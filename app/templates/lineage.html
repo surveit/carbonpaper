@@ -16,6 +16,14 @@
 .row-chip{cursor:pointer;background:#eef4ff;color:#1a3a72;border:1px solid #cfe0ff;border-radius:6px;padding:0 7px;font-size:12.5px;white-space:nowrap}
 .row-chip::before{content:"[";color:#8aa}.row-chip::after{content:"]";color:#8aa}
 .claim-tag{font-size:10.5px;border-radius:5px;padding:0 5px;margin-left:3px;background:#e8f8e8;color:#1f5a1f}
+/* A branch is a parent this walk did NOT follow: clicking re-traces from it,
+   swapping the spine, rather than expanding a second story inline. */
+.branch{background:#fff;border:1px solid #d8c7ea;color:#5b3a86;border-radius:6px;padding:0 7px;font-size:12.5px;white-space:nowrap;text-decoration:none;display:inline-block}
+.branch:hover{background:#f6f0fd}
+.branch::before{content:"⟨"}.branch::after{content:"⟩ ⇄"}
+.nomatch{background:#fff4e6;color:#7a4a00;border-radius:6px;padding:0 7px;font-size:12.5px;white-space:nowrap}
+.offpath{margin-top:14px;border-top:1px dashed #e2e2e2;padding-top:10px;font-size:12.5px;color:#777}
+.offpath b{color:#555;font-weight:600}
 .trunc{background:#fff4e6;color:#7a4a00;border-radius:8px;padding:8px 12px;font-size:13px;margin-bottom:12px}
 .mermaid{background:#fff}.nograph{color:#888;font-size:13px}
 .lin-note{color:#888;font-size:12.5px;margin-bottom:14px}
@@ -30,13 +38,17 @@
 <div class="lin-note">Tracing the pipeline filtered to this single row — every step below is the one row on this row's path, so each carries [1 row].</div>
 <div class="toggle"><button id="b-story" class="on">Story</button><button id="b-graph">Graph</button></div>
 <div id="story" class="story"></div>
+<div id="offpath" class="offpath hidden"></div>
 <div id="graph" class="hidden"><pre class="mermaid" id="mmd">{{ mermaid }}</pre><div id="nograph" class="nograph hidden">Graph needs the compiled workflow, which isn't available for this run.</div></div>
 <div class="lin-panel" id="stage-panel"><div class="lin-empty">Click a step or a graph node to inspect that stage — its transform and output, trimmed to this row.</div></div>
 </div>
 <script>
 const V = {{ view | tojson }}, PROJECT = {{ project | tojson }};
 const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
-document.getElementById('sub').textContent = `run ${V.run_id} · ${V.start_stage} row ${V.start_row} · reads top to bottom, step 1 first`;
+const branchCount = V.nodes.reduce((n, x) => n + ((x.branches || []).length), 0);
+document.getElementById('sub').textContent = `run ${V.run_id} · ${V.start_stage} row ${V.start_row}`
+  + ` · reads top to bottom, step 1 first`
+  + (branchCount ? ` · one of ${branchCount + 1} paths — the others are listed below` : '');
 const byStage = Object.fromEntries(V.nodes.map(n => [n.stage_id, n]));
 // A transform-link opens the panel's Transform disclosure; a row-chip opens Output.
 function tlink(sid, label){ return `<span class="stage-link" data-stage="${esc(sid)}" data-disc="transform">${esc(label)}</span>`; }
@@ -55,6 +67,27 @@ function predsOf(step){
   if(from.length === 1) return ` using step ${from[0]}'s output`;
   return ` joining steps ${from.join(' and ')}`;
 }
+// A branch is a recorded parent this walk did not follow. Promote it — re-trace
+// from that row — rather than expanding it inline, so the page stays one story.
+function traceUrl(stageId, row){
+  return `/project/${encodeURIComponent(PROJECT)}/runs/${encodeURIComponent(V.run_id)}`
+       + `/stage/${encodeURIComponent(stageId)}/row/${row}/trace/view`;
+}
+function bchip(b){
+  return `<a class="branch" href="${traceUrl(b.stage_id, b.row_ordinal)}"`
+       + ` title="trace this row instead">${esc(b.stage_id)} row ${b.row_ordinal}</a>`;
+}
+// A join row with only ONE recorded parent matched nothing on its reference side.
+// That is a recorded fact, not an inference from null cells — which is exactly
+// what distinguishes it from having matched a row whose columns are null.
+const JOIN_KINDS = ['enrich', 'expand'];
+function matchedTo(n){
+  if(!n.branches || !n.branches.length){
+    return JOIN_KINDS.includes(n.transform.kind)
+      ? `, <span class="nomatch">matching no reference row</span>` : '';
+  }
+  return ', matched to ' + n.branches.map(bchip).join(' and ');
+}
 // ---- Story: <transform-link> to get [1 row]; both open a panel disclosure ----
 let html = '';
 if(V.upstream.truncated){ html += `<div class="trunc">⋯ upstream not traced — ${esc(V.upstream.message)}</div>`; }
@@ -64,11 +97,20 @@ V.nodes.forEach((n, i) => {
     sentence = `${tlink(n.stage_id, n.stage_id)} to get ${ochip(n)}`;
   } else {
     const claimTag = n.role==='claim' ? ' <span class="claim-tag">published claim</span>' : '';
-    sentence = `${verb(n)}${predsOf(n.step)} to get ${ochip(n)}${claimTag}`;
+    sentence = `${verb(n)}${predsOf(n.step)}${matchedTo(n)} to get ${ochip(n)}${claimTag}`;
   }
   html += `<div class="step"><span class="stepno">step ${n.step}</span>${sentence}</div>`;
 });
 document.getElementById('story').innerHTML = html;
+// ---- Off-spine branches, listed so a path not taken is never merely hidden ----
+const offAll = V.nodes.flatMap(n => (n.branches || []).map(b => ({ n, b })));
+if(offAll.length){
+  const off = document.getElementById('offpath');
+  off.innerHTML = '<b>Not on this path:</b> '
+    + offAll.map(({n, b}) => `${bchip(b)} <span style="color:#999">(step ${n.step})</span>`).join(' · ')
+    + ' — each is a trace of its own; opening one makes it the path shown.';
+  off.classList.remove('hidden');
+}
 // ---- The row-trimmed stage panel (_lineage_stage.html) ----
 async function openStage(stageId, target){
   const n = byStage[stageId];
