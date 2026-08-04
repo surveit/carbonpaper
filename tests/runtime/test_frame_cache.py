@@ -159,7 +159,7 @@ def _enrich_stage() -> Stage:
                                                           {"name": "z", "type": "str", "nullable": True}]}}],
         "output_schema": {"columns": [{"name": "x", "type": "int", "nullable": True},
                                       {"name": "z", "type": "str", "nullable": True}]},
-        "join": {"keys": [{"left": "x", "right": "x"}], "bring": {"z": "z"}},
+        "join": {"keys": [{"left": "x", "right": "x"}], "enrich_with": {"z": "z"}},
     })
 
 

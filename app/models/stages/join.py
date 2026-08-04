@@ -1,8 +1,4 @@
-"""enrich/expand stage: the shared join handle config plus column validation —
-keys must resolve against their side's edge, every `bring` source must exist on
-the reference with its landed name new to the subject (a join adds, never
-rewrites), and a declared output_schema must be deliverable as the subject's
-columns plus the landed ones."""
+"""enrich/expand stage: the join handle config and its column checks."""
 from __future__ import annotations
 
 from typing import Any, TYPE_CHECKING, ClassVar, Literal, Optional
@@ -29,43 +25,32 @@ class JoinKey(_Base):
 
 
 class JoinConfig(StageConfig):
-    """enrich/expand handle. Cardinality lives in the stage TYPE, not here.
-
-    The joined output is the subject frame extended by `bring`: every subject
-    column under its own name, then each brought reference column under its
-    landed name. A join only ever ADDS — a landed name the subject already
-    carries would rewrite that column, so it is refused; the out is landing
-    the same source under a name the subject does not carry (`score:
-    score_r`). A key pair with the SAME name on both sides needs no bring
-    entry: the subject's own key column already carries the matched value."""
+    """enrich/expand handle. Cardinality lives in the stage TYPE, not here."""
     # Every field changes what this stage computes (keys, brought columns) —
     # see Stage.compute_definition_fingerprint.
-    FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({"keys", "bring"})
+    FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({"keys", "enrich_with"})
     INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset()
 
     keys: list[JoinKey] = Field(min_length=1)
-    bring: dict[str, str] = Field(
+    enrich_with: dict[str, str] = Field(
         min_length=1,
         description=(
-            "Reference column -> the name it lands under in the output, "
-            "usually the same (`region: region`). Every source must exist on "
-            "the reference input; every landed name must be absent from the "
-            "subject, because a join only ever adds — to bring a column the "
-            "subject also carries, land it under a new name (`score: "
-            "score_r`). On an unmatched subject row every brought column is "
-            "null."
+            "Reference column -> the name it lands under, usually the same "
+            "(`region: region`). A join only ADDS: a landed name the subject "
+            "already carries is refused — pick a new one (`score: score_r`). "
+            "Null on an unmatched row."
         ),
     )
 
     @model_validator(mode="after")
     def _landed_names_well_formed(self) -> "JoinConfig":
         seen: set[str] = set()
-        for landed in self.bring.values():
+        for landed in self.enrich_with.values():
             if landed in seen:
-                raise ValueError(f"join.bring lands two columns as {landed!r}")
+                raise ValueError(f"join.enrich_with lands two columns as {landed!r}")
             if landed.startswith(INTERNAL_COLUMN_PREFIX):
                 raise ValueError(
-                    f"join.bring lands {landed!r} inside the reserved "
+                    f"join.enrich_with lands {landed!r} inside the reserved "
                     f"`{INTERNAL_COLUMN_PREFIX}` namespace"
                 )
             seen.add(landed)
@@ -100,21 +85,21 @@ class ExpandStage(JoinStage):
     type: Literal[StageType.expand]
 
 
-BRING_REWRITE_ISSUE = (
-    "stage '{sid}': join.bring lands '{landed}' on the subject input "
+ENRICH_WITH_REWRITE_ISSUE = (
+    "stage '{sid}': join.enrich_with lands '{landed}' on the subject input "
     "'{subject}', which already carries it — a join only ever ADDS; land the "
     "source under a name the subject does not carry (`{src}: {src}_r`) or "
     "drop the entry"
 )
-BRING_SHADOWS_KEY_ISSUE = (
-    "stage '{sid}': join.bring lands '{src}' as '{landed}', but '{landed}' is "
+ENRICH_WITH_SHADOWS_KEY_ISSUE = (
+    "stage '{sid}': join.enrich_with lands '{src}' as '{landed}', but '{landed}' is "
     "a join key on the reference side and the merge reads that column — land "
     "it under a different name"
 )
 
 
 def find_join_column_issues(stage: "JoinStage") -> list[str]:
-    """Keys and bring sources their side's edge cannot satisfy; a landed name the subject carries."""
+    """Keys and enrich_with sources their side's edge cannot satisfy; a landed name the subject carries."""
     join = stage.join
     left = resolve_input_columns(stage, 0)
     right = resolve_input_columns(stage, 1)
@@ -129,17 +114,17 @@ def find_join_column_issues(stage: "JoinStage") -> list[str]:
             issues.append(
                 COLUMN_ISSUE.format(sid=stage.id, field="join key .right", col=key.right, cols=sorted(right))
             )
-    for src, landed in join.bring.items():
+    for src, landed in join.enrich_with.items():
         if src not in right:
             issues.append(
-                COLUMN_ISSUE.format(sid=stage.id, field="join.bring", col=src, cols=sorted(right))
+                COLUMN_ISSUE.format(sid=stage.id, field="join.enrich_with", col=src, cols=sorted(right))
             )
         if landed in left:
-            issues.append(BRING_REWRITE_ISSUE.format(
+            issues.append(ENRICH_WITH_REWRITE_ISSUE.format(
                 sid=stage.id, landed=landed, subject=stage.inputs[0].id, src=src
             ))
         elif landed in right_keys and landed != src:
-            issues.append(BRING_SHADOWS_KEY_ISSUE.format(
+            issues.append(ENRICH_WITH_SHADOWS_KEY_ISSUE.format(
                 sid=stage.id, src=src, landed=landed
             ))
     return issues
@@ -157,7 +142,7 @@ def find_join_output_issues(stage: "JoinStage") -> list[str]:
 
 
 def find_join_signature_issues(stage: "JoinStage") -> list[str]:
-    """Keys must be read from their side, adds must be exactly `bring`; rewrites are refused."""
+    """Keys must be read from their side, adds must be exactly `enrich_with`; rewrites are refused."""
     signature = stage.signature
     assert signature is not None  # find_signature_config_issues runs only with one
     subject, reference = stage.inputs[0], stage.inputs[1]
@@ -173,14 +158,14 @@ def find_join_signature_issues(stage: "JoinStage") -> list[str]:
         if name not in reads_by_input.get(ref.id, set())
     ]
 
-    src_by_landed = {landed: src for src, landed in stage.join.bring.items()}
+    src_by_landed = {landed: src for src, landed in stage.join.enrich_with.items()}
     reference_types = {c.name: c.type for c in reference.table_schema.columns}
     for column in signature.adds:
         src = src_by_landed.get(column.name)
         if src is None:
             issues.append(
                 f"stage '{stage.id}': signature adds `{column.name}`, which "
-                f"join.bring does not land (landed: {sorted(src_by_landed)})"
+                f"join.enrich_with does not land (landed: {sorted(src_by_landed)})"
             )
         elif reference_types.get(src, column.type) != column.type:
             issues.append(
@@ -190,7 +175,7 @@ def find_join_signature_issues(stage: "JoinStage") -> list[str]:
             )
     added = {column.name for column in signature.adds}
     issues.extend(
-        f"stage '{stage.id}': join.bring lands `{landed}` but the signature "
+        f"stage '{stage.id}': join.enrich_with lands `{landed}` but the signature "
         f"does not add it"
         for landed in src_by_landed
         if landed not in added
@@ -206,14 +191,10 @@ def find_join_signature_issues(stage: "JoinStage") -> list[str]:
 def compute_join_output_types(
     join: "JoinConfig", left: "TableSchema", right: "TableSchema"
 ) -> dict[str, str]:
-    """The columns the join handle emits, each mapped to its type: every left
-    column under its own name and type, then each `bring` entry under its
-    landed name with its SOURCE right column's type. An entry whose source the
-    right edge does not supply, or whose landed name the left side already
-    does, contributes nothing here — `find_join_column_issues` reports it."""
+    """Left columns, then each `enrich_with` entry under its landed name with its source's type."""
     right_types = {c.name: c.type for c in right.columns}
     joined: dict[str, str] = {c.name: c.type for c in left.columns}
-    for src, landed in join.bring.items():
+    for src, landed in join.enrich_with.items():
         if src in right_types and landed not in joined:
             joined[landed] = right_types[src]
     return joined
@@ -226,26 +207,18 @@ NODE_TYPE_SPECS: dict[str, dict[str, Any]] = {
         "blocks": ["join"],
         "requires_inputs": True,
         "min_inputs": 2,
-        "required": ["keys", "bring"],
+        "required": ["keys", "enrich_with"],
         "optional": [],
         "notes": (
             "Takes EXACTLY TWO inputs: inputs[0] is the SUBJECT, inputs[1] is the REFERENCE. "
-            "Row count and order come out unchanged, because the reference is required to hold "
-            "at most ONE row per key: the runtime asks pandas to VERIFY that, so a reference "
-            "that repeats a key FAILS THE RUN rather than silently multiplying rows. Use "
-            "`expand` when the fan-out is intended. Every subject row survives — an unmatched "
-            "one carries nulls for the brought columns — and an unmatched reference row is "
-            "dropped. This stage NEVER drops a subject row: to drop rows (e.g. inner-join "
-            "semantics), follow it with a `filter_rows` on a brought column being non-null, "
-            "which records the row loss instead of hiding it. "
-            "The output is every subject column plus exactly `bring` — a map of reference "
-            "column to the name it lands under, usually the same (`region: region`). A join "
-            "only ever ADDS: a landed name the subject already carries would rewrite that "
-            "column and is refused; to bring a column the subject also has, land it under a "
-            "new name (`score: score_r`). A key pair with the SAME name on both sides needs "
-            "no bring entry; the subject's own key column already carries the matched value. "
-            "output_schema may name only columns the join produces — anything else is "
-            "rejected when the stage is saved."
+            "Row count and order come out unchanged: the runtime VERIFIES the reference is "
+            "unique on the key, and a repeat FAILS THE RUN — use `expand` for intended "
+            "fan-out. Every subject row survives (unmatched rows carry nulls in the landed "
+            "columns); dropping rows is `filter_rows`' job. `enrich_with` maps each reference "
+            "column to the name it lands under, usually the same. A join only ADDS: a landed "
+            "name the subject already carries is refused — pick a new one (`score: score_r`). "
+            "A same-named key pair needs no entry. output_schema may name only columns the "
+            "join produces."
         ),
     },
     "expand": {
@@ -253,25 +226,17 @@ NODE_TYPE_SPECS: dict[str, dict[str, Any]] = {
         "blocks": ["join"],
         "requires_inputs": True,
         "min_inputs": 2,
-        "required": ["keys", "bring"],
+        "required": ["keys", "enrich_with"],
         "optional": [],
         "notes": (
             "Takes EXACTLY TWO inputs: inputs[0] is the SUBJECT, inputs[1] is the REFERENCE. "
-            "The reference MAY hold several rows per key, so one subject row may come out as "
-            "several — deliberate fan-out. Use `enrich` instead when the reference is meant to "
-            "be unique on the key and a repeat is a bug you want caught. Every subject row "
-            "survives — an unmatched one carries nulls for the brought columns — and an "
-            "unmatched reference row is dropped. This stage NEVER drops a subject row: to drop "
-            "rows (e.g. inner-join semantics), follow it with a `filter_rows` on a brought "
-            "column being non-null, which records the row loss instead of hiding it. "
-            "The output is every subject column plus exactly `bring` — a map of reference "
-            "column to the name it lands under, usually the same (`region: region`). A join "
-            "only ever ADDS: a landed name the subject already carries would rewrite that "
-            "column and is refused; to bring a column the subject also has, land it under a "
-            "new name (`score: score_r`). A key pair with the SAME name on both sides needs "
-            "no bring entry; the subject's own key column already carries the matched value. "
-            "output_schema may name only columns the join produces — anything else is "
-            "rejected when the stage is saved."
+            "The reference MAY repeat a key, so one subject row can fan out to several — use "
+            "`enrich` when a repeat is a bug you want caught. Every subject row survives "
+            "(unmatched rows carry nulls in the landed columns); dropping rows is "
+            "`filter_rows`' job. `enrich_with` maps each reference column to the name it "
+            "lands under, usually the same. A join only ADDS: a landed name the subject "
+            "already carries is refused — pick a new one (`score: score_r`). A same-named "
+            "key pair needs no entry. output_schema may name only columns the join produces."
         ),
     },
 }

@@ -217,7 +217,7 @@ def test_llm_matching_reads_accepted():
     assert stage.signature is not None
 
 
-def _join_stage(*, adds, reads=None, bring=None, output_adds=None):
+def _join_stage(*, adds, reads=None, enrich_with=None, output_adds=None):
     subject = {"columns": [
         {"name": "state", "type": "str", "nullable": True}, {"name": "bill", "type": "str", "nullable": True},
     ]}
@@ -229,7 +229,7 @@ def _join_stage(*, adds, reads=None, bring=None, output_adds=None):
         "name": "Add region",
         "type": "enrich",
         "inputs": [{"id": "bills", "schema": subject}, {"id": "states", "schema": reference}],
-        "join": {"keys": [{"left": "state", "right": "code"}], "bring": bring or {"region": "region"}},
+        "join": {"keys": [{"left": "state", "right": "code"}], "enrich_with": enrich_with or {"region": "region"}},
         "signature": {
             "form": "extends",
             "reads": reads if reads is not None else [
@@ -261,12 +261,12 @@ def test_join_add_must_be_landed():
     msg = _issues(_join_stage(
         adds=[{"name": "population", "type": "int", "nullable": True}], output_adds=[],
     ))
-    assert "population" in msg and "join.bring does not land" in msg
+    assert "population" in msg and "join.enrich_with does not land" in msg
 
 
 def test_join_landed_column_must_be_added_by_the_signature():
     msg = _issues(_join_stage(adds=[]))
-    assert "join.bring lands `region` but the signature does not add it" in msg
+    assert "join.enrich_with lands `region` but the signature does not add it" in msg
 
 
 def test_join_add_type_must_match_its_source():
@@ -278,7 +278,7 @@ def test_join_add_type_must_match_its_source():
 
 def test_join_signature_adds_the_landed_name_not_the_source():
     stage = parse_stage(_join_stage(
-        bring={"region": "region_r"},
+        enrich_with={"region": "region_r"},
         adds=[{"name": "region_r", "type": "str", "nullable": True}],
     ))
     assert stage.signature is not None

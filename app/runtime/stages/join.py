@@ -53,16 +53,13 @@ def _join_reference_into_subject(
         **{JOIN_SUBJECT_ORD_KEY: np.arange(len(inputs[subject_id]))})
     reference = inputs[reference_id]
 
-    # What crosses the merge from the reference side: its key columns, each
-    # brought column ALREADY under its landed name, and the ordinal carrier —
-    # nothing else, so no un-brought reference column can reach the output. A
-    # landed name never collides with a subject column (validation refuses
-    # that at save, and refuses one shadowing a right key); a right KEY
-    # sharing a subject column's name still can collide, so pandas suffixes
-    # that one copy and the projection below drops it.
+    # Only the keys, each enrich_with column already under its landed name,
+    # and the ordinal carrier cross the merge. Landed-name collisions are
+    # refused at save; a right KEY sharing a subject column's name still
+    # collides, so pandas suffixes that copy and the projection drops it.
     right_keys = [k.right for k in keys]
     narrowed = reference[list(dict.fromkeys(right_keys))].assign(
-        **{landed: reference[src] for src, landed in join_cfg.bring.items()},
+        **{landed: reference[src] for src, landed in join_cfg.enrich_with.items()},
         **{JOIN_REFERENCE_ORD_KEY: np.arange(len(reference))},
     )
 
@@ -88,10 +85,9 @@ def _join_reference_into_subject(
         (subject_id, joined[JOIN_SUBJECT_ORD_KEY].tolist()),
         (reference_id, joined[JOIN_REFERENCE_ORD_KEY].tolist()),
     ])
-    # The projection to the subject's own columns plus the landed names also
-    # drops both ordinal carriers. Attach LAST: `.attrs` does not survive a
-    # frame being rebuilt, and the projection rebuilds it.
-    projected = joined[[*inputs[subject_id].columns, *join_cfg.bring.values()]]
+    # The projection drops both ordinal carriers. Attach LAST: the projection
+    # rebuilds the frame and `.attrs` would not survive it.
+    projected = joined[[*inputs[subject_id].columns, *join_cfg.enrich_with.values()]]
     return attach_row_lineage(projected, lineage)
 
 

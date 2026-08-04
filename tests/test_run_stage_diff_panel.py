@@ -94,7 +94,7 @@ def _seed_compiled(pdir: Path, data_path: Path, routes_path: Path) -> None:
             "inputs": [{"id": CLASSIFY_ID, "schema": _CLASSIFY_SCHEMA},
                        {"id": ROUTES_ID, "schema": _ROUTES_SCHEMA}],
             "join": {"keys": [{"left": "name", "right": "name"}],
-                     "bring": {"route": "route"}},
+                     "enrich_with": {"route": "route"}},
             "output_schema": _ROUTE_SCHEMA,
         }),
     ]
@@ -328,7 +328,7 @@ def test_an_enrich_reads_as_a_diff_against_its_subject_input(run_ctx) -> None:
     strip = _diff_head(html)
     assert (strip.index(">base input</span>") < _unit_at(strip, CLASSIFY_ID)
             < strip.index(">reference input</span>") < _unit_at(strip, ROUTES_ID))
-    # The enrich adds `route` and touches nothing else: bring never drops a
+    # The enrich adds `route` and touches nothing else: enrich_with never drops a
     # subject column.
     assert ">+1 col · 0 cells changed</span>" in strip
     assert "diff-col-new" in html and "north" in html

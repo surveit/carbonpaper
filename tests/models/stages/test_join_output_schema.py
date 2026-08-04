@@ -22,7 +22,7 @@ _RIGHT = {
 }
 
 
-def _join_stage(*, output_columns=None, bring=None, left=_LEFT, right=_RIGHT,
+def _join_stage(*, output_columns=None, enrich_with=None, left=_LEFT, right=_RIGHT,
                 keys=None, stage_type="enrich"):
     spec = {
         "id": "add_filings",
@@ -34,7 +34,7 @@ def _join_stage(*, output_columns=None, bring=None, left=_LEFT, right=_RIGHT,
         ],
         "join": {
             "keys": keys or [{"left": "facility_id", "right": "facility_id"}],
-            "bring": bring or {"amount": "amount"},
+            "enrich_with": enrich_with or {"amount": "amount"},
         },
     }
     if output_columns is not None:
@@ -48,12 +48,12 @@ def _issues(stage_dict) -> str:
     return str(err.value)
 
 
-def test_bring_source_not_producible_rejected():
+def test_enrich_with_source_not_producible_rejected():
     msg = _issues(_join_stage(
-        bring={"amount_typo": "amount_typo"},
+        enrich_with={"amount_typo": "amount_typo"},
         output_columns=[{"name": "facility_id", "type": "str", "nullable": True}]))
     assert "amount_typo" in msg
-    assert "join.bring" in msg
+    assert "join.enrich_with" in msg
 
 
 def test_declared_column_absent_from_join_rejected():
@@ -67,7 +67,7 @@ def test_landing_on_a_subject_column_is_a_refused_rewrite():
     # The reference's own `name` (int) collides with the subject's `name`
     # (str); landing it under that name would rewrite the subject's column.
     msg = _issues(_join_stage(
-        bring={"name": "name"},
+        enrich_with={"name": "name"},
         output_columns=[{"name": "facility_id", "type": "str", "nullable": True}],
     ))
     assert "a join only ever ADDS" in msg
@@ -78,12 +78,12 @@ def test_a_landed_name_carries_its_sources_type():
     # `name_r` — authored in config, never a silent suffix. The declared
     # output must then carry the SOURCE's type.
     stage = parse_stage(_join_stage(
-        bring={"name": "name_r"},
+        enrich_with={"name": "name_r"},
         output_columns=[{"name": "name_r", "type": "int", "nullable": True}],
     ))
     assert stage.id == "add_filings"
     msg = _issues(_join_stage(
-        bring={"name": "name_r"},
+        enrich_with={"name": "name_r"},
         output_columns=[{"name": "name_r", "type": "str", "nullable": True}],
     ))
     assert "name_r" in msg and "int" in msg
@@ -120,10 +120,10 @@ def test_declared_type_mismatch_rejected():
 
 
 def test_un_brought_reference_column_not_producible():
-    # `kind` sits on the reference edge but bring does not name it, so the
+    # `kind` sits on the reference edge but enrich_with does not name it, so the
     # declared output cannot carry it.
     msg = _issues(_join_stage(
-        bring={"amount": "amount"},
+        enrich_with={"amount": "amount"},
         output_columns=[{"name": "kind", "type": "str", "nullable": True}],
     ))
     assert "kind" in msg
@@ -133,7 +133,7 @@ def test_un_brought_reference_column_not_producible():
 def test_valid_join_passes(stage_type):
     stage = parse_stage(_join_stage(
         stage_type=stage_type,
-        bring={"amount": "amount", "kind": "kind"},
+        enrich_with={"amount": "amount", "kind": "kind"},
         output_columns=[
             {"name": "facility_id", "type": "str", "nullable": True},
             {"name": "name", "type": "str", "nullable": True},

@@ -21,7 +21,7 @@ def _join_stage(stage_type: str) -> Stage:
                    {"id": "reference", "schema": _REFERENCE}],
         "output_schema": {"columns": [{"name": "x", "type": "int", "nullable": True},
                                       {"name": "z", "type": "str", "nullable": True}]},
-        "join": {"keys": [{"left": "x", "right": "x"}], "bring": {"z": "z"}},
+        "join": {"keys": [{"left": "x", "right": "x"}], "enrich_with": {"z": "z"}},
     })
 
 
@@ -68,7 +68,7 @@ def test_expand_fans_a_subject_row_out_over_every_matching_reference_row():
     assert out["z"].tolist()[:2] == ["a", "b"] and pd.isna(out["z"].tolist()[2])
 
 
-def test_output_is_subject_columns_plus_bring_only():
+def test_output_is_subject_columns_plus_enrich_with_only():
     # The reference's `extra` is not brought, so it must not leak into the
     # output — the handler narrows the reference before merging.
     out = handle_expand(
@@ -81,7 +81,7 @@ def test_output_is_subject_columns_plus_bring_only():
 
 
 def test_a_brought_column_lands_under_its_authored_name():
-    # The out for a name the subject already carries: `bring: {z: z2}` lands
+    # The out for a name the subject already carries: `enrich_with: {z: z2}` lands
     # the reference's z as z2 — an authored rename, never a silent suffix.
     stage = parse_stage({
         "id": "m", "name": "Join", "type": "enrich",
@@ -89,7 +89,7 @@ def test_a_brought_column_lands_under_its_authored_name():
                    {"id": "reference", "schema": _REFERENCE}],
         "output_schema": {"columns": [{"name": "x", "type": "int", "nullable": True},
                                       {"name": "z2", "type": "str", "nullable": True}]},
-        "join": {"keys": [{"left": "x", "right": "x"}], "bring": {"z": "z2"}},
+        "join": {"keys": [{"left": "x", "right": "x"}], "enrich_with": {"z": "z2"}},
     })
     out = handle_enrich(
         stage,
@@ -112,7 +112,7 @@ def test_a_right_key_sharing_a_subject_columns_name_is_dropped():
                                            {"name": "z", "type": "str", "nullable": True}]}}],
         "output_schema": {"columns": [{"name": "x", "type": "int", "nullable": True},
                                       {"name": "z", "type": "str", "nullable": True}]},
-        "join": {"keys": [{"left": "x", "right": "k"}], "bring": {"z": "z"}},
+        "join": {"keys": [{"left": "x", "right": "k"}], "enrich_with": {"z": "z"}},
     })
     out = handle_enrich(
         stage,
