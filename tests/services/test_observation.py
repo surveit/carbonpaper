@@ -10,7 +10,11 @@ from pathlib import Path
 import pytest
 
 from app.models import Stage
-from app.models.observation import ColumnValueProfile, InputFrameProfile
+from app.models.observation import (
+    DEFAULT_MAX_DISTINCT_VALUES,
+    ColumnValueProfile,
+    InputFrameProfile,
+)
 from app.runtime.observation import profile_input_stage
 from app.services import observation
 from app.services.errors import InputProfilerNotConfiguredError
@@ -68,10 +72,10 @@ def test_stub_profiler_is_called_with_the_resolved_stage(
     projects_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _seed_project(projects_root, "permits", _csv(tmp_path))
-    seen: list[Stage] = []
+    seen: list[tuple[Stage, int]] = []
 
-    def stub(stage: Stage) -> InputFrameProfile:
-        seen.append(stage)
+    def stub(stage: Stage, max_values: int) -> InputFrameProfile:
+        seen.append((stage, max_values))
         return InputFrameProfile(row_count=1, columns=[
             ColumnValueProfile(name="status", row_count=1, null_count=0,
                                distinct_count=1, values=["filed"]),
@@ -80,7 +84,27 @@ def test_stub_profiler_is_called_with_the_resolved_stage(
     monkeypatch.setattr(observation, "_input_profiler", stub)
     profile = observation.observed_column_profile("permits", "load", "status")
     assert profile.values == ["filed"]
-    assert [stage.id for stage in seen] == ["load"]
+    assert [(stage.id, cap) for stage, cap in seen] == [
+        ("load", DEFAULT_MAX_DISTINCT_VALUES)
+    ]
+
+
+def test_caller_maximum_reaches_the_profiler(
+    projects_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _seed_project(projects_root, "permits", _csv(tmp_path))
+    seen: list[int] = []
+
+    def stub(stage: Stage, max_values: int) -> InputFrameProfile:
+        seen.append(max_values)
+        return InputFrameProfile(row_count=1, columns=[
+            ColumnValueProfile(name="status", row_count=1, null_count=0,
+                               distinct_count=1, values=["filed"]),
+        ])
+
+    monkeypatch.setattr(observation, "_input_profiler", stub)
+    observation.observed_column_profile("permits", "load", "status", max_values=5000)
+    assert seen == [5000]
 
 
 # ── end to end over a real file ──────────────────────────────────────────────

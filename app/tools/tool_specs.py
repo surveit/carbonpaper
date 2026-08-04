@@ -5,7 +5,7 @@ different operations — see SAVE_VERSION_* below."""
 from __future__ import annotations
 
 from app.core.agent.tool_spec import ToolSpec
-from app.models.observation import DISTINCT_FULL_SET_CAP
+from app.models.observation import DEFAULT_MAX_DISTINCT_VALUES
 
 # How to use list_distinct_values when declaring a column's schema — shared by the
 # editing agent's system prompt and the glassbox instructions, held once so the two
@@ -17,7 +17,10 @@ looks categorical (a status, a category, a reason code), call
 list_distinct_values(project_id, stage_id, column) against the input_data stage
 whose bound file carries it — the real file's observed vocabulary, not the
 document's guess. (The stage must already exist with its file bound; add it,
-observe, then tighten its schema with edit_stage.) Then DECIDE, per column,
+observe, then tighten its schema with edit_stage.) A distinct_count above the
+number of values returned means the list was TRUNCATED — re-read with a larger
+max_values, since a vocabulary can be thousands long and still closed. Then
+DECIDE, per column,
 whether to freeze the observed set as the column's `enum`. Your declaration is
 the maintenance surface a NON-ENGINEER data owner lives with: an enum on an LLM
 stage's output compiles into the reply model, so an out-of-vocabulary answer is
@@ -169,13 +172,16 @@ expired run_id returns {ok: False, error} rather than a fabricated status.""",
         description=f"""\
 The observed distinct values of ONE column in an input_data stage's bound
 file — read from the real file, never from the methodology's prose. Reports
-row_count, null_count, distinct_count, and either `values` (the COMPLETE
-observed set, when {DISTINCT_FULL_SET_CAP} or fewer) or `sample` (a taste of
-a larger set — never the whole vocabulary). Consult it before deciding
-whether a column's schema should freeze its vocabulary as an `enum`; your
-instructions say how to decide. Fails loudly — never inventing a value —
-when the stage has no bound file, the file is missing, or the column does
-not exist in it.""",
+row_count, null_count, distinct_count (the TRUE number of distinct values)
+and `values`, the sorted values truncated to `max_values` (default
+{DEFAULT_MAX_DISTINCT_VALUES}). `values` is the COMPLETE vocabulary ONLY
+when distinct_count == len(values); when distinct_count is larger you are
+looking at a truncated prefix, so re-read with a bigger max_values before
+freezing anything — a large vocabulary can still be a closed one. Consult it
+before deciding whether a column's schema should freeze its vocabulary as an
+`enum`; your instructions say how to decide. Fails loudly — never inventing
+a value — when the stage has no bound file, the file is missing, or the
+column does not exist in it.""",
     ),
     "list_projects": ToolSpec(
         name="list_projects",

@@ -32,6 +32,7 @@ from app.tools.tool_specs import (
     SAVE_VERSION_FROM_WORKING_COPY,
     TOOL_SPECS,
 )
+from app.models.observation import DEFAULT_MAX_DISTINCT_VALUES
 from app.models.review_guide import ReviewGuideDraft
 from app.services.versioning import ReviewGuide
 from app.models.stages.node_types import NODE_TYPES
@@ -330,9 +331,14 @@ def remove_stage(project_id: str, stage_id: str) -> dict[str, Any]:
 
 
 @mcp.tool(description=TOOL_SPECS["list_distinct_values"].description)
-def list_distinct_values(project_id: str, stage_id: str, column: str) -> dict[str, Any]:
+def list_distinct_values(
+    project_id: str,
+    stage_id: str,
+    column: str,
+    max_values: int = DEFAULT_MAX_DISTINCT_VALUES,
+) -> dict[str, Any]:
     _resolve_existing_project(project_id)  # loud if the project doesn't exist
-    profile = observation.observed_column_profile(project_id, stage_id, column)
+    profile = observation.observed_column_profile(project_id, stage_id, column, max_values)
     return profile.model_dump(mode="json", exclude_none=True)
 
 

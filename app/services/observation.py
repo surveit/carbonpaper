@@ -8,15 +8,20 @@ from __future__ import annotations
 from typing import Callable
 
 from app.models import Stage, StageType
-from app.models.observation import ColumnValueProfile, InputFrameProfile
+from app.models.observation import (
+    DEFAULT_MAX_DISTINCT_VALUES,
+    ColumnValueProfile,
+    InputFrameProfile,
+)
 from app.services import workspace
 from app.services.errors import InputProfilerNotConfiguredError
 from app.services.loader import load_workflow
 
-# The injected capability: given an input_data Stage, load its bound file and
-# report the frame's observed per-column value profiles. Opaque here — this
-# module never learns how the file is read.
-InputProfiler = Callable[[Stage], InputFrameProfile]
+# The injected capability: given an input_data Stage and the most distinct values
+# to list per column, load its bound file and report the frame's observed
+# per-column value profiles. Opaque here — this module never learns how the file
+# is read.
+InputProfiler = Callable[[Stage, int], InputFrameProfile]
 
 _input_profiler: InputProfiler | None = None
 
@@ -28,13 +33,16 @@ def set_input_profiler(profiler: InputProfiler) -> None:
 
 
 def observed_column_profile(
-    project_id: str, stage_id: str, column: str
+    project_id: str,
+    stage_id: str,
+    column: str,
+    max_values: int = DEFAULT_MAX_DISTINCT_VALUES,
 ) -> ColumnValueProfile:
     """One column's observed values in an input stage's bound file. Every miss raises."""
     stage = _find_input_stage(project_id, stage_id)
     if _input_profiler is None:
         raise InputProfilerNotConfiguredError()
-    profile = _input_profiler(stage)
+    profile = _input_profiler(stage, max_values)
     column_profile = profile.column_named(column)
     if column_profile is None:
         observed = ", ".join(c.name for c in profile.columns) or "(none)"

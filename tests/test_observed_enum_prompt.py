@@ -4,6 +4,7 @@ decide per column — one worked example frozen as an enum, one left open — an
 guard code for what a declaration cannot state. Mirrors tests/test_node_type_notes.py."""
 from __future__ import annotations
 
+from app.models.observation import DEFAULT_MAX_DISTINCT_VALUES
 from app.tools.tool_specs import OBSERVED_ENUM_GUIDANCE, TOOL_SPECS
 
 
@@ -30,8 +31,16 @@ def test_guidance_teaches_the_decision_not_a_rule() -> None:
     assert "never replaces guard code" in OBSERVED_ENUM_GUIDANCE
 
 
-def test_tool_description_states_the_cap_semantics() -> None:
+def test_guidance_warns_that_a_truncated_list_is_not_the_vocabulary() -> None:
+    assert "TRUNCATED" in OBSERVED_ENUM_GUIDANCE
+    assert "max_values" in OBSERVED_ENUM_GUIDANCE
+
+
+def test_tool_description_states_when_the_values_are_complete() -> None:
     description = TOOL_SPECS["list_distinct_values"].description
     assert "COMPLETE" in description
-    assert "sample" in description
+    assert "distinct_count == len(values)" in description
+    assert "truncated" in description
+    assert "max_values" in description
+    assert str(DEFAULT_MAX_DISTINCT_VALUES) in description
     assert "Fails loudly" in description

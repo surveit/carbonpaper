@@ -12,7 +12,7 @@ from pydantic import BaseModel
 
 from app.core.agent.bound_tool import BoundToolSpec
 from app.models import StageDraft
-from app.models.observation import ColumnValueProfile
+from app.models.observation import DEFAULT_MAX_DISTINCT_VALUES, ColumnValueProfile
 from app.models.review_guide import ReviewGuideDraft
 from app.services.versioning import ReviewGuide
 from app.services import drafts, observation, project as project_service
@@ -51,9 +51,12 @@ def make_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
         return {"ok": result.ok, "issues": result.issues}
 
     def list_distinct_values(
-        project_id: str, stage_id: str, column: str
+        project_id: str,
+        stage_id: str,
+        column: str,
+        max_values: int = DEFAULT_MAX_DISTINCT_VALUES,
     ) -> ColumnValueProfile:
-        return observation.observed_column_profile(project_id, stage_id, column)
+        return observation.observed_column_profile(project_id, stage_id, column, max_values)
 
     def create_draft(project_id: str, from_version: str = "") -> DraftView:
         return drafts.create_draft(project_id, from_version=from_version or None)
@@ -167,6 +170,13 @@ TOOL_SCHEMAS: dict[str, ToolInputSchema] = {
             str,
             "The column to profile, as named in the file. A column the file does "
             "not hold is a loud error naming the ones it does.",
+        ],
+        "max_values": Annotated[
+            int,
+            "How many distinct values to list, at most (default "
+            f"{DEFAULT_MAX_DISTINCT_VALUES}). Raise it when you expect a large but "
+            "closed vocabulary — the returned list is complete only when "
+            "distinct_count equals its length.",
         ],
     },
     "create_draft": {

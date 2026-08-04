@@ -263,6 +263,31 @@ def test_list_distinct_values_answers_from_the_bound_file(
     assert profile["distinct_count"] == 2
 
 
+def test_list_distinct_values_truncates_but_reports_the_true_count(
+    examples_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.models.observation import DEFAULT_MAX_DISTINCT_VALUES
+    from app.runtime.observation import profile_input_stage
+    from app.services import observation
+
+    codes = [f"c{i:04d}" for i in range(DEFAULT_MAX_DISTINCT_VALUES + 7)]
+    _seed_bound_input(examples_root, tmp_path, "permits", "status\n" + "\n".join(codes) + "\n")
+    monkeypatch.setattr(observation, "_input_profiler", profile_input_stage)
+
+    _server, _allowed, tools = _build("permits")
+    tool = next(t for t in tools if t.name == "list_distinct_values")
+    args = {"project_id": "permits", "stage_id": "load", "column": "status"}
+
+    capped = json.loads(_call(tool, args)["content"][0]["text"])
+    assert capped["distinct_count"] == len(codes)
+    assert len(capped["values"]) == DEFAULT_MAX_DISTINCT_VALUES
+    assert capped["distinct_count"] > len(capped["values"])
+
+    whole = json.loads(_call(tool, {**args, "max_values": len(codes)})["content"][0]["text"])
+    assert whole["values"] == sorted(codes)
+    assert whole["distinct_count"] == len(whole["values"])
+
+
 def test_list_distinct_values_unknown_column_is_a_tool_error(
     examples_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
