@@ -38,11 +38,11 @@ class RowLineage:
         if len(self.source_stage) != len(self.source_row):
             raise ValueError("row lineage needs one source stage per source row")
 
-    def sliced(self, start: int, stop: int | None) -> "RowLineage":
-        """This lineage narrowed to the same window the executor's row slicing
-        (--offset/--limit) took out of the output frame, so entry i still
-        describes output row i."""
-        return RowLineage(self.source_stage[start:stop], self.source_row[start:stop])
+    def shifted(self, offset: int) -> "RowLineage":
+        """Ordinals counted from a sliced input frame's first row, moved onto the upstream's own."""
+        if offset == 0:
+            return self
+        return RowLineage(list(self.source_stage), [r + offset for r in self.source_row])
 
     def to_frame(self) -> pd.DataFrame:
         """The sidecar frame, one row per output row, in output order."""
@@ -75,17 +75,20 @@ def kept_rows_lineage(source_stage_id: str, kept_indices: list[int]) -> RowLinea
 
 
 def concatenated_inputs_lineage(
-    stage: "Stage", inputs: dict[str, pd.DataFrame]
+    stage: "Stage", inputs: dict[str, pd.DataFrame], first_row_ordinal: int = 0
 ) -> RowLineage:
     """Lineage for a stage that emitted its inputs concatenated in declared
     order (union), computed from their row counts alone — the runtime knows the
-    lengths it handed over, so the stage is not consulted."""
+    lengths it handed over, so the stage is not consulted.
+
+    `inputs` are the frames the handler was GIVEN, so where the runtime sliced
+    them the first one is the upstream's row `first_row_ordinal`, not its row 0."""
     source_stage: list[str] = []
     source_row: list[int] = []
     for ref in stage.inputs:
         rows = len(inputs[ref.id])
         source_stage.extend([ref.id] * rows)
-        source_row.extend(range(rows))
+        source_row.extend(range(first_row_ordinal, first_row_ordinal + rows))
     return RowLineage(source_stage, source_row)
 
 

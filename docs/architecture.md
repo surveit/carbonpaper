@@ -39,7 +39,8 @@ import-linter contract keeps `runner.py` free of `app.services` so the arrow bet
 points one way. `__main__.py` — the `python -m app.runtime <project>` CLI, over that same
 seam. Per stage: validate
 inputs, reject duplicate rows, dispatch, validate output, write `outputs/<stage>.parquet`,
-flush `manifest.json` mid-run; halt-on-review + resume; per-run `--limit`/`--offset`;
+flush `manifest.json` mid-run; halt-on-review + resume; per-run `--limit`/`--offset`
+capping the rows a stage READS (cut off its inputs before its handler runs);
 `field_checks`. `stages/` — one module per type. `llm.py`/`options.py` — the agent
 backend (no fallback). `preview.py` — scratch re-runs.
 

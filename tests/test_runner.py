@@ -14,6 +14,7 @@ from app.models import parse_stage, Workflow
 from app.runtime.runner import execute_run, resume_run
 from app.runtime.executor import _raise_if_run_failed, run_subset
 from app.runtime.manifest import RunManifest
+from app.runtime.trace import trace_row
 from app.runtime.stages import llm_transform as lt
 from app.services.loader import WorkflowLoadError
 from app.services import versioning
@@ -57,7 +58,10 @@ def _make_project(root):
     (root / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
 
 
-def test_limit_truncates_and_is_recorded(tmp_path):
+def test_limit_on_a_source_stage_caps_the_rows_it_loads(tmp_path):
+    # input_data is the one stage type with no input frames, so the frame it
+    # just loaded is the runtime's only handle on its rows: the cap lands there.
+    # A limit that silently did nothing on a source would be the worst outcome.
     _make_project(tmp_path)
     _seed_version(tmp_path)
     manifest = execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path))
@@ -65,8 +69,8 @@ def test_limit_truncates_and_is_recorded(tmp_path):
     assert manifest["status"] == "ok"
     [rec] = manifest["stage_records"]
     assert rec["status"] == "ok"
-    assert rec["output_row_count"] == 2                                   # truncated from 5
-    assert any("truncated" in n for n in rec.get("notes", []))   # not silent
+    assert rec["output_row_count"] == 2                        # 2 of the file's 5 rows
+    assert any(n.startswith("limit=2") for n in rec.get("notes", []))   # not silent
 
     run_dir = tmp_path / "runs" / manifest["run_id"]
     out = pd.read_parquet(run_dir / "outputs" / "load.parquet")
@@ -78,9 +82,9 @@ def test_limit_truncates_and_is_recorded(tmp_path):
 
 
 def test_per_run_limit_and_offset_slice_and_are_recorded(tmp_path):
-    # 5 rows, static `limit: 2` in the stage YAML. The per-run cap wins over
-    # the static one, and the offset drops rows BEFORE the cap is applied:
-    # offset 1 drops row 0, then limit 3 keeps rows 1-3.
+    # 5 rows, static `limit: 2` in the stage spec. The per-run cap wins over
+    # the static one, and the offset skips rows BEFORE the cap is applied:
+    # offset 1 skips row 0, then limit 3 reads rows 1-3.
     _make_project(tmp_path)
     _seed_version(tmp_path)
     manifest = execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path),
@@ -156,6 +160,66 @@ def test_per_run_override_for_unknown_stage_id_fails_loudly(tmp_path):
         execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path), limits={"nope": 3})
     with pytest.raises(ValueError, match="unknown stage id"):
         execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path), offsets={"nope": 1})
+
+
+_IDENTITY_ROW_FUNCTION = "def transform(row):\n    return row\n"
+
+
+def _row_mapped_project(root, rows: list[dict], code: str):
+    """input_data loading `rows` from CSV, feeding a python_row_function running `code`."""
+    (root / "compiled").mkdir(parents=True)
+    (root / "data").mkdir(parents=True)
+    pd.DataFrame(rows).to_csv(root / "data" / "items.csv", index=False)
+    load = {
+        "id": "load", "name": "Load items", "type": "input_data",
+        "connector": {"kind": "file",
+                      "params": {"path": str(root / "data" / "items.csv"), "format": "csv"}},
+        "output_schema": _NAME_VAL_SCHEMA,
+    }
+    keep = {
+        "id": "keep", "name": "Keep items", "type": "python_row_function",
+        "inputs": [{"id": "load", "schema": _NAME_VAL_SCHEMA}],
+        "output_schema": _NAME_VAL_SCHEMA,
+        "function": {"kind": "inline", "code": code},
+    }
+    (root / "compiled" / "01_load.json").write_text(json.dumps(load), encoding="utf-8")
+    (root / "compiled" / "02_keep.json").write_text(json.dumps(keep), encoding="utf-8")
+
+
+def test_offset_makes_the_trace_land_on_the_true_upstream_row(tmp_path):
+    # The row driver counts from the frame it was HANDED, which an offset starts
+    # two rows in. Unshifted, that lineage would send the trace to load's row 0.
+    _row_mapped_project(tmp_path, [{"name": f"row{i}", "val": i} for i in range(5)],
+                        _IDENTITY_ROW_FUNCTION)
+    _seed_version(tmp_path)
+    manifest = execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path),
+                           offsets={"keep": 2})
+
+    run_dir = tmp_path / "runs" / manifest["run_id"]
+    assert list(pd.read_parquet(run_dir / "outputs" / "keep.parquet")["val"]) == [2, 3, 4]
+
+    trace = trace_row(run_dir, "keep", 0)
+    assert [s.stage_id for s in trace.steps] == ["keep", "load"]
+    assert trace.steps[1].row_ordinal == 2
+    assert trace.steps[1].row["name"] == "row2"
+    assert trace.end.reached_origin is True
+
+
+def test_a_limited_stage_is_not_failed_by_a_duplicate_row_it_never_reads(tmp_path):
+    # Rows 0 and 3 are exact duplicates, which fails any stage fed both. Under a
+    # cap of 3 the stage is handed neither pair member twice, so it runs clean:
+    # a dry run must not be failed by a row outside the window it asked for.
+    _row_mapped_project(tmp_path, [
+        {"name": "a", "val": 1}, {"name": "b", "val": 2},
+        {"name": "c", "val": 3}, {"name": "a", "val": 1},
+    ], _IDENTITY_ROW_FUNCTION)
+    _seed_version(tmp_path)
+    manifest = execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path),
+                           limits={"keep": 3})
+
+    records = {r["stage_id"]: r for r in manifest["stage_records"]}
+    assert records["keep"]["status"] == "ok"
+    assert manifest["status"] == "ok"
 
 
 def _two_stage_project(root, rows: list[dict]):

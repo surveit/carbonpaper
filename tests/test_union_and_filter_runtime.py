@@ -161,15 +161,14 @@ def test_trace_walks_through_union_to_the_right_source_row_in_the_right_input(tm
 # ── the runtime's row slicing, applied to lineage as well as rows ─────────────
 
 
-def test_trace_follows_lineage_after_the_stage_limit_trims_kept_rows(tmp_path):
-    """A limit trims the filter's OUTPUT after the predicate ran, so the lineage
-    the runtime recorded has to be narrowed by the same window — otherwise the
-    surviving row is traced back to whichever ordinal the untrimmed lineage
-    happened to list first."""
+def test_trace_follows_lineage_after_a_limit_caps_what_the_filter_reads(tmp_path):
+    # A limit caps the filter's INPUT, so the predicate runs over src rows 0-1
+    # only. The one row it keeps is src row 1, and the lineage the driver
+    # recorded against the sliced frame has to name that ordinal.
     src = pd.DataFrame({"a": ["x", "y", "z"], "b": [-1, 1, 2]})
     load = _load_stage("src", src, tmp_path)
     filt = _filter_stage("f", "src", "def should_include(row): return row['b'] > 0")
-    filt = filt.model_copy(update={"limit": 1})
+    filt = filt.model_copy(update={"limit": 2})
     workflow = Workflow(stages=[load, filt])
     run_dir = tmp_path / "runs" / "trace_filter_limit"
 
@@ -178,8 +177,8 @@ def test_trace_follows_lineage_after_the_stage_limit_trims_kept_rows(tmp_path):
         stage_ids=["src", "f"], run_dir=run_dir, repo_root=tmp_path,
     )
 
-    # Predicate keeps src rows 1 and 2; limit=1 then keeps only the first of
-    # those, which is src row 1 ('y') — NOT src row 0.
+    # src row 2 ('z') would also have passed the predicate — it is outside the
+    # window, so it was never offered to it.
     assert outputs["f"]["a"].tolist() == ["y"]
     trace = trace_row(run_dir, "f", 0)
     assert trace.steps[1].row_ordinal == 1

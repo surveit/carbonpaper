@@ -141,11 +141,13 @@ def prepare_run(
     no published version — or an invalid snapshot — fails there, before this is
     reached, so no run dir is left behind.
 
-    `limits` is a per-RUN row-cap override: {stage_id: N} truncates that
-    stage's output to its first N rows for this run only, overriding any
-    static `limit:` in the stage spec. `offsets` ({stage_id: M}) drops the
-    first M rows BEFORE the cap is applied — together they page through a
-    deterministic ordering (offset 5 + limit 3 = rows 6-8). Both are recorded
+    `limits` is a per-RUN row-cap override: {stage_id: N} caps that stage at
+    the first N rows of each of its INPUTS — the handler is never given the
+    rest — overriding any static `limit:` in the stage spec. `offsets`
+    ({stage_id: M}) skips the first M rows BEFORE the cap is applied — together
+    they page through a deterministic ordering (offset 5 + limit 3 = upstream
+    rows 6-8). An `input_data` stage has no input frames, so its window is taken
+    on the frame it loads instead. Both are recorded
     in the manifest (`limit_overrides` / `offset_overrides`) so the slice is
     part of the run's provenance and survives a halt/resume. Unknown stage
     ids fail loudly.
@@ -243,8 +245,8 @@ def execute_run(
 ) -> dict[str, Any]:
     """Run the workflow once (synchronous). Returns the manifest dict. `stages` are
     the frozen stages of `workflow_version`, resolved and loaded by the caller
-    (app.services.versioning). `limits`/`offsets` are per-run row slicing
-    overrides; `bindings` is the per-run connector-param override; `bust_cache`
+    (app.services.versioning). `limits`/`offsets` cap the rows each named stage
+    READS; `bindings` is the per-run connector-param override; `bust_cache`
     recomputes everything; see prepare_run."""
     return run_prepared(
         prepare_run(project_dir, repo_root, stages, workflow_version,

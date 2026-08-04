@@ -43,9 +43,9 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     )
     parser.add_argument("project", help="project name, under the projects root")
     parser.add_argument("--limit", action="append", metavar="STAGE_ID=N", default=[],
-                        help="cap a stage's output at N rows for this run")
+                        help="cap a stage at the first N rows it READS, for this run")
     parser.add_argument("--offset", action="append", metavar="STAGE_ID=M", default=[],
-                        help="drop a stage's first M rows before --limit applies")
+                        help="skip a stage's first M rows before --limit applies")
     parser.add_argument("--bust-cache", action="store_true",
                         help="recompute every stage, reading no cached rows")
     return parser.parse_args(argv)
