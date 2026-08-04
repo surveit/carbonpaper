@@ -1,4 +1,5 @@
-{# Renders a TableSchema (columns list with type, nullable, range, description) as a table. #}
+{# Renders a TableSchema (columns list with type, nullable, range/enum, description) as a table.
+   range and enum share one cell: range is numeric-only, enum str-only, so a column never has both. #}
 {% macro schema_table(schema) %}
 {% if schema and schema.columns %}
 <table class="schema">
@@ -14,6 +15,8 @@
             <td>
                 {% if c.range %}
                     <code class="range">{{ c.range }}</code>
+                {% elif c.enum %}
+                    <code class="range">{{ c.enum | join(' · ') }}</code>
                 {% else %}
                     <span class="muted">—</span>
                 {% endif %}
