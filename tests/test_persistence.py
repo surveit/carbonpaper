@@ -4,7 +4,13 @@ from datetime import datetime, timedelta
 import pytest
 
 from app.core.errors import DocumentNotFound
-from app.core.persistence import PersistedModel, SqliteKvStore, configure_store, validate_id
+from app.core.persistence import (
+    PersistedModel,
+    SqliteKvStore,
+    _now_iso,
+    configure_store,
+    validate_id,
+)
 
 
 @pytest.fixture
@@ -162,6 +168,27 @@ def test_two_records_written_in_the_same_second_order_deterministically(configur
 
     assert first.created_at != second.created_at
     assert first.created_at < second.created_at
+
+
+def test_consecutive_stamps_strictly_increase():
+    """The Windows wall clock ticks every ~15.6ms, so `datetime.now()` alone repeats."""
+    stamps = [_now_iso() for _ in range(1000)]
+
+    assert all(a < b for a, b in zip(stamps, stamps[1:]))
+
+
+def test_concurrent_stampers_never_produce_the_same_stamp():
+    """Threads share the last-stamp state, so an unguarded read-modify-write collides."""
+    stampers, per_stamper = 8, 200
+
+    def stamp_many(_stamper: int) -> list[str]:
+        return [_now_iso() for _ in range(per_stamper)]
+
+    with ThreadPoolExecutor(max_workers=stampers) as pool:
+        stamps = [s for f in [pool.submit(stamp_many, n) for n in range(stampers)]
+                  for s in f.result()]
+
+    assert len(set(stamps)) == stampers * per_stamper
 
 
 def test_load_or_none_missing(configured):
