@@ -58,7 +58,7 @@ def test_every_mcp_tool_declares_its_description() -> None:
     assert not undeclared, (
         "an @mcp.tool without an explicit `description=` falls back to the function's "
         "docstring, making the model-facing prompt a side effect of how the function "
-        f"is documented — add an entry to app/services/tool_specs.py for: {undeclared}"
+        f"is documented — add an entry to app/tools/tool_specs.py for: {undeclared}"
     )
 
 
@@ -66,7 +66,7 @@ def test_no_mcp_tool_carries_a_docstring() -> None:
     documented = [name for name, _, doc in find_mcp_tools(_MCP_SERVER) if doc is not None]
     assert not documented, (
         "a docstring on an MCP tool reads as the model-facing description even when it "
-        f"is not one — move it to app/services/tool_specs.py: {documented}"
+        f"is not one — move it to app/tools/tool_specs.py: {documented}"
     )
 
 
@@ -83,7 +83,8 @@ def test_mcp_descriptions_cover_exactly_the_registered_tools() -> None:
 def test_no_editing_tool_carries_a_docstring() -> None:
     documented = find_docstringed_editing_tools(_EDITING_TOOLS)
     assert not documented, (
-        "an editing tool's docstring is not what the model reads — TOOL_DESCRIPTIONS is; "
+        "an editing tool's docstring is not what the model reads — the `_DESCRIPTIONS` "
+        "mapping in app/tools/editing.py is, built from app/tools/tool_specs.py; "
         f"a docstring here would drift from it unnoticed: {documented}"
     )
 
