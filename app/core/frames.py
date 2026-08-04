@@ -182,11 +182,15 @@ def dtype_proves_cell_type(series: pd.Series, type_name: str) -> bool:
 
 
 def convert_cell_to_json_native(value: object) -> object:
-    """A `json.dumps` default for frame cells: a numpy scalar becomes its Python
-    equivalent via `.item()` (so a numeric cell survives as a JSON number rather
-    than a string), kept only when that equivalent is itself JSON-native;
-    everything else — a pandas Timestamp, a numpy datetime, an arbitrary object
-    — is stringified."""
+    """A `json.dumps` default for frame cells: an array becomes a list and a numpy
+    scalar its Python equivalent via `.item()` (so a list cell survives as a JSON
+    array and a numeric one as a JSON number, not a string); everything else — a
+    pandas Timestamp, a numpy datetime, an arbitrary object — is stringified."""
+    if isinstance(value, np.ndarray):
+        # Without this an array cell falls to str() and is stored as numpy's repr
+        # ("['a' 'b']" — space-separated, unquoted), which does not parse back.
+        # Elements are re-dispatched through this default by json.dumps.
+        return value.tolist()
     if isinstance(value, np.generic):
         native = value.item()
         if native is None or isinstance(native, (bool, int, float, str)):

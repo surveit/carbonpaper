@@ -107,6 +107,24 @@ def test_record_json_safes_both_rows():
     assert got.output_row == {"id": "r1", "final_score": 4.5}
 
 
+def test_record_keeps_an_array_valued_cell_a_list():
+    # A list[str] column read from parquet arrives as an object ndarray. Stored
+    # through str() it came back as numpy's repr — "['grand chose' 'proches de
+    # zéro']", space-separated and unquoted — so a cache hit replayed a str into a
+    # column declared list[str] and the stage failed its own output schema.
+    cache = StageCache()
+    keyphrases = np.array(["grand chose", "proches de zéro"], dtype=object)
+    cache.record(
+        project="proj", stage_id="relevance", stage_fingerprint="sf1", input_fingerprint="ifn",
+        input_row={"id": "r1", "keyphrases": keyphrases},
+        output_row={"id": "r1", "keyphrases": keyphrases, "is_relevant": True},
+    )
+    got = cache.get("proj", "relevance", "sf1", "ifn")
+    assert got is not None
+    assert got.frozen_input["keyphrases"] == ["grand chose", "proches de zéro"]
+    assert got.output_row["keyphrases"] == ["grand chose", "proches de zéro"]
+
+
 def test_record_stores_under_the_passed_fingerprint_not_a_recomputed_one():
     # The id is built from the passed input_fingerprint, never recomputed from
     # input_row — a deliberately mismatched fingerprint proves it: the entry is
