@@ -15,7 +15,7 @@ import pandas as pd
 
 from app.core.errors import RowOutOfRange, StageNotInRun
 from app.core.frames import PARQUET_SUFFIX
-from app.models.stage import PositionalCross, StageType, find_positional_cross
+from app.models.stage import StageType, is_grain_and_order_preserving
 from app.runtime.lineage import (
     EdgeKind,
     RowLineage,
@@ -24,15 +24,16 @@ from app.runtime.lineage import (
 )
 
 
-def _find_positional_cross(stage_type: str) -> PositionalCross | None:
-    """How to cross this stage type on ordinal alone; None where nothing can."""
-    # A type name this build doesn't know (a foreign or future run) is never
-    # trusted. Necessary but NOT sufficient — crossing is still gated on the
-    # recorded input arity and on matching parent/child row counts below.
+def _is_row_preserving(stage_type: str) -> bool:
+    """True when this type guarantees output row i came from input row i by position."""
+    # Delegates to the model's single classification, so a reclassified type is
+    # picked up here automatically; a type name this build doesn't know (a
+    # foreign or future run) is never trusted. Necessary but NOT sufficient —
+    # crossing is still gated on matching parent/child row counts below.
     try:
-        return find_positional_cross(StageType(stage_type))
+        return is_grain_and_order_preserving(StageType(stage_type))
     except ValueError:
-        return None
+        return False
 
 
 @dataclass
@@ -158,17 +159,14 @@ def _not_preserving_message(stage_type: str) -> str:
             "across it needs recording (issue #58)")
 
 
-def _columns_parent_id(
-    parents: list[str], spine: RowParent | None, stage_type: str
-) -> str | None:
-    """The row's actual parent for `columns_new`: the spine, else the positional subject."""
-    # Without this second case an enrich has no parent frame, so EVERY column
-    # reads as new there — overstating what the join contributed.
+def _columns_parent_id(parents: list[str], spine: RowParent | None) -> str | None:
+    """The row's actual parent for `columns_new`: the spine, else the single input edge."""
+    # A multi-input stage with nothing recorded has no single parent frame to
+    # diff against, so every column reads as new there. That overstates what the
+    # stage contributed, but the run did not record what it would take to say
+    # otherwise, and guessing an input would be worse.
     if spine is not None:
         return spine.stage_id
-    cross = _find_positional_cross(stage_type)
-    if cross is not None and len(parents) == cross.input_count:
-        return parents[cross.subject_input]
     return parents[0] if len(parents) == 1 else None
 
 
@@ -226,17 +224,13 @@ def _advance(
                         "of them — open the contributors to go further")
     if not parents:
         return TraceEnd(False, sid, "the manifest records no input edge for this stage")
-    # No sidecar: fall back to crossing on ordinal alone where the type allows
-    # it. This is what keeps a run recorded BEFORE lineage was captured
-    # traceable — an enrich crosses into its subject with nothing recorded.
-    cross = _find_positional_cross(stage_type)
-    # A recorded arity the fact doesn't describe (a missing schema-less edge,
-    # say) means the subject index cannot be trusted, so refuse rather than
-    # index the wrong edge.
-    if cross is None or len(parents) != cross.input_count:
+    # Nothing recorded: the only remaining route is the ordinal, and only where
+    # the type guarantees it. A join is NOT crossable this way even though an
+    # enrich's output happens to be in subject order — a run made before this
+    # recorded lineage stops here, and re-running it is what makes it traceable.
+    if not _is_row_preserving(stage_type) or len(parents) != 1:
         return TraceEnd(False, sid, _not_preserving_message(stage_type))
-    return _advance_positionally(
-        run_dir, by_id, sid, parents[cross.subject_input], r, df)
+    return _advance_positionally(run_dir, by_id, sid, parents[0], r, df)
 
 
 def trace_row(run_dir: Path, stage_id: str, row_ordinal: int) -> Trace:
@@ -266,7 +260,7 @@ def trace_row(run_dir: Path, stage_id: str, row_ordinal: int) -> Trace:
         parents = _parents(record)
         hops = _lineage_hops(run_dir, sid, r)
         spine, branches = _split_spine(hops)
-        columns_parent_id = _columns_parent_id(parents, spine, stage_type)
+        columns_parent_id = _columns_parent_id(parents, spine)
         parent_df = (
             _read_output(run_dir, by_id[columns_parent_id])
             if columns_parent_id in by_id else None

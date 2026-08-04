@@ -9,7 +9,7 @@ import pandas as pd
 
 from app.runtime.lineage import lineage_sidecar_path
 from app.runtime.trace import (
-    _find_positional_cross,
+    _is_row_preserving,
     _load_manifest,
     _origin,
     _parents,
@@ -58,18 +58,18 @@ def write_run(tmp_path: Path, stages: list[dict], run_id: str = "T1") -> Path:
     return run_dir
 
 
-def test_positional_cross_matches_the_model_classification():
-    # Sourced from the model's find_positional_cross, not a tracer-local list.
-    # enrich crosses on ordinal (into input 0 of 2) WITHOUT being row-driven,
-    # which is why this is a separate fact from is_grain_and_order_preserving.
-    for stage_type in ("python_row_function", "llm_transform", "human_review_queue"):
-        assert _find_positional_cross(stage_type) == (0, 1)
-    assert _find_positional_cross("enrich") == (0, 2)
-    # input_data originates rows; the rest reshape or record explicit lineage.
-    for stage_type in ("input_data", "python_frame_function", "expand",
-                       "aggregate", "publish", "filter_rows", "union"):
-        assert _find_positional_cross(stage_type) is None
-    assert _find_positional_cross("not_a_stage_type") is None
+def test_is_row_preserving_matches_the_model_classification():
+    # Sourced from the model's is_grain_and_order_preserving, not a tracer-local
+    # list, so a reclassified type is picked up here; an unknown one is never
+    # trusted. A join is absent even though an enrich's output IS in subject
+    # order: crossing it takes a recorded sidecar, not this.
+    for stage_type in ("input_data", "python_row_function", "llm_transform",
+                       "human_review_queue"):
+        assert _is_row_preserving(stage_type) is True
+    for stage_type in ("python_frame_function", "enrich", "expand", "aggregate",
+                       "publish", "filter_rows", "union"):
+        assert _is_row_preserving(stage_type) is False
+    assert _is_row_preserving("not_a_stage_type") is False
 
 
 def test_parents_reads_input_phases_and_ignores_output_phase():
