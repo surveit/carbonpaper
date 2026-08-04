@@ -1,97 +1,118 @@
-{# The Data-pane stage diff (context: diff, project, run_id, stage — see
+{# The stage diff (context: diff, project, run_id, stage — see
    app.web.stage_diff). Two shapes:
-     row_aligned  — a 1:1 stage's output cells against its input row by row.
-                    This table REPLACES the plain output preview: same rows,
-                    annotated. Added columns take the same palette tint the
-                    stage-tests table uses; a caption names them in words, so
-                    the mark survives without colour.
+     row_aligned  — the stage's INPUT frame as the base, with what the stage
+                    did to it painted over, row by row. This table REPLACES the
+                    plain output preview. Every input column holds its input
+                    position: one the stage DROPPED is struck through, carrying
+                    the input value that was lost; the columns the stage ADDED
+                    follow, in the palette tint the stage-tests table uses. Each
+                    header carries a + or − mark, so both read without colour.
      filter_rows  — ONE table over the first input rows in input order: kept
                     rows drawn exactly as the plain output preview would draw
                     them (lineage links included), dropped rows in place,
-                    tinted, carrying their input ordinal.
-   The header states the relationship (input → stage) and links both raw
-   frames' full-rows views and CSV downloads — the untransformed frames stay
-   one click away with the Inputs/Outputs tabs gone. The route passes
-   diff=None wherever no honest diff exists; this file is then never included
-   and the pane falls back to the plain output view. #}
-{% set raw_links %}
-    <span class="preview-actions">· raw input: <a href="/project/{{ project }}/runs/{{ run_id }}/stage/{{ diff.input_id }}/rows">all rows</a>
-    · <a href="/project/{{ project }}/runs/{{ run_id }}/stage/{{ diff.input_id }}/rows.csv">⬇ CSV</a>
-    · raw output: <a href="/project/{{ project }}/runs/{{ run_id }}/stage/{{ stage.stage_id }}/rows">all rows</a>
-    · <a href="/project/{{ project }}/runs/{{ run_id }}/stage/{{ stage.stage_id }}/rows.csv">⬇ CSV</a></span>
-{% endset %}
-{% if diff.kind == 'filter_rows' %}
+                    tinted and labelled as dropped.
+   The header is ONE horizontal axis, identical for either shape: the input
+   frames stacked vertically, a bracket gathering them where there is more than
+   one, a rail carrying the tally of what the stage did to the frame, then the
+   output frame. The output is a sibling of the input stack, so a second input
+   lengthens the stack without moving the output. Each frame unit names its part
+   in words (base input / reference input / output, so the base reads without
+   colour), carries the row count of the frame it names, and links that frame's
+   RAW full-rows view (?raw=1 — this same partial serves the full-rows page, so
+   a link into it has to ask for raw) and CSV download; a frame the diff could
+   not read carries no count. The route passes diff=None wherever no honest diff
+   exists; this file is then never included and the caller falls back to the
+   plain output view.
+
+   `full_rows` (absent, so false, in the stage panel) switches on the full-rows
+   page's own treatments: a # row-number column, cells clipped to one line with
+   click-to-expand and a title hover, truncated at 4000 characters rather than
+   240, and the tall sticky-header scroll box. #}
+{% set rows_base = "/project/" ~ project ~ "/runs/" ~ run_id ~ "/stage/" %}
+{% macro frame_unit(base_url, role, frame_id, rows_total, klass) -%}
+<span class="diff-frame {{ klass }}"><span class="diff-frame-head"><span class="diff-frame-role">{{ role }}</span>
+    <code class="diff-frame-id">{{ frame_id }}</code></span>
+    <span class="diff-frame-meta">
+    {%- if rows_total is not none %}{{ "{:,}".format(rows_total) }} row{% if rows_total != 1 %}s{% endif %} · {% endif -%}
+    <a href="{{ base_url }}{{ frame_id }}/rows?raw=1" title="every row of this frame, raw">all rows</a>
+    · <a href="{{ base_url }}{{ frame_id }}/rows.csv">⬇ CSV</a></span></span>
+{%- endmacro %}
+{# The axis: the input stack → the rail → the output. `tally` is the list of
+   things the stage did that its own shape measured, in one vocabulary — the
+   template renders it the same way whichever shape produced it. #}
+{% macro diff_head(base_url, inputs, output_id, output_rows, tally) -%}
+<div class="preview-head diff-head"><span class="diff-flow">
+    <span class="diff-inputs">
+    {%- for frame in inputs %}{{ frame_unit(base_url, frame.role, frame.stage_id, frame.rows_total,
+        'diff-frame-base' if loop.first else 'diff-frame-ref') }}
+    {%- endfor %}</span>
+    {%- if inputs | length > 1 %}<span class="diff-brace" aria-hidden="true"></span>{% endif %}
+    <span class="diff-rail"><span class="diff-tally">{{ tally | join(' · ') }}</span>
+    <span class="diff-arrow" aria-hidden="true">→</span></span>
+    <span class="diff-outputs">{{ frame_unit(base_url, 'output', output_id, output_rows, 'diff-frame-out') }}</span>
+</span></div>
+{%- endmacro %}
+{% macro data_cell(text, klass, was, full) -%}
+{%- set klasses = (('cell-clip ' if full else '') ~ klass) | trim -%}
+<td{% if klasses %} class="{{ klasses }}"{% endif %}{% if full %} title="{{ text }}"{% endif %}>
+{%- if was %}<span class="diff-was" title="the input value this stage replaced">{{ was | truncate(120) }}</span>{% endif %}
+{%- if full %}{{ text | truncate(4000, True, '… (truncated — download the CSV for the full value)') }}
+{%- else %}{{ text | truncate(240) }}{% endif %}</td>
+{%- endmacro %}
 <div class="preview-block stage-diff">
-  <div class="preview-head"><code>{{ diff.input_id }}</code> → <code>{{ stage.stage_id }}</code> — dropped rows shown in place
-    <span class="muted">· kept {{ "{:,}".format(diff.kept_total) }} of {{ "{:,}".format(diff.input_total) }} row{% if diff.input_total != 1 %}s{% endif %}
-    · dropped {{ "{:,}".format(diff.dropped_total) }}</span>
-    {{ raw_links }}
-  </div>
+  {{ diff_head(rows_base, diff.inputs, stage.stage_id, diff.output_rows, diff.tally) }}
+{% if diff.kind == 'filter_rows' %}
   {% if diff.input_total > diff.rows | length %}
   <p class="muted">showing the first {{ diff.rows | length }} of {{ "{:,}".format(diff.input_total) }} input rows{% if diff.dropped_beyond_window %} — {{ "{:,}".format(diff.dropped_beyond_window) }} dropped row{% if diff.dropped_beyond_window != 1 %}s{% endif %} fall{% if diff.dropped_beyond_window == 1 %}s{% endif %} beyond them{% endif %}</p>
   {% endif %}
-  <div class="table-scroll"><table class="data-preview">
-    <thead><tr><th class="syw-col">lineage</th>{% for name in diff.columns %}<th>{{ name }}</th>{% endfor %}</tr></thead>
+  <div class="table-scroll{% if full_rows %} rows-full{% endif %}"><table class="data-preview">
+    <thead><tr>{% if full_rows %}<th class="row-num">#</th>{% endif %}<th class="syw-col">lineage</th>{% for name in diff.columns %}<th>{{ name }}</th>{% endfor %}</tr></thead>
     <tbody>
     {% for row in diff.rows %}
+    {% set row_num %}{% if full_rows %}<td class="row-num muted">{{ row.input_ordinal + 1 }}</td>{% endif %}{% endset %}
     {% if row.dropped %}
-    <tr class="diff-row-dropped"><td class="syw-cell">dropped · input row {{ row.input_ordinal }}</td>
-      {%- for value in row.cells %}<td>{{ value | truncate(240) }}</td>{% endfor %}</tr>
+    <tr class="diff-row-dropped">{{ row_num }}<td class="syw-cell">Dropped row</td>
+      {%- for value in row.cells %}{{ data_cell(value, '', '', full_rows) }}{% endfor %}</tr>
     {% else %}
-    <tr><td class="syw-cell"><a href="/project/{{ project }}/runs/{{ run_id }}/stage/{{ stage.stage_id }}/row/{{ row.output_ordinal }}/trace/view" target="_blank" rel="noopener" title="trace this row's provenance back through the pipeline">View lineage</a></td>
-      {%- for value in row.cells %}{% if value[:4] == 'http' %}<td class="cell-url"><a href="{{ value }}" target="_blank" rel="noopener">{{ value }}</a></td>{% else %}<td>{{ value | truncate(240) }}</td>{% endif %}{% endfor %}</tr>
+    <tr>{{ row_num }}<td class="syw-cell"><a href="/project/{{ project }}/runs/{{ run_id }}/stage/{{ stage.stage_id }}/row/{{ row.output_ordinal }}/trace/view" target="_blank" rel="noopener" title="trace this row's provenance back through the pipeline">View lineage</a></td>
+      {%- for value in row.cells %}{% if value[:4] == 'http' %}<td class="cell-url"><a href="{{ value }}" target="_blank" rel="noopener">{{ value }}</a></td>{% else %}{{ data_cell(value, '', '', full_rows) }}{% endif %}{% endfor %}</tr>
     {% endif %}
     {% endfor %}
     </tbody>
   </table></div>
-</div>
 {% else %}
-<div class="preview-block stage-diff">
-  <div class="preview-head"><code>{{ diff.input_id }}</code> → <code>{{ stage.stage_id }}</code> — output as a diff against its input
-    {% set shown = diff.rows | length %}
-    <span class="muted">· {% if diff.rows_total > shown %}first {{ shown }} of {% endif %}{{ "{:,}".format(diff.rows_total) }} row{% if diff.rows_total != 1 %}s{% endif %}</span>
-    {{ raw_links }}
-  </div>
-  <p class="diff-summary">
-    {%- if diff.added_column_names %}
-    <span class="diff-note diff-note-added">added column{% if diff.added_column_names | length != 1 %}s{% endif %}
-      {% for name in diff.added_column_names %}<code>{{ name }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</span>
-    {%- endif %}
-    {%- if diff.removed_column_names %}
-    <span class="diff-note">dropped column{% if diff.removed_column_names | length != 1 %}s{% endif %}
-      {% for name in diff.removed_column_names %}<code>{{ name }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</span>
-    {%- endif %}
-    {%- for column in diff.changed_columns %}
-    <span class="diff-note">changed {{ "{:,}".format(column.changed_cells) }} cell{% if column.changed_cells != 1 %}s{% endif %} in <code>{{ column.name }}</code></span>
-    {%- endfor %}
-    {%- if not diff.added_column_names and not diff.removed_column_names and not diff.changed_cells_total %}
-    <span class="diff-note">every value carried through unchanged</span>
-    {%- elif not diff.changed_cells_total %}
-    <span class="diff-note">every carried-through cell unchanged</span>
-    {%- elif diff.columns | length > (diff.changed_columns | length + diff.added_column_names | length) %}
-    <span class="diff-note muted">every other column untouched</span>
-    {%- endif %}
-  </p>
-  <div class="table-scroll"><table class="data-preview">
-    {% if diff.added_column_names %}
-    <caption>shaded — added by this stage, carried by no input:
-      {% for name in diff.added_column_names %}<code>{{ name }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</caption>
-    {% endif %}
-    <thead><tr><th class="syw-col">lineage</th>
-      {%- for column in diff.columns %}<th{% if column.added %} class="diff-col-new"{% endif %}>{{ column.name }}</th>{% endfor -%}
+  {% if diff.rows_total > diff.rows | length %}
+  <p class="muted">showing the first {{ diff.rows | length }} of {{ "{:,}".format(diff.rows_total) }} rows</p>
+  {% endif %}
+  <div class="table-scroll{% if full_rows %} rows-full{% endif %}"><table class="data-preview">
+    {# The class each state paints with — app/static/style.css owns what they
+       look like — and the mark that says the same thing without colour. The
+       name sits in its own span so a dropped column's strike takes the name
+       and leaves the − readable. #}
+    {%- set cell_class = {'added': 'diff-col-new', 'dropped': 'diff-col-dropped',
+                          'changed': 'diff-cell-changed', 'carried': 'diff-cell-same'} %}
+    {%- set column_mark = {'added': '+', 'dropped': '−'} %}
+    {%- set column_title = {'added': 'added by this stage',
+                            'dropped': 'dropped by this stage, carrying the input value'} %}
+    <thead><tr>{% if full_rows %}<th class="row-num">#</th>{% endif %}<th class="syw-col">lineage</th>
+      {%- for column in diff.columns %}
+      {%- if column.state == 'carried' %}<th>
+      {%- else %}<th class="{{ cell_class[column.state] }}" title="{{ column_title[column.state] }}"><span class="diff-mark">{{ column_mark[column.state] }}</span>
+      {%- endif %}<span class="diff-col-name">{{ column.name }}</span></th>
+      {%- endfor %}
     </tr></thead>
     <tbody>
     {% for row in diff.rows %}
-    <tr><td class="syw-cell"><a href="/project/{{ project }}/runs/{{ run_id }}/stage/{{ stage.stage_id }}/row/{{ loop.index0 }}/trace/view" target="_blank" rel="noopener" title="trace this row's provenance back through the pipeline">View lineage</a></td>
+    <tr>{% if full_rows %}<td class="row-num muted">{{ loop.index }}</td>{% endif %}<td class="syw-cell"><a href="/project/{{ project }}/runs/{{ run_id }}/stage/{{ stage.stage_id }}/row/{{ loop.index0 }}/trace/view" target="_blank" rel="noopener" title="trace this row's provenance back through the pipeline">View lineage</a></td>
       {%- for cell in row %}
-      {%- set klass = 'diff-col-new' if cell.added else ('diff-cell-changed' if cell.changed else 'diff-cell-same') %}
-      {%- if cell.text[:4] == 'http' and not cell.changed %}<td class="cell-url {{ klass }}"><a href="{{ cell.text }}" target="_blank" rel="noopener">{{ cell.text }}</a></td>
-      {%- else %}<td class="{{ klass }}">{% if cell.changed %}<span class="diff-was" title="the input value this stage replaced">{{ cell.was | truncate(120) }}</span>{% endif %}{{ cell.text | truncate(240) }}</td>
+      {%- set klass = cell_class[cell.state] %}
+      {%- if cell.text[:4] == 'http' and cell.state != 'changed' %}<td class="cell-url {{ klass }}"><a href="{{ cell.text }}" target="_blank" rel="noopener">{{ cell.text }}</a></td>
+      {%- else %}{{ data_cell(cell.text, klass, cell.was, full_rows) }}
       {%- endif %}
       {%- endfor %}
     </tr>
     {% endfor %}
     </tbody>
   </table></div>
-</div>
 {% endif %}
+</div>

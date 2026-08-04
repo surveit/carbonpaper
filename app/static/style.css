@@ -1117,23 +1117,105 @@ table.data-preview.selectable tbody tr:hover { background: #f3f7ff; }
 .scratch-result .scratch-head.err { color: #802020; }
 table.data-preview.scratch th { background: #f3ecd0; }
 
+/* The diff header (app/templates/_stage_diff.html): ONE horizontal axis — the
+   input frames stacked vertically, a bracket gathering them where there is more
+   than one, a rail carrying the tally of what the stage did, then the output
+   frame. The row never wraps and every item starts at the top, so a second input
+   lengthens the input stack downward and leaves the output where it was. The
+   base input takes a solid left rule and a reference input a dashed one, but the
+   role label inside each chip is what carries the distinction; the rules only
+   echo it, so the header survives greyscale. It sits above a data table, so it
+   borrows no state tint: border and muted text only. */
+.diff-head { margin-bottom: 6px; max-width: 100%; overflow-x: auto; }
+.diff-flow { display: flex; flex-wrap: nowrap; align-items: flex-start; gap: 8px; }
+.diff-inputs { display: flex; flex-direction: column; align-items: stretch; gap: 4px; }
+.diff-outputs { display: flex; }
+/* Spans the whole input stack and closes on the rail, so two inputs read as one
+   set feeding one transform rather than as two loose chips. */
+.diff-brace {
+    align-self: stretch;
+    width: 8px;
+    border: 1px solid var(--border);
+    border-left: 0;
+    border-radius: 0 8px 8px 0;
+}
+.diff-frame {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 3px 8px;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--border);
+    border-radius: 4px;
+    font-weight: 400;
+    letter-spacing: normal;
+    text-transform: none;
+    white-space: nowrap;
+}
+.diff-frame-base, .diff-frame-out { border-left-color: var(--muted); }
+.diff-frame-ref { border-left-style: dashed; }
+.diff-frame-head { display: flex; align-items: baseline; gap: 5px; }
+.diff-frame-role {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    font-weight: 600;
+    color: var(--muted);
+}
+.diff-frame-id { font-size: 11.5px; }
+.diff-frame-meta { font-size: 11px; font-weight: 400; color: var(--muted); }
+/* The rail: the tally rides above a line that runs left-to-right into the
+   arrowhead. Its top padding drops it to the height of the first frame's text. */
+.diff-rail {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    min-width: 130px;
+    padding-top: 4px;
+    font-weight: 400;
+    letter-spacing: normal;
+    text-transform: none;
+    color: var(--muted);
+}
+.diff-tally {
+    font-size: 11px;
+    font-weight: 600;
+    text-align: center;
+    white-space: nowrap;
+    padding: 0 6px 2px;
+}
+.diff-arrow {
+    display: block;
+    border-top: 1px solid var(--border);
+    text-align: right;
+    line-height: 0;
+    font-size: 15px;
+}
+
 /* Outputs-pane stage diff (app/templates/_stage_diff.html). A column the stage
    ADDS takes the same palette tint the stage-tests table uses for its added
-   columns (--state-review-bg), and the table caption names those columns in
-   words; a changed cell carries the warn tint plus the input value it replaced
+   columns (--state-review-bg); a column the stage DROPPED carries the failed
+   tint; a changed cell carries the warn tint plus the input value it replaced
    struck through, so the change reads without colour; a dropped row carries the
    failed tint. Unchanged cells go muted, so the eye lands on what the stage
-   touched. */
+   touched. Every tint has a colour-free twin: the + and − marks on the column
+   headers, and the strike through a dropped column's cells. */
 .stage-diff th.diff-col-new,
 .stage-diff td.diff-col-new { background: var(--state-review-bg); }
+.stage-diff th.diff-col-dropped,
+.stage-diff td.diff-col-dropped {
+    background: var(--state-failed-bg);
+    color: var(--state-failed-ink);
+}
+/* The strike takes the dropped column's cells and its header NAME — never the
+   − itself, which has to stay readable for the mark to do its job. */
+.stage-diff td.diff-col-dropped { text-decoration: line-through; }
+.stage-diff th.diff-col-dropped .diff-col-name { text-decoration: line-through; }
+.stage-diff .diff-mark { font-weight: 700; margin-right: 3px; }
 .stage-diff td.diff-cell-changed { background: var(--state-warn-bg); }
 .stage-diff td.diff-cell-same { color: var(--muted); }
 .stage-diff .diff-was { display: block; color: var(--muted); text-decoration: line-through; }
 .stage-diff tr.diff-row-dropped td { background: var(--state-failed-bg); color: var(--state-failed-ink); }
-.stage-diff caption { caption-side: top; text-align: left; font-size: 0.78rem; color: var(--muted); padding-bottom: 2px; }
-.diff-summary { margin: 6px 0 2px; font-size: 12.5px; }
-.diff-summary .diff-note { margin-right: 12px; }
-.diff-summary .diff-note-added code { background: var(--state-review-bg); }
 
 /* The Data pane's input-rows disclosure: the upstream previews and the scratch
    row picker, folded below the (diff-aware) output so the pane leads with what
@@ -1252,6 +1334,9 @@ table.data-preview.scratch th { background: #f3ecd0; }
 .table-scroll.rows-full { max-height: calc(100vh - 220px); }
 .table-scroll.rows-full thead th { position: sticky; top: 0; background: #f2f4f8; z-index: 1; }
 td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric: tabular-nums; }
+/* The raw output table saying so, and linking the stage diff — the diff view
+   states its own identity in its header instead, so it renders no view-note. */
+.rows-toolbar .view-note { font-size: .88rem; }
 
 /* ═══ Node review / workflow versioning ══════════════════ */
 
