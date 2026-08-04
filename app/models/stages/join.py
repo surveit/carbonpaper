@@ -15,6 +15,7 @@ from app.models.stages.shared import (
     find_declared_vs_computed_issues,
     resolve_input_columns,
 )
+from app.models.stages.signature import ExtendsSignature
 
 if TYPE_CHECKING:
     from app.models.schema import TableSchema
@@ -56,6 +57,7 @@ class JoinStage(StageBase):
     the config, the arity and the column rules are the same."""
     join: JoinConfig
     inputs: list[StageInput] = Field(default_factory=list, min_length=2, max_length=2)
+    signature: Optional[ExtendsSignature] = None
 
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
         return {"join": self.join}
@@ -65,6 +67,9 @@ class JoinStage(StageBase):
 
     def find_output_schema_issues(self) -> list[str]:
         return find_join_output_issues(self)
+
+    def find_signature_config_issues(self) -> list[str]:
+        return find_join_signature_issues(self)
 
 
 class EnrichStage(JoinStage):
@@ -123,6 +128,50 @@ def find_join_output_issues(stage: "JoinStage") -> list[str]:
     issues.extend(
         find_declared_vs_computed_issues(stage.id, stage_type, stage.output_schema, effective)
     )
+    return issues
+
+
+SIGNATURE_ADD_UNPRODUCIBLE_ISSUE = (
+    "stage '{sid}': signature adds `{col}` that the join cannot produce from its "
+    "reference input (producible: {cols})"
+)
+
+
+def find_join_signature_issues(stage: "JoinStage") -> list[str]:
+    """Keys must be read from their side, adds produced by the reference; rewrites are refused."""
+    signature = stage.signature
+    assert signature is not None  # find_signature_config_issues runs only with one
+    subject, reference = stage.inputs[0], stage.inputs[1]
+    reads_by_input = {
+        entry.input: {column.name for column in entry.columns}
+        for entry in signature.reads
+    }
+    issues = [
+        f"stage '{stage.id}': join key .{side} `{name}` is not read from the "
+        f"{role} input `{ref.id}`"
+        for side, role, ref in (("left", "subject", subject), ("right", "reference", reference))
+        for name in {getattr(key, side) for key in stage.join.keys}
+        if name not in reads_by_input.get(ref.id, set())
+    ]
+
+    joined = compute_join_output_types(stage.join, subject.table_schema, reference.table_schema)
+    subject_names = {column.name for column in subject.table_schema.columns}
+    producible = {name: t for name, t in joined.items() if name not in subject_names}
+    for column in signature.adds:
+        if column.name not in producible:
+            issues.append(SIGNATURE_ADD_UNPRODUCIBLE_ISSUE.format(
+                sid=stage.id, col=column.name, cols=sorted(producible),
+            ))
+        elif producible[column.name] != column.type:
+            issues.append(
+                f"stage '{stage.id}': signature adds `{column.name}` as "
+                f"{column.type!r} but the join produces {producible[column.name]!r}"
+            )
+    if signature.rewrites:
+        issues.append(
+            f"stage '{stage.id}': a join never revises a subject column; "
+            f"rewrites are not supported"
+        )
     return issues
 
 

@@ -20,14 +20,12 @@ import pandas as pd
 
 from app.core.frame_checks import find_frame_violations, find_primary_key_violations
 from app.core.utils import format_errors
-from app.models.schema import TableSchema, _Base
+from app.models.schema import StageId, TableSchema, _Base
 
 # One row: column name → cell value. WHICH columns is not knowable here — it comes
 # from the stage's own declared schema, checked at validate_test_rows — so this is a
 # dynamic boundary, not a model waiting to be written.
 DataRow: TypeAlias = dict[str, Any]
-# The upstream stage a test's input rows stand in for.
-StageId: TypeAlias = str
 
 _INPUTS_DESCRIPTION = (
     "Rows fed to the stage, keyed by the upstream stage id they come from — exactly "

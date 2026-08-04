@@ -25,6 +25,7 @@ from app.models.schema import (
     _SNAKE_RE,
 )
 from app.models.stages.shared import find_internal_namespace_column_issues
+from app.models.stages.signature import TransformSignature, find_signature_issues
 from app.models.stages.stage_tests import StageTest, validate_stage_tests
 from app.models.stages.warnings import CompilerWarning
 from app.core.utils import compute_short_hash
@@ -129,6 +130,18 @@ class StageCommon(_Base):
     limit: Optional[int] = None
     compiler_notes: list[str] = Field(default_factory=list)
 
+    # The authored contract of what this stage reads and writes, per input —
+    # separate from the mechanism (code, prompt, join keys) that honours it.
+    # Declared here so StageDraft carries it too: the signature is authored, not
+    # server-written. Each stored per-type model narrows it to its one form
+    # (ExtendsSignature for the anchored family, ReplacesSignature for the
+    # reshaping family — app.models.stages.signature); the draft keeps the
+    # permissive union, per the StageDraft philosophy. Optional while the
+    # compiler still authors output_schema directly; when present it is checked
+    # against the config (find_signature_config_issues) and the declared
+    # schemas (find_signature_issues).
+    signature: Optional[TransformSignature] = None
+
     @field_validator("inputs", mode="before")
     @classmethod
     def _bare_id_shorthand(cls, v: Any) -> Any:
@@ -228,6 +241,10 @@ class StageBase(StageCommon):
         other type."""
         return None
 
+    def find_signature_config_issues(self) -> list[str]:
+        """Signature-vs-config disagreements; [] when nothing cross-checks. Runs only with one."""
+        return []
+
     # ── the fingerprint ──────────────────────────────────────────────────────
     def compute_definition_fingerprint(self) -> str:
         """sha1[:16] over a sorted-key JSON dump of the output-determining subset
@@ -255,6 +272,10 @@ class StageBase(StageCommon):
                 for name, block in self.fingerprint_blocks().items()
             },
         }
+        if self.signature is not None:
+            # Key absent when unset — like `tests` in the model dump — so every
+            # fingerprint recorded before signatures existed is unchanged.
+            fields["signature"] = self.signature.model_dump(mode="json", exclude_none=True)
         payload = json.dumps(fields, sort_keys=True, separators=(",", ":"), default=str)
         return compute_short_hash(payload)
 
@@ -329,6 +350,16 @@ class StageBase(StageCommon):
         with the declared type matching what the config computes, where that can be known.
         EDGE-ONLY and per-stage, like _config_columns_resolve."""
         issues = self.find_output_schema_issues()
+        if issues:
+            raise ValueError("; ".join(issues))
+        return self
+
+    @model_validator(mode="after")
+    def _signature_consistent(self) -> "StageBase":
+        """A declared signature must agree with the edges, the declared schemas, and the config."""
+        if self.signature is None:
+            return self
+        issues = find_signature_issues(self) + self.find_signature_config_issues()
         if issues:
             raise ValueError("; ".join(issues))
         return self

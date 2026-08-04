@@ -36,6 +36,12 @@ from app.models.stages.input_data import Connector, InputDataStage
 from app.models.stages.join import EnrichStage, ExpandStage, JoinConfig
 from app.models.stages.llm_transform import LLMConfig, LLMTransformStage
 from app.models.stages.publish import PublishConfig, PublishStage
+from app.models.stages.signature import (  # noqa: F401  (re-exported: the stage vocabulary lives here)
+    ExtendsSignature,
+    InputReads,
+    ReplacesSignature,
+    TransformSignature,
+)
 from app.models.stages.union import UnionConfig, UnionStage
 from app.core.utils import format_errors
 
@@ -131,6 +137,9 @@ class StageDraft(StageCommon):
 
 
 __all__ = [
+    "ExtendsSignature",
+    "InputReads",
+    "ReplacesSignature",
     "ReviewConfig",
     "SERVER_OWNED_STAGE_FIELDS",
     "Stage",
@@ -139,6 +148,7 @@ __all__ = [
     "StageDraft",
     "StageInput",
     "StageType",
+    "TransformSignature",
     "is_grain_and_order_preserving",
     "parse_stage",
     "validate_stage",

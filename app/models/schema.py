@@ -9,7 +9,7 @@ from __future__ import annotations
 import datetime
 import re
 from enum import Enum
-from typing import Any, ClassVar, Literal, Optional, Sequence
+from typing import Any, ClassVar, Literal, Optional, Sequence, TypeAlias
 
 from pydantic import (
     BaseModel,
@@ -48,6 +48,11 @@ class StageConfig(_Base):
 
 # ── Identifiers ──────────────────────────────────────────────────────────────
 _SNAKE_RE = re.compile(r"^[a-z][a-z0-9_]*$")
+
+# A stage's id, as other stages reference it (an input edge, a stage-test's
+# per-input rows, a signature's reads). An alias rather than a NewType so stage
+# dicts parse unchanged.
+StageId: TypeAlias = str
 
 
 # Shared by every authored-code block (python_row_function/python_frame_function,
