@@ -10,7 +10,7 @@ from app.models.stages.starlark import StarlarkFunction, StarlarkRowFunctionStag
 
 GOOD = "def transform(row):\n    return {'n': row['n'] + 1}\n"
 
-_SCHEMA = TableSchema(columns=[Column(name="n", type="int")])
+_SCHEMA = TableSchema(columns=[Column(name="n", type="int", nullable=False)])
 _INPUT = StageInput(id="load", schema=_SCHEMA)
 
 
