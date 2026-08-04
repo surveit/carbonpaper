@@ -34,6 +34,17 @@ def test_compute_row_fingerprint_treats_every_null_form_as_json_null(null_value)
     assert with_none == with_other_null
 
 
+def test_compute_row_fingerprint_is_stable_across_list_representations():
+    # A list[str] cell is an object ndarray when the frame was just read from
+    # parquet and a plain list when the row was replayed from the cache. Hashing
+    # those differently files a row under one identity and looks it up under
+    # another, so a stage never finds what it recorded.
+    values = ["grand chose", "proches de zéro"]
+    as_list = compute_row_fingerprint({"keyphrases": values})
+    as_array = compute_row_fingerprint({"keyphrases": np.array(values, dtype=object)})
+    assert as_list == as_array
+
+
 def test_compute_row_fingerprint_guards_array_valued_cells():
     # An array-valued cell (e.g. a list-typed column) must not raise via
     # pd.isna's elementwise ambiguous-truth-value error.
