@@ -27,7 +27,8 @@ from app.models import (
     StageType,
 )
 from app.tools.tool_specs import SAVE_VERSION_FROM_WORKING_COPY, TOOL_SPECS
-from app.models.review_guide import ReviewGuide
+from app.models.review_guide import ReviewGuideDraft
+from app.services.versioning import ReviewGuide
 from app.models.stages.node_types import NODE_TYPES
 from app.runtime import stage_tests
 from app.services import generation
@@ -344,7 +345,9 @@ def read_review_guide(project_id: str, version_id: str) -> ReviewGuide | None:
 
 
 @mcp.tool(description=TOOL_SPECS["write_review_guide"].description)
-def write_review_guide(project_id: str, version_id: str, guide: ReviewGuide) -> ReviewGuide:
+def write_review_guide(
+    project_id: str, version_id: str, guide: ReviewGuideDraft
+) -> ReviewGuide:
     _resolve_existing_project(project_id)
     return project_service.write_review_guide(project_id, version_id, guide)
 

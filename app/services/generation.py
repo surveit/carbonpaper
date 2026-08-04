@@ -18,7 +18,7 @@ from app.compiler.stage_tests import start_stage_test_generation_agent
 # route must match the marker on the same string the turn writes.
 from app.compiler.turn_failure import GENERATION_FAILURE_PREFIX as GENERATION_FAILURE_PREFIX
 from app.core.errors import GenerationError
-from app.models.review_guide import ReviewGuide
+from app.models.review_guide import ReviewGuideDraft
 from app.models.named_schemas import SchemaLibrary
 from app.services import data_model, versioning
 from app.services.loader import load_workflow
@@ -89,7 +89,8 @@ def start_review_guide_generation(
     # Both refusals below run BEFORE the session is created, so neither leaves an
     # orphaned session behind.
     version = versioning.load_version(project_dir, version_id)
-    if version.guide is not None:
+    existing = versioning.find_latest_review_guide(project_dir.name, version_id)
+    if existing is not None:
         raise ValueError(
             f"version '{version_id}' already has a review guide — edit it with the "
             "authoring agent rather than regenerating over it"
@@ -103,7 +104,7 @@ def start_review_guide_generation(
         project_id=project_dir.name,
         document=doc_path.read_text(encoding="utf-8"),
         model=model,
-        on_answer=lambda guide: _finish_review_guide(project_dir, version_id, guide),
+        on_answer=lambda draft: _finish_review_guide(project_dir, version_id, draft),
     )
 
 
@@ -118,16 +119,23 @@ def _finish_data_model(project_dir: Path, answer: SchemaLibrary | None) -> None:
 
 
 def _finish_review_guide(
-    project_dir: Path, version_id: str, guide: ReviewGuide | None
+    project_dir: Path, version_id: str, draft: ReviewGuideDraft | None
 ) -> None:
     """Completion hook for the guide turn; either raise below reaches the transcript via the
     caller."""
-    if guide is None:
+    if draft is None:
         raise GenerationError(
             f"review-guide generation for version '{version_id}' in {project_dir.name} "
             "did not submit a guide"
         )
-    versioning.save_version_guide(project_dir, version_id, guide)
+    versioning.save_version_guide(
+        project_dir,
+        version_id,
+        versioning.ReviewGuide(
+            project=project_dir.name, version_id=version_id,
+            steps=draft.steps, unnarrated=draft.unnarrated,
+        ),
+    )
 
 
 def _finish_stage_tests(project_dir: Path, stage_id: str, answer: BaseModel | None) -> None:

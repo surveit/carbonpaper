@@ -11,6 +11,7 @@ from app.core.errors import RunVersionUnresolvableError
 from app.models import Stage
 from app.models.workflow import sort_stages_by_dependency
 from app.services.run import load_run_version
+from app.services.versioning import find_latest_review_guide
 
 
 @dataclass(frozen=True)
@@ -44,7 +45,8 @@ def build_run_guide_view(project: str, manifest: dict[str, Any]) -> RunGuideView
         # The run page already states this reason in place of the workflow graph
         # (`graph_error`), so a second copy of it here tells the reader nothing new.
         return None
-    if version.guide is None:
+    guide = find_latest_review_guide(project, version.version_id)
+    if guide is None:
         return None
     by_id = _index_stages_in_execution_order(version.stages)
     executed = _collect_executed_stage_ids(manifest)
@@ -55,9 +57,9 @@ def build_run_guide_view(project: str, manifest: dict[str, Any]) -> RunGuideView
                 prose=step.prose,
                 stages=_view_stages(step.stage_ids, by_id, executed),
             )
-            for step in version.guide.steps
+            for step in guide.steps
         ],
-        unnarrated=_view_stages(version.guide.unnarrated, by_id, executed),
+        unnarrated=_view_stages(guide.unnarrated, by_id, executed),
     )
 
 
@@ -67,7 +69,8 @@ def find_guideless_version_id(project: str, manifest: dict[str, Any]) -> str | N
         version = load_run_version(project, manifest)
     except RunVersionUnresolvableError:
         return None
-    return None if version.guide is not None else version.version_id
+    has_guide = find_latest_review_guide(project, version.version_id) is not None
+    return None if has_guide else version.version_id
 
 
 def list_written_columns(stage: Stage) -> list[str]:

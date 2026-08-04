@@ -402,6 +402,7 @@ async def project_workflow_version(request: Request, project_name: str, version_
             "state": shell_state(pdir),
             "section": "versions",
             "version": version,
+            "version_guide": versioning.find_latest_review_guide(project_name, version_id),
             "mermaid": build_mermaid_graph(version.stages, project_name),
         },
     )

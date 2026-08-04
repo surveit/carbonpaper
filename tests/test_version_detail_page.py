@@ -12,7 +12,8 @@ import app.services.run as run_service
 from app.main import app
 from app.services import versioning
 from app.services import project as project_service
-from app.models.review_guide import ReviewGuide, ReviewGuideStep
+from app.models.review_guide import ReviewGuideStep
+from app.services.versioning import ReviewGuide
 from app.services import workspace
 
 client = TestClient(app)
@@ -75,7 +76,7 @@ def _save_covering_guide(project_dir: Path, version_id: str) -> None:
     versioning.save_version_guide(
         project_dir,
         version_id,
-        ReviewGuide(steps=[ReviewGuideStep(
+        ReviewGuide(project=project_dir.name, version_id=version_id, steps=[ReviewGuideStep(
             title="How this workflow works",
             prose="Every stage, narrated together.",
             stage_ids=[stage.id for stage in stages],

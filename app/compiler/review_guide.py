@@ -1,4 +1,4 @@
-"""Builds the agent that authors a ReviewGuide for ONE frozen workflow version.
+"""Builds the agent that authors a review guide for ONE frozen workflow version.
 The version's own stages are rendered into the task, and the agent holds no tool that
 reads a project, so what it narrates cannot be the working copy the version was cut
 from. The submitted guide comes back through a callback; storing it is the caller's
@@ -14,7 +14,7 @@ from app.core.agent.store import open_session_store
 from app.core.agent.turns import default_turn_manager
 from app.core.errors import GenerationError, ReviewGuideValidationError
 from app.models import Stage
-from app.models.review_guide import ReviewGuide
+from app.models.review_guide import ReviewGuideDraft
 from app.models.workflow import sort_stages_by_dependency
 from app.services.loader import stage_to_json
 
@@ -36,7 +36,7 @@ def start_review_guide_generation_agent(
     project_id: str,
     document: str,
     model: str,
-    on_answer: Callable[[ReviewGuide | None], None],
+    on_answer: Callable[[ReviewGuideDraft | None], None],
 ) -> str:
     """Returns the hidden view-only session's id. Must be called from the server event
     loop."""
@@ -74,11 +74,11 @@ def start_review_guide_generation_agent(
 
 def build_review_guide_author(
     stages: list[Stage], version_id: str, document: str, *, model: str = "sonnet"
-) -> Agent[ReviewGuide]:
+) -> Agent[ReviewGuideDraft]:
     """The agent authors against `stages` alone — it holds no tool that reads a project."""
     return Agent(
         system_prompt=REVIEW_GUIDE_SYSTEM_PROMPT,
-        target_schema=ReviewGuide,
+        target_schema=ReviewGuideDraft,
         task=render_guide_task(stages, version_id, document),
         model=model,
     )
