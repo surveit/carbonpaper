@@ -5,7 +5,7 @@ Starlark module to point at."""
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any, ClassVar, Literal, Optional
+from typing import ClassVar, Literal, Optional
 
 import starlark
 from pydantic import Field, model_validator
@@ -19,6 +19,11 @@ from app.core.starlark_source import (
 from app.models.schema import StageConfig
 from app.models.stage_base import StageBase, StageInput, StageType
 from app.models.stages.code import CORNER_CASES_DESCRIPTION, SUMMARY_DESCRIPTION, CornerCase
+from app.models.stages.code import (
+    CODE_CORNER_CASES_CONTRACT_NOTE,
+    CODE_SUMMARY_CONTRACT_NOTE,
+)
+from app.models.stages.node_spec import NodeTypeSpec
 from app.models.stages.signature import ExtendsSignature
 from app.models.stages.stage_tests import StarlarkRowFunctionStageTest
 from app.models.stages.warnings import CompilerWarning, warn
@@ -94,9 +99,7 @@ class StarlarkFunction(StageConfig):
 
     @model_validator(mode="after")
     def _source_is_runnable(block: "StarlarkFunction") -> "StarlarkFunction":
-        # Named `block`, not `self`: this is a config block's own field, not the
-        # stage-level `function` handle app/models/stages/code.py owns (see
-        # tests/arch/test_handle_access_is_owned.py).
+        # `block`, not `self`: a config-block field, not code.py's stage handle.
         validate_starlark_function_code(block.code, block.function)
         return block
 
@@ -135,15 +138,16 @@ def find_starlark_warnings(stage: "StarlarkRowFunctionStage") -> list[CompilerWa
 
 # Authoring notes for this module's stage type(s), as the plain-data shape the
 # authoring prompts render. Assembled into NODE_TYPES by app.models.stages.
-NODE_TYPE_SPECS: dict[str, dict[str, Any]] = {
-    "starlark_row_function": {
-        "summary": "Sandboxed Starlark run once per row: one row in → one row out. Prefer this over python_row_function.",
-        "blocks": ["starlark"],
-        "requires_inputs": True,
-        "min_inputs": 1,
-        "required": ["code"],
-        "optional": ["function"],
-        "notes": (
+NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
+    "starlark_row_function": NodeTypeSpec(
+        summary="Sandboxed Starlark run once per row: one row in → one row out. Prefer this over python_row_function.",
+        signature_form="extends",
+        blocks=["starlark"],
+        requires_inputs=True,
+        min_inputs=1,
+        required=["code"],
+        optional=["function", "summary"],
+        notes=(
             "PREFER THIS over python_row_function for row transforms. Starlark is Python's "
             "syntax minus imports, file and network access, classes, while, and try/except, "
             "so the step cannot read or write anything outside its row. Recursion is not "
@@ -159,6 +163,7 @@ NODE_TYPE_SPECS: dict[str, dict[str, Any]] = {
             "decline a row you cannot honestly process. Module-level variables freeze after "
             "load — keep state in locals. Use python_row_function only when the step "
             "genuinely needs a Python library."
+            f" {CODE_SUMMARY_CONTRACT_NOTE} {CODE_CORNER_CASES_CONTRACT_NOTE}"
         ),
-    },
+    ),
 }

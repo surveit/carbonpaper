@@ -3,12 +3,13 @@ must share an identical schema (prose aside), and a declared output_schema
 must equal that shared schema."""
 from __future__ import annotations
 
-from typing import Any, ClassVar, Literal, Optional
+from typing import ClassVar, Literal, Optional
 
 from pydantic import Field
 
 from app.models.schema import StageConfig, TableSchema
 from app.models.stage_base import StageBase, StageInput, StageType
+from app.models.stages.node_spec import NodeTypeSpec
 from app.models.stages.signature import ReplacesSignature
 
 
@@ -84,21 +85,21 @@ def find_union_signature_issues(stage: "UnionStage") -> list[str]:
     )
     return issues
 
-# Authoring notes for this module's stage type(s), as the plain-data shape the
-# authoring prompts render. Assembled into NODE_TYPES by app.models.stages.
-NODE_TYPE_SPECS: dict[str, dict[str, Any]] = {
-    "union": {
-        "summary": "Concatenate two or more upstream dataframes with an identical schema.",
-        "blocks": ["union"],
-        "requires_inputs": True,
-        "min_inputs": 2,
-        "required": [],
-        "optional": [],
-        "notes": (
+# Authoring copy for this module's stage type(s); assembled into NODE_TYPES.
+NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
+    "union": NodeTypeSpec(
+        summary="Concatenate two or more upstream dataframes with an identical schema.",
+        signature_form="replaces",
+        blocks=["union"],
+        requires_inputs=True,
+        min_inputs=2,
+        required=[],
+        optional=[],
+        notes=(
             "No configuration — pass `union: {}`. Every input must declare an IDENTICAL "
             "schema (same columns, same types); a mismatch is refused when the stage is "
             "saved, naming the differing columns. Concatenates the inputs in declared "
             "order; output_schema must equal that shared schema."
         ),
-    },
+    ),
 }

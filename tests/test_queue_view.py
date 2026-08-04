@@ -64,16 +64,11 @@ def test_lineage_links_the_single_upstream_stage_at_the_sidecar_ordinal():
     ]
 
 
-@pytest.mark.parametrize(
-    "input_ids, row_ordinals, expected_in_note",
-    [
-        (["label"], None, "ordinal"),      # halted before ordinals were recorded
-        (["a", "b"], [0, 1], "2 inputs"),  # a row ordinal names no one input frame
-    ],
-)
-def test_lineage_states_why_no_link_can_be_built(input_ids, row_ordinals, expected_in_note):
-    stage = _queue_stage(_LABEL_COLUMNS, input_ids=input_ids)
-    fingerprints = QueueFingerprints("sf", ["fp0", "fp1"], row_ordinals)
+def test_lineage_states_why_no_link_can_be_built():
+    # Halted before ordinals were recorded; a 2-input queue stage no longer parses.
+    stage = _queue_stage(_LABEL_COLUMNS, input_ids=["label"])
+    fingerprints = QueueFingerprints("sf", ["fp0", "fp1"], None)
+    expected_in_note = "ordinal"
 
     lineage = queue_view.resolve_lineage(stage, fingerprints)
 

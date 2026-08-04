@@ -25,19 +25,19 @@ def _stage(**overrides):
 
 
 def test_validate_docstring_says_it_executes_the_code():
+    from app.models.stages.starlark import validate_starlark_function_code
     # Regression: `validate_starlark_function_code` compiles via `starlark.eval`,
     # which runs `code`'s top-level statements — describing this as a mere
     # binding check without saying it executes would be misleading.
-    from app.models.stages.starlark import validate_starlark_function_code
 
     assert "execut" in (validate_starlark_function_code.__doc__ or "").lower()
 
 
 def test_a_list_holding_a_function_is_rejected_at_save():
+    code = "def f(row):\n    return row\ntransform = [f]\n"
     # Regression: `module[name]` raises identically whether `name` is directly
     # a function or a container merely HOLDING one (serde walks the whole
     # value graph), so the ownership check alone once let this save.
-    code = "def f(row):\n    return row\ntransform = [f]\n"
     with pytest.raises(ValueError):
         StarlarkFunction(code=code)
 
@@ -83,11 +83,11 @@ def test_honours_a_named_function():
 
 @pytest.mark.parametrize("name", ["len", "dict", "fail", "str", "type", "sorted", "range"])
 def test_naming_a_standard_global_as_function_is_rejected_not_saved(name):
+    with pytest.raises(ValueError):
+        StarlarkFunction(code="x = 1\n", function=name)
     # Regression: the probe once evaluated `type(<name>)` against the standard
     # globals, so a name the standard library provides (never bound by `code`
     # itself) read as bound, and a stage saved that defines nothing.
-    with pytest.raises(ValueError):
-        StarlarkFunction(code="x = 1\n", function=name)
 
 
 def test_source_calling_refuse_validates():
@@ -97,11 +97,11 @@ def test_source_calling_refuse_validates():
 
 
 def test_a_typo_d_helper_name_is_caught_at_write_time():
+    with pytest.raises(ValueError):
+        StarlarkFunction(code="def transform(row):\n    return helepr(row)\n")
     # A call to an undefined helper fails Starlark's static free-variable
     # resolution at load, so a typo is rejected when the stage is SAVED,
     # not on the first row the runtime processes.
-    with pytest.raises(ValueError):
-        StarlarkFunction(code="def transform(row):\n    return helepr(row)\n")
 
 
 def test_non_identifier_function_name_is_rejected_at_save_time_not_execution():
@@ -121,14 +121,14 @@ def test_rejects_python_constructs_starlark_does_not_have(source):
 
 
 def test_a_self_terminating_recursive_function_saves():
-    # Regression: recursion is NOT in the reject list above — a self-terminating
-    # recursive function must validate at save time, since it runs fine (see
-    # tests/runtime/test_starlark_code.py for the runtime-level pin, including
-    # the call-stack limit that bounds an UNbounded recursion instead).
     source = (
         "def fact(n):\n    if n <= 1:\n        return 1\n    return n * fact(n - 1)\n"
         "def transform(row):\n    return {'r': fact(row['n'])}\n"
     )
+    # Regression: recursion is NOT in the reject list above — a self-terminating
+    # recursive function must validate at save time, since it runs fine (see
+    # tests/runtime/test_starlark_code.py for the runtime-level pin, including
+    # the call-stack limit that bounds an UNbounded recursion instead).
     assert StarlarkFunction(code=source).code == source
 
 
@@ -173,14 +173,14 @@ def _compilable_idioms_from(description: str) -> list[str]:
 
 @pytest.mark.parametrize("description", [
     StarlarkFunction.model_fields["code"].description,
-    NODE_TYPES["starlark_row_function"]["notes"],
+    NODE_TYPES["starlark_row_function"].notes,
 ], ids=["StarlarkFunction.code field description", "NODE_TYPES notes"])
 def test_authoring_guidance_teaches_a_row_merge_idiom_the_parser_accepts(description):
+    for idiom in _compilable_idioms_from(description):
+        code = f"def transform(row):\n    {idiom}\n"
+        assert StarlarkFunction(code=code).code == code
     # Regression: an earlier revision of both passages told an author (including the
     # compiler agent, which reads this exact text) to write `return {**row, ...}` —
     # syntax starlark-pyo3's parser rejects outright, so every stage authored by
     # following the guidance would fail to save. Checks EVERY quoted `return ...`
     # idiom in the passage, not just the first — a passage may quote more than one.
-    for idiom in _compilable_idioms_from(description):
-        code = f"def transform(row):\n    {idiom}\n"
-        assert StarlarkFunction(code=code).code == code

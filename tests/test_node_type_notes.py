@@ -2,16 +2,15 @@ from __future__ import annotations
 
 import re
 
-from app.models import (
+from app.models.stages.code import (
     CODE_CORNER_CASES_CONTRACT_NOTE,
     CODE_SUMMARY_CONTRACT_NOTE,
-    HUMAN_REVIEW_QUEUE_CONTRACT_NOTE,
 )
 from app.models.stages.node_types import CODE_CARRYING_TYPES, NODE_TYPES
 
 
 def test_human_review_queue_note_states_the_fingerprint_matching():
-    note = NODE_TYPES["human_review_queue"].get("notes")
+    note = NODE_TYPES["human_review_queue"].notes
     assert note, "human_review_queue must carry a `notes` explanation"
     # the authoring agent needs to know editing filter/reviewer_instructions
     # invalidates every decision cached for this stage
@@ -22,14 +21,8 @@ def test_human_review_queue_note_states_the_fingerprint_matching():
 def test_note_reaches_the_editing_agent_prompt():
     from app.agents.compiler.prompt import EDITING_SYSTEM_PROMPT
 
-    note = NODE_TYPES["human_review_queue"]["notes"]
+    note = NODE_TYPES["human_review_queue"].notes
     assert note in EDITING_SYSTEM_PROMPT
-
-
-def test_fixed_output_columns_contract_reaches_the_editing_agent_prompt():
-    from app.agents.compiler.prompt import EDITING_SYSTEM_PROMPT
-
-    assert HUMAN_REVIEW_QUEUE_CONTRACT_NOTE in EDITING_SYSTEM_PROMPT
 
 
 def test_hrq_note_names_the_decision_values_the_runtime_actually_emits():
@@ -42,7 +35,7 @@ def test_hrq_note_names_the_decision_values_the_runtime_actually_emits():
     # verdict the note still names after the enum stopped emitting it.
     from app.models import ReviewVerdict
 
-    quoted = set(re.findall(r'"([a-z_]+)"', HUMAN_REVIEW_QUEUE_CONTRACT_NOTE))
+    quoted = set(re.findall(r'"([a-z_]+)"', NODE_TYPES["human_review_queue"].notes))
     assert quoted == {verdict.value for verdict in ReviewVerdict}
 
 
@@ -65,7 +58,7 @@ def test_hrq_note_names_every_queue_field_that_adds_a_column():
     # the field itself is the part before the subscript.
     adding_fields = {field.split("[")[0] for field, _ in find_added_columns(queue)}
     mentioned = {f"queue.{name}" for name in re.findall(
-        r"queue\.(\w+)", HUMAN_REVIEW_QUEUE_CONTRACT_NOTE)}
+        r"queue\.(\w+)", NODE_TYPES["human_review_queue"].notes)}
 
     assert adding_fields <= mentioned, adding_fields - mentioned
     assert mentioned <= {f"queue.{name}" for name in QueueConfig.model_fields}, mentioned
@@ -84,7 +77,7 @@ def test_summary_budget_note_reaches_every_code_carrying_type():
     from app.agents.compiler.prompt import EDITING_SYSTEM_PROMPT
 
     for stage_type in CODE_CARRYING_TYPES:
-        assert CODE_SUMMARY_CONTRACT_NOTE in NODE_TYPES[stage_type]["notes"], stage_type
+        assert CODE_SUMMARY_CONTRACT_NOTE in NODE_TYPES[stage_type].notes, stage_type
     assert CODE_SUMMARY_CONTRACT_NOTE in EDITING_SYSTEM_PROMPT
 
 
@@ -94,12 +87,12 @@ def test_corner_cases_note_reaches_every_code_carrying_type():
     from app.agents.compiler.prompt import EDITING_SYSTEM_PROMPT
 
     for stage_type in CODE_CARRYING_TYPES:
-        assert CODE_CORNER_CASES_CONTRACT_NOTE in NODE_TYPES[stage_type]["notes"], stage_type
+        assert CODE_CORNER_CASES_CONTRACT_NOTE in NODE_TYPES[stage_type].notes, stage_type
     assert CODE_CORNER_CASES_CONTRACT_NOTE in EDITING_SYSTEM_PROMPT
 
 
 def test_publish_note_names_the_trace_link_helper():
-    note = NODE_TYPES["publish"].get("notes")
+    note = NODE_TYPES["publish"].notes
     assert note, "publish must carry a `notes` explanation"
     # the authoring agent has to know the keyword to declare and the call to make
     assert "trace_links" in note
@@ -109,5 +102,5 @@ def test_publish_note_names_the_trace_link_helper():
 def test_publish_note_reaches_the_editing_agent_prompt():
     from app.agents.compiler.prompt import EDITING_SYSTEM_PROMPT
 
-    note = NODE_TYPES["publish"]["notes"]
+    note = NODE_TYPES["publish"].notes
     assert note in EDITING_SYSTEM_PROMPT

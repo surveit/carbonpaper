@@ -37,28 +37,24 @@ def find_bound_function(module: starlark.Module, names: Sequence[str]) -> str | 
 
 
 def _is_bound_function(module: starlark.Module, name: str) -> bool:
-    # `name` is interpolated into a Starlark expression in `_bound_value_type`
-    # below; a non-identifier (stage config, not a trusted literal) could
-    # otherwise inject arbitrary Starlark into that probe.
+    # A non-identifier could inject Starlark into `_bound_value_type`'s probe.
     if not name.isidentifier():
         raise ValueError(f"Not a valid Starlark identifier: {name!r}")
-    # Two questions, two primitives, because neither alone answers "is this
-    # name bound to a function":
+    # Two questions, two primitives: bound at all, then bound to a function.
     if not _module_binds(module, name):
         return False
     return _bound_value_type(module, name) == _FUNCTION_TYPE_NAME
 
 
 def _module_binds(module: starlark.Module, name: str) -> bool:
-    # `module[name]` reads only what THIS module's own top-level statements
-    # bound — unlike evaluating `name` as a Starlark expression, it never falls
-    # back to a standard-library name (`len`, `dict`, `fail`, ...) that the
-    # code never bound itself. It raises for any value it cannot marshal to
-    # Python (a function, a `range`, a container HOLDING one, ...); a bound
-    # plain value (int, str, list of ints, ...) or an unbound name both just
-    # return — the two are not distinguished here because it doesn't matter:
-    # neither is ever a function, which is all this check needs to settle.
+    # Reads only what THIS module's own top-level statements bound.
     try:
+        # Unlike evaluating `name` as an expression, `module[name]` never falls
+        # back to a standard-library name (`len`, `fail`, ...) the code never
+        # bound itself. It raises for any value it cannot marshal to Python (a
+        # function, a `range`, a container HOLDING one); a bound plain value or
+        # an unbound name both just return — indistinguishable here, and it
+        # doesn't matter: neither is ever a function, all this needs to settle.
         module[name]
     except starlark.StarlarkError:
         return True
@@ -66,10 +62,9 @@ def _module_binds(module: starlark.Module, name: str) -> bool:
 
 
 def _bound_value_type(module: starlark.Module, name: str) -> str:
-    # Ownership is already settled by `_module_binds`; this asks what the
-    # bound value itself IS — unlike `module[name]`, which raises identically
-    # whether `name` is directly a function or merely a container holding one
-    # somewhere inside it (serde walks the whole graph), `type(name)` reports
-    # only the immediate value's type.
+    # Ownership is settled by `_module_binds`; this asks what the value IS.
     probe = starlark.parse("<probe>", f"type({name})")
+    # `module[name]` raises identically for a function and for a container
+    # holding one somewhere inside (serde walks the whole graph); `type(name)`
+    # reports only the immediate value's type.
     return str(starlark.eval(module, probe, starlark.Globals.standard()))

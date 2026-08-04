@@ -12,20 +12,20 @@ from app.core.starlark_source import (
 
 
 def test_the_module_docstring_says_loading_source_executes_it():
+    import app.core.starlark_source as module
     # Regression: `compile_starlark_module` (via `starlark.eval`) runs the
     # source's top-level statements at "compile" time — a module docstring
     # describing this as mere compilation would be false.
-    import app.core.starlark_source as module
 
     assert "execute" in (module.__doc__ or "").lower()
 
 
 def test_the_model_and_runtime_layers_import_the_same_default_function_name():
+    from app.models.stages.starlark import DEFAULT_FUNCTION_NAME as model_name
     # Regression: the model layer (write-time validation) and the runtime layer
     # (execution) each once declared "transform" as their own private constant,
     # linked only by a comment. Both must import this one definition so they
     # cannot drift apart.
-    from app.models.stages.starlark import DEFAULT_FUNCTION_NAME as model_name
     from app.runtime.stages.starlark_functions import DEFAULT_FUNCTION_NAME as runtime_name
 
     assert model_name is DEFAULT_FUNCTION_NAME
@@ -33,9 +33,9 @@ def test_the_model_and_runtime_layers_import_the_same_default_function_name():
 
 
 def test_the_model_and_runtime_layers_import_the_same_refuse_builtin_name():
+    from app.models.stages.starlark import REFUSE_BUILTIN as model_refuse
     # Regression: "refuse" was likewise declared twice — once in the model
     # layer's write-time validation, once in the runtime's execution path.
-    from app.models.stages.starlark import REFUSE_BUILTIN as model_refuse
     from app.runtime.starlark_code import REFUSE_BUILTIN as runtime_refuse
 
     assert model_refuse is REFUSE_BUILTIN
@@ -54,17 +54,17 @@ def test_an_absent_name_returns_none():
 
 @pytest.mark.parametrize("name", ["len", "dict", "fail", "str", "type", "sorted", "range"])
 def test_a_standard_global_the_module_never_bound_returns_none(name):
+    module = compile_starlark_module("x = 1\n", {})
     # Regression: the probe once evaluated `type(name)` against the standard
     # globals, so a name the STANDARD LIBRARY provides (never bound by `code`
     # itself) read as bound — a stage saved even though it defines nothing.
-    module = compile_starlark_module("x = 1\n", {})
     assert find_bound_function(module, (name,)) is None
 
 
 def test_a_module_level_def_shadowing_a_standard_global_is_still_found():
+    module = compile_starlark_module("def len(row):\n    return row\n", {})
     # The fix for the above must not over-reject: a module that genuinely
     # defines its own `len` (shadowing the builtin) is bound and found.
-    module = compile_starlark_module("def len(row):\n    return row\n", {})
     assert find_bound_function(module, ("len",)) == "len"
 
 
@@ -79,6 +79,9 @@ def test_a_name_bound_to_type_range_returns_none():
 
 
 def test_a_list_holding_a_function_is_not_itself_a_function():
+    module = compile_starlark_module(
+        "def f(row):\n    return row\ntransform = [f]\n", {}
+    )
     # Regression: serde::serialize walks the whole value graph, so a name bound
     # to a LIST that merely CONTAINS a function raises the identical
     # "not supported on type `function`" message __getitem__ raises for a name
@@ -86,9 +89,6 @@ def test_a_list_holding_a_function_is_not_itself_a_function():
     # cannot tell the two apart — the ownership check (__getitem__) only
     # answers "is something unmarshallable bound here", never "is that
     # something itself a function". A second, TYPE-only check settles it.
-    module = compile_starlark_module(
-        "def f(row):\n    return row\ntransform = [f]\n", {}
-    )
     assert find_bound_function(module, ("transform",)) is None
 
 
@@ -100,10 +100,10 @@ def test_a_dict_holding_a_function_is_not_itself_a_function():
 
 
 def test_a_lambda_bound_to_the_name_is_accepted_as_a_function():
+    module = compile_starlark_module("transform = lambda row: row\n", {})
     # Deliberate: a lambda IS a function (same `type() == "function"`, same
     # callability as a `def`), so binding one to the wanted name is accepted,
     # not merely tolerated by accident.
-    module = compile_starlark_module("transform = lambda row: row\n", {})
     assert find_bound_function(module, ("transform",)) == "transform"
 
 
@@ -122,6 +122,7 @@ def test_an_injected_builtin_is_callable_from_the_source():
 
 
 def test_a_module_rebinding_type_itself_raises_rather_than_misreporting():
+    module = compile_starlark_module("type = 5\ndef transform(row):\n    return row\n", {})
     # Known, accepted edge case: the TYPE half of the check (see
     # _is_bound_function) evaluates `type(<name>)` against the real module, so
     # a module that ALSO rebinds `type` itself (to something uncallable) breaks
@@ -129,16 +130,15 @@ def test_a_module_rebinding_type_itself_raises_rather_than_misreporting():
     # deliberately left to propagate as a StarlarkError — fail loud on a bizarre
     # adversarial pattern — rather than attempting to special-case it into a
     # silent (and possibly wrong) True/False.
-    module = compile_starlark_module("type = 5\ndef transform(row):\n    return row\n", {})
     with pytest.raises(starlark.StarlarkError):
         find_bound_function(module, ("transform",))
 
 
 def test_a_non_identifier_name_is_rejected_rather_than_read_as_unbound():
+    module = compile_starlark_module("def transform(row):\n    return row\n", {})
     # function_name is stage config an author writes, not a trusted literal. A
     # crafted non-identifier string can otherwise make the probe expression
     # evaluate to something other than a plain name lookup.
-    module = compile_starlark_module("def transform(row):\n    return row\n", {})
     with pytest.raises(ValueError):
         find_bound_function(module, ('transform) if False else ("function"',))
 
@@ -154,10 +154,10 @@ def test_a_non_identifier_name_cannot_execute_a_builtin_during_the_probe():
 
 
 def test_a_builtin_must_be_injected_before_the_source_referencing_it_is_compiled():
+    source = "def transform(row):\n    return double(row['n'])\n"
     # Free names resolve statically at module load, so a body calling an injected
     # builtin only compiles when that builtin was passed in `builtins` up front —
     # never bound later. This is the regression guard for the injection ordering.
-    source = "def transform(row):\n    return double(row['n'])\n"
     compile_starlark_module(source, {"double": lambda n: n * 2})  # does not raise
     with pytest.raises(starlark.StarlarkError):
         compile_starlark_module(source, {})

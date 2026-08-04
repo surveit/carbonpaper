@@ -25,8 +25,7 @@ def marshal_row_for_starlark(row: dict[str, Any]) -> dict[str, Any]:
 
 
 def _marshal_value(column: str, value: Any) -> Any:
-    # Before the type branches below: a nan/NaT reads as its own type there
-    # (e.g. pd.NaT is a datetime instance), so missing must be decided first.
+    # Missing first: nan/NaT reads as its own type below (pd.NaT is a datetime).
     if is_missing_cell(value):
         return None
     if isinstance(value, str):

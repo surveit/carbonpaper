@@ -47,21 +47,21 @@ def test_the_boundary_value_itself_is_allowed():
 
 
 def test_max_exact_int_comment_does_not_claim_float_conversion_mechanism():
+    assert "converts an int to a float" not in inspect.getsource(starlark_marshal)
     # Regression: the comment above MAX_EXACT_INT stated the same false
     # mechanism corrected in the error message below — "converts an int to a
     # float, silently losing the exact value" is false right at the boundary:
     # 2**63 and 2**63+1 (both above MAX_EXACT_INT) still cross the Starlark
     # boundary exactly; observable loss only starts at 2**64.
-    assert "converts an int to a float" not in inspect.getsource(starlark_marshal)
 
 
 def test_oversized_int_message_states_the_guarantee_not_a_false_mechanism():
+    with pytest.raises(ValueError) as err:
+        marshal_row_for_starlark({"n": 2**63})
     # Regression: the message once claimed crossing the boundary "would convert
     # it to a float, silently losing the exact value" — false right at the
     # boundary, since 2**63 round-trips through float exactly (it's a power of
     # two). State the guaranteed-exact bound, not an always-lossy mechanism.
-    with pytest.raises(ValueError) as err:
-        marshal_row_for_starlark({"n": 2**63})
     assert "convert it to a float" not in str(err.value)
     assert "guaranteed" in str(err.value)
 
@@ -79,9 +79,9 @@ def test_bools_are_not_marshalled_as_ints():
 
 
 def test_the_binding_really_does_mangle_ints_above_the_guard():
+    import starlark
     # The guard's justification, pinned. If this goes green the binding changed:
     # re-establish the boundary from observation, do not delete the guard.
-    import starlark
 
     module = starlark.Module()
     starlark.eval(

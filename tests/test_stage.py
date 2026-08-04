@@ -270,6 +270,34 @@ def test_join_rejects_a_third_input(t):
     assert [(e["loc"], e["type"]) for e in err.value.errors()] == [((t, "inputs"), "too_long")]
 
 
+def test_aggregate_rejects_a_second_input():
+    """The handler reads inputs[0] only, so a second input would be silently ignored."""
+    with pytest.raises(ValidationError) as err:
+        m.parse_stage(S(
+            id="agg", type="aggregate",
+            inputs=[{"id": "a", "schema": _K_SCHEMA}, {"id": "b", "schema": _K_SCHEMA}],
+            aggregate={"group_by": ["k"],
+                       "aggregations": [{"output_column": "n", "formula": "count"}]},
+            output_schema={"columns": [{"name": "k", "type": "str", "nullable": True},
+                                       {"name": "n", "type": "int", "nullable": True}]},
+        ))
+    assert [(e["loc"], e["type"]) for e in err.value.errors()] == [(("aggregate", "inputs"), "too_long")]
+
+
+def test_human_review_queue_rejects_a_second_input():
+    """The queue reviews one input frame; a second would be silently ignored."""
+    with pytest.raises(ValidationError) as err:
+        m.parse_stage(S(
+            id="q", type="human_review_queue",
+            inputs=[{"id": "a", "schema": _QUEUE_IN_SCHEMA}, {"id": "b", "schema": _QUEUE_IN_SCHEMA}],
+            queue={"reviewed_columns": {"score": "reviewed_score"}, "verdict_column": "v",
+                   "reviewer_column": "r", "reviewed_at_column": "at"},
+            output_schema=_QUEUE_OUT_SCHEMA,
+        ))
+    assert (("human_review_queue", "inputs"), "too_long") in [
+        (e["loc"], e["type"]) for e in err.value.errors()]
+
+
 # ── tightened fields ─────────────────────────────────────────────────────────
 def test_name_is_required():
     with pytest.raises(ValidationError):
