@@ -1,7 +1,7 @@
 """Both authoring prompts carry OBSERVED_ENUM_GUIDANCE (app/tools/tool_specs.py):
 run a workflow test, read a stage's real output with list_distinct_values, then decide
-per column — one worked example frozen as an enum, one left open — plus the two stage
-types whose observed values cannot corroborate a declaration."""
+on the two questions — constrained generation, discrete consumption — never on how many
+distinct values came back. Plus the two stage types observation cannot corroborate."""
 from __future__ import annotations
 
 from app.models.observation import DEFAULT_MAX_DISTINCT_VALUES
@@ -20,28 +20,48 @@ def test_mcp_instructions_carry_the_observed_enum_guidance() -> None:
     assert OBSERVED_ENUM_GUIDANCE in INSTRUCTIONS
 
 
-def test_guidance_teaches_the_decision_not_a_rule() -> None:
-    # One worked example in each direction — a set worth freezing, and a small
-    # but open set left alone — plus the tool to consult and the guard-code line.
+def test_guidance_decides_on_generation_and_consumption_not_on_the_count() -> None:
+    # The count is what the old wording keyed on, and it is the wrong question: a
+    # closed set can be huge and an open one tiny.
+    assert "COUNT is evidence, never the criterion" in OBSERVED_ENUM_GUIDANCE
+    assert "GENERATION constrained to a discrete set" in OBSERVED_ENUM_GUIDANCE
+    assert "thousands of values and still be closed" in OBSERVED_ENUM_GUIDANCE
+    assert "three\n   and still be open" in OBSERVED_ENUM_GUIDANCE
     assert "list_distinct_values" in OBSERVED_ENUM_GUIDANCE
-    assert "`permit_status`" in OBSERVED_ENUM_GUIDANCE
-    assert '["filed", "granted", "denied"]' in OBSERVED_ENUM_GUIDANCE
-    assert "`city`" in OBSERVED_ENUM_GUIDANCE
-    assert "Leave it a bare `str`" in OBSERVED_ENUM_GUIDANCE
+
+
+def test_guidance_makes_the_enum_mandatory_when_a_later_stage_consumes_the_set() -> None:
+    # A downstream switch or a join into reference data makes the vocabulary
+    # load-bearing: without the declaration an unlisted value is silently wrong.
+    assert "the enum is MANDATORY whatever was\n   observed" in OBSERVED_ENUM_GUIDANCE
+    assert "else-branch or joins to" in OBSERVED_ENUM_GUIDANCE
+    assert "loud failure" in OBSERVED_ENUM_GUIDANCE
+
+
+def test_guidance_works_one_example_for_each_question() -> None:
+    assert "- By generation: `filing_type`" in OBSERVED_ENUM_GUIDANCE
+    assert "fixed list on the source form" in OBSERVED_ENUM_GUIDANCE
+    assert "- By consumption: `country_code`" in OBSERVED_ENUM_GUIDANCE
+    assert "reference table" in OBSERVED_ENUM_GUIDANCE
     assert "never replaces guard code" in OBSERVED_ENUM_GUIDANCE
 
 
 def test_guidance_warns_that_a_truncated_list_is_not_the_vocabulary() -> None:
     assert "TRUNCATED" in OBSERVED_ENUM_GUIDANCE
     assert "max_values" in OBSERVED_ENUM_GUIDANCE
+    assert "is a SAMPLE, not the set" in OBSERVED_ENUM_GUIDANCE
 
 
-def test_guidance_points_at_a_run_of_the_working_copy_as_the_evidence() -> None:
-    # Nothing is observable until a run has produced it, and requiring a saved
-    # version first would push every enum decision to a second pass.
+def test_guidance_scopes_the_run_to_the_input_stage_to_see_a_whole_input_column() -> None:
+    # An unscoped workflow test injects a limit-row slice of every input, so the
+    # vocabulary it shows for an input column is a sample. Scoping the run to that
+    # input stage executes it over the whole bound file instead.
     assert "run_workflow_test(project_id, use_working_copy=True)" in OBSERVED_ENUM_GUIDANCE
+    assert 'only_stages=["<the input stage id>"]' in OBSERVED_ENUM_GUIDANCE
+    assert "whole\nbound file" in OBSERVED_ENUM_GUIDANCE
+    assert "`limit`-row slice" in OBSERVED_ENUM_GUIDANCE
     assert "run_id" in OBSERVED_ENUM_GUIDANCE
-    assert "row_count" in OBSERVED_ENUM_GUIDANCE
+    assert "row_count is the rows that stage's output actually held" in OBSERVED_ENUM_GUIDANCE
 
 
 def test_guidance_names_the_two_columns_observation_cannot_corroborate() -> None:
@@ -62,3 +82,10 @@ def test_tool_description_states_when_the_values_are_complete() -> None:
     assert "max_values" in description
     assert str(DEFAULT_MAX_DISTINCT_VALUES) in description
     assert "Fails loudly" in description
+
+
+def test_workflow_test_description_says_which_stages_a_scoped_run_reads_whole() -> None:
+    description = TOOL_SPECS["run_workflow_test"].description
+    assert "only_stages" in description
+    assert "reads its WHOLE bound file" in description
+    assert "`limit`/`offset` do not apply" in description

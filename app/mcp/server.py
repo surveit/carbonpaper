@@ -19,6 +19,7 @@ from app.core.errors import (
     NoVersionToRunError,
     NoWorkflowTestVersionError,
     RunNotFoundError,
+    WorkflowTestStageScopeError,
     WorkflowTestTargetConflictError,
 )
 from app.models import (
@@ -58,6 +59,7 @@ _RUN_TOOL_ERRORS = (
     WorkflowLoadError,
     RunNotFoundError,
     NoWorkflowTestVersionError,
+    WorkflowTestStageScopeError,
     WorkflowTestTargetConflictError,
     ValueError,
 )
@@ -163,9 +165,10 @@ Runs execute a stored version; save_version(project_id, message) creates one, th
 run_workflow_test against it is how you finish. Publishing is human-only.
 run_workflow(project_id, version_id?) starts a real run and returns a run_id,
 get_run_status(project_id, run_id) follows it to its outcome, and
-run_workflow_test(project_id, version_id?, use_working_copy?, limit, offset) executes any
-stored version — published or not — or, with use_working_copy, the stages you are editing
-right now, over a small slice of the real source, as a run marked is_test_run.
+run_workflow_test(project_id, version_id?, use_working_copy?, only_stages?, limit, offset)
+executes any stored version — published or not — or, with use_working_copy, the stages you
+are editing right now, over a small slice of the real source, as a run marked is_test_run.
+only_stages scopes it to the stages you name.
 
 # Constraints
 {_NODE_TYPE_CONSTRAINTS}
@@ -404,13 +407,13 @@ def get_run_status(project_id: str, run_id: str) -> dict[str, Any]:
 @mcp.tool(description=TOOL_SPECS["run_workflow_test"].description)
 def run_workflow_test(
     project_id: str, version_id: str | None = None, use_working_copy: bool = False,
-    limit: int = 20, offset: int = 0,
+    only_stages: list[str] | None = None, limit: int = 20, offset: int = 0,
 ) -> dict[str, Any]:
     _resolve_existing_project(project_id)  # loud if the project doesn't exist
     try:
         return workflow_test_service.run_workflow_test(
             project_id, version_id=version_id, use_working_copy=use_working_copy,
-            limit=limit, offset=offset)
+            only_stages=only_stages, limit=limit, offset=offset)
     except _RUN_TOOL_ERRORS as exc:
         return {"ok": False, "error": str(exc)}
 

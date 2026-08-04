@@ -58,6 +58,10 @@ class WorkflowVersion(PersistedModel):
     published: bool = False
     published_at: str | None = None
     published_by: str | None = None
+    # True only on a snapshot minted so a working-copy workflow test has an immutable
+    # version to pin — as opposed to one an author asked for. A structured field, so a
+    # reader separating the two never has to sniff `message` or `reviewer`.
+    minted_for_workflow_test: bool = False
 
 
 class ReviewGuide(PersistedModel):
@@ -91,6 +95,7 @@ def create_version_from_stages(
     message: str,
     reviewer: str,
     parent_version: str | None = None,
+    minted_for_workflow_test: bool = False,
 ) -> WorkflowVersion:
     """The single write chokepoint for a WorkflowVersion: strict-parse `stages`
     (raw spec dicts) as a whole Workflow, embed the project's CURRENT schemas,
@@ -108,6 +113,10 @@ def create_version_from_stages(
     workspace.load_schemas, which returns [] when the project has no schema
     library yet — a project with no data model still versions cleanly (the
     absence is truthful, not an error).
+
+    `minted_for_workflow_test` marks a snapshot taken to give a working-copy
+    workflow test something immutable to pin, rather than one an author asked
+    for; it is recorded on the version and changes nothing else here.
 
     version_id has 1-second resolution; two versions minted within the same
     wall-clock second for the same project collide on doc id, and the second
@@ -137,6 +146,7 @@ def create_version_from_stages(
         stages=workflow.stages,
         schemas=schemas,
         published=False,
+        minted_for_workflow_test=minted_for_workflow_test,
     )
     v.save()
     return v

@@ -12,29 +12,34 @@ from app.models.observation import DEFAULT_MAX_DISTINCT_VALUES
 # surfaces cannot drift on when a vocabulary deserves freezing. Both prompts embed
 # it verbatim; tests assert the embedding.
 OBSERVED_ENUM_GUIDANCE = """\
-Declaring enums from observed data: author a categorical-looking column (a
-status, a category, a reason code) as a bare type, run a workflow test, then LOOK
-at what it produced — list_distinct_values(project_id, run_id, stage_id, column)
-reports one stage output's real vocabulary, and edit_stage tightens the schema
-afterwards. run_workflow_test(project_id, use_working_copy=True) runs the stages
-you are editing right now, so nothing has to be saved as a version first. The
-document's prose is a guess; the run is evidence.
-Read the profile before trusting it: distinct_count above len(values) means the
-list was TRUNCATED — re-read with a larger max_values, since a vocabulary can be
-thousands long and still closed — and row_count is THAT STAGE's output, which
-below a filter or an aggregate is a fraction of the source. A set frozen off a
-short tail is still a guess.
-Then DECIDE, per column, whether to freeze the observed set as its `enum`. The
-declaration is the maintenance surface a NON-ENGINEER data owner lives with, and
-a value outside a declared enum FAILS the stage. Freeze the sets whose GROWTH
-should stop and be reviewed; leave open the ones that legitimately grow.
-- Freeze: `permit_status`, 3 values across 12,000 rows — filed | granted |
-  denied — the statuses the methodology reasons about. A fourth means the source
-  changed underneath the workflow; declare enum: ["filed", "granted", "denied"]
-  so that surfaces instead of flowing through unexamined.
-- Leave open: `city`, 38 values. Small but not closed — next month's export may
-  legitimately name a new one, and stopping the run for that would be noise.
-  Leave it a bare `str`.
+Declaring enums from observed data: author a categorical-looking column as a
+bare type, run a workflow test, then LOOK at what it produced —
+list_distinct_values(project_id, run_id, stage_id, column) reports one stage
+output's real vocabulary, and edit_stage tightens the schema afterwards.
+run_workflow_test(project_id, use_working_copy=True) runs the stages you are
+editing right now, so nothing has to be saved as a version first; add
+only_stages=["<the input stage id>"] to EXECUTE just that input over its whole
+bound file, which is the only way to see an input column's COMPLETE vocabulary
+— an unscoped test injects a `limit`-row slice instead.
+row_count is the rows that stage's output actually held. A vocabulary read off
+a slice, off a frame below a filter or an aggregate, or off a list whose
+distinct_count exceeds len(values) (TRUNCATED — re-read with a larger
+max_values) is a SAMPLE, not the set.
+The distinct COUNT is evidence, never the criterion. Two questions decide:
+1. Is the value's GENERATION constrained to a discrete set — a dropdown on the
+   source form, a published code list, an enum in the upstream schema? A column
+   can hold thousands of values and still be closed (commodity codes), or three
+   and still be open, because nothing stops a fourth.
+2. Do WE consume it as a discrete set — a later stage switching per value, or
+   joining it into reference data? Then the enum is MANDATORY whatever was
+   observed: an unlisted value otherwise takes an else-branch or joins to
+   nothing, silently. The declaration is what makes that a loud failure.
+- By generation: `filing_type` comes from a fixed list on the source form, so
+  it cannot grow unless the agency changes the form. Declare it even if the run
+  showed only some values; a new one should stop the pipeline for a human.
+- By consumption: `country_code` feeds a downstream enrich onto a country
+  reference table. An unlisted code does not fail — it joins to null and the row
+  quietly loses its country. Declare the codes that table covers.
 Two stages observation cannot settle for you: an `llm_transform` column whose
 enum you already declared compiles into that stage's reply model, so the run
 returns a subset of your own declaration and corroborates nothing; and a
@@ -283,32 +288,42 @@ published, an unbound input) returns {ok: False, error} and starts no run.""",
 Run a workflow test, so an author can watch the pipeline execute on real
 data before publishing. It IS a real run — same `runs/` dir, manifest, and
 trace/view routes as run_workflow's — and differs from run_workflow on
-exactly five axes:
+exactly six axes:
 
 1. WORKFLOW: any stored version, published or not (run_workflow pins a
    published one) — omit `version_id` for the newest stored — OR, with
-   `use_working_copy: true`, the stages you are editing right now, saved as no
-   version at all. That is what lets you observe a stage's real output before
-   deciding its schema. Naming BOTH a version and the working copy is a loud
-   error; a working-copy run reports `version_id` null, because there is none.
+   `use_working_copy: true`, the stages you are editing right now, which are
+   FROZEN as a new unpublished version first so the run pins a snapshot of
+   exactly what it ran; the returned `version_id` names it. That is what lets
+   you observe a stage's real output before deciding its schema. Naming BOTH a
+   version and the working copy is a loud error.
 2. SOURCE: the `limit` rows from `offset` of the workflow's bound source,
    injected (run_workflow reads the whole source through input_data). The
    slice is still written out as the input stage's own output, so every stage
    of the graph — inputs included — is readable back with
    list_distinct_values.
-3. EXECUTION: synchronous — this returns when the run is done (run_workflow
+3. SCOPE: `only_stages` runs ONLY the stages you name; omitted, every
+   non-input stage runs. A named input_data stage EXECUTES instead of being
+   injected, so it reads its WHOLE bound file — `limit`/`offset` do not apply
+   to it, and that is how you see an input column's complete vocabulary
+   without paying for the stages below it. Every producer a scoped stage reads
+   must be scoped too, unless it is an input_data stage (which is injected as
+   the usual slice); anything else, and the scope is refused rather than run
+   half-fed. An id naming no stage in the workflow is a loud error.
+4. EXECUTION: synchronous — this returns when the run is done (run_workflow
    returns a run_id immediately and executes on a background thread).
-4. REVIEW QUEUE: a human_review_queue stage auto-approves every row in
+5. REVIEW QUEUE: a human_review_queue stage auto-approves every row in
    memory (run_workflow halts there and waits for a human).
-5. STAGE CACHE: read-only — it may replay a workflow run's cached results
+6. STAGE CACHE: read-only — it may replay a workflow run's cached results
    but records none of its own, so it cannot affect a later run.
 
 Marked `is_test_run` on the manifest, so it never counts as the project's
 latest run. Returns the verdict {ok, run_id, version_id, stages_run, error}:
-`ok` False on any stage error, with `error` naming what failed; poll
-get_run_status(project_id, run_id) for the same live/final manifest
-run_workflow exposes. Asking for a stored version when the project has none is
-a loud error — `use_working_copy: true` is the way to test before any exists.""",
+`stages_run` is what actually executed, `ok` False on any stage error with
+`error` naming what failed; poll get_run_status(project_id, run_id) for the
+same live/final manifest run_workflow exposes. Asking for a stored version when
+the project has none is a loud error — `use_working_copy: true` is the way to
+test before any exists.""",
     ),
     "set_draft_stage": ToolSpec(
         name="set_draft_stage",

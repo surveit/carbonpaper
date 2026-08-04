@@ -91,6 +91,11 @@ class WorkflowTestTargetConflictError(Exception):
     workflows."""
 
 
+class WorkflowTestStageScopeError(Exception):
+    """A workflow test's stage scope names no such stage, or omits a non-injectable
+    upstream."""
+
+
 class LLMError(Exception):
     """A live-LLM call failed, or no LLM backend is available."""
 
