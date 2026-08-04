@@ -11,6 +11,15 @@ from pydantic import Field
 from app.models.schema import StageConfig
 from app.models.stage_base import StageBase, StageInput, StageType
 from app.models.stages.shared import find_predicate_column_issues, resolve_input_columns
+from app.models.stages.signature import ExtendsSignature
+
+# The columns the review runtime itself writes onto every row — the only names a
+# human_review_queue signature may add. Named here so the signature check and the
+# authoring prompt (HUMAN_REVIEW_QUEUE_CONTRACT_NOTE) cannot drift apart.
+REVIEW_OUTPUT_COLUMNS: frozenset[str] = frozenset({
+    "decision", "ai_score", "human_score", "final_score",
+    "review_notes", "reviewer_id", "reviewed_at",
+})
 
 
 class RowReviewDecision(str, Enum):
@@ -50,12 +59,30 @@ class HumanReviewQueueStage(StageBase):
     type: Literal[StageType.human_review_queue]
     queue: QueueConfig
     inputs: list[StageInput] = Field(default_factory=list, min_length=1)
+    signature: Optional[ExtendsSignature] = None
 
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
         return {"queue": self.queue}
 
     def find_config_column_issues(self) -> list[str]:
         return find_queue_filter_column_issues(self)
+
+    def find_signature_config_issues(self) -> list[str]:
+        signature = self.signature
+        assert signature is not None  # find_signature_config_issues runs only with one
+        issues = [
+            f"stage '{self.id}': signature adds `{column.name}`, which the review "
+            f"runtime never writes — the only review columns are "
+            f"{sorted(REVIEW_OUTPUT_COLUMNS)}"
+            for column in signature.adds
+            if column.name not in REVIEW_OUTPUT_COLUMNS
+        ]
+        if signature.rewrites:
+            issues.append(
+                f"stage '{self.id}': human_review_queue never revises an input "
+                f"column; rewrites are not supported"
+            )
+        return issues
 
 
 def find_queue_filter_column_issues(stage: "HumanReviewQueueStage") -> list[str]:

@@ -13,6 +13,7 @@ from app.core.prompt_template import find_template_fields
 from app.models.schema import StageConfig, TableSchema
 from app.models.stage_base import StageBase, StageInput, StageType
 from app.models.stages.shared import COLUMN_ISSUE, resolve_input_columns
+from app.models.stages.signature import ExtendsSignature
 
 
 # Tool names an `llm_transform` stage may be granted, so a stage can RESEARCH — look
@@ -107,12 +108,16 @@ class LLMTransformStage(StageBase):
     type: Literal[StageType.llm_transform]
     llm: LLMConfig
     inputs: list[StageInput] = Field(default_factory=list, min_length=1)
+    signature: Optional[ExtendsSignature] = None
 
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
         return {"llm": self.llm}
 
     def find_config_column_issues(self) -> list[str]:
         return find_llm_prompt_column_issues(self)
+
+    def find_signature_config_issues(self) -> list[str]:
+        return find_llm_signature_issues(self)
 
     def llm_reply_schema(self) -> Optional[TableSchema]:
         """What the model's reply itself must carry: `output_schema` minus the
@@ -143,6 +148,36 @@ class LLMTransformStage(StageBase):
         if issues:
             raise ValueError("llm_transform not strictly 1:1: " + "; ".join(issues))
         return self
+
+
+def find_llm_signature_issues(stage: "LLMTransformStage") -> list[str]:
+    """Reads must match the template's placeholders exactly; an llm_transform never rewrites."""
+    signature = stage.signature
+    assert signature is not None  # find_signature_config_issues runs only with one
+    anchor_id = stage.inputs[0].id
+    declared = {
+        column.name
+        for entry in signature.reads
+        if entry.input == anchor_id
+        for column in entry.columns
+    }
+    injected = find_template_fields(stage.llm.prompt_data_template)
+    issues = [
+        f"stage '{stage.id}': signature reads `{name}` but the prompt template "
+        f"never injects it"
+        for name in sorted(declared - injected)
+    ]
+    issues.extend(
+        f"stage '{stage.id}': the prompt template injects {{{name}}} but the "
+        f"signature does not read it"
+        for name in sorted(injected - declared)
+    )
+    if signature.rewrites:
+        issues.append(
+            f"stage '{stage.id}': llm_transform passes its input through untouched "
+            f"and only adds columns; rewrites are not supported"
+        )
+    return issues
 
 
 def find_llm_prompt_column_issues(stage: "LLMTransformStage") -> list[str]:

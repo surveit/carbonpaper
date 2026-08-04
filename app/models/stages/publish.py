@@ -12,6 +12,7 @@ from app.models.schema import StageConfig
 from app.models.stage_base import StageInput, StageType
 from app.models.stages.code import CarriesPythonFunctionStage
 from app.models.stages.shared import COLUMN_ISSUE, resolve_input_columns
+from app.models.stages.signature import ReplacesSignature
 
 
 class PublishFormat(str, Enum):
@@ -48,12 +49,23 @@ class PublishStage(CarriesPythonFunctionStage):
     type: Literal[StageType.publish]
     publish: PublishConfig
     inputs: list[StageInput] = Field(default_factory=list, min_length=1)
+    signature: Optional[ReplacesSignature] = None
 
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
         return {"publish": self.publish, **super().fingerprint_blocks()}
 
     def find_config_column_issues(self) -> list[str]:
         return find_publish_column_issues(self)
+
+    def find_signature_config_issues(self) -> list[str]:
+        signature = self.signature
+        assert signature is not None  # find_signature_config_issues runs only with one
+        if signature.produces:
+            return [
+                f"stage '{self.id}': publish emits files, not a table — "
+                f"signature produces must be empty"
+            ]
+        return []
 
 
 def find_publish_column_issues(stage: "PublishStage") -> list[str]:

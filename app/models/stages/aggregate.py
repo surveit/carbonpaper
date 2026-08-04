@@ -6,11 +6,13 @@ columns group_by + the aggregations actually produce."""
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, TYPE_CHECKING, ClassVar, Literal, Optional
+from typing import Any, ClassVar, Literal, Optional
 
 from pydantic import Field, model_validator
 
-from app.models.schema import StageConfig, _Base
+from app.core.errors import PredicateError
+from app.core.predicate import parse_predicate
+from app.models.schema import StageConfig, TableSchema, _Base
 from app.models.stage_base import StageBase, StageInput, StageType
 from app.models.stages.shared import (
     COLUMN_ISSUE,
@@ -18,9 +20,8 @@ from app.models.stages.shared import (
     find_predicate_column_issues,
     resolve_input_columns,
 )
+from app.models.stages.signature import ReplacesSignature
 
-if TYPE_CHECKING:
-    from app.models.schema import TableSchema
 
 
 class AggFormula(str, Enum):
@@ -63,6 +64,7 @@ class AggregateStage(StageBase):
     type: Literal[StageType.aggregate]
     aggregate: AggregateConfig
     inputs: list[StageInput] = Field(default_factory=list, min_length=1)
+    signature: Optional[ReplacesSignature] = None
 
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
         return {"aggregate": self.aggregate}
@@ -72,6 +74,9 @@ class AggregateStage(StageBase):
 
     def find_output_schema_issues(self) -> list[str]:
         return find_aggregate_output_issues(self)
+
+    def find_signature_config_issues(self) -> list[str]:
+        return find_aggregate_signature_issues(self)
 
 
 # Aggregation formula names, compared as plain strings both by
@@ -122,6 +127,52 @@ def find_aggregate_output_issues(stage: "AggregateStage") -> list[str]:
     edge = stage.inputs[0].table_schema
     computed = compute_aggregate_output_types(aggregate, edge)
     return find_declared_vs_computed_issues(stage.id, "aggregate", stage.output_schema, computed)
+
+
+def find_aggregate_signature_issues(stage: "AggregateStage") -> list[str]:
+    """Reads must be exactly what the config consumes; produces exactly what the formulas compute."""
+    signature = stage.signature
+    assert signature is not None  # find_signature_config_issues runs only with one
+    aggregate = stage.aggregate
+    input_id = stage.inputs[0].id
+
+    consumed = set(aggregate.group_by)
+    consumed.update(op.value_column for op in aggregate.aggregations if op.value_column)
+    for op in aggregate.aggregations:
+        if op.where:
+            try:
+                consumed.update(parse_predicate(op.where).columns)
+            except PredicateError:
+                pass  # find_aggregate_column_issues already reports the bad predicate
+    declared = {
+        column.name
+        for entry in signature.reads
+        if entry.input == input_id
+        for column in entry.columns
+    }
+    issues = [
+        f"stage '{stage.id}': signature reads `{name}` but the aggregate config "
+        f"never consumes it"
+        for name in sorted(declared - consumed)
+    ]
+    issues.extend(
+        f"stage '{stage.id}': the aggregate config consumes `{name}` but the "
+        f"signature does not read it"
+        for name in sorted(consumed - declared)
+    )
+
+    computed = compute_aggregate_output_types(aggregate, stage.inputs[0].table_schema)
+    issues.extend(find_declared_vs_computed_issues(
+        stage.id, "aggregate signature",
+        TableSchema(columns=signature.produces), computed,
+    ))
+    produced = {column.name for column in signature.produces}
+    issues.extend(
+        f"stage '{stage.id}': the aggregate config emits `{name}` but the "
+        f"signature's produces omits it"
+        for name in sorted(set(computed) - produced)
+    )
+    return issues
 
 
 def compute_aggregate_output_types(
