@@ -48,23 +48,30 @@ after injection — without that, the panel's JS (tabs + scratch tool) is dead.
   `llm_transform`) lives in Data's input-rows disclosure (row picker) and
   shows its result in Transform. Nothing is persisted.
 - **Full-table view + CSV**: `…/stage/{sid}/rows` renders the entire stage
-  output (not just the first-5 preview); `…/rows.csv` downloads it uncapped,
-  UTF-8 behind a byte-order mark so accented rows open correctly in Excel on
-  Windows (`loading.csv_download_body`).
-- **Stage-aware diff in Data** (`app.web.stage_diff` → `_stage_diff.html`):
-  a 1:1 stage's (`python_row_function`, `llm_transform`) output preview is a
-  positional diff against its input — columns the stage added are tinted and
-  named in words, changed cells carry the replaced value struck through, and
-  the summary line counts changes over the whole frame. A `filter_rows` stage
-  renders ONE merged table over the first input rows in input order: kept rows
-  exactly as the plain preview draws them (lineage links included), dropped
-  rows in place, tinted, with their input ordinal — read off the stage's
-  lineage sidecar, never guessed — and the header counts kept/dropped over the
-  whole frame, noting drops beyond the shown window. The diff header names
-  `input → stage` and links both raw frames' full-rows views and CSV
-  downloads. Every other stage type keeps the plain output view, and any stage
-  whose alignment can't be verified (missing frame, row-count mismatch, absent
-  sidecar) falls back to it.
+  output (not just the first-5 preview) — as the same diff where one exists,
+  over `MAX_TABLE_ROWS` rows instead of the panel's five, keeping the page's row
+  numbers and click-to-expand cells; `?raw=1` serves the plain table instead,
+  and each view names itself and links the other. `…/rows.csv` downloads the
+  output uncapped, UTF-8 behind a byte-order mark so accented rows open
+  correctly in Excel on Windows (`loading.csv_download_body`).
+- **Stage-aware diff** (`app.web.stage_diff` → `_stage_diff.html`, in Data and
+  on the full-rows page):
+  a 1:1 stage (`python_row_function`, `llm_transform`, and `enrich` against its
+  subject input) draws its INPUT frame as the base with what it did painted
+  over. Every input column holds its input position: one the stage dropped is
+  struck through, carrying the input value it discarded; the columns the stage
+  added follow, tinted. Both sets are named in words in the caption, changed
+  cells carry the replaced value struck through, and the summary line counts
+  changes over the whole frame. A `filter_rows` stage renders ONE merged table
+  over the first input rows in input order: kept rows exactly as the plain
+  preview draws them (lineage links included), dropped rows in place, tinted
+  and labelled — read off the stage's lineage sidecar, never guessed — and the
+  header counts kept/dropped over the whole frame, noting drops beyond the
+  shown window. The diff header names `base input → stage` and links the raw
+  full-rows view (`?raw=1`) and CSV download of every input (an `enrich`'s
+  reference frame included) and of the output. Every other stage type keeps the plain output
+  view, and any stage whose alignment can't be verified (missing frame,
+  row-count mismatch, absent sidecar) falls back to it.
 
 ## Review queue (`queue.html`)
 

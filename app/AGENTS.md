@@ -29,11 +29,16 @@ routers in `app/web/routers/`, which import the Runner (`app.runtime`) and the s
   the definition the run pinned *is* what the current run transformed with, so switching tiers
   here would show the same thing twice and push you off "Current run" mid-panel.
 - **The diff** (`app.web.stage_diff` → `_stage_diff.html`): a 1:1 stage
-  (`python_row_function`, `llm_transform`) reads as a positional diff (added columns tinted,
-  changed cells marked); `filter_rows` reads as ONE merged table with its dropped input rows
-  in place, tinted, off the verified lineage sidecar. The diff header names `input → stage`
-  and links both raw frames' full-rows views + CSV downloads. `build_stage_diff` returns
-  None — the plain output view — for every other type and whenever alignment can't be verified.
+  (`python_row_function`, `llm_transform`, `enrich` — against its subject input) reads as a
+  positional diff over its INPUT frame as the base: every input column holds its place, one the
+  stage dropped struck through carrying the input value, the added ones tinted after them, changed
+  cells marked. `filter_rows` reads as ONE merged table with its dropped input rows in place,
+  tinted, off the verified lineage sidecar. The header names `base input → stage` and links every
+  input's and the output's raw full-rows view (`?raw=1`) + CSV download. `build_stage_diff`
+  returns None — the plain output view — for every other type and whenever alignment can't be
+  verified. The **full-rows page** (`…/stage/{sid}/rows`) renders the same partial over
+  `MAX_TABLE_ROWS` rows, keeping its row numbers and click-to-expand cells; `?raw=1` forces the
+  plain table, and each view names itself and links the other.
 
 ## Live progress + scratch re-run
 `POST /project/<m>/run` → `prepare_run` (initial `running` manifest) → background thread →
