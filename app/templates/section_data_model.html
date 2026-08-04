@@ -1,4 +1,5 @@
 {% extends "project_shell.html" %}
+{% from "_schema_table.html" import constraint_cell %}
 {#
   DATA MODEL — two tiers over the named schemas + the approval GATE.
 
@@ -199,7 +200,7 @@
               <td><span class="type-pill">{{ c.type }}</span></td>
               <td>{% if c.nullable %}<span class="muted">optional</span>{% else %}<span class="strong">required</span>{% endif %}</td>
               <td>{% if c.references %}<code class="range">→ {{ c.references }}</code>{% else %}<span class="muted">—</span>{% endif %}</td>
-              <td>{% if c.range %}<code class="range">{{ c.range }}</code>{% elif c.enum %}<code class="range">{{ c.enum | join(' · ') }}</code>{% else %}<span class="muted">—</span>{% endif %}</td>
+              <td>{{ constraint_cell(c) }}</td>
               <td>{{ c.description or '' }}</td>
             </tr>
           {% endfor %}

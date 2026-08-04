@@ -1,6 +1,24 @@
 {# Renders a TableSchema (columns list with type, required/optional, range/enum, description).
    range and enum share one cell: range is numeric-only, enum str-only, so a column never has both.
    `nullable` is the model's word; the table says optional/required, for a reader who is an editor. #}
+
+{# One column's range-or-enum cell. Shared with the data model page's own table, so the
+   two render a vocabulary identically. A vocabulary longer than ENUM_PREVIEW folds: left
+   inline it wraps to a dozen lines in a ~110px column and buries every other row. #}
+{% set ENUM_PREVIEW = 2 %}
+{% macro constraint_cell(c) %}
+{%- if c.range %}<code class="range">{{ c.range }}</code>
+{%- elif c.enum and c.enum | length > ENUM_PREVIEW + 1 %}
+    <details class="enum-fold">
+        <summary><span class="enum-preview">{% for v in c.enum[:ENUM_PREVIEW] %}<code class="enum-val">{{ v }}</code>{% endfor %}</span
+            ><span class="enum-count">{{ c.enum | length }} values</span></summary>
+        <span class="enum-set">{% for v in c.enum %}<code class="enum-val">{{ v }}</code>{% endfor %}</span>
+    </details>
+{%- elif c.enum %}<span class="enum-set">{% for v in c.enum %}<code class="enum-val">{{ v }}</code>{% endfor %}</span>
+{%- else %}<span class="muted">—</span>
+{%- endif %}
+{%- endmacro %}
+
 {% macro schema_table(schema) %}
 {% if schema and schema.columns %}
 <table class="schema">
@@ -13,15 +31,7 @@
             <td><code>{{ c.name }}</code></td>
             <td><span class="type-pill">{{ c.type }}</span></td>
             <td>{% if c.nullable %}<span class="muted">optional</span>{% else %}<span class="strong">required</span>{% endif %}</td>
-            <td>
-                {% if c.range %}
-                    <code class="range">{{ c.range }}</code>
-                {% elif c.enum %}
-                    <code class="range">{{ c.enum | join(' · ') }}</code>
-                {% else %}
-                    <span class="muted">—</span>
-                {% endif %}
-            </td>
+            <td>{{ constraint_cell(c) }}</td>
             <td>{{ c.description or '' }}{% if c.source %} <span class="muted">[{{ c.source }}]</span>{% endif %}</td>
         </tr>
         {% endfor %}
