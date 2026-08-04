@@ -67,9 +67,11 @@ def test_a_stage_whose_behaviour_is_not_code_is_not_applicable():
     description standing between them and the behaviour, so nothing to certify."""
     stage = m.parse_stage({
         "id": "j", "name": "J", "type": "enrich",
-        "inputs": [{"id": "a", "schema": _SCHEMA}, {"id": "b", "schema": _SCHEMA}],
+        "inputs": [{"id": "a", "schema": _SCHEMA},
+                   {"id": "b", "schema": {"columns": [{"name": "id", "type": "str", "nullable": True},
+                                                      {"name": "v", "type": "str", "nullable": True}]}}],
         "output_schema": _SCHEMA,
-        "join": {"keys": [{"left": "id", "right": "id"}]},
+        "join": {"keys": [{"left": "id", "right": "id"}], "bring": ["v"]},
     })
     assert build_certification(stage, []).status == "n/a"
 

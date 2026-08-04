@@ -1,12 +1,13 @@
 """enrich/expand stage: the shared join handle config, plus column validation on
 both the input and output side — every join key's `.left`/`.right` must resolve
-against its side's stage input edge; and a declared output_schema (plus
-`select`) must be deliverable by the columns the join actually produces."""
+against its side's stage input edge; every `bring` entry must name a reference
+column the subject does not already carry; and a declared output_schema must be
+deliverable as the subject's columns plus the brought ones."""
 from __future__ import annotations
 
 from typing import Any, TYPE_CHECKING, ClassVar, Literal, Optional
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from app.models.schema import StageConfig, _Base
 from app.models.stage_base import StageBase, StageInput, StageType
@@ -29,27 +30,37 @@ class JoinKey(_Base):
 class JoinConfig(StageConfig):
     """enrich/expand handle. Cardinality lives in the stage TYPE, not here.
 
-    The joined output contains: every LEFT column under its own name; each
-    RIGHT column under its own name unless a left column shares it, in which
-    case it appears as `<name>_r`; a key pair with the SAME name on both sides
-    collapses into one column (there is no `<key>_r`). `select` and the
-    stage's `output_schema` may only name these producible columns — anything
-    else is rejected when the stage is saved."""
-    # Every field changes what this stage computes (keys, kept columns) — see
-    # Stage.compute_definition_fingerprint.
-    FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({"keys", "select"})
+    The joined output is the subject frame extended by `bring`: every subject
+    column under its own name, then each brought reference column under its
+    own name. A bring entry naming a column the subject already carries is
+    refused, never renamed — rename it upstream on the reference side if both
+    must survive. A key pair with the SAME name on both sides needs no bring
+    entry: the subject's own key column already carries the matched value."""
+    # Every field changes what this stage computes (keys, brought columns) —
+    # see Stage.compute_definition_fingerprint.
+    FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({"keys", "bring"})
     INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset()
 
     keys: list[JoinKey] = Field(min_length=1)
-    select: Optional[list[str]] = Field(
-        default=None,
+    bring: list[str] = Field(
+        min_length=1,
         description=(
-            "Columns to keep, applied after the join. Each entry must be a "
-            "producible joined column: a left column name, an uncollided right "
-            "column name, or `<name>_r` for a right column whose name a left "
-            "column shares."
+            "The reference columns this join adds to each subject row, each "
+            "under its own name. Every entry must exist on the reference input "
+            "and be absent from the subject — a collision is refused, never "
+            "renamed. On an unmatched subject row every brought column is "
+            "null."
         ),
     )
+
+    @model_validator(mode="after")
+    def _no_duplicate_bring(self) -> "JoinConfig":
+        seen: set[str] = set()
+        for name in self.bring:
+            if name in seen:
+                raise ValueError(f"duplicate column {name!r} in join.bring")
+            seen.add(name)
+        return self
 
 
 class JoinStage(StageBase):
@@ -80,15 +91,15 @@ class ExpandStage(JoinStage):
     type: Literal[StageType.expand]
 
 
-SELECT_UNPRODUCIBLE_ISSUE = (
-    "stage '{sid}': join.select references column '{col}' that the {stype} "
-    "cannot produce (producible columns: {cols})"
+BRING_COLLISION_ISSUE = (
+    "stage '{sid}': join.bring names '{col}', which the subject input "
+    "'{subject}' already supplies — a collision is refused, never renamed; "
+    "rename the reference column upstream or leave it un-brought"
 )
 
 
 def find_join_column_issues(stage: "JoinStage") -> list[str]:
-    """Every join key whose `.left`/`.right` names a column absent from its
-    resolved side's input."""
+    """Keys and `bring` entries their side's edge cannot satisfy; a bring colliding with the subject."""
     join = stage.join
     left = resolve_input_columns(stage, 0)
     right = resolve_input_columns(stage, 1)
@@ -102,43 +113,31 @@ def find_join_column_issues(stage: "JoinStage") -> list[str]:
             issues.append(
                 COLUMN_ISSUE.format(sid=stage.id, field="join key .right", col=key.right, cols=sorted(right))
             )
+    for name in join.bring:
+        if name not in right:
+            issues.append(
+                COLUMN_ISSUE.format(sid=stage.id, field="join.bring", col=name, cols=sorted(right))
+            )
+        elif name in left:
+            issues.append(BRING_COLLISION_ISSUE.format(
+                sid=stage.id, col=name, subject=stage.inputs[0].id
+            ))
     return issues
 
 
 def find_join_output_issues(stage: "JoinStage") -> list[str]:
-    """Every declared output_schema column (and select entry) the join handle
-    cannot deliver."""
-    join = stage.join
+    """Every declared output_schema column the join handle cannot deliver."""
     assert stage.output_schema is not None  # StageBase._schemas_declared guarantees this
-    left = stage.inputs[0].table_schema
-    right = stage.inputs[1].table_schema
-    joined = compute_join_output_types(join, left, right)
-    stage_type = str(stage.type)
-    issues = [
-        SELECT_UNPRODUCIBLE_ISSUE.format(
-            sid=stage.id, col=entry, stype=stage_type, cols=sorted(joined)
-        )
-        for entry in join.select or []
-        if entry not in joined
-    ]
-    effective = (
-        {name: joined[name] for name in join.select if name in joined}
-        if join.select else joined
+    computed = compute_join_output_types(
+        stage.join, stage.inputs[0].table_schema, stage.inputs[1].table_schema
     )
-    issues.extend(
-        find_declared_vs_computed_issues(stage.id, stage_type, stage.output_schema, effective)
+    return find_declared_vs_computed_issues(
+        stage.id, str(stage.type), stage.output_schema, computed
     )
-    return issues
-
-
-SIGNATURE_ADD_UNPRODUCIBLE_ISSUE = (
-    "stage '{sid}': signature adds `{col}` that the join cannot produce from its "
-    "reference input (producible: {cols})"
-)
 
 
 def find_join_signature_issues(stage: "JoinStage") -> list[str]:
-    """Keys must be read from their side, adds produced by the reference; rewrites are refused."""
+    """Keys must be read from their side, adds must be exactly `bring`; rewrites are refused."""
     signature = stage.signature
     assert signature is not None  # find_signature_config_issues runs only with one
     subject, reference = stage.inputs[0], stage.inputs[1]
@@ -154,19 +153,27 @@ def find_join_signature_issues(stage: "JoinStage") -> list[str]:
         if name not in reads_by_input.get(ref.id, set())
     ]
 
-    joined = compute_join_output_types(stage.join, subject.table_schema, reference.table_schema)
-    subject_names = {column.name for column in subject.table_schema.columns}
-    producible = {name: t for name, t in joined.items() if name not in subject_names}
+    brought = set(stage.join.bring)
+    reference_types = {c.name: c.type for c in reference.table_schema.columns}
     for column in signature.adds:
-        if column.name not in producible:
-            issues.append(SIGNATURE_ADD_UNPRODUCIBLE_ISSUE.format(
-                sid=stage.id, col=column.name, cols=sorted(producible),
-            ))
-        elif producible[column.name] != column.type:
+        if column.name not in brought:
+            issues.append(
+                f"stage '{stage.id}': signature adds `{column.name}`, which "
+                f"join.bring does not bring (bring: {sorted(brought)})"
+            )
+        elif reference_types.get(column.name, column.type) != column.type:
             issues.append(
                 f"stage '{stage.id}': signature adds `{column.name}` as "
-                f"{column.type!r} but the join produces {producible[column.name]!r}"
+                f"{column.type!r} but the reference supplies "
+                f"{reference_types[column.name]!r}"
             )
+    added = {column.name for column in signature.adds}
+    issues.extend(
+        f"stage '{stage.id}': join.bring brings `{name}` but the signature does "
+        f"not add it"
+        for name in stage.join.bring
+        if name not in added
+    )
     if signature.rewrites:
         issues.append(
             f"stage '{stage.id}': a join never revises a subject column; "
@@ -178,68 +185,68 @@ def find_join_signature_issues(stage: "JoinStage") -> list[str]:
 def compute_join_output_types(
     join: "JoinConfig", left: "TableSchema", right: "TableSchema"
 ) -> dict[str, str]:
-    """The columns the join handle emits, each mapped to its type — mirroring
-    pandas merge(..., suffixes=("", "_r")): all left columns keep
-    their names and types; a right key whose pair shares the left key's name
-    collapses into that left column; every other right column keeps its name
-    unless it collides with a left column, in which case it appears as
-    <name>_r. `select` projection is NOT applied here — the caller decides."""
-    collapsed_right_keys = {k.right for k in join.keys if k.left == k.right}
+    """The columns the join handle emits, each mapped to its type: every left
+    column under its own name and type, then each `bring` entry the right edge
+    supplies under its own name with the right column's type. A bring entry the
+    right edge does not supply, or the left side already does, contributes
+    nothing here — `find_join_column_issues` reports it."""
+    right_types = {c.name: c.type for c in right.columns}
     joined: dict[str, str] = {c.name: c.type for c in left.columns}
-    left_names = set(joined)
-    for column in right.columns:
-        if column.name in collapsed_right_keys:
-            continue
-        name = column.name if column.name not in left_names else f"{column.name}_r"
-        joined[name] = column.type
+    for name in join.bring:
+        if name in right_types and name not in joined:
+            joined[name] = right_types[name]
     return joined
 
 # Authoring notes for this module's stage type(s), as the plain-data shape the
 # authoring prompts render. Assembled into NODE_TYPES by app.models.stages.
 NODE_TYPE_SPECS: dict[str, dict[str, Any]] = {
     "enrich": {
-        "summary": "Adds reference columns to each subject row; the reference must be unique on the key (many-to-one).",
+        "summary": "Adds brought reference columns to each subject row; the reference must be unique on the key (many-to-one).",
         "blocks": ["join"],
         "requires_inputs": True,
         "min_inputs": 2,
-        "required": ["keys"],
-        "optional": ["select"],
+        "required": ["keys", "bring"],
+        "optional": [],
         "notes": (
             "Takes EXACTLY TWO inputs: inputs[0] is the SUBJECT, inputs[1] is the REFERENCE. "
             "Row count and order come out unchanged, because the reference is required to hold "
             "at most ONE row per key: the runtime asks pandas to VERIFY that, so a reference "
             "that repeats a key FAILS THE RUN rather than silently multiplying rows. Use "
             "`expand` when the fan-out is intended. Every subject row survives — an unmatched "
-            "one carries nulls for the reference columns — and an unmatched reference row is "
+            "one carries nulls for the brought columns — and an unmatched reference row is "
             "dropped. This stage NEVER drops a subject row: to drop rows (e.g. inner-join "
-            "semantics), follow it with a `filter_rows` on a reference column being non-null, "
+            "semantics), follow it with a `filter_rows` on a brought column being non-null, "
             "which records the row loss instead of hiding it. "
-            "A reference column whose name a subject column shares arrives as `<name>_r`; a key "
-            "pair with the SAME name on both sides collapses into one column. `select` and "
-            "output_schema may name only columns the join produces — anything else is rejected "
-            "when the stage is saved."
+            "The output is every subject column plus exactly `bring`: each entry must name a "
+            "reference column the subject does not already carry — a collision is refused, "
+            "never renamed, so rename the reference column upstream if both must survive. A "
+            "key pair with the SAME name on both sides needs no bring entry; the subject's own "
+            "key column already carries the matched value. output_schema may name only columns "
+            "the join produces — anything else is rejected when the stage is saved."
         ),
     },
     "expand": {
-        "summary": "Joins reference rows into each subject row, fanning one subject row out to several (many-to-many).",
+        "summary": "Joins brought reference columns into each subject row, fanning one subject row out to several (many-to-many).",
         "blocks": ["join"],
         "requires_inputs": True,
         "min_inputs": 2,
-        "required": ["keys"],
-        "optional": ["select"],
+        "required": ["keys", "bring"],
+        "optional": [],
         "notes": (
             "Takes EXACTLY TWO inputs: inputs[0] is the SUBJECT, inputs[1] is the REFERENCE. "
             "The reference MAY hold several rows per key, so one subject row may come out as "
             "several — deliberate fan-out. Use `enrich` instead when the reference is meant to "
             "be unique on the key and a repeat is a bug you want caught. Every subject row "
-            "survives — an unmatched one carries nulls for the reference columns — and an "
+            "survives — an unmatched one carries nulls for the brought columns — and an "
             "unmatched reference row is dropped. This stage NEVER drops a subject row: to drop "
-            "rows (e.g. inner-join semantics), follow it with a `filter_rows` on a reference "
+            "rows (e.g. inner-join semantics), follow it with a `filter_rows` on a brought "
             "column being non-null, which records the row loss instead of hiding it. "
-            "A reference column whose name a subject column shares arrives as `<name>_r`; a key "
-            "pair with the SAME name on both sides collapses into one column. `select` and "
-            "output_schema may name only columns the join produces — anything else is rejected "
-            "when the stage is saved."
+            "The output is every subject column plus exactly `bring`: each entry must name a "
+            "reference column the subject does not already carry — a collision is refused, "
+            "never renamed, so rename the reference column upstream if both must survive. A "
+            "key pair with the SAME name on both sides needs no bring entry; the subject's own "
+            "key column already carries the matched value. output_schema may name only columns "
+            "the join produces — anything else is rejected when the stage is saved."
         ),
     },
 }

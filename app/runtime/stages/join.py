@@ -35,26 +35,28 @@ def _join_reference_into_subject(
     reference_id = join_stage.inputs[1].id
     reference = inputs[reference_id]
     keys = join_cfg.keys
+    # The reference is narrowed to its key columns plus `bring` BEFORE the
+    # merge, so no un-brought reference column can reach the output. A brought
+    # column never collides with a subject column (validation refuses that at
+    # save); a right KEY sharing a subject column's name still can, so pandas
+    # suffixes that one copy and the projection below drops it.
+    right_keys = [k.right for k in keys]
+    narrowed = reference[list(dict.fromkeys([*right_keys, *join_cfg.bring]))]
     # how="left": every subject row survives, an unmatched one carrying nulls
-    # for the reference columns. Dropping rows is filter_rows' job — it records
+    # for the brought columns. Dropping rows is filter_rows' job — it records
     # per-row provenance, so the loss stays visible downstream.
     try:
         joined = subject.merge(
-            reference,
+            narrowed,
             left_on=[k.left for k in keys],
-            right_on=[k.right for k in keys],
+            right_on=right_keys,
             how="left",
             suffixes=("", "_r"),
             validate=validate,
         )
     except pd.errors.MergeError as exc:
         raise ValueError(_describe_cardinality_failure(join_stage, reference_id, exc)) from exc
-
-    select = join_cfg.select
-    if select:
-        existing = [c for c in select if c in joined.columns]
-        joined = joined[existing]
-    return joined
+    return joined[[*subject.columns, *join_cfg.bring]]
 
 
 def _describe_cardinality_failure(

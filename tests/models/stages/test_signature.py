@@ -217,7 +217,7 @@ def test_llm_matching_reads_accepted():
     assert stage.signature is not None
 
 
-def _join_stage(*, adds, reads=None):
+def _join_stage(*, adds, reads=None, bring=None, output_adds=None):
     subject = {"columns": [
         {"name": "state", "type": "str", "nullable": True}, {"name": "bill", "type": "str", "nullable": True},
     ]}
@@ -229,7 +229,7 @@ def _join_stage(*, adds, reads=None):
         "name": "Add region",
         "type": "enrich",
         "inputs": [{"id": "bills", "schema": subject}, {"id": "states", "schema": reference}],
-        "join": {"keys": [{"left": "state", "right": "code"}]},
+        "join": {"keys": [{"left": "state", "right": "code"}], "bring": bring or ["region"]},
         "signature": {
             "form": "extends",
             "reads": reads if reads is not None else [
@@ -240,7 +240,8 @@ def _join_stage(*, adds, reads=None):
         },
         "output_schema": {"columns": [
             {"name": "state", "type": "str", "nullable": True}, {"name": "bill", "type": "str", "nullable": True},
-            *[{"name": c["name"], "type": c["type"], "nullable": True} for c in adds],
+            *[{"name": c["name"], "type": c["type"], "nullable": True}
+              for c in (adds if output_adds is None else output_adds)],
         ]},
     }
 
@@ -253,12 +254,26 @@ def test_join_key_must_be_read_from_its_side():
     assert "join key .right `code` is not read from the reference input" in msg
 
 
-def test_join_add_must_be_producible_from_the_reference():
-    # The declared output carries the impossible column too, so whichever of the
-    # two checks speaks first (output deliverability or the signature
-    # cross-check), the refusal names the column the join cannot produce.
-    msg = _issues(_join_stage(adds=[{"name": "population", "type": "int", "nullable": True}]))
-    assert "population" in msg and "cannot produce" in msg
+def test_join_add_must_be_brought():
+    # The output declares only the subject columns, so the deliverability
+    # check stays quiet and the signature cross-check speaks: `population`
+    # is not on the bring list.
+    msg = _issues(_join_stage(
+        adds=[{"name": "population", "type": "int", "nullable": True}], output_adds=[],
+    ))
+    assert "population" in msg and "join.bring does not bring" in msg
+
+
+def test_join_bring_must_be_added_by_the_signature():
+    msg = _issues(_join_stage(adds=[]))
+    assert "join.bring brings `region` but the signature does not add it" in msg
+
+
+def test_join_add_type_must_match_the_reference():
+    msg = _issues(_join_stage(
+        adds=[{"name": "region", "type": "int", "nullable": True}], output_adds=[],
+    ))
+    assert "the reference supplies" in msg
 
 
 def test_join_consistent_signature_accepted():

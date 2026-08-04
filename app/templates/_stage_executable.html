@@ -146,10 +146,8 @@
             {% endfor %}
         </tbody>
     </table>
-    {% if stage.join.select %}
-    <h3>select</h3>
-    <p>{% for c in stage.join.select %}<code>{{ c }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</p>
-    {% endif %}
+    <h3>bring</h3>
+    <p>{% for c in stage.join.bring %}<code>{{ c }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</p>
 </section>
 {% endif %}
 

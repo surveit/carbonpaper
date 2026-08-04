@@ -20,13 +20,17 @@ def S(**kw):
 # carry both. These are the smallest ones that satisfy it.
 _PK_ID_SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True}], "primary_key": ["id"]}
 _K_SCHEMA = {"columns": [{"name": "k", "type": "str", "nullable": True}]}
+# A reference edge for the enrich fixtures: the key plus `v`, the one column a
+# `bring` can name (the key itself would collide with the subject's).
+_KV_SCHEMA = {"columns": [{"name": "k", "type": "str", "nullable": True},
+                          {"name": "v", "type": "str", "nullable": True}]}
 
 
 def _build_enrich_on_k(*, join):
     """A two-input enrich on `k`, declared end to end, so a test can vary only
     the `join` block."""
     return S(id="j", type="enrich",
-             inputs=[{"id": "a", "schema": _K_SCHEMA}, {"id": "b", "schema": _K_SCHEMA}],
+             inputs=[{"id": "a", "schema": _K_SCHEMA}, {"id": "b", "schema": _KV_SCHEMA}],
              output_schema=_K_SCHEMA, join=join)
 
 
@@ -239,7 +243,7 @@ def test_unknown_type_raises():
 def test_join_min_inputs(t):
     with pytest.raises(ValidationError):
         m.parse_stage(S(id="j", type=t, inputs=[{"id": "a"}],
-                                 join={"keys": [{"left": "k", "right": "k"}]}))
+                                 join={"keys": [{"left": "k", "right": "k"}], "bring": ["v"]}))
 
 
 @pytest.mark.parametrize("t", ["enrich", "expand"])
@@ -251,8 +255,10 @@ def test_join_rejects_a_third_input(t):
     with pytest.raises(ValidationError) as err:
         m.parse_stage(S(
             id="j", type=t,
-            inputs=[{"id": i, "schema": _K_SCHEMA} for i in ("a", "b", "c")],
-            output_schema=_K_SCHEMA, join={"keys": [{"left": "k", "right": "k"}]},
+            inputs=[{"id": "a", "schema": _K_SCHEMA}, {"id": "b", "schema": _KV_SCHEMA},
+                    {"id": "c", "schema": _K_SCHEMA}],
+            output_schema=_K_SCHEMA,
+            join={"keys": [{"left": "k", "right": "k"}], "bring": ["v"]},
         ))
     assert [(e["loc"], e["type"]) for e in err.value.errors()] == [((t, "inputs"), "too_long")]
 
@@ -264,7 +270,8 @@ def test_name_is_required():
 
 
 def test_input_ids_property():
-    s = m.parse_stage(_build_enrich_on_k(join={"keys": [{"left": "k", "right": "k"}]}))
+    s = m.parse_stage(_build_enrich_on_k(
+        join={"keys": [{"left": "k", "right": "k"}], "bring": ["v"]}))
     assert s.input_ids == ["a", "b"]
 
 
@@ -289,7 +296,8 @@ def test_queue_needs_no_hash_source_declared():
 
 # ── fixes folded into the model ──────────────────────────────────────────────
 def test_join_accepts_keys():
-    m.parse_stage(_build_enrich_on_k(join={"keys": [{"left": "k", "right": "k"}]}))
+    m.parse_stage(_build_enrich_on_k(
+        join={"keys": [{"left": "k", "right": "k"}], "bring": ["v"]}))
 
 
 def test_join_without_keys_raises():
@@ -300,7 +308,13 @@ def test_join_without_keys_raises():
 
 def test_join_with_empty_keys_raises():
     with pytest.raises(ValidationError):
-        m.parse_stage(_build_enrich_on_k(join={"keys": []}))
+        m.parse_stage(_build_enrich_on_k(join={"keys": [], "bring": ["v"]}))
+
+
+def test_join_with_empty_bring_raises():
+    with pytest.raises(ValidationError):
+        m.parse_stage(_build_enrich_on_k(
+            join={"keys": [{"left": "k", "right": "k"}], "bring": []}))
 
 
 def test_aggregate_output_column_required():
@@ -623,8 +637,8 @@ _RIGHT_SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True}, {"
 _HANDLE_BLOCK = {
     "python_row_function": {"function": _INLINE_ROW_FN},
     "python_frame_function": {"function": _INLINE_ROW_FN},
-    "enrich": {"join": {"keys": [{"left": "id", "right": "id"}]}},
-    "expand": {"join": {"keys": [{"left": "id", "right": "id"}]}},
+    "enrich": {"join": {"keys": [{"left": "id", "right": "id"}], "bring": ["amount"]}},
+    "expand": {"join": {"keys": [{"left": "id", "right": "id"}], "bring": ["amount"]}},
     "aggregate": {"aggregate": {"group_by": ["name"],
                                 "aggregations": [{"output_column": "n", "formula": "count"}]}},
     "human_review_queue": {"queue": {}},

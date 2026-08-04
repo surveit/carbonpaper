@@ -50,7 +50,7 @@ _STAGES: list[dict[str, Any]] = [
     {"id": "attach_source", "name": "Attach the source", "type": "enrich",
      "inputs": [{"id": "keep_flagged", "schema": _FLAGGED},
                 {"id": "load_sources", "schema": _SOURCES}],
-     "join": {"keys": [{"left": "doc_id", "right": "doc_id"}]},
+     "join": {"keys": [{"left": "doc_id", "right": "doc_id"}], "bring": ["source"]},
      "output_schema": _ATTACHED},
 ]
 

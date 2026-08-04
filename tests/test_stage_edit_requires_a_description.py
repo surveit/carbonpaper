@@ -74,9 +74,11 @@ def test_a_config_only_stage_needs_no_summary(project):
     code for prose to stand in for."""
     result = add_stage_spec(project, json.dumps({
         "id": "j", "name": "J", "type": "enrich",
-        "inputs": [{"id": "src", "schema": _SCHEMA}, {"id": "src2", "schema": _SCHEMA}],
+        "inputs": [{"id": "src", "schema": _SCHEMA},
+                   {"id": "src2", "schema": {"columns": [{"name": "id", "type": "str", "nullable": True},
+                                                         {"name": "v", "type": "str", "nullable": True}]}}],
         "output_schema": _SCHEMA,
-        "join": {"keys": [{"left": "id", "right": "id"}]},
+        "join": {"keys": [{"left": "id", "right": "id"}], "bring": ["v"]},
     }))
     # Refused for the missing `src2` edge, never for a missing summary.
     assert not any("summary" in issue for issue in result.issues)
