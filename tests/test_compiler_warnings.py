@@ -44,9 +44,11 @@ def test_a_config_only_stage_warns_about_nothing():
     """An enrich's keys are config a reviewer reads directly — no description to miss."""
     enrich = m.parse_stage({
         "id": "j", "name": "J", "type": "enrich",
-        "inputs": [{"id": "a", "schema": _SCHEMA}, {"id": "b", "schema": _SCHEMA}],
+        "inputs": [{"id": "a", "schema": _SCHEMA},
+                   {"id": "b", "schema": {"columns": [{"name": "id", "type": "str", "nullable": True},
+                                                      {"name": "v", "type": "str", "nullable": True}]}}],
         "output_schema": _SCHEMA,
-        "join": {"keys": [{"left": "id", "right": "id"}]},
+        "join": {"keys": [{"left": "id", "right": "id"}], "enrich_with": {"v": "v"}},
     })
     assert _kinds(enrich) == []
 

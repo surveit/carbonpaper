@@ -1,17 +1,15 @@
-"""enrich/expand stage: the shared join handle config, plus column validation on
-both the input and output side — every join key's `.left`/`.right` must resolve
-against its side's stage input edge; and a declared output_schema (plus
-`select`) must be deliverable by the columns the join actually produces."""
+"""enrich/expand stage: the join handle config and its column checks."""
 from __future__ import annotations
 
 from typing import Any, TYPE_CHECKING, ClassVar, Literal, Optional
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from app.models.schema import StageConfig, _Base
 from app.models.stage_base import StageBase, StageInput, StageType
 from app.models.stages.shared import (
     COLUMN_ISSUE,
+    INTERNAL_COLUMN_PREFIX,
     find_declared_vs_computed_issues,
     resolve_input_columns,
 )
@@ -27,29 +25,36 @@ class JoinKey(_Base):
 
 
 class JoinConfig(StageConfig):
-    """enrich/expand handle. Cardinality lives in the stage TYPE, not here.
-
-    The joined output contains: every LEFT column under its own name; each
-    RIGHT column under its own name unless a left column shares it, in which
-    case it appears as `<name>_r`; a key pair with the SAME name on both sides
-    collapses into one column (there is no `<key>_r`). `select` and the
-    stage's `output_schema` may only name these producible columns — anything
-    else is rejected when the stage is saved."""
-    # Every field changes what this stage computes (keys, kept columns) — see
-    # Stage.compute_definition_fingerprint.
-    FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({"keys", "select"})
+    """enrich/expand handle. Cardinality lives in the stage TYPE, not here."""
+    # Every field changes what this stage computes (keys, brought columns) —
+    # see Stage.compute_definition_fingerprint.
+    FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({"keys", "enrich_with"})
     INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset()
 
     keys: list[JoinKey] = Field(min_length=1)
-    select: Optional[list[str]] = Field(
-        default=None,
+    enrich_with: dict[str, str] = Field(
+        min_length=1,
         description=(
-            "Columns to keep, applied after the join. Each entry must be a "
-            "producible joined column: a left column name, an uncollided right "
-            "column name, or `<name>_r` for a right column whose name a left "
-            "column shares."
+            "Reference column -> the name it lands under, usually the same "
+            "(`region: region`). A join only ADDS: a landed name the subject "
+            "already carries is refused — pick a new one (`score: score_r`). "
+            "Null on an unmatched row."
         ),
     )
+
+    @model_validator(mode="after")
+    def _landed_names_well_formed(self) -> "JoinConfig":
+        seen: set[str] = set()
+        for landed in self.enrich_with.values():
+            if landed in seen:
+                raise ValueError(f"join.enrich_with lands two columns as {landed!r}")
+            if landed.startswith(INTERNAL_COLUMN_PREFIX):
+                raise ValueError(
+                    f"join.enrich_with lands {landed!r} inside the reserved "
+                    f"`{INTERNAL_COLUMN_PREFIX}` namespace"
+                )
+            seen.add(landed)
+        return self
 
 
 class JoinStage(StageBase):
@@ -80,18 +85,25 @@ class ExpandStage(JoinStage):
     type: Literal[StageType.expand]
 
 
-SELECT_UNPRODUCIBLE_ISSUE = (
-    "stage '{sid}': join.select references column '{col}' that the {stype} "
-    "cannot produce (producible columns: {cols})"
+ENRICH_WITH_REWRITE_ISSUE = (
+    "stage '{sid}': join.enrich_with lands '{landed}' on the subject input "
+    "'{subject}', which already carries it — a join only ever ADDS; land the "
+    "source under a name the subject does not carry (`{src}: {src}_r`) or "
+    "drop the entry"
+)
+ENRICH_WITH_SHADOWS_KEY_ISSUE = (
+    "stage '{sid}': join.enrich_with lands '{src}' as '{landed}', but '{landed}' is "
+    "a join key on the reference side and the merge reads that column — land "
+    "it under a different name"
 )
 
 
 def find_join_column_issues(stage: "JoinStage") -> list[str]:
-    """Every join key whose `.left`/`.right` names a column absent from its
-    resolved side's input."""
+    """Keys and enrich_with sources their side's edge cannot satisfy; a landed name the subject carries."""
     join = stage.join
     left = resolve_input_columns(stage, 0)
     right = resolve_input_columns(stage, 1)
+    right_keys = {key.right for key in join.keys}
     issues: list[str] = []
     for key in join.keys:
         if key.left not in left:
@@ -102,43 +114,35 @@ def find_join_column_issues(stage: "JoinStage") -> list[str]:
             issues.append(
                 COLUMN_ISSUE.format(sid=stage.id, field="join key .right", col=key.right, cols=sorted(right))
             )
+    for src, landed in join.enrich_with.items():
+        if src not in right:
+            issues.append(
+                COLUMN_ISSUE.format(sid=stage.id, field="join.enrich_with", col=src, cols=sorted(right))
+            )
+        if landed in left:
+            issues.append(ENRICH_WITH_REWRITE_ISSUE.format(
+                sid=stage.id, landed=landed, subject=stage.inputs[0].id, src=src
+            ))
+        elif landed in right_keys and landed != src:
+            issues.append(ENRICH_WITH_SHADOWS_KEY_ISSUE.format(
+                sid=stage.id, src=src, landed=landed
+            ))
     return issues
 
 
 def find_join_output_issues(stage: "JoinStage") -> list[str]:
-    """Every declared output_schema column (and select entry) the join handle
-    cannot deliver."""
-    join = stage.join
+    """Every declared output_schema column the join handle cannot deliver."""
     assert stage.output_schema is not None  # StageBase._schemas_declared guarantees this
-    left = stage.inputs[0].table_schema
-    right = stage.inputs[1].table_schema
-    joined = compute_join_output_types(join, left, right)
-    stage_type = str(stage.type)
-    issues = [
-        SELECT_UNPRODUCIBLE_ISSUE.format(
-            sid=stage.id, col=entry, stype=stage_type, cols=sorted(joined)
-        )
-        for entry in join.select or []
-        if entry not in joined
-    ]
-    effective = (
-        {name: joined[name] for name in join.select if name in joined}
-        if join.select else joined
+    computed = compute_join_output_types(
+        stage.join, stage.inputs[0].table_schema, stage.inputs[1].table_schema
     )
-    issues.extend(
-        find_declared_vs_computed_issues(stage.id, stage_type, stage.output_schema, effective)
+    return find_declared_vs_computed_issues(
+        stage.id, str(stage.type), stage.output_schema, computed
     )
-    return issues
-
-
-SIGNATURE_ADD_UNPRODUCIBLE_ISSUE = (
-    "stage '{sid}': signature adds `{col}` that the join cannot produce from its "
-    "reference input (producible: {cols})"
-)
 
 
 def find_join_signature_issues(stage: "JoinStage") -> list[str]:
-    """Keys must be read from their side, adds produced by the reference; rewrites are refused."""
+    """Keys must be read from their side, adds must be exactly `enrich_with`; rewrites are refused."""
     signature = stage.signature
     assert signature is not None  # find_signature_config_issues runs only with one
     subject, reference = stage.inputs[0], stage.inputs[1]
@@ -154,19 +158,28 @@ def find_join_signature_issues(stage: "JoinStage") -> list[str]:
         if name not in reads_by_input.get(ref.id, set())
     ]
 
-    joined = compute_join_output_types(stage.join, subject.table_schema, reference.table_schema)
-    subject_names = {column.name for column in subject.table_schema.columns}
-    producible = {name: t for name, t in joined.items() if name not in subject_names}
+    src_by_landed = {landed: src for src, landed in stage.join.enrich_with.items()}
+    reference_types = {c.name: c.type for c in reference.table_schema.columns}
     for column in signature.adds:
-        if column.name not in producible:
-            issues.append(SIGNATURE_ADD_UNPRODUCIBLE_ISSUE.format(
-                sid=stage.id, col=column.name, cols=sorted(producible),
-            ))
-        elif producible[column.name] != column.type:
+        src = src_by_landed.get(column.name)
+        if src is None:
+            issues.append(
+                f"stage '{stage.id}': signature adds `{column.name}`, which "
+                f"join.enrich_with does not land (landed: {sorted(src_by_landed)})"
+            )
+        elif reference_types.get(src, column.type) != column.type:
             issues.append(
                 f"stage '{stage.id}': signature adds `{column.name}` as "
-                f"{column.type!r} but the join produces {producible[column.name]!r}"
+                f"{column.type!r} but its source `{src}` supplies "
+                f"{reference_types[src]!r}"
             )
+    added = {column.name for column in signature.adds}
+    issues.extend(
+        f"stage '{stage.id}': join.enrich_with lands `{landed}` but the signature "
+        f"does not add it"
+        for landed in src_by_landed
+        if landed not in added
+    )
     if signature.rewrites:
         issues.append(
             f"stage '{stage.id}': a join never revises a subject column; "
@@ -178,68 +191,52 @@ def find_join_signature_issues(stage: "JoinStage") -> list[str]:
 def compute_join_output_types(
     join: "JoinConfig", left: "TableSchema", right: "TableSchema"
 ) -> dict[str, str]:
-    """The columns the join handle emits, each mapped to its type — mirroring
-    pandas merge(..., suffixes=("", "_r")): all left columns keep
-    their names and types; a right key whose pair shares the left key's name
-    collapses into that left column; every other right column keeps its name
-    unless it collides with a left column, in which case it appears as
-    <name>_r. `select` projection is NOT applied here — the caller decides."""
-    collapsed_right_keys = {k.right for k in join.keys if k.left == k.right}
+    """Left columns, then each `enrich_with` entry under its landed name with its source's type."""
+    right_types = {c.name: c.type for c in right.columns}
     joined: dict[str, str] = {c.name: c.type for c in left.columns}
-    left_names = set(joined)
-    for column in right.columns:
-        if column.name in collapsed_right_keys:
-            continue
-        name = column.name if column.name not in left_names else f"{column.name}_r"
-        joined[name] = column.type
+    for src, landed in join.enrich_with.items():
+        if src in right_types and landed not in joined:
+            joined[landed] = right_types[src]
     return joined
 
 # Authoring notes for this module's stage type(s), as the plain-data shape the
 # authoring prompts render. Assembled into NODE_TYPES by app.models.stages.
 NODE_TYPE_SPECS: dict[str, dict[str, Any]] = {
     "enrich": {
-        "summary": "Adds reference columns to each subject row; the reference must be unique on the key (many-to-one).",
+        "summary": "Adds brought reference columns to each subject row; the reference must be unique on the key (many-to-one).",
         "blocks": ["join"],
         "requires_inputs": True,
         "min_inputs": 2,
-        "required": ["keys"],
-        "optional": ["select"],
+        "required": ["keys", "enrich_with"],
+        "optional": [],
         "notes": (
             "Takes EXACTLY TWO inputs: inputs[0] is the SUBJECT, inputs[1] is the REFERENCE. "
-            "Row count and order come out unchanged, because the reference is required to hold "
-            "at most ONE row per key: the runtime asks pandas to VERIFY that, so a reference "
-            "that repeats a key FAILS THE RUN rather than silently multiplying rows. Use "
-            "`expand` when the fan-out is intended. Every subject row survives — an unmatched "
-            "one carries nulls for the reference columns — and an unmatched reference row is "
-            "dropped. This stage NEVER drops a subject row: to drop rows (e.g. inner-join "
-            "semantics), follow it with a `filter_rows` on a reference column being non-null, "
-            "which records the row loss instead of hiding it. "
-            "A reference column whose name a subject column shares arrives as `<name>_r`; a key "
-            "pair with the SAME name on both sides collapses into one column. `select` and "
-            "output_schema may name only columns the join produces — anything else is rejected "
-            "when the stage is saved."
+            "Row count and order come out unchanged: the runtime VERIFIES the reference is "
+            "unique on the key, and a repeat FAILS THE RUN — use `expand` for intended "
+            "fan-out. Every subject row survives (unmatched rows carry nulls in the landed "
+            "columns); dropping rows is `filter_rows`' job. `enrich_with` maps each reference "
+            "column to the name it lands under, usually the same. A join only ADDS: a landed "
+            "name the subject already carries is refused — pick a new one (`score: score_r`). "
+            "A same-named key pair needs no entry. output_schema may name only columns the "
+            "join produces."
         ),
     },
     "expand": {
-        "summary": "Joins reference rows into each subject row, fanning one subject row out to several (many-to-many).",
+        "summary": "Joins brought reference columns into each subject row, fanning one subject row out to several (many-to-many).",
         "blocks": ["join"],
         "requires_inputs": True,
         "min_inputs": 2,
-        "required": ["keys"],
-        "optional": ["select"],
+        "required": ["keys", "enrich_with"],
+        "optional": [],
         "notes": (
             "Takes EXACTLY TWO inputs: inputs[0] is the SUBJECT, inputs[1] is the REFERENCE. "
-            "The reference MAY hold several rows per key, so one subject row may come out as "
-            "several — deliberate fan-out. Use `enrich` instead when the reference is meant to "
-            "be unique on the key and a repeat is a bug you want caught. Every subject row "
-            "survives — an unmatched one carries nulls for the reference columns — and an "
-            "unmatched reference row is dropped. This stage NEVER drops a subject row: to drop "
-            "rows (e.g. inner-join semantics), follow it with a `filter_rows` on a reference "
-            "column being non-null, which records the row loss instead of hiding it. "
-            "A reference column whose name a subject column shares arrives as `<name>_r`; a key "
-            "pair with the SAME name on both sides collapses into one column. `select` and "
-            "output_schema may name only columns the join produces — anything else is rejected "
-            "when the stage is saved."
+            "The reference MAY repeat a key, so one subject row can fan out to several — use "
+            "`enrich` when a repeat is a bug you want caught. Every subject row survives "
+            "(unmatched rows carry nulls in the landed columns); dropping rows is "
+            "`filter_rows`' job. `enrich_with` maps each reference column to the name it "
+            "lands under, usually the same. A join only ADDS: a landed name the subject "
+            "already carries is refused — pick a new one (`score: score_r`). A same-named "
+            "key pair needs no entry. output_schema may name only columns the join produces."
         ),
     },
 }

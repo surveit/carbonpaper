@@ -31,17 +31,20 @@ ROUTES_ID = "routes"
 ROUTE_ID = "route"
 
 _LOAD_SCHEMA = {"columns": [{"name": "name", "type": "str", "nullable": True},
-                            {"name": "val", "type": "int", "nullable": True}]}
+                            {"name": "val", "type": "int", "nullable": True},
+                            {"name": "junk", "type": "str", "nullable": True}]}
 _CLASSIFY_SCHEMA = {"columns": [{"name": "name", "type": "str", "nullable": True},
                                 {"name": "val", "type": "int", "nullable": True},
                                 {"name": "label", "type": "str", "nullable": True}]}
 
-# Uppercases `name` where val > 1 (a changed cell) and adds `label` (an added
-# column), so the classify diff has one of each to show.
+# Uppercases `name` where val > 1 (a changed cell), adds `label` (an added
+# column) and returns no `junk` (a dropped column), so the classify diff has
+# one of each to show.
 _CLASSIFY_CODE = (
     "def transform(row):\n"
     "    name = row['name'].upper() if row['val'] > 1 else row['name']\n"
-    "    return {**row, 'name': name, 'label': 'big' if row['val'] > 1 else 'small'}\n"
+    "    return {'name': name, 'val': row['val'],\n"
+    "            'label': 'big' if row['val'] > 1 else 'small'}\n"
 )
 
 _KEEP_CODE = (
@@ -51,8 +54,9 @@ _KEEP_CODE = (
 
 _ROUTES_SCHEMA = {"columns": [{"name": "name", "type": "str", "nullable": True},
                               {"name": "route", "type": "str", "nullable": True}]}
-# `select` keeps name/label/route, so the enrich ADDS `route` and DROPS `val`.
+# The enrich brings `route`; every subject column flows through untouched.
 _ROUTE_SCHEMA = {"columns": [{"name": "name", "type": "str", "nullable": True},
+                             {"name": "val", "type": "int", "nullable": True},
                              {"name": "label", "type": "str", "nullable": True},
                              {"name": "route", "type": "str", "nullable": True}]}
 
@@ -90,7 +94,7 @@ def _seed_compiled(pdir: Path, data_path: Path, routes_path: Path) -> None:
             "inputs": [{"id": CLASSIFY_ID, "schema": _CLASSIFY_SCHEMA},
                        {"id": ROUTES_ID, "schema": _ROUTES_SCHEMA}],
             "join": {"keys": [{"left": "name", "right": "name"}],
-                     "select": ["name", "label", "route"]},
+                     "enrich_with": {"route": "route"}},
             "output_schema": _ROUTE_SCHEMA,
         }),
     ]
@@ -103,7 +107,8 @@ def run_ctx(tmp_path: Path) -> tuple[Path, str]:
     pdir = tmp_path / PROJECT
     pdir.mkdir()
     data = pdir / "rows.csv"
-    pd.DataFrame({"name": ["alpha", "beta", "gamma"], "val": [1, 2, 1]}).to_csv(
+    pd.DataFrame({"name": ["alpha", "beta", "gamma"], "val": [1, 2, 1],
+                  "junk": ["x", "y", "z"]}).to_csv(
         data, index=False)
     routes = pdir / "routes.csv"
     # Keyed on the names `classify` emits (it uppercases where val > 1).
@@ -165,8 +170,8 @@ def test_the_rail_tallies_what_the_stage_did_in_one_line(run_ctx) -> None:
     """The header says what changed; the prose paragraph and caption that said it are gone."""
     _pdir, run_id = run_ctx
     strip = _diff_head(_panel(run_id, CLASSIFY_ID))
-    # classify adds `label` and uppercases the one name where val > 1.
-    assert ">+1 col · 1 cell changed</span>" in strip
+    # classify adds `label`, drops `junk` and uppercases one name.
+    assert ">+1 col · −1 col · 1 cell changed</span>" in strip
     assert "diff-summary" not in strip
 
 
@@ -323,23 +328,24 @@ def test_an_enrich_reads_as_a_diff_against_its_subject_input(run_ctx) -> None:
     strip = _diff_head(html)
     assert (strip.index(">base input</span>") < _unit_at(strip, CLASSIFY_ID)
             < strip.index(">reference input</span>") < _unit_at(strip, ROUTES_ID))
-    # The enrich adds `route`, drops `val` via join.select, and rewrites nothing.
-    assert ">+1 col · −1 col · 0 cells changed</span>" in strip
+    # The enrich adds `route` and touches nothing else: enrich_with never drops a
+    # subject column.
+    assert ">+1 col · 0 cells changed</span>" in strip
     assert "diff-col-new" in html and "north" in html
 
 
 def test_a_dropped_column_is_drawn_in_the_table_carrying_its_input_value(run_ctx) -> None:
     _pdir, run_id = run_ctx
-    html = _panel(run_id, ROUTE_ID)
-    # `val` left the output via join.select; the reader still sees what it held.
+    html = _panel(run_id, CLASSIFY_ID)
+    # classify returned no `junk`; the reader still sees what it held.
     assert "diff-col-dropped" in html
     assert 'title="dropped by this stage, carrying the input value"' in html
     # The − is the colour-free mark; the strike stays on the NAME, so the mark
     # itself is never drawn through (app/static/style.css splits the two).
-    assert '<span class="diff-mark">−</span><span class="diff-col-name">val</span>' in html
-    # The input is the base, so `val` holds its input position — ahead of the
-    # added `route` — rather than being exiled to the end of the table.
-    assert html.index('diff-col-name">val') < html.index('diff-col-name">route')
+    assert '<span class="diff-mark">−</span><span class="diff-col-name">junk</span>' in html
+    # The input is the base, so `junk` holds its input position — ahead of the
+    # added `label` — rather than being exiled to the end of the table.
+    assert html.index('diff-col-name">junk') < html.index('diff-col-name">label')
 
 
 def test_the_two_tab_strip_replaces_inputs_and_outputs(run_ctx) -> None:

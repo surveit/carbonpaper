@@ -51,17 +51,26 @@ def _join_reference_into_subject(
     # back off the result. `.assign` copies, so the caller's frames are untouched.
     subject = inputs[subject_id].assign(
         **{JOIN_SUBJECT_ORD_KEY: np.arange(len(inputs[subject_id]))})
-    reference = inputs[reference_id].assign(
-        **{JOIN_REFERENCE_ORD_KEY: np.arange(len(inputs[reference_id]))})
+    reference = inputs[reference_id]
+
+    # Only the keys, each enrich_with column already under its landed name,
+    # and the ordinal carrier cross the merge. Landed-name collisions are
+    # refused at save; a right KEY sharing a subject column's name still
+    # collides, so pandas suffixes that copy and the projection drops it.
+    right_keys = [k.right for k in keys]
+    narrowed = reference[list(dict.fromkeys(right_keys))].assign(
+        **{landed: reference[src] for src, landed in join_cfg.enrich_with.items()},
+        **{JOIN_REFERENCE_ORD_KEY: np.arange(len(reference))},
+    )
 
     # how="left": every subject row survives, an unmatched one carrying nulls
-    # for the reference columns. Dropping rows is filter_rows' job — it records
+    # for the brought columns. Dropping rows is filter_rows' job — it records
     # per-row provenance, so the loss stays visible downstream.
     try:
         joined = subject.merge(
-            reference,
+            narrowed,
             left_on=[k.left for k in keys],
-            right_on=[k.right for k in keys],
+            right_on=right_keys,
             how="left",
             suffixes=("", "_r"),
             validate=validate,
@@ -76,15 +85,10 @@ def _join_reference_into_subject(
         (subject_id, joined[JOIN_SUBJECT_ORD_KEY].tolist()),
         (reference_id, joined[JOIN_REFERENCE_ORD_KEY].tolist()),
     ])
-    joined = joined.drop(columns=[JOIN_SUBJECT_ORD_KEY, JOIN_REFERENCE_ORD_KEY])
-
-    select = join_cfg.select
-    if select:
-        existing = [c for c in select if c in joined.columns]
-        joined = joined[existing]
-    # Attach LAST: `.attrs` does not survive a frame being rebuilt, and both the
-    # drop and the projection above rebuild it.
-    return attach_row_lineage(joined, lineage)
+    # The projection drops both ordinal carriers. Attach LAST: the projection
+    # rebuilds the frame and `.attrs` would not survive it.
+    projected = joined[[*inputs[subject_id].columns, *join_cfg.enrich_with.values()]]
+    return attach_row_lineage(projected, lineage)
 
 
 def _describe_cardinality_failure(

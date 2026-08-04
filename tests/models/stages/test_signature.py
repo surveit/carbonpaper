@@ -217,7 +217,7 @@ def test_llm_matching_reads_accepted():
     assert stage.signature is not None
 
 
-def _join_stage(*, adds, reads=None):
+def _join_stage(*, adds, reads=None, enrich_with=None, output_adds=None):
     subject = {"columns": [
         {"name": "state", "type": "str", "nullable": True}, {"name": "bill", "type": "str", "nullable": True},
     ]}
@@ -229,7 +229,7 @@ def _join_stage(*, adds, reads=None):
         "name": "Add region",
         "type": "enrich",
         "inputs": [{"id": "bills", "schema": subject}, {"id": "states", "schema": reference}],
-        "join": {"keys": [{"left": "state", "right": "code"}]},
+        "join": {"keys": [{"left": "state", "right": "code"}], "enrich_with": enrich_with or {"region": "region"}},
         "signature": {
             "form": "extends",
             "reads": reads if reads is not None else [
@@ -240,7 +240,8 @@ def _join_stage(*, adds, reads=None):
         },
         "output_schema": {"columns": [
             {"name": "state", "type": "str", "nullable": True}, {"name": "bill", "type": "str", "nullable": True},
-            *[{"name": c["name"], "type": c["type"], "nullable": True} for c in adds],
+            *[{"name": c["name"], "type": c["type"], "nullable": True}
+              for c in (adds if output_adds is None else output_adds)],
         ]},
     }
 
@@ -253,12 +254,34 @@ def test_join_key_must_be_read_from_its_side():
     assert "join key .right `code` is not read from the reference input" in msg
 
 
-def test_join_add_must_be_producible_from_the_reference():
-    # The declared output carries the impossible column too, so whichever of the
-    # two checks speaks first (output deliverability or the signature
-    # cross-check), the refusal names the column the join cannot produce.
-    msg = _issues(_join_stage(adds=[{"name": "population", "type": "int", "nullable": True}]))
-    assert "population" in msg and "cannot produce" in msg
+def test_join_add_must_be_landed():
+    # The output declares only the subject columns, so the deliverability
+    # check stays quiet and the signature cross-check speaks: nothing lands
+    # as `population`.
+    msg = _issues(_join_stage(
+        adds=[{"name": "population", "type": "int", "nullable": True}], output_adds=[],
+    ))
+    assert "population" in msg and "join.enrich_with does not land" in msg
+
+
+def test_join_landed_column_must_be_added_by_the_signature():
+    msg = _issues(_join_stage(adds=[]))
+    assert "join.enrich_with lands `region` but the signature does not add it" in msg
+
+
+def test_join_add_type_must_match_its_source():
+    msg = _issues(_join_stage(
+        adds=[{"name": "region", "type": "int", "nullable": True}], output_adds=[],
+    ))
+    assert "its source `region` supplies" in msg
+
+
+def test_join_signature_adds_the_landed_name_not_the_source():
+    stage = parse_stage(_join_stage(
+        enrich_with={"region": "region_r"},
+        adds=[{"name": "region_r", "type": "str", "nullable": True}],
+    ))
+    assert stage.signature is not None
 
 
 def test_join_consistent_signature_accepted():

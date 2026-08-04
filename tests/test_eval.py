@@ -15,6 +15,8 @@ def S(**kw):
 
 
 _K = {"columns": [{"name": "k", "type": "str", "nullable": True}]}
+_KV = {"columns": [{"name": "k", "type": "str", "nullable": True},
+                    {"name": "v", "type": "str", "nullable": True}]}
 _QUEUE_IN = {"columns": _K["columns"] + [{"name": "score", "type": "int", "nullable": True}]}
 _QUEUE_OUT = {"columns": _QUEUE_IN["columns"] + queue_added_columns()}
 
@@ -96,12 +98,12 @@ def test_joins_and_aggregate_change_grain():
     # grain-preserving: preservation is earned by the runtime driving the stage
     # row by row, never asserted about an operation.
     j = m.parse_stage(S(id="j", type="enrich",
-                                 inputs=[{"id": "a", "schema": _K}, {"id": "b", "schema": _K}],
-                                 join={"keys": [{"left": "k", "right": "k"}]},
+                                 inputs=[{"id": "a", "schema": _K}, {"id": "b", "schema": _KV}],
+                                 join={"keys": [{"left": "k", "right": "k"}], "enrich_with": {"v": "v"}},
                                  output_schema=_K))
     x = m.parse_stage(S(id="x", type="expand",
-                                 inputs=[{"id": "a", "schema": _K}, {"id": "b", "schema": _K}],
-                                 join={"keys": [{"left": "k", "right": "k"}]},
+                                 inputs=[{"id": "a", "schema": _K}, {"id": "b", "schema": _KV}],
+                                 join={"keys": [{"left": "k", "right": "k"}], "enrich_with": {"v": "v"}},
                                  output_schema=_K))
     assert x.is_grain_and_order_preserving is False
     agg_in = {"columns": [{"name": "g", "type": "str", "nullable": True}, {"name": "x", "type": "int", "nullable": True}]}
@@ -283,9 +285,9 @@ def test_scorable_when_tapping_before_the_frame_stage(tmp_path):
 
 def test_expand_changes_grain_so_not_scorable(tmp_path):
     meth = m.parse_workflow([
-        _file_input("j1", tmp_path), _file_input("j2", tmp_path),
-        S(id="jn", type="expand", inputs=[{"id": "j1", "schema": _K}, {"id": "j2", "schema": _K}],
-          join={"keys": [{"left": "k", "right": "k"}]}, output_schema=_K),
+        _file_input("j1", tmp_path), _file_input("j2", tmp_path, output_schema=_KV),
+        S(id="jn", type="expand", inputs=[{"id": "j1", "schema": _K}, {"id": "j2", "schema": _KV}],
+          join={"keys": [{"left": "k", "right": "k"}], "enrich_with": {"v": "v"}}, output_schema=_K),
     ])
     v = resolve_eval_run_settings(meth, overrides=[], target="jn")
     assert v.can_score_declaratively is False

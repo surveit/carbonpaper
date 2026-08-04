@@ -63,7 +63,7 @@ def _join_stage(stage_type: str, output_columns: list[dict] | None = None) -> St
         "id": "route", "name": "Route", "type": stage_type,
         "inputs": [{"id": LOAD_ID, "schema": {"columns": _IN_COLUMNS}},
                    {"id": REF_ID, "schema": {"columns": _REF_COLUMNS}}],
-        "join": {"keys": [{"left": "name", "right": "name"}]},
+        "join": {"keys": [{"left": "name", "right": "name"}], "enrich_with": {"extra": "extra"}},
         "output_schema": {"columns": output_columns or _ENRICHED_COLUMNS},
     })
 
@@ -258,7 +258,9 @@ def test_an_enrich_that_did_not_come_out_one_to_one_yields_no_diff(tmp_path: Pat
 def test_an_enrich_that_dropped_a_subject_column_shows_it_carrying_the_input_value(
     tmp_path: Path,
 ) -> None:
-    # join.select can silently lose a subject column; the table must show it.
+    # The diff reads frames, not the config: an output missing an input
+    # column (e.g. persisted by an older definition of the stage) is still
+    # shown carrying the input value rather than silently narrowed.
     _write_output(tmp_path, LOAD_ID, pd.DataFrame({"name": ["a", "b"], "val": [1, 2]}))
     _write_output(tmp_path, REF_ID, pd.DataFrame({"name": ["a", "b"], "extra": ["p", "q"]}))
     out_rel = _write_output(tmp_path, "route", pd.DataFrame(
