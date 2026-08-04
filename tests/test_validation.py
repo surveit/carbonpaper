@@ -129,16 +129,6 @@ def test_non_nullable_column_with_nulls_errors():
     assert not report.ok
 
 
-def test_primary_key_duplicated_errors():
-    schema = _schema(columns=[{"name": "id", "type": "str", "nullable": True}], primary_key=["id"])
-    df = pd.DataFrame({"id": ["a", "a", "b"]})
-    report = validate_dataframe(df, schema, stage_id="s", phase="output")
-    issue = next(i for i in report.issues if i.column == "id")
-    assert issue.severity == "error"
-    assert issue.message == "Primary key duplicated on 1 row(s)"
-    assert not report.ok
-
-
 def test_undeclared_extra_columns_warns():
     schema = _schema(columns=[{"name": "id", "type": "str", "nullable": True}])
     df = pd.DataFrame({"id": ["a"], "extra": [1]})

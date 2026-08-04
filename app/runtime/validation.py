@@ -15,7 +15,6 @@ from typing import Any
 
 import pandas as pd
 
-from app.core.frame_checks import find_primary_key_violations
 from app.core.frames import (
     CELL_TYPE_PREDICATES,
     dtype_proves_cell_type,
@@ -118,7 +117,6 @@ def validate_dataframe(
         report.issues.extend(_find_numeric_range_issues(series, col))
         report.issues.extend(_find_enum_issues(series, col))
 
-    report.issues.extend(_find_duplicate_primary_keys(df, schema.primary_key))
     report.issues.extend(_find_undeclared_columns(df, declared_names))
 
     return report
@@ -231,14 +229,6 @@ def _find_enum_issues(series: pd.Series, col: Column) -> list[Issue]:
             f"{len(offending)} value(s) outside enum {sorted(allowed)} "
             f"(e.g. {sample}{ellipsis})",
         )
-    ]
-
-
-def _find_duplicate_primary_keys(df: pd.DataFrame, pk: list[str] | None) -> list[Issue]:
-    """The shared cross-row key rule, reported as this module's Issue."""
-    return [
-        Issue("error", ",".join(v.columns) if v.columns else None, v.message)
-        for v in find_primary_key_violations(df, pk)
     ]
 
 

@@ -19,10 +19,8 @@ def _config_block_by_type(root: Path) -> dict[str, dict]:
     }
 
 
-_LLM_IN_SCHEMA = {"primary_key": ["doc_id"],
-                  "columns": [{"name": "doc_id", "type": "str", "nullable": False}]}
-_LLM_OUT_SCHEMA = {"primary_key": ["doc_id"],
-                   "columns": [{"name": "doc_id", "type": "str", "nullable": False},
+_LLM_IN_SCHEMA = {"columns": [{"name": "doc_id", "type": "str", "nullable": False}]}
+_LLM_OUT_SCHEMA = {"columns": [{"name": "doc_id", "type": "str", "nullable": False},
                                {"name": "score", "type": "float", "nullable": False}]}
 
 
@@ -33,7 +31,7 @@ def _write_stage(compiled: Path, order: int, sid: str, stype: str, inputs: list[
     # Every input declares the schema it expects and every non-publish stage
     # declares its output_schema (app/models/stage.py: Stage._schemas_declared).
     # llm_transform is additionally strictly 1:1: its input and output schemas
-    # must share a primary_key and the output must add a column.
+    # must stay additive and the output must add a column.
     stage["output_schema"] = _LLM_OUT_SCHEMA if stype == "llm_transform" else _LLM_IN_SCHEMA
     if inputs:
         stage["inputs"] = [{"id": dep, "schema": _LLM_IN_SCHEMA} for dep in inputs]

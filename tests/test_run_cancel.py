@@ -21,12 +21,10 @@ from conftest import pinned_stages, resumed_stages
 _NAME_VAL_SCHEMA = {"columns": [{"name": "name", "type": "str", "nullable": True},
                                 {"name": "val", "type": "int", "nullable": True}]}
 _ID_TEXT_SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True},
-                               {"name": "text", "type": "str", "nullable": True}],
-                   "primary_key": ["id"]}
+                               {"name": "text", "type": "str", "nullable": True}]}
 _SCORED_SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True},
                               {"name": "text", "type": "str", "nullable": True},
-                              {"name": "score", "type": "int", "nullable": False}],
-                  "primary_key": ["id"]}
+                              {"name": "score", "type": "int", "nullable": False}]}
 
 
 def _seed_version(root):

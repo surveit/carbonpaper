@@ -62,10 +62,8 @@ def test_python_row_function_rejects_multiple_inputs():
 def test_llm_is_grain_and_order_preserving():
     s = m.parse_stage(S(
         id="e", type="llm_transform",
-        inputs=[{"id": "a", "schema": {"columns": [{"name": "id", "type": "str", "nullable": True}],
-                                       "primary_key": ["id"]}}],
-        output_schema={"columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "out", "type": "str", "nullable": True}],
-                       "primary_key": ["id"]},
+        inputs=[{"id": "a", "schema": {"columns": [{"name": "id", "type": "str", "nullable": True}]}}],
+        output_schema={"columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "out", "type": "str", "nullable": True}]},
         llm={"prompt_template": "p"}))
     assert s.is_grain_and_order_preserving is True
 

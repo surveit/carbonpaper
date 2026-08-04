@@ -32,12 +32,11 @@ def test_connector_params_documents_optional_absolute_path_and_bans_invention():
 
 
 def test_llm_transform_notes_document_the_additive_rule():
-    # validator: `llm_transform not strictly 1:1 ... additive ... primary_key` (stage.py) — #2.
+    # validator: `llm_transform not strictly 1:1 ... additive` (stage.py) — #2.
     # Type-specific, so it rides in that type's catalogue notes rather than on a
     # field shared by every type.
     notes = NODE_TYPES["llm_transform"].notes.lower()
     assert "additive" in notes
-    assert "primary_key" in notes
 
 
 def test_output_schema_documents_that_it_is_required():

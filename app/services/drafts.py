@@ -14,10 +14,14 @@ from pydantic import BaseModel, Field, ValidationError
 
 from app.core.errors import DocumentNotFound, DraftNotFoundError
 from app.models import Stage, parse_stage, validate_workflow
-from app.core.persistence import PersistedModel, PersistenceScope
+from app.core.persistence import JsonDict, PersistedModel, PersistenceScope
 from app.core.utils import format_errors, generate_word_triplet_id
 from app.services import versioning, workspace
 from app.services.loader import stage_to_spec_dict
+from app.services.spec_migrations import (
+    STAGE_SPEC_SCHEMA_VERSION,
+    upgrade_stage_spec,
+)
 
 
 class Draft(PersistedModel):
@@ -30,6 +34,7 @@ class Draft(PersistedModel):
 
     collection: ClassVar[str] = "draft"
     SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
+    SCHEMA_VERSION: ClassVar[int] = STAGE_SPEC_SCHEMA_VERSION
     # Dump embedded stages in their spec-dict shape (field aliases
     # restored, unset optionals dropped) — mirrors WorkflowVersion.DUMP_OPTS,
     # so a draft's on-disk stage shape matches a version's.
@@ -38,6 +43,13 @@ class Draft(PersistedModel):
     draft_id: str
     parent_version: str | None = None
     stages: list[Stage] = Field(default_factory=list)
+
+    @classmethod
+    def _upgrade(cls, data: JsonDict) -> JsonDict:
+        for spec in data.get("stages") or []:
+            if isinstance(spec, dict):
+                upgrade_stage_spec(spec)
+        return data
 
 
 class DraftView(BaseModel):

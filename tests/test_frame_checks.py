@@ -1,4 +1,4 @@
-"""The cross-row rules shared by the runner and the stage-test suite validator."""
+"""The cross-row rule shared by the runner and the stage-test suite validator."""
 from __future__ import annotations
 
 import pandas as pd
@@ -6,36 +6,16 @@ import pandas as pd
 from app.core.frame_checks import (
     find_duplicate_row_violations,
     find_frame_violations,
-    find_primary_key_violations,
 )
 
 
 def test_a_clean_frame_has_no_violations():
     df = pd.DataFrame({"id": ["a", "b"], "n": [1, 2]})
-    assert find_frame_violations(df, primary_key=["id"]) == []
-
-
-def test_an_undeclared_key_is_nothing_to_check():
-    df = pd.DataFrame({"id": ["a", "a"]})
-    assert find_primary_key_violations(df, None) == []
-    assert find_primary_key_violations(df, []) == []
-
-
-def test_a_key_column_the_frame_lacks_is_left_to_the_per_column_check():
-    # Reporting it here too would say "Missing column" in second, vaguer words.
-    df = pd.DataFrame({"n": [1, 2]})
-    assert find_primary_key_violations(df, ["id"]) == []
-
-
-def test_a_repeated_key_names_its_columns():
-    df = pd.DataFrame({"id": ["a", "a", "b"], "n": [1, 2, 3]})
-    violation = find_primary_key_violations(df, ["id"])[0]
-    assert violation.columns == ["id"]
-    assert violation.message == "Primary key duplicated on 1 row(s)"
+    assert find_frame_violations(df) == []
 
 
 def test_rows_differing_anywhere_are_not_duplicates():
-    # The declared key plays no part in row identity: same key, distinct rows.
+    # Identity is the whole row's content: rows sharing one cell stay distinct.
     df = pd.DataFrame({"id": ["a", "a"], "n": [1, 2]})
     assert find_duplicate_row_violations(df) == []
 
@@ -65,9 +45,8 @@ def test_groups_past_the_named_limit_are_counted_off_rather_than_listed():
     assert "(+1 more group(s))" in message
 
 
-def test_both_rules_report_together():
+def test_find_frame_violations_reports_the_duplicate_row_rule():
     df = pd.DataFrame({"id": ["a", "a"], "n": [1, 1]})
-    messages = [v.message for v in find_frame_violations(df, primary_key=["id"])]
-    assert len(messages) == 2
-    assert any("Primary key duplicated" in m for m in messages)
-    assert any("exact duplicate rows" in m for m in messages)
+    messages = [v.message for v in find_frame_violations(df)]
+    assert len(messages) == 1
+    assert "exact duplicate rows" in messages[0]

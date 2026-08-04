@@ -61,15 +61,14 @@ _PUBLISH = {
     "publish": {"format": "json"},
 }
 
-# A human_review_queue whose hash resolves off the upstream primary_key.
+# A human_review_queue whose hash resolves off the upstream row content.
 _LOAD_PK_COLUMNS = [{"name": "doc_id", "type": "str", "nullable": True},
                     {"name": "score", "type": "int", "nullable": True}]
-_LOAD_PK_SCHEMA = {"columns": _LOAD_PK_COLUMNS, "primary_key": ["doc_id"]}
+_LOAD_PK_SCHEMA = {"columns": _LOAD_PK_COLUMNS}
 _QUEUE = {
     "id": "review", "type": "human_review_queue", "name": "Review rows",
     "inputs": [{"id": "load", "schema": _LOAD_PK_SCHEMA}],
-    "output_schema": {"columns": _LOAD_PK_COLUMNS + queue_added_columns(),
-                      "primary_key": ["doc_id"]},
+    "output_schema": {"columns": _LOAD_PK_COLUMNS + queue_added_columns()},
     "queue": {**QUEUE_COLUMNS, "reviewer_instructions": "check"},
 }
 

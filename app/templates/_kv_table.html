@@ -1,5 +1,5 @@
 {# One row rendered as label/value pairs. `columns` are the described columns
-   (name, description, in_primary_key); `row` maps those same names to the
+   (name, description); `row` maps those same names to the
    display text, or to None for a null — which is NOT the same as the empty
    string, and prints differently. A column whose description is None gets no
    tooltip. Renders nothing when `columns` is empty. #}
@@ -12,7 +12,7 @@
     <tr>
         <th scope="row" {% if column.description %}title="{{ column.description }}"{% endif %}>
             <code>{{ column.name }}</code>
-            {% if column.in_primary_key %}<span class="pk-flag" title="declared primary key">key</span>{% endif %}
+            
         </th>
         <td class="kv-value">
             {%- if value is none %}<em>null</em>

@@ -179,10 +179,9 @@ def test_the_column_spine_is_the_input_frame_with_the_added_columns_after_it(
 def test_an_llm_transform_is_admitted_to_the_row_aligned_diff(tmp_path: Path) -> None:
     stage = parse_stage({
         "id": "judge", "name": "Judge", "type": "llm_transform",
-        "inputs": [{"id": LOAD_ID, "schema": {"columns": _IN_COLUMNS,
-                                              "primary_key": ["name"]}}],
+        "inputs": [{"id": LOAD_ID, "schema": {"columns": _IN_COLUMNS}}],
         "llm": {"prompt_data_template": "{name}"},
-        "output_schema": {"columns": _OUT_COLUMNS, "primary_key": ["name"]},
+        "output_schema": {"columns": _OUT_COLUMNS},
     })
     _write_output(tmp_path, LOAD_ID, pd.DataFrame({"name": ["a"], "val": [1]}))
     out_rel = _write_output(tmp_path, "judge", pd.DataFrame(

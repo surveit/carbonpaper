@@ -43,14 +43,25 @@ def parse_reference(ref: str) -> tuple[str, Optional[str]]:
 
 class NamedSchema(TableSchema):
     """One named table in the data model — a TableSchema with a `name`, a `kind`,
-    and foreign-key-carrying columns. Column uniqueness and primary-key membership
-    are validated by TableSchema."""
+    a `primary_key`, and foreign-key-carrying columns. Column uniqueness is
+    validated by TableSchema."""
     name: str
     kind: SchemaKind
     title: str
     columns: list[NamedColumn] = Field(default_factory=list)
+    # The data model documents source identity for the journalist; the stage
+    # vocabulary carries no key (row identity there is a content hash).
+    primary_key: Optional[list[str]] = None
     description: Optional[str] = None
     source: Optional[SourceRef] = None
+
+    @model_validator(mode="after")
+    def _key_names_declared_columns(self) -> "NamedSchema":
+        declared = {c.name for c in self.columns}
+        for k in self.primary_key or []:
+            if k not in declared:
+                raise ValueError(f"primary_key {k!r} is not a declared column")
+        return self
 
     @field_validator("name")
     @classmethod

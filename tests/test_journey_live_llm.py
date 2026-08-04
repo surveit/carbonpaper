@@ -99,12 +99,10 @@ def live_project(tmp_path, monkeypatch):
 def _workflow_stages(source_path: str) -> list[dict]:
     load_schema = {
         "columns": [{"name": "claim_id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}],
-        "primary_key": ["claim_id"],
     }
     classified_schema = {
         "columns": [{"name": "claim_id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True},
                     {"name": "about_money", "type": "bool", "nullable": True}],
-        "primary_key": ["claim_id"],
     }
     llm = {
         "prompt_template": (

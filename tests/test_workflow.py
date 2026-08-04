@@ -118,13 +118,11 @@ def _llm_1to1_dict(**over):
         id="score", type="llm_transform", inputs=[{
             "id": "load",
             "schema": {"columns": [{"name": "id", "type": "str", "nullable": True},
-                                   {"name": "text", "type": "str", "nullable": True}],
-                       "primary_key": ["id"]},
+                                   {"name": "text", "type": "str", "nullable": True}]},
         }],
         output_schema={"columns": [{"name": "id", "type": "str", "nullable": True},
                                    {"name": "text", "type": "str", "nullable": True},
-                                   {"name": "score", "type": "int", "nullable": True}],
-                       "primary_key": ["id"]},
+                                   {"name": "score", "type": "int", "nullable": True}]},
         llm={"prompt_template": "score {text}"},
     )
     base.update(over)
@@ -135,41 +133,29 @@ def test_llm_transform_valid_1to1_constructs():
     assert parse_stage(_llm_1to1_dict()).id == "score"
 
 
-def test_llm_transform_pk_mismatch_rejected():
-    with pytest.raises(ValidationError, match="primary_key"):
-        parse_stage(_llm_1to1_dict(output_schema={
-            "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True},
-                        {"name": "score", "type": "int", "nullable": True}],
-            "primary_key": ["text"]}))
-
-
 def test_llm_transform_drops_input_column_rejected():
     with pytest.raises(ValidationError, match="text"):
         parse_stage(_llm_1to1_dict(output_schema={
-            "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True}],
-            "primary_key": ["id"]}))  # dropped `text`
+            "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True}]}))  # dropped `text`
 
 
 def test_llm_transform_modifies_column_schema_rejected():
     with pytest.raises(ValidationError, match="text"):
         parse_stage(_llm_1to1_dict(output_schema={
             "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "int", "nullable": True},
-                        {"name": "score", "type": "int", "nullable": True}],
-            "primary_key": ["id"]}))  # `text` str -> int
+                        {"name": "score", "type": "int", "nullable": True}]}))  # `text` str -> int
 
 
 def test_llm_transform_adds_nothing_rejected():
     with pytest.raises(ValidationError, match="adds no columns"):
         parse_stage(_llm_1to1_dict(output_schema={
-            "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}],
-            "primary_key": ["id"]}))  # adds no new column
+            "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}]}))  # adds no new column
 
 
 def test_parse_workflow_rejects_ineligible_llm_transform():
     """The load seam (parse_workflow → Stage construction) rejects a non-1:1 stage."""
     bad = _llm_1to1_dict(output_schema={
-        "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}],
-        "primary_key": ["id"]})
+        "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}]})
     with pytest.raises(ValidationError, match="adds no columns"):
         m.parse_workflow([bad])
 

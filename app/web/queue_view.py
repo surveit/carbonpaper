@@ -16,12 +16,6 @@ from app.models import Column, QueueConfig, Stage
 from app.runtime.trace_links import RowTraceLinker
 from app.web.loading import QueueFingerprints, display_cell
 
-NO_PRIMARY_KEY_NOTE = (
-    "No primary key is declared on this stage's input schema, so a queued row "
-    "is identified only by its position in this queue."
-)
-
-
 @dataclass(frozen=True)
 class ReviewedField:
     # One reviewed column as the form renders it: `source` is the column this stage
@@ -49,14 +43,12 @@ class QueuedColumn:
 
     name: str
     description: str | None
-    in_primary_key: bool
 
 
 @dataclass(frozen=True)
 class DescribedColumns:
     columns: list[QueuedColumn]
     schema_note: str | None
-    identity_note: str | None
 
 
 @dataclass(frozen=True)
@@ -96,7 +88,6 @@ class QueuePage:
     review_notes_label: str | None
     context_columns: list[QueuedColumn]
     schema_note: str | None
-    identity_note: str | None
     lineage_note: str | None
     items: list[ReviewItem]
     reviewed_count: int
@@ -130,7 +121,6 @@ def build_queue_page(
         ),
         context_columns=_subtract_reviewed_columns(described.columns, queue),
         schema_note=described.schema_note,
-        identity_note=described.identity_note,
         lineage_note=lineage.note,
         items=items,
         reviewed_count=reviewed_count,
@@ -189,18 +179,15 @@ def describe_queued_columns(
     names = [str(c) for c in snapshot.columns] if snapshot is not None else []
     schema = stage_def.inputs[0].table_schema
     declared = {column.name: column for column in schema.columns}
-    primary_key = list(schema.primary_key or [])
     return DescribedColumns(
         columns=[
             QueuedColumn(
                 name=name,
                 description=declared[name].description if name in declared else None,
-                in_primary_key=name in primary_key,
             )
             for name in names
         ],
         schema_note=_find_schema_discrepancy(sorted(declared), names),
-        identity_note=_find_identity_note(primary_key, names),
     )
 
 
@@ -305,18 +292,6 @@ def _find_schema_discrepancy(declared: list[str], present: list[str]) -> str | N
             "not declare, so those have no description or type"
         )
     return None if not parts else f"Schema and queued rows disagree: {'; '.join(parts)}."
-
-
-def _find_identity_note(primary_key: list[str], present: list[str]) -> str | None:
-    if not primary_key:
-        return NO_PRIMARY_KEY_NOTE
-    missing = [k for k in primary_key if k not in present]
-    if missing:
-        return (
-            f"The declared primary key {primary_key} names column(s) {missing} the "
-            "queued rows do not carry, so the key flags below cover only part of it."
-        )
-    return None
 
 
 # ── The per-row cards ────────────────────────────────────────────────────────

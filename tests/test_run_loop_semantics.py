@@ -26,16 +26,13 @@ from conftest import pinned_stages, queue_added_columns, queue_columns, resumed_
 # output_schema and its downstream's input `schema` cannot drift apart.
 _ID_VAL_COLUMNS = [{"name": "id", "type": "str", "nullable": True},
                    {"name": "val", "type": "int", "nullable": True}]
-_ID_VAL_SCHEMA = {"columns": _ID_VAL_COLUMNS, "primary_key": ["id"]}
-_QUEUE_OUT_SCHEMA = {"columns": _ID_VAL_COLUMNS + queue_added_columns("human_val"),
-                     "primary_key": ["id"]}
+_ID_VAL_SCHEMA = {"columns": _ID_VAL_COLUMNS}
+_QUEUE_OUT_SCHEMA = {"columns": _ID_VAL_COLUMNS + queue_added_columns("human_val")}
 _ID_TEXT_SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True},
-                               {"name": "text", "type": "str", "nullable": True}],
-                   "primary_key": ["id"]}
+                               {"name": "text", "type": "str", "nullable": True}]}
 _SCORED_SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True},
                               {"name": "text", "type": "str", "nullable": True},
-                              {"name": "score", "type": "int", "nullable": False}],
-                  "primary_key": ["id"]}
+                              {"name": "score", "type": "int", "nullable": False}]}
 
 
 def _seed_version(root):

@@ -14,8 +14,7 @@ the type's handler, validate the output, write `outputs/<stage>.parquet`, append
 `manifest.json`.
 - **Duplicate-input throw (every stage type):** fails the stage if any input dataframe has
   exact duplicate full-content rows — the error names the input id + 0-based row numbers.
-  Identity is a content hash over the whole row; `primary_key` plays no part (optional, may
-  legitimately duplicate). If N draws per row are intended, add an explicit row_id upstream.
+  Identity is a content hash over the whole row. If N draws per row are intended, add an explicit row_id upstream.
   The rule lives in `app/core/frame_checks.py` with the other cross-row rule (key
   uniqueness), so the stage-test suite validator applies both to a generated test's frames.
 - **Incremental manifest:** flushed after every stage (`running` → terminal), so the UI
@@ -109,9 +108,9 @@ stays the source of truth for stage status; this log is only ever the drill-down
   so `Stage.cache: false` belongs on it unless the answer is genuinely expected to be stable.
 
 `validation.py` — DATA validation of a dataframe against an `output_schema` (columns, types,
-enum vocabularies, ranges, nullability, PK uniqueness), distinct from the stage schemas in
+enum vocabularies, ranges, nullability), distinct from the stage schemas in
 `app/models/`. An error-severity issue in the OUTPUT report (missing column, failed coercion,
-value outside a declared enum, null in a non-nullable column, duplicate primary key) fails the
+value outside a declared enum, null in a non-nullable column) fails the
 stage: the record is `error` with an `OutputSchemaViolation` and downstream stages are blocked.
 `validation_warnings` means warning-severity issues only. Input-side issues alone still only warn.
 An out-of-`range` number is the deliberate exception, still a warning: a range bounds the

@@ -8,14 +8,12 @@ from app.services import loader, node_review, stage_edit
 from app.services.errors import WorkflowLoadError
 
 # A strictly-1:1 llm_transform (app/models/stage.py): its input and output
-# schemas share a primary_key and the output is additive (keeps every input
+# schemas stay additive (keeps every input
 # column, adds at least one).
 _IN_SCHEMA = {
-    "primary_key": ["doc_id"],
     "columns": [{"name": "doc_id", "type": "str", "nullable": False}],
 }
 _OUT_SCHEMA = {
-    "primary_key": ["doc_id"],
     "columns": [
         {"name": "doc_id", "type": "str", "nullable": False},
         {"name": "score", "type": "float", "nullable": False},

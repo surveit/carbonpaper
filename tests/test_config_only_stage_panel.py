@@ -13,11 +13,9 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.services import workspace
 
-_SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": False}],
-           "primary_key": ["id"]}
+_SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": False}]}
 _SCORED = {"columns": [{"name": "id", "type": "str", "nullable": False},
-                       {"name": "score", "type": "int", "nullable": False}],
-           "primary_key": ["id"]}
+                       {"name": "score", "type": "int", "nullable": False}]}
 
 
 def _seed_project(root: Path) -> None:

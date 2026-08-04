@@ -180,7 +180,7 @@ def _build_batch_reply_schema(stage: Stage) -> type:
             "this result so it is matched back to its item."
         ),
     )
-    item_schema = TableSchema(columns=[number_column, *reply_spec.columns], primary_key=None)
+    item_schema = TableSchema(columns=[number_column, *reply_spec.columns])
     item_reply = item_schema.to_pydantic_model(f"{stage.id}_batch_item")
     return create_model(f"{stage.id}_batch", results=(list[item_reply], ...))  # type: ignore[valid-type]
 

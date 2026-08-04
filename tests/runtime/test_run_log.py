@@ -55,10 +55,9 @@ def _llm_stage(batch_size: int) -> Stage:
     return parse_stage({
         "id": "score", "name": "Score", "type": "llm_transform",
         "inputs": [{"id": "src", "schema": {
-            "columns": [{"name": "x", "type": "int", "nullable": True}], "primary_key": ["x"]}}],
+            "columns": [{"name": "x", "type": "int", "nullable": True}]}}],
         "output_schema": {
-            "columns": [{"name": "x", "type": "int", "nullable": True}, {"name": "verdict", "type": "str", "nullable": True}],
-            "primary_key": ["x"]},
+            "columns": [{"name": "x", "type": "int", "nullable": True}, {"name": "verdict", "type": "str", "nullable": True}]},
         "llm": {"prompt_instructions": "score it", "prompt_data_template": "{x}",
                 "batch_size": batch_size},
     })

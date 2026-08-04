@@ -13,11 +13,11 @@ from conftest import contribution_of, make_run_context, queue_columns
 
 def _llm_stage(input_columns, output_columns, pk=("id",)):
     """A valid strictly-1:1 llm_transform stage — input schema and output_schema
-    share a primary_key and output ⊇ input, as Stage validation requires."""
+    satisfy output ⊇ input, as Stage validation requires."""
     return parse_stage({
         "id": "evidence_extraction", "name": "Extract evidence", "type": "llm_transform",
-        "inputs": [{"id": "load", "schema": {"columns": input_columns, "primary_key": list(pk)}}],
-        "output_schema": {"columns": output_columns, "primary_key": list(pk)},
+        "inputs": [{"id": "load", "schema": {"columns": input_columns}}],
+        "output_schema": {"columns": output_columns},
         "llm": {"prompt_template": "extract from {text}"},
     })
 

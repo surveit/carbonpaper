@@ -10,7 +10,7 @@ from app import models as m
 def test_named_schema_valid():
     s = m.NamedSchema.model_validate(
         {"name": "company", "kind": "reference", "title": "Company",
-         "columns": [{"name": "company_id", "type": "str", "nullable": True}], "primary_key": ["company_id"]}
+         "columns": [{"name": "company_id", "type": "str", "nullable": True}]}
     )
     assert s.kind == m.SchemaKind.reference
 
@@ -75,7 +75,7 @@ def test_library_unique_names():
 def test_library_references_resolve():
     lib = m.parse_schema_library([
         {"name": "company", "kind": "reference", "title": "Company",
-         "columns": [{"name": "company_id", "type": "str", "nullable": True}], "primary_key": ["company_id"]},
+         "columns": [{"name": "company_id", "type": "str", "nullable": True}]},
         {"name": "cell", "kind": "computed", "title": "Cell",
          "columns": [{"name": "company_id", "type": "str", "references": "company.company_id", "nullable": True}]},
     ])
@@ -109,3 +109,12 @@ def test_validate_schema_library_nonfatal():
         [{"name": "cell", "kind": "computed", "title": "Cell",
           "columns": [{"name": "cid", "references": "ghost", "type": "str", "nullable": True}]}]
     )
+
+
+def test_primary_key_must_name_declared_columns():
+    with pytest.raises(ValidationError, match="primary_key"):
+        m.NamedSchema.model_validate({
+            "name": "orgs", "kind": "input", "title": "Orgs",
+            "columns": [{"name": "id", "type": "str", "nullable": True}],
+            "primary_key": ["missing"],
+        })

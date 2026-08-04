@@ -29,8 +29,7 @@ from conftest import pinned_stages, resumed_stages
 _NAME_VAL_SCHEMA = {"columns": [{"name": "name", "type": "str", "nullable": True},
                                 {"name": "val", "type": "int", "nullable": True}]}
 _ID_TEXT_SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True},
-                               {"name": "text", "type": "str", "nullable": True}],
-                   "primary_key": ["id"]}
+                               {"name": "text", "type": "str", "nullable": True}]}
 
 
 def _seed_version(root):
@@ -449,8 +448,7 @@ def _llm_transform_project(root):
         "inputs": [{"id": "load", "schema": _ID_TEXT_SCHEMA}],
         "output_schema": {
             "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True},
-                        {"name": "score", "type": "int", "nullable": False}],
-            "primary_key": ["id"]},
+                        {"name": "score", "type": "int", "nullable": False}]},
         "llm": {"prompt_template": "Rate: {text}"},
     }
     (root / "compiled" / "01_load.json").write_text(json.dumps(load), encoding="utf-8")
@@ -504,8 +502,7 @@ def test_run_subset_surfaces_the_real_row_failure_message(tmp_path, monkeypatch)
         "inputs": [{"id": "load", "schema": _ID_TEXT_SCHEMA}],
         "output_schema": {
             "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True},
-                        {"name": "score", "type": "int", "nullable": False}],
-            "primary_key": ["id"]},
+                        {"name": "score", "type": "int", "nullable": False}]},
         "llm": {"prompt_template": "Rate: {text}"},
     })
     workflow = Workflow(stages=[load, score])

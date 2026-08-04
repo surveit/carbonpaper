@@ -21,12 +21,10 @@ def _stage():
     return parse_stage({
         "id": "score", "name": "score", "type": "llm_transform",
         "inputs": [{"id": "load", "schema": {
-            "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}],
-            "primary_key": ["id"]}}],
+            "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}]}}],
         "output_schema": {
             "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True},
-                        {"name": "score", "type": "int", "nullable": False}],
-            "primary_key": ["id"]},
+                        {"name": "score", "type": "int", "nullable": False}]},
         "llm": {"prompt_template": "Rate: {text}"},
     })
 

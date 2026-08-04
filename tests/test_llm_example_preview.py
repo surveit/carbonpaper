@@ -11,12 +11,10 @@ def _llm_stage() -> Stage:
     return parse_stage({
         "id": "score", "type": "llm_transform", "name": "Score",
         "inputs": [{"id": "load", "schema": {
-            "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "quote", "type": "str", "nullable": True}],
-            "primary_key": ["id"]}}],
+            "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "quote", "type": "str", "nullable": True}]}}],
         "output_schema": {
             "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "quote", "type": "str", "nullable": True},
-                        {"name": "score", "type": "int", "nullable": False}],
-            "primary_key": ["id"]},
+                        {"name": "score", "type": "int", "nullable": False}]},
         "llm": {"prompt_instructions": "Score for relevance.",
                 "prompt_data_template": "Rate this: {quote}"},
     })
