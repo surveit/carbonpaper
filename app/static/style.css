@@ -202,34 +202,35 @@ a { color: var(--accent); }
 .queue-progress p { margin: 0; white-space: nowrap; }
 
 .reviewer-instructions { margin: 12px 0 20px; }
-.reviewer-instructions pre.instructions {
+.reviewer-instructions .instructions-text {
     background: #fffbe6; border: 1px solid #d4c060; padding: 12px 14px;
-    border-radius: 4px; white-space: pre-wrap; font-family: inherit;
+    border-radius: 4px; white-space: pre-wrap; margin: 0;
+    font: inherit; color: var(--fg);
+}
+
+/* A page-level statement about what the input schema does or does not declare. */
+.queue-note {
+    margin: 10px 0; padding: 8px 12px; font-size: 13px;
+    background: #f7f7f4; border-left: 3px solid #c0c0b8; border-radius: 0 4px 4px 0;
 }
 
 .queue-items { display: flex; flex-direction: column; gap: 14px; }
+/* Companion to the display rule above: without it, `display: flex` beats the UA's
+   [hidden] rule and the reviewer-name gate renders the rows anyway. */
+.queue-items[hidden] { display: none; }
 .queue-card {
     border: 1px solid #ddd; border-left: 4px solid #999; border-radius: 5px;
     padding: 14px 18px; background: white;
 }
 .queue-card.decided-approve { border-left-color: #2a8a2a; background: #f7fcf7; }
-.queue-card.decided-reject  { border-left-color: #cc2a2a; background: #fcf7f7; }
 .queue-card.decided-modify  { border-left-color: #cc8a00; background: #fcfaf2; }
 
 .queue-card header {
     display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
     font-size: 13px; color: #555; margin-bottom: 8px;
 }
-.queue-card .ai-score {
-    font-weight: 600; padding: 3px 10px; border-radius: 3px;
-    background: #f0f0ed; border: 1px solid #ccc;
-}
-.queue-card blockquote {
-    margin: 8px 0; padding: 8px 14px; border-left: 3px solid #ccc;
-    font-style: italic; color: #333; background: #fafafa;
-}
-.queue-card .reasoning { font-size: 13px; color: #555; margin: 6px 0; }
-.queue-card .warn-flag { color: #cc6600; font-size: 13px; margin: 4px 0; }
+.queue-card header .row-position { font-size: 13px; font-weight: 600; }
+.queue-card header .lineage-link { font-size: 13px; margin-left: auto; }
 
 .queue-card .prior-decision {
     font-size: 13px; margin: 8px 0; padding: 8px 12px;
@@ -240,20 +241,99 @@ a { color: var(--accent); }
     display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
     margin-top: 10px; padding-top: 10px; border-top: 1px dashed #e0e0e0;
 }
-.decision-controls .modify-group {
-    display: flex; gap: 6px; align-items: center; margin-left: auto;
-    font-size: 13px;
-}
-.decision-controls input[type="number"] {
-    width: 60px; padding: 4px 6px; border: 1px solid #ccc; border-radius: 3px;
-}
+/* Companion to `.btn { display: inline-block }`: without it that rule beats the
+   UA's [hidden] rule and a decided card shows Submit beside Change my review. */
+.decision-controls [hidden] { display: none; }
+/* Secondary by omission of .primary: a decided card is not asking for input. */
+.btn.unlock-review { border-style: dashed; }
 .btn.approve { background: #e8f8e8; color: #1f5a1f; border-color: #2a8a2a; }
 .btn.reject  { background: #fde8e8; color: #802020; border-color: #cc2a2a; }
 .btn.modify  { background: #fff4e6; color: #7a4a00; border-color: #cc8a00; }
 .btn.selected { box-shadow: inset 0 0 0 2px currentColor; }
 
-.queue-card .raw-row { margin-top: 8px; font-size: 12px; }
-.queue-card .raw-row pre { background: #f5f5f5; padding: 8px; border-radius: 3px; max-height: 200px; overflow: auto; }
+/* Reviewer-name gate: nothing in .queue-items renders until this carries a name. */
+.reviewer-gate {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    margin: 16px 0 0; padding: 12px 18px;
+    background: #f0f4fa; border: 1px solid #c9d6ec; border-radius: 6px;
+}
+.reviewer-gate label { font-weight: 600; font-size: 13px; color: #1a3a72; }
+.reviewer-gate input {
+    padding: 6px 10px; border: 1px solid #ccc; border-radius: 3px;
+    font: inherit; font-size: 14px; min-width: 220px;
+}
+.reviewer-gate .muted { font-size: 12px; }
+
+.review-section-heading {
+    margin: 10px 0 0; padding-top: 10px; border-top: 1px dashed #e0e0e0;
+    font-size: 12px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: .04em; color: var(--muted);
+}
+
+/* One row per reviewed column: name, the value the stage received, the field. */
+.reviewed-fields {
+    display: grid; grid-template-columns: max-content 1fr minmax(140px, 18rem);
+    gap: 8px 14px; align-items: center;
+    margin-top: 8px;
+}
+.reviewed-field { display: contents; }
+.reviewed-field label { font-weight: 600; font-size: 13px; }
+.reviewed-field .upstream-value { font-size: 12px; color: var(--muted); }
+.reviewed-field input, .reviewed-field select {
+    padding: 5px 8px; border: 1px solid #ccc; border-radius: 3px; font: inherit; font-size: 14px;
+}
+.reviewed-field .recorded-value { font-size: 12px; color: #1a3a72; }
+
+/* A reviewed value is read-only until its `change` button swaps in the control. */
+.field-control { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+/* Companion to the display rules in this block: without it they beat the UA's
+   [hidden] rule and both the closed value and its control render at once. */
+.field-control [hidden] { display: none; }
+.field-editor { display: inline-flex; align-items: center; gap: 6px; }
+.value-display {
+    display: inline-flex; align-items: baseline; gap: 8px; cursor: pointer;
+    padding: 4px 8px; border: 1px dashed #bbb; border-radius: 3px;
+    background: #fbfbfa; font: inherit; font-size: 14px; color: var(--fg); text-align: left;
+}
+.value-display:not(:disabled):hover, .value-display:not(:disabled):focus {
+    border-color: var(--accent); background: #f2f6fd;
+}
+.value-display:disabled { cursor: default; opacity: 0.7; border-style: solid; }
+.value-display .edit-hint { font-size: 11px; color: var(--accent); text-transform: uppercase; }
+.value-display:disabled .edit-hint { color: var(--muted); }
+.revert-edit {
+    border: 1px solid #ccc; border-radius: 3px; background: white;
+    font: inherit; font-size: 12px; padding: 3px 7px; cursor: pointer;
+}
+
+.definition-drift {
+    margin: 16px 0; padding: 12px 16px; border-radius: 5px;
+    background: var(--warn-bg); border-left: 4px solid #cc6600; font-size: 14px;
+}
+
+.review-notes { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; font-size: 13px; }
+.review-notes textarea {
+    padding: 6px 8px; border: 1px solid var(--border); border-radius: 3px;
+    font: inherit; font-size: 13px; resize: vertical;
+}
+
+.queue-card .queued-row { margin: 8px 0; }
+
+/* One row as label/value pairs (_kv_table.html). A long text value is the common
+   case, so the value cell wraps rather than truncating or scrolling. */
+table.kv { border-collapse: collapse; width: 100%; font-size: 13px; }
+table.kv th {
+    text-align: left; vertical-align: top; font-weight: 600; white-space: nowrap;
+    width: 1%; padding: 5px 14px 5px 0;
+}
+table.kv td.kv-value {
+    padding: 5px 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--fg);
+}
+table.kv tr + tr th, table.kv tr + tr td { border-top: 1px solid #eee; }
+.pk-flag {
+    font-size: 10px; text-transform: uppercase; letter-spacing: .04em;
+    padding: 1px 5px; border-radius: 3px; background: #e8eefa; color: #1a3a72;
+}
 
 /* workflow */
 .workflow {
@@ -1117,23 +1197,105 @@ table.data-preview.selectable tbody tr:hover { background: #f3f7ff; }
 .scratch-result .scratch-head.err { color: #802020; }
 table.data-preview.scratch th { background: #f3ecd0; }
 
+/* The diff header (app/templates/_stage_diff.html): ONE horizontal axis — the
+   input frames stacked vertically, a bracket gathering them where there is more
+   than one, a rail carrying the tally of what the stage did, then the output
+   frame. The row never wraps and every item starts at the top, so a second input
+   lengthens the input stack downward and leaves the output where it was. The
+   base input takes a solid left rule and a reference input a dashed one, but the
+   role label inside each chip is what carries the distinction; the rules only
+   echo it, so the header survives greyscale. It sits above a data table, so it
+   borrows no state tint: border and muted text only. */
+.diff-head { margin-bottom: 6px; max-width: 100%; overflow-x: auto; }
+.diff-flow { display: flex; flex-wrap: nowrap; align-items: flex-start; gap: 8px; }
+.diff-inputs { display: flex; flex-direction: column; align-items: stretch; gap: 4px; }
+.diff-outputs { display: flex; }
+/* Spans the whole input stack and closes on the rail, so two inputs read as one
+   set feeding one transform rather than as two loose chips. */
+.diff-brace {
+    align-self: stretch;
+    width: 8px;
+    border: 1px solid var(--border);
+    border-left: 0;
+    border-radius: 0 8px 8px 0;
+}
+.diff-frame {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 3px 8px;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--border);
+    border-radius: 4px;
+    font-weight: 400;
+    letter-spacing: normal;
+    text-transform: none;
+    white-space: nowrap;
+}
+.diff-frame-base, .diff-frame-out { border-left-color: var(--muted); }
+.diff-frame-ref { border-left-style: dashed; }
+.diff-frame-head { display: flex; align-items: baseline; gap: 5px; }
+.diff-frame-role {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    font-weight: 600;
+    color: var(--muted);
+}
+.diff-frame-id { font-size: 11.5px; }
+.diff-frame-meta { font-size: 11px; font-weight: 400; color: var(--muted); }
+/* The rail: the tally rides above a line that runs left-to-right into the
+   arrowhead. Its top padding drops it to the height of the first frame's text. */
+.diff-rail {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    min-width: 130px;
+    padding-top: 4px;
+    font-weight: 400;
+    letter-spacing: normal;
+    text-transform: none;
+    color: var(--muted);
+}
+.diff-tally {
+    font-size: 11px;
+    font-weight: 600;
+    text-align: center;
+    white-space: nowrap;
+    padding: 0 6px 2px;
+}
+.diff-arrow {
+    display: block;
+    border-top: 1px solid var(--border);
+    text-align: right;
+    line-height: 0;
+    font-size: 15px;
+}
+
 /* Outputs-pane stage diff (app/templates/_stage_diff.html). A column the stage
    ADDS takes the same palette tint the stage-tests table uses for its added
-   columns (--state-review-bg), and the table caption names those columns in
-   words; a changed cell carries the warn tint plus the input value it replaced
+   columns (--state-review-bg); a column the stage DROPPED carries the failed
+   tint; a changed cell carries the warn tint plus the input value it replaced
    struck through, so the change reads without colour; a dropped row carries the
    failed tint. Unchanged cells go muted, so the eye lands on what the stage
-   touched. */
+   touched. Every tint has a colour-free twin: the + and − marks on the column
+   headers, and the strike through a dropped column's cells. */
 .stage-diff th.diff-col-new,
 .stage-diff td.diff-col-new { background: var(--state-review-bg); }
+.stage-diff th.diff-col-dropped,
+.stage-diff td.diff-col-dropped {
+    background: var(--state-failed-bg);
+    color: var(--state-failed-ink);
+}
+/* The strike takes the dropped column's cells and its header NAME — never the
+   − itself, which has to stay readable for the mark to do its job. */
+.stage-diff td.diff-col-dropped { text-decoration: line-through; }
+.stage-diff th.diff-col-dropped .diff-col-name { text-decoration: line-through; }
+.stage-diff .diff-mark { font-weight: 700; margin-right: 3px; }
 .stage-diff td.diff-cell-changed { background: var(--state-warn-bg); }
 .stage-diff td.diff-cell-same { color: var(--muted); }
 .stage-diff .diff-was { display: block; color: var(--muted); text-decoration: line-through; }
 .stage-diff tr.diff-row-dropped td { background: var(--state-failed-bg); color: var(--state-failed-ink); }
-.stage-diff caption { caption-side: top; text-align: left; font-size: 0.78rem; color: var(--muted); padding-bottom: 2px; }
-.diff-summary { margin: 6px 0 2px; font-size: 12.5px; }
-.diff-summary .diff-note { margin-right: 12px; }
-.diff-summary .diff-note-added code { background: var(--state-review-bg); }
 
 /* The Data pane's input-rows disclosure: the upstream previews and the scratch
    row picker, folded below the (diff-aware) output so the pane leads with what
@@ -1235,23 +1397,15 @@ table.data-preview.scratch th { background: #f3ecd0; }
 .prompt-rendered { background: var(--code-deep); color: var(--code-fg); padding: .8rem; border-radius: 6px;
     white-space: pre-wrap; max-height: 420px; overflow: auto; font-size: 12px; line-height: 1.45; }
 
-/* ── Review queue: surface the model INPUT so scores are reviewable ── */
-.model-input { margin: .5rem 0; }
-.mi-label { display: inline-block; font-size: .72rem; text-transform: uppercase; letter-spacing: .04em;
-    color: var(--muted); font-weight: 600; margin-bottom: .15rem; }
-.model-input blockquote { margin: .15rem 0; padding: .5rem .8rem; border-left: 3px solid var(--accent);
-    background: #f6f8fc; border-radius: 0 5px 5px 0; }
-.benchmark-text { margin: .15rem 0; padding: .5rem .8rem; background: var(--eval-bg);
-    border-left: 3px solid var(--eval-border); border-radius: 0 5px 5px 0; font-size: .92rem; }
-.model-input-prompt { margin: .4rem 0; }
-.model-input-prompt summary { cursor: pointer; color: var(--accent); font-size: .88rem; }
-.mi-missing { background: var(--warn-bg); padding: .4rem .6rem; border-radius: 5px; }
 
 /* ── Full stage-output table page (/runs/{id}/stage/{id}/rows) ── */
 .rows-toolbar { display: flex; align-items: center; gap: .8rem; margin: 0 0 1rem; flex-wrap: wrap; }
 .table-scroll.rows-full { max-height: calc(100vh - 220px); }
 .table-scroll.rows-full thead th { position: sticky; top: 0; background: #f2f4f8; z-index: 1; }
 td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric: tabular-nums; }
+/* The raw output table saying so, and linking the stage diff — the diff view
+   states its own identity in its header instead, so it renders no view-note. */
+.rows-toolbar .view-note { font-size: .88rem; }
 
 /* ═══ Node review / workflow versioning ══════════════════ */
 

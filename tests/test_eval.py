@@ -1,8 +1,8 @@
-"""Tests for the eval contract (app/models/eval.py + table.py) and the
-grain-preservation gate on Stage that governs it (app/models/stage.py)."""
 from __future__ import annotations
 
 import pytest
+
+from conftest import queue_added_columns, queue_columns
 from pydantic import ValidationError
 
 from app import models as m
@@ -17,6 +17,8 @@ def S(**kw):
 _K = {"columns": [{"name": "k", "type": "str", "nullable": True}]}
 _KV = {"columns": [{"name": "k", "type": "str", "nullable": True},
                     {"name": "v", "type": "str", "nullable": True}]}
+_QUEUE_IN = {"columns": _K["columns"] + [{"name": "score", "type": "int", "nullable": True}]}
+_QUEUE_OUT = {"columns": _QUEUE_IN["columns"] + queue_added_columns()}
 
 
 def _file_input(id_, tmp_path, output_schema=_K):
@@ -73,12 +75,12 @@ def test_input_data_is_grain_and_order_preserving(tmp_path):
 
 
 def test_human_review_queue_is_grain_and_order_preserving():
-    # The runtime maps the queue handler per row and it emits every one of them
-    # — a rejected row stays, carrying its rejection — so it is 1:1 in input
-    # order, and an eval pathway through a queue stage is row-alignable.
+    # The runtime maps the queue handler per row and it emits every one of
+    # them, whatever the verdict — so it is 1:1 in input order, and an eval
+    # pathway through a queue stage is row-alignable.
     s = m.parse_stage(S(id="rev", type="human_review_queue",
-                                 inputs=[{"id": "a", "schema": _K}], queue={},
-                                 output_schema=_K))
+                        inputs=[{"id": "a", "schema": _QUEUE_IN}],
+                        queue=queue_columns(), output_schema=_QUEUE_OUT))
     assert s.is_grain_and_order_preserving is True
 
 

@@ -19,14 +19,16 @@ from app.services.errors import WorkflowLoadError
 from app.services.loader import load_workflow
 from app.services.project import save_working_copy_as_version
 from app.services import workspace
-from conftest import pinned_stages, resumed_stages
+from conftest import pinned_stages, queue_added_columns, queue_columns, resumed_stages
 
 
 # The three frame shapes this file's DAGs carry. Declared once so an upstream's
 # output_schema and its downstream's input `schema` cannot drift apart.
-_ID_VAL_SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True},
-                              {"name": "val", "type": "int", "nullable": True}],
-                  "primary_key": ["id"]}
+_ID_VAL_COLUMNS = [{"name": "id", "type": "str", "nullable": True},
+                   {"name": "val", "type": "int", "nullable": True}]
+_ID_VAL_SCHEMA = {"columns": _ID_VAL_COLUMNS, "primary_key": ["id"]}
+_QUEUE_OUT_SCHEMA = {"columns": _ID_VAL_COLUMNS + queue_added_columns("human_val"),
+                     "primary_key": ["id"]}
 _ID_TEXT_SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True},
                                {"name": "text", "type": "str", "nullable": True}],
                    "primary_key": ["id"]}
@@ -101,12 +103,12 @@ def _score_stage(stage_id, input_id, name="Score"):
 def _queue_stage(stage_id, input_id, name="Review"):
     """A human_review_queue with no cached decisions yet — it halts. Its
     output_schema keeps the (id, val) columns a reviewed row carries through;
-    the stage projects onto exactly what it declares, so the reviewer
-    bookkeeping columns are not part of its output."""
+    the stage projects onto exactly what it declares, so the review-record
+    columns are not part of its output."""
     return {"id": stage_id, "name": name, "type": "human_review_queue",
             "inputs": [{"id": input_id, "schema": _ID_VAL_SCHEMA}],
-            "output_schema": _ID_VAL_SCHEMA,
-            "queue": {}}
+            "output_schema": _QUEUE_OUT_SCHEMA,
+            "queue": queue_columns("val", "human_val")}
 
 
 def _five_item_load_stage(root):
@@ -127,8 +129,8 @@ def _filtered_queue_stage(stage_id, input_id, flt, name="Review"):
     same (id, val) output as `_queue_stage`."""
     return {"id": stage_id, "name": name, "type": "human_review_queue",
             "inputs": [{"id": input_id, "schema": _ID_VAL_SCHEMA}],
-            "output_schema": _ID_VAL_SCHEMA,
-            "queue": {"filter": flt}}
+            "output_schema": _QUEUE_OUT_SCHEMA,
+            "queue": {**queue_columns("val", "human_val"), "filter": flt}}
 
 
 def _stage_status(manifest, stage_id):

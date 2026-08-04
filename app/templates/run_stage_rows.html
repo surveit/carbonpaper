@@ -6,6 +6,17 @@
 {% endblock %}
 
 {% block content %}
+{# Two views of the same output: the stage diff (app.web.stage_diff → the
+   shared _stage_diff.html, rendered with this page's own row numbers and
+   click-to-expand cells) and the plain table. The diff leads where one exists,
+   as it does in the stage panel; ?raw=1 asks for the plain table. The diff
+   brings its own header, whose output frame unit already names this view and
+   links both the raw one (its "all rows" link is this page's ?raw=1) and the
+   CSV — so on that branch the toolbar carries neither. The plain table has no
+   header, so there the toolbar states which view it is, links the diff where
+   one exists, and holds the CSV download. #}
+{% set rows_url = "/project/" ~ project ~ "/runs/" ~ run_id ~ "/stage/" ~ stage_id ~ "/rows" %}
+{% set diff_shown = diff and not raw %}
 <div class="run-topbar">
     <h1><code>{{ stage_id }}</code> output</h1>
     <p class="stage-id">run <code>{{ run_id }}</code> · <code>{{ output_path }}</code> · {{ "{:,}".format(rows_total) }} row{% if rows_total != 1 %}s{% endif %}</p>
@@ -13,13 +24,30 @@
 
 <div class="rows-toolbar">
     <span class="muted">Click any clipped cell to expand it (hover shows the full value).</span>
+    {% if diff_shown %}
+    {% set shown = diff.rows | length %}
+    {# The download these warnings name is the header's, on the output frame
+       unit — this strip carries no button of its own on this branch. #}
+    {% if diff.kind == 'filter_rows' and diff.input_total > shown %}
+    {# The merged table's rows are INPUT rows, so both numbers here are the
+       input's — and the CSV holds the output, which is the kept rows only. #}
+    <span class="alert warn">⚠ Showing first {{ "{:,}".format(shown) }} of {{ "{:,}".format(diff.input_total) }} input rows — the output frame's ⬇ CSV link above holds the complete output (the kept rows).</span>
+    {% elif diff.kind != 'filter_rows' and diff.rows_total > shown %}
+    <span class="alert warn">⚠ Showing first {{ "{:,}".format(shown) }} of {{ "{:,}".format(diff.rows_total) }} rows — the output frame's ⬇ CSV link above holds the complete data.</span>
+    {% endif %}
+    {% else %}
+    <span class="view-note">Showing the raw output table.{% if diff %}
+        <a href="{{ rows_url }}">Show it as a diff against its input instead</a>{% endif %}</span>
     {% if capped %}
     <span class="alert warn">⚠ Showing first {{ "{:,}".format(rows | length) }} of {{ "{:,}".format(rows_total) }} rows — download the CSV for the complete data.</span>
     {% endif %}
     <a class="btn primary" href="/project/{{ project }}/runs/{{ run_id }}/stage/{{ stage_id }}/rows.csv">⬇ Download full CSV</a>
+    {% endif %}
 </div>
 
-{% if rows %}
+{% if diff_shown %}
+{% include "_stage_diff.html" %}
+{% elif rows %}
 <div class="table-scroll rows-full">
 <table class="data-preview">
     <thead><tr><th class="row-num">#</th><th class="syw-col">trace</th>{% for c in columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>

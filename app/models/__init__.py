@@ -44,7 +44,7 @@ from app.models.stages.aggregate import (
 from app.models.stages.filter_rows import FilterConfig as FilterConfig
 from app.models.stages.human_review_queue import (
     QueueConfig as QueueConfig,
-    RowReviewDecision as RowReviewDecision,
+    ReviewVerdict as ReviewVerdict,
 )
 from app.models.stages.input_data import (
     Connector as Connector,

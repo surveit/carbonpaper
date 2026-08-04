@@ -1,79 +1,48 @@
-"""Human-review queue: render the reviewer UI for one queue stage (recovering
-the model input so the score is reviewable) and persist reviewer decisions
-into the stage-result cache (app.core.stage_cache)."""
-
 from __future__ import annotations
 
-from dataclasses import dataclass
+import json
+from collections.abc import Mapping
 from datetime import datetime
-from pathlib import Path
-from typing import Any
 
 import pandas as pd
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
+from pydantic import ValidationError
 
 from app.core.errors import ReviewValidationError
-from app.models import RowReviewDecision, Stage
-from app.models.stages.llm_transform import LLMTransformStage
-from app.runtime.llm import render_prompt
+from app.models import QueueConfig, Stage, TableSchema
+from app.models.stages.human_review_queue import resolve_queue_config
 from app.services import review
-from app.core.stage_cache import StageCacheEntry
 from app.web.config import templates
 from app.web.loading import (
-    QueueFingerprints,
-    display_cell,
     find_stage,
     load_manifest,
     load_queue_fingerprints,
     load_stages,
     queue_snapshot,
-    read_table,
     runs_dir,
 )
+from app.web.queue_view import build_queue_page, find_definition_drift, require_reviewed_column
 
 router = APIRouter()
-
-
-@dataclass(frozen=True)
-class _DecisionDisplay:
-    """One recorded reviewer decision, shaped for the queue template: the verdict
-    label, the reviewer-entered score (only for a `modify`), and who reviewed it
-    when. An entry holding no output row carries no reviewer metadata, so those
-    are None."""
-
-    decision: str
-    modified_score: float | None
-    reviewer: str | None
-    reviewed_at: str | None
 
 
 @router.get("/project/{project}/runs/{run_id}/queue/{stage_id}", response_class=HTMLResponse)
 async def queue_page(request: Request, project: str, run_id: str, stage_id: str):
     """Reviewer UI for one queue stage in one run."""
-    run_dir = runs_dir(project) / run_id
-    manifest = load_manifest(run_dir)
+    manifest = load_manifest(runs_dir(project) / run_id)
+    stage_def = _require_queue_stage(load_stages(project).stages, stage_id)
+    queue = _require_queue_config(stage_def)
 
-    stages = load_stages(project).stages
-    stage_def = find_stage(stages, stage_id)
-    if stage_def is None or stage_def.type != "human_review_queue":
-        raise HTTPException(status_code=404, detail=f"No queue stage '{stage_id}'")
-
-    snapshot = queue_snapshot(project, run_id, stage_id)
     fingerprints = load_queue_fingerprints(project, run_id, stage_id)
-    entries_by_fingerprint = (
-        _load_decided_entries(project, stage_id, fingerprints.stage_fingerprint)
-        if fingerprints else {}
+    drift = (
+        None if fingerprints is None
+        else find_definition_drift(stage_def, fingerprints.stage_fingerprint)
     )
-    input_lookup, join_keys, prompt_template = _load_model_input_lookup(
-        stage_def, stages, manifest, run_dir
+    page = build_queue_page(
+        project, run_id, stage_def, queue,
+        queue_snapshot(project, run_id, stage_id), fingerprints, drift,
     )
-    items = _build_review_items(
-        snapshot, fingerprints, entries_by_fingerprint, input_lookup, join_keys, prompt_template
-    )
-
-    reviewed_count = sum(1 for i in items if i["prior_decision"] is not None)
-    total = len(items)
 
     return templates.TemplateResponse(
         request,
@@ -83,10 +52,9 @@ async def queue_page(request: Request, project: str, run_id: str, stage_id: str)
             "run_id": run_id,
             "stage_id": stage_id,
             "stage_def": stage_def,
-            "items": items,
-            "reviewed_count": reviewed_count,
-            "total": total,
-            "all_reviewed": total > 0 and reviewed_count == total,
+            "definition_drift": drift,
+            "review_notes_column": queue.review_notes_column,
+            "page": page,
             "manifest_status": manifest.get("status"),
         },
     )
@@ -98,44 +66,162 @@ async def queue_decide(
     run_id: str,
     stage_id: str,
     input_fingerprint: str = Form(...),
-    decision: RowReviewDecision = Form(...),
-    modified_score: float | None = Form(None),
+    reviewer: str = Form(...),
+    reviewed_values: str = Form(...),
+    prefilled_values: str = Form(...),
+    review_notes: str | None = Form(None),
 ):
-    """Persist a reviewer's decision as a `StageCacheEntry` keyed by this
-    stage's definition fingerprint and this row's `input_fingerprint`. FastAPI
-    coerces and 422s a malformed `decision`/`modified_score`; the row is
-    resolved by POSITION in the halted-queue sidecar's fingerprint list — never
-    recomputed from live stages — so a fingerprint the sidecar can't vouch for
-    404s rather than being trusted."""
+    # Persist a reviewer's decision as a `StageCacheEntry` keyed by this stage's
+    # definition fingerprint and this row's `input_fingerprint`. `reviewed_values` and
+    # `prefilled_values` are JSON objects keyed by reviewed TARGET column name — what the
+    # reviewer submitted, and what the page they submitted from had pre-filled. The
+    # verdict follows from the two, so the reviewer chooses none. The row is resolved by
+    # POSITION in the halted-queue sidecar's fingerprint list — never recomputed from live
+    # stages — so a fingerprint the sidecar can't vouch for 404s rather than being
+    # trusted.
+    stage_def = _require_queue_stage(load_stages(project).stages, stage_id)
+    queue = _require_queue_config(stage_def)
+    attributed_to = _require_reviewer_name(reviewer)
+    supplied = _parse_posted_values(reviewed_values, "reviewed_values")
+    prefilled = _parse_posted_values(prefilled_values, "prefilled_values")
     stage_fingerprint, row = _resolve_queue_row(project, run_id, stage_id, input_fingerprint)
+    _validate_stage_definition_unchanged(stage_def, stage_fingerprint)
     try:
+        verdict = review.resolve_verdict(supplied, prefilled)
         review.record_decision(
-            project=project, stage_id=stage_id,
+            project=project, stage=stage_def,
             stage_fingerprint=stage_fingerprint, input_fingerprint=input_fingerprint,
             frozen_row={str(k): v for k, v in row.items()},
-            verdict=decision, modified_score=modified_score,
-            reviewer="local", reviewed_at=datetime.now().isoformat(timespec="seconds"),
+            verdict=verdict,
+            reviewed_values=_validate_reviewed_values(stage_def, queue, supplied),
+            review_notes=_normalise_review_notes(review_notes),
+            reviewer=attributed_to,
+            reviewed_at=datetime.now().isoformat(timespec="seconds"),
         )
     except ReviewValidationError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     return JSONResponse(
-        {"ok": True, "input_fingerprint": input_fingerprint, "decision": decision.value}
+        {"ok": True, "input_fingerprint": input_fingerprint, "verdict": verdict.value}
     )
 
 
-# --- queue_decide helpers ------------------------------------------------------
+# --- stage lookup, shared by both routes ---------------------------------------
+
+
+def _require_queue_stage(stages: list[Stage], stage_id: str) -> Stage:
+    stage_def = find_stage(stages, stage_id)
+    if stage_def is None or stage_def.type != "human_review_queue":
+        raise HTTPException(status_code=404, detail=f"No queue stage '{stage_id}'")
+    return stage_def
+
+
+def _require_queue_config(stage_def: Stage) -> QueueConfig:
+    queue = resolve_queue_config(stage_def)
+    assert queue is not None  # _require_queue_stage admits only human_review_queue
+    return queue
+
+
+def _validate_stage_definition_unchanged(stage_def: Stage, halted_fingerprint: str) -> None:
+    drift = find_definition_drift(stage_def, halted_fingerprint)
+    if drift is not None:
+        raise HTTPException(status_code=409, detail=drift)
+
+
+# --- the posted form ----------------------------------------------------------
+
+
+def _require_reviewer_name(reviewer: str) -> str:
+    name = reviewer.strip()
+    if not name:
+        raise HTTPException(
+            status_code=400,
+            detail="reviewer must be a non-blank name: no decision is recorded unattributed",
+        )
+    return name
+
+
+def _parse_posted_values(raw: str, field: str) -> dict[str, str | None]:
+    """A posted JSON value map as its form controls carry it, keyed by reviewed TARGET column."""
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(
+            status_code=400, detail=f"{field} is not valid JSON: {exc}"
+        ) from exc
+    if not isinstance(parsed, dict):
+        raise HTTPException(
+            status_code=400,
+            detail=f"{field} must be a JSON object, got {type(parsed).__name__}",
+        )
+    return {str(name): _as_posted_text(value) for name, value in parsed.items()}
+
+
+def _as_posted_text(value: object) -> str | None:
+    """JSON null and blank alike become None — never assumed to be an allowed null."""
+    # None validates as a null only where the column declares one.
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (str, int, float)):
+        return str(value).strip() or None
+    raise HTTPException(
+        status_code=400,
+        detail=(
+            "a reviewed value must be a JSON string, number, boolean or null, got "
+            f"{type(value).__name__}"
+        ),
+    )
+
+
+def _normalise_review_notes(review_notes: str | None) -> str | None:
+    """An HTML form posts an untouched notes box as "": blank means no note, not an empty one."""
+    stripped = (review_notes or "").strip()
+    return stripped or None
+
+
+def _validate_reviewed_values(
+    stage_def: Stage, queue: QueueConfig, supplied: Mapping[str, str | None]
+) -> dict[str, object]:
+    """Each supplied value validated against its target column's whole declaration."""
+    # Type, nullability, enum vocabulary and numeric range alike, by compiling those
+    # columns to a Pydantic model. A key the stage does not declare passes through
+    # untouched: the review service owns the exactly-the-declared-columns rule, and
+    # duplicating it here would give it two places to drift.
+    declared = {
+        target: require_reviewed_column(stage_def, target)
+        for target in queue.reviewed_columns.values()
+        if target in supplied
+    }
+    if not declared:
+        return dict(supplied)
+    model = TableSchema(columns=list(declared.values())).to_pydantic_model(
+        f"{stage_def.id}_reviewed"
+    )
+    try:
+        validated = model.model_validate({target: supplied[target] for target in declared})
+    except ValidationError as exc:
+        raise HTTPException(status_code=400, detail=_describe_rejections(exc)) from exc
+    return {**supplied, **validated.model_dump()}
+
+
+def _describe_rejections(exc: ValidationError) -> str:
+    return "; ".join(
+        f"column {'.'.join(str(part) for part in error['loc'])!r}: "
+        f"{error['msg']} (got {error['input']!r})"
+        for error in exc.errors()
+    )
 
 
 def _resolve_queue_row(
     project: str, run_id: str, stage_id: str, input_fingerprint: str
 ) -> tuple[str, pd.Series]:
-    """The `(stage_fingerprint, row)` a decision names: `input_fingerprint`'s
-    POSITION in the sidecar's `input_fingerprints` list, read off the same
-    position in the halted-queue snapshot — the only source a decision's
-    fingerprints may come from. 404 if there's no snapshot/sidecar for this
-    stage, or no position matches: never trust a fingerprint the sidecar
-    can't vouch for."""
+    # The `(stage_fingerprint, row)` a decision names: `input_fingerprint`'s POSITION in
+    # the sidecar's `input_fingerprints` list, read off the same position in the halted-
+    # queue snapshot — the only source a decision's fingerprints may come from. 404 if
+    # there's no snapshot/sidecar for this stage, or no position matches: never trust a
+    # fingerprint the sidecar can't vouch for.
     fingerprints = load_queue_fingerprints(project, run_id, stage_id)
     snapshot = queue_snapshot(project, run_id, stage_id)
     if fingerprints is not None and snapshot is not None:
@@ -149,166 +235,3 @@ def _resolve_queue_row(
         status_code=404,
         detail=f"No queued row with input_fingerprint '{input_fingerprint}'",
     )
-
-
-# --- queue_page helpers -------------------------------------------------------
-
-
-def _load_decided_entries(
-    project: str, stage_id: str, stage_fingerprint: str
-) -> dict[str, StageCacheEntry]:
-    """Cached decisions for this stage definition, keyed by `input_fingerprint`:
-    the read-only cache view's entries for (project, stage, stage_fingerprint)."""
-    entries = StageCacheEntry.read_only().find_entries(
-        project, stage_id, stage_fingerprint
-    )
-    return {entry.input_fingerprint: entry for entry in entries}
-
-
-def _display_decision(entry: StageCacheEntry) -> _DecisionDisplay:
-    """The reviewer decision one cached entry records, shaped for the queue
-    template. An entry holding no output row (`output_row is None`) is shown as
-    a `reject` with no reviewer metadata — the shape a rejection was recorded in
-    before this stage emitted rejected rows. Otherwise the verdict and reviewer
-    metadata are read off the stage output columns the entry carries, and the
-    modified score is shown only for a `modify`."""
-    output = entry.output_row
-    if output is None:
-        return _DecisionDisplay(decision="reject", modified_score=None, reviewer=None, reviewed_at=None)
-    decision = output["decision"]
-    return _DecisionDisplay(
-        decision=decision,
-        modified_score=output["final_score"] if decision == "modify" else None,
-        reviewer=output["reviewer_id"],
-        reviewed_at=output["reviewed_at"],
-    )
-
-
-def _load_scored_stage(stages: list[Stage], stage_def: Stage) -> Stage | None:
-    """The upstream stage whose OUTPUT this queue stage reviews — stage_def's
-    declared input, or None if it declares none."""
-    scored_ids = stage_def.input_ids
-    return find_stage(stages, scored_ids[0]) if scored_ids else None
-
-
-def _resolve_prompt_template(scored_def: Stage | None) -> str | None:
-    if not isinstance(scored_def, LLMTransformStage):
-        return None
-    return scored_def.llm.prompt_data_template
-
-
-def _read_table_or_none(path: Path) -> pd.DataFrame | None:
-    if not path.exists():
-        return None
-    try:
-        return read_table(path)
-    except Exception:  # noqa: BLE001
-        return None
-
-
-def _resolve_scored_input_frame(
-    scored_def: Stage, manifest: dict[str, Any], run_dir: Path
-) -> tuple[pd.DataFrame | None, list[str] | None]:
-    """The scored stage's OWN input — DataFrame plus declared primary key — the
-    frame the queue snapshot needs to join back against to recover the model
-    input, or (None, pk) if that stage's output isn't on disk."""
-    output_by_id = {s.get("stage_id"): s.get("output_path") for s in manifest.get("stage_records", [])}
-    scored_in_id = scored_def.input_ids[0]
-    scored_in = scored_def.inputs[0] if scored_def.inputs else None
-    pk = scored_in.table_schema.primary_key if scored_in and scored_in.table_schema else None
-    in_path = output_by_id.get(scored_in_id)
-    in_df = _read_table_or_none(run_dir / in_path) if in_path else None
-    return in_df, pk
-
-
-def _find_join_keys(primary_key: list[str] | None, columns: list[str]) -> list[str]:
-    """Columns to join the queue snapshot back to the scored stage's input on:
-    the declared primary key restricted to columns actually present, or a
-    handful of common id-like column names as a fallback."""
-    return [k for k in (primary_key or []) if k in columns] or \
-        [c for c in ("evidence_id", "entity_id", "doc_id", "id") if c in columns]
-
-
-def _index_rows_by_join_key(df: pd.DataFrame, join_keys: list[str]) -> dict[tuple[str, ...], dict[str, Any]]:
-    return {
-        tuple(str(r[k]) for k in join_keys): {str(k): display_cell(v) for k, v in r.items()}
-        for _, r in df.iterrows()
-    }
-
-
-def _load_model_input_lookup(
-    stage_def: Stage, stages: list[Stage], manifest: dict[str, Any], run_dir: Path
-) -> tuple[dict[tuple[str, ...], dict[str, Any]], list[str], str | None]:
-    """Recover the MODEL INPUT so the score is reviewable, not just visible.
-    The queue snapshot holds the scoring stage's OUTPUT (score + reasoning + ids);
-    the thing the model actually judged (the quote, the benchmark) lives in the
-    scoring stage's INPUT, one stage upstream. Join it back + resolve the prompt
-    template it was scored with."""
-    scored_def = _load_scored_stage(stages, stage_def)
-    prompt_template = _resolve_prompt_template(scored_def)
-
-    input_lookup: dict[tuple[str, ...], dict[str, Any]] = {}
-    join_keys: list[str] = []
-    if scored_def and scored_def.input_ids:
-        in_df, pk = _resolve_scored_input_frame(scored_def, manifest, run_dir)
-        if in_df is not None:
-            join_keys = _find_join_keys(pk, list(in_df.columns))
-            if join_keys:
-                input_lookup = _index_rows_by_join_key(in_df, join_keys)
-    return input_lookup, join_keys, prompt_template
-
-
-def _find_model_input(
-    row: pd.Series, input_lookup: dict[tuple[str, ...], dict[str, Any]], join_keys: list[str]
-) -> dict[str, Any] | None:
-    if input_lookup and join_keys and all(k in row.index for k in join_keys):
-        return input_lookup.get(tuple(str(row[k]) for k in join_keys))
-    return None
-
-
-def _render_model_prompt(model_input: dict[str, Any] | None, prompt_template: str | None) -> str | None:
-    if not model_input or not prompt_template:
-        return None
-    try:
-        return render_prompt(prompt_template, model_input)
-    except Exception:  # noqa: BLE001
-        return None
-
-
-def _build_review_item(
-    row: pd.Series,
-    input_fingerprint: str,
-    entries_by_fingerprint: dict[str, StageCacheEntry],
-    input_lookup: dict[tuple[str, ...], dict[str, Any]],
-    join_keys: list[str],
-    prompt_template: str | None,
-) -> dict[str, Any]:
-    entry = entries_by_fingerprint.get(input_fingerprint)
-    model_input = _find_model_input(row, input_lookup, join_keys)
-    return {
-        "input_fingerprint": input_fingerprint,
-        "row": {k: display_cell(v) for k, v in row.items()},
-        "model_input": model_input,
-        "rendered_prompt": _render_model_prompt(model_input, prompt_template),
-        "prior_decision": _display_decision(entry) if entry is not None else None,
-    }
-
-
-def _build_review_items(
-    snapshot: pd.DataFrame | None,
-    fingerprints: QueueFingerprints | None,
-    entries_by_fingerprint: dict[str, StageCacheEntry],
-    input_lookup: dict[tuple[str, ...], dict[str, Any]],
-    join_keys: list[str],
-    prompt_template: str | None,
-) -> list[dict[str, Any]]:
-    """One review item per snapshot row, zipped POSITIONALLY with the
-    sidecar's `input_fingerprints` — the two lists are index-independent
-    (the snapshot carries no fingerprint column), so position is the only
-    correspondence between them."""
-    if snapshot is None or fingerprints is None:
-        return []
-    return [
-        _build_review_item(row, fp, entries_by_fingerprint, input_lookup, join_keys, prompt_template)
-        for (_, row), fp in zip(snapshot.iterrows(), fingerprints.input_fingerprints)
-    ]

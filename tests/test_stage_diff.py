@@ -1,7 +1,8 @@
-"""The Data-pane stage diff (app.web.stage_diff): added-column and
-changed-cell detection for 1:1 stages, the merged kept-and-dropped table for
-filter_rows read off the lineage sidecar, None for every out-of-scope stage
-type, and None (fallback) wherever the alignment cannot be verified."""
+"""The Data-pane stage diff (app.web.stage_diff): the INPUT frame as the column
+spine with added, dropped and changed columns painted over it, for 1:1 stages
+including enrich (against its subject input); the merged kept-and-dropped table
+for filter_rows read off the lineage sidecar; None for every out-of-scope stage
+type and wherever the alignment cannot be verified."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -15,9 +16,15 @@ from app.runtime.lineage import (
     lineage_sidecar_path,
 )
 from app.web.stage_diff import (
+    BASE_INPUT_ROLE,
     DIFF_ROWS_SHOWN,
     FILTER_ROWS_KIND,
+    REFERENCE_INPUT_ROLE,
     ROW_ALIGNED_KIND,
+    SOLE_INPUT_ROLE,
+    CellDiffState,
+    ColumnDiffState,
+    FilterRowsDiff,
     RowAlignedDiff,
     build_stage_diff,
 )
@@ -39,6 +46,25 @@ def _row_stage(output_columns: list[dict] | None = None) -> Stage:
         "function": {"kind": "inline",
                      "code": "def transform(row):\n    return row\n"},
         "output_schema": {"columns": output_columns or _OUT_COLUMNS},
+    })
+
+
+_REF_COLUMNS = [
+    {"name": "name", "type": "str", "nullable": True},
+    {"name": "extra", "type": "str", "nullable": True},
+]
+_ENRICHED_COLUMNS = _IN_COLUMNS + [{"name": "extra", "type": "str", "nullable": True}]
+REF_ID = "ref"
+_REF_PATH = f"outputs/{REF_ID}.parquet"
+
+
+def _join_stage(stage_type: str, output_columns: list[dict] | None = None) -> Stage:
+    return parse_stage({
+        "id": "route", "name": "Route", "type": stage_type,
+        "inputs": [{"id": LOAD_ID, "schema": {"columns": _IN_COLUMNS}},
+                   {"id": REF_ID, "schema": {"columns": _REF_COLUMNS}}],
+        "join": {"keys": [{"left": "name", "right": "name"}], "bring": ["extra"]},
+        "output_schema": {"columns": output_columns or _ENRICHED_COLUMNS},
     })
 
 
@@ -69,6 +95,11 @@ def _diff(run_dir: Path, stage_def: Stage, out_rel: str):
     return build_stage_diff(stage_def, run_dir, out_rel, {LOAD_ID: _LOAD_PATH})
 
 
+def _numbered_frame(rows: int) -> pd.DataFrame:
+    """`rows` rows wider than any window under test, so the cap is what limits the table."""
+    return pd.DataFrame({"name": [f"r{i}" for i in range(rows)], "val": list(range(rows))})
+
+
 # ─── row-aligned: added columns, changed cells, unchanged passthrough ────────
 
 def test_a_column_the_stage_added_is_named_and_marked(tmp_path: Path) -> None:
@@ -81,7 +112,7 @@ def test_a_column_the_stage_added_is_named_and_marked(tmp_path: Path) -> None:
     assert diff is not None and diff.kind == ROW_ALIGNED_KIND
     assert diff.added_column_names == ["label"]
     label_cells = [row[2] for row in diff.rows]
-    assert all(cell.added for cell in label_cells)
+    assert all(cell.state is CellDiffState.added for cell in label_cells)
     assert diff.changed_cells_total == 0
 
 
@@ -98,9 +129,10 @@ def test_changed_cells_are_counted_over_the_whole_frame_and_marked(tmp_path: Pat
     assert name_column.changed_cells == 2
     assert diff.changed_cells_total == 2
     changed_cell = diff.rows[1][0]
-    assert changed_cell.changed and changed_cell.was == "b" and changed_cell.text == "B"
+    assert changed_cell.state is CellDiffState.changed
+    assert changed_cell.was == "b" and changed_cell.text == "B"
     untouched_cell = diff.rows[0][0]
-    assert not untouched_cell.changed and untouched_cell.was is None
+    assert untouched_cell.state is CellDiffState.carried and untouched_cell.was is None
 
 
 def test_an_unchanged_passthrough_reports_every_value_carried(tmp_path: Path) -> None:
@@ -113,17 +145,35 @@ def test_an_unchanged_passthrough_reports_every_value_carried(tmp_path: Path) ->
     assert diff is not None
     assert diff.changed_cells_total == 0
     assert diff.added_column_names == [] and diff.removed_column_names == []
-    assert all(not cell.changed and not cell.added for row in diff.rows for cell in row)
+    assert all(cell.state is CellDiffState.carried for row in diff.rows for cell in row)
+    assert all(c.state is ColumnDiffState.carried for c in diff.columns)
 
 
-def test_a_column_the_stage_dropped_is_named(tmp_path: Path) -> None:
+def test_the_column_spine_is_the_input_frame_with_the_added_columns_after_it(
+    tmp_path: Path,
+) -> None:
+    # The INPUT is the base and the diff is painted over it: every input column
+    # holds its place whether the stage kept it or dropped it, and the columns
+    # the stage invented follow. Here `val` is dropped and `label` is added.
     _write_output(tmp_path, LOAD_ID, pd.DataFrame({"name": ["a"], "val": [1]}))
-    out_rel = _write_output(tmp_path, "classify", pd.DataFrame({"name": ["a"]}))
+    out_rel = _write_output(tmp_path, "classify", pd.DataFrame(
+        {"name": ["a"], "label": ["x"]}))
+    out_columns = [{"name": "name", "type": "str", "nullable": True},
+                   {"name": "label", "type": "str", "nullable": True}]
 
-    diff = _diff(tmp_path, _row_stage([{"name": "name", "type": "str", "nullable": True}]), out_rel)
+    diff = _diff(tmp_path, _row_stage(out_columns), out_rel)
 
     assert diff is not None
-    assert diff.removed_column_names == ["val"]
+    assert [(c.name, c.state) for c in diff.columns] == [
+        ("name", ColumnDiffState.carried),
+        ("val", ColumnDiffState.dropped),
+        ("label", ColumnDiffState.added)]
+    assert [cell.state for cell in diff.rows[0]] == [
+        CellDiffState.carried, CellDiffState.dropped, CellDiffState.added]
+    # The dropped column carries the INPUT value, so the reader sees what was lost.
+    assert [cell.text for cell in diff.rows[0]] == ["a", "1", "x"]
+    assert diff.removed_column_names == ["val"] and diff.added_column_names == ["label"]
+    assert diff.changed_cells_total == 0
 
 
 def test_an_llm_transform_is_admitted_to_the_row_aligned_diff(tmp_path: Path) -> None:
@@ -144,6 +194,92 @@ def test_an_llm_transform_is_admitted_to_the_row_aligned_diff(tmp_path: Path) ->
     assert diff.added_column_names == ["label"]
 
 
+# ─── enrich: the row-aligned diff against its SUBJECT input ──────────────────
+
+def _enrich_frames(tmp_path: Path) -> str:
+    """Subject and reference frames of equal length, so only the input id tells them apart."""
+    _write_output(tmp_path, LOAD_ID, pd.DataFrame({"name": ["a", "b"], "val": [1, 2]}))
+    _write_output(tmp_path, REF_ID, pd.DataFrame({"name": ["a", "b"], "extra": ["p", "q"]}))
+    return _write_output(tmp_path, "route", pd.DataFrame(
+        {"name": ["a", "b"], "val": [1, 2], "extra": ["p", "q"]}))
+
+
+def _join_diff(tmp_path: Path, stage_def: Stage, out_rel: str):
+    return build_stage_diff(stage_def, tmp_path, out_rel,
+                            {LOAD_ID: _LOAD_PATH, REF_ID: _REF_PATH})
+
+
+def test_an_enrich_diffs_against_its_subject_input_not_its_reference(tmp_path: Path) -> None:
+    # enrich is a left merge pandas VERIFIES is m:1, so every subject row
+    # survives in input order — as strictly 1:1 as python_row_function.
+    out_rel = _enrich_frames(tmp_path)
+
+    diff = _join_diff(tmp_path, _join_stage("enrich"), out_rel)
+
+    assert isinstance(diff, RowAlignedDiff) and diff.kind == ROW_ALIGNED_KIND
+    # Both inputs are named, the SUBJECT first and as the base: the header links
+    # the reference frame too, so the reader can reach where `extra` came from.
+    assert [(f.stage_id, f.role, f.rows_total) for f in diff.inputs] == [
+        (LOAD_ID, BASE_INPUT_ROLE, 2), (REF_ID, REFERENCE_INPUT_ROLE, 2)]
+    assert diff.added_column_names == ["extra"]
+    assert diff.changed_cells_total == 0
+
+
+def test_a_reference_frame_that_will_not_read_is_listed_without_a_row_count(
+    tmp_path: Path,
+) -> None:
+    # The diff never reads the reference frame to build the table, so its loss
+    # costs the count and nothing else — and an uncounted frame gets no number.
+    out_rel = _enrich_frames(tmp_path)
+    (tmp_path / _REF_PATH).unlink()
+
+    diff = _join_diff(tmp_path, _join_stage("enrich"), out_rel)
+
+    assert isinstance(diff, RowAlignedDiff)
+    assert [(f.stage_id, f.rows_total) for f in diff.inputs] == [(LOAD_ID, 2), (REF_ID, None)]
+
+
+def test_an_expand_gets_no_diff(tmp_path: Path) -> None:
+    # expand is m:n: a matching row count is coincidence, not a contract.
+    out_rel = _enrich_frames(tmp_path)
+
+    assert _join_diff(tmp_path, _join_stage("expand"), out_rel) is None
+
+
+def test_an_enrich_that_did_not_come_out_one_to_one_yields_no_diff(tmp_path: Path) -> None:
+    _write_output(tmp_path, LOAD_ID, pd.DataFrame({"name": ["a", "b"], "val": [1, 2]}))
+    _write_output(tmp_path, REF_ID, pd.DataFrame({"name": ["a"], "extra": ["p"]}))
+    out_rel = _write_output(tmp_path, "route", pd.DataFrame(
+        {"name": ["a"], "val": [1], "extra": ["p"]}))
+
+    assert _join_diff(tmp_path, _join_stage("enrich"), out_rel) is None
+
+
+def test_an_enrich_that_dropped_a_subject_column_shows_it_carrying_the_input_value(
+    tmp_path: Path,
+) -> None:
+    # The diff reads frames, not the config: an output missing an input
+    # column (e.g. persisted by an older definition of the stage) is still
+    # shown carrying the input value rather than silently narrowed.
+    _write_output(tmp_path, LOAD_ID, pd.DataFrame({"name": ["a", "b"], "val": [1, 2]}))
+    _write_output(tmp_path, REF_ID, pd.DataFrame({"name": ["a", "b"], "extra": ["p", "q"]}))
+    out_rel = _write_output(tmp_path, "route", pd.DataFrame(
+        {"name": ["a", "b"], "extra": ["p", "q"]}))
+    stage = _join_stage("enrich", _REF_COLUMNS)
+
+    diff = _join_diff(tmp_path, stage, out_rel)
+
+    assert diff is not None
+    assert diff.removed_column_names == ["val"]
+    assert [(c.name, c.state) for c in diff.columns] == [
+        ("name", ColumnDiffState.carried),
+        ("val", ColumnDiffState.dropped),
+        ("extra", ColumnDiffState.added)]
+    dropped_cells = [row[1] for row in diff.rows]
+    assert [cell.text for cell in dropped_cells] == ["1", "2"]
+    assert all(cell.state is CellDiffState.dropped for cell in dropped_cells)
+
+
 # ─── filter_rows: one merged table, dropped rows in place ────────────────────
 
 def test_filter_rows_merges_kept_and_dropped_rows_in_input_order(tmp_path: Path) -> None:
@@ -156,6 +292,10 @@ def test_filter_rows_merges_kept_and_dropped_rows_in_input_order(tmp_path: Path)
     diff = _diff(tmp_path, _filter_stage(), out_rel)
 
     assert diff is not None and diff.kind == FILTER_ROWS_KIND
+    # One input: it is the base without needing the word, and its count is the
+    # input row total the merged table is drawn over.
+    assert [(f.stage_id, f.role, f.rows_total) for f in diff.inputs] == [
+        (LOAD_ID, SOLE_INPUT_ROLE, 4)]
     assert diff.dropped_total == 2 and diff.kept_total == 2 and diff.input_total == 4
     assert [row.input_ordinal for row in diff.rows] == [0, 1, 2, 3]
     assert [row.dropped for row in diff.rows] == [False, True, False, True]
@@ -180,11 +320,11 @@ def test_filter_rows_that_dropped_nothing_still_gets_the_merged_table(tmp_path: 
 
 
 def test_filter_rows_counts_the_drops_beyond_the_shown_window(tmp_path: Path) -> None:
-    _write_output(tmp_path, LOAD_ID, pd.DataFrame(
-        {"name": list("abcdefgh"), "val": list(range(8))}))
-    out_rel = _write_output(tmp_path, "keep", pd.DataFrame(
-        {"name": list("abcdefg"), "val": list(range(7))}))
-    _write_lineage(tmp_path, "keep", kept=[0, 1, 2, 3, 4, 5, 6])  # dropped: ordinal 7
+    total = DIFF_ROWS_SHOWN + 3
+    kept = list(range(total - 1))  # the LAST input row is dropped, past the window
+    _write_output(tmp_path, LOAD_ID, _numbered_frame(total))
+    out_rel = _write_output(tmp_path, "keep", _numbered_frame(total - 1))
+    _write_lineage(tmp_path, "keep", kept=kept)
 
     diff = _diff(tmp_path, _filter_stage(), out_rel)
 
@@ -192,6 +332,126 @@ def test_filter_rows_counts_the_drops_beyond_the_shown_window(tmp_path: Path) ->
     assert len(diff.rows) == DIFF_ROWS_SHOWN
     assert all(not row.dropped for row in diff.rows)
     assert diff.dropped_total == 1 and diff.dropped_beyond_window == 1
+
+
+# ─── the rail tally: one vocabulary, and only the metrics the shape measured ─
+
+def test_a_row_aligned_tally_names_the_columns_and_the_changed_cells(tmp_path: Path) -> None:
+    _write_output(tmp_path, LOAD_ID, pd.DataFrame({"name": ["a", "b"], "val": [1, 2]}))
+    out_rel = _write_output(tmp_path, "classify", pd.DataFrame(
+        {"name": ["A", "b"], "label": ["x", "y"]}))
+    out_columns = [{"name": "name", "type": "str", "nullable": True},
+                   {"name": "label", "type": "str", "nullable": True}]
+
+    diff = _diff(tmp_path, _row_stage(out_columns), out_rel)
+
+    assert diff is not None
+    assert diff.tally == ["+1 col", "−1 col", "1 cell changed"]
+
+
+def test_a_row_aligned_tally_states_the_zero_change_it_measured(tmp_path: Path) -> None:
+    """A positional diff DOES count changed cells, so a zero there is a measured fact."""
+    frame = pd.DataFrame({"name": ["a", "b"], "val": [1, 2]})
+    _write_output(tmp_path, LOAD_ID, frame)
+    out_rel = _write_output(tmp_path, "classify", frame.copy())
+
+    diff = _diff(tmp_path, _row_stage(_IN_COLUMNS), out_rel)
+
+    assert diff is not None
+    # Nothing moved, and the rail still says something true rather than nothing.
+    assert diff.tally == ["0 cells changed"]
+
+
+def test_a_filter_tally_reports_rows_and_never_a_metric_it_did_not_measure(
+    tmp_path: Path,
+) -> None:
+    """A filter compares no cells and no columns, so it must report no number for either."""
+    _write_output(tmp_path, LOAD_ID, pd.DataFrame(
+        {"name": ["a", "b", "c", "d"], "val": [1, 2, 3, 4]}))
+    out_rel = _write_output(tmp_path, "keep", pd.DataFrame({"name": ["a", "c"], "val": [1, 3]}))
+    _write_lineage(tmp_path, "keep", kept=[0, 2])
+
+    diff = _diff(tmp_path, _filter_stage(), out_rel)
+
+    assert diff is not None
+    assert diff.tally == ["−2 rows"]
+    assert not any("cell" in part or "col" in part for part in diff.tally)
+
+
+def test_a_filter_that_dropped_nothing_says_so_rather_than_nothing(tmp_path: Path) -> None:
+    frame = pd.DataFrame({"name": ["a", "b"], "val": [1, 2]})
+    _write_output(tmp_path, LOAD_ID, frame)
+    out_rel = _write_output(tmp_path, "keep", frame.copy())
+    _write_lineage(tmp_path, "keep", kept=[0, 1])
+
+    diff = _diff(tmp_path, _filter_stage(), out_rel)
+
+    assert diff is not None
+    assert diff.tally == ["0 rows dropped"]
+
+
+def test_both_shapes_expose_the_output_row_count_under_one_name(tmp_path: Path) -> None:
+    """The header reads one field for either shape, so it needs no branch on the kind."""
+    frame = pd.DataFrame({"name": ["a", "b"], "val": [1, 2]})
+    _write_output(tmp_path, LOAD_ID, frame)
+    aligned_rel = _write_output(tmp_path, "classify", frame.copy())
+    kept_rel = _write_output(tmp_path, "keep", pd.DataFrame({"name": ["a"], "val": [1]}))
+    _write_lineage(tmp_path, "keep", kept=[0])
+
+    aligned = _diff(tmp_path, _row_stage(_IN_COLUMNS), aligned_rel)
+    filtered = _diff(tmp_path, _filter_stage(), kept_rel)
+
+    assert isinstance(aligned, RowAlignedDiff) and isinstance(filtered, FilterRowsDiff)
+    assert aligned.output_rows == 2 and filtered.output_rows == 1
+
+
+# ─── the row budget is a parameter, and each shape windows its own frame ─────
+
+def test_the_stage_panels_default_window_draws_a_hundred_rows(tmp_path: Path) -> None:
+    """The panel's window is a hundred rows — enough to read a stage, not a five-row taste."""
+    _write_output(tmp_path, LOAD_ID, _numbered_frame(120))
+    out_rel = _write_output(tmp_path, "classify", _numbered_frame(120))
+
+    diff = _diff(tmp_path, _row_stage(_IN_COLUMNS), out_rel)
+
+    assert isinstance(diff, RowAlignedDiff)
+    assert len(diff.rows) == 100 and diff.rows_total == 120
+
+
+def test_the_row_budget_windows_the_output_frame_of_an_aligned_diff(tmp_path: Path) -> None:
+    # The caller sets how many rows are drawn; the whole-frame counts do not move.
+    total = DIFF_ROWS_SHOWN + 2
+    _write_output(tmp_path, LOAD_ID, _numbered_frame(total))
+    changed = _numbered_frame(total)
+    changed["name"] = changed["name"].str.upper()
+    out_rel = _write_output(tmp_path, "classify", changed)
+    stage = _row_stage(_IN_COLUMNS)
+
+    wide = build_stage_diff(stage, tmp_path, out_rel, {LOAD_ID: _LOAD_PATH}, rows_shown=total)
+    default = build_stage_diff(stage, tmp_path, out_rel, {LOAD_ID: _LOAD_PATH})
+
+    assert isinstance(wide, RowAlignedDiff) and isinstance(default, RowAlignedDiff)
+    assert len(wide.rows) == total and len(default.rows) == DIFF_ROWS_SHOWN
+    assert wide.rows_total == default.rows_total == total
+    assert wide.changed_cells_total == default.changed_cells_total == total
+
+
+def test_the_row_budget_windows_the_input_frame_of_a_filter_diff(tmp_path: Path) -> None:
+    # A filter's table is over its INPUT rows, so dropped rows appear in place —
+    # a budget of 8 draws all 8 input rows, and nothing is left beyond it.
+    _write_output(tmp_path, LOAD_ID, pd.DataFrame(
+        {"name": list("abcdefgh"), "val": list(range(8))}))
+    out_rel = _write_output(tmp_path, "keep", pd.DataFrame(
+        {"name": list("abcdefg"), "val": list(range(7))}))
+    _write_lineage(tmp_path, "keep", kept=[0, 1, 2, 3, 4, 5, 6])  # dropped: ordinal 7
+    stage = _filter_stage()
+
+    diff = build_stage_diff(stage, tmp_path, out_rel, {LOAD_ID: _LOAD_PATH}, rows_shown=8)
+
+    assert isinstance(diff, FilterRowsDiff) and diff.kind == FILTER_ROWS_KIND
+    assert len(diff.rows) == 8
+    assert diff.rows[7].dropped and diff.rows[7].cells == ["h", "7"]
+    assert diff.dropped_total == 1 and diff.dropped_beyond_window == 0
 
 
 # ─── out-of-scope stage types: no diff, ever ─────────────────────────────────

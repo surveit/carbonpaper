@@ -13,6 +13,7 @@ from app.evals.runner import run_eval
 from app.evals.store import load_eval_run, save_eval_config
 from app.services.versioning import WorkflowVersion
 from app.services import workspace
+from conftest import QUEUE_COLUMNS
 
 def _load(tmp_path):
     return {
@@ -99,9 +100,14 @@ _QUEUE_REVIEW = {
     "id": "review", "type": "human_review_queue", "name": "Review scores",
     "inputs": [{"id": "load", "schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": True},
                                                      {"name": "score", "type": "int", "nullable": True}]}}],
-    "queue": {},
+    "queue": dict(QUEUE_COLUMNS),
     "output_schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": True},
                                   {"name": "score", "type": "int", "nullable": True},
+                                  {"name": "human_score", "type": "int", "nullable": True},
+                                  {"name": "decision", "type": "str", "nullable": True},
+                                  {"name": "reviewer_id", "type": "str", "nullable": True},
+                                  {"name": "reviewed_at", "type": "str", "nullable": True},
+                                  {"name": "review_notes", "type": "str", "nullable": True},
                                   {"name": "final_score", "type": "int", "nullable": True}]},
 }
 

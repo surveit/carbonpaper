@@ -6,7 +6,8 @@ true things about how power and money work. The standards *are* the product — 
 number or unsourced claim defeats the purpose. Two rules recur in the code:
 - **Never fabricate; fail loudly.** An unsourceable value is `null`/`unknown`; the pipeline
   halts or errors rather than inventing a number, URL, citation, or quote (a missing LLM
-  backend raises; the runner rejects duplicate rows; the queue says "reviewing blind").
+  backend raises; the runner rejects duplicate rows; the review queue states that no
+  primary key is declared rather than guessing which columns identify a row).
 - **Expensive or irreversible steps sit behind human review.** `human_review_queue` halts
   the run; decisions are content-hashed so they survive re-runs.
 
@@ -16,8 +17,9 @@ number or unsourced claim defeats the purpose. Two rules recur in the code:
 - **workflow** — the executable stage graph it compiles into (`compiled/*.json`, one
   validated `Stage` per file; a DAG of typed stages, every edge schema-validated).
 
-A project dir also holds `code/`, `data/`, `runs/<id>/` (outputs + `manifest.json`),
-and `decisions/` — runtime data, not source. Versions are documents in the store
+A project dir also holds `code/`, `data/`, `runs/<id>/` (outputs + `manifest.json`) —
+runtime data, not source. Review decisions are documents in the store
+(`app.core.stage_cache`), not a project subdir. Versions are documents in the store
 (the `workflow_version` collection), not a project subdir.
 
 ## The three features

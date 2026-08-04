@@ -1,70 +1,110 @@
-"""Stage-aware diff for the run stage panel's Outputs pane: a 1:1 stage's
-output read against its input frame cell by cell, and a filter_rows stage's
-dropped rows read off its runtime-recorded lineage sidecar. Anything
-unverifiable — missing frame, row-count mismatch, absent sidecar — yields
-None and the pane falls back to the plain output view, never a guessed alignment."""
+"""Stage-aware diff for the run stage panel and the full-rows page: a 1:1
+stage's INPUT frame as the base, with what the stage did to it painted over —
+cells changed, columns dropped (still drawn, carrying the input value) or added
+— and a filter_rows stage's dropped rows read off its lineage sidecar. Anything
+unverifiable yields None and the caller shows the plain output view."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from typing import ClassVar, Optional, Union
 
 import pandas as pd
 
 from app.models import Stage, StageType
-from app.runtime.lineage import (
-    TRACE_SOURCE_ROW_KEY,
-    TRACE_SOURCE_STAGE_KEY,
-    lineage_sidecar_path,
-)
+from app.runtime.lineage import RowLineage, lineage_sidecar_path
 from app.web.loading import read_table
 
 # The 1:1-by-position stage types the aligned diff covers: their runtime
 # contract maps output row i to input row i, so a positional comparison states
-# facts. Deliberately NOT is_grain_and_order_preserving(), which also admits
+# facts. enrich qualifies because its left merge runs under pandas'
+# validate="m:1", which VERIFIES the reference holds at most one row per key —
+# so every subject row comes out once, in input order. expand (m:n fan-out) does
+# not. Deliberately NOT is_grain_and_order_preserving(), which also admits
 # input_data (no input to diff against) and human_review_queue (out of scope).
 ROW_ALIGNED_TYPES: frozenset[StageType] = frozenset({
     StageType.python_row_function,
     StageType.llm_transform,
+    StageType.enrich,
 })
 
-# One row budget for both rendered tables. Counts in the header always cover
-# the whole frame; only the rows drawn are capped — aligned: the first-5 window
-# the plain output preview showed; filter: the same window over the INPUT
+# The default row budget: the window the stage panel draws, deep enough to read
+# a stage rather than sample it. Callers with more room (the full-rows page) pass
+# their own. Counts in the header always cover the whole frame; only the rows
+# drawn are capped — aligned windows the OUTPUT frame, filter windows the INPUT
 # frame, so dropped rows appear in place among the kept ones.
-DIFF_ROWS_SHOWN = 5
+DIFF_ROWS_SHOWN = 100
 
 ROW_ALIGNED_KIND = "row_aligned"
 FILTER_ROWS_KIND = "filter_rows"
 
+# U+2212, not the hyphen: the tally sets it beside `+` in the same line of text.
+MINUS = "−"
+
+# What the header calls each input frame. The BASE is the frame the table below
+# IS, annotated; a REFERENCE is joined in and shares no row alignment with it.
+# A stage with one input gets neither word — there is nothing to tell apart.
+SOLE_INPUT_ROLE = "input"
+BASE_INPUT_ROLE = "base input"
+REFERENCE_INPUT_ROLE = "reference input"
+
+
+class ColumnDiffState(str, Enum):
+    """What the stage did to one column of the base: kept it, dropped it, or invented it."""
+
+    carried = "carried"
+    dropped = "dropped"
+    added = "added"
+
+
+class CellDiffState(str, Enum):
+    """A cell's state — its column's, with a carried column's cells split by whether it changed."""
+
+    carried = "carried"
+    changed = "changed"
+    dropped = "dropped"
+    added = "added"
+
+
+@dataclass(frozen=True)
+class DiffFrame:
+    """One input frame of the header: its part in the diff, and its row count where read."""
+
+    stage_id: str
+    role: str
+    # None wherever the frame was not read — a reference frame the diff never
+    # needed and could not open. The header then shows no count for it; a count
+    # is only ever a number counted off a frame.
+    rows_total: Optional[int]
+
 
 @dataclass(frozen=True)
 class DiffCell:
-    """One output cell: its rendered text, and the input value it replaced (if any)."""
+    """One cell of the table: its text, and the input value it replaced (if any)."""
 
     text: str
     was: Optional[str]
-    changed: bool
-    added: bool
+    state: CellDiffState
 
 
 @dataclass(frozen=True)
 class DiffColumn:
-    """One output column: whether the stage added it, and its whole-frame changed-cell count."""
+    """One table column: what the stage did to it, and its whole-frame changed-cell count."""
 
     name: str
-    added: bool
+    state: ColumnDiffState
     changed_cells: int
 
 
 @dataclass(frozen=True)
 class RowAlignedDiff:
-    """A 1:1 stage's output vs its input: per-column tallies plus the first rows as cells."""
+    """A 1:1 stage's output painted over its input: per-column tallies plus the first rows."""
 
     kind: ClassVar[str] = ROW_ALIGNED_KIND
 
-    input_id: str
+    inputs: list[DiffFrame]
     columns: list[DiffColumn]
     rows: list[list[DiffCell]]
     rows_total: int
@@ -73,9 +113,21 @@ class RowAlignedDiff:
     removed_column_names: list[str]
 
     @property
-    def changed_columns(self) -> list[DiffColumn]:
-        """The columns whose cells the stage changed, for the summary line."""
-        return [column for column in self.columns if column.changed_cells]
+    def output_rows(self) -> int:
+        return self.rows_total
+
+    @property
+    def tally(self) -> list[str]:
+        """What the stage did to the frame — the three things a positional diff measures."""
+        parts = []
+        if self.added_column_names:
+            parts.append("+" + _render_count(len(self.added_column_names), "col"))
+        if self.removed_column_names:
+            parts.append(MINUS + _render_count(len(self.removed_column_names), "col"))
+        # Always stated: a positional diff compares every carried cell, so zero
+        # here is a count it took, not a metric it skipped.
+        parts.append(_render_count(self.changed_cells_total, "cell") + " changed")
+        return parts
 
 
 @dataclass(frozen=True)
@@ -98,13 +150,24 @@ class FilterRowsDiff:
 
     kind: ClassVar[str] = FILTER_ROWS_KIND
 
-    input_id: str
+    inputs: list[DiffFrame]
     columns: list[str]
     rows: list[FilterRow]
     input_total: int
     kept_total: int
     dropped_total: int
     dropped_beyond_window: int
+
+    @property
+    def output_rows(self) -> int:
+        return self.kept_total
+
+    @property
+    def tally(self) -> list[str]:
+        """What the stage did to the frame — rows only; a filter measures no cell and no column."""
+        if not self.dropped_total:
+            return [_render_count(0, "row") + " dropped"]
+        return [MINUS + _render_count(self.dropped_total, "row")]
 
 
 StageDiff = Union[RowAlignedDiff, FilterRowsDiff]
@@ -115,85 +178,145 @@ def build_stage_diff(
     run_dir: Path,
     output_path: Optional[str],
     output_by_id: dict[str, Optional[str]],
+    rows_shown: int = DIFF_ROWS_SHOWN,
 ) -> Optional[StageDiff]:
-    """The Outputs-pane diff for one executed stage — None wherever no honest diff exists."""
-    if stage_def is None or len(stage_def.input_ids) != 1:
+    """The diff for one executed stage over `rows_shown` rows — None wherever none is honest."""
+    if stage_def is None:
         return None
-    if stage_def.type not in ROW_ALIGNED_TYPES and stage_def.type != StageType.filter_rows:
+    input_ids = _resolve_diff_input_ids(stage_def)
+    if input_ids is None:
         return None
-    input_id = stage_def.input_ids[0]
-    input_df = _read_frame(run_dir, output_by_id.get(input_id))
+    input_df = _read_frame(run_dir, output_by_id.get(input_ids[0]))
     output_df = _read_frame(run_dir, output_path)
     if input_df is None or output_df is None:
         return None
+    inputs = _shape_input_frames(run_dir, input_ids, output_by_id, len(input_df))
     if stage_def.type == StageType.filter_rows:
-        return _build_filter_rows_diff(stage_def.id, input_id, run_dir, input_df, output_df)
-    return _build_row_aligned_diff(input_id, input_df, output_df)
+        return _build_filter_rows_diff(
+            stage_def.id, inputs, run_dir, input_df, output_df, rows_shown
+        )
+    return _build_row_aligned_diff(inputs, input_df, output_df, rows_shown)
+
+
+def _shape_input_frames(
+    run_dir: Path, input_ids: list[str], output_by_id: dict[str, Optional[str]], base_rows: int
+) -> list[DiffFrame]:
+    """The header's input units: the base, already read, then every reference frame."""
+    if len(input_ids) == 1:
+        return [DiffFrame(stage_id=input_ids[0], role=SOLE_INPUT_ROLE, rows_total=base_rows)]
+    return [DiffFrame(stage_id=input_ids[0], role=BASE_INPUT_ROLE, rows_total=base_rows)] + [
+        _shape_reference_frame(run_dir, output_by_id.get(input_id), input_id)
+        for input_id in input_ids[1:]
+    ]
+
+
+def _shape_reference_frame(
+    run_dir: Path, rel_path: Optional[str], stage_id: str
+) -> DiffFrame:
+    """A frame the diff only links: counted by reading it, or left uncounted where it will not read."""
+    frame = _read_frame(run_dir, rel_path)
+    return DiffFrame(
+        stage_id=stage_id,
+        role=REFERENCE_INPUT_ROLE,
+        rows_total=None if frame is None else len(frame),
+    )
+
+
+def _resolve_diff_input_ids(stage_def: Stage) -> Optional[list[str]]:
+    """The stage's inputs, the base — the frame the output is diffed against — first, or None."""
+    if stage_def.type not in ROW_ALIGNED_TYPES and stage_def.type != StageType.filter_rows:
+        return None
+    # enrich takes two inputs and diffs against inputs[0], its SUBJECT: that is
+    # the frame its output is row-aligned with, while inputs[1] is a reference
+    # the output shares no alignment with. Every other covered type takes one.
+    expected_inputs = 2 if stage_def.type == StageType.enrich else 1
+    if len(stage_def.input_ids) != expected_inputs:
+        return None
+    return list(stage_def.input_ids)
 
 
 def _build_row_aligned_diff(
-    input_id: str, input_df: pd.DataFrame, output_df: pd.DataFrame
+    inputs: list[DiffFrame], input_df: pd.DataFrame, output_df: pd.DataFrame, rows_shown: int
 ) -> Optional[RowAlignedDiff]:
     """Positional cell diff of two same-length frames; None when the lengths differ."""
     if len(input_df) != len(output_df):
         return None
     in_text = _text_frame(input_df)
     out_text = _text_frame(output_df)
-    input_names = set(in_text.columns)
-    output_names = set(out_text.columns)
-    columns = [
-        DiffColumn(
-            name=name,
-            added=name not in input_names,
-            changed_cells=_count_changed_cells(in_text, out_text, name),
-        )
-        for name in out_text.columns
-    ]
+    columns = _shape_aligned_columns(in_text, out_text)
     return RowAlignedDiff(
-        input_id=input_id,
+        inputs=inputs,
         columns=columns,
-        rows=_shape_aligned_rows(in_text, out_text, columns),
+        rows=_shape_aligned_rows(in_text, out_text, columns, rows_shown),
         rows_total=len(output_df),
         changed_cells_total=sum(column.changed_cells for column in columns),
-        added_column_names=[column.name for column in columns if column.added],
-        removed_column_names=[name for name in in_text.columns if name not in output_names],
+        added_column_names=[
+            column.name for column in columns if column.state is ColumnDiffState.added
+        ],
+        removed_column_names=[
+            column.name for column in columns if column.state is ColumnDiffState.dropped
+        ],
     )
 
 
-def _count_changed_cells(in_text: pd.DataFrame, out_text: pd.DataFrame, name: str) -> int:
-    """How many cells of a carried-through column differ, over the WHOLE frame."""
-    if name not in in_text.columns:
-        return 0
-    return int((in_text[name] != out_text[name]).sum())
+def _shape_aligned_columns(in_text: pd.DataFrame, out_text: pd.DataFrame) -> list[DiffColumn]:
+    """The INPUT columns in input order — the base the diff is painted over — then the added ones."""
+    input_names = set(in_text.columns)
+    return [
+        _shape_input_column(in_text, out_text, str(name)) for name in in_text.columns
+    ] + [
+        DiffColumn(name=str(name), state=ColumnDiffState.added, changed_cells=0)
+        for name in out_text.columns
+        if name not in input_names
+    ]
+
+
+def _shape_input_column(in_text: pd.DataFrame, out_text: pd.DataFrame, name: str) -> DiffColumn:
+    """One column of the base: carried through with its whole-frame changed count, or dropped."""
+    if name not in out_text.columns:
+        return DiffColumn(name=name, state=ColumnDiffState.dropped, changed_cells=0)
+    return DiffColumn(
+        name=name,
+        state=ColumnDiffState.carried,
+        changed_cells=int((in_text[name] != out_text[name]).sum()),
+    )
 
 
 def _shape_aligned_rows(
-    in_text: pd.DataFrame, out_text: pd.DataFrame, columns: list[DiffColumn]
+    in_text: pd.DataFrame, out_text: pd.DataFrame, columns: list[DiffColumn], rows_shown: int
 ) -> list[list[DiffCell]]:
-    """The first DIFF_ROWS_SHOWN output rows as cells marked against their input row."""
-    rows: list[list[DiffCell]] = []
-    for i in range(min(len(out_text), DIFF_ROWS_SHOWN)):
-        row: list[DiffCell] = []
-        for column in columns:
-            text = str(out_text[column.name].iat[i])
-            if column.added:
-                row.append(DiffCell(text=text, was=None, changed=False, added=True))
-                continue
-            was = str(in_text[column.name].iat[i])
-            changed = was != text
-            row.append(DiffCell(text=text, was=was if changed else None,
-                                changed=changed, added=False))
-        rows.append(row)
-    return rows
+    """The first `rows_shown` output rows as cells marked against their input row."""
+    return [
+        [_shape_aligned_cell(in_text, out_text, column, i) for column in columns]
+        for i in range(min(len(out_text), rows_shown))
+    ]
+
+
+def _shape_aligned_cell(
+    in_text: pd.DataFrame, out_text: pd.DataFrame, column: DiffColumn, i: int
+) -> DiffCell:
+    """Row `i` of one column: its output value against its input, or the dropped input value."""
+    if column.state is ColumnDiffState.dropped:
+        # No output value exists, so the cell shows what the stage discarded —
+        # the whole point of drawing the column at all.
+        return DiffCell(text=str(in_text[column.name].iat[i]), was=None,
+                        state=CellDiffState.dropped)
+    text = str(out_text[column.name].iat[i])
+    if column.state is ColumnDiffState.added:
+        return DiffCell(text=text, was=None, state=CellDiffState.added)
+    was = str(in_text[column.name].iat[i])
+    if was == text:
+        return DiffCell(text=text, was=None, state=CellDiffState.carried)
+    return DiffCell(text=text, was=was, state=CellDiffState.changed)
 
 
 def _build_filter_rows_diff(
-    stage_id: str, input_id: str, run_dir: Path,
-    input_df: pd.DataFrame, output_df: pd.DataFrame,
+    stage_id: str, inputs: list[DiffFrame], run_dir: Path,
+    input_df: pd.DataFrame, output_df: pd.DataFrame, rows_shown: int,
 ) -> Optional[FilterRowsDiff]:
     """The merged filter table off the verified sidecar; None where it can't vouch for alignment."""
     kept = _read_kept_ordinals(
-        run_dir, stage_id, input_id, rows_out=len(output_df), rows_in=len(input_df)
+        run_dir, stage_id, inputs[0].stage_id, rows_out=len(output_df), rows_in=len(input_df)
     )
     if kept is None:
         return None
@@ -203,11 +326,11 @@ def _build_filter_rows_diff(
         # A filter passes columns through unchanged; frames that disagree mean
         # the alignment story doesn't hold, so no merged table.
         return None
-    rows = _shape_filter_rows(in_text, out_text, kept)
+    rows = _shape_filter_rows(in_text, out_text, kept, rows_shown)
     dropped_total = len(input_df) - len(output_df)
     dropped_in_window = sum(1 for row in rows if row.dropped)
     return FilterRowsDiff(
-        input_id=input_id,
+        inputs=inputs,
         columns=[str(name) for name in in_text.columns],
         rows=rows,
         input_total=len(input_df),
@@ -218,14 +341,14 @@ def _build_filter_rows_diff(
 
 
 def _shape_filter_rows(
-    in_text: pd.DataFrame, out_text: pd.DataFrame, kept: list[int]
+    in_text: pd.DataFrame, out_text: pd.DataFrame, kept: list[int], rows_shown: int
 ) -> list[FilterRow]:
-    """The first DIFF_ROWS_SHOWN INPUT rows, each kept (drawn from the output) or dropped."""
+    """The first `rows_shown` INPUT rows, each kept (drawn from the output) or dropped."""
     output_ordinal_by_input = {
         input_ordinal: output_ordinal for output_ordinal, input_ordinal in enumerate(kept)
     }
     rows: list[FilterRow] = []
-    for i in range(min(len(in_text), DIFF_ROWS_SHOWN)):
+    for i in range(min(len(in_text), rows_shown)):
         output_ordinal = output_ordinal_by_input.get(i)
         # A kept row's cells come from the persisted OUTPUT row — the thing this
         # pane shows — not from the input copy the pass-through contract implies.
@@ -243,14 +366,17 @@ def _read_kept_ordinals(
     if not path.exists():
         return None
     try:
-        lineage = pd.read_parquet(path)
+        lineage = RowLineage.from_frame(pd.read_parquet(path))
     except (OSError, ValueError):
         return None
     if len(lineage) != rows_out:
         return None
-    if not bool((lineage[TRACE_SOURCE_STAGE_KEY] == input_id).all()):
+    # A filter's row has exactly one parent, in the input being diffed. A row
+    # with two (a join) or none (an unmatched subject) is a different shape, and
+    # this pane states nothing about it.
+    if not all(len(entry) == 1 and entry[0].stage_id == input_id for entry in lineage.parents):
         return None
-    kept = [int(ordinal) for ordinal in lineage[TRACE_SOURCE_ROW_KEY]]
+    kept = [entry[0].row_ordinal for entry in lineage.parents]
     if any(ordinal < 0 or ordinal >= rows_in for ordinal in kept):
         return None
     if any(later <= earlier for earlier, later in zip(kept, kept[1:])):
@@ -273,6 +399,11 @@ def _read_frame(run_dir: Path, rel_path: Optional[str]) -> Optional[pd.DataFrame
         # An unreadable frame means fallback to the plain output view, whose own
         # loader reports the read error in the pane — nothing is hidden here.
         return None
+
+
+def _render_count(count: int, noun: str) -> str:
+    """`1 col` / `2 cols` — a counted noun, agreeing in number and thousands-separated."""
+    return f"{count:,} {noun}{'' if count == 1 else 's'}"
 
 
 def _text_frame(df: pd.DataFrame) -> pd.DataFrame:

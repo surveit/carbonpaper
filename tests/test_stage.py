@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import pytest
+
+from conftest import queue_added_columns, queue_columns
 from pydantic import ValidationError
 
 from app import models as m
@@ -19,6 +21,11 @@ def S(**kw):
 # output_schema, so tests aimed at some OTHER part of the contract still have to
 # carry both. These are the smallest ones that satisfy it.
 _PK_ID_SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True}], "primary_key": ["id"]}
+_QUEUE_IN_COLUMNS = [{"name": "id", "type": "str", "nullable": True},
+                     {"name": "score", "type": "int", "nullable": True}]
+_QUEUE_IN_SCHEMA = {"columns": _QUEUE_IN_COLUMNS, "primary_key": ["id"]}
+_QUEUE_OUT_SCHEMA = {"columns": _QUEUE_IN_COLUMNS + queue_added_columns(),
+                     "primary_key": ["id"]}
 _K_SCHEMA = {"columns": [{"name": "k", "type": "str", "nullable": True}]}
 # A reference edge for the enrich fixtures: the key plus `v`, the one column a
 # `bring` can name (the key itself would collide with the subject's).
@@ -288,8 +295,8 @@ def test_queue_needs_no_hash_source_declared():
     # the row itself (app.core.stage_cache) — no upstream primary_key or
     # explicit column list is required to build the stage.
     s = m.parse_stage(S(
-        id="rev", type="human_review_queue", inputs=[{"id": "a", "schema": _PK_ID_SCHEMA}],
-        output_schema=_PK_ID_SCHEMA, queue={},
+        id="rev", type="human_review_queue", inputs=[{"id": "a", "schema": _QUEUE_IN_SCHEMA}],
+        output_schema=_QUEUE_OUT_SCHEMA, queue=queue_columns(),
     ))
     assert s.queue is not None
 
@@ -641,7 +648,7 @@ _HANDLE_BLOCK = {
     "expand": {"join": {"keys": [{"left": "id", "right": "id"}], "bring": ["amount"]}},
     "aggregate": {"aggregate": {"group_by": ["name"],
                                 "aggregations": [{"output_column": "n", "formula": "count"}]}},
-    "human_review_queue": {"queue": {}},
+    "human_review_queue": {"queue": queue_columns("name", "human_name")},
     "publish": {"publish": {"format": "json"}, "function": _INLINE_ROW_FN},
 }
 _INPUT_IDS = {"enrich": ["facilities", "filings"], "expand": ["facilities", "filings"]}
@@ -651,6 +658,11 @@ _OUTPUT_SCHEMA = {
     "expand": {"columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "name", "type": "str", "nullable": True},
                            {"name": "amount", "type": "int", "nullable": True}]},
     "aggregate": {"columns": [{"name": "name", "type": "str", "nullable": True}, {"name": "n", "type": "int", "nullable": True}]},
+    "human_review_queue": {
+        "columns": [{"name": "id", "type": "str", "nullable": True},
+                    {"name": "name", "type": "str", "nullable": True}]
+                   + queue_added_columns("human_name", "str"),
+        "primary_key": ["id"]},
 }
 NON_EXEMPT_TYPES = ["python_row_function", "python_frame_function", "enrich", "expand",
                     "aggregate", "human_review_queue"]

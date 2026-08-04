@@ -39,6 +39,7 @@ from app.runtime.cancellation import request_cancel
 from app.runtime.errors import PreviewError
 from app.runtime.preview import PREVIEWABLE_TYPES, run_stage_preview
 from app.runtime.run_log import RUN_DONE, read_events_since, read_events_window
+from app.web import loading
 from app.web.config import projects_dir, REPO_ROOT, templates
 from app.web.stage_test_views import build_certification, shape_test_views
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
@@ -58,7 +59,7 @@ from app.web.project_view import shell_state
 from app.web.run_header import build_live_view, build_run_header
 from app.web.run_index import build_run_index_rows
 from app.web.run_stage_panel import not_executed_panel
-from app.web.stage_diff import build_stage_diff
+from app.web.stage_diff import StageDiff, build_stage_diff
 
 router = APIRouter()
 
@@ -516,10 +517,11 @@ async def run_stage_partial(
     response_class=HTMLResponse,
 )
 async def run_stage_rows(
-    request: Request, project: str, run_id: str, stage_id: str
+    request: Request, project: str, run_id: str, stage_id: str, raw: bool = False
 ):
-    """Full table of one stage's output, capped at MAX_TABLE_ROWS rendered rows.
-    The page links to the uncapped CSV download."""
+    """Full table of one stage's output, capped at MAX_TABLE_ROWS rendered rows —
+    as the stage diff wherever one exists, which `?raw=1` turns off. The page
+    links to the uncapped CSV download."""
     run_dir = runs_dir(project) / run_id
     stage_record = manifest_stage(run_dir, stage_id)
     table = load_output_table(run_dir, stage_record.get("output_path"))
@@ -532,8 +534,29 @@ async def run_stage_rows(
             "stage_id": stage_id,
             "stage": stage_record,
             "output_path": stage_record.get("output_path"),
+            # Built even under ?raw=1: the raw view offers the diff view only
+            # where one actually exists, so it has to know either way.
+            "diff": _build_full_rows_diff(project, run_dir, stage_id, stage_record),
+            "raw": raw,
+            # The page's own treatments (row numbers, click-to-expand cells,
+            # sticky-header scroll box) the shared diff partial renders on request.
+            "full_rows": True,
             **table,
         },
+    )
+
+
+def _build_full_rows_diff(
+    project: str, run_dir: Path, stage_id: str, stage_record: dict[str, Any]
+) -> StageDiff | None:
+    """The full-rows page's diff, over its own row budget — None where none is honest."""
+    manifest = load_manifest(run_dir)
+    return build_stage_diff(
+        run_service.load_pinned_stage_def(project, manifest, stage_id).stage,
+        run_dir,
+        stage_record.get("output_path"),
+        {s.get("stage_id"): s.get("output_path") for s in manifest.get("stage_records", [])},
+        rows_shown=loading.MAX_TABLE_ROWS,
     )
 
 

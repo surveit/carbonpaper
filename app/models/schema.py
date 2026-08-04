@@ -1,9 +1,5 @@
-"""Schema primitives — the model base and the anonymous Column / TableSchema.
-
-This module sits *below* `stage.py` and `named_schemas.py`: they import from here,
-never the other way around, so `NamedColumn`/`NamedSchema` can extend
-`Column`/`TableSchema` without `named_schemas.py` depending on `stage.py`.
-"""
+# Sits BELOW stage.py and named_schemas.py: they import from here, never the other
+# way round, so NamedColumn/NamedSchema can extend Column/TableSchema.
 from __future__ import annotations
 
 import datetime
@@ -230,6 +226,15 @@ class Column(_Base):
                 f"unbounded), got {self.range!r}"
             )
         return self
+
+    def resolve_numeric_bounds(self) -> tuple[float | None, float | None]:
+        # A declared numeric range as (low, high); a bound declared with the
+        # RANGE_UNBOUNDED_MARKER sentinel is None on that side.
+        if self.range is None or self.type not in ("int", "float"):
+            return (None, None)
+        low, high = self.range
+        return (None if isinstance(low, str) else low,
+                None if isinstance(high, str) else high)
 
 
 Column.model_rebuild()
@@ -578,22 +583,9 @@ def _field_for(column: Column) -> Any:
     kwargs: dict[str, Any] = {}
     if column.description:
         kwargs["description"] = column.description
-    low, high = _numeric_bounds(column)
+    low, high = column.resolve_numeric_bounds()
     if low is not None:
         kwargs["ge"] = low
     if high is not None:
         kwargs["le"] = high
     return Field(**kwargs)
-
-
-def _numeric_bounds(column: Column) -> tuple[Any, Any]:
-    """A declared numeric range as (ge, le); a string bound containing "inf"
-    (the schema's unbounded sentinel) becomes None on that side."""
-    if column.range is None or column.type not in ("int", "float"):
-        return (None, None)
-    low, high = column.range
-    if isinstance(low, str):
-        low = None
-    if isinstance(high, str):
-        high = None
-    return (low, high)

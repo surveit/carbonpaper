@@ -17,10 +17,9 @@ from app.services.loader import resolve_function_code
 
 
 def _transform_of(stage: Stage | None) -> dict[str, Any]:
-    """What the stage did, for the node-detail panel: a `kind` the template
-    styles on and a `detail` blob (code / prompt / keys / source). `unknown`
-    when the compiled stage is absent (the tracer needs only the run dir; the
-    compiled DAG may not be loadable)."""
+    """What the stage did: a `kind` the template styles on, plus a `detail` blob."""
+    # `unknown` where the compiled stage is absent — the tracer needs only the
+    # run dir, and the compiled DAG may not be loadable.
     if stage is None:
         return {"kind": "unknown", "detail": None}
     if isinstance(stage, InputDataStage):
@@ -45,15 +44,11 @@ def _transform_of(stage: Stage | None) -> dict[str, Any]:
 
 
 def build_trace_view(trace: dict[str, Any], stages: dict[str, Stage]) -> dict[str, Any]:
-    """Turn `trace` (the dict from `trace_to_dict`) into the render payload.
-
-    Nodes run chronologically (source/stop first, claim last). Each node
-    carries its row, the columns new at that stage, and its transform detail.
-    Edges connect consecutive nodes carrying the earlier node's row (the data
-    that flowed forward). `upstream` records whether the walk stopped short of
-    an origin and why (the terminal reason, folded onto the earliest node
-    rather than shown as its own step).
-    """
+    """Turn `trace` into the render payload: nodes chronological, claim last."""
+    # Each node carries its row, the columns new at that stage, its transform,
+    # and any `branches` — parents the walk did not follow, offered as promotable
+    # traces rather than expanded inline, so the page stays one story. `upstream`
+    # folds the terminal stop reason onto the earliest node, not its own step.
     chrono = list(reversed(trace["steps"]))
     end = trace["end"]
     truncated = not end["reached_origin"]
@@ -78,6 +73,10 @@ def build_trace_view(trace: dict[str, Any], stages: dict[str, Stage]) -> dict[st
             "columns_new": step["columns_new"],
             "row": step["row"],
             "transform": _transform_of(stages.get(step["stage_id"])),
+            # Recorded parents this walk did not follow (the other side of a
+            # join). Each is a trace of its own the reader can promote onto the
+            # spine; the template builds the link from the run it is already on.
+            "branches": step.get("branches") or [],
         })
 
     edges = [

@@ -128,5 +128,6 @@ def test_union_lineage_counts_from_the_first_row_the_stage_actually_read():
 
     lineage = concatenated_inputs_lineage(stage, inputs, 5)
 
-    assert lineage.source_stage == ["left", "left", "right", "right"]
-    assert lineage.source_row == [5, 6, 5, 6]
+    assert [[(p.stage_id, p.row_ordinal) for p in entry] for entry in lineage.parents] == [
+        [("left", 5)], [("left", 6)], [("right", 5)], [("right", 6)]
+    ]
