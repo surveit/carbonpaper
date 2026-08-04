@@ -119,7 +119,7 @@ def test_branches_survive_serialization(tmp_path):
     from app.runtime.trace import trace_to_dict
     payload = trace_to_dict(trace_row(_join_run(tmp_path), "j", 0))
     assert payload["steps"][0]["branches"] == [
-        {"stage_id": "contracts", "row_ordinal": 0, "kind": "direct"}
+        {"stage_id": "contracts", "row_ordinal": 0, "kind": "direct", "columns": None}
     ]
 
 
@@ -131,7 +131,7 @@ def test_branches_reach_the_render_payload(tmp_path):
     view = build_trace_view(trace_to_dict(trace_row(_join_run(tmp_path), "j", 0)), {})
     by_stage = {n["stage_id"]: n for n in view["nodes"]}
     assert by_stage["j"]["branches"] == [
-        {"stage_id": "contracts", "row_ordinal": 0, "kind": "direct"}
+        {"stage_id": "contracts", "row_ordinal": 0, "kind": "direct", "columns": None}
     ]
     assert by_stage["filings"]["branches"] == []
 

@@ -5,6 +5,7 @@ so no runtime machinery can reach a stage's real output. A row may have several
 parents, so the sidecar is list-valued — see `RowLineage`."""
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -19,6 +20,11 @@ if TYPE_CHECKING:
 TRACE_SOURCE_STAGE_KEY = "_trace_source_stage"
 TRACE_SOURCE_ROW_KEY = "_trace_source_row"
 TRACE_EDGE_KIND_KEY = "_trace_edge_kind"
+TRACE_SUPPLIES_KEY = "_trace_supplies"
+TRACE_SUPPLIES_TABLE_KEY = "_trace_supplies_table"
+
+# The supplies index every parent that fed its output row WHOLE carries.
+WHOLE_ROW = 0
 
 # The `.attrs` channel the row driver hands lineage out on. The executor reads
 # it BEFORE any row slicing and pops it before persisting — `.attrs` does not
@@ -47,6 +53,13 @@ class RowParent:
     stage_id: str
     row_ordinal: int
     kind: str = EdgeKind.direct.value
+    # Index into the owning RowLineage's `supplies` table, naming the output
+    # columns this parent fed. Interned rather than held inline because column
+    # attribution varies per INPUT ROLE and per `where`, never per row: a join's
+    # two sides are two entries for the whole stage, and an aggregate's are one
+    # per distinct filter. Inline it and an aggregate's sidecar carries a tag per
+    # column per row for information that has a handful of distinct values.
+    supplies: int = WHOLE_ROW
 
 
 @dataclass(frozen=True)
@@ -57,14 +70,27 @@ class RowLineage:
     # NON-MATCH — the one thing that tells "no matching row existed" apart from
     # "matched a row whose columns are null", which nulls alone cannot carry.
     parents: list[list[RowParent]] = field(default_factory=list)
+    # supplies[i] = the output columns a parent with `supplies == i` fed. None
+    # means the parent's contribution is not narrowed to particular columns —
+    # true of a filter or union row, which passed through whole, and of any
+    # producer that does not attribute. Entry 0 is always None.
+    supplies: list[tuple[str, ...] | None] = field(
+        default_factory=lambda: [None]
+    )
 
     def __post_init__(self) -> None:
         for entry in self.parents:
             if not isinstance(entry, list):
                 raise ValueError("row lineage needs a list of parents per output row")
+        if not self.supplies or self.supplies[WHOLE_ROW] is not None:
+            raise ValueError("supplies entry 0 must be None — the whole-row default")
 
     def __len__(self) -> int:
         return len(self.parents)
+
+    def columns_supplied_by(self, parent: RowParent) -> tuple[str, ...] | None:
+        """The output columns `parent` fed, or None where it supplied the whole row."""
+        return self.supplies[parent.supplies] if parent.supplies < len(self.supplies) else None
 
     def shifted(self, offset: int) -> "RowLineage":
         """Ordinals counted from a sliced input frame's first row, moved onto the upstream's own."""
@@ -73,12 +99,16 @@ class RowLineage:
         if offset == 0:
             return self
         return RowLineage([
-            [RowParent(p.stage_id, p.row_ordinal + offset, p.kind) for p in entry]
+            [RowParent(p.stage_id, p.row_ordinal + offset, p.kind, p.supplies) for p in entry]
             for entry in self.parents
-        ])
+        ], list(self.supplies))
 
     def to_frame(self) -> pd.DataFrame:
-        """One row per output row; the three columns are parallel per-parent lists."""
+        """One row per output row; four parallel per-parent lists plus the supplies table."""
+        table = json.dumps([None if s is None else list(s) for s in self.supplies])
+        # Repeated on every row because the table is per STAGE: parquet
+        # dictionary-encodes a constant column to nothing, and it keeps the
+        # sidecar a plain frame any reader can open.
         return pd.DataFrame({
             TRACE_SOURCE_STAGE_KEY: pd.Series(
                 [[p.stage_id for p in entry] for entry in self.parents], dtype=object),
@@ -86,30 +116,45 @@ class RowLineage:
                 [[p.row_ordinal for p in entry] for entry in self.parents], dtype=object),
             TRACE_EDGE_KIND_KEY: pd.Series(
                 [[str(p.kind) for p in entry] for entry in self.parents], dtype=object),
+            TRACE_SUPPLIES_KEY: pd.Series(
+                [[int(p.supplies) for p in entry] for entry in self.parents], dtype=object),
+            TRACE_SUPPLIES_TABLE_KEY: pd.Series(
+                [table] * len(self.parents), dtype=object),
         })
 
     @classmethod
     def from_frame(cls, df: pd.DataFrame) -> "RowLineage":
         """Read a sidecar frame back, including one written before lineage went multi-parent."""
-        # A pre-multi-parent sidecar held SCALARS and no kind column, so each of
-        # its rows reads as one direct parent — old runs stay traceable
-        # without a migration.
+        # A pre-multi-parent sidecar held SCALARS and no kind column, and a
+        # pre-supplies one named no columns — each reads as one whole-row direct
+        # parent, so old runs stay traceable without a migration.
         has_kind = TRACE_EDGE_KIND_KEY in df.columns
+        has_supplies = TRACE_SUPPLIES_KEY in df.columns
         parents: list[list[RowParent]] = []
         for i in range(len(df)):
             stages = _as_list(df[TRACE_SOURCE_STAGE_KEY].iloc[i])
             rows = _as_list(df[TRACE_SOURCE_ROW_KEY].iloc[i])
             kinds = _as_list(df[TRACE_EDGE_KIND_KEY].iloc[i]) if has_kind else []
+            supplies = _as_list(df[TRACE_SUPPLIES_KEY].iloc[i]) if has_supplies else []
             entry = [
                 RowParent(
                     stage_id=str(stages[k]),
                     row_ordinal=int(rows[k]),
                     kind=str(kinds[k]) if k < len(kinds) else EdgeKind.direct.value,
+                    supplies=int(supplies[k]) if k < len(supplies) else WHOLE_ROW,
                 )
                 for k in range(min(len(stages), len(rows)))
             ]
             parents.append(entry)
-        return cls(parents)
+        return cls(parents, _read_supplies_table(df))
+
+
+def _read_supplies_table(df: pd.DataFrame) -> list[tuple[str, ...] | None]:
+    """The stage's supplies table off any row of the sidecar; whole-row-only when absent."""
+    if TRACE_SUPPLIES_TABLE_KEY not in df.columns or len(df) == 0:
+        return [None]
+    raw = json.loads(str(df[TRACE_SUPPLIES_TABLE_KEY].iloc[0]))
+    return [None if entry is None else tuple(str(c) for c in entry) for entry in raw]
 
 
 def _as_list(value: Any) -> list[Any]:
@@ -190,6 +235,30 @@ def merged_inputs_lineage(
 def _is_missing(value: Any) -> bool:
     """True for an ordinal a merge left unmatched (NaN, None and pd.NA alike)."""
     return value is None or bool(pd.isna(value))
+
+
+def grouped_contributions_lineage(
+    source_stage_id: str, contributors: list[dict[int, tuple[str, ...]]]
+) -> RowLineage:
+    """For an aggregate: entry i names every input row that fed output row i, and what it fed."""
+    table: list[tuple[str, ...] | None] = [None]
+    # A row appears ONCE however many columns it fed, so this stays O(input
+    # rows) rather than O(rows x aggregations); the column tuples intern because
+    # there are only as many distinct ones as there are `where` filters.
+    index_of: dict[tuple[str, ...], int] = {}
+    parents: list[list[RowParent]] = []
+    for row_contributors in contributors:
+        entry: list[RowParent] = []
+        for ordinal, columns in sorted(row_contributors.items()):
+            if columns not in index_of:
+                index_of[columns] = len(table)
+                table.append(columns)
+            entry.append(RowParent(
+                source_stage_id, int(ordinal),
+                EdgeKind.contribution.value, index_of[columns],
+            ))
+        parents.append(entry)
+    return RowLineage(parents, table)
 
 
 def lineage_sidecar_path(run_dir: Path, stage_id: str) -> Path:

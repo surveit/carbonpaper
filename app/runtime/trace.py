@@ -50,6 +50,7 @@ class StageTransform:
     # for a trace of its own, which is how the reader promotes a branch onto the
     # spine; the walk itself stays a single chain (see `Trace.steps`).
     branches: list[RowParent] = field(default_factory=list)
+    supplies: list[tuple[str, ...] | None] = field(default_factory=lambda: [None])
 
 
 @dataclass
@@ -125,15 +126,17 @@ def _row_dict(df: pd.DataFrame, r: int) -> dict[str, Any]:
     return {str(k): _scalar(v) for k, v in df.iloc[r].items()}
 
 
-def _lineage_hops(run_dir: Path, stage_id: str, row_ordinal: int) -> list[RowParent]:
-    """Every recorded parent of `row_ordinal`, spine first; empty where no sidecar applies."""
+def _lineage_hops(
+    run_dir: Path, stage_id: str, row_ordinal: int
+) -> tuple[list[RowParent], list[tuple[str, ...] | None]]:
+    """`row_ordinal`'s recorded parents, spine first, with the stage's supplies table."""
     path = lineage_sidecar_path(run_dir, stage_id)
     if not path.exists():
-        return []
+        return [], [None]
     lineage = RowLineage.from_frame(pd.read_parquet(path))
     if row_ordinal < 0 or row_ordinal >= len(lineage):
-        return []
-    return list(lineage.parents[row_ordinal])
+        return [], [None]
+    return list(lineage.parents[row_ordinal]), list(lineage.supplies)
 
 
 def _split_spine(hops: list[RowParent]) -> tuple[RowParent | None, list[RowParent]]:
@@ -259,7 +262,7 @@ def trace_row(run_dir: Path, stage_id: str, row_ordinal: int) -> Trace:
             raise RowOutOfRange(f"row {r} out of range for stage {sid!r} ({len(df)} rows)")
 
         parents = _parents(record)
-        hops = _lineage_hops(run_dir, sid, r)
+        hops, supplies = _lineage_hops(run_dir, sid, r)
         spine, branches = _split_spine(hops)
         columns_parent_id = _columns_parent_id(parents, spine)
         parent_df = (
@@ -275,6 +278,7 @@ def trace_row(run_dir: Path, stage_id: str, row_ordinal: int) -> Trace:
             columns_new=_new_columns(df, parent_df),
             origin=_origin(stage_type),
             branches=branches,
+            supplies=supplies,
         ))
 
         next_hop = _advance(
@@ -292,6 +296,14 @@ def trace_row(run_dir: Path, stage_id: str, row_ordinal: int) -> Trace:
         steps=steps,
         end=end,
     )
+
+
+def _columns_supplied(step: StageTransform, branch: RowParent) -> list[str] | None:
+    """The output columns this branch fed, or None where it supplied the whole row."""
+    if branch.supplies >= len(step.supplies):
+        return None
+    columns = step.supplies[branch.supplies]
+    return None if columns is None else list(columns)
 
 
 def trace_to_dict(trace: Trace) -> dict[str, Any]:
@@ -313,6 +325,7 @@ def trace_to_dict(trace: Trace) -> dict[str, Any]:
                         "stage_id": branch.stage_id,
                         "row_ordinal": branch.row_ordinal,
                         "kind": str(branch.kind),
+                        "columns": _columns_supplied(step, branch),
                     }
                     for branch in step.branches
                 ],
