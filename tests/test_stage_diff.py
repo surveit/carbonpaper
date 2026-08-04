@@ -258,7 +258,7 @@ def test_an_enrich_that_did_not_come_out_one_to_one_yields_no_diff(tmp_path: Pat
 def test_an_enrich_that_dropped_a_subject_column_shows_it_carrying_the_input_value(
     tmp_path: Path,
 ) -> None:
-    # The diff reads frames, not config: a missing input column still shows its value.
+    # The diff reads frames, not config: a column missing from the output still shows.
     _write_output(tmp_path, LOAD_ID, pd.DataFrame({"name": ["a", "b"], "val": [1, 2]}))
     _write_output(tmp_path, REF_ID, pd.DataFrame({"name": ["a", "b"], "extra": ["p", "q"]}))
     out_rel = _write_output(tmp_path, "route", pd.DataFrame(

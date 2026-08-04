@@ -69,7 +69,7 @@ def test_expand_fans_a_subject_row_out_over_every_matching_reference_row():
 
 
 def test_output_is_subject_columns_plus_enrich_with_only():
-    # Un-landed `extra` must not leak: the handler narrows the reference before merging.
+    # `extra` is not brought, so the handler narrows the reference before merging.
     out = handle_expand(
         _join_stage("expand"),
         {"subject": pd.DataFrame({"x": [1]}),
@@ -80,7 +80,7 @@ def test_output_is_subject_columns_plus_enrich_with_only():
 
 
 def test_a_brought_column_lands_under_its_authored_name():
-    # `enrich_with: {z: z2}` lands z as z2 — an authored rename, never a suffix.
+    # `{z: z2}` lands the reference's z as z2 — an authored rename, never a silent suffix.
     stage = parse_stage({
         "id": "m", "name": "Join", "type": "enrich",
         "inputs": [{"id": "subject", "schema": _SUBJECT},
@@ -100,7 +100,7 @@ def test_a_brought_column_lands_under_its_authored_name():
 
 
 def test_a_right_key_sharing_a_subject_columns_name_is_dropped():
-    # The reference's own `x` shares the subject's name; un-landed, it is narrowed away.
+    # The reference's own `x` collides, but is narrowed away un-brought.
     stage = parse_stage({
         "id": "m", "name": "Join", "type": "enrich",
         "inputs": [{"id": "subject", "schema": _SUBJECT},

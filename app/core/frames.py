@@ -67,6 +67,31 @@ def is_sequence_cell(value: object) -> bool:
     return isinstance(value, (list, tuple, np.ndarray))
 
 
+def is_missing_cell(value: Any) -> bool:
+    """Catches `is_null_form`'s misses too: np.floating nan and bare np.datetime64 NaT."""
+    if is_sequence_cell(value) or isinstance(value, dict):
+        return False
+    if is_null_form(value):
+        return True
+    if isinstance(value, np.floating):
+        return bool(np.isnan(value))
+    return bool(pd.api.types.is_scalar(value) and pd.isna(value))
+
+
+def is_bool_cell(value: Any) -> bool:
+    return isinstance(value, (bool, np.bool_))
+
+
+def is_exact_int_cell(value: Any) -> bool:
+    """Unlike `_is_int_cell`, never true for a whole-valued float — 2.0 stays a float."""
+    return not is_bool_cell(value) and isinstance(value, (int, np.integer))
+
+
+def is_exact_float_cell(value: Any) -> bool:
+    """The float counterpart to `is_exact_int_cell`: true only for an actual float."""
+    return isinstance(value, (float, np.floating))
+
+
 # ── Cell-level type predicates ───────────────────────────────────────────────
 # "May this cell sit in a column whose declared type is named T?" — one
 # predicate per name in `CELL_TYPE_PREDICATES` below. The names are plain
@@ -80,14 +105,10 @@ def is_sequence_cell(value: object) -> bool:
 # int).
 
 
-def _is_bool_cell(value: Any) -> bool:
-    return isinstance(value, (bool, np.bool_))
-
-
 def _is_int_cell(value: Any) -> bool:
     # A Python bool is a subclass of int, but a column declared `int` that
     # holds True/False is a real mismatch — reject it explicitly.
-    if _is_bool_cell(value):
+    if is_bool_cell(value):
         return False
     if isinstance(value, (int, np.integer)):
         return True
@@ -123,7 +144,7 @@ CELL_TYPE_PREDICATES: Mapping[str, Callable[[Any], bool]] = {
     "str": _is_str_cell,
     "int": _is_int_cell,
     "float": _is_float_cell,
-    "bool": _is_bool_cell,
+    "bool": is_bool_cell,
     "datetime": _is_datetime_cell,
     "date": _is_date_cell,
 }

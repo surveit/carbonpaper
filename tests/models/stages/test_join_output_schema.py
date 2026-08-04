@@ -64,7 +64,7 @@ def test_declared_column_absent_from_join_rejected():
 
 
 def test_landing_on_a_subject_column_is_a_refused_rewrite():
-    # Landing the reference's `name` under a name the subject carries would rewrite it.
+    # Landing the reference's `name` under the subject's own would rewrite that column.
     msg = _issues(_join_stage(
         enrich_with={"name": "name"},
         output_columns=[{"name": "facility_id", "type": "str", "nullable": True}],
@@ -73,7 +73,7 @@ def test_landing_on_a_subject_column_is_a_refused_rewrite():
 
 
 def test_a_landed_name_carries_its_sources_type():
-    # The out: land `name` (int) as `name_r`; the output carries the SOURCE's type.
+    # Landed as an authored `name_r`, never a silent suffix — and it takes the SOURCE type.
     stage = parse_stage(_join_stage(
         enrich_with={"name": "name_r"},
         output_columns=[{"name": "name_r", "type": "int", "nullable": True}],
@@ -117,7 +117,7 @@ def test_declared_type_mismatch_rejected():
 
 
 def test_un_brought_reference_column_not_producible():
-    # `kind` is on the reference edge but not landed, so the output cannot carry it.
+    # `kind` is on the reference but unnamed by enrich_with, so the output cannot carry it.
     msg = _issues(_join_stage(
         enrich_with={"amount": "amount"},
         output_columns=[{"name": "kind", "type": "str", "nullable": True}],

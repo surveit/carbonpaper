@@ -26,8 +26,10 @@ class JoinKey(_Base):
 
 
 class JoinConfig(StageConfig):
-    """enrich/expand handle. Cardinality lives in the stage TYPE, not here."""
+    """enrich/expand handle; cardinality lives in the stage TYPE."""
+    # Both change what this stage computes.
     FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({"keys", "enrich_with"})
+    # ...so they feed Stage.compute_definition_fingerprint.
     INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset()
 
     keys: list[JoinKey] = Field(min_length=1)

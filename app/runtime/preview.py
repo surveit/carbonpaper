@@ -7,8 +7,8 @@ publish) are refused - as is input_data, which has no upstream rows to subset.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 import pandas as pd
 import pyarrow
@@ -26,6 +26,7 @@ from .stages import HANDLERS
 PREVIEWABLE_TYPES: set[str] = {
     "python_row_function",
     "python_frame_function",
+    "starlark_row_function",
     "llm_transform",
     "enrich",
     "expand",
@@ -64,6 +65,15 @@ def _load_upstream_inputs(
     return inputs
 
 
+@dataclass(frozen=True)
+class StagePreview:
+    """A scratch re-run's result. `frame` holds real values — rendering it is the caller's."""
+
+    frame: pd.DataFrame
+    input_rows: int
+    selected_indices: list[int]
+
+
 def run_stage_preview(
     *,
     stage_def: Stage,
@@ -71,7 +81,7 @@ def run_stage_preview(
     repo_root: Path,
     output_by_id: dict[str, str | None],
     selected_indices: list[int],
-) -> dict[str, Any]:
+) -> StagePreview:
     """Run `stage_def`'s handler on the chosen rows of its FIRST upstream input,
     entirely in memory, and return the output as records.
 
@@ -80,8 +90,7 @@ def run_stage_preview(
     preview. Other upstream inputs (e.g. a join's reference input) are passed
     through whole, since "row N of a join" isn't well defined.
 
-    Returns a dict: {columns, rows_total, preview (records), input_rows,
-    truncated_to}. Never writes to disk.
+    Never writes to disk.
     """
     stype = stage_def.type
     if stype not in PREVIEWABLE_TYPES:
@@ -125,11 +134,4 @@ def run_stage_preview(
     if output is None:
         output = pd.DataFrame()
 
-    safe = output.fillna("").astype(str)
-    return {
-        "columns": list(output.columns),
-        "rows_total": int(len(output)),
-        "input_rows": len(valid),
-        "selected_indices": valid,
-        "preview": safe.to_dict(orient="records"),
-    }
+    return StagePreview(frame=output, input_rows=len(valid), selected_indices=valid)

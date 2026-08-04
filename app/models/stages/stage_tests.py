@@ -71,6 +71,14 @@ class PythonRowFunctionStageTest(StageTest):
     )
 
 
+class StarlarkRowFunctionStageTest(StageTest):
+    """One row in → that one row out, or a refusal."""
+    inputs: _OneInputRow = Field(description=_INPUTS_DESCRIPTION)
+    expected: Optional[Annotated[list[DataRow], Field(min_length=1, max_length=1)]] = (
+        Field(description=_EXPECTED_DESCRIPTION)
+    )
+
+
 class FilterRowsStageTest(StageTest):
     """One row in → that row kept, dropped (`[]`), or a refusal."""
     inputs: _OneInputRow = Field(description=_INPUTS_DESCRIPTION)

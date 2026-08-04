@@ -5,6 +5,10 @@ import pytest
 from app.core.frames import (
     FrameStore,
     collapse_null_forms,
+    is_bool_cell,
+    is_exact_float_cell,
+    is_exact_int_cell,
+    is_missing_cell,
     is_null_form,
     is_sequence_cell,
     list_rows,
@@ -86,6 +90,58 @@ def test_is_null_form_survives_an_array_valued_cell(cell):
 def test_is_null_form_agrees_with_collapse_null_forms():
     for value in [None, float("nan"), pd.NA, pd.NaT, 0, "x", [1], np.nan]:
         assert is_null_form(value) == (collapse_null_forms(value) is None)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [None, float("nan"), pd.NA, pd.NaT, np.float32("nan"), np.datetime64("NaT", "ns")],
+)
+def test_is_missing_cell_accepts_every_form_including_the_two_is_null_form_misses(value):
+    """Includes the two forms `is_null_form` deliberately does not catch."""
+    assert is_missing_cell(value)
+
+
+@pytest.mark.parametrize("cell", [[1, 2], (1, 2), np.array([1, 2]), {"a": 1}])
+def test_is_missing_cell_rejects_a_sequence_or_mapping_cell(cell):
+    assert not is_missing_cell(cell)
+
+
+@pytest.mark.parametrize("value", [0, "", False, [], "nan", np.int64(0), 2.0])
+def test_is_missing_cell_rejects_non_nulls_including_falsy_ones(value):
+    assert not is_missing_cell(value)
+
+
+# is_exact_int_cell/is_exact_float_cell deliberately differ from _is_int_cell/
+# _is_float_cell (lossy-tolerant, for column-type checks: a whole-valued float
+# passes as int there) — do not merge these pairs.
+@pytest.mark.parametrize("value", [2, np.int64(2), -5])
+def test_is_exact_int_cell_accepts_real_ints(value):
+    assert is_exact_int_cell(value)
+
+
+@pytest.mark.parametrize("value", [2.0, np.float64(2.0), True, "2", None, [2]])
+def test_is_exact_int_cell_rejects_whole_floats_bools_and_non_ints(value):
+    assert not is_exact_int_cell(value)
+
+
+@pytest.mark.parametrize("value", [2.0, np.float64(2.0), 0.5])
+def test_is_exact_float_cell_accepts_real_floats(value):
+    assert is_exact_float_cell(value)
+
+
+@pytest.mark.parametrize("value", [2, np.int64(2), True, "x", None])
+def test_is_exact_float_cell_rejects_ints_bools_and_non_floats(value):
+    assert not is_exact_float_cell(value)
+
+
+@pytest.mark.parametrize("value", [True, False, np.bool_(True)])
+def test_is_bool_cell_accepts_python_and_numpy_bools(value):
+    assert is_bool_cell(value)
+
+
+@pytest.mark.parametrize("value", [1, 0, 1.0, "true", None])
+def test_is_bool_cell_rejects_non_bools(value):
+    assert not is_bool_cell(value)
 
 
 @pytest.mark.parametrize("cell", [[1], (1,), np.array([1])])

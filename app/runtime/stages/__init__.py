@@ -30,6 +30,7 @@ from .join import handle_enrich, handle_expand
 from .llm_transform import make_llm_row_mapper, run_llm_batches
 from .publish import handle_publish
 from .python_functions import handle_python_frame_function, make_python_row_mapper
+from .starlark_functions import make_starlark_row_mapper
 from .union import handle_union
 
 Preflight = Callable[[Stage], tuple[list[str], dict[str, Any] | None]]
@@ -76,6 +77,10 @@ HANDLERS: dict[StageType, StageHandler] = {
     StageType.filter_rows: RowMapHandler(
         make_filter_mapper, drops_rows=True, caches_rows=False
     ),
+    # parallelism stays 1: matching python_row_function's calling convention. The
+    # interpreter handle is this execution's, and Starlark freezes module globals,
+    # so nothing crosses rows either way.
+    StageType.starlark_row_function: RowMapHandler(make_starlark_row_mapper),
 }
 
 # A mis-shaped registration (e.g. a frame handler for a type the model declares
@@ -107,4 +112,5 @@ __all__ = [
     "read_input_data",
     "handle_union",
     "make_filter_mapper",
+    "make_starlark_row_mapper",
 ]

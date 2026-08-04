@@ -13,6 +13,7 @@ from app.models.stages.code import PythonFrameFunctionStage, PythonRowFunctionSt
 from app.models.stages.input_data import InputDataStage
 from app.models.stages.join import EnrichStage, ExpandStage
 from app.models.stages.llm_transform import LLMTransformStage
+from app.models.stages.starlark import StarlarkRowFunctionStage
 from app.services.loader import resolve_function_code
 
 
@@ -30,6 +31,8 @@ def _transform_of(stage: Stage | None) -> dict[str, Any]:
         # Full source: the whole module file for a module ref, the inline code
         # for an inline ref — never a partial snippet or a bare reference.
         return {"kind": "python", "detail": resolve_function_code(stage)}
+    if isinstance(stage, StarlarkRowFunctionStage):
+        return {"kind": "starlark", "detail": resolve_function_code(stage)}
     if isinstance(stage, LLMTransformStage):
         return {"kind": "llm", "detail": {
             "instructions": stage.llm.prompt_instructions,

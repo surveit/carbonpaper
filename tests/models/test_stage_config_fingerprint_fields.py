@@ -14,13 +14,14 @@ from app.models.stages.join import JoinConfig
 from app.models.stages.llm_transform import LLMConfig
 from app.models.stages.filter_rows import FilterConfig
 from app.models.stages.publish import PublishConfig
+from app.models.stages.starlark import StarlarkFunction
 from app.models.stages.union import UnionConfig
 
 # Every class a stage's `fingerprint_blocks()` can return, so a block that
 # reaches the fingerprint cannot skip the classification below.
 _CONFIG_CLASSES = [
     Connector, LLMConfig, PythonFunction, JoinConfig, AggregateConfig, QueueConfig,
-    PublishConfig, UnionConfig, FilterConfig,
+    PublishConfig, UnionConfig, FilterConfig, StarlarkFunction,
 ]
 
 

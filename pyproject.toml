@@ -94,6 +94,16 @@ allowed_importers = ["app.evals", "app.web", "app.mcp", "app.services.run", "app
 # status/review helpers must not reach in.
 
 [[tool.importlinter.contracts]]
+name = "app.runtime.preview imported only by web"
+type = "protected"
+protected_modules = ["app.runtime.preview"]
+allowed_importers = ["app.web"]
+# The scratch re-run runs a stage in memory and persists nothing. It hands back a frame of
+# real values and renders none of it — turning cells into display text is app.web's job, and
+# `render_frame_as_text` lives there so no runtime module can reach it (app.web is protected
+# above, importable only by app.main). Frames of text must never flow back toward the runner.
+
+[[tool.importlinter.contracts]]
 name = "app.evals is a leaf — imported only by web"
 type = "protected"
 protected_modules = ["app.evals"]
