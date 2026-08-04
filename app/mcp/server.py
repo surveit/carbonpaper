@@ -26,6 +26,7 @@ from app.models import (
     find_workflow_compiler_warnings,
     StageType,
 )
+from app.models.authoring_lifecycle_note import AUTHORING_LIFECYCLE_GUIDANCE
 from app.tools.tool_specs import SAVE_VERSION_FROM_WORKING_COPY, TOOL_SPECS
 from app.models.review_guide import ReviewGuideDraft
 from app.services.versioning import ReviewGuide
@@ -84,6 +85,11 @@ INSTRUCTIONS = f"""\
 glassbox turns an investigation methodology (prose) into a reviewable, runnable data
 pipeline. YOU author the workflow through these tools. Every stage is validated against
 the whole graph before it is stored.
+
+# The lifecycle every project follows
+{AUTHORING_LIFECYCLE_GUIDANCE}
+(Here, a limited run is run_workflow_test's `limit`/`offset` slice; a full run is
+run_workflow.)
 
 # Setup
 1. create_project(name, document) — the methodology prose becomes the project's source
