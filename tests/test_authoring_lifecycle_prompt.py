@@ -61,15 +61,6 @@ def test_research_may_build_a_prototype_without_skipping_the_gates() -> None:
     assert "scaffolding" in AUTHORING_LIFECYCLE_GUIDANCE
 
 
-def test_lifecycle_keeps_the_worked_example_at_the_plan_gate() -> None:
-    # The filing_row_id lesson lives at the plan gate: the ID is proposed in the
-    # plan for the user to approve or strike, and one first met in the built
-    # workflow fails the gate regardless of how sound the engineering is.
-    assert "`filing_row_id`" in AUTHORING_LIFECYCLE_GUIDANCE
-    assert "approve or" in AUTHORING_LIFECYCLE_GUIDANCE
-    assert "strike" in AUTHORING_LIFECYCLE_GUIDANCE
-    assert "failure of this gate" in AUTHORING_LIFECYCLE_GUIDANCE
-
 
 def test_slice_states_the_reader_and_the_why() -> None:
     # The rule (a concept carries its reason), where it is headed (the plan),

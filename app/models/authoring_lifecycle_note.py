@@ -25,9 +25,6 @@ the full one.
 2. PLAN, AND ASK QUESTIONS. Ask what research left open rather than guess. The
    sign-off gate: the plan names the major stages and clears the rule below.
 {INTERMEDIATE_CONCEPTS_NOTE}
-   Worked example: the plan proposes "adding `filing_row_id`: a stable per-row
-   ID the review queue joins on" to approve or strike; first met in the built
-   workflow, it is a failure of this gate.
 3. BUILD TO THE SIGNED-OFF PLAN. A mid-build deviation goes back to the user,
    never silently into the output; agreed additions and their reasons go in the
    stage's `compiler_notes`.
