@@ -292,10 +292,10 @@ published, an unbound input) returns {ok: False, error} and starts no run.""",
         description="""\
 Run a workflow test, so an author can watch the pipeline execute on real
 data before publishing. It IS a real run — same `runs/` dir, manifest, and
-trace/view routes as run_workflow's — and differs from run_workflow on
-exactly six axes:
+trace/view routes as a PRODUCTION run — and differs from one on exactly six
+axes:
 
-1. WORKFLOW: any stored version, published or not (run_workflow pins a
+1. WORKFLOW: any stored version, published or not (a production run pins a
    published one) — omit `version_id` for the newest stored — OR, with
    `use_working_copy: true`, the stages you are editing right now, which are
    FROZEN as a new unpublished version first so the run pins a snapshot of
@@ -303,7 +303,7 @@ exactly six axes:
    you observe a stage's real output before deciding its schema. Naming BOTH a
    version and the working copy is a loud error.
 2. SOURCE: the `limit` rows from `offset` of the workflow's bound source,
-   injected (run_workflow reads the whole source through input_data). The
+   injected (a production run reads the whole source through input_data). The
    slice is still written out as the input stage's own output, so every stage
    of the graph — inputs included — is readable back with
    list_distinct_values.
@@ -315,10 +315,10 @@ exactly six axes:
    must be scoped too, unless it is an input_data stage (which is injected as
    the usual slice); anything else, and the scope is refused rather than run
    half-fed. An id naming no stage in the workflow is a loud error.
-4. EXECUTION: synchronous — this returns when the run is done (run_workflow
-   returns a run_id immediately and executes on a background thread).
+4. EXECUTION: synchronous — this returns when the run is done (a production
+   run returns a run_id immediately and executes on a background thread).
 5. REVIEW QUEUE: a human_review_queue stage auto-approves every row in
-   memory (run_workflow halts there and waits for a human).
+   memory (a production run halts there and waits for a human).
 6. STAGE CACHE: read-only — it may replay a workflow run's cached results
    but records none of its own, so it cannot affect a later run.
 
