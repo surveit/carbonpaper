@@ -13,7 +13,7 @@ import pandas as pd
 from fastapi import HTTPException
 
 from app.core.errors import NoVersionToRunError
-from app.core.frames import PARQUET_SUFFIX
+from app.core.frames import PARQUET_SUFFIX, render_frame_as_text
 from app.models import Stage, StageType
 from app.models.stages.llm_transform import LLMTransformStage
 from app.runtime.manifest import load_manifest_model
@@ -279,11 +279,16 @@ def read_output_df(run_dir: Path, rel_path: str | None) -> pd.DataFrame:
         ) from exc
 
 
+def render_cells_as_text(frame: pd.DataFrame) -> list[dict[str, Any]]:
+    """Every cell as a display string, with nulls as ""."""
+    return render_frame_as_text(frame).to_dict(orient="records")
+
+
 def load_output_table(run_dir: Path, rel_path: str | None) -> dict[str, Any]:
     """Full (capped) table of a stage output: columns, total row count, up to
     MAX_TABLE_ROWS rows as strings, and whether the render was capped."""
     df = read_output_df(run_dir, rel_path)
-    rows = df.head(MAX_TABLE_ROWS).fillna("").astype(str).to_dict(orient="records")
+    rows = render_cells_as_text(df.head(MAX_TABLE_ROWS))
     return {
         "columns": list(df.columns),
         "rows": rows,
@@ -312,7 +317,7 @@ def load_output_row(run_dir: Path, rel_path: str | None, row: int) -> dict[str, 
     return {
         "columns": list(df.columns),
         "rows_total": len(df),
-        "preview": df.iloc[[row]].fillna("").astype(str).to_dict(orient="records"),
+        "preview": render_cells_as_text(df.iloc[[row]]),
         "row_index": row,
     }
 
@@ -333,7 +338,7 @@ def load_output_preview(run_dir: Path, rel_path: str | None) -> dict[str, Any] |
     return {
         "columns": list(df.columns),
         "rows_total": len(df),
-        "preview": df.head(5).fillna("").astype(str).to_dict(orient="records"),
+        "preview": render_cells_as_text(df.head(5)),
     }
 
 

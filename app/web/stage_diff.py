@@ -13,6 +13,7 @@ from typing import ClassVar, Optional, Union
 
 import pandas as pd
 
+from app.core.frames import render_frame_as_text
 from app.models import Stage, StageType
 from app.runtime.lineage import RowLineage, lineage_sidecar_path
 from app.web.loading import read_table
@@ -408,6 +409,6 @@ def _render_count(count: int, noun: str) -> str:
 
 def _text_frame(df: pd.DataFrame) -> pd.DataFrame:
     """`df` as rendered strings under str column names — the form the panel's tables show."""
-    text = df.fillna("").astype(str)
+    text = render_frame_as_text(df)
     text.columns = [str(name) for name in text.columns]
     return text

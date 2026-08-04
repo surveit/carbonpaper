@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from app.core.errors import EvalNotScorableError
+from app.core.frames import render_frame_as_text
 from app.models import EvalConfig, EvalRun, Stage
 from app.evals.compatibility import validate_eval_compatibility
 from app.evals.runner import run_eval
@@ -130,7 +131,8 @@ def _read_eval_dataset_preview(config: EvalConfig) -> dict[str, Any]:
     try:
         frame = read_table(REPO_ROOT / config.table.path)
         capped = len(frame) > DATASET_PREVIEW_ROWS
-        preview = frame.head(DATASET_PREVIEW_ROWS).fillna("").astype(str).to_dict(orient="records")
+        preview = render_frame_as_text(
+            frame.head(DATASET_PREVIEW_ROWS)).to_dict(orient="records")
         rows = [{str(k): v for k, v in row.items()} for row in preview]
     except (OSError, ValueError) as exc:
         error = str(exc)

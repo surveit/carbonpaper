@@ -206,3 +206,15 @@ def test_rows_rejects_output_path_outside_run_dir(examples_dir, client):
     (run_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
     r = client.get(f"/project/{PROJ}/runs/{RUN}/stage/{STAGE}/rows")
     assert r.status_code == 404
+
+
+def test_rows_page_renders_a_nullable_int_column(examples_dir, client):
+    """A declared nullable int with real nulls is Int64 on disk; the page must serve it."""
+    frame = pd.DataFrame({
+        "name": ["rowval_0000", "rowval_0001"],
+        "likes": pd.Series([None, 7], dtype="Int64"),
+    })
+    _write_run(examples_dir, frame)
+    r = client.get(f"/project/{PROJ}/runs/{RUN}/stage/{STAGE}/rows")
+    assert r.status_code == 200
+    assert "rowval_0000" in r.text and "7" in r.text

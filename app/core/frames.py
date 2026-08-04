@@ -36,6 +36,13 @@ def list_rows(frame: pd.DataFrame) -> list[dict[str, Any]]:
     ]
 
 
+def render_frame_as_text(frame: pd.DataFrame) -> pd.DataFrame:
+    """`frame` with every cell a display string and every null "" ."""
+    # Via object because fillna("") RAISES on pandas' masked dtypes (Int64/Float64/
+    # boolean) — the dtypes a declared-nullable int, float or bool column arrives as.
+    return frame.astype(object).where(frame.notna(), "").astype(str)
+
+
 def collapse_null_forms(value: object) -> object:
     """`value`, or None if `value` is one of the four pandas null forms a row
     cell can carry: plain `None`, `float('nan')`, `pd.NA`, or `pd.NaT` — all
