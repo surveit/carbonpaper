@@ -69,20 +69,20 @@ app/chat/  PydanticAI chat · app/core/llm/  model menu · tests/  pytest (offli
   caller. That spends the readability the ceiling exists to protect and leaves the next change
   with even less room. If the split is bigger than the change you are on, say so in the PR and
   let a human decide whether to take it now.
-- **A stored model's required fields may only SHRINK.** `PersistedModel.load` is a strict
-  `model_validate` with `extra="forbid"`, so a record written last week is parsed by today's
-  model with no leniency. Adding a required field — to a `PersistedModel` subclass OR to any
-  model reachable from one (a `WorkflowVersion` embeds whole `Stage`s, so `QueueConfig` and
-  `JoinConfig` are as load-bearing as the record itself) — makes every stored record
-  unreadable at once. Making a field optional, or removing one, is safe. `schema_version` is
-  written on every save from `SCHEMA_VERSION` and is readable via
-  `SqliteKvStore.schema_version`, but **nothing branches on it**: there is no migration
-  runner and no upgrade hook, so a widened model has no path back to the records it orphaned.
-  Until one exists, widening a required field set is a human decision on the record, and the
-  PR must say which stored records it breaks and how they will be recovered. A read failure
-  does not stay local — `_build_project_card` loads every project's versions, so one
-  unreadable document takes down the home page for every project. **No test enforces this
-  yet**, so it is a review-time rule: raise it in review rather than assuming CI will.
+- **On a stored model, only ADDING an OPTIONAL field is safe.** `PersistedModel.load` is a
+  strict `model_validate` with `extra="forbid"`, so a record written last week is parsed by
+  today's model with no leniency, and both directions break it: adding a REQUIRED field
+  orphans every record that lacks it, and REMOVING a field orphans every record that still
+  carries it. This reaches through nesting — a `WorkflowVersion` embeds whole `Stage`s, so
+  `QueueConfig` and `JoinConfig` are as load-bearing as the record class. All three have
+  happened: `queue`'s column names and `join.enrich_with` arrived as required, and `guide`
+  left `WorkflowVersion` for its own record. A read failure does not stay local either —
+  `_build_project_card` loads every project's versions, so one unreadable document takes
+  down the home page for every project. Changing a stored shape means writing an Alembic
+  revision (`alembic/versions/`, `alembic upgrade head`) that rewrites the affected JSON
+  payloads; a revision may refuse a record it cannot determine, and MUST refuse rather than
+  fill a value the stored data does not carry. **No test enforces the shape rule yet**, so
+  it is a review-time rule: raise it in review rather than assuming CI will.
 - **Planning docs stay out of the repo.** Design specs, implementation/execution plans,
   brainstorming or "rethink" notes, and refactor/migration roadmaps are ephemeral working
   artifacts — keep them in scratch or the PR description, never commit them. Committed docs
