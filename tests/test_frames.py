@@ -120,3 +120,9 @@ def test_a_sequence_cell_survives_beside_a_masked_null():
     text = render_frame_as_text(frame)
     assert list(text["tags"]) == ["['a', 'b']", "[]"]
     assert list(text["likes"]) == ["", ""]
+
+
+def test_a_date_keeps_its_compact_rendering_and_a_missing_one_is_blank():
+    """Rendering must not spell a date out to 00:00:00, nor a missing one as "NaT"."""
+    frame = pd.DataFrame({"d": pd.to_datetime(["2026-01-01", None])})
+    assert list(render_frame_as_text(frame)["d"]) == ["2026-01-01", ""]
