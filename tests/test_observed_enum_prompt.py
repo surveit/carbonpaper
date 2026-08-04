@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 import re
 
+from app.models.authoring_lifecycle_note import AUTHORING_LIFECYCLE_GUIDANCE
 from app.models.observation import DEFAULT_MAX_DISTINCT_VALUES
 from app.tools.tool_specs import OBSERVED_ENUM_GUIDANCE, TOOL_SPECS
 
@@ -96,6 +97,39 @@ def test_guidance_scopes_the_run_to_the_input_stage_to_see_a_whole_input_column(
     assert "`limit`-row slice" in OBSERVED_ENUM_GUIDANCE
     assert "run_id" in OBSERVED_ENUM_GUIDANCE
     assert "row_count is the rows that stage's output actually held" in OBSERVED_ENUM_GUIDANCE
+
+
+def test_guidance_names_the_observation_run_as_the_lifecycle_research_step() -> None:
+    # Both prompts also carry the gated lifecycle, which puts a run behind a
+    # signed-off plan. Observing to decide a schema happens before any plan
+    # exists, and reads one input whole — so the guidance says which gate it is
+    # under, or the two blocks read as competing procedures.
+    assert "IS research, so it precedes the signed-off plan" in OBSERVED_ENUM_GUIDANCE
+    assert "the smoke gate does not govern it" in OBSERVED_ENUM_GUIDANCE
+
+
+def test_the_two_questions_split_across_the_lifecycle_gate() -> None:
+    # Question 1 is a claim about the world, which research confirms; question 2
+    # is a design commitment the human signs off on. Without the split the enum
+    # reads as a private decision the build makes on its own.
+    assert "research settles it" in OBSERVED_ENUM_GUIDANCE
+    assert "observed vocabulary is what confirms it" in OBSERVED_ENUM_GUIDANCE
+    assert "design commitment, so it goes in the PLAN" in OBSERVED_ENUM_GUIDANCE
+    assert "signs off on the enum,\n   not just the stage list" in OBSERVED_ENUM_GUIDANCE
+
+
+def test_the_enum_guidance_continues_the_lifecycle_on_both_surfaces() -> None:
+    # One procedure, not two adjacent ones: observation belongs to the research
+    # phase, so the guidance follows the lifecycle with no section opening between.
+    from app.agents.compiler.prompt import EDITING_SYSTEM_PROMPT
+    from app.mcp.server import INSTRUCTIONS
+
+    for prompt in (EDITING_SYSTEM_PROMPT, INSTRUCTIONS):
+        lifecycle_at = prompt.index(AUTHORING_LIFECYCLE_GUIDANCE)
+        guidance_at = prompt.index(OBSERVED_ENUM_GUIDANCE)
+        assert lifecycle_at < guidance_at
+        between = prompt[lifecycle_at + len(AUTHORING_LIFECYCLE_GUIDANCE) : guidance_at]
+        assert "\n#" not in between, f"a section opens between the two: {between!r}"
 
 
 def test_guidance_names_the_two_columns_observation_cannot_corroborate() -> None:

@@ -72,6 +72,7 @@ _RUN_TOOL_ERRORS = (
 # Anything outside this set propagates as a genuine internal fault.
 _STAGE_TOOL_ERRORS = (WorkflowLoadError, FileNotFoundError)
 
+
 def _render_node_type_constraints() -> str:
     """Every node type's own runtime facts as bullets for the instructions
     preamble, rendered from NODE_TYPES so this prompt and the editing agent's
@@ -100,6 +101,8 @@ the whole graph before it is stored.
 (Here, a limited run is run_workflow_test's `limit`/`offset` slice; a full run is
 run_workflow.)
 
+{OBSERVED_ENUM_GUIDANCE}
+
 # Setup
 1. create_project(name, document) — the methodology prose becomes the project's source
    of record. Returns the project_id every other tool takes.
@@ -124,8 +127,6 @@ run_workflow.)
    edit_stage(project_id, stage_id, changes_json) to change only the fields you name (a
    JSON Merge Patch), remove_stage(project_id, stage_id) to undo a stage you added
    (refused while another stage still lists it in `inputs`).
-
-{OBSERVED_ENUM_GUIDANCE}
 
 # The review guide, and why it exists
 A workflow you author is not self-explaining. The human who owns the methodology has to

@@ -21,6 +21,8 @@ editing right now, so nothing has to be saved as a version first; add
 only_stages=["<the input stage id>"] to EXECUTE just that input over its whole
 bound file, which is the only way to see an input column's COMPLETE vocabulary
 — an unscoped test injects a `limit`-row slice instead.
+Doing this IS research, so it precedes the signed-off plan; a scoped input read
+runs no compute stage, so the smoke gate does not govern it.
 row_count is the rows that stage's output actually held. A vocabulary read off
 a slice, off a frame below a filter or an aggregate, or off a list whose
 distinct_count exceeds len(values) (TRUNCATED — re-read with a larger
@@ -29,11 +31,14 @@ The distinct COUNT is evidence, never the criterion. Two questions decide:
 1. Is the value's GENERATION constrained to a discrete set — a dropdown on the
    source form, a published code list, an enum in the upstream schema? A column
    can hold thousands of values and still be closed (commodity codes), or three
-   and still be open, because nothing stops a fourth.
+   and still be open, because nothing stops a fourth. This is a claim about the
+   world: research settles it, and the observed vocabulary is what confirms it.
 2. Do WE consume it as a discrete set — a later stage switching per value, or
    joining it into reference data? Then the enum is MANDATORY whatever was
    observed: an unlisted value otherwise takes an else-branch or joins to
-   nothing, silently. The declaration is what makes that a loud failure.
+   nothing, silently. The declaration is what makes that a loud failure — a
+   design commitment, so it goes in the PLAN: the human signs off on the enum,
+   not just the stage list.
 - By generation: `filing_type` comes from a fixed list on the source form, so
   it cannot grow unless the agency changes the form. Declare it even if the run
   showed only some values; a new one should stop the pipeline for a human.
