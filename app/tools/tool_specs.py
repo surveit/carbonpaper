@@ -320,10 +320,9 @@ exactly six axes:
 Marked `is_test_run` on the manifest, so it never counts as the project's
 latest run. Returns the verdict {ok, run_id, version_id, stages_run, error}:
 `stages_run` is what actually executed, `ok` False on any stage error with
-`error` naming what failed; poll get_run_status(project_id, run_id) for the
-same live/final manifest run_workflow exposes. Asking for a stored version when
-the project has none is a loud error — `use_working_copy: true` is the way to
-test before any exists.""",
+`error` naming what failed. Asking for a stored version when the project has
+none is a loud error — `use_working_copy: true` is the way to test before any
+exists.""",
     ),
     "set_draft_stage": ToolSpec(
         name="set_draft_stage",

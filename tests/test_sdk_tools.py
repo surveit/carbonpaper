@@ -58,7 +58,7 @@ def test_allowed_names_cover_every_tool(examples_root: Path) -> None:
     _server, allowed, _tools = _build("congresswatch")
     specs = make_editing_tools(EditingContext(project_id="congresswatch"))
     assert set(allowed) == {f"mcp__tools__{spec.name}" for spec in specs}
-    assert len(allowed) == 15
+    assert len(allowed) == 16
 
 
 def test_read_stage_handler_returns_text_content(examples_root: Path) -> None:
@@ -232,10 +232,8 @@ def test_as_content_serializes_a_pydantic_model_to_its_fields() -> None:
     assert json.loads(out["content"][0]["text"]) == {"ok": True, "label": "draft"}
 
 
-def _seed_and_run(examples: Path, name: str, csv_text: str) -> str:
-    """One csv-bound input_data stage, workflow-tested once. Returns the run id."""
-    from app.services.workflow_test import run_workflow_test
-
+def _seed_csv_stage(examples: Path, name: str, csv_text: str) -> None:
+    """One csv-bound input_data stage `load` in the project's working copy."""
     project = examples / name
     compiled = project / "compiled"
     compiled.mkdir(parents=True, exist_ok=True)
@@ -247,6 +245,13 @@ def _seed_and_run(examples: Path, name: str, csv_text: str) -> str:
         "output_schema": {"columns": [{"name": "status", "type": "str", "nullable": True}]},
     }
     (compiled / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
+
+
+def _seed_and_run(examples: Path, name: str, csv_text: str) -> str:
+    """One csv-bound input_data stage, workflow-tested once. Returns the run id."""
+    from app.services.workflow_test import run_workflow_test
+
+    _seed_csv_stage(examples, name, csv_text)
     result = run_workflow_test(name, use_working_copy=True, limit=10_000)
     assert result["ok"] is True, result["error"]
     return str(result["run_id"])
@@ -301,6 +306,46 @@ def test_list_distinct_values_unknown_column_is_a_tool_error(examples_root: Path
                        "stage_id": "load", "column": "nope"})
     assert out.get("is_error") is True
     assert "status" in out["content"][0]["text"]  # names the observed columns
+
+
+def test_run_workflow_test_then_observe_is_one_flow_on_the_editing_surface(
+    examples_root: Path,
+) -> None:
+    # The flow the shared guidance teaches, driven through the editing agent's own
+    # tools: scope a test to the input stage, then read that stage's real
+    # vocabulary off the run it produced.
+    _seed_csv_stage(examples_root, "permits", "status\nfiled\ngranted\nfiled\n")
+    _server, _allowed, tools = _build("permits")
+    by_name = {t.name: t for t in tools}
+
+    # Verbatim the argument set the guidance writes — version_id/limit/offset
+    # omitted — so the instruction it gives is executable exactly as worded.
+    ran = json.loads(_call(by_name["run_workflow_test"], {
+        "project_id": "permits", "use_working_copy": True, "only_stages": ["load"],
+    })["content"][0]["text"])
+    assert ran["ok"] is True, ran["error"]
+    assert ran["stages_run"] == ["load"]
+
+    observed = json.loads(_call(by_name["list_distinct_values"], {
+        "project_id": "permits", "run_id": ran["run_id"],
+        "stage_id": "load", "column": "status",
+    })["content"][0]["text"])
+    assert observed["values"] == ["filed", "granted"]
+    assert observed["row_count"] == 3
+
+
+def test_run_workflow_test_unknown_scoped_stage_is_a_tool_error(examples_root: Path) -> None:
+    # Refused loudly, naming the stages there are — never a run of nothing that
+    # reads back as a complete one.
+    _seed_csv_stage(examples_root, "permits", "status\nfiled\n")
+    _server, _allowed, tools = _build("permits")
+    tool = next(t for t in tools if t.name == "run_workflow_test")
+    # The full argument set the SDK schema declares, unlike the test above.
+    out = _call(tool, {"project_id": "permits", "version_id": "",
+                       "use_working_copy": True, "only_stages": ["nope"],
+                       "limit": 20, "offset": 0})
+    assert out.get("is_error") is True
+    assert "load" in out["content"][0]["text"]
 
 
 def test_list_distinct_values_unknown_run_is_a_tool_error(examples_root: Path) -> None:

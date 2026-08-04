@@ -15,7 +15,7 @@ from app.models import StageDraft
 from app.models.observation import DEFAULT_MAX_DISTINCT_VALUES, ObservedColumnValues
 from app.models.review_guide import ReviewGuideDraft
 from app.services.versioning import ReviewGuide
-from app.services import drafts, observation, project as project_service
+from app.services import drafts, observation, project as project_service, workflow_test
 from app.tools.tool_specs import SAVE_VERSION_FROM_DRAFT, TOOL_SPECS
 from app.services.drafts import DraftDetail, DraftEdit, DraftView, SaveResult
 
@@ -60,6 +60,23 @@ def make_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
         return observation.observed_column_values(
             project_id, run_id, stage_id, column, max_values)
 
+    def run_workflow_test(
+        project_id: str,
+        version_id: str = "",
+        use_working_copy: bool = False,
+        only_stages: list[str] | None = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> dict[str, Any]:
+        return workflow_test.run_workflow_test(
+            project_id,
+            version_id=version_id or None,
+            use_working_copy=use_working_copy,
+            only_stages=only_stages or None,
+            limit=limit,
+            offset=offset,
+        )
+
     def create_draft(project_id: str, from_version: str = "") -> DraftView:
         return drafts.create_draft(project_id, from_version=from_version or None)
 
@@ -92,6 +109,7 @@ def make_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
         add_stage,
         remove_stage,
         list_distinct_values,
+        run_workflow_test,
         create_draft,
         read_draft,
         set_draft_stage,
@@ -186,6 +204,33 @@ TOOL_SCHEMAS: dict[str, ToolInputSchema] = {
             "distinct_count equals its length.",
         ],
     },
+    "run_workflow_test": {
+        "project_id": Annotated[str, "The project id (call get_current_project first)."],
+        "version_id": Annotated[
+            str,
+            "A stored version to run, published or not. Pass \"\" for the newest "
+            "stored one. Naming a version AND use_working_copy is a loud error.",
+        ],
+        "use_working_copy": Annotated[
+            bool,
+            "Run the stages you are editing right now instead of a stored version. "
+            "They are frozen as a new unpublished version first, so the run pins a "
+            "snapshot; that version's id comes back in the reply.",
+        ],
+        "only_stages": Annotated[
+            list[str],
+            "Run ONLY these stage ids; [] runs every non-input stage. A named "
+            "input_data stage EXECUTES over its whole bound file, ignoring "
+            "limit/offset. Every producer a scoped stage reads must be scoped too "
+            "unless it is an input_data stage, or the scope is refused.",
+        ],
+        "limit": Annotated[
+            int,
+            "How many rows of the bound source to inject as each unscoped input "
+            "stage's output.",
+        ],
+        "offset": Annotated[int, "Where in the bound source that slice starts."],
+    },
     "create_draft": {
         "project_id": Annotated[str, "The project id (call get_current_project first)."],
         "from_version": Annotated[
@@ -265,6 +310,7 @@ TOOL_LABELS: dict[str, str] = {
     "add_stage": "Adding a stage",
     "remove_stage": "Removing a stage",
     "list_distinct_values": "Reading a column's observed values",
+    "run_workflow_test": "Running a workflow test",
     "create_draft": "Starting a draft",
     "read_draft": "Reading the draft",
     "set_draft_stage": "Editing the draft",

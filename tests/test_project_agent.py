@@ -16,6 +16,7 @@ _EXPECTED_TOOL_NAMES = {
     "add_stage",
     "remove_stage",
     "list_distinct_values",
+    "run_workflow_test",
     "create_draft",
     "read_draft",
     "set_draft_stage",

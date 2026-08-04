@@ -4,8 +4,27 @@ on the two questions — constrained generation, discrete consumption — never 
 distinct values came back. Plus the two stage types observation cannot corroborate."""
 from __future__ import annotations
 
+import asyncio
+import re
+
 from app.models.observation import DEFAULT_MAX_DISTINCT_VALUES
 from app.tools.tool_specs import OBSERVED_ENUM_GUIDANCE, TOOL_SPECS
+
+
+def find_mcp_tool_names() -> set[str]:
+    from app.mcp.server import mcp
+
+    return {tool.name for tool in asyncio.run(mcp.list_tools())}
+
+
+def find_editing_tool_names() -> set[str]:
+    from app.tools.editing import EditingContext, make_editing_tools
+
+    return {spec.name for spec in make_editing_tools(EditingContext(project_id="any"))}
+
+
+def find_tools_the_guidance_names(registered: set[str]) -> set[str]:
+    return set(re.findall(r"[a-z_][a-z0-9_]*", OBSERVED_ENUM_GUIDANCE)) & registered
 
 
 def test_editing_prompt_carries_the_observed_enum_guidance() -> None:
@@ -18,6 +37,21 @@ def test_mcp_instructions_carry_the_observed_enum_guidance() -> None:
     from app.mcp.server import INSTRUCTIONS
 
     assert OBSERVED_ENUM_GUIDANCE in INSTRUCTIONS
+
+
+def test_every_tool_the_guidance_names_exists_on_both_surfaces() -> None:
+    # One prose block embedded in two prompts can only stay honest if every tool it
+    # tells the reader to call is registered on both. run_workflow_test was MCP-only
+    # while the guidance taught it, so the editing agent read an uncallable
+    # instruction.
+    on_mcp, on_editing = find_mcp_tool_names(), find_editing_tool_names()
+    named = find_tools_the_guidance_names(on_mcp | on_editing)
+    assert {"list_distinct_values", "run_workflow_test", "edit_stage"} <= named
+    assert named <= on_mcp, f"guidance names tools the MCP server lacks: {sorted(named - on_mcp)}"
+    assert named <= on_editing, (
+        "guidance names tools the editing agent lacks: "
+        f"{sorted(named - on_editing)} — it registers {sorted(on_editing)}"
+    )
 
 
 def test_guidance_decides_on_generation_and_consumption_not_on_the_count() -> None:
