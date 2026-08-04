@@ -32,7 +32,7 @@ class EdgeKind(str, Enum):
     """How a parent relates to the row it produced."""
 
     # Bounded per row, so the tracer walks these.
-    derivation = "derivation"
+    made_from = "made_from"
     # Unbounded per row (an aggregate's contributors): a cohort to open, never
     # a step to take, so the walk reports these rather than following them.
     contribution = "contribution"
@@ -47,7 +47,7 @@ class RowParent:
 
     stage_id: str
     row_ordinal: int
-    kind: str = EdgeKind.derivation.value
+    kind: str = EdgeKind.made_from.value
 
 
 @dataclass(frozen=True)
@@ -93,7 +93,7 @@ class RowLineage:
     def from_frame(cls, df: pd.DataFrame) -> "RowLineage":
         """Read a sidecar frame back, including one written before lineage went multi-parent."""
         # A pre-multi-parent sidecar held SCALARS and no kind column, so each of
-        # its rows reads as one derivation parent — old runs stay traceable
+        # its rows reads as one made_from parent — old runs stay traceable
         # without a migration.
         has_kind = TRACE_EDGE_KIND_KEY in df.columns
         parents: list[list[RowParent]] = []
@@ -105,7 +105,7 @@ class RowLineage:
                 RowParent(
                     stage_id=str(stages[k]),
                     row_ordinal=int(rows[k]),
-                    kind=str(kinds[k]) if k < len(kinds) else EdgeKind.derivation.value,
+                    kind=str(kinds[k]) if k < len(kinds) else EdgeKind.made_from.value,
                 )
                 for k in range(min(len(stages), len(rows)))
             ]
@@ -156,7 +156,7 @@ def kept_rows_lineage(source_stage_id: str, kept_indices: list[int]) -> RowLinea
 def concatenated_inputs_lineage(
     stage: "Stage", inputs: dict[str, pd.DataFrame], first_row_ordinal: int = 0
 ) -> RowLineage:
-    """For a union: derived from input row counts alone, so the stage is not consulted."""
+    """For a union: read off the input row counts alone, so the stage is not consulted."""
     # `inputs` are the frames the handler was GIVEN, so where the runtime sliced
     # them the first row is the upstream's `first_row_ordinal`, not its row 0.
     parents: list[list[RowParent]] = []

@@ -13,11 +13,7 @@ from typing import ClassVar, Optional, Union
 import pandas as pd
 
 from app.models import Stage, StageType
-from app.runtime.lineage import (
-    TRACE_SOURCE_ROW_KEY,
-    TRACE_SOURCE_STAGE_KEY,
-    lineage_sidecar_path,
-)
+from app.runtime.lineage import RowLineage, lineage_sidecar_path
 from app.web.loading import read_table
 
 # The 1:1-by-position stage types the aligned diff covers: their runtime
@@ -243,14 +239,17 @@ def _read_kept_ordinals(
     if not path.exists():
         return None
     try:
-        lineage = pd.read_parquet(path)
+        lineage = RowLineage.from_frame(pd.read_parquet(path))
     except (OSError, ValueError):
         return None
     if len(lineage) != rows_out:
         return None
-    if not bool((lineage[TRACE_SOURCE_STAGE_KEY] == input_id).all()):
+    # A filter's row has exactly one parent, in the input being diffed. A row
+    # with two (a join) or none (an unmatched subject) is a different shape, and
+    # this pane states nothing about it.
+    if not all(len(entry) == 1 and entry[0].stage_id == input_id for entry in lineage.parents):
         return None
-    kept = [int(ordinal) for ordinal in lineage[TRACE_SOURCE_ROW_KEY]]
+    kept = [entry[0].row_ordinal for entry in lineage.parents]
     if any(ordinal < 0 or ordinal >= rows_in for ordinal in kept):
         return None
     if any(later <= earlier for earlier, later in zip(kept, kept[1:])):

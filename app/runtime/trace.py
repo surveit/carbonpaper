@@ -136,12 +136,12 @@ def _lineage_hops(run_dir: Path, stage_id: str, row_ordinal: int) -> list[RowPar
 
 def _split_spine(hops: list[RowParent]) -> tuple[RowParent | None, list[RowParent]]:
     """The parent the walk follows, and the ones it only reports as branches."""
-    # The spine is the first DERIVATION parent. Recording puts the subject side
+    # The spine is the first MADE-FROM parent. Recording puts the subject side
     # first, and where only the reference matched it is the row's only parent —
     # so the spine follows the DATA, not a config default. A contribution parent
     # is never walked into; a row with none therefore has no spine, and the walk
     # ends there with its contributors still reported.
-    spine = next((p for p in hops if p.kind == EdgeKind.derivation.value), None)
+    spine = next((p for p in hops if p.kind == EdgeKind.made_from.value), None)
     return spine, [p for p in hops if p is not spine]
 
 
@@ -222,7 +222,7 @@ def _advance(
         return _advance_via_lineage(run_dir, by_id, sid, spine)
     if has_hops:
         return TraceEnd(False, sid,
-                        "this row summarizes its inputs rather than deriving from one "
+                        "this row summarizes its inputs rather than being made from one "
                         "of them — open the contributors to go further")
     if not parents:
         return TraceEnd(False, sid, "the manifest records no input edge for this stage")
