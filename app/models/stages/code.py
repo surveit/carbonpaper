@@ -284,6 +284,10 @@ NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
         required=["kind"],
         optional=["module", "function", "code", "requirements", "summary"],
         notes=(
+            "Prefer starlark_row_function, which runs sandboxed with no file, network, or "
+            "library access — reach for this Python variant only when the transform genuinely "
+            "needs a Python library (e.g. regex, date parsing beyond ISO-8601, numpy math) "
+            "that Starlark's builtin-only environment cannot express. "
             "Takes exactly ONE input — to combine data from another input use enrich/expand, "
             "or python_frame_function. "
             "`transform(row)` is handed a plain dict and must return a plain dict, and that "
