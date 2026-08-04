@@ -2,11 +2,11 @@
 
 The emit SHAPE is not described here — it is carried by the `submit_answer` tool's input
 schema (built from `SchemaLibrary`); this prompt carries only the role and the
-methodology guidance, plus the shared plan-agreement rule on additions nobody asked for.
+methodology guidance, plus the shared rule that an intermediate concept carries its why.
 """
 from __future__ import annotations
 
-from app.models.proposed_additions_note import PROPOSED_ADDITIONS_GUIDANCE
+from app.models.authoring_lifecycle_note import INTERMEDIATE_CONCEPTS_NOTE
 
 _ROLE_AND_METHOD = """\
 You are a METHODOLOGY COMPILER. Given a research transcript or a prose description of an
@@ -61,5 +61,7 @@ four columns of the `filing` table:
   values are represented by one value (Budget) or many (budget, budgeting, budgets)."""
 
 DATA_MODEL_SYSTEM_PROMPT = (
-    _ROLE_AND_METHOD + "\n\n# Additions nobody asked for\n" + PROPOSED_ADDITIONS_GUIDANCE
+    _ROLE_AND_METHOD
+    + "\n\n# Intermediate concepts carry their why\n"
+    + INTERMEDIATE_CONCEPTS_NOTE
 )
