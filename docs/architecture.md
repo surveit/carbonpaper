@@ -5,6 +5,11 @@ A FastAPI app over a file-backed project artifact — one directory per project 
 Python across six packages. Vocabulary: **project**/**methodology**/**workflow** per
 [overview.md](overview.md).
 
+Two entrypoints sit above the packages, importing them and imported by nothing:
+`app/main.py` (the ASGI app — `python -m uvicorn app.main:app`) and `app/cli.py`
+(`python -m app.cli <project>` — one run of a project's newest published version,
+driven through `app/services/run.py`).
+
 ## `app/models/` — the schema layer (Pydantic)
 THE definition of what a workflow is. Constructing a model validates it;
 `validate_*` return issue lists, `parse_*` raise. **Dependency rule: imports nothing from
@@ -37,8 +42,7 @@ stages of the version the run pins. The runner reads no versions: the caller res
 the working copy, never a draft, never an unpublished version), loads its frozen stages and
 hands them in. `app/services/run.py` is the one place that composes this, and an
 import-linter contract keeps `runner.py` free of `app.services` so the arrow between the two
-points one way. `__main__.py` — the `python -m app.runtime <project>` CLI, over that same
-seam. Per stage: validate
+points one way; `app/cli.py` drives that same seam. Per stage: validate
 inputs, reject duplicate rows, dispatch, validate output, write `outputs/<stage>.parquet`,
 flush `manifest.json` mid-run; halt-on-review + resume; per-run `--limit`/`--offset`
 capping the rows a stage READS (cut off its inputs before its handler runs);

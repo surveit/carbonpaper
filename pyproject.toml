@@ -58,13 +58,15 @@ allowed_importers = ["app.main"]
 # app.services.workspace and app.web re-exports them so routers are unaffected.
 
 [[tool.importlinter.contracts]]
-name = "app.services imported only by web, runtime, evals, compiler, mcp, agents, seeds, tools"
+name = "app.services imported only by cli, web, runtime, evals, compiler, mcp, agents, seeds, tools"
 type = "protected"
 protected_modules = ["app.services"]
-allowed_importers = ["app.web", "app.runtime", "app.evals", "app.compiler", "app.mcp", "app.agents", "app.seeds", "app.tools"]
+allowed_importers = ["app.cli", "app.web", "app.runtime", "app.evals", "app.compiler", "app.mcp", "app.agents", "app.seeds", "app.tools"]
 # Domain logic the upper layers lean on. As a declared whitelist, a new importer is
 # a deliberate edit, not an accident. (services → compiler is fine — compilation and
-# generation wrap it — which is why app.compiler lists app.services below.) app.agents
+# generation wrap it — which is why app.compiler lists app.services below.) app.cli is
+# an entrypoint, not a layer: `python -m app.cli <project>` runs one workflow and sits
+# above everything here, beside app.main, which is why nothing imports it. app.agents
 # is the hydrated editing agent, a top-level interface like app.web / app.mcp: it reads
 # and edits projects through app.services.stage_edit / app.services.project. app.seeds'
 # capture scripts compose the project export/import seam the same way — never sqlite3,
@@ -180,7 +182,7 @@ allowed_importers = ["app.services.run"]
 # run) reaches the shared execution engine through app.runtime.executor (run_subset /
 # _execute_stages), never these entry points, so it can never mint a production run.
 # app.services.run is the SOLE importer: the web run UI (app.web.routers.runs), its
-# version resolver (app.web.loading) and the CLI (app.runtime.__main__) drive runs
+# version resolver (app.web.loading) and the CLI (app.cli) drive runs
 # through that service seam rather than importing the runner directly, so this stays a
 # single named door into production runs.
 

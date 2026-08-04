@@ -6,7 +6,7 @@ import time
 import pandas as pd
 import pytest
 
-import app.runtime.__main__ as runtime_cli
+from app import cli
 from app.core.errors import NoVersionToRunError, SubsetRunError
 from app.services import run as run_service
 from app.core.run_status import RunStatus
@@ -142,14 +142,14 @@ def test_cli_bust_cache_flag_reaches_the_run(monkeypatch):
                 "stage_records": []}
 
     monkeypatch.setattr(run_service, "execute", fake_execute)
-    assert runtime_cli.main(["proj", "--bust-cache"]) == 0
-    assert runtime_cli.main(["proj"]) == 0
+    assert cli.main(["proj", "--bust-cache"]) == 0
+    assert cli.main(["proj"]) == 0
     assert calls == [True, False]
 
 
 def test_cli_rejects_an_unknown_flag():
     with pytest.raises(SystemExit):
-        runtime_cli.main(["proj", "--nope"])
+        cli.main(["proj", "--nope"])
 
 
 def test_per_run_override_for_unknown_stage_id_fails_loudly(tmp_path):
@@ -756,7 +756,7 @@ def test_resume_reapplies_run_bindings_for_a_pending_input_stage(tmp_path):
 def test_the_documented_cli_runs_a_project_with_nothing_configured(
     tmp_path, monkeypatch, projects_root
 ):
-    """`python -m app.runtime <project>` is a standalone process: no
+    """`python -m app.cli <project>` is a standalone process: no
     server lifespan wired storage for it, so its own entry point must. Seeds a
     version through an on-disk store, then drops BOTH process-wide stores to
     simulate the fresh process the CLI actually runs in."""
@@ -778,7 +778,7 @@ def test_the_documented_cli_runs_a_project_with_nothing_configured(
     monkeypatch.setattr(persistence_module, "_store", None)
     monkeypatch.setattr(frames_module, "_frame_store", None)
 
-    assert runtime_cli.main(["project"]) == 0
+    assert cli.main(["project"]) == 0
     assert persistence_module.is_store_configured()
     assert frames_module.is_frame_store_configured()
     assert list((project_dir / "runs").iterdir())
