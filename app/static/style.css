@@ -1334,8 +1334,8 @@ table.data-preview.scratch th { background: #f3ecd0; }
 .table-scroll.rows-full { max-height: calc(100vh - 220px); }
 .table-scroll.rows-full thead th { position: sticky; top: 0; background: #f2f4f8; z-index: 1; }
 td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric: tabular-nums; }
-/* Which of the page's two views (the stage diff or the raw output table) is on
-   screen, and the link to the other one — stated, never left to be inferred. */
+/* The raw output table saying so, and linking the stage diff — the diff view
+   states its own identity in its header instead, so it renders no view-note. */
 .rows-toolbar .view-note { font-size: .88rem; }
 
 /* ═══ Node review / workflow versioning ══════════════════ */

@@ -136,6 +136,17 @@ def _unit_at(strip: str, frame_id: str) -> int:
     return strip.index(f">{frame_id}</code>")
 
 
+def _rows_toolbar(html: str) -> str:
+    """The full-rows page's toolbar alone — it holds only spans, so the first </div> ends it."""
+    assert 'class="rows-toolbar"' in html
+    return html.split('class="rows-toolbar"')[1].split("</div>")[0]
+
+
+def _output_unit(html: str) -> str:
+    """The header rail's output frame unit — where the raw view and the CSV live."""
+    return _diff_head(html).split('class="diff-outputs"')[1]
+
+
 def test_a_row_function_output_reads_as_a_diff_against_its_input(run_ctx) -> None:
     _pdir, run_id = run_ctx
     html = _panel(run_id, CLASSIFY_ID)
@@ -410,30 +421,59 @@ def test_the_full_rows_diff_keeps_the_row_numbers_and_expandable_cells(run_ctx) 
     assert "Click any clipped cell to expand it" in html
 
 
-def test_the_diff_page_names_its_view_and_links_the_raw_one(run_ctx) -> None:
+def test_the_diff_page_leaves_the_view_toggle_and_the_csv_to_the_header(run_ctx) -> None:
+    """The output frame unit IS the toggle, so the toolbar repeats neither it nor the CSV."""
+    # The unit's "all rows" link is this page's own ?raw=1 view and its ⬇ CSV is
+    # the same rows.csv the toolbar button used to serve — a second copy of each
+    # would be two controls for one thing.
     _pdir, run_id = run_ctx
     html = _rows_page(run_id, CLASSIFY_ID)
-    assert "diff against its input" in html
-    assert f"/stage/{CLASSIFY_ID}/rows?raw=1" in html
+    toolbar = _rows_toolbar(html)
+    assert "view-note" not in toolbar
+    assert "Download full CSV" not in toolbar
+    unit = _output_unit(html)
+    assert f'/stage/{CLASSIFY_ID}/rows?raw=1"' in unit
+    assert f'/stage/{CLASSIFY_ID}/rows.csv"' in unit
+    # What is left still has content, so the strip is no empty gap.
+    assert "Click any clipped cell to expand it" in toolbar
+
+
+def test_the_capped_diff_warning_sends_the_reader_to_a_link_that_exists(run_ctx, monkeypatch) -> None:
+    """With no button on the strip, the sentence has to name the one link there is."""
+    monkeypatch.setattr(loading, "MAX_TABLE_ROWS", 2)
+    _pdir, run_id = run_ctx
+    for stage_id in (CLASSIFY_ID, KEEP_ID):
+        html = _rows_page(run_id, stage_id)
+        toolbar = _rows_toolbar(html)
+        assert "the output frame's ⬇ CSV link above" in toolbar
+        assert "⬇ CSV</a>" in _output_unit(html)
 
 
 def test_raw_1_forces_the_plain_table_and_says_which_view_it_is(run_ctx) -> None:
     """A reader arriving from a raw-frames link must not be handed an annotated table."""
+    # This branch renders no header rail, so the toolbar is the only route to
+    # both the other view and the download — it keeps them.
     _pdir, run_id = run_ctx
     html = _rows_page(run_id, CLASSIFY_ID, "?raw=1")
     assert "stage-diff" not in html
-    assert "raw output table" in html
+    toolbar = _rows_toolbar(html)
+    assert "raw output table" in toolbar
     # …and the way to the diff is one click away, stated in words.
-    assert f'/stage/{CLASSIFY_ID}/rows"' in html
-    assert "as a diff against its input" in html
+    assert f'/stage/{CLASSIFY_ID}/rows"' in toolbar
+    assert "as a diff against its input" in toolbar
+    assert "Download full CSV" in toolbar
+    assert f'/stage/{CLASSIFY_ID}/rows.csv"' in toolbar
 
 
 def test_a_stage_with_no_diff_offers_no_diff_view(run_ctx) -> None:
     _pdir, run_id = run_ctx
     html = _rows_page(run_id, LOAD_ID)
     assert "stage-diff" not in html
-    assert "raw output table" in html
-    assert "as a diff against its input" not in html
+    toolbar = _rows_toolbar(html)
+    assert "raw output table" in toolbar
+    assert "as a diff against its input" not in toolbar
+    # No header exists to carry it, so the download button stays here too.
+    assert "Download full CSV" in toolbar
 
 
 def test_a_filter_full_rows_page_shows_its_dropped_rows_in_place(run_ctx) -> None:
