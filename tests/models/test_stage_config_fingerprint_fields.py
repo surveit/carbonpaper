@@ -6,7 +6,7 @@ import pytest
 from typing import get_args
 
 from app.models.stage import PythonFunction, Stage
-from app.models.stage_base import StageBase
+from app.models.stages.stage_base import StageBase
 from app.models.stages.aggregate import AggregateConfig
 from app.models.stages.human_review_queue import QueueConfig
 from app.models.stages.input_data import Connector

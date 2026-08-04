@@ -17,7 +17,7 @@ from app.core.starlark_source import (
     find_bound_function,
 )
 from app.models.schema import StageConfig
-from app.models.stage_base import StageBase, StageInput, StageType
+from app.models.stages.stage_base import StageBase, StageInput, StageType
 from app.models.stages.code import CORNER_CASES_DESCRIPTION, SUMMARY_DESCRIPTION, CornerCase
 from app.models.stages.code import (
     CODE_CORNER_CASES_CONTRACT_NOTE,

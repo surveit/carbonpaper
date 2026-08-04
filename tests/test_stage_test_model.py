@@ -5,7 +5,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.models import Stage, parse_stage, stage_to_spec_dict, StageTest, TableSchema
-from app.models.stage_base import StageBase, StageType, find_stage_test_class
+from app.models.stages.stage_base import StageBase, StageType, find_stage_test_class
 from app.models.stages.stage_tests import (
     FilterRowsStageTest,
     PythonFrameFunctionStageTest,

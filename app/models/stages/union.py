@@ -8,7 +8,7 @@ from typing import ClassVar, Literal, Optional
 from pydantic import Field
 
 from app.models.schema import StageConfig, TableSchema
-from app.models.stage_base import StageBase, StageInput, StageType
+from app.models.stages.stage_base import StageBase, StageInput, StageType
 from app.models.stages.node_spec import NodeTypeSpec
 from app.models.stages.signature import ReplacesSignature
 

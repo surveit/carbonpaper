@@ -10,7 +10,7 @@ from pydantic import Field, model_validator
 
 from app.models.errors import StepRefused
 from app.models.schema import StageConfig
-from app.models.stage_base import StageBase, StageInput, StageType
+from app.models.stages.stage_base import StageBase, StageInput, StageType
 from app.models.stages.warnings import CompilerWarning, warn
 from app.models.stages.code import (
     CODE_CORNER_CASES_CONTRACT_NOTE,

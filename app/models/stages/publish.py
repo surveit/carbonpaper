@@ -9,7 +9,7 @@ from typing import ClassVar, Literal, Optional
 from pydantic import Field
 
 from app.models.schema import StageConfig
-from app.models.stage_base import StageInput, StageType
+from app.models.stages.stage_base import StageInput, StageType
 from app.models.stages.code import (
     CODE_CORNER_CASES_CONTRACT_NOTE,
     CODE_SUMMARY_CONTRACT_NOTE,

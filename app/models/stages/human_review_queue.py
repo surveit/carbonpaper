@@ -9,7 +9,7 @@ from typing import ClassVar, Literal, Optional
 from pydantic import Field, field_validator
 
 from app.models.schema import SCALAR_COLUMN_TYPES, STR_COLUMN_TYPE, StageConfig, TableSchema
-from app.models.stage_base import StageBase, StageInput, StageType
+from app.models.stages.stage_base import StageBase, StageInput, StageType
 from app.models.stages.shared import find_predicate_column_issues
 from app.models.stages.node_spec import NodeTypeSpec
 from app.models.stages.signature import ExtendsSignature

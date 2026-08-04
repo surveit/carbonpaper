@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Literal
 from app.models.schema import _Base
 
 if TYPE_CHECKING:
-    from app.models.stage_base import StageBase
+    from app.models.stages.stage_base import StageBase
 
 WarningKind = Literal[
     "undescribed",

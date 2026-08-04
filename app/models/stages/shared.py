@@ -1,7 +1,7 @@
 """Shared helpers for per-stage-type column validation, on both the input and
 output side.
 
-`StageBase` is imported only under `TYPE_CHECKING`: `app.models.stage_base`
+`StageBase` is imported only under `TYPE_CHECKING`: `app.models.stages.stage_base`
 imports this module at runtime, so importing it back would be circular."""
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from app.core.predicate import parse_predicate
 
 if TYPE_CHECKING:
     from app.models.schema import TableSchema
-    from app.models.stage_base import StageBase
+    from app.models.stages.stage_base import StageBase
 
 COLUMN_ISSUE = (
     "stage '{sid}': {field} references column '{col}' not in its input schema (declares {cols})"

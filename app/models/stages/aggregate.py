@@ -13,7 +13,7 @@ from pydantic import Field, model_validator
 from app.core.errors import PredicateError
 from app.core.predicate import parse_predicate
 from app.models.schema import StageConfig, TableSchema, _Base
-from app.models.stage_base import StageBase, StageInput, StageType
+from app.models.stages.stage_base import StageBase, StageInput, StageType
 from app.models.stages.shared import (
     COLUMN_ISSUE,
     find_declared_vs_computed_issues,
