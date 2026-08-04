@@ -19,6 +19,7 @@ from app.core.starlark_source import (
 from app.models.schema import StageConfig
 from app.models.stage_base import StageBase, StageInput, StageType
 from app.models.stages.code import CORNER_CASES_DESCRIPTION, SUMMARY_DESCRIPTION, CornerCase
+from app.models.stages.signature import ExtendsSignature
 from app.models.stages.stage_tests import StarlarkRowFunctionStageTest
 from app.models.stages.warnings import CompilerWarning, warn
 
@@ -107,6 +108,12 @@ class StarlarkRowFunctionStage(StageBase):
     # Exactly one input: the runtime maps the function over one frame's rows.
     inputs: list[StageInput] = Field(default_factory=list, min_length=1, max_length=1)
     tests: Optional[Sequence[StarlarkRowFunctionStageTest]] = None
+    # The code is opaque to load-time validation, so unlike the config-driven
+    # types nothing here cross-checks the block. The function is held to its
+    # claimed writes at run time instead: the stage's output frame is validated
+    # against output_schema, which find_signature_issues pins to this
+    # signature.
+    signature: Optional[ExtendsSignature] = None
 
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
         return {"starlark": self.starlark}
