@@ -147,7 +147,7 @@
         </tbody>
     </table>
     <h3>bring</h3>
-    <p>{% for c in stage.join.bring %}<code>{{ c }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</p>
+    <p>{% for src, landed in stage.join.bring.items() %}<code>{{ src }}{% if landed != src %} → {{ landed }}{% endif %}</code>{% if not loop.last %}, {% endif %}{% endfor %}</p>
 </section>
 {% endif %}
 

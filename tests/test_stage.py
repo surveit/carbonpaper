@@ -250,7 +250,7 @@ def test_unknown_type_raises():
 def test_join_min_inputs(t):
     with pytest.raises(ValidationError):
         m.parse_stage(S(id="j", type=t, inputs=[{"id": "a"}],
-                                 join={"keys": [{"left": "k", "right": "k"}], "bring": ["v"]}))
+                                 join={"keys": [{"left": "k", "right": "k"}], "bring": {"v": "v"}}))
 
 
 @pytest.mark.parametrize("t", ["enrich", "expand"])
@@ -265,7 +265,7 @@ def test_join_rejects_a_third_input(t):
             inputs=[{"id": "a", "schema": _K_SCHEMA}, {"id": "b", "schema": _KV_SCHEMA},
                     {"id": "c", "schema": _K_SCHEMA}],
             output_schema=_K_SCHEMA,
-            join={"keys": [{"left": "k", "right": "k"}], "bring": ["v"]},
+            join={"keys": [{"left": "k", "right": "k"}], "bring": {"v": "v"}},
         ))
     assert [(e["loc"], e["type"]) for e in err.value.errors()] == [((t, "inputs"), "too_long")]
 
@@ -278,7 +278,7 @@ def test_name_is_required():
 
 def test_input_ids_property():
     s = m.parse_stage(_build_enrich_on_k(
-        join={"keys": [{"left": "k", "right": "k"}], "bring": ["v"]}))
+        join={"keys": [{"left": "k", "right": "k"}], "bring": {"v": "v"}}))
     assert s.input_ids == ["a", "b"]
 
 
@@ -304,7 +304,7 @@ def test_queue_needs_no_hash_source_declared():
 # ── fixes folded into the model ──────────────────────────────────────────────
 def test_join_accepts_keys():
     m.parse_stage(_build_enrich_on_k(
-        join={"keys": [{"left": "k", "right": "k"}], "bring": ["v"]}))
+        join={"keys": [{"left": "k", "right": "k"}], "bring": {"v": "v"}}))
 
 
 def test_join_without_keys_raises():
@@ -315,13 +315,13 @@ def test_join_without_keys_raises():
 
 def test_join_with_empty_keys_raises():
     with pytest.raises(ValidationError):
-        m.parse_stage(_build_enrich_on_k(join={"keys": [], "bring": ["v"]}))
+        m.parse_stage(_build_enrich_on_k(join={"keys": [], "bring": {"v": "v"}}))
 
 
 def test_join_with_empty_bring_raises():
     with pytest.raises(ValidationError):
         m.parse_stage(_build_enrich_on_k(
-            join={"keys": [{"left": "k", "right": "k"}], "bring": []}))
+            join={"keys": [{"left": "k", "right": "k"}], "bring": {}}))
 
 
 def test_aggregate_output_column_required():
@@ -644,8 +644,8 @@ _RIGHT_SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True}, {"
 _HANDLE_BLOCK = {
     "python_row_function": {"function": _INLINE_ROW_FN},
     "python_frame_function": {"function": _INLINE_ROW_FN},
-    "enrich": {"join": {"keys": [{"left": "id", "right": "id"}], "bring": ["amount"]}},
-    "expand": {"join": {"keys": [{"left": "id", "right": "id"}], "bring": ["amount"]}},
+    "enrich": {"join": {"keys": [{"left": "id", "right": "id"}], "bring": {"amount": "amount"}}},
+    "expand": {"join": {"keys": [{"left": "id", "right": "id"}], "bring": {"amount": "amount"}}},
     "aggregate": {"aggregate": {"group_by": ["name"],
                                 "aggregations": [{"output_column": "n", "formula": "count"}]}},
     "human_review_queue": {"queue": queue_columns("name", "human_name")},

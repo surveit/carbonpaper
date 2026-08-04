@@ -94,7 +94,7 @@ def _seed_compiled(pdir: Path, data_path: Path, routes_path: Path) -> None:
             "inputs": [{"id": CLASSIFY_ID, "schema": _CLASSIFY_SCHEMA},
                        {"id": ROUTES_ID, "schema": _ROUTES_SCHEMA}],
             "join": {"keys": [{"left": "name", "right": "name"}],
-                     "bring": ["route"]},
+                     "bring": {"route": "route"}},
             "output_schema": _ROUTE_SCHEMA,
         }),
     ]

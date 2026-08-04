@@ -51,19 +51,20 @@ def _join_reference_into_subject(
     # back off the result. `.assign` copies, so the caller's frames are untouched.
     subject = inputs[subject_id].assign(
         **{JOIN_SUBJECT_ORD_KEY: np.arange(len(inputs[subject_id]))})
-    reference = inputs[reference_id].assign(
-        **{JOIN_REFERENCE_ORD_KEY: np.arange(len(inputs[reference_id]))})
+    reference = inputs[reference_id]
 
-    # The reference is narrowed to its key columns plus `bring` (and its
-    # ordinal carrier) BEFORE the merge, so no un-brought reference column can
-    # reach the output. A brought column never collides with a subject column
-    # (validation refuses that at save); a right KEY sharing a subject column's
-    # name still can, so pandas suffixes that one copy and the projection below
-    # drops it.
+    # What crosses the merge from the reference side: its key columns, each
+    # brought column ALREADY under its landed name, and the ordinal carrier —
+    # nothing else, so no un-brought reference column can reach the output. A
+    # landed name never collides with a subject column (validation refuses
+    # that at save, and refuses one shadowing a right key); a right KEY
+    # sharing a subject column's name still can collide, so pandas suffixes
+    # that one copy and the projection below drops it.
     right_keys = [k.right for k in keys]
-    narrowed = reference[
-        list(dict.fromkeys([*right_keys, *join_cfg.bring, JOIN_REFERENCE_ORD_KEY]))
-    ]
+    narrowed = reference[list(dict.fromkeys(right_keys))].assign(
+        **{landed: reference[src] for src, landed in join_cfg.bring.items()},
+        **{JOIN_REFERENCE_ORD_KEY: np.arange(len(reference))},
+    )
 
     # how="left": every subject row survives, an unmatched one carrying nulls
     # for the brought columns. Dropping rows is filter_rows' job — it records
@@ -87,10 +88,10 @@ def _join_reference_into_subject(
         (subject_id, joined[JOIN_SUBJECT_ORD_KEY].tolist()),
         (reference_id, joined[JOIN_REFERENCE_ORD_KEY].tolist()),
     ])
-    # The projection to the subject's own columns plus `bring` also drops both
-    # ordinal carriers. Attach LAST: `.attrs` does not survive a frame being
-    # rebuilt, and the projection rebuilds it.
-    projected = joined[[*inputs[subject_id].columns, *join_cfg.bring]]
+    # The projection to the subject's own columns plus the landed names also
+    # drops both ordinal carriers. Attach LAST: `.attrs` does not survive a
+    # frame being rebuilt, and the projection rebuilds it.
+    projected = joined[[*inputs[subject_id].columns, *join_cfg.bring.values()]]
     return attach_row_lineage(projected, lineage)
 
 

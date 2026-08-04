@@ -65,7 +65,7 @@ def test_validate_inputs_resolve_reports_all_dangling():
     s = parse_stage(S(id="b", type="enrich",
                                inputs=[_in("ghost1", {"columns": [{"name": "x", "type": "str", "nullable": True}]}),
                                        _in("ghost2", {"columns": [{"name": "y", "type": "str", "nullable": True}]})],
-                               join={"keys": [{"left": "x", "right": "y"}], "bring": ["y"]},
+                               join={"keys": [{"left": "x", "right": "y"}], "bring": {"y": "y"}},
                                output_schema={"columns": [{"name": "x", "type": "str", "nullable": True}, {"name": "y", "type": "str", "nullable": True}]}))
     issues = m.validate_inputs_resolve([s])
     assert len(issues) == 2  # both dangling inputs, not just the first
@@ -103,7 +103,7 @@ def test_validate_workflow_reports_issues():
     s = parse_stage(S(id="j", type="enrich",
                                inputs=[_in("a", {"columns": [{"name": "x", "type": "str", "nullable": True}]}),
                                        _in("b", {"columns": [{"name": "y", "type": "str", "nullable": True}]})],
-                               join={"keys": [{"left": "x", "right": "y"}], "bring": ["y"]},
+                               join={"keys": [{"left": "x", "right": "y"}], "bring": {"y": "y"}},
                                output_schema={"columns": [{"name": "x", "type": "str", "nullable": True}, {"name": "y", "type": "str", "nullable": True}]}))
     issues = m.validate_workflow([s])
     assert issues  # both inputs dangle — reported, not raised
@@ -359,7 +359,7 @@ def test_validate_publish_is_terminal_reports_every_offending_edge():
         _loader(), _publish("pub_a"), _publish("pub_b"),
         _reader("down_a", "pub_a"), _reader("down_b", "pub_b"),
         S(id="down_c", type="enrich", inputs=[_in("pub_a", _X), _in("pub_b", _Y)],
-          join={"keys": [{"left": "x", "right": "y"}], "bring": ["y"]},
+          join={"keys": [{"left": "x", "right": "y"}], "bring": {"y": "y"}},
           output_schema={"columns": [{"name": "x", "type": "str", "nullable": True}, {"name": "y", "type": "str", "nullable": True}]}),
     )]
     issues = m.validate_publish_is_terminal(stages)

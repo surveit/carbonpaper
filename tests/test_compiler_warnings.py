@@ -48,7 +48,7 @@ def test_a_config_only_stage_warns_about_nothing():
                    {"id": "b", "schema": {"columns": [{"name": "id", "type": "str", "nullable": True},
                                                       {"name": "v", "type": "str", "nullable": True}]}}],
         "output_schema": _SCHEMA,
-        "join": {"keys": [{"left": "id", "right": "id"}], "bring": ["v"]},
+        "join": {"keys": [{"left": "id", "right": "id"}], "bring": {"v": "v"}},
     })
     assert _kinds(enrich) == []
 

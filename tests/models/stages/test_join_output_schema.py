@@ -34,7 +34,7 @@ def _join_stage(*, output_columns=None, bring=None, left=_LEFT, right=_RIGHT,
         ],
         "join": {
             "keys": keys or [{"left": "facility_id", "right": "facility_id"}],
-            "bring": bring or ["amount"],
+            "bring": bring or {"amount": "amount"},
         },
     }
     if output_columns is not None:
@@ -48,9 +48,9 @@ def _issues(stage_dict) -> str:
     return str(err.value)
 
 
-def test_bring_entry_not_producible_rejected():
+def test_bring_source_not_producible_rejected():
     msg = _issues(_join_stage(
-        bring=["amount_typo"],
+        bring={"amount_typo": "amount_typo"},
         output_columns=[{"name": "facility_id", "type": "str", "nullable": True}]))
     assert "amount_typo" in msg
     assert "join.bring" in msg
@@ -63,20 +63,35 @@ def test_declared_column_absent_from_join_rejected():
     assert "bogus" in msg
 
 
-def test_bring_colliding_with_subject_refused_never_renamed():
+def test_landing_on_a_subject_column_is_a_refused_rewrite():
     # The reference's own `name` (int) collides with the subject's `name`
-    # (str); under the old handle it arrived as `name_r` — now the bring
-    # itself is refused.
+    # (str); landing it under that name would rewrite the subject's column.
     msg = _issues(_join_stage(
-        bring=["name"],
+        bring={"name": "name"},
         output_columns=[{"name": "facility_id", "type": "str", "nullable": True}],
     ))
-    assert "refused, never renamed" in msg
+    assert "a join only ever ADDS" in msg
 
 
-def test_suffixed_name_is_not_producible():
-    # No brought column is ever renamed, so the old `<name>_r` spelling names
-    # nothing the join can deliver.
+def test_a_landed_name_carries_its_sources_type():
+    # The out for that collision: land the reference's `name` (int) as
+    # `name_r` — authored in config, never a silent suffix. The declared
+    # output must then carry the SOURCE's type.
+    stage = parse_stage(_join_stage(
+        bring={"name": "name_r"},
+        output_columns=[{"name": "name_r", "type": "int", "nullable": True}],
+    ))
+    assert stage.id == "add_filings"
+    msg = _issues(_join_stage(
+        bring={"name": "name_r"},
+        output_columns=[{"name": "name_r", "type": "str", "nullable": True}],
+    ))
+    assert "name_r" in msg and "int" in msg
+
+
+def test_a_name_nothing_lands_as_is_not_producible():
+    # `name_r` exists only when an author lands a column there — nothing is
+    # ever suffixed into it silently.
     msg = _issues(_join_stage(
         output_columns=[{"name": "name_r", "type": "int", "nullable": True}],
     ))
@@ -108,7 +123,7 @@ def test_un_brought_reference_column_not_producible():
     # `kind` sits on the reference edge but bring does not name it, so the
     # declared output cannot carry it.
     msg = _issues(_join_stage(
-        bring=["amount"],
+        bring={"amount": "amount"},
         output_columns=[{"name": "kind", "type": "str", "nullable": True}],
     ))
     assert "kind" in msg
@@ -118,7 +133,7 @@ def test_un_brought_reference_column_not_producible():
 def test_valid_join_passes(stage_type):
     stage = parse_stage(_join_stage(
         stage_type=stage_type,
-        bring=["amount", "kind"],
+        bring={"amount": "amount", "kind": "kind"},
         output_columns=[
             {"name": "facility_id", "type": "str", "nullable": True},
             {"name": "name", "type": "str", "nullable": True},

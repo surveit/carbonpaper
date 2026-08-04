@@ -1,6 +1,6 @@
 """Covers the join config-column checks: every key must resolve against its
-side's edge, and every `bring` entry must name a reference column the subject
-does not already carry."""
+side's edge, every `bring` source must exist on the reference, and every landed
+name must be new to the subject — a join adds, never rewrites."""
 from __future__ import annotations
 
 import pytest
@@ -23,7 +23,7 @@ def _enrich_stage(*, left_columns, right_columns, key_left, key_right, bring):
 
 
 def test_both_keys_present_ok():
-    parse_stage(_enrich_stage(left_columns=["a"], right_columns=["b"], key_left="a", key_right="b", bring=["b"]))
+    parse_stage(_enrich_stage(left_columns=["a"], right_columns=["b"], key_left="a", key_right="b", bring={"b": "b"}))
 
 
 def test_key_on_the_wrong_side_rejected():
@@ -31,42 +31,70 @@ def test_key_on_the_wrong_side_rejected():
     names them backwards (.left="b", .right="a") must be rejected on both
     sides, not silently matched by name across sides."""
     with pytest.raises(ValidationError):
-        parse_stage(_enrich_stage(left_columns=["a"], right_columns=["b"], key_left="b", key_right="a", bring=["b"]))
+        parse_stage(_enrich_stage(left_columns=["a"], right_columns=["b"], key_left="b", key_right="a", bring={"b": "b"}))
 
 
 def test_left_key_missing_rejected():
     with pytest.raises(ValidationError):
-        parse_stage(_enrich_stage(left_columns=["a"], right_columns=["b"], key_left="ghost", key_right="b", bring=["b"]))
+        parse_stage(_enrich_stage(left_columns=["a"], right_columns=["b"], key_left="ghost", key_right="b", bring={"b": "b"}))
 
 
 def test_right_key_missing_rejected():
     with pytest.raises(ValidationError):
-        parse_stage(_enrich_stage(left_columns=["a"], right_columns=["b"], key_left="a", key_right="ghost", bring=["b"]))
+        parse_stage(_enrich_stage(left_columns=["a"], right_columns=["b"], key_left="a", key_right="ghost", bring={"b": "b"}))
 
 
-def test_bring_referencing_absent_column_rejected():
+def test_bring_source_absent_from_the_reference_rejected():
     with pytest.raises(ValidationError) as err:
         parse_stage(_enrich_stage(
-            left_columns=["a"], right_columns=["b"], key_left="a", key_right="b", bring=["ghost"],
+            left_columns=["a"], right_columns=["b"], key_left="a", key_right="b", bring={"ghost": "ghost"},
         ))
     assert "join.bring" in str(err.value)
 
 
-def test_bring_colliding_with_subject_rejected():
-    """A brought column the subject already carries is refused, never renamed."""
+def test_landing_on_a_subject_column_rejected_as_a_rewrite():
+    """Landing on a name the subject carries would rewrite it — a join only adds."""
     with pytest.raises(ValidationError) as err:
         parse_stage(_enrich_stage(
-            left_columns=["a", "dup"], right_columns=["b", "dup"], key_left="a", key_right="b", bring=["dup"],
+            left_columns=["a", "dup"], right_columns=["b", "dup"], key_left="a", key_right="b",
+            bring={"dup": "dup"},
         ))
-    assert "refused, never renamed" in str(err.value)
+    assert "a join only ever ADDS" in str(err.value)
 
 
-def test_duplicate_bring_entries_rejected():
+def test_the_out_is_landing_the_same_source_under_a_new_name():
+    parse_stage(_enrich_stage(
+        left_columns=["a", "dup"], right_columns=["b", "dup"], key_left="a", key_right="b",
+        bring={"dup": "dup_r"},
+    ))
+
+
+def test_two_sources_landing_as_one_name_rejected():
     with pytest.raises(ValidationError) as err:
         parse_stage(_enrich_stage(
-            left_columns=["a"], right_columns=["b"], key_left="a", key_right="b", bring=["b", "b"],
+            left_columns=["a"], right_columns=["b", "c"], key_left="a", key_right="b",
+            bring={"b": "same", "c": "same"},
         ))
-    assert "duplicate" in str(err.value)
+    assert "lands two columns as" in str(err.value)
+
+
+def test_landing_onto_a_right_key_name_rejected():
+    """Landing onto the reference-side key would corrupt the key the merge reads."""
+    with pytest.raises(ValidationError) as err:
+        parse_stage(_enrich_stage(
+            left_columns=["a"], right_columns=["b", "z"], key_left="a", key_right="b",
+            bring={"z": "b"},
+        ))
+    assert "join key on the reference side" in str(err.value)
+
+
+def test_landing_inside_the_internal_namespace_rejected():
+    with pytest.raises(ValidationError) as err:
+        parse_stage(_enrich_stage(
+            left_columns=["a"], right_columns=["b"], key_left="a", key_right="b",
+            bring={"b": "_b"},
+        ))
+    assert "reserved" in str(err.value)
 
 
 def test_find_join_column_issues_reports_bring():
@@ -84,7 +112,7 @@ def test_find_join_column_issues_reports_bring():
             ),
         ],
         join=JoinConfig.model_validate(
-            {"keys": [{"left": "a", "right": "b"}], "bring": ["ghost"]}
+            {"keys": [{"left": "a", "right": "b"}], "bring": {"ghost": "ghost"}}
         ),
     )
     issues = find_join_column_issues(stage)

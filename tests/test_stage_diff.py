@@ -63,7 +63,7 @@ def _join_stage(stage_type: str, output_columns: list[dict] | None = None) -> St
         "id": "route", "name": "Route", "type": stage_type,
         "inputs": [{"id": LOAD_ID, "schema": {"columns": _IN_COLUMNS}},
                    {"id": REF_ID, "schema": {"columns": _REF_COLUMNS}}],
-        "join": {"keys": [{"left": "name", "right": "name"}], "bring": ["extra"]},
+        "join": {"keys": [{"left": "name", "right": "name"}], "bring": {"extra": "extra"}},
         "output_schema": {"columns": output_columns or _ENRICHED_COLUMNS},
     })
 

@@ -71,7 +71,7 @@ def test_a_stage_whose_behaviour_is_not_code_is_not_applicable():
                    {"id": "b", "schema": {"columns": [{"name": "id", "type": "str", "nullable": True},
                                                       {"name": "v", "type": "str", "nullable": True}]}}],
         "output_schema": _SCHEMA,
-        "join": {"keys": [{"left": "id", "right": "id"}], "bring": ["v"]},
+        "join": {"keys": [{"left": "id", "right": "id"}], "bring": {"v": "v"}},
     })
     assert build_certification(stage, []).status == "n/a"
 
