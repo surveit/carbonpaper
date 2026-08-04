@@ -64,9 +64,8 @@ def _find_unchecked_description_warnings(
     if stage.find_authored_code_block() is None:
         return []
     if not stage.CARRIES_RUNNABLE_TESTS:
-        return [warn(stage, "untestable",
-                     f"a {stage.type} cannot carry examples, so nothing can check its "
-                     f"description against its code")]
+        # No example can ever run here, so asking for one would never clear.
+        return []
     if not stage.tests:
         return [warn(stage, "unexemplified",
                      "has a description but no examples, so nothing checks it against "

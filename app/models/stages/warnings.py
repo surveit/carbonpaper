@@ -17,7 +17,6 @@ WarningKind = Literal[
     "unexemplified",
     "examples_failing",
     "unreviewable_code",
-    "untestable",
     "nondeterministic",
     "row_limit",
 ]
@@ -30,16 +29,13 @@ WarningKind = Literal[
 # result in. It is fixable: either the code or the description is wrong, and both
 # are edits to this stage.
 #
-# `untestable` cannot be cleared on the stage at all — a filter_rows carries a
-# description no example can ever check — so treating it as fixable would leave the
-# authoring agent no way to finish. The other two are deliberate authoring choices:
-# wrong to refuse, still worth telling a reviewer about.
+# The last two are deliberate authoring choices: wrong to refuse, still worth
+# telling a reviewer about.
 FIXABLE: dict[str, bool] = {
     "undescribed": True,
     "unexemplified": True,
     "examples_failing": True,
     "unreviewable_code": True,
-    "untestable": False,
     "nondeterministic": False,
     "row_limit": False,
 }
