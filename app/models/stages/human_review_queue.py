@@ -11,6 +11,7 @@ from pydantic import Field, field_validator
 from app.models.schema import SCALAR_COLUMN_TYPES, STR_COLUMN_TYPE, StageConfig, TableSchema
 from app.models.stage_base import StageBase, StageInput, StageType
 from app.models.stages.shared import find_predicate_column_issues
+from app.models.stages.signature import ExtendsSignature
 
 
 class ReviewVerdict(str, Enum):
@@ -71,6 +72,7 @@ class HumanReviewQueueStage(StageBase):
     type: Literal[StageType.human_review_queue]
     queue: QueueConfig
     inputs: list[StageInput] = Field(default_factory=list, min_length=1)
+    signature: Optional[ExtendsSignature] = None
 
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
         return {"queue": self.queue}
@@ -94,6 +96,31 @@ class HumanReviewQueueStage(StageBase):
             _find_reviewed_target_issues(sid, queue, input_schema, output_schema)
             + _find_review_record_target_issues(sid, queue, output_schema)
         )
+
+    # The signature is optional and names only what its author chose to declare, so it
+    # cannot own "this stage never overwrites an input column" — `queue` names the added
+    # columns whether or not a signature exists, and `_find_added_column_collisions` is
+    # the check that enforces it. What this adds is the tie between the two accounts: a
+    # signature may only claim adds the queue block already names, and may not claim a
+    # rewrite at all. Given that, the signature's own anchor-collision check
+    # (signature._find_extends_issues) can only ever restate the config check's verdict.
+    def find_signature_config_issues(self) -> list[str]:
+        signature = self.signature
+        assert signature is not None  # find_signature_config_issues runs only with one
+        declared = {name for _, name in find_added_columns(self.queue)}
+        issues = [
+            f"stage '{self.id}': signature adds `{column.name}`, which the review "
+            f"runtime never writes — this stage adds exactly the columns its queue "
+            f"block names ({sorted(declared)})"
+            for column in signature.adds
+            if column.name not in declared
+        ]
+        if signature.rewrites:
+            issues.append(
+                f"stage '{self.id}': human_review_queue never revises an input "
+                f"column; rewrites are not supported"
+            )
+        return issues
 
 
 def resolve_queue_config(stage: StageBase) -> Optional[QueueConfig]:
@@ -164,8 +191,11 @@ def _find_reviewed_source_issues(
 def _find_added_column_collisions(
     sid: str, queue: QueueConfig, input_schema: TableSchema
 ) -> list[str]:
-    # A stage that adds columns never overwrites one — this also catches two review
-    # stages in series where the second reuses the first's names.
+    # THE check for "a review stage adds columns and never overwrites one": it runs on
+    # every queue stage, signature or not, and covers every name the queue block adds.
+    # This also catches two review stages in series where the second reuses the first's
+    # names. `find_signature_config_issues` keeps a declared signature pinned to these
+    # names rather than restating the rule.
     existing = {c.name for c in input_schema.columns}
     return [
         f"stage '{sid}': {field} adds column '{name}', which its input schema already "

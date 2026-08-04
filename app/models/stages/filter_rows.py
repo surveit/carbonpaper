@@ -18,6 +18,7 @@ from app.models.stages.code import (
     CornerCase,
     validate_inline_function_code,
 )
+from app.models.stages.signature import ExtendsSignature
 from app.models.stages.stage_tests import FilterRowsStageTest
 
 
@@ -76,9 +77,20 @@ class FilterRowsStage(StageBase):
     # join or a python_frame_function.
     inputs: list[StageInput] = Field(default_factory=list, min_length=1, max_length=1)
     tests: Optional[Sequence[FilterRowsStageTest]] = None
+    signature: Optional[ExtendsSignature] = None
 
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
         return {"filter": self.filter}
+
+    def find_signature_config_issues(self) -> list[str]:
+        signature = self.signature
+        assert signature is not None  # find_signature_config_issues runs only with one
+        if signature.adds or signature.rewrites:
+            return [
+                f"stage '{self.id}': filter_rows keeps every kept row's columns "
+                f"unchanged — its signature declares reads only, never adds or rewrites"
+            ]
+        return []
 
     def find_output_schema_issues(self) -> list[str]:
         return find_filter_output_issues(self)

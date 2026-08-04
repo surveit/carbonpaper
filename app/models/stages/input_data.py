@@ -11,6 +11,7 @@ from pydantic import ConfigDict, Field, model_validator
 
 from app.models.schema import StageConfig, _Base
 from app.models.stage_base import StageBase, StageType
+from app.models.stages.signature import ReplacesSignature
 
 
 class ConnectorKind(str, Enum):
@@ -64,6 +65,9 @@ class Connector(StageConfig):
 class InputDataStage(StageBase):
     type: Literal[StageType.input_data]
     connector: Connector
+    # The root of the schema graph: no inputs, so `produces` IS the declaration
+    # of what the source supplies — the degenerate replaces form.
+    signature: Optional[ReplacesSignature] = None
 
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
         return {"connector": self.connector}

@@ -3,12 +3,13 @@ must share an identical schema (prose aside), and a declared output_schema
 must equal that shared schema."""
 from __future__ import annotations
 
-from typing import Any, ClassVar, Literal
+from typing import Any, ClassVar, Literal, Optional
 
 from pydantic import Field
 
-from app.models.schema import StageConfig
+from app.models.schema import StageConfig, TableSchema
 from app.models.stage_base import StageBase, StageInput, StageType
+from app.models.stages.signature import ReplacesSignature
 
 
 class UnionConfig(StageConfig):
@@ -22,6 +23,7 @@ class UnionStage(StageBase):
     type: Literal[StageType.union]
     union: UnionConfig
     inputs: list[StageInput] = Field(default_factory=list, min_length=2)
+    signature: Optional[ReplacesSignature] = None
 
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
         return {"union": self.union}
@@ -31,6 +33,9 @@ class UnionStage(StageBase):
 
     def find_output_schema_issues(self) -> list[str]:
         return find_union_output_issues(self)
+
+    def find_signature_config_issues(self) -> list[str]:
+        return find_union_signature_issues(self)
 
 
 def find_union_column_issues(stage: "UnionStage") -> list[str]:
@@ -61,6 +66,23 @@ def find_union_output_issues(stage: "UnionStage") -> list[str]:
         f"stage '{stage.id}': output_schema disagrees with the union's shared "
         f"input schema on column(s) {differing}"
     ]
+
+
+def find_union_signature_issues(stage: "UnionStage") -> list[str]:
+    """A union reads no columns, and every input must supply `produces`."""
+    signature = stage.signature
+    assert signature is not None  # find_signature_config_issues runs only with one
+    issues = [
+        f"stage '{stage.id}': a union concatenates without consuming any column; "
+        f"signature reads must be empty"
+    ] if signature.reads else []
+    produced = TableSchema(columns=signature.produces)
+    issues.extend(
+        f"stage '{stage.id}': signature produces vs input `{ref.id}` — {reason}"
+        for ref in stage.inputs
+        for reason in produced.find_unsatisfied_columns(ref.table_schema)
+    )
+    return issues
 
 # Authoring notes for this module's stage type(s), as the plain-data shape the
 # authoring prompts render. Assembled into NODE_TYPES by app.models.stages.

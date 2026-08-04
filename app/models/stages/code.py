@@ -15,6 +15,7 @@ from pydantic import Field, model_validator
 from app.models.errors import StepRefused
 from app.models.schema import FunctionKind, StageConfig, _Base
 from app.models.stage_base import StageBase, StageInput, StageType
+from app.models.stages.signature import ExtendsSignature, ReplacesSignature
 from app.models.stages.stage_tests import (
     PythonFrameFunctionStageTest,
     PythonRowFunctionStageTest,
@@ -230,6 +231,12 @@ class PythonRowFunctionStage(CarriesPythonFunctionStage):
     # a second input is a join or a python_frame_function.
     inputs: list[StageInput] = Field(default_factory=list, min_length=1, max_length=1)
     tests: Optional[Sequence[PythonRowFunctionStageTest]] = None
+    # The code is opaque to load-time validation, so unlike the config-driven
+    # types nothing here cross-checks the block. The function is held to its
+    # claimed writes at run time instead: the stage's output frame is validated
+    # against output_schema, which find_signature_issues pins to this
+    # signature.
+    signature: Optional[ExtendsSignature] = None
 
 
 class PythonFrameFunctionStage(CarriesPythonFunctionStage):
@@ -237,6 +244,7 @@ class PythonFrameFunctionStage(CarriesPythonFunctionStage):
     CARRIES_RUNNABLE_TESTS: ClassVar[bool] = True
     inputs: list[StageInput] = Field(default_factory=list, min_length=1)
     tests: Optional[Sequence[PythonFrameFunctionStageTest]] = None
+    signature: Optional[ReplacesSignature] = None
 
 # Authoring notes for this module's stage type(s), as the plain-data shape the
 # authoring prompts render. Assembled into NODE_TYPES by app.models.stages.
