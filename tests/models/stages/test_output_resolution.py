@@ -1,0 +1,108 @@
+"""A stage may omit its stored output_schema when a signature is declared —
+the outer resolves from it; a stored outer still wins and is still checked."""
+from __future__ import annotations
+
+import pytest
+from pydantic import ValidationError
+
+from app.models import parse_stage, validate_workflow
+from app.models.stage import Stage
+
+
+def _row_stage(**overrides) -> dict:
+    spec = {
+        "id": "clean", "name": "Clean", "type": "python_row_function",
+        "inputs": [{"id": "bills", "schema": {"columns": [
+            {"name": "price", "type": "str", "nullable": True},
+            {"name": "title", "type": "str", "nullable": True},
+        ]}}],
+        "function": {"kind": "inline", "code": "def transform(row):\n    return row"},
+        "signature": {
+            "form": "extends",
+            "reads": [{"input": "bills", "columns": [{"name": "price", "type": "str", "nullable": True}]}],
+            "rewrites": [{"name": "price", "type": "float", "nullable": True}],
+            "adds": [{"name": "note", "type": "str", "nullable": True}],
+        },
+    }
+    spec.update(overrides)
+    return spec
+
+
+def test_an_extends_signature_resolves_the_outer():
+    stage = parse_stage(_row_stage())
+    resolved = stage.resolve_output_schema()
+    assert [(c.name, c.type) for c in resolved.columns] == [
+        ("price", "float"), ("title", "str"), ("note", "str")]
+
+
+def test_a_replaces_signature_resolves_to_exactly_produces():
+    stage = parse_stage({
+        "id": "shape", "name": "Shape", "type": "python_frame_function",
+        "inputs": [{"id": "bills", "schema": {"columns": [
+            {"name": "price", "type": "str", "nullable": True}]}}],
+        "function": {"kind": "inline", "code": "def transform(df):\n    return df"},
+        "signature": {
+            "form": "replaces",
+            "reads": [{"input": "bills", "columns": [{"name": "price", "type": "str", "nullable": True}]}],
+            "produces": [{"name": "n", "type": "int", "nullable": True}],
+        },
+    })
+    resolved = stage.resolve_output_schema()
+    assert [(c.name, c.type) for c in resolved.columns] == [("n", "int")]
+
+
+def test_a_stored_outer_still_wins_and_is_still_checked():
+    # Stored beside the signature, the outer must still agree with it.
+    with pytest.raises(ValidationError, match="output_schema disagrees"):
+        parse_stage(_row_stage(output_schema={"columns": [
+            {"name": "price", "type": "str", "nullable": True},
+            {"name": "title", "type": "str", "nullable": True},
+        ]}))
+
+
+def test_neither_outer_nor_signature_is_still_refused():
+    with pytest.raises(ValidationError, match="no output_schema and no signature"):
+        parse_stage(_row_stage(signature=None))
+
+
+def test_an_edge_is_satisfied_by_the_upstream_resolved_outer():
+    source = parse_stage({
+        "id": "bills", "name": "Bills", "type": "input_data",
+        "connector": {"kind": "file", "params": {"format": "csv"}},
+        "output_schema": {"columns": [
+            {"name": "price", "type": "str", "nullable": True},
+            {"name": "title", "type": "str", "nullable": True},
+        ]},
+    })
+    upstream = parse_stage(_row_stage())
+    downstream = parse_stage({
+        "id": "keep", "name": "Keep", "type": "filter_rows",
+        "inputs": [{"id": "clean", "schema": {"columns": [
+            {"name": "price", "type": "float", "nullable": True},
+            {"name": "title", "type": "str", "nullable": True},
+            {"name": "note", "type": "str", "nullable": True},
+        ]}}],
+        "filter": {"code": "def should_include(row):\n    return True"},
+        "output_schema": {"columns": [
+            {"name": "price", "type": "float", "nullable": True},
+            {"name": "title", "type": "str", "nullable": True},
+            {"name": "note", "type": "str", "nullable": True},
+        ]},
+    })
+    assert validate_workflow([source, upstream, downstream]) == []
+
+
+def test_a_signature_only_llm_stage_resolves_its_reply_schema():
+    stage: Stage = parse_stage({
+        "id": "score", "name": "Score", "type": "llm_transform",
+        "inputs": [{"id": "bills", "schema": {"columns": [
+            {"name": "title", "type": "str", "nullable": True}]}}],
+        "llm": {"prompt_data_template": "Title: {title}"},
+        "signature": {
+            "form": "extends",
+            "reads": [{"input": "bills", "columns": [{"name": "title", "type": "str", "nullable": True}]}],
+            "adds": [{"name": "score", "type": "int", "nullable": True}],
+        },
+    })
+    reply = stage.llm_reply_schema()
+    assert [(c.name, c.type) for c in reply.columns] == [("score", "int")]

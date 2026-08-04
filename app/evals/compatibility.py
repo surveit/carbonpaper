@@ -116,7 +116,7 @@ def _validate_override_declares_output_schema(config: EvalConfig,
     if config.table is None:
         return []
     override = by_id[config.override_stage]
-    if override.output_schema is None:
+    if override.resolve_output_schema() is None:
         return [f"override stage `{override.id}` declares no output schema"]
     return []
 
@@ -148,12 +148,12 @@ def _validate_reference_overrides_cover_stages(config: EvalConfig,
     problems: list[str] = []
     for ov in config.reference_overrides:
         stage = by_id[ov.stage_id]
-        if stage.output_schema is None:
+        if stage.resolve_output_schema() is None:
             problems.append(f"cannot verify reference override `{ov.stage_id}`: "
                             f"stage declares no output schema")
             continue
         problems += _validate_columns_covered(
-            stage.output_schema, ov.table.table_schema, ov.stage_id,
+            stage.resolve_output_schema(), ov.table.table_schema, ov.stage_id,
             f"reference override `{ov.stage_id}`")
     return problems
 
@@ -174,11 +174,11 @@ def _validate_target_emits_checked_columns(config: EvalConfig,
     """Every check's `output_column` must exist on the target's declared
     output, and an abs_tol check needs that column to be numeric."""
     target = by_id[config.target_stage]
-    if target.output_schema is None:
+    if target.resolve_output_schema() is None:
         return [f"cannot verify assertions: target `{target.id}` declares no output schema"]
     problems: list[str] = []
     for expected_output in config.expected_outputs:
-        col = target.output_schema.column_for_name(expected_output.output_column)
+        col = target.resolve_output_schema().column_for_name(expected_output.output_column)
         if col is None:
             problems.append(f"expected output asserts on `{expected_output.output_column}`, "
                             f"which target `{target.id}` does not emit")

@@ -208,6 +208,20 @@ def _find_replaces_issues(stage: "StageBase", signature: ReplacesSignature) -> l
     return []
 
 
+def promised_output_schema(stage: "StageBase") -> "TableSchema | None":
+    """The output the signature promises; None without one (or empty produces)."""
+    signature = stage.signature
+    if signature is None:
+        return None
+    if isinstance(signature, ExtendsSignature):
+        if not stage.inputs:
+            return None
+        return _extend(stage.inputs[0], signature)
+    if not signature.produces:
+        return None
+    return TableSchema(columns=signature.produces)
+
+
 def _extend(anchor: "StageInput", signature: ExtendsSignature) -> TableSchema:
     """The promised output: anchor columns, spec-replaced by rewrites, plus adds."""
     rewrites_by_name = {column.name: column for column in signature.rewrites}

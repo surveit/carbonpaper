@@ -68,7 +68,7 @@ def start_stage_test_generation(project_dir: Path, *, stage_id: str, model: str)
             f"tests can only be generated for stage types that can run them, "
             f"not `{stage.type}`"
         )
-    if stage.output_schema is None:
+    if stage.resolve_output_schema() is None:
         raise ValueError(
             f"stage `{stage_id}` has no output schema — tests need one to state expected rows"
         )

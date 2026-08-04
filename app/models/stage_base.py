@@ -25,7 +25,11 @@ from app.models.schema import (
     _SNAKE_RE,
 )
 from app.models.stages.shared import find_internal_namespace_column_issues
-from app.models.stages.signature import TransformSignature, find_signature_issues
+from app.models.stages.signature import (
+    TransformSignature,
+    find_signature_issues,
+    promised_output_schema,
+)
 from app.models.stages.stage_tests import StageTest, validate_stage_tests
 from app.models.stages.warnings import CompilerWarning
 from app.core.utils import compute_short_hash
@@ -197,8 +201,8 @@ class StageBase(StageCommon):
     output_schema: Optional[TableSchema] = Field(
         default=None,
         description=(
-            "Columns this stage outputs. REQUIRED for every "
-            "type except `publish`."
+            "Columns this stage outputs. Optional when a `signature` is "
+            "declared — the output resolves from it; `publish` needs neither."
         ),
     )
     source: Optional[SourceRef] = None
@@ -245,6 +249,12 @@ class StageBase(StageCommon):
         """What an llm_transform's model reply itself must carry; None for every
         other type."""
         return None
+
+    def resolve_output_schema(self) -> Optional[TableSchema]:
+        """The effective output schema: the stored one, else what the signature promises."""
+        if self.output_schema is not None and self.output_schema.columns:
+            return self.output_schema
+        return promised_output_schema(self)
 
     def find_signature_config_issues(self) -> list[str]:
         """Signature-vs-config disagreements; [] when nothing cross-checks. Runs only with one."""
@@ -322,8 +332,8 @@ class StageBase(StageCommon):
         ]
         if self.REQUIRES_OUTPUT_SCHEMA and not (
             self.output_schema and self.output_schema.columns
-        ):
-            issues.append("declares no output_schema")
+        ) and self.signature is None:
+            issues.append("declares no output_schema and no signature to resolve one from")
         issues.extend(find_internal_namespace_column_issues(self))
         if issues:
             raise ValueError(f"type `{self.type}`: " + "; ".join(issues))

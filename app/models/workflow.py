@@ -111,13 +111,14 @@ def validate_edge_schemas(stages: list[Stage]) -> list[str]:
                     f"`{stage.id}`: input `{ref.id}` references no stage — "
                     "validate_inputs_resolve must run, and pass, before this check"
                 )
-            if upstream.output_schema is None:
+            upstream_output = upstream.resolve_output_schema()
+            if upstream_output is None:
                 raise ValueError(
                     f"`{stage.id}`: input `{ref.id}` declares no output_schema — "
                     "publish is the only type exempt, and "
                     "validate_publish_is_terminal must run, and pass, before this check"
                 )
-            for reason in input_table_schema.find_unsatisfied_columns(upstream.output_schema):
+            for reason in input_table_schema.find_unsatisfied_columns(upstream_output):
                 issues.append(f"`{stage.id}`: input from `{ref.id}` — {reason}")
     return issues
 

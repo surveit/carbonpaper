@@ -106,8 +106,8 @@
 
     {# ── Outputs: the schema this stage produces ── #}
     <div class="pane" data-pane="outputs" hidden>
-      {% if stage.output_schema %}
-      <div class="schema-card"><h4>output schema</h4>{{ schema_table(stage.output_schema) }}</div>
+      {% if stage.resolve_output_schema() %}
+      <div class="schema-card"><h4>output schema</h4>{{ schema_table(stage.resolve_output_schema()) }}</div>
       {% else %}<p class="muted"><em>No output schema declared.</em></p>{% endif %}
     </div>
 
