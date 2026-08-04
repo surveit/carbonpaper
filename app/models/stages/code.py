@@ -231,9 +231,11 @@ class PythonRowFunctionStage(CarriesPythonFunctionStage):
     # a second input is a join or a python_frame_function.
     inputs: list[StageInput] = Field(default_factory=list, min_length=1, max_length=1)
     tests: Optional[Sequence[PythonRowFunctionStageTest]] = None
-    # The code is opaque to validation, so unlike the config-driven types there
-    # is no cross-check against the block — the signature IS the account of what
-    # the function consumes and writes.
+    # The code is opaque to load-time validation, so unlike the config-driven
+    # types nothing here cross-checks the block. The function is held to its
+    # claimed writes at run time instead: the stage's output frame is validated
+    # against output_schema, which find_signature_issues pins to this
+    # signature.
     signature: Optional[ExtendsSignature] = None
 
 

@@ -180,7 +180,10 @@ def _find_extends_issues(stage: "StageBase", signature: ExtendsSignature) -> lis
     )
 
     # A colliding add makes the promised output ill-defined, so the comparison
-    # below only runs once the adds are genuinely new.
+    # below only runs once the adds are genuinely new. The comparison exists
+    # because output_schema is authored BESIDE the signature — two accounts of
+    # one output can drift; an output_schema computed from the anchor edge and
+    # the signature satisfies it by construction.
     if stage.output_schema is not None and not colliding:
         expected = _extend(anchor, signature)
         differing = sorted(stage.output_schema.differing_column_names(expected))
