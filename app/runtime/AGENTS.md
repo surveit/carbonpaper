@@ -20,10 +20,18 @@ the type's handler, validate the output, write `outputs/<stage>.parquet`, append
   uniqueness), so the stage-test suite validator applies both to a generated test's frames.
 - **Incremental manifest:** flushed after every stage (`running` → terminal), so the UI
   shows live progress and a run can execute in a background thread (`prepare_run`/`run_prepared`).
-- **Row slicing:** any stage may carry `limit: N` (throttle the LLM fan-out for a dry run).
-  Per run, `--limit <id>=<N>` overrides it and `--offset <id>=<M>` drops the first M rows
-  first (offset 5 + limit 3 = rows 6-8); recorded in the manifest, re-applied on resume,
-  unknown ids fail loudly.
+- **Row slicing caps what a stage READS, not what it emits:** any stage may carry
+  `limit: N`, and the window is cut off each of its INPUT frames before the handler is
+  invoked — so an `llm_transform` with `limit: 3` makes 3 calls, not 5,000 then a
+  discard. Per run, `--limit <id>=<N>` overrides it and `--offset <id>=<M>` skips the
+  first M rows first (offset 5 + limit 3 = upstream rows 6-8); a multi-input stage
+  (`join`/`enrich`/`expand`, `union`) applies the same window to every input. The
+  window is taken BEFORE the duplicate-row and input-schema checks, so a limited run
+  is not failed by a row it never reads. `input_data` is the one type with no input
+  frames: its window is taken on the frame it just loaded, so `limit` is never a
+  silent no-op on a source. Recorded in the manifest, re-applied on resume, unknown
+  ids fail loudly. A sliced stage's rows are recorded in its lineage sidecar under
+  their TRUE upstream ordinals, so `trace` still lands on the right source row.
 - **Recompute everything:** `--bust-cache` (a run-form checkbox too) sets
   `RunContext.bust_cache`: the run skips every stage-cache READ while still recording
   what it computes, so the cache ends re-pinned, not stale. Recorded in the manifest
