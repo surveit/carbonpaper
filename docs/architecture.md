@@ -19,7 +19,8 @@ runtime or web — keep it pure.** Checks the *spec*, distinct from RUNTIME data
 - `stages/` — one module per stage type, holding that type's config class, its `StageBase`
   subclass (which declares the blocks that type REQUIRES and its input arity), and its own
   validation helpers. `PythonFunction` and both python-transform stage models live in
-  `stages/code.py`.
+  `stages/code.py`; `StarlarkFunction` and `StarlarkRowFunctionStage` live in
+  `stages/starlark.py`.
 - `schema.py` — `Column`, `TableSchema`, column-type vocab. `workflow.py` — graph checks
   (unique ids, inputs resolve, cycles). `named_schemas.py` — named schemas + FK `references`.
   `eval.py` — `EvalConfig` + grain-preservation gate. `table.py` — `TableRef`.

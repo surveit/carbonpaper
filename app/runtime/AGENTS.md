@@ -44,7 +44,10 @@ the type's handler, validate the output, write `outputs/<stage>.parquet`, append
 ## `stages/` — one module per stage type (`HANDLERS`)
 `input_data` connector `file` (csv/parquet/json/geojson; `_read_geojson` flattens a
 FeatureCollection); `python_row_function`/`python_frame_function`
-(`function: {kind: module|inline}`, row variant mapped per row); `enrich`/`expand`
+(`function: {kind: module|inline}`, row variant mapped per row);
+`starlark_row_function` (`starlark_functions.py`, row-mapped; compiles the stage's
+inline Starlark through `app/runtime/starlark_code.py`, the one place the interpreter
+is driven and a `refuse(...)` call is translated to `StepRefused`); `enrich`/`expand`
 (left join of inputs[1] into inputs[0]; `enrich` verifies m:1 and fails the run on a
 non-unique reference, `expand` allows m:n fan-out); `aggregate`;
 `llm_transform` (row-mapped, bounded parallelism);

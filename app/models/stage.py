@@ -42,6 +42,7 @@ from app.models.stages.signature import (  # noqa: F401  (re-exported: the stage
     ReplacesSignature,
     TransformSignature,
 )
+from app.models.stages.starlark import StarlarkFunction, StarlarkRowFunctionStage
 from app.models.stages.union import UnionConfig, UnionStage
 from app.core.utils import format_errors
 
@@ -63,6 +64,7 @@ Stage = Annotated[
         PublishStage,
         UnionStage,
         FilterRowsStage,
+        StarlarkRowFunctionStage,
     ],
     Field(discriminator="type"),
 ]
@@ -108,6 +110,7 @@ class StageDraft(StageCommon):
     publish: Optional[PublishConfig] = None
     union: Optional[UnionConfig] = None
     filter: Optional[FilterConfig] = None
+    starlark: Optional[StarlarkFunction] = None
 
     # Which SERVER_OWNED_STAGE_FIELDS the submitted draft carried, for the caller
     # to warn about. Bookkeeping about one submission, not part of a stage: kept
