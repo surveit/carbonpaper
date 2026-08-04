@@ -88,14 +88,19 @@ def _publish_stage(stage_id="pub"):
 
 
 # ── the non-blocking kinds ───────────────────────────────────────────────────
-def test_an_untestable_type_is_not_blocking():
-    """A publish stage can never carry examples, so blocking would leave the agent stuck."""
-    warnings = find_stage_compiler_warnings(_publish_stage())
-    assert [w.kind for w in warnings] == ["untestable"]
-    assert not warnings[0].blocking
+def test_a_type_that_cannot_run_examples_warns_about_nothing():
+    """A publish stage can never carry examples, so there is nothing to ask it for."""
+    assert _kinds(_publish_stage()) == []
 
 
-def test_a_filter_with_no_examples_is_unexemplified_not_untestable():
+def test_a_type_that_cannot_run_examples_still_owes_a_description():
+    """Dropping the example demand does not drop the prose demand."""
+    stage = _publish_stage()
+    stage.function.summary = None
+    assert _kinds(stage) == ["undescribed"]
+
+
+def test_a_filter_with_no_examples_is_unexemplified():
     """filter_rows CAN carry examples, so the honest complaint is that it has none."""
     warnings = find_stage_compiler_warnings(
         _stage(stage_id="filt", type_="filter_rows", handle="filter"))
@@ -114,7 +119,7 @@ def test_a_workflow_is_clean_when_nothing_blocking_remains():
     """`is_clean` is the agent's gate, so a note must not hold it shut."""
     report = find_workflow_compiler_warnings([
         _stage(stage_id="ok", tests=[_PASSING_EXAMPLE]),
-        _publish_stage(),
+        _stage(stage_id="note", cache=False, tests=[_PASSING_EXAMPLE]),
     ])
     assert report.warnings and report.is_clean
     assert report.blocking == []
@@ -132,10 +137,10 @@ def test_a_workflow_with_one_undescribed_stage_is_not_clean():
 def test_blocking_warnings_sort_before_notes():
     """The page reads top-down and takes its colour from the first entry."""
     report = find_workflow_compiler_warnings([
-        _publish_stage(),
+        _stage(stage_id="note", cache=False, tests=[_PASSING_EXAMPLE]),
         _stage(stage_id="silent", summary=None),
     ])
-    assert [w.kind for w in report.warnings] == ["undescribed", "untestable"]
+    assert [w.kind for w in report.warnings] == ["undescribed", "nondeterministic"]
 
 
 # ── examples that do not pass ────────────────────────────────────────────────
