@@ -388,6 +388,14 @@ class TableSchema(_Base):
                 return c
         return None
 
+    def extend(self, rewrites: Sequence[Column], adds: Sequence[Column]) -> "TableSchema":
+        """This schema with same-named `rewrites` replacing columns in place and `adds` appended."""
+        rewrites_by_name = {column.name: column for column in rewrites}
+        return TableSchema(columns=[
+            *(rewrites_by_name.get(column.name, column) for column in self.columns),
+            *adds,
+        ])
+
     def subtract(self, other: "TableSchema", strict: bool = True) -> "TableSchema":
         """The columns of `self` that `other` does not spec-match: absent from
         `other` by name, or present but differing on a spec field per

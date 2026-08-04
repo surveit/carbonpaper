@@ -13,10 +13,10 @@ from app.models.stage import Stage
 def get_output_columns_from_stage(stage: Stage) -> list[Column]:
     """The output columns `stage` declares. Requires `stage` to declare an
     output schema; raises `ValueError` if it doesn't."""
-    resolved = stage.resolve_output_schema()
-    if resolved is None:
+    output_schema = stage.resolve_output_schema()
+    if output_schema is None:
         raise ValueError(f"stage {stage.id!r} declares no output schema")
-    return list(resolved.columns)
+    return list(output_schema.columns)
 
 
 def get_injected_columns(

@@ -106,3 +106,29 @@ def test_a_signature_only_llm_stage_resolves_its_reply_schema():
     })
     reply = stage.llm_reply_schema()
     assert [(c.name, c.type) for c in reply.columns] == [("score", "int")]
+
+
+def test_a_signature_only_enrich_resolves_from_bring_and_anchor():
+    stage = parse_stage({
+        "id": "add_region", "name": "Add region", "type": "enrich",
+        "inputs": [
+            {"id": "bills", "schema": {"columns": [
+                {"name": "state", "type": "str", "nullable": True}]}},
+            {"id": "states", "schema": {"columns": [
+                {"name": "code", "type": "str", "nullable": True},
+                {"name": "region", "type": "str", "nullable": True}]}},
+        ],
+        "join": {"keys": [{"left": "state", "right": "code"}],
+                 "enrich_with": {"region": "region"}},
+        "signature": {
+            "form": "extends",
+            "reads": [
+                {"input": "bills", "columns": [{"name": "state", "type": "str", "nullable": True}]},
+                {"input": "states", "columns": [{"name": "code", "type": "str", "nullable": True}]},
+            ],
+            "adds": [{"name": "region", "type": "str", "nullable": True}],
+        },
+    })
+    resolved = stage.resolve_output_schema()
+    assert [(c.name, c.type) for c in resolved.columns] == [
+        ("state", "str"), ("region", "str")]

@@ -363,7 +363,11 @@ class StageBase(StageCommon):
         config: for the types whose output is fixed by config (join, aggregate,
         union, filter_rows), every declared column must be producible by name,
         with the declared type matching what the config computes, where that can be known.
-        EDGE-ONLY and per-stage, like _config_columns_resolve."""
+        EDGE-ONLY and per-stage, like _config_columns_resolve. Nothing to
+        check without a stored outer: deliverability compares two authored
+        accounts, and the signature's own cross-checks carry the rest."""
+        if self.output_schema is None:
+            return self
         issues = self.find_output_schema_issues()
         if issues:
             raise ValueError("; ".join(issues))

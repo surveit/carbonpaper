@@ -14,7 +14,7 @@ from app.models.schema import Column, StageId, TableSchema, _Base
 if TYPE_CHECKING:
     # Only under TYPE_CHECKING, mirroring app.models.stages.shared:
     # app.models.stage_base imports this module at runtime.
-    from app.models.stage_base import StageBase, StageInput
+    from app.models.stage_base import StageBase
 
 
 class InputReads(_Base):
@@ -185,7 +185,7 @@ def _find_extends_issues(stage: "StageBase", signature: ExtendsSignature) -> lis
     # one output can drift; an output_schema computed from the anchor edge and
     # the signature satisfies it by construction.
     if stage.output_schema is not None and not colliding:
-        expected = _extend(anchor, signature)
+        expected = anchor.table_schema.extend(signature.rewrites, signature.adds)
         differing = sorted(stage.output_schema.differing_column_names(expected))
         if differing:
             issues.append(_issue(
@@ -216,20 +216,10 @@ def promised_output_schema(stage: "StageBase") -> "TableSchema | None":
     if isinstance(signature, ExtendsSignature):
         if not stage.inputs:
             return None
-        return _extend(stage.inputs[0], signature)
+        return stage.inputs[0].table_schema.extend(signature.rewrites, signature.adds)
     if not signature.produces:
         return None
     return TableSchema(columns=signature.produces)
-
-
-def _extend(anchor: "StageInput", signature: ExtendsSignature) -> TableSchema:
-    """The promised output: anchor columns, spec-replaced by rewrites, plus adds."""
-    rewrites_by_name = {column.name: column for column in signature.rewrites}
-    columns = [
-        rewrites_by_name.get(column.name, column)
-        for column in anchor.table_schema.columns
-    ]
-    return TableSchema(columns=[*columns, *signature.adds])
 
 
 def _issue(stage: "StageBase", problem: str) -> str:
