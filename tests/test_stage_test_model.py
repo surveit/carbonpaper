@@ -293,24 +293,7 @@ _KEYED_SCHEMA = {
         {"name": "client", "type": "str", "nullable": False},
         {"name": "paid", "type": "float", "nullable": False},
     ],
-    "primary_key": ["client"],
 }
-
-
-def test_stage_tests_model_rejects_an_input_frame_repeating_a_primary_key():
-    """Each row is well-formed alone, so only a cross-row check catches this."""
-    bad = {
-        "name": "one_client_paid_two_firms",
-        "inputs": {"load": [{"client": "Gamma", "paid": 10000.0},
-                            {"client": "Gamma", "paid": 15000.0}]},
-        "expected": [{"client": "Gamma", "paid": 25000.0}],
-    }
-    with pytest.raises(ValidationError) as excinfo:
-        _frame_suite_model(_KEYED_SCHEMA).model_validate({"tests": [bad]})
-    message = str(excinfo.value)
-    assert "one_client_paid_two_firms" in message
-    assert "load" in message
-    assert "Primary key duplicated" in message
 
 
 def test_stage_tests_model_rejects_an_input_frame_repeating_a_whole_row():
@@ -326,31 +309,6 @@ def test_stage_tests_model_rejects_an_input_frame_repeating_a_whole_row():
     message = str(excinfo.value)
     assert "the_same_row_twice" in message
     assert "exact duplicate rows" in message
-
-
-def test_stage_tests_model_rejects_expected_rows_repeating_a_primary_key():
-    bad = {
-        "name": "two_rows_for_one_client",
-        "inputs": {"load": [{"client": "Gamma", "paid": 10000.0}]},
-        "expected": [{"client": "Gamma", "paid": 10000.0},
-                     {"client": "Gamma", "paid": 15000.0}],
-    }
-    with pytest.raises(ValidationError) as excinfo:
-        _frame_suite_model(_KEYED_SCHEMA).model_validate({"tests": [bad]})
-    message = str(excinfo.value)
-    assert "expected rows" in message
-    assert "Primary key duplicated" in message
-
-
-def test_stage_tests_model_accepts_distinct_rows_under_a_primary_key():
-    suite = _frame_suite_model(_KEYED_SCHEMA).model_validate({"tests": [{
-        "name": "two_clients_each_paid",
-        "inputs": {"load": [{"client": "Gamma", "paid": 10000.0},
-                            {"client": "Delta", "paid": 15000.0}]},
-        "expected": [{"client": "Gamma", "paid": 10000.0},
-                     {"client": "Delta", "paid": 15000.0}],
-    }]})
-    assert len(suite.tests[0].inputs["load"]) == 2
 
 
 def test_stage_tests_model_accepts_repeated_expected_rows_under_no_key():

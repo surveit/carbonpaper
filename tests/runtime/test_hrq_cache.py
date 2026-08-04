@@ -698,15 +698,14 @@ def _load_stage(root):
     csv_path = root / "data" / "items.csv"
     pd.DataFrame({"id": ["a", "b"], "score": [1, 2]}).to_csv(csv_path, index=False)
     return {"id": "load", "name": "Load", "type": "input_data",
-            "output_schema": {"columns": _SCORED_COLUMNS, "primary_key": ["id"]},
+            "output_schema": {"columns": _SCORED_COLUMNS},
             "connector": {"kind": "file", "params": {"path": str(csv_path), "format": "csv"}}}
 
 
 def _review_stage_full():
     return {"id": "review", "name": "Review", "type": "human_review_queue",
             "inputs": [{"id": "load", "schema": {
-                "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True}],
-                "primary_key": ["id"]}}],
+                "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True}]}}],
             "output_schema": {"columns": [*_SCORED_COLUMNS, *_REVIEW_COLUMNS]},
             "queue": dict(QUEUE_COLUMNS)}
 

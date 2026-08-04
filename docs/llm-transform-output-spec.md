@@ -19,7 +19,7 @@ separate concern that belongs to the LLM layer, planned for a later PR (see Stat
 2. **1:N is expressed as one added JSON *array* column** — an array of scalars or of
    *flat* records. Fan-out lives in a value, not in row multiplication by the LLM.
    If downstream needs the array tabular, explosion is a separate mechanical step,
-   computable from schema: the exploded stage's primary key gains one column, and that
+   computable from schema: the exploded stage gains one identity column, and that
    column names the record key that drives the explosion.
 3. **A `json` column must declare its shape recursively, in our own schema
    language** — not a raw draft-07 blob. A `json` (or `list[json]`) column carries
@@ -59,10 +59,9 @@ This describes what the code does today, not an aspiration:
 - **Rule 1 is enforced by `Stage` construction, not in the handler.** The
   `Stage` model's 1:1 validator (`app/models/stage.py`) rejects any
   `llm_transform` whose *declared* schemas aren't 1:1: exactly one input, the
-  input schema and `output_schema` naming the same primary key, the output
-  keeping every input column unchanged (a transform never rewrites a column's
-  schema — checked via `TableSchema.is_subset_of`), and adding at least one new
-  column. Because a stage carries its own contract, an ineligible stage can't be
+  output keeping every input column unchanged (a transform never rewrites a
+  column's schema — checked via `TableSchema.is_subset_of`), and adding at
+  least one new column. Because a stage carries its own contract, an ineligible stage can't be
   built — so it can't be loaded, versioned, or run — and `TableSchema.subtract`
   (`output_schema − input_schema`) is exactly the reply columns and can never
   throw when the runtime computes it.

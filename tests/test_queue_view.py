@@ -14,7 +14,6 @@ from conftest import queue_added_columns, queue_columns
 def _queue_stage(
     input_columns: list[dict[str, object]],
     *,
-    primary_key: list[str] | None = None,
     source: str = "label",
     target: str = "human_label",
     target_type: str = "str",
@@ -27,13 +26,13 @@ def _queue_stage(
     added: list[dict[str, object]] = queue_added_columns(target, target_type)
     added[0] = {**added[0], **(target_spec or {})}
     inputs = [
-        {"id": upstream, "schema": {"columns": input_columns, "primary_key": primary_key}}
+        {"id": upstream, "schema": {"columns": input_columns}}
         for upstream in (input_ids or ["upstream"])
     ]
     return parse_stage({
         "id": "review", "name": "Review", "type": "human_review_queue",
         "inputs": inputs,
-        "output_schema": {"columns": input_columns + added, "primary_key": primary_key},
+        "output_schema": {"columns": input_columns + added},
         "queue": queue_columns(source=source, target=target),
     })
 
@@ -80,34 +79,20 @@ def test_lineage_states_why_no_link_can_be_built():
 # ── Describing the queued rows from the declared input schema ────────────────
 
 
-def test_queued_columns_carry_the_declared_description_and_primary_key():
-    stage = _queue_stage(_LABEL_COLUMNS, primary_key=["id"])
+def test_queued_columns_carry_the_declared_description():
+    stage = _queue_stage(_LABEL_COLUMNS)
     snapshot = pd.DataFrame({"id": ["a"], "score": [2], "label": ["high"]})
 
     described = queue_view.describe_queued_columns(stage, snapshot)
 
     by_name = {column.name: column for column in described.columns}
     assert by_name["label"].description == "high when the score exceeds one"
-    assert not by_name["label"].in_primary_key
-    assert by_name["id"].in_primary_key and by_name["id"].description is None
-    assert described.schema_note is None and described.identity_note is None
-
-
-def test_a_stage_with_no_declared_primary_key_says_so_rather_than_guessing():
-    # An `id` column is present and would have been guessed at by the removed join-key
-    # fallback; with no `primary_key` declared the view states that instead, and no column
-    # is flagged as the key.
-    stage = _queue_stage(_LABEL_COLUMNS)
-    snapshot = pd.DataFrame({"id": ["a"], "score": [2], "label": ["high"]})
-
-    described = queue_view.describe_queued_columns(stage, snapshot)
-
-    assert described.identity_note == queue_view.NO_PRIMARY_KEY_NOTE
-    assert not any(column.in_primary_key for column in described.columns)
+    assert by_name["id"].description is None
+    assert described.schema_note is None
 
 
 def test_a_schema_and_snapshot_that_disagree_are_reported_not_papered_over():
-    stage = _queue_stage(_LABEL_COLUMNS, primary_key=["id"])
+    stage = _queue_stage(_LABEL_COLUMNS)
     snapshot = pd.DataFrame({"id": ["a"], "label": ["high"], "extra": [1]})
 
     described = queue_view.describe_queued_columns(stage, snapshot)
@@ -120,7 +105,7 @@ def test_a_schema_and_snapshot_that_disagree_are_reported_not_papered_over():
 def test_the_context_table_omits_the_columns_under_review():
     # The context a reviewer is shown is the queued row MINUS the SOURCE of a reviewed
     # column, which the review section prints beside its own control.
-    stage = _queue_stage(_LABEL_COLUMNS, primary_key=["id"])
+    stage = _queue_stage(_LABEL_COLUMNS)
     snapshot = pd.DataFrame({"id": ["a"], "score": [2], "label": ["high"]})
 
     page = queue_view.build_queue_page("p", "r", stage, stage.queue, snapshot, None, None)

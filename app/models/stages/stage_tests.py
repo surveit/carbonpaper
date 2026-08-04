@@ -18,7 +18,7 @@ from pydantic import (
 
 import pandas as pd
 
-from app.core.frame_checks import find_frame_violations, find_primary_key_violations
+from app.core.frame_checks import find_frame_violations
 from app.core.utils import format_errors
 from app.models.schema import StageId, TableSchema, _Base
 
@@ -208,26 +208,14 @@ def _find_test_frame_problems(
     input_schemas: dict[StageId, TableSchema],
     output_schema: TableSchema,
 ) -> list[str]:
-    # An input frame must pass every rule the runner applies to a stage input
-    # (key uniqueness AND no exact duplicate rows); the expected rows only the one
-    # it applies to a stage output (key uniqueness). A test states frames a real
-    # run would have to accept — no stricter, no looser.
-    problems = [
+    # An input frame must pass the rule the runner applies to a stage input
+    # (no exact duplicate rows). A test states frames a real run would have
+    # to accept — no stricter, no looser.
+    return [
         f"test {test.name!r}, input {input_id!r}: {violation.message}"
-        for input_id, schema in input_schemas.items()
-        for violation in find_frame_violations(
-            pd.DataFrame(test.inputs[input_id]), primary_key=schema.primary_key
-        )
+        for input_id in input_schemas
+        for violation in find_frame_violations(pd.DataFrame(test.inputs[input_id]))
     ]
-    if test.expected is None:
-        return problems  # a failure case claims no output rows to form a frame
-    problems += [
-        f"test {test.name!r}, expected rows: {violation.message}"
-        for violation in find_primary_key_violations(
-            pd.DataFrame(test.expected), output_schema.primary_key
-        )
-    ]
-    return problems
 
 
 def _find_row_problems(

@@ -24,7 +24,6 @@
     </tbody>
 </table>
 <p class="schema-meta">
-    {% if schema.primary_key %}<span><b>primary key:</b> {{ schema.primary_key | join(', ') }}</span>{% endif %}
     {% if schema.estimated_rows %}<span><b>est rows:</b> {{ "{:,}".format(schema.estimated_rows) }}</span>{% endif %}
 </p>
 {% else %}

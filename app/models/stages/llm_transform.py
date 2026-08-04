@@ -226,10 +226,9 @@ def find_double_braced_input_issues(
 
 def find_llm_one_to_one_issues(stage: "LLMTransformStage") -> list[str]:
     """An llm_transform maps one input row to one output row, so on its
-    DECLARED schemas alone it must: take exactly one input; declare a
-    primary_key on both that input's schema and its output_schema, naming
-    the same columns; keep every input column unchanged (a transform never
-    rewrites an existing column's schema); and add at least one new column.
+    DECLARED schemas alone it must: take exactly one input; keep every input
+    column unchanged (a transform never rewrites an existing column's
+    schema); and add at least one new column.
 
     Checked so the reply spec the runtime computes
     (`output_schema.subtract(input_schema)`) is exactly the added columns and
@@ -239,27 +238,11 @@ def find_llm_one_to_one_issues(stage: "LLMTransformStage") -> list[str]:
     input_schema = stage.inputs[0].table_schema
     output_schema = stage.output_schema
     assert output_schema is not None  # StageBase._schemas_declared guarantees this
-    issues = _find_primary_key_issues(input_schema, output_schema)
-    issues.extend(_find_additive_shape_issues(input_schema, output_schema))
-    return issues
+    return _find_additive_shape_issues(input_schema, output_schema)
 
 
-# Helpers for find_llm_one_to_one_issues: it has already confirmed
-# `input_schema`/`output_schema` are both declared before calling these.
-
-
-def _find_primary_key_issues(input_schema: TableSchema, output_schema: TableSchema) -> list[str]:
-    issues: list[str] = []
-    input_pk, output_pk = input_schema.primary_key, output_schema.primary_key
-    if not input_pk:
-        issues.append("input schema declares no primary_key")
-    if not output_pk:
-        issues.append("output_schema declares no primary_key")
-    if input_pk and output_pk and set(input_pk) != set(output_pk):
-        issues.append(
-            f"input primary_key {input_pk} != output primary_key {output_pk}"
-        )
-    return issues
+# Helper for find_llm_one_to_one_issues: it has already confirmed
+# `input_schema`/`output_schema` are both declared before calling it.
 
 
 def _find_additive_shape_issues(input_schema: TableSchema, output_schema: TableSchema) -> list[str]:
@@ -295,10 +278,8 @@ NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
             "prefix, cutting latency (and cost on a per-token backend). "
             "prompt_data_template is the minimal per-row input framing, rendered with "
             "Python's str.format_map: inject a column as {column_name}. "
-            "Its single input's schema must declare a primary_key, and its output_schema "
-            "must be strictly ADDITIVE and 1:1: the SAME primary_key as that input, every "
-            "input column unchanged, plus at least one new column (one input row -> one "
-            "output row)."
+            "Its output_schema must be strictly ADDITIVE and 1:1: every input column "
+            "unchanged, plus at least one new column (one input row -> one output row)."
         ),
     ),
 }

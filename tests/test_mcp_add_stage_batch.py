@@ -16,7 +16,7 @@ _CLEANED = {"columns": [
     {"name": "claim_id", "type": "str", "nullable": False},
     {"name": "amount", "type": "float", "nullable": False},
     {"name": "cleaned", "type": "bool", "nullable": False},
-], "primary_key": ["claim_id"]}
+]}
 
 _LOAD = {
     "id": "load", "name": "Load claims", "type": "input_data",

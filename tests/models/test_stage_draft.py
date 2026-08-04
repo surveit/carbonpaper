@@ -64,7 +64,6 @@ def test_an_input_schema_round_trips_under_the_key_a_compiled_stage_spells():
         "name": "Flag rows",
         "inputs": [{"id": "raw", "schema": {
             "columns": [{"name": "filing_id", "type": "str", "nullable": True}],
-            "primary_key": ["filing_id"],
         }}],
         "function": {"kind": "inline", "code": "def transform(row):\n    return row\n"},
         "output_schema": {"columns": [{"name": "filing_id", "type": "str", "nullable": True}]},
@@ -86,17 +85,17 @@ def test_a_stage_that_breaks_a_cross_field_rule_parses_as_a_draft_and_is_refused
         "id": "score_rows",
         "type": "llm_transform",
         "name": "Score rows",
-        # an input schema with no primary_key -> the 1:1 rule is uncheckable
+        # the output drops the input's `text` -> the additive 1:1 rule fails
         "inputs": [{"id": "raw", "schema": {"columns": [{"name": "text", "type": "str", "nullable": True}]}}],
         "output_schema": {"columns": [
-            {"name": "text", "type": "str", "nullable": True}, {"name": "score", "type": "float", "nullable": True},
+            {"name": "score", "type": "float", "nullable": True},
         ]},
         "llm": {"prompt_data_template": "score this"},
     }
 
     draft = StageDraft.model_validate(broken)  # must not raise
 
-    with pytest.raises(ValidationError, match="primary_key"):
+    with pytest.raises(ValidationError):
         parse_stage(draft.to_stage_spec())
 
 

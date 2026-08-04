@@ -197,7 +197,7 @@ class StageBase(StageCommon):
     output_schema: Optional[TableSchema] = Field(
         default=None,
         description=(
-            "Columns this stage outputs, with an optional primary_key. REQUIRED for every "
+            "Columns this stage outputs. REQUIRED for every "
             "type except `publish`."
         ),
     )

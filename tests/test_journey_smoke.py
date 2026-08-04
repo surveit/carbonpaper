@@ -133,18 +133,15 @@ def _workflow_stages(authored_path: str) -> list[dict]:
     file input -> per-row transform -> frame reshape -> publish."""
     load_schema = {
         "columns": [{"name": "name", "type": "str", "nullable": True}, {"name": "val", "type": "int", "nullable": True}],
-        "primary_key": ["name"],
     }
     flag_schema = {
         "columns": [{"name": "name", "type": "str", "nullable": True}, {"name": "val", "type": "int", "nullable": True},
                     {"name": "flagged", "type": "bool", "nullable": True}],
-        "primary_key": ["name"],
     }
     # groupby("flagged", as_index=False)["val"].sum() — one row per flag value,
     # in that column order.
     totals_schema = {
         "columns": [{"name": "flagged", "type": "bool", "nullable": True}, {"name": "val", "type": "int", "nullable": True}],
-        "primary_key": ["flagged"],
     }
     return [
         {

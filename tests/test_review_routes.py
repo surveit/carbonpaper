@@ -69,8 +69,7 @@ def _load_quotes_stage(root):
                           "params": {"path": str(csv_path), "format": "csv"}},
             "output_schema": {
                 "columns": [{"name": "id", "type": "str", "nullable": True},
-                            {"name": "quote", "type": "str", "nullable": True}],
-                "primary_key": ["id"]}}
+                            {"name": "quote", "type": "str", "nullable": True}]}}
 
 
 # The reviewer columns app/services/review.py's _build_output_row (and the
@@ -87,12 +86,10 @@ def _score_stage():
     # queued row.
     return {"id": "score", "name": "Score quotes", "type": "llm_transform",
             "inputs": [{"id": "load", "schema": {
-                "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "quote", "type": "str", "nullable": True}],
-                "primary_key": ["id"]}}],
+                "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "quote", "type": "str", "nullable": True}]}}],
             "output_schema": {
                 "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "quote", "type": "str", "nullable": True},
-                            {"name": "score", "type": "int", "nullable": False}],
-                "primary_key": ["id"]},
+                            {"name": "score", "type": "int", "nullable": False}]},
             "llm": {"prompt_instructions": "Score each quote for tone.",
                     "prompt_data_template": "Rate this: {quote}"}}
 
@@ -103,12 +100,10 @@ def _review_stage():
     return {"id": "review", "name": "Review scores", "type": "human_review_queue",
             "inputs": [{"id": "score", "schema": {
                 "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "quote", "type": "str", "nullable": True},
-                            {"name": "score", "type": "int", "nullable": True}],
-                "primary_key": ["id"]}}],
+                            {"name": "score", "type": "int", "nullable": True}]}}],
             "output_schema": {
                 "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "quote", "type": "str", "nullable": True},
-                            {"name": "score", "type": "int", "nullable": True}] + _REVIEW_COLUMNS,
-                "primary_key": ["id"]},
+                            {"name": "score", "type": "int", "nullable": True}] + _REVIEW_COLUMNS},
             "queue": dict(QUEUE_COLUMNS)}
 
 
@@ -339,19 +334,16 @@ def _e2e_load_stage(root):
     return {"id": "load", "name": "Load items", "type": "input_data",
             "connector": {"kind": "file", "params": {"path": str(csv_path), "format": "csv"}},
             "output_schema": {
-                "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True}],
-                "primary_key": ["id"]}}
+                "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True}]}}
 
 
 def _e2e_review_stage():
     return {"id": "review", "name": "Review items", "type": "human_review_queue",
             "inputs": [{"id": "load", "schema": {
-                "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True}],
-                "primary_key": ["id"]}}],
+                "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True}]}}],
             "output_schema": {
                 "columns": [{"name": "id", "type": "str", "nullable": True},
-                            {"name": "score", "type": "int", "nullable": True}] + _REVIEW_COLUMNS,
-                "primary_key": ["id"]},
+                            {"name": "score", "type": "int", "nullable": True}] + _REVIEW_COLUMNS},
             "queue": dict(QUEUE_COLUMNS)}
 
 
@@ -451,8 +443,7 @@ def _no_notes_review_stage():
     return _with_queue_output_schema({
             "id": "review", "name": "Review items", "type": "human_review_queue",
             "inputs": [{"id": "load", "schema": {
-                "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True}],
-                "primary_key": ["id"]}}],
+                "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True}]}}],
             "queue": queue})
 
 
@@ -576,8 +567,7 @@ def _bool_review_stage(nullable):
         "id": "review", "name": "Review flags", "type": "human_review_queue",
         "inputs": [{"id": "load", "schema": {
             "columns": [{"name": "id", "type": "str", "nullable": True},
-                        {"name": "flag", "type": "bool", "nullable": nullable}],
-            "primary_key": ["id"]}}],
+                        {"name": "flag", "type": "bool", "nullable": nullable}]}}],
         "queue": {**queue_columns(source="flag", target="human_flag")}})
 
 
@@ -593,8 +583,7 @@ def _build_and_halt_bool_queue(tmp_path, monkeypatch, project, *, ai_value, null
         "id": "load", "name": "Load flags", "type": "input_data",
         "connector": {"kind": "file", "params": {"path": str(csv_path), "format": "csv"}},
         "output_schema": {"columns": [{"name": "id", "type": "str", "nullable": True},
-                                      {"name": "flag", "type": "bool", "nullable": nullable}],
-                          "primary_key": ["id"]}})
+                                      {"name": "flag", "type": "bool", "nullable": nullable}]}})
     _write_stage(project_dir, "02_review.json", _bool_review_stage(nullable))
     _seed_version(project_dir)
     run_id = run_prepared(prepare_run(project_dir, project_dir, *pinned_stages(project_dir)))["run_id"]
@@ -691,8 +680,7 @@ def _temporal_review_stage(column_type):
         "id": "review", "name": "Review times", "type": "human_review_queue",
         "inputs": [{"id": "load", "schema": {
             "columns": [{"name": "id", "type": "str", "nullable": True},
-                        {"name": "seen_at", "type": column_type, "nullable": True}],
-            "primary_key": ["id"]}}],
+                        {"name": "seen_at", "type": column_type, "nullable": True}]}}],
         "queue": {**queue_columns(source="seen_at", target="human_seen_at")}})
 
 
@@ -708,8 +696,7 @@ def _decide_a_temporal_row(tmp_path, monkeypatch, project, column_type, recorded
         "id": "load", "name": "Load sightings", "type": "input_data",
         "connector": {"kind": "file", "params": {"path": str(csv_path), "format": "csv"}},
         "output_schema": {"columns": [{"name": "id", "type": "str", "nullable": True},
-                                      {"name": "seen_at", "type": column_type, "nullable": True}],
-                          "primary_key": ["id"]}})
+                                      {"name": "seen_at", "type": column_type, "nullable": True}]}})
     _write_stage(project_dir, "02_review.json", _temporal_review_stage(column_type))
     _seed_version(project_dir)
     run_id = run_prepared(prepare_run(project_dir, project_dir, *pinned_stages(project_dir)))["run_id"]
@@ -762,8 +749,7 @@ def _output_schema_review_stage():
             "inputs": [{"id": "load", "schema": {
                 "columns": [{"name": "id", "type": "str", "nullable": True},
                             {"name": "score", "type": "int", "nullable": False,
-                             "range": [0, 5]}],
-                "primary_key": ["id"]}}],
+                             "range": [0, 5]}]}}],
             "output_schema": {"columns": [
                 {"name": "id", "type": "str", "nullable": True},
                 {"name": "score", "type": "int", "nullable": False, "range": [0, 5]},
@@ -781,8 +767,7 @@ def _build_and_halt_output_schema_queue(tmp_path, monkeypatch, project):
     load = _e2e_load_stage(project_dir)
     load["output_schema"] = {"columns": [
         {"name": "id", "type": "str", "nullable": True},
-        {"name": "score", "type": "int", "nullable": False, "range": [0, 5]}],
-        "primary_key": ["id"]}
+        {"name": "score", "type": "int", "nullable": False, "range": [0, 5]}]}
     _write_stage(project_dir, "01_load.json", load)
     _write_stage(project_dir, "02_review.json", _output_schema_review_stage())
     _seed_version(project_dir)
@@ -874,8 +859,7 @@ def _labelled_row_function_stage():
     )
     return {"id": "label", "name": "Label items", "type": "python_row_function",
             "inputs": [{"id": "load", "schema": {
-                "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True}],
-                "primary_key": ["id"]}}],
+                "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True}]}}],
             "function": {"kind": "inline", "code": code},
             "output_schema": {"columns": [
                 {"name": "id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True},
@@ -890,8 +874,7 @@ def _review_labels_stage():
                 {"name": "id", "type": "str", "nullable": True},
                 {"name": "score", "type": "int", "nullable": True},
                 {"name": "label", "type": "str",
-                 "description": "high when the score exceeds one", "nullable": True}],
-            "primary_key": ["id"]}}],
+                 "description": "high when the score exceeds one", "nullable": True}]}}],
         "queue": {**queue_columns(source="label", target="human_label")}})
 
 
@@ -920,15 +903,6 @@ def test_a_queue_whose_upstream_is_not_an_llm_transform_renders_and_links(tmp_pa
     ]
 
 
-def _no_primary_key_review_stage():
-    return _with_queue_output_schema({
-        "id": "review", "name": "Review items", "type": "human_review_queue",
-        "inputs": [{"id": "load", "schema": {
-            "columns": [{"name": "id", "type": "str", "nullable": True},
-                        {"name": "score", "type": "int", "nullable": True}]}}],
-        "queue": dict(QUEUE_COLUMNS)})
-
-
 def _described_review_stage():
     # The queue's input edge describes the columns it queues, and its output schema
     # describes what the reviewer writes back.
@@ -939,8 +913,7 @@ def _described_review_stage():
                     {"name": "score", "type": "int",
                      "description": "the score this row was labelled from", "nullable": True},
                     {"name": "label", "type": "str",
-                     "description": "high when the score exceeds one", "nullable": True}],
-                "primary_key": ["id"]}}],
+                     "description": "high when the score exceeds one", "nullable": True}]}}],
             "output_schema": {"columns": [
                 {"name": "id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True},
                 {"name": "label", "type": "str", "nullable": True},
@@ -1010,20 +983,6 @@ def test_the_card_renders_the_described_queued_row_and_its_review_section(tmp_pa
     assert '<p class="instructions-text">Confirm the label against the score.</p>' in html
 
 
-def test_a_stage_with_no_primary_key_states_it_rather_than_guessing_one(tmp_path, monkeypatch):
-    project = "queue_route_identity_note"
-    project_dir = tmp_path / project
-    run_id, _fingerprints = _build_and_halt_queue_over(
-        tmp_path, monkeypatch, project,
-        [_e2e_load_stage(project_dir), _no_primary_key_review_stage()],
-    )
-
-    html = TestClient(app).get(f"/project/{project}/runs/{run_id}/queue/review").text
-
-    assert queue_view.NO_PRIMARY_KEY_NOTE.replace("'", "&#39;") in html
-    assert 'class="pk-flag"' not in html
-
-
 def test_a_reviewed_value_is_read_only_until_its_edit_button_is_pressed(tmp_path, monkeypatch):
     # Both halves, as with the reviewer-name gate: the editor carries `hidden`, AND the
     # stylesheet answers it. Without the second half the editor's own `display` beats the
@@ -1070,7 +1029,7 @@ def _empty_string_load_stage(project_dir):
                           "params": {"path": str(csv_path), "format": "csv"}},
             "output_schema": {"columns": [
                 {"name": "id", "type": "str", "nullable": True},
-                {"name": "flag", "type": "bool", "nullable": True}], "primary_key": ["flag"]}}
+                {"name": "flag", "type": "bool", "nullable": True}]}}
 
 
 _EMPTY_STRING_COLUMNS = [
@@ -1089,16 +1048,16 @@ def _empty_string_row_function_stage():
             "            'note': '' if row['id'] == 'e' else None}")
     return {"id": "note", "name": "Add notes", "type": "python_row_function",
             "inputs": [{"id": "load", "schema": {
-                "columns": _EMPTY_STRING_COLUMNS[:2], "primary_key": ["flag"]}}],
+                "columns": _EMPTY_STRING_COLUMNS[:2]}}],
             "function": {"kind": "inline", "code": code},
-            "output_schema": {"columns": _EMPTY_STRING_COLUMNS, "primary_key": ["flag"]}}
+            "output_schema": {"columns": _EMPTY_STRING_COLUMNS}}
 
 
 def _empty_string_review_stage():
     return _with_queue_output_schema({
         "id": "review", "name": "Review notes", "type": "human_review_queue",
         "inputs": [{"id": "note", "schema": {
-            "columns": _EMPTY_STRING_COLUMNS, "primary_key": ["flag"]}}],
+            "columns": _EMPTY_STRING_COLUMNS}}],
         "queue": {**queue_columns(source="flag", target="human_flag")}})
 
 

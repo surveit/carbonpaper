@@ -134,14 +134,12 @@ def test_subtract_difference():
     assert [c.name for c in diff.columns] == ["score"]
 
 
-def test_subtract_result_has_no_primary_key_or_metadata():
-    a = _ts(columns=[{"name": "id", "type": "str", "nullable": True}], primary_key=["id"])
+def test_subtract_result_has_no_metadata():
+    a = _ts(columns=[{"name": "id", "type": "str", "nullable": True}])
     b = _ts(
-        columns=[{"name": "id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True}],
-        primary_key=["id"], estimated_rows=10, notes="some notes",
+        columns=[{"name": "id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True}], estimated_rows=10, notes="some notes",
     )
     diff = b.subtract(a)
-    assert diff.primary_key is None
     assert diff.estimated_rows is None
     assert diff.notes is None
 
@@ -431,23 +429,6 @@ def test_to_prompt_header_and_footer():
         "with exactly these keys:"
     )
     assert lines[-1] == "Any other key is invalid."
-
-
-def test_to_prompt_states_a_single_column_primary_key():
-    """Unstated, the only uniqueness the schema declares is invisible."""
-    ts = _ts(columns=[{"name": "id", "type": "str", "nullable": False}],
-             primary_key=["id"])
-    assert ts.to_prompt().splitlines()[-1] == (
-        "Primary key: 'id' — no two rows may carry the same value."
-    )
-
-
-def test_to_prompt_states_a_composite_primary_key():
-    ts = _ts(columns=[{"name": "id", "type": "str", "nullable": True}, {"name": "year", "type": "int", "nullable": True}],
-             primary_key=["id", "year"])
-    assert ts.to_prompt().splitlines()[-1] == (
-        "Primary key: 'id' + 'year' — no two rows may carry the same combination."
-    )
 
 
 def test_to_prompt_says_nothing_about_a_key_that_is_not_declared():

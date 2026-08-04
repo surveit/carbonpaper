@@ -7,7 +7,7 @@ import pytest
 from app import models as m
 from app.web.stage_test_views import build_certification
 
-_SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True}], "primary_key": ["id"]}
+_SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True}]}
 
 
 def _stage(*, summary=None, type_="python_row_function", handle="function"):

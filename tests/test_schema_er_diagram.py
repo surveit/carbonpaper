@@ -10,11 +10,11 @@ def test_empty_schema_list_renders_bare_header():
 def test_entity_block_with_pk_and_plain_column():
     schemas = [{
         "name": "orgs",
+        "primary_key": ["id"],
         "columns": [
             {"name": "id", "type": "str", "nullable": True},
             {"name": "title", "type": "str", "nullable": True},
         ],
-        "primary_key": ["id"],
     }]
     diagram = build_schema_er_diagram(schemas)
     assert diagram == (
@@ -75,7 +75,7 @@ def test_column_missing_name_is_skipped():
 
 def test_fk_edge_drawn_from_referenced_schema_to_referencing_schema():
     schemas = [
-        {"name": "orgs", "columns": [{"name": "id", "type": "str", "nullable": True}], "primary_key": ["id"]},
+        {"name": "orgs", "columns": [{"name": "id", "type": "str", "nullable": True}]},
         {"name": "filings", "columns": [
             {"name": "org_id", "type": "str", "references": "orgs.id", "nullable": True},
         ]},

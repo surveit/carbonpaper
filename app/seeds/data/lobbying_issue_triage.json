@@ -44,9 +44,6 @@
             "description": "Filer's free-text description of specific issues lobbied. This is the messy field the pipeline is designed to triage."
           }
         ],
-        "primary_key": [
-          "filing_id"
-        ],
         "name": "lobbying_filing",
         "kind": "input",
         "title": "Lobbying Filing",
@@ -104,9 +101,6 @@
             ]
           }
         ],
-        "primary_key": [
-          "filing_id"
-        ],
         "name": "triaged_filing",
         "kind": "computed",
         "title": "Triaged Filing",
@@ -135,9 +129,6 @@
             "nullable": false,
             "description": "Rendered HTML of the complete triage report, with filings ordered by spend_rank ascending."
           }
-        ],
-        "primary_key": [
-          "report_id"
         ],
         "name": "triage_report",
         "kind": "computed",
@@ -193,9 +184,6 @@
             "nullable": false,
             "description": "Filer's free-text description of specific issues lobbied — the messy field the pipeline triages."
           }
-        ],
-        "primary_key": [
-          "filing_id"
         ]
       },
       "cache": true,
@@ -252,9 +240,6 @@
                 "type": "str",
                 "nullable": false
               }
-            ],
-            "primary_key": [
-              "filing_id"
             ]
           }
         }
@@ -320,9 +305,6 @@
             "nullable": true,
             "description": "One plain-language sentence summarising what the client appears to want."
           }
-        ],
-        "primary_key": [
-          "filing_id"
         ]
       },
       "cache": true,
@@ -412,9 +394,6 @@
                 "nullable": true,
                 "description": "One plain-language sentence summarising what the client appears to want."
               }
-            ],
-            "primary_key": [
-              "filing_id"
             ]
           }
         }
@@ -486,9 +465,6 @@
               "inf"
             ]
           }
-        ],
-        "primary_key": [
-          "filing_id"
         ]
       },
       "cache": true,
@@ -582,9 +558,6 @@
                   "inf"
                 ]
               }
-            ],
-            "primary_key": [
-              "filing_id"
             ]
           }
         }

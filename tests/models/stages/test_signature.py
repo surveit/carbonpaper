@@ -263,7 +263,6 @@ def _llm_stage(*, reads):
         "type": "llm_transform",
         "inputs": [{"id": "bills", "schema": {
             "columns": _EDGE["columns"],
-            "primary_key": ["title"],
         }}],
         "llm": {"prompt_data_template": "Price: {price}"},
         "signature": {
@@ -273,7 +272,6 @@ def _llm_stage(*, reads):
         },
         "output_schema": {
             "columns": [*_EDGE["columns"], {"name": "score", "type": "int", "nullable": True}],
-            "primary_key": ["title"],
         },
     }
 

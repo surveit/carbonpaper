@@ -26,17 +26,14 @@ def _load(tmp_path):
     }
 _EXTRACT = {
     "id": "extract", "type": "llm_transform", "name": "Extract evidence pieces",
-    "inputs": [{"id": "load", "schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": True}],
-                                         "primary_key": ["doc_id"]}}],
+    "inputs": [{"id": "load", "schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": True}]}}],
     "llm": {"prompt_template": "You are reading a document {doc_id}. Extract evidence."},
     "output_schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": True},
-                                  {"name": "evidence_id", "type": "str", "nullable": True}],
-                      "primary_key": ["doc_id"]},
+                                  {"name": "evidence_id", "type": "str", "nullable": True}]},
 }
 _SCHEMA = {
     "name": "documents", "title": "Documents", "kind": "input",
     "description": "The source documents this project reads.",
-    "primary_key": ["doc_id"],
     "columns": [{"name": "doc_id", "type": "str", "description": "stable id", "nullable": True}],
 }
 

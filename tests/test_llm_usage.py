@@ -26,12 +26,11 @@ def _llm_stage() -> Stage:
         "id": "classify", "name": "Classify", "type": "llm_transform",
         "inputs": [{"id": "load", "schema": {
             "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}],
-            "primary_key": ["id"],
         }}],
         "output_schema": {"columns": [
             {"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True},
             {"name": "score", "type": "int", "nullable": True},
-        ], "primary_key": ["id"]},
+        ]},
         "llm": {"prompt_template": "{text}"},
     })
 
@@ -86,16 +85,13 @@ def test_run_manifest_records_stage_llm_usage(tmp_path, monkeypatch):
             "connector": {"kind": "file", "params": {
                 "path": str(tmp_path / "data" / "in.csv"), "format": "csv"}},
             "output_schema": {"columns": [
-                {"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}],
-                "primary_key": ["id"]}}
+                {"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}]}}
     classify = {"id": "classify", "name": "Classify", "type": "llm_transform",
                 "inputs": [{"id": "load", "schema": {"columns": [
-                    {"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}],
-                    "primary_key": ["id"]}}],
+                    {"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}]}}],
                 "output_schema": {"columns": [
                     {"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True},
-                    {"name": "score", "type": "int", "nullable": True}],
-                    "primary_key": ["id"]},
+                    {"name": "score", "type": "int", "nullable": True}]},
                 "llm": {"prompt_template": "{text}"}}
     (tmp_path / "compiled" / "01_load.json").write_text(json.dumps(load), encoding="utf-8")
     (tmp_path / "compiled" / "02_classify.json").write_text(json.dumps(classify), encoding="utf-8")
