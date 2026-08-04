@@ -1,7 +1,7 @@
 {# One row rendered as label/value pairs. `columns` are the described columns
    (name, description); `row` maps those same names to the
-   display text, or to None for a null — which is NOT the same as the empty
-   string, and prints differently. A column whose description is None gets no
+   display text, or to None for an absent value — which is NOT the same as the
+   empty string, and prints differently. A column whose description is None gets no
    tooltip. Renders nothing when `columns` is empty. #}
 {% macro kv_table(columns, row) %}
 {% if columns %}
@@ -15,8 +15,8 @@
             
         </th>
         <td class="kv-value">
-            {%- if value is none %}<em>null</em>
-            {%- elif value == '' %}<em>empty string</em>
+            {%- if value is none %}<em>no value</em>
+            {%- elif value == '' %}<em>empty text</em>
             {%- else %}{{ value }}{% endif -%}
         </td>
     </tr>

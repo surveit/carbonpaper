@@ -41,3 +41,16 @@ def test_a_column_constrained_by_neither_shows_the_em_dash():
     html = _render(Column(name="client", type="str", nullable=False))
 
     assert "—" in html
+
+
+# ─── The reader is an editor, so the table says optional, never null ─────────
+
+
+def test_the_table_says_required_and_optional_not_null():
+    html = _render(
+        Column(name="filing_id", type="str", nullable=False),
+        Column(name="primary_ask", type="str", nullable=True),
+    )
+
+    assert ">required<" in html and ">optional<" in html
+    assert "null" not in html.lower()

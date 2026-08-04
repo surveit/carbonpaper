@@ -149,7 +149,7 @@
     <p class="muted">{% if stage.type == 'expand' %}Left join, many-to-many: one subject row may come out as
         several.{% else %}Left join, many-to-one: the reference is verified unique on the key, so the row
         count and order are unchanged.{% endif %} Every subject row survives, an unmatched one carrying
-        nulls.</p>
+        no values for the reference's columns.</p>
     <h3>keys <span class="muted">(subject = <code>{{ stage.inputs[0].id }}</code>, reference =
         <code>{{ stage.inputs[1].id }}</code>)</span></h3>
     <table class="join-keys">

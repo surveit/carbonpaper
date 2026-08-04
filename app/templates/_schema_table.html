@@ -1,17 +1,18 @@
-{# Renders a TableSchema (columns list with type, nullable, range/enum, description) as a table.
-   range and enum share one cell: range is numeric-only, enum str-only, so a column never has both. #}
+{# Renders a TableSchema (columns list with type, required/optional, range/enum, description).
+   range and enum share one cell: range is numeric-only, enum str-only, so a column never has both.
+   `nullable` is the model's word; the table says optional/required, for a reader who is an editor. #}
 {% macro schema_table(schema) %}
 {% if schema and schema.columns %}
 <table class="schema">
     <thead>
-        <tr><th>column</th><th>type</th><th>null?</th><th>range / enum</th><th>description</th></tr>
+        <tr><th>column</th><th>type</th><th>required?</th><th>range / enum</th><th>description</th></tr>
     </thead>
     <tbody>
         {% for c in schema.columns %}
         <tr>
             <td><code>{{ c.name }}</code></td>
             <td><span class="type-pill">{{ c.type }}</span></td>
-            <td>{% if c.nullable %}<span class="muted">nullable</span>{% else %}<span class="strong">not null</span>{% endif %}</td>
+            <td>{% if c.nullable %}<span class="muted">optional</span>{% else %}<span class="strong">required</span>{% endif %}</td>
             <td>
                 {% if c.range %}
                     <code class="range">{{ c.range }}</code>

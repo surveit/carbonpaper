@@ -125,7 +125,7 @@ def test_non_nullable_column_with_nulls_errors():
     report = validate_dataframe(df, schema, stage_id="s", phase="output")
     issue = next(i for i in report.issues if i.column == "status")
     assert issue.severity == "error"
-    assert issue.message == "2 null value(s) in non-nullable column"
+    assert issue.message == "2 row(s) have no value, but this column is required"
     assert not report.ok
 
 
@@ -188,7 +188,7 @@ def test_null_in_non_nullable_column_reported_once_not_twice():
     schema = _schema(columns=[{"name": "v", "type": "str", "nullable": False}])
     df = pd.DataFrame({"v": ["a", None]})
     report, issues = _issues_for("v", df, schema)
-    assert [i.message for i in issues] == ["1 null value(s) in non-nullable column"]
+    assert [i.message for i in issues] == ["1 row(s) have no value, but this column is required"]
     assert not report.ok
 
 

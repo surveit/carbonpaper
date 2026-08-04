@@ -58,14 +58,14 @@ def test_raising_function_is_error_with_exception_text():
 
 
 def test_test_violating_input_schema_is_malformed_not_code_bug():
-    # amount is non-nullable; the test's input row is null there.
+    # amount is required; the test's input row has no value there.
     stage = _row_stage(_DOUBLE, [{
         "name": "null_amount", "inputs": {"load": [{"amount": None}]},
         "expected": [{"amount": None, "doubled": None}],
     }])
     [result] = run_tests_for_stage(stage)
     assert result.status == "malformed"
-    assert "null" in (result.message or "").lower()
+    assert "no value" in (result.message or "").lower()
 
 
 def test_nan_output_matches_expected_none():
@@ -223,7 +223,7 @@ def test_failure_case_skips_expected_row_schema_checks_but_not_its_inputs():
     }])
     [malformed] = run_tests_for_stage(bad_input)
     assert malformed.status == "malformed"
-    assert "null" in (malformed.message or "").lower()
+    assert "no value" in (malformed.message or "").lower()
 
 
 def test_find_failing_stage_tests_reports_a_failed_failure_case():

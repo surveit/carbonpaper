@@ -59,7 +59,7 @@
     <p class="prior-decision">
         Recorded: <strong>{{ item.prior_decision.verdict }}</strong>
         {% for column, value in item.prior_decision.reviewed_values.items() %}
-          · {{ column }} = {% if value is none %}<em>null</em>{% else %}<code>{{ value }}</code>{% endif %}
+          · {{ column }} = {% if value is none %}<em>no value</em>{% else %}<code>{{ value }}</code>{% endif %}
         {% endfor %}
         {% if item.prior_decision.review_notes %}
         · notes: <em>{{ item.prior_decision.review_notes }}</em>
@@ -92,10 +92,10 @@
             <label for="{{ field_id }}"
                    {% if field.description %}title="{{ field.description }}"{% endif %}>{{ field.target }}</label>
             <span class="upstream-value">received <code>{{ field.source }}</code>:
-                <strong>{% if upstream_text is none or upstream_text == '' %}<em>null</em>{% else %}{{ upstream_text }}{% endif %}</strong>
+                <strong>{% if upstream_text is none or upstream_text == '' %}<em>no value</em>{% else %}{{ upstream_text }}{% endif %}</strong>
                 {% if item.prior_decision %}
                 <span class="recorded-value">· you recorded
-                    <strong>{% if recorded is none %}<em>null</em>{% else %}{{ recorded }}{% endif %}</strong></span>
+                    <strong>{% if recorded is none %}<em>no value</em>{% else %}{{ recorded }}{% endif %}</strong></span>
                 {% endif %}
             </span>
             <div class="field-control">

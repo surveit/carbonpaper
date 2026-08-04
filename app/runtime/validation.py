@@ -136,7 +136,7 @@ def _find_nullability_issues(series: pd.Series, col: Column) -> list[Issue]:
         return []
     null_n = series.isna().sum()
     if null_n > 0:
-        return [Issue("error", col.name, f"{null_n} null value(s) in non-nullable column")]
+        return [Issue("error", col.name, f"{null_n} row(s) have no value, but this column is required")]
     return []
 
 
