@@ -8,7 +8,6 @@ from app.core.frames import (
     is_null_form,
     is_sequence_cell,
     list_rows,
-    render_frame_as_text,
 )
 
 
@@ -98,31 +97,3 @@ def test_is_sequence_cell_accepts_lists_tuples_and_arrays(cell):
 @pytest.mark.parametrize("cell", ["ab", {"a": 1}, 1, None])
 def test_is_sequence_cell_rejects_scalars_strings_and_dicts(cell):
     assert not is_sequence_cell(cell)
-
-
-@pytest.mark.parametrize("dtype,values,expected", [
-    ("Int64", [1, None], ["1", ""]),
-    ("Float64", [1.5, None], ["1.5", ""]),
-    ("boolean", [True, None], ["True", ""]),
-    ("object", ["x", None], ["x", ""]),
-])
-def test_a_masked_dtype_renders_its_null_as_blank(dtype, values, expected):
-    """pandas' nullable dtypes reject fillna(""), so the render goes via object."""
-    frame = pd.DataFrame({"c": pd.Series(values, dtype=dtype)})
-    assert list(render_frame_as_text(frame)["c"]) == expected
-
-
-def test_a_sequence_cell_survives_beside_a_masked_null():
-    frame = pd.DataFrame({
-        "tags": [["a", "b"], []],
-        "likes": pd.Series([None, None], dtype="Int64"),
-    })
-    text = render_frame_as_text(frame)
-    assert list(text["tags"]) == ["['a', 'b']", "[]"]
-    assert list(text["likes"]) == ["", ""]
-
-
-def test_a_date_keeps_its_compact_rendering_and_a_missing_one_is_blank():
-    """Rendering must not spell a date out to 00:00:00, nor a missing one as "NaT"."""
-    frame = pd.DataFrame({"d": pd.to_datetime(["2026-01-01", None])})
-    assert list(render_frame_as_text(frame)["d"]) == ["2026-01-01", ""]

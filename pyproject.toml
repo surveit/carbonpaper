@@ -98,9 +98,10 @@ name = "app.runtime.preview imported only by web"
 type = "protected"
 protected_modules = ["app.runtime.preview"]
 allowed_importers = ["app.web"]
-# The scratch re-run is a DISPLAY path: it runs a stage in memory, persists nothing, and
-# renders its frame to text for the panel. Nothing that computes a persisted value may
-# reach it — the runner writes outputs from real frames, never from a rendered preview.
+# The scratch re-run runs a stage in memory and persists nothing. It hands back a frame of
+# real values and renders none of it — turning cells into display text is app.web's job, and
+# `render_frame_as_text` lives there so no runtime module can reach it (app.web is protected
+# above, importable only by app.main). Frames of text must never flow back toward the runner.
 
 [[tool.importlinter.contracts]]
 name = "app.evals is a leaf — imported only by web"

@@ -13,7 +13,7 @@ import pandas as pd
 from fastapi import HTTPException
 
 from app.core.errors import NoVersionToRunError
-from app.core.frames import PARQUET_SUFFIX, list_rows, render_frame_as_text
+from app.core.frames import PARQUET_SUFFIX, list_rows
 from app.models import Stage, StageType
 from app.models.stages.llm_transform import LLMTransformStage
 from app.runtime.manifest import load_manifest_model
@@ -277,6 +277,15 @@ def read_output_df(run_dir: Path, rel_path: str | None) -> pd.DataFrame:
         raise HTTPException(
             status_code=500, detail=f"Could not read output file: {exc}"
         ) from exc
+
+
+def render_frame_as_text(frame: pd.DataFrame) -> pd.DataFrame:
+    """`frame` with every cell a display string and every null "" ."""
+    # astype(str) first so each dtype formats itself (a datetime renders 2026-01-01,
+    # not 2026-01-01 00:00:00), then blank the nulls off the ORIGINAL frame's mask.
+    # Blanking via fillna("") instead would RAISE on pandas' masked dtypes
+    # (Int64/Float64/boolean) — what a declared-nullable int/float/bool arrives as.
+    return frame.astype(str).where(frame.notna(), "")
 
 
 def render_cells_as_text(frame: pd.DataFrame) -> list[dict[str, Any]]:

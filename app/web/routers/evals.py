@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from app.core.errors import EvalNotScorableError
-from app.core.frames import list_rows, render_frame_as_text
+from app.core.frames import list_rows
 from app.models import EvalConfig, EvalRun, Stage
 from app.evals.compatibility import validate_eval_compatibility
 from app.evals.runner import run_eval
@@ -24,7 +24,7 @@ from app.evals.store import (
 )
 from app.services.versioning import list_versions
 from app.web.config import projects_dir, REPO_ROOT, templates
-from app.web.loading import load_stages_or_empty, read_table
+from app.web.loading import load_stages_or_empty, read_table, render_frame_as_text
 from app.web.project_view import shell_state
 
 router = APIRouter()

@@ -13,10 +13,9 @@ from typing import ClassVar, Optional, Union
 
 import pandas as pd
 
-from app.core.frames import render_frame_as_text
 from app.models import Stage, StageType
 from app.runtime.lineage import RowLineage, lineage_sidecar_path
-from app.web.loading import read_table
+from app.web.loading import read_table, render_frame_as_text
 
 # The 1:1-by-position stage types the aligned diff covers: their runtime
 # contract maps output row i to input row i, so a positional comparison states

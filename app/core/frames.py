@@ -36,15 +36,6 @@ def list_rows(frame: pd.DataFrame) -> list[dict[str, Any]]:
     ]
 
 
-def render_frame_as_text(frame: pd.DataFrame) -> pd.DataFrame:
-    """`frame` with every cell a display string and every null "" ."""
-    # astype(str) first so each dtype formats itself (a datetime renders 2026-01-01,
-    # not 2026-01-01 00:00:00), then blank the nulls off the ORIGINAL frame's mask.
-    # Blanking via fillna("") instead would RAISE on pandas' masked dtypes
-    # (Int64/Float64/boolean) — what a declared-nullable int/float/bool arrives as.
-    return frame.astype(str).where(frame.notna(), "")
-
-
 def collapse_null_forms(value: object) -> object:
     """`value`, or None if `value` is one of the four pandas null forms a row
     cell can carry: plain `None`, `float('nan')`, `pd.NA`, or `pd.NaT` — all

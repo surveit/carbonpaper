@@ -53,6 +53,7 @@ from app.web.loading import (
     load_output_table,
     manifest_stage,
     read_output_df,
+    render_cells_as_text,
     runs_dir,
 )
 from app.web.project_view import shell_state
@@ -637,7 +638,14 @@ async def run_stage_scratch_preview(
             status_code=500,
         )
 
-    return JSONResponse({"ok": True, **result})
+    return JSONResponse({
+        "ok": True,
+        "columns": list(result.frame.columns),
+        "rows_total": int(len(result.frame)),
+        "input_rows": result.input_rows,
+        "selected_indices": result.selected_indices,
+        "preview": render_cells_as_text(result.frame),
+    })
 
 
 @router.get("/project/{project}/runs/{run_id}/artifact/{filename:path}")
