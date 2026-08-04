@@ -50,6 +50,19 @@ def test_lifecycle_states_the_steps_and_their_gates() -> None:
     assert "full-run budget" in AUTHORING_LIFECYCLE_GUIDANCE
 
 
+def test_research_may_build_a_prototype_without_skipping_the_gates() -> None:
+    # Prototyping over limited rows is research — above all to learn how the
+    # data shapes out through the stages — but the gates govern committal, not
+    # exploration: the prototype is scaffolding, never the deliverable, and it
+    # neither skips the plan gate nor spends the full-run budget.
+    assert "prototype pipeline" in AUTHORING_LIFECYCLE_GUIDANCE
+    assert "IS research" in AUTHORING_LIFECYCLE_GUIDANCE
+    assert "how the data shapes out" in AUTHORING_LIFECYCLE_GUIDANCE
+    assert "committal, not exploration" in AUTHORING_LIFECYCLE_GUIDANCE
+    assert "scaffolding" in AUTHORING_LIFECYCLE_GUIDANCE
+    assert "skips no plan gate" in AUTHORING_LIFECYCLE_GUIDANCE
+
+
 def test_lifecycle_keeps_the_worked_example_at_the_plan_gate() -> None:
     # The filing_row_id lesson lives at the plan gate: the ID is proposed in the
     # plan for the user to approve or strike, and one first met in the built

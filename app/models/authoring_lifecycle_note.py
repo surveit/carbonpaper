@@ -21,7 +21,13 @@ AUTHORING_LIFECYCLE_GUIDANCE = f"""\
 Authoring is a gated lifecycle: research, then a plan the user signs off, then
 the build, then a smoke run before the full one.
 1. RESEARCH FIRST. Read the methodology prose and look at the real data before
-   proposing anything.
+   proposing anything. Building and running some or all of a prototype pipeline
+   over limited rows IS research — above all to learn how the data shapes out
+   through the stages, the intermediate vocabularies and shapes the prose alone
+   cannot tell you. The gates govern committal, not exploration: the prototype
+   is scaffolding whose lessons flow into the plan the user signs, never the
+   deliverable — it skips no plan gate, and its runs stay cheap (the full-run
+   budget still waits for step 4's smoke sign-off).
 2. PLAN, AND ASK QUESTIONS. Produce a plan for the user, and ask what the
    research left open rather than guessing. The gate a plan must pass for
    sign-off: it names the major stages, and it clears the rule below.
