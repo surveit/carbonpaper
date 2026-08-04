@@ -1190,7 +1190,6 @@ _GRANDFATHERED_ENTRANCE_PROSE: frozenset[str] = frozenset(
         "tests/models/stages/test_human_review_queue_columns.py::test_a_review_record_name_reused_as_a_reviewed_target_is_rejected",
         "tests/models/stages/test_human_review_queue_columns.py::test_an_added_column_that_the_input_already_declares_is_rejected",
         "tests/models/stages/test_human_review_queue_columns.py::test_two_sources_mapping_to_the_same_target_are_rejected",
-        "tests/models/stages/test_signature.py::test_join_add_must_be_producible_from_the_reference",
         "tests/models/stages/test_signature.py::test_output_schema_must_match_the_extended_anchor",
         "tests/models/test_stage_fingerprint.py::test_compute_definition_fingerprint_for_publish_reacts_to_function_code",
         "tests/models/test_stage_fingerprint.py::test_compute_definition_fingerprint_survives_a_stored_round_trip",

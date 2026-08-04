@@ -15,7 +15,7 @@ import pandas as pd
 
 from app.models import Stage, StageType
 from app.runtime.lineage import RowLineage, lineage_sidecar_path
-from app.web.loading import read_table
+from app.web.loading import read_table, render_frame_as_text
 
 # The 1:1-by-position stage types the aligned diff covers: their runtime
 # contract maps output row i to input row i, so a positional comparison states
@@ -408,6 +408,6 @@ def _render_count(count: int, noun: str) -> str:
 
 def _text_frame(df: pd.DataFrame) -> pd.DataFrame:
     """`df` as rendered strings under str column names — the form the panel's tables show."""
-    text = df.fillna("").astype(str)
+    text = render_frame_as_text(df)
     text.columns = [str(name) for name in text.columns]
     return text
