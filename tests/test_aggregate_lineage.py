@@ -49,8 +49,7 @@ def _persistable(out: pd.DataFrame):
 
 
 def _parents_of(lineage: RowLineage, out_row: int):
-    return [(p.row_ordinal, lineage.columns_supplied_by(p))
-            for p in lineage.parents[out_row]]
+    return [(p.row_ordinal, p.columns) for p in lineage.parents[out_row]]
 
 
 def test_every_contributing_row_is_recorded_once_whatever_it_fed():
@@ -86,21 +85,15 @@ def test_the_missing_group_key_keeps_its_own_contributors():
     assert _parents_of(lineage, missing[0]) == [(1, ("total",)), (3, ("total",))]
 
 
-def test_the_supplies_table_holds_one_entry_per_distinct_filter():
-    lineage = read_row_lineage(handle_aggregate(
-        _stage([_TOTAL, _BIG_N], [_TOTAL_COL, _BIG_N_COL]), {"filings": FILINGS}, None))
-    # Whole-row, total-only, and total+big_n — three entries however many rows,
-    # because column attribution varies per `where`, never per row.
-    assert lineage.supplies == [None, ("total",), ("total", "big_n")]
-
-
-def test_unfiltered_aggregations_share_one_supplies_entry():
+def test_an_unfiltered_row_is_recorded_against_every_column():
     second = {"output_column": "biggest", "formula": "max", "value_column": "amt"}
     lineage = read_row_lineage(handle_aggregate(
         _stage([_TOTAL, second], [_TOTAL_COL, {"name": "biggest", "type": "int",
                                                "nullable": True}]),
         {"filings": FILINGS}, None))
-    assert lineage.supplies == [None, ("total", "biggest")]
+    # With no `where` anywhere, every contributor fed every number.
+    assert all(p.columns == ("total", "biggest")
+               for entry in lineage.parents for p in entry)
 
 
 def test_no_trace_column_reaches_the_output():
