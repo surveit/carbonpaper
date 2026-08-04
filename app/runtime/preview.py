@@ -13,7 +13,7 @@ from typing import Any
 import pandas as pd
 import pyarrow
 
-from app.core.frames import PARQUET_SUFFIX, render_frame_as_text
+from app.core.frames import PARQUET_SUFFIX, list_rows, render_frame_as_text
 from app.models import Stage
 
 from .context import RunContext
@@ -125,11 +125,10 @@ def run_stage_preview(
     if output is None:
         output = pd.DataFrame()
 
-    safe = render_frame_as_text(output)
     return {
         "columns": list(output.columns),
         "rows_total": int(len(output)),
         "input_rows": len(valid),
         "selected_indices": valid,
-        "preview": safe.to_dict(orient="records"),
+        "preview": list_rows(render_frame_as_text(output)),
     }

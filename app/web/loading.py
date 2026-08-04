@@ -13,7 +13,7 @@ import pandas as pd
 from fastapi import HTTPException
 
 from app.core.errors import NoVersionToRunError
-from app.core.frames import PARQUET_SUFFIX, render_frame_as_text
+from app.core.frames import PARQUET_SUFFIX, list_rows, render_frame_as_text
 from app.models import Stage, StageType
 from app.models.stages.llm_transform import LLMTransformStage
 from app.runtime.manifest import load_manifest_model
@@ -281,7 +281,7 @@ def read_output_df(run_dir: Path, rel_path: str | None) -> pd.DataFrame:
 
 def render_cells_as_text(frame: pd.DataFrame) -> list[dict[str, Any]]:
     """Every cell as a display string, with nulls as ""."""
-    return render_frame_as_text(frame).to_dict(orient="records")
+    return list_rows(render_frame_as_text(frame))
 
 
 def load_output_table(run_dir: Path, rel_path: str | None) -> dict[str, Any]:
