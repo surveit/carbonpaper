@@ -59,7 +59,7 @@ def test_is_row_preserving_matches_the_model_classification():
     for stage_type in ("input_data", "python_row_function", "llm_transform",
                        "human_review_queue"):
         assert _is_row_preserving(stage_type) is True
-    for stage_type in ("python_frame_function", "join", "aggregate", "publish"):
+    for stage_type in ("python_frame_function", "enrich", "expand", "aggregate", "publish"):
         assert _is_row_preserving(stage_type) is False
     assert _is_row_preserving("not_a_stage_type") is False
 
@@ -80,7 +80,7 @@ def test_origin_maps_stage_type_to_label():
     assert _origin("input_data") == "source"
     assert _origin("python_row_function") == "computed"
     assert _origin("llm_transform") == "llm"
-    assert _origin("join") == "other"
+    assert _origin("enrich") == "other"
 
 
 def test_load_manifest_and_stages_by_id(tmp_path):

@@ -11,6 +11,7 @@ from pydantic import ValidationError
 
 from app.core.errors import ReviewValidationError
 from app.models import QueueConfig, Stage, TableSchema
+from app.models.stages.human_review_queue import resolve_queue_config
 from app.services import review
 from app.web.config import templates
 from app.web.loading import (
@@ -70,14 +71,14 @@ async def queue_decide(
     prefilled_values: str = Form(...),
     review_notes: str | None = Form(None),
 ):
-    """Persist a reviewer's decision as a `StageCacheEntry` keyed by this
-    stage's definition fingerprint and this row's `input_fingerprint`.
-    `reviewed_values` and `prefilled_values` are JSON objects keyed by reviewed
-    TARGET column name — what the reviewer submitted, and what the page they
-    submitted from had pre-filled. The verdict is DERIVED from the two, so the
-    reviewer chooses none. The row is resolved by POSITION in the halted-queue
-    sidecar's fingerprint list — never recomputed from live stages — so a
-    fingerprint the sidecar can't vouch for 404s rather than being trusted."""
+    # Persist a reviewer's decision as a `StageCacheEntry` keyed by this stage's
+    # definition fingerprint and this row's `input_fingerprint`. `reviewed_values` and
+    # `prefilled_values` are JSON objects keyed by reviewed TARGET column name — what the
+    # reviewer submitted, and what the page they submitted from had pre-filled. The
+    # verdict follows from the two, so the reviewer chooses none. The row is resolved by
+    # POSITION in the halted-queue sidecar's fingerprint list — never recomputed from live
+    # stages — so a fingerprint the sidecar can't vouch for 404s rather than being
+    # trusted.
     stage_def = _require_queue_stage(load_stages(project).stages, stage_id)
     queue = _require_queue_config(stage_def)
     attributed_to = _require_reviewer_name(reviewer)
@@ -86,7 +87,7 @@ async def queue_decide(
     stage_fingerprint, row = _resolve_queue_row(project, run_id, stage_id, input_fingerprint)
     _validate_stage_definition_unchanged(stage_def, stage_fingerprint)
     try:
-        verdict = review.derive_verdict(supplied, prefilled)
+        verdict = review.resolve_verdict(supplied, prefilled)
         review.record_decision(
             project=project, stage=stage_def,
             stage_fingerprint=stage_fingerprint, input_fingerprint=input_fingerprint,
@@ -116,8 +117,8 @@ def _require_queue_stage(stages: list[Stage], stage_id: str) -> Stage:
 
 
 def _require_queue_config(stage_def: Stage) -> QueueConfig:
-    queue = stage_def.queue
-    assert queue is not None  # Stage._handle_for_type: human_review_queue carries queue
+    queue = resolve_queue_config(stage_def)
+    assert queue is not None  # _require_queue_stage admits only human_review_queue
     return queue
 
 
@@ -141,8 +142,7 @@ def _require_reviewer_name(reviewer: str) -> str:
 
 
 def _parse_posted_values(raw: str, field: str) -> dict[str, str | None]:
-    """A posted JSON value map as the text its form controls carry, keyed by
-    reviewed TARGET column name."""
+    """A posted JSON value map as its form controls carry it, keyed by reviewed TARGET column."""
     try:
         parsed = json.loads(raw)
     except json.JSONDecodeError as exc:
@@ -158,8 +158,8 @@ def _parse_posted_values(raw: str, field: str) -> dict[str, str | None]:
 
 
 def _as_posted_text(value: object) -> str | None:
-    """JSON null and blank alike become None, which validates as a null only
-    where the column declares one — the null is never assumed to be allowed."""
+    """JSON null and blank alike become None — never assumed to be an allowed null."""
+    # None validates as a null only where the column declares one.
     if value is None:
         return None
     if isinstance(value, bool):
@@ -176,8 +176,7 @@ def _as_posted_text(value: object) -> str | None:
 
 
 def _normalise_review_notes(review_notes: str | None) -> str | None:
-    """An HTML form posts an untouched notes box as "", not as an absent field:
-    blank means no note, never an empty note."""
+    """An HTML form posts an untouched notes box as "": blank means no note, not an empty one."""
     stripped = (review_notes or "").strip()
     return stripped or None
 
@@ -185,12 +184,11 @@ def _normalise_review_notes(review_notes: str | None) -> str | None:
 def _validate_reviewed_values(
     stage_def: Stage, queue: QueueConfig, supplied: Mapping[str, str | None]
 ) -> dict[str, object]:
-    """Each supplied value validated against its target column's whole
-    declaration — type, nullability, enum vocabulary and numeric range — by
-    compiling those columns to a Pydantic model. A key the stage does not
-    declare passes through untouched: the review service owns the
-    exactly-the-declared-columns rule, and duplicating it here would give it two
-    places to drift."""
+    """Each supplied value validated against its target column's whole declaration."""
+    # Type, nullability, enum vocabulary and numeric range alike, by compiling those
+    # columns to a Pydantic model. A key the stage does not declare passes through
+    # untouched: the review service owns the exactly-the-declared-columns rule, and
+    # duplicating it here would give it two places to drift.
     declared = {
         target: require_reviewed_column(stage_def, target)
         for target in queue.reviewed_columns.values()
@@ -219,12 +217,11 @@ def _describe_rejections(exc: ValidationError) -> str:
 def _resolve_queue_row(
     project: str, run_id: str, stage_id: str, input_fingerprint: str
 ) -> tuple[str, pd.Series]:
-    """The `(stage_fingerprint, row)` a decision names: `input_fingerprint`'s
-    POSITION in the sidecar's `input_fingerprints` list, read off the same
-    position in the halted-queue snapshot — the only source a decision's
-    fingerprints may come from. 404 if there's no snapshot/sidecar for this
-    stage, or no position matches: never trust a fingerprint the sidecar
-    can't vouch for."""
+    # The `(stage_fingerprint, row)` a decision names: `input_fingerprint`'s POSITION in
+    # the sidecar's `input_fingerprints` list, read off the same position in the halted-
+    # queue snapshot — the only source a decision's fingerprints may come from. 404 if
+    # there's no snapshot/sidecar for this stage, or no position matches: never trust a
+    # fingerprint the sidecar can't vouch for.
     fingerprints = load_queue_fingerprints(project, run_id, stage_id)
     snapshot = queue_snapshot(project, run_id, stage_id)
     if fingerprints is not None and snapshot is not None:

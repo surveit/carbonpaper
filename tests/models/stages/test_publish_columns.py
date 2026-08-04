@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from app.models import Stage
+from app.models import parse_stage
 
 
 def _publish_stage(*, one_file_per, edge_columns):
@@ -20,13 +20,13 @@ def _publish_stage(*, one_file_per, edge_columns):
 
 def test_one_file_per_missing_rejected():
     with pytest.raises(ValidationError):
-        Stage.model_validate(_publish_stage(one_file_per="nope", edge_columns=["a"]))
+        parse_stage(_publish_stage(one_file_per="nope", edge_columns=["a"]))
 
 
 def test_one_file_per_present_ok():
-    Stage.model_validate(_publish_stage(one_file_per="a", edge_columns=["a"]))
+    parse_stage(_publish_stage(one_file_per="a", edge_columns=["a"]))
 
 
 def test_one_file_per_unset_is_clean():
-    Stage.model_validate(_publish_stage(one_file_per=None, edge_columns=["a"]))
+    parse_stage(_publish_stage(one_file_per=None, edge_columns=["a"]))
 

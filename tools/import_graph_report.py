@@ -4,7 +4,7 @@ Computes coupling metrics for the `app` package (propagation cost, module/
 edge counts, edge density, fan-in/fan-out extremes, import-cycle count) and
 renders the head-vs-base comment body the `import-graph-report` CI job posts
 on every pull request. Purely informational — the job that runs this is
-never merge-blocking — so a metric this script can't derive must fail loudly
+never merge-blocking — so a metric this script cannot compute must fail loudly
 (an exception) rather than surface as a wrong or estimated number in
 someone's PR comment.
 
@@ -58,7 +58,7 @@ class ReachabilityGraph(Protocol):
 
 
 class ImportGraphMetricError(Exception):
-    """A metric could not be derived from grimp's graph — the caller must see
+    """A metric could not be computed from grimp's graph — the caller must see
     this and fail the step; there is no fallback value to report instead."""
 
 

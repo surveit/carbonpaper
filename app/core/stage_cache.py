@@ -77,7 +77,7 @@ def _build_frame_cache_id(
 
 
 def compute_row_fingerprint(row: Mapping[str, object]) -> str:
-    """compute_short_hash over the canonical JSON of `row`: every null form a
+    """compute_short_hash over a sorted-key JSON dump of `row`: every null form a
     pandas row cell can carry (None, float('nan'), pd.NA, pd.NaT — see
     `app.core.frames.collapse_null_forms`) is mapped to JSON null first, so two
     rows that differ only in which null form they carry hash identically. Column
@@ -86,8 +86,8 @@ def compute_row_fingerprint(row: Mapping[str, object]) -> str:
     against exactly two instability sources that would otherwise change a
     row's identity for free: null-form representation drift across a storage
     round trip, and column order."""
-    canonical = {key: collapse_null_forms(value) for key, value in row.items()}
-    payload = json.dumps(canonical, sort_keys=True, separators=(",", ":"), default=str)
+    normalized = {key: collapse_null_forms(value) for key, value in row.items()}
+    payload = json.dumps(normalized, sort_keys=True, separators=(",", ":"), default=str)
     return compute_short_hash(payload)
 
 
@@ -103,9 +103,9 @@ def _to_json_safe_row(row: Mapping[str, object]) -> JsonDict:
     a stage's output, where a stringified score would corrupt the numeric column
     it feeds. `compute_row_fingerprint` keeps its own `default=str`, so
     fingerprints are unaffected by this."""
-    canonical = {key: collapse_null_forms(value) for key, value in row.items()}
+    normalized = {key: collapse_null_forms(value) for key, value in row.items()}
     safe: JsonDict = json.loads(
-        json.dumps(canonical, default=convert_cell_to_json_native)
+        json.dumps(normalized, default=convert_cell_to_json_native)
     )
     return safe
 

@@ -12,6 +12,7 @@ from pydantic import BaseModel, ValidationError
 
 from app.core.agent.diagnostics import AgentRunDiagnostics, summarize_run
 from app.core.agent.registry import build_mcp_server
+from app.core.agent.bound_tool import BoundToolSpec
 from app.core.agent.sdk_engine import CLI_MODEL, ClaudeAgentSdkEngine
 from app.core.agent.usage import LlmUsage
 from app.core.errors import GenerationError
@@ -23,6 +24,61 @@ Model = TypeVar("Model", bound=BaseModel)
 # The one tool this agent exposes. Also the name the engine reports on a
 # tool_call event, which is how a failed run counts the model's own calls.
 SUBMIT_ANSWER_TOOL = "submit_answer"
+
+# What the model reads about that tool, passed explicitly to build_mcp_server so the
+# text is a registry entry rather than whatever the method's docstring happens to say.
+SUBMIT_ANSWER_DESCRIPTION = """\
+Submit your completed answer as this tool's arguments, matching this tool's
+input schema exactly. Call it once, when the ENTIRE answer is ready. If it is
+rejected, fix the reported problems and call submit_answer again. Once it is
+accepted you are done — do not restate the answer."""
+
+# ─────────────────────────────────────────────────────────────────────────────
+# WORKAROUND for a defect OUTSIDE this codebase — delete it when that is fixed.
+#
+# Nothing here is a design choice. It exists because a tool whose whole parameter
+# list is a single array-of-objects gets called as {"prop": {"prop": [...]}}: the
+# model collapses the arguments object into the answer object and builds it twice.
+# MCP rejects that before our handler runs, so the whole answer is regenerated.
+#
+# The schema we send is correct and reaches the model intact — verified by asking
+# it to recite its own tool definition. Ruled out with their own runs: $defs/$ref,
+# payload size (fails at 1.8KB), the schema title, the property name, the prompt
+# wording, the model tier, and attention (an agent made to recite the schema first
+# still wrapped 3/3). The ONLY variable is the shape: 12/12 runs wrapped with one
+# list property, 0/9 with any second argument.
+#
+# Not isolated to the model versus the CLI — that needs the same tool definition
+# sent straight to the API, and there is no API key on the dev machines.
+#
+# TO CHECK WHETHER IT IS STILL NEEDED: delete advertise_more_than_one_argument and
+# its two call sites, then run tests/test_agent_answer_arguments.py, which exercises
+# the failing shape end to end. If it passes, this whole block can go.
+# ─────────────────────────────────────────────────────────────────────────────
+COMPANION_FIELD = "answer_is_complete"
+
+
+def advertise_more_than_one_argument(schema: dict[str, Any]) -> dict[str, Any]:
+    # Both halves measured over 6 runs of the failing shape: the companion argument
+    # alone still retried 2/6, spelling the lone argument out alone 0/6, together 0/6
+    # (and 0/8 on a longer run). Both kept — one breaks the shape, the other says what
+    # to pass. See the WORKAROUND note above before touching either.
+    """`schema` made non-degenerate iff it declares exactly one property."""
+    properties = schema.get("properties", {})
+    if len(properties) != 1:
+        return schema
+    (name, only), = properties.items()
+    spelled_out = "Pass this argument's own value directly — do not wrap the whole answer in it."
+    described = {**only, "description": f"{only['description']} {spelled_out}"
+                 if only.get("description") else spelled_out}
+    return {
+        **schema,
+        "properties": {name: described, COMPANION_FIELD: {
+            "type": "boolean",
+            "description": "True once every other argument is filled in. Always true.",
+        }},
+        "required": [*schema.get("required", []), COMPANION_FIELD],
+    }
 
 
 class Agent(Generic[Model]):
@@ -45,12 +101,22 @@ class Agent(Generic[Model]):
         task: str,
         model: str = CLI_MODEL,
         max_attempts: int = 4,
+        extra_tools: list[str] | None = None,
+        max_turns: int | None = None,
     ) -> None:
         self._system_prompt = system_prompt
         self._target_schema = target_schema
         self._task = task
         self._model = model
         self._max_attempts = max_attempts
+        # Tools the agent may use BESIDES submit_answer. Empty for an agent that
+        # answers from its task alone; a research agent is granted search/fetch/read
+        # tools here. The caller owns the decision — this class does not police
+        # which names are grantable (see models.stages.llm_transform.GRANTABLE_TOOLS).
+        self._extra_tools = list(extra_tools or [])
+        # Turn cap. A research agent needs many more turns than a submit-only one,
+        # because every search and fetch costs a turn.
+        self._max_turns = max_turns
         # Per-run capture state, written by submit_answer during the run.
         self._answer: Model | None = None
         self._attempts = 0
@@ -116,15 +182,12 @@ class Agent(Generic[Model]):
         return self._last_usage
 
     def submit_answer(self, **fields: Any) -> str:
-        """Submit your completed answer as this tool's arguments, matching this tool's
-        input schema exactly. Call it once, when the ENTIRE answer is ready. If it is
-        rejected, fix the reported problems and call submit_answer again. Once it is
-        accepted you are done — do not restate the answer."""
         # Validates `fields` into target_schema and CAPTURES the instance on success —
         # that captured object is what run() returns, so the agent never re-emits it. On
         # failure it raises; the registry's tool wrapper turns the raise into an is_error
         # tool result carrying these issues, which the agent then corrects and re-submits.
         self._attempts += 1
+        fields.pop(COMPANION_FIELD, None)  # advertised only; see build_companion_property
         try:
             self._answer = self._target_schema.model_validate(fields)
         except ValidationError as err:
@@ -141,14 +204,23 @@ class Agent(Generic[Model]):
         max_attempts turns (+ a small buffer for any preamble/closing turn) so an agent
         that never submits a valid answer cannot loop forever. Used by run(), and by a
         caller driving the agent as a live turn: turns.start(engine=agent.build_engine()...)."""
-        input_schema = self._target_schema.model_json_schema()
-        server, allowed, _wrapped = build_mcp_server(
-            [self.submit_answer], {SUBMIT_ANSWER_TOOL: input_schema}
-        )
+        input_schema = advertise_more_than_one_argument(
+            self._target_schema.model_json_schema())
+        server, allowed, _wrapped = build_mcp_server([
+            BoundToolSpec(
+                name=SUBMIT_ANSWER_TOOL,
+                description=SUBMIT_ANSWER_DESCRIPTION,
+                fn=self.submit_answer,
+                input_schema=input_schema,
+                label="Submitting the answer",
+            )
+        ])
         return ClaudeAgentSdkEngine(
             system_prompt=self._system_prompt,
             mcp_server=server,
-            allowed_tools=allowed,
+            # submit_answer stays first: it is the only way an answer is recorded,
+            # with or without research tools alongside it.
+            allowed_tools=allowed + self._extra_tools,
             model=self._model,
-            max_turns=self._max_attempts + 2,
+            max_turns=self._max_turns or (self._max_attempts + 2),
         )

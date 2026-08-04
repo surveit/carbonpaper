@@ -1,0 +1,25 @@
+{#
+  STAGE STRIP — one square per stage, in the run's topological order, coloured by
+  that stage's status. Status only: the squares are not links and have no hover
+  panel. It is the run page's progress row and alert strip in one object, and the
+  runs index renders the same strip in its `result` column.
+
+  Context:
+    strip       = app.web.stage_strip.StageStrip
+    show_counts = render the labelled counts beneath (run page yes, index no)
+    strip_id    = optional element id, so the run page's poller can find it
+#}
+<span class="stage-strip{% if not show_counts %} compact{% endif %}"
+      {% if strip_id %}id="{{ strip_id }}"{% endif %}>
+  {%- for square in strip.squares -%}
+  <i class="status-{{ square.status }}" data-stage-id="{{ square.stage_id }}"
+     title="{{ square.stage_id }} — {{ square.status }}"></i>
+  {%- endfor -%}
+</span>
+{% if show_counts %}
+<div class="strip-counts" id="strip-counts">
+  {%- for tally in strip.tallies %}
+  <span><i class="status-{{ tally.status }}"></i>{{ tally.count }} {{ tally.label }}</span>
+  {%- endfor %}
+</div>
+{% endif %}

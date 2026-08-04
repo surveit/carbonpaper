@@ -7,11 +7,12 @@ from fastapi.testclient import TestClient
 import app.web.routers.evals as evals_router
 from app.core.errors import EvalNotScorableError
 from app.main import app
-from app.models import EvalConfig, ExpectedOutput, FileFormat, Stage, TableRef
+from app.models import parse_stage, EvalConfig, ExpectedOutput, FileFormat, TableRef
 from app.models.schema import TableSchema
 from app.evals.runner import run_eval
 from app.evals.store import load_eval_run, save_eval_config
 from app.services.versioning import WorkflowVersion
+from app.services import workspace
 from conftest import QUEUE_COLUMNS
 
 def _load(tmp_path):
@@ -19,21 +20,21 @@ def _load(tmp_path):
         "id": "load", "type": "input_data", "name": "Load rows",
         "connector": {"kind": "file",
                       "params": {"path": str(tmp_path / "data" / "rows.csv"), "format": "csv"}},
-        "output_schema": {"columns": [{"name": "doc_id", "type": "str"},
-                                      {"name": "score", "type": "int"}]},
+        "output_schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": True},
+                                      {"name": "score", "type": "int", "nullable": True}]},
     }
 # label = "pos" iff score >= 0 — a deterministic classifier we can predict.
 _CLASSIFY = {
     "id": "classify", "type": "python_row_function", "name": "Label by sign",
-    "inputs": [{"id": "load", "schema": {"columns": [{"name": "doc_id", "type": "str"},
-                                                     {"name": "score", "type": "int"}]}}],
+    "inputs": [{"id": "load", "schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": True},
+                                                     {"name": "score", "type": "int", "nullable": True}]}}],
     "function": {"kind": "inline", "code":
                  "def transform(row):\n"
                  "    return {'doc_id': row['doc_id'], 'score': row['score'],\n"
                  "            'label': 'pos' if row['score'] >= 0 else 'neg'}"},
-    "output_schema": {"columns": [{"name": "doc_id", "type": "str"},
-                                  {"name": "score", "type": "int"},
-                                  {"name": "label", "type": "str"}]},
+    "output_schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": True},
+                                  {"name": "score", "type": "int", "nullable": True},
+                                  {"name": "label", "type": "str", "nullable": True}]},
 }
 
 
@@ -46,7 +47,7 @@ def project(tmp_path):
     WorkflowVersion(
         id="demo/v1", version_id="v1", created_at="2026-07-10T00:00:00",
         message="seed", reviewer="test",
-        stages=[Stage.model_validate(_load(tmp_path)), Stage.model_validate(_CLASSIFY)],
+        stages=[parse_stage(_load(tmp_path)), parse_stage(_CLASSIFY)],
     ).save()
 
     data = demo / "eval_data"
@@ -59,8 +60,8 @@ def project(tmp_path):
         override_stage="load", target_stage="classify",
         table=TableRef(path="demo/eval_data/cases.csv", format=FileFormat.csv,
                        table_schema=TableSchema(columns=[
-                           {"name": "doc_id", "type": "str"}, {"name": "score", "type": "int"},
-                           {"name": "label", "type": "str"}])),
+                           {"name": "doc_id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True},
+                           {"name": "label", "type": "str", "nullable": True}])),
         expected_outputs=[ExpectedOutput(output_column="label", metric="exact")])
     return tmp_path, demo, config
 
@@ -97,16 +98,16 @@ def test_run_eval_writes_a_per_row_result_table(project):
 # through it is row-alignable and no longer vetoed before it runs.
 _QUEUE_REVIEW = {
     "id": "review", "type": "human_review_queue", "name": "Review scores",
-    "inputs": [{"id": "load", "schema": {"columns": [{"name": "doc_id", "type": "str"},
-                                                     {"name": "score", "type": "int"}]}}],
+    "inputs": [{"id": "load", "schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": True},
+                                                     {"name": "score", "type": "int", "nullable": True}]}}],
     "queue": dict(QUEUE_COLUMNS),
-    "output_schema": {"columns": [{"name": "doc_id", "type": "str"},
-                                  {"name": "score", "type": "int"},
-                                  {"name": "human_score", "type": "int"},
-                                  {"name": "decision", "type": "str"},
-                                  {"name": "reviewer_id", "type": "str"},
-                                  {"name": "reviewed_at", "type": "str"},
-                                  {"name": "review_notes", "type": "str"},
+    "output_schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": True},
+                                  {"name": "score", "type": "int", "nullable": True},
+                                  {"name": "human_score", "type": "int", "nullable": True},
+                                  {"name": "decision", "type": "str", "nullable": True},
+                                  {"name": "reviewer_id", "type": "str", "nullable": True},
+                                  {"name": "reviewed_at", "type": "str", "nullable": True},
+                                  {"name": "review_notes", "type": "str", "nullable": True},
                                   {"name": "final_score", "type": "int", "nullable": True}]},
 }
 
@@ -129,7 +130,7 @@ def test_run_eval_through_a_queue_stage_records_an_error_never_a_score(project):
     WorkflowVersion(
         id="demo/v-queue", version_id="v-queue", created_at="2026-07-12T00:00:00",
         message="queue pathway", reviewer="test",
-        stages=[Stage.model_validate(_load(repo_root)), Stage.model_validate(_QUEUE_REVIEW)],
+        stages=[parse_stage(_load(repo_root)), parse_stage(_QUEUE_REVIEW)],
     ).save()
     pd.DataFrame({"doc_id": ["a", "b"], "score": [1, 2], "final_score": [1, 2]}).to_csv(
         demo / "eval_data" / "queue_cases.csv", index=False)
@@ -138,7 +139,7 @@ def test_run_eval_through_a_queue_stage_records_an_error_never_a_score(project):
         override_stage="load", target_stage="review",
         table=TableRef(path="demo/eval_data/queue_cases.csv", format=FileFormat.csv,
                        table_schema=TableSchema(columns=[
-                           {"name": "doc_id", "type": "str"}, {"name": "score", "type": "int"},
+                           {"name": "doc_id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True},
                            {"name": "final_score", "type": "int", "nullable": True}])),
         expected_outputs=[ExpectedOutput(output_column="final_score", metric="exact")])
 
@@ -176,7 +177,7 @@ def test_run_eval_scores_an_explicit_unpublished_version(project):
     WorkflowVersion(
         id="demo/v2-draft", version_id="v2-draft", created_at="2026-07-11T00:00:00",
         message="agent draft", reviewer="agent",
-        stages=[Stage.model_validate(_load(repo_root)), Stage.model_validate(_CLASSIFY)],
+        stages=[parse_stage(_load(repo_root)), parse_stage(_CLASSIFY)],
         published=False,
     ).save()
     run = run_eval(demo, config, repo_root, version_id="v2-draft")
@@ -192,7 +193,7 @@ def test_run_eval_none_version_id_resolves_to_newest_overall(project):
     WorkflowVersion(
         id="demo/v2-draft", version_id="v2-draft", created_at="2026-07-11T00:00:00",
         message="agent draft", reviewer="agent",
-        stages=[Stage.model_validate(_load(repo_root)), Stage.model_validate(_CLASSIFY)],
+        stages=[parse_stage(_load(repo_root)), parse_stage(_CLASSIFY)],
         published=False,
     ).save()
     run = run_eval(demo, config, repo_root)
@@ -224,7 +225,7 @@ def test_trigger_route_runs_and_redirects_to_the_run(project, monkeypatch):
     """POST .../run scores the eval and 303-redirects to its new run page."""
     repo_root, demo, config = project
     save_eval_config(demo, config)
-    monkeypatch.setattr(evals_router, "EXAMPLES_DIR", repo_root)
+    workspace.set_projects_dir(repo_root)
     monkeypatch.setattr(evals_router, "REPO_ROOT", repo_root)
 
     r = TestClient(app).post("/project/demo/evals/label_check/run", follow_redirects=False)
@@ -236,7 +237,7 @@ def test_trigger_route_400s_when_not_runnable(project, monkeypatch):
     """An eval with no dataset can't be run; the route reports 400, not a redirect."""
     repo_root, demo, config = project
     save_eval_config(demo, config.model_copy(update={"table": None}))
-    monkeypatch.setattr(evals_router, "EXAMPLES_DIR", repo_root)
+    workspace.set_projects_dir(repo_root)
     monkeypatch.setattr(evals_router, "REPO_ROOT", repo_root)
 
     r = TestClient(app).post("/project/demo/evals/label_check/run", follow_redirects=False)
@@ -252,10 +253,10 @@ def test_trigger_route_scores_an_explicitly_selected_unpublished_version(project
     WorkflowVersion(
         id="demo/v2-draft", version_id="v2-draft", created_at="2026-07-11T00:00:00",
         message="agent draft", reviewer="agent",
-        stages=[Stage.model_validate(_load(repo_root)), Stage.model_validate(_CLASSIFY)],
+        stages=[parse_stage(_load(repo_root)), parse_stage(_CLASSIFY)],
         published=False,
     ).save()
-    monkeypatch.setattr(evals_router, "EXAMPLES_DIR", repo_root)
+    workspace.set_projects_dir(repo_root)
     monkeypatch.setattr(evals_router, "REPO_ROOT", repo_root)
 
     r = TestClient(app).post(
@@ -271,7 +272,7 @@ def test_trigger_route_404s_when_selected_version_does_not_exist(project, monkey
     500 -- the route reports 404 with the reason."""
     repo_root, demo, config = project
     save_eval_config(demo, config)
-    monkeypatch.setattr(evals_router, "EXAMPLES_DIR", repo_root)
+    workspace.set_projects_dir(repo_root)
     monkeypatch.setattr(evals_router, "REPO_ROOT", repo_root)
 
     r = TestClient(app).post(

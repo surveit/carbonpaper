@@ -43,12 +43,16 @@ jobs:
       - run: python -m pytest -m live_llm tests/test_journey_live_llm.py
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-      # A red here without the run directory is undiagnosable from the log
-      # alone (the failure message carries the manifest's stage records, but
-      # transcripts and queue snapshots only exist on disk) — keep the whole
-      # pytest tmp tree for the post-mortem.
-      - name: Upload run evidence on failure
-        if: failure()
+      # Kept on every outcome, for two different reasons.
+      # A red here without the run directory is undiagnosable from the log alone
+      # (the failure message carries the manifest's stage records, but
+      # transcripts and queue snapshots only exist on disk).
+      # A GREEN run's events.jsonl carries the CLI's opening init inventory —
+      # the tool list the model was actually offered under the pinned CLI. That
+      # is the only place tool scoping can be observed rather than inferred, and
+      # a single green run on its own is weak evidence that it held.
+      - name: Upload run evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: live-llm-run-evidence

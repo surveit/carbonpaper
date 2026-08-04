@@ -129,7 +129,7 @@ class EvalConfig(_Base):
 
 # ── Scorability (computed per run) ───────────────────────────────────────────
 class EvalRunSettings(_Base):
-    """How a given run will be scored, derived from the override→target path.
+    """How a given run will be scored, computed from the override→target path.
 
     `frontier` is the set of stages that actually execute to produce the target
     given the overrides (the target plus its non-overridden ancestors, not

@@ -11,18 +11,17 @@ from typing import Any
 
 import pandas as pd
 from fastapi import HTTPException
-from pydantic import ValidationError
 
 from app.core.errors import NoVersionToRunError
 from app.core.frames import PARQUET_SUFFIX
 from app.models import Stage, StageType
+from app.models.stages.llm_transform import LLMTransformStage
 from app.runtime.manifest import load_manifest_model
-from app.core.run_status import StageStatus
 from app.services.run import resolve_version
 from app.services.loader import CompiledStageFile, load_compiled_dir
 from app.services.versioning import list_versions, load_version_stages
 from app.services.workspace import load_schemas, resolve_project_dir
-from app.web.config import EXAMPLES_DIR
+from app.web.config import projects_dir
 
 
 # ─── Projects & stages ──────────────────────────────────────────────────
@@ -42,11 +41,11 @@ def list_projects() -> list[dict[str, Any]]:
     just-created project whose data model is still being generated must show up,
     not appear only once generation finishes. A dir with none of those markers is
     not a project and is omitted. A run counts only if it has a manifest.json
-    (mirrors list_runs), so the count is real runs, never inflated."""
-    if not EXAMPLES_DIR.exists():
+    (mirrors the runs index), so the count is real runs, never inflated."""
+    if not projects_dir().exists():
         return []
     cards: list[dict[str, Any]] = []
-    for p in sorted(EXAMPLES_DIR.iterdir()):
+    for p in sorted(projects_dir().iterdir()):
         if not p.is_dir():
             continue
         card = _build_project_card(p)
@@ -82,7 +81,7 @@ def _build_project_card(p: Path) -> dict[str, Any] | None:
 
 def _count_runs_with_manifest(rdir: Path) -> int:
     """Non-test runs only: a run dir counts iff it carries a manifest.json
-    (mirrors list_runs) AND that manifest is not a test run's, so an
+    (mirrors the runs index) AND that manifest is not a test run's, so an
     in-progress/abandoned run dir, or a workflow test's run, is never counted."""
     if not rdir.is_dir():
         return 0
@@ -119,7 +118,7 @@ class StageListing:
 
 
 def load_stages(project: str) -> StageListing:
-    compiled_dir = EXAMPLES_DIR / project / "compiled"
+    compiled_dir = projects_dir() / project / "compiled"
     if not compiled_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No compiled stages for {project}")
     entries = load_compiled_dir(compiled_dir)
@@ -140,7 +139,7 @@ def load_stages_or_empty(project: str) -> StageListing:
     """Like load_stages, but returns an EMPTY listing instead of 404 when the project
     has no compiled/ workflow yet. For the shell's workflow section, which renders the
     locked/empty page (not an error) for a project that has no workflow authored."""
-    compiled_dir = EXAMPLES_DIR / project / "compiled"
+    compiled_dir = projects_dir() / project / "compiled"
     if not compiled_dir.is_dir():
         return StageListing(stages=[], issues=[], order={})
     return load_stages(project)
@@ -166,8 +165,7 @@ def list_file_inputs(project: str, version_id: str | None = None) -> list[dict[s
         {"stage_id": s.id, "name": s.name,
          "path": str((s.connector.params or {}).get("path") or "")}
         for s in stages
-        if s.type == StageType.input_data and s.connector is not None
-        and s.connector.kind == "file"
+        if s.type == StageType.input_data and s.connector.kind == "file"
     ]
 
 
@@ -207,7 +205,7 @@ def save_uploaded_input(project_dir: Path, stage_id: str, filename: str, src) ->
 # ─── Runs & manifests ────────────────────────────────────────────────────────
 
 def runs_dir(project: str) -> Path:
-    return EXAMPLES_DIR / project / "runs"
+    return projects_dir() / project / "runs"
 
 
 def load_manifest(run_dir: Path) -> dict[str, Any]:
@@ -223,64 +221,6 @@ def load_manifest(run_dir: Path) -> dict[str, Any]:
     return load_manifest_model(run_dir).to_dict()
 
 
-def list_runs(project: str) -> list[dict[str, Any]]:
-    """One index row per manifest-backed run of `project`, newest first.
-
-    Every row is parsed through the typed `RunManifest`, the same reader the run
-    pages use, so the counts a row reports are the counts that manifest actually
-    holds. A manifest this reader cannot parse — malformed JSON, or a file
-    written against an older on-disk vocabulary the model now rejects — yields a
-    `corrupt` row with None counts rather than a zero the reader never read; the
-    template shows those as unreadable. One unreadable run never takes the index
-    down with it."""
-    rdir = runs_dir(project)
-    if not rdir.is_dir():
-        return []
-    return [
-        _run_index_row(run)
-        for run in sorted(rdir.iterdir(), reverse=True)
-        if run.is_dir() and (run / "manifest.json").exists()
-    ]
-
-
-def _run_index_row(run: Path) -> dict[str, Any]:
-    try:
-        manifest = load_manifest_model(run)
-    except ValidationError:  # also how the model reports unparseable JSON
-        return _unreadable_run_row(run)
-    records = manifest.stage_records
-    return {
-        "run_id": run.name,
-        "status": manifest.status,
-        "started_at": manifest.started_at,
-        "finished_at": manifest.finished_at,
-        # None for legacy (pre-versioning) runs; the template renders
-        # "(unversioned)" — a displayed truth, not a fabricated id.
-        "workflow_version": manifest.workflow_version,
-        "stages_total": len(records),
-        "stages_ok": sum(1 for s in records if s.status == StageStatus.OK),
-        "stages_error": sum(1 for s in records if s.status == StageStatus.ERROR),
-        "is_test_run": manifest.is_test_run,
-    }
-
-
-def _unreadable_run_row(run: Path) -> dict[str, Any]:
-    """The index row for a run whose manifest could not be parsed: identity only.
-    Every field the manifest would have supplied is None — no count, timestamp,
-    or version is invented for a file that was never read."""
-    return {
-        "run_id": run.name,
-        "status": "corrupt",
-        "started_at": None,
-        "finished_at": None,
-        "workflow_version": None,
-        "stages_total": None,
-        "stages_ok": None,
-        "stages_error": None,
-        "is_test_run": None,
-    }
-
-
 # ─── Tabular output previews ─────────────────────────────────────────────────
 
 # Hard cap on rows rendered in the full-table view of a stage output. The CSV
@@ -291,6 +231,22 @@ MAX_TABLE_ROWS = 5000
 def read_table(path: Path) -> pd.DataFrame:
     """Read a stage output file (parquet or csv) into a DataFrame."""
     return pd.read_parquet(path) if path.suffix == PARQUET_SUFFIX else pd.read_csv(path)
+
+
+# Excel on Windows reads a .csv in the machine's legacy code page (cp1252 on a
+# Western install) unless the file opens with a UTF-8 byte-order mark. Without
+# the mark, a run whose rows hold French or Dutch text downloads clean and then
+# renders as "mÃ©rite" for a Windows reviewer while the same file is fine on
+# macOS — the reviewer reads mojibake and cannot judge the row. The mark costs
+# the readers that do not need it nothing: pandas.read_csv strips a leading BOM
+# on its default encoding, so re-importing a downloaded file through an
+# `input_data` csv connector keeps its first column name intact.
+_UTF8_BOM = "\ufeff"
+
+
+def csv_download_body(df: pd.DataFrame) -> bytes:
+    """`df` as CSV download bytes: UTF-8 behind a byte-order mark (see `_UTF8_BOM`)."""
+    return (_UTF8_BOM + df.to_csv(index=False)).encode("utf-8")
 
 
 def manifest_stage(run_dir: Path, stage_id: str) -> dict[str, Any]:
@@ -477,7 +433,10 @@ def build_llm_example(
     Returns {rendered, source_id} on success, {error} if no input or render
     fails, or None if the stage isn't an LLM stage.
     """
-    template = stage_def.llm.prompt_data_template if stage_def and stage_def.llm else None
+    template = (
+        stage_def.llm.prompt_data_template
+        if isinstance(stage_def, LLMTransformStage) else None
+    )
     if not template:
         return None
     for ip in input_previews:

@@ -15,7 +15,7 @@ client = TestClient(app)
 
 
 def test_invalid_working_copy_versions_as_400_with_issues(tmp_path, monkeypatch):
-    _point_examples_dir_at(monkeypatch, tmp_path)
+    _point_examples_dir_at(tmp_path)
     create_project("relpath", "Load a file.", source="test")
     stage = {"id": "load", "name": "Load", "type": "input_data",
              "connector": {"kind": "file",

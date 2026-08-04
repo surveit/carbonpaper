@@ -16,12 +16,15 @@ from fastapi.responses import (
 
 from app.core.errors import ProjectExistsError
 from app.models import (
+    find_workflow_compiler_warnings,
     validate_named_schema,
     validate_schema_library,
 )
 from app.services import generation, node_review, project, versioning
-from app.services.loader import stage_to_spec_dict
-from app.web.config import EXAMPLES_DIR, templates
+from app.services.loader import resolve_function_code, stage_to_json, stage_to_spec_dict
+from app.web.config import projects_dir, templates
+from app.runtime.stage_tests import run_stage_tests
+from app.web.stage_test_views import build_certification, shape_test_views
 from app.web.diagrams import (
     SCHEMA_KIND_CLASS,
     SCHEMA_KIND_GLYPH,
@@ -49,10 +52,10 @@ def _project_dir(project_name: str) -> Path:
     every section + authoring route: refuse anything that isn't a DIRECT child of
     examples/ (no traversal, no absolute path), so a name like '..%2f..' or one
     resolving outside examples/ can never read or delete anything here."""
-    target = (EXAMPLES_DIR / project_name).resolve()
-    if target.parent != EXAMPLES_DIR.resolve() or not target.is_dir():
+    target = (projects_dir() / project_name).resolve()
+    if target.parent != projects_dir().resolve() or not target.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project_name}'")
-    return EXAMPLES_DIR / project_name
+    return projects_dir() / project_name
 
 
 # ─── Gated-flow render helpers (the data-model gate + per-schema edit seed) ────
@@ -94,7 +97,7 @@ def _schema_spec(schema: dict[str, Any]) -> dict[str, Any]:
     """One schema with loader bookkeeping (_filename/_order/_error) removed — the
     spec only. The schema model is `extra="forbid"`, so validation and the edit
     textarea must both see the spec, never the bookkeeping keys the loader injects."""
-    return {k: v for k, v in schema.items() if k not in node_review.CANONICAL_IGNORE_KEYS}
+    return {k: v for k, v in schema.items() if k not in node_review.HASH_IGNORED_KEYS}
 
 
 def _schema_json_map(schemas: list[dict[str, Any]]) -> dict[str, str]:
@@ -180,7 +183,7 @@ async def new_project_submit(
         safe_name = project.create_project(name, doc_text, model=model, source="pasted document")
     except (ValueError, ProjectExistsError) as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    project_dir = EXAMPLES_DIR / safe_name
+    project_dir = projects_dir() / safe_name
     doc = (project_dir / "document.md").read_text(encoding="utf-8")
     # Kick off data-model generation. It runs as a LIVE chat turn; land the user on it
     # so they watch the model being authored (it streams while it runs, then persists
@@ -291,7 +294,7 @@ async def project_workflow(request: Request, project_name: str):
     navigable (the data-model→workflow nav lock is disabled pending a rethink);
     renders an empty state when no workflow is authored yet.
 
-    Belief colouring uses the SAME canonical spec (stage_to_spec_dict) the node-review
+    Belief colouring uses the SAME spec dict (stage_to_spec_dict) the node-review
     decide route and the /review/status poller use, so the FIRST paint agrees with the
     live recolour. When the workflow validates we colour off typed Stages; a workflow
     with a broken stage still renders (as a draft graph off raw dicts) so the reviewer
@@ -304,7 +307,7 @@ async def project_workflow(request: Request, project_name: str):
     coverage: dict[str, Any] | None
     stages: list[Any]
     if listing.stages:
-        # Valid workflow: colour by the canonical typed-stage spec (matches node_review
+        # Valid workflow: colour by the typed-stage spec dict (matches node_review
         # + /review/status), so an approved node paints green on first load.
         specs = [stage_to_spec_dict(s) for s in listing.stages]
         review_by_id = {
@@ -336,6 +339,17 @@ async def project_workflow(request: Request, project_name: str):
             "stages": stages,
             "mermaid": mermaid,
             "coverage": coverage,
+            # From the TYPED stages only: warnings judge a valid workflow's quality,
+            # and a workflow that does not load has its load issues shown instead.
+            # The examples are RUN here — the whole suite is sub-second — so a stage
+            # whose examples disagree with its code says so in the same list.
+            # None, not an empty report, when nothing typed loaded: the template
+            # renders an empty report as "nothing is wrong", which zero stages have
+            # not earned.
+            "compiler_warnings": find_workflow_compiler_warnings(
+                listing.stages,
+                run_stage_tests(listing.stages).count_failing_by_stage(),
+            ) if listing.stages else None,
             "type_class": TYPE_CLASS,
             "type_glyph": TYPE_GLYPH,
         },
@@ -386,7 +400,45 @@ async def project_workflow_version(request: Request, project_name: str, version_
             "state": shell_state(pdir),
             "section": "versions",
             "version": version,
+            "version_guide": versioning.find_latest_review_guide(project_name, version_id),
             "mermaid": build_mermaid_graph(version.stages, project_name),
+        },
+    )
+
+
+@router.get(
+    "/project/{project_name}/workflow/version/{version_id}/stage/{stage_id}/partial",
+    response_class=HTMLResponse,
+)
+async def version_stage_partial(
+    request: Request, project_name: str, version_id: str, stage_id: str
+):
+    """One frozen stage of a version, read-only — the panel the version page's graph
+    nodes open. Reads the SNAPSHOT's stages, not the working copy: the point of the
+    version page is what was frozen, which may since have been edited or deleted."""
+    pdir = _project_dir(project_name)
+    try:
+        version = versioning.load_version(pdir, version_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    stage = next((s for s in version.stages if s.id == stage_id), None)
+    if stage is None:
+        raise HTTPException(
+            status_code=404, detail=f"No stage '{stage_id}' in version {version_id}"
+        )
+    return templates.TemplateResponse(
+        request,
+        "_version_stage.html",
+        {
+            "project": project_name,
+            "version_id": version_id,
+            "stage": stage,
+            "raw_json": stage_to_json(stage),
+            "function_code": resolve_function_code(stage),
+            "test_views": (views := shape_test_views(stage)),
+            "certification": build_certification(stage, views),
+            "type_class": TYPE_CLASS,
+            "type_glyph": TYPE_GLYPH,
         },
     )
 
@@ -448,7 +500,7 @@ async def edit_schema(project_name: str, schema_name: str, json_text: str = Form
         )
 
     # Strip loader bookkeeping keys before validating/writing.
-    schema = {k: v for k, v in parsed.items() if k not in node_review.CANONICAL_IGNORE_KEYS}
+    schema = {k: v for k, v in parsed.items() if k not in node_review.HASH_IGNORED_KEYS}
 
     # Guard: no renaming a schema via edit (no writing one file's content under
     # another's name). The path name is authoritative.

@@ -2,6 +2,8 @@
 <title>lineage · {{ title }}</title>
 <link rel="stylesheet" href="/static/style.css">
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+{# standalone page (does not extend base.html), so it loads the node dispatcher itself #}
+<script src="/static/diagram_nodes.js"></script>
 <style>
 .lin-wrap{max-width:1100px;margin:18px auto;padding:0 20px}
 .lin-sub{color:#888;font-size:13px;margin-bottom:8px}
@@ -43,7 +45,8 @@ function verb(n){
   const k = n.transform.kind, sid = n.stage_id;
   if(k==='python') return `run python ${tlink(sid, sid + '()')}`;
   if(k==='llm') return `ask the LLM in ${tlink(sid, sid)}`;
-  if(k==='join') return tlink(sid, 'join');
+  if(k==='enrich') return `enrich with ${tlink(sid, sid)}`;
+  if(k==='expand') return `expand with ${tlink(sid, sid)}`;
   return tlink(sid, sid);
 }
 function predsOf(step){
@@ -81,9 +84,8 @@ async function openStage(stageId, target){
     panel.scrollIntoView({ behavior:'smooth', block:'start' });
   } catch(e){ panel.innerHTML = `<div class="lin-empty">error: ${esc(e)}</div>`; }
 }
-// mermaid's node click calls window.loadStage(sid); keep it distinct from
-// openStage so this global can't shadow-recurse into itself.
-window.loadStage = sid => openStage(sid, 'output');
+// Graph node clicks arrive as a diagram:node event (static/diagram_nodes.js).
+onDiagramNode(sid => openStage(sid, 'output'));
 document.getElementById('story').addEventListener('click', e => { const el = e.target.closest('[data-stage]'); if(el) openStage(el.dataset.stage, el.dataset.disc); });
 // ---- Graph (reuses the central mermaid workflow component) ----
 // mermaid loads from a CDN; if that's blocked, degrade gracefully — the story

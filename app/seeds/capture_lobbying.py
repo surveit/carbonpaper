@@ -9,6 +9,7 @@ from pathlib import Path
 
 from app.seeds.bootstrap import ensure_store_configured
 from app.services.project import export_project
+from app.services.workspace import set_projects_dir
 
 # The demo lives on the mcp-authoring branch of a separate worktree, checked
 # out locally at this path. Only this capture script reads from it.
@@ -22,8 +23,14 @@ def capture_lobbying_bundle() -> Path:
     _FIXTURE_PATH (replacing it if already present); returns that path.
     Read-only on the source."""
     ensure_store_configured()
-    wf = export_project(_SOURCE_PROJECT_NAME, examples_dir=_SOURCE_REPO_ROOT / "examples")
-    _FIXTURE_PATH.write_text(wf.model_dump_json(indent=2), encoding="utf-8")
+    # This script is the ONE caller that reads a workspace other than its own:
+    # it exports out of a separate local checkout. It repoints the process for
+    # the duration rather than passing a root down through the service API —
+    # a dev-tool concern must not put a second workspace back into the domain
+    # signatures.
+    set_projects_dir(_SOURCE_REPO_ROOT / "examples")
+    wf = export_project(_SOURCE_PROJECT_NAME)
+    _FIXTURE_PATH.write_text(wf.to_json(), encoding="utf-8")
     return _FIXTURE_PATH
 
 

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import mimetypes
 import traceback
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,6 +16,7 @@ from typing import Any, AsyncIterator
 from fastapi import APIRouter, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.datastructures import FormData
 from fastapi.responses import (
+    FileResponse,
     HTMLResponse,
     JSONResponse,
     RedirectResponse,
@@ -25,37 +27,38 @@ from starlette.concurrency import run_in_threadpool
 from app.core.errors import (
     MissingInputBindingError,
     NoVersionToRunError,
-    RowOutOfRange,
     RunVersionUnresolvableError,
-    StageNotInRun,
 )
 from app.core.run_status import RunStatus, StageStatus
 from app.services.errors import WorkflowLoadError
-from app.services.loader import load_workflow, resolve_function_code
+from app.services.loader import resolve_function_code
 from app.services.versioning import list_versions
 from app.services import run as run_service
+from app.services.run_guide import build_run_guide_view, find_guideless_version_id
 from app.runtime.cancellation import request_cancel
 from app.runtime.errors import PreviewError
 from app.runtime.preview import PREVIEWABLE_TYPES, run_stage_preview
-from app.runtime.run_log import RUN_DONE, read_events_since
-from app.runtime.trace import trace_row, trace_to_dict
-from app.runtime.trace_view import build_trace_view
-from app.web.config import EXAMPLES_DIR, REPO_ROOT, templates
+from app.runtime.run_log import RUN_DONE, read_events_since, read_events_window
+from app.web.config import projects_dir, REPO_ROOT, templates
+from app.web.stage_test_views import build_certification, shape_test_views
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
 from app.web.loading import (
     build_llm_example,
+    csv_download_body,
     list_file_inputs,
     save_uploaded_input,
-    list_runs,
     load_manifest,
     load_output_preview,
-    load_output_row,
     load_output_table,
     manifest_stage,
     read_output_df,
     runs_dir,
 )
 from app.web.project_view import shell_state
+from app.web.run_header import build_live_view, build_run_header
+from app.web.run_index import build_run_index_rows
+from app.web.run_stage_panel import not_executed_panel
+from app.web.stage_diff import build_stage_diff
 
 router = APIRouter()
 
@@ -65,10 +68,16 @@ router = APIRouter()
 _EVENT_POLL_INTERVAL_S = 0.5
 _IDLE_POLLS_BEFORE_TERMINAL_STOP = 2
 
+# The run log's page size: how many events the SSE feed opens on, and how many
+# one "load older" fetch brings back. The template reads EVENT_TAIL too, so the
+# panel's "showing N of M" is sized by the same number the stream is.
+EVENT_TAIL = 500
+EVENT_PAGE_MAX = 5000
+
 
 @router.post("/project/{project}/run")
 async def trigger_run(request: Request, project: str):
-    project_dir = EXAMPLES_DIR / project
+    project_dir = projects_dir() / project
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
     # Set up the run (writes an initial `running` manifest), kick off execution
@@ -105,7 +114,7 @@ async def trigger_run_of_version(project: str, version_id: str):
     (400), and MissingInputBindingError/ValueError for a version whose stages
     aren't run-ready (e.g. an unbound file input) (400). Same
     background-and-redirect flow as trigger_run."""
-    project_dir = EXAMPLES_DIR / project
+    project_dir = projects_dir() / project
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
     try:
@@ -183,7 +192,7 @@ async def run_inputs(project: str, version_id: str | None = None):
     path}]). The run form fetches this when the version dropdown changes so its
     path fields describe the version about to run — a different version can author
     different input stages/paths. `version_id` None resolves to the latest."""
-    project_dir = EXAMPLES_DIR / project
+    project_dir = projects_dir() / project
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
     return JSONResponse(list_file_inputs(project, version_id))
@@ -201,7 +210,7 @@ async def upload_input(
     a path, so we save those bytes server-side (uploads/<stage_id>/<name>) and
     hand back the saved copy's path for the field. The disk copy runs in a
     threadpool so a large upload doesn't stall the event loop."""
-    project_dir = EXAMPLES_DIR / project
+    project_dir = projects_dir() / project
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
     if not file.filename:
@@ -217,7 +226,7 @@ async def runs_index(request: Request, project: str):
     """RUNS section of the project shell: the runs list, framed by the sidebar. Passes
     the SAME project_state the other sections do (so the sidebar / next-action agree)
     plus the manifest-backed run rows. 404 if the project dir doesn't exist."""
-    pdir = EXAMPLES_DIR / project
+    pdir = projects_dir() / project
     if not pdir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
     # A stored version that no longer validates raises WorkflowLoadError from
@@ -229,7 +238,7 @@ async def runs_index(request: Request, project: str):
         {
             "state": shell_state(pdir),
             "section": "runs",
-            "runs": list_runs(project),
+            "runs": build_run_index_rows(project),
             # Only PUBLISHED versions are runnable (resolve_version_id gates on it),
             # so the run form's version picker offers only those — never an
             # unpublished version the run would then reject.
@@ -264,6 +273,9 @@ async def run_status(project: str, run_id: str):
                    "awaiting": _count(StageStatus.AWAITING_REVIEW),
                    "cancelled": _count(StageStatus.CANCELLED)},
         "stages": [{"stage_id": s["stage_id"], "status": s.get("status")} for s in mstages],
+        # The header parts that move while a run is in flight; the run page
+        # updates them in place rather than fetching a second endpoint.
+        "header": build_live_view(project, run_id, manifest).model_dump(),
         "mermaid": graph.mermaid,
         "graph_error": graph.error,
     })
@@ -291,48 +303,66 @@ def build_run_graph(
     )
 
 
-def _artifact_links(project: str, run_id: str, run_dir: Path, manifest: dict) -> list[dict]:
-    """Browsable links to the files a completed run published.
-
-    Only returns links once the run has finished AND a publish stage completed —
-    linking to the files it actually wrote under artifacts/ (preferring a
-    browsable index.html) rather than a hardcoded guess. Empty for in-progress or
-    never-published runs, so the page shows no banner."""
-    if manifest.get("status") in (RunStatus.RUNNING, None):
-        return []
-    has_ok_publish = any(
-        s.get("type") == "publish"
-        and s.get("status") in (StageStatus.OK, StageStatus.VALIDATION_WARNINGS)
-        for s in manifest.get("stage_records", [])
-    )
-    artifacts_root = run_dir / "artifacts"
-    if not (has_ok_publish and artifacts_root.is_dir()):
-        return []
-    files = sorted(f for f in artifacts_root.rglob("*") if f.is_file())
-    index = next((f for f in files if f.name == "index.html"), None)
-    if index is not None:
-        files = [index]
-    return [
-        {
-            "name": f.name,
-            "url": f"/project/{project}/runs/{run_id}/artifact/{f.relative_to(artifacts_root).as_posix()}",
-        }
-        for f in files
-    ]
-
-
 @router.get("/project/{project}/runs/{run_id}/events")
 async def stream_run_events(
-    project: str, run_id: str, request: Request, from_seq: int = 0
+    project: str,
+    run_id: str,
+    request: Request,
+    from_seq: int | None = None,
+    tail: int = EVENT_TAIL,
 ):
-    """SSE tail of this run's event log, live or finished."""
+    """SSE tail of this run's event log, live or finished.
+
+    Defaults to the LAST `tail` events, not the whole log: a row-per-event log
+    of a 135k-row stage runs to 270k events, and streaming all of them is a feed
+    no one can read arriving faster than a browser can render it. Older events
+    are a page fetch away (/events/page); `from_seq` still replays from an exact
+    cursor, which is what a reconnect uses.
+    """
     run_dir = runs_dir(project) / run_id
     load_manifest(run_dir)  # 404s if the run doesn't exist
+    start = (
+        _tail_start_seq(run_dir / "events.jsonl", tail)
+        if from_seq is None
+        else max(from_seq, 0)
+    )
     return StreamingResponse(
-        _tail_run_events(run_dir, request, from_seq),
+        _tail_run_events(run_dir, request, start),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+def _tail_start_seq(events_path: Path, tail: int) -> int:
+    """The seq to open a stream at so it yields the last `tail` events."""
+    # One read of the log, and the answer comes off the parsed events rather than
+    # from arithmetic on seq: taking `highest - tail` would assume seq has no
+    # gaps, which is true of what the writer emits today but is not a property
+    # the log itself carries.
+    events = read_events_since(events_path, 0)
+    if not events:
+        return 0
+    if tail <= 0:
+        return int(events[-1]["seq"]) + 1      # start past the end: nothing old
+    return 0 if len(events) <= tail else int(events[-tail]["seq"])
+
+
+@router.get("/project/{project}/runs/{run_id}/events/page")
+async def run_events_page(
+    project: str, run_id: str, before_seq: int, limit: int = EVENT_TAIL
+):
+    """The page of events immediately BEFORE `before_seq` — "load older"."""
+    # Backwards paging only. Newer events arrive on the SSE feed, so a forwards
+    # page would be a second route to the same events with its own cursor to
+    # keep in step; there is nothing for it to do.
+    run_dir = runs_dir(project) / run_id
+    load_manifest(run_dir)  # 404s if the run doesn't exist
+    limit = max(1, min(limit, EVENT_PAGE_MAX))
+    start = max(0, before_seq - limit)
+    events = read_events_window(
+        run_dir / "events.jsonl", start, limit=max(0, before_seq - start)
+    )
+    return {"events": events, "first_seq": start, "has_more": start > 0}
 
 
 async def _tail_run_events(
@@ -380,18 +410,31 @@ async def run_detail(request: Request, project: str, run_id: str):
     manifest = load_manifest(run_dir)
     status_by_id = {s["stage_id"]: s.get("status", "") for s in manifest.get("stage_records", [])}
     graph = build_run_graph(project, manifest, status_by_id)
-    artifact_links = _artifact_links(project, run_id, run_dir, manifest)
 
     return templates.TemplateResponse(
         request,
         "run_detail.html",
         {
+            # The run view renders inside the project shell, so it carries the nav
+            # state like every other section. `section: runs` keeps the Runs entry
+            # highlighted while looking at one run.
+            "state": shell_state(projects_dir() / project),
+            "section": "runs",
             "project": project,
             "run_id": run_id,
             "manifest": manifest,
             "mermaid": graph.mermaid,
             "graph_error": graph.error,
-            "artifact_links": artifact_links,
+            "event_tail": EVENT_TAIL,
+            # The grounding line, the CTA and the stage strip — everything above
+            # the graph (app.web.run_header).
+            "header": build_run_header(project, run_id, run_dir, manifest),
+            # None when the pinned version carries no guide — the panel is then
+            # not rendered at all, rather than standing in for one with prose.
+            "guide": build_run_guide_view(project, manifest),
+            # Set only when a guide could still be written for this run's version:
+            # the version id the Generate-guide offer targets in the panel's place.
+            "guideless_version": find_guideless_version_id(project, manifest),
             "type_glyph": TYPE_GLYPH,
             "type_class": TYPE_CLASS,
         },
@@ -412,16 +455,18 @@ async def run_stage_partial(
         (s for s in manifest.get("stage_records", []) if s.get("stage_id") == stage_id),
         None,
     )
-    if stage_record is None:
-        raise HTTPException(status_code=404, detail=f"No stage '{stage_id}' in run")
-
-    output_preview = load_output_preview(run_dir, stage_record.get("output_path"))
 
     # The panel's Schema tier and Transform detail describe what THIS run
     # executed, so they read the version it pinned. With no resolvable version
     # there is no stage definition to show and the panel says why.
     pinned = run_service.load_pinned_stage_def(project, manifest, stage_id)
     stage_def = pinned.stage
+    if stage_record is None:
+        # A stage the graph draws but this run never executed (a workflow test
+        # injects its input stages) — see app.web.run_stage_panel.
+        return not_executed_panel(request, project, run_id, manifest, stage_id, pinned)
+
+    output_preview = load_output_preview(run_dir, stage_record.get("output_path"))
     output_by_id = {
         s.get("stage_id"): s.get("output_path") for s in manifest.get("stage_records", [])
     }
@@ -448,9 +493,17 @@ async def run_stage_partial(
             "stage_def": stage_def,
             "stage_def_error": pinned.error,
             "preview": output_preview,
+            # None for every stage type outside the diff's scope, and for any
+            # stage whose alignment can't be verified — the pane then shows the
+            # plain output view (app.web.stage_diff).
+            "diff": build_stage_diff(
+                stage_def, run_dir, stage_record.get("output_path"), output_by_id
+            ),
             "input_previews": input_previews,
             "function_code": function_code,
             "llm_example": llm_example,
+            "test_views": (views := shape_test_views(stage_def)),
+            "certification": build_certification(stage_def, views) if stage_def else None,
             "previewable": stage_def is not None and stage_def.type in PREVIEWABLE_TYPES,
             "type_glyph": TYPE_GLYPH,
             "type_class": TYPE_CLASS,
@@ -487,114 +540,16 @@ async def run_stage_rows(
 @router.get("/project/{project}/runs/{run_id}/stage/{stage_id}/rows.csv")
 async def run_stage_rows_csv(project: str, run_id: str, stage_id: str):
     """One stage's complete output as a CSV download (no row cap)."""
+    # UTF-8 behind a byte-order mark, so accented rows survive Excel on
+    # Windows — `csv_download_body` carries the why.
     run_dir = runs_dir(project) / run_id
     stage_record = manifest_stage(run_dir, stage_id)
     df = read_output_df(run_dir, stage_record.get("output_path"))
     filename = f"{project}__{run_id}__{stage_id}.csv"
     return Response(
-        content=df.to_csv(index=False),
+        content=csv_download_body(df),
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
-
-
-@router.get(
-    "/project/{project}/runs/{run_id}/stage/{stage_id}/lineage_panel",
-    response_class=HTMLResponse,
-)
-async def run_stage_lineage_panel(
-    request: Request, project: str, run_id: str, stage_id: str, row: int
-):
-    """Minimal stage view for the lineage page: the transform, the output
-    schema, and the output trimmed to `row`. Reuses `_stage_executable.html`
-    and `schema_table` — not the whole run-detail panel."""
-    run_dir = runs_dir(project) / run_id
-    manifest = load_manifest(run_dir)
-    stage_record = next(
-        (s for s in manifest.get("stage_records", []) if s.get("stage_id") == stage_id),
-        None,
-    )
-    if stage_record is None:
-        raise HTTPException(status_code=404, detail=f"No stage '{stage_id}' in run")
-    # Transform detail is part of the lineage of THIS run, so it comes from the
-    # version the run pinned. Unresolvable → no transform and a stated reason;
-    # the row's output table still renders, because that data is still true.
-    pinned = run_service.load_pinned_stage_def(project, manifest, stage_id)
-    return templates.TemplateResponse(
-        request,
-        "_lineage_stage.html",
-        {
-            "project": project,
-            "run_id": run_id,
-            "stage": stage_record,
-            "stage_def": pinned.stage,
-            "stage_def_error": pinned.error,
-            "function_code": resolve_function_code(pinned.stage),
-            "preview": load_output_row(run_dir, stage_record.get("output_path"), row),
-            "scoped_row": row,
-            "type_glyph": TYPE_GLYPH,
-            "type_class": TYPE_CLASS,
-        },
-    )
-
-
-@router.get("/project/{project}/runs/{run_id}/stage/{stage_id}/row/{row}/trace")
-async def run_stage_row_trace(project: str, run_id: str, stage_id: str, row: int):
-    """Show-your-work for one output row: its ancestry through row-preserving
-    stages, as JSON. 404 if the run/stage is absent, 400 if the row ordinal is
-    out of range."""
-    run_dir = runs_dir(project) / run_id
-    load_manifest(run_dir)  # 404s if the run doesn't exist
-    try:
-        trace = trace_row(run_dir, stage_id, row)
-    except StageNotInRun as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except RowOutOfRange as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return JSONResponse(trace_to_dict(trace))
-
-
-@router.get(
-    "/project/{project}/runs/{run_id}/stage/{stage_id}/row/{row}/trace/view",
-    response_class=HTMLResponse,
-)
-async def run_stage_row_trace_view(
-    request: Request, project: str, run_id: str, stage_id: str, row: int
-):
-    """The row's show-your-work as a read-only HTML page: a numbered story and a
-    graph toggle on top; clicking a stage loads the row-trimmed panel below."""
-    run_dir = runs_dir(project) / run_id
-    manifest = load_manifest(run_dir)
-    try:
-        trace = trace_row(run_dir, stage_id, row)
-    except StageNotInRun as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except RowOutOfRange as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    # Node detail and the graph both describe THIS run, so both read the version
-    # it pinned. With no resolvable version neither falls back to the working
-    # copy: the story still lists the ancestry, transforms show as "unknown",
-    # and no graph is drawn.
-    try:
-        stages = run_service.load_run_stages(project, manifest)
-    except RunVersionUnresolvableError:
-        stages = []
-    stages_by_id = {s.id: s for s in stages}
-
-    view = build_trace_view(trace_to_dict(trace), stages_by_id)
-    ordered = [stages_by_id[n["stage_id"]] for n in view["nodes"]
-               if n["stage_id"] in stages_by_id]
-    mermaid = build_mermaid_graph(ordered, project) if len(ordered) == len(view["nodes"]) else ""
-    return templates.TemplateResponse(
-        request,
-        "lineage.html",
-        {
-            "title": f"{view['start_stage']} · row {view['start_row']}",
-            "view": view,
-            "project": project,
-            "mermaid": mermaid,
-        },
     )
 
 
@@ -662,14 +617,21 @@ async def run_stage_scratch_preview(
     return JSONResponse({"ok": True, **result})
 
 
-@router.get("/project/{project}/runs/{run_id}/artifact/{filename:path}", response_class=HTMLResponse)
+@router.get("/project/{project}/runs/{run_id}/artifact/{filename:path}")
 async def run_artifact(project: str, run_id: str, filename: str):
-    """Serve generated HTML artifacts (per-org profiles etc.) inline."""
+    # A publish stage writes whatever its format says — an .xlsx workbook as
+    # readily as an HTML profile — so decoding every artifact as text answers a
+    # binary one with a UnicodeDecodeError.
+    """Serve a run's artifact: HTML inline, anything else as its own file type."""
     run_dir = runs_dir(project) / run_id
     candidate = (run_dir / "artifacts" / filename).resolve()
     if not candidate.exists() or not str(candidate).startswith(str(run_dir.resolve())):
         raise HTTPException(status_code=404, detail="Artifact not found")
-    return HTMLResponse(content=candidate.read_text(encoding="utf-8"))
+    media_type, _ = mimetypes.guess_type(candidate.name)
+    if media_type == "text/html":
+        return HTMLResponse(content=candidate.read_text(encoding="utf-8"))
+    return FileResponse(candidate, media_type=media_type or "application/octet-stream",
+                        filename=candidate.name)
 
 
 @router.post("/project/{project}/runs/{run_id}/resume")
@@ -678,22 +640,24 @@ async def resume_run_route(project: str, run_id: str):
     NOT already complete (so this serves BOTH: a halted run after its review
     decisions, AND an ERRORED run after the bug is fixed — it re-runs the failed
     stage + downstream and reuses completed upstream outputs)."""
-    project_dir = EXAMPLES_DIR / project
+    project_dir = projects_dir() / project
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
     run_dir = runs_dir(project) / run_id
     if not (run_dir / "manifest.json").exists():
         raise HTTPException(status_code=404, detail="Run not found")
-    # Validate the compiled workflow synchronously so load errors surface as a 400
-    # here rather than being swallowed on the background thread below.
+    # Resume executes the version the run PINNED, so that snapshot is what has to
+    # load — validating the live working copy here would block resuming a valid
+    # run because of an unrelated edit. The seam loads it synchronously and only
+    # then goes to a background thread (the re-run is LLM-heavy), so a bad
+    # snapshot surfaces as a 400 here rather than dying where nothing reports it.
     try:
-        load_workflow(project_dir)
+        run_service.resume(project, run_id)
+    except RunVersionUnresolvableError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except WorkflowLoadError as exc:
-        return JSONResponse({"detail": "compiled workflow failed validation",
+        return JSONResponse({"detail": "pinned workflow version failed validation",
                              "issues": exc.issues}, status_code=400)
-    # Resume re-runs the queue stage + downstream (LLM-heavy) — do it in the
-    # background and redirect immediately so the page can poll progress.
-    run_service.resume(project, run_id)
     return RedirectResponse(
         url=f"/project/{project}/runs/{run_id}",
         status_code=303,

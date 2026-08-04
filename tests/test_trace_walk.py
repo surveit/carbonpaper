@@ -68,7 +68,7 @@ def test_stop_at_reshaping_stage_points_at_issue_58(tmp_path):
 
 def test_rowcount_mismatch_on_preserving_stage_stops_defensively(tmp_path):
     # The point-5 scenario: a row-preserving stage whose PERSISTED output has
-    # fewer rows than its input (a row errored out, or --limit sliced it), so
+    # fewer rows than its input (a row errored out, say), so
     # output row i no longer positionally equals input row i. The walk must
     # refuse to guess — stop at this step, don't map to the wrong parent row.
     seeds = pd.DataFrame({"facility_id": ["a", "b", "c"]})          # N = 3

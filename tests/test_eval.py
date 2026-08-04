@@ -14,8 +14,8 @@ def S(**kw):
     return kw
 
 
-_K = {"columns": [{"name": "k"}]}
-_QUEUE_IN = {"columns": [{"name": "k"}, {"name": "score", "type": "int"}]}
+_K = {"columns": [{"name": "k", "type": "str", "nullable": True}]}
+_QUEUE_IN = {"columns": _K["columns"] + [{"name": "score", "type": "int", "nullable": True}]}
 _QUEUE_OUT = {"columns": _QUEUE_IN["columns"] + queue_added_columns()}
 
 
@@ -36,74 +36,82 @@ def _py(id_, inputs, granularity="frame", schema=_K, **kw):
 
 def _ref(path="x.csv", cols=("k",)):
     return {"path": path, "format": "csv",
-            "table_schema": {"columns": [{"name": c} for c in cols]}}
+            "table_schema": {"columns": [{"name": c, "type": "str", "nullable": True} for c in cols]}}
 
 
 # ── is_grain_and_order_preserving (fixed by stage type) ────────────────────────────────
 def test_python_frame_function_not_grain_preserving():
-    assert m.Stage.model_validate(_py("t", ["a"])).is_grain_and_order_preserving is False
+    assert m.parse_stage(_py("t", ["a"])).is_grain_and_order_preserving is False
 
 
 def test_python_row_function_is_grain_and_order_preserving():
-    assert m.Stage.model_validate(_py("t", ["a"], granularity="row")).is_grain_and_order_preserving is True
+    assert m.parse_stage(_py("t", ["a"], granularity="row")).is_grain_and_order_preserving is True
 
 
 def test_python_row_function_rejects_multiple_inputs():
-    # a row function maps over one input's rows — two inputs is a join
+    # a row function maps over one input's rows — two inputs is an enrich/expand
     with pytest.raises(ValidationError):
-        m.Stage.model_validate(S(id="t", type="python_row_function",
+        m.parse_stage(S(id="t", type="python_row_function",
                                  inputs=[{"id": "a", "schema": _K}, {"id": "b", "schema": _K}],
                                  function={"kind": "inline", "code": "def transform(row): return row"},
                                  output_schema=_K))
 
 
 def test_llm_is_grain_and_order_preserving():
-    s = m.Stage.model_validate(S(
+    s = m.parse_stage(S(
         id="e", type="llm_transform",
-        inputs=[{"id": "a", "schema": {"columns": [{"name": "id", "type": "str"}],
+        inputs=[{"id": "a", "schema": {"columns": [{"name": "id", "type": "str", "nullable": True}],
                                        "primary_key": ["id"]}}],
-        output_schema={"columns": [{"name": "id", "type": "str"}, {"name": "out", "type": "str"}],
+        output_schema={"columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "out", "type": "str", "nullable": True}],
                        "primary_key": ["id"]},
         llm={"prompt_template": "p"}))
     assert s.is_grain_and_order_preserving is True
 
 
 def test_input_data_is_grain_and_order_preserving(tmp_path):
-    assert m.Stage.model_validate(_file_input("load", tmp_path)).is_grain_and_order_preserving is True
+    assert m.parse_stage(_file_input("load", tmp_path)).is_grain_and_order_preserving is True
 
 
 def test_human_review_queue_is_grain_and_order_preserving():
     # The runtime maps the queue handler per row and it emits every one of
     # them, whatever the verdict — so it is 1:1 in input order, and an eval
     # pathway through a queue stage is row-alignable.
-    s = m.Stage.model_validate(S(id="rev", type="human_review_queue",
-                                 inputs=[{"id": "a", "schema": _QUEUE_IN}],
-                                 queue=queue_columns(), output_schema=_QUEUE_OUT))
+    s = m.parse_stage(S(id="rev", type="human_review_queue",
+                        inputs=[{"id": "a", "schema": _QUEUE_IN}],
+                        queue=queue_columns(), output_schema=_QUEUE_OUT))
     assert s.is_grain_and_order_preserving is True
 
 
 def test_publish_not_grain_and_order_preserving():
     # handle_publish runs an authored function whose output is a table of
     # artifact paths — different rows from its input, never row-alignable.
-    s = m.Stage.model_validate(S(id="pub", type="publish",
+    s = m.parse_stage(S(id="pub", type="publish",
                                  inputs=[{"id": "a", "schema": _K}], publish={},
                                  function={"kind": "inline", "code": "def transform(row): return row"}))
     assert s.is_grain_and_order_preserving is False
 
 
-def test_join_and_aggregate_change_grain():
-    j = m.Stage.model_validate(S(id="j", type="join",
+def test_joins_and_aggregate_change_grain():
+    # enrich is registered as a frame handler, so even its m:1 shape is NOT
+    # grain-preserving: preservation is earned by the runtime driving the stage
+    # row by row, never asserted about an operation.
+    j = m.parse_stage(S(id="j", type="enrich",
                                  inputs=[{"id": "a", "schema": _K}, {"id": "b", "schema": _K}],
                                  join={"keys": [{"left": "k", "right": "k"}]},
                                  output_schema=_K))
-    agg_in = {"columns": [{"name": "g"}, {"name": "x", "type": "int"}]}
-    agg = m.Stage.model_validate(S(id="agg", type="aggregate",
+    x = m.parse_stage(S(id="x", type="expand",
+                                 inputs=[{"id": "a", "schema": _K}, {"id": "b", "schema": _K}],
+                                 join={"keys": [{"left": "k", "right": "k"}]},
+                                 output_schema=_K))
+    assert x.is_grain_and_order_preserving is False
+    agg_in = {"columns": [{"name": "g", "type": "str", "nullable": True}, {"name": "x", "type": "int", "nullable": True}]}
+    agg = m.parse_stage(S(id="agg", type="aggregate",
                                    inputs=[{"id": "a", "schema": agg_in}],
                                    aggregate={"group_by": ["g"],
                                               "aggregations": [{"formula": "sum", "output_column": "t",
                                                                 "value_column": "x"}]},
-                                   output_schema={"columns": [{"name": "g"},
-                                                              {"name": "t", "type": "int"}]}))
+                                   output_schema={"columns": [{"name": "g", "type": "str", "nullable": True},
+                                                              {"name": "t", "type": "int", "nullable": True}]}))
     assert j.is_grain_and_order_preserving is False    # fan-out
     assert agg.is_grain_and_order_preserving is False  # fan-in
 
@@ -165,7 +173,7 @@ def test_eval_config_table_optional():
 
 def test_eval_config_no_key_or_input_columns_fields():
     # `key` and `input_columns` are not part of the contract: the injected
-    # columns are derived from override_stage's output schema, not authored.
+    # columns are computed from override_stage's output schema, not authored.
     cfg = m.EvalConfig.model_validate({
         "id": "e1", "project": "lobbymap", "name": "E1",
         "override_stage": "a", "target_stage": "b",
@@ -273,10 +281,10 @@ def test_scorable_when_tapping_before_the_frame_stage(tmp_path):
     assert set(v.frontier) == {"a", "b"}
 
 
-def test_join_changes_grain_so_not_scorable(tmp_path):
+def test_expand_changes_grain_so_not_scorable(tmp_path):
     meth = m.parse_workflow([
         _file_input("j1", tmp_path), _file_input("j2", tmp_path),
-        S(id="jn", type="join", inputs=[{"id": "j1", "schema": _K}, {"id": "j2", "schema": _K}],
+        S(id="jn", type="expand", inputs=[{"id": "j1", "schema": _K}, {"id": "j2", "schema": _K}],
           join={"keys": [{"left": "k", "right": "k"}]}, output_schema=_K),
     ])
     v = resolve_eval_run_settings(meth, overrides=[], target="jn")

@@ -12,35 +12,38 @@ from fastapi.testclient import TestClient
 import app as app_package
 import app.runtime.runner as runner
 import app.web.loading as loading
+from app.services import workspace
 from app.web import queue_view
 from app.main import app
 from app.runtime.runner import prepare_run, run_prepared
 from app.runtime.stages import llm_transform as lt
 from app.services import review, versioning
 from app.core.stage_cache import StageCacheEntry
-from app.services.versioning import create_version_from_disk
-from app.models import ReviewVerdict, Stage
-from conftest import QUEUE_COLUMNS, queue_added_columns, queue_columns
+from app.services.project import save_working_copy_as_version
+from app.models import ReviewVerdict, Stage, parse_stage
+from conftest import (
+    QUEUE_COLUMNS, pinned_stages, queue_added_columns, queue_columns, resumed_stages,
+)
 
 PROJECT = "queue_route_journey"
 
 
 def _seed_version(root):
-    vid = create_version_from_disk(root, message="test seed", reviewer="test").version_id
+    vid = save_working_copy_as_version(root, message="test seed", reviewer="test").version_id
     versioning.publish_version(root, vid, reviewer="human")
 
 
 def _with_queue_output_schema(stage):
-    """`stage` plus the output_schema its input edge and `queue` block imply:
-    the edge's own columns, each reviewed source repeated under its target name
-    and spec, then the review-record columns. For the fixtures whose subject is
-    something other than the output schema."""
+    # `stage` plus the output_schema its input edge and `queue` block imply: the edge's
+    # own columns, each reviewed source repeated under its target name and spec, then the
+    # review-record columns. For the fixtures whose subject is something other than the
+    # output schema.
     input_schema = stage["inputs"][0]["schema"]
     by_name = {column["name"]: column for column in input_schema["columns"]}
     queue = stage["queue"]
     added = [{**by_name[source], "name": target}
              for source, target in queue["reviewed_columns"].items()]
-    added += [{"name": queue[field], "type": "str"}
+    added += [{"name": queue[field], "type": "str", "nullable": True}
               for field in ("verdict_column", "reviewer_column",
                             "reviewed_at_column", "review_notes_column")
               if queue.get(field) is not None]
@@ -65,8 +68,8 @@ def _load_quotes_stage(root):
             "connector": {"kind": "file",
                           "params": {"path": str(csv_path), "format": "csv"}},
             "output_schema": {
-                "columns": [{"name": "id", "type": "str"},
-                            {"name": "quote", "type": "str"}],
+                "columns": [{"name": "id", "type": "str", "nullable": True},
+                            {"name": "quote", "type": "str", "nullable": True}],
                 "primary_key": ["id"]}}
 
 
@@ -79,15 +82,15 @@ _REVIEW_COLUMNS = queue_added_columns()
 
 
 def _score_stage():
-    """llm_transform: scores each quote. output_schema is additive (a stage
-    invariant — app/models/stage.py's _llm_transform_one_to_one), so `quote`
-    survives onto the queued row."""
+    # llm_transform: scores each quote. output_schema is additive (a stage invariant —
+    # app/models/stage.py's _llm_transform_one_to_one), so `quote` survives onto the
+    # queued row.
     return {"id": "score", "name": "Score quotes", "type": "llm_transform",
             "inputs": [{"id": "load", "schema": {
-                "columns": [{"name": "id", "type": "str"}, {"name": "quote", "type": "str"}],
+                "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "quote", "type": "str", "nullable": True}],
                 "primary_key": ["id"]}}],
             "output_schema": {
-                "columns": [{"name": "id", "type": "str"}, {"name": "quote", "type": "str"},
+                "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "quote", "type": "str", "nullable": True},
                             {"name": "score", "type": "int", "nullable": False}],
                 "primary_key": ["id"]},
             "llm": {"prompt_instructions": "Score each quote for tone.",
@@ -95,16 +98,16 @@ def _score_stage():
 
 
 def _review_stage():
-    """human_review_queue reviewing `score`'s output; no cached decisions yet,
-    so the run halts and snapshots both rows."""
+    # human_review_queue reviewing `score`'s output; no cached decisions yet, so the run
+    # halts and snapshots both rows.
     return {"id": "review", "name": "Review scores", "type": "human_review_queue",
             "inputs": [{"id": "score", "schema": {
-                "columns": [{"name": "id", "type": "str"}, {"name": "quote", "type": "str"},
-                            {"name": "score", "type": "int"}],
+                "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "quote", "type": "str", "nullable": True},
+                            {"name": "score", "type": "int", "nullable": True}],
                 "primary_key": ["id"]}}],
             "output_schema": {
-                "columns": [{"name": "id", "type": "str"}, {"name": "quote", "type": "str"},
-                            {"name": "score", "type": "int"}] + _REVIEW_COLUMNS,
+                "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "quote", "type": "str", "nullable": True},
+                            {"name": "score", "type": "int", "nullable": True}] + _REVIEW_COLUMNS,
                 "primary_key": ["id"]},
             "queue": dict(QUEUE_COLUMNS)}
 
@@ -124,10 +127,9 @@ def _find_stage_def(project: str, stage_id: str) -> Stage:
 
 
 def _decide_data(fp, reviewed, prefilled=None, reviewer="Ada", **extra):
-    """The form a browser posts to /decide. `prefilled` defaults to `reviewed`,
-    the unchanged submit the endpoint derives `approve` from; pass a different
-    mapping to post a changed value. Either may be a raw string, for the
-    malformed-payload cases."""
+    # The form a browser posts to /decide. `prefilled` defaults to `reviewed`, the
+    # unchanged submit the endpoint settles as `approve`; pass a different mapping to post
+    # a changed value. Either may be a raw string, for the malformed-payload cases.
     if prefilled is None:
         prefilled = {} if isinstance(reviewed, str) else reviewed
     return {
@@ -139,12 +141,11 @@ def _decide_data(fp, reviewed, prefilled=None, reviewer="Ada", **extra):
 
 
 def _build_and_halt(tmp_path, monkeypatch):
-    """Builds load -> score (llm_transform, mocked) -> review
-    (human_review_queue) and runs it for real. The run halts at `review` with
-    both rows snapshotted. Returns (project_dir, run_id, run_dir, snapshot,
-    fingerprints) — fingerprints is the sidecar dict, its `input_fingerprints`
-    list POSITIONALLY aligned to `snapshot`'s row order."""
-    monkeypatch.setattr(loading, "EXAMPLES_DIR", tmp_path)
+    # Builds load -> score (llm_transform, mocked) -> review (human_review_queue) and runs
+    # it for real. The run halts at `review` with both rows snapshotted. Returns
+    # (project_dir, run_id, run_dir, snapshot, fingerprints) — fingerprints is the sidecar
+    # dict, its `input_fingerprints` list POSITIONALLY aligned to `snapshot`'s row order.
+    workspace.set_projects_dir(tmp_path)
     monkeypatch.setattr(
         lt, "call_llm", lambda stage_id, llm_config, row, **kw: {"score": 1}
     )
@@ -155,7 +156,7 @@ def _build_and_halt(tmp_path, monkeypatch):
     _write_stage(project_dir, "03_review.json", _review_stage())
     _seed_version(project_dir)
 
-    manifest = run_prepared(prepare_run(project_dir, repo_root=project_dir))
+    manifest = run_prepared(prepare_run(project_dir, project_dir, *pinned_stages(project_dir)))
     assert manifest["status"] == "awaiting_review"
     assert manifest["halted_at"] == ["review"]
 
@@ -170,14 +171,13 @@ def _put_cached_decision(
     stage_fingerprint: str, input_fingerprint: str, row: pd.Series,
     decision: ReviewVerdict, reviewed_score: float | None = None,
 ) -> None:
-    """Seed a prior decision through the real review service (record_decision →
-    the production cache seam) — never a hand-assembled entry, a raw store
-    write, or the HTTP endpoint (used by tests that only care about
-    queue_page's rendering of an already-cached decision). `reviewed_score` is
-    the reviewer's value for QUEUE_COLUMNS' one reviewed column, defaulting to
-    the AI value they were shown."""
+    # Seed a prior decision through the real review service (record_decision → the
+    # production cache seam) — never a hand-assembled entry, a raw store write, or the
+    # HTTP endpoint (used by tests that only care about queue_page's rendering of an
+    # already-cached decision). `reviewed_score` is the reviewer's value for
+    # QUEUE_COLUMNS' one reviewed column, defaulting to the AI value they were shown.
     review.record_decision(
-        project=project, stage=Stage.model_validate(_review_stage()),
+        project=project, stage=parse_stage(_review_stage()),
         stage_fingerprint=stage_fingerprint, input_fingerprint=input_fingerprint,
         frozen_row={"id": row["id"], "quote": row["quote"], "score": int(row["score"])},
         verdict=decision,
@@ -219,7 +219,7 @@ def test_happy_path_renders_items_with_fingerprint_prior_decision_and_counts(tmp
     assert 'data-target="human_score"' in html
     assert 'type="number"' in html
     assert 'data-prefill="1"' in html  # the mocked upstream score
-    # One Submit per card; the verdict is derived, so no button names one.
+    # One Submit per card; the verdict is settled server-side, so no button names one.
     assert html.count(">Submit<") == html.count('<article class="queue-card')
     # The notes column is labelled by name, and nothing ties a note to a change.
     assert "<span>Review notes</span>" in html  # the declared column is `review_notes`
@@ -244,7 +244,7 @@ def test_404_when_the_stage_id_is_not_a_human_review_queue_stage(tmp_path, monke
         # The payload itself is unreadable as a map of target column -> value.
         ("{not json", None, {}, "not valid JSON"),
         ("[1, 2]", None, {}, "JSON object"),
-        # The verdict is derived by comparing the two maps column by column, so a
+        # The verdict is settled by comparing the two maps column by column, so a
         # column in only one is a comparison that cannot be made — never one
         # silently treated as unchanged.
         ({"human_score": 1}, {}, {}, "human_score"),
@@ -285,7 +285,7 @@ def test_decide_404_on_unknown_fingerprint_and_writes_nothing(tmp_path, monkeypa
     assert not StageCacheEntry.list(prefix=f"{PROJECT}/review/")
 
 
-# ── 3. The verdict is DERIVED from submitted vs pre-filled values ───────────
+# ── 3. The verdict is SETTLED from submitted vs pre-filled values ───────────
 
 
 @pytest.mark.parametrize(
@@ -301,7 +301,7 @@ def test_decide_404_on_unknown_fingerprint_and_writes_nothing(tmp_path, monkeypa
         ("  -3 ", {}, "modify", -3),
     ],
 )
-def test_decide_derives_the_verdict_from_submitted_against_prefilled(
+def test_decide_settles_the_verdict_from_submitted_against_prefilled(
     tmp_path, monkeypatch, submitted, extra, expected_verdict, expected_stored
 ):
     _project_dir, run_id, _run_dir, _snapshot, fingerprints = _build_and_halt(tmp_path, monkeypatch)
@@ -339,38 +339,38 @@ def _e2e_load_stage(root):
     return {"id": "load", "name": "Load items", "type": "input_data",
             "connector": {"kind": "file", "params": {"path": str(csv_path), "format": "csv"}},
             "output_schema": {
-                "columns": [{"name": "id", "type": "str"}, {"name": "score", "type": "int"}],
+                "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True}],
                 "primary_key": ["id"]}}
 
 
 def _e2e_review_stage():
     return {"id": "review", "name": "Review items", "type": "human_review_queue",
             "inputs": [{"id": "load", "schema": {
-                "columns": [{"name": "id", "type": "str"}, {"name": "score", "type": "int"}],
+                "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True}],
                 "primary_key": ["id"]}}],
             "output_schema": {
-                "columns": [{"name": "id", "type": "str"},
-                            {"name": "score", "type": "int"}] + _REVIEW_COLUMNS,
+                "columns": [{"name": "id", "type": "str", "nullable": True},
+                            {"name": "score", "type": "int", "nullable": True}] + _REVIEW_COLUMNS,
                 "primary_key": ["id"]},
             "queue": dict(QUEUE_COLUMNS)}
 
 
 def test_e2e_decide_every_verdict_then_resume_completes(tmp_path, monkeypatch):
-    """halt -> POST /decide for each pending row -> runner.resume_run ->
-    completed manifest, with the resumed output reflecting each DERIVED verdict:
-    a submit matching the prefill records approve and keeps the AI score, one
-    differing from it records modify and substitutes the human-entered score.
-    Every reviewed row is emitted. No decisions/ directory is created under the
-    project dir — every write goes through the cache."""
+    # halt -> POST /decide for each pending row -> runner.resume_run -> completed
+    # manifest, with the resumed output reflecting each SETTLED verdict: a submit matching
+    # the prefill records approve and keeps the AI score, one differing from it records
+    # modify and substitutes the human-entered score. Every reviewed row is emitted. No
+    # decisions/ directory is created under the project dir — every write goes through the
+    # cache.
     project = "queue_route_e2e"
-    monkeypatch.setattr(loading, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
 
     project_dir = tmp_path / project
     _write_stage(project_dir, "01_load.json", _e2e_load_stage(project_dir))
     _write_stage(project_dir, "02_review.json", _e2e_review_stage())
     _seed_version(project_dir)
 
-    manifest = run_prepared(prepare_run(project_dir, repo_root=project_dir))
+    manifest = run_prepared(prepare_run(project_dir, project_dir, *pinned_stages(project_dir)))
     assert manifest["status"] == "awaiting_review"
     run_id = manifest["run_id"]
 
@@ -383,7 +383,7 @@ def test_e2e_decide_every_verdict_then_resume_completes(tmp_path, monkeypatch):
 
     client = TestClient(app)
     # Each row's prefill is the AI value the page opened on; submitting it
-    # unchanged derives approve, submitting anything else derives modify.
+    # unchanged settles approve, submitting anything else settles modify.
     ai_score_by_id = {k: str(v) for k, v in zip(snapshot["id"], snapshot["score"])}
     submitted = {"a": ai_score_by_id["a"], "b": "99", "c": "0"}
     expected_verdict = {"a": "approve", "b": "modify", "c": "modify"}
@@ -408,7 +408,8 @@ def test_e2e_decide_every_verdict_then_resume_completes(tmp_path, monkeypatch):
         assert entry is not None
         assert set(entry.frozen_input) == {"id", "score"}
 
-    resumed = runner.resume_run(project_dir, run_id, project_dir)
+    resumed = runner.resume_run(project_dir, run_id, project_dir,
+                                  *resumed_stages(project_dir, run_id))
     assert resumed["status"] == "ok"
 
     out = pd.read_parquet(run_dir / "outputs" / "review.parquet").set_index("id")
@@ -426,8 +427,8 @@ def test_e2e_decide_every_verdict_then_resume_completes(tmp_path, monkeypatch):
 
 
 def test_decide_accepts_an_untouched_notes_box_as_no_note(tmp_path, monkeypatch):
-    """An HTML form posts an empty textarea as "" — that is no note, not an
-    empty note, and must not reach the notes column as one."""
+    # An HTML form posts an empty textarea as "" — that is no note, not an empty note, and
+    # must not reach the notes column as one.
     _project_dir, run_id, _run_dir, _snapshot, fingerprints = _build_and_halt(tmp_path, monkeypatch)
     fp = fingerprints["input_fingerprints"][0]
 
@@ -450,20 +451,20 @@ def _no_notes_review_stage():
     return _with_queue_output_schema({
             "id": "review", "name": "Review items", "type": "human_review_queue",
             "inputs": [{"id": "load", "schema": {
-                "columns": [{"name": "id", "type": "str"}, {"name": "score", "type": "int"}],
+                "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True}],
                 "primary_key": ["id"]}}],
             "queue": queue})
 
 
 def test_decide_400_on_notes_when_the_stage_declares_no_notes_column(tmp_path, monkeypatch):
     project = "queue_route_no_notes"
-    monkeypatch.setattr(loading, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     project_dir = tmp_path / project
     _write_stage(project_dir, "01_load.json", _e2e_load_stage(project_dir))
     _write_stage(project_dir, "02_review.json", _no_notes_review_stage())
     _seed_version(project_dir)
 
-    manifest = run_prepared(prepare_run(project_dir, repo_root=project_dir))
+    manifest = run_prepared(prepare_run(project_dir, project_dir, *pinned_stages(project_dir)))
     run_id = manifest["run_id"]
     fingerprints = _read_fingerprints(project_dir / "runs" / run_id)
 
@@ -484,22 +485,22 @@ def test_decide_400_on_notes_when_the_stage_declares_no_notes_column(tmp_path, m
 
 
 def _drift_the_review_stage(project_dir):
-    """Rename the reviewed target on the LIVE definition after the run halted, so
-    the live stage fingerprint no longer matches the sidecar's."""
+    # Rename the reviewed target on the LIVE definition after the run halted, so the live
+    # stage fingerprint no longer matches the sidecar's.
     drifted = _review_stage()
     drifted["queue"] = {**QUEUE_COLUMNS, "reviewed_columns": {"score": "checked_score"}}
     drifted["output_schema"] = {**drifted["output_schema"], "columns": [
-        {"name": "checked_score", "type": "int"} if column["name"] == "human_score" else column
+        {"name": "checked_score", "type": "int", "nullable": True} if column["name"] == "human_score" else column
         for column in drifted["output_schema"]["columns"]
     ]}
     _write_stage(project_dir, "03_review.json", drifted)
 
 
 def test_queue_page_states_the_drift_and_renders_no_items(tmp_path, monkeypatch):
-    """The run's decisions are keyed by the fingerprint it halted under, but the
-    columns they are read and written through come from the live definition. Once
-    the two describe different column sets the page says so in place of the rows,
-    rather than raising KeyError or half-rendering them."""
+    # The run's decisions are keyed by the fingerprint it halted under, but the columns
+    # they are read and written through come from the live definition. Once the two
+    # describe different column sets the page says so in place of the rows, rather than
+    # raising KeyError or half-rendering them.
     project_dir, run_id, _run_dir, _snapshot, _fingerprints = _build_and_halt(tmp_path, monkeypatch)
     _drift_the_review_stage(project_dir)
 
@@ -528,10 +529,10 @@ def test_decide_409_when_the_stage_changed_since_the_halt(tmp_path, monkeypatch)
 
 
 def test_queue_page_gates_the_items_behind_the_reviewer_name(tmp_path, monkeypatch):
-    """The gate takes BOTH halves: the container carries `hidden`, and the
-    stylesheet answers it with an [hidden] rule. Without the second half the
-    container's own `display: flex` beats the UA rule and the rows render anyway,
-    so asserting the markup alone passes while the gate is visually inert."""
+    # The gate takes BOTH halves: the container carries `hidden`, and the stylesheet
+    # answers it with an [hidden] rule. Without the second half the container's own
+    # `display: flex` beats the UA rule and the rows render anyway, so asserting the
+    # markup alone passes while the gate is visually inert.
     _project_dir, run_id, _run_dir, _snapshot, _fingerprints = _build_and_halt(tmp_path, monkeypatch)
 
     html = TestClient(app).get(f"/project/{PROJECT}/runs/{run_id}/queue/review").text
@@ -547,10 +548,9 @@ def test_queue_page_gates_the_items_behind_the_reviewer_name(tmp_path, monkeypat
 
 
 def test_queue_page_prefills_a_decided_row_from_the_recorded_value(tmp_path, monkeypatch):
-    """A decided row opens with what the reviewer recorded, not the value it
-    contradicts — otherwise an untouched submit silently reverts their own
-    decision. What the stage received stays visible beside it, labelled
-    separately."""
+    # A decided row opens with what the reviewer recorded, not the value it contradicts —
+    # otherwise an untouched submit silently reverts their own decision. What the stage
+    # received stays visible beside it, labelled separately.
     _project_dir, run_id, _run_dir, snapshot, fingerprints = _build_and_halt(tmp_path, monkeypatch)
     first_fp = fingerprints["input_fingerprints"][0]
     _put_cached_decision(
@@ -575,16 +575,16 @@ def _bool_review_stage(nullable):
     return _with_queue_output_schema({
         "id": "review", "name": "Review flags", "type": "human_review_queue",
         "inputs": [{"id": "load", "schema": {
-            "columns": [{"name": "id", "type": "str"},
+            "columns": [{"name": "id", "type": "str", "nullable": True},
                         {"name": "flag", "type": "bool", "nullable": nullable}],
             "primary_key": ["id"]}}],
         "queue": {**queue_columns(source="flag", target="human_flag")}})
 
 
 def _build_and_halt_bool_queue(tmp_path, monkeypatch, project, *, ai_value, nullable=True):
-    """A one-row queue over a `bool` column whose AI value is `ai_value` (None
-    for a null). Returns (project, run_id, fingerprints, snapshot)."""
-    monkeypatch.setattr(loading, "EXAMPLES_DIR", tmp_path)
+    # A one-row queue over a `bool` column whose AI value is `ai_value` (None for a null).
+    # Returns (project, run_id, fingerprints, snapshot).
+    workspace.set_projects_dir(tmp_path)
     project_dir = tmp_path / project
     (project_dir / "data").mkdir(parents=True, exist_ok=True)
     csv_path = project_dir / "data" / "flags.csv"
@@ -592,20 +592,20 @@ def _build_and_halt_bool_queue(tmp_path, monkeypatch, project, *, ai_value, null
     _write_stage(project_dir, "01_load.json", {
         "id": "load", "name": "Load flags", "type": "input_data",
         "connector": {"kind": "file", "params": {"path": str(csv_path), "format": "csv"}},
-        "output_schema": {"columns": [{"name": "id", "type": "str"},
+        "output_schema": {"columns": [{"name": "id", "type": "str", "nullable": True},
                                       {"name": "flag", "type": "bool", "nullable": nullable}],
                           "primary_key": ["id"]}})
     _write_stage(project_dir, "02_review.json", _bool_review_stage(nullable))
     _seed_version(project_dir)
-    run_id = run_prepared(prepare_run(project_dir, repo_root=project_dir))["run_id"]
+    run_id = run_prepared(prepare_run(project_dir, project_dir, *pinned_stages(project_dir)))["run_id"]
     run_dir = project_dir / "runs" / run_id
     return run_id, _read_fingerprints(run_dir), pd.read_parquet(run_dir / "queue" / "review.parquet")
 
 
 def _find_selected_option(html, target):
-    """The value of the `selected` option of `target`'s select, or None when the
-    select pre-selects nothing — in which case a browser falls back to whichever
-    option happens to be FIRST, so "nothing selected" is never a safe state."""
+    # The value of the `selected` option of `target`'s select, or None when the select
+    # pre-selects nothing — in which case a browser falls back to whichever option happens
+    # to be FIRST, so "nothing selected" is never a safe state.
     select = re.search(
         rf'<select[^>]*data-target="{target}"[^>]*>(.*?)</select>', html, re.DOTALL
     )
@@ -615,10 +615,10 @@ def _find_selected_option(html, target):
 
 
 def test_a_null_bool_ai_value_is_never_rendered_as_false(tmp_path, monkeypatch):
-    """A checkbox has two states and a nullable bool has three, so a checkbox
-    would advertise a missing AI value as `false` and Approve would post it. The
-    field is a select that opens EXPLICITLY on its unset option — not merely
-    without a selection, which would leave the browser showing `true`."""
+    # A checkbox has two states and a nullable bool has three, so a checkbox would
+    # advertise a missing AI value as `false` and Approve would post it. The field is a
+    # select that opens EXPLICITLY on its unset option — not merely without a selection,
+    # which would leave the browser showing `true`.
     run_id, _fingerprints, _snapshot = _build_and_halt_bool_queue(
         tmp_path, monkeypatch, "queue_route_bool_null", ai_value=None)
 
@@ -632,14 +632,14 @@ def test_a_null_bool_ai_value_is_never_rendered_as_false(tmp_path, monkeypatch):
 
 
 def test_a_bool_select_opens_on_the_recorded_value_of_a_decided_row(tmp_path, monkeypatch):
-    """The recorded `true` must come back SELECTED. Left unselected, the unset
-    option renders first, the browser shows it, and an untouched Save posts ""
-    — silently reverting the reviewer's own decision."""
+    # The recorded `true` must come back SELECTED. Left unselected, the unset option
+    # renders first, the browser shows it, and an untouched Save posts "" — silently
+    # reverting the reviewer's own decision.
     project = "queue_route_bool_recorded"
     run_id, fingerprints, snapshot = _build_and_halt_bool_queue(
         tmp_path, monkeypatch, project, ai_value=False)
     review.record_decision(
-        project=project, stage=Stage.model_validate(_bool_review_stage(True)),
+        project=project, stage=parse_stage(_bool_review_stage(True)),
         stage_fingerprint=fingerprints["stage_fingerprint"],
         input_fingerprint=fingerprints["input_fingerprints"][0],
         frozen_row={"id": snapshot.iloc[0]["id"], "flag": bool(snapshot.iloc[0]["flag"])},
@@ -659,9 +659,9 @@ def test_a_bool_select_opens_on_the_recorded_value_of_a_decided_row(tmp_path, mo
 
 
 def test_a_non_nullable_bool_select_opens_on_the_ai_value(tmp_path, monkeypatch):
-    """With no unset option to fall back on, an unselected select shows whichever
-    option is FIRST — `true` — so a row the model said `false` for would record
-    `true` on an untouched Save. The AI value must be selected."""
+    # With no unset option to fall back on, an unselected select shows whichever option is
+    # FIRST — `true` — so a row the model said `false` for would record `true` on an
+    # untouched Save. The AI value must be selected.
     project = "queue_route_bool_required"
     run_id, fingerprints, _snapshot = _build_and_halt_bool_queue(
         tmp_path, monkeypatch, project, ai_value=False, nullable=False)
@@ -672,7 +672,7 @@ def test_a_non_nullable_bool_select_opens_on_the_ai_value(tmp_path, monkeypatch)
     assert _find_selected_option(html, "human_flag") == "false"
 
     # Submitting what the page opened on records `false`, not the first option
-    # — and, unchanged from the prefill, derives `approve`.
+    # — and, unchanged from the prefill, settles `approve`.
     r = client.post(
         f"/project/{project}/runs/{run_id}/queue/review/decide",
         data=_decide_data(fingerprints["input_fingerprints"][0], {"human_flag": "false"}),
@@ -690,16 +690,16 @@ def _temporal_review_stage(column_type):
     return _with_queue_output_schema({
         "id": "review", "name": "Review times", "type": "human_review_queue",
         "inputs": [{"id": "load", "schema": {
-            "columns": [{"name": "id", "type": "str"},
-                        {"name": "seen_at", "type": column_type}],
+            "columns": [{"name": "id", "type": "str", "nullable": True},
+                        {"name": "seen_at", "type": column_type, "nullable": True}],
             "primary_key": ["id"]}}],
         "queue": {**queue_columns(source="seen_at", target="human_seen_at")}})
 
 
 def _decide_a_temporal_row(tmp_path, monkeypatch, project, column_type, recorded):
-    """Runs a one-row queue over a `date`/`datetime` column, records `recorded`
-    for it through the real endpoint, and returns the reloaded page."""
-    monkeypatch.setattr(loading, "EXAMPLES_DIR", tmp_path)
+    # Runs a one-row queue over a `date`/`datetime` column, records `recorded` for it
+    # through the real endpoint, and returns the reloaded page.
+    workspace.set_projects_dir(tmp_path)
     project_dir = tmp_path / project
     (project_dir / "data").mkdir(parents=True, exist_ok=True)
     csv_path = project_dir / "data" / "sightings.csv"
@@ -707,12 +707,12 @@ def _decide_a_temporal_row(tmp_path, monkeypatch, project, column_type, recorded
     _write_stage(project_dir, "01_load.json", {
         "id": "load", "name": "Load sightings", "type": "input_data",
         "connector": {"kind": "file", "params": {"path": str(csv_path), "format": "csv"}},
-        "output_schema": {"columns": [{"name": "id", "type": "str"},
-                                      {"name": "seen_at", "type": column_type}],
+        "output_schema": {"columns": [{"name": "id", "type": "str", "nullable": True},
+                                      {"name": "seen_at", "type": column_type, "nullable": True}],
                           "primary_key": ["id"]}})
     _write_stage(project_dir, "02_review.json", _temporal_review_stage(column_type))
     _seed_version(project_dir)
-    run_id = run_prepared(prepare_run(project_dir, repo_root=project_dir))["run_id"]
+    run_id = run_prepared(prepare_run(project_dir, project_dir, *pinned_stages(project_dir)))["run_id"]
     fingerprints = _read_fingerprints(project_dir / "runs" / run_id)
 
     client = TestClient(app)
@@ -742,9 +742,9 @@ def _find_input_value(html, target):
 def test_a_temporal_control_opens_on_the_recorded_value_of_a_decided_row(
     tmp_path, monkeypatch, column_type, control, recorded
 ):
-    """The recorded value comes back from the cache stringified — space-
-    separated, which a `date`/`datetime-local` control rejects, rendering BLANK
-    on a row that has a value. An untouched Save would then post "" over it."""
+    # The recorded value comes back from the cache stringified — space- separated, which a
+    # `date`/`datetime-local` control rejects, rendering BLANK on a row that has a value.
+    # An untouched Save would then post "" over it.
     html = _decide_a_temporal_row(
         tmp_path, monkeypatch, f"queue_route_{column_type}", column_type, recorded)
 
@@ -753,41 +753,40 @@ def test_a_temporal_control_opens_on_the_recorded_value_of_a_decided_row(
 
 
 def _output_schema_review_stage():
-    """Declares an output_schema, so `human_score` resolves from THERE rather than
-    from the input edge's `score`. The two differ on the one spec field the model
-    lets them differ on: `score` is non-nullable, `human_score` is nullable. That
-    is the evidence of which declaration the endpoint coerced against — a blank
-    value is a null through the output_schema column and a refusal through the
-    source column."""
+    # Declares an output_schema, so `human_score` resolves from THERE rather than from the
+    # input edge's `score`. The two differ on the one spec field the model lets them
+    # differ on: `score` is non-nullable, `human_score` is nullable. That is the evidence
+    # of which declaration the endpoint coerced against — a blank value is a null through
+    # the output_schema column and a refusal through the source column.
     return {"id": "review", "name": "Review items", "type": "human_review_queue",
             "inputs": [{"id": "load", "schema": {
-                "columns": [{"name": "id", "type": "str"},
+                "columns": [{"name": "id", "type": "str", "nullable": True},
                             {"name": "score", "type": "int", "nullable": False,
                              "range": [0, 5]}],
                 "primary_key": ["id"]}}],
             "output_schema": {"columns": [
-                {"name": "id", "type": "str"},
+                {"name": "id", "type": "str", "nullable": True},
                 {"name": "score", "type": "int", "nullable": False, "range": [0, 5]},
                 {"name": "human_score", "type": "int", "nullable": True, "range": [0, 5]},
-                {"name": "decision", "type": "str"}, {"name": "reviewer_id", "type": "str"},
-                {"name": "reviewed_at", "type": "str"}, {"name": "review_notes", "type": "str"}]},
+                {"name": "decision", "type": "str", "nullable": True}, {"name": "reviewer_id", "type": "str", "nullable": True},
+                {"name": "reviewed_at", "type": "str", "nullable": True}, {"name": "review_notes", "type": "str", "nullable": True}]},
             "queue": dict(QUEUE_COLUMNS)}
 
 
 def _build_and_halt_output_schema_queue(tmp_path, monkeypatch, project):
-    monkeypatch.setattr(loading, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     project_dir = tmp_path / project
     # The loader declares `score` exactly as the review stage's edge does: the
     # edge check requires the producer to be no more permissive than the consumer.
     load = _e2e_load_stage(project_dir)
     load["output_schema"] = {"columns": [
-        {"name": "id", "type": "str"},
+        {"name": "id", "type": "str", "nullable": True},
         {"name": "score", "type": "int", "nullable": False, "range": [0, 5]}],
         "primary_key": ["id"]}
     _write_stage(project_dir, "01_load.json", load)
     _write_stage(project_dir, "02_review.json", _output_schema_review_stage())
     _seed_version(project_dir)
-    run_id = run_prepared(prepare_run(project_dir, repo_root=project_dir))["run_id"]
+    run_id = run_prepared(prepare_run(project_dir, project_dir, *pinned_stages(project_dir)))["run_id"]
     return run_id, _read_fingerprints(project_dir / "runs" / run_id)
 
 
@@ -825,12 +824,12 @@ def test_decide_coerces_against_the_output_schema_column_when_declared(tmp_path,
 
 
 def _build_and_halt_queue_over(tmp_path, monkeypatch, project, stages):
-    monkeypatch.setattr(loading, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     project_dir = tmp_path / project
     for index, stage in enumerate(stages, start=1):
         _write_stage(project_dir, f"{index:02d}_{stage['id']}.json", stage)
     _seed_version(project_dir)
-    manifest = run_prepared(prepare_run(project_dir, repo_root=project_dir))
+    manifest = run_prepared(prepare_run(project_dir, project_dir, *pinned_stages(project_dir)))
     assert manifest["status"] == "awaiting_review", manifest
     run_id = manifest["run_id"]
     return run_id, _read_fingerprints(project_dir / "runs" / run_id)
@@ -846,9 +845,8 @@ def _lineage_urls(project, run_id, stage_id="review"):
 
 
 def test_a_queue_directly_on_input_data_renders_and_links_to_that_stage(tmp_path, monkeypatch):
-    """The snapshot IS the material to review here — there is no model between
-    the input and the queue — so the page renders in full and traces the
-    `input_data` stage's row."""
+    # The snapshot IS the material to review here — there is no model between the input
+    # and the queue — so the page renders in full and traces the `input_data` stage's row.
     project = "queue_route_on_input_data"
     project_dir = tmp_path / project
     run_id, fingerprints = _build_and_halt_queue_over(
@@ -867,8 +865,8 @@ def test_a_queue_directly_on_input_data_renders_and_links_to_that_stage(tmp_path
 
 
 def _labelled_row_function_stage():
-    """python_row_function upstream: no model produced these values, and the
-    queue's input edge declares a description for the column it adds."""
+    # python_row_function upstream: no model produced these values, and the queue's input
+    # edge declares a description for the column it adds.
     code = (
         "def transform(row):\n"
         "    return {'id': row['id'], 'score': row['score'],\n"
@@ -876,12 +874,12 @@ def _labelled_row_function_stage():
     )
     return {"id": "label", "name": "Label items", "type": "python_row_function",
             "inputs": [{"id": "load", "schema": {
-                "columns": [{"name": "id", "type": "str"}, {"name": "score", "type": "int"}],
+                "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True}],
                 "primary_key": ["id"]}}],
             "function": {"kind": "inline", "code": code},
             "output_schema": {"columns": [
-                {"name": "id", "type": "str"}, {"name": "score", "type": "int"},
-                {"name": "label", "type": "str"}]}}
+                {"name": "id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True},
+                {"name": "label", "type": "str", "nullable": True}]}}
 
 
 def _review_labels_stage():
@@ -889,19 +887,19 @@ def _review_labels_stage():
         "id": "review", "name": "Review labels", "type": "human_review_queue",
         "inputs": [{"id": "label", "schema": {
             "columns": [
-                {"name": "id", "type": "str"},
-                {"name": "score", "type": "int"},
+                {"name": "id", "type": "str", "nullable": True},
+                {"name": "score", "type": "int", "nullable": True},
                 {"name": "label", "type": "str",
-                 "description": "high when the score exceeds one"}],
+                 "description": "high when the score exceeds one", "nullable": True}],
             "primary_key": ["id"]}}],
         "queue": {**queue_columns(source="label", target="human_label")}})
 
 
 def test_a_queue_whose_upstream_is_not_an_llm_transform_renders_and_links(tmp_path, monkeypatch):
-    """A `python_row_function` computed these values, so nothing on the page may
-    attribute them to a model: the queue stage cannot know what produced what it
-    received, and telling the reviewer "AI" is exactly the fabrication this
-    surface was rewritten to remove."""
+    # A `python_row_function` computed these values, so nothing on the page may attribute
+    # them to a model: the queue stage cannot know what produced what it received, and
+    # telling the reviewer "AI" is exactly the fabrication this surface was rewritten to
+    # remove.
     project = "queue_route_on_row_function"
     project_dir = tmp_path / project
     run_id, fingerprints = _build_and_halt_queue_over(
@@ -926,31 +924,31 @@ def _no_primary_key_review_stage():
     return _with_queue_output_schema({
         "id": "review", "name": "Review items", "type": "human_review_queue",
         "inputs": [{"id": "load", "schema": {
-            "columns": [{"name": "id", "type": "str"},
-                        {"name": "score", "type": "int"}]}}],
+            "columns": [{"name": "id", "type": "str", "nullable": True},
+                        {"name": "score", "type": "int", "nullable": True}]}}],
         "queue": dict(QUEUE_COLUMNS)})
 
 
 def _described_review_stage():
-    """The queue's input edge describes the columns it queues, and its output
-    schema describes what the reviewer writes back."""
+    # The queue's input edge describes the columns it queues, and its output schema
+    # describes what the reviewer writes back.
     return {"id": "review", "name": "Review labels", "type": "human_review_queue",
             "inputs": [{"id": "label", "schema": {
                 "columns": [
-                    {"name": "id", "type": "str"},
+                    {"name": "id", "type": "str", "nullable": True},
                     {"name": "score", "type": "int",
-                     "description": "the score this row was labelled from"},
+                     "description": "the score this row was labelled from", "nullable": True},
                     {"name": "label", "type": "str",
-                     "description": "high when the score exceeds one"}],
+                     "description": "high when the score exceeds one", "nullable": True}],
                 "primary_key": ["id"]}}],
             "output_schema": {"columns": [
-                {"name": "id", "type": "str"}, {"name": "score", "type": "int"},
-                {"name": "label", "type": "str"},
+                {"name": "id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True},
+                {"name": "label", "type": "str", "nullable": True},
                 {"name": "human_label", "type": "str",
-                 "description": "the label after review"},
-                {"name": "decision", "type": "str"},
-                {"name": "reviewer_id", "type": "str"},
-                {"name": "reviewed_at", "type": "str"},
+                 "description": "the label after review", "nullable": True},
+                {"name": "decision", "type": "str", "nullable": True},
+                {"name": "reviewer_id", "type": "str", "nullable": True},
+                {"name": "reviewed_at", "type": "str", "nullable": True},
                 {"name": "review_notes", "type": "str", "nullable": True}]},
             "queue": {**queue_columns(source="label", target="human_label"),
                       "reviewer_instructions": "Confirm the label against the score."}}
@@ -973,13 +971,12 @@ def _first_card(html):
 
 
 def test_the_card_renders_the_described_queued_row_and_its_review_section(tmp_path, monkeypatch):
-    """The context table is the queued row MINUS the columns under review, each
-    column labelled by its own name and tooltipped from its DECLARED
-    description — no `<pre>` JSON dump, no declared type on show, no invented
-    tooltip, and no column name this workflow did not declare. The header says
-    where in the queue the reviewer is (a bare primary key identifies nothing to
-    a human) and links the upstream row; the reviewer brief reads as body text.
-    """
+    # The context table is the queued row MINUS the columns under review, each column
+    # labelled by its own name and tooltipped from its DECLARED description — no `<pre>`
+    # JSON dump, no declared type on show, no invented tooltip, and no column name this
+    # workflow did not declare. The header says where in the queue the reviewer is (a bare
+    # primary key identifies nothing to a human) and links the upstream row; the reviewer
+    # brief reads as body text.
     run_id, fingerprints, html = _described_queue_html(
         tmp_path, monkeypatch, "queue_route_card")
 
@@ -1028,11 +1025,11 @@ def test_a_stage_with_no_primary_key_states_it_rather_than_guessing_one(tmp_path
 
 
 def test_a_reviewed_value_is_read_only_until_its_edit_button_is_pressed(tmp_path, monkeypatch):
-    """Both halves, as with the reviewer-name gate: the editor carries `hidden`,
-    AND the stylesheet answers it. Without the second half the editor's own
-    `display` beats the UA rule and every field is editable on load — markup-only
-    assertions pass while the affordance is inert. The opener is a real
-    `<button>`, which the platform activates on Enter and Space."""
+    # Both halves, as with the reviewer-name gate: the editor carries `hidden`, AND the
+    # stylesheet answers it. Without the second half the editor's own `display` beats the
+    # UA rule and every field is editable on load — markup-only assertions pass while the
+    # affordance is inert. The opener is a real `<button>`, which the platform activates
+    # on Enter and Space.
     _project_dir, run_id, _run_dir, _snapshot, _fingerprints = _build_and_halt(tmp_path, monkeypatch)
 
     html = TestClient(app).get(f"/project/{PROJECT}/runs/{run_id}/queue/review").text
@@ -1050,9 +1047,9 @@ def test_a_reviewed_value_is_read_only_until_its_edit_button_is_pressed(tmp_path
 
 
 def test_the_closed_field_displays_exactly_what_it_will_submit(tmp_path, monkeypatch):
-    """The read-only display, the control's own value and `data-prefill` are all
-    the same text, so a field nobody opened submits the value the reviewer was
-    shown — which derives `approve`."""
+    # The read-only display, the control's own value and `data-prefill` are all the same
+    # text, so a field nobody opened submits the value the reviewer was shown — which
+    # settles `approve`.
     _project_dir, run_id, _run_dir, _snapshot, _fingerprints = _build_and_halt(tmp_path, monkeypatch)
 
     html = TestClient(app).get(f"/project/{PROJECT}/runs/{run_id}/queue/review").text
@@ -1072,22 +1069,21 @@ def _empty_string_load_stage(project_dir):
             "connector": {"kind": "file",
                           "params": {"path": str(csv_path), "format": "csv"}},
             "output_schema": {"columns": [
-                {"name": "id", "type": "str"},
-                {"name": "flag", "type": "bool"}], "primary_key": ["flag"]}}
+                {"name": "id", "type": "str", "nullable": True},
+                {"name": "flag", "type": "bool", "nullable": True}], "primary_key": ["flag"]}}
 
 
 _EMPTY_STRING_COLUMNS = [
-    {"name": "id", "type": "str"},
-    {"name": "flag", "type": "bool"},
+    {"name": "id", "type": "str", "nullable": True},
+    {"name": "flag", "type": "bool", "nullable": True},
     {"name": "note", "type": "str", "nullable": True},
 ]
 
 
 def _empty_string_row_function_stage():
-    """One row holds a real empty string and one holds a null, in the same `str`
-    column — the pair a null-flattening display prints alike. A CSV cannot carry
-    the distinction (pandas reads a quoted empty field as NaN), so the frame is
-    built by a row function."""
+    # One row holds a real empty string and one holds a null, in the same `str` column —
+    # the pair a null-flattening display prints alike. A CSV cannot carry the distinction
+    # (pandas reads a quoted empty field as NaN), so the frame is built by a row function.
     code = ("def transform(row):\n"
             "    return {'id': row['id'], 'flag': row['flag'],\n"
             "            'note': '' if row['id'] == 'e' else None}")
@@ -1107,9 +1103,8 @@ def _empty_string_review_stage():
 
 
 def test_an_empty_string_cell_is_not_printed_as_a_null(tmp_path, monkeypatch):
-    """`display_cell` flattens a null to "", so a column holding a real empty
-    string would otherwise be shown as holding nothing — stating something the
-    data does not say."""
+    # `display_cell` flattens a null to "", so a column holding a real empty string would
+    # otherwise be shown as holding nothing — stating something the data does not say.
     project = "queue_route_empty_string"
     project_dir = tmp_path / project
     run_id, _fingerprints = _build_and_halt_queue_over(
@@ -1129,12 +1124,12 @@ def test_an_empty_string_cell_is_not_printed_as_a_null(tmp_path, monkeypatch):
 
 
 def _every_column_reviewed_stage():
-    """A queue over a frame whose ONLY column is the one under review, so
-    subtracting the reviewed columns leaves no context at all."""
+    # A queue over a frame whose ONLY column is the one under review, so subtracting the
+    # reviewed columns leaves no context at all.
     return _with_queue_output_schema({
         "id": "review", "name": "Review scores", "type": "human_review_queue",
         "inputs": [{"id": "load", "schema": {
-            "columns": [{"name": "score", "type": "int"}]}}],
+            "columns": [{"name": "score", "type": "int", "nullable": True}]}}],
         "queue": dict(QUEUE_COLUMNS)})
 
 
@@ -1148,7 +1143,7 @@ def test_no_context_table_is_rendered_when_every_column_is_under_review(tmp_path
     load = {"id": "load", "name": "Load scores", "type": "input_data",
             "connector": {"kind": "file",
                           "params": {"path": str(csv_path), "format": "csv"}},
-            "output_schema": {"columns": [{"name": "score", "type": "int"}]}}
+            "output_schema": {"columns": [{"name": "score", "type": "int", "nullable": True}]}}
     run_id, _fingerprints = _build_and_halt_queue_over(
         tmp_path, monkeypatch, project, [load, _every_column_reviewed_stage()])
 
@@ -1174,10 +1169,10 @@ def _decided_queue_html(tmp_path, monkeypatch):
 
 
 def test_a_decided_card_disables_its_openers_and_offers_a_secondary_cta(tmp_path, monkeypatch):
-    """`disabled` on the `<button>` itself, so a keyboard user cannot tab into
-    and activate it — a CSS-only look would leave the control live. And both
-    halves of the hidden Submit: the attribute AND the stylesheet rule, without
-    which `.btn`'s own `display` beats the UA's [hidden] rule."""
+    # `disabled` on the `<button>` itself, so a keyboard user cannot tab into and activate
+    # it — a CSS-only look would leave the control live. And both halves of the hidden
+    # Submit: the attribute AND the stylesheet rule, without which `.btn`'s own `display`
+    # beats the UA's [hidden] rule.
     _project_dir, _run_id, fingerprints, html = _decided_queue_html(tmp_path, monkeypatch)
 
     decided = _first_card(html)
@@ -1205,9 +1200,9 @@ def test_a_decided_card_disables_its_openers_and_offers_a_secondary_cta(tmp_path
 
 
 def test_unlocking_a_decided_card_records_a_new_verdict_on_resubmit(tmp_path, monkeypatch):
-    """"Change my review" itself records nothing — it unlocks the card. The
-    re-submit that follows still derives its verdict from the page's prefill,
-    which on a decided row is the value the reviewer recorded before."""
+    # "Change my review" itself records nothing — it unlocks the card. The re-submit that
+    # follows still settles its verdict from the page's prefill, which on a decided row is
+    # the value the reviewer recorded before.
     _project_dir, run_id, fingerprints, html = _decided_queue_html(tmp_path, monkeypatch)
 
     decided = _first_card(html)

@@ -7,22 +7,22 @@ from collections.abc import Mapping
 from app.core.errors import ReviewValidationError
 from app.core.stage_cache import StageCacheEntry
 from app.models import QueueConfig, ReviewVerdict, Stage
+from app.models.stages.human_review_queue import resolve_queue_config
 
 
-def derive_verdict(
+def resolve_verdict(
     supplied: Mapping[str, str | None], prefilled: Mapping[str, str | None]
 ) -> ReviewVerdict:
-    """`modify` iff a submitted value differs from what THE PAGE carried as its
-    prefill for that column. Deliberately not compared against a server-side
-    recompute of the prefill: the reviewer decided against what they were
-    shown, and a decision landing between render and submit would change what
-    a recompute produced. A reviewer who retypes an identical value records
-    `approve` — `modify` means the value changed."""
+    """`modify` iff a submitted value differs from what THE PAGE carried as its prefill."""
+    # Deliberately not compared against a server-side recompute of the prefill: the
+    # reviewer decided against what they were shown, and a decision landing between
+    # render and submit would change what a recompute produced. A reviewer who
+    # retypes an identical value records `approve` — `modify` means the value changed.
     unmatched = sorted(set(supplied) ^ set(prefilled))
     if unmatched:
         raise ReviewValidationError(
             "reviewed_values and prefilled_values must name the same columns — "
-            f"the verdict is derived by comparing them; {unmatched} appears in only "
+            f"the verdict is settled by comparing them; {unmatched} appears in only "
             "one of the two"
         )
     changed = any(value != prefilled[target] for target, value in supplied.items())
@@ -37,9 +37,9 @@ def record_decision(
     review_notes: str | None,
     reviewer: str, reviewed_at: str,
 ) -> None:
-    """`reviewed_values` is keyed by TARGET column name (the values of
-    `stage.queue.reviewed_columns`), already coerced to the declared types by
-    the caller: this validates the key set, not the value types."""
+    """`reviewed_values` is keyed by TARGET column name, already coerced by the caller."""
+    # This validates the key set against what the queue block declares, not the
+    # value types.
     queue = _require_queue_config(stage)
     _validate_verdict_came_from_a_human(verdict)
     _validate_reviewed_values_match_declared_columns(queue, reviewed_values)
@@ -55,12 +55,13 @@ def record_decision(
 
 
 def _require_queue_config(stage: Stage) -> QueueConfig:
-    if stage.queue is None:
+    queue = resolve_queue_config(stage)
+    if queue is None:
         raise ReviewValidationError(
             f"stage '{stage.id}' declares no queue config: it is a {stage.type} stage, "
             "not a human_review_queue"
         )
-    return stage.queue
+    return queue
 
 
 def _validate_verdict_came_from_a_human(verdict: ReviewVerdict) -> None:

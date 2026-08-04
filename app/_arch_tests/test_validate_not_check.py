@@ -2,7 +2,7 @@
 
 A function that raises on (or reports) a broken invariant is ``validate_*``; one that
 returns the offending items is ``find_*``. ``check_*`` / ``_check_*`` names are banned.
-Scope is all of ``app/``, derived from where this test lives.
+Scope is all of ``app/``, taken from where this test lives.
 """
 from __future__ import annotations
 

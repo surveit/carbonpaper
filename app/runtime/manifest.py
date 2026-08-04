@@ -76,7 +76,7 @@ class StageRecord(BaseModel):
     """One stage's manifest record, written into `manifest["stage_records"]` and
     read back by the web layer.
 
-    Field order is the canonical on-disk order of a stage that RAN;
+    Field order is the on-disk field order of a stage that RAN;
     `output_path`, `queue_path`, `notes`, and `llm_usage` are set only at the
     lifecycle points that produce them (`_finalize_stage_output` adds
     `output_path`/`llm_usage`, `_record_halt` adds `queue_path`, row slicing and

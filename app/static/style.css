@@ -19,10 +19,29 @@
     --code-deep: #1d1f23;
     --code-fg: #e4e4e2;
     --code-comment: #888;
-    /* Belief (node-review) palette — kept identical to the per-node stroke in
-       build_mermaid_graph (app/web/diagrams.py REVIEW_STROKE) so a legend chip
-       equals the colour the workflow node shows. approved→green, unreviewed→grey,
-       rejected→red, stale→amber. */
+    /* Run-state palette — the five states every run surface speaks in: the status
+       pill, the alert strip, run badges, per-stage borders, the progress bar, and
+       the per-node stroke in build_mermaid_graph (app/web/diagrams.py
+       _STATUS_STROKE). Seven stage statuses map onto them: running and
+       validation_warnings both take warn, cancelled and pending both take idle —
+       the node glyph is what separates the pair.
+
+       Three roles per state. The base is the stroke/border/fill; `-bg` is the tint
+       it sits on; `-ink` is TEXT on that tint, dark enough to clear WCAG AA 4.5:1
+       against it (the base is chosen to be seen, not read — as text it measures as
+       low as 3.5:1). tests/arch/test_status_colour_contract.py measures every
+       ink/tint pair, so a nudged colour fails CI rather than a reader. */
+    --state-done: #2f7d32;   --state-done-bg: #eaf3ea;   --state-done-ink: #245f27;
+    --state-warn: #a8690b;   --state-warn-bg: #faf1e2;   --state-warn-ink: #7a4a06;
+    --state-failed: #b3261e; --state-failed-bg: #fbeae8; --state-failed-ink: #96201a;
+    --state-review: #2a6ac8; --state-review-bg: #e9f0fb; --state-review-ink: #1f4f9c;
+    --state-idle: #7b8089;   --state-idle-bg: #f0f0ee;   --state-idle-ink: #565b63;
+    /* Belief (node-review) palette — how a node is modeled, a separate axis from
+       run state. Identical to the per-node stroke in build_mermaid_graph
+       (app/web/diagrams.py REVIEW_STROKE) so a legend chip equals the colour the
+       workflow node shows. approved→green, unreviewed→grey, rejected→red,
+       stale→amber. Both palettes are pinned to their Python twin by
+       tests/arch/test_status_colour_contract.py. */
     --belief-approved-bg: #e7f6e7;   --belief-approved-bd: #2a8a2a;
     --belief-unreviewed-bg: #eceff3; --belief-unreviewed-bd: #9aa3ad;
     --belief-rejected-bg: #fbeaea;   --belief-rejected-bd: #cc2a2a;
@@ -128,8 +147,6 @@ a { color: var(--accent); }
     font-size: 13px;
     color: var(--muted);
 }
-.legend-sep { color: var(--border); font-size: 16px; }
-.legend-icon { font-size: 13px; }
 
 /* Type badges */
 .badge, .type-tag {
@@ -158,22 +175,20 @@ a { color: var(--accent); }
 .badge.aggregate,.type-tag.aggregate{ background: #f0f0e6; color: #4a4818; border-color: #888533; }
 .badge.human,    .type-tag.human    { background: #fce8f4; color: #802660; border-color: #c0399a; }
 .badge.publish,  .type-tag.publish  { background: #e8f8e8; color: #1f5a1f; border-color: #3aa83a; }
+.badge.rowset,   .type-tag.rowset   { background: #ecebfb; color: #332a8a; border-color: #5b4ec8; }
 .badge.custom,   .type-tag.custom   { background: #fde8e8; color: #802020; border-color: #cc3333; }
 
-.badge.ok       { background: #e8f8e8; color: #1f5a1f; border-color: #2a8a2a; }
-.badge.warn     { background: #fff4e6; color: #7a4a00; border-color: #cc8a00; }
-.badge.err      { background: #fde8e8; color: #802020; border-color: #cc2a2a; }
-.badge.awaiting { background: #e6f0fc; color: #1a4a82; border-color: #2a6ac8; }
-.badge.pending  { background: #f0f0f0; color: #666666; border-color: #aaaaaa; }
+/* Run-state badges — one state each, so a badge, its pill, its stage border and
+   its graph node all carry the same colour for the same state: tint behind, base
+   on the border, ink on the label. */
+.badge.ok       { background: var(--state-done-bg);   color: var(--state-done-ink);   border-color: var(--state-done); }
+.badge.warn     { background: var(--state-warn-bg);   color: var(--state-warn-ink);   border-color: var(--state-warn); }
+.badge.err      { background: var(--state-failed-bg); color: var(--state-failed-ink); border-color: var(--state-failed); }
+.badge.awaiting { background: var(--state-review-bg); color: var(--state-review-ink); border-color: var(--state-review); }
+.badge.pending  { background: var(--state-idle-bg);   color: var(--state-idle-ink);   border-color: var(--state-idle); }
 
-.run-status.status-awaiting_review { background: #e6f0fc; color: #1a4a82; border-color: #2a6ac8; }
-.run-status.status-pending         { background: #f0f0f0; color: #666666; border-color: #aaaaaa; }
-
-.banner-review {
-    background: #e6f0fc; border: 1px solid #2a6ac8; border-radius: 6px;
-    padding: 14px 18px; margin: 14px 0; color: #1a3a72;
-}
-.banner-review .btn { margin-left: 12px; }
+.run-status.status-awaiting_review { background: var(--state-review-bg); color: var(--state-review-ink); border-color: var(--state-review); }
+.run-status.status-pending         { background: var(--state-idle-bg);   color: var(--state-idle-ink);   border-color: var(--state-idle); }
 
 /* Review queue page */
 .queue-progress {
@@ -183,7 +198,7 @@ a { color: var(--accent); }
 .queue-progress .bar {
     flex: 1; height: 10px; background: #e0e0e0; border-radius: 5px; overflow: hidden;
 }
-.queue-progress .fill { height: 100%; background: #2a6ac8; transition: width 0.3s; }
+.queue-progress .fill { height: 100%; background: var(--state-review); transition: width 0.3s; }
 .queue-progress p { margin: 0; white-space: nowrap; }
 
 .reviewer-instructions { margin: 12px 0 20px; }
@@ -475,7 +490,7 @@ table.schema tr:last-child td { border-bottom: 0; }
     color: var(--fg);
 }
 
-/* Executable handle blocks */
+/* Transform config blocks */
 .exec-block {
     background: var(--exec-bg);
     border-left: 4px solid var(--exec-border);
@@ -484,6 +499,111 @@ table.schema tr:last-child td { border-bottom: 0; }
     margin: 16px 0;
 }
 .exec-block h2 { margin-top: 0; }
+
+/* The plain-language summary of an authored-code block — the first thing read
+   in the Transform pane, and for a non-engineer the only readable statement of
+   what the step does, so it is set larger than the metadata under it. */
+.stage-summary {
+    font-size: 16px;
+    line-height: 1.55;
+    margin: 0 0 12px;
+    max-width: 70ch;
+}
+.stage-summary.missing { font-size: 14px; }
+
+/* Stated corner cases, folded under the summary (_stage_code.html). Sits between
+   the description and the badge because it is part of the description — the
+   examples check these too. */
+.stage-corners { max-width: 70ch; margin: 0 0 12px; font-size: 14px; }
+.stage-corners > summary { cursor: pointer; color: var(--muted); }
+.stage-corner-list { margin: 8px 0 0; }
+.stage-corner-list dt { font-weight: 500; margin-top: 8px; }
+.stage-corner-list dd { margin: 2px 0 0 18px; color: var(--muted); }
+
+/* Compiler warnings (section_workflow.html) — what is wrong with the workflow as
+   written, above the graph. Two severities only: blocking (someone can and must
+   fix it) and note (a legitimate choice, or something the stage cannot clear). */
+.wf-issues {
+    border: 1px solid var(--border);
+    border-left-width: 3px;
+    border-radius: 4px;
+    padding: 10px 16px;
+    margin: 0 0 16px;
+    max-width: 100ch;
+    background: white;
+}
+.wf-issues > summary { cursor: pointer; }
+.wf-issues-error { border-left-color: var(--belief-rejected-bd); background: var(--belief-rejected-bg); }
+.wf-issues-note  { border-left-color: var(--belief-unreviewed-bd); background: var(--belief-unreviewed-bg); }
+/* Clean: a plain block, not a <details> — there is no list to disclose. */
+.wf-issues-clean { border-left-color: var(--belief-approved-bd); background: var(--belief-approved-bg); }
+.wf-clean-line { margin: 0; font-size: 14px; }
+.wf-clean-why { margin: 6px 0 0; font-size: 13px; line-height: 1.5; }
+.wf-issues ul { margin: 10px 0 2px; padding: 0; list-style: none; }
+.wf-issue {
+    font-size: 13.5px; margin: 5px 0;
+    display: flex; flex-wrap: wrap; gap: 7px; align-items: baseline;
+}
+.wf-issue-kind {
+    flex: none; min-width: 118px; text-align: center;
+    font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px;
+    padding: 2px 7px; border-radius: 3px; border: 1px solid;
+}
+.wf-issue-error .wf-issue-kind { background: var(--belief-rejected-bg); color: #802020; border-color: var(--belief-rejected-bd); }
+.wf-issue-note  .wf-issue-kind { background: var(--belief-unreviewed-bg); color: #4a5561; border-color: var(--belief-unreviewed-bd); }
+
+/* Certification badge (_stage_certification.html) — sits directly under the
+   summary, because the claim it makes is a claim ABOUT that summary. The `why`
+   line is deliberately not hidden behind a disclosure: a green badge with no
+   stated scope reads as "this step is correct", which it does not mean. */
+.stage-cert {
+    max-width: 70ch;
+    margin: 0 0 14px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-left-width: 3px;
+    border-radius: 3px;
+}
+.stage-cert-line { margin: 0; font-size: 14px; }
+.stage-cert-why { margin: 6px 0 0; font-size: 13px; line-height: 1.5; }
+.stage-cert-badge {
+    display: inline-block; font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.4px; padding: 3px 10px; border-radius: 3px; margin-right: 8px;
+    border: 1px solid;
+}
+.stage-cert-certified { border-left-color: var(--belief-approved-bd); }
+.stage-cert-certified .stage-cert-badge {
+    background: var(--belief-approved-bg); color: #1f5a1f; border-color: var(--belief-approved-bd);
+}
+.stage-cert-failing { border-left-color: var(--belief-rejected-bd); }
+.stage-cert-failing .stage-cert-badge {
+    background: var(--belief-rejected-bg); color: #802020; border-color: var(--belief-rejected-bd);
+}
+.stage-cert-untested,
+.stage-cert-unsummarised { border-left-color: var(--belief-stale-bd); }
+.stage-cert-untested .stage-cert-badge,
+.stage-cert-unsummarised .stage-cert-badge {
+    background: var(--belief-stale-bg); color: #7a4a00; border-color: var(--belief-stale-bd);
+}
+/* Grey, not green: nothing ran, so nothing is being certified. */
+.stage-cert-untestable,
+.stage-cert-na { border-left-color: var(--belief-unreviewed-bd); }
+.stage-cert-untestable .stage-cert-badge,
+.stage-cert-na .stage-cert-badge {
+    background: var(--belief-unreviewed-bg); color: #4a5561; border-color: var(--belief-unreviewed-bd);
+}
+
+/* Code comes LAST, and open: description → examples → code. */
+.code-block > details > summary {
+    cursor: pointer;
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+}
+/* A heading, not a link: the generic `details summary` accent colour reads as
+   one, and this disclosure sits at the same level as Python function / Tests. */
+.code-block > details > summary h2 { display: inline; color: var(--fg); }
+.code-block > details[open] > summary { margin-bottom: 12px; }
 
 .eval-block {
     background: var(--eval-bg);
@@ -595,10 +715,6 @@ details pre { margin-top: 6px; max-height: 480px; overflow: auto; }
 .left-pane .workflow {
     margin: 0 0 16px;
     padding: 14px;
-}
-.left-pane .legend {
-    margin-bottom: 10px;
-    font-size: 12px;
 }
 
 .right-pane {
@@ -771,21 +887,6 @@ a.fact-chip:hover { background: var(--hover); color: var(--fg); }
 .btn.danger:hover { background: #fbdada; }
 .btn.danger:disabled { opacity: 0.6; cursor: default; }
 
-/* A workflow test's run — see RunManifest.is_test_run */
-.badge-test {
-    display: inline-block;
-    margin-left: 6px;
-    padding: 2px 7px;
-    border-radius: 3px;
-    font-size: 10px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.4px;
-    background: #f3e8fd;
-    color: #5a2a8c;
-    border: 1px solid #8a5cf6;
-}
-
 /* Run status badges */
 .run-status {
     display: inline-block;
@@ -797,13 +898,13 @@ a.fact-chip:hover { background: var(--hover); color: var(--fg); }
     letter-spacing: 0.4px;
     border: 1px solid;
 }
-.run-status.status-ok { background: #e8f8e8; color: #1f5a1f; border-color: #3aa83a; }
+.run-status.status-ok { background: var(--state-done-bg); color: var(--state-done-ink); border-color: var(--state-done); }
 .run-status.status-warnings,
-.run-status.status-validation_warnings { background: #fff4e6; color: #7a4a00; border-color: #cc7a00; }
+.run-status.status-validation_warnings,
+.run-status.status-running { background: var(--state-warn-bg); color: var(--state-warn-ink); border-color: var(--state-warn); }
 .run-status.status-errors,
-.run-status.status-error { background: #fde8e8; color: #802020; border-color: #cc3333; }
-.run-status.status-running { background: #eef2f7; color: #2c3e60; border-color: #4a5e85; }
-.run-status.status-cancelled { background: var(--code-bg); color: var(--muted); border-color: var(--border); }
+.run-status.status-error { background: var(--state-failed-bg); color: var(--state-failed-ink); border-color: var(--state-failed); }
+.run-status.status-cancelled { background: var(--state-idle-bg); color: var(--state-idle-ink); border-color: var(--state-idle); }
 .run-status.status-corrupt,
 .run-status.status-unknown { background: var(--code-bg); color: var(--muted); border-color: var(--border); }
 
@@ -826,9 +927,9 @@ a.fact-chip:hover { background: var(--hover); color: var(--fg); }
     font-weight: 600;
     line-height: 1.1;
 }
-.run-summary .card .num.ok { color: #1f5a1f; }
-.run-summary .card .num.warn { color: #7a4a00; }
-.run-summary .card .num.err { color: #802020; }
+.run-summary .card .num.ok { color: var(--state-done-ink); }
+.run-summary .card .num.warn { color: var(--state-warn-ink); }
+.run-summary .card .num.err { color: var(--state-failed-ink); }
 .run-summary .card .lbl {
     font-size: 11px;
     text-transform: uppercase;
@@ -837,13 +938,20 @@ a.fact-chip:hover { background: var(--hover); color: var(--fg); }
     margin-top: 2px;
 }
 
+/* Banners. `.banner` is the box and the neutral default; a modifier gives it the
+   colour of what it says. The modifiers are declared after `.banner` and match its
+   specificity, so an element carrying both paints in the modifier's state. */
 .banner {
     padding: 12px 16px;
-    background: #e8f8e8;
-    border-left: 4px solid #3aa83a;
+    background: var(--state-idle-bg);
+    border-left: 4px solid var(--state-idle);
     border-radius: 0 4px 4px 0;
     margin: 16px 0;
 }
+.banner-done   { background: var(--state-done-bg);   border-left-color: var(--state-done); }
+.banner-warn   { background: var(--state-warn-bg);   border-left-color: var(--state-warn); }
+.banner-review { background: var(--state-review-bg); border-left-color: var(--state-review); }
+.banner-review .btn { margin-left: 12px; }
 
 /* Per-stage run blocks */
 .run-stage {
@@ -853,9 +961,9 @@ a.fact-chip:hover { background: var(--hover); color: var(--fg); }
     padding: 14px 18px;
     margin: 12px 0;
 }
-.run-stage.status-error { border-left: 4px solid #cc3333; }
-.run-stage.status-validation_warnings { border-left: 4px solid #cc7a00; }
-.run-stage.status-ok { border-left: 4px solid #3aa83a; }
+.run-stage.status-error { border-left: 4px solid var(--state-failed); }
+.run-stage.status-validation_warnings { border-left: 4px solid var(--state-warn); }
+.run-stage.status-ok { border-left: 4px solid var(--state-done); }
 .run-stage header {
     display: flex;
     align-items: center;
@@ -878,16 +986,16 @@ a.fact-chip:hover { background: var(--hover); color: var(--fg); }
 .run-stage h3 a:hover { color: var(--accent); }
 
 .run-error {
-    background: #fde8e8;
+    background: var(--state-failed-bg);
     padding: 10px 14px;
     border-radius: 4px;
-    color: #802020;
+    color: var(--state-failed-ink);
     margin: 8px 0;
     font-size: 13px;
 }
 .run-error pre {
     background: rgba(0,0,0,0.05);
-    color: #802020;
+    color: var(--state-failed-ink);
     margin-top: 6px;
     font-size: 11px;
     max-height: 280px;
@@ -951,6 +1059,19 @@ table.data-preview td.cell-url {
     word-break: break-all;
 }
 table.data-preview td.cell-url a { color: var(--accent, #1a3a72); }
+/* Clipped text cells: hover shows the full value (title attr), click expands
+   the cell in place so long text wraps instead of being cut off. */
+table.data-preview td.cell-clip { cursor: zoom-in; }
+table.data-preview td.cell-clip.expanded {
+    white-space: pre-wrap;
+    max-width: 640px;
+    min-width: 320px;
+    overflow: visible;
+    text-overflow: clip;
+    overflow-wrap: anywhere;
+    background: #fffbe8;
+    cursor: zoom-out;
+}
 table.data-preview th {
     background: var(--code-bg);
     font-weight: 600;
@@ -1076,6 +1197,30 @@ table.data-preview.selectable tbody tr:hover { background: #f3f7ff; }
 .scratch-result .scratch-head.err { color: #802020; }
 table.data-preview.scratch th { background: #f3ecd0; }
 
+/* Outputs-pane stage diff (app/templates/_stage_diff.html). A column the stage
+   ADDS takes the same palette tint the stage-tests table uses for its added
+   columns (--state-review-bg), and the table caption names those columns in
+   words; a changed cell carries the warn tint plus the input value it replaced
+   struck through, so the change reads without colour; a dropped row carries the
+   failed tint. Unchanged cells go muted, so the eye lands on what the stage
+   touched. */
+.stage-diff th.diff-col-new,
+.stage-diff td.diff-col-new { background: var(--state-review-bg); }
+.stage-diff td.diff-cell-changed { background: var(--state-warn-bg); }
+.stage-diff td.diff-cell-same { color: var(--muted); }
+.stage-diff .diff-was { display: block; color: var(--muted); text-decoration: line-through; }
+.stage-diff tr.diff-row-dropped td { background: var(--state-failed-bg); color: var(--state-failed-ink); }
+.stage-diff caption { caption-side: top; text-align: left; font-size: 0.78rem; color: var(--muted); padding-bottom: 2px; }
+.diff-summary { margin: 6px 0 2px; font-size: 12.5px; }
+.diff-summary .diff-note { margin-right: 12px; }
+.diff-summary .diff-note-added code { background: var(--state-review-bg); }
+
+/* The Data pane's input-rows disclosure: the upstream previews and the scratch
+   row picker, folded below the (diff-aware) output so the pane leads with what
+   the stage produced while the picker stays one click away. */
+.data-inputs { margin: 14px 0 4px; }
+.data-inputs > summary { color: var(--accent); font-size: 12px; cursor: pointer; }
+
 /* Validation block inside the Outputs tier. */
 .tier-outputs .validation-block { background: #fff; border: 1px solid var(--border); margin-top: 12px; }
 .validation-block .val-phase {
@@ -1087,35 +1232,71 @@ table.data-preview.scratch th { background: #f3ecd0; }
     font-weight: 600;
 }
 
-/* ── Run page redesign: progress framing, full-width workflow, nested-tab panel ── */
+/* ── Run page: full-width workflow, nested-tab panel ── */
 .run-topbar h1 { margin-bottom: .1rem; }
-.run-progress { display: flex; align-items: center; gap: 1rem; margin: 1rem 0 .4rem; flex-wrap: wrap; }
-.run-progress form { margin: 0 0 0 auto; }
 .spinner { width: 18px; height: 18px; border: 3px solid #e3e3e0; border-top-color: var(--accent);
     border-radius: 50%; animation: spin .8s linear infinite; display: inline-block; flex: none; }
 .spinner[hidden] { display: none; }
 @keyframes spin { to { transform: rotate(360deg); } }
-.overall-status { font-weight: 600; text-transform: capitalize; padding: .15rem .6rem;
-    border-radius: 5px; background: var(--hover); }
-.overall-status.status-running { background: #fff4d6; color: #8a6d00; }
-.overall-status.status-ok { background: #e6f4e6; color: #1f6b1f; }
-.overall-status.status-errors, .overall-status.status-error { background: #fdecea; color: #a11; }
-.overall-status.status-awaiting_review { background: var(--review-bg); color: var(--review-border); }
-.overall-status.status-cancelled { background: var(--code-bg); color: var(--muted); }
-.progress-track { flex: 1; min-width: 160px; max-width: 420px; height: 10px; background: #e8e8e4;
-    border-radius: 6px; overflow: hidden; }
-.progress-fill { height: 100%; background: #2a8a2a; transition: width .4s ease; }
-.progress-counts { font-size: .9rem; }
-.alert-strip { display: flex; gap: .6rem; margin: 0 0 1rem; flex-wrap: wrap; }
-.alert-strip[hidden] { display: none; }
-.alert { padding: .2rem .6rem; border-radius: 5px; font-size: .85rem; }
-.alert[hidden] { display: none; }
-.alert.err { background: #fdecea; color: #a11; }
-.alert.warn { background: var(--warn-bg); color: var(--warn-border); }
-.alert.awaiting { background: var(--review-bg); color: var(--review-border); }
-.alert.cancelled { background: var(--code-bg); color: var(--muted); }
-.lede .lg { padding: 0 .25rem; border-radius: 3px; font-weight: 600; }
-.lg-done { color: #2a8a2a; } .lg-run { color: #b8860b; } .lg-err { color: #cc2a2a; } .lg-pend { color: #999; }
+
+/* ── The run header: grounding line → CTA → stage strip (app/web/run_header.py).
+      The run's state is not stated in words anywhere; the CTA is how it is read,
+      so the CTA is the only large thing here. ── */
+.run-header { margin: 0 0 1.2rem; }
+.run-ground { display: flex; flex-wrap: wrap; align-items: center; gap: .45em;
+    margin: 0 0 .75rem; font-size: .82rem; color: var(--muted); }
+.run-ground .sep { opacity: .45; }
+.run-ground .run-id { font-size: .74rem; background: var(--code-bg); color: var(--muted);
+    padding: 1px 6px; border-radius: 3px; }
+.run-ground .unresolved { color: var(--state-warn-ink); cursor: help; }
+.run-ground .flagchip { background: #f3e8fd; color: #5a2a8c; border: 1px solid #d9c2f5;
+    padding: 1px 7px; border-radius: 3px; font-size: .74rem; cursor: help; }
+.cta-row { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; margin: 0 0 .85rem; }
+.cta-row form { margin: 0; }
+.cta-row .btn { font-size: .95rem; font-weight: 600; padding: 9px 16px; border-radius: 7px; }
+.cta-row .btn.ghost { background: #fff; color: var(--fg); border-color: var(--border);
+    font-weight: 500; }
+.cta-row .btn.ghost:hover { background: var(--hover); }
+.cta-row .btn:disabled { opacity: .6; cursor: default; }
+.cta-aside { font-size: .82rem; color: var(--muted); }
+
+/* ── The stage strip (_stage_strip.html): one square per stage in topological
+      order, coloured by status. Status only — the squares are not links.
+
+      The squares divide the row's width rather than each claiming 26px, because
+      a fixed width silently drops the overflow: the reader counts fewer squares
+      than the tally beneath claims, with no sign any are missing. They grow to
+      26px and no further, so a short workflow looks as it always did. Below
+      ~3px each the row can still overflow — that is 60+ stages in the narrowest
+      column, and the floor is what keeps a single failed stage visible. ── */
+.stage-strip { display: flex; gap: 3px; align-items: flex-end; width: 100%; }
+.stage-strip i { display: block; height: 16px; border-radius: 3px;
+    flex: 1 1 0; min-width: 3px; max-width: 26px; }
+/* The runs-index twin sits inline in a table cell, so it keeps its intrinsic
+   width — the cell, not the strip, decides how much room there is. */
+.stage-strip.compact { display: inline-flex; gap: 2px; width: auto; vertical-align: -2px; }
+.stage-strip.compact i { width: 8px; height: 10px; border-radius: 2px; flex: none; max-width: none; }
+.strip-counts { display: flex; flex-wrap: wrap; gap: .95rem; margin: .5rem 0 0;
+    font-size: .8rem; color: var(--muted); }
+.strip-counts span { display: flex; align-items: center; gap: .4em; }
+.strip-counts i { display: block; width: 9px; height: 9px; border-radius: 2px; }
+.stage-strip i, .strip-counts i { background: var(--state-idle); }
+.stage-strip i.status-pending, .strip-counts i.status-pending { background: #d5d7d3; }
+.stage-strip i.status-ok, .strip-counts i.status-ok { background: var(--state-done); }
+.stage-strip i.status-validation_warnings,
+.strip-counts i.status-validation_warnings,
+.stage-strip i.status-running, .strip-counts i.status-running { background: var(--state-warn); }
+.stage-strip i.status-awaiting_review,
+.strip-counts i.status-awaiting_review { background: var(--state-review); }
+.stage-strip i.status-error, .strip-counts i.status-error { background: var(--state-failed); }
+.stage-strip i.status-cancelled, .strip-counts i.status-cancelled { background: var(--state-idle); }
+
+/* ── Runs index rows (section_runs.html) ── */
+.runs-table td { vertical-align: top; }
+.runs-table .run-sub { display: block; font-size: .74rem; color: var(--muted);
+    font-family: "SFMono-Regular", "Consolas", monospace; }
+.runs-table .run-diff { font-size: .82rem; color: var(--muted); }
+.runs-table .unresolved { color: var(--state-warn-ink); cursor: help; }
 
 .workflow-full { width: 100%; margin: 1rem 0 .3rem; }
 .stage-panel-full { margin-top: 1.2rem; border-top: 2px solid var(--border); padding-top: 1rem; min-height: 120px; }
@@ -1134,10 +1315,6 @@ table.data-preview.scratch th { background: #f3ecd0; }
 .prompt-rendered { background: var(--code-deep); color: var(--code-fg); padding: .8rem; border-radius: 6px;
     white-space: pre-wrap; max-height: 420px; overflow: auto; font-size: 12px; line-height: 1.45; }
 
-/* ── Re-run failed stages action ── */
-.rerun-bar { display: flex; align-items: center; gap: .8rem; margin: 0 0 1rem; flex-wrap: wrap; }
-.rerun-bar form { margin: 0; }
-.rerun-bar .muted { font-size: .85rem; }
 
 /* ── Full stage-output table page (/runs/{id}/stage/{id}/rows) ── */
 .rows-toolbar { display: flex; align-items: center; gap: .8rem; margin: 0 0 1rem; flex-wrap: wrap; }
@@ -1147,7 +1324,7 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
 
 /* ═══ Node review / workflow versioning ══════════════════ */
 
-/* Belief chips — legend rows, the node-review state line, and (inline) hints. */
+/* Belief chips — the legend row, the node-review state line, and (inline) hints. */
 .belief-chip {
     display: inline-block;
     padding: 3px 10px;
@@ -1164,12 +1341,11 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
 .belief-rejected   { background: var(--belief-rejected-bg);   color: #802020; border-color: var(--belief-rejected-bd); }
 .belief-stale      { background: var(--belief-stale-bg);      color: #7a4a00; border-color: var(--belief-stale-bd); }
 
-/* Legend label + the second (belief) legend row on the project page. */
+/* The label naming which axis a legend row explains. */
 .legend-label {
     font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px;
     color: var(--muted); font-weight: 700; margin-right: 2px;
 }
-.belief-legend { margin-top: -14px; }
 
 /* Coverage badge (header) + shared coverage bar (header + versions table). */
 .coverage-badge {
@@ -1234,9 +1410,6 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
 }
 .nr-issues[hidden] { display: none; }
 .nr-issues li { color: #802020; font-family: "SFMono-Regular", "Consolas", monospace; font-size: 12px; margin: 2px 0; }
-
-/* Run-detail: "ran against version" line. */
-.ran-against { margin-top: 2px; }
 
 /* == Project shell . dashboard . section layout =======================================
    The sidebar shell (.app-*), home dashboard cards (.project-*, .dash-*), overview
@@ -1716,7 +1889,7 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
 
 .ov-tile-sub { font-size: 12px; color: var(--muted); }
 
-.ov-tile-sub.review { color: #2a6ac8; font-weight: 600; }
+.ov-tile-sub.review { color: var(--state-review-ink); font-weight: 600; }
 
 .ov-tile-bar { width: 100%; height: 8px; margin-top: 2px; }
 
@@ -1865,11 +2038,20 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
     border: 1px solid var(--border); background: #f7f7f8; border-radius: 5px; color: #333; }
 .diagram-tools button:hover { background: #ececec; }
 .diagram-tools .diagram-hint { font-size: 12px; }
-.diagram-viewport { overflow: auto; max-height: 72vh; min-height: 260px; border: 1px solid var(--border);
+/* The box hugs the diagram: no min-height, so a one-row graph does not sit in a
+   tall empty well. resize:vertical still lets a reader open it up by hand. */
+.diagram-viewport { overflow: auto; max-height: 72vh; border: 1px solid var(--border);
     border-radius: 8px; background: #fbfbfc; resize: vertical; cursor: grab; }
 .diagram-viewport.grabbing { cursor: grabbing; }
 .diagram-viewport:fullscreen { max-height: none; height: 100vh; width: 100vw; background: #fbfbfc; }
-.diagram-viewport .mermaid { margin: 0; padding: .5rem; }
+/* THE VIEWPORT OWNS THE SCROLL. `pre` carries overflow-x:auto from the base rule,
+   which made this block its own scroll container: the svg's overflow ended here
+   instead of at .diagram-viewport, whose scrollLeft then had no range to move in
+   and silently discarded every write (zoom-to-node scrolled nowhere).
+   max-content lets a wide graph overflow the viewport so it can scroll; min-width
+   keeps a narrow one filling the box, still centred by .mermaid's text-align. */
+.diagram-viewport .mermaid { margin: 0; padding: .5rem; overflow: visible;
+    width: max-content; min-width: 100%; box-sizing: border-box; }
 .diagram-viewport .mermaid svg { max-width: none !important; height: auto; }
 /* The node currently open in the review panel — outline it in the graph so the two
    agree on the selection (distinct from the belief FILL colour). */
@@ -1878,6 +2060,24 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
 .diagram-viewport svg g.node.wf-node-active > circle,
 .diagram-viewport svg g.node.wf-node-active > path { stroke: #2f43c9 !important; stroke-width: 3px !important; }
 .diagram-viewport svg g.node.wf-node-active { filter: drop-shadow(0 0 4px rgba(47,67,201,.55)); }
+/* Pulse on arrival: the graph scrolls under the reader, so without a moving cue the
+   newly-outlined node is easy to miss. diagram_viewport.js re-applies the class on
+   every focus, which is what replays the animation; it stays on until the next one. */
+@keyframes wf-node-arrive {
+    0%, 100% { filter: drop-shadow(0 0 4px rgba(47, 67, 201, .55)); }
+    50%      { filter: drop-shadow(0 0 14px rgba(47, 67, 201, .95)); }
+}
+.diagram-viewport svg g.node.wf-node-arriving { animation: wf-node-arrive .5s ease-in-out 2; }
+@media (prefers-reduced-motion: reduce) {
+    .diagram-viewport svg g.node.wf-node-arriving { animation: none; }
+}
+
+/* Stage nodes carry mermaid's .clickable (and its pointer cursor) because the graph
+   DECLARES a click handler — whether or not this page listens for one. onDiagramNode()
+   sets data-diagram-clickable on <html>, so the cursor promises a click only where one
+   is actually wired. See static/diagram_nodes.js. */
+.mermaid g.node.clickable { cursor: default; }
+html[data-diagram-clickable] .mermaid g.node.clickable { cursor: pointer; }
 
 /* ── Workflow: graph on top, stage detail full-width below (master-detail layout). ── */
 .wf-top .diagram-viewport { max-height: 56vh; }        /* cap so the detail below stays reachable */
@@ -1918,6 +2118,14 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
 .test-status-malformed { background: var(--belief-stale-bg); color: #7a4a00; border-color: var(--belief-stale-bd); }
 .test-rows { border-collapse: collapse; margin: 0.3rem 0 0.6rem; }
 .test-rows th, .test-rows td { border: 1px solid var(--border); padding: 0.15rem 0.5rem; font-size: 0.85rem; }
+/* A column the step ADDS: in its output schema, in none of its input schemas. One flat
+   tint the full height of the column, so the eye separates produced values from
+   carried-through ones in a pass; the caption names the same columns in words, so the
+   mark does not rest on colour. --state-review-bg is the palette's blue tint — the only
+   one that stays legible on --exec-bg, which the surrounding block fills. */
+.test-rows th.test-col-new,
+.test-rows td.test-col-new { background: var(--state-review-bg); }
+.test-rows caption { caption-side: top; text-align: left; font-size: 0.78rem; color: var(--muted); padding-bottom: 2px; }
 .test-message { color: #802020; }
 .node-review-full .nr-edit-hint { margin: 0 0 10px; }
 

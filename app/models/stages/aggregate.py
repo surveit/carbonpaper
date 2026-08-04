@@ -1,40 +1,92 @@
-"""Column validation for an aggregate stage, on both the input and output
-side: `group_by`, each aggregation's `value_column`, and every column an
-aggregation's `where` predicate references must resolve against the stage's
-input edge; and a declared output_schema must be deliverable by the columns
-group_by + the aggregations actually produce."""
+"""aggregate stage: the config block, plus column validation on both the
+input and output side — `group_by`, each aggregation's `value_column`, and
+every column an aggregation's `where` references must resolve against the
+stage's input edge; and a declared output_schema must be deliverable by the
+columns group_by + the aggregations actually produce."""
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from enum import Enum
+from typing import Any, TYPE_CHECKING, ClassVar, Literal, Optional
 
+from pydantic import Field, model_validator
+
+from app.models.schema import StageConfig, _Base
+from app.models.stage_base import StageBase, StageInput, StageType
 from app.models.stages.shared import (
     COLUMN_ISSUE,
-    find_declared_vs_derived_issues,
+    find_declared_vs_computed_issues,
     find_predicate_column_issues,
     resolve_input_columns,
 )
 
 if TYPE_CHECKING:
     from app.models.schema import TableSchema
-    from app.models.stage import AggregateConfig, Stage
+
+
+class AggFormula(str, Enum):
+    sum = "sum"
+    mean = "mean"
+    count_ = "count"  # trailing underscore: `count` would shadow str.count
+    min = "min"
+    max = "max"
+    first = "first"
+    list = "list"
+
+
+class AggregationOp(_Base):
+    output_column: str
+    formula: AggFormula
+    value_column: Optional[str] = None
+    where: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _value_column_for_formula(self) -> "AggregationOp":
+        if self.formula != AggFormula.count_ and not self.value_column:
+            raise ValueError(
+                f"aggregation `{self.output_column}`: formula `{self.formula}` needs value_column"
+            )
+        return self
+
+
+class AggregateConfig(StageConfig):
+    """aggregate config block."""
+    # Every field changes what this stage computes (grouping, aggregations) —
+    # see StageBase.compute_definition_fingerprint.
+    FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({"group_by", "aggregations"})
+    INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset()
+
+    group_by: list[str]
+    aggregations: list[AggregationOp]
+
+
+class AggregateStage(StageBase):
+    type: Literal[StageType.aggregate]
+    aggregate: AggregateConfig
+    inputs: list[StageInput] = Field(default_factory=list, min_length=1)
+
+    def fingerprint_blocks(self) -> dict[str, StageConfig]:
+        return {"aggregate": self.aggregate}
+
+    def find_config_column_issues(self) -> list[str]:
+        return find_aggregate_column_issues(self)
+
+    def find_output_schema_issues(self) -> list[str]:
+        return find_aggregate_output_issues(self)
+
 
 # Aggregation formula names, compared as plain strings both by
-# derive_aggregate_output_types below and by the runtime handler
+# compute_aggregate_output_types below and by the runtime handler
 # (app.runtime.stages.aggregate.handle_aggregate, which executes the same
 # dispatch on real data) — named here so the two sites can't drift apart.
-# Plain string, not the AggFormula enum: AggFormula lives on `Stage` in
-# app.models.stage, and importing it here at module scope would be circular
-# (stage.py imports this package back for its own model validator).
 AGG_FORMULA_COUNT = "count"
 AGG_FORMULA_LIST = "list"
 
 
-def find_aggregate_column_issues(stage: "Stage") -> list[str]:
+def find_aggregate_column_issues(stage: "AggregateStage") -> list[str]:
     """Every `group_by` entry, aggregation `value_column`, and column an
     aggregation's `where` references that is absent from the resolved single
     input."""
     aggregate = stage.aggregate
-    assert aggregate is not None  # Stage._handle_for_type guarantees this for type="aggregate"
     cols = resolve_input_columns(stage, 0)
     issues = [
         COLUMN_ISSUE.format(sid=stage.id, field="aggregate.group_by", col=g, cols=sorted(cols))
@@ -60,23 +112,22 @@ def find_aggregate_column_issues(stage: "Stage") -> list[str]:
     return issues
 
 
-def find_aggregate_output_issues(stage: "Stage") -> list[str]:
-    """Every declared output_schema column the aggregate handle cannot deliver:
-    a name outside group_by + aggregation output columns, or a type the
-    derivation contradicts. Type checks apply only where the derivation can know
-    the type."""
+def find_aggregate_output_issues(stage: "AggregateStage") -> list[str]:
+    """Every declared output_schema column the aggregate config cannot deliver:
+    a name outside group_by + aggregation output columns, or a type that
+    contradicts what the config computes. Type checks apply only where that
+    computed type can be known."""
     aggregate = stage.aggregate
-    assert aggregate is not None  # Stage._handle_for_type guarantees this for type="aggregate"
-    assert stage.output_schema is not None  # Stage._schemas_declared guarantees this off publish
+    assert stage.output_schema is not None  # StageBase._schemas_declared guarantees this
     edge = stage.inputs[0].table_schema
-    derived = derive_aggregate_output_types(aggregate, edge)
-    return find_declared_vs_derived_issues(stage.id, "aggregate", stage.output_schema, derived)
+    computed = compute_aggregate_output_types(aggregate, edge)
+    return find_declared_vs_computed_issues(stage.id, "aggregate", stage.output_schema, computed)
 
 
-def derive_aggregate_output_types(
+def compute_aggregate_output_types(
     aggregate: "AggregateConfig", edge: "TableSchema"
 ) -> dict[str, str | None]:
-    """The columns the aggregate handle emits, each mapped to its derived type
+    """The columns the aggregate config emits, each mapped to its computed type
     (None = unknowable): every group_by column carries its edge type through
     unchanged, and each aggregation's output column follows its formula —
     count->int and mean->float unconditionally; sum->the value column's type
@@ -89,19 +140,40 @@ def derive_aggregate_output_types(
         column = edge.column_for_name(name)
         return column.type if column is not None else None
 
-    derived: dict[str, str | None] = {g: edge_type(g) for g in aggregate.group_by}
+    computed: dict[str, str | None] = {g: edge_type(g) for g in aggregate.group_by}
     for op in aggregate.aggregations:
         value_type = edge_type(op.value_column)
         if op.formula == AGG_FORMULA_COUNT:
-            derived[op.output_column] = "int"
+            computed[op.output_column] = "int"
         elif op.formula == "mean":
-            derived[op.output_column] = "float"
+            computed[op.output_column] = "float"
         elif op.formula == "sum":
-            derived[op.output_column] = (
+            computed[op.output_column] = (
                 value_type if value_type in ("int", "float", "str") else None
             )
         elif op.formula == AGG_FORMULA_LIST:
-            derived[op.output_column] = f"list[{value_type}]" if value_type else None
+            computed[op.output_column] = f"list[{value_type}]" if value_type else None
         else:  # min / max / first: the value column's own type
-            derived[op.output_column] = value_type
-    return derived
+            computed[op.output_column] = value_type
+    return computed
+
+# Authoring notes for this module's stage type(s), as the plain-data shape the
+# authoring prompts render. Assembled into NODE_TYPES by app.models.stages.
+NODE_TYPE_SPECS: dict[str, dict[str, Any]] = {
+    "aggregate": {
+        "summary": "Structured group-by aggregation.",
+        "blocks": ["aggregate"],
+        "requires_inputs": True,
+        "min_inputs": 1,
+        "required": ["group_by", "aggregations"],
+        "optional": [],
+        "notes": (
+            "Output columns are exactly group_by plus each aggregation's output_column — every "
+            "other input column is DROPPED, so carry anything needed downstream via group_by "
+            "or a `first` aggregation. formula `count` takes no value_column; every other "
+            "formula requires one. Declared output types must match "
+            "what the formula computes: count->int, mean->float, min/max/first->the value "
+            "column's type, list->list[<that type>]."
+        ),
+    },
+}

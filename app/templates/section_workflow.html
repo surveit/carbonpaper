@@ -34,10 +34,11 @@
 {% block section_head %}
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 <script>
-  // Mermaid click handler: route node clicks to window.loadStage() (the review panel).
-  window.loadStage = function (stageId) {
+  // Graph node clicks → the review panel. onDiagramNode (static/diagram_nodes.js) is
+  // the subscription; _loadStage is defined further down, after the panel exists.
+  onDiagramNode(function (stageId) {
     if (window._loadStage) { window._loadStage(stageId); }
-  };
+  });
   document.addEventListener("DOMContentLoaded", function () {
     // startOnLoad:false + useMaxWidth:false — diagram_viewport.js renders the graph and
     // sizes the svg itself, so it's legible (not shrunk to the column) and zoom is real.
@@ -78,21 +79,51 @@
   </div>
 </div>
 
+{# Compiler warnings — what is wrong with the workflow AS WRITTEN, judged without
+   running anything. The same list the authoring agent must clear before it reports
+   asked to sign off (the report_compiler_warnings MCP tool), so a reviewer and the
+   agent look at one thing. Blocking entries first: those are the ones someone can
+   fix. A warning does not stop anyone reviewing the workflow — it means their
+   attention is about to be spent on something already known. Whether a step's
+   examples PASS is a different question, answered by running them, and is not here. #}
+{% if compiler_warnings and compiler_warnings.warnings %}
+{% set blocking = compiler_warnings.blocking|length %}
+<details class="wf-issues wf-issues-{{ 'error' if blocking else 'note' }}" open>
+  <summary>
+    {% if blocking %}<strong>⚠ {{ blocking }} to fix before signing this workflow off</strong>
+    {% else %}<strong>Nothing left to fix</strong>{% endif %}
+    <span class="muted">— {{ compiler_warnings.warnings|length }} compiler
+      warning{% if compiler_warnings.warnings|length != 1 %}s{% endif %}</span></summary>
+  <ul>
+    {% for warning in compiler_warnings.warnings %}
+    <li class="wf-issue wf-issue-{{ 'error' if warning.blocking else 'note' }}">
+      <span class="wf-issue-kind">{{ warning.kind.replace('_', ' ') }}</span>
+      <a href="#" data-stage-link="{{ warning.stage_id }}">{{ warning.stage_name }}</a>
+      <span class="muted">— {{ warning.detail }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+</details>
+{% elif compiler_warnings %}
+{# Nothing wrong, said out loud. Silence here is what a reviewer sees when nobody has
+   looked, so a clean workflow has to be distinguishable from an unexamined one. The
+   count is all it claims: these checks read the workflow, they do not run it, so they
+   say nothing about the numbers a run produces. #}
+<div class="wf-issues wf-issues-clean">
+  <p class="wf-clean-line"><strong>✓ 0 errors, 0 warnings</strong></p>
+  <p class="wf-clean-why muted">Nothing in this workflow is flagged as written. These
+    checks are made without running anything, so they say nothing about the numbers a
+    run produces.</p>
+</div>
+{% endif %}
+
 {# ── Graph full-width on top, node review docked full-width below. ── #}
 <div class="wf-stack">
     <div class="wf-top">
+      {# Belief has no text fallback in the node — the stroke is its only channel,
+         so it is the one axis the graph needs a legend for. A node's type is
+         spelled out in its own label (glyph + type-name subtitle). #}
       <div class="legend">
-        <span class="legend-label">type</span>
-        <span class="badge input">▶ input_data</span>
-        <span class="badge llm">✦ llm_transform</span>
-        <span class="badge python">🔂 python_row_function</span>
-        <span class="badge python">🧨 python_frame_function</span>
-        <span class="badge join">⋈ join</span>
-        <span class="badge aggregate">Σ aggregate</span>
-        <span class="badge human">👤 human_review_queue</span>
-        <span class="badge publish">📤 publish</span>
-      </div>
-      <div class="legend belief-legend">
         <span class="legend-label">belief</span>
         <span class="belief-chip belief-approved">approved</span>
         <span class="belief-chip belief-unreviewed">unreviewed</span>

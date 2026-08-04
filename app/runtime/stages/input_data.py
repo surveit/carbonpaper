@@ -8,14 +8,42 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Hashable, Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pandas as pd
 
-from app.models import Stage, XlsxReadParams
+from app.models import (
+    JSON_COLUMN_TYPE,
+    STR_COLUMN_TYPE,
+    FileFormat,
+    Stage,
+    TableSchema,
+    XlsxReadParams,
+)
+from app.models.stages.input_data import InputDataStage
 
 from ..context import RunContext
+from .execution import narrow_stage
+
+# Column types a text-on-disk file (csv) stores as text and that something
+# downstream re-reads as text: `str` itself, `date`/`datetime` (parsed below by
+# pd.to_datetime, which needs the original characters — on an int-inferred
+# YYYYMMDD column it would read the digits as nanoseconds), and
+# `json`/`list[X]` (parsed by the `list_columns` path or by a later stage).
+# Letting pandas guess any of them is the silent-data-loss case: a zero-padded
+# `002` declared `str` comes back as the integer 2.
+_TEXT_ON_DISK_TYPES = frozenset({STR_COLUMN_TYPE, JSON_COLUMN_TYPE, "date", "datetime"})
+_DATE_TYPES = frozenset({"date", "datetime"})
+
+# The formats pandas type-INFERS, and so the only ones the declared schema has
+# anything to add to. xlsx is one of them: a workbook does type its cells, but
+# pd.read_excel hands openpyxl's values to the same inference csv goes through,
+# so a cell the sheet marks as text still comes back a number. parquet is read
+# through arrow, which hands pandas an already-typed column; geojson is built
+# from json.loads dicts.
+_INFERRING_FORMATS = frozenset({FileFormat.csv, FileFormat.json, FileFormat.xlsx})
 
 
 def preflight_input_data(stage: Stage) -> tuple[list[str], dict[str, Any] | None]:
@@ -27,8 +55,7 @@ def preflight_input_data(stage: Stage) -> tuple[list[str], dict[str, Any] | None
     None when the stage is not ready. The hash is a strong integrity signal for
     "which file was designated", not a read-time proof — the handler opens the
     file moments later."""
-    connector = stage.connector
-    assert connector is not None  # Stage validation: input_data carries connector
+    connector = narrow_stage(stage, InputDataStage).connector
     path_param = connector.params.get("path")
     if not path_param:
         return ([f"`{stage.id}`: no file bound — supply a run binding, or author "
@@ -43,9 +70,8 @@ def preflight_input_data(stage: Stage) -> tuple[list[str], dict[str, Any] | None
 
 
 def read_input_data(stage: Stage, ctx: RunContext) -> pd.DataFrame:
-    connector = stage.connector
-    assert connector is not None  # Stage validation: input_data carries connector
-    params = connector.params
+    input_stage = narrow_stage(stage, InputDataStage)
+    params = input_stage.connector.params
 
     if "path" not in params:
         raise ValueError(
@@ -54,17 +80,19 @@ def read_input_data(stage: Stage, ctx: RunContext) -> pd.DataFrame:
             "workflow to author it or a reference override to inject it"
         )
     path = Path(params["path"])   # absolute: the model rejects a relative path when present
-    fmt = params.get("format", "csv")
-    if fmt == "csv":
-        df = pd.read_csv(path)
-    elif fmt == "parquet":
+    fmt = params.get("format", FileFormat.csv)
+    schema = input_stage.output_schema  # required on input_data by Stage validation; None only off-model
+    if fmt == FileFormat.csv:
+        df = pd.read_csv(path, dtype=_read_dtype(schema, fmt, params))
+    elif fmt == FileFormat.parquet:
         df = pd.read_parquet(path)
-    elif fmt == "json":
-        df = pd.read_json(path, lines=True)
-    elif fmt == "geojson":
+    elif fmt == FileFormat.json:
+        df = pd.read_json(path, lines=True, dtype=_read_dtype(schema, fmt, params))
+    elif fmt == FileFormat.geojson:
         df = _read_geojson(path)
-    elif fmt == "xlsx":
-        df = _read_xlsx(path, XlsxReadParams.model_validate(params))
+    elif fmt == FileFormat.xlsx:
+        df = _read_xlsx(path, XlsxReadParams.model_validate(params),
+                        dtype=_read_dtype(schema, fmt, params))
     else:
         raise ValueError(f"Unsupported file format: {fmt}")
 
@@ -73,17 +101,68 @@ def read_input_data(stage: Stage, ctx: RunContext) -> pd.DataFrame:
         if col in df.columns:
             df[col] = df[col].apply(_parse_list_cell)
 
-    # Optional date parsing
-    for col in params.get("parse_dates", []):
+    # Date parsing: the authored `parse_dates` param, plus every date/datetime
+    # column the schema declares that it does not already name. Both go through
+    # this one loop, so a declared date column behaves identically whether or
+    # not the param happens to list it, and no column is coerced twice.
+    for col in _date_columns(schema, fmt, params):
         if col in df.columns:
             df[col] = pd.to_datetime(df[col], errors="coerce")
 
     return df
 
 
+def _read_dtype(
+    schema: TableSchema | None, fmt: str, params: dict[str, Any]
+) -> dict[Hashable, Any] | None:
+    """The `dtype=` map for a guessing format, or None when there is nothing to pin."""
+    # Keyed Hashable, not str: pandas types `dtype=` as Mapping[Hashable, ...], whose
+    # key is invariant, so a dict[str, ...] is not assignable to it.
+    pinned: dict[Hashable, Any] = {name: str for name in _text_on_disk_columns(schema, fmt)}
+    # An explicit `dtype` param wins per column name: the author's declaration of how
+    # to READ the file beats what we infer from the declaration of what it CONTAINS.
+    pinned.update(params.get("dtype") or {})
+    return pinned or None
+
+
+def _text_on_disk_columns(schema: TableSchema | None, fmt: str) -> list[str]:
+    """Declared columns this format must not be allowed to type-infer."""
+    if schema is None:
+        return []
+    # csv holds nothing but text, so every text-on-disk type — and `list[X]`, whose
+    # cells the `list_columns` path re-reads as text — is pinned to str and typed
+    # afterwards by code that knows the declaration. xlsx pins the same set: a cell
+    # holds one scalar, never a real list or dict, and a date pinned to str is
+    # re-read below by pd.to_datetime, which round-trips a genuine Excel date and
+    # rescues a compact YYYYMMDD one that inference would call a number.
+    if fmt in (FileFormat.csv, FileFormat.xlsx):
+        return [c.name for c in schema.columns
+                if c.type in _TEXT_ON_DISK_TYPES or c.type.startswith("list[")]
+    # json (lines) carries real JSON types, so only `str` is pinned: a JSON string
+    # "002" is still coerced to the integer 2 without it, but a `list[X]`/`json`
+    # column arrives as a real list/dict that `_parse_list_cell` already handles and
+    # stringifying would corrupt.
+    if fmt == FileFormat.json:
+        return [c.name for c in schema.columns if c.type == STR_COLUMN_TYPE]
+    return []
+
+
+def _date_columns(schema: TableSchema | None, fmt: str, params: dict[str, Any]) -> list[str]:
+    """Columns to run through pd.to_datetime: the authored `parse_dates`, then declared dates."""
+    columns = list(params.get("parse_dates", []))
+    # Only formats pandas type-infers contribute declared columns — parquet and
+    # geojson carry real types already.
+    if schema is None or fmt not in _INFERRING_FORMATS:
+        return columns
+    seen = set(columns)
+    columns.extend(c.name for c in schema.columns
+                   if c.type in _DATE_TYPES and c.name not in seen)
+    return columns
+
+
 def _read_geojson(path: Path) -> pd.DataFrame:
     """Flatten a GeoJSON FeatureCollection into a DataFrame: one row per
-    feature, columns = feature properties plus geometry-derived `lon`/`lat`
+    feature, columns = feature properties plus `lon`/`lat` read off the geometry
     (point centroid). Keeps input_data honest for vector sources like the
     Trase Indonesia mills file, which the `csv`/`json` paths can't parse."""
     geo = json.loads(path.read_text(encoding="utf-8"))
@@ -99,13 +178,19 @@ def _read_geojson(path: Path) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def _read_xlsx(path: Path, params: XlsxReadParams) -> pd.DataFrame:
+def _read_xlsx(
+    path: Path, params: XlsxReadParams, *, dtype: dict[Hashable, Any] | None = None
+) -> pd.DataFrame:
     # header_row/first_column are 0-based indices into the sheet as it appears in
     # Excel; rows above and columns left of them are discarded before parsing.
     # sheet_name is str|int (exactly one sheet), so pd.read_excel always hands back
     # a single DataFrame here, never the dict it returns for a None/list sheet_name.
+    # dtype keys on the header row's names, so first_column's later slicing cannot
+    # shift it; pandas types this parameter Mapping[str, ...] here and
+    # Mapping[Hashable, ...] on read_csv, and an invariant key blocks one of the two.
     frame = pd.read_excel(
-        path, sheet_name=params.sheet_name, header=params.header_row, engine="openpyxl"
+        path, sheet_name=params.sheet_name, header=params.header_row, engine="openpyxl",
+        dtype=cast("Mapping[str, Any] | None", dtype),
     )
     assert isinstance(frame, pd.DataFrame)
     if params.first_column:

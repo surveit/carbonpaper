@@ -45,7 +45,7 @@ class AgentSession(PersistedModel):
 
 
 def open_session_store() -> SessionStore:
-    """The canonical session store the chat UI reads/writes. Both the chat routes
+    """The one session store the chat UI reads/writes. Both the chat routes
     and headless writers (e.g. generation) use this so their sessions land in the
     same document store and list together."""
     return SessionStore()

@@ -1,0 +1,367 @@
+"""The run page's header view-model: the grounding line, the stage strip, and the
+one action this run's state calls for. The state is never spelled out in words —
+the reader gets it off the CTA (`_run_header.html`)."""
+
+from __future__ import annotations
+
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Literal, Mapping, Sequence
+
+from pydantic import BaseModel
+
+from app.core.errors import RunVersionUnresolvableError
+from app.core.run_status import RunStatus, StageStatus
+from app.services import run as run_service
+from app.web.stage_strip import (
+    StageStrip,
+    StatusTally,
+    build_stage_strip,
+    count_stage_status,
+    read_stage_records,
+)
+
+ActionKind = Literal["primary", "ghost"]
+
+
+class RunAction(BaseModel):
+    # `method` picks the markup: "get" renders a link, "post" a one-button form.
+    label: str
+    url: str
+    method: Literal["get", "post"] = "get"
+    kind: ActionKind = "primary"
+
+
+class RunCta(BaseModel):
+    """`primary` is None only for a finished run that published nothing."""
+
+    primary: RunAction | None = None
+    secondary: list[RunAction] = []
+    aside: str | None = None
+
+
+class ArtifactLink(BaseModel):
+    name: str
+    url: str
+
+
+class VersionNote(BaseModel):
+    """The pinned version as the header states it — `message` or `error`, never both."""
+
+    version_id: str | None
+    message: str | None = None
+    error: str | None = None
+
+
+class RunLiveView(BaseModel):
+    """The header parts the run page's 2s poller refreshes in place."""
+
+    duration: str | None
+    duration_verb: str
+    aside: str | None
+    tallies: list[StatusTally]
+
+
+class RunHeader(BaseModel):
+    run_id: str
+    started_at: str | None
+    is_test_run: bool
+    version: VersionNote
+    strip: StageStrip
+    cta: RunCta
+    live: RunLiveView
+
+
+def build_run_header(
+    project: str, run_id: str, run_dir: Path, manifest: Mapping[str, Any]
+) -> RunHeader:
+    strip = build_stage_strip(manifest)
+    artifacts = list_artifact_links(project, run_id, run_dir, manifest)
+    cta = choose_run_cta(project, run_id, manifest, artifacts)
+    return RunHeader(
+        run_id=run_id,
+        started_at=_read_text(manifest.get("started_at")),
+        is_test_run=bool(manifest.get("is_test_run")),
+        version=read_version_note(project, manifest.get("workflow_version")),
+        strip=strip,
+        cta=cta,
+        live=_build_live_view(manifest, strip, cta),
+    )
+
+
+def build_live_view(
+    project: str, run_id: str, manifest: Mapping[str, Any]
+) -> RunLiveView:
+    """What the poller refreshes."""
+    # Artifacts are left out: a run publishes them only once it has finished, at
+    # which point the page reloads anyway.
+    return _build_live_view(
+        manifest,
+        build_stage_strip(manifest),
+        choose_run_cta(project, run_id, manifest, []),
+    )
+
+
+def choose_run_cta(
+    project: str,
+    run_id: str,
+    manifest: Mapping[str, Any],
+    artifacts: Sequence[ArtifactLink],
+) -> RunCta:
+    """The single action this run's state calls for."""
+    # The page states no status headline, so this button is how the state is read.
+    base = f"/project/{project}/runs/{run_id}"
+    if manifest.get("status") == RunStatus.RUNNING:
+        return _build_cancel_cta(base, manifest)
+    halted = find_halted_stage_ids(manifest)
+    if halted:
+        return _build_review_cta(base, manifest, halted)
+    if count_stage_status(manifest, StageStatus.ERROR):
+        return _build_rerun_cta(base, manifest)
+    if manifest.get("status") == RunStatus.CANCELLED:
+        return _build_resume_cta(base, manifest)
+    return _build_artifacts_cta(artifacts)
+
+
+def find_halted_stage_ids(manifest: Mapping[str, Any]) -> list[str]:
+    """`halted_at` when the run recorded one, else every stage in awaiting_review."""
+    halted = manifest.get("halted_at") or []
+    if halted:
+        return [str(stage_id) for stage_id in halted]
+    return [
+        str(record.get("stage_id"))
+        for record in read_stage_records(manifest)
+        if record.get("status") == StageStatus.AWAITING_REVIEW
+    ]
+
+
+def read_version_note(project: str, version_id: object) -> VersionNote:
+    """The pinned version's `message`, or the stated reason it could not be read."""
+    # Never an empty message standing in for a real one: a version that resolved
+    # but carries no message is reported as having none.
+    text = _read_text(version_id)
+    if text is None:
+        return VersionNote(version_id=None)
+    try:
+        version = run_service.load_run_version(project, {"workflow_version": text})
+    except RunVersionUnresolvableError as exc:
+        return VersionNote(version_id=text, error=str(exc))
+    return VersionNote(version_id=text, message=version.message or None)
+
+
+def list_artifact_links(
+    project: str, run_id: str, run_dir: Path, manifest: Mapping[str, Any]
+) -> list[ArtifactLink]:
+    """Browsable links to the files a completed run published, empty until one has."""
+    # Only once the run has finished AND a publish stage completed, and only to
+    # files actually written under artifacts/ (preferring a browsable index.html)
+    # — never to a hardcoded guess.
+    if manifest.get("status") in (RunStatus.RUNNING, None):
+        return []
+    has_ok_publish = any(
+        record.get("type") == "publish"
+        and record.get("status") in (StageStatus.OK, StageStatus.VALIDATION_WARNINGS)
+        for record in read_stage_records(manifest)
+    )
+    artifacts_root = run_dir / "artifacts"
+    if not (has_ok_publish and artifacts_root.is_dir()):
+        return []
+    files = sorted(f for f in artifacts_root.rglob("*") if f.is_file())
+    index = next((f for f in files if f.name == "index.html"), None)
+    if index is not None:
+        files = [index]
+    return [
+        ArtifactLink(
+            name=f.name,
+            url=(f"/project/{project}/runs/{run_id}/artifact/"
+                 f"{f.relative_to(artifacts_root).as_posix()}"),
+        )
+        for f in files
+    ]
+
+
+def measure_elapsed_seconds(
+    started_at: str | None, finished_at: str | None, *, still_running: bool
+) -> float | None:
+    """None when the two timestamps cannot answer it — never a guessed duration."""
+    start = _read_timestamp(started_at)
+    if start is None:
+        return None
+    if finished_at:
+        end = _read_timestamp(finished_at)
+    else:
+        end = datetime.now(tz=start.tzinfo) if still_running else None
+    if end is None:
+        return None
+    # One stored timestamp carrying an offset and the other not leaves the naive one's
+    # offset unknown, and assuming it would invent the duration.
+    if (start.tzinfo is None) != (end.tzinfo is None):
+        return None
+    seconds = (end - start).total_seconds()
+    return seconds if seconds >= 0 else None
+
+
+def format_duration(seconds: float) -> str:
+    """A run length as "48s", "2m 14s" or "1h 04m"."""
+    whole = int(seconds)
+    if whole < _SECONDS_PER_MINUTE:
+        return f"{whole}s"
+    if whole < _SECONDS_PER_HOUR:
+        return f"{whole // _SECONDS_PER_MINUTE}m {whole % _SECONDS_PER_MINUTE:02d}s"
+    minutes = (whole % _SECONDS_PER_HOUR) // _SECONDS_PER_MINUTE
+    return f"{whole // _SECONDS_PER_HOUR}h {minutes:02d}m"
+
+
+def describe_run_duration(manifest: Mapping[str, Any]) -> str | None:
+    """How long this run has taken so far, or None when that cannot be read."""
+    seconds = measure_elapsed_seconds(
+        _read_text(manifest.get("started_at")),
+        _read_text(manifest.get("finished_at")),
+        still_running=manifest.get("status") == RunStatus.RUNNING,
+    )
+    return None if seconds is None else format_duration(seconds)
+
+
+def read_file_name(path: str) -> str:
+    """The last segment of a path recorded on either platform's separator."""
+    return path.replace("\\", "/").rstrip("/").rsplit("/", 1)[-1]
+
+
+# ─── The CTA per run state ───────────────────────────────────────────────────
+
+# Both re-run paths POST the same /resume route, which re-runs every stage that
+# is not already complete and reuses the completed ones' outputs.
+_CACHE_NOTE = "keeps the {done} completed stage{s} — no new LLM calls"
+
+
+def _build_live_view(
+    manifest: Mapping[str, Any], strip: StageStrip, cta: RunCta
+) -> RunLiveView:
+    running = manifest.get("status") == RunStatus.RUNNING
+    return RunLiveView(
+        duration=describe_run_duration(manifest),
+        duration_verb="running" if running else "ran",
+        aside=cta.aside,
+        tallies=strip.tallies,
+    )
+
+
+def _build_cancel_cta(base: str, manifest: Mapping[str, Any]) -> RunCta:
+    return RunCta(
+        primary=RunAction(
+            label="✕ Cancel run", url=f"{base}/cancel", method="post", kind="ghost"
+        ),
+        aside=_describe_running_stage(manifest),
+    )
+
+
+def _build_review_cta(
+    base: str, manifest: Mapping[str, Any], halted: list[str]
+) -> RunCta:
+    first, rest = halted[0], halted[1:]
+    secondary = [
+        RunAction(label=f"👤 Review {stage_id} →", url=f"{base}/queue/{stage_id}",
+                  kind="ghost")
+        for stage_id in rest
+    ]
+    errors = count_stage_status(manifest, StageStatus.ERROR)
+    if errors:
+        secondary.append(
+            _build_resume_action(_describe_failed(errors), kind="ghost", base=base)
+        )
+    return RunCta(
+        primary=RunAction(label=_describe_review(manifest, first),
+                          url=f"{base}/queue/{first}"),
+        secondary=secondary,
+        aside=_describe_blocked(manifest, len(halted)),
+    )
+
+
+def _build_rerun_cta(base: str, manifest: Mapping[str, Any]) -> RunCta:
+    errors = count_stage_status(manifest, StageStatus.ERROR)
+    return RunCta(
+        primary=_build_resume_action(_describe_failed(errors), kind="primary", base=base),
+        aside=_describe_cache_reuse(manifest),
+    )
+
+
+def _build_resume_cta(base: str, manifest: Mapping[str, Any]) -> RunCta:
+    return RunCta(
+        primary=_build_resume_action("↻ Resume cancelled run →", kind="primary",
+                                     base=base),
+        aside=_describe_cache_reuse(manifest),
+    )
+
+
+def _build_artifacts_cta(artifacts: Sequence[ArtifactLink]) -> RunCta:
+    """A finished run has no imperative button — its outputs are the only ones."""
+    if not artifacts:
+        return RunCta()
+    first, *rest = artifacts
+    return RunCta(
+        primary=RunAction(label=f"📤 {first.name}", url=first.url),
+        secondary=[RunAction(label=a.name, url=a.url, kind="ghost") for a in rest],
+    )
+
+
+def _build_resume_action(label: str, *, kind: ActionKind, base: str) -> RunAction:
+    return RunAction(label=label, url=f"{base}/resume", method="post", kind=kind)
+
+
+def _describe_failed(errors: int) -> str:
+    return f"↻ Re-run {errors} failed stage{'' if errors == 1 else 's'} →"
+
+
+def _describe_review(manifest: Mapping[str, Any], stage_id: str) -> str:
+    """No item count when the run recorded none for that stage."""
+    stats = manifest.get("human_review_queue_stats") or {}
+    pending = (stats.get(stage_id) or {}).get("items_pending")
+    if pending is None:
+        return f"👤 Review items in {stage_id} →"
+    return f"👤 Review {pending} item{'' if pending == 1 else 's'} in {stage_id} →"
+
+
+def _describe_blocked(manifest: Mapping[str, Any], halted_count: int) -> str | None:
+    waiting = count_stage_status(manifest, StageStatus.PENDING)
+    if not waiting:
+        return None
+    these = "this" if halted_count == 1 else "these"
+    return f"{waiting} stage{'' if waiting == 1 else 's'} waiting on {these}"
+
+
+def _describe_cache_reuse(manifest: Mapping[str, Any]) -> str:
+    done = count_stage_status(manifest, StageStatus.OK) + count_stage_status(
+        manifest, StageStatus.VALIDATION_WARNINGS
+    )
+    return _CACHE_NOTE.format(done=done, s="" if done == 1 else "s")
+
+
+def _describe_running_stage(manifest: Mapping[str, Any]) -> str | None:
+    records = read_stage_records(manifest)
+    for position, record in enumerate(records, start=1):
+        if record.get("status") == StageStatus.RUNNING:
+            return f"on {record.get('stage_id')} — stage {position} of {len(records)}"
+    return None
+
+
+# ─── Manifest reading ────────────────────────────────────────────────────────
+
+_SECONDS_PER_MINUTE = 60
+_SECONDS_PER_HOUR = 3600
+
+
+def _read_text(value: object) -> str | None:
+    """A manifest field as a non-empty string, or None — absent stays absent, not ""."""
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _read_timestamp(value: str | None) -> datetime | None:
+    if value is None:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None

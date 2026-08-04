@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import argparse
 
-from app.seeds.bootstrap import ensure_store_configured
+from app.seeds.bootstrap import configure_projects_dir_from_env, ensure_store_configured
 from app.seeds.seed import discover_workflow_files, seed_all
 
 
@@ -20,6 +20,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> None:
     _parse_args(argv)
+    configure_projects_dir_from_env()
     ensure_store_configured()
     imported = set(seed_all())
     # Each fixture file is named after the project it imports as (see

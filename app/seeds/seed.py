@@ -27,10 +27,10 @@ def discover_workflow_files(data_dir: Path | None = None) -> list[Path]:
 
 
 def seed_all(
-    *, examples_dir: Path | None = None, data_dir: Path | None = None,
+    *, data_dir: Path | None = None,
 ) -> list[str]:
-    """Import every discovered WorkflowFile fixture into the workspace at
-    `examples_dir` (default: the real examples/ root) via import_project —
+    """Import every discovered WorkflowFile fixture into the process's projects
+    workspace (see app.services.workspace.projects_dir) via import_project —
     the same seam a UI or CLI caller would use, never generation.
 
     Import-if-absent only: a fixture whose project already exists is left
@@ -45,16 +45,16 @@ def seed_all(
     for wf_path in discover_workflow_files(data_dir):
         wf = WorkflowFile.model_validate_json(wf_path.read_text(encoding="utf-8"))
         try:
-            name = import_project(wf, examples_dir=examples_dir)
+            name = import_project(wf)
         except ProjectExistsError:
             continue
         imported.append(name)
     return imported
 
 
-def seed_demo_data_if_enabled(examples_dir: Path | None = None) -> list[str]:
-    """The CW_SEED_DEMO=1 startup hook: when the env var is exactly "1",
-    seed `examples_dir` (default: the real workspace) from the committed
+def seed_demo_data_if_enabled() -> list[str]:
+    """The CARBONPAPER_SEED_DEMO=1 startup hook: when the env var is exactly "1",
+    seed the process's projects workspace from the committed
     fixtures; every other value, including unset, is a no-op. Always calls
     seed_all, which is seed-if-absent only (never destructive), so an
     already-seeded workspace is untouched. Returns the project names actually
@@ -62,9 +62,9 @@ def seed_demo_data_if_enabled(examples_dir: Path | None = None) -> list[str]:
 
     app.main's lifespan makes exactly one call to this function after the
     store is configured; it carries no seeding decisions of its own."""
-    if os.environ.get("CW_SEED_DEMO") != "1":
+    if os.environ.get("CARBONPAPER_SEED_DEMO") != "1":
         return []
-    return seed_all(examples_dir=examples_dir)
+    return seed_all()
 
 
 __all__ = ["discover_workflow_files", "seed_all", "seed_demo_data_if_enabled"]

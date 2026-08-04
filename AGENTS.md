@@ -6,10 +6,13 @@ directory · **methodology** = the authored prose (`methodology_raw.md`) ·
 **workflow** = the stage graph it compiles to. What/why + features → `docs/overview.md`;
 code map → `docs/architecture.md`; quickstart → `README.md`.
 
-## The 8 stage types
-`input_data` · `llm_transform` · `python_row_function` · `python_frame_function` · `join` ·
-`aggregate` · `human_review_queue` · `publish`. Prefer `python_row_function` (runtime-enforced
-1:1) unless the logic needs the whole frame.
+## The 11 stage types
+`input_data` · `llm_transform` · `python_row_function` · `python_frame_function` · `enrich` ·
+`expand` · `aggregate` · `human_review_queue` · `publish` · `union` · `filter_rows`. Prefer
+`python_row_function` (runtime-enforced 1:1) unless the logic needs the whole frame. `enrich`
+and `expand` are both LEFT joins of a reference input into a subject input, differing only in
+permitted cardinality (m:1, verified; vs m:n fan-out); neither drops a subject row — that is
+`filter_rows`' job.
 
 ## Repo layout
 ```
@@ -31,6 +34,13 @@ app/chat/  PydanticAI chat · app/core/llm/  model menu · tests/  pytest (offli
   `app.services.generation`, which wraps the compiler). Both enforced by import-linter.
 - **Never `except Exception` or bare `except`.** Catch specific types — swallowing errors breaks
   fail-loudly. Enforced by Ruff `BLE001`.
+- **A system prompt states the model's ROLE in the wider system, and what becomes of its
+  output.** Not just the task: who reads the result, what it is shown beside, what the reader
+  is deciding, and what the model will *not* be told (e.g. the stage-test generator never sees the
+  code or the pass/fail). A model given only a task optimises the artifact; one given its place
+  optimises the reader's decision, and the two differ — ordering worked examples so they
+  *explain* rather than merely cover does not follow from the task alone. Include at least one
+  worked example of the output.
 - **No `dict[str, Any]` as a stand-in for a structured value.** A dict with a known, fixed set of
   keys is a missing model — define a Pydantic model (`PersistedModel` for a stored object) or
   reference an existing one, and pass *that*. A function returning `dict[str, Any]`, or a field
@@ -39,6 +49,11 @@ app/chat/  PydanticAI chat · app/core/llm/  model menu · tests/  pytest (offli
   caller-defined and not yet known: a raw stage-spec dict that may be invalid mid-edit (matching
   `stage_to_spec_dict` / `validate_workflow_draft`), or foreign JSON being parsed — and even
   there, parse into a model at the first point the shape is known.
+- **Banned words are enforced, not advisory.** `tests/arch/test_no_banned_words.py` fails on any
+  word in its `BANNED_WORDS` set across `.py`/`.md`/`.html`/`.js`/`.css` — read that set for the
+  current list and the replacement each word owes you. The test file is the only place a banned
+  word may appear, so name the specific property instead: a sorted-key JSON dump, the spec-dict
+  form, the on-disk text, `HASH_IGNORED_KEYS`.
 - **Never weaken an arch test without human approval.** The import-linter contracts
   (`pyproject.toml`, run as `lint-imports`) and the AST invariant tests (`_arch_tests/`,
   `tests/arch/`) exist to fail on work in progress — that failure is the signal, not an obstacle.
@@ -46,6 +61,14 @@ app/chat/  PydanticAI chat · app/core/llm/  model menu · tests/  pytest (offli
   allowlist entry to an existing one is a human decision on the record. When an arch test blocks
   the change you were about to make, reroute the change and say in the PR which test caught you
   and what you did differently.
+- **A module at the size ceiling gets split, not squeezed.** The file-size ratchet
+  (`tests/arch/test_file_size_ratchet.py`) fails a file in `app/` over the LLOC ceiling, and the
+  only sanctioned way back under is moving a cohesive group of code out to its own module. Never
+  buy the statements back by writing denser code — fusing named steps into one long expression,
+  dropping an intermediate variable that was carrying a name, inlining a small helper into its
+  caller. That spends the readability the ceiling exists to protect and leaves the next change
+  with even less room. If the split is bigger than the change you are on, say so in the PR and
+  let a human decide whether to take it now.
 - **Planning docs stay out of the repo.** Design specs, implementation/execution plans,
   brainstorming or "rethink" notes, and refactor/migration roadmaps are ephemeral working
   artifacts — keep them in scratch or the PR description, never commit them. Committed docs

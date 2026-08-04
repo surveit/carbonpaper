@@ -7,10 +7,10 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
-import app.web.loading as loading
+from app.services import workspace
 from app.core.errors import TraceLinksUnavailableError
 from app.main import app
-from app.models import Stage
+from app.models import parse_stage, Stage
 from app.runtime.context import RunContext
 from app.runtime.stages.publish import handle_publish
 from app.runtime.trace_links import RowTraceLinker
@@ -64,11 +64,11 @@ def transform(df, output_dir):
 """
 
 
-_NAME_COLUMN = [{"name": "name", "type": "str"}]
+_NAME_COLUMN = [{"name": "name", "type": "str", "nullable": True}]
 
 
 def _publish_stage(code: str, input_columns=_NAME_COLUMN) -> Stage:
-    return Stage.model_validate({
+    return parse_stage({
         "id": "report",
         "type": "publish",
         "name": "Report",
@@ -125,14 +125,14 @@ def test_a_link_emitted_into_published_html_resolves(tmp_path, monkeypatch):
     ctx = RunContext.for_workflow_run(
         repo_root=tmp_path, run_dir=run_dir, project="proj", run_id="R1",
     )
-    enrich_columns = [{"name": "facility_id", "type": "str"}, *_NAME_COLUMN,
-                      {"name": "score", "type": "int"}]
+    enrich_columns = [{"name": "facility_id", "type": "str", "nullable": True}, *_NAME_COLUMN,
+                      {"name": "score", "type": "int", "nullable": True}]
     handle_publish(
         _publish_stage(_LINKING_PUBLISH_CODE, input_columns=enrich_columns),
         {"enrich": enrich}, ctx)
     html = (run_dir / "artifacts" / "build" / "index.html").read_text(encoding="utf-8")
 
-    monkeypatch.setattr(loading, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     client = TestClient(app)
     for href in _hrefs(html):
         assert client.get(href).status_code == 200

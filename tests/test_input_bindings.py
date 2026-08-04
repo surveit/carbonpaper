@@ -7,24 +7,24 @@ import pandas as pd
 import pytest
 
 from app.core.errors import MissingInputBindingError
-from app.models import Stage
+from app.models import parse_stage, Stage
 from app.runtime.runner import apply_run_bindings, validate_stages_ready, execute_run
 from app.runtime.stages.input_data import read_input_data
 from app.services import versioning
-from app.services.versioning import create_version_from_disk
-from conftest import make_run_context
+from app.services.project import save_working_copy_as_version
+from conftest import make_run_context, pinned_stages
 
 
 # Every input declares the schema it expects and every non-publish stage declares
 # its output_schema (app/models/stage.py: Stage._schemas_declared). The stages
 # these two helpers build are only ever bound/preflighted, never executed, so the
 # schema names the single column of the csv the file-writing tests here create.
-_X_SCHEMA = {"columns": [{"name": "x", "type": "int"}]}
+_X_SCHEMA = {"columns": [{"name": "x", "type": "int", "nullable": True}]}
 
 
 def _input_stage(stage_id: str, path: str | None) -> Stage:
     params: dict = {"path": path, "format": "csv"} if path else {}
-    return Stage.model_validate({
+    return parse_stage({
         "id": stage_id, "name": stage_id, "type": "input_data",
         "connector": {"kind": "file", "params": params},
         "output_schema": _X_SCHEMA,
@@ -32,7 +32,7 @@ def _input_stage(stage_id: str, path: str | None) -> Stage:
 
 
 def _connectorless_stage(stage_id: str, input_id: str) -> Stage:
-    return Stage.model_validate({
+    return parse_stage({
         "id": stage_id, "name": stage_id, "type": "python_row_function",
         "inputs": [{"id": input_id, "schema": _X_SCHEMA}],
         "output_schema": _X_SCHEMA,
@@ -90,9 +90,9 @@ def test_binding_connectorless_stage_rejected(tmp_path):
     # Bindings override connector params; a stage with no connector has nothing
     # to bind, whatever its type. Generic rule — no file/type special-casing.
     stages = [_input_stage("load", str(tmp_path / "a.csv")),
-              _connectorless_stage("derive", "load")]
-    with pytest.raises(ValueError, match="derive"):
-        apply_run_bindings(stages, {"derive": {"path": str(tmp_path / "b.csv")}})
+              _connectorless_stage("score", "load")]
+    with pytest.raises(ValueError, match="score"):
+        apply_run_bindings(stages, {"score": {"path": str(tmp_path / "b.csv")}})
 
 
 def test_original_stages_untouched(tmp_path):
@@ -125,15 +125,15 @@ def test_ready_stage_yields_provenance_record(tmp_path):
 def test_connectorless_stage_has_no_preflight(tmp_path):
     data = tmp_path / "a.csv"
     pd.DataFrame({"x": [1]}).to_csv(data, index=False)
-    stages = [_input_stage("load", str(data)), _connectorless_stage("derive", "load")]
+    stages = [_input_stage("load", str(data)), _connectorless_stage("score", "load")]
     records = validate_stages_ready(stages, {"load": "workflow"})
     assert set(records) == {"load"}
 
 
 # ── prepare_run integration ─────────────────────────────────────────────────
 
-_ROWS_SCHEMA = {"columns": [{"name": "name", "type": "str"},
-                            {"name": "val", "type": "int"}]}
+_ROWS_SCHEMA = {"columns": [{"name": "name", "type": "str", "nullable": True},
+                            {"name": "val", "type": "int", "nullable": True}]}
 
 
 def _make_bound_project(root, filename="a.csv"):
@@ -145,7 +145,7 @@ def _make_bound_project(root, filename="a.csv"):
              "connector": {"kind": "file",
                            "params": {"path": str(data), "format": "csv"}}}
     (root / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
-    vid = create_version_from_disk(root, message="seed", reviewer="test").version_id
+    vid = save_working_copy_as_version(root, message="seed", reviewer="test").version_id
     versioning.publish_version(root, vid, reviewer="human")
     return data
 
@@ -155,7 +155,7 @@ def test_run_binding_recorded_with_hash_and_source(tmp_path):
     other = tmp_path / "b.csv"
     pd.DataFrame({"name": ["z"], "val": [9]}).to_csv(other, index=False)
 
-    manifest = execute_run(tmp_path, repo_root=tmp_path,
+    manifest = execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path),
                            bindings={"load": {"path": str(other)}})
 
     assert manifest["status"] == "ok"
@@ -170,7 +170,7 @@ def test_run_binding_recorded_with_hash_and_source(tmp_path):
 
 def test_workflow_path_recorded_as_workflow_source(tmp_path):
     data = _make_bound_project(tmp_path)
-    manifest = execute_run(tmp_path, repo_root=tmp_path)
+    manifest = execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path))
     rec = manifest["input_bindings"]["load"]
     assert rec["source"] == "workflow"
     assert rec["path"] == str(data)
@@ -184,18 +184,18 @@ def test_unbound_input_leaves_no_run_dir(tmp_path):
              "output_schema": _ROWS_SCHEMA,
              "connector": {"kind": "file", "params": {}}}
     (tmp_path / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
-    vid = create_version_from_disk(tmp_path, message="seed", reviewer="test").version_id
+    vid = save_working_copy_as_version(tmp_path, message="seed", reviewer="test").version_id
     versioning.publish_version(tmp_path, vid, reviewer="human")
 
     with pytest.raises(MissingInputBindingError, match="load"):
-        execute_run(tmp_path, repo_root=tmp_path)
+        execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path))
     assert not (tmp_path / "runs").exists()
 
 
 def test_bound_file_must_exist_before_run_dir(tmp_path):
     _make_bound_project(tmp_path)
     with pytest.raises(MissingInputBindingError, match="ghost"):
-        execute_run(tmp_path, repo_root=tmp_path,
+        execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path),
                     bindings={"load": {"path": str(tmp_path / "ghost.csv")}})
     assert not (tmp_path / "runs").exists()
 
@@ -205,7 +205,7 @@ def test_handler_ignores_repo_root_for_file_inputs(tmp_path):
     _make_bound_project(tmp_path)
     elsewhere = tmp_path / "unrelated_repo_root"
     elsewhere.mkdir()
-    manifest = execute_run(tmp_path, repo_root=elsewhere)
+    manifest = execute_run(tmp_path, elsewhere, *pinned_stages(tmp_path))
     assert manifest["status"] == "ok"
     assert manifest["stage_records"][0]["output_row_count"] == 2
 

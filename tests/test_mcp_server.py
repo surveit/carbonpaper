@@ -11,7 +11,8 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from app.models import StageDraft
+from app.models import parse_stage, StageDraft
+from app.services import workspace
 
 HEADERS = {
     "Accept": "application/json, text/event-stream",
@@ -70,14 +71,15 @@ def test_mcp_lists_the_authoring_tools(client):
         "generate_stage_tests",
         "run_stage_tests",
         "save_version",
+        "read_review_guide",
+        "write_review_guide",
     } <= names
 
 
 def test_create_project_tool_and_status(tmp_path, monkeypatch):
     from app.mcp import server
-    from app.services import workspace
 
-    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     created = server.create_project(name="Money Trail", document="Follow the filings.")
     assert created["project_id"] == "money_trail"
     status = server.get_project_status(project_id="money_trail")
@@ -86,9 +88,8 @@ def test_create_project_tool_and_status(tmp_path, monkeypatch):
 
 def test_generate_data_model_kicks_the_live_turn(tmp_path, monkeypatch):
     from app.mcp import server
-    from app.services import workspace
 
-    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     server.create_project(name="probe", document="doc text")
 
     seen: dict[str, object] = {}
@@ -106,9 +107,8 @@ def test_generate_data_model_kicks_the_live_turn(tmp_path, monkeypatch):
 
 def test_generate_data_model_without_document_fails_loudly(tmp_path, monkeypatch):
     from app.mcp import server
-    from app.services import workspace
 
-    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     (tmp_path / "empty_proj").mkdir()
     with pytest.raises(ValueError):
         asyncio.run(server.generate_data_model(project_id="empty_proj"))
@@ -150,22 +150,20 @@ def _write_compiled_workflow(pdir: Path) -> None:
          "inputs": [{"id": "load", "schema": _IN_SCHEMA}], "output_schema": _OUT_SCHEMA,
          "function": {"kind": "inline", "code": _DOUBLE}},
     ]
-    from app.models import Stage
     for spec in stages:
-        write_stage(compiled / f"{spec['id']}.json", Stage.model_validate(spec))
+        write_stage(compiled / f"{spec['id']}.json", parse_stage(spec))
 
 
 def test_run_stage_tests_reports_summary_diffs_and_coverage(tmp_path, monkeypatch):
     from app.mcp import server
-    from app.services import workspace
 
-    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     pdir = tmp_path / "trail"
     _write_compiled_workflow(pdir)
 
     report = server.run_stage_tests(project_id="trail")
-    assert set(report) == {"summary", "stages", "untested_python_stages"}
-    assert report["untested_python_stages"] == ["untested"]
+    assert set(report) == {"summary", "stages", "untested_stages"}
+    assert report["untested_stages"] == ["untested"]
     assert report["summary"]["failed"] == 1
     [run] = report["stages"]
     failing = next(o for o in run["results"] if o["name"] == "wrong")
@@ -175,9 +173,8 @@ def test_run_stage_tests_reports_summary_diffs_and_coverage(tmp_path, monkeypatc
 
 def test_run_stage_tests_scopes_to_one_stage(tmp_path, monkeypatch):
     from app.mcp import server
-    from app.services import workspace
 
-    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     pdir = tmp_path / "trail"
     _write_compiled_workflow(pdir)
 
@@ -185,11 +182,10 @@ def test_run_stage_tests_scopes_to_one_stage(tmp_path, monkeypatch):
     assert report["summary"]["tests_total"] == 2
 
 
-def test_generate_stage_tests_kicks_the_derivation_turn(tmp_path, monkeypatch):
+def test_generate_stage_tests_kicks_the_generation_turn(tmp_path, monkeypatch):
     from app.mcp import server
-    from app.services import workspace
 
-    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     server.create_project(name="probe", document="doc text")
 
     seen: dict[str, object] = {}
@@ -207,9 +203,8 @@ def test_generate_stage_tests_kicks_the_derivation_turn(tmp_path, monkeypatch):
 
 def test_mcp_remove_stage_returns_ok_and_issues(tmp_path, monkeypatch):
     from app.mcp import server
-    from app.services import workspace
 
-    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     pdir = tmp_path / "trail"
     _write_compiled_workflow(pdir)
 
@@ -227,9 +222,8 @@ def test_mcp_stage_tools_report_an_unknown_stage_id_as_issues(tmp_path, monkeypa
     """The documented refusal channel is {ok: False, issues}: a stage id that is not
     in the workflow comes back on it rather than as a tool exception."""
     from app.mcp import server
-    from app.services import workspace
 
-    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     _write_compiled_workflow(tmp_path / "trail")
 
     removed = server.remove_stage(project_id="trail", stage_id="ghost")
@@ -243,9 +237,8 @@ def test_mcp_add_stage_reports_an_unloadable_workflow_as_issues(tmp_path, monkey
     """A compiled/ dir that holds a broken stage file still refuses the write — and
     the refusal reaches the client on the documented {ok: False, issues} channel."""
     from app.mcp import server
-    from app.services import workspace
 
-    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     compiled = tmp_path / "trail" / "compiled"
     compiled.mkdir(parents=True)
     (compiled / "broken.json").write_text('{"id": "broken", "type": "not_a_real_type"}', encoding="utf-8")
@@ -262,9 +255,8 @@ def test_mcp_add_stage_refuses_to_invent_a_project(tmp_path, monkeypatch):
     """add_stage creates a workflow's first stage, never the project itself: a typo'd
     project id is loud and writes nothing under the workspace."""
     from app.mcp import server
-    from app.services import workspace
 
-    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     with pytest.raises(ValueError):
         server.add_stage(
             project_id="no_such_project",
@@ -275,9 +267,8 @@ def test_mcp_add_stage_refuses_to_invent_a_project(tmp_path, monkeypatch):
 
 def test_mcp_add_stage_creates_the_first_stage_of_a_new_project(tmp_path, monkeypatch):
     from app.mcp import server
-    from app.services import workspace
 
-    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     server.create_project(name="trail", document="Follow the filings.")
 
     added = server.add_stage(
@@ -295,14 +286,13 @@ def test_mcp_add_stage_drops_server_owned_fields_and_names_them(tmp_path, monkey
     server writes. Saving it is the useful behavior — but silently is not, so the
     result names the fields that were dropped."""
     from app.mcp import server
-    from app.services import workspace
 
-    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     server.create_project(name="trail", document="Follow the filings.")
     echoed = {
         "id": "load", "name": "Load", "type": "input_data",
         "connector": {"kind": "file"},
-        "output_schema": {"columns": [{"name": "doc_id", "type": "str"}]},
+        "output_schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": True}]},
         "tests": [], "source": {"section": "para 3"},
     }
 
@@ -324,9 +314,8 @@ def test_mcp_add_stage_still_refuses_an_unknown_field(tmp_path, monkeypatch):
     """Only the four KNOWN server-owned names are accepted-and-dropped. A typo'd
     field name is still an error — otherwise the drop would swallow real mistakes."""
     from app.mcp import server
-    from app.services import workspace
 
-    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     server.create_project(name="trail", document="Follow the filings.")
     typo = {
         "id": "load", "name": "Load", "type": "input_data",
@@ -342,7 +331,7 @@ _UNADDITIVE_LLM_STAGE = {
     "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
     # llm_transform must be additive and 1:1 — dropping the input's `amount`
     # column breaks that, and `Stage` is where that rule lives.
-    "output_schema": {"columns": [{"name": "verdict", "type": "str"}]},
+    "output_schema": {"columns": [{"name": "verdict", "type": "str", "nullable": True}]},
     "llm": {"prompt_data_template": "judge {amount}"},
 }
 
@@ -354,9 +343,8 @@ def test_mcp_add_stage_refuses_an_invalid_stage_on_the_issues_channel(tmp_path, 
     binding instead, the client would get isError=true with raw Pydantic text — off
     the refusal channel the instructions tell it to watch."""
     from app.mcp import server
-    from app.services import workspace
 
-    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     _write_compiled_workflow(tmp_path / "trail")
 
     _content, refused = asyncio.run(
@@ -385,9 +373,9 @@ def test_mcp_save_version_snapshots_the_working_copy_unpublished(tmp_path, monke
     owns end-to-end — but publishing stays human-only, so the snapshot is born
     unpublished."""
     from app.mcp import server
-    from app.services import versioning, workspace
+    from app.services import versioning
 
-    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     pdir = tmp_path / "trail"
     _write_compiled_workflow(pdir)
 
@@ -408,9 +396,9 @@ def test_mcp_save_version_omitting_the_parent_records_none(tmp_path, monkeypatch
     is not evidence of what this snapshot descended from; asserting it would fabricate
     the lineage the version exists to document."""
     from app.mcp import server
-    from app.services import versioning, workspace
+    from app.services import versioning
 
-    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     pdir = tmp_path / "trail"
     _write_compiled_workflow(pdir)
 
@@ -426,9 +414,9 @@ def test_mcp_save_version_records_the_caller_supplied_parent(tmp_path, monkeypat
     """The parent the caller names is the one stored: the agent knows which version it
     loaded, and that claim is the only basis for the lineage a reviewer walks."""
     from app.mcp import server
-    from app.services import versioning, workspace
+    from app.services import versioning
 
-    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     pdir = tmp_path / "trail"
     _write_compiled_workflow(pdir)
 
@@ -447,9 +435,9 @@ def test_mcp_save_version_refuses_a_parent_that_does_not_exist(tmp_path, monkeyp
     channel and NOTHING is written — a dangling ancestor would be a lineage claim the
     store cannot substantiate."""
     from app.mcp import server
-    from app.services import versioning, workspace
+    from app.services import versioning
 
-    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     pdir = tmp_path / "trail"
     _write_compiled_workflow(pdir)
 
@@ -470,9 +458,9 @@ def test_mcp_save_version_refuses_an_unloadable_working_copy(tmp_path, monkeypat
     """An invalid working copy can never become a version: the refusal reaches the
     client on the documented {ok: False, issues} channel and nothing is stored."""
     from app.mcp import server
-    from app.services import versioning, workspace
+    from app.services import versioning
 
-    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     pdir = tmp_path / "trail"
     (pdir / "compiled").mkdir(parents=True)
     (pdir / "compiled" / "broken.json").write_text(
@@ -487,19 +475,67 @@ def test_mcp_save_version_refuses_an_unloadable_working_copy(tmp_path, monkeypat
 def test_mcp_save_version_refuses_to_invent_a_project(tmp_path, monkeypatch):
     """A typo'd project id is loud and writes nothing under the workspace."""
     from app.mcp import server
-    from app.services import workspace
 
-    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     with pytest.raises(ValueError):
         server.save_version(project_id="no_such_project", message="nope")
     assert list(tmp_path.iterdir()) == []
 
 
-def test_read_tools_reject_unknown_project(tmp_path, monkeypatch):
+def _saved_version(tmp_path, monkeypatch) -> str:
     from app.mcp import server
     from app.services import workspace
 
-    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
+    _write_compiled_workflow(tmp_path / "trail")
+    return server.save_version(project_id="trail", message="first cut")["version_id"]
+
+
+_GUIDE = {
+    "steps": [
+        {"title": "Double each amount", "prose": "Every `amount` is doubled as filed.",
+         "stage_ids": ["double"]},
+    ],
+    "unnarrated": ["load", "untested"],
+}
+
+
+def test_mcp_review_guide_round_trips_through_the_tool_boundary(tmp_path, monkeypatch):
+    """Through call_tool, where the risk is: JSON the boundary must bind to a ReviewGuide."""
+    from app.mcp import server
+
+    version_id = _saved_version(tmp_path, monkeypatch)
+    args = {"project_id": "trail", "version_id": version_id}
+    _content, before = asyncio.run(server.mcp.call_tool("read_review_guide", args))
+    assert before["result"] is None
+
+    asyncio.run(server.mcp.call_tool("write_review_guide", {**args, "guide": _GUIDE}))
+
+    _content, stored = asyncio.run(server.mcp.call_tool("read_review_guide", args))
+    assert stored["result"]["steps"] == _GUIDE["steps"]
+    assert stored["result"]["unnarrated"] == _GUIDE["unnarrated"]
+
+
+def test_mcp_write_review_guide_refuses_a_mismatch_naming_the_stage(tmp_path, monkeypatch):
+    """Refused with the id named, and the version keeps no guide rather than one skipping a
+    stage."""
+    from app.mcp import server
+
+    version_id = _saved_version(tmp_path, monkeypatch)
+    args = {"project_id": "trail", "version_id": version_id}
+    partial = {"steps": _GUIDE["steps"], "unnarrated": ["load"]}  # 'untested' accounted for nowhere
+
+    with pytest.raises(Exception, match="untested"):
+        asyncio.run(server.mcp.call_tool("write_review_guide", {**args, "guide": partial}))
+
+    _content, stored = asyncio.run(server.mcp.call_tool("read_review_guide", args))
+    assert stored["result"] is None
+
+
+def test_read_tools_reject_unknown_project(tmp_path, monkeypatch):
+    from app.mcp import server
+
+    workspace.set_projects_dir(tmp_path)
     with pytest.raises(ValueError):
         server.read_data_model(project_id="no_such_project")
     with pytest.raises(ValueError):

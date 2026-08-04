@@ -8,9 +8,10 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from app.models import NODE_TYPES
+from app.models.stages.node_types import NODE_TYPES
 from app.models.schema import Column
-from app.models.stage import Connector, PythonFunction, Stage
+from app.models.stage import PythonFunction, StageBase
+from app.models.stages.input_data import Connector
 
 
 def _desc(model: type[BaseModel], field: str) -> str:
@@ -40,7 +41,7 @@ def test_llm_transform_notes_document_the_additive_rule():
 
 
 def test_output_schema_documents_that_it_is_required():
-    assert "required" in _desc(Stage, "output_schema")
+    assert "required" in _desc(StageBase, "output_schema")
 
 
 def test_function_code_documents_the_three_signatures():

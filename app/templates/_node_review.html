@@ -7,17 +7,18 @@
    Context (GET /project/{project}/node/{id}/review-partial):
      project      — str
      stage        — the loaded Stage (.id .type .name .inputs[].table_schema
-                    .output_schema + the transform handle: llm/function/join/…)
+                    .output_schema + the transform config block: llm/function/join/…)
      review       — approval_state_for(stage, …) {state, current_hash, matched_decision}
      raw_json     — stage_to_json(stage) for the Spec editor
      function_code — python source for a function stage (may be None)
      type_class / type_glyph — the type-tag maps
      test_views — shaped per-test run results for _stage_tests.html
                     ([] for stages without tests; see node_review._shape_one_test)
-     test_derivable — stage.type in STAGE_TEST_TYPES; gates the Generate tests
-                    button in _stage_tests.html (python transforms only)
+     can_generate_tests — stage.CARRIES_RUNNABLE_TESTS; gates the Generate tests
+                    button in _stage_tests.html
 #}
 {% from "_schema_table.html" import schema_table %}
+{% from "_stage_code.html" import stage_code %}
 {% set state = review.state %}
 {% set belief_label = {'approved':'approved','unreviewed':'unreviewed','rejected':'rejected','edited_stale':'edited · stale'} %}
 
@@ -77,8 +78,11 @@
 
     {# ── Transform: how this step computes (+ eval / review routing) ── #}
     <div class="pane" data-pane="transform">
+      {# summary (in the executable block) → examples → code: the code is last
+         because it is the least readable statement of what this step does. #}
       {% include "_stage_executable.html" %}
       {% include "_stage_tests.html" %}
+      {{ stage_code(stage, function_code) }}
       {% if stage.eval %}
       <section class="eval-block">
         <h2>📊 Eval</h2>
@@ -204,8 +208,8 @@
     }
   }
 
-  // ── Generate tests: kick a hidden derivation turn, poll its status, then
-  //    re-fetch this whole panel via window._loadStage so the freshly derived
+  // ── Generate tests: kick a hidden generation turn, poll its status, then
+  //    re-fetch this whole panel via window._loadStage so the freshly generated
   //    suite renders (mirrors how a decision/edit refreshes the graph). ──
   const genBtn = panel.querySelector('[data-role="generate-tests"]');
   const genMsg = panel.querySelector('[data-role="generate-tests-msg"]');
@@ -246,7 +250,7 @@
   async function startGenerateTests() {
     if (!genBtn) return;
     genBtn.disabled = true;
-    genBtn.textContent = 'Deriving tests…';
+    genBtn.textContent = 'Generating tests…';
     if (genMsg) { genMsg.textContent = ''; genMsg.className = 'nr-edit-msg'; }
     try {
       const r = await fetch(GENERATE_TESTS_URL, { method: 'POST' });
@@ -259,7 +263,7 @@
       }
       pollGenerateTestsStatus(d.session);
     } catch (e) {
-      if (genMsg) { genMsg.textContent = 'Failed to start derivation.'; genMsg.className = 'nr-edit-msg err'; }
+      if (genMsg) { genMsg.textContent = 'Failed to start generation.'; genMsg.className = 'nr-edit-msg err'; }
       resetGenerateTestsButton();
     }
   }

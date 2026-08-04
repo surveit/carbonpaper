@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from app.models import parse_stage
 from app.services import loader, node_review, stage_edit
 from app.services.errors import WorkflowLoadError
 
@@ -68,16 +69,15 @@ def test_id_mismatch_rejected(tmp_path: Path) -> None:
 def test_edit_after_approval_drops_to_edited_stale(tmp_path: Path) -> None:
     pdir = _seed(tmp_path)
     # Approve the CURRENT spec (hash it the same way the service does), then edit it.
-    from app.models import Stage
-    original_hash = node_review.node_content_hash(loader.stage_to_spec_dict(Stage.model_validate(_VALID)))
+    original_hash = node_review.node_content_hash(loader.stage_to_spec_dict(parse_stage(_VALID)))
     node_review.record_node_decision(pdir, stage_id="score", content_hash=original_hash,
                                      decision="approve", reviewer="human")
     result = stage_edit.edit_stage_spec(pdir, "score", json.dumps({**_VALID, "name": "Score rows v2"}))
     assert result.ok is True
-    # The writer no longer reports colour; re-derive it the way the review layer
+    # The writer no longer reports colour; recompute it the way the review layer
     # (and the node-edit route) does — the approved node still drops to amber.
     edited = json.loads((pdir / "compiled" / "02_score.json").read_text(encoding="utf-8"))
-    spec = loader.stage_to_spec_dict(Stage.model_validate(edited))
+    spec = loader.stage_to_spec_dict(parse_stage(edited))
     decisions = node_review.load_node_decisions(pdir)
     assert node_review.approval_state_for(spec, decisions)["state"] == "edited_stale"
 
@@ -110,10 +110,10 @@ def test_patch_changes_only_named_field_and_preserves_the_rest(tmp_path: Path) -
 
 def test_patch_deep_merges_nested_object(tmp_path: Path) -> None:
     pdir = _seed(tmp_path)
-    result = stage_edit.patch_stage_spec(pdir, "score", json.dumps({"llm": {"model": "opus"}}))
+    result = stage_edit.patch_stage_spec(pdir, "score", json.dumps({"llm": {"model": "claude-opus-5"}}))
     assert result.ok is True
     after = _score(pdir)
-    assert after["llm"]["model"] == "opus"
+    assert after["llm"]["model"] == "claude-opus-5"
     # the sibling key inside llm is NOT dropped (deep merge, not whole-object replace)
     assert after["llm"]["prompt_data_template"] == "score {doc_id}"
 

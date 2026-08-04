@@ -1,14 +1,11 @@
-"""Production workflow runner - the run-lifecycle entry points.
-
-These are the only functions that create a production run record; the reusable
-engine they call and the non-production subset executor both live in
-`app.runtime.executor`, and an import-linter contract enforces that split.
+"""Production run-lifecycle entry points, executing the version-pinned stages a caller
+hands them - the only functions that create a production run record. The engine they
+call and the non-production subset executor live in `app.runtime.executor`; contracts
+enforce that split, and that this module never imports `app.services`.
 """
 
 from __future__ import annotations
 
-import json
-import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Mapping
@@ -17,13 +14,11 @@ import pandas as pd
 import pyarrow.lib as pa_lib
 from pydantic import ValidationError as PydanticValidationError
 
-from app.core.errors import MissingInputBindingError, NoVersionToRunError
+from app.core.errors import MissingInputBindingError
 from app.core.frames import PARQUET_SUFFIX
-from app.core.store_config import configure_default_stores
 from app.models import Connector, Stage, StageType
-from app.core.run_status import RunStatus, StageStatus
-from app.services.errors import WorkflowLoadError
-from app.services import versioning
+from app.models.stages.input_data import InputDataStage
+from app.core.run_status import StageStatus
 
 from .context import RunContext
 from .executor import _execute_stages, topological_sort
@@ -33,45 +28,6 @@ from .manifest import (
     write_manifest,
 )
 from .stages import PREFLIGHTS
-
-
-def resolve_version_id(project_dir: Path, version_id: str | None) -> str:
-    """Resolve the workflow version a run will be pinned to. Every run MUST target a
-    real, PUBLISHED version — we never blank it, never fabricate one, never
-    silently read the working copy, and never CREATE one as a run side effect.
-    A run is read-only with respect to versions.
-
-    - If `version_id` is given, it must name an existing, published version; we
-      fail loudly otherwise rather than redirecting to some other snapshot or
-      silently running an unreviewed draft.
-    - If `version_id` is None, pin to the newest PUBLISHED version (an
-      unpublished version more recent than it is skipped).
-    - If no version exists, or none is published, raise NoVersionToRunError. A
-      run will not immortalise the working copy as a version (that is what let
-      an invalid working copy poison "the latest" and fail every subsequent
-      run), and a run will not treat an unreviewed draft as runnable.
-    """
-    if version_id is not None:
-        # Validate the requested version exists (load_version fails loudly if
-        # its version.json is missing) — a caller asking for a specific id
-        # must not be silently redirected to some other snapshot.
-        version = versioning.load_version(project_dir, version_id)
-        if not version.published:
-            raise NoVersionToRunError(
-                f"Version '{version_id}' of '{project_dir.name}' is not published. "
-                f"A run pins a published version — publish it first."
-            )
-        return version_id
-
-    for version in versioning.list_versions(project_dir):  # newest-first
-        if version.published:
-            return version.version_id
-
-    raise NoVersionToRunError(
-        f"No published version to run for '{project_dir.name}'. A run "
-        f"targets a published version and never creates one — save a version "
-        f"and publish it first."
-    )
 
 
 def apply_run_bindings(
@@ -95,7 +51,7 @@ def apply_run_bindings(
 
     Fails loudly on a binding keyed to a stage id that does not exist or
     carries no connector, and on a binding value that is not a dict of params."""
-    connector_ids = {s.id for s in stages if s.connector is not None}
+    connector_ids = {s.id for s in stages if isinstance(s, InputDataStage)}
     given = dict(bindings or {})
     unbindable = sorted(set(given) - connector_ids)
     if unbindable:
@@ -103,8 +59,12 @@ def apply_run_bindings(
             f"bindings target stage id(s) with no connector to bind: {unbindable}; "
             f"bindable stages are {sorted(connector_ids)}")
 
-    rebound = [
-        _merge_connector_params(stage, given[stage.id]) if stage.id in given else stage
+    rebound: list[Stage] = [
+        _merge_connector_params(stage, given[stage.id])
+        # `given`'s keys were just checked to be connector_ids, which is exactly
+        # the input_data stages — so the isinstance never rejects a bound stage.
+        if isinstance(stage, InputDataStage) and stage.id in given
+        else stage
         for stage in stages
     ]
     param_sources = {
@@ -113,7 +73,9 @@ def apply_run_bindings(
     return rebound, param_sources
 
 
-def _merge_connector_params(stage: Stage, binding: Mapping[str, Any]) -> Stage:
+def _merge_connector_params(
+    stage: InputDataStage, binding: Mapping[str, Any]
+) -> InputDataStage:
     """A copy of `stage` with `binding` merged over its connector params,
     re-validated as a whole Connector so a bad param fails at prepare, not
     mid-run."""
@@ -121,7 +83,6 @@ def _merge_connector_params(stage: Stage, binding: Mapping[str, Any]) -> Stage:
         raise ValueError(
             f"binding for `{stage.id}` must be a dict of connector params, "
             f"got {type(binding).__name__}: {binding!r}")
-    assert stage.connector is not None  # caller filters to connector-carrying stages
     try:
         connector = Connector.model_validate({
             **stage.connector.model_dump(),
@@ -159,7 +120,8 @@ def validate_stages_ready(
 def prepare_run(
     project_dir: Path,
     repo_root: Path,
-    version_id: str | None = None,
+    stages: list[Stage],
+    workflow_version: str,
     limits: dict[str, int] | None = None,
     offsets: dict[str, int] | None = None,
     bindings: Mapping[str, Mapping[str, Any]] | None = None,
@@ -170,19 +132,22 @@ def prepare_run(
     poll it while execution proceeds in the background. Returns a dict with the
     run_id, run_dir, ctx, ordered stages and the manifest.
 
-    The run is PINNED to a workflow version: stages are loaded from the version's
-    immutable snapshot (versioning.load_version_stages), never from the live
-    `compiled/` working copy, so working-copy edits can never affect this run.
-    `version_id` resolution is documented on resolve_version_id (None -> the
-    newest PUBLISHED version; a project with no published version raises
-    NoVersionToRunError); the resolved id is recorded in the manifest as
-    `workflow_version`.
+    The run is PINNED to a workflow version: `stages` are that version's frozen
+    snapshot, resolved and loaded by the caller
+    (app.services.versioning.resolve_version_id + load_version_stages) — never
+    the live `compiled/` working copy, so working-copy edits can never affect
+    this run. `workflow_version` is the id those stages came from and is
+    recorded in the manifest. Because the caller resolves first, a project with
+    no published version — or an invalid snapshot — fails there, before this is
+    reached, so no run dir is left behind.
 
-    `limits` is a per-RUN row-cap override: {stage_id: N} truncates that
-    stage's output to its first N rows for this run only, overriding any
-    static `limit:` in the stage spec. `offsets` ({stage_id: M}) drops the
-    first M rows BEFORE the cap is applied — together they page through a
-    deterministic ordering (offset 5 + limit 3 = rows 6-8). Both are recorded
+    `limits` is a per-RUN row-cap override: {stage_id: N} caps that stage at
+    the first N rows of each of its INPUTS — the handler is never given the
+    rest — overriding any static `limit:` in the stage spec. `offsets`
+    ({stage_id: M}) skips the first M rows BEFORE the cap is applied — together
+    they page through a deterministic ordering (offset 5 + limit 3 = upstream
+    rows 6-8). An `input_data` stage has no input frames, so its window is taken
+    on the frame it loads instead. Both are recorded
     in the manifest (`limit_overrides` / `offset_overrides`) so the slice is
     part of the run's provenance and survives a halt/resume. Unknown stage
     ids fail loudly.
@@ -206,14 +171,8 @@ def prepare_run(
     means no prior decision is replayed — every queueable row halts again and
     the humans are re-asked.
 
-    Raises NoVersionToRunError (no version exists, or none is published) or
-    WorkflowLoadError (from the version snapshot's strict load) before the run
-    dir is created, so a run with no published version — or an invalid
-    workflow — never leaves a run behind.
-    The same holds for a binding/preflight failure: it is raised before the
-    run dir is created."""
-    workflow_version = resolve_version_id(project_dir, version_id)
-    stages = versioning.load_version_stages(project_dir, workflow_version)
+    A binding/preflight failure is raised before the run dir is created, so an
+    unready workflow never leaves a run behind."""
     stages, param_sources = apply_run_bindings(stages, bindings)
     input_records = validate_stages_ready(stages, param_sources)
     ordered = topological_sort(stages)
@@ -277,46 +236,50 @@ def run_prepared(prep: dict[str, Any]) -> dict[str, Any]:
 def execute_run(
     project_dir: Path,
     repo_root: Path,
-    version_id: str | None = None,
+    stages: list[Stage],
+    workflow_version: str,
     limits: dict[str, int] | None = None,
     offsets: dict[str, int] | None = None,
     bindings: Mapping[str, Mapping[str, Any]] | None = None,
     bust_cache: bool = False,
 ) -> dict[str, Any]:
-    """Run the workflow once (synchronous). Returns the manifest dict. `version_id`
-    pins the run to a workflow version (None -> newest published; none published ->
-    NoVersionToRunError); see prepare_run / resolve_version_id.
-    `limits`/`offsets` are per-run row slicing overrides; `bindings` is the
-    per-run connector-param override; `bust_cache` recomputes everything; see
-    prepare_run."""
+    """Run the workflow once (synchronous). Returns the manifest dict. `stages` are
+    the frozen stages of `workflow_version`, resolved and loaded by the caller
+    (app.services.versioning). `limits`/`offsets` cap the rows each named stage
+    READS; `bindings` is the per-run connector-param override; `bust_cache`
+    recomputes everything; see prepare_run."""
     return run_prepared(
-        prepare_run(project_dir, repo_root, version_id,
+        prepare_run(project_dir, repo_root, stages, workflow_version,
                     limits=limits, offsets=offsets, bindings=bindings,
                     bust_cache=bust_cache)
     )
 
 
-def resume_run(project_dir: Path, run_id: str, repo_root: Path) -> dict[str, Any]:
+def resume_run(
+    project_dir: Path,
+    run_id: str,
+    repo_root: Path,
+    stages: list[Stage],
+    workflow_version: str,
+) -> dict[str, Any]:
     """Resume a previously halted run. Loads existing outputs from disk,
     re-runs the halted queue stage (decisions now exist), continues
-    downstream, updates the same manifest in place."""
+    downstream, updates the same manifest in place.
+
+    A resume stays pinned to the SAME workflow snapshot the halted run started
+    on: `stages` must be that snapshot's stages, loaded by the caller for the
+    version its manifest records (app.services.run.read_pinned_version). The pin
+    is re-checked here, so stages for some other version fail loudly instead of
+    silently executing a different workflow than the halted run did."""
     run_dir = project_dir / "runs" / run_id
     manifest = load_manifest_model(run_dir)
 
-    # Stay pinned to the SAME workflow snapshot the run started on. We read the
-    # version off the existing manifest and reload the version's stages — never
-    # the live working copy — so a resume can't silently execute a different workflow
-    # than the halted run did. A run that carries no workflow_version is a pre-
-    # versioning (legacy) run we cannot safely resume under the version model;
-    # fail loudly rather than guessing which snapshot it meant.
-    workflow_version = manifest.workflow_version
-    if not workflow_version:
+    if manifest.workflow_version != workflow_version:
         raise ValueError(
-            f"Run {run_id} of '{project_dir.name}' has no 'workflow_version' in "
-            f"its manifest ({run_dir / 'manifest.json'}); cannot resume a versioned "
-            f"run without its pinned workflow version."
+            f"Run {run_id} of '{project_dir.name}' is pinned to workflow version "
+            f"{manifest.workflow_version!r}, but stages for {workflow_version!r} "
+            f"were supplied; a resume must execute the version the run started on."
         )
-    stages = versioning.load_version_stages(project_dir, workflow_version)
     # Replay this run's bindings (recorded verbatim by prepare_run) onto the
     # freshly-reloaded stages. Without this, a stage that had not yet executed
     # when the run halted would resume on its workflow-authored params (or fail
@@ -371,54 +334,3 @@ def resume_run(project_dir: Path, run_id: str, repo_root: Path) -> dict[str, Any
     # loop re-adds `halted_at` if a stage halts again; otherwise it stays gone.
     manifest.clear_halt()
     return _execute_stages(ordered, ctx, manifest, run_dir, outputs_so_far).to_dict()
-
-
-# CLI entrypoint for ad-hoc runs
-def main() -> int:
-    args = sys.argv[1:]
-    if not args:
-        print("Usage: python -m app.runtime.runner <project_dir> "
-              "[--limit <stage_id>=<N> ...] [--offset <stage_id>=<M> ...] "
-              "[--bust-cache]")
-        return 1
-    project_dir = Path(args[0]).resolve()
-    limits: dict[str, int] = {}
-    offsets: dict[str, int] = {}
-    bust_cache = False
-    i = 1
-    while i < len(args):
-        if args[i] in ("--limit", "--offset") and i + 1 < len(args) and "=" in args[i + 1]:
-            stage_id, _, n = args[i + 1].partition("=")
-            (limits if args[i] == "--limit" else offsets)[stage_id] = int(n)
-            i += 2
-        elif args[i] == "--bust-cache":
-            bust_cache = True
-            i += 1
-        else:
-            print(f"Unknown argument: {args[i]}")
-            return 1
-    repo_root = Path(__file__).resolve().parents[2]
-    # This process has no server lifespan to wire storage for it, and the run it
-    # is about to start reads a version out of the document store and may pin a
-    # frame in the frame store. Guarded, so a caller that configured its own
-    # stores before invoking main() keeps them.
-    configure_default_stores()
-    try:
-        manifest = execute_run(project_dir, repo_root,
-                               limits=limits or None, offsets=offsets or None,
-                               bust_cache=bust_cache)
-    except (NoVersionToRunError, WorkflowLoadError) as exc:
-        print(exc)
-        return 1
-    print(json.dumps(
-        {"run_id": manifest["run_id"], "workflow_version": manifest["workflow_version"],
-         "status": manifest["status"],
-         "stage_records": [(s["stage_id"], s["status"], s["output_row_count"])
-                           for s in manifest["stage_records"]]},
-        indent=2,
-    ))
-    return 0 if manifest["status"] == RunStatus.OK else 1
-
-
-if __name__ == "__main__":
-    sys.exit(main())

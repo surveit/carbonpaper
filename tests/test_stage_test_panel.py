@@ -6,6 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.services import workspace
 
 _IN_SCHEMA = {"columns": [{"name": "amount", "type": "float", "nullable": False}]}
 _OUT_SCHEMA = {"columns": [
@@ -40,10 +41,7 @@ def _seed_project(root: Path) -> None:
 
 @pytest.fixture
 def client(tmp_path: Path, monkeypatch) -> TestClient:
-    import app.web.loading as loading
-    import app.web.routers.node_review as node_review_router
-    monkeypatch.setattr(node_review_router, "EXAMPLES_DIR", tmp_path)
-    monkeypatch.setattr(loading, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     return TestClient(app)
 
 
@@ -56,6 +54,18 @@ def test_panel_shows_each_test_with_status(client: TestClient, tmp_path: Path) -
     assert "doubles_two" in html and "The basic doubling contract." in html
     assert "expects_wrong_value" in html
     assert "passed" in html and "mismatch" in html
+
+
+def test_expected_output_marks_the_columns_the_step_adds(
+    client: TestClient, tmp_path: Path
+) -> None:
+    _seed_project(tmp_path)
+    html = client.get("/project/alpha/node/double/review-partial").text
+    # `doubled` is in the output schema and in no input's; `amount` is carried in.
+    assert '<th class="test-col-new">doubled</th>' in html
+    assert "<th>amount</th>" in html
+    assert '<td class="test-col-new">4.0</td>' in html
+    assert "<code>doubled</code>" in html  # named in the caption, not colour alone
 
 
 def test_panel_without_tests_has_no_tests_section(client: TestClient, tmp_path: Path) -> None:

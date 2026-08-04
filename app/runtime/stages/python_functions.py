@@ -1,5 +1,5 @@
 """Handlers for the python_row_function and python_frame_function stage types -
-the two grains of running authored python over the input, differing only in
+the two grains of running python over the input, differing only in
 what the function is shown (a row dict or the whole frame).
 """
 
@@ -11,15 +11,24 @@ from typing import Any, Callable
 import pandas as pd
 
 from app.models import FunctionKind, Stage
+from app.models.stages.code import (
+    PythonFrameFunctionStage,
+    PythonRowFunctionStage,
+)
+from app.models.stages.publish import PublishStage
 
+from ..code import load_function
 from ..context import RunContext
-from .execution import Row, RowMapper
+from .execution import Row, RowMapper, narrow_stage
 
 
-def _load_python_function(stage: Stage) -> Callable[..., Any]:
+# The three types whose behaviour is a `function` block.
+CodeCarryingStage = PythonRowFunctionStage | PythonFrameFunctionStage | PublishStage
+
+
+def _load_python_function(stage: CodeCarryingStage) -> Callable[..., Any]:
     """Resolve the callable for a stage carrying a function: block."""
     fn_spec = stage.function
-    assert fn_spec is not None  # Stage validation: these types carry function
     fn_name = fn_spec.function or "transform"
     if fn_spec.kind == FunctionKind.module:
         if not fn_spec.module:
@@ -27,9 +36,7 @@ def _load_python_function(stage: Stage) -> Callable[..., Any]:
         module = importlib.import_module(fn_spec.module)
         return getattr(module, fn_name)
     if fn_spec.kind == FunctionKind.inline:
-        ns: dict[str, Any] = {}
-        exec(fn_spec.code or "", ns)
-        fn = ns.get(fn_name) or ns.get("transform")
+        fn = load_function(fn_spec.code or "", fn_name, "transform")
         if fn is None:
             raise ValueError(f"Inline function 'transform' not defined for stage {stage.id}")
         return fn
@@ -39,7 +46,7 @@ def _load_python_function(stage: Stage) -> Callable[..., Any]:
 def handle_python_frame_function(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext) -> pd.DataFrame:
     """Whole-frame transform: the function sees the full input frame(s) and may
     reshape them (group-by, pivot, dedup, multi-input merge)."""
-    fn = _load_python_function(stage)
+    fn = _load_python_function(narrow_stage(stage, PythonFrameFunctionStage))
     # Pass dataframes positionally in declared input order.
     args = [inputs[ref.id] for ref in stage.inputs]
     return fn(*args)
@@ -47,10 +54,10 @@ def handle_python_frame_function(stage: Stage, inputs: dict[str, pd.DataFrame], 
 
 def make_python_row_mapper(stage: Stage, ctx: RunContext, src: pd.DataFrame) -> RowMapper:
     """Resolve the stage's function once; the runtime maps it over the single
-    input's rows — one dict in, one dict out. The authored function is shown
+    input's rows — one dict in, one dict out. The function is shown
     neither the frame nor a row's position in it, so it cannot fan out, fan in,
     or reorder."""
-    fn = _load_python_function(stage)
+    fn = _load_python_function(narrow_stage(stage, PythonRowFunctionStage))
 
     def map_row(row: Row, index: int) -> Row:
         result = fn(row)

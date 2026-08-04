@@ -6,14 +6,18 @@ import pandas as pd
 
 from app.core.predicate import parse_predicate
 from app.models import Stage
-from app.models.stages.aggregate import AGG_FORMULA_COUNT, AGG_FORMULA_LIST
+from app.models.stages.aggregate import (
+    AGG_FORMULA_COUNT,
+    AGG_FORMULA_LIST,
+    AggregateStage,
+)
 
 from ..context import RunContext
+from .execution import narrow_stage
 
 
 def handle_aggregate(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext) -> pd.DataFrame:
-    agg_cfg = stage.aggregate
-    assert agg_cfg is not None  # Stage validation: aggregate carries agg_cfg
+    agg_cfg = narrow_stage(stage, AggregateStage).aggregate
     df = inputs[stage.inputs[0].id]
     group_by = agg_cfg.group_by
 

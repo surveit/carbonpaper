@@ -2,7 +2,7 @@
 
 The screens a workflow *operator* (vs. its author) uses: watching a run,
 reviewing flagged rows, and approving/versioning the workflow itself. Code:
-`app/web/routers/{runs,review,node_review}.py` + `app/templates/`
+`app/web/routers/{runs,run_lineage,review,node_review}.py` + `app/templates/`
 (`run_detail.html`, `_run_stage_panel.html`, `queue.html`, `_node_review.html`,
 `versions.html`) + `app/static/style.css`. All routes live under
 `/project/{project}/…`.
@@ -11,10 +11,12 @@ reviewing flagged rows, and approving/versioning the workflow itself. Code:
 
 `GET /project/{p}/runs/{run_id}`.
 
-- **Progress framing** (not error-counting): the header shows *complete /
-  in-progress / to-do* with a bar, a spinner while active, and an overall status.
-  Warnings/errors/awaiting live in a **separate alert strip** that only appears
-  when there's something to report.
+- **The header** (`app/web/run_header.py` → `_run_header.html`) is three things: a
+  grounding line (start, duration, run id, pinned version + its message), one
+  CTA chosen by run state, and the **stage strip** — one square per stage in
+  topological order, coloured by status, with labelled counts beneath. The run's
+  status is never spelled out in words; you read it off the CTA. The squares
+  divide the header's width so every stage is drawn whatever the stage count.
 - **The workflow graph is the main object**: full width, on top; the stage
   detail panel sits below it. Per-state borders via `build_mermaid_graph` status
   strokes: green=complete, yellow=in-progress, red=error, grey=pending,
@@ -35,12 +37,34 @@ NOT execute injected `<script>` tags, so `loadStage` re-creates script nodes
 after injection — without that, the panel's JS (tabs + scratch tool) is dead.
 
 - L1: **Schema** (the static spec) | **Current run** (this run's data).
-- L2: **Inputs** | **Transform** | **Outputs**. 6 panes = L1 × L2.
+- L2: **Data** | **Transform**. 3 panes: Data differs by tier, Transform
+  serves both. Data folds the old Inputs/Outputs tabs into one pane, because
+  the run-tier output now reads as a diff *against* its input.
+- **Data, run tier**: the stage's output (the stage-aware diff below, or the
+  plain preview), validation, then the upstream input previews in an
+  `input rows` disclosure. **Schema tier**: input schemas, then the output
+  schema.
 - The **scratch tool** (in-memory re-run on picked rows; real LLM calls for
-  `llm_transform`) lives in Inputs (row picker) and shows its result in
-  Transform. Nothing is persisted.
+  `llm_transform`) lives in Data's input-rows disclosure (row picker) and
+  shows its result in Transform. Nothing is persisted.
 - **Full-table view + CSV**: `…/stage/{sid}/rows` renders the entire stage
-  output (not just the first-5 preview); `…/rows.csv` downloads it uncapped.
+  output (not just the first-5 preview); `…/rows.csv` downloads it uncapped,
+  UTF-8 behind a byte-order mark so accented rows open correctly in Excel on
+  Windows (`loading.csv_download_body`).
+- **Stage-aware diff in Data** (`app.web.stage_diff` → `_stage_diff.html`):
+  a 1:1 stage's (`python_row_function`, `llm_transform`) output preview is a
+  positional diff against its input — columns the stage added are tinted and
+  named in words, changed cells carry the replaced value struck through, and
+  the summary line counts changes over the whole frame. A `filter_rows` stage
+  renders ONE merged table over the first input rows in input order: kept rows
+  exactly as the plain preview draws them (lineage links included), dropped
+  rows in place, tinted, with their input ordinal — read off the stage's
+  lineage sidecar, never guessed — and the header counts kept/dropped over the
+  whole frame, noting drops beyond the shown window. The diff header names
+  `input → stage` and links both raw frames' full-rows views and CSV
+  downloads. Every other stage type keeps the plain output view, and any stage
+  whose alignment can't be verified (missing frame, row-count mismatch, absent
+  sidecar) falls back to it.
 
 ## Review queue (`queue.html`)
 
@@ -77,7 +101,7 @@ written into `queue.reviewer_column` on every decision, alongside a timestamp in
 The form fields come from the stage's own `queue.reviewed_columns`: one control
 per reviewed column, typed from that column's declared schema. The reviewer
 names no verdict: the page posts both the values it submits and the values it
-was pre-filled with, and `queue_decide` DERIVES `modify` when any submitted
+was pre-filled with, and `queue_decide` RECORDS `modify` when any submitted
 value differs from the prefill the page carried, `approve` when they all match.
 (`skipped` is the runtime's own verdict for a row its filter excluded; the
 review service refuses it from a reviewer.) A decision records that verdict, a
@@ -88,7 +112,7 @@ target that reuses an input column's name). Once a decision is recorded the card
 stops asking for input: its per-field `change` openers carry the `disabled`
 attribute and the primary **Submit** is replaced by a secondary **Change my
 review**, which records nothing and only re-enables the controls; the re-submit
-that follows derives its verdict against the recorded value the card opens on.
+that follows settles its verdict against the recorded value the card opens on.
 Decisions are keyed by a hash of the
 row (`app.core.stage_cache`)
 so they survive re-runs and LLM non-determinism. When all items are decided, a

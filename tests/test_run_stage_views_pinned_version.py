@@ -12,14 +12,12 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
-import app.web.config as web_config
 import app.services.workspace as workspace
-import app.web.loading as loading
-import app.web.routers.project as project_router
-import app.web.routers.runs as runs_router
 from app.main import app
 from app.runtime.runner import execute_run
 from app.services import versioning
+from app.services import project as project_service
+from conftest import pinned_stages
 
 client = TestClient(app)
 
@@ -35,8 +33,8 @@ def _load_stage(data_path: Path) -> dict:
         "id": LOAD_ID, "name": "Load rows", "type": "input_data",
         "connector": {"kind": "file",
                       "params": {"path": str(data_path), "format": "csv"}},
-        "output_schema": {"columns": [{"name": "name", "type": "str"},
-                                      {"name": "val", "type": "int"}]},
+        "output_schema": {"columns": [{"name": "name", "type": "str", "nullable": True},
+                                      {"name": "val", "type": "int", "nullable": True}]},
     }
 
 
@@ -47,13 +45,13 @@ def _classify_stage(marker: str) -> dict:
         "id": CLASSIFY_ID, "name": f"Classify ({marker})",
         "type": "python_row_function",
         "inputs": [{"id": LOAD_ID,
-                    "schema": {"columns": [{"name": "name", "type": "str"},
-                                           {"name": "val", "type": "int"}]}}],
+                    "schema": {"columns": [{"name": "name", "type": "str", "nullable": True},
+                                           {"name": "val", "type": "int", "nullable": True}]}}],
         "function": {"kind": "inline",
                      "code": f'def transform(row):\n    return {{**row, "label": "{marker}"}}\n'},
-        "output_schema": {"columns": [{"name": "name", "type": "str"},
-                                      {"name": "val", "type": "int"},
-                                      {"name": "label", "type": "str"}]},
+        "output_schema": {"columns": [{"name": "name", "type": "str", "nullable": True},
+                                      {"name": "val", "type": "int", "nullable": True},
+                                      {"name": "label", "type": "str", "nullable": True}]},
     }
 
 
@@ -67,17 +65,16 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         json.dumps(_load_stage(data)), encoding="utf-8")
     (pdir / "compiled" / "02_classify.json").write_text(
         json.dumps(_classify_stage(PINNED_MARKER)), encoding="utf-8")
-    for mod in (web_config, workspace, loading, project_router, runs_router):
-        monkeypatch.setattr(mod, "EXAMPLES_DIR", tmp_path, raising=False)
+    workspace.set_projects_dir(tmp_path)
     return pdir
 
 
 def _run_once(project_dir: Path) -> str:
     """Snapshot + publish the working copy, run it, and return the run id."""
-    version_id = versioning.create_version_from_disk(
+    version_id = project_service.save_working_copy_as_version(
         project_dir, message="v1", reviewer="test").version_id
     versioning.publish_version(project_dir, version_id, reviewer="test")
-    return str(execute_run(project_dir, repo_root=project_dir)["run_id"])
+    return str(execute_run(project_dir, project_dir, *pinned_stages(project_dir))["run_id"])
 
 
 def _drift_the_working_copy(project_dir: Path) -> None:
@@ -148,6 +145,27 @@ def test_scratch_preview_executes_the_stage_that_ran_not_the_working_copy(
     body = _scratch_preview(run_id).json()
     assert body["ok"] is True
     assert [row["label"] for row in body["preview"]] == [PINNED_MARKER]
+
+
+# ─── Transform reads the same under either tier ─────────────────────────────
+
+def test_transform_pane_serves_both_the_schema_and_current_run_tiers(
+    project: Path,
+) -> None:
+    """The definition the run pinned IS what the current run transformed with,
+    so one pane answers both tiers. Two panes would leave "Current run ›
+    Transform" — the tier the panel opens on — showing less than Schema does."""
+    run_id = _run_once(project)
+
+    html = _stage_panel(run_id).text
+    assert 'data-pane="schema-transform run-transform"' in html
+    assert 'data-pane="schema-transform"' not in html
+    assert 'data-pane="run-transform"' not in html
+    # The handle and the scratch re-run result both live in that one pane.
+    pane = html.split('data-pane="schema-transform run-transform"', 1)[1]
+    pane = pane.split("data-pane=", 1)[0]
+    assert PINNED_MARKER in pane
+    assert 'class="scratch-result"' in pane
 
 
 # ─── Unresolvable pinned version: loud and visible, never a substitute ───────

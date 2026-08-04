@@ -4,10 +4,10 @@ import pandas as pd
 
 import app.runtime.stages.llm_transform as lt
 from app.core.agent.usage import LlmUsage
-from app.models import Stage
+from app.models import parse_stage, Stage
 from app.models.stage import StageType
 from app.runtime.stages import HANDLERS
-from conftest import contribution_of, make_run_context
+from conftest import contribution_of, make_run_context, pinned_stages
 
 
 def test_summed_adds_fields_and_counts_calls():
@@ -22,14 +22,14 @@ def test_summed_of_nothing_is_the_zero_instance():
 
 
 def _llm_stage() -> Stage:
-    return Stage.model_validate({
+    return parse_stage({
         "id": "classify", "name": "Classify", "type": "llm_transform",
         "inputs": [{"id": "load", "schema": {
-            "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"}],
+            "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}],
             "primary_key": ["id"],
         }}],
         "output_schema": {"columns": [
-            {"name": "id", "type": "str"}, {"name": "text", "type": "str"},
+            {"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True},
             {"name": "score", "type": "int", "nullable": True},
         ], "primary_key": ["id"]},
         "llm": {"prompt_template": "{text}"},
@@ -73,7 +73,7 @@ def test_run_manifest_records_stage_llm_usage(tmp_path, monkeypatch):
 
     from app.runtime.runner import execute_run
     from app.services import versioning
-    from app.services.versioning import create_version_from_disk
+    from app.services.project import save_working_copy_as_version
 
     monkeypatch.setattr(lt, "call_llm", _fake_call_llm(
         {"score": 5}, LlmUsage(input_tokens=10, output_tokens=4, cost_usd=0.001, calls=1)))
@@ -86,23 +86,23 @@ def test_run_manifest_records_stage_llm_usage(tmp_path, monkeypatch):
             "connector": {"kind": "file", "params": {
                 "path": str(tmp_path / "data" / "in.csv"), "format": "csv"}},
             "output_schema": {"columns": [
-                {"name": "id", "type": "str"}, {"name": "text", "type": "str"}],
+                {"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}],
                 "primary_key": ["id"]}}
     classify = {"id": "classify", "name": "Classify", "type": "llm_transform",
                 "inputs": [{"id": "load", "schema": {"columns": [
-                    {"name": "id", "type": "str"}, {"name": "text", "type": "str"}],
+                    {"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}],
                     "primary_key": ["id"]}}],
                 "output_schema": {"columns": [
-                    {"name": "id", "type": "str"}, {"name": "text", "type": "str"},
+                    {"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True},
                     {"name": "score", "type": "int", "nullable": True}],
                     "primary_key": ["id"]},
                 "llm": {"prompt_template": "{text}"}}
     (tmp_path / "compiled" / "01_load.json").write_text(json.dumps(load), encoding="utf-8")
     (tmp_path / "compiled" / "02_classify.json").write_text(json.dumps(classify), encoding="utf-8")
-    vid = create_version_from_disk(tmp_path, message="seed", reviewer="test").version_id
+    vid = save_working_copy_as_version(tmp_path, message="seed", reviewer="test").version_id
     versioning.publish_version(tmp_path, vid, reviewer="human")
 
-    manifest = execute_run(tmp_path, repo_root=tmp_path)
+    manifest = execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path))
 
     assert manifest["status"] == "ok", manifest
     record = next(r for r in manifest["stage_records"] if r["stage_id"] == "classify")

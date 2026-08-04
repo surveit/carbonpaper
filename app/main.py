@@ -11,13 +11,16 @@ from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
 from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
 from starlette.routing import Route
 
 from app.core.store_config import configure_default_stores
 from app.seeds.seed import seed_demo_data_if_enabled
-from app.web.config import STATIC_DIR
-from app.web.routers import admin, editing, evals, project, node_review, review, runs
+from app.web.config import (
+    STATIC_DIR, RevalidatedStaticFiles, configure_projects_dir_from_env,
+)
+from app.web.routers import (
+    admin, editing, evals, guide, project, node_review, review, run_lineage, runs,
+)
 
 from app.web.chat_router import router as chat_router
 from app.mcp.server import handle_streamable_http, run_session_manager
@@ -34,7 +37,11 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     # time (the test suite's autouse fixtures) wins over the on-disk defaults —
     # the app never reconfigures a store that's already set.
     configure_default_stores()
-    # Opt-in demo data: CW_SEED_DEMO=1 seeds the committed example bundles into
+    # The projects root (CARBONPAPER_PROJECTS_DIR, default the repo's examples/). Read
+    # here rather than at import time in app.services.workspace, so the test
+    # suite's own set_projects_dir() is never overridden by the environment.
+    configure_projects_dir_from_env()
+    # Opt-in demo data: CARBONPAPER_SEED_DEMO=1 seeds the committed example bundles into
     # the workspace (seed-if-absent, never destructive); a normal boot leaves
     # this env var unset, so it does nothing. All seeding logic lives in
     # app.seeds — this is its one call site.
@@ -47,13 +54,15 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="Workflow", lifespan=lifespan)
-app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+app.mount("/static", RevalidatedStaticFiles(directory=str(STATIC_DIR)), name="static")
 
 app.include_router(project.router)
 app.include_router(runs.router)
+app.include_router(run_lineage.router)
 app.include_router(evals.router)
 app.include_router(review.router)
 app.include_router(node_review.router)
+app.include_router(guide.router)
 app.include_router(admin.router)
 
 # The compiler's chat-driven editing entry ('Edit with agent' -> a chat session).

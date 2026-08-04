@@ -8,15 +8,15 @@ import pandas as pd
 import pytest
 
 from app.core.errors import SubsetRunError
-from app.models import Stage, Workflow
+from app.models import parse_stage, Stage, Workflow
 from app.runtime.executor import run_subset
 from app.runtime.trace import trace_row
 
-_AB_SCHEMA = {"columns": [{"name": "a", "type": "str"}, {"name": "b", "type": "int"}]}
+_AB_SCHEMA = {"columns": [{"name": "a", "type": "str", "nullable": True}, {"name": "b", "type": "int", "nullable": True}]}
 
 
 def _union_stage(sid: str, input_ids: list[str]) -> Stage:
-    return Stage.model_validate({
+    return parse_stage({
         "id": sid, "name": sid, "type": "union",
         "inputs": [{"id": i, "schema": _AB_SCHEMA} for i in input_ids],
         "output_schema": _AB_SCHEMA,
@@ -25,7 +25,7 @@ def _union_stage(sid: str, input_ids: list[str]) -> Stage:
 
 
 def _filter_stage(sid: str, input_id: str, predicate_code: str) -> Stage:
-    return Stage.model_validate({
+    return parse_stage({
         "id": sid, "name": sid, "type": "filter_rows",
         "inputs": [{"id": input_id, "schema": _AB_SCHEMA}],
         "output_schema": _AB_SCHEMA,
@@ -40,7 +40,7 @@ def _load_stage(sid: str, df: pd.DataFrame, tmp_path) -> Stage:
     actually executes."""
     path = tmp_path / f"{sid}.csv"
     df.to_csv(path, index=False)
-    return Stage.model_validate({
+    return parse_stage({
         "id": sid, "name": sid, "type": "input_data",
         "connector": {"kind": "file", "params": {"path": str(path), "format": "csv"}},
         "output_schema": _AB_SCHEMA,
@@ -161,15 +161,14 @@ def test_trace_walks_through_union_to_the_right_source_row_in_the_right_input(tm
 # ── the runtime's row slicing, applied to lineage as well as rows ─────────────
 
 
-def test_trace_follows_lineage_after_the_stage_limit_trims_kept_rows(tmp_path):
-    """A limit trims the filter's OUTPUT after the predicate ran, so the lineage
-    the runtime recorded has to be narrowed by the same window — otherwise the
-    surviving row is traced back to whichever ordinal the untrimmed lineage
-    happened to list first."""
+def test_trace_follows_lineage_after_a_limit_caps_what_the_filter_reads(tmp_path):
+    # A limit caps the filter's INPUT, so the predicate runs over src rows 0-1
+    # only. The one row it keeps is src row 1, and the lineage the driver
+    # recorded against the sliced frame has to name that ordinal.
     src = pd.DataFrame({"a": ["x", "y", "z"], "b": [-1, 1, 2]})
     load = _load_stage("src", src, tmp_path)
     filt = _filter_stage("f", "src", "def should_include(row): return row['b'] > 0")
-    filt = filt.model_copy(update={"limit": 1})
+    filt = filt.model_copy(update={"limit": 2})
     workflow = Workflow(stages=[load, filt])
     run_dir = tmp_path / "runs" / "trace_filter_limit"
 
@@ -178,8 +177,8 @@ def test_trace_follows_lineage_after_the_stage_limit_trims_kept_rows(tmp_path):
         stage_ids=["src", "f"], run_dir=run_dir, repo_root=tmp_path,
     )
 
-    # Predicate keeps src rows 1 and 2; limit=1 then keeps only the first of
-    # those, which is src row 1 ('y') — NOT src row 0.
+    # src row 2 ('z') would also have passed the predicate — it is outside the
+    # window, so it was never offered to it.
     assert outputs["f"]["a"].tolist() == ["y"]
     trace = trace_row(run_dir, "f", 0)
     assert trace.steps[1].row_ordinal == 1
@@ -192,7 +191,7 @@ def test_a_row_mapper_that_may_not_drop_still_rejects_a_none_row(tmp_path):
     loud error it was."""
     src = pd.DataFrame({"a": ["x"], "b": [1]})
     load = _load_stage("src", src, tmp_path)
-    mapper = Stage.model_validate({
+    mapper = parse_stage({
         "id": "m", "name": "m", "type": "python_row_function",
         "inputs": [{"id": "src", "schema": _AB_SCHEMA}],
         "output_schema": _AB_SCHEMA,

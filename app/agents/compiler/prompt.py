@@ -5,7 +5,8 @@ so the prompt names no specific project."""
 
 from __future__ import annotations
 
-from app.models import HUMAN_REVIEW_QUEUE_CONTRACT_NOTE, NODE_TYPES
+from app.models import HUMAN_REVIEW_QUEUE_CONTRACT_NOTE
+from app.models.stages.node_types import NODE_TYPES
 
 # Runtime facts that live beside NODE_TYPES rather than inside a type's own
 # `notes`, keyed by the type they qualify; rendered as extra note lines.
@@ -30,21 +31,25 @@ _SYSTEM_PROMPT = (
     "blocks saving. When the proposal is finished, save_version once, with a message "
     "for the human reviewer explaining what changed and why. The resulting version "
     "is born UNPUBLISHED: only a human publishes it, and runs execute published "
-    "versions only. For a single-field tweak to the live workflow, edit_stage "
-    "remains the direct path."
+    "versions only. A workflow does not explain itself, so once it needs the human to "
+    "understand it before they act on it, call write_review_guide for the version "
+    "save_version returned: an ordered walkthrough, in the methodology's own terms, "
+    "saying what each part does and what a reviewer should check. For a "
+    "single-field tweak to the live workflow, edit_stage remains the direct path."
 )
 
 
 def _stage_type_catalog() -> str:
-    """The stage-type contract rendered for the system prompt: every type, its
-    handle block, that handle's required keys, whether it takes inputs, and the
-    type's runtime notes — so the agent can build a valid stage without a lookup
-    tool."""
-    lines = ["The stage types you can use (type — handle block; required keys; inputs):"]
+    """The stage-type contract rendered for the system prompt: every type, the
+    config blocks it must carry, those blocks' required keys, whether it takes
+    inputs, and the type's runtime notes — so the agent can build a valid stage
+    without a lookup tool."""
+    lines = ["The stage types you can use (type — config blocks; required keys; inputs):"]
     for stage_type, spec in NODE_TYPES.items():
+        blocks = ", ".join(f"`{b}`" for b in spec["blocks"])
         required = ", ".join(spec.get("required", [])) or "none"
         takes = "takes inputs" if spec.get("requires_inputs") else "no inputs"
-        lines.append(f"- {stage_type} — handle `{spec['handle']}`; required: {required}; {takes}")
+        lines.append(f"- {stage_type} — blocks {blocks}; required: {required}; {takes}")
         notes = (spec.get("notes"), _EXTRA_NODE_TYPE_NOTES.get(stage_type))
         for note in (n for n in notes if n):
             lines.append(f"    note: {note}")

@@ -1,5 +1,5 @@
 """The one thing llm_transform adds over a plain LLM call: it compiles the
-derived reply spec — output_schema − input_schema — to the Pydantic model the
+computed reply spec — output_schema − input_schema — to the Pydantic model the
 agent backend enforces. The call mechanism itself is unchanged (llm.call_llm
 per row, driven by the runtime's row driver)."""
 from __future__ import annotations
@@ -10,7 +10,7 @@ import pandas as pd
 import pytest
 from pydantic import ValidationError
 
-from app.models import Stage
+from app.models import parse_stage
 from app.models.stage import StageType
 from app.runtime.stages import HANDLERS
 from app.runtime.stages import llm_transform as lt
@@ -18,13 +18,13 @@ from conftest import contribution_of, make_run_context
 
 
 def _stage():
-    return Stage.model_validate({
+    return parse_stage({
         "id": "score", "name": "score", "type": "llm_transform",
         "inputs": [{"id": "load", "schema": {
-            "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"}],
+            "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}],
             "primary_key": ["id"]}}],
         "output_schema": {
-            "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"},
+            "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True},
                         {"name": "score", "type": "int", "nullable": False}],
             "primary_key": ["id"]},
         "llm": {"prompt_template": "Rate: {text}"},

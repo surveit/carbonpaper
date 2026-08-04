@@ -1,7 +1,7 @@
 """run_stage_tests: aggregate every stage's authored tests into a typed report."""
 import pytest
 
-from app.models import Stage
+from app.models import parse_stage, Stage
 from app.runtime.stage_tests import run_stage_tests
 
 _IN_SCHEMA = {"columns": [{"name": "amount", "type": "float", "nullable": False}]}
@@ -13,7 +13,7 @@ _DOUBLE = "def transform(row):\n    return {**row, 'doubled': row['amount'] * 2}
 
 
 def _row_stage(stage_id: str, tests: list[dict]) -> Stage:
-    return Stage.model_validate({
+    return parse_stage({
         "id": stage_id, "name": stage_id, "type": "python_row_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
         "output_schema": _OUT_SCHEMA,
@@ -23,7 +23,7 @@ def _row_stage(stage_id: str, tests: list[dict]) -> Stage:
 
 
 def _frame_stage(stage_id: str, tests: list[dict]) -> Stage:
-    return Stage.model_validate({
+    return parse_stage({
         "id": stage_id, "name": stage_id, "type": "python_frame_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
         "output_schema": _IN_SCHEMA,
@@ -47,7 +47,7 @@ def _no_tests_python_stage() -> Stage:
 
 
 def _non_python_stage() -> Stage:
-    return Stage.model_validate({
+    return parse_stage({
         "id": "load", "name": "Load", "type": "input_data",
         "connector": {"kind": "file"},
         "output_schema": _IN_SCHEMA,
@@ -77,14 +77,14 @@ def test_all_stages_run_aggregates_counts():
 
 def test_untested_python_stage_is_listed_not_run():
     report = run_stage_tests(_workflow())
-    assert report.untested_python_stages == ["untested"]
+    assert report.untested_stages == ["untested"]
 
 
 def test_single_stage_id_scopes_the_run():
     report = run_stage_tests(_workflow(), stage_id="double")
     assert [run.stage_id for run in report.stages] == ["double"]
     assert report.summary.tests_total == 2
-    assert report.untested_python_stages == []
+    assert report.untested_stages == []
 
 
 def test_mismatch_surfaces_cell_diffs_in_outcome():

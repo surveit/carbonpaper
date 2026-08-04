@@ -1,7 +1,7 @@
 """Rendering of run status onto the workflow mermaid graph."""
 from __future__ import annotations
 
-from app.models import Stage
+from app.models import parse_stage
 from app.web.diagrams import build_mermaid_graph
 
 
@@ -14,7 +14,7 @@ def test_cancelled_stage_gets_glyph_and_grey_stroke() -> None:
     stages = [{"id": "s1", "name": "Stage One", "type": "input_data"}]
     graph = build_mermaid_graph(stages, "demo", status_by_id={"s1": "cancelled"})
     assert "✖" in graph
-    assert "stroke:#8a8a8a" in graph
+    assert "stroke:#7b8089" in graph
 
 
 def test_plain_stage_with_no_status_or_review_renders_the_bare_node() -> None:
@@ -25,10 +25,20 @@ def test_plain_stage_with_no_status_or_review_renders_the_bare_node() -> None:
     graph = build_mermaid_graph(stages, "demo")
     assert graph.startswith("flowchart LR")
     assert '    s1["<b>⬆️ Stage One</b><br/><span' in graph
-    assert 'click s1 call loadStage("s1") "Open stage"' in graph
+    assert 'click s1 call dvNode("s1") "Open stage"' in graph
     assert "]:::input" in graph
     assert "stroke:" not in graph.split("classDef")[0]
-    assert "    classDef custom fill:#fde8e8,stroke:#cc3333,color:#000" in graph
+    assert "    classDef input fill:#f7f7f4,stroke:#d4d4d0,color:#1a1a1a" in graph
+
+
+def test_every_node_class_gets_the_same_neutral_surface() -> None:
+    """Stroke is a node's only colour: the glyph and type-name subtitle carry the type."""
+    surfaces = {
+        line.strip().split(" ", 2)[2]
+        for line in build_mermaid_graph([], "demo").splitlines()
+        if line.strip().startswith("classDef ")
+    }
+    assert len(surfaces) == 1, f"stage types are still fill-coded: {sorted(surfaces)}"
 
 
 def test_notes_eval_and_review_indicators_all_appear() -> None:
@@ -55,7 +65,7 @@ def test_run_status_stroke_wins_over_review_belief_when_both_given() -> None:
         stages, "demo",
         status_by_id={"s1": "error"}, review_by_id={"s1": "approved"},
     )
-    assert "stroke:#cc2a2a,stroke-width:3px" in graph   # ERROR red, not approved green
+    assert "stroke:#b3261e,stroke-width:3px" in graph   # ERROR red, not approved green
     assert "#2a8a2a" not in graph
 
 
@@ -92,11 +102,11 @@ def test_typed_stage_input_renders_the_same_as_the_equivalent_draft_dict(tmp_pat
     """build_mermaid_graph also accepts real Stage objects (the isinstance(s,
     Stage) branch of _node_view) — pinned so the two input shapes stay
     interchangeable."""
-    stage = Stage.model_validate({
+    stage = parse_stage({
         "id": "load", "name": "Load", "type": "input_data",
         "connector": {"kind": "file",
                       "params": {"path": str(tmp_path / "d.csv"), "format": "csv"}},
-        "output_schema": {"columns": [{"name": "k"}]},
+        "output_schema": {"columns": [{"name": "k", "type": "str", "nullable": True}]},
     })
     typed_graph = build_mermaid_graph([stage], "demo")
     dict_graph = build_mermaid_graph(

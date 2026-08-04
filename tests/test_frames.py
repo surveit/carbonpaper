@@ -1,7 +1,14 @@
+import numpy as np
 import pandas as pd
 import pytest
 
-from app.core.frames import FrameStore, list_rows
+from app.core.frames import (
+    FrameStore,
+    collapse_null_forms,
+    is_null_form,
+    is_sequence_cell,
+    list_rows,
+)
 
 
 @pytest.fixture
@@ -57,3 +64,36 @@ def test_list_rows_gives_one_str_keyed_dict_per_row():
 
 def test_list_rows_of_an_empty_frame_is_empty():
     assert list_rows(pd.DataFrame({"a": []})) == []
+
+
+@pytest.mark.parametrize("value", [None, float("nan"), pd.NA, pd.NaT])
+def test_is_null_form_accepts_every_pandas_null_form(value):
+    assert is_null_form(value)
+
+
+@pytest.mark.parametrize("value", [0, "", False, [], "nan", np.int64(0)])
+def test_is_null_form_rejects_non_nulls_including_falsy_ones(value):
+    assert not is_null_form(value)
+
+
+@pytest.mark.parametrize("cell", [[1, 2], (1, 2), np.array([1, 2]), {"a": 1}, {1, 2}])
+def test_is_null_form_survives_an_array_valued_cell(cell):
+    """pd.isna on an array cell returns an elementwise array; each of these must answer
+    False."""
+    assert not is_null_form(cell)
+
+
+def test_is_null_form_agrees_with_collapse_null_forms():
+    for value in [None, float("nan"), pd.NA, pd.NaT, 0, "x", [1], np.nan]:
+        assert is_null_form(value) == (collapse_null_forms(value) is None)
+
+
+@pytest.mark.parametrize("cell", [[1], (1,), np.array([1])])
+def test_is_sequence_cell_accepts_lists_tuples_and_arrays(cell):
+    # ndarray matters: a list column round-trips through parquet as one.
+    assert is_sequence_cell(cell)
+
+
+@pytest.mark.parametrize("cell", ["ab", {"a": 1}, 1, None])
+def test_is_sequence_cell_rejects_scalars_strings_and_dicts(cell):
+    assert not is_sequence_cell(cell)

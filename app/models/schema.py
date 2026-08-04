@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime
 import re
 from enum import Enum
-from typing import Any, Literal, Optional, Sequence
+from typing import Any, ClassVar, Literal, Optional, Sequence
 
 from pydantic import (
     BaseModel,
@@ -32,13 +32,23 @@ class _Base(BaseModel):
     )
 
 
+class StageConfig(_Base):
+    """One stage type's config block. Every field is classified into exactly one
+    of the two sets below, so a field added to a block forces the decision of
+    whether it changes what the stage computes
+    (`tests/models/test_stage_config_fingerprint_fields.py` holds the partition;
+    `StageBase.compute_definition_fingerprint` reads FINGERPRINT_FIELDS)."""
+    FINGERPRINT_FIELDS: ClassVar[frozenset[str]]
+    INCIDENTAL_FIELDS: ClassVar[frozenset[str]]
+
+
 # ── Identifiers ──────────────────────────────────────────────────────────────
 _SNAKE_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
-# Shared by every authored-code handle (python_row_function/python_frame_function,
+# Shared by every authored-code block (python_row_function/python_frame_function,
 # publish's function block, filter_rows) — lives here, below `stage.py`, so a
-# handle-config class defined in its own module can use it without a cycle.
+# config class defined in its own module can use it without a cycle.
 class FunctionKind(str, Enum):
     inline = "inline"
     module = "module"
@@ -49,7 +59,7 @@ SCALAR_COLUMN_TYPES: set[str] = {"str", "int", "float", "bool", "datetime", "dat
 STRUCTURED_COLUMN_TYPES: set[str] = {"json"}
 _LIST_RE = re.compile(r"^list\[(.+)\]$")
 
-# Named handles for the column-type values compared individually below (by
+# Named constants for the column-type values compared individually below (by
 # _annotation_for/_render_column in this module, and by app.runtime.validation)
 # — as opposed to the scalar/structured *sets* above, which are membership-tested
 # as a whole.
@@ -103,18 +113,25 @@ def _is_range_bound(v: Any) -> bool:
 class Column(_Base):
     name: str
     type: str = Field(
-        default="str",
         description=(
             "Column type: a scalar (str, int, float, bool, date, datetime); `json` (a nested "
             "object — give its shape with `fields`, or an open string->scalar map with "
             "`value_type`); or `list[X]` of any of these (e.g. list[str], list[json])."
         ),
     )
-    nullable: bool = True
+    nullable: bool
     description: Optional[str] = None
     range: Optional[list[Any]] = None
     source: Optional[str] = None
-    enum: Optional[list[str]] = None
+    enum: Optional[list[str]] = Field(
+        default=None,
+        description=(
+            "The closed set of values a `str` column may hold — declare it whenever the "
+            "vocabulary is fixed and known at authoring time. A stage whose output holds "
+            "a value outside the set FAILS, so declare it only where the set really is "
+            "closed."
+        ),
+    )
     fields: Optional[list["Column"]] = Field(
         default=None,
         description=(
@@ -206,8 +223,8 @@ class Column(_Base):
         return self
 
     def resolve_numeric_bounds(self) -> tuple[float | None, float | None]:
-        """A declared numeric range as (low, high); a bound declared with the
-        RANGE_UNBOUNDED_MARKER sentinel is None on that side."""
+        # A declared numeric range as (low, high); a bound declared with the
+        # RANGE_UNBOUNDED_MARKER sentinel is None on that side.
         if self.range is None or self.type not in ("int", "float"):
             return (None, None)
         low, high = self.range
@@ -222,7 +239,7 @@ Column.model_rebuild()
 # A producer's output column and a consumer's declared copy of it must match on
 # SPEC, but may legitimately differ in prose (description/source). The spec
 # fields are everything the Column model declares except its identity (`name`)
-# and prose (`description`, `source`) — derived from the model, so a newly added
+# and prose (`description`, `source`) — read off the model, so a newly added
 # capability is compared automatically instead of being silently ignored.
 _PROSE_COLUMN_FIELDS = frozenset({"name", "description", "source"})
 _SPEC_COLUMN_FIELDS: tuple[str, ...] = tuple(
@@ -291,6 +308,21 @@ def _numeric_range(col: Column) -> Optional[tuple[float, float]]:
         return None
     lo, hi = col.range
     return (lo, hi)
+
+
+def _render_primary_key(primary_key: list[str] | None) -> list[str]:
+    """The uniqueness the key states, for a reader building rows. [] when none."""
+    # Without this the key is invisible in the rendered schema, and a reader
+    # asked to build a table of rows has no way to know which of them a real
+    # frame could never hold side by side.
+    if not primary_key:
+        return []
+    if len(primary_key) == 1:
+        return [
+            f"Primary key: {primary_key[0]!r} — no two rows may carry the same value."
+        ]
+    keys = " + ".join(repr(name) for name in primary_key)
+    return [f"Primary key: {keys} — no two rows may carry the same combination."]
 
 
 def _render_column(col: Column, indent: str) -> list[str]:
@@ -475,6 +507,7 @@ class TableSchema(_Base):
         for c in self.columns:
             lines.extend(_render_column(c, ""))
         lines.append("Any other key is invalid.")
+        lines.extend(_render_primary_key(self.primary_key))
         return "\n".join(lines)
 
     def to_pydantic_model(self, name: str) -> type[BaseModel]:

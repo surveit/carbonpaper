@@ -1,22 +1,22 @@
 {# Tests — the stage's authored input/output cases, one skimmable section per
    test. Context: test_views (see node_review._shape_one_test; [] when the stage
-   has no tests) and test_derivable (stage.type in STAGE_TEST_TYPES). The section
-   renders when there are cases to show OR the stage is a python transform that
-   could grow some via the Generate tests button — otherwise it's hidden, same as
+   has no tests) and can_generate_tests (stage.CARRIES_RUNNABLE_TESTS). The section
+   renders when there are cases to show OR the stage is one that could grow some
+   via the Generate tests button — otherwise it's hidden, same as
    before this button existed. Reads like a report: the headings alone give the
    case coverage; expanding a section shows the data. Non-passing sections start
    open. #}
-{% if test_views or test_derivable %}
+{% if test_views or can_generate_tests %}
 <section class="exec-block test-report">
-  <h2>🧪 Tests
-    {% if test_derivable %}
+  <h2>🧪 Example behavior
+    {% if can_generate_tests %}
     <button type="button" class="btn" data-role="generate-tests"
-            title="Replaces this stage's tests with a fresh derivation from the methodology">Generate tests</button>
+            title="Replaces this stage's examples with a fresh suite generated from the methodology">Generate examples</button>
     <span class="nr-edit-msg" data-role="generate-tests-msg"></span>
     {% endif %}
   </h2>
   {% if not test_views %}
-  <p class="muted">No tests yet.</p>
+  <p class="muted">No examples yet.</p>
   {% endif %}
   {% for view in test_views %}
   <details class="test-case" {% if view.status != "passed" %}open{% endif %}>
@@ -38,17 +38,33 @@
     </table>
     {% else %}<p class="muted">no rows (empty input)</p>{% endif %}
     {% endfor %}
+    {% if view.expected is none %}
+    <h3>expected outcome</h3>
+    <p class="muted">the step refuses this input rather than returning a value</p>
+    {% else %}
     <h3>expected output</h3>
     {% if view.expected.rows %}
+    {# A shaded column is one the step ADDS — in the output schema, in none of the
+       input schemas. The caption names them too, so the mark survives without
+       colour. Same list on every case: it is a fact about the stage, not the case. #}
     <table class="test-rows">
-      <thead><tr>{% for column in view.expected.columns %}<th>{{ column }}</th>{% endfor %}</tr></thead>
+      {% if view.expected.new_columns %}
+      <caption>shaded — added by this step, carried by no input:
+        {% for name in view.expected.new_columns %}<code>{{ name }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</caption>
+      {% endif %}
+      <thead><tr>{% for column in view.expected.columns %}
+        <th{% if column in view.expected.new_columns %} class="test-col-new"{% endif %}>{{ column }}</th>
+        {%- endfor %}</tr></thead>
       <tbody>
         {% for row in view.expected.rows %}
-        <tr>{% for column in view.expected.columns %}<td>{{ row.get(column) }}</td>{% endfor %}</tr>
+        <tr>{% for column in view.expected.columns %}
+          <td{% if column in view.expected.new_columns %} class="test-col-new"{% endif %}>{{ row.get(column) }}</td>
+          {%- endfor %}</tr>
         {% endfor %}
       </tbody>
     </table>
     {% else %}<p class="muted">no rows (empty output)</p>{% endif %}
+    {% endif %}
     {% if view.message %}<p class="test-message">{{ view.message }}</p>{% endif %}
     {% if view.diffs %}
     <h3>differing cells</h3>

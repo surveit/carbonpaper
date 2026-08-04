@@ -6,16 +6,20 @@ batch is collected so one call surfaces every problem, not just the first.
 """
 from __future__ import annotations
 
-from typing import Any, Sequence
+from typing import Any, Sequence, TypeVar
 
 from pydantic import ValidationError, model_validator
 
 from app.models.schema import _Base
-from app.models.stage import Stage, StageDraft, StageType
+from app.models.stage import Stage, StageCommon, StageType
 from app.core.utils import format_errors
 
+# Ordering and cycle detection read only the shared fields, so they hold a
+# submitted draft and a stored stage alike, and hand back what they were given.
+_StageT = TypeVar("_StageT", bound=StageCommon)
 
-def validate_unique_ids(stages: Sequence[StageDraft]) -> list[str]:
+
+def validate_unique_ids(stages: Sequence[StageCommon]) -> list[str]:
     """One issue per stage id that appears more than once."""
     ids = [s.id for s in stages]
     dupes = sorted({i for i in ids if ids.count(i) > 1})
@@ -34,7 +38,7 @@ def validate_inputs_resolve(stages: list[Stage]) -> list[str]:
     return issues
 
 
-def detect_cycle(stages: Sequence[StageDraft]) -> list[str]:
+def detect_cycle(stages: Sequence[StageCommon]) -> list[str]:
     """A one-item list naming the first cycle found, or [] if acyclic. One cycle
     is enough to reject the workflow; we don't enumerate them all. The stage graph
     must stay acyclic — a cycle means the runner could never order the stages.
@@ -66,14 +70,14 @@ def detect_cycle(stages: Sequence[StageDraft]) -> list[str]:
     return found
 
 
-def sort_stages_by_dependency(stages: Sequence[StageDraft]) -> list[StageDraft]:
+def sort_stages_by_dependency(stages: Sequence[_StageT]) -> list[_StageT]:
     """`stages` reordered so every stage follows the stages it names in `inputs`.
     An input naming an id outside `stages` imposes no order — it is already in the
     workflow, or missing, which is a validation problem and not this function's.
     Ties keep submission order. Ids must be unique (`validate_unique_ids`);
     raises ValueError on a cycle, which `detect_cycle` reports far better."""
     pending = list(stages)
-    ordered: list[StageDraft] = []
+    ordered: list[_StageT] = []
     while pending:
         waiting = {s.id for s in pending}
         ready = [s for s in pending if not waiting & set(s.input_ids)]
@@ -184,7 +188,7 @@ def validate_workflow(stages: list[Stage]) -> list[str]:
     schema supplied by its upstream output_schema. Per-stage invariants (e.g. llm_transform being strictly 1:1) are
     already enforced by `Stage` construction, so any `list[Stage]` reaching here
     is stage-valid; this is the remaining, whole-graph seam `load_workflow` (and
-    hence `create_version_from_disk`) enforces, so an invalid workflow is never versioned
+    hence `save_working_copy_as_version`) enforces, so an invalid workflow is never versioned
     or run."""
     return graph_issues(stages)
 

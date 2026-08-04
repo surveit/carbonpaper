@@ -11,14 +11,14 @@ from typing import Any, Mapping
 from app.core.errors import RunNotFoundError, RunVersionUnresolvableError
 from app.models import Stage
 from app.runtime.manifest import load_manifest_model
-from app.runtime.runner import (
-    prepare_run,
-    resolve_version_id,
-    resume_run,
-    run_prepared,
-)
+from app.runtime.runner import prepare_run, resume_run, run_prepared
 from app.services.errors import WorkflowLoadError
-from app.services.versioning import load_version_stages
+from app.services.versioning import (
+    WorkflowVersion,
+    load_version,
+    load_version_stages,
+    resolve_version_id,
+)
 from app.services.workspace import repo_root, resolve_project_dir
 
 
@@ -41,27 +41,86 @@ def start_run(
     before any thread starts and before a run dir exists. See prepare_run for
     `version_id` / `bindings` / `limits` / `offsets` / `bust_cache` semantics —
     this seam adds none of its own."""
-    prep = prepare_run(
-        resolve_project_dir(project),
+    prep = _prepare(project, version_id, bindings, limits, offsets, bust_cache)
+    _run_in_background(run_prepared, prep)
+    return str(prep["run_id"])
+
+
+def execute(
+    project: str,
+    *,
+    version_id: str | None = None,
+    bindings: Mapping[str, Mapping[str, Any]] | None = None,
+    limits: dict[str, int] | None = None,
+    offsets: dict[str, int] | None = None,
+    bust_cache: bool = False,
+) -> dict[str, Any]:
+    """start_run's synchronous twin, for a caller with nothing to poll from: returns
+    the final manifest."""
+    return run_prepared(
+        _prepare(project, version_id, bindings, limits, offsets, bust_cache)
+    )
+
+
+def _prepare(
+    project: str,
+    version_id: str | None,
+    bindings: Mapping[str, Mapping[str, Any]] | None,
+    limits: dict[str, int] | None,
+    offsets: dict[str, int] | None,
+    bust_cache: bool,
+) -> dict[str, Any]:
+    """Resolve the version, load its frozen stages, hand both to the runner."""
+    # Version resolution and snapshot loading are this layer's job: the runner
+    # executes the stages it is given and reads no versions itself.
+    project_dir = resolve_project_dir(project)
+    workflow_version = resolve_version_id(project_dir, version_id)
+    return prepare_run(
+        project_dir,
         repo_root(),
-        version_id=version_id,
+        load_version_stages(project_dir, workflow_version),
+        workflow_version,
         limits=limits,
         offsets=offsets,
         bindings=bindings,
         bust_cache=bust_cache,
     )
-    _run_in_background(run_prepared, prep)
-    return str(prep["run_id"])
 
 
 def resume(project: str, run_id: str) -> None:
     """Resume a halted or errored run on a background daemon thread. Re-runs
     every not-yet-complete stage and reuses completed upstream outputs (see
     resume_run); launched in the background so the caller can redirect and poll.
-    Resolves the project name to its directory and the repo root internally. The
-    caller validates the workflow / run existence synchronously first — this only
-    handles the background launch."""
-    _run_in_background(resume_run, resolve_project_dir(project), run_id, repo_root())
+    Reloads the stages of the version the run PINNED — never the working copy —
+    so the resumed run executes the workflow the halted one did. Resolves the
+    project name to its directory and the repo root internally. The caller
+    validates the run's existence synchronously first — this only handles the
+    background launch."""
+    project_dir = resolve_project_dir(project)
+    workflow_version = read_pinned_version(project, run_id)
+    _run_in_background(
+        resume_run,
+        project_dir,
+        run_id,
+        repo_root(),
+        load_version_stages(project_dir, workflow_version),
+        workflow_version,
+    )
+
+
+def read_pinned_version(project: str, run_id: str) -> str:
+    """The workflow version a run is pinned to, off its manifest."""
+    # A run carrying no workflow_version predates the version model; fail loudly
+    # rather than guessing which snapshot it meant.
+    run_dir = resolve_project_dir(project) / "runs" / run_id
+    workflow_version = load_manifest_model(run_dir).workflow_version
+    if not workflow_version:
+        raise RunVersionUnresolvableError(
+            f"Run '{run_id}' of '{project}' records no workflow version in its "
+            f"manifest ({run_dir / 'manifest.json'}), so the workflow it executed "
+            f"cannot be identified — it cannot be resumed."
+        )
+    return workflow_version
 
 
 def read_run_status(project: str, run_id: str) -> dict[str, Any]:
@@ -83,16 +142,14 @@ def resolve_version(project: str, version_id: str | None) -> str:
     """The published workflow version a run would pin to (None -> newest
     published). Raises NoVersionToRunError if `version_id` names an unpublished
     or missing version, or if the project has no published version. A thin,
-    side-effect-free pass-through to the runner's resolver (resolving the project
-    name to its directory) so callers outside the runtime (e.g. the web layer's
-    project listing) never import the runner."""
+    side-effect-free pass-through to versioning's resolver, taking the project
+    NAME so a caller holding only a name (e.g. the web layer's project listing)
+    needs no project directory of its own."""
     return resolve_version_id(resolve_project_dir(project), version_id)
 
 
-def load_run_stages(project: str, manifest: dict[str, Any]) -> list[Stage]:
-    """The stages of the version this run pinned, from that version's frozen
-    document — never `compiled/`, which drifts as the working copy is edited.
-    Raises RunVersionUnresolvableError rather than falling back to it."""
+def load_run_version(project: str, manifest: dict[str, Any]) -> WorkflowVersion:
+    """The frozen version this run pinned. Never falls back to `compiled/` — raises."""
     version_id = manifest.get("workflow_version")
     if not version_id:
         raise RunVersionUnresolvableError(
@@ -100,12 +157,17 @@ def load_run_stages(project: str, manifest: dict[str, Any]) -> list[Stage]:
             "manifest, so the workflow it executed cannot be identified."
         )
     try:
-        return load_version_stages(resolve_project_dir(project), str(version_id))
+        return load_version(resolve_project_dir(project), str(version_id))
     except (FileNotFoundError, WorkflowLoadError) as exc:
         raise RunVersionUnresolvableError(
             f"This run of '{project}' pinned workflow version "
             f"'{version_id}', which could not be read: {exc}"
         ) from exc
+
+
+def load_run_stages(project: str, manifest: dict[str, Any]) -> list[Stage]:
+    """The stages of the version this run pinned — the definitions it executed."""
+    return load_run_version(project, manifest).stages
 
 
 @dataclass(frozen=True)

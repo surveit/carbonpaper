@@ -6,18 +6,18 @@ import pandas as pd
 import pytest
 from pydantic import ValidationError
 
-from app.models import Stage
+from app.models import parse_stage
 from app.runtime.stages import HANDLERS
 from conftest import make_run_context
 
 
 # Every frame below is a single int column `x`; `output_columns` names what the
 # `code` under test returns.
-_X_COLUMN = [{"name": "x", "type": "int"}]
+_X_COLUMN = [{"name": "x", "type": "int", "nullable": True}]
 
 
 def _stage(code, inputs=("src",), output_columns=_X_COLUMN):
-    return Stage.model_validate({
+    return parse_stage({
         "id": "t", "name": "t", "type": "python_row_function",
         "inputs": [{"id": i, "schema": {"columns": _X_COLUMN}} for i in inputs],
         "output_schema": {"columns": output_columns},
@@ -32,7 +32,7 @@ def _run(stage, frames):
 def test_row_function_maps_per_row():
     df = pd.DataFrame({"x": [1, 2, 3]})
     code = "def transform(row):\n    return {'x': row['x'], 'y': row['x'] * 10}\n"
-    out = _run(_stage(code, output_columns=_X_COLUMN + [{"name": "y", "type": "int"}]),
+    out = _run(_stage(code, output_columns=_X_COLUMN + [{"name": "y", "type": "int", "nullable": True}]),
                {"src": df})
     assert len(out) == 3                    # 1:1 — one row out per row in
     assert list(out["y"]) == [10, 20, 30]
@@ -59,7 +59,8 @@ def test_row_function_rejects_non_dict_return():
 
 def test_row_function_rejects_multiple_inputs():
     # python_row_function's max_inputs=1 is enforced by Stage validation itself
-    # (Stage._handle_for_type), so a 2-input stage can't even be constructed.
+    # (PythonRowFunctionStage declares inputs max_length=1), so a 2-input stage
+    # can't even be constructed.
     code = "def transform(row):\n    return {'x': row['x']}\n"
     with pytest.raises(ValidationError):
         _stage(code, inputs=("a", "b"))

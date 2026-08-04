@@ -6,27 +6,41 @@ Python across six packages. Vocabulary: **project**/**methodology**/**workflow**
 [overview.md](overview.md).
 
 ## `app/models/` — the schema layer (Pydantic)
-THE canonical definition of what a workflow is. Constructing a model validates it;
+THE definition of what a workflow is. Constructing a model validates it;
 `validate_*` return issue lists, `parse_*` raise. **Dependency rule: imports nothing from
 runtime or web — keep it pure.** Checks the *spec*, distinct from RUNTIME data validation
 (`app/runtime/validation.py`, which checks dataframes).
-- `stage.py` — the 8 stage types, the executable-handle block each requires, and
-  `Stage.is_grain_preserving` (1:1 row correspondence — the eval gate depends on it).
+- `stage_base.py` — the stage types, and `StageBase`: the fields and rules every stored
+  stage satisfies whatever its type, plus `is_grain_and_order_preserving` (1:1 row
+  correspondence in order — the eval gate depends on it).
+- `stage.py` — `Stage`, the pydantic discriminated union over the per-type models keyed on
+  `type` (parse a stage dict with `parse_stage`; `Stage` is an annotation, not a class), and
+  `StageDraft`, the flat all-optional shape an authoring client submits.
+- `stages/` — one module per stage type, holding that type's config class, its `StageBase`
+  subclass (which declares the blocks that type REQUIRES and its input arity), and its own
+  validation helpers. `PythonFunction` and both python-transform stage models live in
+  `stages/code.py`.
 - `schema.py` — `Column`, `TableSchema`, column-type vocab. `workflow.py` — graph checks
   (unique ids, inputs resolve, cycles). `named_schemas.py` — named schemas + FK `references`.
   `eval.py` — `EvalConfig` + grain-preservation gate. `table.py` — `TableRef`.
 
-**Loading is canonical + strict.** Stages persist as JSON (`compiled/<NN>_<stage_id>.json`,
+**Loading is normalizing + strict.** Stages persist as JSON (`compiled/<NN>_<stage_id>.json`,
 a validated `Stage`); `app/services/loader.py` is the one loader — the runner refuses a
 workflow with an invalid stage (`WorkflowLoadError`), the viewer (same loader) renders
 per-file issues. Typed `Stage` objects flow end-to-end.
 
 ## `app/runtime/` — the Runner  → `app/runtime/AGENTS.md`
-`runner.py` — `execute_run`/`prepare_run`/`run_prepared`/`resume_run`; every run pins to a
-PUBLISHED workflow version (`resolve_version_id`, defaulting to the newest published one) —
-never the working copy, never a draft, never an unpublished version. Per stage: validate
+`runner.py` — `execute_run`/`prepare_run`/`run_prepared`/`resume_run`, each taking the
+stages of the version the run pins. The runner reads no versions: the caller resolves one
+(`app/services/versioning.py: resolve_version_id`, defaulting to the newest PUBLISHED — never
+the working copy, never a draft, never an unpublished version), loads its frozen stages and
+hands them in. `app/services/run.py` is the one place that composes this, and an
+import-linter contract keeps `runner.py` free of `app.services` so the arrow between the two
+points one way. `__main__.py` — the `python -m app.runtime <project>` CLI, over that same
+seam. Per stage: validate
 inputs, reject duplicate rows, dispatch, validate output, write `outputs/<stage>.parquet`,
-flush `manifest.json` mid-run; halt-on-review + resume; per-run `--limit`/`--offset`;
+flush `manifest.json` mid-run; halt-on-review + resume; per-run `--limit`/`--offset`
+capping the rows a stage READS (cut off its inputs before its handler runs);
 `field_checks`. `stages/` — one module per type. `llm.py`/`options.py` — the agent
 backend (no fallback). `preview.py` — scratch re-runs.
 
@@ -43,12 +57,15 @@ type's registered shape disagrees with that core fact, and
 `tests/test_handler_registry.py` pins the same per-type equality in CI.
 
 ## `app/compiler/` — prose → LLM generation engines
-Two generators, each an `app.core.agent` Agent targeting a model schema: `data_model.py`
-(document → `SchemaLibrary`, the nouns a human then approves) and `stage_tests.py` (one
-python-transform stage + the document → its `StageTest` cases, derived code-blind). Both
-submit through `submit_answer`, so a schema-invalid reply is **re-asked inside the agent's
-own loop**, not just parse-checked. `app/services/generation.py` drives them and persists
-what comes back. Workflow stages are authored one at a time through `app/services/stage_edit.py`.
+Three generators, each an `app.core.agent` Agent targeting a model schema: `data_model.py`
+(document → `SchemaLibrary`, the nouns a human then approves), `stage_tests.py` (one
+python-transform stage + the document → its `StageTest` cases, generated code-blind), and
+`review_guide.py` (one saved version's frozen stages + the document → its `ReviewGuide`).
+All three submit through `submit_answer`, so a schema-invalid reply is **re-asked inside
+the agent's own loop**, not just parse-checked. `app/services/generation.py` drives them
+and persists what comes back. The guide author is given the version's stages and no tool
+that reads a project, so it cannot narrate the working copy the version was cut from.
+Workflow stages are authored one at a time through `app/services/stage_edit.py`.
 
 ## `app/web/` — the web layer  → `app/AGENTS.md`
 Thin `app/main.py` (~40 lines); routes under `/project/{project}/…`. Routers: `project.py`
@@ -57,9 +74,14 @@ lists every version newest-first, `/workflow/version/{id}` is one immutable vers
 read-only detail with Publish/Run-this-version; the mutable editor stays at `/workflow`),
 `runs.py` (trigger/list/detail/status-poll, rows + CSV, scratch preview, resume, plus
 running one specific pinned version), `review.py` (review queue), `node_review.py` (node
-approval + editing + version creation + publish — the only writer to `compiled/`).
+approval + editing + version creation + publish — the only writer to `compiled/`),
+`guide.py` (`POST /workflow/version/{id}/guide` — starts review-guide authoring for one
+version, watched through node_review's generation-session status endpoint).
 `web/{config,loading,diagrams}.py` — paths + Jinja · viewer reads over the loader ·
-mermaid/ER builders. Everything a run page states about the workflow — its graph, each
+mermaid/ER builders. `web/{run_header,run_index,stage_strip}.py` build what the run page
+and the runs index show about a run: the header's grounding line and its single
+state-chosen action, the index rows, and the per-stage status strip both pages draw.
+Everything a run page states about the workflow — its graph, each
 stage's source and schemas, the lineage panel, and the scratch re-run's handler — is read
 from the version its manifest pinned to (`run.load_run_stages` /
 `run.load_pinned_stage_def` in `app/services/`), never from `compiled/`; a manifest naming no resolvable version raises
@@ -67,10 +89,12 @@ from the version its manifest pinned to (`run.load_run_stages` /
 working copy while the scratch re-run refuses to execute (409).
 
 ## `app/services/` — web-independent workflow logic
-`run.py` (the production run seam — start/resume/status, plus resolving what a run
-pinned: `resolve_version`, `load_run_stages`, `load_pinned_stage_def`); `loader.py` (canonical stage loader, above); `compilation.py` (compile persistence for
+`run.py` (the production run seam — start/execute/resume/status, and the only module that
+drives `app/runtime/runner.py`: it resolves the version and loads its stages before handing
+them to the runner, plus resolves what a run pinned — `resolve_version`,
+`read_pinned_version`, `load_run_stages`, `load_pinned_stage_def`); `loader.py` (stage loader, above); `compilation.py` (compile persistence for
 `app/compiler`); `node_review.py` (content-hash approval over stage specs — read its
-docstring; the canonical-hash invariant must not rot); `versioning.py` (`create_version_from_stages`
+docstring; the content-hash invariant must not rot); `versioning.py` (`create_version_from_stages`
 is the ONE write path for a `WorkflowVersion` document, born unpublished; `publish_version`
 is the metadata-only human-approval act a run's `resolve_version_id` requires before it
 will pin to that version); `drafts.py` (disposable, mutable scratch — a `Draft` document
@@ -80,7 +104,7 @@ is its only exit, strict-validating before freezing it into a version via
 
 ## `app/chat/`, `app/core/llm/`, tests
 `chat/` — a reusable PydanticAI chat engine (streaming, tools, file persistence), separate
-from the row-mapped `llm_transform` path; own env (`CW_CHAT_BACKEND`); one demo tool, not yet
-wired in. `core/llm/options.py` — the `LLMModel` menu. `tests/` (pytest; `conftest.py` forces
+from the row-mapped `llm_transform` path; one demo tool, not yet wired in.
+`core/llm/options.py` — the `LLMModel` menu. `tests/` (pytest; `conftest.py` forces
 `agent_available` False so no test can reach a real model); `.github/workflows/ci.yml`
 runs ruff + mypy + pytest on every PR.

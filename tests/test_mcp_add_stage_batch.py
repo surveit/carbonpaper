@@ -1,4 +1,4 @@
-"""add_stage takes a LIST: these pin the batch outcome model — order derived, partial
+"""add_stage takes a LIST: these pin the batch outcome model — order resolved, partial
 success kept, an unorderable batch refused whole. Every assertion checks the STORED
 workflow, not just the payload, since "added" is worth nothing if it is not on disk."""
 from __future__ import annotations
@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 
 import pytest
+from app.services import workspace
 
 _CLAIM = {"columns": [
     {"name": "claim_id", "type": "str", "nullable": False},
@@ -24,7 +25,7 @@ _LOAD = {
 _CLEAN = {
     "id": "clean", "name": "Clean", "type": "python_row_function",
     "inputs": [{"id": "load", "schema": _CLAIM}],
-    "function": {"kind": "inline",
+    "function": {"kind": "inline", "summary": "Test fixture step.", "corner_cases": [],
                  "code": "def transform(row):\n    return {**row, 'cleaned': True}\n"},
     "output_schema": _CLEANED,
 }
@@ -40,7 +41,7 @@ _RANK = {
     "id": "rank", "name": "Rank", "type": "python_row_function",
     "inputs": [{"id": "score", "schema": {
         "columns": [{"name": "verdict", "type": "str", "nullable": True}]}}],
-    "function": {"kind": "inline",
+    "function": {"kind": "inline", "summary": "Test fixture step.", "corner_cases": [],
                  "code": "def transform(row):\n    return {**row, 'rank': 1}\n"},
     "output_schema": {"columns": [
         {"name": "verdict", "type": "str", "nullable": True},
@@ -51,7 +52,7 @@ _REPORT = {
     "id": "report", "name": "Report", "type": "python_row_function",
     "inputs": [{"id": "rank", "schema": {
         "columns": [{"name": "rank", "type": "int", "nullable": False}]}}],
-    "function": {"kind": "inline",
+    "function": {"kind": "inline", "summary": "Test fixture step.", "corner_cases": [],
                  "code": "def transform(row):\n    return {**row, 'note': 'x'}\n"},
     "output_schema": {"columns": [
         {"name": "rank", "type": "int", "nullable": False},
@@ -76,9 +77,8 @@ def _list_stored_stage_ids(tmp_path) -> set[str]:
 @pytest.fixture
 def project(tmp_path, monkeypatch):
     from app.mcp import server
-    from app.services import workspace
 
-    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     server.create_project(name="trail", document="Follow the filings.")
     return tmp_path
 

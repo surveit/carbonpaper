@@ -66,7 +66,7 @@ def build_nav(state: project.ProjectState) -> list[NavItem]:
     Versions, Runs, and Evals nested under Workflow — the three things a workflow
     has: its versioned snapshots, its executions, and the evals that score them.
 
-    Each item's `status` is derived from `state` (the truthful on-disk status); the
+    Each item's `status` is computed from `state` (the truthful on-disk status); the
     template turns it into a glyph. An absent thing is "none" (renders ○), never a
     fabricated done-marker."""
     base = f"/project/{state.name}"
@@ -163,7 +163,7 @@ def _next_action(state: project.ProjectState) -> NextAction:
 
 # ─── Nav structure + status tokens ────────────────────────────────────────────
 # A nav item's status is a semantic token (ok / warn / bad / todo / none / review /
-# present / home / evals); project_shell.html maps it to a glyph + colour. Deriving
+# present / home / evals); project_shell.html maps it to a glyph + colour. Classifying
 # it here (not in Jinja) keeps the classification testable and the template dumb.
 
 

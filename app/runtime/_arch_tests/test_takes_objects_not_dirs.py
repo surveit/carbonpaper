@@ -28,11 +28,11 @@ class RuntimeObjectRule:
     # Pre-existing offenders. A ratchet: new entries are forbidden — a new
     # offender must be fixed, not added here.
     #
-    # - app/runtime/runner.py: resolve_version_id / prepare_run / execute_run /
-    #   resume_run all read a project's on-disk version snapshots directly.
-    #   Open PR #111 removes the runner's version reads (the runner will be
-    #   handed an already-resolved Workflow instead); merging it empties these
-    #   four rows.
+    # - app/runtime/runner.py: prepare_run / execute_run / resume_run no longer
+    #   READ the project directory (a caller resolves the version and hands them
+    #   its stages), but they still take it to place the run under <dir>/runs/
+    #   and to name the project on the manifest. Emptying these rows means
+    #   passing that destination and name directly instead.
     allowlist: frozenset[tuple[str, str, str]] = field(default_factory=frozenset)
 
 
@@ -45,7 +45,6 @@ _RULE = RuntimeObjectRule(
     ),
     allowlist=frozenset(
         {
-            ("app/runtime/runner.py", "resolve_version_id", "project_dir"),
             ("app/runtime/runner.py", "prepare_run", "project_dir"),
             ("app/runtime/runner.py", "execute_run", "project_dir"),
             ("app/runtime/runner.py", "resume_run", "project_dir"),

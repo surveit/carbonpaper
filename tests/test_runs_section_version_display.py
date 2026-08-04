@@ -10,12 +10,8 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-import app.web.config as web_config
-import app.web.loading as loading
-import app.web.routers.node_review as node_review_router
-import app.web.routers.project as project_router
-import app.web.routers.runs as runs_router
 from app.main import app
+from app.services import workspace
 
 client = TestClient(app)
 
@@ -27,8 +23,7 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """A `demo` project with one real, manifest-backed run."""
     pdir = tmp_path / "demo"
     pdir.mkdir(parents=True)
-    for mod in (web_config, loading, node_review_router, project_router, runs_router):
-        monkeypatch.setattr(mod, "EXAMPLES_DIR", tmp_path, raising=False)
+    workspace.set_projects_dir(tmp_path)
 
     manifest = json.loads((GOLDENS / "ok_run.json").read_text(encoding="utf-8"))
     run_dir = pdir / "runs" / manifest["run_id"]

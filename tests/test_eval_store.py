@@ -1,5 +1,5 @@
 """Tests for app/evals/store.py — eval config/run storage (document store) and
-status derivation. Config/run storage is scoped by a project dir (`tmp_path`
+the status rule. Config/run storage is scoped by a project dir (`tmp_path`
 here; only its `.name` is used, to key documents), isolated per test by the
 autouse in-memory store (see conftest.fresh_store). Dataset uploads stay on
 disk under `tmp_path` and are untouched by this conversion."""
@@ -29,7 +29,7 @@ from app.services.versioning import WorkflowVersion
 
 def _ref(path="x.csv", cols=("k",)):
     return {"path": path, "format": "csv",
-            "table_schema": {"columns": [{"name": c} for c in cols]}}
+            "table_schema": {"columns": [{"name": c, "type": "str", "nullable": True} for c in cols]}}
 
 
 def _config(**over):

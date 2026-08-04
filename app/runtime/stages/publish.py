@@ -10,9 +10,11 @@ import pandas as pd
 
 from app.core.errors import TraceLinksUnavailableError
 from app.models import Stage
+from app.models.stages.publish import PublishStage
 
 from ..context import RunContext
 from ..trace_links import RowTraceLinker
+from .execution import narrow_stage
 from .python_functions import _load_python_function
 
 TRACE_LINKS_KWARG = "trace_links"
@@ -23,21 +25,21 @@ def handle_publish(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContex
     output dataframe (paths to artifacts). The function gets the input frames
     positionally, an `output_dir` kwarg, and a `trace_links` RowTraceLinker only
     if it declares that keyword."""
-    output_dir = _prepare_output_dir(stage, ctx)
-    fn = _load_python_function(stage)
+    publish_stage = narrow_stage(stage, PublishStage)
+    output_dir = _prepare_output_dir(publish_stage, ctx)
+    fn = _load_python_function(publish_stage)
     args = [inputs[ref.id] for ref in stage.inputs]
 
-    linker = _resolve_trace_linker(fn, stage, ctx)
+    linker = _resolve_trace_linker(fn, publish_stage, ctx)
     if linker is None:
         return fn(*args, output_dir=str(output_dir))
     return fn(*args, output_dir=str(output_dir), trace_links=linker)
 
 
-def _prepare_output_dir(stage: Stage, ctx: RunContext) -> Path:
+def _prepare_output_dir(stage: PublishStage, ctx: RunContext) -> Path:
     """The runtime owns the run-dir layout, so it creates output_dir before the
     authored function runs — the function just writes into it."""
     publish_cfg = stage.publish
-    assert publish_cfg is not None  # Stage validation: publish carries publish_cfg
     output_dir = (
         ctx.require_run_dir() / "artifacts" / Path(publish_cfg.destination or "build/").name
     )
@@ -46,7 +48,7 @@ def _prepare_output_dir(stage: Stage, ctx: RunContext) -> Path:
 
 
 def _resolve_trace_linker(
-    fn: Callable[..., Any], stage: Stage, ctx: RunContext
+    fn: Callable[..., Any], stage: PublishStage, ctx: RunContext
 ) -> RowTraceLinker | None:
     """None unless the function declares the keyword, so a function written
     against the plain `(df, output_dir)` signature keeps running unchanged."""

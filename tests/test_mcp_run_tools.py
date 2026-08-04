@@ -5,9 +5,11 @@ import json
 import pandas as pd
 
 import app.services.run as run_service
-from app.models import Stage
+from app.models import parse_stage
 from app.services import versioning
-from app.services.versioning import WorkflowVersion, create_version_from_disk
+from app.services.project import save_working_copy_as_version
+from app.services.versioning import WorkflowVersion
+from app.services import workspace
 
 
 def _make_run_project(root):
@@ -21,17 +23,17 @@ def _make_run_project(root):
         "connector": {"kind": "file",
                       "params": {"path": str(root / "data" / "items.csv"),
                                  "format": "csv"}},
-        "output_schema": {"columns": [{"name": "name", "type": "str"},
-                                      {"name": "val", "type": "int"}]},
+        "output_schema": {"columns": [{"name": "name", "type": "str", "nullable": True},
+                                      {"name": "val", "type": "int", "nullable": True}]},
     }
     (root / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
-    vid = create_version_from_disk(root, message="seed", reviewer="test").version_id
+    vid = save_working_copy_as_version(root, message="seed", reviewer="test").version_id
     versioning.publish_version(root, vid, reviewer="human")
     return vid
 
 
-_LOAD_SCHEMA = {"columns": [{"name": "doc_id", "type": "str"},
-                            {"name": "score", "type": "int"}]}
+_LOAD_SCHEMA = {"columns": [{"name": "doc_id", "type": "str", "nullable": True},
+                            {"name": "score", "type": "int", "nullable": True}]}
 _LOAD_STAGE_TMPL = {
     "id": "load", "type": "input_data", "name": "Load rows",
     "output_schema": _LOAD_SCHEMA,
@@ -43,9 +45,9 @@ _CLASSIFY = {
                  "def transform(row):\n"
                  "    return {'doc_id': row['doc_id'], 'score': row['score'],\n"
                  "            'label': 'pos' if row['score'] >= 0 else 'neg'}"},
-    "output_schema": {"columns": [{"name": "doc_id", "type": "str"},
-                                  {"name": "score", "type": "int"},
-                                  {"name": "label", "type": "str"}]},
+    "output_schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": True},
+                                  {"name": "score", "type": "int", "nullable": True},
+                                  {"name": "label", "type": "str", "nullable": True}]},
 }
 
 
@@ -62,7 +64,7 @@ def _make_workflow_test_project(root):
     WorkflowVersion(
         id=f"{root.name}/v1", version_id="v1", created_at="2026-07-10T00:00:00",
         message="seed", reviewer="test", published=False,
-        stages=[Stage.model_validate(s) for s in (load, _CLASSIFY)],
+        stages=[parse_stage(s) for s in (load, _CLASSIFY)],
     ).save()
 
 
@@ -74,9 +76,8 @@ def _sync_background(monkeypatch):
 def test_run_workflow_starts_a_real_run_pollable_by_get_run_status(tmp_path, monkeypatch):
     """run_workflow mints a real run id; get_run_status reads back its manifest."""
     from app.mcp import server
-    from app.services import workspace
 
-    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     _sync_background(monkeypatch)
     _make_run_project(tmp_path / "money_trail")
 
@@ -91,9 +92,8 @@ def test_run_workflow_translates_no_version_to_error(tmp_path, monkeypatch):
     """A project with no published version fails loudly as {ok: False, error},
     never a traceback or a fabricated run id."""
     from app.mcp import server
-    from app.services import workspace
 
-    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     _sync_background(monkeypatch)
     (tmp_path / "unready").mkdir()
 
@@ -106,9 +106,8 @@ def test_run_workflow_translates_no_version_to_error(tmp_path, monkeypatch):
 def test_get_run_status_missing_run_translates_to_error(tmp_path, monkeypatch):
     """An unknown run id becomes {ok: False, error}, not a RunNotFoundError trace."""
     from app.mcp import server
-    from app.services import workspace
 
-    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     _make_run_project(tmp_path / "money_trail")
 
     result = server.get_run_status(project_id="money_trail", run_id="20990101T000000")
@@ -120,9 +119,8 @@ def test_run_workflow_test_delegates_and_reports_verdict(tmp_path, monkeypatch):
     """run_workflow_test runs the frontier over the slice and returns the
     workflow-test verdict (ok True, the executed stage) — never a production run."""
     from app.mcp import server
-    from app.services import workspace
 
-    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     _make_workflow_test_project(tmp_path / "demo")
 
     result = server.run_workflow_test(project_id="demo", limit=2, offset=1)

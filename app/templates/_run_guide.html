@@ -1,0 +1,201 @@
+{# The review guide the run's pinned version carries, as a rail beside the run: the
+   ordered walkthrough its author wrote, each step next to the stages it narrates.
+
+   The prose is the ONLY thing here that was authored. Everything shown around it —
+   each stage's name, type, position in the execution order and the columns it writes
+   — is read off the same pinned version at render time (services/run_guide.py),
+   so it cannot drift from the workflow the run actually executed.
+
+   Context: guide (RunGuideView) · project · type_class / type_glyph — the type-tag maps.
+   Included only when `guide` is set; a version with no guide gets no rail at all.
+
+   Steps are [data-stage-link] anchors handed to the loadStage run_detail.html already
+   defines, so the stage panel, the hash deep-link and the graph highlight are the run
+   view's own — there is no second copy of any of them here. #}
+
+{% from "_stage_code.html" import prose_with_column_chips %}
+
+{# How many columns a stage may name inline before the list folds. Above this the
+   list is taller than the step it belongs to and the prose stops being readable. #}
+{% set _FOLD_WRITES = 6 %}
+
+{% macro guide_stage(s) %}
+<li class="guide-stage">
+  {% if s.stage is none %}
+  {# The guide names an id this version defines no stage for. It is written about in
+     the prose above, so say it is unresolved rather than quietly dropping it. #}
+  <span class="guide-stage-row unresolved"
+        title="The version this run pinned defines no stage with this id">
+    <code>{{ s.stage_id }}</code> — no such stage in this version</span>
+  {% else %}
+  {# Linked whether or not this run executed it: the stage panel has its own
+     not-executed case, showing the pinned definition and saying it did not run.
+     The dashed border is the warning; the panel is the explanation. #}
+  <a class="guide-stage-row{% if not s.executed %} absent{% endif %}"
+     href="#{{ s.stage_id }}" data-stage-link="{{ s.stage_id }}"
+     {% if not s.executed %}title="This run has no record for this stage"{% endif %}>
+    <span class="guide-stage-name">{{ s.stage.name }}</span>
+    <span class="type-tag {{ type_class.get(s.stage.type, 'custom') }}">{{ type_glyph.get(s.stage.type, '') }} {{ s.stage.type }}</span>
+  </a>
+  {# A wide stage's column list is longer than the step's own prose, so past
+     _FOLD_WRITES it folds behind its exact count — every column is still there,
+     one click away, and none is summarised into a number. #}
+  {% if s.written_columns | length > _FOLD_WRITES %}
+  <details class="guide-writes">
+    <summary>writes {{ s.written_columns | length }} columns</summary>
+    {% for c in s.written_columns %}<code>{{ c }}</code> {% endfor %}
+  </details>
+  {% elif s.written_columns %}
+  <span class="guide-writes">writes{% for c in s.written_columns %} <code>{{ c }}</code>{% endfor %}</span>
+  {% endif %}
+  {% endif %}
+</li>
+{% endmacro %}
+
+<style>
+  /* The guide sits on the RIGHT of the run, and scrolls independently of it. */
+  .run-shell.with-guide { display: grid; grid-template-columns: minmax(0, 1fr) 360px;
+                          gap: 18px; align-items: stretch; }
+  .run-shell.with-guide.guide-collapsed { grid-template-columns: minmax(0, 1fr) auto; }
+  /* Same trap as .app-side: an author `display` rule would beat [hidden]. The guide
+     has none, but pin it so a later style rule cannot silently break the collapse. */
+  .run-guide[hidden] { display: none; }
+  .guide-expand { position: sticky; top: 0; }
+  .run-guide-head { display: flex; align-items: center; gap: 8px; }
+  .run-guide-head .drawer-btn { margin-left: auto; }
+  .run-guide { min-width: 0; height: 100%; overflow-y: auto;
+               border-left: 1px solid var(--border); padding-left: 18px; }
+  .run-guide-head h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em;
+                       color: var(--muted); margin: 0 0 4px; }
+  .run-guide-lead { font-size: 11.5px; color: var(--muted); margin: 0 0 8px; }
+
+  .guide-steps { list-style: none; margin: 0; padding: 0; }
+  .guide-steps > li { display: flex; gap: 8px; padding: 10px 0;
+                      border-top: 1px solid var(--border); }
+  .guide-steps .n { flex: 0 0 18px; height: 18px; margin-top: 2px; border-radius: 50%;
+                    background: var(--fg); color: #fff; font-size: 10px;
+                    display: flex; align-items: center; justify-content: center; }
+  .guide-steps h3 { font-size: 12.5px; margin: 0 0 3px; line-height: 1.35;
+                    text-transform: none; letter-spacing: 0; }
+  .guide-steps p { font-size: 11.5px; line-height: 1.5; margin: 0 0 6px; }
+  .guide-steps p code, .guide-writes code, .guide-stage-row code {
+    font-family: ui-monospace, monospace; font-size: .88em; padding: 1px 4px;
+    border-radius: 3px; background: var(--code-bg); color: var(--fg);
+    word-break: break-word; }
+
+  .guide-stage-list { list-style: none; margin: 0; padding: 0;
+                      display: flex; flex-direction: column; gap: 4px; }
+  .guide-stage-row { display: flex; align-items: baseline; gap: 5px; flex-wrap: wrap;
+                     font-size: 11px; text-decoration: none; color: var(--fg);
+                     border: 1px solid var(--border); border-radius: 3px;
+                     padding: 3px 6px; }
+  a.guide-stage-row:hover { background: var(--hover); border-color: var(--muted); }
+  a.guide-stage-row.active { background: var(--fg); border-color: var(--fg); color: #fff; }
+  a.guide-stage-row.active .guide-stage-name { color: #fff; }
+  .guide-stage-name { font-weight: 600; }
+  .guide-stage-row .type-tag { font-size: 9px; padding: 0 3px; }
+  /* Named by the guide but not executed by THIS run: still shown, not linkable. */
+  .guide-stage-row.absent { border-style: dashed; color: var(--muted); }
+  .guide-stage-row.unresolved { border-style: dashed; border-color: var(--warn-border);
+                                background: var(--warn-bg); color: var(--fg); }
+  .guide-writes { display: block; font-size: 10.5px; color: var(--muted);
+                  margin: 2px 0 0 6px; }
+  details.guide-writes > summary { cursor: pointer; }
+  details.guide-writes[open] > summary { margin-bottom: 2px; }
+
+  .guide-unnarrated { margin-top: 14px; border-top: 1px solid var(--border);
+                      padding-top: 10px; }
+  .guide-unnarrated h3 { font-size: 12px; margin: 0 0 3px; text-transform: none;
+                         letter-spacing: 0; }
+  .guide-unnarrated p { font-size: 11px; color: var(--muted); margin: 0 0 6px; }
+
+  @media (max-width: 1000px) {
+    .run-shell.with-guide { grid-template-columns: 1fr; }
+    .run-guide { height: auto; overflow: visible; border-left: 0; padding-left: 0; }
+  }
+</style>
+
+<button type="button" class="drawer-btn guide-expand" id="guide-expand" hidden
+        title="Show the review guide" aria-label="Show the review guide">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+       stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M15 3v18"/><path d="m10 15-3-3 3-3"/>
+  </svg>
+</button>
+<aside class="run-guide fade-scroll" id="run-guide">
+  <div class="run-guide-head">
+    <h2>Review guide</h2>
+    {# panel-right-close: mirror of the sidebar's toggle. #}
+    <button type="button" class="drawer-btn" id="guide-collapse"
+            title="Hide the review guide" aria-label="Hide the review guide">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M15 3v18"/><path d="m8 9 3 3-3 3"/>
+      </svg>
+    </button>
+  </div>
+  <p class="run-guide-lead">Written against the workflow version this run pinned. Each
+    step opens its stages' output in this run.</p>
+  <ol class="guide-steps">
+    {% for step in guide.steps %}
+    <li>
+      <span class="n">{{ loop.index }}</span>
+      <div>
+        <h3>{{ step.title }}</h3>
+        <p>{{ prose_with_column_chips(step.prose) }}</p>
+        <ul class="guide-stage-list">
+          {% for s in step.stages %}{{ guide_stage(s) }}{% endfor %}
+        </ul>
+      </div>
+    </li>
+    {% endfor %}
+  </ol>
+  {% if guide.unnarrated %}
+  <div class="guide-unnarrated">
+    <h3>Not narrated</h3>
+    <p>The guide's author placed these stages outside the walkthrough, as carrying no
+      judgement a reviewer could act on.</p>
+    <ul class="guide-stage-list">
+      {% for s in guide.unnarrated %}{{ guide_stage(s) }}{% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+</aside>
+
+<script>
+(function () {
+  // ── The guide rail hands a step click to the loadStage run_detail.html already
+  //    defines (as window._loadStage). The stage panel, the hash deep-link and the
+  //    graph highlight are all the run view's own — no second copy of any of them.
+  document.addEventListener('click', function (ev) {
+    const a = ev.target.closest('[data-stage-link]');
+    if (!a) return;
+    ev.preventDefault();
+    const id = a.getAttribute('data-stage-link');
+    document.querySelectorAll('.guide-stage-row.active')
+      .forEach(el => el.classList.remove('active'));
+    document.querySelectorAll(`.guide-stage-row[data-stage-link="${CSS.escape(id)}"]`)
+      .forEach(el => el.classList.add('active'));
+    if (window._loadStage) window._loadStage(id);
+  });
+
+  // ── Guide drawer, mirroring the sidebar's.
+  const shell = document.getElementById('run-shell');
+  const guide = document.getElementById('run-guide');
+  const gExpand = document.getElementById('guide-expand');
+  const gCollapse = document.getElementById('guide-collapse');
+  const GKEY = 'run-guide-collapsed:' + {{ project | tojson }};
+
+  function setGuideCollapsed(on) {
+    shell.classList.toggle('guide-collapsed', on);
+    guide.hidden = on;
+    gExpand.hidden = !on;
+    try { localStorage.setItem(GKEY, on ? '1' : '0'); } catch (e) { /* private mode */ }
+    // The fade lives in its own IIFE in run_detail.html; repaint through its hook.
+    if (window._paintFades) window._paintFades();
+  }
+  gCollapse.addEventListener('click', () => setGuideCollapsed(true));
+  gExpand.addEventListener('click', () => setGuideCollapsed(false));
+  try { if (localStorage.getItem(GKEY) === '1') setGuideCollapsed(true); } catch (e) { /* ignore */ }
+})();
+</script>

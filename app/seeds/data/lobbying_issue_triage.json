@@ -1,6 +1,6 @@
 {
   "name": "lobbying_issue_triage",
-  "document": "# Lobbying Disclosure Issue Triage (illustrative sample)\n\n## Purpose\n\nEvery quarter, federal lobbying disclosures (Senate LDA \"LD-2\" filings) report which client hired which registrant, how much was spent, and — in a free-text \"specific lobbying issues\" field — what they lobbied on. That free-text field is where the substance is, but it is messy and inconsistent, which makes patterns hard to see across filings. This workflow triages a small set of filings so a reporter can quickly see, for each one: what policy area it is really about, whether it targets a specific named bill, and what the client is actually asking for — then ranks the filings by reported spend.\n\nThis is a demonstration workflow. It runs on a small, bundled, synthetic sample of filings (not live LDA data); the shape mirrors the real Senate LDA export.\n\n## Input data\n\nA single bundled CSV, `sample_lobbying_filings.csv`, one row per filing, with columns:\n\n- `filing_id` — stable, unique identifier for the filing (the primary key)\n- `client` — the organization that retained the lobbyists\n- `registrant` — the lobbying firm that filed the disclosure\n- `amount_usd` — reported lobbying spend for the period, in whole US dollars\n- `filing_period` — the reporting period, e.g. \"2024 Q1\"\n- `specific_issues` — the filer's free-text description of the specific issues lobbied\n\nNo external data is fetched. The CSV is the complete and only input.\n\n## Step 1 — Classify each filing's issue text (LLM)\n\nFor each filing, read the `specific_issues` free text and derive three new fields — one filing in, one filing out (the filing is neither dropped nor duplicated):\n\n- `policy_area` — the single best-fit policy area, one of: Health, Energy & Environment, Finance & Taxation, Technology, Defense, Transportation, Agriculture, Other.\n- `targets_specific_bill` — true if the issue text names a specific piece of legislation (for example a bill number like \"H.R. 3684\" or \"S. 1234\", or a named Act), false otherwise.\n- `primary_ask` — a single plain-language sentence summarizing what the client appears to want.\n\nThis step makes no judgment about spend and does not add or remove filings.\n\n## Step 2 — Rank filings by reported spend\n\nAcross all filings, sort by `amount_usd` from highest to lowest and assign `spend_rank` (1 = highest spend). This is a deterministic reshaping of the whole table: it adds the rank column and keeps every filing.\n\n## Step 3 — Publish the triage report\n\nProduce a single HTML report listing every filing in spend-rank order, showing client, registrant, reported spend, the classified policy area, whether it targets a specific bill, and the primary ask. Group it so a reader can scan the biggest spenders first. No score or recommendation is produced — the report is a reading aid, not a verdict.\n\n## Out of scope\n\nNo external fetching, no human-review queue, and no joins — a single linear pass from the bundled CSV to the published report.",
+  "document": "# Lobbying Disclosure Issue Triage (illustrative sample)\n\n## Purpose\n\nEvery quarter, federal lobbying disclosures (Senate LDA \"LD-2\" filings) report which client hired which registrant, how much was spent, and — in a free-text \"specific lobbying issues\" field — what they lobbied on. That free-text field is where the substance is, but it is messy and inconsistent, which makes patterns hard to see across filings. This workflow triages a small set of filings so a reporter can quickly see, for each one: what policy area it is really about, whether it targets a specific named bill, and what the client is actually asking for — then ranks the filings by reported spend.\n\nThis is a demonstration workflow. It runs on a small, bundled, synthetic sample of filings (not live LDA data); the shape mirrors the real Senate LDA export.\n\n## Input data\n\nA single bundled CSV, `sample_lobbying_filings.csv`, one row per filing, with columns:\n\n- `filing_id` — stable, unique identifier for the filing (the primary key)\n- `client` — the organization that retained the lobbyists\n- `registrant` — the lobbying firm that filed the disclosure\n- `amount_usd` — reported lobbying spend for the period, in whole US dollars\n- `filing_period` — the reporting period, e.g. \"2024 Q1\"\n- `specific_issues` — the filer's free-text description of the specific issues lobbied\n\nNo external data is fetched. The CSV is the complete and only input.\n\n## Step 1 — Classify each filing's issue text (LLM)\n\nFor each filing, read the `specific_issues` free text and add three new fields — one filing in, one filing out (the filing is neither dropped nor duplicated):\n\n- `policy_area` — the single best-fit policy area, one of: Health, Energy & Environment, Finance & Taxation, Technology, Defense, Transportation, Agriculture, Other.\n- `targets_specific_bill` — true if the issue text names a specific piece of legislation (for example a bill number like \"H.R. 3684\" or \"S. 1234\", or a named Act), false otherwise.\n- `primary_ask` — a single plain-language sentence summarizing what the client appears to want.\n\nThis step makes no judgment about spend and does not add or remove filings.\n\n## Step 2 — Rank filings by reported spend\n\nAcross all filings, sort by `amount_usd` from highest to lowest and assign `spend_rank` (1 = highest spend). This is a deterministic reshaping of the whole table: it adds the rank column and keeps every filing.\n\n## Step 3 — Publish the triage report\n\nProduce a single HTML report listing every filing in spend-rank order, showing client, registrant, reported spend, the classified policy area, whether it targets a specific bill, and the primary ask. Group it so a reader can scan the biggest spenders first. No score or recommendation is produced — the report is a reading aid, not a verdict.\n\n## Out of scope\n\nNo external fetching, no human-review queue, and no joins — a single linear pass from the bundled CSV to the published report.",
   "model": "sonnet",
   "source": "mcp",
   "data_model": {
@@ -11,88 +11,49 @@
             "name": "filing_id",
             "type": "str",
             "nullable": false,
-            "description": "Stable, unique identifier for the filing; mirrors the real Senate LDA filing identifier.",
-            "range": null,
-            "source": null,
-            "enum": null,
-            "fields": null,
-            "value_type": null,
-            "references": null
+            "description": "Stable, unique identifier for the filing; mirrors the real Senate LDA filing identifier."
           },
           {
             "name": "client",
             "type": "str",
             "nullable": false,
-            "description": "Organization that retained the lobbyists.",
-            "range": null,
-            "source": null,
-            "enum": null,
-            "fields": null,
-            "value_type": null,
-            "references": null
+            "description": "Organization that retained the lobbyists."
           },
           {
             "name": "registrant",
             "type": "str",
             "nullable": false,
-            "description": "Lobbying firm that filed the disclosure.",
-            "range": null,
-            "source": null,
-            "enum": null,
-            "fields": null,
-            "value_type": null,
-            "references": null
+            "description": "Lobbying firm that filed the disclosure."
           },
           {
             "name": "amount_usd",
             "type": "int",
             "nullable": false,
-            "description": "Reported lobbying spend for the period, in whole US dollars.",
-            "range": null,
-            "source": null,
-            "enum": null,
-            "fields": null,
-            "value_type": null,
-            "references": null
+            "description": "Reported lobbying spend for the period, in whole US dollars."
           },
           {
             "name": "filing_period",
             "type": "str",
             "nullable": false,
-            "description": "Reporting period label as it appears in the filing, e.g. '2024 Q1'.",
-            "range": null,
-            "source": null,
-            "enum": null,
-            "fields": null,
-            "value_type": null,
-            "references": null
+            "description": "Reporting period label as it appears in the filing, e.g. '2024 Q1'."
           },
           {
             "name": "specific_issues",
             "type": "str",
             "nullable": false,
-            "description": "Filer's free-text description of specific issues lobbied. This is the messy field the pipeline is designed to triage.",
-            "range": null,
-            "source": null,
-            "enum": null,
-            "fields": null,
-            "value_type": null,
-            "references": null
+            "description": "Filer's free-text description of specific issues lobbied. This is the messy field the pipeline is designed to triage."
           }
         ],
-        "estimated_rows": null,
         "primary_key": [
           "filing_id"
         ],
-        "notes": null,
         "name": "lobbying_filing",
         "kind": "input",
         "title": "Lobbying Filing",
         "description": "One row per Senate LDA LD-2 filing from the bundled synthetic CSV. This is the sole input to the pipeline — no external data is fetched.",
         "source": {
           "doc": "sample_lobbying_filings.csv",
-          "section": "Input data",
-          "lines": null
+          "section": "Input data"
         }
       },
       {
@@ -102,11 +63,6 @@
             "type": "str",
             "nullable": false,
             "description": "Foreign key back to the source filing.",
-            "range": null,
-            "source": null,
-            "enum": null,
-            "fields": null,
-            "value_type": null,
             "references": "lobbying_filing"
           },
           {
@@ -114,8 +70,6 @@
             "type": "str",
             "nullable": false,
             "description": "Single best-fit policy area assigned by the LLM from the fixed taxonomy.",
-            "range": null,
-            "source": null,
             "enum": [
               "Health",
               "Energy & Environment",
@@ -125,34 +79,19 @@
               "Transportation",
               "Agriculture",
               "Other"
-            ],
-            "fields": null,
-            "value_type": null,
-            "references": null
+            ]
           },
           {
             "name": "targets_specific_bill",
             "type": "bool",
             "nullable": false,
-            "description": "True when the issue text names a specific piece of legislation (e.g. a bill number or named Act); false otherwise. Assigned by the LLM.",
-            "range": null,
-            "source": null,
-            "enum": null,
-            "fields": null,
-            "value_type": null,
-            "references": null
+            "description": "True when the issue text names a specific piece of legislation (e.g. a bill number or named Act); false otherwise. Assigned by the LLM."
           },
           {
             "name": "primary_ask",
             "type": "str",
             "nullable": false,
-            "description": "Single plain-language sentence summarising what the client appears to want, as inferred by the LLM from the specific_issues text.",
-            "range": null,
-            "source": null,
-            "enum": null,
-            "fields": null,
-            "value_type": null,
-            "references": null
+            "description": "Single plain-language sentence summarising what the client appears to want, as inferred by the LLM from the specific_issues text."
           },
           {
             "name": "spend_rank",
@@ -162,27 +101,18 @@
             "range": [
               1,
               "inf"
-            ],
-            "source": null,
-            "enum": null,
-            "fields": null,
-            "value_type": null,
-            "references": null
+            ]
           }
         ],
-        "estimated_rows": null,
         "primary_key": [
           "filing_id"
         ],
-        "notes": null,
         "name": "triaged_filing",
         "kind": "computed",
         "title": "Triaged Filing",
         "description": "Per-filing record produced after all pipeline stages complete. Step 1 (LLM) adds the three classification fields; Step 2 (deterministic sort) adds spend_rank. Grain is identical to lobbying_filing — one row per input filing, no drops or duplicates.",
         "source": {
-          "doc": null,
-          "section": "Step 1 — Classify each filing's issue text (LLM)",
-          "lines": null
+          "section": "Step 1 — Classify each filing's issue text (LLM)"
         }
       },
       {
@@ -191,52 +121,30 @@
             "name": "report_id",
             "type": "str",
             "nullable": false,
-            "description": "Generated identifier for this report run.",
-            "range": null,
-            "source": null,
-            "enum": null,
-            "fields": null,
-            "value_type": null,
-            "references": null
+            "description": "Generated identifier for this report run."
           },
           {
             "name": "filing_count",
             "type": "int",
             "nullable": false,
-            "description": "Total number of filings included in the report; must equal the row count of triaged_filing for the same run.",
-            "range": null,
-            "source": null,
-            "enum": null,
-            "fields": null,
-            "value_type": null,
-            "references": null
+            "description": "Total number of filings included in the report; must equal the row count of triaged_filing for the same run."
           },
           {
             "name": "html_content",
             "type": "str",
             "nullable": false,
-            "description": "Rendered HTML of the complete triage report, with filings ordered by spend_rank ascending.",
-            "range": null,
-            "source": null,
-            "enum": null,
-            "fields": null,
-            "value_type": null,
-            "references": null
+            "description": "Rendered HTML of the complete triage report, with filings ordered by spend_rank ascending."
           }
         ],
-        "estimated_rows": null,
         "primary_key": [
           "report_id"
         ],
-        "notes": null,
         "name": "triage_report",
         "kind": "computed",
         "title": "Triage Report",
         "description": "The single HTML report artifact produced by Step 3. One row per pipeline run. Lists every triaged_filing in spend-rank order; serves as a reading aid for reporters, not a verdict.",
         "source": {
-          "doc": null,
-          "section": "Step 3 — Publish the triage report",
-          "lines": null
+          "section": "Step 3 — Publish the triage report"
         }
       }
     ]
@@ -246,11 +154,6 @@
       "id": "raw_filings",
       "type": "input_data",
       "name": "Sample Lobbying Filings CSV",
-      "source": {
-        "doc": "sample_lobbying_filings.csv",
-        "section": "Input data",
-        "lines": null
-      },
       "inputs": [],
       "output_schema": {
         "columns": [
@@ -258,74 +161,48 @@
             "name": "filing_id",
             "type": "str",
             "nullable": false,
-            "description": "Stable unique identifier for the filing; primary key.",
-            "range": null,
-            "source": null,
-            "enum": null,
-            "fields": null,
-            "value_type": null
+            "description": "Stable unique identifier for the filing; primary key."
           },
           {
             "name": "client",
             "type": "str",
             "nullable": false,
-            "description": "Organization that retained the lobbyists.",
-            "range": null,
-            "source": null,
-            "enum": null,
-            "fields": null,
-            "value_type": null
+            "description": "Organization that retained the lobbyists."
           },
           {
             "name": "registrant",
             "type": "str",
             "nullable": false,
-            "description": "Lobbying firm that filed the disclosure.",
-            "range": null,
-            "source": null,
-            "enum": null,
-            "fields": null,
-            "value_type": null
+            "description": "Lobbying firm that filed the disclosure."
           },
           {
             "name": "amount_usd",
             "type": "int",
             "nullable": false,
-            "description": "Reported lobbying spend for the period in whole US dollars.",
-            "range": null,
-            "source": null,
-            "enum": null,
-            "fields": null,
-            "value_type": null
+            "description": "Reported lobbying spend for the period in whole US dollars."
           },
           {
             "name": "filing_period",
             "type": "str",
             "nullable": false,
-            "description": "Reporting period label as it appears in the filing, e.g. '2024 Q1'.",
-            "range": null,
-            "source": null,
-            "enum": null,
-            "fields": null,
-            "value_type": null
+            "description": "Reporting period label as it appears in the filing, e.g. '2024 Q1'."
           },
           {
             "name": "specific_issues",
             "type": "str",
             "nullable": false,
-            "description": "Filer's free-text description of specific issues lobbied — the messy field the pipeline triages.",
-            "range": null,
-            "source": null,
-            "enum": null,
-            "fields": null,
-            "value_type": null
+            "description": "Filer's free-text description of specific issues lobbied — the messy field the pipeline triages."
           }
         ],
-        "estimated_rows": null,
         "primary_key": [
           "filing_id"
-        ],
-        "notes": null
+        ]
+      },
+      "cache": true,
+      "compiler_notes": [],
+      "source": {
+        "doc": "sample_lobbying_filings.csv",
+        "section": "Input data"
       },
       "connector": {
         "kind": "file",
@@ -334,28 +211,12 @@
         },
         "refresh": "ad_hoc",
         "notes": "Bundled synthetic CSV mirroring the real Senate LDA LD-2 export shape. No external data is fetched."
-      },
-      "llm": null,
-      "function": null,
-      "join": null,
-      "aggregate": null,
-      "queue": null,
-      "publish": null,
-      "review": null,
-      "limit": null,
-      "compiler_notes": [],
-      "eval": null,
-      "tests": null
+      }
     },
     {
       "id": "classify_issues",
       "type": "llm_transform",
       "name": "Classify Issue Text per Filing",
-      "source": {
-        "doc": null,
-        "section": "Step 1 — Classify each filing's issue text (LLM)",
-        "lines": null
-      },
       "inputs": [
         {
           "id": "raw_filings",
@@ -364,75 +225,37 @@
               {
                 "name": "filing_id",
                 "type": "str",
-                "nullable": false,
-                "description": null,
-                "range": null,
-                "source": null,
-                "enum": null,
-                "fields": null,
-                "value_type": null
+                "nullable": false
               },
               {
                 "name": "client",
                 "type": "str",
-                "nullable": false,
-                "description": null,
-                "range": null,
-                "source": null,
-                "enum": null,
-                "fields": null,
-                "value_type": null
+                "nullable": false
               },
               {
                 "name": "registrant",
                 "type": "str",
-                "nullable": false,
-                "description": null,
-                "range": null,
-                "source": null,
-                "enum": null,
-                "fields": null,
-                "value_type": null
+                "nullable": false
               },
               {
                 "name": "amount_usd",
                 "type": "int",
-                "nullable": false,
-                "description": null,
-                "range": null,
-                "source": null,
-                "enum": null,
-                "fields": null,
-                "value_type": null
+                "nullable": false
               },
               {
                 "name": "filing_period",
                 "type": "str",
-                "nullable": false,
-                "description": null,
-                "range": null,
-                "source": null,
-                "enum": null,
-                "fields": null,
-                "value_type": null
+                "nullable": false
               },
               {
                 "name": "specific_issues",
                 "type": "str",
-                "nullable": false,
-                "description": null,
-                "range": null,
-                "source": null,
-                "enum": null,
-                "fields": null,
-                "value_type": null
+                "nullable": false
               }
             ],
-            "estimated_rows": null,
             "primary_key": [
               "filing_id"
-            ],
-            "notes": null
+            ]
           }
         }
       ],
@@ -442,75 +265,38 @@
             "name": "filing_id",
             "type": "str",
             "nullable": false,
-            "description": "Stable unique identifier; unchanged from input.",
-            "range": null,
-            "source": null,
-            "enum": null,
-            "fields": null,
-            "value_type": null
+            "description": "Stable unique identifier; unchanged from input."
           },
           {
             "name": "client",
             "type": "str",
-            "nullable": false,
-            "description": null,
-            "range": null,
-            "source": null,
-            "enum": null,
-            "fields": null,
-            "value_type": null
+            "nullable": false
           },
           {
             "name": "registrant",
             "type": "str",
-            "nullable": false,
-            "description": null,
-            "range": null,
-            "source": null,
-            "enum": null,
-            "fields": null,
-            "value_type": null
+            "nullable": false
           },
           {
             "name": "amount_usd",
             "type": "int",
-            "nullable": false,
-            "description": null,
-            "range": null,
-            "source": null,
-            "enum": null,
-            "fields": null,
-            "value_type": null
+            "nullable": false
           },
           {
             "name": "filing_period",
             "type": "str",
-            "nullable": false,
-            "description": null,
-            "range": null,
-            "source": null,
-            "enum": null,
-            "fields": null,
-            "value_type": null
+            "nullable": false
           },
           {
             "name": "specific_issues",
             "type": "str",
-            "nullable": false,
-            "description": null,
-            "range": null,
-            "source": null,
-            "enum": null,
-            "fields": null,
-            "value_type": null
+            "nullable": false
           },
           {
             "name": "policy_area",
             "type": "str",
             "nullable": true,
             "description": "Single best-fit policy area from the fixed eight-value taxonomy.",
-            "range": null,
-            "source": null,
             "enum": [
               "Health",
               "Energy & Environment",
@@ -520,75 +306,48 @@
               "Transportation",
               "Agriculture",
               "Other"
-            ],
-            "fields": null,
-            "value_type": null
+            ]
           },
           {
             "name": "targets_specific_bill",
             "type": "bool",
             "nullable": true,
-            "description": "True when the issue text names a specific bill number or named Act; false otherwise.",
-            "range": null,
-            "source": null,
-            "enum": null,
-            "fields": null,
-            "value_type": null
+            "description": "True when the issue text names a specific bill number or named Act; false otherwise."
           },
           {
             "name": "primary_ask",
             "type": "str",
             "nullable": true,
-            "description": "One plain-language sentence summarising what the client appears to want.",
-            "range": null,
-            "source": null,
-            "enum": null,
-            "fields": null,
-            "value_type": null
+            "description": "One plain-language sentence summarising what the client appears to want."
           }
         ],
-        "estimated_rows": null,
         "primary_key": [
           "filing_id"
-        ],
-        "notes": null
+        ]
       },
-      "connector": null,
-      "llm": {
-        "prompt_instructions": "You are a policy analyst triaging federal lobbying disclosures.\n\nReturn a JSON object with exactly these three fields:\n\n1. \"policy_area\": the single best-fit category from this fixed list — choose exactly one:\n   Health | Energy & Environment | Finance & Taxation | Technology | Defense | Transportation | Agriculture | Other\n\n2. \"targets_specific_bill\": true if the text names a specific piece of legislation (e.g. a bill number such as H.R. 3684 or S. 1234, or a named Act), false otherwise.\n\n3. \"primary_ask\": a single plain-language sentence (no jargon) summarising what the client appears to want from government.",
-        "prompt_data_template": "Filing context:\n- Client: {client}\n- Registrant: {registrant}\n- Period: {filing_period}\n\nSpecific issues lobbied (verbatim from the disclosure):\n{specific_issues}",
-        "model": null,
-        "temperature": 0.0,
-        "max_retries": 8,
-        "response_format": "json",
-        "rubric": null,
-        "tools": null
-      },
-      "function": null,
-      "join": null,
-      "aggregate": null,
-      "queue": null,
-      "publish": null,
-      "review": null,
-      "limit": null,
+      "cache": true,
       "compiler_notes": [
         "Grain is strictly 1:1 — the document explicitly states no filing is dropped or duplicated in this step.",
         "policy_area enum is closed; max_retries=3 handles hallucinated category values by letting the model retry on schema mismatch.",
         "targets_specific_bill may produce false negatives when legislation is cited by colloquial name only (e.g. 'the infrastructure bill') rather than a formal bill number or named Act — this limitation is not addressed in the source document.",
         "client and filing_period are passed into the prompt as context only; they do not change the classification logic."
       ],
-      "eval": null,
-      "tests": null
+      "source": {
+        "section": "Step 1 — Classify each filing's issue text (LLM)"
+      },
+      "llm": {
+        "prompt_instructions": "You are a policy analyst triaging federal lobbying disclosures.\n\nReturn a JSON object with exactly these three fields:\n\n1. \"policy_area\": the single best-fit category from this fixed list — choose exactly one:\n   Health | Energy & Environment | Finance & Taxation | Technology | Defense | Transportation | Agriculture | Other\n\n2. \"targets_specific_bill\": true if the text names a specific piece of legislation (e.g. a bill number such as H.R. 3684 or S. 1234, or a named Act), false otherwise.\n\n3. \"primary_ask\": a single plain-language sentence (no jargon) summarising what the client appears to want from government.",
+        "prompt_data_template": "Filing context:\n- Client: {client}\n- Registrant: {registrant}\n- Period: {filing_period}\n\nSpecific issues lobbied (verbatim from the disclosure):\n{specific_issues}",
+        "temperature": 0.0,
+        "max_retries": 8,
+        "response_format": "json",
+        "batch_size": 1
+      }
     },
     {
       "id": "rank_by_spend",
       "type": "python_frame_function",
       "name": "Rank Filings by Reported Spend",
-      "source": {
-        "doc": null,
-        "section": "Step 2 — Rank filings by reported spend",
-        "lines": null
-      },
       "inputs": [
         {
           "id": "classify_issues",
@@ -598,75 +357,38 @@
                 "name": "filing_id",
                 "type": "str",
                 "nullable": false,
-                "description": "Stable unique identifier; unchanged from input.",
-                "range": null,
-                "source": null,
-                "enum": null,
-                "fields": null,
-                "value_type": null
+                "description": "Stable unique identifier; unchanged from input."
               },
               {
                 "name": "client",
                 "type": "str",
-                "nullable": false,
-                "description": null,
-                "range": null,
-                "source": null,
-                "enum": null,
-                "fields": null,
-                "value_type": null
+                "nullable": false
               },
               {
                 "name": "registrant",
                 "type": "str",
-                "nullable": false,
-                "description": null,
-                "range": null,
-                "source": null,
-                "enum": null,
-                "fields": null,
-                "value_type": null
+                "nullable": false
               },
               {
                 "name": "amount_usd",
                 "type": "int",
-                "nullable": false,
-                "description": null,
-                "range": null,
-                "source": null,
-                "enum": null,
-                "fields": null,
-                "value_type": null
+                "nullable": false
               },
               {
                 "name": "filing_period",
                 "type": "str",
-                "nullable": false,
-                "description": null,
-                "range": null,
-                "source": null,
-                "enum": null,
-                "fields": null,
-                "value_type": null
+                "nullable": false
               },
               {
                 "name": "specific_issues",
                 "type": "str",
-                "nullable": false,
-                "description": null,
-                "range": null,
-                "source": null,
-                "enum": null,
-                "fields": null,
-                "value_type": null
+                "nullable": false
               },
               {
                 "name": "policy_area",
                 "type": "str",
                 "nullable": true,
                 "description": "Single best-fit policy area from the fixed eight-value taxonomy.",
-                "range": null,
-                "source": null,
                 "enum": [
                   "Health",
                   "Energy & Environment",
@@ -676,38 +398,24 @@
                   "Transportation",
                   "Agriculture",
                   "Other"
-                ],
-                "fields": null,
-                "value_type": null
+                ]
               },
               {
                 "name": "targets_specific_bill",
                 "type": "bool",
                 "nullable": true,
-                "description": "True when the issue text names a specific bill number or named Act; false otherwise.",
-                "range": null,
-                "source": null,
-                "enum": null,
-                "fields": null,
-                "value_type": null
+                "description": "True when the issue text names a specific bill number or named Act; false otherwise."
               },
               {
                 "name": "primary_ask",
                 "type": "str",
                 "nullable": true,
-                "description": "One plain-language sentence summarising what the client appears to want.",
-                "range": null,
-                "source": null,
-                "enum": null,
-                "fields": null,
-                "value_type": null
+                "description": "One plain-language sentence summarising what the client appears to want."
               }
             ],
-            "estimated_rows": null,
             "primary_key": [
               "filing_id"
-            ],
-            "notes": null
+            ]
           }
         }
       ],
@@ -716,76 +424,37 @@
           {
             "name": "filing_id",
             "type": "str",
-            "nullable": false,
-            "description": null,
-            "range": null,
-            "source": null,
-            "enum": null,
-            "fields": null,
-            "value_type": null
+            "nullable": false
           },
           {
             "name": "client",
             "type": "str",
-            "nullable": false,
-            "description": null,
-            "range": null,
-            "source": null,
-            "enum": null,
-            "fields": null,
-            "value_type": null
+            "nullable": false
           },
           {
             "name": "registrant",
             "type": "str",
-            "nullable": false,
-            "description": null,
-            "range": null,
-            "source": null,
-            "enum": null,
-            "fields": null,
-            "value_type": null
+            "nullable": false
           },
           {
             "name": "amount_usd",
             "type": "int",
-            "nullable": false,
-            "description": null,
-            "range": null,
-            "source": null,
-            "enum": null,
-            "fields": null,
-            "value_type": null
+            "nullable": false
           },
           {
             "name": "filing_period",
             "type": "str",
-            "nullable": false,
-            "description": null,
-            "range": null,
-            "source": null,
-            "enum": null,
-            "fields": null,
-            "value_type": null
+            "nullable": false
           },
           {
             "name": "specific_issues",
             "type": "str",
-            "nullable": false,
-            "description": null,
-            "range": null,
-            "source": null,
-            "enum": null,
-            "fields": null,
-            "value_type": null
+            "nullable": false
           },
           {
             "name": "policy_area",
             "type": "str",
             "nullable": true,
-            "description": null,
-            "range": null,
-            "source": null,
             "enum": [
               "Health",
               "Energy & Environment",
@@ -795,31 +464,17 @@
               "Transportation",
               "Agriculture",
               "Other"
-            ],
-            "fields": null,
-            "value_type": null
+            ]
           },
           {
             "name": "targets_specific_bill",
             "type": "bool",
-            "nullable": true,
-            "description": null,
-            "range": null,
-            "source": null,
-            "enum": null,
-            "fields": null,
-            "value_type": null
+            "nullable": true
           },
           {
             "name": "primary_ask",
             "type": "str",
-            "nullable": true,
-            "description": null,
-            "range": null,
-            "source": null,
-            "enum": null,
-            "fields": null,
-            "value_type": null
+            "nullable": true
           },
           {
             "name": "spend_rank",
@@ -829,51 +484,34 @@
             "range": [
               1,
               "inf"
-            ],
-            "source": null,
-            "enum": null,
-            "fields": null,
-            "value_type": null
+            ]
           }
         ],
-        "estimated_rows": null,
         "primary_key": [
           "filing_id"
-        ],
-        "notes": null
+        ]
       },
-      "connector": null,
-      "llm": null,
-      "function": {
-        "kind": "inline",
-        "code": "def transform(df):\n    df = df.sort_values('amount_usd', ascending=False).reset_index(drop=True)\n    df['spend_rank'] = range(1, len(df) + 1)\n    return df",
-        "module": null,
-        "function": null,
-        "requirements": []
-      },
-      "join": null,
-      "aggregate": null,
-      "queue": null,
-      "publish": null,
-      "review": null,
-      "limit": null,
+      "cache": true,
       "compiler_notes": [
         "Ties in amount_usd are broken by pandas stable sort (original CSV order); the document does not specify a tiebreaker.",
         "Every filing from the classify_issues frame is preserved — no rows are dropped or added.",
         "spend_rank upper bound is unbounded and equals the total row count of the input."
       ],
-      "eval": null,
-      "tests": null
+      "source": {
+        "section": "Step 2 — Rank filings by reported spend"
+      },
+      "function": {
+        "kind": "inline",
+        "summary": "Puts every filing in order from the largest reported spend to the smallest and numbers them, so rank 1 is the biggest spender. No filing is dropped or added; two filings reporting the same amount keep the order they arrived in.",
+        "corner_cases": [],
+        "code": "def transform(df):\n    df = df.sort_values('amount_usd', ascending=False).reset_index(drop=True)\n    df['spend_rank'] = range(1, len(df) + 1)\n    return df",
+        "requirements": []
+      }
     },
     {
       "id": "publish_report",
       "type": "publish",
       "name": "Publish HTML Triage Report",
-      "source": {
-        "doc": null,
-        "section": "Step 3 — Publish the triage report",
-        "lines": null
-      },
       "inputs": [
         {
           "id": "rank_by_spend",
@@ -882,76 +520,37 @@
               {
                 "name": "filing_id",
                 "type": "str",
-                "nullable": false,
-                "description": null,
-                "range": null,
-                "source": null,
-                "enum": null,
-                "fields": null,
-                "value_type": null
+                "nullable": false
               },
               {
                 "name": "client",
                 "type": "str",
-                "nullable": false,
-                "description": null,
-                "range": null,
-                "source": null,
-                "enum": null,
-                "fields": null,
-                "value_type": null
+                "nullable": false
               },
               {
                 "name": "registrant",
                 "type": "str",
-                "nullable": false,
-                "description": null,
-                "range": null,
-                "source": null,
-                "enum": null,
-                "fields": null,
-                "value_type": null
+                "nullable": false
               },
               {
                 "name": "amount_usd",
                 "type": "int",
-                "nullable": false,
-                "description": null,
-                "range": null,
-                "source": null,
-                "enum": null,
-                "fields": null,
-                "value_type": null
+                "nullable": false
               },
               {
                 "name": "filing_period",
                 "type": "str",
-                "nullable": false,
-                "description": null,
-                "range": null,
-                "source": null,
-                "enum": null,
-                "fields": null,
-                "value_type": null
+                "nullable": false
               },
               {
                 "name": "specific_issues",
                 "type": "str",
-                "nullable": false,
-                "description": null,
-                "range": null,
-                "source": null,
-                "enum": null,
-                "fields": null,
-                "value_type": null
+                "nullable": false
               },
               {
                 "name": "policy_area",
                 "type": "str",
                 "nullable": true,
-                "description": null,
-                "range": null,
-                "source": null,
                 "enum": [
                   "Health",
                   "Energy & Environment",
@@ -961,31 +560,17 @@
                   "Transportation",
                   "Agriculture",
                   "Other"
-                ],
-                "fields": null,
-                "value_type": null
+                ]
               },
               {
                 "name": "targets_specific_bill",
                 "type": "bool",
-                "nullable": true,
-                "description": null,
-                "range": null,
-                "source": null,
-                "enum": null,
-                "fields": null,
-                "value_type": null
+                "nullable": true
               },
               {
                 "name": "primary_ask",
                 "type": "str",
-                "nullable": true,
-                "description": null,
-                "range": null,
-                "source": null,
-                "enum": null,
-                "fields": null,
-                "value_type": null
+                "nullable": true
               },
               {
                 "name": "spend_rank",
@@ -995,51 +580,36 @@
                 "range": [
                   1,
                   "inf"
-                ],
-                "source": null,
-                "enum": null,
-                "fields": null,
-                "value_type": null
+                ]
               }
             ],
-            "estimated_rows": null,
             "primary_key": [
               "filing_id"
-            ],
-            "notes": null
+            ]
           }
         }
       ],
-      "output_schema": null,
-      "connector": null,
-      "llm": null,
-      "function": {
-        "kind": "inline",
-        "code": "import html as _html\nimport pathlib\n\nimport pandas as pd\n\n\nSTYLE = \"\"\"\n  body { font-family: -apple-system, \"Segoe UI\", Roboto, Arial, sans-serif;\n         margin: 2rem auto; max-width: 1040px; padding: 0 1rem; color: #1a1a1a; }\n  h1 { font-size: 1.5rem; margin-bottom: .2rem; }\n  .sub { color: #666; margin-top: 0; font-size: .9rem; }\n  .note { background: #fff8e1; border: 1px solid #ffe082; padding: .55rem .8rem;\n          border-radius: 6px; font-size: .82rem; color: #7a5b00; margin: 1rem 0 1.4rem; }\n  table { border-collapse: collapse; width: 100%; font-size: .9rem; }\n  th, td { text-align: left; padding: .5rem .6rem; border-bottom: 1px solid #ececec;\n           vertical-align: top; }\n  th { background: #fafafa; font-size: .72rem; text-transform: uppercase;\n       letter-spacing: .04em; color: #555; }\n  td.rank { font-weight: 700; color: #9aa0a6; }\n  td.num { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }\n  td.muted { color: #777; }\n  .pill { background: #eef2ff; color: #3730a3; padding: .12rem .55rem;\n          border-radius: 999px; font-size: .78rem; white-space: nowrap; }\n  .bill-yes { color: #166534; font-weight: 600; }\n  .bill-no { color: #9ca3af; }\n\"\"\"\n\n\ndef _cell(value):\n    return \"<td>\" + _html.escape(str(value)) + \"</td>\"\n\n\ndef transform(df, output_dir):\n    # The publish handler points output_dir at run_dir/artifacts/<name> but does\n    # NOT create it; create it here so writing the report never FileNotFoundErrors.\n    pathlib.Path(output_dir).mkdir(parents=True, exist_ok=True)\n\n    body_rows = []\n    for _, row in df.iterrows():\n        targets_bill = bool(row[\"targets_specific_bill\"])\n        bill_html = (\n            \"<td class='bill-yes'>Yes</td>\" if targets_bill else \"<td class='bill-no'>No</td>\"\n        )\n        cells = (\n            \"<td class='rank'>\" + str(int(row[\"spend_rank\"])) + \"</td>\"\n            + _cell(row[\"client\"])\n            + \"<td class='muted'>\" + _html.escape(str(row[\"registrant\"])) + \"</td>\"\n            + _cell(row[\"filing_period\"])\n            + \"<td class='num'>$\" + format(int(row[\"amount_usd\"]), \",\") + \"</td>\"\n            + \"<td><span class='pill'>\" + _html.escape(str(row[\"policy_area\"])) + \"</span></td>\"\n            + bill_html\n            + _cell(row[\"primary_ask\"])\n        )\n        body_rows.append(\"<tr>\" + cells + \"</tr>\")\n\n    html_doc = (\n        \"<!DOCTYPE html>\\n<html lang='en'>\\n<head>\\n<meta charset='UTF-8'>\\n\"\n        \"<title>Lobbying Disclosure Triage</title>\\n<style>\" + STYLE + \"</style>\\n\"\n        \"</head>\\n<body>\\n\"\n        \"<h1>Lobbying Disclosure Triage Report</h1>\\n\"\n        \"<p class='sub'>\" + str(len(df)) + \" filings, ranked by reported spend (highest first).</p>\\n\"\n        \"<p class='note'>Illustrative / synthetic sample data — not live Senate LDA \"\n        \"filings. This report is a reading aid, not a verdict.</p>\\n\"\n        \"<table>\\n<thead><tr>\"\n        \"<th>Rank</th><th>Client</th><th>Registrant</th><th>Period</th>\"\n        \"<th>Reported spend</th><th>Policy area</th><th>Targets a bill?</th><th>Primary ask</th>\"\n        \"</tr></thead>\\n<tbody>\\n\" + \"\\n\".join(body_rows) + \"\\n</tbody>\\n</table>\\n\"\n        \"</body>\\n</html>\\n\"\n    )\n\n    out_path = pathlib.Path(output_dir) / \"triage_report.html\"\n    out_path.write_text(html_doc, encoding=\"utf-8\")\n    return pd.DataFrame([{\"report_path\": str(out_path), \"filing_count\": len(df)}])\n",
-        "module": null,
-        "function": null,
-        "requirements": []
-      },
-      "join": null,
-      "aggregate": null,
-      "queue": null,
-      "publish": {
-        "format": "html_report",
-        "destination": "report",
-        "template": null,
-        "one_file_per": null,
-        "cross_link": null
-      },
-      "review": null,
-      "limit": null,
+      "cache": true,
       "compiler_notes": [
         "The document says this is a reading aid, not a verdict — no scoring or recommendation column is rendered.",
         "specific_issues raw text is intentionally omitted from the HTML table to keep the report scannable; it remains in the upstream frame for reference.",
         "The triage_report data-model schema declares report_id and html_content columns; this stage writes the HTML to disk and returns a file-path pointer rather than embedding html_content inline, which is practical at scale. report_id would be stamped by the runtime wrapper at execution time.",
         "No templating library dependency is introduced — the HTML is assembled with Python f-strings and stdlib html.escape."
       ],
-      "eval": null,
-      "tests": null
+      "source": {
+        "section": "Step 3 — Publish the triage report"
+      },
+      "publish": {
+        "format": "html_report",
+        "destination": "report"
+      },
+      "function": {
+        "kind": "inline",
+        "summary": "Writes the finished triage report as a single web page: one row per filing, highest spend first, with a link on each row back to the data it came from.",
+        "corner_cases": [],
+        "code": "import html as _html\nimport pathlib\n\nimport pandas as pd\n\n\nSTYLE = \"\"\"\n  body { font-family: -apple-system, \"Segoe UI\", Roboto, Arial, sans-serif;\n         margin: 2rem auto; max-width: 1040px; padding: 0 1rem; color: #1a1a1a; }\n  h1 { font-size: 1.5rem; margin-bottom: .2rem; }\n  .sub { color: #666; margin-top: 0; font-size: .9rem; }\n  .note { background: #fff8e1; border: 1px solid #ffe082; padding: .55rem .8rem;\n          border-radius: 6px; font-size: .82rem; color: #7a5b00; margin: 1rem 0 1.4rem; }\n  table { border-collapse: collapse; width: 100%; font-size: .9rem; }\n  th, td { text-align: left; padding: .5rem .6rem; border-bottom: 1px solid #ececec;\n           vertical-align: top; }\n  th { background: #fafafa; font-size: .72rem; text-transform: uppercase;\n       letter-spacing: .04em; color: #555; }\n  td.rank { font-weight: 700; color: #9aa0a6; }\n  td.num { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }\n  td.muted { color: #777; }\n  .pill { background: #eef2ff; color: #3730a3; padding: .12rem .55rem;\n          border-radius: 999px; font-size: .78rem; white-space: nowrap; }\n  .bill-yes { color: #166534; font-weight: 600; }\n  .bill-no { color: #9ca3af; }\n\"\"\"\n\n\ndef _cell(value):\n    return \"<td>\" + _html.escape(str(value)) + \"</td>\"\n\n\ndef transform(df, output_dir):\n    # The publish handler points output_dir at run_dir/artifacts/<name> but does\n    # NOT create it; create it here so writing the report never FileNotFoundErrors.\n    pathlib.Path(output_dir).mkdir(parents=True, exist_ok=True)\n\n    body_rows = []\n    for _, row in df.iterrows():\n        targets_bill = bool(row[\"targets_specific_bill\"])\n        bill_html = (\n            \"<td class='bill-yes'>Yes</td>\" if targets_bill else \"<td class='bill-no'>No</td>\"\n        )\n        cells = (\n            \"<td class='rank'>\" + str(int(row[\"spend_rank\"])) + \"</td>\"\n            + _cell(row[\"client\"])\n            + \"<td class='muted'>\" + _html.escape(str(row[\"registrant\"])) + \"</td>\"\n            + _cell(row[\"filing_period\"])\n            + \"<td class='num'>$\" + format(int(row[\"amount_usd\"]), \",\") + \"</td>\"\n            + \"<td><span class='pill'>\" + _html.escape(str(row[\"policy_area\"])) + \"</span></td>\"\n            + bill_html\n            + _cell(row[\"primary_ask\"])\n        )\n        body_rows.append(\"<tr>\" + cells + \"</tr>\")\n\n    html_doc = (\n        \"<!DOCTYPE html>\\n<html lang='en'>\\n<head>\\n<meta charset='UTF-8'>\\n\"\n        \"<title>Lobbying Disclosure Triage</title>\\n<style>\" + STYLE + \"</style>\\n\"\n        \"</head>\\n<body>\\n\"\n        \"<h1>Lobbying Disclosure Triage Report</h1>\\n\"\n        \"<p class='sub'>\" + str(len(df)) + \" filings, ranked by reported spend (highest first).</p>\\n\"\n        \"<p class='note'>Illustrative / synthetic sample data — not live Senate LDA \"\n        \"filings. This report is a reading aid, not a verdict.</p>\\n\"\n        \"<table>\\n<thead><tr>\"\n        \"<th>Rank</th><th>Client</th><th>Registrant</th><th>Period</th>\"\n        \"<th>Reported spend</th><th>Policy area</th><th>Targets a bill?</th><th>Primary ask</th>\"\n        \"</tr></thead>\\n<tbody>\\n\" + \"\\n\".join(body_rows) + \"\\n</tbody>\\n</table>\\n\"\n        \"</body>\\n</html>\\n\"\n    )\n\n    out_path = pathlib.Path(output_dir) / \"triage_report.html\"\n    out_path.write_text(html_doc, encoding=\"utf-8\")\n    return pd.DataFrame([{\"report_path\": str(out_path), \"filing_count\": len(df)}])\n",
+        "requirements": []
+      }
     }
   ]
 }

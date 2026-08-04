@@ -3,7 +3,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from app.models import Stage
+from app.models import parse_stage, Stage
 from app.models.stage import StageType
 from app.runtime.context import RunContext
 from app.runtime.manifest import StageContribution
@@ -15,13 +15,13 @@ from conftest import queue_columns
 def _rating_stage() -> Stage:
     """A row-mapped stage declaring three output columns. The id is distinct
     from every column name so a message can be checked for both."""
-    return Stage.model_validate({
+    return parse_stage({
         "id": "rate", "name": "Rate", "type": "python_row_function",
-        "inputs": [{"id": "load", "schema": {"columns": [{"name": "id", "type": "str"}]}}],
+        "inputs": [{"id": "load", "schema": {"columns": [{"name": "id", "type": "str", "nullable": True}]}}],
         "output_schema": {"columns": [
-            {"name": "id", "type": "str"},
-            {"name": "score", "type": "int"},
-            {"name": "verdict", "type": "str"},
+            {"name": "id", "type": "str", "nullable": True},
+            {"name": "score", "type": "int", "nullable": True},
+            {"name": "verdict", "type": "str", "nullable": True},
         ]},
         "function": {"kind": "inline", "code": "def transform(row): return row"},
     })
@@ -52,19 +52,19 @@ def test_human_review_queue_output_missing_a_declared_column_raises(tmp_path):
     """The queue handler projects through the same row driver, so a column its
     rows never carry fails there too — it is not quietly dropped from the frame
     a downstream stage then consumes."""
-    stage = Stage.model_validate({
+    stage = parse_stage({
         "id": "q", "name": "Review", "type": "human_review_queue",
         "inputs": [{"id": "load", "schema": {"columns": [
             {"name": "claim_id", "type": "str", "nullable": False},
-            {"name": "score", "type": "int"}]}}],
+            {"name": "score", "type": "int", "nullable": True}]}}],
         "output_schema": {"columns": [
             {"name": "claim_id", "type": "str", "nullable": False},
-            {"name": "score", "type": "int"},
-            {"name": "human_score", "type": "int"},
-            {"name": "decision", "type": "str"},
-            {"name": "reviewer_id", "type": "str"},
-            {"name": "reviewed_at", "type": "str"},
-            {"name": "reviewer_note", "type": "str"},   # no row outcome produces this
+            {"name": "score", "type": "int", "nullable": True},
+            {"name": "human_score", "type": "int", "nullable": True},
+            {"name": "decision", "type": "str", "nullable": True},
+            {"name": "reviewer_id", "type": "str", "nullable": True},
+            {"name": "reviewed_at", "type": "str", "nullable": True},
+            {"name": "reviewer_note", "type": "str", "nullable": True},   # no row outcome produces this
         ]},
         "queue": {**queue_columns(), "review_notes_column": None},
     })

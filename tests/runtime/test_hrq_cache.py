@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 
 import app.runtime.runner as runner
-from app.models import ReviewVerdict, Stage
+from app.models import parse_stage, ReviewVerdict, Stage
 from app.models.stage import StageType
 from app.runtime.cancellation import request_cancel
 from app.runtime.context import RunIdentity
@@ -15,9 +15,10 @@ from app.runtime.runner import prepare_run, run_prepared
 from app.runtime.stages import HANDLERS, human_review_queue
 from app.services import review, versioning
 from app.core.stage_cache import StageCache, compute_row_fingerprint
-from app.services.versioning import create_version_from_disk
+from app.services.project import save_working_copy_as_version
 from conftest import (
-    QUEUE_COLUMNS, contribution_of, make_run_context, queue_added_columns,
+    QUEUE_COLUMNS, contribution_of, make_run_context, pinned_stages,
+    queue_added_columns, resumed_stages,
 )
 
 PROJECT = "hrq-cache-tests"
@@ -30,8 +31,8 @@ def _run_queue_stage(stage: Stage, inputs: dict[str, pd.DataFrame], ctx) -> pd.D
 
 
 # The upstream columns `_src()` builds — the default input edge below.
-_SCORED_COLUMNS = [{"name": "id", "type": "str"}, {"name": "score", "type": "int"}]
-_FLAGGED_COLUMNS = [*_SCORED_COLUMNS, {"name": "flag", "type": "str"}]
+_SCORED_COLUMNS = [{"name": "id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True}]
+_FLAGGED_COLUMNS = [*_SCORED_COLUMNS, {"name": "flag", "type": "str", "nullable": True}]
 
 # The columns `QUEUE_COLUMNS` declares this stage adds to every row it emits.
 # The stage's output is projected onto its declared columns, so output_schema has
@@ -50,7 +51,7 @@ def _stage(
         queue["reviewer_instructions"] = reviewer_instructions
     if flt is not None:
         queue["filter"] = flt
-    return Stage.model_validate({
+    return parse_stage({
         "id": "review", "name": "Review", "type": "human_review_queue",
         "inputs": [{"id": "scored", "schema": {"columns": input_columns}}],
         "output_schema": {"columns": [*input_columns, *_REVIEW_COLUMNS]},
@@ -212,12 +213,12 @@ def test_fingerprints_stable_across_parquet_round_trip(tmp_path):
 
 
 def test_input_fingerprint_matches_original_row_before_any_review_record_stamped(tmp_path):
-    """The sidecar's `input_fingerprint` for a halted snapshot row must equal
-    `compute_row_fingerprint` of that row's ORIGINAL upstream dict, recomputed
-    independently here from `src` — never a value that shifts once the
-    handler applies a cached decision. Fingerprinting happens on the upstream
-    row before any review-record column is stamped, so a later column can never
-    change the key a cached decision is matched on."""
+    # The sidecar's `input_fingerprint` for a halted snapshot row must equal
+    # `compute_row_fingerprint` of that row's ORIGINAL upstream dict, recomputed
+    # independently here from `src` — never a value that shifts once the handler applies a
+    # cached decision. Fingerprinting happens on the upstream row before any review-record
+    # column is stamped, so a later column can never change the key a cached decision is
+    # matched on.
     stage = _stage()
     src = _src(3)
     expected_by_id = {
@@ -362,9 +363,9 @@ def test_output_rows_stay_in_input_order(tmp_path):
 
 
 def test_a_modified_row_stays_in_its_own_position_carrying_the_human_score(tmp_path):
-    """A verdict that changes the row's value removes no row: the modified row
-    is emitted in its own input position with the human score the reviewer
-    entered, and the rows around it are untouched."""
+    # A verdict that changes the row's value removes no row: the modified row is emitted
+    # in its own input position with the human score the reviewer entered, and the rows
+    # around it are untouched.
     stage = _stage()
     src = _src(3)
 
@@ -400,13 +401,12 @@ def _every_outcome_src() -> pd.DataFrame:
 
 
 def test_every_output_row_carries_a_verdict_covering_every_outcome(tmp_path):
-    """A real queue output covering every outcome: two rows the filter passed
-    through unreviewed either side of three the reviewer decided. EVERY row
-    carries a verdict value, so a downstream filter is a plain string
-    comparison and never has to reason about a missing one. Filtering on
-    `decision == "approve"` is asserted here as the trap it is: it silently
-    takes the unreviewed rows with it — the queue deliberately let those
-    through, and losing them is data loss."""
+    # A real queue output covering every outcome: two rows the filter passed through
+    # unreviewed either side of three the reviewer decided. EVERY row carries a verdict
+    # value, so a downstream filter is a plain string comparison and never has to reason
+    # about a missing one. Filtering on `decision == "approve"` is asserted here as the
+    # trap it is: it silently takes the unreviewed rows with it — the queue deliberately
+    # let those through, and losing them is data loss.
     stage = _stage(flt="flag == 'review'", input_columns=_FLAGGED_COLUMNS)
     src = _every_outcome_src()
 
@@ -432,15 +432,14 @@ def test_every_output_row_carries_a_verdict_covering_every_outcome(tmp_path):
 
 
 def test_every_decided_row_is_emitted_with_only_the_declared_columns(tmp_path):
-    """Deciding EVERY queued row still emits every row, projected onto the
-    columns output_schema declares. A queue stage can no longer hand a
-    non-empty input on as a zero-row frame at all, whatever the reviewer
-    decided."""
-    stage = Stage.model_validate({
+    # Deciding EVERY queued row still emits every row, projected onto the columns
+    # output_schema declares. A queue stage can no longer hand a non-empty input on as a
+    # zero-row frame at all, whatever the reviewer decided.
+    stage = parse_stage({
         "id": "review", "name": "Review", "type": "human_review_queue",
         "inputs": [{"id": "scored", "schema": {"columns": _SCORED_COLUMNS}}],
-        "output_schema": {"columns": [{"name": "id", "type": "str"},
-                                      {"name": "score", "type": "int"}]
+        "output_schema": {"columns": [{"name": "id", "type": "str", "nullable": True},
+                                      {"name": "score", "type": "int", "nullable": True}]
                           + queue_added_columns()},
         "queue": dict(QUEUE_COLUMNS),
     })
@@ -479,9 +478,9 @@ def test_a_cached_entry_holding_no_output_row_re_queues_the_row(tmp_path):
 
 
 def test_queue_stats_count_every_row_the_reviewer_answered(tmp_path):
-    """The manifest's per-stage item counts, over a run where every outcome
-    occurs. `items_decided` counts what the reviewer ANSWERED, whatever the
-    verdict — not what a downstream stage would keep."""
+    # The manifest's per-stage item counts, over a run where every outcome occurs.
+    # `items_decided` counts what the reviewer ANSWERED, whatever the verdict — not what a
+    # downstream stage would keep.
     stage = _stage(flt="flag == 'review'", input_columns=_FLAGGED_COLUMNS)
     src = _alternating_src()
 
@@ -535,7 +534,7 @@ def test_cache_is_read_once_per_stage_execution(tmp_path, monkeypatch):
 
 
 def test_queue_stats_hold_when_every_row_is_served_from_the_cache(tmp_path, monkeypatch):
-    """The counts are derived from the assembled frame, not accumulated as rows
+    """The counts are computed from the assembled frame, not accumulated as rows
     are mapped, so they survive a run where the driver's cache answers EVERY row
     and the mapper is never called once — decided rows replaying a human's
     verdict and passed-through rows replaying their own recorded output."""
@@ -636,7 +635,7 @@ def test_nullable_extension_dtype_cells_reach_the_reviewer_as_plain_numpy_values
         "flag": pd.array([True, None], dtype="boolean"),
     })
     snapshot, _fingerprints = _halt_and_read_snapshot(
-        _stage(input_columns=[*_SCORED_COLUMNS, {"name": "flag", "type": "bool"}]),
+        _stage(input_columns=[*_SCORED_COLUMNS, {"name": "flag", "type": "bool", "nullable": True}]),
         {"scored": src}, _ctx(tmp_path))
 
     assert list(snapshot.columns) == ["id", "score", "flag"]
@@ -690,7 +689,7 @@ def _write_stage(root, filename, stage):
 
 
 def _seed_version(root):
-    vid = create_version_from_disk(root, message="test seed", reviewer="test").version_id
+    vid = save_working_copy_as_version(root, message="test seed", reviewer="test").version_id
     versioning.publish_version(root, vid, reviewer="human")
 
 
@@ -706,7 +705,7 @@ def _load_stage(root):
 def _review_stage_full():
     return {"id": "review", "name": "Review", "type": "human_review_queue",
             "inputs": [{"id": "load", "schema": {
-                "columns": [{"name": "id", "type": "str"}, {"name": "score", "type": "int"}],
+                "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True}],
                 "primary_key": ["id"]}}],
             "output_schema": {"columns": [*_SCORED_COLUMNS, *_REVIEW_COLUMNS]},
             "queue": dict(QUEUE_COLUMNS)}
@@ -725,7 +724,7 @@ def test_resume_reattaches_cached_decisions_written_via_the_seam(tmp_path):
     _write_stage(project_dir, "02_review.json", _review_stage_full())
     _seed_version(project_dir)
 
-    halted = run_prepared(prepare_run(project_dir, repo_root=project_dir))
+    halted = run_prepared(prepare_run(project_dir, project_dir, *pinned_stages(project_dir)))
     assert halted["status"] == "awaiting_review"
     run_id = halted["run_id"]
 
@@ -736,7 +735,8 @@ def test_resume_reattaches_cached_decisions_written_via_the_seam(tmp_path):
 
     _approve_every_row(snapshot, fingerprints, project=project_dir.name)
 
-    resumed = runner.resume_run(project_dir, run_id, project_dir)
+    resumed = runner.resume_run(project_dir, run_id, project_dir,
+                            *resumed_stages(project_dir, run_id))
     assert resumed["status"] == "ok"
     out = pd.read_parquet(run_dir / "outputs" / "review.parquet")
     assert sorted(out["human_score"].tolist()) == [1, 2]
@@ -754,7 +754,7 @@ def test_resume_replays_the_runs_bust_cache(tmp_path):
     _seed_version(project_dir)
 
     halted = run_prepared(
-        prepare_run(project_dir, repo_root=project_dir, bust_cache=True))
+        prepare_run(project_dir, project_dir, *pinned_stages(project_dir), bust_cache=True))
     assert halted["status"] == "awaiting_review"
     run_id = halted["run_id"]
 
@@ -765,5 +765,6 @@ def test_resume_replays_the_runs_bust_cache(tmp_path):
     fingerprints = _read_fingerprints(run_dir / "queue" / "review.parquet")
     _approve_every_row(snapshot, fingerprints, project=project_dir.name)
 
-    resumed = runner.resume_run(project_dir, run_id, project_dir)
+    resumed = runner.resume_run(project_dir, run_id, project_dir,
+                            *resumed_stages(project_dir, run_id))
     assert resumed["status"] == "awaiting_review"

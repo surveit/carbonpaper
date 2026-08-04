@@ -133,9 +133,12 @@ class RunNotFoundError(Exception):
 
 
 class ReviewValidationError(ValueError):
-    """A submitted review decision does not match what the queue stage declares
-    (a runtime-only verdict, reviewed values that are not exactly the declared
-    reviewed columns, or notes with no notes column)."""
+    """A submitted review decision does not match what the queue stage declares."""
+
+
+class ReviewGuideValidationError(ValueError):
+    """A guide does not account for exactly its version's stages; raised on WRITE, so none is
+    stored."""
 
 
 class PredicateError(ValueError):

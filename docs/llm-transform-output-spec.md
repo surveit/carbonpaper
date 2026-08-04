@@ -1,7 +1,7 @@
 # The llm_transform output rules (design decision, 2026-07)
 
 *Decided in review while simplifying palm_tier2's unit-validation chain. The goal:
-the JSON an LLM stage must return is **derivable from its schemas**, so prompts stop
+the JSON an LLM stage must return is **computable from its schemas**, so prompts stop
 hand-writing (and drifting from) output shapes. The set of columns the reply must
 carry — with their per-column type/nullability/enum/range and, for structured
 columns, their recursive shape — is computed from the stage's own input/output
@@ -19,7 +19,7 @@ separate concern that belongs to the LLM layer, planned for a later PR (see Stat
 2. **1:N is expressed as one added JSON *array* column** — an array of scalars or of
    *flat* records. Fan-out lives in a value, not in row multiplication by the LLM.
    If downstream needs the array tabular, explosion is a separate mechanical step,
-   derivable from schema: the exploded stage's primary key gains one column, and that
+   computable from schema: the exploded stage's primary key gains one column, and that
    column names the record key that drives the explosion.
 3. **A `json` column must declare its shape recursively, in our own schema
    language** — not a raw draft-07 blob. A `json` (or `list[json]`) column carries
@@ -43,7 +43,7 @@ separate concern that belongs to the LLM layer, planned for a later PR (see Stat
   + `TableSchema.to_prompt`. No hand-written "return JSON shaped like…" that drifts
   from the schema.
 - **The JSON-output guarantee is a separable LLM-layer concern.** Validating a reply
-  against the derived shape, re-asking on violation, and dropping (not nulling) a row
+  against the computed shape, re-asking on violation, and dropping (not nulling) a row
   that still fails after N tries belongs to an agent that "guarantees a specific JSON
   output," in the LLM layer — not to `llm_transform`. That layer, when built, feeds
   back the specific schema errors only; epistemic guidance (when to return null,
@@ -65,15 +65,15 @@ This describes what the code does today, not an aspiration:
   column. Because a stage carries its own contract, an ineligible stage can't be
   built — so it can't be loaded, versioned, or run — and `TableSchema.subtract`
   (`output_schema − input_schema`) is exactly the reply columns and can never
-  throw when the runtime derives it.
+  throw when the runtime computes it.
 - **The reply spec goes into the prompt; the call machinery is unchanged.**
   `make_llm_row_mapper` appends `subtract(...).to_prompt()` to the stage's
   prompt and calls `llm.call_llm` per row, driven by the runtime's row driver
   (`app/runtime/stages/execution.py`) — the same call path as any other
-  row-mapped stage. Appending the derived spec is the only thing this mapper
+  row-mapped stage. Appending the computed spec is the only thing this mapper
   adds over a plain LLM call.
 - **There is no reply validation, retry, transcript, or JSON guarantee here.**
-  Validating a reply against the derived spec, re-asking on violation, dropping
+  Validating a reply against the computed spec, re-asking on violation, dropping
   (not nulling) a row that still fails, and persisting per-row conversations are
   planned for a later PR that unifies the LLM-calling agent in `app/chat`. This
   PR changes prompts only.

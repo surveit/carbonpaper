@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from app.models import Stage
+from app.models import Stage, parse_stage
 from app.web import queue_view
 from app.web.loading import QueueFingerprints
 from conftest import queue_added_columns, queue_columns
@@ -21,16 +21,16 @@ def _queue_stage(
     target_spec: dict[str, object] | None = None,
     input_ids: list[str] | None = None,
 ) -> Stage:
-    """A `human_review_queue` stage over `input_columns`, with the output_schema
-    its input edge and `queue` block imply. `target_spec` overrides the reviewed
-    TARGET column's declaration."""
+    # A `human_review_queue` stage over `input_columns`, with the output_schema its input
+    # edge and `queue` block imply. `target_spec` overrides the reviewed TARGET column's
+    # declaration.
     added: list[dict[str, object]] = queue_added_columns(target, target_type)
     added[0] = {**added[0], **(target_spec or {})}
     inputs = [
         {"id": upstream, "schema": {"columns": input_columns, "primary_key": primary_key}}
         for upstream in (input_ids or ["upstream"])
     ]
-    return Stage.model_validate({
+    return parse_stage({
         "id": "review", "name": "Review", "type": "human_review_queue",
         "inputs": inputs,
         "output_schema": {"columns": input_columns + added, "primary_key": primary_key},
@@ -39,9 +39,9 @@ def _queue_stage(
 
 
 _LABEL_COLUMNS: list[dict[str, object]] = [
-    {"name": "id", "type": "str"},
-    {"name": "score", "type": "int", "description": "the score this row was labelled from"},
-    {"name": "label", "type": "str", "description": "high when the score exceeds one"},
+    {"name": "id", "type": "str", "nullable": True},
+    {"name": "score", "type": "int", "description": "the score this row was labelled from", "nullable": True},
+    {"name": "label", "type": "str", "description": "high when the score exceeds one", "nullable": True},
 ]
 
 
@@ -49,9 +49,9 @@ _LABEL_COLUMNS: list[dict[str, object]] = [
 
 
 def test_lineage_links_the_single_upstream_stage_at_the_sidecar_ordinal():
-    """The queue stage has produced no output at halt time, so a row's lineage
-    link names the UPSTREAM stage and the row's ordinal from the sidecar —
-    never the queue stage itself, and never a guessed position."""
+    # The queue stage has produced no output at halt time, so a row's lineage link names
+    # the UPSTREAM stage and the row's ordinal from the sidecar — never the queue stage
+    # itself, and never a guessed position.
     stage = _queue_stage(_LABEL_COLUMNS, input_ids=["label"])
     fingerprints = QueueFingerprints("sf", ["fp0", "fp1"], [3, 7])
 
@@ -99,9 +99,9 @@ def test_queued_columns_carry_the_declared_description_and_primary_key():
 
 
 def test_a_stage_with_no_declared_primary_key_says_so_rather_than_guessing():
-    """An `id` column is present and would have been guessed at by the removed
-    join-key fallback; with no `primary_key` declared the view states that
-    instead, and no column is flagged as the key."""
+    # An `id` column is present and would have been guessed at by the removed join-key
+    # fallback; with no `primary_key` declared the view states that instead, and no column
+    # is flagged as the key.
     stage = _queue_stage(_LABEL_COLUMNS)
     snapshot = pd.DataFrame({"id": ["a"], "score": [2], "label": ["high"]})
 
@@ -123,8 +123,8 @@ def test_a_schema_and_snapshot_that_disagree_are_reported_not_papered_over():
 
 
 def test_the_context_table_omits_the_columns_under_review():
-    """The context a reviewer is shown is the queued row MINUS the SOURCE of a
-    reviewed column, which the review section prints beside its own control."""
+    # The context a reviewer is shown is the queued row MINUS the SOURCE of a reviewed
+    # column, which the review section prints beside its own control.
     stage = _queue_stage(_LABEL_COLUMNS, primary_key=["id"])
     snapshot = pd.DataFrame({"id": ["a"], "score": [2], "label": ["high"]})
 
@@ -171,7 +171,7 @@ def test_a_reviewed_field_takes_its_control_from_the_declared_type(
     target_type, control, options, step
 ):
     stage = _queue_stage(
-        [{"name": "id", "type": "str"}, {"name": "label", "type": target_type}],
+        [{"name": "id", "type": "str", "nullable": True}, {"name": "label", "type": target_type, "nullable": True}],
         target_type=target_type,
     )
 
@@ -182,7 +182,7 @@ def test_a_reviewed_field_takes_its_control_from_the_declared_type(
 
 def test_a_declared_range_becomes_the_fields_bounds():
     stage = _queue_stage(
-        [{"name": "id", "type": "str"}, {"name": "label", "type": "int", "range": [0, 5]}],
+        [{"name": "id", "type": "str", "nullable": True}, {"name": "label", "type": "int", "range": [0, 5], "nullable": True}],
         target_type="int", target_spec={"range": [0, 5]},
     )
 
@@ -192,8 +192,8 @@ def test_a_declared_range_becomes_the_fields_bounds():
 
 
 def test_the_notes_label_prefers_the_declared_description():
-    """With no declared description the column name is spelled out — an
-    undeclared `reviewer_notes` reads "Reviewer notes", never a hardcoded one."""
+    # With no declared description the column name is spelled out — an undeclared
+    # `reviewer_notes` reads "Reviewer notes", never a hardcoded one.
     stage = _queue_stage(_LABEL_COLUMNS)
     assert queue_view.resolve_notes_label(stage, "review_notes") == "Review notes"
     assert queue_view.resolve_notes_label(stage, "reviewer_notes") == "Reviewer notes"
@@ -230,7 +230,7 @@ def test_the_notes_label_prefers_the_declared_description():
 )
 def test_a_control_opens_on_the_value_in_its_own_spelling(target_type, value, expected):
     stage = _queue_stage(
-        [{"name": "id", "type": "str"},
+        [{"name": "id", "type": "str", "nullable": True},
          {"name": "label", "type": target_type, "nullable": True}],
         target_type=target_type, target_spec={"nullable": True},
     )
@@ -241,8 +241,8 @@ def test_a_control_opens_on_the_value_in_its_own_spelling(target_type, value, ex
 
 def test_an_enum_prefill_keeps_a_declared_value_and_drops_an_undeclared_one():
     stage = _queue_stage(
-        [{"name": "id", "type": "str"},
-         {"name": "label", "type": "str", "enum": ["yes", "no", "unclear"]}],
+        [{"name": "id", "type": "str", "nullable": True},
+         {"name": "label", "type": "str", "enum": ["yes", "no", "unclear"], "nullable": True}],
         target_spec={"enum": ["yes", "no", "unclear"]},
     )
 

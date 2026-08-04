@@ -17,13 +17,15 @@ from pandas.testing import assert_frame_equal
 
 from app.runtime.runner import execute_run
 from app.services import versioning
+from app.services import project as project_service
+from conftest import pinned_stages
 
 _ROWS = [{"name": "a", "val": 1}, {"name": "b", "val": 2}, {"name": "c", "val": 3}]
 
-_LOADED = [{"name": "name", "type": "str"}, {"name": "val", "type": "int"}]
-_CLEANED = [*_LOADED, {"name": "doubled", "type": "int"}]
-_FLAGGED = [*_CLEANED, {"name": "big", "type": "bool"}]
-_TOTALLED = [*_FLAGGED, {"name": "total", "type": "int"}]
+_LOADED = [{"name": "name", "type": "str", "nullable": True}, {"name": "val", "type": "int", "nullable": True}]
+_CLEANED = [*_LOADED, {"name": "doubled", "type": "int", "nullable": True}]
+_FLAGGED = [*_CLEANED, {"name": "big", "type": "bool", "nullable": True}]
+_TOTALLED = [*_FLAGGED, {"name": "total", "type": "int", "nullable": True}]
 
 # One fully-computing run's probe tally over `_ROWS`: a row-mapped stage's body
 # runs once per row, a frame-shaped stage's once for the whole frame.
@@ -116,7 +118,7 @@ def _write_stage(root: Path, filename: str, spec: dict[str, object]) -> None:
 
 
 def _publish_a_version(root: Path) -> str:
-    version = versioning.create_version_from_disk(
+    version = project_service.save_working_copy_as_version(
         root, message="cache e2e", reviewer="test")
     versioning.publish_version(root, version.version_id, reviewer="human")
     return version.version_id
@@ -129,7 +131,7 @@ def _run_and_read(
     output frame read back off disk."""
     if (project / "runs").exists():
         time.sleep(1.05)  # run ids are second-resolution: one dir per run
-    manifest = execute_run(project, repo_root=project, bust_cache=bust_cache)
+    manifest = execute_run(project, project, *pinned_stages(project), bust_cache=bust_cache)
     assert manifest["status"] == "ok", manifest
     run_dir = project / "runs" / manifest["run_id"]
     return {
@@ -266,7 +268,7 @@ def test_the_cache_survives_a_process_restart_and_a_change_of_directory(tmp_path
     that both were read back off disk.
 
     The two runs are launched from DIFFERENT directories, neither of them the
-    project, with only CW_DB_PATH set and the frames root left to its default:
+    project, with only CARBONPAPER_DB_PATH set and the frames root left to its default:
     a frames root that resolved against the working directory rather than
     against the pinned database would send the two runs to different roots, and
     the second would miss the frame entry and recompute `totals`.
@@ -298,10 +300,14 @@ def _run_in_a_fresh_process(project: Path, *, db: Path, cwd: Path) -> None:
     store of its own — the faithful exercise of a restart, as
     tests/test_seed_cli.py is of a store-free process."""
     repo_root = Path(__file__).resolve().parents[1]
-    env = {k: v for k, v in os.environ.items() if k != "CW_FRAMES_ROOT"}
+    env = {k: v for k, v in os.environ.items() if k != "CARBONPAPER_FRAMES_ROOT"}
     result = subprocess.run(
-        [sys.executable, "-m", "app.runtime.runner", str(project)],
-        cwd=cwd, env={**env, "PYTHONPATH": str(repo_root), "CW_DB_PATH": str(db)},
+        [sys.executable, "-m", "app.runtime", project.name],
+        cwd=cwd,
+        env={**env, "PYTHONPATH": str(repo_root), "CARBONPAPER_DB_PATH": str(db),
+             # The CLI takes a project NAME, so the fresh process needs the root to
+             # resolve it under — the one thing a different cwd must not change.
+             "CARBONPAPER_PROJECTS_DIR": str(project.parent)},
         capture_output=True, text=True,
     )
     assert result.returncode == 0, (

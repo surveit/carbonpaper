@@ -1,12 +1,20 @@
 {% extends "project_shell.html" %}
 {#
-  RUNS — the runs list (reuses runs_index.html's table shape), with awaiting-review
-  runs surfaced at the top.
+  RUNS — the runs list, with awaiting-review runs surfaced at the top.
+
+  Four columns, none of which is the run id: `run_id` IS `started_at` (the same
+  instant, machine-formatted), so it survives as the row's link target and on
+  hover rather than as a column of its own.
+
+    when         relative time, with the run's duration under it
+    what it ran  the pinned version's message + the basenames of the files it read
+    result       the stage strip, the same partial the run page draws
+    differences  what THIS run set differently (row caps, cache, test run) — not
+                 a diff against another run
 
   Context the route passes:
     state = project.project_state(mdir); section = "runs"
-    runs  = main._list_runs(state.name)  — list of
-            {run_id, status, started_at, workflow_version, stages_total, stages_ok, stages_error}
+    runs  = app.web.run_index.build_run_index_rows(state.name) — list of RunIndexRow
 
   The "awaiting review" count comes from state.runs.awaiting_review (a run halted at a
   human_review_queue). Counts are truthful — only manifest-backed runs appear.
@@ -28,40 +36,42 @@
 {% endif %}
 
 {% if state.runs.awaiting_review > 0 %}
-<div class="banner-review">
+<div class="banner banner-review">
   👤 <strong>{{ state.runs.awaiting_review }}</strong> run{% if state.runs.awaiting_review != 1 %}s{% endif %}
   awaiting review — halted at a human-review queue. Open the run to clear its queue.
 </div>
 {% endif %}
 
 {% if runs %}
-<table class="stages">
+<table class="stages runs-table">
   <thead>
-    <tr><th>run id</th><th>version</th><th>started</th><th>status</th><th>stages</th></tr>
+    <tr><th>when</th><th>what it ran</th><th>result</th><th>differences</th></tr>
   </thead>
   <tbody>
     {% for r in runs %}
     <tr>
-      <td><a href="/project/{{ state.name }}/runs/{{ r.run_id }}"><code>{{ r.run_id }}</code></a>
-        {% if r.is_test_run %}<span class="badge-test" title="A workflow test, not a production run. It read the stage-result cache but wrote none.">test</span>{% endif %}
+      <td>
+        <a href="/project/{{ state.name }}/runs/{{ r.run_id }}" title="run {{ r.run_id }}">
+          {%- if r.started_at %}{{ r.started_at | relative_time }}{% else %}<code>{{ r.run_id }}</code>{% endif -%}
+        </a>
+        {% if r.duration %}<span class="run-sub">{{ r.duration }}</span>{% endif %}
       </td>
       <td>
-        {% if r.workflow_version %}
-          <a href="/project/{{ state.name }}/workflow"><code>{{ r.workflow_version }}</code></a>
-        {% else %}
-          <span class="muted">(unversioned)</span>
-        {% endif %}
+        {%- if r.version is none %}<span class="muted">(manifest unreadable)</span>
+        {%- elif r.version.message %}“{{ r.version.message }}”
+        {%- elif r.version.error %}<span class="unresolved" title="{{ r.version.error }}">version
+          {% if r.version.version_id %}<code>{{ r.version.version_id }}</code>{% endif %} could not be read</span>
+        {%- elif r.version.version_id %}<code>{{ r.version.version_id }}</code> <span class="muted">(no message)</span>
+        {%- else %}<span class="unresolved">no workflow version recorded</span>
+        {%- endif %}
+        {% if r.input_names %}<span class="run-sub">{{ r.input_names | join(' · ') }}</span>{% endif %}
       </td>
-      <td>{{ r.started_at | friendly_time }}</td>
-      <td><span class="run-status status-{{ r.status }}">{{ r.status }}</span></td>
-      <td>
-        {% if r.stages_total is none %}
-        <span class="muted">(manifest unreadable)</span>
-        {% else %}
-        {{ r.stages_ok }}/{{ r.stages_total }} ok
-        {% if r.stages_error %}· <span class="status-error">{{ r.stages_error }} error{% if r.stages_error != 1 %}s{% endif %}</span>{% endif %}
-        {% endif %}
+      <td title="{{ r.result_summary }}">
+        {%- if r.strip is none %}<span class="muted">(manifest unreadable)</span>
+        {%- else %}{% with strip = r.strip, show_counts = false, strip_id = none %}{% include "_stage_strip.html" %}{% endwith %}
+        {%- endif %}
       </td>
+      <td class="run-diff">{% if r.differences %}{{ r.differences | join(' · ') }}{% endif %}</td>
     </tr>
     {% endfor %}
   </tbody>

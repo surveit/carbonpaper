@@ -7,17 +7,17 @@ from the production run entry points."""
 from __future__ import annotations
 
 import enum
-import hashlib
 import time
 import traceback
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, NamedTuple
 
 import pandas as pd
 import pyarrow.lib as pa_lib
 
 from app.core.errors import SubsetRunError
+from app.core.frame_checks import find_duplicate_row_violations
 from app.models import Stage, StageType, Workflow
 from app.core.run_status import RunStatus, StageStatus
 
@@ -40,6 +40,7 @@ from .lineage import (
     LINEAGE_ATTR,
     RowLineage,
     concatenated_inputs_lineage,
+    kept_rows_lineage,
     lineage_sidecar_path,
     read_row_lineage,
 )
@@ -322,18 +323,22 @@ def _flush_manifest(
 
 
 def _gather_stage_inputs(
-    stage: Stage, outputs_so_far: dict[str, pd.DataFrame], record: StageRecord
-) -> dict[str, pd.DataFrame]:
-    """This stage's input dataframes, keyed by producer id, rejecting exact
-    duplicate rows and recording an input-schema validation report for every
-    input that declares one. Raises if an upstream output is missing — the
-    caller's exception handling turns that into this stage's own error."""
+    stage: Stage, outputs_so_far: dict[str, pd.DataFrame], ctx: RunContext,
+    record: StageRecord,
+) -> tuple[dict[str, pd.DataFrame], _RowWindow]:
+    """The rows this stage's handler will be given, keyed by producer id, cut to
+    this run's row window BEFORE the duplicate-row and input-schema checks run —
+    so a `limit: 3` dry run is never failed by row 4,000, which it never reads.
+    Raises if an upstream output is missing — the caller's exception handling
+    turns that into this stage's own error."""
     sid = stage.id
+    window = _resolve_row_window(stage, ctx)
     inputs_for_stage: dict[str, pd.DataFrame] = {}
     for ref in stage.inputs:
         if ref.id not in outputs_so_far:
             raise RuntimeError(f"Upstream stage '{ref.id}' has no output yet")
-        df = outputs_so_far[ref.id]
+        df = _take_row_window(
+            outputs_so_far[ref.id], window, f"from input '{ref.id}'", record)
         _reject_duplicate_input_rows(df, ref.id, sid)
         inputs_for_stage[ref.id] = df
         if ref.table_schema is not None:
@@ -341,7 +346,8 @@ def _gather_stage_inputs(
                 df, ref.table_schema, stage_id=sid, phase=f"input:{ref.id}",
             )
             record.input_validation_report.append(rep.to_dict())
-    return inputs_for_stage
+    return inputs_for_stage, window
+
 
 def _resolve_handler(stage_type: StageType) -> StageHandler:
     handler = HANDLERS.get(stage_type)
@@ -373,36 +379,37 @@ def _record_stage_error(record: StageRecord, exc: Exception) -> None:
     )
 
 
-def _apply_row_slicing(
-    output: pd.DataFrame, stage: Stage, ctx: RunContext, record: StageRecord
-) -> tuple[pd.DataFrame, int, int | None]:
-    """Offset then cap `output`'s rows, in the handler's emitted order. Offset
-    (per-run only, from --offset stage=M) drops the first M rows; the cap
-    (--limit stage=N, else the stage's static `limit:`) then keeps the first
-    N. Used to throttle/page the expensive LLM fan-out. Each trim actually
-    taken is recorded as a note on `record`.
+class _RowWindow(NamedTuple):
+    """`start` is the ordinal, in the upstream rows, of the first row the stage reads."""
 
-    Returns the trimmed frame and the window it took out of the handler's own
-    rows, as (start, stop), so the caller can narrow this stage's row lineage to
-    exactly the rows that survived."""
-    sid = stage.id
-    start = 0
-    offset = ctx.offsets.get(sid)
-    if isinstance(offset, int) and offset > 0 and len(output) > 0:
+    start: int
+    cap: int | None
+
+
+def _resolve_row_window(stage: Stage, ctx: RunContext) -> _RowWindow:
+    """The window this run reads: --offset stage=M, then --limit stage=N over the stage's `limit:`."""
+    offset = ctx.offsets.get(stage.id)
+    cap = ctx.limits.get(stage.id, stage.limit)
+    return _RowWindow(
+        offset if isinstance(offset, int) and offset > 0 else 0,
+        cap if isinstance(cap, int) and cap >= 0 else None,
+    )
+
+
+def _take_row_window(
+    df: pd.DataFrame, window: _RowWindow, source: str, record: StageRecord
+) -> pd.DataFrame:
+    """`window` of `df`'s rows; every cut actually taken is noted on `record`, never silent."""
+    if window.start > 0 and len(df) > 0:
         record.add_note(
-            f"offset={offset}: dropped first {min(offset, len(output))} of {len(output)} row(s)"
+            f"offset={window.start}: skipped the first "
+            f"{min(window.start, len(df))} of {len(df)} row(s) {source}"
         )
-        start = min(offset, len(output))
-        output = output.iloc[offset:].reset_index(drop=True).copy()
-    stop: int | None = None
-    limit = ctx.limits.get(sid, stage.limit)
-    if isinstance(limit, int) and limit >= 0 and len(output) > limit:
-        record.add_note(
-            f"limit={limit}: truncated from {len(output)} to {limit} row(s)"
-        )
-        stop = start + limit
-        output = output.head(limit).copy()
-    return output, start, stop
+        df = df.iloc[window.start:].reset_index(drop=True).copy()
+    if window.cap is not None and len(df) > window.cap:
+        record.add_note(f"limit={window.cap}: read {window.cap} of {len(df)} row(s) {source}")
+        df = df.head(window.cap).copy()
+    return df
 
 
 def _persist_row_lineage(lineage: RowLineage, sid: str, run_dir: Path) -> None:
@@ -414,21 +421,38 @@ def _persist_row_lineage(lineage: RowLineage, sid: str, run_dir: Path) -> None:
 
 
 def _stage_row_lineage(
-    stage: Stage, output: pd.DataFrame | None, inputs: dict[str, pd.DataFrame]
+    stage: Stage, output: pd.DataFrame | None, inputs: dict[str, pd.DataFrame],
+    window: _RowWindow,
 ) -> RowLineage | None:
     """This stage's per-row provenance, or None where output row i is input row
     i and the trace needs no help crossing it.
 
-    Both sources are the runtime's own knowledge, never the stage's report of
+    Every source is the runtime's own knowledge, never the stage's report of
     itself: the row driver's record of which input ordinals it emitted, riding
-    the frame's `.attrs`, and — for a union — the row counts of the inputs the
-    runtime handed over, since concatenation is in declared order."""
+    the frame's `.attrs`; for a union, the row counts of the inputs the runtime
+    handed over, since concatenation is in declared order; and, for a stage the
+    runtime sliced, the window it cut. The first two count from the start of the
+    SLICED input frames the handler was given, so both are shifted back onto the
+    upstream stage's own ordinals."""
     driven = read_row_lineage(output)
     if driven is not None:
-        return driven
+        return driven.shifted(window.start)
     if stage.type == StageType.union:
-        return concatenated_inputs_lineage(stage, inputs)
-    return None
+        return concatenated_inputs_lineage(stage, inputs, window.start)
+    return _sliced_input_lineage(stage, output, window)
+
+
+def _sliced_input_lineage(
+    stage: Stage, output: pd.DataFrame | None, window: _RowWindow
+) -> RowLineage | None:
+    """A sliced stage's rows named by their true upstream ordinals, for the trace to cross."""
+    if window.start == 0 and window.cap is None:
+        return None
+    if not stage.is_grain_and_order_preserving or len(stage.inputs) != 1:
+        return None
+    rows = 0 if output is None else len(output)
+    return kept_rows_lineage(
+        stage.inputs[0].id, list(range(window.start, window.start + rows)))
 
 
 def _persist_stage_output(output: pd.DataFrame, sid: str, run_dir: Path, record: StageRecord) -> Path:
@@ -450,7 +474,7 @@ def _persist_stage_output(output: pd.DataFrame, sid: str, run_dir: Path, record:
 
 def _finalize_stage_output(
     stage: Stage,
-    ctx: RunContext,
+    window: _RowWindow,
     record: StageRecord,
     output: pd.DataFrame | None,
     inputs_for_stage: dict[str, pd.DataFrame],
@@ -458,22 +482,22 @@ def _finalize_stage_output(
     run_dir: Path,
     manifest: RunManifest,
 ) -> bool:
-    """Trim, validate, and persist a stage's raw handler output, then decide
+    """Validate and persist a stage's raw handler output, then decide
     its terminal status. Two things make it a stage error, both recorded
     exactly like a raised exception: a per-row generation failure, and an
     error-severity issue in the OUTPUT validation report (a missing declared
-    column, a failed coercion, a null in a non-nullable column, a duplicated
-    primary key) — a frame that violates the declared schema must not be
-    consumed downstream. The output file stays on disk for inspection, and the
-    stage's own `error` status keeps a resume from reusing it. Otherwise the
-    status is `ok`, or `validation_warnings` when an INPUT report carries an
-    error. Returns True if the caller must join this stage to `blocked`, so
-    every transitive consumer is skipped rather than run on this stage's
-    non-conforming frame and marked `ok`; False otherwise."""
+    column, a failed coercion, a value outside a declared enum, a null in a
+    non-nullable column, a duplicated primary key) — a frame that violates the
+    declared schema must not be consumed downstream. The output file stays on
+    disk for inspection, and the stage's own `error` status keeps a resume from
+    reusing it. Otherwise the status is `ok`, or `validation_warnings` when an
+    INPUT report carries an error. Returns True if the caller must join this
+    stage to `blocked`, so every transitive consumer is skipped rather than run
+    on this stage's non-conforming frame and marked `ok`; False otherwise."""
     sid = stage.id
-    # Read the stage's contribution off the handler's frame BEFORE any slicing
-    # (which builds a new frame and drops `.attrs`), then merge usage into this
-    # record and human_review_queue_stats/dropped_columns into the manifest.
+    # Read the stage's contribution off the handler's frame BEFORE any frame is
+    # rebuilt (which drops `.attrs`), then merge usage into this record and
+    # human_review_queue_stats/dropped_columns into the manifest.
     contribution = _read_stage_contribution(output)
     row_errors = _merge_stage_contribution(contribution, sid, manifest, record)
 
@@ -482,15 +506,17 @@ def _finalize_stage_output(
     # Drop the contribution channel so it never reaches the persisted parquet
     # (its metadata isn't JSON-serializable) — it has been merged above.
     output.attrs.pop(CONTRIBUTION_ATTR, None)
-    lineage = _stage_row_lineage(stage, output, inputs_for_stage)
+    lineage = _stage_row_lineage(stage, output, inputs_for_stage, window)
     # Drop the lineage channel for the same reason as the contribution one
     # above: `.attrs` is not JSON-serializable and must not reach the parquet.
     output.attrs.pop(LINEAGE_ATTR, None)
-    output, start, stop = _apply_row_slicing(output, stage, ctx, record)
+    if not stage.inputs:
+        # A stage with no inputs originates its rows outside the run, so the
+        # frame it just loaded is the runtime's only handle on them: its window
+        # is taken here rather than on an input frame that does not exist.
+        output = _take_row_window(output, window, "loaded from the source", record)
     if lineage is not None:
-        # Slicing happens after the handler emitted, so the lineage narrows with
-        # it — entry i must still describe output row i.
-        _persist_row_lineage(lineage.sliced(start, stop), sid, run_dir)
+        _persist_row_lineage(lineage, sid, run_dir)
 
     out_rep = validate_dataframe(output, stage.output_schema, stage_id=sid, phase="output")
     if row_errors:
@@ -591,7 +617,7 @@ def _run_stage(
 
     joins_blocked = False
     try:
-        inputs_for_stage = _gather_stage_inputs(stage, outputs_so_far, record)
+        inputs_for_stage, window = _gather_stage_inputs(stage, outputs_so_far, ctx, record)
         handler = _resolve_handler(stage.type)
         try:
             output = handler.execute(stage, inputs_for_stage, ctx)
@@ -609,7 +635,7 @@ def _run_stage(
             record.status = StageStatus.CANCELLED
             return _StageOutcome.CANCELLED, False
         joins_blocked = _finalize_stage_output(
-            stage, ctx, record, output, inputs_for_stage, outputs_so_far, run_dir,
+            stage, window, record, output, inputs_for_stage, outputs_so_far, run_dir,
             manifest)
     except Exception as exc:  # noqa: BLE001 — the runner's contract is to
         # record ANY stage failure in the manifest and keep running
@@ -763,38 +789,11 @@ def _final_run_status(stage_statuses: Iterable[str]) -> RunStatus:
 # --- duplicate-input-row rejection (every stage type) ------------------------
 
 
-def _duplicate_row_groups(df: pd.DataFrame) -> list[list[int]]:
-    """Groups of 0-based row positions whose FULL row content is identical.
-    Identity is a content hash over every column's string-rendered value —
-    the declared primary_key plays no part (it is optional and may
-    legitimately duplicate)."""
-    if df is None or len(df) == 0:
-        return []
-    groups: dict[str, list[int]] = {}
-    for pos, cells in enumerate(df.itertuples(index=False, name=None)):
-        # repr() (not str()) so cells of different types with the same face
-        # value ("1" vs 1) stay distinct, and NaN/None/lists all render.
-        rendered = "\x1f".join(repr(c) for c in cells)
-        digest = hashlib.sha1(rendered.encode("utf-8")).hexdigest()
-        groups.setdefault(digest, []).append(pos)
-    return [positions for positions in groups.values() if len(positions) > 1]
-
-
 def _reject_duplicate_input_rows(df: pd.DataFrame, input_id: str, stage_id: str) -> None:
-    """Fail the stage if an input dataframe contains exact duplicate
-    full-content rows. Duplicates at a stage boundary are ambiguous intent —
-    either an upstream bug, or sampling smuggled in implicitly. If N draws
-    per row are intended, the author adds an explicit row_id/draw_id column
-    upstream, making the rows distinct."""
-    dupes = _duplicate_row_groups(df)
-    if not dupes:
+    """Fail the stage if an input frame carries exact duplicate rows."""
+    violations = find_duplicate_row_violations(df)
+    if not violations:
         return
-    shown = "; ".join(f"rows {group}" for group in dupes[:5])
-    more = f" (+{len(dupes) - 5} more group(s))" if len(dupes) > 5 else ""
     raise ValueError(
-        f"Input '{input_id}' to stage '{stage_id}' contains exact duplicate "
-        f"rows: {shown}{more} (0-based row numbers). Duplicates at a stage "
-        "boundary are ambiguous intent — an upstream bug, or sampling smuggled "
-        "in implicitly. If N draws per row are intended, add an explicit "
-        "row_id/draw_id column upstream so the rows are distinct."
+        f"Input '{input_id}' to stage '{stage_id}' contains {violations[0].message}"
     )

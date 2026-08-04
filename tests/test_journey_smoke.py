@@ -14,6 +14,7 @@ import app.services.run as run_service
 from app.main import app
 from app.services.project import create_project
 from app.services.versioning import list_versions
+from app.services import workspace
 
 client = TestClient(app)
 
@@ -103,7 +104,7 @@ def test_offline_journey_reaches_a_published_artifact(journey_project, tmp_path)
 
 @pytest.fixture
 def journey_project(tmp_path, monkeypatch):
-    _point_examples_dir_at(monkeypatch, tmp_path)
+    _point_examples_dir_at(tmp_path)
     # Run synchronously: the background thread is not the seam under test, and
     # the poll loop it exists for would only slow this test down.
     monkeypatch.setattr(run_service, "_run_in_background", lambda target, *args: target(*args))
@@ -121,37 +122,28 @@ def journey_project(tmp_path, monkeypatch):
     return project_dir
 
 
-def _point_examples_dir_at(monkeypatch, root) -> None:
-    """Point the projects storage root at `root`. EXAMPLES_DIR is imported
-    by value into each consuming module, so every participant on the journey
-    needs its own copy patched."""
-    for module in (
-        "app.services.workspace",
-        "app.web.config",
-        "app.web.loading",
-        "app.web.routers.runs",
-        "app.web.routers.node_review",
-        "app.web.routers.project",
-    ):
-        monkeypatch.setattr(f"{module}.EXAMPLES_DIR", root)
+def _point_examples_dir_at(root) -> None:
+    """Point the process's projects storage root at `root`. One live root,
+    one call — every consumer reads it through workspace.projects_dir()."""
+    workspace.set_projects_dir(root)
 
 
 def _workflow_stages(authored_path: str) -> list[dict]:
     """A minimal workflow using one stage of each non-LLM executable family:
     file input -> per-row transform -> frame reshape -> publish."""
     load_schema = {
-        "columns": [{"name": "name", "type": "str"}, {"name": "val", "type": "int"}],
+        "columns": [{"name": "name", "type": "str", "nullable": True}, {"name": "val", "type": "int", "nullable": True}],
         "primary_key": ["name"],
     }
     flag_schema = {
-        "columns": [{"name": "name", "type": "str"}, {"name": "val", "type": "int"},
-                    {"name": "flagged", "type": "bool"}],
+        "columns": [{"name": "name", "type": "str", "nullable": True}, {"name": "val", "type": "int", "nullable": True},
+                    {"name": "flagged", "type": "bool", "nullable": True}],
         "primary_key": ["name"],
     }
     # groupby("flagged", as_index=False)["val"].sum() — one row per flag value,
     # in that column order.
     totals_schema = {
-        "columns": [{"name": "flagged", "type": "bool"}, {"name": "val", "type": "int"}],
+        "columns": [{"name": "flagged", "type": "bool", "nullable": True}, {"name": "val", "type": "int", "nullable": True}],
         "primary_key": ["flagged"],
     }
     return [

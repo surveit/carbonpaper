@@ -1,7 +1,7 @@
 """Node-level approval state: is a step modeled in a way we trust? Never halts a run.
 
-CANONICAL-HASH INVARIANT: the hash is over the LOADED stage dict, not the file text.
-A loader injecting a new bookkeeping key MUST add it to CANONICAL_IGNORE_KEYS, or a
+CONTENT-HASH INVARIANT: the hash is over the LOADED stage dict, not the file text.
+A loader injecting a new bookkeeping key MUST add it to HASH_IGNORED_KEYS, or a
 cosmetic reload silently invalidates every prior approval."""
 
 from __future__ import annotations
@@ -16,10 +16,10 @@ import pandas as pd
 from app.core.utils import compute_short_hash
 
 # Loader-injected bookkeeping keys that are NOT part of the stage spec and must
-# be excluded from the canonical form before hashing. See the module docstring:
+# be excluded before hashing. See the module docstring:
 # this set is the invariant — extend it whenever a loader gains a new injected
 # key, or cosmetic reloads will break approvals.
-CANONICAL_IGNORE_KEYS: set[str] = {"_filename", "_order", "_error"}
+HASH_IGNORED_KEYS: set[str] = {"_filename", "_order", "_error"}
 
 
 class NodeApprovalState(str, Enum):
@@ -45,26 +45,26 @@ DECISION_APPROVE = "approve"
 DECISION_REJECT = "reject"
 
 
-def canonical_node_spec(stage: dict[str, Any]) -> dict[str, Any]:
+def strip_bookkeeping_keys(stage: dict[str, Any]) -> dict[str, Any]:
     """Return the stage dict stripped of loader-injected bookkeeping keys
-    (CANONICAL_IGNORE_KEYS), so two loads of the same spec — regardless of which
+    (HASH_IGNORED_KEYS), so two loads of the same spec — regardless of which
     file/whitespace/comment they came from — produce an identical mapping.
 
     Shallow strip is correct: the ignore-set keys are only ever injected at the
     top level by the loaders (see module docstring)."""
-    return {k: v for k, v in stage.items() if k not in CANONICAL_IGNORE_KEYS}
+    return {k: v for k, v in stage.items() if k not in HASH_IGNORED_KEYS}
 
 
 def node_content_hash(stage: dict[str, Any]) -> str:
-    """Stable hash (app.core.utils.compute_short_hash) of the canonical stage
-    spec.
+    """Stable hash (app.core.utils.compute_short_hash) of the stage spec, minus
+    the loader-injected keys.
 
     Hashes the LOADED dict, not file text: json.dumps with sort_keys=True makes
     key order irrelevant, the tight separators drop incidental whitespace, and
     default=str lets any non-JSON-native scalar (e.g. a date) serialize."""
-    canonical = canonical_node_spec(stage)
+    spec = strip_bookkeeping_keys(stage)
     payload = json.dumps(
-        canonical, sort_keys=True, separators=(",", ":"), default=str
+        spec, sort_keys=True, separators=(",", ":"), default=str
     )
     return compute_short_hash(payload)
 
@@ -278,7 +278,7 @@ def data_model_state(
     SCHEMA_LIBRARY_STAGE_ID rows, but against the library hash rather than letting
     approval_state_for recompute a hash from a node dict: a synthetic node carrying
     {id: _schema_library} would hash differently from the library payload (id is
-    not a canonical-ignore key, by design for real nodes), so the recomputed hash
+    not in HASH_IGNORED_KEYS, by design for real nodes), so the recomputed hash
     would never match a stored approval. Computing the hash here keeps the gate
     honest.
 
@@ -308,11 +308,11 @@ def data_model_state(
 
 
 __all__ = [
-    "CANONICAL_IGNORE_KEYS",
+    "HASH_IGNORED_KEYS",
     "NodeApprovalState",
     "NODE_DECISION_COLUMNS",
     "SCHEMA_LIBRARY_STAGE_ID",
-    "canonical_node_spec",
+    "strip_bookkeeping_keys",
     "node_content_hash",
     "node_decisions_path",
     "load_node_decisions",

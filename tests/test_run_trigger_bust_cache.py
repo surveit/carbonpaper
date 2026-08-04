@@ -7,12 +7,11 @@ import pytest
 from fastapi.datastructures import FormData
 from fastapi.testclient import TestClient
 
-import app.web.routers.runs as runs_router
 import app.services.run as run_service
 from app.main import app
 from app.services import versioning
 from app.services import workspace
-from app.services.versioning import create_version_from_disk
+from app.services.project import save_working_copy_as_version
 from app.web.routers.runs import _read_bust_cache
 
 client = TestClient(app)
@@ -35,13 +34,12 @@ def project(tmp_path, monkeypatch):
     stage = {"id": "load", "name": "Load", "type": "input_data",
              "connector": {"kind": "file",
                            "params": {"path": str(data), "format": "csv"}},
-             "output_schema": {"columns": [{"name": "name", "type": "str"},
-                                           {"name": "val", "type": "int"}]}}
+             "output_schema": {"columns": [{"name": "name", "type": "str", "nullable": True},
+                                           {"name": "val", "type": "int", "nullable": True}]}}
     (proj / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
-    vid = create_version_from_disk(proj, message="seed", reviewer="test").version_id
+    vid = save_working_copy_as_version(proj, message="seed", reviewer="test").version_id
     versioning.publish_version(proj, vid, reviewer="human")
-    monkeypatch.setattr(runs_router, "EXAMPLES_DIR", tmp_path)
-    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     monkeypatch.setattr(run_service, "_run_in_background",
                         lambda target, *args: target(*args))
     return proj

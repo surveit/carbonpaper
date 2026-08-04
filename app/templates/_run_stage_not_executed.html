@@ -1,0 +1,45 @@
+{# ── A stage this run's graph draws but never executed, so the manifest holds no
+   record and no output for it. Rendered by _not_executed_panel (app.web.routers.runs)
+   in place of the 404 the panel used to show.
+
+   Deliberately NOT the two-tier _run_stage_panel: every "Current run" pane of that
+   panel would be empty, and five empty panes read as a broken page rather than as
+   "this stage did not run here". One banner saying so, then the frozen definition —
+   which IS real and worth reading — is the whole panel.
+
+   Context: project / run_id — str · stage — the pinned version's Stage ·
+            is_test_run — bool · function_code (may be None) · type_class / type_glyph #}
+{% from "_schema_table.html" import schema_table %}
+
+<div class="run-stage-panel">
+
+<div class="stage-header">
+    <span class="type-tag {{ type_class.get(stage.type, 'custom') }}">{{ type_glyph.get(stage.type, '') }} {{ stage.type }}</span>
+    <span class="run-status status-pending">not run</span>
+    <h2><code>{{ stage.id }}</code></h2>
+    <p class="stage-id">{{ stage.name }}</p>
+</div>
+
+<p class="banner" id="stage-not-executed">
+    ⏭ <strong>Not executed in this run</strong> — so there is no output, no timing, and no
+    validation to show for it.
+    {% if is_test_run and stage.type == 'input_data' %}
+    A workflow test injects each input stage's rows directly — a limit/offset slice read
+    straight off the bound source — and runs only the stages downstream of them, so this
+    stage never ran and its rows were never written to the run.
+    {% endif %}
+    Its output as a real run would produce it is on
+    <a href="/project/{{ project }}/runs">any production run</a> of this workflow.
+</p>
+
+{# The definition below is the one this run PINNED (the same frozen stage every
+   other pane of the run's panel reads), not the editable working copy. #}
+<h3>Stage definition</h3>
+{# _stage_executable.html renders the function source itself, off `function_code`. #}
+{% include "_stage_executable.html" %}
+
+{% if stage.output_schema %}
+<div class="schema-card"><h4>output schema</h4>{{ schema_table(stage.output_schema) }}</div>
+{% endif %}
+
+</div>{# /run-stage-panel #}

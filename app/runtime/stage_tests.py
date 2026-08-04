@@ -1,5 +1,5 @@
-"""Run a python transform's authored tests against its actual code, executing each
-through the SAME handler registry the real runner uses.
+"""Run a stage's authored tests against its actual code, executing each through
+the SAME handler registry the real runner uses.
 
 Comparison is on the output_schema's columns, counts None and float NaN as one
 absence, and compares both sides as a multiset, so no test pins an ordering.
@@ -16,8 +16,9 @@ from pydantic import BaseModel
 
 from app.core.frames import list_rows
 from app.models import Stage, TableSchema
+from app.models.errors import StepRefused
 from app.models.stage import StageType
-from app.models.stages.stage_tests import STAGE_TEST_TYPES, StageTest
+from app.models.stages.stage_tests import StageTest
 from app.runtime.context import RunContext
 from app.runtime.stages import HANDLERS
 from app.runtime.validation import Severity, validate_dataframe
@@ -69,7 +70,15 @@ class TestRunSummary(BaseModel):
 class StageTestsReport(BaseModel):
     summary: TestRunSummary
     stages: list[StageTestRun]
-    untested_python_stages: list[str]
+    untested_stages: list[str]
+
+    def count_failing_by_stage(self) -> dict[str, int]:
+        """Stage id -> failing example count, omitting the clean ones."""
+        counts = {
+            run.stage_id: sum(1 for r in run.results if r.status != "passed")
+            for run in self.stages
+        }
+        return {stage_id: n for stage_id, n in counts.items() if n}
 
 
 def run_stage_tests(
@@ -77,16 +86,16 @@ def run_stage_tests(
 ) -> StageTestsReport:
     """Run authored stage tests against their current code and report the result.
 
-    With `stage_id` None, run every python-transform stage that carries tests;
-    with a `stage_id`, run just that stage (raising ValueError if it names no
-    stage, or names one whose type carries no runnable tests). Either way,
-    `untested_python_stages` lists the in-scope python transforms that have no
-    tests — a coverage gap the caller should see, not a failure."""
+    With `stage_id` None, run every stage that can carry tests and does; with a
+    `stage_id`, run just that stage (raising ValueError if it names no stage, or
+    names one whose type carries no runnable tests). Either way,
+    `untested_stages` lists the in-scope stages that have no tests — a coverage
+    gap the caller should see, not a failure."""
     targets = _select_target_stages(stages, stage_id)
     runs = [_run_one_stage(stage) for stage in targets if stage.tests]
     untested = [stage.id for stage in targets if not stage.tests]
     return StageTestsReport(
-        summary=_summarize(runs), stages=runs, untested_python_stages=untested
+        summary=_summarize(runs), stages=runs, untested_stages=untested
     )
 
 
@@ -94,7 +103,7 @@ def run_tests_for_stage(stage: Stage) -> list[StageTestResult]:
     """Execute each of `stage.tests` through the stage's registered handler
     and compare to its expected rows. Raises ValueError for stage types whose
     tests cannot execute (the model forbids authoring them there anyway)."""
-    if stage.type not in STAGE_TEST_TYPES:
+    if not stage.CARRIES_RUNNABLE_TESTS:
         raise ValueError(
             f"stage {stage.id} ({stage.type}) does not carry runnable tests"
         )
@@ -102,7 +111,7 @@ def run_tests_for_stage(stage: Stage) -> list[StageTestResult]:
 
 
 def find_failing_stage_tests(stages: list[Stage]) -> list[str]:
-    """The version gate's check: run every python transform's tests and
+    """The version gate's check: run every stage's authored tests and
     return one human-readable line per test the stage fails ([] = gate open).
     Stages without tests contribute nothing — the gate holds existing tests to
     green; it does not require tests to exist."""
@@ -120,13 +129,13 @@ def find_failing_stage_tests(stages: list[Stage]) -> list[str]:
 
 
 def _select_target_stages(stages: list[Stage], stage_id: str | None) -> list[Stage]:
-    """The python-transform stages a run covers: all of them when `stage_id` is
-    None, or exactly the named one — raising ValueError if it is absent or is not
-    a stage type that carries runnable tests."""
+    """The stages a run covers: every one that can carry runnable tests when
+    `stage_id` is None, or exactly the named one — raising ValueError if it is
+    absent or is not a stage type that carries runnable tests."""
     if stage_id is None:
-        return [stage for stage in stages if stage.type in STAGE_TEST_TYPES]
+        return [stage for stage in stages if stage.CARRIES_RUNNABLE_TESTS]
     stage = _find_stage(stages, stage_id)
-    if stage.type not in STAGE_TEST_TYPES:
+    if not stage.CARRIES_RUNNABLE_TESTS:
         raise ValueError(
             f"stage {stage_id} ({stage.type}) does not carry runnable tests"
         )
@@ -165,18 +174,20 @@ def _run_one_test(stage: Stage, test: StageTest) -> StageTestResult:
     malformed = _validate_test_against_schemas(stage, test, input_frames)
     if malformed:
         return StageTestResult(test.name, "malformed", message=malformed)
-    # Ephemeral context: authored tests run only python_row_function /
-    # python_frame_function (STAGE_TEST_TYPES), neither of which reads
-    # repo_root/run_dir or needs project scope — so both are None (no run on
-    # disk), no identity, no cache. A stage reaching for run disk under this
-    # context fails loudly via require_run_dir rather than touching a fabricated
-    # path.
+    # Ephemeral context: every type declaring CARRIES_RUNNABLE_TESTS runs
+    # authored code over its own input and reads neither repo_root/run_dir nor
+    # project scope — so both are None (no run on disk), no identity, no cache. A
+    # stage reaching for run disk under this context fails loudly via
+    # require_run_dir rather than touching a fabricated path.
     ctx = RunContext.for_stages_outside_a_run(None, None)
     try:
         actual = HANDLERS[StageType(stage.type)].execute(stage, input_frames, ctx)
     except Exception as exc:  # noqa: BLE001 — the function is authored code; any raise IS the result
+        return _judge_raise(test, exc)
+    if test.expected is None:
         return StageTestResult(
-            test.name, "error", message=f"{type(exc).__name__}: {exc}"
+            test.name, "mismatch",
+            message=f"expected the step to fail, got {_describe_output(actual)}",
         )
     if not isinstance(actual, pd.DataFrame):
         return StageTestResult(
@@ -184,6 +195,25 @@ def _run_one_test(stage: Stage, test: StageTest) -> StageTestResult:
             message=f"function returned {type(actual).__name__}, expected a DataFrame",
         )
     return _compare(stage, test, actual)
+
+
+def _describe_output(actual: Any) -> str:
+    """What the step returned instead of failing — row count only if it is a frame."""
+    if isinstance(actual, pd.DataFrame):
+        return f"{len(actual)} row(s)"
+    return type(actual).__name__
+
+
+def _judge_raise(test: StageTest, exc: Exception) -> StageTestResult:
+    """Only StepRefused satisfies a failure case; every other raise is an error.
+
+    The type carries the whole signal — nothing is matched against the message. A
+    step that refuses says so by raising StepRefused; a KeyError from the same input
+    is the step falling over, which is what the test was written to tell apart, and
+    it stays an error even on a test that expected a failure."""
+    if test.expected is None and isinstance(exc, StepRefused):
+        return StageTestResult(test.name, "passed")
+    return StageTestResult(test.name, "error", message=f"{type(exc).__name__}: {exc}")
 
 
 def _build_frame(rows: list[dict[str, Any]], schema: TableSchema | None) -> pd.DataFrame:
@@ -212,6 +242,10 @@ def _validate_test_against_schemas(
             f"input {ref.id}: {issue.message}"
             for issue in report.issues if issue.severity == Severity.error
         ]
+    if test.expected is None:
+        # A failure case states no output rows, so there is no output shape to
+        # lint — only its inputs, which a real run would still have to accept.
+        return "; ".join(problems) if problems else None
     expected_frame = _build_frame(test.expected, stage.output_schema)
     report = validate_dataframe(
         expected_frame, stage.output_schema, stage_id=stage.id, phase="output"
@@ -225,8 +259,10 @@ def _validate_test_against_schemas(
 
 def _compare(stage: Stage, test: StageTest, actual: pd.DataFrame) -> StageTestResult:
     # Python transforms always declare their output schema; publish (the
-    # schema-less terminal stage) cannot carry tests.
+    # schema-less terminal stage) cannot carry tests. And a failure case
+    # (expected is None) has already been judged by the time we compare rows.
     assert stage.output_schema is not None
+    assert test.expected is not None
     columns = [column.name for column in stage.output_schema.columns]
     expected_rows = [_select_cells(row, columns) for row in test.expected]
     actual_rows = [_select_cells(row, columns) for row in list_rows(actual)]

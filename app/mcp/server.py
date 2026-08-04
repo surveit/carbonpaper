@@ -22,10 +22,14 @@ from app.core.errors import (
 )
 from app.models import (
     HUMAN_REVIEW_QUEUE_CONTRACT_NOTE,
-    NODE_TYPES,
     StageDraft,
+    find_workflow_compiler_warnings,
     StageType,
 )
+from app.tools.tool_specs import SAVE_VERSION_FROM_WORKING_COPY, TOOL_SPECS
+from app.models.review_guide import ReviewGuideDraft
+from app.services.versioning import ReviewGuide
+from app.models.stages.node_types import NODE_TYPES
 from app.runtime import stage_tests
 from app.services import generation
 from app.services import loader
@@ -35,7 +39,7 @@ from app.services import versioning
 from app.services import workflow_test as workflow_test_service
 from app.services import workspace
 from app.services.errors import WorkflowLoadError
-from app.services.stage_edit import AddStagesResult, EditStageResult
+from app.services.stage_edit import EditStageResult
 
 # Domain failures a run/workflow-test tool turns into {ok: False, error: str(exc)} — a
 # loud, honest verdict rather than a traceback or a fabricated run id/status.
@@ -84,7 +88,7 @@ the whole graph before it is stored.
 # Setup
 1. create_project(name, document) — the methodology prose becomes the project's source
    of record. Returns the project_id every other tool takes.
-2. generate_data_model(project_id) — derives the named schemas from the document. Runs in
+2. generate_data_model(project_id) — generates the named schemas from the document. Runs in
    the background; poll get_project_status until schemas appear.
 3. The HUMAN approves the data model in the web UI. No tool approves it.
 
@@ -106,13 +110,38 @@ the whole graph before it is stored.
    JSON Merge Patch), remove_stage(project_id, stage_id) to undo a stage you added
    (refused while another stage still lists it in `inputs`).
 
+# The review guide, and why it exists
+A workflow you author is not self-explaining. The human who owns the methodology has to
+decide whether it does what they meant — and they read the stage graph, not the code. The
+review guide is the prose that makes that decision possible: an ordered walkthrough,
+each step naming the stages it covers and saying what a reviewer should check.
+
+8. write_review_guide(project_id, version_id, guide) — write it once the workflow needs a
+   human to understand it before acting on it, which is any version you expect to be
+   published or run. Nothing generates one and nothing seeds one; you write it from a blank
+   page. read_review_guide shows what a version already carries.
+   Write it FOR the methodology's owner, not a programmer: use the document's terms of
+   art, wrap column names in `backticks`, and say what could be quietly wrong rather than
+   restating the stage names and order the page already shows.
+
 Added stages land `unreviewed`. REVIEW AND APPROVAL ARE HUMAN-ONLY, in the web UI, and
-only a human publishes. Your job ends at a saved version with a workflow test run for the
-human to review.
+only a human publishes. Your job ends at a saved version carrying a review guide, with a
+workflow test run for the human to review.
 
 # Per-stage tests
-Once a python-transform stage exists, generate_stage_tests derives its tests from the
+Once a python-transform stage exists, generate_stage_tests writes its tests from the
 methodology; then loop edit_stage → run_stage_tests until they pass.
+
+# Finishing
+report_compiler_warnings(project_id) reports what is wrong with the workflow,
+including any stage whose examples do not pass. Dirty is fine while you build.
+
+Two different things you can ask a human for, with different bars:
+- A look at a smoke test — run_workflow_test and a review of what came out. Fine with
+  warnings outstanding; say which ones are open.
+- FINAL SIGNOFF. Do not ask for this with any warning outstanding. Either clear it, or
+  state plainly why that specific warning is safe to ignore here. A warning you leave
+  unmentioned spends the reviewer's attention on something you already knew about.
 
 # Running
 Runs execute a stored version; save_version(project_id, message) creates one, then
@@ -188,43 +217,25 @@ async def run_session_manager() -> AsyncIterator[None]:
             _active_manager = None
 
 
-@mcp.tool()
+@mcp.tool(description=TOOL_SPECS["list_projects"].description)
 def list_projects() -> list[str]:
-    """List the names of every project in the workspace that has an authored
-    workflow. A just-created project appears here only once its first stage has
-    been added — use get_project_status(project_id) to inspect one before that."""
     return project_service.list_projects()
 
 
-@mcp.tool()
+@mcp.tool(description=TOOL_SPECS["create_project"].description)
 def create_project(name: str, document: str) -> dict[str, Any]:
-    """Create a NEW project from a methodology document (prose describing how the
-    investigation finds, verifies, and surfaces its claims). Writes the document
-    as the project's source of record. Returns the project_id (the sanitized
-    name). Fails loudly if the name is taken — never overwrites. Next step:
-    generate_data_model(project_id)."""
     project_id = project_service.create_project(name, document, source="mcp")
     return {"project_id": project_id, "next": "generate_data_model"}
 
 
-@mcp.tool()
+@mcp.tool(description=TOOL_SPECS["get_project_status"].description)
 def get_project_status(project_id: str) -> dict[str, Any]:
-    """One project's full status snapshot: document present?, data-model state
-    (generating shows no schemas yet; then unapproved/approved), workflow stage
-    counts and review coverage, versions, runs. Poll this after generate_* to see
-    the result land."""
     pdir = _resolve_existing_project(project_id)
     return project_service.project_state(pdir).model_dump(mode="json")
 
 
-@mcp.tool()
+@mcp.tool(description=TOOL_SPECS["generate_data_model"].description)
 async def generate_data_model(project_id: str) -> dict[str, Any]:
-    """Generate the project's DATA MODEL (named schemas) from its methodology
-    document. Starts a live generation turn in the background and returns
-    immediately — poll get_project_status until schemas appear, and tell the user
-    they can watch it stream at the returned `watch` path in the web UI. The
-    human then reviews/approves the data model in the web UI; the approved
-    schemas are the vocabulary you author the workflow's stages against."""
     pdir = _resolve_existing_project(project_id)
     document = _read_document(pdir, project_id)
     model = project_service.project_meta(pdir).model or "sonnet"
@@ -232,17 +243,8 @@ async def generate_data_model(project_id: str) -> dict[str, Any]:
     return {"status": "started", "watch": f"/chat/{session_id}", "poll": "get_project_status"}
 
 
-@mcp.tool()
+@mcp.tool(description=TOOL_SPECS["generate_stage_tests"].description)
 async def generate_stage_tests(project_id: str, stage_id: str) -> dict[str, Any]:
-    """Derive tests for one python-transform stage FROM THE METHODOLOGY. The
-    derivation is code-blind by construction: the deriver only ever sees the
-    methodology document plus the data model / stage schemas, never the stage's
-    code or any existing tests — so calling this right after generating or
-    editing the code cannot anchor the tests on the implementation (that would
-    assert the code equals itself). Starts a background turn and returns
-    immediately; on completion the derived suite REPLACES the stage's tests
-    wholesale. Fails loudly if the stage is not a python transform or has no
-    output schema."""
     pdir = _resolve_existing_project(project_id)
     model = project_service.project_meta(pdir).model or "sonnet"
     session_id = generation.start_stage_test_generation(pdir, stage_id=stage_id, model=model)
@@ -250,145 +252,60 @@ async def generate_stage_tests(project_id: str, stage_id: str) -> dict[str, Any]
         "status": "started",
         "watch": f"/chat/{session_id}",
         "poll": "get_project_status",
-        "note": "read_stage to see the derived tests once done",
+        "note": "read_stage to see the generated tests once done",
     }
 
 
-@mcp.tool()
+@mcp.tool(description=TOOL_SPECS["run_stage_tests"].description)
 def run_stage_tests(project_id: str, stage_id: str | None = None) -> dict[str, Any]:
-    """Run a stage's authored tests against its CURRENT code and report the
-    result. Omit `stage_id` to run every python-transform stage that has tests,
-    or pass one to scope the run to that stage. Use this after regenerating code
-    with edit_stage to see which tests the new code fails — the report carries a
-    summary plus, per test, its status and any cell diffs, and lists
-    `untested_python_stages` (python transforms with no tests, a coverage gap).
-    This does NOT edit tests: a failing test means the code disagrees with the
-    frozen test, and the fix is to the code (or to re-derive via
-    generate_stage_tests), never to bend the test to the code."""
     pdir = _resolve_existing_project(project_id)
     stages = loader.load_workflow(pdir)
     report: stage_tests.StageTestsReport = stage_tests.run_stage_tests(stages, stage_id)
     return report.model_dump(mode="json")
 
 
-@mcp.tool()
+@mcp.tool(description=TOOL_SPECS["report_compiler_warnings"].description)
+def report_compiler_warnings(project_id: str) -> dict[str, Any]:
+    pdir = _resolve_existing_project(project_id)
+    stages = loader.load_workflow(pdir)
+    failing = stage_tests.run_stage_tests(stages).count_failing_by_stage()
+    report = find_workflow_compiler_warnings(stages, failing)
+    return {
+        "is_clean": report.is_clean,
+        "blocking": [w.model_dump(mode="json") for w in report.blocking],
+        "warnings": [w.model_dump(mode="json") for w in report.warnings],
+    }
+
+
+@mcp.tool(description=TOOL_SPECS["read_data_model"].description)
 def read_data_model(project_id: str) -> list[dict[str, Any]]:
-    """The project's data model: every named schema as JSON (empty list if none
-    generated yet)."""
     pdir = _resolve_existing_project(project_id)
     return workspace.load_schemas(pdir)
 
 
-@mcp.tool()
+@mcp.tool(description=TOOL_SPECS["describe_workflow"].description)
 def describe_workflow(project_id: str) -> dict[str, Any]:
-    """Summarize a project's workflow: each stage's id, type, name, upstream input
-    ids, and review state. Read this before editing so you know the current
-    shape. Does not return full stage specs — use read_stage for one."""
     _resolve_existing_project(project_id)
     return project_service.describe_workflow(project_id)
 
 
-@mcp.tool()
+@mcp.tool(description=TOOL_SPECS["read_stage"].description)
 def read_stage(project_id: str, stage_id: str) -> str:
-    """Return the JSON of one stage from the workflow. Read before editing."""
     return project_service.read_stage(project_id, stage_id)
 
 
-@mcp.tool()
+@mcp.tool(description=TOOL_SPECS["edit_stage"].description)
 def edit_stage(project_id: str, stage_id: str, changes_json: str) -> dict[str, Any]:
-    """Change specific fields of one stage. `changes_json` is a JSON object of
-    ONLY the fields to change (a JSON Merge Patch): {"limit": 100} sets limit;
-    {"llm": {"model": "opus"}} changes only llm.model and leaves the rest of the
-    llm block intact; {"name": null} deletes a field. Fields you do not mention
-    are preserved exactly. Validated first; if invalid, nothing is written and
-    the issues are returned. A successful edit drops the node to 'edited_stale'
-    for a human to re-approve — you cannot approve it yourself. You cannot
-    change a stage's id this way."""
     return catch_stage_edit_refusals(lambda: project_service.edit_stage(project_id, stage_id, changes_json))
 
 
-@mcp.tool()
+@mcp.tool(description=TOOL_SPECS["add_stage"].description)
 def add_stage(project_id: str, stages: list[StageDraft]) -> dict[str, Any]:
-    """Create NEW stages in the workflow. `stages` is a LIST — submit every stage
-    you are ready to author in ONE call; a list of one is the single-stage case.
-    Each is a FULL stage: id (new and unique — use edit_stage to change an
-    existing one), name, type, the type's handle block (e.g. connector / llm /
-    function), output_schema, and inputs. read_stage on a similar existing stage
-    shows the shape.
-
-    Order does not matter: the batch is sorted by the `inputs` each stage
-    declares, so a stage may name another stage in the SAME call as an input, or
-    one already in the workflow.
-
-    Each stage is validated against the whole workflow-so-far before it is
-    written: its own shape, unique ids, inputs resolving, no cycles, and edge
-    conformance — a column a stage declares on an input that the upstream's
-    output_schema does not supply is refused. The result reports every stage:
-
-      added   — ids now in the workflow
-      failed  — [{id, issues}]; that stage was NOT written, the rest still were
-      skipped — [{id, because}]; not attempted, because a stage it inputs from
-                failed or was itself skipped
-      issues  — every failure's issues flattened, so `ok`/`issues` reads the same
-                as it always has
-
-    Fix what `failed` names and re-send only the failed and skipped stages:
-    read_stage the named upstream, repair the declared input schema against what
-    that stage really outputs. A batch that cannot be ordered at all — duplicate
-    ids, or a cycle among the submitted stages — is refused whole, with NOTHING
-    written and the cycle named in `issues`.
-
-    Copying a stage from read_stage is fine: the server-owned fields it carries
-    (tests, eval, review, source) are dropped rather than refused, and a
-    `warnings` entry names the stage and the fields dropped from it. Any OTHER
-    unknown field is still an error — a typo'd field name never passes silently.
-
-    New nodes land 'unreviewed' for a human to approve. The FIRST stage of a
-    project starts its workflow — no other tool creates one."""
-    try:
-        outcome = project_service.add_stages(project_id, stages)
-    except _STAGE_TOOL_ERRORS as exc:
-        outcome = AddStagesResult(batch_issues=[str(exc)])
-
-    result: dict[str, Any] = {
-        "ok": not (outcome.failed or outcome.batch_issues),
-        "added": outcome.added,
-        "failed": [{"id": f.id, "issues": f.issues} for f in outcome.failed],
-        "skipped": [{"id": s.id, "because": s.because} for s in outcome.skipped],
-        "issues": outcome.batch_issues + [i for f in outcome.failed for i in f.issues],
-    }
-    warnings = _find_dropped_field_warnings(stages, outcome.added)
-    if warnings:
-        result["warnings"] = warnings
-    return result
+    return project_service.add_stages_reporting_drops(project_id, stages)
 
 
-def _find_dropped_field_warnings(stages: list[StageDraft], added: list[str]) -> list[str]:
-    """One entry per STORED stage that echoed back fields only the server writes,
-    naming the stage so a batch does not lose which one carried them, plus one
-    trailing entry saying who does write them. A stage that was not stored is not
-    warned about — nothing was dropped from the workflow on its behalf."""
-    stored = set(added)
-    named = [
-        f"`{s.id}`: ignored server-owned fields: {', '.join(s.dropped_server_owned_fields)}"
-        for s in stages
-        if s.id in stored and s.dropped_server_owned_fields
-    ]
-    if not named:
-        return []
-    return named + [
-        "only the server writes these: tests come from generate_stage_tests, "
-        "review is human-only."
-    ]
-
-
-@mcp.tool()
+@mcp.tool(description=TOOL_SPECS["remove_stage"].description)
 def remove_stage(project_id: str, stage_id: str) -> dict[str, Any]:
-    """Delete one stage from the workflow — the undo for a stage you added. The
-    workflow WITHOUT the stage is validated first: if another stage still lists it
-    in `inputs`, the removal is refused, nothing is deleted, and the issues are
-    returned (remove or repoint the downstream stage first). Removing the last
-    remaining stage is allowed."""
     return catch_stage_edit_refusals(lambda: project_service.remove_stage(project_id, stage_id))
 
 
@@ -405,25 +322,15 @@ def catch_stage_edit_refusals(edit: Callable[[], EditStageResult]) -> dict[str, 
     return {"ok": result.ok, "issues": result.issues}
 
 
-@mcp.tool()
+@mcp.tool(description=SAVE_VERSION_FROM_WORKING_COPY.description)
 def save_version(
     project_id: str, message: str, parent_version: str | None = None
 ) -> dict[str, Any]:
-    """Freeze the project's CURRENT workflow into an immutable version — the snapshot
-    a run or a workflow test executes. Born UNPUBLISHED: only a human publishes.
-
-    `parent_version` is the version YOU started this edit from. Supply it only when you
-    actually loaded that version; it is recorded verbatim as this snapshot's ancestor,
-    and an id naming no version of this project is refused. Omitting it is normal and
-    records no ancestor — nothing is inferred from what else the project has stored.
-
-    The working copy is strict-loaded first, so an invalid workflow comes back as
-    {ok: False, issues} and no version is written."""
     pdir = _resolve_existing_project(project_id)
     try:
         if parent_version is not None:
             versioning.validate_version_exists(pdir, parent_version)
-        version = versioning.create_version_from_disk(
+        version = project_service.save_working_copy_as_version(
             pdir, message=message, reviewer="agent", parent_version=parent_version
         )
     except _STAGE_TOOL_ERRORS as exc:
@@ -431,16 +338,22 @@ def save_version(
     return {"ok": True, "issues": [], "version_id": version.version_id}
 
 
-@mcp.tool()
+@mcp.tool(description=TOOL_SPECS["read_review_guide"].description)
+def read_review_guide(project_id: str, version_id: str) -> ReviewGuide | None:
+    _resolve_existing_project(project_id)
+    return project_service.read_review_guide(project_id, version_id)
+
+
+@mcp.tool(description=TOOL_SPECS["write_review_guide"].description)
+def write_review_guide(
+    project_id: str, version_id: str, guide: ReviewGuideDraft
+) -> ReviewGuide:
+    _resolve_existing_project(project_id)
+    return project_service.write_review_guide(project_id, version_id, guide)
+
+
+@mcp.tool(description=TOOL_SPECS["run_workflow"].description)
 def run_workflow(project_id: str, version_id: str | None = None) -> dict[str, Any]:
-    """Start a REAL production run of the project's published workflow and return
-    its `run_id` immediately — the run executes in the background. This is a run
-    of record: it writes a manifest under the project's runs/ dir and produces the
-    workflow's published artifacts. `version_id` pins a specific published version
-    (omit for the newest published one); an unpublished or missing version is a
-    loud error, never a silent fallback. Poll get_run_status(project_id, run_id)
-    for live progress and the final status. On a pre-run failure (nothing
-    published, an unbound input) returns {ok: False, error} and starts no run."""
     _resolve_existing_project(project_id)  # loud if the project doesn't exist
     try:
         run_id = run_service.start_run(project_id, version_id=version_id)
@@ -449,12 +362,8 @@ def run_workflow(project_id: str, version_id: str | None = None) -> dict[str, An
     return {"run_id": run_id, "status": run_service.read_run_status(project_id, run_id)["status"]}
 
 
-@mcp.tool()
+@mcp.tool(description=TOOL_SPECS["get_run_status"].description)
 def get_run_status(project_id: str, run_id: str) -> dict[str, Any]:
-    """The current manifest of one production run as a dict: its overall status
-    (running / ok / errors / halted), per-stage statuses, and run metadata. Poll
-    this after run_workflow to follow progress and see the outcome. An unknown or
-    expired run_id returns {ok: False, error} rather than a fabricated status."""
     _resolve_existing_project(project_id)  # loud if the project doesn't exist
     try:
         return run_service.read_run_status(project_id, run_id)
@@ -462,31 +371,10 @@ def get_run_status(project_id: str, run_id: str) -> dict[str, Any]:
         return {"ok": False, "error": str(exc)}
 
 
-@mcp.tool()
+@mcp.tool(description=TOOL_SPECS["run_workflow_test"].description)
 def run_workflow_test(
     project_id: str, version_id: str | None = None, limit: int = 20, offset: int = 0,
 ) -> dict[str, Any]:
-    """Run a workflow test, so an author can watch the pipeline execute on real
-    data before publishing. It IS a real run — same `runs/` dir, manifest, and
-    trace/view routes as run_workflow's — and differs from run_workflow on
-    exactly five axes:
-
-    1. VERSION: any stored version, published or not (run_workflow pins a
-       published one). Omit `version_id` for the newest stored.
-    2. SOURCE: the `limit` rows from `offset` of the workflow's bound source,
-       injected (run_workflow reads the whole source through input_data).
-    3. EXECUTION: synchronous — this returns when the run is done (run_workflow
-       returns a run_id immediately and executes on a background thread).
-    4. REVIEW QUEUE: a human_review_queue stage auto-approves every row in
-       memory (run_workflow halts there and waits for a human).
-    5. STAGE CACHE: read-only — it may replay a workflow run's cached results
-       but records none of its own, so it cannot affect a later run.
-
-    Marked `is_test_run` on the manifest, so it never counts as the project's
-    latest run. Returns the verdict {ok, run_id, version_id, stages_run, error}:
-    `ok` False on any stage error, with `error` naming what failed; poll
-    get_run_status(project_id, run_id) for the same live/final manifest
-    run_workflow exposes. A project with no stored version is a loud error."""
     _resolve_existing_project(project_id)  # loud if the project doesn't exist
     try:
         return workflow_test_service.run_workflow_test(

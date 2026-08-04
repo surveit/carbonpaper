@@ -56,6 +56,52 @@
     // Re-grab the (possibly new) svg after a re-render and fit to width again.
     vp._refit = function () { if (grabSvg()) fit(); };
 
+    // Outline one node and bring it into view, zooming in first when the diagram is
+    // fitted so small that the node is unreadable. Returns false when the id names no
+    // node — the caller may be racing a re-render and want to retry.
+    vp._focusNode = function (stageId, minScale) {
+      if (!svg && !grabSvg()) return false;
+      svg.querySelectorAll("g.node.wf-node-active")
+        .forEach(function (n) { n.classList.remove("wf-node-active"); });
+      if (!stageId) return true;
+      var node = findNode(stageId);
+      if (!node) return false;
+      node.classList.add("wf-node-active");
+      if (scale < (minScale || 1)) { scale = minScale || 1; apply(); }
+      // Measure AFTER any zoom: the box moves when the svg is rescaled. clientWidth,
+      // not the rect's width, so a visible scrollbar does not shift the centre.
+      var box = node.getBoundingClientRect(), port = vp.getBoundingClientRect();
+      vp.scrollTo({
+        left: vp.scrollLeft + (box.left + box.width / 2) - (port.left + vp.clientWidth / 2),
+        top: vp.scrollTop + (box.top + box.height / 2) - (port.top + vp.clientHeight / 2),
+        behavior: "smooth",
+      });
+      pulse(node);
+      return true;
+    };
+
+    // mermaid ids a flowchart node "mermaid-<salt>-flowchart-<stageId>-<n>", where the
+    // salt is a per-render timestamp. Anchoring the stage id between "flowchart-" and a
+    // trailing index matches the whole id, so a stage whose id is a substring of another
+    // ("route" vs "solicitation_route") cannot win the lookup.
+    function findNode(stageId) {
+      var escaped = stageId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      var wanted = new RegExp("(?:^|-)flowchart-" + escaped + "-\\d+$");
+      var nodes = svg.querySelectorAll("g.node");
+      for (var i = 0; i < nodes.length; i++) {
+        if (wanted.test(nodes[i].id)) return nodes[i];
+      }
+      return null;
+    }
+
+    // Restart the arrival pulse even when the same node is focused twice in a row:
+    // re-adding a class the element already carries does not replay its animation.
+    function pulse(node) {
+      node.classList.remove("wf-node-arriving");
+      void node.getBoundingClientRect();          // force a style flush between removal and re-add
+      node.classList.add("wf-node-arriving");
+    }
+
     if (grabSvg()) fit();
 
     block.querySelectorAll("[data-zoom]").forEach(function (b) {

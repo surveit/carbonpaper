@@ -11,25 +11,26 @@ from app.runtime.cancellation import consume_cancel, request_cancel
 from app.runtime.runner import prepare_run, run_prepared
 from app.runtime.stages import llm_transform as lt
 from app.services import versioning
-from app.services.versioning import create_version_from_disk
+from app.services.project import save_working_copy_as_version
+from conftest import pinned_stages, resumed_stages
 
 
 # The two shapes the fixtures below load: the (name, val) items csv, and the
 # (id, text) csv the llm project scores. Declared once so an upstream's
 # output_schema and its downstream's input `schema` cannot drift apart.
-_NAME_VAL_SCHEMA = {"columns": [{"name": "name", "type": "str"},
-                                {"name": "val", "type": "int"}]}
-_ID_TEXT_SCHEMA = {"columns": [{"name": "id", "type": "str"},
-                               {"name": "text", "type": "str"}],
+_NAME_VAL_SCHEMA = {"columns": [{"name": "name", "type": "str", "nullable": True},
+                                {"name": "val", "type": "int", "nullable": True}]}
+_ID_TEXT_SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True},
+                               {"name": "text", "type": "str", "nullable": True}],
                    "primary_key": ["id"]}
-_SCORED_SCHEMA = {"columns": [{"name": "id", "type": "str"},
-                              {"name": "text", "type": "str"},
+_SCORED_SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True},
+                              {"name": "text", "type": "str", "nullable": True},
                               {"name": "score", "type": "int", "nullable": False}],
                   "primary_key": ["id"]}
 
 
 def _seed_version(root):
-    vid = create_version_from_disk(root, message="test seed", reviewer="test").version_id
+    vid = save_working_copy_as_version(root, message="test seed", reviewer="test").version_id
     versioning.publish_version(root, vid, reviewer="human")
     return vid
 
@@ -59,7 +60,7 @@ def _two_stage_project(root):
 def test_cancel_requested_before_run_starts_leaves_the_first_stage_pending(tmp_path):
     _one_stage_project(tmp_path)
     _seed_version(tmp_path)
-    prep = prepare_run(tmp_path, repo_root=tmp_path)
+    prep = prepare_run(tmp_path, tmp_path, *pinned_stages(tmp_path))
     request_cancel(tmp_path.name, prep["run_id"])
 
     manifest = run_prepared(prep)
@@ -84,7 +85,7 @@ def test_mid_run_cancel_preserves_the_completed_stages_output(tmp_path, monkeypa
     threads, which would make the test timing-dependent."""
     _two_stage_project(tmp_path)
     _seed_version(tmp_path)
-    prep = prepare_run(tmp_path, repo_root=tmp_path)
+    prep = prepare_run(tmp_path, tmp_path, *pinned_stages(tmp_path))
 
     calls = {"n": 0}
 
@@ -160,7 +161,7 @@ def test_mid_stage_cancel_marks_the_running_stage_cancelled_not_pending(tmp_path
 
     _three_stage_llm_project(tmp_path)
     _seed_version(tmp_path)
-    prep = prepare_run(tmp_path, repo_root=tmp_path)
+    prep = prepare_run(tmp_path, tmp_path, *pinned_stages(tmp_path))
 
     manifest = run_prepared(prep)
 
@@ -188,13 +189,14 @@ def test_a_cancelled_run_can_be_resumed_and_runs_to_completion(tmp_path):
     special-casing of the cancel — that is the whole point of consume-on-read."""
     _two_stage_project(tmp_path)
     _seed_version(tmp_path)
-    prep = prepare_run(tmp_path, repo_root=tmp_path)
+    prep = prepare_run(tmp_path, tmp_path, *pinned_stages(tmp_path))
     request_cancel(tmp_path.name, prep["run_id"])
 
     cancelled = run_prepared(prep)
     assert cancelled["status"] == "cancelled"
 
-    resumed = runner.resume_run(tmp_path, prep["run_id"], tmp_path)
+    resumed = runner.resume_run(tmp_path, prep["run_id"], tmp_path,
+                            *resumed_stages(tmp_path, prep["run_id"]))
 
     assert resumed["status"] == "ok"
     records = {r["stage_id"]: r for r in resumed["stage_records"]}

@@ -6,7 +6,7 @@ import pytest
 
 from app.core.errors import ReviewValidationError
 from app.core.stage_cache import StageCacheEntry
-from app.models import ReviewVerdict, Stage
+from app.models import ReviewVerdict, Stage, parse_stage
 from app.services import review
 from conftest import queue_columns
 
@@ -14,16 +14,16 @@ FROZEN_ROW = {"id": "a", "score": 1}
 
 # Every source any queue config below reviews, so one input schema serves them all.
 _INPUT_COLUMNS: list[dict[str, object]] = [
-    {"name": "id", "type": "str"},
-    {"name": "score", "type": "int"},
-    {"name": "label", "type": "str"},
+    {"name": "id", "type": "str", "nullable": True},
+    {"name": "score", "type": "int", "nullable": True},
+    {"name": "label", "type": "str", "nullable": True},
 ]
 _SOURCE_TYPES = {column["name"]: column["type"] for column in _INPUT_COLUMNS}
 
 
 def _stage(queue: dict[str, object] | None = None) -> Stage:
     block = queue if queue is not None else queue_columns()
-    return Stage.model_validate({
+    return parse_stage({
         "id": "review", "name": "Review", "type": "human_review_queue",
         "inputs": [{"id": "scored", "schema": {"columns": _INPUT_COLUMNS}}],
         "output_schema": {"columns": _INPUT_COLUMNS + _added_columns(block)},
@@ -32,16 +32,16 @@ def _stage(queue: dict[str, object] | None = None) -> Stage:
 
 
 def _added_columns(queue: Mapping[str, object]) -> list[dict[str, object]]:
-    """output_schema must declare every column the queue block adds, so the
-    fixture derives them from the block rather than restating them."""
+    # output_schema must declare every column the queue block adds, so the fixture reads
+    # them off the block rather than restating them.
     reviewed = queue["reviewed_columns"]
     assert isinstance(reviewed, dict)
     columns: list[dict[str, object]] = [
-        {"name": target, "type": _SOURCE_TYPES[source]}
+        {"name": target, "type": _SOURCE_TYPES[source], "nullable": True}
         for source, target in reviewed.items()
     ]
     columns += [
-        {"name": queue[field], "type": "str"}
+        {"name": queue[field], "type": "str", "nullable": True}
         for field in ("verdict_column", "reviewer_column",
                       "reviewed_at_column", "review_notes_column")
         if queue.get(field) is not None

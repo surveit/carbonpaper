@@ -1,4 +1,4 @@
-"""Location-derived scope: an arch test in an ``_arch_tests/`` folder governs the
+"""Scope taken from location: an arch test in an ``_arch_tests/`` folder governs the
 subtree it sits in — no hardcoded path. Exemptions are checked on the path RELATIVE
 to the scan base: the checkout may itself live under a hidden directory (e.g. a git
 worktree under ``.claude/``), whose absolute parts would match ``startswith(".")``.
@@ -11,6 +11,8 @@ from pathlib import Path
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _MARKER = "_arch_tests"
 _EXEMPT_PARTS = {"tests", _MARKER, "__pycache__", "_vendor", "node_modules", "venv"}
+# Wider than _EXEMPT_PARTS: prose rules govern tests and docs too, not just app code.
+_EXEMPT_TEXT_PARTS = {"__pycache__", "_vendor", "node_modules", "venv"}
 
 
 def find_governed_files(test_file: str) -> list[Path]:
@@ -33,6 +35,26 @@ def scan_all_source() -> list[Path]:
         raise ValueError(
             f"scan_all_source found no source files under {_REPO_ROOT} — the scope "
             "resolver is misconfigured (exemptions are excluding everything)"
+        )
+    return files
+
+
+def scan_all_text(suffixes: tuple[str, ...]) -> list[Path]:
+    """Every first-party file with one of `suffixes` — tests and docs included,
+    unlike `scan_all_source`."""
+    files = sorted(
+        path
+        for suffix in suffixes
+        for path in _REPO_ROOT.rglob(f"*{suffix}")
+        if not any(
+            part.startswith(".") or part in _EXEMPT_TEXT_PARTS
+            for part in path.relative_to(_REPO_ROOT).parts
+        )
+    )
+    if not files:
+        raise ValueError(
+            f"scan_all_text found no {suffixes} files under {_REPO_ROOT} — the "
+            "scope resolver is misconfigured"
         )
     return files
 

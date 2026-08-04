@@ -51,8 +51,52 @@
      'none':    ('○', 'glyph-none'),
      'review':  ('👤', 'glyph-review'),
    } %}
-<div class="app-shell">
-  <aside class="app-side">
+{# The sidebar collapses to a narrow re-open button, so a wide working view (a run,
+   a diagram) can have the width back. Purely additive: nothing else about the shell
+   changes, and the state is remembered per project. #}
+<style>
+  .app-shell.side-collapsed { grid-template-columns: auto minmax(0, 1fr); gap: 14px; }
+  /* style.css gives .app-side `display: flex`, and an author display rule beats the
+     UA's `[hidden] { display: none }` — so without this the hidden sidebar stays a
+     grid item and the collapse reclaims almost no width. */
+  .app-side[hidden] { display: none; }
+  /* Drawer toggles: square icon buttons, the conventional panel-left pair. The
+     chevron points the way the panel is about to move. */
+  .drawer-btn { display: inline-flex; align-items: center; justify-content: center;
+    width: 26px; height: 26px; padding: 0; border: 1px solid var(--rule, #ccc);
+    background: #fff; border-radius: 4px; cursor: pointer; color: var(--muted, #777); }
+  .drawer-btn:hover { background: var(--code-bg, #f0f0f0); border-color: var(--ink, #888);
+    color: var(--body, #333); }
+  .drawer-btn svg { display: block; }
+  /* Required, not tidy-up: the `display` above beats the UA's `[hidden] { display:
+     none }`, so without this the hidden toggle stays a grid item and shoves the
+     real columns onto a second row. Same trap as .app-side below. */
+  .drawer-btn[hidden] { display: none; }
+  .app-side-collapse { margin-left: auto; }
+  .app-side-expand { position: sticky; top: 16px; }
+  @media (max-width: 860px) {
+    .app-shell.side-collapsed { grid-template-columns: 1fr; }
+    .app-side-expand { position: static; }
+  }
+</style>
+<div class="app-shell" id="app-shell">
+  {# panel-left-open / panel-left-close: the rect is the page, the rule is the
+     panel edge, the chevron says which way it goes. #}
+  <button type="button" class="drawer-btn app-side-expand" id="app-side-expand" hidden
+          title="Show the project sidebar" aria-label="Show the project sidebar">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="m14 9 3 3-3 3"/>
+    </svg>
+  </button>
+  <aside class="app-side" id="app-side">
+    <button type="button" class="drawer-btn app-side-collapse" id="app-side-collapse"
+            title="Hide the project sidebar" aria-label="Hide the project sidebar">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="m16 15-3-3 3-3"/>
+      </svg>
+    </button>
     <a class="app-side-brand" href="/project/{{ state.name }}" title="{{ state.meta.title or state.name }}">
       <span class="app-side-kicker">project</span>
       <span class="app-side-name">{{ state.meta.title or state.name }}</span>
@@ -100,4 +144,24 @@
     {% block section %}{% endblock %}
   </div>
 </div>
+<script>
+(function () {
+  const shell = document.getElementById('app-shell');
+  const side = document.getElementById('app-side');
+  const expand = document.getElementById('app-side-expand');
+  const collapse = document.getElementById('app-side-collapse');
+  const KEY = 'app-side-collapsed:' + {{ state.name | tojson }};
+
+  function setCollapsed(on) {
+    shell.classList.toggle('side-collapsed', on);
+    side.hidden = on;
+    expand.hidden = !on;
+    try { localStorage.setItem(KEY, on ? '1' : '0'); } catch (e) { /* private mode */ }
+  }
+  collapse.addEventListener('click', () => setCollapsed(true));
+  expand.addEventListener('click', () => setCollapsed(false));
+  // Expanded unless this project was explicitly collapsed before.
+  try { if (localStorage.getItem(KEY) === '1') setCollapsed(true); } catch (e) { /* ignore */ }
+})();
+</script>
 {% endblock %}

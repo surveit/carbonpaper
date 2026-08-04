@@ -12,7 +12,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.core.run_status import RunStatus, StageStatus
-from app.models import Stage
+from app.models import parse_stage
 from app.runtime.manifest import (
     RunManifest,
     StageContribution,
@@ -69,10 +69,10 @@ def test_minted_manifest_omits_the_run_level_optionals():
     run-level optionals the run only earns later (`finished_at`, `halted_at`,
     `cancelled_at`, `resumed_at`, `updated_at`)."""
     abs_path = str((Path.cwd() / "x.csv").resolve())
-    stage = Stage.model_validate(
+    stage = parse_stage(
         {"id": "s", "name": "S", "type": "input_data",
          "connector": {"kind": "file", "params": {"path": abs_path, "format": "csv"}},
-         "output_schema": {"columns": [{"name": "k"}]}}
+         "output_schema": {"columns": [{"name": "k", "type": "str", "nullable": True}]}}
     )
     manifest = create_run_manifest(
         [stage], run_id="r", project="p", workflow_version="v",

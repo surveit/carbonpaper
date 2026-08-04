@@ -61,7 +61,7 @@ _RULES: tuple[ProtectedAttributeRule, ...] = (
         rationale=(
             "TableSchema.columns is app/models' to search, project, or "
             "filter — a caller that needs 'the column names of this schema' "
-            "or 'the columns matching X' is re-deriving a primitive the "
+            "or 'the columns matching X' is re-implementing a primitive the "
             "schema should expose (see TableSchema.subtract/is_subset_of for "
             "the whole-schema equivalent already avoided this way)."
         ),
@@ -73,7 +73,7 @@ _RULES: tuple[ProtectedAttributeRule, ...] = (
         rationale=(
             "Workflow.stages is app/models' to index, project, or "
             "filter — a caller that needs 'the stage with this id' or 'the "
-            "ids of these stages' is re-deriving a primitive Workflow should "
+            "ids of these stages' is re-implementing a primitive Workflow should "
             "expose (see Workflow.index_stages_by_id, added for exactly the "
             "three sites that used to hand-roll {stage.id: stage for stage "
             "in workflow.stages})."
@@ -236,12 +236,12 @@ def test_find_mutation_sites_ignores_a_plain_read() -> None:
 def test_find_source_files_excludes_owner_and_exempt_paths(tmp_path: Path) -> None:
     owner_dir = tmp_path / "core" / "models"
     owner_dir.mkdir(parents=True)
-    (owner_dir / "workflow.py").write_text("")
+    (owner_dir / "workflow.py").write_text("", encoding="utf-8")
     exempt_file = tmp_path / "services" / "drafts.py"
     exempt_file.parent.mkdir(parents=True)
-    exempt_file.write_text("")
+    exempt_file.write_text("", encoding="utf-8")
     other_file = tmp_path / "services" / "runner.py"
-    other_file.write_text("")
+    other_file.write_text("", encoding="utf-8")
     rule = ProtectedAttributeRule(
         attribute="stages",
         owner=owner_dir,
@@ -254,7 +254,7 @@ def test_find_source_files_excludes_owner_and_exempt_paths(tmp_path: Path) -> No
 def test_find_source_files_raises_when_scope_is_empty(tmp_path: Path) -> None:
     owner_dir = tmp_path / "only_file_lives_here"
     owner_dir.mkdir(parents=True)
-    (owner_dir / "m.py").write_text("")
+    (owner_dir / "m.py").write_text("", encoding="utf-8")
     rule = ProtectedAttributeRule(attribute="stages", owner=owner_dir, rationale="test")
     with pytest.raises(ValueError, match="governs no source files"):
         find_source_files(tmp_path, rule)

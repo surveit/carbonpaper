@@ -16,6 +16,7 @@ from fastapi.testclient import TestClient
 
 import app.web.loading as loading
 from app.main import app
+from app.services import workspace
 
 PROJ = "testmeth"
 RUN = "run-0001"
@@ -59,7 +60,7 @@ def _write_run(
 
 @pytest.fixture()
 def examples_dir(tmp_path: Path, monkeypatch) -> Path:
-    monkeypatch.setattr(loading, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     return tmp_path
 
 
@@ -128,7 +129,7 @@ def test_csv_download_is_full_file_ignoring_cap(examples_dir, client, monkeypatc
     assert r.headers["content-type"].startswith("text/csv")
     assert "attachment" in r.headers["content-disposition"]
     assert f"{STAGE}.csv" in r.headers["content-disposition"]
-    got = pd.read_csv(io.StringIO(r.text))
+    got = pd.read_csv(io.BytesIO(r.content))
     assert len(got) == 25
     assert list(got["name"]) == [f"rowval_{i:04d}" for i in range(25)]
 
@@ -137,8 +138,45 @@ def test_csv_download_from_csv_output(examples_dir, client):
     _write_run(examples_dir, _df(4), fmt="csv")
     r = client.get(f"/project/{PROJ}/runs/{RUN}/stage/{STAGE}/rows.csv")
     assert r.status_code == 200
-    got = pd.read_csv(io.StringIO(r.text))
+    got = pd.read_csv(io.BytesIO(r.content))
     assert len(got) == 4
+
+
+def _accented_df() -> pd.DataFrame:
+    """Rows in the shape that exposed the encoding bug."""
+    # French/Dutch text plus an emoji, with an accent in a column NAME too — a
+    # mark that survives the re-import shows up in the column name first.
+    return pd.DataFrame(
+        {
+            "média": ["Ce sac ne mérite qu'une chose", "Offrons un verre à Pascal"],
+            "text": ["zelfmoord plegen, scheelt ook een hoop 🤝", "députés et sénateurs"],
+        }
+    )
+
+
+def test_csv_download_opens_with_a_utf8_byte_order_mark(examples_dir, client):
+    """The mark is what makes Excel on Windows read the download as UTF-8."""
+    # Without it Excel falls back to the machine's legacy code page, which is
+    # what rendered "mérite" as "mÃ©rite" for Windows reviewers while the same
+    # download was fine on macOS.
+    _write_run(examples_dir, _accented_df())
+    r = client.get(f"/project/{PROJ}/runs/{RUN}/stage/{STAGE}/rows.csv")
+    assert r.status_code == 200
+    assert r.content.startswith(b"\xef\xbb\xbf")
+    # The bytes after the mark are plain UTF-8 — the mark is a prefix, not a
+    # re-encoding, so the accented text is unchanged.
+    assert "mérite" in r.content[3:].decode("utf-8")
+    assert "🤝" in r.content[3:].decode("utf-8")
+
+
+def test_csv_download_reimports_without_the_mark_in_a_column_name(examples_dir, client):
+    """A downloaded CSV re-imports with no U+FEFF prefix on its first column name."""
+    # It can be fed straight back in through an `input_data` csv connector.
+    _write_run(examples_dir, _accented_df())
+    r = client.get(f"/project/{PROJ}/runs/{RUN}/stage/{STAGE}/rows.csv")
+    got = pd.read_csv(io.BytesIO(r.content))
+    assert list(got.columns) == ["média", "text"]
+    assert got["média"][0] == "Ce sac ne mérite qu'une chose"
 
 
 def test_rows_404_for_unknown_run(examples_dir, client):

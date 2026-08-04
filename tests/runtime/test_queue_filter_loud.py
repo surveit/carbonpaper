@@ -3,22 +3,22 @@ import pandas as pd
 import pytest
 from app.runtime.context import RunIdentity
 from app.runtime.stages import HANDLERS
-from app.models import Stage
+from app.models import parse_stage
 from app.models.stage import StageType
 from app.core.stage_cache import StageCacheEntry
 from conftest import QUEUE_COLUMNS, make_run_context, queue_added_columns
 
 
 def test_bad_filter_raises_instead_of_skipping_review(tmp_path):
-    stage = Stage.model_validate({
+    stage = parse_stage({
         "id": "q", "type": "human_review_queue", "name": "q",
         # The edge DECLARES `nonexistent` — otherwise the filter's column
         # reference would be rejected when the stage is built, and this test is
         # about the frame that actually arrives not having the column.
         "inputs": [{"id": "a", "schema": {"columns": [
             {"name": "claim_id", "type": "str", "nullable": False},
-            {"name": "score", "type": "int"},
-            {"name": "nonexistent", "type": "bool"}]}}],
+            {"name": "score", "type": "int", "nullable": True},
+            {"name": "nonexistent", "type": "bool", "nullable": True}]}}],
         "output_schema": {"columns": [{"name": "claim_id", "type": "str", "nullable": False}]
                           + queue_added_columns(),
                           "primary_key": ["claim_id"]},
@@ -42,11 +42,11 @@ def test_a_cell_the_filter_cannot_answer_names_the_stage_and_the_filter(tmp_path
     false. What the operator sees must still be this stage's own message —
     naming the stage id and the filter text — not the bare numpy error the
     comparison raises underneath."""
-    stage = Stage.model_validate({
+    stage = parse_stage({
         "id": "q", "type": "human_review_queue", "name": "q",
         "inputs": [{"id": "a", "schema": {"columns": [
             {"name": "claim_id", "type": "str", "nullable": False},
-            {"name": "score", "type": "int"}]}}],
+            {"name": "score", "type": "int", "nullable": True}]}}],
         "output_schema": {"columns": [{"name": "claim_id", "type": "str", "nullable": False}]
                           + queue_added_columns(),
                           "primary_key": ["claim_id"]},

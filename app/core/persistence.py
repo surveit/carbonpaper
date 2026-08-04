@@ -8,12 +8,13 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import Enum
 from threading import RLock
+from uuid import uuid4
 from typing import Any, ClassVar, Iterator, Protocol, Self
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.core.errors import DocumentNotFound
 
@@ -186,8 +187,23 @@ def is_store_configured() -> bool:
     return _store is not None
 
 
+_stamp_lock = RLock()
+_last_stamp: datetime | None = None
+
+
 def _now_iso() -> str:
-    return datetime.now().isoformat(timespec="seconds")
+    # Newest-first reads sort on `created_at`, but the OS tick is coarse (15.6ms on
+    # Windows), so back-to-back calls read one instant. Forced strictly increasing —
+    # +1us whenever the clock has not moved; fixed-width ISO keeps string order
+    # chronological. Total WITHIN a process only: two processes can still tie in the
+    # same tick, which the `id` tiebreak at each sort site covers.
+    global _last_stamp
+    with _stamp_lock:
+        now = datetime.now()
+        if _last_stamp is not None and now <= _last_stamp:
+            now = _last_stamp + timedelta(microseconds=1)
+        _last_stamp = now
+    return now.isoformat(timespec="microseconds")
 
 
 class PersistenceScope(str, Enum):
@@ -234,6 +250,13 @@ class PersistedModel(BaseModel):
     `app/_arch_tests/test_persisted_models_declare_scope.py`, which flags an
     undeclared subclass at review time.
 
+    `id` defaults to a fresh random value, so a record that is only ever reached
+    through `load(id)` with an id kept elsewhere needs no id of its own. A caller
+    MAY pass one, and must whenever the record has to be findable without it:
+    `read_all`/`list` select by id PREFIX and the store offers no query by field,
+    so a project-scoped record composes `f"{project}/{local_id}"` or it cannot be
+    listed per project.
+
     `created_at`/`updated_at` are stamped automatically, so a subclass never
     hand-rolls them: on a fresh construct (no stored value yet) both
     default_factory to now; on load from the store, the stored values are
@@ -252,9 +275,16 @@ class PersistedModel(BaseModel):
         populate_by_name=True,
     )
 
-    id: str
+    id: str = Field(default_factory=lambda: uuid4().hex)
     created_at: str = Field(default_factory=_now_iso)
     updated_at: str = Field(default_factory=_now_iso)
+
+    @model_validator(mode="after")
+    def _stamp_one_creation_instant(self) -> Self:
+        """One instant, not two: the factories fire microseconds apart."""
+        if not {"created_at", "updated_at"} & self.model_fields_set:
+            object.__setattr__(self, "updated_at", self.created_at)
+        return self
     collection: ClassVar[str]
     SCOPE: ClassVar[PersistenceScope]
     SCHEMA_VERSION: ClassVar[int] = 1

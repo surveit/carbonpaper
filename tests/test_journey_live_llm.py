@@ -76,7 +76,7 @@ def test_live_llm_journey_reaches_a_published_artifact(live_project, tmp_path):
 
 @pytest.fixture
 def live_project(tmp_path, monkeypatch):
-    _point_examples_dir_at(monkeypatch, tmp_path)
+    _point_examples_dir_at(tmp_path)
     monkeypatch.setattr(run_service, "_run_in_background", lambda target, *args: target(*args))
 
     source = tmp_path / "claims.csv"
@@ -98,11 +98,11 @@ def live_project(tmp_path, monkeypatch):
 
 def _workflow_stages(source_path: str) -> list[dict]:
     load_schema = {
-        "columns": [{"name": "claim_id", "type": "str"}, {"name": "text", "type": "str"}],
+        "columns": [{"name": "claim_id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}],
         "primary_key": ["claim_id"],
     }
     classified_schema = {
-        "columns": [{"name": "claim_id", "type": "str"}, {"name": "text", "type": "str"},
+        "columns": [{"name": "claim_id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True},
                     {"name": "about_money", "type": "bool", "nullable": True}],
         "primary_key": ["claim_id"],
     }

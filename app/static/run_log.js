@@ -13,6 +13,14 @@
 //  2. Filters. "errors only" is applied FIRST, over every event: an llm_error
 //     is a LEVEL_DETAIL (1) event, so filtering by detail level first would
 //     strip exactly the errors the checkbox exists to surface.
+//
+//  3. Appending is incremental and batched. Re-rendering the whole buffer per
+//     arriving event is O(n²) in formatting AND reparses the panel's innerHTML
+//     every time; on a 272k-event run (a row-per-event log of a 135k-row stage)
+//     that wedges the tab for good. New events are formatted once, appended
+//     with insertAdjacentHTML, and coalesced into one timer tick. The full
+//     rebuild is kept for the two things that genuinely invalidate the panel: a
+//     filter change and a "load older" prepend.
 (function (global) {
   var LEVEL_DETAIL = 1;
 
@@ -110,7 +118,13 @@
     }
 
     function connect() {
-      stream = options.openStream(options.url + "?from_seq=" + (lastSeq + 1));
+      // The FIRST connection carries no cursor, so the server opens on the tail
+      // — that default is what keeps a 272k-event log from arriving in full.
+      // Every RECONNECT carries one: resuming is what the cursor is for, and a
+      // reconnect that fell back to the tail would silently skip the middle.
+      stream = options.openStream(
+        lastSeq < 0 ? options.url : options.url + "?from_seq=" + (lastSeq + 1)
+      );
       stream.onmessage = receive;
       stream.addEventListener("done", finish);
       stream.onerror = function () {
@@ -125,13 +139,27 @@
     return { highestSeq: function () { return lastSeq; } };
   }
 
+  // A ceiling on what the panel keeps in the DOM. "Load older" is the way to
+  // reach further back; without a cap, a long live run walks into the same
+  // unbounded-buffer wall the tail default exists to avoid.
+  var MAX_BUFFERED_EVENTS = 20000;
+
+  // How long arriving events are pooled before one batched append.
+  var FLUSH_INTERVAL_MS = 32;
+
   function initRunLog(config) {
     var pre = document.getElementById("run-log");
     var countEl = document.getElementById("run-log-count");
     var stateEl = document.getElementById("run-log-state");
     var errorsOnly = document.getElementById("run-log-errors-only");
     var detail = document.getElementById("run-log-detail");
+    var olderBtn = document.getElementById("run-log-older");
     var events = [];
+    var pending = [];              // arrived since the last flush
+    var timer = null;
+    var loadingOlder = false;
+    var moreAvailable = true;      // until a page fetch says otherwise
+    var pageSize = config.pageSize || 500;
     var base = "/project/" + encodeURIComponent(config.project)
       + "/runs/" + encodeURIComponent(config.runId);
 
@@ -140,32 +168,107 @@
         + "/trace/view";
     }
 
-    function render() {
-      pre.innerHTML = renderEvents(events, {
+    function options() {
+      return {
         errorsOnly: errorsOnly.checked, detail: detail.checked,
         traceUrl: traceUrl,
-      });
+      };
+    }
+
+    // seq only has to be MONOTONIC for this to hold: an event before the oldest
+    // one held is older still. The panel deliberately does not turn seq into a
+    // count — that would assume it has no gaps.
+    function oldestSeq() {
+      return events.length && typeof events[0].seq === "number" ? events[0].seq : 0;
+    }
+
+    function updateChrome() {
       var detailN = events.filter(function (e) {
         return (e.level || 0) >= LEVEL_DETAIL;
       }).length;
-      countEl.textContent = "· " + events.length + " event"
-        + (events.length !== 1 ? "s" : "") + (detailN ? " (" + detailN + " LLM detail)" : "");
+      countEl.textContent = "· " + events.length
+        + " event" + (events.length !== 1 ? "s" : "")
+        + (detailN ? " (" + detailN + " LLM detail)" : "")
+        + (moreAvailable && oldestSeq() > 0 ? " · older not loaded" : "");
+      if (!olderBtn) return;
+      olderBtn.hidden = !(moreAvailable && oldestSeq() > 0);
+      olderBtn.disabled = loadingOlder;
+      olderBtn.textContent = loadingOlder ? "loading…" : "load older";
+    }
+
+    // Full rebuild. Only for what actually invalidates every line: a filter
+    // change, or older events arriving at the FRONT of the buffer.
+    function render() {
+      pre.innerHTML = renderEvents(events, options());
+      pre.scrollTop = pre.scrollHeight;
+      updateChrome();
+    }
+
+    // The hot path: format only what arrived and append it.
+    function flush() {
+      timer = null;
+      if (!pending.length) return;
+      var batch = pending;
+      pending = [];
+      var html = renderEvents(batch, options());
+      // Measured BEFORE the insert — afterwards every position has moved.
       var nearBottom = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 60;
+      if (html) pre.insertAdjacentHTML("beforeend", html + "\n");
       if (nearBottom) pre.scrollTop = pre.scrollHeight;
+      if (events.length > MAX_BUFFERED_EVENTS) {
+        events = events.slice(events.length - MAX_BUFFERED_EVENTS);
+        render();                  // the buffer moved; the DOM has to follow
+        return;
+      }
+      updateChrome();
+    }
+
+    // A timer, not requestAnimationFrame: rAF does not fire in a background
+    // tab, so a run opened in one would buffer events and render nothing until
+    // it was focused. The interval only has to be long enough to coalesce a
+    // burst into one insert — the freeze came from rendering per event, not
+    // from rendering per frame.
+    function schedule() {
+      if (timer !== null) return;
+      timer = setTimeout(flush, FLUSH_INTERVAL_MS);
+    }
+
+    function loadOlder() {
+      var before = oldestSeq();
+      if (loadingOlder || before <= 0) return;
+      loadingOlder = true;
+      updateChrome();
+      fetch(base + "/events/page?before_seq=" + before + "&limit=" + pageSize)
+        .then(function (r) { return r.json(); })
+        .then(function (page) {
+          events = (page.events || []).concat(events);
+          moreAvailable = !!page.has_more;
+          // Prepending moves everything down by the height of what was added;
+          // holding scrollTop steady against that keeps the reader's place.
+          var heightBefore = pre.scrollHeight;
+          var top = pre.scrollTop;
+          pre.innerHTML = renderEvents(events, options());
+          pre.scrollTop = top + (pre.scrollHeight - heightBefore);
+          updateChrome();
+        })
+        .catch(function () { stateEl.textContent = "could not load older events"; })
+        .then(function () { loadingOlder = false; updateChrome(); });
     }
 
     errorsOnly.addEventListener("change", render);
     detail.addEventListener("change", render);
+    if (olderBtn) olderBtn.addEventListener("click", loadOlder);
     document.getElementById("run-log-clear").addEventListener("click", function () {
       pre.textContent = "";
     });
 
     stateEl.textContent = "connecting…";
+    updateChrome();
     openRunLogStream({
       url: base + "/events",
       openStream: function (url) { return new EventSource(url); },
       schedule: function (fn) { setTimeout(fn, 2000); },
-      onEvent: function (ev) { events.push(ev); render(); },
+      onEvent: function (ev) { events.push(ev); pending.push(ev); schedule(); },
       onState: function (state) { stateEl.textContent = state; },
     });
   }

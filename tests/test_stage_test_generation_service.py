@@ -9,10 +9,15 @@ import pytest
 
 import app.compiler.stage_tests as compiler_stage_tests
 import app.services.generation as generation
+from app.compiler.turn_failure import GENERATION_FAILURE_PREFIX
 from app.core.agent.store import SessionStore
 from app.core.agent.turns import TurnManager
 from app.core.errors import GenerationError
-from app.models.stages.stage_tests import build_stage_tests_model
+from app.models import TableSchema
+from app.models.stages.stage_tests import (
+    PythonRowFunctionStageTest,
+    build_stage_tests_model,
+)
 
 _IN_SCHEMA = {"columns": [{"name": "amount", "type": "float", "nullable": False}]}
 _OUT_SCHEMA = {"columns": [
@@ -21,10 +26,20 @@ _OUT_SCHEMA = {"columns": [
 ]}
 
 
+def _suite_model(output_schema: dict = _OUT_SCHEMA) -> Any:
+    """The suite model for the `double` stage: one input `load` carrying
+    _IN_SCHEMA, a python_row_function so each test is one row in / one row out."""
+    return build_stage_tests_model(
+        PythonRowFunctionStageTest,
+        {"load": TableSchema.model_validate(_IN_SCHEMA)},
+        TableSchema.model_validate(output_schema),
+    )
+
+
 def _seed_project(project_dir: Path, *, existing_tests: list[dict] | None = None) -> None:
     """A project with a document and a two-stage workflow (load -> double), mirroring the
     fixture in tests/test_version_gate_stage_tests.py. `double` is the python_row_function
-    stage tests are derived for."""
+    stage tests are generated for."""
     project_dir.mkdir(parents=True, exist_ok=True)
     (project_dir / "document.md").write_text("Double the amount.", encoding="utf-8")
     compiled = project_dir / "compiled"
@@ -38,7 +53,7 @@ def _seed_project(project_dir: Path, *, existing_tests: list[dict] | None = None
         "id": "double", "name": "Double", "type": "python_row_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
         "output_schema": _OUT_SCHEMA,
-        "function": {"kind": "inline",
+        "function": {"kind": "inline", "summary": "Test fixture step.", "corner_cases": [],
                      "code": "def transform(row):\n    return {**row, 'doubled': row['amount'] * 2}\n"},
     }
     if existing_tests is not None:
@@ -47,10 +62,7 @@ def _seed_project(project_dir: Path, *, existing_tests: list[dict] | None = None
 
 
 def _valid_suite() -> Any:
-    """A validated StageTestSuite instance for the `double` stage's shape (one input `load`,
-    a python_row_function so each test is exactly one row in / one row out)."""
-    suite_model = build_stage_tests_model("python_row_function", ["load"])
-    return suite_model.model_validate({
+    return _suite_model().model_validate({
         "tests": [{
             "name": "doubles_two",
             "inputs": {"load": [{"amount": 2.0}]},
@@ -95,20 +107,20 @@ def test_finish_with_no_answer_raises(tmp_path: Path):
         generation._finish_stage_tests(project_dir, "double", None)
 
     stage = json.loads((project_dir / "compiled" / "02_double.json").read_text(encoding="utf-8"))
-    assert "tests" not in stage  # nothing written on a failed derivation
+    assert "tests" not in stage  # nothing written on a failed generation
 
 
 def test_finish_with_empty_suite_raises(tmp_path: Path):
-    """`{"tests": []}` validates as a suite (validate_stage_tests short-circuits on an
-    empty list), but writing it through would wipe any existing tests while reporting
-    success. The completion hook must reject it before it reaches stage_edit."""
+    """`{"tests": []}` validates as a suite (there is no case to refuse), but writing it
+    through would wipe any existing tests while reporting success. The completion hook
+    must reject it before it reaches stage_edit."""
     project_dir = tmp_path / "demo"
     _seed_project(project_dir, existing_tests=[{
         "name": "old_case",
         "inputs": {"load": [{"amount": 1.0}]},
         "expected": [{"amount": 1.0, "doubled": 2.0}],
     }])
-    empty_suite = build_stage_tests_model("python_row_function", ["load"]).model_validate({"tests": []})
+    empty_suite = _suite_model().model_validate({"tests": []})
 
     with pytest.raises(GenerationError, match="empty test suite"):
         generation._finish_stage_tests(project_dir, "double", empty_suite)
@@ -146,11 +158,11 @@ def test_finish_stage_tests_preserves_null_cells(tmp_path: Path):
         "id": "double", "name": "Double", "type": "python_row_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
         "output_schema": out_schema,
-        "function": {"kind": "inline",
+        "function": {"kind": "inline", "summary": "Test fixture step.", "corner_cases": [],
                      "code": "def transform(row):\n    return {**row, 'flag': None}\n"},
     }), encoding="utf-8")
 
-    suite = build_stage_tests_model("python_row_function", ["load"]).model_validate({
+    suite = _suite_model(out_schema).model_validate({
         "tests": [{
             "name": "flag_defaults_null",
             "inputs": {"load": [{"amount": 1.0}]},
@@ -166,12 +178,12 @@ def test_finish_stage_tests_preserves_null_cells(tmp_path: Path):
 
 # ── start_stage_test_generation wiring: hidden view-only session + a live turn ───────────
 
-class _FakeDeriverAgent:
-    """Stands in for the stage-test deriver Agent driven as a live turn: stream_turn
+class _FakeGeneratorAgent:
+    """Stands in for the stage-test generator Agent driven as a live turn: stream_turn
     'submits' a StageTestSuite and the engine returns a transcript, exactly as
     submit_answer + the real engine would during the turn."""
 
-    task = "derive tests for stage `double` and submit them"
+    task = "generate tests for stage `double` and submit them"
 
     def __init__(self) -> None:
         self._answer: Any = None
@@ -185,15 +197,15 @@ class _FakeDeriverAgent:
 
         class _Engine:
             async def stream_turn(self, prompt: str, *, message_history: Any, emit: Any, resume: Any):
-                emit({"kind": "text", "text": "derived"})
+                emit({"kind": "text", "text": "generated"})
                 agent._answer = _valid_suite()  # the submit_answer tool would set this
-                return [{"role": "assistant", "parts": [{"type": "text", "text": "derived"}]}], None
+                return [{"role": "assistant", "parts": [{"type": "text", "text": "generated"}]}], None
 
         return _Engine()
 
 
 def test_start_raises_before_session_for_non_python_stage(tmp_path: Path, monkeypatch: Any):
-    """`load` is an input_data stage — tests can't be derived for it. The type check must
+    """`load` is an input_data stage — tests cannot be generated for it. The type check must
     run before the session is created, so no orphaned session is left behind."""
     project_dir = tmp_path / "demo"
     _seed_project(project_dir)
@@ -201,7 +213,7 @@ def test_start_raises_before_session_for_non_python_stage(tmp_path: Path, monkey
     monkeypatch.setattr(compiler_stage_tests, "open_session_store", lambda: store)
 
     before = len(store.list_sessions())
-    with pytest.raises(ValueError, match="python transform"):
+    with pytest.raises(ValueError, match="can run them"):
         generation.start_stage_test_generation(project_dir, stage_id="load", model="sonnet")
 
     assert len(store.list_sessions()) == before  # no orphaned session
@@ -216,13 +228,13 @@ def test_start_creates_hidden_viewonly_session(tmp_path: Path, monkeypatch: Any)
     # generation delegates to.
     monkeypatch.setattr(compiler_stage_tests, "open_session_store", lambda: store)
     monkeypatch.setattr(compiler_stage_tests, "default_turn_manager", lambda: turns)
-    monkeypatch.setattr(compiler_stage_tests, "build_stage_test_deriver", lambda *a, **k: _FakeDeriverAgent())
+    monkeypatch.setattr(compiler_stage_tests, "build_stage_test_generator", lambda *a, **k: _FakeGeneratorAgent())
 
     async def _drive() -> str:
         sid = generation.start_stage_test_generation(project_dir, stage_id="double", model="sonnet")
-        assert store.load(sid)["pending_user"] == _FakeDeriverAgent.task
+        assert store.load(sid)["pending_user"] == _FakeGeneratorAgent.task
         turn_id = store.load(sid)["active_turn"]
-        assert turn_id, "a live turn should be active on the session while it derives"
+        assert turn_id, "a live turn should be active on the session while it generates"
         await turns._tasks[turn_id]
         return sid
 
@@ -239,12 +251,12 @@ def test_start_creates_hidden_viewonly_session(tmp_path: Path, monkeypatch: Any)
     assert stage["tests"][0]["name"] == "doubles_two"  # completion hook patched the stage
 
 
-class _FakeDeriverAgentNoAnswer:
-    """Stands in for a deriver whose turn ends without ever calling submit_answer — the
+class _FakeGeneratorAgentNoAnswer:
+    """Stands in for a generator whose turn ends without ever calling submit_answer — the
     no-answer path _finish_stage_tests turns into a GenerationError, exercising the
     on_done failure-persistence wrapper in app.compiler.stage_tests."""
 
-    task = "derive tests for stage `double` and submit them"
+    task = "generate tests for stage `double` and submit them"
 
     def __init__(self) -> None:
         self._answer: Any = None
@@ -263,8 +275,8 @@ class _FakeDeriverAgentNoAnswer:
         return _Engine()
 
 
-def test_failed_derivation_is_persisted_into_the_session(tmp_path: Path, monkeypatch: Any):
-    """A derivation that ends with no submitted suite raises inside the completion hook.
+def test_failed_generation_is_persisted_into_the_session(tmp_path: Path, monkeypatch: Any):
+    """A generation turn that ends with no submitted suite raises inside the completion hook.
     That failure must not be lost to anyone who wasn't watching the live turn: it lands in
     the session's persisted transcript, and the stage file is left unpatched."""
     project_dir = tmp_path / "demo"
@@ -274,7 +286,7 @@ def test_failed_derivation_is_persisted_into_the_session(tmp_path: Path, monkeyp
     monkeypatch.setattr(compiler_stage_tests, "open_session_store", lambda: store)
     monkeypatch.setattr(compiler_stage_tests, "default_turn_manager", lambda: turns)
     monkeypatch.setattr(
-        compiler_stage_tests, "build_stage_test_deriver", lambda *a, **k: _FakeDeriverAgentNoAnswer()
+        compiler_stage_tests, "build_stage_test_generator", lambda *a, **k: _FakeGeneratorAgentNoAnswer()
     )
 
     async def _drive() -> str:
@@ -292,7 +304,7 @@ def test_failed_derivation_is_persisted_into_the_session(tmp_path: Path, monkeyp
         for part in message.get("parts", [])
         if part.get("type") == "text"
     ]
-    assert any("derivation failed" in text for text in failure_texts)
+    assert any(GENERATION_FAILURE_PREFIX in text for text in failure_texts)
 
     stage = json.loads((project_dir / "compiled" / "02_double.json").read_text(encoding="utf-8"))
-    assert "tests" not in stage  # nothing written on a failed derivation
+    assert "tests" not in stage  # nothing written on a failed generation

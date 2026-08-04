@@ -13,13 +13,14 @@ from typing import Any, Callable
 from claude_agent_sdk import (
     AssistantMessage,
     ClaudeAgentOptions,
+    query,
     ResultMessage,
+    SystemMessage,
     TextBlock,
     ThinkingBlock,
     ToolResultBlock,
     ToolUseBlock,
     UserMessage,
-    query,
 )
 
 # `CLI_PATH` is the located Claude Code CLI (the SDK does not always find it on
@@ -27,7 +28,7 @@ from claude_agent_sdk import (
 from app.core.agent.usage import LlmUsage
 from app.core.llm_sdk import CLI_PATH as _CLI_PATH
 
-CLI_MODEL = os.environ.get("CW_CHAT_CLI_MODEL", "sonnet")
+CLI_MODEL = os.environ.get("CARBONPAPER_CHAT_CLI_MODEL", "sonnet")
 
 # The in-process MCP server name the tools are mounted under. The CLI addresses a
 # tool as f"mcp__{MCP_SERVER_NAME}__{tool_name}". Kept here (not in registry) so
@@ -82,10 +83,17 @@ class ClaudeAgentSdkEngine:
         tool_labels: dict[str, str] | None = None,
         model: str = CLI_MODEL,
         max_turns: int | None = None,
+        builtin_tools: list[str] | None = None,
     ) -> None:
         self._system_prompt = system_prompt
         self._mcp_server = mcp_server
         self._allowed_tools = allowed_tools
+        # The CLI's own built-in tools (Bash, Read, Write, WebSearch, …) this run may
+        # see AT ALL, distinct from allowed_tools, which only pre-approves permission
+        # for tools already on offer. Empty — the default — leaves the turn with
+        # nothing but the caller's in-process MCP tools, so a structured-output run
+        # cannot drift into using the assistant toolset instead of answering.
+        self._builtin_tools = list(builtin_tools or [])
         # Present-tense labels shown in the chat while a tool runs, keyed by the
         # bare tool name; an unlabelled tool falls back to its bare name.
         self._tool_labels = tool_labels or {}
@@ -111,6 +119,11 @@ class ClaudeAgentSdkEngine:
             mcp_servers={MCP_SERVER_NAME: self._mcp_server},
             allowed_tools=self._allowed_tools,
             setting_sources=[],
+            # `tools` is the base set of built-ins on offer; `[]` disables every one.
+            tools=self._builtin_tools,
+            # Only the mcp_servers passed here — never a project/user/plugin .mcp.json
+            # the CLI would otherwise merge in, whose tools this run never asked for.
+            strict_mcp_config=True,
         )
         if self._max_turns is not None:
             kw["max_turns"] = self._max_turns
@@ -175,6 +188,18 @@ class ClaudeAgentSdkEngine:
                         assistant_parts.append(
                             {"type": "tool_result", "content": content}
                         )
+            elif isinstance(msg, SystemMessage):
+                # The CLI's own account of the turn — the init message carries
+                # which MCP servers connected and which tools the model can
+                # actually see, which is the difference between a model that
+                # declined to call a tool and one that was never offered it.
+                # Not part of the transcript: it is the CLI talking, not the
+                # model. A caller that does not want it drops the unknown kind.
+                emit({
+                    "kind": "system",
+                    "subtype": getattr(msg, "subtype", "") or "",
+                    "text": json.dumps(getattr(msg, "data", None) or {}, default=str),
+                })
             elif isinstance(msg, ResultMessage):
                 # ResultMessage is terminal; let the generator exhaust naturally
                 # (do NOT break — breaking aclose()s a still-running generator).

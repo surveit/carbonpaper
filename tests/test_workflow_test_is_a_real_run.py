@@ -15,11 +15,13 @@ import pytest
 
 from app.runtime.runner import execute_run
 from app.services import versioning, workspace
+from app.services import project as project_service
 from app.services.workflow_test import run_workflow_test
+from conftest import pinned_stages
 
 _ROWS = [{"name": "a", "val": 1}, {"name": "b", "val": 2}, {"name": "c", "val": 3}]
-_LOADED = [{"name": "name", "type": "str"}, {"name": "val", "type": "int"}]
-_DOUBLED = [*_LOADED, {"name": "doubled", "type": "int"}]
+_LOADED = [{"name": "name", "type": "str", "nullable": True}, {"name": "val", "type": "int", "nullable": True}]
+_DOUBLED = [*_LOADED, {"name": "doubled", "type": "int", "nullable": True}]
 
 
 def _clean_code(probe: Path) -> str:
@@ -58,7 +60,7 @@ def _write_project(root: Path) -> Path:
 
 
 def _publish(root: Path) -> str:
-    version = versioning.create_version_from_disk(root, message="e2e", reviewer="test")
+    version = project_service.save_working_copy_as_version(root, message="e2e", reviewer="test")
     versioning.publish_version(root, version.version_id, reviewer="human")
     return version.version_id
 
@@ -71,7 +73,7 @@ def _invocations(probe: Path) -> Counter[str]:
 
 @pytest.fixture
 def project(tmp_path, monkeypatch):
-    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     root = tmp_path / "demo"
     root.mkdir()
     return root
@@ -83,7 +85,7 @@ def test_workflow_test_replays_cached_rows_and_writes_no_new_entries(project):
     probe = _write_project(project)
     _publish(project)
 
-    manifest = execute_run(project, repo_root=project)
+    manifest = execute_run(project, project, *pinned_stages(project))
     assert manifest["status"] == "ok"
     assert _invocations(probe) == Counter({"clean": 2})
 
@@ -99,7 +101,7 @@ def test_production_run_after_a_workflow_test_is_unaffected(project):
     the poisoning this seam must prevent. Assert the opposite."""
     probe = _write_project(project)
     _publish(project)
-    execute_run(project, repo_root=project)
+    execute_run(project, project, *pinned_stages(project))
     assert _invocations(probe) == Counter({"clean": 2})  # "a", "b"
 
     _write_rows(project, _ROWS)  # add "c" — the workflow test's slice sees it
@@ -108,7 +110,7 @@ def test_production_run_after_a_workflow_test_is_unaffected(project):
     assert _invocations(probe) == Counter({"clean": 3})  # only "c" recomputed
 
     time.sleep(1.05)  # run ids are second-resolution
-    manifest = execute_run(project, repo_root=project)
+    manifest = execute_run(project, project, *pinned_stages(project))
     assert manifest["status"] == "ok"
     # "a"/"b" still replay from the FIRST production run's cache, but "c"
     # recomputes a SECOND time here — proof the workflow test recorded nothing

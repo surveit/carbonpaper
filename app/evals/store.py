@@ -1,4 +1,4 @@
-"""Eval config/run storage (the document store), plus status derivation.
+"""Eval config/run storage (the document store), plus the status rule.
 Configs are mutable authored documents (write is upsert); runs are immutable,
 minted by the runner and only read here. Both are project-scoped by document id,
 so a project with no eval activity returns empty rather than needing scaffolding.
@@ -135,7 +135,7 @@ def latest_version_id(project_dir: Path) -> str | None:
     """The id of the newest version overall (any published state), or None if
     the project has no version at all. Eval-scoped: used only by the eval
     runner's default-to-newest resolution and eval status display. Production
-    runs use app.runtime.runner.resolve_version_id instead, which pins
+    runs use app.services.versioning.resolve_version_id instead, which pins
     published versions only -- this function does not gate on publication, so
     it is not a substitute for that check."""
     return find_latest_version_id(project_dir)

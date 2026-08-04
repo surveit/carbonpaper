@@ -9,14 +9,15 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
-import app.web.loading as loading
 from app.core.run_status import RunStatus, StageStatus
 from app.main import app
 from app.runtime.runner import execute_run
 from app.services import versioning
-from app.services.versioning import create_version_from_disk
+from app.services.project import save_working_copy_as_version
+from app.services import workspace
+from conftest import pinned_stages
 
-# The exact value sets, derived by grepping every `record["status"]` /
+# The exact value sets, collected by grepping every `record["status"]` /
 # `manifest["status"]` literal the runner writes (app/runtime/runner.py) and
 # the status_glyph/status_stroke maps that key off them (app/web/diagrams.py).
 STAGE_STATUS_VALUES = {
@@ -55,8 +56,8 @@ def test_run_status_matches_the_values_the_runner_produces() -> None:
 
 
 def test_css_class_pattern_renders_bare_not_qualified() -> None:
-    """Locks in the exact template pattern app/templates/run_detail.html uses
-    (`class="status-{{ manifest.status }}"`) against a real enum member."""
+    # Locks in the template pattern _stage_strip.html uses (`class="status-{{
+    # square.status }}"`) against a real enum member.
     assert f"status-{RunStatus.OK}" == "status-ok"
     assert f"status-{StageStatus.VALIDATION_WARNINGS}" == "status-validation_warnings"
 
@@ -74,14 +75,14 @@ def _make_project(root) -> None:
         "id": "load", "name": "Load items", "type": "input_data",
         "connector": {"kind": "file",
                       "params": {"path": str(root / "data" / "items.csv"), "format": "csv"}},
-        "output_schema": {"columns": [{"name": "name", "type": "str"},
-                                      {"name": "val", "type": "int"}]},
+        "output_schema": {"columns": [{"name": "name", "type": "str", "nullable": True},
+                                      {"name": "val", "type": "int", "nullable": True}]},
     }
     (root / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
 
 
 def _seed_and_publish(project_dir) -> None:
-    vid = create_version_from_disk(project_dir, message="seed", reviewer="test").version_id
+    vid = save_working_copy_as_version(project_dir, message="seed", reviewer="test").version_id
     versioning.publish_version(project_dir, vid, reviewer="human")
 
 
@@ -89,7 +90,7 @@ def test_a_real_run_produces_enum_statuses_that_round_trip_to_bare_strings(tmp_p
     _make_project(tmp_path)
     _seed_and_publish(tmp_path)
 
-    manifest = execute_run(tmp_path, repo_root=tmp_path)
+    manifest = execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path))
 
     # The producer's in-memory manifest carries real enum members, not plain
     # str — and they still equal / stringify as the bare value.
@@ -111,12 +112,12 @@ def test_a_real_run_produces_enum_statuses_that_round_trip_to_bare_strings(tmp_p
 
 
 def test_a_real_run_renders_bare_status_through_the_web_layer(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr(loading, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     project_dir = tmp_path / PROJECT
     _make_project(project_dir)
     _seed_and_publish(project_dir)
 
-    manifest = execute_run(project_dir, repo_root=project_dir)
+    manifest = execute_run(project_dir, project_dir, *pinned_stages(project_dir))
     run_id = manifest["run_id"]
 
     client = TestClient(app)
