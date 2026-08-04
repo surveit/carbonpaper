@@ -415,8 +415,6 @@ _GRANDFATHERED: frozenset[str] = frozenset(
         "app/services/loader.py::load_workflow",
         "app/services/loader.py::load_workflow_object",
         "app/services/loader.py::resolve_function_code",
-        "app/services/loader.py::stage_to_json",
-        "app/services/loader.py::stage_to_spec_dict",
         "app/services/node_review.py::NodeApprovalState",
         "app/services/node_review.py::_latest_decision_row",
         "app/services/node_review.py::approval_state_for",

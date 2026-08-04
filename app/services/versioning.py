@@ -13,7 +13,7 @@ from typing import Any, ClassVar
 from pydantic import Field, ValidationError
 
 from app.core.errors import DocumentNotFound, NoVersionToRunError, ReviewGuideValidationError
-from app.models import Coverage, Stage
+from app.models import Coverage, Stage, stage_to_spec_dict
 from app.models.review_guide import ReviewGuideStep
 from app.models.workflow import parse_workflow
 from app.core.persistence import JsonDict, PersistedModel, PersistenceScope, get_store
@@ -24,7 +24,6 @@ from app.services.spec_migrations import (
     upgrade_stage_spec,
 )
 from app.services.errors import WorkflowLoadError
-from app.services.loader import stage_to_spec_dict
 from app.services.workspace import load_schemas
 
 

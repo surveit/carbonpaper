@@ -12,8 +12,9 @@ from pathlib import Path
 from typing import Any
 
 from app.core.paths import REPO_ROOT, repo_root
+from app.models import stage_to_spec_dict
 from app.services import node_review
-from app.services.loader import load_compiled_dir, stage_to_spec_dict
+from app.services.loader import load_compiled_dir
 
 __all__ = ["REPO_ROOT", "repo_root", "projects_dir", "set_projects_dir",
            "configure_projects_dir_from_env"]

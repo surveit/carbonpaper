@@ -87,6 +87,15 @@ def validate_stage(spec: Any) -> list[str]:
         return format_errors(err)
 
 
+def stage_to_spec_dict(stage: Stage) -> dict[str, Any]:
+    """Aliases restored (`schema`, not `table_schema`); None-valued keys dropped."""
+    return stage.model_dump(mode="json", by_alias=True, exclude_none=True)
+
+
+def stage_to_json(stage: Stage) -> str:
+    return stage.model_dump_json(indent=2, by_alias=True, exclude_none=True)
+
+
 # ── StageDraft ───────────────────────────────────────────────────────────────
 # Stage fields an authoring client never writes, so StageDraft does not declare
 # them. A client that echoes back a stage it read from the server carries them
@@ -154,5 +163,7 @@ __all__ = [
     "TransformSignature",
     "is_grain_and_order_preserving",
     "parse_stage",
+    "stage_to_json",
+    "stage_to_spec_dict",
     "validate_stage",
 ]

@@ -20,10 +20,11 @@ from app.models import (
     SchemaLibrary,
     StageType,
     TableSchema,
+    stage_to_spec_dict,
 )
 from app.models.stages.input_data import InputDataStage
 from app.services import data_model, node_review, project, versioning, workspace
-from app.services.loader import load_compiled_dir, stage_to_spec_dict, write_stage
+from app.services.loader import load_compiled_dir, write_stage
 from app.services.project import WorkflowFile, export_project, import_project
 
 _TINY_LIBRARY = SchemaLibrary(schemas=[NamedSchema(

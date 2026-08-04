@@ -37,7 +37,7 @@ def as_tool_content(value: object) -> dict[str, Any]:
         # by_alias + exclude_none so a model carrying Stage(s) (e.g. a draft view)
         # comes back to the agent in the SAME spec-dict form it writes stages
         # in — aliased (`schema`, not `table_schema`) and without the unset-optional
-        # nulls, matching loader.stage_to_spec_dict. Additive for every other
+        # nulls, matching app.models.stage_to_spec_dict. Additive for every other
         # model-returning tool: an alias-free model (DraftView, DraftEdit,
         # SaveResult, ...) dumps equivalently (a dropped null re-parses as its
         # default).
