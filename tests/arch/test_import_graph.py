@@ -1,8 +1,7 @@
 """Architecture: import cycles anywhere under `app/` — between modules, and between sibling
-packages at every depth — plus fan-in/fan-out drift: whole-graph properties `pyproject.toml`'s
-layering contracts can't express. `app.models`/`app.core` are exempt from the fan-in ceiling;
-nothing is exempt from fan-out or no-cycles. `if TYPE_CHECKING:` imports are excluded — they
-never execute at runtime and would otherwise read as a cycle: `app.models.stage`/`.stages`.
+packages at every depth — plus a fan-out ceiling every module is held to: whole-graph properties
+`pyproject.toml`'s layering contracts can't express. `if TYPE_CHECKING:` imports are excluded —
+they never execute at runtime and would otherwise read as a cycle: `app.models.stage`/`.stages`.
 """
 from __future__ import annotations
 
@@ -14,18 +13,11 @@ import pytest
 
 _APP_PACKAGE = "app"
 
-# Modules under these prefixes are the intended, fan-in-unbounded landing zone
-# for shared contracts/infrastructure (the repo's placement rule for
-# foundational code) — exempt from the fan-in ceiling below.
+# Modules under these prefixes are the intended landing zone for shared
+# contracts/infrastructure (the repo's placement rule for foundational code).
+# The import-graph report excludes them when naming the highest-fan-in module,
+# since a foundational module's popularity says nothing about the rest.
 _CORE_PACKAGE_PREFIXES: tuple[str, ...] = ("app.models", "app.core")
-
-# Measured non-core fan-in maximum at HEAD (post row_model/schema fold) was 11
-# (app.services.versioning, app.services.loader, tied). Ceiling set with ~45%
-# headroom: a module quietly climbing from 11 toward 16 direct dependents is
-# becoming load-bearing infrastructure worth a deliberate look — if it is
-# genuinely foundational, the remedy is moving it under app.models/app.core
-# (both exempt), not raising this ceiling.
-_FAN_IN_CEILING = 16
 
 # Measured fan-out maximum at HEAD (post row_model/schema fold) was 15
 # (app.web.routers.runs). Ceiling set with ~40% headroom: a module climbing
@@ -92,12 +84,6 @@ def test_sibling_packages_are_acyclic_at_every_depth(app_internal_edges: list[Im
     assert not cycles, _describe_package_cycles_failure(cycles)
 
 
-def test_non_core_modules_stay_under_the_fan_in_ceiling(app_internal_edges: list[ImportEdge]) -> None:
-    fan_in = compute_fan_in(app_internal_edges)
-    violations = find_fan_in_violations(fan_in, _FAN_IN_CEILING, is_core_module)
-    assert not violations, _describe_ceiling_failure("fan-in", violations)
-
-
 def test_modules_stay_under_the_fan_out_ceiling(app_internal_edges: list[ImportEdge]) -> None:
     fan_out = compute_fan_out(app_internal_edges)
     violations = find_fan_out_violations(fan_out, _FAN_OUT_CEILING)
@@ -108,20 +94,13 @@ def test_modules_stay_under_the_fan_out_ceiling(app_internal_edges: list[ImportE
 
 
 def is_core_module(module: str) -> bool:
-    """Whether `module` is `app.models`/`app.core` or something below either —
-    the two acknowledged fan-in-unbounded import targets, exempt from the
-    fan-in ceiling."""
     return any(
         module == prefix or module.startswith(f"{prefix}.") for prefix in _CORE_PACKAGE_PREFIXES
     )
 
 
 def describe_core_package_prefixes() -> tuple[str, ...]:
-    """The core-package prefixes `is_core_module` exempts from the fan-in
-    ceiling, exposed as a public accessor so other consumers (e.g. the
-    import-graph CI report) can name them without re-typing the list — the
-    module-level constant itself stays private since nothing but
-    `is_core_module` needs to iterate it directly."""
+    """The prefixes `is_core_module` matches, so the CI report can name them without re-typing."""
     return _CORE_PACKAGE_PREFIXES
 
 
@@ -149,18 +128,6 @@ def _compute_degree(
         module: ModuleDegree(module, len(neighbors), tuple(sorted(neighbors)))
         for module, neighbors in neighbors_by_module.items()
     }
-
-
-def find_fan_in_violations(
-    fan_in: dict[str, ModuleDegree], ceiling: int, is_exempt: Callable[[str], bool]
-) -> list[str]:
-    """Non-exempt modules whose fan-in exceeds `ceiling`, as offender lines
-    naming the module, its measured/ceiling degree, and its importers."""
-    return [
-        _describe_fan_in_violation(degree, ceiling)
-        for degree in fan_in.values()
-        if degree.degree > ceiling and not is_exempt(degree.module)
-    ]
 
 
 def find_fan_out_violations(fan_out: dict[str, ModuleDegree], ceiling: int) -> list[str]:
@@ -242,15 +209,6 @@ def _find_cycle_path_within(component: frozenset[str], paths: list[tuple[str, ..
 
 
 # --- degree violation messages ----------------------------------------------
-
-
-def _describe_fan_in_violation(degree: ModuleDegree, ceiling: int) -> str:
-    return (
-        f"{degree.module}: fan-in {degree.degree} exceeds the ceiling of {ceiling} "
-        f"(imported by {', '.join(degree.neighbors)}) — this module is becoming load-bearing "
-        "infrastructure; if it's genuinely foundational, move it under app.models or app.core "
-        "(both exempt), otherwise reduce how many modules depend on it directly"
-    )
 
 
 def _describe_fan_out_violation(degree: ModuleDegree, ceiling: int) -> str:
@@ -520,23 +478,11 @@ def test_find_package_cycles_reports_all_three_members_of_a_three_package_tangle
     assert all(package in message for package in ("app.x", "app.y", "app.z"))
 
 
-def test_find_fan_in_violations_flags_a_non_core_module_over_the_ceiling() -> None:
-    edges = [ImportEdge(f"app.importer{i}", "app.services.hub") for i in range(5)]
-    violations = find_fan_in_violations(compute_fan_in(edges), ceiling=4, is_exempt=is_core_module)
-    assert len(violations) == 1
-    assert "app.services.hub" in violations[0] and "fan-in 5" in violations[0]
-
-
-def test_find_fan_in_violations_exempts_core_modules() -> None:
-    edges = [ImportEdge(f"app.importer{i}", "app.models.schema") for i in range(50)]
-    violations = find_fan_in_violations(compute_fan_in(edges), ceiling=4, is_exempt=is_core_module)
-    assert violations == []
-
-
-def test_find_fan_in_violations_passes_a_module_under_the_ceiling() -> None:
+def test_compute_fan_in_counts_distinct_importers_and_names_them() -> None:
     edges = [ImportEdge(f"app.importer{i}", "app.services.hub") for i in range(3)]
-    violations = find_fan_in_violations(compute_fan_in(edges), ceiling=4, is_exempt=is_core_module)
-    assert violations == []
+    assert compute_fan_in(edges)["app.services.hub"] == ModuleDegree(
+        "app.services.hub", 3, ("app.importer0", "app.importer1", "app.importer2")
+    )
 
 
 def test_find_fan_out_violations_flags_a_module_over_the_ceiling() -> None:
