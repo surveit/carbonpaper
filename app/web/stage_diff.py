@@ -29,14 +29,14 @@ ROW_ALIGNED_TYPES: frozenset[StageType] = frozenset({
     StageType.llm_transform,
 })
 
-# Row budgets for the rendered tables. Change COUNTS always cover the whole
-# frame; only the rows drawn are capped (aligned: same first-5 window the plain
-# output preview shows; dropped: the dropped subset is the point, so more room).
-ALIGNED_ROWS_SHOWN = 5
-DROPPED_ROWS_SHOWN = 50
+# One row budget for both rendered tables. Counts in the header always cover
+# the whole frame; only the rows drawn are capped — aligned: the first-5 window
+# the plain output preview showed; filter: the same window over the INPUT
+# frame, so dropped rows appear in place among the kept ones.
+DIFF_ROWS_SHOWN = 5
 
 ROW_ALIGNED_KIND = "row_aligned"
-DROPPED_ROWS_KIND = "dropped_rows"
+FILTER_ROWS_KIND = "filter_rows"
 
 
 @dataclass(frozen=True)
@@ -79,28 +79,35 @@ class RowAlignedDiff:
 
 
 @dataclass(frozen=True)
-class DroppedRow:
-    """One input row a filter dropped: its input ordinal and its rendered cells."""
+class FilterRow:
+    """One input row of the merged filter table: kept (with its output ordinal) or dropped."""
 
-    ordinal: int
+    input_ordinal: int
+    output_ordinal: Optional[int]
     cells: list[str]
+
+    @property
+    def dropped(self) -> bool:
+        """Whether the filter dropped this input row (it carries no output ordinal)."""
+        return self.output_ordinal is None
 
 
 @dataclass(frozen=True)
-class DroppedRowsDiff:
-    """A filter_rows stage's drop report: which input rows its output no longer carries."""
+class FilterRowsDiff:
+    """A filter_rows stage's output with the dropped input rows shown in place, in input order."""
 
-    kind: ClassVar[str] = DROPPED_ROWS_KIND
+    kind: ClassVar[str] = FILTER_ROWS_KIND
 
     input_id: str
     columns: list[str]
-    dropped: list[DroppedRow]
-    dropped_total: int
-    kept_total: int
+    rows: list[FilterRow]
     input_total: int
+    kept_total: int
+    dropped_total: int
+    dropped_beyond_window: int
 
 
-StageDiff = Union[RowAlignedDiff, DroppedRowsDiff]
+StageDiff = Union[RowAlignedDiff, FilterRowsDiff]
 
 
 def build_stage_diff(
@@ -120,7 +127,7 @@ def build_stage_diff(
     if input_df is None or output_df is None:
         return None
     if stage_def.type == StageType.filter_rows:
-        return _build_dropped_rows_diff(stage_def.id, input_id, run_dir, input_df, output_df)
+        return _build_filter_rows_diff(stage_def.id, input_id, run_dir, input_df, output_df)
     return _build_row_aligned_diff(input_id, input_df, output_df)
 
 
@@ -163,9 +170,9 @@ def _count_changed_cells(in_text: pd.DataFrame, out_text: pd.DataFrame, name: st
 def _shape_aligned_rows(
     in_text: pd.DataFrame, out_text: pd.DataFrame, columns: list[DiffColumn]
 ) -> list[list[DiffCell]]:
-    """The first ALIGNED_ROWS_SHOWN output rows as cells marked against their input row."""
+    """The first DIFF_ROWS_SHOWN output rows as cells marked against their input row."""
     rows: list[list[DiffCell]] = []
-    for i in range(min(len(out_text), ALIGNED_ROWS_SHOWN)):
+    for i in range(min(len(out_text), DIFF_ROWS_SHOWN)):
         row: list[DiffCell] = []
         for column in columns:
             text = str(out_text[column.name].iat[i])
@@ -180,36 +187,58 @@ def _shape_aligned_rows(
     return rows
 
 
-def _build_dropped_rows_diff(
+def _build_filter_rows_diff(
     stage_id: str, input_id: str, run_dir: Path,
     input_df: pd.DataFrame, output_df: pd.DataFrame,
-) -> Optional[DroppedRowsDiff]:
-    """The rows a filter dropped, per its lineage sidecar; None when the sidecar can't vouch."""
+) -> Optional[FilterRowsDiff]:
+    """The merged filter table off the verified sidecar; None where it can't vouch for alignment."""
     kept = _read_kept_ordinals(
         run_dir, stage_id, input_id, rows_out=len(output_df), rows_in=len(input_df)
     )
     if kept is None:
         return None
     in_text = _text_frame(input_df)
-    dropped_ordinals = [i for i in range(len(input_df)) if i not in kept]
-    dropped = [
-        DroppedRow(ordinal=i, cells=[str(in_text[name].iat[i]) for name in in_text.columns])
-        for i in dropped_ordinals[:DROPPED_ROWS_SHOWN]
-    ]
-    return DroppedRowsDiff(
+    out_text = _text_frame(output_df)
+    if list(in_text.columns) != list(out_text.columns):
+        # A filter passes columns through unchanged; frames that disagree mean
+        # the alignment story doesn't hold, so no merged table.
+        return None
+    rows = _shape_filter_rows(in_text, out_text, kept)
+    dropped_total = len(input_df) - len(output_df)
+    dropped_in_window = sum(1 for row in rows if row.dropped)
+    return FilterRowsDiff(
         input_id=input_id,
         columns=[str(name) for name in in_text.columns],
-        dropped=dropped,
-        dropped_total=len(dropped_ordinals),
-        kept_total=len(output_df),
+        rows=rows,
         input_total=len(input_df),
+        kept_total=len(output_df),
+        dropped_total=dropped_total,
+        dropped_beyond_window=dropped_total - dropped_in_window,
     )
+
+
+def _shape_filter_rows(
+    in_text: pd.DataFrame, out_text: pd.DataFrame, kept: list[int]
+) -> list[FilterRow]:
+    """The first DIFF_ROWS_SHOWN INPUT rows, each kept (drawn from the output) or dropped."""
+    output_ordinal_by_input = {
+        input_ordinal: output_ordinal for output_ordinal, input_ordinal in enumerate(kept)
+    }
+    rows: list[FilterRow] = []
+    for i in range(min(len(in_text), DIFF_ROWS_SHOWN)):
+        output_ordinal = output_ordinal_by_input.get(i)
+        # A kept row's cells come from the persisted OUTPUT row — the thing this
+        # pane shows — not from the input copy the pass-through contract implies.
+        source, at = (in_text, i) if output_ordinal is None else (out_text, output_ordinal)
+        cells = [str(source[name].iat[at]) for name in source.columns]
+        rows.append(FilterRow(input_ordinal=i, output_ordinal=output_ordinal, cells=cells))
+    return rows
 
 
 def _read_kept_ordinals(
     run_dir: Path, stage_id: str, input_id: str, *, rows_out: int, rows_in: int
-) -> Optional[set[int]]:
-    """The input ordinals the stage kept, off its sidecar; None where alignment is unverifiable."""
+) -> Optional[list[int]]:
+    """The input ordinals the stage kept, in output order; None where alignment is unverifiable."""
     path = lineage_sidecar_path(run_dir, stage_id)
     if not path.exists():
         return None
@@ -221,8 +250,12 @@ def _read_kept_ordinals(
         return None
     if not bool((lineage[TRACE_SOURCE_STAGE_KEY] == input_id).all()):
         return None
-    kept = {int(ordinal) for ordinal in lineage[TRACE_SOURCE_ROW_KEY]}
+    kept = [int(ordinal) for ordinal in lineage[TRACE_SOURCE_ROW_KEY]]
     if any(ordinal < 0 or ordinal >= rows_in for ordinal in kept):
+        return None
+    if any(later <= earlier for earlier, later in zip(kept, kept[1:])):
+        # A filter emits a subsequence of its input, so the kept ordinals must
+        # strictly increase — anything else is not a filter's sidecar.
         return None
     return kept
 

@@ -1,8 +1,8 @@
-"""The run stage panel's Outputs pane through the real runner: a 1:1 stage
-reads as a diff against its input (added columns tinted, changed cells
-marked), a filter stage carries a dropped-rows report beside its output
-preview, out-of-scope types keep the plain pane, and an unverifiable
-alignment falls back to the plain pane rather than guessing."""
+"""The run stage panel's Data pane through the real runner: a 1:1 stage reads
+as a diff against its input (added columns tinted, changed cells marked), a
+filter stage reads as one merged table with its dropped rows in place, the L2
+strip is Data | Transform for every stage type, and an unverifiable alignment
+falls back to the plain output view rather than guessing."""
 from __future__ import annotations
 
 import json
@@ -99,7 +99,7 @@ def _panel(run_id: str, stage_id: str) -> str:
 def test_a_row_function_output_reads_as_a_diff_against_its_input(run_ctx) -> None:
     _pdir, run_id = run_ctx
     html = _panel(run_id, CLASSIFY_ID)
-    assert "output as a diff against input" in html
+    assert "output as a diff against its input" in html
     # The added column is tinted AND named in words (caption + summary).
     assert "diff-col-new" in html
     assert "added by this stage, carried by no input" in html
@@ -111,28 +111,65 @@ def test_a_row_function_output_reads_as_a_diff_against_its_input(run_ctx) -> Non
     assert "output data" not in html
 
 
-def test_a_filter_stage_shows_its_dropped_rows_beside_the_output(run_ctx) -> None:
+def test_the_diff_header_links_both_raw_frames(run_ctx) -> None:
+    """With the Inputs/Outputs tabs gone, both raw frames stay one click away."""
+    # The header names input → stage and links each side's existing full-rows
+    # view and CSV download — no new endpoints.
+    _pdir, run_id = run_ctx
+    html = _panel(run_id, CLASSIFY_ID)
+    assert "raw input:" in html and "raw output:" in html
+    assert f"/stage/{LOAD_ID}/rows.csv" in html
+    assert f"/stage/{CLASSIFY_ID}/rows.csv" in html
+
+
+def test_a_filter_stage_shows_its_dropped_rows_in_place(run_ctx) -> None:
     _pdir, run_id = run_ctx
     html = _panel(run_id, KEEP_ID)
-    assert "rows dropped by this stage" in html
+    # ONE merged table: kept rows with lineage links, the dropped row inline,
+    # tinted, carrying its input ordinal — no second table to reconcile.
+    assert "dropped rows shown in place" in html
     assert "diff-row-dropped" in html
+    assert "dropped · input row 1" in html
     assert "BETA" in html  # the dropped row's content is visible
-    # The plain output preview still renders below the report.
-    assert "output data" in html
+    assert "View lineage" in html  # kept rows keep their lineage links
+    assert "output data" not in html  # the merged table IS the output view
 
 
-def test_an_input_stage_keeps_the_plain_outputs_pane(run_ctx) -> None:
+def test_the_two_tab_strip_replaces_inputs_and_outputs(run_ctx) -> None:
+    _pdir, run_id = run_ctx
+    for stage_id in (CLASSIFY_ID, LOAD_ID):  # in-scope and out-of-scope alike
+        html = _panel(run_id, stage_id)
+        assert 'data-l2="data"' in html and 'data-l2="transform"' in html
+        assert 'data-l2="inputs"' not in html and 'data-l2="outputs"' not in html
+        assert 'data-pane="schema-data"' in html and 'data-pane="run-data"' in html
+        assert "run-inputs" not in html and "run-outputs" not in html
+        assert "schema-inputs" not in html and "schema-outputs" not in html
+
+
+def test_the_data_pane_keeps_the_input_row_picker(run_ctx) -> None:
+    """The scratch row picker that lived under Inputs moved into Data, not away."""
+    # It still drives the Transform pane's scratch preview.
+    _pdir, run_id = run_ctx
+    html = _panel(run_id, CLASSIFY_ID)
+    assert "data-inputs" in html
+    assert 'class="row-pick"' in html and "scratch-run" in html
+    assert "Run transform on selected" in html
+
+
+def test_an_input_stage_keeps_the_plain_output_view_in_data(run_ctx) -> None:
     _pdir, run_id = run_ctx
     html = _panel(run_id, LOAD_ID)
     assert "stage-diff" not in html
     assert "output data" in html
+    # Its schema pane carries the output schema the old Outputs tab showed.
+    assert "output schema" in html
 
 
 def test_a_filter_missing_its_sidecar_falls_back_to_the_plain_pane(run_ctx) -> None:
     pdir, run_id = run_ctx
     lineage_sidecar_path(pdir / "runs" / run_id, KEEP_ID).unlink()
     html = _panel(run_id, KEEP_ID)
-    assert "rows dropped by this stage" not in html
+    assert "dropped rows shown in place" not in html
     assert "output data" in html
 
 
@@ -142,5 +179,5 @@ def test_a_row_count_mismatch_falls_back_to_the_plain_pane(run_ctx) -> None:
     grown = pd.concat([pd.read_parquet(out_path)] * 2, ignore_index=True)
     grown.to_parquet(out_path, index=False)
     html = _panel(run_id, CLASSIFY_ID)
-    assert "output as a diff against input" not in html
+    assert "output as a diff against its input" not in html
     assert "output data" in html

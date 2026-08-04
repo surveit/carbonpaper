@@ -37,23 +37,34 @@ NOT execute injected `<script>` tags, so `loadStage` re-creates script nodes
 after injection — without that, the panel's JS (tabs + scratch tool) is dead.
 
 - L1: **Schema** (the static spec) | **Current run** (this run's data).
-- L2: **Inputs** | **Transform** | **Outputs**. 6 panes = L1 × L2.
+- L2: **Data** | **Transform**. 3 panes: Data differs by tier, Transform
+  serves both. Data folds the old Inputs/Outputs tabs into one pane, because
+  the run-tier output now reads as a diff *against* its input.
+- **Data, run tier**: the stage's output (the stage-aware diff below, or the
+  plain preview), validation, then the upstream input previews in an
+  `input rows` disclosure. **Schema tier**: input schemas, then the output
+  schema.
 - The **scratch tool** (in-memory re-run on picked rows; real LLM calls for
-  `llm_transform`) lives in Inputs (row picker) and shows its result in
-  Transform. Nothing is persisted.
+  `llm_transform`) lives in Data's input-rows disclosure (row picker) and
+  shows its result in Transform. Nothing is persisted.
 - **Full-table view + CSV**: `…/stage/{sid}/rows` renders the entire stage
   output (not just the first-5 preview); `…/rows.csv` downloads it uncapped,
   UTF-8 behind a byte-order mark so accented rows open correctly in Excel on
   Windows (`loading.csv_download_body`).
-- **Stage-aware diff in Outputs** (`app.web.stage_diff` → `_stage_diff.html`):
+- **Stage-aware diff in Data** (`app.web.stage_diff` → `_stage_diff.html`):
   a 1:1 stage's (`python_row_function`, `llm_transform`) output preview is a
   positional diff against its input — columns the stage added are tinted and
   named in words, changed cells carry the replaced value struck through, and
   the summary line counts changes over the whole frame. A `filter_rows` stage
-  shows which input rows it dropped (read off its lineage sidecar, never
-  guessed) above the normal preview. Every other stage type keeps the plain
-  pane, and any stage whose alignment can't be verified (missing frame,
-  row-count mismatch, absent sidecar) falls back to the plain pane.
+  renders ONE merged table over the first input rows in input order: kept rows
+  exactly as the plain preview draws them (lineage links included), dropped
+  rows in place, tinted, with their input ordinal — read off the stage's
+  lineage sidecar, never guessed — and the header counts kept/dropped over the
+  whole frame, noting drops beyond the shown window. The diff header names
+  `input → stage` and links both raw frames' full-rows views and CSV
+  downloads. Every other stage type keeps the plain output view, and any stage
+  whose alignment can't be verified (missing frame, row-count mismatch, absent
+  sidecar) falls back to it.
 
 ## Review queue (`queue.html`)
 

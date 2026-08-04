@@ -1,10 +1,13 @@
 {# Per-run stage detail panel. Two layers of tabs:
      L1: Schema (the static contract) | Current run (this run's data)
-     L2: Inputs | Transform | Outputs
-   5 panes: Inputs and Outputs differ by tier, Transform does not. The stage
+     L2: Data | Transform
+   3 panes: Data differs by tier, Transform does not. Data folds what were
+   separate Inputs/Outputs tabs into one pane — the run-tier output now reads
+   as a diff AGAINST its input where the stage type permits one, so keeping
+   the two apart made the reader reconcile them mentally. The stage
    definition this run pinned IS what the current run transformed with, so one
-   pane serves both tiers (`data-pane` lists both) and you can stay on
-   "Current run" for the whole panel. #}
+   Transform pane serves both tiers (`data-pane` lists both) and you can stay
+   on "Current run" for the whole panel. #}
 {% from "_schema_table.html" import schema_table %}
 {% from "_stage_code.html" import stage_code %}
 
@@ -54,24 +57,26 @@
         <button data-l1="run" class="active">Current run</button>
     </div>
     <div class="tabs tabs-l2">
-        <button data-l2="inputs">Inputs</button>
+        <button data-l2="data">Data</button>
         <button data-l2="transform" class="active">Transform</button>
-        <button data-l2="outputs">Outputs</button>
     </div>
 </div>
 
 <div class="panes">
 
-  {# ─────────── SCHEMA × INPUTS ─────────── #}
-  <div class="pane" data-pane="schema-inputs" hidden>
+  {# ─────────── SCHEMA × DATA (input schemas, then the output schema) ─────────── #}
+  <div class="pane" data-pane="schema-data" hidden>
     {% if stage_def and stage_def.inputs %}
       {% for inp in stage_def.inputs %}
       <div class="schema-card">
-        <h4><a href="/project/{{ project }}/runs/{{ run_id }}#{{ inp.id }}"><code>{{ inp.id }}</code></a> schema</h4>
+        <h4>input <a href="/project/{{ project }}/runs/{{ run_id }}#{{ inp.id }}"><code>{{ inp.id }}</code></a> schema</h4>
         {{ schema_table(inp.table_schema) }}
       </div>
       {% endfor %}
     {% else %}<p class="muted"><em>No declared inputs.</em></p>{% endif %}
+    {% if stage_def and stage_def.output_schema %}
+    <div class="schema-card"><h4>output schema</h4>{{ schema_table(stage_def.output_schema) }}</div>
+    {% else %}<p class="muted"><em>No output schema declared.</em></p>{% endif %}
   </div>
 
   {# ─────────── TRANSFORM (both tiers) ─────────── #}
@@ -82,18 +87,47 @@
     {% else %}<p class="muted"><em>No static stage definition.</em></p>{% endif %}
     {# Scratch re-run result — filled in by the Inputs row picker below. #}
     <div class="scratch-result" hidden></div>
-    {% if previewable %}<p class="muted"><em>Pick rows under <b>Inputs</b> and run the transform to preview it here.</em></p>{% endif %}
+    {% if previewable %}<p class="muted"><em>Pick rows under <b>Data</b> › input rows and run the transform to preview it here.</em></p>{% endif %}
   </div>
 
-  {# ─────────── SCHEMA × OUTPUTS ─────────── #}
-  <div class="pane" data-pane="schema-outputs" hidden>
-    {% if stage_def and stage_def.output_schema %}
-    <div class="schema-card"><h4>output schema</h4>{{ schema_table(stage_def.output_schema) }}</div>
-    {% else %}<p class="muted"><em>No output schema declared.</em></p>{% endif %}
-  </div>
+  {# ─────────── RUN × DATA (diff-aware output, then the input rows) ─────────── #}
+  <div class="pane" data-pane="run-data" hidden>
+    {# Stage-aware diff (app.web.stage_diff): a row_aligned diff or a
+       filter_rows merged table REPLACES the plain preview below — same rows,
+       annotated. diff is None for out-of-scope stage types and whenever
+       alignment can't be verified; the pane then shows the plain output view. #}
+    {% if diff %}{% include "_stage_diff.html" %}
+    {% elif preview and preview.preview %}
+    <div class="preview-block">
+      <div class="preview-head">output data {% set shown = preview.preview | length %}<span class="muted">· {% if preview.rows_total > shown %}first {{ shown }} of {% endif %}{{ "{:,}".format(preview.rows_total) }} row{% if preview.rows_total != 1 %}s{% endif %}</span>
+        <span class="preview-actions">· <a href="/project/{{ project }}/runs/{{ run_id }}/stage/{{ stage.stage_id }}/rows">view all rows</a>
+        · <a href="/project/{{ project }}/runs/{{ run_id }}/stage/{{ stage.stage_id }}/rows.csv">⬇ CSV</a></span></div>
+      <div class="table-scroll"><table class="data-preview">
+        <thead><tr><th class="syw-col">lineage</th>{% for c in preview.columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+        <tbody>{% for row in preview.preview %}<tr><td class="syw-cell"><a href="/project/{{ project }}/runs/{{ run_id }}/stage/{{ stage.stage_id }}/row/{{ loop.index0 }}/trace/view" target="_blank" rel="noopener" title="trace this row's provenance back through the pipeline">View lineage</a></td>{% for c in preview.columns %}{% set v = row[c] | string %}{% if v[:4] == 'http' %}<td class="cell-url"><a href="{{ v }}" target="_blank" rel="noopener">{{ v }}</a></td>{% else %}<td>{{ v | truncate(240) }}</td>{% endif %}{% endfor %}</tr>{% endfor %}</tbody>
+      </table></div>
+    </div>
+    {% elif preview and preview.error %}<p class="muted"><em>output preview unavailable: {{ preview.error }}</em></p>
+    {% elif stage.output_path %}<p class="muted"><em>output file missing on disk: <code>{{ stage.output_path }}</code></em></p>
+    {% else %}<p class="muted"><em>No output yet.</em></p>{% endif %}
 
-  {# ─────────── RUN × INPUTS ─────────── #}
-  <div class="pane" data-pane="run-inputs" hidden>
+    <div class="validation-block">
+      <h4>validation</h4>
+      {% if in_issues or out_issues %}
+        {% if in_issues %}<p class="val-phase">input</p><ul class="validation-list">
+          {% for i in in_issues %}<li class="sev-{{ i.severity }}"><strong>{{ i.severity }}</strong>{% if i.column %} · <code>{{ i.column }}</code>{% endif %} — {{ i.message }}</li>{% endfor %}
+        </ul>{% endif %}
+        {% if out_issues %}<p class="val-phase">output</p><ul class="validation-list">
+          {% for i in out_issues %}<li class="sev-{{ i.severity }}"><strong>{{ i.severity }}</strong>{% if i.column %} · <code>{{ i.column }}</code>{% endif %} — {{ i.message }}</li>{% endfor %}
+        </ul>{% endif %}
+      {% else %}<p class="muted"><em>No validation issues.</em></p>{% endif %}
+    </div>
+
+    {# The input rows + scratch row picker that lived under the Inputs tab —
+       one disclosure away, never gone: the picker still drives the Transform
+       pane's scratch preview. #}
+    <details class="data-inputs">
+      <summary>input rows{% if previewable %} — pick rows to re-run the transform on{% endif %}</summary>
     {% if input_previews %}
       {% for ip in input_previews %}
       <div class="preview-block input-preview" {% if loop.first %}data-primary="1"{% endif %}>
@@ -131,42 +165,7 @@
       {% if stage.type == 'llm_transform' %}<strong>Makes real LLM calls</strong> — keep the selection small.{% endif %}</p>
     </div>
     {% endif %}
-  </div>
-
-  {# ─────────── RUN × OUTPUTS ─────────── #}
-  <div class="pane" data-pane="run-outputs" hidden>
-    {# Stage-aware diff (app.web.stage_diff): a row_aligned diff REPLACES the
-       plain preview table below (same rows, annotated against the input); a
-       dropped_rows report sits ABOVE it. diff is None for out-of-scope stage
-       types and whenever alignment can't be verified — the pane then reads
-       exactly as before. #}
-    {% if diff %}{% include "_stage_diff.html" %}{% endif %}
-    {% if diff and diff.kind == 'row_aligned' %}
-    {% elif preview and preview.preview %}
-    <div class="preview-block">
-      <div class="preview-head">output data {% set shown = preview.preview | length %}<span class="muted">· {% if preview.rows_total > shown %}first {{ shown }} of {% endif %}{{ "{:,}".format(preview.rows_total) }} row{% if preview.rows_total != 1 %}s{% endif %}</span>
-        <span class="preview-actions">· <a href="/project/{{ project }}/runs/{{ run_id }}/stage/{{ stage.stage_id }}/rows">view all rows</a>
-        · <a href="/project/{{ project }}/runs/{{ run_id }}/stage/{{ stage.stage_id }}/rows.csv">⬇ CSV</a></span></div>
-      <div class="table-scroll"><table class="data-preview">
-        <thead><tr><th class="syw-col">lineage</th>{% for c in preview.columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
-        <tbody>{% for row in preview.preview %}<tr><td class="syw-cell"><a href="/project/{{ project }}/runs/{{ run_id }}/stage/{{ stage.stage_id }}/row/{{ loop.index0 }}/trace/view" target="_blank" rel="noopener" title="trace this row's provenance back through the pipeline">View lineage</a></td>{% for c in preview.columns %}{% set v = row[c] | string %}{% if v[:4] == 'http' %}<td class="cell-url"><a href="{{ v }}" target="_blank" rel="noopener">{{ v }}</a></td>{% else %}<td>{{ v | truncate(240) }}</td>{% endif %}{% endfor %}</tr>{% endfor %}</tbody>
-      </table></div>
-    </div>
-    {% elif preview and preview.error %}<p class="muted"><em>output preview unavailable: {{ preview.error }}</em></p>
-    {% elif stage.output_path %}<p class="muted"><em>output file missing on disk: <code>{{ stage.output_path }}</code></em></p>
-    {% else %}<p class="muted"><em>No output yet.</em></p>{% endif %}
-
-    <div class="validation-block">
-      <h4>validation</h4>
-      {% if in_issues or out_issues %}
-        {% if in_issues %}<p class="val-phase">input</p><ul class="validation-list">
-          {% for i in in_issues %}<li class="sev-{{ i.severity }}"><strong>{{ i.severity }}</strong>{% if i.column %} · <code>{{ i.column }}</code>{% endif %} — {{ i.message }}</li>{% endfor %}
-        </ul>{% endif %}
-        {% if out_issues %}<p class="val-phase">output</p><ul class="validation-list">
-          {% for i in out_issues %}<li class="sev-{{ i.severity }}"><strong>{{ i.severity }}</strong>{% if i.column %} · <code>{{ i.column }}</code>{% endif %} — {{ i.message }}</li>{% endfor %}
-        </ul>{% endif %}
-      {% else %}<p class="muted"><em>No validation issues.</em></p>{% endif %}
-    </div>
+    </details>
   </div>
 
 </div>{# /panes #}
@@ -192,7 +191,7 @@
   root.querySelectorAll('[data-l2]').forEach(b => b.addEventListener('click', () => { l2 = b.dataset.l2; apply(); }));
   apply();
 
-  // ── scratch re-run (row picker in run-inputs, result in run-transform) ──
+  // ── scratch re-run (row picker in run-data's input rows, result in run-transform) ──
   const meth = root.dataset.project, run = root.dataset.run, stage = root.dataset.stage;
   const primary = root.querySelector('.input-preview[data-primary] table.selectable');
   const rowPicks = () => primary ? Array.from(primary.querySelectorAll('.row-pick')) : [];

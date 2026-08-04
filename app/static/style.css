@@ -1135,6 +1135,12 @@ table.data-preview.scratch th { background: #f3ecd0; }
 .diff-summary .diff-note { margin-right: 12px; }
 .diff-summary .diff-note-added code { background: var(--state-review-bg); }
 
+/* The Data pane's input-rows disclosure: the upstream previews and the scratch
+   row picker, folded below the (diff-aware) output so the pane leads with what
+   the stage produced while the picker stays one click away. */
+.data-inputs { margin: 14px 0 4px; }
+.data-inputs > summary { color: var(--accent); font-size: 12px; cursor: pointer; }
+
 /* Validation block inside the Outputs tier. */
 .tier-outputs .validation-block { background: #fff; border: 1px solid var(--border); margin-top: 12px; }
 .validation-block .val-phase {

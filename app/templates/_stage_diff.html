@@ -1,44 +1,56 @@
-{# The Outputs-pane stage diff (context: diff, project, run_id, stage — see
+{# The Data-pane stage diff (context: diff, project, run_id, stage — see
    app.web.stage_diff). Two shapes:
      row_aligned  — a 1:1 stage's output cells against its input row by row.
                     This table REPLACES the plain output preview: same rows,
                     annotated. Added columns take the same palette tint the
                     stage-tests table uses; a caption names them in words, so
                     the mark survives without colour.
-     dropped_rows — a filter stage's drop report, a section ABOVE the normal
-                    output preview: which input rows the output no longer carries.
-   The route passes diff=None wherever no honest diff exists; this file is then
-   never included and the pane is exactly what it was. #}
-{% if diff.kind == 'dropped_rows' %}
+     filter_rows  — ONE table over the first input rows in input order: kept
+                    rows drawn exactly as the plain output preview would draw
+                    them (lineage links included), dropped rows in place,
+                    tinted, carrying their input ordinal.
+   The header states the relationship (input → stage) and links both raw
+   frames' full-rows views and CSV downloads — the untransformed frames stay
+   one click away with the Inputs/Outputs tabs gone. The route passes
+   diff=None wherever no honest diff exists; this file is then never included
+   and the pane falls back to the plain output view. #}
+{% set raw_links %}
+    <span class="preview-actions">· raw input: <a href="/project/{{ project }}/runs/{{ run_id }}/stage/{{ diff.input_id }}/rows">all rows</a>
+    · <a href="/project/{{ project }}/runs/{{ run_id }}/stage/{{ diff.input_id }}/rows.csv">⬇ CSV</a>
+    · raw output: <a href="/project/{{ project }}/runs/{{ run_id }}/stage/{{ stage.stage_id }}/rows">all rows</a>
+    · <a href="/project/{{ project }}/runs/{{ run_id }}/stage/{{ stage.stage_id }}/rows.csv">⬇ CSV</a></span>
+{% endset %}
+{% if diff.kind == 'filter_rows' %}
 <div class="preview-block stage-diff">
-  <div class="preview-head">rows dropped by this stage
-    <span class="muted">· kept {{ "{:,}".format(diff.kept_total) }} of {{ "{:,}".format(diff.input_total) }} row{% if diff.input_total != 1 %}s{% endif %} from <code>{{ diff.input_id }}</code>
+  <div class="preview-head"><code>{{ diff.input_id }}</code> → <code>{{ stage.stage_id }}</code> — dropped rows shown in place
+    <span class="muted">· kept {{ "{:,}".format(diff.kept_total) }} of {{ "{:,}".format(diff.input_total) }} row{% if diff.input_total != 1 %}s{% endif %}
     · dropped {{ "{:,}".format(diff.dropped_total) }}</span>
+    {{ raw_links }}
   </div>
-  {% if diff.dropped_total == 0 %}
-  <p class="muted"><em>No rows dropped — every input row passed the filter.</em></p>
-  {% else %}
-  {% if diff.dropped_total > diff.dropped | length %}
-  <p class="muted">showing the first {{ diff.dropped | length }} of {{ "{:,}".format(diff.dropped_total) }} dropped rows — the full input is one stage up</p>
+  {% if diff.input_total > diff.rows | length %}
+  <p class="muted">showing the first {{ diff.rows | length }} of {{ "{:,}".format(diff.input_total) }} input rows{% if diff.dropped_beyond_window %} — {{ "{:,}".format(diff.dropped_beyond_window) }} dropped row{% if diff.dropped_beyond_window != 1 %}s{% endif %} fall{% if diff.dropped_beyond_window == 1 %}s{% endif %} beyond them{% endif %}</p>
   {% endif %}
   <div class="table-scroll"><table class="data-preview">
-    <thead><tr><th>input row</th>{% for name in diff.columns %}<th>{{ name }}</th>{% endfor %}</tr></thead>
+    <thead><tr><th class="syw-col">lineage</th>{% for name in diff.columns %}<th>{{ name }}</th>{% endfor %}</tr></thead>
     <tbody>
-    {% for row in diff.dropped %}
-    <tr class="diff-row-dropped"><td>{{ row.ordinal }}</td>
-      {% for value in row.cells %}<td>{{ value | truncate(240) }}</td>{% endfor %}</tr>
+    {% for row in diff.rows %}
+    {% if row.dropped %}
+    <tr class="diff-row-dropped"><td class="syw-cell">dropped · input row {{ row.input_ordinal }}</td>
+      {%- for value in row.cells %}<td>{{ value | truncate(240) }}</td>{% endfor %}</tr>
+    {% else %}
+    <tr><td class="syw-cell"><a href="/project/{{ project }}/runs/{{ run_id }}/stage/{{ stage.stage_id }}/row/{{ row.output_ordinal }}/trace/view" target="_blank" rel="noopener" title="trace this row's provenance back through the pipeline">View lineage</a></td>
+      {%- for value in row.cells %}{% if value[:4] == 'http' %}<td class="cell-url"><a href="{{ value }}" target="_blank" rel="noopener">{{ value }}</a></td>{% else %}<td>{{ value | truncate(240) }}</td>{% endif %}{% endfor %}</tr>
+    {% endif %}
     {% endfor %}
     </tbody>
   </table></div>
-  {% endif %}
 </div>
 {% else %}
 <div class="preview-block stage-diff">
-  <div class="preview-head">output as a diff against input <code>{{ diff.input_id }}</code>
+  <div class="preview-head"><code>{{ diff.input_id }}</code> → <code>{{ stage.stage_id }}</code> — output as a diff against its input
     {% set shown = diff.rows | length %}
     <span class="muted">· {% if diff.rows_total > shown %}first {{ shown }} of {% endif %}{{ "{:,}".format(diff.rows_total) }} row{% if diff.rows_total != 1 %}s{% endif %}</span>
-    <span class="preview-actions">· <a href="/project/{{ project }}/runs/{{ run_id }}/stage/{{ stage.stage_id }}/rows">view all rows</a>
-    · <a href="/project/{{ project }}/runs/{{ run_id }}/stage/{{ stage.stage_id }}/rows.csv">⬇ CSV</a></span>
+    {{ raw_links }}
   </div>
   <p class="diff-summary">
     {%- if diff.added_column_names %}

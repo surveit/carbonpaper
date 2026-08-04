@@ -1,5 +1,5 @@
-"""The Outputs-pane stage diff (app.web.stage_diff): added-column and
-changed-cell detection for 1:1 stages, the dropped-rows report for
+"""The Data-pane stage diff (app.web.stage_diff): added-column and
+changed-cell detection for 1:1 stages, the merged kept-and-dropped table for
 filter_rows read off the lineage sidecar, None for every out-of-scope stage
 type, and None (fallback) wherever the alignment cannot be verified."""
 from __future__ import annotations
@@ -15,7 +15,8 @@ from app.runtime.lineage import (
     lineage_sidecar_path,
 )
 from app.web.stage_diff import (
-    DROPPED_ROWS_KIND,
+    DIFF_ROWS_SHOWN,
+    FILTER_ROWS_KIND,
     ROW_ALIGNED_KIND,
     RowAlignedDiff,
     build_stage_diff,
@@ -143,9 +144,9 @@ def test_an_llm_transform_is_admitted_to_the_row_aligned_diff(tmp_path: Path) ->
     assert diff.added_column_names == ["label"]
 
 
-# ─── filter_rows: the dropped-rows report ────────────────────────────────────
+# ─── filter_rows: one merged table, dropped rows in place ────────────────────
 
-def test_filter_rows_reports_the_dropped_rows_by_input_ordinal(tmp_path: Path) -> None:
+def test_filter_rows_merges_kept_and_dropped_rows_in_input_order(tmp_path: Path) -> None:
     _write_output(tmp_path, LOAD_ID, pd.DataFrame(
         {"name": ["a", "b", "c", "d"], "val": [1, 2, 3, 4]}))
     out_rel = _write_output(tmp_path, "keep", pd.DataFrame(
@@ -154,13 +155,18 @@ def test_filter_rows_reports_the_dropped_rows_by_input_ordinal(tmp_path: Path) -
 
     diff = _diff(tmp_path, _filter_stage(), out_rel)
 
-    assert diff is not None and diff.kind == DROPPED_ROWS_KIND
+    assert diff is not None and diff.kind == FILTER_ROWS_KIND
     assert diff.dropped_total == 2 and diff.kept_total == 2 and diff.input_total == 4
-    assert [row.ordinal for row in diff.dropped] == [1, 3]
-    assert diff.dropped[0].cells == ["b", "2"]
+    assert [row.input_ordinal for row in diff.rows] == [0, 1, 2, 3]
+    assert [row.dropped for row in diff.rows] == [False, True, False, True]
+    # A kept row carries its ordinal IN THE OUTPUT, which is what its lineage
+    # link needs; a dropped row carries none.
+    assert [row.output_ordinal for row in diff.rows] == [0, None, 1, None]
+    assert diff.rows[1].cells == ["b", "2"]
+    assert diff.dropped_beyond_window == 0
 
 
-def test_filter_rows_that_dropped_nothing_still_gets_a_report(tmp_path: Path) -> None:
+def test_filter_rows_that_dropped_nothing_still_gets_the_merged_table(tmp_path: Path) -> None:
     frame = pd.DataFrame({"name": ["a", "b"], "val": [1, 2]})
     _write_output(tmp_path, LOAD_ID, frame)
     out_rel = _write_output(tmp_path, "keep", frame.copy())
@@ -168,8 +174,24 @@ def test_filter_rows_that_dropped_nothing_still_gets_a_report(tmp_path: Path) ->
 
     diff = _diff(tmp_path, _filter_stage(), out_rel)
 
-    assert diff is not None and diff.kind == DROPPED_ROWS_KIND
-    assert diff.dropped_total == 0 and diff.dropped == []
+    assert diff is not None and diff.kind == FILTER_ROWS_KIND
+    assert diff.dropped_total == 0
+    assert all(not row.dropped for row in diff.rows)
+
+
+def test_filter_rows_counts_the_drops_beyond_the_shown_window(tmp_path: Path) -> None:
+    _write_output(tmp_path, LOAD_ID, pd.DataFrame(
+        {"name": list("abcdefgh"), "val": list(range(8))}))
+    out_rel = _write_output(tmp_path, "keep", pd.DataFrame(
+        {"name": list("abcdefg"), "val": list(range(7))}))
+    _write_lineage(tmp_path, "keep", kept=[0, 1, 2, 3, 4, 5, 6])  # dropped: ordinal 7
+
+    diff = _diff(tmp_path, _filter_stage(), out_rel)
+
+    assert diff is not None and diff.kind == FILTER_ROWS_KIND
+    assert len(diff.rows) == DIFF_ROWS_SHOWN
+    assert all(not row.dropped for row in diff.rows)
+    assert diff.dropped_total == 1 and diff.dropped_beyond_window == 1
 
 
 # ─── out-of-scope stage types: no diff, ever ─────────────────────────────────
@@ -237,5 +259,15 @@ def test_a_filter_whose_sidecar_disagrees_with_its_output_yields_no_diff(tmp_pat
     _write_output(tmp_path, LOAD_ID, pd.DataFrame({"name": ["a", "b"], "val": [1, 2]}))
     out_rel = _write_output(tmp_path, "keep", pd.DataFrame({"name": ["a"], "val": [1]}))
     _write_lineage(tmp_path, "keep", kept=[0, 1])  # names 2 rows; the output has 1
+
+    assert _diff(tmp_path, _filter_stage(), out_rel) is None
+
+
+def test_a_filter_whose_sidecar_ordinals_do_not_increase_yields_no_diff(tmp_path: Path) -> None:
+    # A filter emits a subsequence of its input, so kept ordinals strictly
+    # increase; a sidecar that says otherwise cannot vouch for the merge.
+    _write_output(tmp_path, LOAD_ID, pd.DataFrame({"name": ["a", "b"], "val": [1, 2]}))
+    out_rel = _write_output(tmp_path, "keep", pd.DataFrame({"name": ["b", "a"], "val": [2, 1]}))
+    _write_lineage(tmp_path, "keep", kept=[1, 0])
 
     assert _diff(tmp_path, _filter_stage(), out_rel) is None
