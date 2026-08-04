@@ -4,7 +4,7 @@ equal the input schema."""
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any, ClassVar, Literal, Optional
+from typing import ClassVar, Literal, Optional
 
 from pydantic import Field, model_validator
 
@@ -18,6 +18,7 @@ from app.models.stages.code import (
     CornerCase,
     validate_inline_function_code,
 )
+from app.models.stages.node_spec import NodeTypeSpec
 from app.models.stages.signature import ExtendsSignature
 from app.models.stages.stage_tests import FilterRowsStageTest
 
@@ -123,17 +124,17 @@ def find_filter_warnings(stage: "FilterRowsStage") -> list[CompilerWarning]:
                      "no plain-language description — reviewable only by reading its code")]
     return []
 
-# Authoring notes for this module's stage type(s), as the plain-data shape the
-# authoring prompts render. Assembled into NODE_TYPES by app.models.stages.
-NODE_TYPE_SPECS: dict[str, dict[str, Any]] = {
-    "filter_rows": {
-        "summary": "Keep the rows an authored predicate returns True for.",
-        "blocks": ["filter"],
-        "requires_inputs": True,
-        "min_inputs": 1,
-        "required": ["code"],
-        "optional": ["function"],
-        "notes": (
+# Authoring copy for this module's stage type(s); assembled into NODE_TYPES.
+NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
+    "filter_rows": NodeTypeSpec(
+        summary="Keep the rows an authored predicate returns True for.",
+        signature_form="extends",
+        blocks=["filter"],
+        requires_inputs=True,
+        min_inputs=1,
+        required=["code"],
+        optional=["function"],
+        notes=(
             "Takes exactly ONE input. The predicate is INLINE code only — there is no "
             "kind/module here; a filter that needs an importable module is doing more "
             "than deciding. `should_include(row)` is handed a plain dict and "
@@ -141,5 +142,5 @@ NODE_TYPE_SPECS: dict[str, dict[str, Any]] = {
             "type is a run-time error. Kept rows preserve their original relative order "
             "and every column unchanged, so output_schema must equal the input schema."
         ),
-    },
+    ),
 }

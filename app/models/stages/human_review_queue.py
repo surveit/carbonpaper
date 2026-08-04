@@ -4,13 +4,14 @@ resolves — sources against the input edge, added names against output_schema."
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, ClassVar, Literal, Optional
+from typing import ClassVar, Literal, Optional
 
 from pydantic import Field, field_validator
 
 from app.models.schema import SCALAR_COLUMN_TYPES, STR_COLUMN_TYPE, StageConfig, TableSchema
 from app.models.stage_base import StageBase, StageInput, StageType
 from app.models.stages.shared import find_predicate_column_issues
+from app.models.stages.node_spec import NodeTypeSpec
 from app.models.stages.signature import ExtendsSignature
 
 
@@ -274,19 +275,19 @@ def _find_review_record_target_issues(
             )
     return issues
 
-# Authoring notes for this module's stage type(s), as the plain-data shape the
-# authoring prompts render. Assembled into NODE_TYPES by app.models.stages.
-NODE_TYPE_SPECS: dict[str, dict[str, Any]] = {
-    "human_review_queue": {
-        "summary": "Pulls flagged rows for human decision; halts the run.",
-        "blocks": ["queue"],
-        "requires_inputs": True,
-        "min_inputs": 1,
-        "required": ["reviewed_columns", "verdict_column", "reviewer_column",
+# Authoring copy for this module's stage type(s); assembled into NODE_TYPES.
+NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
+    "human_review_queue": NodeTypeSpec(
+        summary="Pulls flagged rows for human decision; halts the run.",
+        signature_form="extends",
+        blocks=["queue"],
+        requires_inputs=True,
+        min_inputs=1,
+        required=["reviewed_columns", "verdict_column", "reviewer_column",
                      "reviewed_at_column"],
-        "optional": ["filter", "reviewer_instructions", "review_notes_column",
+        optional=["filter", "reviewer_instructions", "review_notes_column",
                      "routing", "conflict_resolution", "estimated_volume_per_week"],
-        "notes": (
+        notes=(
             "Reviewed rows are matched to a cached human decision by "
             "fingerprinting the row itself — no column configuration is needed "
             "to enable that matching. The column fields say what the human is "
@@ -299,5 +300,5 @@ NODE_TYPE_SPECS: dict[str, dict[str, Any]] = {
             "decision for this stage stops matching and every row is asked "
             "again."
         ),
-    },
+    ),
 }

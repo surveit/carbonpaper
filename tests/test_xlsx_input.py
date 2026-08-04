@@ -152,7 +152,7 @@ def test_authoring_surfaces_advertise_xlsx():
     for fmt in FileFormat:
         assert fmt.value in params_description, f"{fmt.value} not advertised to the authoring agent"
 
-    notes = NODE_TYPES["input_data"]["notes"]
+    notes = NODE_TYPES["input_data"].notes
     assert "xlsx" in notes
     for param in ("sheet_name", "header_row", "first_column"):
         assert param in notes, f"{param} not advertised to the authoring agent"

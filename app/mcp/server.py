@@ -73,7 +73,7 @@ def _render_node_type_constraints() -> str:
         textwrap.fill(f"- {stage_type} — {note}", width=88, subsequent_indent="  ")
         for stage_type, note in (
             (name, HUMAN_REVIEW_QUEUE_CONTRACT_NOTE
-             if name == StageType.human_review_queue else spec["notes"])
+             if name == StageType.human_review_queue else spec.notes)
             for name, spec in NODE_TYPES.items()
         )
     )

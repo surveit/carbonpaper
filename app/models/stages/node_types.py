@@ -6,8 +6,6 @@ exists and cannot import modules that subclass it.
 """
 from __future__ import annotations
 
-from typing import Any
-
 from app.models.node_contract_notes import (
     CODE_CORNER_CASES_CONTRACT_NOTE,
     CODE_SUMMARY_CONTRACT_NOTE,
@@ -19,15 +17,13 @@ from app.models.stages.human_review_queue import NODE_TYPE_SPECS as _HUMAN_REVIE
 from app.models.stages.input_data import NODE_TYPE_SPECS as _INPUT_DATA
 from app.models.stages.join import NODE_TYPE_SPECS as _JOIN
 from app.models.stages.llm_transform import NODE_TYPE_SPECS as _LLM_TRANSFORM
+from app.models.stages.node_spec import NodeTypeSpec
 from app.models.stages.publish import NODE_TYPE_SPECS as _PUBLISH
 from app.models.stages.union import NODE_TYPE_SPECS as _UNION
 
 # app.agents.compiler.prompt and app.mcp.server render this into their system
-# prompts: type -> {summary, blocks, required, optional, min_inputs,
-# requires_inputs}. `blocks` names the config blocks that type's stage model
-# requires. The models do not expose this rendering shape, so the copy is plain
-# data. Merge order fixes the order the prompts list the types in.
-NODE_TYPES: dict[str, dict[str, Any]] = {
+# prompts. Merge order fixes the order the prompts list the types in.
+NODE_TYPES: dict[str, NodeTypeSpec] = {
     **_INPUT_DATA,
     **_LLM_TRANSFORM,
     **_CODE,
@@ -46,7 +42,7 @@ NODE_TYPES: dict[str, dict[str, Any]] = {
 CODE_CARRYING_TYPES = ("python_row_function", "python_frame_function", "publish", "filter_rows")
 for _type_name in CODE_CARRYING_TYPES:
     _spec = NODE_TYPES[_type_name]
-    _spec["notes"] = (
-        f"{_spec['notes']} {CODE_SUMMARY_CONTRACT_NOTE} {CODE_CORNER_CASES_CONTRACT_NOTE}"
-    )
-    _spec["optional"] = [*_spec["optional"], "summary"]
+    NODE_TYPES[_type_name] = _spec.model_copy(update={
+        "notes": f"{_spec.notes} {CODE_SUMMARY_CONTRACT_NOTE} {CODE_CORNER_CASES_CONTRACT_NOTE}",
+        "optional": [*_spec.optional, "summary"],
+    })

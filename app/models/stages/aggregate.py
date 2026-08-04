@@ -6,7 +6,7 @@ columns group_by + the aggregations actually produce."""
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, ClassVar, Literal, Optional
+from typing import ClassVar, Literal, Optional
 
 from pydantic import Field, model_validator
 
@@ -20,6 +20,7 @@ from app.models.stages.shared import (
     find_predicate_column_issues,
     resolve_input_columns,
 )
+from app.models.stages.node_spec import NodeTypeSpec
 from app.models.stages.signature import ReplacesSignature
 
 
@@ -208,17 +209,17 @@ def compute_aggregate_output_types(
             computed[op.output_column] = value_type
     return computed
 
-# Authoring notes for this module's stage type(s), as the plain-data shape the
-# authoring prompts render. Assembled into NODE_TYPES by app.models.stages.
-NODE_TYPE_SPECS: dict[str, dict[str, Any]] = {
-    "aggregate": {
-        "summary": "Structured group-by aggregation.",
-        "blocks": ["aggregate"],
-        "requires_inputs": True,
-        "min_inputs": 1,
-        "required": ["group_by", "aggregations"],
-        "optional": [],
-        "notes": (
+# Authoring copy for this module's stage type(s); assembled into NODE_TYPES.
+NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
+    "aggregate": NodeTypeSpec(
+        summary="Structured group-by aggregation.",
+        signature_form="replaces",
+        blocks=["aggregate"],
+        requires_inputs=True,
+        min_inputs=1,
+        required=["group_by", "aggregations"],
+        optional=[],
+        notes=(
             "Output columns are exactly group_by plus each aggregation's output_column — every "
             "other input column is DROPPED, so carry anything needed downstream via group_by "
             "or a `first` aggregation. formula `count` takes no value_column; every other "
@@ -226,5 +227,5 @@ NODE_TYPE_SPECS: dict[str, dict[str, Any]] = {
             "what the formula computes: count->int, mean->float, min/max/first->the value "
             "column's type, list->list[<that type>]."
         ),
-    },
+    ),
 }

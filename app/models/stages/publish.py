@@ -4,7 +4,7 @@ stage's input edge."""
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, ClassVar, Literal, Optional
+from typing import ClassVar, Literal, Optional
 
 from pydantic import Field
 
@@ -12,6 +12,7 @@ from app.models.schema import StageConfig
 from app.models.stage_base import StageInput, StageType
 from app.models.stages.code import CarriesPythonFunctionStage
 from app.models.stages.shared import COLUMN_ISSUE, resolve_input_columns
+from app.models.stages.node_spec import NodeTypeSpec
 from app.models.stages.signature import ReplacesSignature
 
 
@@ -83,17 +84,17 @@ def find_publish_column_issues(stage: "PublishStage") -> list[str]:
         )
     ]
 
-# Authoring notes for this module's stage type(s), as the plain-data shape the
-# authoring prompts render. Assembled into NODE_TYPES by app.models.stages.
-NODE_TYPE_SPECS: dict[str, dict[str, Any]] = {
-    "publish": {
-        "summary": "Render a final artifact (html, json, csv, cards).",
-        "blocks": ["publish", "function"],
-        "requires_inputs": True,
-        "min_inputs": 1,
-        "required": [],
-        "optional": ["format", "destination", "template", "one_file_per", "cross_link"],
-        "notes": (
+# Authoring copy for this module's stage type(s); assembled into NODE_TYPES.
+NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
+    "publish": NodeTypeSpec(
+        summary="Render a final artifact (html, json, csv, cards).",
+        signature_form="replaces",
+        blocks=["publish", "function"],
+        requires_inputs=True,
+        min_inputs=1,
+        required=[],
+        optional=["format", "destination", "template", "one_file_per", "cross_link"],
+        notes=(
             "Published output must be INTERROGABLE: every row or claim it renders links "
             "back to that row's provenance. Declare the keyword `trace_links` on the "
             "function — `def transform(df, output_dir, trace_links)` — and the runtime "
@@ -105,5 +106,5 @@ NODE_TYPE_SPECS: dict[str, dict[str, Any]] = {
             "trace has. Omit the keyword for a format that cannot carry a link (csv, json). "
             "The one type exempt from declaring an output_schema: it emits files, not a table."
         ),
-    },
+    ),
 }

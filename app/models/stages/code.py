@@ -8,13 +8,14 @@ from __future__ import annotations
 import ast
 
 from collections.abc import Sequence
-from typing import Any, ClassVar, Literal, Optional, Protocol
+from typing import ClassVar, Literal, Optional, Protocol
 
 from pydantic import Field, model_validator
 
 from app.models.errors import StepRefused
 from app.models.schema import FunctionKind, StageConfig, _Base
 from app.models.stage_base import StageBase, StageInput, StageType
+from app.models.stages.node_spec import NodeTypeSpec
 from app.models.stages.signature import ExtendsSignature, ReplacesSignature
 from app.models.stages.stage_tests import (
     PythonFrameFunctionStageTest,
@@ -246,17 +247,17 @@ class PythonFrameFunctionStage(CarriesPythonFunctionStage):
     tests: Optional[Sequence[PythonFrameFunctionStageTest]] = None
     signature: Optional[ReplacesSignature] = None
 
-# Authoring notes for this module's stage type(s), as the plain-data shape the
-# authoring prompts render. Assembled into NODE_TYPES by app.models.stages.
-NODE_TYPE_SPECS: dict[str, dict[str, Any]] = {
-    "python_row_function": {
-        "summary": "Deterministic Python run once per row: one row in → one row out (cannot fan rows out/in or reorder).",
-        "blocks": ["function"],
-        "requires_inputs": True,
-        "min_inputs": 1,
-        "required": ["kind"],
-        "optional": ["module", "function", "code", "requirements"],
-        "notes": (
+# Authoring copy for this module's stage type(s); assembled into NODE_TYPES.
+NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
+    "python_row_function": NodeTypeSpec(
+        summary="Deterministic Python run once per row: one row in → one row out (cannot fan rows out/in or reorder).",
+        signature_form="extends",
+        blocks=["function"],
+        requires_inputs=True,
+        min_inputs=1,
+        required=["kind"],
+        optional=["module", "function", "code", "requirements"],
+        notes=(
             "Takes exactly ONE input — to combine data from another input use enrich/expand, "
             "or python_frame_function. "
             "`transform(row)` is handed a plain dict and must return a plain dict, and that "
@@ -264,20 +265,21 @@ NODE_TYPE_SPECS: dict[str, dict[str, Any]] = {
             "carry columns through explicitly (`return {**row, ...}`). The function is shown "
             "neither the frame nor the row's position, so it cannot fan out, drop or reorder."
         ),
-    },
-    "python_frame_function": {
-        "summary": "Deterministic Python over the whole dataframe(s); may reshape (dedup, pivot, multi-input merge).",
-        "blocks": ["function"],
-        "requires_inputs": True,
-        "min_inputs": 1,
-        "required": ["kind"],
-        "optional": ["module", "function", "code", "requirements"],
-        "notes": (
+    ),
+    "python_frame_function": NodeTypeSpec(
+        summary="Deterministic Python over the whole dataframe(s); may reshape (dedup, pivot, multi-input merge).",
+        signature_form="replaces",
+        blocks=["function"],
+        requires_inputs=True,
+        min_inputs=1,
+        required=["kind"],
+        optional=["module", "function", "code", "requirements"],
+        notes=(
             "The runtime calls `transform(*frames)`: one POSITIONAL parameter per declared "
             "input, in `inputs` order — never by name, never a dict of frames. It receives no "
             "output_dir and no trace_links; writing files is publish's job. Return the output "
             "DataFrame. Rows may be added, dropped or reordered here, so this stage breaks the "
             "row-position provenance trail an upstream row-mapped stage preserves."
         ),
-    },
+    ),
 }

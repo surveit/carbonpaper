@@ -7,6 +7,7 @@ via get_current_project, so the prompt names no specific project."""
 from __future__ import annotations
 
 from app.models import HUMAN_REVIEW_QUEUE_CONTRACT_NOTE
+from app.models.node_contract_notes import SIGNATURE_CONTRACT_NOTE
 from app.models.authoring_lifecycle_note import AUTHORING_LIFECYCLE_GUIDANCE
 from app.models.stages.node_types import NODE_TYPES
 
@@ -42,17 +43,18 @@ _SYSTEM_PROMPT = (
 
 
 def _stage_type_catalog() -> str:
-    """The stage-type contract rendered for the system prompt: every type, the
-    config blocks it must carry, those blocks' required keys, whether it takes
-    inputs, and the type's runtime notes — so the agent can build a valid stage
-    without a lookup tool."""
-    lines = ["The stage types you can use (type — config blocks; required keys; inputs):"]
+    """Every NodeTypeSpec rendered so the agent can build a valid stage without a lookup tool."""
+    lines = ["The stage types you can use:", SIGNATURE_CONTRACT_NOTE]
     for stage_type, spec in NODE_TYPES.items():
-        blocks = ", ".join(f"`{b}`" for b in spec["blocks"])
-        required = ", ".join(spec.get("required", [])) or "none"
-        takes = "takes inputs" if spec.get("requires_inputs") else "no inputs"
-        lines.append(f"- {stage_type} — blocks {blocks}; required: {required}; {takes}")
-        notes = (spec.get("notes"), _EXTRA_NODE_TYPE_NOTES.get(stage_type))
+        blocks = ", ".join(f"`{b}`" for b in spec.blocks)
+        required = ", ".join(spec.required) or "none"
+        takes = "takes inputs" if spec.requires_inputs else "no inputs"
+        lines.append(f"- {stage_type} — {spec.summary}")
+        lines.append(
+            f"    blocks {blocks}; required: {required}; {takes}; "
+            f"signature form: {spec.signature_form}"
+        )
+        notes = (spec.notes, _EXTRA_NODE_TYPE_NOTES.get(stage_type))
         for note in (n for n in notes if n):
             lines.append(f"    note: {note}")
     return "\n".join(lines)

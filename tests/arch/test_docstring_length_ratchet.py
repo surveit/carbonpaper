@@ -36,7 +36,6 @@ _GRANDFATHERED: frozenset[str] = frozenset(
         "app/_arch_tests/test_persisted_models_declare_scope.py::find_undeclared_scope_offenders",
         "app/_arch_tests/test_persisted_models_declare_scope.py::test_find_project_read_write_missing_read_only_offenders_ignores_a_class_missing_scope",
         "app/_arch_tests/test_persisted_models_declare_scope.py::test_find_undeclared_scope_offenders_rejects_a_bare_annotation_with_no_value",
-        "app/agents/compiler/prompt.py::_stage_type_catalog",
         "app/compiler/data_model.py::_frame",
         "app/compiler/data_model.py::build_data_model_agent",
         "app/compiler/data_model.py::start_data_model_generation_agent",

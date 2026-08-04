@@ -32,6 +32,18 @@ CODE_CORNER_CASES_CONTRACT_NOTE = (
     "— an empty list if the step genuinely has none, but never omitted."
 )
 
+# Rendered once above the stage-type catalog: the signature vocabulary is
+# per-form, not per-type, so each type's line only names its form.
+SIGNATURE_CONTRACT_NOTE = (
+    "A stage may declare `signature` — what its transform reads and writes, "
+    "checked against its edges and config at save. Form `extends`: output = the "
+    "first input's rows plus `rewrites` (revised in place) and `adds` (new "
+    "columns); every other column flows through untouched. Form `replaces`: "
+    "nothing flows; output is exactly `produces`. `reads` lists what the "
+    "transform consumes per input — a column that merely passes through is not "
+    "a read."
+)
+
 HUMAN_REVIEW_QUEUE_CONTRACT_NOTE = (
     "This type's output columns are the input columns it passes through PLUS exactly the "
     "columns its own `queue` block names: one added column per `queue.reviewed_columns` "

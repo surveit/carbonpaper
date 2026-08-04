@@ -1,7 +1,7 @@
 """enrich/expand stage: the join handle config and its column checks."""
 from __future__ import annotations
 
-from typing import Any, TYPE_CHECKING, ClassVar, Literal, Optional
+from typing import TYPE_CHECKING, ClassVar, Literal, Optional
 
 from pydantic import Field, model_validator
 
@@ -13,6 +13,7 @@ from app.models.stages.shared import (
     find_declared_vs_computed_issues,
     resolve_input_columns,
 )
+from app.models.stages.node_spec import NodeTypeSpec
 from app.models.stages.signature import ExtendsSignature
 
 if TYPE_CHECKING:
@@ -199,17 +200,17 @@ def compute_join_output_types(
             joined[landed] = right_types[src]
     return joined
 
-# Authoring notes for this module's stage type(s), as the plain-data shape the
-# authoring prompts render. Assembled into NODE_TYPES by app.models.stages.
-NODE_TYPE_SPECS: dict[str, dict[str, Any]] = {
-    "enrich": {
-        "summary": "Adds brought reference columns to each subject row; the reference must be unique on the key (many-to-one).",
-        "blocks": ["join"],
-        "requires_inputs": True,
-        "min_inputs": 2,
-        "required": ["keys", "enrich_with"],
-        "optional": [],
-        "notes": (
+# Authoring copy for this module's stage type(s); assembled into NODE_TYPES.
+NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
+    "enrich": NodeTypeSpec(
+        summary="Adds brought reference columns to each subject row; the reference must be unique on the key (many-to-one).",
+        signature_form="extends",
+        blocks=["join"],
+        requires_inputs=True,
+        min_inputs=2,
+        required=["keys", "enrich_with"],
+        optional=[],
+        notes=(
             "Takes EXACTLY TWO inputs: inputs[0] is the SUBJECT, inputs[1] is the REFERENCE. "
             "Row count and order come out unchanged: the runtime VERIFIES the reference is "
             "unique on the key, and a repeat FAILS THE RUN — use `expand` for intended "
@@ -220,15 +221,16 @@ NODE_TYPE_SPECS: dict[str, dict[str, Any]] = {
             "A same-named key pair needs no entry. output_schema may name only columns the "
             "join produces."
         ),
-    },
-    "expand": {
-        "summary": "Joins brought reference columns into each subject row, fanning one subject row out to several (many-to-many).",
-        "blocks": ["join"],
-        "requires_inputs": True,
-        "min_inputs": 2,
-        "required": ["keys", "enrich_with"],
-        "optional": [],
-        "notes": (
+    ),
+    "expand": NodeTypeSpec(
+        summary="Joins brought reference columns into each subject row, fanning one subject row out to several (many-to-many).",
+        signature_form="extends",
+        blocks=["join"],
+        requires_inputs=True,
+        min_inputs=2,
+        required=["keys", "enrich_with"],
+        optional=[],
+        notes=(
             "Takes EXACTLY TWO inputs: inputs[0] is the SUBJECT, inputs[1] is the REFERENCE. "
             "The reference MAY repeat a key, so one subject row can fan out to several — use "
             "`enrich` when a repeat is a bug you want caught. Every subject row survives "
@@ -238,5 +240,5 @@ NODE_TYPE_SPECS: dict[str, dict[str, Any]] = {
             "already carries is refused — pick a new one (`score: score_r`). A same-named "
             "key pair needs no entry. output_schema may name only columns the join produces."
         ),
-    },
+    ),
 }

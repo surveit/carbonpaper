@@ -13,6 +13,7 @@ from app.core.prompt_template import find_template_fields
 from app.models.schema import StageConfig, TableSchema
 from app.models.stage_base import StageBase, StageInput, StageType
 from app.models.stages.shared import COLUMN_ISSUE, resolve_input_columns
+from app.models.stages.node_spec import NodeTypeSpec
 from app.models.stages.signature import ExtendsSignature
 
 
@@ -275,18 +276,18 @@ def _find_additive_shape_issues(input_schema: TableSchema, output_schema: TableS
         issues.append("output_schema adds no columns beyond the input")
     return issues
 
-# Authoring notes for this module's stage type(s), as the plain-data shape the
-# authoring prompts render. Assembled into NODE_TYPES by app.models.stages.
-NODE_TYPE_SPECS: dict[str, dict[str, Any]] = {
-    "llm_transform": {
-        "summary": "Row-by-row LLM call producing structured output.",
-        "blocks": ["llm"],
-        "requires_inputs": True,
-        "min_inputs": 1,
-        "required": ["prompt_data_template"],
-        "optional": ["model", "temperature", "response_format", "max_retries",
+# Authoring copy for this module's stage type(s); assembled into NODE_TYPES.
+NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
+    "llm_transform": NodeTypeSpec(
+        summary="Row-by-row LLM call producing structured output.",
+        signature_form="extends",
+        blocks=["llm"],
+        requires_inputs=True,
+        min_inputs=1,
+        required=["prompt_data_template"],
+        optional=["model", "temperature", "response_format", "max_retries",
                      "rubric", "tools"],
-        "notes": (
+        notes=(
             "Author it as TWO fields: prompt_instructions is the row-invariant guidance "
             "(role, methodology, how to weigh evidence/sources) and MUST NOT depend on "
             "any row value — the same instructions run over every input row, so keeping "
@@ -299,5 +300,5 @@ NODE_TYPE_SPECS: dict[str, dict[str, Any]] = {
             "input column unchanged, plus at least one new column (one input row -> one "
             "output row)."
         ),
-    },
+    ),
 }

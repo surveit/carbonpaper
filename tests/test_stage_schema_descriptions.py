@@ -35,7 +35,7 @@ def test_llm_transform_notes_document_the_additive_rule():
     # validator: `llm_transform not strictly 1:1 ... additive ... primary_key` (stage.py) — #2.
     # Type-specific, so it rides in that type's catalogue notes rather than on a
     # field shared by every type.
-    notes = NODE_TYPES["llm_transform"]["notes"].lower()
+    notes = NODE_TYPES["llm_transform"].notes.lower()
     assert "additive" in notes
     assert "primary_key" in notes
 

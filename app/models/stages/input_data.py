@@ -11,6 +11,7 @@ from pydantic import ConfigDict, Field, model_validator
 
 from app.models.schema import StageConfig, _Base
 from app.models.stage_base import StageBase, StageType
+from app.models.stages.node_spec import NodeTypeSpec
 from app.models.stages.signature import ReplacesSignature
 
 
@@ -82,17 +83,17 @@ class XlsxReadParams(_Base):
     first_column: int = 0
     source_row_column: str | None = None
 
-# Authoring notes for this module's stage type(s), as the plain-data shape the
-# authoring prompts render. Assembled into NODE_TYPES by app.models.stages.
-NODE_TYPE_SPECS: dict[str, dict[str, Any]] = {
-    "input_data": {
-        "summary": "Declares a source dataset with a typed schema.",
-        "blocks": ["connector"],
-        "requires_inputs": False,
-        "min_inputs": 0,
-        "required": ["kind"],
-        "optional": ["params", "refresh", "notes"],
-        "notes": (
+# Authoring copy for this module's stage type(s); assembled into NODE_TYPES.
+NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
+    "input_data": NodeTypeSpec(
+        summary="Declares a source dataset with a typed schema.",
+        signature_form="replaces",
+        blocks=["connector"],
+        requires_inputs=False,
+        min_inputs=0,
+        required=["kind"],
+        optional=["params", "refresh", "notes"],
+        notes=(
             "When the methodology names a specific static file, params.path may "
             "carry it and MUST be an ABSOLUTE path; when the source does not say "
             "where the data lives, omit path — the user binds a file when starting "
@@ -103,5 +104,5 @@ NODE_TYPE_SPECS: dict[str, dict[str, Any]] = {
             "first_column (0-based index of the first column read, default 0). "
             "Takes no inputs, but must still declare its output_schema."
         ),
-    },
+    ),
 }
