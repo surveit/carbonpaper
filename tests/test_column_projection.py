@@ -1,5 +1,3 @@
-"""Pins issue #50: output_schema alone decides which columns survive a stage.
-"""
 from __future__ import annotations
 
 import pandas as pd
@@ -10,7 +8,7 @@ from app.runtime.context import RunContext, RunIdentity
 from app.runtime.stages import HANDLERS
 from app.runtime.stages import llm_transform as lt
 from app.core.stage_cache import StageCacheEntry
-from conftest import contribution_of, make_run_context
+from conftest import contribution_of, make_run_context, queue_columns
 
 
 def _llm_stage(input_columns, output_columns, pk=("id",)):
@@ -72,16 +70,26 @@ _SCORED_COLUMNS = [
     {"name": "quote", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True},
     {"name": "benchmark_id", "type": "str", "nullable": True}, {"name": "query_id", "type": "str", "nullable": True},
 ]
+# What `queue_columns()` names for the verdict, reviewer, timestamp and note.
+# Every one must be declared on output_schema (app/models/stages/
+# human_review_queue.py), so they are appended to whatever a test declares and
+# named in its expected column list.
+_REVIEW_RECORD = ["decision", "reviewer_id", "reviewed_at", "review_notes"]
+_REVIEW_RECORD_COLUMNS = [
+    {"name": name, "type": "str", "nullable": name != "decision"} for name in _REVIEW_RECORD
+]
 
 
 def _queue_stage(output_schema, flt=None):
-    queue = {}
+    # The reviewed column is named `final_score` here because that is what these
+    # tests declare in output_schema — the runtime knows no such name of its own.
+    queue = queue_columns(source="score", target="final_score")
     if flt is not None:
         queue["filter"] = flt
     return parse_stage({
         "id": "review", "name": "Human review", "type": "human_review_queue",
         "inputs": [{"id": "scored", "schema": {"columns": _SCORED_COLUMNS}}],
-        "output_schema": output_schema,
+        "output_schema": {"columns": output_schema["columns"] + _REVIEW_RECORD_COLUMNS},
         "queue": queue,
     })
 
@@ -116,7 +124,7 @@ def test_human_review_queue_keeps_only_declared_columns(tmp_path):
     ctx = _queue_test_ctx(tmp_path, "keeps-declared-columns")
     out = HANDLERS[StageType.human_review_queue].execute(stage, {"scored": _src_scored()}, ctx)
 
-    assert list(out.columns) == ["evidence_id", "final_score"]
+    assert list(out.columns) == ["evidence_id", "final_score"] + _REVIEW_RECORD
     dropped = contribution_of(out).dropped_columns
     for col in ("entity_id", "quote", "benchmark_id", "query_id"):
         assert col in dropped
@@ -134,7 +142,7 @@ def test_human_review_queue_carried_columns_survive_by_being_declared(tmp_path):
     ctx = _queue_test_ctx(tmp_path, "carried-columns-survive")
     out = HANDLERS[StageType.human_review_queue].execute(stage, {"scored": _src_scored()}, ctx)
 
-    assert list(out.columns) == ["evidence_id", "final_score", "quote"]
+    assert list(out.columns) == ["evidence_id", "final_score", "quote"] + _REVIEW_RECORD
     dropped = contribution_of(out).dropped_columns
     assert "quote" not in dropped
     assert "benchmark_id" in dropped  # still dropped: not declared

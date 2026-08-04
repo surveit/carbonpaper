@@ -88,20 +88,53 @@ after injection — without that, the panel's JS (tabs + scratch tool) is dead.
 
 `GET /project/{p}/runs/{run_id}/queue/{stage_id}`.
 
-The key principle: **a reviewer must see the model INPUT, not just its output.**
-The queue snapshot only holds the scoring stage's *output* (score + reasoning +
-ids); the thing the model judged lives one stage upstream. `queue_page` walks
-back from the queue stage → the scoring `llm_transform` stage → that stage's
-input, loads the input's run output, joins each flagged row by primary key, and
-**re-renders the actual prompt**. The card leads with *the scored text + the
-exact prompt the model received*, then the model's output. If the input can't be
-recovered it says so loudly ("reviewing blind") rather than hiding it. (Known
-gap: when no primary key is declared, the join falls back to guessed keys —
-issue #49.)
+A `human_review_queue` can follow **any** stage type, so the page assumes
+nothing about the upstream stage or its column names. The queued row itself is
+the material to review, split in two: the columns the queue declares as
+`reviewed_columns` sources appear only in the review section, beside their
+controls; every other column of the row is background context, rendered as a
+key/value table (none of them under review → no table at all). `queue_page`
+describes each column from the schema the queue stage's input edge declares —
+its `description` becomes the label's tooltip, and a column in the declared
+`primary_key` carries a `key` flag. Every stage declares a schema on each input
+edge, but a `primary_key` on it is optional, so where one is missing the page
+states that rather than guessing which columns identify a row. Each card's header
+states its **position in the queue** (`Row 1 of 3`) — an opaque key identifies
+nothing to a human, and the key column is already in the table, flagged.
 
-Decisions are content-hashed (`decisions/<stage>.parquet`) so they survive
-re-runs and LLM non-determinism. When all items are decided, a **Resume run**
-button appears.
+**Lineage**: each card links to
+`…/stage/{upstream_stage_id}/row/{row_ordinal}/trace/view`, where the ordinal
+comes from the halted-queue sidecar's `row_ordinals` (written by the runtime,
+positionally aligned to the snapshot). The queue stage has produced no output at
+halt time, so it is the UPSTREAM stage's row that is traced. No ordinals, no
+declared input, or more than one declared input → no link and a stated reason,
+never a guessed one.
+
+The page opens on a **"Reviewing as"** name field and the queue stays hidden
+until a name is typed (remembered in `localStorage`); `queue_decide` rejects a
+blank one with a 400, so no decision is recorded unattributed. The name is
+written into `queue.reviewer_column` on every decision, alongside a timestamp in
+`queue.reviewed_at_column`.
+
+The form fields come from the stage's own `queue.reviewed_columns`: one control
+per reviewed column, typed from that column's declared schema. The reviewer
+names no verdict: the page posts both the values it submits and the values it
+was pre-filled with, and `queue_decide` RECORDS `modify` when any submitted
+value differs from the prefill the page carried, `approve` when they all match.
+(`skipped` is the runtime's own verdict for a row its filter excluded; the
+review service refuses it from a reviewer.) A decision records that verdict, a
+value for each reviewed column, and optionally a note — it never overwrites the
+column it reviewed, because a review stage may only ADD columns
+(`app.models.stages.human_review_queue._find_added_column_collisions` rejects a
+target that reuses an input column's name). Once a decision is recorded the card
+stops asking for input: its per-field `change` openers carry the `disabled`
+attribute and the primary **Submit** is replaced by a secondary **Change my
+review**, which records nothing and only re-enables the controls; the re-submit
+that follows settles its verdict against the recorded value the card opens on.
+Decisions are keyed by a hash of the
+row (`app.core.stage_cache`)
+so they survive re-runs and LLM non-determinism. When all items are decided, a
+**Resume run** button appears.
 
 ## Node review + workflow versioning (`_node_review.html`, `versions.html`)
 

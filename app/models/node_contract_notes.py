@@ -1,8 +1,6 @@
-"""Node-type runtime facts rendered into the authoring prompts, in ONE place so no two
-prompts can drift apart.
-
-Lives in app.models, not app.compiler: an import-linter contract admits only app.main
-and app.services into app.compiler, which would lock out app.agents and app.mcp."""
+# Lives in app.models, not app.compiler: an import-linter contract admits only
+# app.main and app.services into app.compiler, which would lock out app.agents
+# and app.mcp.
 from __future__ import annotations
 
 from app.models.stages.code import SUMMARY_MAX_CHARS
@@ -35,20 +33,28 @@ CODE_CORNER_CASES_CONTRACT_NOTE = (
 )
 
 HUMAN_REVIEW_QUEUE_CONTRACT_NOTE = (
-    "This type's output columns are FIXED by the runtime regardless of what "
-    "output_schema declares: only `decision`, `ai_score`, `human_score`, "
-    "`final_score`, `review_notes`, `reviewer_id`, `reviewed_at`, plus "
-    "passthrough columns are ever populated — declare exactly those (never invented "
-    "names like \"review_decision\"). Declare `human_score` and `final_score` "
-    "NULLABLE: both are null on a rejected row, and `human_score` is null on every "
-    "row the filter passed through unreviewed. "
-    "This type emits one output row per input row and never removes any: a rejected "
-    "row is still emitted, carrying `decision == \"reject\"` with `human_score`/"
-    "`final_score` null. Every output row carries a `decision` — \"approve\", "
-    "\"modify\" or \"reject\" where a human decided, and \"not_reviewed\" where the "
-    "queue filter passed the row through without review. So a downstream stage "
-    "filtering on `decision != \"reject\"` is what excludes a rejected row; filtering "
-    "on `decision == \"approve\"` would silently discard the unreviewed rows too. "
-    "Unlike python_frame_function, undeclared upstream columns are silently dropped, so "
-    "declare every column a later stage needs to read."
+    "This type's output columns are the input columns it passes through PLUS exactly the "
+    "columns its own `queue` block names: one added column per `queue.reviewed_columns` "
+    "entry, `queue.verdict_column`, `queue.reviewer_column`, `queue.reviewed_at_column`, "
+    "and `queue.review_notes_column` when declared. Declare all of them in output_schema; "
+    "and unlike python_frame_function, undeclared upstream columns are silently dropped, so "
+    "declare every column a later stage needs to read. Those four columns record the act "
+    "of reviewing — what verdict, who, when, what notes — and must "
+    "be declared type str — `queue.reviewed_at_column` too, never date or datetime — and "
+    "all but `queue.verdict_column` must be declared nullable, since a skipped or "
+    "auto-approved row carries no reviewer, timestamp or note. "
+    "A reviewed column is ADDED beside its source, whose value is never modified in place: "
+    "name it `reviewed_<source>` by default and declare it with the SAME spec as its source "
+    "column — type, enum and range alike — and nullability at least as permissive. A "
+    "reviewed source column must be scalar (str/int/float/bool/date/datetime): a json or "
+    "list column cannot be reviewed through a form field and fails validation. No added "
+    "column may reuse an input column's name, so two review stages in series must name "
+    "their added columns differently. `queue.filter` may reference INPUT columns only, "
+    "never a column this stage adds. "
+    "This type emits one output row per input row and never removes any. The verdict column "
+    "holds \"approve\" (a human accepted the value this stage received), \"modify\" (a "
+    "human supplied a different one), or \"skipped\" (the queue filter did not select the "
+    "row, so the received value stands unreviewed). A downstream stage that wants only "
+    "human-sanctioned values "
+    "filters on the verdict column != \"skipped\"."
 )

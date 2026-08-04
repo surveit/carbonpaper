@@ -8,14 +8,19 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 
 import pandas as pd
 import pyarrow.lib as pa_lib
 
 from app.core.predicate import parse_predicate
-from app.models import RowReviewDecision, Stage
-from app.models.stages.human_review_queue import HumanReviewQueueStage
+from app.models import Stage
+from app.models.stages.human_review_queue import (
+    HumanReviewQueueStage,
+    QueueConfig,
+    ReviewVerdict,
+)
 from app.core.stage_cache import compute_row_fingerprint
 
 from ..context import RunContext
@@ -23,41 +28,51 @@ from ..manifest import QueueStats, StageContribution
 from ..errors import HaltForReview
 from .execution import ROW_DEFERRED_KEY, Row, RowMapper, narrow_stage
 
-# The upstream AI score column a queue stage reviews. Named once so the two sites
-# that test for its presence (_approve_row and _pass_row_through) can't drift
-# apart.
-_SCORE_COLUMN = "score"
-
-# The `decision` value carried by a row the queue filter did not select. Not a
-# RowReviewDecision: no human saw this row, so no verdict of theirs applies to
-# it. It is spelled out rather than left missing so that EVERY output row of a
-# queue stage carries a decision, and a downstream stage can exclude the
-# rejected rows by comparing strings — never by reasoning about a null.
-NOT_REVIEWED = "not_reviewed"
-
 
 @dataclass(frozen=True)
 class PendingReview:
-    """One row awaiting a human decision: the `input_fingerprint` the cache was
-    searched under, and `frozen_row`, a copy of the row exactly as it arrived
-    from upstream. Carried on the deferred marker of the row that produced it,
-    which is the only place either value exists until the snapshot and its
-    sidecar are written."""
+    """One row awaiting a human decision, carried on the deferred marker of the row that made it."""
 
+    # The key the cache was searched under, and a copy of the row exactly as it
+    # arrived from upstream.
     input_fingerprint: str
     frozen_row: Row
+    # 0-based position in this stage's INPUT frame — also its position in the
+    # upstream stage's output frame, since a row-mapped stage neither reorders
+    # nor fans out rows.
+    row_ordinal: int
 
 
 def make_human_review_mapper(stage: Stage, ctx: RunContext, src: pd.DataFrame) -> RowMapper:
-    """The callable that decides one row's outcome for one execution of this
-    stage.
-
-    Auto-approve is answered here and goes no further: `_approve_row` reaches
-    for no project scope, no cache, no disk and no filter, so a run that carries
-    none of those can still pass a queue stage through."""
+    """The callable that decides one row's outcome for one execution of this stage."""
+    # The one place every path through this stage passes, so the frame is checked
+    # against the declared columns here — before a row is mapped, a snapshot
+    # written or a halt raised. Auto-approve is answered here and goes no further:
+    # `_approve_row` reaches for no project scope, no cache, no disk and no filter,
+    # so a run carrying none of those can still pass a queue stage through.
+    queue = narrow_stage(stage, HumanReviewQueueStage).queue
+    validate_reviewed_sources_present(queue, src, stage.id)
     if ctx.queue_auto_approve:
-        return _approve_row
-    return _QueueRowMapper(stage, ctx, src)
+        return partial(_approve_row, queue)
+    return _QueueRowMapper(stage, queue, ctx, src)
+
+
+def validate_reviewed_sources_present(
+    queue: QueueConfig, src: pd.DataFrame, sid: str
+) -> None:
+    """Raises when the frame this run produced lacks a column `reviewed_columns` names."""
+    # Authoring-time validation checks `reviewed_columns` against the input edge's
+    # DECLARED schema; this is the complement. A queued row never reads its source
+    # column (the human supplies the value), so without this check a frame missing
+    # one would halt for review instead of failing.
+    missing = sorted(set(queue.reviewed_columns) - set(src.columns))
+    if missing:
+        raise ValueError(
+            f"human_review_queue '{sid}': queue.reviewed_columns names source column(s) "
+            f"{missing}, which this stage's actual input frame does not carry "
+            f"(it has {sorted(src.columns)}). The frame does not match the schema the "
+            "stage declares — no value may stand in for a missing column."
+        )
 
 
 class _QueueRowMapper:
@@ -74,15 +89,17 @@ class _QueueRowMapper:
     (a cancel) reports nothing and leaves whatever the manifest already held:
     for a resumed run, the counts of the halt it is resuming."""
 
-    def __init__(self, stage: Stage, ctx: RunContext, src: pd.DataFrame) -> None:
-        queue = narrow_stage(stage, HumanReviewQueueStage).queue
+    def __init__(
+        self, stage: Stage, queue: QueueConfig, ctx: RunContext, src: pd.DataFrame
+    ) -> None:
+        self._queue = queue
         _require_project_scope(ctx, stage.id)
         self._queueable = _compute_queueable_mask(src, queue.filter, stage.id)
 
     def __call__(self, row: Row, index: int) -> Row:
         if not self._queueable[index]:
-            return _pass_row_through(row)
-        return _defer_row(row)
+            return _skip_row(self._queue, row)
+        return _defer_row(row, index)
 
     def finish_mapped_rows(
         self,
@@ -97,7 +114,7 @@ class _QueueRowMapper:
         can produce. Returns after the counts when no row was deferred. The
         halt carries the same `contribution`, because on that path the raise is
         this stage's only return path into the manifest."""
-        contribution.human_review_queue_stats = _compute_queue_stats(df)
+        contribution.human_review_queue_stats = _compute_queue_stats(self._queue, df)
         pending = _find_pending_reviews(df)
         if not pending:
             return
@@ -159,71 +176,64 @@ def _compute_queueable_mask(src: pd.DataFrame, flt: str | None, sid: str) -> lis
 # --- the row outcomes the mapper does not need its own state for ---------------
 
 
-def _defer_row(row: Row) -> Row:
-    """A queueable row nobody has decided: a deferred marker carrying the row's
-    fingerprint and a frozen copy of it, and nothing else. Never a substituted,
-    defaulted or partially-filled row — the value does not exist yet. The
-    fingerprint is the key the driver's row cache looked this row up under, so
-    the decision recorded against it resolves on the next run."""
+def _defer_row(row: Row, index: int) -> Row:
+    """A queueable row nobody has decided: a deferred marker and nothing else."""
+    # Never a substituted, defaulted or partially-filled row — the value does not
+    # exist yet. The fingerprint is the key the driver's row cache looked this row
+    # up under, so the decision recorded against it resolves on the next run.
     return {
         ROW_DEFERRED_KEY: PendingReview(
-            input_fingerprint=compute_row_fingerprint(row), frozen_row=dict(row)
+            input_fingerprint=compute_row_fingerprint(row),
+            frozen_row=dict(row),
+            row_ordinal=index,
         )
     }
 
 
-def _pass_row_through(row: Row) -> Row:
-    """A row the filter did not select: its AI score stands as final, and the
-    reviewer columns carry the pass-through values (no human saw this row). Its
-    `decision` is NOT_REVIEWED — a value, not a blank, so a downstream filter
-    that excludes rejections keeps this row without having to test for a
-    missing one."""
-    passed: Row = dict(row)
-    if _SCORE_COLUMN in row:
-        passed["ai_score"] = row[_SCORE_COLUMN]
-        passed["final_score"] = row[_SCORE_COLUMN]
-    passed["human_score"] = pd.NA
-    passed["reviewer_id"] = row.get("reviewer", pd.NA)
-    passed["reviewed_at"] = pd.NA
-    passed["review_notes"] = "below review threshold"
-    passed["decision"] = NOT_REVIEWED
-    return passed
+def _skip_row(queue: QueueConfig, row: Row) -> Row:
+    """A row the filter did not select: the upstream values stand, verdict `skipped`."""
+    # Declaring a filter is the author's statement that the upstream values stand
+    # for the rows it excludes, so those values are copied into the reviewed
+    # columns — but the verdict is `skipped`, not `approve`: nobody looked at it.
+    return _add_review_columns(queue, row, ReviewVerdict.skipped)
 
 
-def _approve_row(row: Row, index: int) -> Row:
-    """Approve one row in memory, as `ctx.queue_auto_approve` asks: the same
-    reviewer columns an `approve` decision produces (final and human score =
-    the AI score), with reviewer_id/reviewed_at null because no human reviewed
-    it. Reads no cache and writes no file. The outcome depends on the row
-    alone, so its position in the input is not read."""
-    ai = row[_SCORE_COLUMN] if _SCORE_COLUMN in row else pd.NA
-    return {
-        **row,
-        "ai_score": ai,
-        "human_score": ai,
-        "final_score": ai,
-        "review_notes": f"decision={RowReviewDecision.approve}",
-        "reviewer_id": pd.NA,
-        "reviewed_at": pd.NA,
-        "decision": RowReviewDecision.approve,
+def _approve_row(queue: QueueConfig, row: Row, index: int) -> Row:
+    """Writes `approve` although nobody looked, which `_skip_row` refuses to do."""
+    # This path exists only under `queue_auto_approve`, which RunContext keeps off
+    # every run whose output is a real artifact. The outcome depends on the row
+    # alone, so its position in the input is not read.
+    return _add_review_columns(queue, row, ReviewVerdict.approve)
+
+
+def _add_review_columns(queue: QueueConfig, row: Row, verdict: ReviewVerdict) -> Row:
+    added: Row = {
+        target: row[source] for source, target in queue.reviewed_columns.items()
     }
+    added[queue.verdict_column] = verdict.value
+    added[queue.reviewer_column] = pd.NA
+    added[queue.reviewed_at_column] = pd.NA
+    if queue.review_notes_column is not None:
+        added[queue.review_notes_column] = pd.NA
+    return {**row, **added}
 
 
 # --- finish_mapped_rows: the deferred rows, the snapshot and its sidecar ------
 
 
-def _compute_queue_stats(df: pd.DataFrame) -> QueueStats:
-    """The stage's item counts, read off the assembled frame rather than
-    accumulated as rows are mapped: a row the driver's cache served never
-    reaches the mapper, and every count is a property of the row it produced.
-
-    Each row shows which outcome it took — a deferred marker for a pending row,
-    `NOT_REVIEWED` for one the filter passed through, any other decision for one
-    a human decided. Queued total is the queueable rows: pending plus decided."""
-    decisions = list(df["decision"]) if "decision" in df.columns else []
-    passed_through = sum(1 for value in decisions if value == NOT_REVIEWED)
+def _compute_queue_stats(queue: QueueConfig, df: pd.DataFrame) -> QueueStats:
+    """The stage's item counts, read off the assembled frame rather than accumulated."""
+    # A row the driver's cache served never reaches the mapper, and every count is a
+    # property of the row it produced. Each row's declared verdict column shows which
+    # outcome it took — a deferred marker for a pending row, `skipped` for one the
+    # filter passed through, any other verdict for one a human decided. Queued total
+    # is the queueable rows: pending plus decided.
+    column = queue.verdict_column
+    verdicts = list(df[column]) if column in df.columns else []
+    passed_through = sum(1 for value in verdicts if value == ReviewVerdict.skipped)
     decided = sum(
-        1 for value in decisions if not pd.isna(value) and value != NOT_REVIEWED
+        1 for value in verdicts
+        if not pd.isna(value) and value != ReviewVerdict.skipped
     )
     pending = len(_find_pending_reviews(df))
     return {
@@ -281,14 +291,16 @@ def _write_pending_snapshot(queue_dir: Path, sid: str, pending: list[PendingRevi
 def _write_fingerprint_sidecar(
     queue_dir: Path, sid: str, stage_fingerprint: str, pending: list[PendingReview]
 ) -> None:
-    """Write `<stage>.fingerprints.json`: the one `stage_fingerprint` every
-    pending row of this halt shares, and `input_fingerprints` in the pending
-    rows' own order — POSITIONALLY aligned to the snapshot written from the
-    same list."""
+    """`input_fingerprints` and `row_ordinals` are POSITIONALLY aligned to the snapshot."""
+    # Both are in the pending rows' own order; `stage_fingerprint` is the one every
+    # pending row of this halt shares. `row_ordinals` are positions in this stage's
+    # INPUT frame, so they are NOT 0..n-1 whenever a queue filter passed some rows
+    # through unreviewed.
     (queue_dir / f"{sid}.fingerprints.json").write_text(
         json.dumps({
             "stage_fingerprint": stage_fingerprint,
             "input_fingerprints": [item.input_fingerprint for item in pending],
+            "row_ordinals": [item.row_ordinal for item in pending],
         }),
         encoding="utf-8",
     )

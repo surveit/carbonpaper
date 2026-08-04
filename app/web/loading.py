@@ -1,9 +1,5 @@
-"""Filesystem access for the web layer: read compiled stage JSON, run
-manifests, stage outputs, and queue snapshots off disk, plus small pure
-helpers for the stage-dict shape they return. Reviewer decisions themselves
-are not read from disk here — they live in the stage-result cache
-(app.core.stage_cache)."""
-
+# Reviewer decisions are NOT read from disk here — they live in the stage-result
+# cache (app.core.stage_cache).
 from __future__ import annotations
 
 import json
@@ -354,12 +350,15 @@ def queue_snapshot(project: str, run_id: str, stage_id: str) -> pd.DataFrame | N
 
 @dataclass
 class QueueFingerprints:
-    """The fingerprints a halted queue stage's snapshot carries off to the
+    """The bookkeeping a halted queue stage's snapshot carries off to the
     side, never as snapshot columns: `stage_fingerprint` (shared by every
-    pending row of that halt) and `input_fingerprints` (one per row,
-    POSITIONALLY aligned to the snapshot's row order)."""
+    pending row of that halt), `input_fingerprints` and `row_ordinals` (one per
+    row each, POSITIONALLY aligned to the snapshot's row order).
+    `row_ordinals` is None for a sidecar written before the runtime recorded
+    them — an unknowable position, never a guessed one."""
     stage_fingerprint: str
     input_fingerprints: list[str]
+    row_ordinals: list[int] | None
 
 
 def load_queue_fingerprints(project: str, run_id: str, stage_id: str) -> QueueFingerprints | None:
@@ -368,25 +367,43 @@ def load_queue_fingerprints(project: str, run_id: str, stage_id: str) -> QueueFi
     None if no run has halted at this stage yet (no such sidecar).
 
     Raises ValueError if the snapshot exists but its row count doesn't match
-    `input_fingerprints`' length: positional alignment between the two files
-    is not something to guess at silently when it can't be verified."""
+    `input_fingerprints`' length, or if `row_ordinals` is present with a
+    different length: positional alignment between these lists is not
+    something to guess at silently when it can't be verified."""
     run_dir = runs_dir(project) / run_id
     path = run_dir / "queue" / f"{stage_id}.fingerprints.json"
     if not path.exists():
         return None
     data = json.loads(path.read_text(encoding="utf-8"))
+    ordinals = data.get("row_ordinals")
     fingerprints = QueueFingerprints(
         stage_fingerprint=data["stage_fingerprint"],
         input_fingerprints=data["input_fingerprints"],
+        row_ordinals=None if ordinals is None else [int(o) for o in ordinals],
     )
-    snapshot = queue_snapshot(project, run_id, stage_id)
-    if snapshot is not None and len(snapshot) != len(fingerprints.input_fingerprints):
+    _validate_sidecar_alignment(fingerprints, queue_snapshot(project, run_id, stage_id),
+                                stage_id, run_id)
+    return fingerprints
+
+
+def _validate_sidecar_alignment(
+    fingerprints: QueueFingerprints, snapshot: pd.DataFrame | None,
+    stage_id: str, run_id: str,
+) -> None:
+    expected = len(fingerprints.input_fingerprints)
+    if snapshot is not None and len(snapshot) != expected:
         raise ValueError(
             f"queue fingerprints sidecar for stage '{stage_id}' in run '{run_id}' "
-            f"names {len(fingerprints.input_fingerprints)} row(s) but the "
-            f"snapshot has {len(snapshot)} — alignment cannot be trusted"
+            f"names {expected} row(s) but the snapshot has {len(snapshot)} — "
+            "alignment cannot be trusted"
         )
-    return fingerprints
+    ordinals = fingerprints.row_ordinals
+    if ordinals is not None and len(ordinals) != expected:
+        raise ValueError(
+            f"queue fingerprints sidecar for stage '{stage_id}' in run '{run_id}' "
+            f"names {expected} fingerprint(s) but {len(ordinals)} row ordinal(s) — "
+            "alignment cannot be trusted"
+        )
 
 
 def display_cell(v: Any) -> Any:

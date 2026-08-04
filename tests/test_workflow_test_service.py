@@ -10,6 +10,7 @@ from app.models import parse_stage
 from app.services import workspace
 from app.services.workflow_test import run_workflow_test
 from app.services.versioning import WorkflowVersion
+from conftest import QUEUE_COLUMNS, queue_added_columns
 
 
 def _load_stage(demo):
@@ -61,14 +62,15 @@ _PUBLISH = {
 }
 
 # A human_review_queue whose hash resolves off the upstream primary_key.
-_LOAD_PK_SCHEMA = {"columns": [{"name": "doc_id", "type": "str", "nullable": True},
-                               {"name": "score", "type": "int", "nullable": True}],
-                   "primary_key": ["doc_id"]}
+_LOAD_PK_COLUMNS = [{"name": "doc_id", "type": "str", "nullable": True},
+                    {"name": "score", "type": "int", "nullable": True}]
+_LOAD_PK_SCHEMA = {"columns": _LOAD_PK_COLUMNS, "primary_key": ["doc_id"]}
 _QUEUE = {
     "id": "review", "type": "human_review_queue", "name": "Review rows",
     "inputs": [{"id": "load", "schema": _LOAD_PK_SCHEMA}],
-    "output_schema": _LOAD_PK_SCHEMA,
-    "queue": {"reviewer_instructions": "check"},
+    "output_schema": {"columns": _LOAD_PK_COLUMNS + queue_added_columns(),
+                      "primary_key": ["doc_id"]},
+    "queue": {**QUEUE_COLUMNS, "reviewer_instructions": "check"},
 }
 
 

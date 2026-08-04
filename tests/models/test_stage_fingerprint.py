@@ -26,6 +26,10 @@ def _queue_stage(**queue_overrides):
         "routing": "team-a",
         "conflict_resolution": "escalate",
         "estimated_volume_per_week": 10,
+        "reviewed_columns": {"score": "human_score"},
+        "verdict_column": "decision",
+        "reviewer_column": "reviewer_id",
+        "reviewed_at_column": "reviewed_at",
     }
     queue.update(queue_overrides)
     return parse_stage({
@@ -39,7 +43,14 @@ def _queue_stage(**queue_overrides):
                 {"name": "score", "type": "float", "nullable": False},
             ]},
         }],
-        "output_schema": {"columns": [{"name": "id", "type": "str", "nullable": False}]},
+        # Every column the queue adds, since output_schema must declare them all.
+        "output_schema": {"columns": [
+            {"name": "id", "type": "str", "nullable": False},
+            {"name": "human_score", "type": "float", "nullable": True},
+            {"name": "decision", "type": "str", "nullable": True},
+            {"name": "reviewer_id", "type": "str", "nullable": True},
+            {"name": "reviewed_at", "type": "str", "nullable": True},
+        ]},
         "queue": queue,
     })
 

@@ -318,15 +318,26 @@ def test_review_queue_add_outside_the_review_columns_rejected():
         "name": "Check",
         "type": "human_review_queue",
         "inputs": [{"id": "bills", "schema": _EDGE}],
-        "queue": {},
+        "queue": {
+            "reviewed_columns": {"price": "reviewed_price"},
+            "verdict_column": "verdict",
+            "reviewer_column": "reviewer",
+            "reviewed_at_column": "reviewed_at",
+        },
         "signature": {
             "form": "extends",
-            "adds": [{"name": "verdict", "type": "str", "nullable": True}],
+            "adds": [{"name": "hunch", "type": "str", "nullable": True}],
         },
-        "output_schema": {"columns": [*_EDGE["columns"], {"name": "verdict", "type": "str", "nullable": True}]},
+        "output_schema": {"columns": [
+            *_EDGE["columns"],
+            {"name": "reviewed_price", "type": "str", "nullable": True},
+            {"name": "verdict", "type": "str", "nullable": False},
+            {"name": "reviewer", "type": "str", "nullable": True},
+            {"name": "reviewed_at", "type": "str", "nullable": True},
+        ]},
     }
     msg = _issues(spec)
-    assert "adds `verdict`, which the review runtime never writes" in msg
+    assert "adds `hunch`, which the review runtime never writes" in msg
 
 
 def test_publish_signature_must_produce_nothing():
