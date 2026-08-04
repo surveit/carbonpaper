@@ -166,7 +166,7 @@ def test_unbounded_recursion_overflows_the_call_stack_not_a_refusal():
 
 def test_the_error_rendering_the_refusal_contract_depends_on_is_unchanged():
     # Pins the exact starlark-pyo3 rendering the sentinel match relies on. If this
-    # fails the binding changed its error format — re-derive the matcher in
+    # fails the binding changed its error format — recompute the matcher in
     # _find_refusal_message, do not loosen this test.
     module = starlark.Module()
     module.add_callable("boom", _raise_step_refused)

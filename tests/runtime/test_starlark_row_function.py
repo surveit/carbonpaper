@@ -14,9 +14,10 @@ from conftest import make_run_context
 
 DOUBLE = "def transform(row):\n    return {'n': row['n'], 'doubled': row['n'] * 2}\n"
 
-_N_COLUMN = [{"name": "n", "type": "int"}]
+_N_COLUMN = [{"name": "n", "type": "int", "nullable": False}]
 _N_DOUBLED_SCHEMA = {"columns": [
-    {"name": "n", "type": "int"}, {"name": "doubled", "type": "int"},
+    {"name": "n", "type": "int", "nullable": False},
+    {"name": "doubled", "type": "int", "nullable": False},
 ]}
 
 
@@ -73,8 +74,8 @@ def test_an_oversized_int_in_the_input_stops_the_stage():
 def test_a_row_with_a_datetime_is_marshalled_before_starlark_sees_it():
     stage = _stage(
         "def transform(row):\n    return {'iso': row['ts']}\n",
-        output_schema={"columns": [{"name": "iso", "type": "str"}]},
-        input_columns=[{"name": "ts", "type": "datetime"}],
+        output_schema={"columns": [{"name": "iso", "type": "str", "nullable": False}]},
+        input_columns=[{"name": "ts", "type": "datetime", "nullable": False}],
     )
     out = _handler().execute(
         stage, {"src": pd.DataFrame({"ts": [pd.Timestamp("2024-01-02T03:04:05")]})},

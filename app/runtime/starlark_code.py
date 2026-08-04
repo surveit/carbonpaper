@@ -15,7 +15,7 @@ from app.models.errors import StepRefused
 # which is what _find_refusal_message matches.
 
 # starlark-pyo3 renders an injected callable's exception as
-# "error: <ClassName>: <message>" on its own line. Derived from the class so the
+# "error: <ClassName>: <message>" on its own line. Built from the class so the
 # sentinel can never drift from the type it stands for. An author cannot forge it:
 # fail("StepRefused: x") renders as "error: fail: StepRefused: x".
 _REFUSAL_MARKER = f"\nerror: {StepRefused.__name__}: "

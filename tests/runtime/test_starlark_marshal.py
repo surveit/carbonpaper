@@ -80,7 +80,7 @@ def test_bools_are_not_marshalled_as_ints():
 
 def test_the_binding_really_does_mangle_ints_above_the_guard():
     # The guard's justification, pinned. If this goes green the binding changed:
-    # re-derive the boundary from observation, do not delete the guard.
+    # re-establish the boundary from observation, do not delete the guard.
     import starlark
 
     module = starlark.Module()
