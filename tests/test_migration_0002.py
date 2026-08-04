@@ -31,8 +31,8 @@ def _column(name: str) -> dict[str, Any]:
 
 def _v1_stages() -> list[dict[str, Any]]:
     """A v1 workflow: a queue naming no columns, and an enrich naming no brought ones."""
-    subject = {"columns": [_column("id"), _column("verdict")], "primary_key": None}
-    reference = {"columns": [_column("id"), _column("extra")], "primary_key": None}
+    subject = {"columns": [_column("id"), _column("verdict")]}
+    reference = {"columns": [_column("id"), _column("extra")]}
     return [
         {"id": "src", "name": "Source", "type": "input_data",
          "connector": {"kind": "file", "params": {"format": "csv", "path": "/tmp/a.csv"}},
@@ -43,17 +43,14 @@ def _v1_stages() -> list[dict[str, Any]]:
         {"id": "joined", "name": "Join", "type": "enrich",
          "inputs": [{"id": "src", "schema": subject}, {"id": "ref", "schema": reference}],
          "join": {"keys": [{"left": "id", "right": "id"}]},
-         "output_schema": {"columns": [_column("id"), _column("verdict"), _column("extra")],
-                           "primary_key": None}},
+         "output_schema": {"columns": [_column("id"), _column("verdict"), _column("extra")]}},
         {"id": "gate", "name": "Review", "type": "human_review_queue",
          "inputs": [{"id": "joined", "schema": {
-             "columns": [_column("id"), _column("verdict"), _column("extra")],
-             "primary_key": None}}],
+             "columns": [_column("id"), _column("verdict"), _column("extra")]}}],
          "queue": {"reviewer_instructions": "Confirm each row."},
          "output_schema": {"columns": [
              _column("id"), _column("verdict"), _column("extra"),
-             _column("decision"), _column("reviewer_id"), _column("reviewed_at")],
-             "primary_key": None}},
+             _column("decision"), _column("reviewer_id"), _column("reviewed_at")]}},
     ]
 
 
