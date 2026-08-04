@@ -18,18 +18,20 @@ client = TestClient(app)
 _SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True}]}
 _CLEAN_LINE = "0 errors, 0 warnings"
 
-_LOAD = {
-    "id": "load", "name": "Load", "type": "input_data",
-    "output_schema": _SCHEMA,
-    "connector": {"kind": "file",
-                  "params": {"path": "/data/things.csv", "format": "csv"}},
-}
 _UNDESCRIBED = {
     "id": "shape", "name": "Shape", "type": "python_row_function",
     "inputs": [{"id": "load", "schema": _SCHEMA}],
     "output_schema": _SCHEMA,
     "function": {"kind": "inline", "code": "def transform(row):\n    return row"},
 }
+
+
+def _make_load_stage(path):
+    return {
+        "id": "load", "name": "Load", "type": "input_data",
+        "output_schema": _SCHEMA,
+        "connector": {"kind": "file", "params": {"path": path, "format": "csv"}},
+    }
 
 
 def _workflow_page(tmp_path, name, stages):
@@ -46,13 +48,15 @@ def _workflow_page(tmp_path, name, stages):
 
 
 def test_a_workflow_with_no_warnings_says_so(tmp_path):
-    page = _workflow_page(tmp_path, "clean", [_LOAD])
+    load = _make_load_stage(str(tmp_path / "things.csv"))
+    page = _workflow_page(tmp_path, "clean", [load])
     assert _CLEAN_LINE in page
     assert "wf-issues-clean" in page
 
 
 def test_a_workflow_with_a_warning_lists_it_instead(tmp_path):
-    page = _workflow_page(tmp_path, "dirty", [_LOAD, _UNDESCRIBED])
+    load = _make_load_stage(str(tmp_path / "things.csv"))
+    page = _workflow_page(tmp_path, "dirty", [load, _UNDESCRIBED])
     assert _CLEAN_LINE not in page
     assert "to fix before signing this workflow off" in page
 
@@ -60,9 +64,6 @@ def test_a_workflow_with_a_warning_lists_it_instead(tmp_path):
 def test_a_workflow_that_does_not_load_claims_nothing(tmp_path):
     """Zero typed stages produce zero warnings, which is not a clean bill of health."""
     # A relative connector path is rejected by input_data, so nothing types.
-    broken = {**_LOAD, "connector": {"kind": "file",
-                                     "params": {"path": "data/things.csv",
-                                                "format": "csv"}}}
-    page = _workflow_page(tmp_path, "broken", [broken])
+    page = _workflow_page(tmp_path, "broken", [_make_load_stage("data/things.csv")])
     assert _CLEAN_LINE not in page
     assert "wf-issues" not in page
