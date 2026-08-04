@@ -74,8 +74,8 @@
       </div>
       {% endfor %}
     {% else %}<p class="muted"><em>No declared inputs.</em></p>{% endif %}
-    {% if stage_def and stage_def.output_schema %}
-    <div class="schema-card"><h4>output schema</h4>{{ schema_table(stage_def.output_schema) }}</div>
+    {% if stage_def and stage_def.resolve_output_schema() %}
+    <div class="schema-card"><h4>output schema</h4>{{ schema_table(stage_def.resolve_output_schema()) }}</div>
     {% else %}<p class="muted"><em>No output schema declared.</em></p>{% endif %}
   </div>
 

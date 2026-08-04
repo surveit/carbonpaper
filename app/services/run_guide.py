@@ -75,11 +75,12 @@ def find_guideless_version_id(project: str, manifest: dict[str, Any]) -> str | N
 
 def list_written_columns(stage: Stage) -> list[str]:
     """Columns the output adds to the stage's first input — the subject side of a join."""
-    if stage.output_schema is None:
+    output_schema = stage.resolve_output_schema()
+    if output_schema is None:
         return []
     if not stage.inputs:
-        return [column.name for column in stage.output_schema.columns]
-    added = stage.output_schema.subtract(stage.inputs[0].table_schema, strict=False)
+        return [column.name for column in output_schema.columns]
+    added = output_schema.subtract(stage.inputs[0].table_schema, strict=False)
     return [column.name for column in added.columns]
 
 

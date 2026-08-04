@@ -776,7 +776,8 @@ def _project_onto_declared_columns(
     off before this runs. Raises when a declared column is absent, except on a
     frame whose rows already reported generation failures — a failed row
     produces no generated value, and its row errors fail the stage anyway."""
-    declared = [c.name for c in stage.output_schema.columns] if stage.output_schema else []
+    output_schema = stage.resolve_output_schema()
+    declared = [c.name for c in output_schema.columns] if output_schema else []
     if not declared:
         return df
     if not len(df.columns) and not len(df):

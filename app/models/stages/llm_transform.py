@@ -134,9 +134,10 @@ class LLMTransformStage(StageBase):
         if not self.inputs:
             return None
         input_schema = self.inputs[0].table_schema
-        if self.output_schema is None or input_schema is None:
+        output_schema = self.resolve_output_schema()
+        if output_schema is None or input_schema is None:
             return None
-        return self.output_schema.subtract(input_schema)
+        return output_schema.subtract(input_schema)
 
     @model_validator(mode="after")
     def _one_to_one(self) -> "LLMTransformStage":
@@ -236,8 +237,8 @@ def find_llm_one_to_one_issues(stage: "LLMTransformStage") -> list[str]:
     if len(stage.inputs) != 1:
         return [f"llm_transform must have exactly one input, has {len(stage.inputs)}"]
     input_schema = stage.inputs[0].table_schema
-    output_schema = stage.output_schema
-    assert output_schema is not None  # StageBase._schemas_declared guarantees this
+    output_schema = stage.resolve_output_schema()
+    assert output_schema is not None  # _schemas_declared: an outer is stored or resolves
     return _find_additive_shape_issues(input_schema, output_schema)
 
 

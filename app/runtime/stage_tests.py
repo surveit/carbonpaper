@@ -246,9 +246,9 @@ def _validate_test_against_schemas(
         # A failure case states no output rows, so there is no output shape to
         # lint — only its inputs, which a real run would still have to accept.
         return "; ".join(problems) if problems else None
-    expected_frame = _build_frame(test.expected, stage.output_schema)
+    expected_frame = _build_frame(test.expected, stage.resolve_output_schema())
     report = validate_dataframe(
-        expected_frame, stage.output_schema, stage_id=stage.id, phase="output"
+        expected_frame, stage.resolve_output_schema(), stage_id=stage.id, phase="output"
     )
     problems += [
         f"expected rows: {issue.message}"
@@ -261,9 +261,10 @@ def _compare(stage: Stage, test: StageTest, actual: pd.DataFrame) -> StageTestRe
     # Python transforms always declare their output schema; publish (the
     # schema-less terminal stage) cannot carry tests. And a failure case
     # (expected is None) has already been judged by the time we compare rows.
-    assert stage.output_schema is not None
+    output_schema = stage.resolve_output_schema()
+    assert output_schema is not None
     assert test.expected is not None
-    columns = [column.name for column in stage.output_schema.columns]
+    columns = [column.name for column in output_schema.columns]
     expected_rows = [_select_cells(row, columns) for row in test.expected]
     actual_rows = [_select_cells(row, columns) for row in list_rows(actual)]
     if len(expected_rows) != len(actual_rows):

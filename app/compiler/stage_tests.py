@@ -81,13 +81,14 @@ def build_stage_test_generator(
             f"not `{stage.type}`"
         )
     task = render_generation_task(document, stage)  # raises if there is no output schema
-    assert stage.output_schema is not None
+    output_schema = stage.resolve_output_schema()
+    assert output_schema is not None
     return Agent(
         system_prompt=STAGE_TESTS_SYSTEM_PROMPT,
         target_schema=build_stage_tests_model(
             find_stage_test_class(type(stage)),
             {ref.id: ref.table_schema for ref in stage.inputs},
-            stage.output_schema,
+            output_schema,
         ),
         task=task,
         model=model,
@@ -118,7 +119,8 @@ def render_generation_task(document: str, stage: Stage) -> str:
             f"stage `{stage.id}` has no summary — examples are written from a step's "
             f"description, so write one first (there is nothing to check the code against)"
         )
-    if stage.output_schema is None:
+    output_schema = stage.resolve_output_schema()
+    if output_schema is None:
         raise ValueError(
             f"stage `{stage.id}` has no output schema — tests need one to state expected rows"
         )
@@ -132,7 +134,7 @@ def render_generation_task(document: str, stage: Stage) -> str:
         f"----- END DESCRIPTION -----\n\n"
         f"Write examples for stage `{stage.id}` ({stage.type}): {stage.name}\n\n"
         f"{inputs}\n\n"
-        f"Output schema:\n{stage.output_schema.to_prompt()}"
+        f"Output schema:\n{output_schema.to_prompt()}"
     )
 
 

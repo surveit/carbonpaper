@@ -37,7 +37,7 @@
     {% else %}<p class="muted"><em>no output for this stage.</em></p>{% endif %}
   </details>
 
-  {% if stage_def and stage_def.output_schema %}
-  <details class="lin-disc" data-disc="schema"><summary class="disclosure">Output schema</summary>{{ schema_table(stage_def.output_schema) }}</details>
+  {% if stage_def and stage_def.resolve_output_schema() %}
+  <details class="lin-disc" data-disc="schema"><summary class="disclosure">Output schema</summary>{{ schema_table(stage_def.resolve_output_schema()) }}</details>
   {% endif %}
 </div>

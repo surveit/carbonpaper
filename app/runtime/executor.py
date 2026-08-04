@@ -518,7 +518,7 @@ def _finalize_stage_output(
     if lineage is not None:
         _persist_row_lineage(lineage, sid, run_dir)
 
-    out_rep = validate_dataframe(output, stage.output_schema, stage_id=sid, phase="output")
+    out_rep = validate_dataframe(output, stage.resolve_output_schema(), stage_id=sid, phase="output")
     if row_errors:
         out_rep.issues[0:0] = [
             Issue("error", None,

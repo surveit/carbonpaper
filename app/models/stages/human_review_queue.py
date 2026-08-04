@@ -90,7 +90,7 @@ class HumanReviewQueueStage(StageBase):
 
     def find_output_schema_issues(self) -> list[str]:
         sid, queue = self.id, self.queue
-        output_schema = self.output_schema
+        output_schema = self.resolve_output_schema()
         assert output_schema is not None  # _schemas_declared runs first and requires one
         input_schema = self.inputs[0].table_schema
         return (

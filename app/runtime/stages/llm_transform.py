@@ -93,7 +93,7 @@ def run_llm_batches(
     un-stripped and unprojected — the shape assembles the stage's output frame
     from them."""
     llm = narrow_stage(stage, LLMTransformStage).llm
-    assert stage.output_schema is not None and stage.inputs[0].table_schema is not None
+    assert stage.resolve_output_schema() is not None and stage.inputs[0].table_schema is not None
     batch_reply_schema = _build_batch_reply_schema(stage)
 
     src = inputs[stage.inputs[0].id]
