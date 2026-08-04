@@ -32,9 +32,18 @@ routers in `app/web/routers/`, which import the Runner (`app.runtime`) and the s
   (`python_row_function`, `llm_transform`, `enrich` — against its subject input) reads as a
   positional diff over its INPUT frame as the base: every input column holds its place, one the
   stage dropped struck through carrying the input value, the added ones tinted after them, changed
-  cells marked. `filter_rows` reads as ONE merged table with its dropped input rows in place,
-  tinted, off the verified lineage sidecar. The header names `base input → stage` and links every
-  input's and the output's raw full-rows view (`?raw=1`) + CSV download. `build_stage_diff`
+  cells marked; each header carries a `+` or `−` so both read without colour. `filter_rows` reads
+  as ONE merged table with its dropped input rows in place, tinted, off the verified lineage
+  sidecar. The header is one horizontal axis, the same for either shape — the inputs stacked
+  vertically, a bracket where there is more than one, a rail, then the output, which is a sibling
+  of the stack and so does not move when an input is added. Each unit names its part in words
+  (`base input` / `reference input` / `output`), carries the row count of the frame it names, and
+  links that frame's raw full-rows view (`?raw=1`) + CSV download. A frame the diff did not read
+  (an `enrich`'s reference where the parquet will not open) is listed with no count, never a
+  guessed one. The rail carries `diff.tally` — the list of things the stage did that its own shape
+  MEASURED, in one vocabulary (`+2 cols · −3 cols · 0 cells changed`, `−121 rows`); a filter
+  compares no cells and no columns, so it reports neither rather than a zero it never took.
+  `build_stage_diff`
   returns None — the plain output view — for every other type and whenever alignment can't be
   verified. The **full-rows page** (`…/stage/{sid}/rows`) renders the same partial over
   `MAX_TABLE_ROWS` rows, keeping its row numbers and click-to-expand cells; `?raw=1` forces the

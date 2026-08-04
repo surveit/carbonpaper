@@ -60,16 +60,27 @@ after injection — without that, the panel's JS (tabs + scratch tool) is dead.
   subject input) draws its INPUT frame as the base with what it did painted
   over. Every input column holds its input position: one the stage dropped is
   struck through, carrying the input value it discarded; the columns the stage
-  added follow, tinted. Both sets are named in words in the caption, changed
-  cells carry the replaced value struck through, and the summary line counts
-  changes over the whole frame. A `filter_rows` stage renders ONE merged table
+  added follow, tinted. Each column header carries the colour-free mark for what
+  happened to it — `+` on an added column, `−` on a dropped one, where the strike
+  takes the name and leaves the mark readable — and changed cells carry the
+  replaced value struck through. A `filter_rows` stage renders ONE merged table
   over the first input rows in input order: kept rows exactly as the plain
   preview draws them (lineage links included), dropped rows in place, tinted
-  and labelled — read off the stage's lineage sidecar, never guessed — and the
-  header counts kept/dropped over the whole frame, noting drops beyond the
-  shown window. The diff header names `base input → stage` and links the raw
-  full-rows view (`?raw=1`) and CSV download of every input (an `enrich`'s
-  reference frame included) and of the output. Every other stage type keeps the plain output
+  and labelled — read off the stage's lineage sidecar, never guessed — noting
+  drops beyond the shown window. The diff header is one horizontal axis, laid out
+  the same way for either shape: the input frames stacked vertically, a bracket
+  gathering them where there is more than one, a rail, then the output frame —
+  a sibling of the input stack, so a second input lengthens the stack without
+  moving the output. Each unit names its part in words — `base input` /
+  `reference input` / `output`, so the base reads without colour — carries the
+  row count of the frame it names, and links that frame's raw full-rows view
+  (`?raw=1`) and CSV download; an `enrich`'s reference frame is a unit like any
+  other, shown with no count wherever it could not be read. The rail carries one
+  tally in one vocabulary, whichever shape produced it: the things the stage did
+  that its own shape actually measured (`+2 cols · −3 cols · 0 cells changed` for
+  a positional diff, `−121 rows` for a filter). A filter compares no cells and no
+  columns, so it reports neither — a zero it never counted would be invented.
+  Every other stage type keeps the plain output
   view, and any stage whose alignment can't be verified (missing frame,
   row-count mismatch, absent sidecar) falls back to it.
 

@@ -124,14 +124,25 @@ def _panel(run_id: str, stage_id: str) -> str:
     return response.text
 
 
+def _diff_head(html: str) -> str:
+    """The header strip alone — every claim about the frame layout is about this."""
+    assert 'class="preview-head diff-head"' in html
+    # The strip's own elements are spans, so the first </div> closes the head.
+    return html.split('class="preview-head diff-head"')[1].split("</div>")[0]
+
+
+def _unit_at(strip: str, frame_id: str) -> int:
+    """Where the unit naming `frame_id` sits in the strip — for asserting the order."""
+    return strip.index(f">{frame_id}</code>")
+
+
 def test_a_row_function_output_reads_as_a_diff_against_its_input(run_ctx) -> None:
     _pdir, run_id = run_ctx
     html = _panel(run_id, CLASSIFY_ID)
-    assert "output as a diff against its input" in html
-    # The added column is tinted AND named in words (caption + summary).
+    # The added column is tinted AND carries the colour-free + on its header.
     assert "diff-col-new" in html
-    assert "added by this stage, carried by no input" in html
-    assert "<code>label</code>" in html
+    assert '<span class="diff-mark">+</span><span class="diff-col-name">label</span>' in html
+    assert 'title="added by this stage"' in html
     # The one uppercased name is a marked changed cell carrying its old value.
     assert "diff-cell-changed" in html
     assert "BETA" in html and "beta" in html
@@ -139,28 +150,145 @@ def test_a_row_function_output_reads_as_a_diff_against_its_input(run_ctx) -> Non
     assert "output data" not in html
 
 
-def test_the_diff_header_links_both_raw_frames(run_ctx) -> None:
-    """With the Inputs/Outputs tabs gone, both raw frames stay one click away."""
-    # The header names input → stage and links each side's existing full-rows
-    # view and CSV download — no new endpoints.
+def test_the_rail_tallies_what_the_stage_did_in_one_line(run_ctx) -> None:
+    """The header says what changed; the prose paragraph and caption that said it are gone."""
     _pdir, run_id = run_ctx
-    html = _panel(run_id, CLASSIFY_ID)
-    assert "raw frames:" in html and "output <code>classify</code>" in html
-    assert f"/stage/{LOAD_ID}/rows.csv" in html
-    assert f"/stage/{CLASSIFY_ID}/rows.csv" in html
-    # With one input there is nothing to tell apart, so no base marker.
-    assert "base input" not in html
+    strip = _diff_head(_panel(run_id, CLASSIFY_ID))
+    # classify adds `label` and uppercases the one name where val > 1.
+    assert ">+1 col · 1 cell changed</span>" in strip
+    assert "diff-summary" not in strip
 
 
-def test_the_diff_header_links_every_input_of_a_two_input_stage(run_ctx) -> None:
+def test_neither_shape_carries_a_prose_block_the_table_already_says(run_ctx) -> None:
+    """The summary paragraph and the table caption are deleted, not merely reworded."""
+    _pdir, run_id = run_ctx
+    for stage_id in (CLASSIFY_ID, ROUTE_ID, KEEP_ID):
+        html = _panel(run_id, stage_id)
+        assert "diff-summary" not in html
+        assert "<caption>" not in html
+        assert "added by this stage, carried by no input" not in html
+        assert "every value carried through unchanged" not in html
+
+
+def test_the_header_gives_every_frame_its_own_labelled_unit(run_ctx) -> None:
+    """Inputs → stage → output has to read off the LAYOUT, not off a sentence."""
     # The enrich diffs against its subject, but the REFERENCE frame is where the
-    # added columns came from — link it too, with the base one identifiable.
+    # added columns came from — it is a unit like any other, with the base one
+    # identifiable by the words in its label rather than by colour.
     _pdir, run_id = run_ctx
-    html = _panel(run_id, ROUTE_ID)
-    assert f"base input <code>{CLASSIFY_ID}</code>" in html
-    assert f"input <code>{ROUTES_ID}</code>" in html
-    assert f"/stage/{CLASSIFY_ID}/rows.csv" in html
-    assert f"/stage/{ROUTES_ID}/rows.csv" in html
+    strip = _diff_head(_panel(run_id, ROUTE_ID))
+    # One unit per frame — both inputs and the output — each naming its own part.
+    assert strip.count('class="diff-frame ') == 3
+    assert ">base input</span>" in strip
+    assert ">reference input</span>" in strip
+    assert ">output</span>" in strip
+    # The input set stands before the arrow, the output after it.
+    assert (_unit_at(strip, CLASSIFY_ID) < _unit_at(strip, ROUTES_ID)
+            < strip.index("diff-arrow") < _unit_at(strip, ROUTE_ID))
+    # Every unit carries its own pair of links, so no frame is a dead end.
+    for frame_id in (CLASSIFY_ID, ROUTES_ID, ROUTE_ID):
+        assert f'/stage/{frame_id}/rows?raw=1"' in strip
+        assert f'/stage/{frame_id}/rows.csv"' in strip
+
+
+def test_a_one_input_stage_names_its_only_input_without_a_base_marker(run_ctx) -> None:
+    """With the Inputs/Outputs tabs gone, both raw frames stay one click away."""
+    # With one input there is nothing to tell apart, so "base" would be noise;
+    # the two units still lay the input → output relation out structurally, and
+    # each still reaches its own full-rows view and CSV — no new endpoints.
+    _pdir, run_id = run_ctx
+    strip = _diff_head(_panel(run_id, CLASSIFY_ID))
+    assert strip.count('class="diff-frame ') == 2
+    assert ">input</span>" in strip and ">output</span>" in strip
+    assert "base input" not in strip and "reference input" not in strip
+    assert _unit_at(strip, LOAD_ID) < strip.index("diff-arrow") < _unit_at(strip, CLASSIFY_ID)
+    for frame_id in (LOAD_ID, CLASSIFY_ID):
+        assert f'/stage/{frame_id}/rows?raw=1"' in strip
+        assert f'/stage/{frame_id}/rows.csv"' in strip
+
+
+def test_a_second_input_lengthens_the_input_stack_without_moving_the_output(run_ctx) -> None:
+    """The output is a sibling of the input stack, so input count cannot reposition it."""
+    # The layout is one horizontal axis: every input frame lives inside the
+    # stacked input list, and the output sits outside it — so a second input
+    # grows the list downward rather than pushing the output along or onto
+    # another line. app/static/style.css holds that row to one line, top-aligned.
+    _pdir, run_id = run_ctx
+    for stage_id, input_ids in ((CLASSIFY_ID, [LOAD_ID]),
+                                (ROUTE_ID, [CLASSIFY_ID, ROUTES_ID])):
+        strip = _diff_head(_panel(run_id, stage_id))
+        stack = strip.split('class="diff-inputs"')[1].split('class="diff-rail"')[0]
+        for input_id in input_ids:
+            assert f">{input_id}</code>" in stack
+        assert f">{stage_id}</code>" not in stack
+        # The output unit is the LAST thing on the axis, after the rail.
+        assert strip.index('class="diff-outputs"') > strip.index('class="diff-rail"')
+        assert f">{stage_id}</code>" in strip.split('class="diff-outputs"')[1]
+
+
+def test_the_bracket_appears_only_where_there_is_more_than_one_input(run_ctx) -> None:
+    """It exists to converge a set; over a single frame it would be decoration."""
+    _pdir, run_id = run_ctx
+    assert "diff-brace" not in _diff_head(_panel(run_id, CLASSIFY_ID))
+    assert "diff-brace" in _diff_head(_panel(run_id, ROUTE_ID))
+
+
+def test_every_frame_unit_carries_the_row_count_of_the_frame_it_names(run_ctx) -> None:
+    """The tallies live on the frames they count, not in a prose line beside them."""
+    _pdir, run_id = run_ctx
+    strip = _diff_head(_panel(run_id, ROUTE_ID))
+    # 3 subject rows, 3 reference rows, 3 output rows — one count per unit.
+    assert strip.count("3 rows") == 3
+
+
+def test_an_unread_reference_frame_shows_no_row_count_rather_than_a_guess(run_ctx) -> None:
+    """A count may only be shown for a frame that was actually read."""
+    pdir, run_id = run_ctx
+    # The reference frame is not needed to build the diff, so its loss must cost
+    # the count and nothing else — never a fabricated or defaulted number.
+    (pdir / "runs" / run_id / "outputs" / f"{ROUTES_ID}.parquet").unlink()
+    strip = _diff_head(_panel(run_id, ROUTE_ID))
+    assert ">reference input</span>" in strip
+    assert f'/stage/{ROUTES_ID}/rows?raw=1"' in strip
+    assert strip.count("3 rows") == 2  # the subject and the output, not the reference
+    assert "0 rows" not in strip
+
+
+def test_the_filter_header_folds_its_tallies_into_the_frames_and_the_rail(run_ctx) -> None:
+    _pdir, run_id = run_ctx
+    strip = _diff_head(_panel(run_id, KEEP_ID))
+    # 3 in, 1 dropped by the stage, 2 out — the shape of the transform, in place.
+    assert "3 rows" in strip and "2 rows" in strip
+    assert ">−1 row</span>" in strip
+    assert "kept 2 of 3" not in strip  # the old prose line is gone, not doubled
+
+
+def test_the_filter_rail_reports_no_metric_the_filter_never_measured(run_ctx) -> None:
+    """A filter compares no cells and no columns, so a zero for either would be invented."""
+    _pdir, run_id = run_ctx
+    strip = _diff_head(_panel(run_id, KEEP_ID))
+    assert "cells changed" not in strip and "cols" not in strip
+
+
+def test_both_shapes_put_their_tally_in_the_same_slot(run_ctx) -> None:
+    """One rail, one vocabulary — the filter shape gets no header treatment of its own."""
+    _pdir, run_id = run_ctx
+    for stage_id in (CLASSIFY_ID, ROUTE_ID, KEEP_ID):
+        strip = _diff_head(_panel(run_id, stage_id))
+        assert strip.count('class="diff-rail"') == 1
+        assert strip.count('class="diff-tally"') == 1
+        # …and the shape-specific sentences that used to sit there are gone.
+        assert "output as a diff against its input" not in strip
+        assert "dropped rows shown in place" not in strip
+
+
+def test_the_full_rows_page_lays_the_frames_out_the_same_way(run_ctx) -> None:
+    """One partial, both surfaces: the strip is not forked for the bigger page."""
+    _pdir, run_id = run_ctx
+    strip = _diff_head(_rows_page(run_id, ROUTE_ID))
+    assert strip.count('class="diff-frame ') == 3
+    assert ">base input</span>" in strip and ">reference input</span>" in strip
+    assert f'/stage/{ROUTES_ID}/rows.csv"' in strip
 
 
 def test_a_filter_stage_shows_its_dropped_rows_in_place(run_ctx) -> None:
@@ -168,7 +296,6 @@ def test_a_filter_stage_shows_its_dropped_rows_in_place(run_ctx) -> None:
     html = _panel(run_id, KEEP_ID)
     # ONE merged table: kept rows with lineage links, the dropped row inline,
     # tinted, carrying its input ordinal — no second table to reconcile.
-    assert "dropped rows shown in place" in html
     assert "diff-row-dropped" in html
     # The cell says what happened, not which ordinal it happened to.
     assert "Dropped row" in html
@@ -181,11 +308,13 @@ def test_a_filter_stage_shows_its_dropped_rows_in_place(run_ctx) -> None:
 def test_an_enrich_reads_as_a_diff_against_its_subject_input(run_ctx) -> None:
     _pdir, run_id = run_ctx
     html = _panel(run_id, ROUTE_ID)
-    # The subject input (inputs[0]) heads the diff — never the reference frame.
-    assert f"<code>{CLASSIFY_ID}</code> → <code>{ROUTE_ID}</code>" in html
-    assert "output as a diff against its input" in html
-    assert "diff-col-new" in html and "<code>route</code>" in html
-    assert "north" in html
+    # The subject input (inputs[0]) is the BASE unit — never the reference frame.
+    strip = _diff_head(html)
+    assert (strip.index(">base input</span>") < _unit_at(strip, CLASSIFY_ID)
+            < strip.index(">reference input</span>") < _unit_at(strip, ROUTES_ID))
+    # The enrich adds `route`, drops `val` via join.select, and rewrites nothing.
+    assert ">+1 col · −1 col · 0 cells changed</span>" in strip
+    assert "diff-col-new" in html and "north" in html
 
 
 def test_a_dropped_column_is_drawn_in_the_table_carrying_its_input_value(run_ctx) -> None:
@@ -193,11 +322,13 @@ def test_a_dropped_column_is_drawn_in_the_table_carrying_its_input_value(run_ctx
     html = _panel(run_id, ROUTE_ID)
     # `val` left the output via join.select; the reader still sees what it held.
     assert "diff-col-dropped" in html
-    assert "dropped by this stage" in html  # the caption names it in words
-    assert "<code>val</code>" in html
+    assert 'title="dropped by this stage, carrying the input value"' in html
+    # The − is the colour-free mark; the strike stays on the NAME, so the mark
+    # itself is never drawn through (app/static/style.css splits the two).
+    assert '<span class="diff-mark">−</span><span class="diff-col-name">val</span>' in html
     # The input is the base, so `val` holds its input position — ahead of the
     # added `route` — rather than being exiled to the end of the table.
-    assert html.index('class="diff-col-dropped">val') < html.index('class="diff-col-new">route')
+    assert html.index('diff-col-name">val') < html.index('diff-col-name">route')
 
 
 def test_the_two_tab_strip_replaces_inputs_and_outputs(run_ctx) -> None:
@@ -234,7 +365,7 @@ def test_a_filter_missing_its_sidecar_falls_back_to_the_plain_pane(run_ctx) -> N
     pdir, run_id = run_ctx
     lineage_sidecar_path(pdir / "runs" / run_id, KEEP_ID).unlink()
     html = _panel(run_id, KEEP_ID)
-    assert "dropped rows shown in place" not in html
+    assert "stage-diff" not in html
     assert "output data" in html
 
 
@@ -244,7 +375,7 @@ def test_a_row_count_mismatch_falls_back_to_the_plain_pane(run_ctx) -> None:
     grown = pd.concat([pd.read_parquet(out_path)] * 2, ignore_index=True)
     grown.to_parquet(out_path, index=False)
     html = _panel(run_id, CLASSIFY_ID)
-    assert "output as a diff against its input" not in html
+    assert "stage-diff" not in html
     assert "output data" in html
 
 
@@ -260,8 +391,9 @@ def _rows_page(run_id: str, stage_id: str, query: str = "") -> str:
 def test_the_full_rows_page_reads_as_a_diff_by_default(run_ctx) -> None:
     _pdir, run_id = run_ctx
     html = _rows_page(run_id, CLASSIFY_ID)
-    assert "output as a diff against its input" in html
-    assert "diff-col-new" in html and "<code>label</code>" in html
+    assert "stage-diff" in html
+    assert "diff-col-new" in html
+    assert '<span class="diff-mark">+</span><span class="diff-col-name">label</span>' in html
     assert "diff-cell-changed" in html and "BETA" in html
 
 
@@ -307,7 +439,6 @@ def test_a_stage_with_no_diff_offers_no_diff_view(run_ctx) -> None:
 def test_a_filter_full_rows_page_shows_its_dropped_rows_in_place(run_ctx) -> None:
     _pdir, run_id = run_ctx
     html = _rows_page(run_id, KEEP_ID)
-    assert "dropped rows shown in place" in html
     assert "diff-row-dropped" in html and "BETA" in html
     assert '<th class="row-num">#</th>' in html
 
@@ -332,13 +463,13 @@ def test_a_capped_filter_page_counts_input_rows_not_output_rows(run_ctx, monkeyp
     assert "Showing first 2 of 3 input rows" in html
 
 
-def test_the_raw_frames_strip_links_the_raw_view_not_another_diff(run_ctx) -> None:
-    """The strip is labelled "raw frames"; every link in it must reach a raw table."""
+def test_every_frame_unit_links_the_raw_view_not_another_diff(run_ctx) -> None:
+    """A unit's "all rows" is that frame itself; a diff of it would be a different claim."""
     # Every input plus the output, on a one-input and a two-input stage alike.
     _pdir, run_id = run_ctx
     for stage_id, linked in ((CLASSIFY_ID, [LOAD_ID, CLASSIFY_ID]),
                              (ROUTE_ID, [CLASSIFY_ID, ROUTES_ID, ROUTE_ID])):
-        strip = _panel(run_id, stage_id).split("raw frames:")[1].split("</span>")[0]
+        strip = _diff_head(_panel(run_id, stage_id))
         for linked_id in linked:
             assert f'/stage/{linked_id}/rows?raw=1"' in strip
         assert '/rows"' not in strip  # no link in the strip serves a diff
