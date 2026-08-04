@@ -3,11 +3,15 @@ Anything it would represent INEXACTLY raises here rather than reaching Starlark.
 from __future__ import annotations
 
 import datetime as dt
-import math
 from typing import Any
 
-import numpy as np
-import pandas as pd
+from app.core.frames import (
+    is_bool_cell,
+    is_exact_float_cell,
+    is_exact_int_cell,
+    is_missing_cell,
+    is_sequence_cell,
+)
 
 # The largest magnitude guaranteed to cross the Starlark boundary with its exact
 # digits intact (observed loss above it: 2**70+7 → 1.18e+21). Signed-64 max is
@@ -21,28 +25,25 @@ def marshal_row_for_starlark(row: dict[str, Any]) -> dict[str, Any]:
 
 
 def _marshal_value(column: str, value: Any) -> Any:
-    if value is None or isinstance(value, str):
+    # Before the type branches below: a nan/NaT reads as its own type there
+    # (e.g. pd.NaT is a datetime instance), so missing must be decided first.
+    if is_missing_cell(value):
+        return None
+    if isinstance(value, str):
         return value
     if isinstance(value, dict):
         return {str(key): _marshal_value(column, item) for key, item in value.items()}
-    if isinstance(value, (list, tuple, np.ndarray)):
+    if is_sequence_cell(value):
         return [_marshal_value(column, item) for item in value]
     # Before the int branch: bool subclasses int.
-    if isinstance(value, (bool, np.bool_)):
+    if is_bool_cell(value):
         return bool(value)
-    if isinstance(value, (int, np.integer)):
+    if is_exact_int_cell(value):
         return _marshal_int(column, int(value))
-    if isinstance(value, (float, np.floating)):
-        number = float(value)
-        return None if math.isnan(number) else number
-    # Must run before the generic scalar/missing branch below: that branch only
-    # ever returns None for a missing value, never formats one, so a valid
-    # (non-missing) date reaching it instead of here would fall through
-    # unconverted all the way to the final "unrepresentable type" raise.
+    if is_exact_float_cell(value):
+        return float(value)
     if isinstance(value, (dt.datetime, dt.date)):
-        return None if pd.isna(value) else value.isoformat()
-    if pd.api.types.is_scalar(value) and pd.isna(value):
-        return None
+        return value.isoformat()
     raise ValueError(
         f"column {column!r}: a Starlark stage cannot be handed a "
         f"{type(value).__name__} — Starlark holds only strings, numbers, booleans, "
