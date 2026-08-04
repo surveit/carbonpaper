@@ -290,6 +290,9 @@ def render_cells_as_text(frame: pd.DataFrame) -> list[dict[str, Any]]:
     return list_rows(render_frame_as_text(frame))
 
 
+SELECTED_ORDINAL_KEY = "_row_ordinal"
+
+
 def load_output_table(run_dir: Path, rel_path: str | None) -> dict[str, Any]:
     """Full (capped) table of a stage output: columns, total row count, up to
     MAX_TABLE_ROWS rows as strings, and whether the render was capped."""
@@ -300,6 +303,26 @@ def load_output_table(run_dir: Path, rel_path: str | None) -> dict[str, Any]:
         "rows": rows,
         "rows_total": len(df),
         "capped": len(df) > len(rows),
+    }
+
+
+def load_selected_output_rows(
+    run_dir: Path, rel_path: str | None, ordinals: list[int]
+) -> dict[str, Any]:
+    """`load_output_table`'s shape narrowed to `ordinals`, each row keeping its own index."""
+    df = read_output_df(run_dir, rel_path)
+    kept = [o for o in ordinals if 0 <= o < len(df)][:MAX_TABLE_ROWS]
+    rows = render_cells_as_text(df.iloc[kept])
+    for ordinal, row in zip(kept, rows):
+        # The reader arrived from a contributor chip, so the row's ORDINAL is the
+        # thing they need back — a position in the filtered list means nothing.
+        row[SELECTED_ORDINAL_KEY] = ordinal
+    return {
+        "columns": list(df.columns),
+        "rows": rows,
+        "rows_total": len(df),
+        "capped": len([o for o in ordinals if 0 <= o < len(df)]) > len(rows),
+        "selected_total": len(ordinals),
     }
 
 

@@ -313,6 +313,7 @@ def trace_to_dict(trace: Trace) -> dict[str, Any]:
                         "stage_id": branch.stage_id,
                         "row_ordinal": branch.row_ordinal,
                         "kind": str(branch.kind),
+                        "columns": None if branch.columns is None else list(branch.columns),
                     }
                     for branch in step.branches
                 ],

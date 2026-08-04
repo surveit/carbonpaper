@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 TRACE_SOURCE_STAGE_KEY = "_trace_source_stage"
 TRACE_SOURCE_ROW_KEY = "_trace_source_row"
 TRACE_EDGE_KIND_KEY = "_trace_edge_kind"
+TRACE_SOURCE_COLUMNS_KEY = "_trace_source_columns"
 
 # The `.attrs` channel the row driver hands lineage out on. The executor reads
 # it BEFORE any row slicing and pops it before persisting — `.attrs` does not
@@ -47,6 +48,10 @@ class RowParent:
     stage_id: str
     row_ordinal: int
     kind: str = EdgeKind.direct.value
+    # The output columns this parent fed. None means its contribution is not
+    # narrowed to particular columns — true of a filter or union row, which
+    # passed through whole, and of any producer that does not attribute.
+    columns: tuple[str, ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -73,12 +78,12 @@ class RowLineage:
         if offset == 0:
             return self
         return RowLineage([
-            [RowParent(p.stage_id, p.row_ordinal + offset, p.kind) for p in entry]
+            [RowParent(p.stage_id, p.row_ordinal + offset, p.kind, p.columns) for p in entry]
             for entry in self.parents
         ])
 
     def to_frame(self) -> pd.DataFrame:
-        """One row per output row; the three columns are parallel per-parent lists."""
+        """One row per output row; the four columns are parallel per-parent lists."""
         return pd.DataFrame({
             TRACE_SOURCE_STAGE_KEY: pd.Series(
                 [[p.stage_id for p in entry] for entry in self.parents], dtype=object),
@@ -86,30 +91,42 @@ class RowLineage:
                 [[p.row_ordinal for p in entry] for entry in self.parents], dtype=object),
             TRACE_EDGE_KIND_KEY: pd.Series(
                 [[str(p.kind) for p in entry] for entry in self.parents], dtype=object),
+            TRACE_SOURCE_COLUMNS_KEY: pd.Series(
+                [[list(p.columns or ()) for p in entry] for entry in self.parents],
+                dtype=object),
         })
 
     @classmethod
     def from_frame(cls, df: pd.DataFrame) -> "RowLineage":
         """Read a sidecar frame back, including one written before lineage went multi-parent."""
-        # A pre-multi-parent sidecar held SCALARS and no kind column, so each of
-        # its rows reads as one direct parent — old runs stay traceable
-        # without a migration.
+        # A pre-multi-parent sidecar held SCALARS and no kind column, and an
+        # earlier one named no columns — each reads as one unattributed direct
+        # parent, so old runs stay traceable without a migration.
         has_kind = TRACE_EDGE_KIND_KEY in df.columns
+        has_columns = TRACE_SOURCE_COLUMNS_KEY in df.columns
         parents: list[list[RowParent]] = []
         for i in range(len(df)):
             stages = _as_list(df[TRACE_SOURCE_STAGE_KEY].iloc[i])
             rows = _as_list(df[TRACE_SOURCE_ROW_KEY].iloc[i])
             kinds = _as_list(df[TRACE_EDGE_KIND_KEY].iloc[i]) if has_kind else []
+            columns = _as_list(df[TRACE_SOURCE_COLUMNS_KEY].iloc[i]) if has_columns else []
             entry = [
                 RowParent(
                     stage_id=str(stages[k]),
                     row_ordinal=int(rows[k]),
                     kind=str(kinds[k]) if k < len(kinds) else EdgeKind.direct.value,
+                    columns=_columns_or_none(columns[k]) if k < len(columns) else None,
                 )
                 for k in range(min(len(stages), len(rows)))
             ]
             parents.append(entry)
         return cls(parents)
+
+
+def _columns_or_none(cell: Any) -> tuple[str, ...] | None:
+    """A parent's recorded columns; an empty list reads as unattributed, not as no columns."""
+    names = _as_list(cell)
+    return tuple(str(c) for c in names) if names else None
 
 
 def _as_list(value: Any) -> list[Any]:
@@ -190,6 +207,21 @@ def merged_inputs_lineage(
 def _is_missing(value: Any) -> bool:
     """True for an ordinal a merge left unmatched (NaN, None and pd.NA alike)."""
     return value is None or bool(pd.isna(value))
+
+
+def grouped_contributions_lineage(
+    source_stage_id: str, contributors: list[dict[int, tuple[str, ...]]]
+) -> RowLineage:
+    """For an aggregate: entry i names every input row that fed output row i, and what it fed."""
+    return RowLineage([
+        # A row appears ONCE carrying every column it fed, which is what keeps
+        # this O(input rows) rather than O(rows x aggregations).
+        [
+            RowParent(source_stage_id, int(ordinal), EdgeKind.contribution.value, columns)
+            for ordinal, columns in sorted(row_contributors.items())
+        ]
+        for row_contributors in contributors
+    ])
 
 
 def lineage_sidecar_path(run_dir: Path, stage_id: str) -> Path:

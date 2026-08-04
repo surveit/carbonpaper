@@ -518,14 +518,20 @@ async def run_stage_partial(
     response_class=HTMLResponse,
 )
 async def run_stage_rows(
-    request: Request, project: str, run_id: str, stage_id: str, raw: bool = False
+    request: Request, project: str, run_id: str, stage_id: str, raw: bool = False,
+    ordinals: str | None = None,
 ):
     """Full table of one stage's output, capped at MAX_TABLE_ROWS rendered rows —
     as the stage diff wherever one exists, which `?raw=1` turns off. The page
     links to the uncapped CSV download."""
     run_dir = runs_dir(project) / run_id
     stage_record = manifest_stage(run_dir, stage_id)
-    table = load_output_table(run_dir, stage_record.get("output_path"))
+    selected = _parse_ordinals(ordinals)
+    table = (
+        loading.load_selected_output_rows(run_dir, stage_record.get("output_path"), selected)
+        if selected is not None
+        else load_output_table(run_dir, stage_record.get("output_path"))
+    )
     return templates.TemplateResponse(
         request,
         "run_stage_rows.html",
@@ -537,7 +543,12 @@ async def run_stage_rows(
             "output_path": stage_record.get("output_path"),
             # Built even under ?raw=1: the raw view offers the diff view only
             # where one actually exists, so it has to know either way.
-            "diff": _build_full_rows_diff(project, run_dir, stage_id, stage_record),
+            # No diff over a filtered view: the diff aligns output rows to input
+            # rows by position, which a subset cannot honour.
+            "diff": (
+                None if selected is not None
+                else _build_full_rows_diff(project, run_dir, stage_id, stage_record)
+            ),
             "raw": raw,
             # The page's own treatments (row numbers, click-to-expand cells,
             # sticky-header scroll box) the shared diff partial renders on request.
@@ -545,6 +556,21 @@ async def run_stage_rows(
             **table,
         },
     )
+
+
+def _parse_ordinals(ordinals: str | None) -> list[int] | None:
+    """`?ordinals=3,7,9` as row numbers, or None where the page shows everything."""
+    if ordinals is None:
+        return None
+    # A malformed entry is skipped rather than failing the page: the parameter
+    # arrives from a link, and showing the rows it did name beats a 422.
+    parsed = []
+    for part in ordinals.split(","):
+        try:
+            parsed.append(int(part))
+        except ValueError:
+            continue
+    return parsed
 
 
 def _build_full_rows_diff(
