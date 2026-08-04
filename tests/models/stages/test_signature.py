@@ -255,9 +255,7 @@ def test_join_key_must_be_read_from_its_side():
 
 
 def test_join_add_must_be_landed():
-    # The output declares only the subject columns, so the deliverability
-    # check stays quiet and the signature cross-check speaks: nothing lands
-    # as `population`.
+    # Output declares subject columns only, so the signature cross-check speaks first.
     msg = _issues(_join_stage(
         adds=[{"name": "population", "type": "int", "nullable": True}], output_adds=[],
     ))
