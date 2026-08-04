@@ -22,7 +22,7 @@ def configure_default_stores() -> None:
 def _configure_default_document_store() -> None:
     if is_store_configured():
         return
-    db_path = _resolve_db_path()
+    db_path = resolve_db_path()
     db_path.parent.mkdir(parents=True, exist_ok=True)
     configure_store(SqliteKvStore(str(db_path)))
 
@@ -39,9 +39,10 @@ def _configure_default_frame_store() -> None:
     if is_frame_store_configured():
         return
     override = os.environ.get("CARBONPAPER_FRAMES_ROOT")
-    root = Path(override) if override is not None else _resolve_db_path().parent / "frames"
+    root = Path(override) if override is not None else resolve_db_path().parent / "frames"
     configure_frame_store(FrameStore(root))
 
 
-def _resolve_db_path() -> Path:
+def resolve_db_path() -> Path:
+    """Alembic's env.py reads this too, so a migration and the app cannot diverge."""
     return Path(os.environ.get("CARBONPAPER_DB_PATH", "data/app.db"))
