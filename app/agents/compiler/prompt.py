@@ -6,16 +6,9 @@ via get_current_project, so the prompt names no specific project."""
 
 from __future__ import annotations
 
-from app.models import HUMAN_REVIEW_QUEUE_CONTRACT_NOTE
-from app.models.node_contract_notes import SIGNATURE_CONTRACT_NOTE
 from app.models.authoring_lifecycle_note import AUTHORING_LIFECYCLE_GUIDANCE
 from app.models.stages.node_types import NODE_TYPES
-
-# Runtime facts that live beside NODE_TYPES rather than inside a type's own
-# `notes`, keyed by the type they qualify; rendered as extra note lines.
-_EXTRA_NODE_TYPE_NOTES: dict[str, str] = {
-    "human_review_queue": HUMAN_REVIEW_QUEUE_CONTRACT_NOTE,
-}
+from app.models.stages.signature import SIGNATURE_CONTRACT_NOTE
 
 _SYSTEM_PROMPT = (
     "You help a journalist author and refine a project — a workflow of typed "
@@ -54,9 +47,7 @@ def _stage_type_catalog() -> str:
             f"    blocks {blocks}; required: {required}; {takes}; "
             f"signature form: {spec.signature_form}"
         )
-        notes = (spec.notes, _EXTRA_NODE_TYPE_NOTES.get(stage_type))
-        for note in (n for n in notes if n):
-            lines.append(f"    note: {note}")
+        lines.append(f"    note: {spec.notes}")
     return "\n".join(lines)
 
 

@@ -13,6 +13,8 @@ from app.models.schema import StageConfig
 from app.models.stage_base import StageBase, StageInput, StageType
 from app.models.stages.warnings import CompilerWarning, warn
 from app.models.stages.code import (
+    CODE_CORNER_CASES_CONTRACT_NOTE,
+    CODE_SUMMARY_CONTRACT_NOTE,
     CORNER_CASES_DESCRIPTION,
     SUMMARY_DESCRIPTION,
     CornerCase,
@@ -133,7 +135,7 @@ NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
         requires_inputs=True,
         min_inputs=1,
         required=["code"],
-        optional=["function"],
+        optional=["function", "summary"],
         notes=(
             "Takes exactly ONE input. The predicate is INLINE code only — there is no "
             "kind/module here; a filter that needs an importable module is doing more "
@@ -141,6 +143,7 @@ NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
             "must return a bool — True keeps the row, False drops it; any other return "
             "type is a run-time error. Kept rows preserve their original relative order "
             "and every column unchanged, so output_schema must equal the input schema."
+            f" {CODE_SUMMARY_CONTRACT_NOTE} {CODE_CORNER_CASES_CONTRACT_NOTE}"
         ),
     ),
 }

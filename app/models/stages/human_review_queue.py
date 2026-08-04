@@ -72,7 +72,7 @@ class QueueConfig(StageConfig):
 class HumanReviewQueueStage(StageBase):
     type: Literal[StageType.human_review_queue]
     queue: QueueConfig
-    inputs: list[StageInput] = Field(default_factory=list, min_length=1)
+    inputs: list[StageInput] = Field(default_factory=list, min_length=1, max_length=1)
     signature: Optional[ExtendsSignature] = None
 
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
@@ -288,17 +288,32 @@ NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
         optional=["filter", "reviewer_instructions", "review_notes_column",
                      "routing", "conflict_resolution", "estimated_volume_per_week"],
         notes=(
-            "Reviewed rows are matched to a cached human decision by "
-            "fingerprinting the row itself — no column configuration is needed "
-            "to enable that matching. The column fields say what the human is "
-            "asked and what the stage ADDS: every column named by "
-            "`reviewed_columns`, `verdict_column`, `reviewer_column`, "
-            "`reviewed_at_column` and `review_notes_column` must be declared in "
-            "`output_schema` and must not already exist in the input. Editing "
-            "any of them — or `filter`/`reviewer_instructions` — changes the "
-            "stage's definition fingerprint, so every previously cached "
-            "decision for this stage stops matching and every row is asked "
-            "again."
+            "This type's output columns are the input columns it passes through PLUS exactly "
+            "the columns its own `queue` block names: one added column per "
+            "`queue.reviewed_columns` entry, `queue.verdict_column`, `queue.reviewer_column`, "
+            "`queue.reviewed_at_column`, and `queue.review_notes_column` when declared. "
+            "Declare all of them in output_schema; undeclared upstream columns are silently "
+            "dropped, so declare every column a later stage needs to read. The four "
+            "record-of-review columns must be declared type str — `queue.reviewed_at_column` "
+            "too, never date or datetime — and all but `queue.verdict_column` nullable, since "
+            "a skipped or auto-approved row carries no reviewer, timestamp or note. "
+            "A reviewed column is ADDED beside its source, whose value is never modified in "
+            "place: name it `reviewed_<source>` by default and declare it with the SAME spec "
+            "as its source — type, enum and range alike — and nullability at least as "
+            "permissive. A reviewed source column must be scalar (str/int/float/bool/date/"
+            "datetime): a json or list column cannot be reviewed through a form field. No "
+            "added column may reuse an input column's name, so two review stages in series "
+            "must name their added columns differently. `queue.filter` may reference INPUT "
+            "columns only, never a column this stage adds. "
+            "This type emits one output row per input row and never removes any. The verdict "
+            "column holds \"approve\" (a human accepted the value), \"modify\" (a human "
+            "supplied a different one), or \"skipped\" (the queue filter did not select the "
+            "row); a downstream stage that wants only human-sanctioned values filters on the "
+            "verdict column != \"skipped\". "
+            "Reviewed rows are matched to a cached human decision by fingerprinting the row "
+            "itself — no column configuration enables that. Editing any queue column field, "
+            "`filter` or `reviewer_instructions` changes the stage's definition fingerprint: "
+            "every cached decision stops matching and every row is asked again."
         ),
     ),
 }

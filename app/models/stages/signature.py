@@ -220,3 +220,15 @@ def _extend(anchor: "StageInput", signature: ExtendsSignature) -> TableSchema:
 
 def _issue(stage: "StageBase", problem: str) -> str:
     return SIGNATURE_ISSUE.format(sid=stage.id, problem=problem)
+
+
+# Rendered once above the stage-type catalog; each type's line names only its form.
+SIGNATURE_CONTRACT_NOTE = (
+    "Every stage MUST declare `signature` — what its transform reads and "
+    "writes, checked against its edges and config at save. Form `extends`: "
+    "output = the first input's rows plus `rewrites` (revised in place) and "
+    "`adds` (new columns); every other column flows through untouched. Form "
+    "`replaces`: nothing flows; output is exactly `produces`. `reads` lists "
+    "what the transform consumes per input — a column that merely passes "
+    "through is not a read."
+)

@@ -10,11 +10,6 @@ from app.models.compiler_warnings import (
 from app.models.stages.warnings import CompilerWarning as CompilerWarning
 from app.models.coverage import Coverage as Coverage
 from app.models.errors import StepRefused as StepRefused
-from app.models.node_contract_notes import (
-    CODE_CORNER_CASES_CONTRACT_NOTE as CODE_CORNER_CASES_CONTRACT_NOTE,
-    CODE_SUMMARY_CONTRACT_NOTE as CODE_SUMMARY_CONTRACT_NOTE,
-    HUMAN_REVIEW_QUEUE_CONTRACT_NOTE as HUMAN_REVIEW_QUEUE_CONTRACT_NOTE,
-)
 from app.models.schema import (
     Column as Column,
     FunctionKind as FunctionKind,

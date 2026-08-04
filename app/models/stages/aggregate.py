@@ -64,7 +64,7 @@ class AggregateConfig(StageConfig):
 class AggregateStage(StageBase):
     type: Literal[StageType.aggregate]
     aggregate: AggregateConfig
-    inputs: list[StageInput] = Field(default_factory=list, min_length=1)
+    inputs: list[StageInput] = Field(default_factory=list, min_length=1, max_length=1)
     signature: Optional[ReplacesSignature] = None
 
     def fingerprint_blocks(self) -> dict[str, StageConfig]:

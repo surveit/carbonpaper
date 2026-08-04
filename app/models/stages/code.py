@@ -65,6 +65,32 @@ CORNER_CASES_DESCRIPTION = (
 )
 
 
+# Appended to the notes of every type carrying authored code. The limit is
+# interpolated so the prompt cannot outlive the number stage_edit refuses on.
+CODE_SUMMARY_CONTRACT_NOTE = (
+    "The description is a BUDGET ON THE CODE, not an annotation of it: the block's "
+    f"`summary` ({SUMMARY_MAX_CHARS} characters, refused above that) plus its "
+    "`corner_cases` is the whole space this step's behaviour gets. Author both in the "
+    "same edit as the code, and rewrite them in the same edit whenever it changes. If "
+    "the behaviour will not fit that budget precisely enough for a reader who never "
+    "sees the code to reconstruct it exactly, the step does too much — downscope it or "
+    "split the stage. The description does not grow to fit the code. Why the budget "
+    "binds: the human reviewing this stage is a journalist, not an engineer, and the "
+    "stage page leads with the summary — the code is shown last, folded — so the "
+    "summary is the only part they check; and the agent that generates this stage's "
+    "test examples is shown the summary, the corner cases and the schemas, never the code "
+    "and never the methodology, then its examples are run against the real code. "
+    "Examples that fail on code you believe is correct mean the description "
+    "under-determined the behaviour."
+)
+
+# One sentence on purpose: the field's own description carries the substance.
+CODE_CORNER_CASES_CONTRACT_NOTE = (
+    "ALWAYS submit the block's `corner_cases` alongside the summary, in the same edit "
+    "— an empty list if the step genuinely has none, but never omitted."
+)
+
+
 class CornerCase(_Base):
     """One input where a step's behaviour needs stating, and what must happen."""
 
@@ -250,13 +276,13 @@ class PythonFrameFunctionStage(CarriesPythonFunctionStage):
 # Authoring copy for this module's stage type(s); assembled into NODE_TYPES.
 NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
     "python_row_function": NodeTypeSpec(
-        summary="Deterministic Python run once per row: one row in → one row out (cannot fan rows out/in or reorder).",
+        summary="Python run once per row: one row in → one row out (cannot fan rows out/in or reorder).",
         signature_form="extends",
         blocks=["function"],
         requires_inputs=True,
         min_inputs=1,
         required=["kind"],
-        optional=["module", "function", "code", "requirements"],
+        optional=["module", "function", "code", "requirements", "summary"],
         notes=(
             "Takes exactly ONE input — to combine data from another input use enrich/expand, "
             "or python_frame_function. "
@@ -264,22 +290,24 @@ NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
             "dict IS the output row: a key you do not return is absent from the output, so "
             "carry columns through explicitly (`return {**row, ...}`). The function is shown "
             "neither the frame nor the row's position, so it cannot fan out, drop or reorder."
+            f" {CODE_SUMMARY_CONTRACT_NOTE} {CODE_CORNER_CASES_CONTRACT_NOTE}"
         ),
     ),
     "python_frame_function": NodeTypeSpec(
-        summary="Deterministic Python over the whole dataframe(s); may reshape (dedup, pivot, multi-input merge).",
+        summary="Python over the whole dataframe(s); may reshape (dedup, pivot, multi-input merge).",
         signature_form="replaces",
         blocks=["function"],
         requires_inputs=True,
         min_inputs=1,
         required=["kind"],
-        optional=["module", "function", "code", "requirements"],
+        optional=["module", "function", "code", "requirements", "summary"],
         notes=(
             "The runtime calls `transform(*frames)`: one POSITIONAL parameter per declared "
             "input, in `inputs` order — never by name, never a dict of frames. It receives no "
             "output_dir and no trace_links; writing files is publish's job. Return the output "
             "DataFrame. Rows may be added, dropped or reordered here, so this stage breaks the "
             "row-position provenance trail an upstream row-mapped stage preserves."
+            f" {CODE_SUMMARY_CONTRACT_NOTE} {CODE_CORNER_CASES_CONTRACT_NOTE}"
         ),
     ),
 }

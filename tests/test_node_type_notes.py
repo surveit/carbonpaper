@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import re
 
-from app.models import (
+from app.models.stages.code import (
     CODE_CORNER_CASES_CONTRACT_NOTE,
     CODE_SUMMARY_CONTRACT_NOTE,
-    HUMAN_REVIEW_QUEUE_CONTRACT_NOTE,
 )
 from app.models.stages.node_types import CODE_CARRYING_TYPES, NODE_TYPES
 
@@ -26,12 +25,6 @@ def test_note_reaches_the_editing_agent_prompt():
     assert note in EDITING_SYSTEM_PROMPT
 
 
-def test_fixed_output_columns_contract_reaches_the_editing_agent_prompt():
-    from app.agents.compiler.prompt import EDITING_SYSTEM_PROMPT
-
-    assert HUMAN_REVIEW_QUEUE_CONTRACT_NOTE in EDITING_SYSTEM_PROMPT
-
-
 def test_hrq_note_names_the_decision_values_the_runtime_actually_emits():
     # The note tells an author how to filter on the verdict column. That guidance is only
     # correct while the quoted strings it names are exactly the ones a queue stage's
@@ -42,7 +35,7 @@ def test_hrq_note_names_the_decision_values_the_runtime_actually_emits():
     # verdict the note still names after the enum stopped emitting it.
     from app.models import ReviewVerdict
 
-    quoted = set(re.findall(r'"([a-z_]+)"', HUMAN_REVIEW_QUEUE_CONTRACT_NOTE))
+    quoted = set(re.findall(r'"([a-z_]+)"', NODE_TYPES["human_review_queue"].notes))
     assert quoted == {verdict.value for verdict in ReviewVerdict}
 
 
@@ -65,7 +58,7 @@ def test_hrq_note_names_every_queue_field_that_adds_a_column():
     # the field itself is the part before the subscript.
     adding_fields = {field.split("[")[0] for field, _ in find_added_columns(queue)}
     mentioned = {f"queue.{name}" for name in re.findall(
-        r"queue\.(\w+)", HUMAN_REVIEW_QUEUE_CONTRACT_NOTE)}
+        r"queue\.(\w+)", NODE_TYPES["human_review_queue"].notes)}
 
     assert adding_fields <= mentioned, adding_fields - mentioned
     assert mentioned <= {f"queue.{name}" for name in QueueConfig.model_fields}, mentioned

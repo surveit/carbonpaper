@@ -10,7 +10,11 @@ from pydantic import Field
 
 from app.models.schema import StageConfig
 from app.models.stage_base import StageInput, StageType
-from app.models.stages.code import CarriesPythonFunctionStage
+from app.models.stages.code import (
+    CODE_CORNER_CASES_CONTRACT_NOTE,
+    CODE_SUMMARY_CONTRACT_NOTE,
+    CarriesPythonFunctionStage,
+)
 from app.models.stages.shared import COLUMN_ISSUE, resolve_input_columns
 from app.models.stages.node_spec import NodeTypeSpec
 from app.models.stages.signature import ReplacesSignature
@@ -93,7 +97,8 @@ NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
         requires_inputs=True,
         min_inputs=1,
         required=[],
-        optional=["format", "destination", "template", "one_file_per", "cross_link"],
+        optional=["format", "destination", "template", "one_file_per", "cross_link",
+                  "summary"],
         notes=(
             "Published output must be INTERROGABLE: every row or claim it renders links "
             "back to that row's provenance. Declare the keyword `trace_links` on the "
@@ -105,6 +110,7 @@ NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
             "filter, or dedup before reading the ordinal — position is the only key the "
             "trace has. Omit the keyword for a format that cannot carry a link (csv, json). "
             "The one type exempt from declaring an output_schema: it emits files, not a table."
+            f" {CODE_SUMMARY_CONTRACT_NOTE} {CODE_CORNER_CASES_CONTRACT_NOTE}"
         ),
     ),
 }

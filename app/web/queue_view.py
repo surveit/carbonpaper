@@ -206,19 +206,9 @@ def describe_queued_columns(
 
 def resolve_lineage(stage_def: Stage, fingerprints: QueueFingerprints | None) -> Lineage:
     # The queue stage has produced no output at halt time, so its own rows cannot be
-    # traced — the link points at the UPSTREAM stage's row instead. A row-mapped stage
-    # takes exactly one input frame (app.runtime.stages.execution._run_row_mapper), so a
-    # row ordinal cannot be attributed to any one of several declared inputs; that case
-    # gets no link.
+    # traced — the link points at the UPSTREAM stage's row instead. The model holds a
+    # queue stage to exactly one input, so the ordinal names a row of that frame.
     input_ids = stage_def.input_ids
-    if not input_ids:
-        return Lineage(None, "This stage declares no input, so there is no upstream row to trace.")
-    if len(input_ids) > 1:
-        return Lineage(None, (
-            f"This stage declares {len(input_ids)} inputs ({input_ids}); a queued row's "
-            "ordinal is its position in the single frame a row-mapped stage takes, so it "
-            "cannot be attributed to one of them and no lineage link is offered."
-        ))
     if fingerprints is not None and fingerprints.row_ordinals is None:
         return Lineage(None, (
             "This run halted before the queue recorded each row's ordinal, so there is "

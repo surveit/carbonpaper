@@ -6,10 +6,6 @@ exists and cannot import modules that subclass it.
 """
 from __future__ import annotations
 
-from app.models.node_contract_notes import (
-    CODE_CORNER_CASES_CONTRACT_NOTE,
-    CODE_SUMMARY_CONTRACT_NOTE,
-)
 from app.models.stages.aggregate import NODE_TYPE_SPECS as _AGGREGATE
 from app.models.stages.code import NODE_TYPE_SPECS as _CODE
 from app.models.stages.filter_rows import NODE_TYPE_SPECS as _FILTER_ROWS
@@ -35,14 +31,7 @@ NODE_TYPES: dict[str, NodeTypeSpec] = {
     **_FILTER_ROWS,
 }
 
-# The types whose config carries authored code all owe a plain-language `summary` and
-# a `corner_cases` list — both refused on write by app.services.stage_edit. Applied
-# here rather than written into each entry, so a new code-carrying type cannot ship
-# having forgotten them.
+# The types whose config carries authored code all owe a plain-language `summary`
+# and `corner_cases`, refused on write by app.services.stage_edit; their specs carry
+# the contract notes, pinned by tests/test_node_type_notes.py.
 CODE_CARRYING_TYPES = ("python_row_function", "python_frame_function", "publish", "filter_rows")
-for _type_name in CODE_CARRYING_TYPES:
-    _spec = NODE_TYPES[_type_name]
-    NODE_TYPES[_type_name] = _spec.model_copy(update={
-        "notes": f"{_spec.notes} {CODE_SUMMARY_CONTRACT_NOTE} {CODE_CORNER_CASES_CONTRACT_NOTE}",
-        "optional": [*_spec.optional, "summary"],
-    })

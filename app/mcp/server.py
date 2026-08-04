@@ -21,10 +21,8 @@ from app.core.errors import (
     RunNotFoundError,
 )
 from app.models import (
-    HUMAN_REVIEW_QUEUE_CONTRACT_NOTE,
     StageDraft,
     find_workflow_compiler_warnings,
-    StageType,
 )
 from app.models.authoring_lifecycle_note import AUTHORING_LIFECYCLE_GUIDANCE
 from app.tools.tool_specs import SAVE_VERSION_FROM_WORKING_COPY, TOOL_SPECS
@@ -64,18 +62,10 @@ _STAGE_TOOL_ERRORS = (WorkflowLoadError, FileNotFoundError)
 
 
 def _render_node_type_constraints() -> str:
-    """Every node type's own runtime facts as bullets for the instructions
-    preamble, rendered from NODE_TYPES so this prompt and the editing agent's
-    cannot drift apart on them — nor from the registry when a type is added.
-    human_review_queue's registry notes are superseded by the fuller contract
-    note. Wrapped to the width of the surrounding prose."""
+    """Every node type's notes as bullets, from NODE_TYPES so the two prompts cannot drift."""
     return "\n".join(
-        textwrap.fill(f"- {stage_type} — {note}", width=88, subsequent_indent="  ")
-        for stage_type, note in (
-            (name, HUMAN_REVIEW_QUEUE_CONTRACT_NOTE
-             if name == StageType.human_review_queue else spec.notes)
-            for name, spec in NODE_TYPES.items()
-        )
+        textwrap.fill(f"- {stage_type} — {spec.notes}", width=88, subsequent_indent="  ")
+        for stage_type, spec in NODE_TYPES.items()
     )
 
 

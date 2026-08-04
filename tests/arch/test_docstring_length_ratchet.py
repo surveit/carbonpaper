@@ -165,7 +165,6 @@ _GRANDFATHERED: frozenset[str] = frozenset(
         "app/evals/store.py::save_eval_run",
         "app/mcp/server.py::_StreamableHTTPEndpoint",
         "app/mcp/server.py::_read_document",
-        "app/mcp/server.py::_render_node_type_constraints",
         "app/mcp/server.py::_resolve_existing_project",
         "app/mcp/server.py::catch_stage_edit_refusals",
         "app/mcp/server.py::run_session_manager",
