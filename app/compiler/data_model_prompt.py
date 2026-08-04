@@ -2,11 +2,13 @@
 
 The emit SHAPE is not described here — it is carried by the `submit_answer` tool's input
 schema (built from `SchemaLibrary`); this prompt carries only the role and the
-methodology guidance.
+methodology guidance, plus the shared plan-agreement rule on additions nobody asked for.
 """
 from __future__ import annotations
 
-DATA_MODEL_SYSTEM_PROMPT = """\
+from app.models.proposed_additions_note import PROPOSED_ADDITIONS_GUIDANCE
+
+_ROLE_AND_METHOD = """\
 You are a METHODOLOGY COMPILER. Given a research transcript or a prose description of an
 investigation, describe its DATA MODEL — the tables the methodology operates on — as a
 set of NAMED SCHEMAS, and SUBMIT it by calling the `submit_answer` tool (its input
@@ -57,3 +59,7 @@ four columns of the `filing` table:
 - `issue_codes` — a real judgement about free text or enum. Most likely an enum, but it
   comes down ultimately to whether it's free text on input. Can infer whether all similar
   values are represented by one value (Budget) or many (budget, budgeting, budgets)."""
+
+DATA_MODEL_SYSTEM_PROMPT = (
+    _ROLE_AND_METHOD + "\n\n# Additions nobody asked for\n" + PROPOSED_ADDITIONS_GUIDANCE
+)

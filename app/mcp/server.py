@@ -26,6 +26,7 @@ from app.models import (
     find_workflow_compiler_warnings,
     StageType,
 )
+from app.models.proposed_additions_note import PROPOSED_ADDITIONS_GUIDANCE
 from app.tools.tool_specs import SAVE_VERSION_FROM_WORKING_COPY, TOOL_SPECS
 from app.models.review_guide import ReviewGuideDraft
 from app.services.versioning import ReviewGuide
@@ -155,6 +156,8 @@ published or not — over a small slice of the real source, as a run marked is_t
 {_NODE_TYPE_CONSTRAINTS}
 - Never fabricate a column, source, model, or value. If the methodology does not supply it,
   leave it out and say what is missing.
+
+{PROPOSED_ADDITIONS_GUIDANCE}
 
 list_projects() names the projects that already have an authored workflow;
 get_project_status(project_id) is the full snapshot of any one project."""

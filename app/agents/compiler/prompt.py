@@ -1,11 +1,13 @@
-"""The editing agent's system prompt: a fixed instruction plus a rendered catalog
-of the stage types it can build (so it can author a valid stage without a lookup
-tool). The agent learns which project it edits at runtime via get_current_project,
-so the prompt names no specific project."""
+"""The editing agent's system prompt: a fixed instruction, the shared
+plan-agreement rule on additions nobody asked for, and a rendered catalog of the
+stage types it can build (so it can author a valid stage without a lookup tool).
+The agent learns which project it edits at runtime via get_current_project, so
+the prompt names no specific project."""
 
 from __future__ import annotations
 
 from app.models import HUMAN_REVIEW_QUEUE_CONTRACT_NOTE
+from app.models.proposed_additions_note import PROPOSED_ADDITIONS_GUIDANCE
 from app.models.stages.node_types import NODE_TYPES
 
 # Runtime facts that live beside NODE_TYPES rather than inside a type's own
@@ -56,4 +58,6 @@ def _stage_type_catalog() -> str:
     return "\n".join(lines)
 
 
-EDITING_SYSTEM_PROMPT = _SYSTEM_PROMPT + "\n\n" + _stage_type_catalog()
+EDITING_SYSTEM_PROMPT = (
+    _SYSTEM_PROMPT + "\n\n" + PROPOSED_ADDITIONS_GUIDANCE + "\n\n" + _stage_type_catalog()
+)
