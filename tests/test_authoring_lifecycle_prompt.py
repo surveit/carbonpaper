@@ -41,7 +41,7 @@ def test_lifecycle_states_the_steps_and_their_gates() -> None:
     assert "RESEARCH FIRST" in AUTHORING_LIFECYCLE_GUIDANCE
     assert "PLAN, AND ASK QUESTIONS" in AUTHORING_LIFECYCLE_GUIDANCE
     assert "major stages" in AUTHORING_LIFECYCLE_GUIDANCE
-    assert "signs off" in AUTHORING_LIFECYCLE_GUIDANCE
+    assert "sign-off gate" in AUTHORING_LIFECYCLE_GUIDANCE
     assert "BUILD TO THE SIGNED-OFF PLAN" in AUTHORING_LIFECYCLE_GUIDANCE
     assert "never silently into the output" in AUTHORING_LIFECYCLE_GUIDANCE
     assert "`compiler_notes`" in AUTHORING_LIFECYCLE_GUIDANCE
@@ -51,16 +51,14 @@ def test_lifecycle_states_the_steps_and_their_gates() -> None:
 
 
 def test_research_may_build_a_prototype_without_skipping_the_gates() -> None:
-    # Prototyping over limited rows is research — above all to learn how the
-    # data shapes out through the stages — but the gates govern committal, not
-    # exploration: the prototype is scaffolding, never the deliverable, and it
-    # neither skips the plan gate nor spends the full-run budget.
+    # Prototyping over limited rows is research — to learn how the data shapes
+    # out through the stages — but the gates govern committal, not exploration:
+    # the prototype is scaffolding, never the deliverable.
     assert "prototype pipeline" in AUTHORING_LIFECYCLE_GUIDANCE
     assert "IS research" in AUTHORING_LIFECYCLE_GUIDANCE
     assert "how the data shapes out" in AUTHORING_LIFECYCLE_GUIDANCE
     assert "committal, not exploration" in AUTHORING_LIFECYCLE_GUIDANCE
     assert "scaffolding" in AUTHORING_LIFECYCLE_GUIDANCE
-    assert "skips no plan gate" in AUTHORING_LIFECYCLE_GUIDANCE
 
 
 def test_lifecycle_keeps_the_worked_example_at_the_plan_gate() -> None:
@@ -74,9 +72,8 @@ def test_lifecycle_keeps_the_worked_example_at_the_plan_gate() -> None:
 
 
 def test_slice_states_the_reader_and_the_why() -> None:
-    # The rule (a concept carries its reason), where the concept is headed (the
-    # plan the user signs off), and the reader whose trust is at stake.
-    assert "the reason the design needs it" in INTERMEDIATE_CONCEPTS_NOTE
-    assert "plan the user signs off" in INTERMEDIATE_CONCEPTS_NOTE
+    # The rule (a concept carries its reason), where it is headed (the plan),
+    # and the reader checking it against their own data.
+    assert "the reason it is needed" in INTERMEDIATE_CONCEPTS_NOTE
+    assert "goes in the plan" in INTERMEDIATE_CONCEPTS_NOTE
     assert "THEIR OWN data" in INTERMEDIATE_CONCEPTS_NOTE
-    assert "more trust than its engineering buys" in INTERMEDIATE_CONCEPTS_NOTE
