@@ -1,8 +1,8 @@
-"""Architecture: cycles anywhere under `app/`, plus fan-in/fan-out degree drift —
-whole-graph properties `pyproject.toml`'s layering contracts can't express. `app.models`
-and `app.core` are exempt from the fan-in ceiling; nothing is exempt from fan-out or
-no-cycles. `if TYPE_CHECKING:` imports are excluded — they never execute at runtime and
-would otherwise read as a cycle between `app.models.stage` and `app.models.stages`.
+"""Architecture: import cycles anywhere under `app/` — between modules, and between sibling
+packages at every depth — plus fan-in/fan-out drift: whole-graph properties `pyproject.toml`'s
+layering contracts can't express. `app.models`/`app.core` are exempt from the fan-in ceiling;
+nothing is exempt from fan-out or no-cycles. `if TYPE_CHECKING:` imports are excluded — they
+never execute at runtime and would otherwise read as a cycle: `app.models.stage`/`.stages`.
 """
 from __future__ import annotations
 
@@ -54,6 +54,15 @@ class ModuleDegree:
     neighbors: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class PackageCycle:
+    """One cyclic package group at one rollup depth, plus a cycle path through it."""
+
+    depth: int
+    members: tuple[str, ...]
+    path: tuple[str, ...]
+
+
 # --- shared graph fixture ---------------------------------------------------
 
 
@@ -76,6 +85,11 @@ def find_app_internal_edges(graph: "grimp.ImportGraph", package: str) -> list[Im
 def test_app_has_no_import_cycles(app_internal_edges: list[ImportEdge]) -> None:
     cycles = find_import_cycles(app_internal_edges)
     assert not cycles, _describe_cycles_failure(cycles)
+
+
+def test_sibling_packages_are_acyclic_at_every_depth(app_internal_edges: list[ImportEdge]) -> None:
+    cycles = find_package_cycles_at_every_depth(app_internal_edges)
+    assert not cycles, _describe_package_cycles_failure(cycles)
 
 
 def test_non_core_modules_stay_under_the_fan_in_ceiling(app_internal_edges: list[ImportEdge]) -> None:
@@ -166,12 +180,65 @@ def find_import_cycles(edges: list[ImportEdge]) -> list[tuple[str, ...]]:
     tuple is module names in import order, with the starting module repeated
     at the end to show the loop closes."""
     adjacency = _build_adjacency(edges)
-    components = _find_strongly_connected_components(adjacency)
     return [
-        _trace_cycle_within(component, adjacency)
-        for component in components
+        _trace_cycle_within(component, adjacency) for component in find_cyclic_components(edges)
+    ]
+
+
+def find_cyclic_components(edges: list[ImportEdge]) -> list[frozenset[str]]:
+    """Full membership of every cyclic strongly connected component (size > 1, or a self-loop)."""
+    adjacency = _build_adjacency(edges)
+    return [
+        component
+        for component in _find_strongly_connected_components(adjacency)
         if len(component) > 1 or _has_self_loop(component, adjacency)
     ]
+
+
+def find_package_cycles_at_every_depth(edges: list[ImportEdge]) -> list[PackageCycle]:
+    return [
+        cycle
+        for depth in range(1, find_deepest_package_depth(edges) + 1)
+        for cycle in find_package_cycles_at_depth(edges, depth)
+    ]
+
+
+def find_package_cycles_at_depth(edges: list[ImportEdge], depth: int) -> list[PackageCycle]:
+    rolled = roll_up_edges_to_depth(edges, depth)
+    paths = find_import_cycles(rolled)
+    return [
+        PackageCycle(depth, tuple(sorted(component)), _find_cycle_path_within(component, paths))
+        for component in find_cyclic_components(rolled)
+    ]
+
+
+def roll_up_edges_to_depth(edges: list[ImportEdge], depth: int) -> list[ImportEdge]:
+    """Edges between packages at `depth`, deduplicated; an edge inside one package collapses away."""
+    rolled: set[ImportEdge] = set()
+    for edge in edges:
+        importer = roll_up_module_to_depth(edge.importer, depth)
+        imported = roll_up_module_to_depth(edge.imported, depth)
+        if importer != imported:
+            rolled.add(ImportEdge(importer=importer, imported=imported))
+    return sorted(rolled, key=lambda edge: (edge.importer, edge.imported))
+
+
+def roll_up_module_to_depth(module: str, depth: int) -> str:
+    """`app.a.b.c` at depth 2 is `app.a.b`; a module shallower than `depth` is unchanged."""
+    return ".".join(module.split(".")[: depth + 1])
+
+
+def find_deepest_package_depth(edges: list[ImportEdge]) -> int:
+    """Depth of the deepest module, counting `app` as 0 and `app.services.loader` as 2."""
+    modules = {edge.importer for edge in edges} | {edge.imported for edge in edges}
+    return max((module.count(".") for module in modules), default=0)
+
+
+def _find_cycle_path_within(component: frozenset[str], paths: list[tuple[str, ...]]) -> tuple[str, ...]:
+    for path in paths:
+        if set(path) <= component:
+            return path
+    raise ValueError(f"no traced cycle path lies within the component {sorted(component)}")
 
 
 # --- degree violation messages ----------------------------------------------
@@ -320,6 +387,24 @@ def _describe_cycles_failure(cycles: list[tuple[str, ...]]) -> str:
     )
 
 
+def _describe_package_cycles_failure(cycles: list[PackageCycle]) -> str:
+    groups = "\n  ".join(_describe_package_cycle(cycle) for cycle in cycles)
+    return (
+        "package-level import cycle(s) found under app/ — at every level of the tree, sibling "
+        "packages must form a DAG, so that each package can be read, tested and moved without "
+        f"dragging its siblings along:\n  {groups}"
+    )
+
+
+def _describe_package_cycle(cycle: PackageCycle) -> str:
+    # Every member, not just the traced path: the path visits enough packages to
+    # close one loop, which understates a group of three or more.
+    return (
+        f"depth {cycle.depth}: {len(cycle.members)} packages tangled "
+        f"{{{', '.join(cycle.members)}}} — e.g. {' -> '.join(cycle.path)}"
+    )
+
+
 # --- unit tests for the checking logic, on synthetic data (red + green) ----
 
 
@@ -372,6 +457,71 @@ def test_find_import_cycles_reports_a_self_loop_within_a_larger_scc() -> None:
         ImportEdge("app.b", "app.a"),
     ]
     assert find_import_cycles(edges) == [("app.a", "app.a")]
+
+
+def test_find_cyclic_components_names_every_member_not_just_a_path_through_them() -> None:
+    edges = [
+        ImportEdge("app.a", "app.b"),
+        ImportEdge("app.b", "app.c"),
+        ImportEdge("app.c", "app.a"),
+    ]
+    assert find_cyclic_components(edges) == [frozenset({"app.a", "app.b", "app.c"})]
+
+
+def test_roll_up_module_to_depth_truncates_deeper_modules_and_leaves_shallower_ones() -> None:
+    assert roll_up_module_to_depth("app.a.b.c", 2) == "app.a.b"
+    assert roll_up_module_to_depth("app.a", 2) == "app.a"
+
+
+def test_roll_up_edges_to_depth_drops_within_package_edges_and_deduplicates() -> None:
+    edges = [
+        ImportEdge("app.x.one", "app.x.two"),  # both ends collapse to app.x
+        ImportEdge("app.x.one", "app.y.one"),
+        ImportEdge("app.x.two", "app.y.two"),  # rolls up to the same edge as the line above
+    ]
+    assert roll_up_edges_to_depth(edges, 1) == [ImportEdge("app.x", "app.y")]
+
+
+def test_find_deepest_package_depth_counts_the_longest_dotted_module() -> None:
+    assert find_deepest_package_depth([ImportEdge("app.a", "app.b.c.d")]) == 3
+
+
+def test_find_package_cycles_flags_a_graph_that_is_module_acyclic_but_package_cyclic() -> None:
+    # The trap this rule exists to catch: no module imports itself back, so
+    # find_import_cycles is silent, yet app.x and app.y each import the other.
+    edges = [ImportEdge("app.x.one", "app.y.one"), ImportEdge("app.y.two", "app.x.two")]
+    assert find_import_cycles(edges) == []
+    assert find_package_cycles_at_every_depth(edges) == [
+        PackageCycle(depth=1, members=("app.x", "app.y"), path=("app.x", "app.y", "app.x"))
+    ]
+
+
+def test_find_package_cycles_passes_a_graph_acyclic_at_every_depth() -> None:
+    edges = [ImportEdge("app.x.one", "app.y.one"), ImportEdge("app.x.two", "app.y.two")]
+    assert find_package_cycles_at_every_depth(edges) == []
+
+
+def test_find_package_cycles_flags_a_tangle_that_only_appears_below_the_first_level() -> None:
+    # At depth 1 both ends are app.m and the edges vanish as self-edges; only
+    # the depth-2 rollup shows app.m.a and app.m.b importing each other.
+    edges = [ImportEdge("app.m.a.one", "app.m.b.one"), ImportEdge("app.m.b.two", "app.m.a.two")]
+    assert find_package_cycles_at_depth(edges, 1) == []
+    assert find_package_cycles_at_every_depth(edges) == [
+        PackageCycle(depth=2, members=("app.m.a", "app.m.b"), path=("app.m.a", "app.m.b", "app.m.a"))
+    ]
+
+
+def test_find_package_cycles_reports_all_three_members_of_a_three_package_tangle() -> None:
+    edges = [
+        ImportEdge("app.x.one", "app.y.one"),
+        ImportEdge("app.y.one", "app.z.one"),
+        ImportEdge("app.z.one", "app.x.two"),
+    ]
+    cycles = find_package_cycles_at_every_depth(edges)
+    assert [cycle.members for cycle in cycles] == [("app.x", "app.y", "app.z")]
+    message = _describe_package_cycles_failure(cycles)
+    assert "3 packages tangled" in message
+    assert all(package in message for package in ("app.x", "app.y", "app.z"))
 
 
 def test_find_fan_in_violations_flags_a_non_core_module_over_the_ceiling() -> None:
