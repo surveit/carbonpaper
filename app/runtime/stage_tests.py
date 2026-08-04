@@ -261,9 +261,10 @@ def _compare(stage: Stage, test: StageTest, actual: pd.DataFrame) -> StageTestRe
     # Python transforms always declare their output schema; publish (the
     # schema-less terminal stage) cannot carry tests. And a failure case
     # (expected is None) has already been judged by the time we compare rows.
-    assert stage.resolve_output_schema() is not None
+    output_schema = stage.resolve_output_schema()
+    assert output_schema is not None
     assert test.expected is not None
-    columns = [column.name for column in stage.resolve_output_schema().columns]
+    columns = [column.name for column in output_schema.columns]
     expected_rows = [_select_cells(row, columns) for row in test.expected]
     actual_rows = [_select_cells(row, columns) for row in list_rows(actual)]
     if len(expected_rows) != len(actual_rows):
