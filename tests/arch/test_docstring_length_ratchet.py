@@ -1,12 +1,14 @@
-"""Architecture: every function, method, and class docstring in ``app/`` and ``tests/`` at
-or under 100 characters. A docstring that restates its code doubles the maintenance surface
-— every later change has to read and update both — so prose earns its place only where it is
-ORTHOGONAL to the code, saying what the code cannot. `_GRANDFATHERED` (predates the rule, may
-only shrink) / `_JUSTIFIED_EXCEPTIONS` (reason-mandatory, rare); else cut it, or move to docs/.
+"""Architecture: the prose at a function's, method's, or class's ENTRANCE in ``app/`` and
+``tests/`` — its docstring PLUS the comment block above the first statement — at or under 100
+characters TOGETHER. One budget over both syntaxes, because prose above the first statement
+costs the reader what a docstring costs. `_GRANDFATHERED` / `_GRANDFATHERED_ENTRANCE_PROSE`
+(may only shrink) / `_JUSTIFIED_EXCEPTIONS` (rare); else cut it, or move it to docs/.
 """
 from __future__ import annotations
 
 import ast
+import io
+import tokenize
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -18,15 +20,15 @@ from arch.test_module_docstring_ratchet import find_governed_files
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _APP_ROOT = _REPO_ROOT / "app"
 _TESTS_ROOT = _REPO_ROOT / "tests"
-_DOCSTRING_CHAR_CEILING = 100
+_PROSE_CHAR_CEILING = 100
 
 _DEFINITION_NODES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
 
-# Symbols already over the ceiling when this rule landed. No per-entry reason: the
-# reason is uniform — they predate the rule. A ratchet, so entries may only be
-# REMOVED, never added; a new offender cuts its docstring instead. Keyed on the
+# Symbols already over the ceiling on their docstring alone when this rule landed. No
+# per-entry reason: the reason is uniform — they predate the rule. A ratchet, so entries
+# may only be REMOVED, never added; a new offender cuts its prose instead. Keyed on the
 # SYMBOL (`path::Qualified.name`), never a line number, which would rot on the next
-# unrelated edit. An entry whose symbol is gone, or whose docstring is now at or
+# unrelated edit. An entry whose symbol is gone, or whose entrance prose is now at or
 # under the ceiling, fails loud as stale — that is what makes this a burn-down list
 # rather than a parking lot.
 _GRANDFATHERED: frozenset[str] = frozenset(
@@ -1048,24 +1050,399 @@ _GRANDFATHERED: frozenset[str] = frozenset(
     }
 )
 
+# Symbols over the ceiling only once the comment block above their first statement was
+# folded into the same budget as their docstring — the change that made this rule count
+# entrance prose in both syntaxes rather than docstrings alone. Same burn-down discipline
+# as `_GRANDFATHERED`: entries may only be REMOVED, and a stale one fails loud. A symbol
+# already listed above is not repeated here; it is exempt under either measure.
+_GRANDFATHERED_ENTRANCE_PROSE: frozenset[str] = frozenset(
+    {
+        "app/agents/compiler/config.py::_build_editing_tools",
+        "app/core/agent/agent.py::Agent.submit_answer",
+        "app/core/agent/diagnostics.py::_find_tool_results",
+        "app/core/agent/sdk_engine.py::ClaudeAgentSdkEngine._options",
+        "app/core/agent/sdk_engine.py::ClaudeAgentSdkEngine.stream_turn",
+        "app/core/frame_checks.py::_find_duplicate_row_groups",
+        "app/core/frame_checks.py::find_primary_key_violations",
+        "app/core/frames.py::_is_date_cell",
+        "app/core/frames.py::_is_int_cell",
+        "app/core/persistence.py::_now_iso",
+        "app/main.py::lifespan",
+        "app/models/schema.py::Column.resolve_numeric_bounds",
+        "app/models/schema.py::_render_primary_key",
+        "app/models/stages/aggregate.py::AggregateConfig",
+        "app/models/stages/human_review_queue.py::QueueConfig",
+        "app/models/stages/human_review_queue.py::_find_added_column_collisions",
+        "app/models/stages/human_review_queue.py::_find_reviewed_target_issues",
+        "app/models/stages/human_review_queue.py::resolve_queue_config",
+        "app/models/stages/input_data.py::Connector",
+        "app/models/stages/llm_transform.py::LLMConfig",
+        "app/models/stages/publish.py::PublishConfig",
+        "app/models/stages/stage_tests.py::_find_test_frame_problems",
+        "app/models/stages/stage_tests.py::validate_test_frames",
+        "app/runtime/code.py::load_function",
+        "app/runtime/context.py::RunContext._a_writable_cache_forbids_queue_auto_approve",
+        "app/runtime/context.py::RunContext.attach_run_log",
+        "app/runtime/executor.py::_execute_stages",
+        "app/runtime/executor.py::_subset_ctx",
+        "app/runtime/lineage.py::EdgeKind",
+        "app/runtime/lineage.py::RowLineage",
+        "app/runtime/lineage.py::RowLineage.from_frame",
+        "app/runtime/lineage.py::RowLineage.shifted",
+        "app/runtime/lineage.py::attach_row_lineage",
+        "app/runtime/lineage.py::concatenated_inputs_lineage",
+        "app/runtime/lineage.py::merged_inputs_lineage",
+        "app/runtime/run_log.py::DetailSink.emit",
+        "app/runtime/run_log.py::RunLog._drain",
+        "app/runtime/run_log.py::RunLog.emit",
+        "app/runtime/run_log.py::_count_logged_events",
+        "app/runtime/run_log.py::read_events_since",
+        "app/runtime/stage_tests.py::_compare",
+        "app/runtime/stages/human_review_queue.py::PendingReview",
+        "app/runtime/stages/human_review_queue.py::_approve_row",
+        "app/runtime/stages/human_review_queue.py::_compute_queue_stats",
+        "app/runtime/stages/human_review_queue.py::_defer_row",
+        "app/runtime/stages/human_review_queue.py::_skip_row",
+        "app/runtime/stages/human_review_queue.py::_write_fingerprint_sidecar",
+        "app/runtime/stages/human_review_queue.py::make_human_review_mapper",
+        "app/runtime/stages/human_review_queue.py::validate_reviewed_sources_present",
+        "app/runtime/stages/input_data.py::_add_source_row_column",
+        "app/runtime/stages/input_data.py::_read_dtype",
+        "app/runtime/stages/input_data.py::_read_xlsx",
+        "app/runtime/stages/join.py::_describe_cardinality_failure",
+        "app/runtime/stages/join.py::handle_enrich",
+        "app/runtime/stages/llm_transform.py::_build_chunk_processor",
+        "app/runtime/stages/llm_transform.py::make_llm_row_mapper.map_row",
+        "app/runtime/stages/row_events.py::emit_batched_row_outcomes",
+        "app/runtime/stages/row_events.py::emit_cached_row",
+        "app/runtime/stages/row_events.py::emit_row_outcome",
+        "app/runtime/trace.py::_advance",
+        "app/runtime/trace.py::_advance_via_lineage",
+        "app/runtime/trace.py::_columns_parent_id",
+        "app/runtime/trace.py::_is_row_preserving",
+        "app/runtime/trace.py::_scalar",
+        "app/runtime/trace.py::_split_spine",
+        "app/runtime/trace.py::trace_row",
+        "app/runtime/trace_view.py::_transform_of",
+        "app/runtime/trace_view.py::build_trace_view",
+        "app/services/generation.py::start_review_guide_generation",
+        "app/services/project.py::read_review_guide",
+        "app/services/review.py::record_decision",
+        "app/services/review.py::resolve_verdict",
+        "app/services/run.py::_prepare",
+        "app/services/run.py::read_pinned_version",
+        "app/services/run_guide.py::_index_stages_in_execution_order",
+        "app/services/versioning.py::_no_coverage",
+        "app/services/versioning.py::find_latest_review_guide",
+        "app/services/versioning.py::resolve_version_id",
+        "app/web/config.py::RevalidatedStaticFiles",
+        "app/web/config.py::relative_time",
+        "app/web/queue_view.py::Lineage",
+        "app/web/queue_view.py::QueuedColumn",
+        "app/web/queue_view.py::ReviewedField",
+        "app/web/queue_view.py::_as_cell_text",
+        "app/web/queue_view.py::_as_option_text",
+        "app/web/queue_view.py::_build_field_prefills",
+        "app/web/queue_view.py::_build_review_items",
+        "app/web/queue_view.py::_build_upstream_texts",
+        "app/web/queue_view.py::_is_null",
+        "app/web/queue_view.py::_require_recorded_output",
+        "app/web/queue_view.py::_resolve_prefill",
+        "app/web/queue_view.py::_subtract_reviewed_columns",
+        "app/web/queue_view.py::build_lineage_urls",
+        "app/web/queue_view.py::build_queue_page",
+        "app/web/queue_view.py::describe_queued_columns",
+        "app/web/queue_view.py::find_definition_drift",
+        "app/web/queue_view.py::resolve_lineage",
+        "app/web/queue_view.py::resolve_notes_label",
+        "app/web/routers/review.py::_as_posted_text",
+        "app/web/routers/review.py::_resolve_queue_row",
+        "app/web/routers/review.py::_validate_reviewed_values",
+        "app/web/routers/review.py::queue_decide",
+        "app/web/routers/run_lineage.py::run_stage_lineage_panel",
+        "app/web/routers/run_lineage.py::run_stage_row_trace",
+        "app/web/routers/run_lineage.py::run_stage_row_trace_view",
+        "app/web/routers/runs.py::_tail_run_events",
+        "app/web/routers/runs.py::_tail_start_seq",
+        "app/web/routers/runs.py::run_events_page",
+        "app/web/routers/runs.py::run_stage_rows_csv",
+        "app/web/run_header.py::build_live_view",
+        "app/web/run_header.py::choose_run_cta",
+        "app/web/run_header.py::list_artifact_links",
+        "app/web/run_header.py::read_version_note",
+        "app/web/run_index.py::build_run_index_rows",
+        "app/web/stage_test_views.py::_find_new_output_columns",
+        "tests/arch/test_import_graph.py::_TarjanState.connect",
+        "tests/arch/test_import_graph.py::test_find_import_cycles_reports_a_self_loop_within_a_larger_scc",
+        "tests/arch/test_import_graph.py::test_find_import_cycles_reports_one_path_per_disjoint_cycle",
+        "tests/arch/test_llm_models_are_pinned.py::test_str_is_the_wire_id",
+        "tests/arch/test_llm_models_are_pinned.py::test_the_runtime_default_is_a_pinned_model",
+        "tests/arch/test_tool_descriptions_name_available_tools.py::test_the_detector_sees_the_cross_references_the_descriptions_carry",
+        "tests/conftest.py::pinned_stages",
+        "tests/conftest.py::queue_added_columns",
+        "tests/conftest.py::queue_columns",
+        "tests/conftest.py::resumed_stages",
+        "tests/core/test_stage_cache.py::test_compute_row_fingerprint_guards_array_valued_cells",
+        "tests/core/test_stage_cache.py::test_old_shape_entry_fails_loudly_on_load",
+        "tests/core/test_stage_cache.py::test_record_json_safes_both_rows",
+        "tests/core/test_stage_cache.py::test_record_stores_under_the_passed_fingerprint_not_a_recomputed_one",
+        "tests/models/stages/test_human_review_queue_columns.py::test_a_non_nullable_review_record_column_is_rejected",
+        "tests/models/stages/test_human_review_queue_columns.py::test_a_review_record_name_reused_as_a_reviewed_target_is_rejected",
+        "tests/models/stages/test_human_review_queue_columns.py::test_an_added_column_that_the_input_already_declares_is_rejected",
+        "tests/models/stages/test_human_review_queue_columns.py::test_two_sources_mapping_to_the_same_target_are_rejected",
+        "tests/models/stages/test_signature.py::test_join_add_must_be_producible_from_the_reference",
+        "tests/models/stages/test_signature.py::test_output_schema_must_match_the_extended_anchor",
+        "tests/models/test_stage_fingerprint.py::test_compute_definition_fingerprint_for_publish_reacts_to_function_code",
+        "tests/models/test_stage_fingerprint.py::test_compute_definition_fingerprint_survives_a_stored_round_trip",
+        "tests/runtime/test_enrich_expand_cardinality.py::test_enrich_preserves_subject_order_even_when_the_keys_are_unsorted",
+        "tests/runtime/test_hrq_cache.py::test_a_modified_row_stays_in_its_own_position_carrying_the_human_score",
+        "tests/runtime/test_hrq_cache.py::test_every_decided_row_is_emitted_with_only_the_declared_columns",
+        "tests/runtime/test_hrq_cache.py::test_every_output_row_carries_a_verdict_covering_every_outcome",
+        "tests/runtime/test_hrq_cache.py::test_input_fingerprint_matches_original_row_before_any_review_record_stamped",
+        "tests/runtime/test_hrq_cache.py::test_queue_stats_count_every_row_the_reviewer_answered",
+        "tests/runtime/test_hrq_declared_columns.py::_stage",
+        "tests/runtime/test_hrq_declared_columns.py::test_a_queued_row_also_refuses_an_absent_source_column",
+        "tests/runtime/test_hrq_declared_columns.py::test_a_source_column_absent_from_the_frame_raises",
+        "tests/runtime/test_hrq_declared_columns.py::test_auto_approve_copies_the_source_value_under_the_approve_verdict",
+        "tests/runtime/test_hrq_declared_columns.py::test_declared_names_are_the_only_columns_added",
+        "tests/runtime/test_hrq_declared_columns.py::test_filtered_out_row_is_skipped_with_the_source_value_copied",
+        "tests/services/test_review.py::_added_columns",
+        "tests/test_agent_generate.py::test_answer_exposes_the_captured_submission_for_live_driving",
+        "tests/test_agent_generate.py::test_failure_counts_an_unreadable_init_instead_of_reading_it_as_absent",
+        "tests/test_agent_generate.py::test_failure_reads_the_tool_inventory_out_of_the_engines_init_event",
+        "tests/test_agent_generate.py::test_failure_reports_a_tool_the_init_never_advertised",
+        "tests/test_agent_generate.py::test_failure_separates_calls_the_model_emitted_from_calls_the_handler_saw",
+        "tests/test_agent_generate.py::test_failure_shows_a_tool_less_completion_as_zero_calls_and_no_results",
+        "tests/test_agent_generate.py::test_run_forwards_events_to_an_opted_in_caller_and_still_summarizes",
+        "tests/test_agent_routes.py::test_chat_page_hides_composer_for_view_only_session",
+        "tests/test_authoring_lifecycle_prompt.py::test_lifecycle_embeds_the_slice_verbatim",
+        "tests/test_authoring_lifecycle_prompt.py::test_lifecycle_states_the_steps_and_their_gates",
+        "tests/test_authoring_lifecycle_prompt.py::test_research_may_build_a_prototype_without_skipping_the_gates",
+        "tests/test_authoring_lifecycle_prompt.py::test_slice_states_the_reader_and_the_why",
+        "tests/test_chat_hidden_sessions.py::test_chat_index_excludes_hidden_sessions",
+        "tests/test_column_projection.py::_queue_stage",
+        "tests/test_column_projection.py::_src_scored",
+        "tests/test_column_projection.py::test_human_review_queue_carried_columns_survive_by_being_declared",
+        "tests/test_column_projection.py::test_llm_transform_declared_input_column_rides_through",
+        "tests/test_column_projection.py::test_llm_transform_drops_undeclared_columns_including_former_hardcoded_ids",
+        "tests/test_column_tightness.py::test_a_column_may_still_be_declared_loose_it_just_has_to_say_so",
+        "tests/test_column_tightness.py::test_the_requirement_reaches_the_schema_library_the_data_model_agent_submits",
+        "tests/test_column_tightness.py::test_the_requirement_reaches_the_submit_answer_tool_input_schema",
+        "tests/test_eval.py::test_eval_config_no_key_or_input_columns_fields",
+        "tests/test_eval.py::test_eval_config_rejects_stray_key_field",
+        "tests/test_eval.py::test_expected_output_rejects_stray_expected_field",
+        "tests/test_eval.py::test_human_review_queue_is_grain_and_order_preserving",
+        "tests/test_eval.py::test_joins_and_aggregate_change_grain",
+        "tests/test_eval.py::test_publish_not_grain_and_order_preserving",
+        "tests/test_eval_compatibility.py::test_coverage_check_rejects_bare_name_on_a_conflicting_column",
+        "tests/test_eval_compatibility.py::test_expected_output_column_not_in_target_schema",
+        "tests/test_eval_compatibility.py::test_get_injected_columns_raises_for_checked_column_not_on_target",
+        "tests/test_eval_compatibility.py::test_override_stage_has_no_output_schema",
+        "tests/test_eval_compatibility.py::test_reference_override_stage_equals_target_stage",
+        "tests/test_eval_compatibility.py::test_stages_list_has_a_structural_problem",
+        "tests/test_eval_compatibility.py::test_target_not_reachable_from_override_is_broken",
+        "tests/test_friendly_time_client.py::test_an_unparseable_datetime_yields_nothing_to_paint",
+        "tests/test_friendly_time_client.py::test_past_a_week_the_date_itself_is_more_use_than_a_count",
+        "tests/test_friendly_time_client.py::test_the_previous_calendar_day_reads_as_yesterday_with_the_clock_time",
+        "tests/test_handler_execution.py::test_internal_marker_columns_never_reach_output_even_without_an_output_schema",
+        "tests/test_handler_execution.py::test_row_driver_empty_input",
+        "tests/test_handler_execution.py::test_row_driver_empty_input_reports_no_dropped_columns_when_projecting",
+        "tests/test_handler_execution.py::test_row_driver_ignores_cancellation_when_ctx_has_no_run_identity",
+        "tests/test_handler_execution.py::test_row_driver_parallel_branch_raises_run_cancelled_when_pre_requested",
+        "tests/test_import_graph_report.py::test_cli_rejects_root_and_markdown_together",
+        "tests/test_import_graph_report.py::test_compute_import_graph_metrics_on_the_real_repo_matches_the_arch_gate",
+        "tests/test_import_graph_report.py::test_compute_propagation_cost_percent_on_a_three_chain",
+        "tests/test_input_bindings.py::test_binding_connectorless_stage_rejected",
+        "tests/test_input_bindings.py::test_invalid_merged_params_rejected_naming_the_stage",
+        "tests/test_input_bindings.py::test_non_dict_binding_rejected_with_stage_id",
+        "tests/test_input_bindings.py::test_read_input_data_names_the_stage_when_no_path_is_bound",
+        "tests/test_input_data_declared_types.py::_xlsx_cells",
+        "tests/test_input_data_declared_types.py::test_a_compact_yyyymmdd_xlsx_cell_declared_date_is_not_read_as_a_number",
+        "tests/test_input_data_declared_types.py::test_a_real_excel_date_declared_date_survives_the_str_pin",
+        "tests/test_input_data_declared_types.py::test_an_empty_xlsx_cell_declared_str_stays_null",
+        "tests/test_input_data_declared_types.py::test_an_xlsx_text_cell_declared_str_keeps_its_zero_padding",
+        "tests/test_input_data_declared_types.py::test_an_xlsx_text_cell_declared_str_keeps_the_digits_it_was_written_with",
+        "tests/test_input_data_declared_types.py::test_bare_read_would_have_lost_them",
+        "tests/test_input_data_declared_types.py::test_compact_yyyymmdd_date_is_not_read_as_a_number",
+        "tests/test_input_data_declared_types.py::test_json_lines_list_column_arrives_as_a_real_list",
+        "tests/test_input_data_declared_types.py::test_json_lines_str_column_keeps_its_zero_padding",
+        "tests/test_input_data_declared_types.py::test_list_column_of_numeric_looking_values_keeps_its_zero_padding",
+        "tests/test_input_data_declared_types.py::test_missing_output_schema_falls_back_to_plain_inference",
+        "tests/test_llm_batch_rejoin.py::test_anomaly_is_thrown_back_and_recovers_on_retry",
+        "tests/test_llm_batch_rejoin.py::test_batched_chunk_failure_reports_no_marker_as_a_dropped_column",
+        "tests/test_llm_batch_rejoin.py::test_batched_run_reports_only_user_columns_as_dropped",
+        "tests/test_llm_batch_rejoin.py::test_duplicate_number_same_length_fails_whole_chunk",
+        "tests/test_llm_batch_rejoin.py::test_extra_unknown_number_fails_whole_chunk",
+        "tests/test_llm_batch_rejoin.py::test_matched_by_row_number_not_reply_order",
+        "tests/test_llm_transform_spec.py::test_timeout_with_empty_message_is_captured_and_labeled",
+        "tests/test_llm_usage.py::test_failed_row_still_records_the_tokens_it_spent",
+        "tests/test_llm_usage.py::test_run_manifest_records_stage_llm_usage",
+        "tests/test_node_type_notes.py::test_corner_cases_note_reaches_every_code_carrying_type",
+        "tests/test_node_type_notes.py::test_hrq_note_names_every_queue_field_that_adds_a_column",
+        "tests/test_node_type_notes.py::test_hrq_note_names_the_decision_values_the_runtime_actually_emits",
+        "tests/test_node_type_notes.py::test_summary_budget_note_states_the_limit_the_write_path_refuses_on",
+        "tests/test_persistence.py::test_load_of_a_record_without_timestamps_fills_defaults_via_factory",
+        "tests/test_persistence.py::test_persistedmodel_config_mirrors_base",
+        "tests/test_persistence.py::test_save_advances_updated_at_but_not_created_at",
+        "tests/test_project_tools.py::test_write_review_guide_rejects_an_invented_field",
+        "tests/test_queue_view.py::_queue_stage",
+        "tests/test_queue_view.py::test_a_stage_with_no_declared_primary_key_says_so_rather_than_guessing",
+        "tests/test_queue_view.py::test_lineage_links_the_single_upstream_stage_at_the_sidecar_ordinal",
+        "tests/test_queue_view.py::test_the_context_table_omits_the_columns_under_review",
+        "tests/test_queue_view.py::test_the_notes_label_prefers_the_declared_description",
+        "tests/test_review_routes.py::_build_and_halt",
+        "tests/test_review_routes.py::_build_and_halt_bool_queue",
+        "tests/test_review_routes.py::_decide_a_temporal_row",
+        "tests/test_review_routes.py::_decide_data",
+        "tests/test_review_routes.py::_described_review_stage",
+        "tests/test_review_routes.py::_drift_the_review_stage",
+        "tests/test_review_routes.py::_empty_string_row_function_stage",
+        "tests/test_review_routes.py::_every_column_reviewed_stage",
+        "tests/test_review_routes.py::_find_selected_option",
+        "tests/test_review_routes.py::_labelled_row_function_stage",
+        "tests/test_review_routes.py::_output_schema_review_stage",
+        "tests/test_review_routes.py::_put_cached_decision",
+        "tests/test_review_routes.py::_review_stage",
+        "tests/test_review_routes.py::_score_stage",
+        "tests/test_review_routes.py::_with_queue_output_schema",
+        "tests/test_review_routes.py::test_a_bool_select_opens_on_the_recorded_value_of_a_decided_row",
+        "tests/test_review_routes.py::test_a_decided_card_disables_its_openers_and_offers_a_secondary_cta",
+        "tests/test_review_routes.py::test_a_non_nullable_bool_select_opens_on_the_ai_value",
+        "tests/test_review_routes.py::test_a_null_bool_ai_value_is_never_rendered_as_false",
+        "tests/test_review_routes.py::test_a_queue_directly_on_input_data_renders_and_links_to_that_stage",
+        "tests/test_review_routes.py::test_a_queue_whose_upstream_is_not_an_llm_transform_renders_and_links",
+        "tests/test_review_routes.py::test_a_reviewed_value_is_read_only_until_its_edit_button_is_pressed",
+        "tests/test_review_routes.py::test_a_temporal_control_opens_on_the_recorded_value_of_a_decided_row",
+        "tests/test_review_routes.py::test_an_empty_string_cell_is_not_printed_as_a_null",
+        "tests/test_review_routes.py::test_decide_accepts_an_untouched_notes_box_as_no_note",
+        "tests/test_review_routes.py::test_e2e_decide_every_verdict_then_resume_completes",
+        "tests/test_review_routes.py::test_queue_page_gates_the_items_behind_the_reviewer_name",
+        "tests/test_review_routes.py::test_queue_page_prefills_a_decided_row_from_the_recorded_value",
+        "tests/test_review_routes.py::test_queue_page_states_the_drift_and_renders_no_items",
+        "tests/test_review_routes.py::test_the_card_renders_the_described_queued_row_and_its_review_section",
+        "tests/test_review_routes.py::test_the_closed_field_displays_exactly_what_it_will_submit",
+        "tests/test_review_routes.py::test_unlocking_a_decided_card_records_a_new_verdict_on_resubmit",
+        "tests/test_row_function.py::test_row_function_rejects_multiple_inputs",
+        "tests/test_row_slicing.py::test_limit_caps_the_rows_a_frame_handler_is_given",
+        "tests/test_row_slicing.py::test_limit_keeps_the_row_mapper_off_the_rows_past_the_cap",
+        "tests/test_row_slicing.py::test_union_lineage_counts_from_the_first_row_the_stage_actually_read",
+        "tests/test_run_events_stream.py::test_an_explicit_from_seq_still_wins_over_the_tail_default",
+        "tests/test_run_events_stream.py::test_an_interrupted_run_ends_the_stream_instead_of_hanging",
+        "tests/test_run_graph_pinned_version.py::_input_stage",
+        "tests/test_run_header.py::test_a_completed_run_offers_its_outputs_and_no_imperative_button",
+        "tests/test_run_header.py::test_a_run_both_halted_and_failed_leads_with_the_review",
+        "tests/test_run_loop_semantics.py::test_resume_of_a_run_with_no_pinned_version_fails_loudly",
+        "tests/test_run_rows.py::_accented_df",
+        "tests/test_run_rows.py::test_csv_download_opens_with_a_utf8_byte_order_mark",
+        "tests/test_run_rows.py::test_csv_download_reimports_without_the_mark_in_a_column_name",
+        "tests/test_run_stage_diff_panel.py::test_a_capped_filter_page_counts_input_rows_not_output_rows",
+        "tests/test_run_stage_diff_panel.py::test_a_one_input_stage_names_its_only_input_without_a_base_marker",
+        "tests/test_run_stage_diff_panel.py::test_a_second_input_lengthens_the_input_stack_without_moving_the_output",
+        "tests/test_run_stage_diff_panel.py::test_every_frame_unit_links_the_raw_view_not_another_diff",
+        "tests/test_run_stage_diff_panel.py::test_raw_1_forces_the_plain_table_and_says_which_view_it_is",
+        "tests/test_run_stage_diff_panel.py::test_the_data_pane_keeps_the_input_row_picker",
+        "tests/test_run_stage_diff_panel.py::test_the_diff_page_leaves_the_view_toggle_and_the_csv_to_the_header",
+        "tests/test_run_stage_diff_panel.py::test_the_full_rows_diff_keeps_the_row_numbers_and_expandable_cells",
+        "tests/test_run_stage_diff_panel.py::test_the_header_gives_every_frame_its_own_labelled_unit",
+        "tests/test_run_status.py::test_css_class_pattern_renders_bare_not_qualified",
+        "tests/test_runner.py::test_a_limited_stage_is_not_failed_by_a_duplicate_row_it_never_reads",
+        "tests/test_runner.py::test_distinct_input_rows_pass",
+        "tests/test_runner.py::test_duplicate_input_rows_fail_the_stage",
+        "tests/test_runner.py::test_limit_on_a_source_stage_caps_the_rows_it_loads",
+        "tests/test_runner.py::test_llm_generation_failure_surfaces_as_error_status_not_raised",
+        "tests/test_runner.py::test_offset_makes_the_trace_land_on_the_true_upstream_row",
+        "tests/test_runner.py::test_output_missing_a_declared_column_errors_the_stage_and_blocks_downstream",
+        "tests/test_runner.py::test_output_validation_error_other_than_a_missing_column_also_errors_the_stage",
+        "tests/test_runner.py::test_per_run_limit_and_offset_slice_and_are_recorded",
+        "tests/test_runner.py::test_run_subset_preserves_partial_work_in_the_manifest_on_a_mid_frontier_error",
+        "tests/test_runner.py::test_run_subset_surfaces_the_real_row_failure_message",
+        "tests/test_runner.py::test_warning_only_output_report_does_not_error_the_stage",
+        "tests/test_runs_index_listing.py::test_a_workflow_test_run_is_listed_and_reported_as_a_difference",
+        "tests/test_runs_index_listing.py::test_an_unresolvable_pinned_version_says_so_instead_of_a_message",
+        "tests/test_runs_index_listing.py::test_the_row_names_the_input_files_by_basename_only",
+        "tests/test_schema_capabilities.py::test_find_unsatisfied_columns_allows_nullable_requirement_fed_by_non_null_producer",
+        "tests/test_schema_capabilities.py::test_is_subset_of_uses_exact_nullability",
+        "tests/test_schema_capabilities.py::test_subtract_strict_false_does_not_throw_on_spec_delta",
+        "tests/test_stage.py::test_llm_transform_rejects_input_with_no_declared_schema",
+        "tests/test_stage.py::test_llm_transform_rejects_spaced_double_braced_input_column",
+        "tests/test_stage.py::test_model_enum_rejects_unversioned_alias",
+        "tests/test_stage.py::test_python_function_inline_code_must_compile",
+        "tests/test_stage.py::test_queue_needs_no_hash_source_declared",
+        "tests/test_stage.py::test_stage_rejects_input_that_declares_no_schema",
+        "tests/test_stage.py::test_weighted_formula_cut",
+        "tests/test_stage_diff.py::test_a_filter_whose_sidecar_ordinals_do_not_increase_yields_no_diff",
+        "tests/test_stage_diff.py::test_a_frame_function_gets_no_diff_even_at_matching_row_counts",
+        "tests/test_stage_diff.py::test_a_reference_frame_that_will_not_read_is_listed_without_a_row_count",
+        "tests/test_stage_diff.py::test_an_enrich_diffs_against_its_subject_input_not_its_reference",
+        "tests/test_stage_diff.py::test_the_column_spine_is_the_input_frame_with_the_added_columns_after_it",
+        "tests/test_stage_diff.py::test_the_row_budget_windows_the_input_frame_of_a_filter_diff",
+        "tests/test_stage_edit.py::test_add_stage_still_refuses_when_the_existing_workflow_is_unloadable",
+        "tests/test_stage_edit.py::test_edit_that_breaks_the_workflow_graph_is_rejected",
+        "tests/test_stage_edit.py::test_remove_stage_rejected_when_a_downstream_depends_on_it",
+        "tests/test_stage_edit_requires_a_description.py::test_the_field_description_states_the_limit_this_path_refuses_on",
+        "tests/test_stage_schema_descriptions.py::test_connector_params_documents_optional_absolute_path_and_bans_invention",
+        "tests/test_stage_schema_descriptions.py::test_llm_transform_notes_document_the_additive_rule",
+        "tests/test_stage_summary_panel.py::test_a_summary_does_not_change_what_the_stage_computes",
+        "tests/test_stage_test_model.py::test_stage_tests_model_accepts_repeated_expected_rows_under_no_key",
+        "tests/test_stage_test_model.py::test_stage_without_tests_serializes_without_tests_key",
+        "tests/test_stage_test_runner.py::test_failure_case_is_error_when_the_step_raises_something_else",
+        "tests/test_stage_test_runner.py::test_failure_case_returning_a_non_dataframe_is_mismatch_not_crash",
+        "tests/test_stage_test_runner.py::test_failure_case_returning_zero_rows_is_mismatch_not_passed",
+        "tests/test_stage_test_runner.py::test_failure_case_skips_expected_row_schema_checks_but_not_its_inputs",
+        "tests/test_stage_test_runner.py::test_frame_function_output_order_does_not_matter",
+        "tests/test_stage_test_runner.py::test_frame_function_returning_none_is_error_not_crash",
+        "tests/test_stage_test_runner.py::test_inline_code_raises_step_refused_without_importing_it",
+        "tests/test_stage_test_runner.py::test_multi_input_frame_positional_order_is_declared_order",
+        "tests/test_stage_test_runner.py::test_nan_output_matches_expected_none",
+        "tests/test_stage_test_runner.py::test_omitted_column_in_expected_row_claims_none",
+        "tests/test_store_neutral.py::test_list_sessions_returns_newest_first",
+        "tests/test_trace_endpoint.py::test_trace_endpoint_encodes_nan_and_infinity_as_null",
+        "tests/test_trace_helpers.py::test_is_row_preserving_matches_the_model_classification",
+        "tests/test_trace_join_branches.py::_join_run",
+        "tests/test_trace_join_branches.py::test_an_unmatched_row_has_one_parent_and_no_branch",
+        "tests/test_trace_join_branches.py::test_branches_reach_the_render_payload",
+        "tests/test_trace_join_branches.py::test_columns_new_is_only_what_the_join_added",
+        "tests/test_trace_join_branches.py::test_contribution_parents_are_never_walked_into",
+        "tests/test_trace_join_branches.py::test_expand_records_the_subject_row_each_fanned_out_row_came_from",
+        "tests/test_trace_join_branches.py::test_handler_lineage_reaches_the_executor_channel",
+        "tests/test_trace_join_branches.py::test_promoting_a_branch_is_just_another_trace",
+        "tests/test_trace_join_branches.py::test_spine_follows_the_right_side_when_only_it_matched",
+        "tests/test_trace_serialize.py::test_trace_to_dict_turns_non_finite_floats_into_null",
+        "tests/test_trace_walk.py::test_human_review_queue_traces_positionally",
+        "tests/test_trace_walk.py::test_llm_transform_traces_positionally",
+        "tests/test_trace_walk.py::test_mismatch_deeper_in_chain_stops_at_the_right_step",
+        "tests/test_trace_walk.py::test_rowcount_mismatch_on_preserving_stage_stops_defensively",
+        "tests/test_union_and_filter_runtime.py::test_trace_follows_lineage_after_a_limit_caps_what_the_filter_reads",
+        "tests/test_workflow.py::test_check_edge_schemas_clean_when_input_is_a_projection",
+        "tests/test_workflow.py::test_check_edge_schemas_clean_when_producer_non_null_feeds_nullable_requirement",
+        "tests/test_workflow_clean_state.py::test_a_workflow_that_does_not_load_claims_nothing",
+        "tests/test_xlsx_input.py::test_source_row_column_holds_true_sheet_row_numbers",
+    }
+)
+
 # Post-rule exceptions, each mapped to the written reason it earned one. Separate
 # from `_GRANDFATHERED` on purpose: that set is a burn-down of pre-existing debt,
 # this dict is a deliberate, argued carve-out. Ships EMPTY and should stay very
-# rare — the normal remedy is cutting the docstring to one short sentence, or moving
-# the content to docs/ and referencing the file from the code.
+# rare — the normal remedy is cutting the prose to one short sentence, or moving the
+# content to docs/ and referencing the file from the code.
 _JUSTIFIED_EXCEPTIONS: dict[str, str] = {}
 
 
 @dataclass(frozen=True)
-class SymbolDocstring:
+class SymbolEntranceProse:
     path: str
     line: int
     symbol: str
-    chars: int
+    docstring_chars: int
+    comment_chars: int
+
+    @property
+    def prose_chars(self) -> int:
+        return self.docstring_chars + self.comment_chars
 
 
-def measure_symbol_docstrings(paths: list[Path], repo_root: Path) -> list[SymbolDocstring]:
-    measurements: list[SymbolDocstring] = []
+def measure_symbol_entrance_prose(paths: list[Path], repo_root: Path) -> list[SymbolEntranceProse]:
+    measurements: list[SymbolEntranceProse] = []
     for path in paths:
         text = path.read_text(encoding="utf-8")
         measurements.extend(
@@ -1074,19 +1451,20 @@ def measure_symbol_docstrings(paths: list[Path], repo_root: Path) -> list[Symbol
                 path.relative_to(repo_root).as_posix(),
                 prefix="",
                 overload_lines=find_overload_stub_lines(text),
+                comment_chars_by_line=read_comment_chars_by_line(text),
             )
         )
     return measurements
 
 
-def index_by_symbol(measurements: list[SymbolDocstring]) -> dict[str, SymbolDocstring]:
+def index_by_symbol(measurements: list[SymbolEntranceProse]) -> dict[str, SymbolEntranceProse]:
     """Raises on a duplicate symbol; a ``@property``/``@x.setter`` pair collides."""
-    by_symbol: dict[str, SymbolDocstring] = {}
+    by_symbol: dict[str, SymbolEntranceProse] = {}
     for measurement in measurements:
         key = f"{measurement.path}::{measurement.symbol}"
         if key in by_symbol:
             raise ValueError(
-                f"docstring-length ratchet: two docstringed symbols resolve to {key} "
+                f"entrance-prose ratchet: two symbols carrying prose resolve to {key} "
                 f"(lines {by_symbol[key].line} and {measurement.line}) — the rule keys by "
                 "path::Qualified.name and cannot tell them apart, so one would be measured "
                 "and the other silently dropped. Give one a distinct name, or — where that "
@@ -1098,45 +1476,55 @@ def index_by_symbol(measurements: list[SymbolDocstring]) -> dict[str, SymbolDocs
 
 
 def find_ratchet_violations(
-    measurements: list[SymbolDocstring], grandfathered: frozenset[str], exceptions: dict[str, str]
+    measurements: list[SymbolEntranceProse],
+    grandfathered: frozenset[str],
+    entrance_prose_grandfathered: frozenset[str],
+    exceptions: dict[str, str],
 ) -> list[str]:
     """Over the ceiling and unlisted, plus every stale grandfathered/exception entry."""
     by_symbol = index_by_symbol(measurements)
     offenders = [
         _describe_violation(by_symbol[key])
         for key in sorted(by_symbol)
-        if by_symbol[key].chars > _DOCSTRING_CHAR_CEILING
+        if by_symbol[key].prose_chars > _PROSE_CHAR_CEILING
         and key not in grandfathered
+        and key not in entrance_prose_grandfathered
         and key not in exceptions
     ]
-    offenders += [
-        _describe_stale_entry(key, "_GRANDFATHERED")
-        for key in sorted(grandfathered)
-        if _is_stale(key, by_symbol)
-    ]
-    offenders += [
-        _describe_stale_entry(key, "_JUSTIFIED_EXCEPTIONS")
-        for key in sorted(exceptions)
-        if _is_stale(key, by_symbol)
-    ]
+    for listed, list_name in (
+        (grandfathered, "_GRANDFATHERED"),
+        (entrance_prose_grandfathered, "_GRANDFATHERED_ENTRANCE_PROSE"),
+        (frozenset(exceptions), "_JUSTIFIED_EXCEPTIONS"),
+    ):
+        offenders += [
+            _describe_stale_entry(key, list_name)
+            for key in sorted(listed)
+            if _is_stale(key, by_symbol)
+        ]
     return offenders
 
 
-def test_docstrings_do_not_exceed_the_ratchet() -> None:
-    measurements = measure_symbol_docstrings(
+def test_entrance_prose_does_not_exceed_the_ratchet() -> None:
+    measurements = measure_symbol_entrance_prose(
         find_governed_files(_APP_ROOT, _TESTS_ROOT), _REPO_ROOT
     )
-    offenders = find_ratchet_violations(measurements, _GRANDFATHERED, _JUSTIFIED_EXCEPTIONS)
+    offenders = find_ratchet_violations(
+        measurements, _GRANDFATHERED, _GRANDFATHERED_ENTRANCE_PROSE, _JUSTIFIED_EXCEPTIONS
+    )
     assert not offenders, (
-        "docstring-length ratchet (every function, method, and class under app/ and "
-        f"tests/): a docstring must be at most {_DOCSTRING_CHAR_CEILING} characters — one "
-        "short sentence. The default is NO docstring at all; one earns its place only by "
-        "carrying what the code cannot say (an invariant, a gotcha, units, a non-obvious "
-        "why). Cut it to one short sentence, or move the content to a file under docs/ and "
-        "reference that file from the code. Adding an entry to the _JUSTIFIED_EXCEPTIONS "
-        "dict in tests/arch/test_docstring_length_ratchet.py, with a written reason, should "
-        "be very rare, and the _GRANDFATHERED frozenset beside it may only SHRINK — never "
-        "add to it:\n  " + "\n  ".join(offenders)
+        "entrance-prose ratchet (every function, method, and class under app/ and tests/): "
+        "the docstring AND the comment block above the first statement share ONE budget of "
+        f"at most {_PROSE_CHAR_CEILING} characters — one short sentence. Moving a docstring "
+        "into a comment block at the top of the body does NOT satisfy this rule: the budget "
+        "counts both, so the prose has to get shorter, not change syntax. The default is NO "
+        "prose at all; it earns its place only by carrying what the code cannot say (an "
+        "invariant, a gotcha, units, a non-obvious why). Cut it to one short sentence, or "
+        "move the content to a file under docs/ and reference that file from the code. A "
+        "comment sitting BESIDE or BELOW the first statement is unbudgeted — that is where "
+        "a note about a specific statement belongs. Adding an entry to the "
+        "_JUSTIFIED_EXCEPTIONS dict in tests/arch/test_docstring_length_ratchet.py, with a "
+        "written reason, should be very rare, and both frozensets beside it may only SHRINK "
+        "— never add to either:\n  " + "\n  ".join(offenders)
     )
 
 
@@ -1144,46 +1532,110 @@ def test_docstrings_do_not_exceed_the_ratchet() -> None:
 
 
 def _measure_children(
-    node: ast.AST, rel_path: str, prefix: str, overload_lines: set[int]
-) -> list[SymbolDocstring]:
-    measurements: list[SymbolDocstring] = []
+    node: ast.AST,
+    rel_path: str,
+    prefix: str,
+    overload_lines: set[int],
+    comment_chars_by_line: dict[int, int],
+) -> list[SymbolEntranceProse]:
+    measurements: list[SymbolEntranceProse] = []
     for child in ast.iter_child_nodes(node):
         if not isinstance(child, _DEFINITION_NODES):
-            measurements.extend(_measure_children(child, rel_path, prefix, overload_lines))
+            measurements.extend(
+                _measure_children(child, rel_path, prefix, overload_lines, comment_chars_by_line)
+            )
             continue
         symbol = f"{prefix}{child.name}"
         # clean=True dedents, deliberately: a continuation line's leading whitespace is
         # not prose, so a method nested three levels deep is not billed for its indent.
         docstring = ast.get_docstring(child, clean=True)
+        docstring_chars = 0 if docstring is None else len(docstring)
+        comment_chars = _sum_entrance_comment_chars(child, comment_chars_by_line)
         # An @typing.overload stub is dropped here, BEFORE the identity check, the way
         # the complexity ratchet does it: the stubs and their implementation all resolve
         # to one symbol, and a stub's body is the trivial `...` — nothing to measure.
-        if docstring is not None and child.lineno not in overload_lines:
-            measurements.append(SymbolDocstring(rel_path, child.lineno, symbol, len(docstring)))
-        measurements.extend(_measure_children(child, rel_path, f"{symbol}.", overload_lines))
+        # A symbol carrying no prose at all is never recorded, so a list entry naming it
+        # reads as stale.
+        if docstring_chars + comment_chars > 0 and child.lineno not in overload_lines:
+            measurements.append(
+                SymbolEntranceProse(
+                    rel_path, child.lineno, symbol, docstring_chars, comment_chars
+                )
+            )
+        measurements.extend(
+            _measure_children(
+                child, rel_path, f"{symbol}.", overload_lines, comment_chars_by_line
+            )
+        )
     return measurements
+
+
+def read_comment_chars_by_line(source: str) -> dict[int, int]:
+    chars_by_line: dict[int, int] = {}
+    for token in tokenize.generate_tokens(io.StringIO(source).readline):
+        if token.type == tokenize.COMMENT:
+            chars_by_line[token.start[0]] = len(_strip_comment_marker(token.string))
+    return chars_by_line
+
+
+def _strip_comment_marker(raw: str) -> str:
+    """The comment as a reader meets it: without its ``#`` and the single space after it."""
+    body = raw[1:]
+    return body[1:] if body.startswith(" ") else body
+
+
+def _sum_entrance_comment_chars(
+    node: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef,
+    comment_chars_by_line: dict[int, int],
+) -> int:
+    docstring_node = node.body[0] if ast.get_docstring(node) is not None else None
+    remaining = node.body[1:] if docstring_node is not None else node.body
+    if not remaining:
+        return 0
+    lower = node.lineno if docstring_node is None else _end_line_of(docstring_node)
+    upper = _first_line_of(remaining[0])
+    return sum(chars for line, chars in comment_chars_by_line.items() if lower < line < upper)
+
+
+def _end_line_of(statement: ast.stmt) -> int:
+    if statement.end_lineno is None:
+        raise ValueError(
+            "entrance-prose ratchet: a docstring statement at line "
+            f"{statement.lineno} carries no end_lineno, so the entrance window cannot be "
+            "bounded — refusing to guess it"
+        )
+    return statement.end_lineno
+
+
+def _first_line_of(statement: ast.stmt) -> int:
+    # A decorated def opens at its `@`: a comment above that is not the parent's prose.
+    if isinstance(statement, _DEFINITION_NODES) and statement.decorator_list:
+        return min(decorator.lineno for decorator in statement.decorator_list)
+    return statement.lineno
 
 
 # --- offender messages -----------------------------------------------------
 
 
-def _is_stale(key: str, by_symbol: dict[str, SymbolDocstring]) -> bool:
-    return key not in by_symbol or by_symbol[key].chars <= _DOCSTRING_CHAR_CEILING
+def _is_stale(key: str, by_symbol: dict[str, SymbolEntranceProse]) -> bool:
+    return key not in by_symbol or by_symbol[key].prose_chars <= _PROSE_CHAR_CEILING
 
 
-def _describe_violation(measurement: SymbolDocstring) -> str:
+def _describe_violation(measurement: SymbolEntranceProse) -> str:
     return (
-        f"{measurement.path}::{measurement.symbol}  docstring_chars={measurement.chars} "
-        f"(> {_DOCSTRING_CHAR_CEILING}, not listed) — cut it to one short sentence, or move "
-        "the content to docs/ and reference that file"
+        f"{measurement.path}::{measurement.symbol}  prose_chars={measurement.prose_chars} "
+        f"(docstring {measurement.docstring_chars} + entrance comments "
+        f"{measurement.comment_chars} > {_PROSE_CHAR_CEILING}, not listed) — cut it to one "
+        "short sentence, or move the content to docs/ and reference that file; moving it "
+        "between the two syntaxes buys nothing, they share the budget"
     )
 
 
 def _describe_stale_entry(key: str, list_name: str) -> str:
     return (
-        f"{key}  (no longer an over-ceiling docstring — the symbol was deleted or renamed, "
-        f"or its docstring is already at or under {_DOCSTRING_CHAR_CEILING} chars) — delete "
-        f"the stale {list_name} entry"
+        f"{key}  (no longer over-ceiling entrance prose — the symbol was deleted or renamed, "
+        f"or its docstring and entrance comments now total at or under {_PROSE_CHAR_CEILING} "
+        f"chars) — delete the stale {list_name} entry"
     )
 
 
@@ -1196,59 +1648,70 @@ def _write_module(tmp_path: Path, body: str, name: str = "m.py") -> Path:
     return path
 
 
-def _measurement(symbol: str = "go", chars: int = 150, path: str = "app/m.py", line: int = 1) -> SymbolDocstring:
-    return SymbolDocstring(path=path, line=line, symbol=symbol, chars=chars)
+def _measurement(
+    symbol: str = "go",
+    docstring_chars: int = 150,
+    comment_chars: int = 0,
+    path: str = "app/m.py",
+    line: int = 1,
+) -> SymbolEntranceProse:
+    return SymbolEntranceProse(
+        path=path,
+        line=line,
+        symbol=symbol,
+        docstring_chars=docstring_chars,
+        comment_chars=comment_chars,
+    )
 
 
-def test_measure_symbol_docstrings_flags_a_function_over_the_ceiling(tmp_path: Path) -> None:
+def test_measure_symbol_entrance_prose_flags_a_function_over_the_ceiling(tmp_path: Path) -> None:
     file = _write_module(tmp_path, f'def go():\n    """{"x" * 101}"""\n')
-    [measurement] = measure_symbol_docstrings([file], tmp_path)
-    assert measurement.chars == 101
-    offenders = find_ratchet_violations([measurement], frozenset(), {})
+    [measurement] = measure_symbol_entrance_prose([file], tmp_path)
+    assert measurement.prose_chars == 101
+    offenders = find_ratchet_violations([measurement], frozenset(), frozenset(), {})
     assert len(offenders) == 1
     assert "m.py::go" in offenders[0] and "one short sentence" in offenders[0]
 
 
-def test_measure_symbol_docstrings_passes_a_docstring_of_exactly_the_ceiling(tmp_path: Path) -> None:
+def test_measure_symbol_entrance_prose_passes_a_docstring_of_exactly_the_ceiling(tmp_path: Path) -> None:
     file = _write_module(tmp_path, f'def go():\n    """{"x" * 100}"""\n')
-    [measurement] = measure_symbol_docstrings([file], tmp_path)
-    assert measurement.chars == _DOCSTRING_CHAR_CEILING
-    assert find_ratchet_violations([measurement], frozenset(), {}) == []
+    [measurement] = measure_symbol_entrance_prose([file], tmp_path)
+    assert measurement.prose_chars == _PROSE_CHAR_CEILING
+    assert find_ratchet_violations([measurement], frozenset(), frozenset(), {}) == []
 
 
-def test_measure_symbol_docstrings_skips_a_symbol_with_no_docstring(tmp_path: Path) -> None:
+def test_measure_symbol_entrance_prose_skips_a_symbol_with_no_docstring(tmp_path: Path) -> None:
     file = _write_module(tmp_path, "def go():\n    return 1\n\n\nclass Foo:\n    x = 1\n")
-    assert measure_symbol_docstrings([file], tmp_path) == []
+    assert measure_symbol_entrance_prose([file], tmp_path) == []
 
 
-def test_measure_symbol_docstrings_measures_a_class_docstring(tmp_path: Path) -> None:
+def test_measure_symbol_entrance_prose_measures_a_class_docstring(tmp_path: Path) -> None:
     file = _write_module(tmp_path, 'class Foo:\n    """Short."""\n')
-    [measurement] = measure_symbol_docstrings([file], tmp_path)
+    [measurement] = measure_symbol_entrance_prose([file], tmp_path)
     assert measurement.symbol == "Foo"
-    assert measurement.chars == len("Short.")
+    assert measurement.prose_chars == len("Short.")
 
 
-def test_measure_symbol_docstrings_measures_an_async_function(tmp_path: Path) -> None:
+def test_measure_symbol_entrance_prose_measures_an_async_function(tmp_path: Path) -> None:
     file = _write_module(tmp_path, 'async def go():\n    """Short."""\n')
-    [measurement] = measure_symbol_docstrings([file], tmp_path)
+    [measurement] = measure_symbol_entrance_prose([file], tmp_path)
     assert measurement.symbol == "go"
 
 
-def test_measure_symbol_docstrings_ignores_the_module_docstring(tmp_path: Path) -> None:
-    # The module-level ceiling is a separate rule (lines, not chars), so a long module
-    # docstring must not surface here — where it would have no owning symbol to name.
+def test_measure_symbol_entrance_prose_ignores_the_module_docstring(tmp_path: Path) -> None:
+    # The module ceiling is a separate rule (lines, not chars) with no owning symbol to name.
     file = _write_module(tmp_path, f'"""{"x" * 300}"""\ndef go():\n    """Short."""\n')
-    [measurement] = measure_symbol_docstrings([file], tmp_path)
+    [measurement] = measure_symbol_entrance_prose([file], tmp_path)
     assert measurement.symbol == "go"
 
 
-def test_measure_symbol_docstrings_qualifies_a_method_as_class_dot_method(tmp_path: Path) -> None:
+def test_measure_symbol_entrance_prose_qualifies_a_method_as_class_dot_method(tmp_path: Path) -> None:
     file = _write_module(tmp_path, 'class Foo:\n    def bar(self):\n        """Short."""\n')
-    symbols = {m.symbol for m in measure_symbol_docstrings([file], tmp_path)}
+    symbols = {m.symbol for m in measure_symbol_entrance_prose([file], tmp_path)}
     assert symbols == {"Foo.bar"}
 
 
-def test_measure_symbol_docstrings_qualifies_a_nested_class_and_closure(tmp_path: Path) -> None:
+def test_measure_symbol_entrance_prose_qualifies_a_nested_class_and_closure(tmp_path: Path) -> None:
     file = _write_module(
         tmp_path,
         'class Outer:\n'
@@ -1260,17 +1723,17 @@ def test_measure_symbol_docstrings_qualifies_a_nested_class_and_closure(tmp_path
         '            def deeper():\n'
         '                """Short."""\n',
     )
-    symbols = {m.symbol for m in measure_symbol_docstrings([file], tmp_path)}
+    symbols = {m.symbol for m in measure_symbol_entrance_prose([file], tmp_path)}
     assert symbols == {"Outer", "Outer.Inner", "Outer.Inner.go", "Outer.Inner.go.deeper"}
 
 
-def test_measure_symbol_docstrings_finds_a_def_nested_in_a_conditional(tmp_path: Path) -> None:
+def test_measure_symbol_entrance_prose_finds_a_def_nested_in_a_conditional(tmp_path: Path) -> None:
     file = _write_module(tmp_path, 'if True:\n    def go():\n        """Short."""\n')
-    [measurement] = measure_symbol_docstrings([file], tmp_path)
+    [measurement] = measure_symbol_entrance_prose([file], tmp_path)
     assert measurement.symbol == "go"
 
 
-def test_measure_symbol_docstrings_dedents_a_deeply_nested_docstring(tmp_path: Path) -> None:
+def test_measure_symbol_entrance_prose_dedents_a_deeply_nested_docstring(tmp_path: Path) -> None:
     file = _write_module(
         tmp_path,
         "class Foo:\n"
@@ -1280,24 +1743,22 @@ def test_measure_symbol_docstrings_dedents_a_deeply_nested_docstring(tmp_path: P
         "\n"
         '            Second."""\n',
     )
-    [measurement] = measure_symbol_docstrings([file], tmp_path)
-    assert measurement.chars == len("First.\n\nSecond.")
+    [measurement] = measure_symbol_entrance_prose([file], tmp_path)
+    assert measurement.prose_chars == len("First.\n\nSecond.")
 
 
-def test_measure_symbol_docstrings_reads_relative_posix_path(tmp_path: Path) -> None:
+def test_measure_symbol_entrance_prose_reads_relative_posix_path(tmp_path: Path) -> None:
     nested = tmp_path / "app" / "sub"
     nested.mkdir(parents=True)
     file = _write_module(nested, 'def go():\n    """Short."""\n')
-    [measurement] = measure_symbol_docstrings([file], tmp_path)
+    [measurement] = measure_symbol_entrance_prose([file], tmp_path)
     assert measurement.path == "app/sub/m.py"
 
 
-def test_measure_symbol_docstrings_excludes_overload_stubs_but_keeps_the_implementation(
+def test_measure_symbol_entrance_prose_excludes_overload_stubs_but_keeps_the_implementation(
     tmp_path: Path,
 ) -> None:
-    # Without the exclusion, an overload group's stubs and its implementation all
-    # resolve to one symbol, and `index_by_symbol` would (correctly) raise on every
-    # overloaded method in app/ — a false positive, not a real ambiguity.
+    # Without the exclusion an overload group's stubs and its body collide as one symbol.
     file = _write_module(
         tmp_path,
         "from typing import overload\n"
@@ -1307,7 +1768,7 @@ def test_measure_symbol_docstrings_excludes_overload_stubs_but_keeps_the_impleme
         'def go(x: str) -> str:\n    """Short."""\n'
         'def go(x):\n    """Real."""\n',
     )
-    measurements = measure_symbol_docstrings([file], tmp_path)
+    measurements = measure_symbol_entrance_prose([file], tmp_path)
     assert [(m.symbol, m.line) for m in measurements] == [("go", 8)]
 
 
@@ -1320,7 +1781,7 @@ def test_index_by_symbol_raises_on_a_property_setter_pair(tmp_path: Path) -> Non
         "    @x.setter\n"
         '    def x(self, value):\n        """Short."""\n',
     )
-    measurements = measure_symbol_docstrings([file], tmp_path)
+    measurements = measure_symbol_entrance_prose([file], tmp_path)
     with pytest.raises(ValueError, match="m.py::Foo.x") as excinfo:
         index_by_symbol(measurements)
     assert "lines 3 and 6" in str(excinfo.value)
@@ -1333,7 +1794,7 @@ def test_index_by_symbol_keeps_two_different_symbols_in_the_same_file() -> None:
 
 def test_find_ratchet_violations_reports_every_offender_sorted_by_symbol() -> None:
     offenders = find_ratchet_violations(
-        [_measurement(symbol="zeta"), _measurement(symbol="alpha")], frozenset(), {}
+        [_measurement(symbol="zeta"), _measurement(symbol="alpha")], frozenset(), frozenset(), {}
     )
     assert [offender.split()[0] for offender in offenders] == [
         "app/m.py::alpha",
@@ -1342,44 +1803,44 @@ def test_find_ratchet_violations_reports_every_offender_sorted_by_symbol() -> No
 
 
 def test_find_ratchet_violations_passes_a_grandfathered_symbol_over_the_ceiling() -> None:
-    assert find_ratchet_violations([_measurement()], frozenset({"app/m.py::go"}), {}) == []
+    assert find_ratchet_violations([_measurement()], frozenset({"app/m.py::go"}), frozenset(), {}) == []
 
 
 def test_find_ratchet_violations_passes_a_justified_exception_over_the_ceiling() -> None:
-    assert find_ratchet_violations([_measurement()], frozenset(), {"app/m.py::go": "why"}) == []
+    assert find_ratchet_violations([_measurement()], frozenset(), frozenset(), {"app/m.py::go": "why"}) == []
 
 
 def test_find_ratchet_violations_still_flags_an_unlisted_symbol_beside_a_listed_one() -> None:
     measurements = [_measurement(symbol="listed"), _measurement(symbol="unlisted")]
-    offenders = find_ratchet_violations(measurements, frozenset({"app/m.py::listed"}), {})
+    offenders = find_ratchet_violations(measurements, frozenset({"app/m.py::listed"}), frozenset(), {})
     assert len(offenders) == 1
     assert "app/m.py::unlisted" in offenders[0]
 
 
 def test_find_ratchet_violations_flags_a_grandfathered_entry_now_under_the_ceiling() -> None:
-    cut = _measurement(chars=_DOCSTRING_CHAR_CEILING)
-    offenders = find_ratchet_violations([cut], frozenset({"app/m.py::go"}), {})
+    cut = _measurement(docstring_chars=_PROSE_CHAR_CEILING)
+    offenders = find_ratchet_violations([cut], frozenset({"app/m.py::go"}), frozenset(), {})
     assert len(offenders) == 1
     assert "delete the stale _GRANDFATHERED entry" in offenders[0]
 
 
 def test_find_ratchet_violations_flags_a_grandfathered_entry_for_a_missing_symbol() -> None:
-    offenders = find_ratchet_violations([], frozenset({"app/gone.py::go"}), {})
+    offenders = find_ratchet_violations([], frozenset({"app/gone.py::go"}), frozenset(), {})
     assert len(offenders) == 1
     assert "app/gone.py::go" in offenders[0] and "_GRANDFATHERED" in offenders[0]
 
 
 def test_find_ratchet_violations_flags_a_stale_justified_exception() -> None:
-    cut = _measurement(chars=_DOCSTRING_CHAR_CEILING)
-    offenders = find_ratchet_violations([cut], frozenset(), {"app/m.py::go": "why"})
+    cut = _measurement(docstring_chars=_PROSE_CHAR_CEILING)
+    offenders = find_ratchet_violations([cut], frozenset(), frozenset(), {"app/m.py::go": "why"})
     assert len(offenders) == 1
     assert "delete the stale _JUSTIFIED_EXCEPTIONS entry" in offenders[0]
 
 
 def test_find_ratchet_violations_raises_on_two_symbols_with_the_same_identity() -> None:
-    duplicates = [_measurement(line=1), _measurement(line=10, chars=5)]
+    duplicates = [_measurement(line=1), _measurement(line=10, docstring_chars=5)]
     with pytest.raises(ValueError, match="app/m.py::go"):
-        find_ratchet_violations(duplicates, frozenset(), {})
+        find_ratchet_violations(duplicates, frozenset(), frozenset(), {})
 
 
 def test_justified_exceptions_ships_empty_and_every_entry_carries_a_reason() -> None:
@@ -1387,24 +1848,31 @@ def test_justified_exceptions_ships_empty_and_every_entry_carries_a_reason() -> 
     assert all(reason.strip() for reason in _JUSTIFIED_EXCEPTIONS.values())
 
 
-def test_neither_list_exempts_this_rules_own_file() -> None:
+def test_no_list_exempts_this_rules_own_file() -> None:
     own_file = Path(__file__).resolve().relative_to(_REPO_ROOT).as_posix()
     listed = sorted(
         key
-        for key in (set(_GRANDFATHERED) | set(_JUSTIFIED_EXCEPTIONS))
+        for key in (
+            set(_GRANDFATHERED) | set(_GRANDFATHERED_ENTRANCE_PROSE) | set(_JUSTIFIED_EXCEPTIONS)
+        )
         if key.split("::", 1)[0] == own_file
     )
     assert not listed, (
-        "a rule must never exempt itself: these entries let this file's own docstrings "
-        f"past the {_DOCSTRING_CHAR_CEILING}-character ceiling it enforces on everyone "
-        "else. _GRANDFATHERED is only for symbols that PREDATE the rule, and this file "
-        "was written under it — so delete these entries and cut the docstrings (or drop "
-        "them: a well-named checker test rarely needs one):\n  " + "\n  ".join(listed)
+        "a rule must never exempt itself: these entries let this file's own entrance prose "
+        f"past the {_PROSE_CHAR_CEILING}-character ceiling it enforces on everyone "
+        "else. Both frozensets are only for symbols that PREDATE the measure they name, and "
+        "this file was written under it — so delete these entries and cut the prose (or drop "
+        "it: a well-named checker test rarely needs any):\n  " + "\n  ".join(listed)
     )
 
 
 def test_grandfathered_entries_are_symbol_keys_not_line_numbers() -> None:
-    assert all("::" in key and not key.rsplit("::", 1)[1].isdigit() for key in _GRANDFATHERED)
+    listed = _GRANDFATHERED | _GRANDFATHERED_ENTRANCE_PROSE
+    assert all("::" in key and not key.rsplit("::", 1)[1].isdigit() for key in listed)
+
+
+def test_the_two_grandfather_lists_do_not_overlap() -> None:
+    assert not (_GRANDFATHERED & _GRANDFATHERED_ENTRANCE_PROSE)
 
 
 def test_the_rule_governs_a_non_empty_set_of_files() -> None:
@@ -1419,3 +1887,137 @@ def test_the_rule_governs_a_non_empty_set_of_files() -> None:
 def test_find_governed_files_raises_when_a_root_has_no_python_files(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="governs no source files"):
         find_governed_files(tmp_path, tmp_path)
+
+
+# --- the entrance comment block counts against the same budget -------------
+
+
+def _comment_block(chars: int, indent: str = "    ") -> str:
+    return f"{indent}# {'x' * chars}"
+
+
+def test_measure_symbol_entrance_prose_flags_an_undocstringed_function_whose_entrance_comment_is_long(
+    tmp_path: Path,
+) -> None:
+    file = _write_module(
+        tmp_path,
+        "def go():\n" + _comment_block(55) + "\n" + _comment_block(55) + "\n    return 1\n",
+    )
+    [measurement] = measure_symbol_entrance_prose([file], tmp_path)
+    assert measurement.prose_chars == 110
+    assert len(find_ratchet_violations([measurement], frozenset(), frozenset(), {})) == 1
+
+
+def test_measure_symbol_entrance_prose_adds_the_entrance_comment_to_a_docstring_under_the_ceiling(
+    tmp_path: Path,
+) -> None:
+    file = _write_module(
+        tmp_path,
+        f'def go():\n    """{"d" * 60}"""\n' + _comment_block(60) + "\n    return 1\n",
+    )
+    [measurement] = measure_symbol_entrance_prose([file], tmp_path)
+    assert measurement.prose_chars == 120
+    assert len(find_ratchet_violations([measurement], frozenset(), frozenset(), {})) == 1
+
+
+def test_measure_symbol_entrance_prose_ignores_a_comment_below_the_first_statement(
+    tmp_path: Path,
+) -> None:
+    file = _write_module(
+        tmp_path,
+        f'def go():\n    """{"d" * 60}"""\n    total = 1\n'
+        + _comment_block(60)
+        + "\n    return total\n",
+    )
+    [measurement] = measure_symbol_entrance_prose([file], tmp_path)
+    assert measurement.prose_chars == 60
+    assert find_ratchet_violations([measurement], frozenset(), frozenset(), {}) == []
+
+
+def test_measure_symbol_entrance_prose_counts_a_comment_above_the_first_field_of_a_class(
+    tmp_path: Path,
+) -> None:
+    file = _write_module(
+        tmp_path,
+        "class Foo:\n" + _comment_block(55) + "\n" + _comment_block(55) + "\n    x: int = 1\n",
+    )
+    [measurement] = measure_symbol_entrance_prose([file], tmp_path)
+    assert measurement.symbol == "Foo"
+    assert measurement.prose_chars == 110
+
+
+def test_measure_symbol_entrance_prose_counts_an_entrance_comment_split_off_by_a_blank_line(
+    tmp_path: Path,
+) -> None:
+    file = _write_module(
+        tmp_path,
+        "def go():\n" + _comment_block(55) + "\n" + _comment_block(55) + "\n\n    return 1\n",
+    )
+    [measurement] = measure_symbol_entrance_prose([file], tmp_path)
+    assert measurement.prose_chars == 110
+
+
+def test_measure_symbol_entrance_prose_records_nothing_for_a_symbol_with_neither_prose_form(
+    tmp_path: Path,
+) -> None:
+    file = _write_module(tmp_path, "def go():\n    return 1  # trailing note, not the entrance\n")
+    assert measure_symbol_entrance_prose([file], tmp_path) == []
+
+
+def test_measure_symbol_entrance_prose_counts_a_comment_inside_a_multi_line_signature(
+    tmp_path: Path,
+) -> None:
+    # The window opens at the `def` line, so a note among the parameters is entrance prose.
+    file = _write_module(
+        tmp_path,
+        "def go(\n" + _comment_block(55) + "\n" + _comment_block(55) + "\n):\n    return 1\n",
+    )
+    [measurement] = measure_symbol_entrance_prose([file], tmp_path)
+    assert measurement.prose_chars == 110
+
+
+def test_measure_symbol_entrance_prose_closes_the_window_at_a_decorated_first_statement(
+    tmp_path: Path,
+) -> None:
+    file = _write_module(
+        tmp_path,
+        "class Foo:\n"
+        + _comment_block(55)
+        + "\n    @property\n"
+        + _comment_block(70)
+        + "\n    def bar(self):\n        return 1\n",
+    )
+    [measurement] = measure_symbol_entrance_prose([file], tmp_path)
+    assert (measurement.symbol, measurement.prose_chars) == ("Foo", 55)
+
+
+def test_read_comment_chars_by_line_bills_the_prose_a_reader_sees_not_the_marker() -> None:
+    chars_by_line = read_comment_chars_by_line("# abc\n#abc\n## abc\nx = 1  # abc\n")
+    assert chars_by_line == {1: 3, 2: 3, 3: 5, 4: 3}
+
+
+def test_find_ratchet_violations_flags_a_stale_entrance_prose_entry() -> None:
+    cut = _measurement(docstring_chars=_PROSE_CHAR_CEILING)
+    offenders = find_ratchet_violations([cut], frozenset(), frozenset({"app/m.py::go"}), {})
+    assert len(offenders) == 1
+    assert "delete the stale _GRANDFATHERED_ENTRANCE_PROSE entry" in offenders[0]
+
+
+def test_measure_symbol_entrance_prose_flags_the_pending_review_shape_that_motivated_the_rule(
+    tmp_path: Path,
+) -> None:
+    # `PendingReview`'s shape: a docstring cut to fit, its paragraph moved above the fields.
+    file = _write_module(
+        tmp_path,
+        "class PendingReview:\n"
+        '    """One row awaiting a human decision, carried on the deferred marker of the'
+        ' row that made it."""\n'
+        "\n"
+        "    # The key the cache was searched under, and a copy of the row exactly as it\n"
+        "    # arrived from upstream.\n"
+        "    input_fingerprint: str\n"
+        "    frozen_row: dict[str, str]\n",
+    )
+    [measurement] = measure_symbol_entrance_prose([file], tmp_path)
+    assert measurement.prose_chars > _PROSE_CHAR_CEILING
+    assert len(find_ratchet_violations([measurement], frozenset(), frozenset(), {})) == 1
