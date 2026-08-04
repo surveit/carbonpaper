@@ -397,8 +397,7 @@ def _describe_package_cycles_failure(cycles: list[PackageCycle]) -> str:
 
 
 def _describe_package_cycle(cycle: PackageCycle) -> str:
-    # Every member, not just the traced path: the path visits enough packages to
-    # close one loop, which understates a group of three or more.
+    # The path closes one loop, so it understates a tangle of three or more.
     return (
         f"depth {cycle.depth}: {len(cycle.members)} packages tangled "
         f"{{{', '.join(cycle.members)}}} — e.g. {' -> '.join(cycle.path)}"
@@ -487,8 +486,6 @@ def test_find_deepest_package_depth_counts_the_longest_dotted_module() -> None:
 
 
 def test_find_package_cycles_flags_a_graph_that_is_module_acyclic_but_package_cyclic() -> None:
-    # The trap this rule exists to catch: no module imports itself back, so
-    # find_import_cycles is silent, yet app.x and app.y each import the other.
     edges = [ImportEdge("app.x.one", "app.y.one"), ImportEdge("app.y.two", "app.x.two")]
     assert find_import_cycles(edges) == []
     assert find_package_cycles_at_every_depth(edges) == [
@@ -502,8 +499,7 @@ def test_find_package_cycles_passes_a_graph_acyclic_at_every_depth() -> None:
 
 
 def test_find_package_cycles_flags_a_tangle_that_only_appears_below_the_first_level() -> None:
-    # At depth 1 both ends are app.m and the edges vanish as self-edges; only
-    # the depth-2 rollup shows app.m.a and app.m.b importing each other.
+    # At depth 1 both ends roll up to app.m, so the edges vanish as self-edges.
     edges = [ImportEdge("app.m.a.one", "app.m.b.one"), ImportEdge("app.m.b.two", "app.m.a.two")]
     assert find_package_cycles_at_depth(edges, 1) == []
     assert find_package_cycles_at_every_depth(edges) == [
