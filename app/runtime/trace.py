@@ -136,12 +136,12 @@ def _lineage_hops(run_dir: Path, stage_id: str, row_ordinal: int) -> list[RowPar
 
 def _split_spine(hops: list[RowParent]) -> tuple[RowParent | None, list[RowParent]]:
     """The parent the walk follows, and the ones it only reports as branches."""
-    # The spine is the first MADE-FROM parent. Recording puts the subject side
+    # The spine is the first DIRECT parent. Recording puts the subject side
     # first, and where only the reference matched it is the row's only parent —
     # so the spine follows the DATA, not a config default. A contribution parent
     # is never walked into; a row with none therefore has no spine, and the walk
     # ends there with its contributors still reported.
-    spine = next((p for p in hops if p.kind == EdgeKind.made_from.value), None)
+    spine = next((p for p in hops if p.kind == EdgeKind.direct.value), None)
     return spine, [p for p in hops if p is not spine]
 
 

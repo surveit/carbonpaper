@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Iterable
+from typing import TYPE_CHECKING, Any, Iterable, Sequence
 
 import numpy as np
 import pandas as pd
@@ -31,14 +31,13 @@ LINEAGE_ATTR = "row_lineage"
 class EdgeKind(str, Enum):
     """How a parent relates to the row it produced."""
 
-    # Bounded per row, so the tracer walks these.
-    made_from = "made_from"
-    # Unbounded per row (an aggregate's contributors): a cohort to open, never
-    # a step to take, so the walk reports these rather than following them.
+    # An enrich's subject row, and the reference row merged into it.
+    direct = "direct"
+    # Every filing in the quarter an aggregate totalled into one row.
     contribution = "contribution"
-    # Bounded but not pinned to individual rows. Recorded so the walk can say
-    # what it could not determine instead of stopping dead.
-    unresolved = "unresolved"
+    # A python_frame_function pivoted the frame: this input fed the output, but
+    # which of its rows fed THIS row was not recoverable.
+    unknown = "unknown"
 
 
 @dataclass(frozen=True)
@@ -47,7 +46,7 @@ class RowParent:
 
     stage_id: str
     row_ordinal: int
-    kind: str = EdgeKind.made_from.value
+    kind: str = EdgeKind.direct.value
 
 
 @dataclass(frozen=True)
@@ -93,7 +92,7 @@ class RowLineage:
     def from_frame(cls, df: pd.DataFrame) -> "RowLineage":
         """Read a sidecar frame back, including one written before lineage went multi-parent."""
         # A pre-multi-parent sidecar held SCALARS and no kind column, so each of
-        # its rows reads as one made_from parent — old runs stay traceable
+        # its rows reads as one direct parent — old runs stay traceable
         # without a migration.
         has_kind = TRACE_EDGE_KIND_KEY in df.columns
         parents: list[list[RowParent]] = []
@@ -105,7 +104,7 @@ class RowLineage:
                 RowParent(
                     stage_id=str(stages[k]),
                     row_ordinal=int(rows[k]),
-                    kind=str(kinds[k]) if k < len(kinds) else EdgeKind.made_from.value,
+                    kind=str(kinds[k]) if k < len(kinds) else EdgeKind.direct.value,
                 )
                 for k in range(min(len(stages), len(rows)))
             ]
@@ -169,23 +168,22 @@ def concatenated_inputs_lineage(
     return RowLineage(parents)
 
 
-def paired_inputs_lineage(
-    left_stage_id: str, left_rows: Iterable[Any],
-    right_stage_id: str, right_rows: Iterable[Any],
+def merged_inputs_lineage(
+    inputs: Sequence[tuple[str, Iterable[Any]]],
 ) -> RowLineage:
-    """For a join: one row from each of two inputs per output row, subject first."""
-    # Ordinals arrive as read back off the merged frame, so an unmatched side is
-    # NaN/None and is then simply absent from the row's parents — that absence IS
-    # the recorded non-match. Subject first, so it becomes the spine; where only
-    # the reference matched, it is the row's only parent and the spine follows it.
+    """At most one row from each of N inputs per output row; FIRST is the one the walk follows."""
+    # Ordinals arrive as read back off the merged frame, so an input that did not
+    # match this row is NaN/None and is then simply absent from its parents —
+    # that absence IS the recorded non-match. Order carries the preference: the
+    # earliest input that did match becomes the spine, so a row where the
+    # preferred one is absent still gets walked, on the data rather than a default.
     parents: list[list[RowParent]] = []
-    for left_ord, right_ord in zip(left_rows, right_rows):
-        entry: list[RowParent] = []
-        if not _is_missing(left_ord):
-            entry.append(RowParent(left_stage_id, int(left_ord)))
-        if not _is_missing(right_ord):
-            entry.append(RowParent(right_stage_id, int(right_ord)))
-        parents.append(entry)
+    for ordinals in zip(*(rows for _stage_id, rows in inputs)):
+        parents.append([
+            RowParent(stage_id, int(ordinal))
+            for (stage_id, _rows), ordinal in zip(inputs, ordinals)
+            if not _is_missing(ordinal)
+        ])
     return RowLineage(parents)
 
 

@@ -14,7 +14,7 @@ from app.models import Stage
 from app.models.stages.join import JoinStage
 
 from ..context import RunContext
-from ..lineage import attach_row_lineage, paired_inputs_lineage
+from ..lineage import attach_row_lineage, merged_inputs_lineage
 from .execution import narrow_stage
 
 # Ordinal carriers for the merge, dropped before the frame is returned. They sit
@@ -72,10 +72,10 @@ def _join_reference_into_subject(
     # An unmatched reference ordinal comes back NaN and is recorded as an ABSENT
     # parent — which is what lets a reader tell "no matching row existed" from
     # "matched a row whose columns are null".
-    lineage = paired_inputs_lineage(
-        subject_id, joined[JOIN_SUBJECT_ORD_KEY].tolist(),
-        reference_id, joined[JOIN_REFERENCE_ORD_KEY].tolist(),
-    )
+    lineage = merged_inputs_lineage([
+        (subject_id, joined[JOIN_SUBJECT_ORD_KEY].tolist()),
+        (reference_id, joined[JOIN_REFERENCE_ORD_KEY].tolist()),
+    ])
     joined = joined.drop(columns=[JOIN_SUBJECT_ORD_KEY, JOIN_REFERENCE_ORD_KEY])
 
     select = join_cfg.select
