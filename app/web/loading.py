@@ -13,7 +13,7 @@ import pandas as pd
 from fastapi import HTTPException
 
 from app.core.errors import NoVersionToRunError
-from app.core.frames import PARQUET_SUFFIX, list_rows
+from app.core.frames import list_rows, read_frame_file
 from app.models import Stage, StageType
 from app.models.stages.llm_transform import LLMTransformStage
 from app.runtime.manifest import load_manifest_model
@@ -228,11 +228,6 @@ def load_manifest(run_dir: Path) -> dict[str, Any]:
 MAX_TABLE_ROWS = 5000
 
 
-def read_table(path: Path) -> pd.DataFrame:
-    """Read a stage output file (parquet or csv) into a DataFrame."""
-    return pd.read_parquet(path) if path.suffix == PARQUET_SUFFIX else pd.read_csv(path)
-
-
 # Excel on Windows reads a .csv in the machine's legacy code page (cp1252 on a
 # Western install) unless the file opens with a UTF-8 byte-order mark. Without
 # the mark, a run whose rows hold French or Dutch text downloads clean and then
@@ -272,7 +267,7 @@ def read_output_df(run_dir: Path, rel_path: str | None) -> pd.DataFrame:
             status_code=404, detail=f"Output file missing on disk: {rel_path}"
         )
     try:
-        return read_table(path)
+        return read_frame_file(path)
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(
             status_code=500, detail=f"Could not read output file: {exc}"
@@ -337,7 +332,7 @@ def load_output_row(run_dir: Path, rel_path: str | None, row: int) -> dict[str, 
     if not path.exists():
         return {"error": f"missing on disk: {rel_path}"}
     try:
-        df = read_table(path)
+        df = read_frame_file(path)
     except Exception as exc:  # noqa: BLE001
         return {"error": str(exc)}
     if row < 0 or row >= len(df):
@@ -361,7 +356,7 @@ def load_output_preview(run_dir: Path, rel_path: str | None) -> dict[str, Any] |
     if not path.exists():
         return {"error": f"missing on disk: {rel_path}"}
     try:
-        df = read_table(path)
+        df = read_frame_file(path)
     except Exception as exc:  # noqa: BLE001
         return {"error": str(exc)}
     return {
@@ -378,7 +373,7 @@ def queue_snapshot(project: str, run_id: str, stage_id: str) -> pd.DataFrame | N
     for ext in (".parquet", ".csv"):
         p = run_dir / "queue" / f"{stage_id}{ext}"
         if p.exists():
-            return read_table(p)
+            return read_frame_file(p)
     return None
 
 

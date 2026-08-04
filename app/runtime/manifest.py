@@ -12,9 +12,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, TypedDict
 
+import pandas as pd
 from pydantic import BaseModel, ConfigDict, field_validator
 
 from app.core.agent.usage import LlmUsage
+from app.core.errors import StageNotInRun, StageOutputMissing
+from app.core.frames import read_frame_file
 from app.models import Stage, StageType
 from app.core.run_status import RunStatus, StageStatus
 
@@ -299,6 +302,33 @@ def write_manifest(run_dir: Path, manifest: RunManifest) -> None:
     typed model to the same `exclude_unset` JSON shape a reader parses back."""
     (run_dir / "manifest.json").write_text(
         json.dumps(manifest.to_dict(), indent=2, default=str), encoding="utf-8"
+    )
+
+
+def read_stage_output_frame(run_dir: Path, stage_id: str) -> pd.DataFrame:
+    """The frame a stage of this run wrote, read from the path its own record names."""
+    records = load_manifest_model(run_dir).stage_records
+    record = _find_stage_record(records, run_dir, stage_id)
+    if not record.output_path:
+        raise StageOutputMissing(
+            f"stage '{stage_id}' of run '{run_dir.name}' wrote no output "
+            f"(its status is '{record.status}'), so it holds no values to read"
+        )
+    # The recorded path, never one assembled from the stage id: the executor writes
+    # CSV instead of parquet for a frame parquet cannot hold, so where the output
+    # landed is a fact of this run.
+    return read_frame_file(run_dir / record.output_path)
+
+
+def _find_stage_record(
+    records: list[StageRecord], run_dir: Path, stage_id: str
+) -> StageRecord:
+    for record in records:
+        if record.stage_id == stage_id:
+            return record
+    ran = ", ".join(record.stage_id for record in records) or "(none)"
+    raise StageNotInRun(
+        f"run '{run_dir.name}' has no stage '{stage_id}' — the stages it ran: {ran}"
     )
 
 

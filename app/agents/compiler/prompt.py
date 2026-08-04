@@ -1,12 +1,13 @@
 """The editing agent's system prompt: a fixed instruction, the shared gated
 authoring lifecycle (research, signed-off plan, build, smoke run before full),
-and a rendered catalog of the stage types it can build (so it can author a valid
-stage without a lookup tool). The agent learns which project it edits at runtime
+the shared rule on declaring an enum from observed data, and a rendered catalog of
+the stage types it can build. The agent learns which project it edits at runtime
 via get_current_project, so the prompt names no specific project."""
 
 from __future__ import annotations
 
 from app.models.authoring_lifecycle_note import AUTHORING_LIFECYCLE_GUIDANCE
+from app.models.observed_enum_note import OBSERVED_ENUM_GUIDANCE
 from app.models.stages.node_types import NODE_TYPES
 from app.models.stages.signature import SIGNATURE_CONTRACT_NOTE
 
@@ -51,6 +52,14 @@ def _stage_type_catalog() -> str:
     return "\n".join(lines)
 
 
+_OBSERVING_HERE = (
+    "You have no run tool, so you cannot observe a column yourself: state the "
+    "vocabulary you believe a column has and what would settle it, and ask the human "
+    "to check it against the data before you declare the enum."
+)
+
 EDITING_SYSTEM_PROMPT = (
-    _SYSTEM_PROMPT + "\n\n" + AUTHORING_LIFECYCLE_GUIDANCE + "\n\n" + _stage_type_catalog()
+    _SYSTEM_PROMPT + "\n\n" + AUTHORING_LIFECYCLE_GUIDANCE
+    + "\n\n" + OBSERVED_ENUM_GUIDANCE + "\n" + _OBSERVING_HERE
+    + "\n\n" + _stage_type_catalog()
 )

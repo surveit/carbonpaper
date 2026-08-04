@@ -1,8 +1,8 @@
-"""Workflow-test seam: run a workflow over a slice of its real source as a REAL
-run — same `<project_dir>/runs/<id>/` dir, manifest, and routes as a production
-run, but marked `RunManifest.is_test_run` and scoped read-only. It reaches the
-shared engine through app.runtime.executor (run_subset), never
-app.runtime.runner."""
+"""Workflow-test seam: run a workflow over its real source — a slice of it, or
+named stages with nothing injected — as a REAL run: same `<project_dir>/runs/<id>/`
+dir, manifest, and routes as a production run, but marked `RunManifest.is_test_run`
+and scoped read-only. It reaches the shared engine through app.runtime.executor
+(run_subset), never app.runtime.runner."""
 from __future__ import annotations
 
 from datetime import datetime
@@ -19,30 +19,38 @@ from app.runtime.stages.input_data import read_input_data
 from app.services.versioning import list_versions, load_version, load_version_stages
 from app.services.workspace import repo_root, resolve_project_dir
 
+# Rows an unscoped workflow test reads from the source when the caller names no
+# limit — small enough to be cheap, wide enough to show the data's shape.
+DEFAULT_ROW_LIMIT = 20
+
 
 def run_workflow_test(
     project: str,
     *,
     version_id: str | None = None,
-    limit: int = 20,
-    offset: int = 0,
+    stage_ids: list[str] | None = None,
+    limit: int | None = None,
+    offset: int | None = None,
 ) -> dict[str, Any]:
-    """Run the resolved version's frontier over a slice of its bound source, as a
-    real run (marked `is_test_run`) under `<project_dir>/runs/<run_id>/`. Returns
-    `{ok, run_id, version_id, stages_run, error}`.
+    """Run the resolved version, as a real run (marked `is_test_run`) under
+    `<project_dir>/runs/<run_id>/`. Returns `{ok, run_id, version_id, stages_run, error}`.
 
-    The same run app.services.run.start_run produces, differing on exactly five
+    The same run app.services.run.start_run produces, differing on exactly six
     axes — the reason this is its own seam rather than a flag on that one:
 
     1. VERSION: any stored version, published or not (_resolve_workflow_test_version).
     2. SOURCE: a `limit`/`offset` slice, injected (get_source_data_with_limit_and_offset)
        rather than read whole through the input_data stage — which is why the
        frontier excludes input_data (_frontier_stages).
-    3. EXECUTION: synchronous; start_run launches a background daemon thread.
-    4. REVIEW QUEUE: auto-approves in memory (queue_auto_approve) instead of halting.
-    5. STAGE CACHE: read-only (RunContext.for_workflow_test_run) instead of read+write.
+    3. SCOPE: `stage_ids` runs ONLY those stages and injects NOTHING, so a named
+       input_data stage EXECUTES through its own handler and reads its whole bound
+       file. That is the no-override mode: no slice, hence no `limit`/`offset`
+       (passing either alongside `stage_ids` is refused rather than ignored).
+    4. EXECUTION: synchronous; start_run launches a background daemon thread.
+    5. REVIEW QUEUE: auto-approves in memory (queue_auto_approve) instead of halting.
+    6. STAGE CACHE: read-only (RunContext.for_workflow_test_run) instead of read+write.
 
-    Collapsing these into start_run would mean five flags with two valid
+    Collapsing these into start_run would mean six flags with two valid
     combinations, so they stay two functions; only version resolution is shared
     vocabulary (cf. app.services.run.resolve_version, which gates on published)."""
     project_dir = resolve_project_dir(project)
@@ -50,23 +58,23 @@ def run_workflow_test(
     stages = load_version_stages(project_dir, version)
     # Read the source(s) before building the Workflow, so a sourceless workflow
     # fails on the missing source rather than on downstream graph validation.
-    injected = get_source_data_with_limit_and_offset(stages, limit=limit, offset=offset)
+    injected = _injected_source(stages, stage_ids, limit, offset)
     workflow = Workflow(stages=stages)
-    frontier = topological_sort(_frontier_stages(stages))
+    frontier = topological_sort(_scoped_stages(stages, stage_ids))
 
     run_id = _mint_run_id()
     run_dir = project_dir / "runs" / run_id
 
-    stage_ids = [stage.id for stage in frontier]
+    executed_ids = [stage.id for stage in frontier]
     ok, error = _run_frontier(
-        workflow, injected, stage_ids, run_dir, repo_root(),
+        workflow, injected, executed_ids, run_dir, repo_root(),
         project=project_dir.name, run_id=run_id, workflow_version=version)
 
     return {
         "ok": ok,
         "run_id": run_id,
         "version_id": version,
-        "stages_run": stage_ids,
+        "stages_run": executed_ids,
         "error": error,
     }
 
@@ -115,6 +123,37 @@ def _run_frontier(
     except SubsetRunError as exc:
         return False, str(exc)
     return True, None
+
+
+def _injected_source(
+    stages: list[Stage], stage_ids: list[str] | None, limit: int | None, offset: int | None,
+) -> dict[str, pd.DataFrame]:
+    """The seeded outputs: a source slice for the whole-frontier run, nothing for a scoped one."""
+    if stage_ids is None:
+        return get_source_data_with_limit_and_offset(
+            stages,
+            limit=DEFAULT_ROW_LIMIT if limit is None else limit,
+            offset=0 if offset is None else offset,
+        )
+    if limit is not None or offset is not None:
+        raise ValueError(
+            "a scoped workflow test injects nothing, so `limit`/`offset` have no source "
+            f"to slice: drop them, or drop stage_ids={stage_ids} to run the frontier"
+        )
+    return {}
+
+
+def _scoped_stages(stages: list[Stage], stage_ids: list[str] | None) -> list[Stage]:
+    """The stages to execute: exactly `stage_ids`, or every non-input stage when it is None."""
+    if stage_ids is None:
+        return _frontier_stages(stages)
+    by_id = {stage.id: stage for stage in stages}
+    unknown = [sid for sid in stage_ids if sid not in by_id]
+    if unknown:
+        raise ValueError(
+            f"version has no stage(s) {unknown} — its stages: {sorted(by_id)}"
+        )
+    return [by_id[sid] for sid in stage_ids]
 
 
 def _frontier_stages(stages: list[Stage]) -> list[Stage]:
