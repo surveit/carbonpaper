@@ -27,9 +27,8 @@ is ready; if it is rejected, fix the reported issues and call it again.
 - Declare a column's `enum` whenever its vocabulary is CLOSED — a fixed set of values the
   methodology itself names (a status, a category, a reason code), not free text. The set is
   enforced wherever the column is used, so a closed vocabulary left as bare `str` gives that up.
-  Enforcement is hard: a stage emitting a value outside the set FAILS, so declare the enum
-  only where the methodology genuinely fixes the vocabulary, never to sketch example values
-  for a column whose set is open or still being discovered.
+  Enforcement is hard — a stage emitting a value outside the set FAILS — so an enum is never
+  a place to sketch example values for a set that is still open.
 - Every column must state its `type` and its `nullable`. Both are DECISIONS, and there is no
   default to fall back on: declare the tightest of each that the methodology actually
   guarantees, and leave a column loose only where looseness is the honest answer.

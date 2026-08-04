@@ -131,10 +131,9 @@ class Column(_Base):
         default=None,
         description=(
             "The closed set of values a `str` column may hold — declare it whenever the "
-            "vocabulary is fixed and known at authoring time. Enforced at runtime, not "
-            "decorative: a stage whose output holds a value outside the set FAILS, the "
-            "same as one that emits the wrong type. Leave it unset where the vocabulary "
-            "is open or still being discovered."
+            "vocabulary is fixed and known at authoring time. A stage whose output holds "
+            "a value outside the set FAILS, so declare it only where the set really is "
+            "closed."
         ),
     )
     fields: Optional[list["Column"]] = Field(

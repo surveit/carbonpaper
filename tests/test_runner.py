@@ -324,9 +324,6 @@ def test_output_validation_error_other_than_a_missing_column_also_errors_the_sta
 
 
 def test_value_outside_a_declared_enum_errors_the_stage_and_blocks_downstream(tmp_path):
-    # A declared enum is a CLOSED vocabulary — a claim about what can exist, not
-    # a preference. A value outside it is error-severity like a wrong type, so
-    # the stage fails and its downstream never sees the frame.
     (tmp_path / "compiled").mkdir(parents=True)
     (tmp_path / "data").mkdir(parents=True)
     pd.DataFrame({"name": ["a"], "val": [1]}).to_csv(
@@ -364,7 +361,6 @@ def test_value_outside_a_declared_enum_errors_the_stage_and_blocks_downstream(tm
     records = {r["stage_id"]: r for r in manifest["stage_records"]}
     assert records["label"]["status"] == "error"
     assert records["label"]["error"]["type"] == "OutputSchemaViolation"
-    # Names the column and the value that is not in the vocabulary.
     assert "status" in records["label"]["error"]["message"]
     assert "'pending'" in records["label"]["error"]["message"]
     assert records["tail"]["status"] == "pending"

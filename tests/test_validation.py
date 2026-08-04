@@ -37,7 +37,6 @@ def test_enum_value_outside_vocabulary_errors():
 
 
 def test_enum_error_names_the_distinct_offenders_not_the_repeats():
-    """One typo on 3 rows is one thing to fix; the count carries how many rows."""
     schema = _schema(columns=[
         {"name": "status", "type": "str", "enum": ["open", "closed"], "nullable": True},
     ])
@@ -61,7 +60,6 @@ def test_enum_error_truncates_a_long_offender_list():
 
 
 def test_enum_error_names_the_whole_vocabulary_however_long():
-    """The set is never sampled — what is too long to show is the display's call."""
     vocabulary = [f"v{n}" for n in range(9)]
     schema = _schema(columns=[
         {"name": "status", "type": "str", "enum": vocabulary, "nullable": True},
@@ -85,7 +83,6 @@ def test_enum_all_values_valid_raises_no_issue():
 
 
 def test_enum_nulls_are_not_reported_as_outside_the_vocabulary():
-    """A nullable enum column may hold nulls; `_find_nullability_issues` owns the rest."""
     schema = _schema(columns=[
         {"name": "status", "type": "str", "enum": ["open"], "nullable": True},
     ])

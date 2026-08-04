@@ -49,9 +49,7 @@ assert set(CELL_TYPE_PREDICATES) == SCALAR_COLUMN_TYPES, (
     f"SCALAR_COLUMN_TYPES: {SCALAR_COLUMN_TYPES ^ set(CELL_TYPE_PREDICATES)}"
 )
 
-# How many offending values to name in an Issue message. A column's declared
-# vocabulary is NOT sampled — an enum issue names the whole set, and where that
-# is too long to show is the display's call, not this layer's.
+# How many offending values to name in an Issue message.
 _OFFENDER_SAMPLE_N = 10
 
 
@@ -214,11 +212,6 @@ def _find_numeric_range_issues(series: pd.Series, col: Column) -> list[Issue]:
 
 def _find_enum_issues(series: pd.Series, col: Column) -> list[Issue]:
     """Values outside a `str` column's declared vocabulary — an error, like a bad type."""
-    # `enum` is declared only where the vocabulary is CLOSED and known at authoring
-    # time, so a value outside it is one the schema says cannot exist — the same
-    # standing as a value of the wrong type, and a downstream stage switching on the
-    # vocabulary has no branch for it. Error severity, so an output report carrying
-    # one fails the stage rather than passing the frame on with a note.
     if not (col.enum and col.type == STR_COLUMN_TYPE):
         return []
     non_null = series.dropna()
@@ -229,8 +222,6 @@ def _find_enum_issues(series: pd.Series, col: Column) -> list[Issue]:
     offending = rendered[~rendered.isin(allowed)]
     if not len(offending):
         return []
-    # The DISTINCT bad values, not the first N rows: one typo repeated 400 times is
-    # one thing to fix, and the count already says how many rows carry it.
     distinct = list(offending.unique())
     sample = ", ".join(repr(v) for v in distinct[:_OFFENDER_SAMPLE_N])
     ellipsis = "…" if len(distinct) > _OFFENDER_SAMPLE_N else ""

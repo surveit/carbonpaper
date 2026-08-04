@@ -103,8 +103,8 @@ enum vocabularies, ranges, nullability, PK uniqueness), distinct from the stage 
 value outside a declared enum, null in a non-nullable column, duplicate primary key) fails the
 stage: the record is `error` with an `OutputSchemaViolation` and downstream stages are blocked.
 `validation_warnings` means warning-severity issues only. Input-side issues alone still only warn.
-An enum is a CLOSED vocabulary — a value outside it stands with a wrong type, not with an
-out-of-`range` number, which stays a warning because a range bounds the expected, not the possible.
+An out-of-`range` number is the deliberate exception, still a warning: a range bounds the
+expected, an enum the possible.
 
 ## Run / debug
 ```
