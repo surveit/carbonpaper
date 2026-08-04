@@ -138,7 +138,8 @@ expired run_id returns {ok: False, error} rather than a fabricated status.""",
         description="""\
 List the names of every project in the workspace that has an authored
 workflow. A just-created project appears here only once its first stage has
-been added — use get_project_status(project_id) to inspect one before that.""",
+been added, so a name missing from this list is a project with no stages
+yet, not a project that does not exist.""",
     ),
     "read_data_model": ToolSpec(
         name="read_data_model",
