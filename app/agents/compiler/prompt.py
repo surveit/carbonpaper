@@ -45,7 +45,7 @@ def _stage_type_catalog() -> str:
         lines.append(f"- {stage_type} — {spec.summary}")
         lines.append(
             f"    blocks {blocks}; required: {required}; {takes}; "
-            f"signature form: {spec.signature_form}"
+            f"transform signature form: {spec.transform_signature_form}"
         )
         lines.append(f"    note: {spec.notes}")
     return "\n".join(lines)

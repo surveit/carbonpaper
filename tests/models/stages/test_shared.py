@@ -41,10 +41,10 @@ def test_find_predicate_column_issues_turns_a_parse_failure_into_one_issue_not_r
     assert "s" in issues[0]
 
 
-def test_find_config_column_issues_is_empty_for_a_type_that_names_no_column():
+def test_find_unsupplied_reads_is_empty_for_a_type_that_names_no_column():
     load = parse_stage({
         "id": "load", "type": "input_data", "name": "load",
         "connector": {"kind": "file", "params": {}},
         "output_schema": {"columns": [{"name": "a", "type": "str", "nullable": False}]},
     })
-    assert load.find_config_column_issues() == []
+    assert load.find_unsupplied_reads() == []

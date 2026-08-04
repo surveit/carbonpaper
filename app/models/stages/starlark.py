@@ -115,8 +115,8 @@ class StarlarkRowFunctionStage(StageBase):
     # types nothing here cross-checks the block. The function is held to its
     # claimed writes at run time instead: the stage's output frame is validated
     # against output_schema, which find_signature_issues pins to this
-    # signature.
-    signature: Optional[ExtendsSignature] = None
+    # transform_signature.
+    transform_signature: Optional[ExtendsSignature] = None
 
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
         return {"starlark": self.starlark}
@@ -141,7 +141,7 @@ def find_starlark_warnings(stage: "StarlarkRowFunctionStage") -> list[CompilerWa
 NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
     "starlark_row_function": NodeTypeSpec(
         summary="Sandboxed Starlark run once per row: one row in → one row out. Prefer this over python_row_function.",
-        signature_form="extends",
+        transform_signature_form="extends",
         blocks=["starlark"],
         requires_inputs=True,
         min_inputs=1,

@@ -17,7 +17,7 @@ from app.models.stages.code import (
 )
 from app.models.stages.shared import COLUMN_ISSUE, resolve_input_columns
 from app.models.stages.node_spec import NodeTypeSpec
-from app.models.stages.signature import ReplacesSignature
+from app.models.stages.signature import OverwritesSignature
 
 
 class PublishFormat(str, Enum):
@@ -54,21 +54,21 @@ class PublishStage(CarriesPythonFunctionStage):
     type: Literal[StageType.publish]
     publish: PublishConfig
     inputs: list[StageInput] = Field(default_factory=list, min_length=1)
-    signature: Optional[ReplacesSignature] = None
+    transform_signature: Optional[OverwritesSignature] = None
 
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
         return {"publish": self.publish, **super().fingerprint_blocks()}
 
-    def find_config_column_issues(self) -> list[str]:
+    def find_unsupplied_reads(self) -> list[str]:
         return find_publish_column_issues(self)
 
-    def find_signature_config_issues(self) -> list[str]:
-        signature = self.signature
-        assert signature is not None  # find_signature_config_issues runs only with one
-        if signature.produces:
+    def find_signature_disagreements(self) -> list[str]:
+        signature = self.transform_signature
+        assert signature is not None  # find_signature_disagreements runs only with one
+        if signature.writes:
             return [
                 f"stage '{self.id}': publish emits files, not a table — "
-                f"signature produces must be empty"
+                f"transform_signature writes must be empty"
             ]
         return []
 
@@ -92,7 +92,7 @@ def find_publish_column_issues(stage: "PublishStage") -> list[str]:
 NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
     "publish": NodeTypeSpec(
         summary="Render a final artifact (html, json, csv, cards).",
-        signature_form="replaces",
+        transform_signature_form="overwrites",
         blocks=["publish", "function"],
         requires_inputs=True,
         min_inputs=1,

@@ -139,17 +139,16 @@ class StageCommon(_Base):
     limit: Optional[int] = None
     compiler_notes: list[str] = Field(default_factory=list)
 
-    # The authored contract of what this stage reads and writes, per input —
-    # separate from the mechanism (code, prompt, join keys) that honours it.
-    # Declared here so StageDraft carries it too: the signature is authored, not
-    # server-written. Each stored per-type model narrows it to its one form
-    # (ExtendsSignature for the anchored family, ReplacesSignature for the
-    # reshaping family — app.models.stages.signature); the draft keeps the
+    # What this stage's transform reads and writes, per input — apart from the
+    # mechanism (code, prompt, join keys) that honours it. Declared here so
+    # StageDraft carries it too: it is authored, not server-written. Each stored
+    # per-type model narrows it to its one form (ExtendsSignature or
+    # OverwritesSignature — app.models.stages.signature); the draft keeps the
     # permissive union, per the StageDraft philosophy. Optional while the
     # compiler still authors output_schema directly; when present it is checked
-    # against the config (find_signature_config_issues) and the declared
-    # schemas (find_signature_issues).
-    signature: Optional[TransformSignature] = None
+    # against the transform config (find_signature_disagreements) and the
+    # declared schemas (find_signature_issues).
+    transform_signature: Optional[TransformSignature] = None
 
     @field_validator("inputs", mode="before")
     @classmethod
@@ -201,8 +200,8 @@ class StageBase(StageCommon):
     output_schema: Optional[TableSchema] = Field(
         default=None,
         description=(
-            "Columns this stage outputs. Optional when a `signature` is "
-            "declared — the output resolves from it; `publish` needs neither."
+            "Columns this stage outputs. Optional when a `transform_signature` "
+            "is declared — the output resolves from it; `publish` needs neither."
         ),
     )
     source: Optional[SourceRef] = None
@@ -224,14 +223,12 @@ class StageBase(StageCommon):
         name they are spelled with on the stage."""
         raise NotImplementedError
 
-    def find_config_column_issues(self) -> list[str]:
-        """Every column this stage's config names that its own input edge cannot
-        supply. [] for a type whose config names no column."""
+    def find_unsupplied_reads(self) -> list[str]:
+        # [] for a type whose transform config names no column at all.
         return []
 
-    def find_output_schema_issues(self) -> list[str]:
-        """Every way the declared output_schema is undeliverable. [] for a type
-        whose internals, not its config, fix the output."""
+    def find_unaccounted_writes(self) -> list[str]:
+        # [] for a type whose internals, not its transform config, fix the output.
         return []
 
     def find_authored_code_block(self) -> Optional["AuthoredCode"]:
@@ -256,8 +253,8 @@ class StageBase(StageCommon):
             return self.output_schema
         return promised_output_schema(self)
 
-    def find_signature_config_issues(self) -> list[str]:
-        """Signature-vs-config disagreements; [] when nothing cross-checks. Runs only with one."""
+    def find_signature_disagreements(self) -> list[str]:
+        # Runs only on a stage that carries a transform_signature.
         return []
 
     # ── the fingerprint ──────────────────────────────────────────────────────
@@ -287,10 +284,12 @@ class StageBase(StageCommon):
                 for name, block in self.fingerprint_blocks().items()
             },
         }
-        if self.signature is not None:
+        if self.transform_signature is not None:
             # Key absent when unset — like `tests` in the model dump — so every
-            # fingerprint recorded before signatures existed is unchanged.
-            fields["signature"] = self.signature.model_dump(mode="json", exclude_none=True)
+            # fingerprint recorded before transform signatures existed is unchanged.
+            fields["transform_signature"] = self.transform_signature.model_dump(
+                mode="json", exclude_none=True
+            )
         payload = json.dumps(fields, sort_keys=True, separators=(",", ":"), default=str)
         return compute_short_hash(payload)
 
@@ -332,8 +331,10 @@ class StageBase(StageCommon):
         ]
         if self.REQUIRES_OUTPUT_SCHEMA and not (
             self.output_schema and self.output_schema.columns
-        ) and self.signature is None:
-            issues.append("declares no output_schema and no signature to resolve one from")
+        ) and self.transform_signature is None:
+            issues.append(
+                "declares no output_schema and no transform_signature to resolve one from"
+            )
         issues.extend(find_internal_namespace_column_issues(self))
         if issues:
             raise ValueError(f"type `{self.type}`: " + "; ".join(issues))
@@ -352,7 +353,7 @@ class StageBase(StageCommon):
         for a single stage in isolation, independent of the rest of any
         workflow. Cross-stage checks (unique ids, inputs resolve, acyclic) live
         in `workflow.graph_issues`."""
-        issues = self.find_config_column_issues()
+        issues = self.find_unsupplied_reads()
         if issues:
             raise ValueError("; ".join(issues))
         return self
@@ -365,20 +366,20 @@ class StageBase(StageCommon):
         with the declared type matching what the config computes, where that can be known.
         EDGE-ONLY and per-stage, like _config_columns_resolve. Nothing to
         check without a stored outer: deliverability compares two authored
-        accounts, and the signature's own cross-checks carry the rest."""
+        accounts, and the transform_signature's own cross-checks carry the rest."""
         if self.output_schema is None:
             return self
-        issues = self.find_output_schema_issues()
+        issues = self.find_unaccounted_writes()
         if issues:
             raise ValueError("; ".join(issues))
         return self
 
     @model_validator(mode="after")
     def _signature_consistent(self) -> "StageBase":
-        """A declared signature must agree with the edges, the declared schemas, and the config."""
-        if self.signature is None:
+        """A transform_signature must agree with the edges, the schemas, and the transform config."""
+        if self.transform_signature is None:
             return self
-        issues = find_signature_issues(self) + self.find_signature_config_issues()
+        issues = find_signature_issues(self) + self.find_signature_disagreements()
         if issues:
             raise ValueError("; ".join(issues))
         return self

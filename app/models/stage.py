@@ -39,7 +39,7 @@ from app.models.stages.publish import PublishConfig, PublishStage
 from app.models.stages.signature import (  # noqa: F401  (re-exported: the stage vocabulary lives here)
     ExtendsSignature,
     InputReads,
-    ReplacesSignature,
+    OverwritesSignature,
     TransformSignature,
 )
 from app.models.stages.starlark import StarlarkFunction, StarlarkRowFunctionStage
@@ -142,7 +142,7 @@ class StageDraft(StageCommon):
 __all__ = [
     "ExtendsSignature",
     "InputReads",
-    "ReplacesSignature",
+    "OverwritesSignature",
     "ReviewConfig",
     "SERVER_OWNED_STAGE_FIELDS",
     "Stage",

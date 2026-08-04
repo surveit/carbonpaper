@@ -10,7 +10,7 @@ class NodeTypeSpec(_Base):
     """What the authoring prompts render for one stage type."""
 
     summary: str
-    signature_form: Literal["extends", "replaces"]
+    transform_signature_form: Literal["extends", "overwrites"]
     blocks: list[str]
     requires_inputs: bool
     min_inputs: int

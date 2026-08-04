@@ -53,7 +53,7 @@ def find_internal_namespace_column_issues(stage: "StageBase") -> list[str]:
             for name in _internal_namespace_columns(stage.output_schema)
         )
     issues.extend(
-        f"signature declares column {name!r}"
+        f"transform_signature declares column {name!r}"
         for name in _signature_column_names(stage)
         if name.startswith(INTERNAL_COLUMN_PREFIX)
     )
@@ -63,16 +63,13 @@ def find_internal_namespace_column_issues(stage: "StageBase") -> list[str]:
 
 
 def _signature_column_names(stage: "StageBase") -> list[str]:
-    """Every column name the signature mentions, duck-typed over both forms; [] without one."""
-    signature = stage.signature
+    signature = stage.transform_signature
     if signature is None:
         return []
-    names = [
-        column.name for entry in signature.reads for column in entry.columns
+    return [
+        *(column.name for entry in signature.reads for column in entry.columns),
+        *(column.name for column in signature.writes),
     ]
-    for field in ("adds", "rewrites", "produces"):
-        names.extend(column.name for column in getattr(signature, field, []))
-    return names
 
 
 def _internal_namespace_columns(schema: "TableSchema") -> list[str]:

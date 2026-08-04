@@ -1,4 +1,4 @@
-"""A stage may omit its stored output_schema when a signature is declared —
+"""A stage may omit its stored output_schema when a transform_signature is declared —
 the outer resolves from it; a stored outer still wins and is still checked."""
 from __future__ import annotations
 
@@ -17,11 +17,11 @@ def _row_stage(**overrides) -> dict:
             {"name": "title", "type": "str", "nullable": True},
         ]}}],
         "function": {"kind": "inline", "code": "def transform(row):\n    return row"},
-        "signature": {
+        "transform_signature": {
             "form": "extends",
             "reads": [{"input": "bills", "columns": [{"name": "price", "type": "str", "nullable": True}]}],
-            "rewrites": [{"name": "price", "type": "float", "nullable": True}],
-            "adds": [{"name": "note", "type": "str", "nullable": True}],
+            "updates": [{"name": "price", "type": "float", "nullable": True}],
+            "creates": [{"name": "note", "type": "str", "nullable": True}],
         },
     }
     spec.update(overrides)
@@ -35,16 +35,16 @@ def test_an_extends_signature_resolves_the_outer():
         ("price", "float"), ("title", "str"), ("note", "str")]
 
 
-def test_a_replaces_signature_resolves_to_exactly_produces():
+def test_an_overwrites_signature_resolves_to_exactly_writes():
     stage = parse_stage({
         "id": "shape", "name": "Shape", "type": "python_frame_function",
         "inputs": [{"id": "bills", "schema": {"columns": [
             {"name": "price", "type": "str", "nullable": True}]}}],
         "function": {"kind": "inline", "code": "def transform(df):\n    return df"},
-        "signature": {
-            "form": "replaces",
+        "transform_signature": {
+            "form": "overwrites",
             "reads": [{"input": "bills", "columns": [{"name": "price", "type": "str", "nullable": True}]}],
-            "produces": [{"name": "n", "type": "int", "nullable": True}],
+            "writes": [{"name": "n", "type": "int", "nullable": True}],
         },
     })
     resolved = stage.resolve_output_schema()
@@ -61,8 +61,8 @@ def test_a_stored_outer_still_wins_and_is_still_checked():
 
 
 def test_neither_outer_nor_signature_is_still_refused():
-    with pytest.raises(ValidationError, match="no output_schema and no signature"):
-        parse_stage(_row_stage(signature=None))
+    with pytest.raises(ValidationError, match="no output_schema and no transform_signature"):
+        parse_stage(_row_stage(transform_signature=None))
 
 
 def test_an_edge_is_satisfied_by_the_upstream_resolved_outer():
@@ -98,17 +98,17 @@ def test_a_signature_only_llm_stage_resolves_its_reply_schema():
         "inputs": [{"id": "bills", "schema": {"columns": [
             {"name": "title", "type": "str", "nullable": True}]}}],
         "llm": {"prompt_data_template": "Title: {title}"},
-        "signature": {
+        "transform_signature": {
             "form": "extends",
             "reads": [{"input": "bills", "columns": [{"name": "title", "type": "str", "nullable": True}]}],
-            "adds": [{"name": "score", "type": "int", "nullable": True}],
+            "creates": [{"name": "score", "type": "int", "nullable": True}],
         },
     })
     reply = stage.llm_reply_schema()
     assert [(c.name, c.type) for c in reply.columns] == [("score", "int")]
 
 
-def test_a_signature_only_enrich_resolves_from_bring_and_anchor():
+def test_a_signature_only_enrich_resolves_from_bring_and_first_input():
     stage = parse_stage({
         "id": "add_region", "name": "Add region", "type": "enrich",
         "inputs": [
@@ -120,13 +120,13 @@ def test_a_signature_only_enrich_resolves_from_bring_and_anchor():
         ],
         "join": {"keys": [{"left": "state", "right": "code"}],
                  "enrich_with": {"region": "region"}},
-        "signature": {
+        "transform_signature": {
             "form": "extends",
             "reads": [
                 {"input": "bills", "columns": [{"name": "state", "type": "str", "nullable": True}]},
                 {"input": "states", "columns": [{"name": "code", "type": "str", "nullable": True}]},
             ],
-            "adds": [{"name": "region", "type": "str", "nullable": True}],
+            "creates": [{"name": "region", "type": "str", "nullable": True}],
         },
     })
     resolved = stage.resolve_output_schema()

@@ -80,22 +80,22 @@ class FilterRowsStage(StageBase):
     # join or a python_frame_function.
     inputs: list[StageInput] = Field(default_factory=list, min_length=1, max_length=1)
     tests: Optional[Sequence[FilterRowsStageTest]] = None
-    signature: Optional[ExtendsSignature] = None
+    transform_signature: Optional[ExtendsSignature] = None
 
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
         return {"filter": self.filter}
 
-    def find_signature_config_issues(self) -> list[str]:
-        signature = self.signature
-        assert signature is not None  # find_signature_config_issues runs only with one
-        if signature.adds or signature.rewrites:
+    def find_signature_disagreements(self) -> list[str]:
+        signature = self.transform_signature
+        assert signature is not None  # find_signature_disagreements runs only with one
+        if signature.creates or signature.updates:
             return [
                 f"stage '{self.id}': filter_rows keeps every kept row's columns "
-                f"unchanged — its signature declares reads only, never adds or rewrites"
+                f"unchanged — its transform_signature declares reads only, never creates or updates"
             ]
         return []
 
-    def find_output_schema_issues(self) -> list[str]:
+    def find_unaccounted_writes(self) -> list[str]:
         return find_filter_output_issues(self)
 
     def find_authored_code_block(self) -> FilterConfig:
@@ -130,7 +130,7 @@ def find_filter_warnings(stage: "FilterRowsStage") -> list[CompilerWarning]:
 NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
     "filter_rows": NodeTypeSpec(
         summary="Keep the rows an authored predicate returns True for.",
-        signature_form="extends",
+        transform_signature_form="extends",
         blocks=["filter"],
         requires_inputs=True,
         min_inputs=1,
