@@ -8,6 +8,7 @@ from typing import Any
 
 from app.core.errors import RunNotFoundError, RunVersionUnresolvableError
 from app.models import Stage, stage_to_spec_dict
+from app.runtime.manifest import resolve_output_path
 from app.services import run as run_service
 from app.services.review_packet import ReviewPacket
 from app.services.review_packet.checksums import write_checksums
@@ -29,7 +30,10 @@ def export_review_packet(project: str, run_id: str, dest_root: Path) -> ReviewPa
 
     root = dest_root / f"{project}-{run_id}"
     root.mkdir(parents=True, exist_ok=True)
-    data = write_packet_data(root, run_dir, project_dir, view, workflow)
+    stage_sources = {
+        s.stage_id: resolve_output_path(run_dir, s.output_path) for s in view.stages
+    }
+    data = write_packet_data(root, run_dir, project_dir, view, workflow, stage_sources)
     pages = write_packet_pages(
         root,
         run_dir,

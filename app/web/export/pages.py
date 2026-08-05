@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from app.core.stage_display import TYPE_CLASS, TYPE_GLYPH
+from app.runtime.manifest import resolve_output_path
 from app.services.loader import resolve_function_code
 from app.services.review_packet.checksums import CHECKSUMS_FILE
 from app.services.review_packet.data import DataReport
@@ -131,7 +132,8 @@ def _build_panel_context(run_dir: Path, view: RunView, stage: StageView) -> dict
 
 def _load_full_table(run_dir: Path, stage: StageView) -> dict[str, Any] | None:
     # The whole table, not the 5-row preview: offline there is nowhere to click through to.
-    if stage.output_path is None or not (run_dir / stage.output_path).is_file():
+    source = resolve_output_path(run_dir, stage.output_path)
+    if source is None or not source.is_file():
         return None
     table = load_output_table(run_dir, stage.output_path)
     return {

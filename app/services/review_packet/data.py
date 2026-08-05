@@ -36,7 +36,12 @@ class DataReport(BaseModel):
 
 
 def write_packet_data(
-    root: Path, run_dir: Path, project_dir: Path, view: RunView, workflow: str | None
+    root: Path,
+    run_dir: Path,
+    project_dir: Path,
+    view: RunView,
+    workflow: str | None,
+    stage_sources: dict[str, Path | None],
 ) -> DataReport:
     # `workflow` is the pinned version as JSON, or None when it could not be read.
     report = DataReport(written=[], omitted=[])
@@ -44,7 +49,9 @@ def write_packet_data(
     _write_workflow(root, workflow, view, report)
     _copy_document(root, project_dir, report)
     for stage in view.stages:
-        _write_stage_output(root, run_dir, stage, report)
+        # Pre-resolved by the caller: joining a run dir to a recorded output_path is
+        # app.runtime.manifest's alone, and this layer may not import it.
+        _write_stage_output(root, stage, stage_sources.get(stage.stage_id), report)
     for index, binding in enumerate(view.inputs):
         _copy_input_file(root, binding.path, binding.stage_id, index, report)
     return report
@@ -85,10 +92,10 @@ def _copy_document(root: Path, project_dir: Path, report: DataReport) -> None:
 
 
 def _write_stage_output(
-    root: Path, run_dir: Path, stage: StageView, report: DataReport
+    root: Path, stage: StageView, source: Path | None, report: DataReport
 ) -> None:
     # A CSV round trip loses dtypes, so the raw file is what a reviewer recomputes against.
-    if stage.output_path is None:
+    if source is None:
         report.omitted.append(
             OmittedFile(
                 path=f"{DATA_DIR}/{stage.stage_id}.csv",
@@ -96,7 +103,6 @@ def _write_stage_output(
             )
         )
         return
-    source = run_dir / stage.output_path
     if not source.is_file():
         report.omitted.append(
             OmittedFile(
