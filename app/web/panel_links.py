@@ -32,8 +32,7 @@ class AppPanelLinks:
 
 
 class PacketPanelLinks:
-    """Paths relative to a stage page inside the packet; `None` = not in the packet."""
-    # On None the template omits the affordance rather than writing a dead link.
+    # Relative to a stage page. `None` = the template omits it, not a dead link.
 
     def stage_anchor(self, stage_id: str) -> str:
         return f"{_segment(stage_id)}.html"

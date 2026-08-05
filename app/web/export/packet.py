@@ -7,9 +7,8 @@ from pathlib import Path
 from typing import Any
 
 from app.core.errors import RunNotFoundError, RunVersionUnresolvableError
-from app.models import Stage
+from app.models import Stage, stage_to_spec_dict
 from app.services import run as run_service
-from app.services.loader import stage_to_spec_dict
 from app.services.review_packet import ReviewPacket
 from app.services.review_packet.checksums import write_checksums
 from app.services.review_packet.data import write_packet_data
@@ -21,8 +20,7 @@ from app.web.export.pages import write_packet_pages
 
 
 def export_review_packet(project: str, run_id: str, dest_root: Path) -> ReviewPacket:
-    """Writes `dest_root/<project>-<run_id>/` and returns what landed in it."""
-    # A run with no manifest raises rather than yielding an empty packet.
+    # Writes `dest_root/<project>-<run_id>/`. No manifest raises, not an empty packet.
     project_dir = resolve_project_dir(project)
     run_dir = project_dir / "runs" / run_id
     manifest = run_service.read_run_status(project, run_id)
@@ -52,8 +50,7 @@ def export_review_packet(project: str, run_id: str, dest_root: Path) -> ReviewPa
 
 
 def _build_diagram(stages: list[Stage], project: str, view: RunView) -> str:
-    """The run's workflow flowchart; empty when the pinned version was unreadable."""
-    # The index then draws no graph at all, rather than an empty one.
+    # Empty when the pinned version was unreadable; the index then draws no graph.
     if not stages:
         return ""
     statuses = {s.stage_id: s.status for s in view.stages}

@@ -108,9 +108,7 @@ def _write_stage_page(root: Path, run_dir: Path, view: RunView, stage: StageView
 
 
 def _build_panel_context(run_dir: Path, view: RunView, stage: StageView) -> dict[str, Any]:
-    """`previewable` False and `test_views` empty are what make the panel inert."""
-    # They drop the scratch-run controls and the examples section. Examples are
-    # omitted because running them now would report today's code, not this run's.
+    # The False/empty entries below are what make the packet's panel inert.
     return {
         "project": view.project,
         "run_id": view.run_id,
@@ -122,7 +120,7 @@ def _build_panel_context(run_dir: Path, view: RunView, stage: StageView) -> dict
         "function_code": resolve_function_code(stage.definition),
         "llm_example": None,
         "test_views": [],
-        "test_derivable": False,
+        "can_generate_tests": False,
         "certification": None,
         "previewable": False,
         "links": PacketPanelLinks(),
@@ -132,9 +130,7 @@ def _build_panel_context(run_dir: Path, view: RunView, stage: StageView) -> dict
 
 
 def _load_full_table(run_dir: Path, stage: StageView) -> dict[str, Any] | None:
-    """The whole table to load_output_table's 5000-row cap, not the 5-row preview."""
-    # The packet is read offline, with no route to click through to. The panel
-    # template states the cap itself when it bites.
+    # The whole table, not the 5-row preview: offline there is nowhere to click through to.
     if stage.output_path is None or not (run_dir / stage.output_path).is_file():
         return None
     table = load_output_table(run_dir, stage.output_path)

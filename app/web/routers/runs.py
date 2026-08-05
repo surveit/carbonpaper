@@ -564,6 +564,7 @@ async def run_stage_rows(
                 else _build_full_rows_diff(project, run_dir, stage_id, stage_record)
             ),
             "raw": raw,
+            "links": AppPanelLinks(project, run_id),
             # The page's own treatments (row numbers, click-to-expand cells,
             # sticky-header scroll box) the shared diff partial renders on request.
             "full_rows": True,

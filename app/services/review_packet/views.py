@@ -42,8 +42,7 @@ class InputBindingView(BaseModel):
 
 
 class StageView(BaseModel):
-    """`record` is the stage's manifest entry verbatim."""
-    # The app's own stage-panel template reads it directly, so it passes unshaped.
+    # `record` is the manifest entry verbatim; the stage-panel template reads it unshaped.
 
     record: dict[str, Any]
     stage_id: str
@@ -81,8 +80,8 @@ def build_run_view(
     definitions: dict[str, Stage],
     definition_error: str | None,
 ) -> RunView:
-    """`definition_error` says why `definitions` is empty; the packet reports it."""
-    # Reports it rather than rendering a blank workflow, which would read as "no steps".
+    # `definition_error` says why `definitions` is empty; a blank workflow would
+    # read as "no steps".
     return RunView(
         project=str(manifest.get("project") or ""),
         run_id=str(manifest.get("run_id") or ""),

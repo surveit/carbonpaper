@@ -12,8 +12,9 @@ import pandas as pd
 import pytest
 
 import app.services.run as run_service
-from app.models.review_guide import ReviewGuide, ReviewGuideStep
+from app.models.review_guide import ReviewGuideStep
 from app.services import versioning, workspace
+from app.services.versioning import ReviewGuide
 from app.web.export import export_review_packet
 from app.services.review_packet.checksums import compute_sha256
 
@@ -70,7 +71,10 @@ def _load_stage(root):
     }
 
 
-_COLUMNS = [{"name": "name", "type": "str"}, {"name": "val", "type": "int"}]
+_COLUMNS = [
+    {"name": "name", "type": "str", "nullable": False},
+    {"name": "val", "type": "int", "nullable": False},
+]
 
 
 def _double_stage():
@@ -95,7 +99,9 @@ def _double_stage():
 
 
 def _seed_version(root):
-    vid = versioning.create_version_from_disk(root, message="seed", reviewer="test").version_id
+    vid = versioning.create_version_from_stages(
+        root, [_load_stage(root), _double_stage()], message="seed", reviewer="test"
+    ).version_id
     versioning.publish_version(root, vid, reviewer="human")
     return vid
 
@@ -254,9 +260,7 @@ def test_pages_name_the_stage_type_plainly(exported):
 
 
 def test_index_identifies_an_input_by_name_and_hash_not_by_path(exported, project_dir):
-    """The hash identifies the bytes; only the verbatim records keep the path."""
-    # Scrubbing the records would make the packet's workflow disagree with the real
-    # one — a worse failure than disclosing the author's directory layout.
+    # Scrubbing the verbatim records instead would make them disagree with the real run.
     author_path = str(project_dir / "data" / "items.csv")
     assert author_path not in (exported.root / "index.html").read_text(encoding="utf-8")
     assert author_path in (exported.root / "manifest.json").read_text(encoding="utf-8")
@@ -324,6 +328,8 @@ def test_index_carries_the_versions_review_guide(project_dir, tmp_path):
         project_dir,
         version_id,
         ReviewGuide(
+            project=project_dir.name,
+            version_id=version_id,
             steps=[
                 ReviewGuideStep(
                     title="Check the doubling",
@@ -353,9 +359,11 @@ def test_guide_stage_links_reach_the_packets_own_pages(project_dir, tmp_path):
         project_dir,
         version_id,
         ReviewGuide(
+            project=project_dir.name,
+            version_id=version_id,
             steps=[
                 ReviewGuideStep(title="Step", prose="p", stage_ids=["load", "double"])
-            ]
+            ],
         ),
     )
     run_id = run_service.start_run(_PROJECT)

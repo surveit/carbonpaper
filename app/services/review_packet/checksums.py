@@ -11,8 +11,7 @@ _READ_CHUNK_BYTES = 1 << 20
 
 
 def write_checksums(root: Path) -> str:
-    """Covers every file under `root` but itself. Returns the packet-relative path."""
-    # Itself, because a manifest cannot carry the hash of the file it is written into.
+    # Covers every file but itself: a manifest cannot carry its own hash.
     lines = [
         f"{compute_sha256(path)}  {path.relative_to(root).as_posix()}"
         for path in _list_packet_files(root)

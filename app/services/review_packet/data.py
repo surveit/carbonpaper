@@ -38,7 +38,6 @@ class DataReport(BaseModel):
 def write_packet_data(
     root: Path, run_dir: Path, project_dir: Path, view: RunView, workflow: str | None
 ) -> DataReport:
-    """Writes every non-HTML file of the packet under `root`."""
     # `workflow` is the pinned version as JSON, or None when it could not be read.
     report = DataReport(written=[], omitted=[])
     _copy_run_records(root, run_dir, report)
@@ -52,7 +51,6 @@ def write_packet_data(
 
 
 def _copy_run_records(root: Path, run_dir: Path, report: DataReport) -> None:
-    """The run's own two artifacts, verbatim."""
     # events.jsonl carries the LLM prompts — the only record of what a model was asked.
     _copy_file(run_dir / MANIFEST_FILE, root / MANIFEST_FILE, MANIFEST_FILE, report)
     _copy_file(run_dir / EVENTS_FILE, root / EVENTS_FILE, EVENTS_FILE, report)
@@ -89,7 +87,6 @@ def _copy_document(root: Path, project_dir: Path, report: DataReport) -> None:
 def _write_stage_output(
     root: Path, run_dir: Path, stage: StageView, report: DataReport
 ) -> None:
-    """CSV for reading, plus the raw file the run actually wrote."""
     # A CSV round trip loses dtypes, so the raw file is what a reviewer recomputes against.
     if stage.output_path is None:
         report.omitted.append(
@@ -136,8 +133,7 @@ def read_stage_output(path: Path) -> pd.DataFrame:
 def _copy_input_file(
     root: Path, path: str, stage_id: str, index: int, report: DataReport
 ) -> None:
-    """Named by stage, not by the author's filename."""
-    # Two stages may bind files of the same name; the manifest records the real path.
+    # Named by stage: two stages may bind files of the same name.
     source = Path(path)
     relative = f"{INPUTS_DIR}/{index:02d}-{stage_id}{source.suffix}"
     if not path or not source.is_file():

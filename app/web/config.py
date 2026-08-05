@@ -77,9 +77,7 @@ def _time_element(v: object, attrs: str) -> Markup:
 
 
 def plain_value(v: object) -> str:
-    """A `str`-valued Enum's own value, for display."""
-    # Enum overrides __str__, so `{{ x }}` renders "StageType.input_data". A dict
-    # lookup on the same value still works, so the mismatch shows up only on a page.
+    # Bare `{{ x }}` on an Enum renders "StageType.input_data".
     return str(v.value) if isinstance(v, Enum) else ("" if v is None else str(v))
 
 
