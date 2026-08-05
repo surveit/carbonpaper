@@ -8,7 +8,7 @@ from app.core.persistence import get_store
 from app.services.drafts import Draft
 from app.services.loader import load_workflow
 from app.services.spec_migrations import upgrade_stage_spec
-from app.services.versioning import WorkflowVersion
+from app.services.versioning import WorkflowVersion, list_versions
 
 _V1_STAGE = {
     "id": "load", "name": "Load", "type": "input_data",
@@ -62,6 +62,16 @@ def test_a_v1_version_record_loads_and_its_data_model_keeps_its_key(tmp_path):
     version = WorkflowVersion.load(f"{project}/v1")
     assert [s.id for s in version.stages] == ["tag"]
     assert version.schemas[0]["primary_key"] == ["id"]
+
+
+def test_a_v1_version_record_is_listable_too(tmp_path):
+    # list_versions reads the store directly, not via WorkflowVersion.load.
+    project = tmp_path.name
+    get_store().write("workflow_version", f"{project}/v1", {
+        "version_id": "v1", "message": "m", "reviewer": "r",
+        "stages": [json.loads(json.dumps(_V1_ROW_STAGE))],
+    }, schema_version=1)
+    assert [v.version_id for v in list_versions(tmp_path)] == ["v1"]
 
 
 def test_a_v1_draft_record_loads_instead_of_refusing(tmp_path):

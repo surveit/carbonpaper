@@ -288,7 +288,9 @@ def list_versions(project_dir: Path) -> list[WorkflowVersion]:
     versions: list[WorkflowVersion] = []
     for doc_id, data in get_store().read_all("workflow_version", f"{name}/"):
         try:
-            v = WorkflowVersion.model_validate(data)
+            # Same read-path upgrade WorkflowVersion.load applies: a document must
+            # not validate one way in and fail the other.
+            v = WorkflowVersion.model_validate(WorkflowVersion._upgrade(data))
         except ValidationError as exc:
             raise _invalid_version_document(doc_id, exc) from exc
         versions.append(v)
