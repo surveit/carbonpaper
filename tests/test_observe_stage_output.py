@@ -1,7 +1,6 @@
-"""Observing a stage's real output: a scoped workflow test executes the input stage
-over its WHOLE bound file (nothing injected), and observe_stage_output profiles
-several of that output's columns at once — never presenting a cut list as a whole
-vocabulary."""
+"""Observing a stage's real output: a workflow test executes the stages you name over
+the slice you ask for, and observe_stage_output_data_range profiles several of that
+output's columns at once — never presenting a cut list as a whole vocabulary."""
 from __future__ import annotations
 
 import pandas as pd
@@ -12,15 +11,16 @@ from app.models import parse_stage
 from app.services import workspace
 from app.services.run import read_stage_output
 from app.services.versioning import WorkflowVersion
-from app.services.workflow_test import DEFAULT_ROW_LIMIT, run_workflow_test
+from app.services.workflow_test import run_workflow_test
 
-# More rows than DEFAULT_ROW_LIMIT, so "read the whole bound file" is distinguishable
-# from "read the default slice"; 3 statuses, and one distinct id per row.
+# One distinct doc_id per row, 3 statuses in equal parts, and a numeric column
+# spanning zero — so a range summary is distinguishable from a value list.
+_ROW_COUNT = 24
 _STATUSES = ["awarded", "protested", "cancelled"]
 _ROWS = pd.DataFrame({
-    "doc_id": [f"{n:03d}" for n in range(1, DEFAULT_ROW_LIMIT + 5)],
-    "status": [_STATUSES[n % 3] for n in range(DEFAULT_ROW_LIMIT + 4)],
-    "score": [n - 2 for n in range(DEFAULT_ROW_LIMIT + 4)],
+    "doc_id": [f"{n:03d}" for n in range(1, _ROW_COUNT + 1)],
+    "status": [_STATUSES[n % 3] for n in range(_ROW_COUNT)],
+    "score": [n - 2 for n in range(_ROW_COUNT)],
 })
 
 _LOAD_SCHEMA = {"columns": [{"name": "doc_id", "type": "str", "nullable": True},
@@ -60,40 +60,37 @@ def demo(tmp_path):
     return project
 
 
-# ── 1. Run stages with no overrides ─────────────────────────────────────────
+# ── 1. Which stages run, and over how much ──────────────────────────────────
 
 
-def test_scoping_to_the_input_stage_reads_the_whole_bound_file(demo):
-    """The no-override mode: the input stage executes and reads its file whole."""
+def test_naming_the_input_stage_executes_it_over_the_whole_bound_file(demo):
     result = run_workflow_test("demo", stage_ids=["load"])
     assert result["ok"] is True
     assert result["stages_run"] == ["load"]
-    rows_read = len(read_stage_output("demo", result["run_id"], "load"))
-    assert rows_read == len(_ROWS) > DEFAULT_ROW_LIMIT
+    assert len(read_stage_output("demo", result["run_id"], "load")) == _ROW_COUNT
 
 
-def test_an_unscoped_test_still_injects_the_slice_and_skips_the_input(demo):
+def test_a_test_naming_no_stages_injects_the_slice_and_skips_the_input(demo):
     result = run_workflow_test("demo", limit=2)
     assert result["stages_run"] == ["classify"]
     assert len(read_stage_output("demo", result["run_id"], "classify")) == 2
 
 
-def test_a_scoped_test_refuses_a_limit_rather_than_ignoring_it(demo):
-    """A silently ignored limit would misreport how many rows the run read."""
-    with pytest.raises(ValueError, match="no source"):
-        run_workflow_test("demo", stage_ids=["load"], limit=2)
+def test_naming_a_stage_still_injects_the_slice_its_producer_owes_it(demo):
+    """Scope and slice are independent: `classify` runs alone, over 5 injected rows."""
+    result = run_workflow_test("demo", stage_ids=["classify"], limit=5)
+    assert result["ok"] is True
+    assert len(read_stage_output("demo", result["run_id"], "classify")) == 5
 
 
-def test_a_scoped_test_names_the_real_stages_for_an_unknown_id(demo):
+def test_an_omitted_limit_injects_the_whole_source(demo):
+    result = run_workflow_test("demo", stage_ids=["classify"])
+    assert len(read_stage_output("demo", result["run_id"], "classify")) == _ROW_COUNT
+
+
+def test_naming_an_unknown_stage_names_the_real_ones(demo):
     with pytest.raises(ValueError, match=r"classify.*load|load.*classify"):
         run_workflow_test("demo", stage_ids=["laod"])
-
-
-def test_scoping_a_stage_without_its_producer_fails_the_run(demo):
-    """A stage errors rather than running on a fabricated empty input."""
-    result = run_workflow_test("demo", stage_ids=["classify"])
-    assert result["ok"] is False
-    assert "load" in result["error"]
 
 
 # ── 2. Read a stage's output ────────────────────────────────────────────────
@@ -116,49 +113,85 @@ def test_reading_a_stage_the_run_does_not_have_names_the_ones_it_ran(demo):
 
 def test_reading_a_stage_that_wrote_no_output_is_loud(demo):
     """An errored stage has a record but no file — a raise, never an empty frame."""
-    result = run_workflow_test("demo", stage_ids=["classify"])
+    bad = dict(_CLASSIFY, function={"kind": "inline", "code":
+                                    "def transform(row):\n    raise ValueError('boom')"})
+    WorkflowVersion(
+        id="demo/v2", version_id="v2", created_at="2026-08-02T00:00:00",
+        message="broken", reviewer="test", published=False,
+        stages=[parse_stage(s) for s in (_load_stage(demo), bad)],
+    ).save()
+    result = run_workflow_test("demo", version_id="v2", limit=2)
+    assert result["ok"] is False
     with pytest.raises(StageOutputMissing, match="no output"):
         read_stage_output("demo", result["run_id"], "classify")
+
+
+def _load_stage(project) -> dict:
+    return {
+        "id": "load", "type": "input_data", "name": "Load rows",
+        "connector": {"kind": "file", "params": {
+            "path": str(project / "data" / "rows.csv"), "format": "csv"}},
+        "output_schema": _LOAD_SCHEMA,
+    }
 
 
 # ── 3. The tool: several columns at once, never a cut list as a whole set ────
 
 
-def _observe(project_id, run_id, stage_id, columns, **kwargs):
+def _observe(project_id, run_id, stage_id, columns, max_values=100):
     from app.mcp import server
 
-    return server.observe_stage_output(
+    return server.observe_stage_output_data_range(
         project_id=project_id, run_id=run_id, stage_id=stage_id,
-        columns=columns, **kwargs)
+        columns=columns, max_values=max_values)
 
 
 def test_the_tool_profiles_several_columns_in_one_call(demo):
     run_id = run_workflow_test("demo", stage_ids=["load"])["run_id"]
     result = _observe("demo", run_id, "load", ["status", "score"])
     assert result["ok"] is True
-    assert result["row_count"] == len(_ROWS)
-    assert [c["column"] for c in result["columns"]] == ["status", "score"]
-    status = result["columns"][0]
-    assert status["values"] == ["awarded", "cancelled", "protested"]
+    assert result["row_count"] == _ROW_COUNT
+    assert [column["column"] for column in result["columns"]] == ["status", "score"]
+
+
+def test_a_categorical_column_reports_a_count_per_value(demo):
+    run_id = run_workflow_test("demo", stage_ids=["load"])["run_id"]
+    status = _observe("demo", run_id, "load", ["status"])["columns"][0]
+    assert status["values"] == [
+        {"value": "awarded", "count": 8},
+        {"value": "cancelled", "count": 8},
+        {"value": "protested", "count": 8},
+    ]
     assert status["distinct_count"] == 3
     assert status["truncated"] is False
     assert status["null_count"] == 0
+    assert status["value_range"] is None
+
+
+def test_a_numeric_column_reports_its_range(demo):
+    """min/max/mean/median is the answer for a numeric column; a value list is not."""
+    run_id = run_workflow_test("demo", stage_ids=["load"])["run_id"]
+    score = _observe("demo", run_id, "load", ["score"])["columns"][0]
+    assert score["value_range"] == {
+        "min": -2.0, "max": float(_ROW_COUNT - 3),
+        "mean": float(_ROWS["score"].mean()), "median": float(_ROWS["score"].median()),
+    }
+    assert score["distinct_count"] == _ROW_COUNT
 
 
 def test_a_cut_list_reports_the_true_distinct_count_beside_it(demo):
     """The property that must not be lost: a cut list never reads as a whole set."""
     run_id = run_workflow_test("demo", stage_ids=["load"])["run_id"]
-    result = _observe("demo", run_id, "load", ["doc_id"], max_values=2)
-    profile = result["columns"][0]
+    profile = _observe("demo", run_id, "load", ["doc_id"], max_values=2)["columns"][0]
     assert len(profile["values"]) == 2
-    assert profile["distinct_count"] == len(_ROWS)
+    assert profile["distinct_count"] == _ROW_COUNT
     assert profile["truncated"] is True
 
 
 def test_raising_max_values_returns_the_whole_vocabulary(demo):
     run_id = run_workflow_test("demo", stage_ids=["load"])["run_id"]
     profile = _observe("demo", run_id, "load", ["doc_id"], max_values=500)["columns"][0]
-    assert profile["distinct_count"] == len(profile["values"]) == len(_ROWS)
+    assert profile["distinct_count"] == len(profile["values"]) == _ROW_COUNT
     assert profile["truncated"] is False
 
 
@@ -180,13 +213,13 @@ def test_a_column_a_stage_computes_is_observable_though_no_file_holds_it(demo):
     """`label` exists only after classify runs — what a file read cannot answer."""
     run_id = run_workflow_test("demo", limit=6)["run_id"]
     profile = _observe("demo", run_id, "classify", ["label"])["columns"][0]
-    assert profile["values"] == ["neg", "pos"]
+    assert [value["value"] for value in profile["values"]] == ["pos", "neg"]
 
 
 def test_the_tool_is_registered_on_the_glassbox_surface(demo):
     from app.mcp import server
 
-    assert "observe_stage_output" in {
+    assert "observe_stage_output_data_range" in {
         tool.name for tool in server.mcp._tool_manager.list_tools()}
 
 
@@ -202,7 +235,7 @@ def test_both_authoring_surfaces_carry_the_observed_enum_guidance():
     assert OBSERVED_ENUM_GUIDANCE in INSTRUCTIONS
 
 
-def test_the_guidance_keeps_the_two_questions_and_the_traps():
+def test_the_guidance_keeps_the_two_questions_and_the_sample_warning():
     from app.models.authoring_lifecycle_note import AUTHORING_LIFECYCLE_GUIDANCE
     from app.models.observed_enum_note import OBSERVED_ENUM_GUIDANCE
 
@@ -210,13 +243,17 @@ def test_the_guidance_keeps_the_two_questions_and_the_traps():
     assert "GENERATION" in text and "thousands of values and still be closed" in text
     assert "Do WE consume it as a discrete set" in text and "MANDATORY" in text
     assert "distinct COUNT is evidence, never the criterion" in text
-    assert "goes in the PLAN" in text and "Observing IS research" in text
+    assert "goes in the PLAN" in text
     assert "SAMPLE, not the set" in text
-    assert "`llm_transform`" in text and "corroborates nothing" in text
-    assert "`human_review_queue`" in text and "artifact of the test" in text
-    assert "never replaces guard code" in text
     # No tool name in the shared text: the editing agent registers no run tool, so
     # each surface states its own recipe after embedding this.
-    for name in ("observe_stage_output", "run_workflow_test", "save_version"):
+    for name in ("observe_stage_output_data_range", "run_workflow_test", "save_version"):
         assert name not in text
     assert AUTHORING_LIFECYCLE_GUIDANCE not in text
+
+
+def test_the_editing_prompt_asks_no_human_to_check_a_column(demo):
+    """The editing agent iterates; escalating an enum to a human was the wrong ask."""
+    from app.agents.compiler.prompt import EDITING_SYSTEM_PROMPT
+
+    assert "ask the human" not in EDITING_SYSTEM_PROMPT

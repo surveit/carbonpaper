@@ -15,7 +15,7 @@ import pyarrow.lib as pa_lib
 from pydantic import ValidationError as PydanticValidationError
 
 from app.core.errors import MissingInputBindingError
-from app.core.frames import PARQUET_SUFFIX
+from app.core.frames import read_frame_file
 from app.models import Connector, Stage, StageType
 from app.models.stages.input_data import InputDataStage
 from app.core.run_status import StageStatus
@@ -25,6 +25,7 @@ from .executor import _execute_stages, topological_sort
 from .manifest import (
     create_run_manifest,
     load_manifest_model,
+    resolve_output_path,
     write_manifest,
 )
 from .stages import PREFLIGHTS
@@ -188,9 +189,8 @@ def prepare_run(
                 f"stages are {[s.id for s in ordered]}"
             )
 
-    runs_dir = project_dir / "runs"
     run_id = datetime.now().strftime("%Y%m%dT%H%M%S")
-    run_dir = runs_dir / run_id
+    run_dir = project_dir / "runs" / run_id
     (run_dir / "outputs").mkdir(parents=True, exist_ok=True)
     (run_dir / "artifacts").mkdir(parents=True, exist_ok=True)
 
@@ -293,16 +293,11 @@ def resume_run(
     for record in manifest.stage_records:
         if record.status not in (StageStatus.OK, StageStatus.VALIDATION_WARNINGS):
             continue
-        if not record.output_path:
-            continue
-        path = run_dir / record.output_path
-        if not path.exists():
-            continue
         try:
-            if path.suffix == PARQUET_SUFFIX:
-                outputs_so_far[record.stage_id] = pd.read_parquet(path)
-            else:
-                outputs_so_far[record.stage_id] = pd.read_csv(path)
+            path = resolve_output_path(run_dir, record.output_path)
+            if path is None or not path.exists():
+                continue
+            outputs_so_far[record.stage_id] = read_frame_file(path)
         except (pa_lib.ArrowException, pd.errors.ParserError, OSError, ValueError):
             # A prior output file that's missing/corrupt/unreadable is
             # treated as not-yet-produced; the stage simply re-runs.

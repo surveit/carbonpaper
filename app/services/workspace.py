@@ -69,6 +69,11 @@ def resolve_project_dir(name: str) -> Path:
     return candidate
 
 
+def resolve_run_dir(name: str, run_id: str) -> Path:
+    """Where one run of a project lives. Services name the runs/ layout only here."""
+    return resolve_project_dir(name) / "runs" / run_id
+
+
 def load_schemas(project_dir: Path) -> list[dict[str, Any]]:
     """Load the named-schema data model from <project_dir>/schemas/*.json — one schema
     object per file (the shape the schema writer emits). Returns [] if the project has

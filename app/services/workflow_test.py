@@ -1,8 +1,8 @@
-"""Workflow-test seam: run a workflow over its real source — a slice of it, or
-named stages with nothing injected — as a REAL run: same `<project_dir>/runs/<id>/`
-dir, manifest, and routes as a production run, but marked `RunManifest.is_test_run`
-and scoped read-only. It reaches the shared engine through app.runtime.executor
-(run_subset), never app.runtime.runner."""
+"""Workflow-test seam: run a workflow — any subset of its stages, over any slice of
+its real source — as a REAL run: same `<project_dir>/runs/<id>/` dir, manifest, and
+routes as a production run, but marked `RunManifest.is_test_run` and scoped
+read-only. It reaches the shared engine through app.runtime.executor (run_subset),
+never app.runtime.runner."""
 from __future__ import annotations
 
 from datetime import datetime
@@ -17,11 +17,7 @@ from app.runtime.context import RunContext, RunIdentity
 from app.runtime.executor import run_subset, topological_sort
 from app.runtime.stages.input_data import read_input_data
 from app.services.versioning import list_versions, load_version, load_version_stages
-from app.services.workspace import repo_root, resolve_project_dir
-
-# Rows an unscoped workflow test reads from the source when the caller names no
-# limit — small enough to be cheap, wide enough to show the data's shape.
-DEFAULT_ROW_LIMIT = 20
+from app.services.workspace import repo_root, resolve_project_dir, resolve_run_dir
 
 
 def run_workflow_test(
@@ -30,7 +26,7 @@ def run_workflow_test(
     version_id: str | None = None,
     stage_ids: list[str] | None = None,
     limit: int | None = None,
-    offset: int | None = None,
+    offset: int = 0,
 ) -> dict[str, Any]:
     """Run the resolved version, as a real run (marked `is_test_run`) under
     `<project_dir>/runs/<run_id>/`. Returns `{ok, run_id, version_id, stages_run, error}`.
@@ -39,13 +35,11 @@ def run_workflow_test(
     axes — the reason this is its own seam rather than a flag on that one:
 
     1. VERSION: any stored version, published or not (_resolve_workflow_test_version).
-    2. SOURCE: a `limit`/`offset` slice, injected (get_source_data_with_limit_and_offset)
-       rather than read whole through the input_data stage — which is why the
-       frontier excludes input_data (_frontier_stages).
-    3. SCOPE: `stage_ids` runs ONLY those stages and injects NOTHING, so a named
-       input_data stage EXECUTES through its own handler and reads its whole bound
-       file. That is the no-override mode: no slice, hence no `limit`/`offset`
-       (passing either alongside `stage_ids` is refused rather than ignored).
+    2. SOURCE: `limit` rows from `offset`, injected (_read_source_slices) rather than
+       read whole through the input_data stage. `limit=None` injects the whole source.
+    3. SCOPE: `stage_ids` names the stages to execute; None runs every non-input stage
+       (_frontier_stages). A source stage named here EXECUTES, reading its own whole
+       bound file — nothing is injected over a stage that runs.
     4. EXECUTION: synchronous; start_run launches a background daemon thread.
     5. REVIEW QUEUE: auto-approves in memory (queue_auto_approve) instead of halting.
     6. STAGE CACHE: read-only (RunContext.for_workflow_test_run) instead of read+write.
@@ -56,16 +50,16 @@ def run_workflow_test(
     project_dir = resolve_project_dir(project)
     version = _resolve_workflow_test_version(project_dir, version_id)
     stages = load_version_stages(project_dir, version)
+    executing = topological_sort(_stages_to_execute(stages, stage_ids))
     # Read the source(s) before building the Workflow, so a sourceless workflow
     # fails on the missing source rather than on downstream graph validation.
-    injected = _injected_source(stages, stage_ids, limit, offset)
+    injected = _read_source_slices(stages, executing, limit=limit, offset=offset)
     workflow = Workflow(stages=stages)
-    frontier = topological_sort(_scoped_stages(stages, stage_ids))
 
     run_id = _mint_run_id()
-    run_dir = project_dir / "runs" / run_id
+    run_dir = resolve_run_dir(project, run_id)
 
-    executed_ids = [stage.id for stage in frontier]
+    executed_ids = [stage.id for stage in executing]
     ok, error = _run_frontier(
         workflow, injected, executed_ids, run_dir, repo_root(),
         project=project_dir.name, run_id=run_id, workflow_version=version)
@@ -125,25 +119,7 @@ def _run_frontier(
     return True, None
 
 
-def _injected_source(
-    stages: list[Stage], stage_ids: list[str] | None, limit: int | None, offset: int | None,
-) -> dict[str, pd.DataFrame]:
-    """The seeded outputs: a source slice for the whole-frontier run, nothing for a scoped one."""
-    if stage_ids is None:
-        return get_source_data_with_limit_and_offset(
-            stages,
-            limit=DEFAULT_ROW_LIMIT if limit is None else limit,
-            offset=0 if offset is None else offset,
-        )
-    if limit is not None or offset is not None:
-        raise ValueError(
-            "a scoped workflow test injects nothing, so `limit`/`offset` have no source "
-            f"to slice: drop them, or drop stage_ids={stage_ids} to run the frontier"
-        )
-    return {}
-
-
-def _scoped_stages(stages: list[Stage], stage_ids: list[str] | None) -> list[Stage]:
+def _stages_to_execute(stages: list[Stage], stage_ids: list[str] | None) -> list[Stage]:
     """The stages to execute: exactly `stage_ids`, or every non-input stage when it is None."""
     if stage_ids is None:
         return _frontier_stages(stages)
@@ -163,12 +139,10 @@ def _frontier_stages(stages: list[Stage]) -> list[Stage]:
     return [stage for stage in stages if stage.type != StageType.input_data.value]
 
 
-def get_source_data_with_limit_and_offset(
-    stages: list[Stage], *, limit: int, offset: int,
+def _read_source_slices(
+    stages: list[Stage], executing: list[Stage], *, limit: int | None, offset: int,
 ) -> dict[str, pd.DataFrame]:
-    """Read each input_data stage's bound file and take `df.iloc[offset:offset+limit]`,
-    keyed by stage id. Raises NoWorkflowTestSourceError if the workflow declares no
-    input_data stage."""
+    """`iloc[offset:offset+limit]` per source stage that is not itself executing; None = all."""
     sources = [stage for stage in stages if stage.type == StageType.input_data.value]
     if not sources:
         raise NoWorkflowTestSourceError(
@@ -178,9 +152,12 @@ def get_source_data_with_limit_and_offset(
     # source read carries the real repo_root and no run_dir (None, the read
     # precedes any run-dir creation) rather than a fabricated cwd sentinel.
     ctx = RunContext.for_stages_outside_a_run(repo_root(), None)
+    executing_ids = {stage.id for stage in executing}
+    end = None if limit is None else offset + limit
     return {
-        source.id: read_input_data(source, ctx).iloc[offset:offset + limit]
+        source.id: read_input_data(source, ctx).iloc[offset:end]
         for source in sources
+        if source.id not in executing_ids
     }
 
 

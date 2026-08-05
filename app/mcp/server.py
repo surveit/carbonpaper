@@ -10,7 +10,6 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, AsyncIterator, Callable
 
-import pandas as pd
 from mcp.server.fastmcp import FastMCP
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from starlette.types import Receive, Scope, Send
@@ -34,6 +33,7 @@ from app.models.stages.node_types import NODE_TYPES
 from app.runtime import stage_tests
 from app.services import generation
 from app.services import loader
+from app.services import observe as observe_service
 from app.services import project as project_service
 from app.services import run as run_service
 from app.services import versioning
@@ -62,11 +62,6 @@ _RUN_TOOL_ERRORS = (
 # Anything outside this set propagates as a genuine internal fault.
 _STAGE_TOOL_ERRORS = (WorkflowLoadError, FileNotFoundError)
 
-# Distinct values observe_stage_output returns per column when the caller names no
-# maximum. A 100k-value id column must not flood a reader who needs only to see that
-# it is not categorical; a caller expecting a large closed vocabulary asks for more.
-DEFAULT_MAX_VALUES = 40
-
 
 def _render_node_type_constraints() -> str:
     """Every node type's notes as bullets, from NODE_TYPES so the two prompts cannot drift."""
@@ -90,10 +85,9 @@ run_workflow.)
 
 {OBSERVED_ENUM_GUIDANCE}
 (Here, to observe: save_version, then run_workflow_test(stage_ids=["<the input
-stage id>"]) — that EXECUTES the input over its whole bound file, unsliced —
-then observe_stage_output for the values it produced. edit_stage tightens the
-schema afterwards. A scoped input read runs no compute stage, so the smoke gate
-does not govern it.)
+stage id>"]) — naming a source stage EXECUTES it over its whole bound file — then
+observe_stage_output_data_range on what it wrote. edit_stage tightens the schema
+afterwards.)
 
 # Setup
 1. create_project(name, document) — the methodology prose becomes the project's source
@@ -158,8 +152,9 @@ Runs execute a stored version; save_version(project_id, message) creates one, th
 run_workflow_test against it is how you finish. Publishing is human-only.
 run_workflow(project_id, version_id?) starts a real run and returns a run_id,
 get_run_status(project_id, run_id) follows it to its outcome, and
-run_workflow_test(project_id, version_id?, limit, offset) executes any stored version —
-published or not — over a small slice of the real source, as a run marked is_test_run.
+run_workflow_test(project_id, limit, version_id?, stage_ids?, offset?) executes any stored
+version — published or not — over `limit` rows of the real source, as a run marked
+is_test_run; observe_stage_output_data_range then profiles what a stage of it wrote.
 
 # Constraints
 {_NODE_TYPE_CONSTRAINTS}
@@ -384,10 +379,10 @@ def get_run_status(project_id: str, run_id: str) -> dict[str, Any]:
 @mcp.tool(description=TOOL_SPECS["run_workflow_test"].description)
 def run_workflow_test(
     project_id: str,
+    limit: int | None,
     version_id: str | None = None,
     stage_ids: list[str] | None = None,
-    limit: int | None = None,
-    offset: int | None = None,
+    offset: int = 0,
 ) -> dict[str, Any]:
     _resolve_existing_project(project_id)  # loud if the project doesn't exist
     try:
@@ -398,48 +393,21 @@ def run_workflow_test(
         return {"ok": False, "error": str(exc)}
 
 
-@mcp.tool(description=TOOL_SPECS["observe_stage_output"].description)
-def observe_stage_output(
+@mcp.tool(description=TOOL_SPECS["observe_stage_output_data_range"].description)
+def observe_stage_output_data_range(
     project_id: str,
     run_id: str,
     stage_id: str,
     columns: list[str],
-    max_values: int = DEFAULT_MAX_VALUES,
+    max_values: int,
 ) -> dict[str, Any]:
     _resolve_existing_project(project_id)  # loud if the project doesn't exist
-    if max_values < 1:
-        return {"ok": False, "error": f"max_values must be at least 1, got {max_values}"}
     try:
-        frame = run_service.read_stage_output(project_id, run_id, stage_id)
-        profiles = [_profile_column(frame, name, max_values) for name in columns]
+        profile = observe_service.profile_stage_output(
+            project_id, run_id, stage_id, columns, max_values=max_values)
     except _RUN_TOOL_ERRORS as exc:
         return {"ok": False, "error": str(exc)}
-    return {
-        "ok": True, "run_id": run_id, "stage_id": stage_id,
-        "row_count": len(frame), "columns": profiles,
-    }
-
-
-def _profile_column(
-    frame: pd.DataFrame, name: str, max_values: int
-) -> dict[str, object]:
-    """One column's observed values. `distinct_count` is the TRUE count even when cut."""
-    if name not in frame.columns:
-        raise ValueError(
-            f"the output holds no column '{name}' — its columns: "
-            + (", ".join(str(c) for c in frame.columns) or "(none)")
-        )
-    present = frame[name].dropna()
-    # Text form, not the cell's own type: it is what the profile reports, and it
-    # keeps an unhashable cell (a list/dict column) countable without a special case.
-    distinct = sorted({value if isinstance(value, str) else str(value) for value in present})
-    return {
-        "column": name,
-        "null_count": len(frame) - len(present),
-        "distinct_count": len(distinct),
-        "values": distinct[:max_values],
-        "truncated": len(distinct) > max_values,
-    }
+    return {"ok": True, **profile.model_dump()}
 
 
 def _resolve_existing_project(project_id: str) -> Path:

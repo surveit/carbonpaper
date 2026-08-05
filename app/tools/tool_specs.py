@@ -143,33 +143,27 @@ workflow. A just-created project appears here only once its first stage has
 been added, so a name missing from this list is a project with no stages
 yet, not a project that does not exist.""",
     ),
-    "observe_stage_output": ToolSpec(
-        name="observe_stage_output",
+    "observe_stage_output_data_range": ToolSpec(
+        name="observe_stage_output_data_range",
         description="""\
-Profile SEVERAL columns of one stage's stored output in a run — what the data
-actually holds, so a declared schema comes from observation instead of the
-methodology's prose. `columns` is a LIST: ask for every column you are about to
-declare in ONE call.
+Profile columns of one stage's stored output in a run: what the data actually
+holds, for declaring a schema from observation rather than from prose. `columns`
+is a LIST — ask for every column you are about to declare in one call.
 
-Per column: `distinct_count` (the TRUE number of distinct non-null values in
-that output), `values` (those values, sorted, as text, cut to `max_values`),
-`truncated`, `null_count`. READ distinct_count AGAINST len(values): equal means
-you are seeing the whole vocabulary; greater means `values` is a PREFIX and not
-the set — re-read with a larger `max_values` before declaring an enum from it.
-Raise `max_values` freely for a vocabulary you expect to be large and closed
-(commodity codes, country codes).
+Per column: `null_count`, `distinct_count` (the TRUE count of distinct non-null
+values), `values` (commonest first, as text with their counts, cut to
+`max_values`), `truncated`, and on a numerically typed column `value_range`
+(min/max/mean/median). `truncated` means `values` is a prefix, not the
+vocabulary — raise `max_values` before declaring an enum from it.
 
-It reads what one run WROTE, so `row_count` is that stage's own output size —
-below a filter or an aggregate that is far smaller than the source, and off a
-sliced run it is a sample either way. run_workflow_test(stage_ids=["<an
-input_data stage id>"]) is what gives an input column its COMPLETE vocabulary:
-that stage then executes over its whole bound file with nothing injected.
+`row_count` is that stage's OWN output: far below the source under a filter or an
+aggregate, and a sample either way off a sliced run. Naming a source stage in
+run_workflow_test's `stage_ids` executes it over its whole bound file — that is
+what gives an input column its complete vocabulary.
 
-Reading the source file yourself is not the same answer: the input stage pins
-the declared dtypes, so a zero-padded "002" declared `str` stays "002" here and
-becomes 2 in a plain CSV read — and a column a stage COMPUTES exists in no file
-at all. An unknown project, run, stage or column comes back {ok: False, error}
-naming what does exist, never an empty profile.""",
+Reading the source file yourself answers a different question: the input stage
+pins the declared dtypes (a zero-padded "002" declared `str` stays "002"; a plain
+CSV read makes it 2), and a computed column is in no file at all.""",
     ),
     "read_data_model": ToolSpec(
         name="read_data_model",
@@ -258,14 +252,15 @@ exactly six axes:
    published one). Omit `version_id` for the newest stored. Runs execute a
    STORED version, so save_version first — there is no unsaved-edits mode.
 2. SOURCE: the `limit` rows from `offset` of the workflow's bound source,
-   injected (run_workflow reads the whole source through input_data).
-3. SCOPE: `stage_ids` runs ONLY the stages you name and injects NOTHING, so a
-   named input_data stage EXECUTES over its WHOLE bound file — the way to see
-   an input column's complete vocabulary without paying for the stages below
-   it. `limit`/`offset` have no source to slice then, so passing either
-   alongside `stage_ids` is refused rather than quietly ignored. Every
-   producer a scoped stage reads must be scoped too, or that stage errors on
-   its absent input. Omit `stage_ids` and every non-input stage runs.
+   injected (run_workflow reads the whole source through input_data). `limit`
+   is the run's budget — every LLM stage pays per row, so state it; null is
+   the whole source.
+3. SCOPE: `stage_ids` names the stages to execute. A source stage named there
+   EXECUTES over its WHOLE bound file instead of taking the injected slice —
+   the way to see an input column's complete vocabulary without paying for the
+   stages below it. Every producer a named stage reads must be named too, or
+   run over the injected slice, or that stage errors on its absent input. Omit
+   `stage_ids` and every non-input stage runs.
 4. EXECUTION: synchronous — this returns when the run is done (run_workflow
    returns a run_id immediately and executes on a background thread).
 5. REVIEW QUEUE: a human_review_queue stage auto-approves every row in
@@ -277,8 +272,9 @@ Marked `is_test_run` on the manifest, so it never counts as the project's
 latest run. Returns the verdict {ok, run_id, version_id, stages_run, error}:
 `stages_run` is what actually executed, and `ok` False on any stage error with
 `error` naming what failed; poll get_run_status(project_id, run_id) for the
-same live/final manifest run_workflow exposes, or observe_stage_output for the
-values a stage produced. A project with no stored version is a loud error.""",
+same live/final manifest run_workflow exposes, or
+observe_stage_output_data_range for the values a stage produced. A project with
+no stored version is a loud error.""",
     ),
     "set_draft_stage": ToolSpec(
         name="set_draft_stage",

@@ -305,19 +305,29 @@ def write_manifest(run_dir: Path, manifest: RunManifest) -> None:
     )
 
 
+def resolve_output_path(run_dir: Path, output_path: str | None) -> Path | None:
+    """The sole join of a run dir to a recorded output path; None when the record names none."""
+    if not output_path:
+        return None
+    resolved = (run_dir / output_path).resolve()
+    if not resolved.is_relative_to(run_dir.resolve()):
+        raise StageOutputMissing(
+            f"recorded output path '{output_path}' escapes run '{run_dir.name}'"
+        )
+    return resolved
+
+
 def read_stage_output_frame(run_dir: Path, stage_id: str) -> pd.DataFrame:
     """The frame a stage of this run wrote, read from the path its own record names."""
     records = load_manifest_model(run_dir).stage_records
     record = _find_stage_record(records, run_dir, stage_id)
-    if not record.output_path:
+    path = resolve_output_path(run_dir, record.output_path)
+    if path is None:
         raise StageOutputMissing(
             f"stage '{stage_id}' of run '{run_dir.name}' wrote no output "
             f"(its status is '{record.status}'), so it holds no values to read"
         )
-    # The recorded path, never one assembled from the stage id: the executor writes
-    # CSV instead of parquet for a frame parquet cannot hold, so where the output
-    # landed is a fact of this run.
-    return read_frame_file(run_dir / record.output_path)
+    return read_frame_file(path)
 
 
 def _find_stage_record(

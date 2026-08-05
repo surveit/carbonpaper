@@ -22,7 +22,7 @@ from app.services.versioning import (
     load_version_stages,
     resolve_version_id,
 )
-from app.services.workspace import repo_root, resolve_project_dir
+from app.services.workspace import repo_root, resolve_project_dir, resolve_run_dir
 
 
 def start_run(
@@ -115,7 +115,7 @@ def read_pinned_version(project: str, run_id: str) -> str:
     """The workflow version a run is pinned to, off its manifest."""
     # A run carrying no workflow_version predates the version model; fail loudly
     # rather than guessing which snapshot it meant.
-    run_dir = _run_dir(project, run_id)
+    run_dir = resolve_run_dir(project, run_id)
     workflow_version = load_manifest_model(run_dir).workflow_version
     if not workflow_version:
         raise RunVersionUnresolvableError(
@@ -128,7 +128,7 @@ def read_pinned_version(project: str, run_id: str) -> str:
 
 def read_stage_output(project: str, run_id: str, stage_id: str) -> pd.DataFrame:
     """The rows one stage of one run actually produced. Every miss raises, naming what exists."""
-    run_dir = _run_dir(project, run_id)
+    run_dir = resolve_run_dir(project, run_id)
     _validate_run_exists(run_dir, project, run_id)
     return read_stage_output_frame(run_dir, stage_id)
 
@@ -139,13 +139,9 @@ def read_run_status(project: str, run_id: str) -> dict[str, Any]:
     fields stay omitted — the same shape the executor persisted). Raises
     RunNotFoundError if the run has no manifest — a bad/expired run id, surfaced
     loudly rather than as an empty or fabricated status."""
-    run_dir = _run_dir(project, run_id)
+    run_dir = resolve_run_dir(project, run_id)
     _validate_run_exists(run_dir, project, run_id)
     return load_manifest_model(run_dir).to_dict()
-
-
-def _run_dir(project: str, run_id: str) -> Path:
-    return resolve_project_dir(project) / "runs" / run_id
 
 
 def _validate_run_exists(run_dir: Path, project: str, run_id: str) -> None:

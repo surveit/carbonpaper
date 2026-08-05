@@ -486,7 +486,6 @@ _GRANDFATHERED: frozenset[str] = frozenset(
         "app/services/workflow_test.py::_mint_run_id",
         "app/services/workflow_test.py::_resolve_workflow_test_version",
         "app/services/workflow_test.py::_run_frontier",
-        "app/services/workflow_test.py::get_source_data_with_limit_and_offset",
         "app/services/workflow_test.py::run_workflow_test",
         "app/services/workspace.py::configure_projects_dir_from_env",
         "app/services/workspace.py::list_project_names",

@@ -52,14 +52,8 @@ def _stage_type_catalog() -> str:
     return "\n".join(lines)
 
 
-_OBSERVING_HERE = (
-    "You have no run tool, so you cannot observe a column yourself: state the "
-    "vocabulary you believe a column has and what would settle it, and ask the human "
-    "to check it against the data before you declare the enum."
-)
-
 EDITING_SYSTEM_PROMPT = (
     _SYSTEM_PROMPT + "\n\n" + AUTHORING_LIFECYCLE_GUIDANCE
-    + "\n\n" + OBSERVED_ENUM_GUIDANCE + "\n" + _OBSERVING_HERE
+    + "\n\n" + OBSERVED_ENUM_GUIDANCE
     + "\n\n" + _stage_type_catalog()
 )
