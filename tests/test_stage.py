@@ -37,7 +37,11 @@ def _build_enrich_on_k(*, join):
     the `join` block."""
     return S(id="j", type="enrich",
              inputs=[{"id": "a", "schema": _K_SCHEMA}, {"id": "b", "schema": _KV_SCHEMA}],
-             output_schema=_K_SCHEMA, join=join)
+             signature={"form": "extends",
+                        "reads": [{"input": "a", "columns": _K_SCHEMA["columns"]},
+                                  {"input": "b", "columns": _K_SCHEMA["columns"]}],
+                        "adds": [{"name": "v", "type": "str", "nullable": True}]},
+             join=join)
 
 
 # ── column types ─────────────────────────────────────────────────────────────
@@ -73,7 +77,7 @@ def test_valid_input_data(tmp_path):
     s = m.parse_stage(S(
         id="load", type="input_data",
         connector={"kind": "file", "params": {"path": str(tmp_path / "d.csv"), "format": "csv"}},
-        output_schema={"columns": [{"name": "id", "type": "str", "nullable": True}]}))
+        signature={"form": "replaces", "produces": _PK_ID_SCHEMA["columns"]}))
     assert s.type == m.StageType.input_data
 
 
@@ -81,7 +85,11 @@ def test_valid_llm_transform():
     s = m.parse_stage(S(
         id="extract", type="llm_transform",
         inputs=[{"id": "load", "schema": {"columns": [{"name": "id", "type": "str", "nullable": True}]}}],
-        output_schema={"columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "out", "type": "str", "nullable": True}]},
+        signature={
+            "form": "extends",
+            "reads": [{"input": "load", "columns": _PK_ID_SCHEMA["columns"]}],
+            "adds": [{"name": "out", "type": "str", "nullable": True}],
+        },
         llm={"prompt_template": "do {id}", "tools": ["WebSearch"]}))
     assert s.llm.prompt_data_template == "do {id}"
 
@@ -103,7 +111,7 @@ def test_llm_transform_rejects_more_than_one_input():
         m.parse_stage(S(
             id="extract", type="llm_transform",
             inputs=[{"id": "a", "schema": _PK_ID_SCHEMA}, {"id": "b", "schema": _PK_ID_SCHEMA}],
-            output_schema={"columns": [{"name": "id", "type": "str", "nullable": True}]},
+            signature={"form": "extends"},
             llm={"prompt_template": "do it"}))
 
 
@@ -114,26 +122,16 @@ def test_llm_transform_rejects_input_with_no_declared_schema():
         m.parse_stage(S(
             id="extract", type="llm_transform",
             inputs=[{"id": "a"}],
-            output_schema={"columns": [{"name": "id", "type": "str", "nullable": True}]},
+            signature={"form": "extends", "adds": _PK_ID_SCHEMA["columns"]},
             llm={"prompt_template": "do it"}))
 
 
-def test_llm_transform_rejects_missing_output_schema():
-    with pytest.raises(ValidationError, match="declares no output_schema"):
+def test_llm_transform_rejects_a_missing_signature():
+    with pytest.raises(ValidationError, match="signature"):
         m.parse_stage(S(
             id="extract", type="llm_transform",
             inputs=[{"id": "a", "schema": {"columns": [{"name": "id", "type": "str", "nullable": True}]}}],
             llm={"prompt_template": "do it"}))
-
-
-def test_llm_transform_rejects_output_that_drops_an_input_column():
-    with pytest.raises(ValidationError, match="output must keep every input column unchanged"):
-        m.parse_stage(S(
-            id="extract", type="llm_transform",
-            inputs=[{"id": "a", "schema": {
-                "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}]}}],
-            output_schema={"columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True}]},
-            llm={"prompt_template": "do {id}"}))
 
 
 def test_llm_transform_rejects_output_that_adds_no_columns():
@@ -141,7 +139,10 @@ def test_llm_transform_rejects_output_that_adds_no_columns():
         m.parse_stage(S(
             id="extract", type="llm_transform",
             inputs=[{"id": "a", "schema": {"columns": [{"name": "id", "type": "str", "nullable": True}]}}],
-            output_schema={"columns": [{"name": "id", "type": "str", "nullable": True}]},
+            signature={
+                "form": "extends",
+                "reads": [{"input": "a", "columns": _PK_ID_SCHEMA["columns"]}],
+            },
             llm={"prompt_template": "do {id}"}))
 
 
@@ -159,7 +160,8 @@ def test_publish_requires_the_function_block_it_actually_runs():
 def test_publish_config_is_typed():
     s = m.parse_stage(S(
         id="p", type="publish", inputs=[{"id": "a", "schema": _PK_ID_SCHEMA}],
-        publish={"format": "json"}, function={"kind": "inline", "code": "def transform(row): return row"}))
+        publish={"format": "json"}, signature={"form": "replaces"},
+        function={"kind": "inline", "code": "def transform(row): return row"}))
     assert s.publish.format == m.PublishFormat.json
 
 
@@ -186,7 +188,10 @@ def test_python_function_inline_code_must_define_transform():
 def test_python_function_inline_valid_transform_ok():
     m.parse_stage(S(id="t", type="python_row_function",
                              inputs=[{"id": "a", "schema": _PK_ID_SCHEMA}],
-                             output_schema=_PK_ID_SCHEMA,
+                             signature={
+                                 "form": "extends",
+                                 "reads": [{"input": "a", "columns": _PK_ID_SCHEMA["columns"]}],
+                             },
                              function={"kind": "inline", "code": "def transform(row): return row"}))
 
 
@@ -219,7 +224,8 @@ def test_join_rejects_a_third_input(t):
             id="j", type=t,
             inputs=[{"id": "a", "schema": _K_SCHEMA}, {"id": "b", "schema": _KV_SCHEMA},
                     {"id": "c", "schema": _K_SCHEMA}],
-            output_schema=_K_SCHEMA,
+            signature={"form": "extends",
+                       "adds": [{"name": "v", "type": "str", "nullable": True}]},
             join={"keys": [{"left": "k", "right": "k"}], "enrich_with": {"v": "v"}},
         ))
     assert [(e["loc"], e["type"]) for e in err.value.errors()] == [((t, "inputs"), "too_long")]
@@ -233,8 +239,14 @@ def test_aggregate_rejects_a_second_input():
             inputs=[{"id": "a", "schema": _K_SCHEMA}, {"id": "b", "schema": _K_SCHEMA}],
             aggregate={"group_by": ["k"],
                        "aggregations": [{"output_column": "n", "formula": "count"}]},
-            output_schema={"columns": [{"name": "k", "type": "str", "nullable": True},
-                                       {"name": "n", "type": "int", "nullable": True}]},
+            signature={
+                "form": "replaces",
+                "reads": [{"input": "a", "columns": _K_SCHEMA["columns"]}],
+                "produces": [
+                    {"name": "k", "type": "str", "nullable": True},
+                    {"name": "n", "type": "int", "nullable": True},
+                ],
+            },
         ))
     assert [(e["loc"], e["type"]) for e in err.value.errors()] == [(("aggregate", "inputs"), "too_long")]
 
@@ -247,7 +259,16 @@ def test_human_review_queue_rejects_a_second_input():
             inputs=[{"id": "a", "schema": _QUEUE_IN_SCHEMA}, {"id": "b", "schema": _QUEUE_IN_SCHEMA}],
             queue={"reviewed_columns": {"score": "reviewed_score"}, "verdict_column": "v",
                    "reviewer_column": "r", "reviewed_at_column": "at"},
-            output_schema=_QUEUE_OUT_SCHEMA,
+            signature={
+                "form": "extends",
+                "adds": [
+                    {"name": "human_score", "type": "int", "nullable": True},
+                    {"name": "decision", "type": "str", "nullable": True},
+                    {"name": "reviewer_id", "type": "str", "nullable": True},
+                    {"name": "reviewed_at", "type": "str", "nullable": True},
+                    {"name": "review_notes", "type": "str", "nullable": True},
+                ],
+            },
         ))
     assert (("human_review_queue", "inputs"), "too_long") in [
         (e["loc"], e["type"]) for e in err.value.errors()]
@@ -268,7 +289,10 @@ def test_input_ids_property():
 def test_source_parses_as_sourceref(tmp_path):
     s = m.parse_stage(S(id="load", type="input_data",
                                  connector={"kind": "file", "params": {"path": str(tmp_path / "d.csv")}},
-                                 output_schema=_PK_ID_SCHEMA,
+                                 signature={
+                                     "form": "replaces",
+                                     "produces": _PK_ID_SCHEMA["columns"],
+                                 },
                                  source={"doc": "x.md", "section": "S1", "lines": [1, 2]}))
     assert s.source.doc == "x.md" and s.source.lines == [1, 2]
 
@@ -279,7 +303,16 @@ def test_queue_needs_no_hash_source_declared():
     # explicit column list is required to build the stage.
     s = m.parse_stage(S(
         id="rev", type="human_review_queue", inputs=[{"id": "a", "schema": _QUEUE_IN_SCHEMA}],
-        output_schema=_QUEUE_OUT_SCHEMA, queue=queue_columns(),
+        signature={
+            "form": "extends",
+            "adds": [
+                {"name": "human_score", "type": "int", "nullable": True},
+                {"name": "decision", "type": "str", "nullable": True},
+                {"name": "reviewer_id", "type": "str", "nullable": True},
+                {"name": "reviewed_at", "type": "str", "nullable": True},
+                {"name": "review_notes", "type": "str", "nullable": True},
+            ],
+        }, queue=queue_columns(),
     ))
     assert s.queue is not None
 
@@ -318,7 +351,19 @@ def test_aggregate_valid():
         id="agg", type="aggregate",
         inputs=[{"id": "a", "schema": {"columns": [{"name": "g", "type": "str", "nullable": True},
                                                    {"name": "x", "type": "int", "nullable": True}]}}],
-        output_schema={"columns": [{"name": "g", "type": "str", "nullable": True}, {"name": "total", "type": "int", "nullable": True}]},
+        signature={
+            "form": "replaces",
+            "reads": [
+                {
+                    "input": "a",
+                    "columns": [
+                        {"name": "g", "type": "str", "nullable": True},
+                        {"name": "x", "type": "int", "nullable": True},
+                    ],
+                },
+            ],
+            "produces": [{"name": "g", "type": "str", "nullable": True}, {"name": "total", "type": "int", "nullable": True}],
+        },
         aggregate={"group_by": ["g"],
                    "aggregations": [{"formula": "sum", "output_column": "total",
                                      "value_column": "x"}]}))
@@ -352,7 +397,7 @@ def test_model_enum_accepts_known():
     s = m.parse_stage(S(
         id="e", type="llm_transform",
         inputs=[{"id": "a", "schema": {"columns": [{"name": "id", "type": "str", "nullable": True}]}}],
-        output_schema={"columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "out", "type": "str", "nullable": True}]},
+        signature={"form": "extends", "adds": [{"name": "out", "type": "str", "nullable": True}]},
         llm={"prompt_template": "p", "model": "claude-haiku-4-5"}))
     assert s.llm.model == LLMModel.claude_haiku_4_5
 
@@ -375,7 +420,7 @@ def test_model_enum_rejects_unversioned_alias():
 def test_validate_stage_helper(tmp_path):
     assert m.validate_stage(S(id="load", type="input_data",
                               connector={"kind": "file", "params": {"path": str(tmp_path / "d.csv")}},
-                              output_schema=_PK_ID_SCHEMA)) == []
+                              signature={"form": "replaces", "produces": _PK_ID_SCHEMA["columns"]})) == []
     assert m.validate_stage({"id": "BadId", "type": "input_data", "name": "x", "connector": {"kind": "file"}})
 
 
@@ -384,7 +429,11 @@ def test_inputs_are_refs_with_schema():
     s = m.parse_stage(S(
         id="x", type="python_frame_function",
         inputs=[{"id": "a", "schema": {"columns": [{"name": "k", "type": "str", "nullable": True}]}}],
-        output_schema={"columns": [{"name": "k", "type": "str", "nullable": True}]},
+        signature={
+            "form": "replaces",
+            "reads": [{"input": "a", "columns": _K_SCHEMA["columns"]}],
+            "produces": _K_SCHEMA["columns"],
+        },
         function={"kind": "inline", "code": "def transform(row): return row"},
     ))
     assert s.input_ids == ["a"]
@@ -396,7 +445,7 @@ def test_inputs_bare_id_shorthand_normalises_then_fails_on_the_missing_schema():
     the required `schema` rather than on the string's shape."""
     issues = m.validate_stage(S(
         id="x", type="python_frame_function", inputs=["a"],
-        output_schema=_K_SCHEMA,
+        signature={"form": "replaces", "produces": _K_SCHEMA["columns"]},
         function={"kind": "inline", "code": "def transform(row): return row"},
     ))
     assert any("inputs.0.schema" in issue for issue in issues)
@@ -440,7 +489,10 @@ def test_unknown_keys_rejected():
 def test_enum_fields_are_plain_strings(tmp_path):
     s = m.parse_stage(S(id="load", type="input_data",
                                  connector={"kind": "file", "params": {"path": str(tmp_path / "d.csv")}},
-                                 output_schema=_PK_ID_SCHEMA))
+                                 signature={
+                                     "form": "replaces",
+                                     "produces": _PK_ID_SCHEMA["columns"],
+                                 }))
     assert s.type == "input_data" and isinstance(s.type, str)
     assert s.connector is not None and isinstance(s.connector.kind, str)
 
@@ -454,7 +506,10 @@ def test_aggregation_requires_value_column_except_count():
 def test_stage_eval_block_is_kept(tmp_path):
     s = m.parse_stage(S(id="load", type="input_data",
                                  connector={"kind": "file", "params": {"path": str(tmp_path / "d.csv")}},
-                                 output_schema=_PK_ID_SCHEMA,
+                                 signature={
+                                     "form": "replaces",
+                                     "produces": _PK_ID_SCHEMA["columns"],
+                                 },
                                  eval={"metrics": ["recall"]}))
     assert s.eval == {"metrics": ["recall"]}
 
@@ -466,8 +521,10 @@ def test_llm_transform_rejects_double_braced_input_column():
             id="extract", type="llm_transform",
             inputs=[{"id": "load", "schema": {
                 "columns": [{"name": "content", "type": "str", "nullable": True}]}}],
-            output_schema={"columns": [{"name": "content", "type": "str", "nullable": True},
-                                       {"name": "out", "type": "str", "nullable": True}]},
+            signature={
+                "form": "extends",
+                "adds": [{"name": "out", "type": "str", "nullable": True}],
+            },
             llm={"prompt_template": "Analyze {{content}} now"}))
 
 
@@ -479,8 +536,10 @@ def test_llm_transform_rejects_spaced_double_braced_input_column():
             id="extract", type="llm_transform",
             inputs=[{"id": "load", "schema": {
                 "columns": [{"name": "content", "type": "str", "nullable": True}]}}],
-            output_schema={"columns": [{"name": "content", "type": "str", "nullable": True},
-                                       {"name": "out", "type": "str", "nullable": True}]},
+            signature={
+                "form": "extends",
+                "adds": [{"name": "out", "type": "str", "nullable": True}],
+            },
             llm={"prompt_template": "Analyze {{ content }} now"}))
 
 
@@ -490,8 +549,7 @@ def test_llm_transform_allows_prompt_that_injects_nothing():
         id="extract", type="llm_transform",
         inputs=[{"id": "load", "schema": {
             "columns": [{"name": "content", "type": "str", "nullable": True}]}}],
-        output_schema={"columns": [{"name": "content", "type": "str", "nullable": True},
-                                   {"name": "out", "type": "str", "nullable": True}]},
+        signature={"form": "extends", "adds": [{"name": "out", "type": "str", "nullable": True}]},
         llm={"prompt_template": "score the row"}))
     assert s.llm is not None
 
@@ -501,8 +559,16 @@ def test_llm_transform_accepts_single_brace_input_column():
         id="extract", type="llm_transform",
         inputs=[{"id": "load", "schema": {
             "columns": [{"name": "content", "type": "str", "nullable": True}]}}],
-        output_schema={"columns": [{"name": "content", "type": "str", "nullable": True},
-                                   {"name": "out", "type": "str", "nullable": True}]},
+        signature={
+            "form": "extends",
+            "reads": [
+                {
+                    "input": "load",
+                    "columns": [{"name": "content", "type": "str", "nullable": True}],
+                },
+            ],
+            "adds": [{"name": "out", "type": "str", "nullable": True}],
+        },
         llm={"prompt_template": "Analyze {content} now"}))
     assert s.llm.prompt_data_template == "Analyze {content} now"
 
@@ -555,8 +621,10 @@ def test_double_brace_checks_data_template_not_instructions():
             id="extract", type="llm_transform",
             inputs=[{"id": "load", "schema": {
                 "columns": [{"name": "text", "type": "str", "nullable": True}]}}],
-            output_schema={"columns": [{"name": "text", "type": "str", "nullable": True},
-                                       {"name": "out", "type": "str", "nullable": True}]},
+            signature={
+                "form": "extends",
+                "adds": [{"name": "out", "type": "str", "nullable": True}],
+            },
             llm={"prompt_template": "Analyze {{text}} now"}))
 
     # The SAME {{text}} placed only in prompt_instructions, with a valid
@@ -566,8 +634,16 @@ def test_double_brace_checks_data_template_not_instructions():
         id="extract", type="llm_transform",
         inputs=[{"id": "load", "schema": {
             "columns": [{"name": "text", "type": "str", "nullable": True}]}}],
-        output_schema={"columns": [{"name": "text", "type": "str", "nullable": True},
-                                   {"name": "out", "type": "str", "nullable": True}]},
+        signature={
+            "form": "extends",
+            "reads": [
+                {
+                    "input": "load",
+                    "columns": [{"name": "text", "type": "str", "nullable": True}],
+                },
+            ],
+            "adds": [{"name": "out", "type": "str", "nullable": True}],
+        },
         llm={"prompt_instructions": "Never echo {{text}} verbatim.",
              "prompt_template": "Analyze {text} now"}))
     assert s.llm is not None
@@ -603,16 +679,26 @@ def test_output_schema_issues_raise_at_stage_construction():
             "group_by": ["company"],
             "aggregations": [{"output_column": "n", "formula": "count"}],
         },
-        "output_schema": {"columns": [{"name": "undeclared_extra", "type": "str", "nullable": True}]},
+        "signature": {
+            "form": "replaces",
+            "reads": [
+                {
+                    "input": "rows",
+                    "columns": [{"name": "company", "type": "str", "nullable": True}],
+                },
+            ],
+            "produces": [{"name": "undeclared_extra", "type": "str", "nullable": True}],
+        },
     }
     with pytest.raises(ValidationError, match="undeclared_extra"):
         m.parse_stage(spec)
 
 
-# ── mandatory input/output schemas ───────────────────────────────────────────
-# Every stage must declare a schema on every input and an output_schema, with
-# two one-sided exemptions: input_data takes no inputs (but still declares its
-# output), publish emits files not a table (but still declares its inputs).
+# ── mandatory input schemas and signature ────────────────────────────────────
+# Every stage must declare a schema on every input and a signature, with two
+# one-sided exemptions: input_data takes no inputs (but its signature still says
+# what it produces), publish emits files not a table (so its signature produces
+# nothing) — but still declares its inputs.
 
 _INLINE_ROW_FN = {"kind": "inline", "code": "def transform(row): return row"}
 _LEFT_SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "name", "type": "str", "nullable": True}]}
@@ -626,19 +712,29 @@ _HANDLE_BLOCK = {
     "aggregate": {"aggregate": {"group_by": ["name"],
                                 "aggregations": [{"output_column": "n", "formula": "count"}]}},
     "human_review_queue": {"queue": queue_columns("name", "human_name")},
-    "publish": {"publish": {"format": "json"}, "function": _INLINE_ROW_FN},
+    "publish": {"publish": {"format": "json"}, "function": _INLINE_ROW_FN,
+                "signature": {"form": "replaces"}},
 }
 _INPUT_IDS = {"enrich": ["facilities", "filings"], "expand": ["facilities", "filings"]}
-_OUTPUT_SCHEMA = {
-    "enrich": {"columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "name", "type": "str", "nullable": True},
-                           {"name": "amount", "type": "int", "nullable": True}]},
-    "expand": {"columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "name", "type": "str", "nullable": True},
-                           {"name": "amount", "type": "int", "nullable": True}]},
-    "aggregate": {"columns": [{"name": "name", "type": "str", "nullable": True}, {"name": "n", "type": "int", "nullable": True}]},
-    "human_review_queue": {
-        "columns": [{"name": "id", "type": "str", "nullable": True},
-                    {"name": "name", "type": "str", "nullable": True}]
-                   + queue_added_columns("human_name", "str")},
+_JOIN_SIGNATURE = {
+    "form": "extends",
+    "reads": [{"input": "facilities", "columns": [{"name": "id", "type": "str", "nullable": True}]},
+              {"input": "filings", "columns": [{"name": "id", "type": "str", "nullable": True}]}],
+    "adds": [{"name": "amount", "type": "int", "nullable": True}],
+}
+_SIGNATURE = {
+    "enrich": _JOIN_SIGNATURE,
+    "expand": _JOIN_SIGNATURE,
+    "aggregate": {
+        "form": "replaces",
+        "reads": [{"input": "facilities",
+                   "columns": [{"name": "name", "type": "str", "nullable": True}]}],
+        "produces": [{"name": "name", "type": "str", "nullable": True},
+                     {"name": "n", "type": "int", "nullable": True}],
+    },
+    "human_review_queue": {"form": "extends",
+                           "adds": queue_added_columns("human_name", "str")},
+    "python_frame_function": {"form": "replaces", "produces": _LEFT_SCHEMA["columns"]},
 }
 NON_EXEMPT_TYPES = ["python_row_function", "python_frame_function", "enrich", "expand",
                     "aggregate", "human_review_queue"]
@@ -658,7 +754,7 @@ def _schema_spec(stage_type, *, inputs_declared=True, declare_output=True):
         **_HANDLE_BLOCK[stage_type],
     )
     if declare_output:
-        kw["output_schema"] = _OUTPUT_SCHEMA.get(stage_type, _LEFT_SCHEMA)
+        kw["signature"] = _SIGNATURE.get(stage_type, {"form": "extends"})
     return S(**kw)
 
 
@@ -667,7 +763,7 @@ def _input_data_spec(tmp_path, *, declare_output=True):
               connector={"kind": "file", "params": {"path": str(tmp_path / "d.csv"),
                                                     "format": "csv"}})
     if declare_output:
-        kw["output_schema"] = _LEFT_SCHEMA
+        kw["signature"] = {"form": "replaces", "produces": _LEFT_SCHEMA["columns"]}
     return S(**kw)
 
 
@@ -687,9 +783,9 @@ def test_stage_rejects_input_that_declares_no_schema(t):
 
 
 @pytest.mark.parametrize("t", NON_EXEMPT_TYPES)
-def test_stage_rejects_missing_output_schema(t):
+def test_stage_rejects_a_missing_signature(t):
     msg = _rejection_message(_schema_spec(t, declare_output=False))
-    assert "declares no output_schema" in msg
+    assert "signature" in msg and "Field required" in msg
 
 
 def test_stage_locates_only_the_input_that_declares_no_schema():
@@ -700,25 +796,23 @@ def test_stage_locates_only_the_input_that_declares_no_schema():
 
 @pytest.mark.parametrize("t", NON_EXEMPT_TYPES)
 def test_fully_declared_stage_accepted(t):
-    assert m.parse_stage(_schema_spec(t)).output_schema is not None
+    assert m.parse_stage(_schema_spec(t)).resolve_output_schema() is not None
 
 
-def test_input_data_rejects_missing_output_schema(tmp_path):
-    """input_data's exemption is input-side only: it takes no inputs, but it
-    still declares what it emits — otherwise the first edge of every workflow
-    goes unchecked."""
+def test_input_data_rejects_a_missing_signature(tmp_path):
+    """Its exemption is input-side only: the signature still says what it produces."""
     msg = _rejection_message(_input_data_spec(tmp_path, declare_output=False))
-    assert "declares no output_schema" in msg
+    assert "signature" in msg and "Field required" in msg
 
 
-def test_input_data_with_output_schema_accepted(tmp_path):
-    assert m.parse_stage(_input_data_spec(tmp_path)).output_schema is not None
+def test_input_data_with_a_signature_accepted(tmp_path):
+    assert m.parse_stage(_input_data_spec(tmp_path)).resolve_output_schema() is not None
 
 
-def test_publish_without_output_schema_accepted():
-    """publish emits files, not a table — its output side is exempt."""
+def test_publish_producing_nothing_accepted():
+    """publish emits files, not a table — its signature produces nothing."""
     s = m.parse_stage(_schema_spec("publish", declare_output=False))
-    assert s.output_schema is None
+    assert s.resolve_output_schema() is None
 
 
 def test_publish_rejects_input_that_declares_no_schema():
@@ -729,7 +823,7 @@ def test_publish_rejects_input_that_declares_no_schema():
 
 
 def test_publish_fully_declared_accepted():
-    s = m.parse_stage(_schema_spec("publish"))
+    s = m.parse_stage(_schema_spec("publish", declare_output=False))
     assert s.inputs[0].table_schema is not None
 
 
@@ -746,10 +840,10 @@ def test_stage_rejects_input_whose_schema_declares_no_columns():
     assert "facilities" in msg
 
 
-def test_stage_rejects_output_schema_that_declares_no_columns():
-    spec = _schema_spec("python_row_function")
-    spec["output_schema"] = _EMPTY_SCHEMA
-    assert "declares no output_schema" in _rejection_message(spec)
+def test_stage_rejects_a_signature_that_produces_no_columns():
+    spec = _schema_spec("python_frame_function")
+    spec["signature"] = {"form": "replaces", "produces": []}
+    assert "produces no columns" in _rejection_message(spec)
 
 
 def test_output_schema_issues_surface_in_draft_validation():
@@ -768,6 +862,15 @@ def test_output_schema_issues_surface_in_draft_validation():
             "group_by": ["company"],
             "aggregations": [{"output_column": "n", "formula": "count"}],
         },
-        "output_schema": {"columns": [{"name": "undeclared_extra", "type": "str", "nullable": True}]},
+        "signature": {
+            "form": "replaces",
+            "reads": [
+                {
+                    "input": "rows",
+                    "columns": [{"name": "company", "type": "str", "nullable": True}],
+                },
+            ],
+            "produces": [{"name": "undeclared_extra", "type": "str", "nullable": True}],
+        },
     }])
     assert any("undeclared_extra" in issue for issue in issues)

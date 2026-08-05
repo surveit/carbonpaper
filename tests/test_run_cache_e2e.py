@@ -83,24 +83,36 @@ def _write_project(
         "id": "load", "name": "Load items", "type": "input_data",
         "connector": {"kind": "file", "params": {
             "path": str(root / "data" / "items.csv"), "format": "csv"}},
-        "output_schema": {"columns": _LOADED},
+        "signature": {"form": "replaces", "produces": _LOADED},
     })
     _write_stage(root, "02_clean", {
         "id": "clean", "name": "Clean", "type": "python_row_function",
         "inputs": [{"id": "load", "schema": {"columns": _LOADED}}],
-        "output_schema": {"columns": _CLEANED},
+        "signature": {
+            "form": "extends",
+            "reads": [{"input": "load", "columns": _LOADED}],
+            "adds": [{"name": "doubled", "type": "int", "nullable": True}],
+        },
         "function": {"kind": "inline", "code": _clean_code(probe, edit=clean_edit)},
     })
     _write_stage(root, "03_flag", {
         "id": "flag", "name": "Flag", "type": "python_row_function",
         "inputs": [{"id": "clean", "schema": {"columns": _CLEANED}}], "cache": flag_cache,
-        "output_schema": {"columns": _FLAGGED},
+        "signature": {
+            "form": "extends",
+            "reads": [{"input": "clean", "columns": _CLEANED}],
+            "adds": [{"name": "big", "type": "bool", "nullable": True}],
+        },
         "function": {"kind": "inline", "code": _flag_code(probe)},
     })
     _write_stage(root, "04_totals", {
         "id": "totals", "name": "Totals", "type": "python_frame_function",
         "inputs": [{"id": "flag", "schema": {"columns": _FLAGGED}}],
-        "output_schema": {"columns": _TOTALLED},
+        "signature": {
+            "form": "replaces",
+            "reads": [{"input": "flag", "columns": _FLAGGED}],
+            "produces": _TOTALLED,
+        },
         "function": {"kind": "inline", "code": _totals_code(probe, edit=totals_edit)},
     })
     return probe

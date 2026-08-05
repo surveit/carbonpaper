@@ -47,7 +47,10 @@ def _seed(examples: Path, name: str) -> Path:
         "name": "Load rows",
         "type": "input_data",
         "connector": {"kind": "file"},
-        "output_schema": {"columns": [{"name": "id", "type": "str", "nullable": False}]},
+        "signature": {
+            "form": "replaces",
+            "produces": [{"name": "id", "type": "str", "nullable": False}],
+        },
     }
     (compiled / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
     return examples / name
@@ -92,7 +95,10 @@ def test_draft_round_trip_creates_an_unpublished_version(examples_root: Path) ->
         "name": "Load rows",
         "type": "input_data",
         "connector": connector,
-        "output_schema": {"columns": [{"name": "id", "type": "str", "nullable": False}]},
+        "signature": {
+            "form": "replaces",
+            "produces": [{"name": "id", "type": "str", "nullable": False}],
+        },
     }
 
     created = _call(by_name["create_draft"], {"project_id": "congresswatch"})
@@ -184,7 +190,7 @@ def test_draft_stage_input_schema_round_trips_in_alias_form(examples_root: Path)
         "name": "Transform rows",
         "type": "python_row_function",
         "inputs": [{"id": "load", "schema": upstream_schema}],
-        "output_schema": {"columns": [{"name": "id", "type": "str", "nullable": True}]},
+        "signature": {"form": "extends"},
         "function": {"kind": "inline", "code": "def transform(row): return row"},
     }
 

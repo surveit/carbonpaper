@@ -27,9 +27,13 @@ def project(tmp_path, monkeypatch):
     # output_schema names the CSV's columns; every non-publish stage must declare
     # one (app/models/stage.py: Stage._schemas_declared).
     stage = {"id": "load", "name": "Load", "type": "input_data",
-             "output_schema": {"columns": [
-                 {"name": "name", "type": "str", "nullable": False},
-                 {"name": "val", "type": "int", "nullable": False}]},
+             "signature": {
+                 "form": "replaces",
+                 "produces": [
+                     {"name": "name", "type": "str", "nullable": False},
+                     {"name": "val", "type": "int", "nullable": False},
+                 ],
+             },
              "connector": {"kind": "file",
                            "params": {"path": str(data), "format": "csv"}}}
     (proj / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")

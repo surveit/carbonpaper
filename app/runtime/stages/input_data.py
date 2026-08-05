@@ -81,7 +81,7 @@ def read_input_data(stage: Stage, ctx: RunContext) -> pd.DataFrame:
         )
     path = Path(params["path"])   # absolute: the model rejects a relative path when present
     fmt = params.get("format", FileFormat.csv)
-    schema = input_stage.output_schema  # required on input_data by Stage validation; None only off-model
+    schema = input_stage.resolve_output_schema()  # input_data's produces is non-empty by validation
     if fmt == FileFormat.csv:
         df = pd.read_csv(path, dtype=_read_dtype(schema, fmt, params))
     elif fmt == FileFormat.parquet:

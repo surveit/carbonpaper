@@ -28,8 +28,10 @@ def _stage(aggregations, out_columns):
     return parse_stage({
         "id": "agg", "type": "aggregate", "name": "agg",
         "inputs": [{"id": "filings", "schema": _IN_SCHEMA}],
-        "output_schema": {"columns": [
-            {"name": "firm", "type": "str", "nullable": True}, *out_columns]},
+        "signature": {
+            "form": "replaces",
+            "reads": [{"input": "filings", "columns": _IN_SCHEMA["columns"]}],
+            "produces": [{"name": "firm", "type": "str", "nullable": True}, *out_columns]},
         "aggregate": {"group_by": ["firm"], "aggregations": aggregations},
     })
 

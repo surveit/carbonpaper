@@ -35,10 +35,14 @@ _X_COLUMN = [{"name": "x", "type": "int", "nullable": True}]
 
 
 def _row_stage(output_schema=None, input_columns=_X_COLUMN):
+    """A row function outputting `output_schema`; its adds are what that names beyond the edge."""
+    flowing = {c["name"] for c in input_columns}
+    added = [c for c in (output_schema or {}).get("columns", [])
+             if c["name"] not in flowing]
     return parse_stage({
         "id": "t", "name": "t", "type": "python_row_function",
         "inputs": [{"id": "src", "schema": {"columns": input_columns}}],
-        "output_schema": output_schema or {"columns": input_columns},
+        "signature": {"form": "extends", "adds": added},
         "function": {"kind": "inline", "code": "def transform(row):\n    return row\n"},
     })
 
@@ -48,7 +52,11 @@ def _two_input_stage():
         "id": "t2", "name": "t2", "type": "python_frame_function",
         "inputs": [{"id": "a", "schema": {"columns": _X_COLUMN}},
                    {"id": "b", "schema": {"columns": _X_COLUMN}}],
-        "output_schema": {"columns": _X_COLUMN},
+        "signature": {
+            "form": "replaces",
+            "reads": [{"input": "a", "columns": _X_COLUMN}, {"input": "b", "columns": _X_COLUMN}],
+            "produces": _X_COLUMN,
+        },
         "function": {"kind": "inline", "code": "def transform(a, b):\n    return a\n"},
     })
 

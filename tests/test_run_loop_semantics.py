@@ -54,16 +54,16 @@ def _load_items_stage(root, *, stage_id="load"):
     return {"id": stage_id, "name": f"Load {stage_id}", "type": "input_data",
             "connector": {"kind": "file",
                           "params": {"path": str(csv_path), "format": "csv"}},
-            "output_schema": _ID_VAL_SCHEMA}
+            "signature": {"form": "replaces", "produces": _ID_VAL_COLUMNS}}
 
 
 def _raising_stage(stage_id, input_id, name="Boom", schema=_ID_VAL_SCHEMA):
     """A python_frame_function whose transform raises — the stage errors. It
-    emits nothing, so `schema` (its input's shape) stands as its declared output
+    emits nothing, so `schema` (its input's shape) stands as what it produces
     too: the identity shape it would have emitted had it not raised."""
     return {"id": stage_id, "name": name, "type": "python_frame_function",
             "inputs": [{"id": input_id, "schema": schema}],
-            "output_schema": schema,
+            "signature": {"form": "replaces", "produces": schema["columns"]},
             "function": {"kind": "inline",
                          "code": "def transform(df):\n    raise ValueError('boom')\n"}}
 
@@ -73,7 +73,7 @@ def _passthrough_stage(stage_id, input_id, name="Passthrough", schema=_ID_VAL_SC
     from `input_id` and the shape it emits."""
     return {"id": stage_id, "name": name, "type": "python_frame_function",
             "inputs": [{"id": input_id, "schema": schema}],
-            "output_schema": schema,
+            "signature": {"form": "replaces", "produces": schema["columns"]},
             "function": {"kind": "inline",
                          "code": "def transform(df):\n    return df\n"}}
 
@@ -86,25 +86,27 @@ def _score_load_stage(root):
     return {"id": "load", "name": "Load", "type": "input_data",
             "connector": {"kind": "file",
                           "params": {"path": str(csv_path), "format": "csv"}},
-            "output_schema": _ID_TEXT_SCHEMA}
+            "signature": {"form": "replaces", "produces": _ID_TEXT_SCHEMA["columns"]}}
 
 
 def _score_stage(stage_id, input_id, name="Score"):
     """An llm_transform adding a non-null `score` column to each (id, text) row."""
     return {"id": stage_id, "name": name, "type": "llm_transform",
             "inputs": [{"id": input_id, "schema": _ID_TEXT_SCHEMA}],
-            "output_schema": _SCORED_SCHEMA,
+            "signature": {
+                "form": "extends",
+                "reads": [{"input": input_id, "columns": [
+                    {"name": "text", "type": "str", "nullable": True}]}],
+                "adds": [{"name": "score", "type": "int", "nullable": False}]},
             "llm": {"prompt_template": "Rate: {text}"}}
 
 
 def _queue_stage(stage_id, input_id, name="Review"):
-    """A human_review_queue with no cached decisions yet — it halts. Its
-    output_schema keeps the (id, val) columns a reviewed row carries through;
-    the stage projects onto exactly what it declares, so the review-record
-    columns are not part of its output."""
+    """A human_review_queue with no cached decisions yet — it halts."""
     return {"id": stage_id, "name": name, "type": "human_review_queue",
             "inputs": [{"id": input_id, "schema": _ID_VAL_SCHEMA}],
-            "output_schema": _QUEUE_OUT_SCHEMA,
+            "signature": {"form": "extends",
+                          "adds": queue_added_columns("human_val")},
             "queue": queue_columns("val", "human_val")}
 
 
@@ -117,16 +119,17 @@ def _five_item_load_stage(root):
     return {"id": "load", "name": "Load", "type": "input_data",
             "connector": {"kind": "file",
                           "params": {"path": str(csv_path), "format": "csv"}},
-            "output_schema": _ID_VAL_SCHEMA}
+            "signature": {"form": "replaces", "produces": _ID_VAL_COLUMNS}}
 
 
 def _filtered_queue_stage(stage_id, input_id, flt, name="Review"):
     """A human_review_queue that reviews only the rows `flt` selects. With no
-    cached decisions, every selected row is pending — so it halts. Declares the
-    same (id, val) output as `_queue_stage`."""
+    cached decisions, every selected row is pending — so it halts. Adds the same
+    columns as `_queue_stage`."""
     return {"id": stage_id, "name": name, "type": "human_review_queue",
             "inputs": [{"id": input_id, "schema": _ID_VAL_SCHEMA}],
-            "output_schema": _QUEUE_OUT_SCHEMA,
+            "signature": {"form": "extends",
+                          "adds": queue_added_columns("human_val")},
             "queue": {**queue_columns("val", "human_val"), "filter": flt}}
 
 
@@ -516,7 +519,7 @@ def test_resume_after_error_reruns_the_errored_stage_and_its_downstream(tmp_path
     pd.DataFrame({"id": ["a", "b"], "val": [1, 2]}).to_csv(csv_path, index=False)
     load = {"id": "load", "name": "Load", "type": "input_data",
             "connector": {"kind": "file", "params": {"path": str(csv_path), "format": "csv"}},
-            "output_schema": _ID_VAL_SCHEMA}
+            "signature": {"form": "replaces", "produces": _ID_VAL_COLUMNS}}
     _write_stage(tmp_path, "01_load.json", load)
     _write_stage(tmp_path, "02_mid.json", _passthrough_stage("mid", "load"))
     _write_stage(tmp_path, "03_tail.json", _passthrough_stage("tail", "mid"))

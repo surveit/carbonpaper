@@ -32,11 +32,15 @@ _DOUBLED = {"columns": [
 
 _LOAD = {
     "id": "load", "name": "Load", "type": "input_data",
-    "connector": {"kind": "file"}, "output_schema": _ROWS,
+    "connector": {"kind": "file"}, "signature": {"form": "replaces", "produces": _ROWS["columns"]},
 }
 _DOUBLE = {
     "id": "double", "name": "Double", "type": "python_row_function",
-    "inputs": [{"id": "load", "schema": _ROWS}], "output_schema": _DOUBLED,
+    "inputs": [{"id": "load", "schema": _ROWS}], "signature": {
+        "form": "extends",
+        "reads": [{"input": "load", "columns": _ROWS["columns"]}],
+        "adds": [{"name": "doubled", "type": "float", "nullable": False}],
+    },
     "function": {"kind": "inline", "summary": "Doubles the amount.", "corner_cases": [],
                  "code": "def transform(row):\n    return {**row, 'doubled': row['amount'] * 2}\n"},
 }
@@ -44,7 +48,11 @@ _DOUBLE = {
 # a guide naming it would be describing a workflow the version does not contain.
 _TRIPLE = {
     "id": "triple", "name": "Triple", "type": "python_row_function",
-    "inputs": [{"id": "load", "schema": _ROWS}], "output_schema": _DOUBLED,
+    "inputs": [{"id": "load", "schema": _ROWS}], "signature": {
+        "form": "extends",
+        "reads": [{"input": "load", "columns": _ROWS["columns"]}],
+        "adds": [{"name": "doubled", "type": "float", "nullable": False}],
+    },
     "function": {"kind": "inline", "summary": "Triples the amount.", "corner_cases": [],
                  "code": "def transform(row):\n    return {**row, 'doubled': row['amount'] * 3}\n"},
 }

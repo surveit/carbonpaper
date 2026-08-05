@@ -148,7 +148,7 @@ def _workflow_stages(authored_path: str) -> list[dict]:
             "id": "load", "name": "Load rows", "type": "input_data",
             "connector": {"kind": "file",
                           "params": {"path": authored_path, "format": "csv"}},
-            "output_schema": load_schema,
+            "signature": {"form": "replaces", "produces": load_schema["columns"]},
         },
         {
             "id": "flag", "name": "Flag rows over threshold", "type": "python_row_function",
@@ -158,7 +158,8 @@ def _workflow_stages(authored_path: str) -> list[dict]:
                 "    row[\"flagged\"] = row[\"val\"] > 1\n"
                 "    return row\n"
             )},
-            "output_schema": flag_schema,
+            "signature": {"form": "extends",
+                          "adds": [{"name": "flagged", "type": "bool", "nullable": True}]},
         },
         {
             "id": "totals", "name": "Total per flag", "type": "python_frame_function",
@@ -167,12 +168,13 @@ def _workflow_stages(authored_path: str) -> list[dict]:
                 "def transform(df):\n"
                 "    return df.groupby(\"flagged\", as_index=False)[\"val\"].sum()\n"
             )},
-            "output_schema": totals_schema,
+            "signature": {"form": "replaces", "produces": totals_schema["columns"]},
         },
         {
             "id": "report", "name": "Publish totals", "type": "publish",
             "inputs": [{"id": "totals", "schema": totals_schema}],
             "publish": {"format": "csv", "destination": "report/"},
+            "signature": {"form": "replaces"},
             "function": {"kind": "inline", "code": (
                 "import pandas as pd\n"
                 "from pathlib import Path\n"

@@ -22,7 +22,7 @@ def _filter_stage(code: str, tests: list[dict], stage_id: str = "keep_active") -
     return parse_stage({
         "id": stage_id, "name": "Keep active", "type": "filter_rows",
         "inputs": [{"id": "load", "schema": _SCHEMA}],
-        "output_schema": _SCHEMA,
+        "signature": {"form": "extends"},
         "filter": {"summary": "Keeps the rows marked active.", "code": code},
         "tests": tests,
     })

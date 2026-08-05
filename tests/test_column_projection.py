@@ -12,19 +12,23 @@ from conftest import contribution_of, make_run_context, queue_columns
 
 
 def _llm_stage(input_columns, output_columns, pk=("id",)):
-    """A valid strictly-1:1 llm_transform stage — input schema and output_schema
-    satisfy output ⊇ input, as Stage validation requires."""
+    """A strictly-1:1 llm_transform outputting `output_columns`."""
+    flowing = {c["name"] for c in input_columns}
     return parse_stage({
         "id": "evidence_extraction", "name": "Extract evidence", "type": "llm_transform",
         "inputs": [{"id": "load", "schema": {"columns": input_columns}}],
-        "output_schema": {"columns": output_columns},
+        "signature": {
+            "form": "extends",
+            "reads": [{"input": "load", "columns": [
+                c for c in input_columns if c["name"] == "text"]}],
+            "adds": [c for c in output_columns if c["name"] not in flowing]},
         "llm": {"prompt_template": "extract from {text}"},
     })
 
 
 def test_llm_transform_drops_undeclared_columns_including_former_hardcoded_ids(monkeypatch):
     # The model returns benchmark_id / query_id — names the OLD hardcoded keep-list
-    # would have force-kept. output_schema doesn't declare them, so they're dropped
+    # would have force-kept. The signature doesn't declare them, so they're dropped
     # (and recorded), not resurrected.
     stage = _llm_stage(
         input_columns=[{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}],
@@ -71,7 +75,7 @@ _SCORED_COLUMNS = [
     {"name": "benchmark_id", "type": "str", "nullable": True}, {"name": "query_id", "type": "str", "nullable": True},
 ]
 # What `queue_columns()` names for the verdict, reviewer, timestamp and note.
-# Every one must be declared on output_schema (app/models/stages/
+# Every one must be added by the signature (app/models/stages/
 # human_review_queue.py), so they are appended to whatever a test declares and
 # named in its expected column list.
 _REVIEW_RECORD = ["decision", "reviewer_id", "reviewed_at", "review_notes"]
@@ -81,15 +85,18 @@ _REVIEW_RECORD_COLUMNS = [
 
 
 def _queue_stage(output_schema, flt=None):
-    # The reviewed column is named `final_score` here because that is what these
-    # tests declare in output_schema — the runtime knows no such name of its own.
     queue = queue_columns(source="score", target="final_score")
+    # The reviewed column is named `final_score` because that is what these tests
+    # declare — the runtime knows no such name of its own.
     if flt is not None:
         queue["filter"] = flt
+    flowing = {c["name"] for c in _SCORED_COLUMNS}
+    outputs = output_schema["columns"] + _REVIEW_RECORD_COLUMNS
     return parse_stage({
         "id": "review", "name": "Human review", "type": "human_review_queue",
         "inputs": [{"id": "scored", "schema": {"columns": _SCORED_COLUMNS}}],
-        "output_schema": {"columns": output_schema["columns"] + _REVIEW_RECORD_COLUMNS},
+        "signature": {"form": "extends",
+                      "adds": [c for c in outputs if c["name"] not in flowing]},
         "queue": queue,
     })
 
@@ -115,7 +122,8 @@ def _queue_test_ctx(tmp_path, project: str) -> RunContext:
     )
 
 
-def test_human_review_queue_keeps_only_declared_columns(tmp_path):
+def test_human_review_queue_carries_every_input_column_through(tmp_path):
+    """A review stage only ADDS, so no input column can be left behind."""
     stage = _queue_stage(
         output_schema={"columns": [{"name": "evidence_id", "type": "str", "nullable": True},
                                     {"name": "final_score", "type": "int", "nullable": True}]},
@@ -124,25 +132,6 @@ def test_human_review_queue_keeps_only_declared_columns(tmp_path):
     ctx = _queue_test_ctx(tmp_path, "keeps-declared-columns")
     out = HANDLERS[StageType.human_review_queue].execute(stage, {"scored": _src_scored()}, ctx)
 
-    assert list(out.columns) == ["evidence_id", "final_score"] + _REVIEW_RECORD
-    dropped = contribution_of(out).dropped_columns
-    for col in ("entity_id", "quote", "benchmark_id", "query_id"):
-        assert col in dropped
-
-
-def test_human_review_queue_carried_columns_survive_by_being_declared(tmp_path):
-    # `quote` survives because it's declared in output_schema, not because the
-    # runtime keeps a magic list of column names.
-    stage = _queue_stage(
-        output_schema={"columns": [{"name": "evidence_id", "type": "str", "nullable": True},
-                                    {"name": "final_score", "type": "int", "nullable": True},
-                                    {"name": "quote", "type": "str", "nullable": True}]},
-        flt="entity_id == 'nope'",
-    )
-    ctx = _queue_test_ctx(tmp_path, "carried-columns-survive")
-    out = HANDLERS[StageType.human_review_queue].execute(stage, {"scored": _src_scored()}, ctx)
-
-    assert list(out.columns) == ["evidence_id", "final_score", "quote"] + _REVIEW_RECORD
-    dropped = contribution_of(out).dropped_columns
-    assert "quote" not in dropped
-    assert "benchmark_id" in dropped  # still dropped: not declared
+    assert list(out.columns) == [c["name"] for c in _SCORED_COLUMNS] + [
+        "final_score"] + _REVIEW_RECORD
+    assert contribution_of(out).dropped_columns == []

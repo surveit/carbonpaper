@@ -24,8 +24,14 @@ def _frame_stage(code: str = _DOUBLING_CODE, *, cache: bool = True) -> Stage:
     return parse_stage({
         "id": "double", "name": "Double", "type": "python_frame_function",
         "inputs": [{"id": "src", "schema": _X}], "cache": cache,
-        "output_schema": {
-            "columns": [{"name": "x", "type": "int", "nullable": True}, {"name": "y", "type": "int", "nullable": True}]},
+        "signature": {
+            "form": "replaces",
+            "reads": [{"input": "src", "columns": _X["columns"]}],
+            "produces": [
+                {"name": "x", "type": "int", "nullable": True},
+                {"name": "y", "type": "int", "nullable": True},
+            ],
+        },
         "function": {"kind": "inline", "code": code},
     })
 
@@ -129,7 +135,14 @@ def _two_input_stage() -> Stage:
     return parse_stage({
         "id": "merge", "name": "Merge", "type": "python_frame_function",
         "inputs": [{"id": "left", "schema": _X}, {"id": "right", "schema": _X}],
-        "output_schema": _X,
+        "signature": {
+            "form": "replaces",
+            "reads": [
+                {"input": "left", "columns": _X["columns"]},
+                {"input": "right", "columns": _X["columns"]},
+            ],
+            "produces": _X["columns"],
+        },
         "function": {"kind": "inline",
                      "code": "def transform(left, right):\n    return left\n"},
     })
@@ -157,8 +170,14 @@ def _enrich_stage() -> Stage:
         "inputs": [{"id": "left", "schema": _X},
                    {"id": "right", "schema": {"columns": [{"name": "x", "type": "int", "nullable": True},
                                                           {"name": "z", "type": "str", "nullable": True}]}}],
-        "output_schema": {"columns": [{"name": "x", "type": "int", "nullable": True},
-                                      {"name": "z", "type": "str", "nullable": True}]},
+        "signature": {
+            "form": "extends",
+            "reads": [
+                {"input": "left", "columns": _X["columns"]},
+                {"input": "right", "columns": _X["columns"]},
+            ],
+            "adds": [{"name": "z", "type": "str", "nullable": True}],
+        },
         "join": {"keys": [{"left": "x", "right": "x"}], "enrich_with": {"z": "z"}},
     })
 
@@ -167,8 +186,19 @@ def _aggregate_stage() -> Stage:
     return parse_stage({
         "id": "agg", "name": "Agg", "type": "aggregate",
         "inputs": [{"id": "src", "schema": {"columns": [{"name": "g", "type": "str", "nullable": True}]}}],
-        "output_schema": {"columns": [{"name": "g", "type": "str", "nullable": True},
-                                      {"name": "n", "type": "int", "nullable": True}]},
+        "signature": {
+            "form": "replaces",
+            "reads": [
+                {
+                    "input": "src",
+                    "columns": [{"name": "g", "type": "str", "nullable": True}],
+                },
+            ],
+            "produces": [
+                {"name": "g", "type": "str", "nullable": True},
+                {"name": "n", "type": "int", "nullable": True},
+            ],
+        },
         "aggregate": {"group_by": ["g"], "aggregations": [
             {"output_column": "n", "formula": "count"}]},
     })
@@ -320,7 +350,7 @@ def test_publish_runs_its_side_effect_every_run_and_writes_no_entry(tmp_path):
     stage = parse_stage({
         "id": "pub", "name": "Publish", "type": "publish",
         "inputs": [{"id": "src", "schema": _X}],
-        "publish": {"destination": "build/"},
+        "publish": {"destination": "build/"}, "signature": {"form": "replaces"},
         "function": {"kind": "inline", "code": code},
     })
     handler = HANDLERS[StageType.publish]

@@ -20,10 +20,16 @@ def _python_stage(*, summary=_SUMMARY, corner_cases=None) -> Stage:
             {"name": "amount", "type": "float", "nullable": False},
         ]}}],
         "function": function,
-        "output_schema": {"columns": [
-            {"name": "amount", "type": "float", "nullable": False},
-            {"name": "doubled", "type": "float", "nullable": False},
-        ]},
+        "signature": {
+            "form": "extends",
+            "reads": [
+                {
+                    "input": "load",
+                    "columns": [{"name": "amount", "type": "float", "nullable": False}],
+                },
+            ],
+            "adds": [{"name": "doubled", "type": "float", "nullable": False}],
+        },
     })
 
 
@@ -92,6 +98,7 @@ def test_a_stage_with_no_summary_cannot_generate_examples():
 def test_generator_rejects_non_python_stages():
     bad = parse_stage({
         "id": "pub", "name": "Publish", "type": "publish",
+        "signature": {"form": "replaces"},
         "inputs": [{"id": "double", "schema": {"columns": [
             {"name": "amount", "type": "float", "nullable": False},
             {"name": "doubled", "type": "float", "nullable": False},

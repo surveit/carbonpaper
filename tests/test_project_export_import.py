@@ -19,10 +19,10 @@ from app.models import (
     SchemaKind,
     SchemaLibrary,
     StageType,
-    TableSchema,
     stage_to_spec_dict,
 )
 from app.models.stages.input_data import InputDataStage
+from app.models.stages.signature import ReplacesSignature
 from app.services import data_model, node_review, project, versioning, workspace
 from app.services.loader import load_compiled_dir, write_stage
 from app.services.project import WorkflowFile, export_project, import_project
@@ -74,10 +74,10 @@ def test_round_trip_through_json_reproduces_the_source_and_mints_a_version(tmp_p
         id="load_entities", name="Load Entities", type=StageType.input_data,
         connector=Connector(kind=ConnectorKind.file, params={"format": "csv"}),
         # The `entity` schema this project's data model declares.
-        output_schema=TableSchema(
-            columns=[Column(name="entity_id", type="str", nullable=False),
-                     Column(name="entity_name", type="str", nullable=True)],
-        ),
+        signature=ReplacesSignature(produces=[
+            Column(name="entity_id", type="str", nullable=False),
+            Column(name="entity_name", type="str", nullable=True),
+        ]),
     )
     write_stage(compiled / "01_load_entities.json", stage)
     stage_hash = node_review.node_content_hash(stage_to_spec_dict(stage))
@@ -135,7 +135,10 @@ def test_a_bundle_from_before_per_type_stages_still_imports(tmp_path):
         "stages": [{
             "id": "load", "type": "input_data", "name": "Load",
             "connector": {"kind": "file", "params": {"format": "csv"}},
-            "output_schema": {"columns": [{"name": "entity_id", "type": "str", "nullable": False}]},
+            "signature": {
+                "form": "replaces",
+                "produces": [{"name": "entity_id", "type": "str", "nullable": False}],
+            },
             "llm": None, "function": None, "join": None, "aggregate": None,
             "queue": None, "publish": None, "union": None, "filter": None,
         }],
@@ -154,7 +157,10 @@ def test_a_non_null_foreign_config_block_is_still_refused(tmp_path):
         "stages": [{
             "id": "load", "type": "input_data", "name": "Load",
             "connector": {"kind": "file", "params": {"format": "csv"}},
-            "output_schema": {"columns": [{"name": "entity_id", "type": "str", "nullable": False}]},
+            "signature": {
+                "form": "replaces",
+                "produces": [{"name": "entity_id", "type": "str", "nullable": False}],
+            },
             "llm": {"prompt_instructions": "do a thing"},
         }],
     })

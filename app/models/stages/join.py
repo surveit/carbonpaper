@@ -1,7 +1,7 @@
 """enrich/expand stage: the join handle config and its column checks."""
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, ClassVar, Literal, Optional
+from typing import TYPE_CHECKING, ClassVar, Literal
 
 from pydantic import Field, model_validator
 
@@ -10,7 +10,6 @@ from app.models.stages.stage_base import StageBase, StageInput, StageType
 from app.models.stages.shared import (
     COLUMN_ISSUE,
     INTERNAL_COLUMN_PREFIX,
-    find_declared_vs_computed_issues,
     resolve_input_columns,
 )
 from app.models.stages.node_spec import NodeTypeSpec
@@ -63,16 +62,13 @@ class JoinStage(StageBase):
     the config, the arity and the column rules are the same."""
     join: JoinConfig
     inputs: list[StageInput] = Field(default_factory=list, min_length=2, max_length=2)
-    signature: Optional[ExtendsSignature] = None
+    signature: ExtendsSignature
 
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
         return {"join": self.join}
 
     def find_config_column_issues(self) -> list[str]:
         return find_join_column_issues(self)
-
-    def find_output_schema_issues(self) -> list[str]:
-        return find_join_output_issues(self)
 
     def find_signature_config_issues(self) -> list[str]:
         return find_join_signature_issues(self)
@@ -129,17 +125,6 @@ def find_join_column_issues(stage: "JoinStage") -> list[str]:
                 sid=stage.id, src=src, landed=landed
             ))
     return issues
-
-
-def find_join_output_issues(stage: "JoinStage") -> list[str]:
-    """Every declared output_schema column the join handle cannot deliver."""
-    assert stage.output_schema is not None  # StageBase._schemas_declared guarantees this
-    computed = compute_join_output_types(
-        stage.join, stage.inputs[0].table_schema, stage.inputs[1].table_schema
-    )
-    return find_declared_vs_computed_issues(
-        stage.id, str(stage.type), stage.output_schema, computed
-    )
 
 
 def find_join_signature_issues(stage: "JoinStage") -> list[str]:
@@ -218,8 +203,8 @@ NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
             "columns); dropping rows is `filter_rows`' job. `enrich_with` maps each reference "
             "column to the name it lands under, usually the same. A join only ADDS: a landed "
             "name the subject already carries is refused — pick a new one (`score: score_r`). "
-            "A same-named key pair needs no entry. output_schema may name only columns the "
-            "join produces."
+            "A same-named key pair needs no entry. The signature adds exactly the landed "
+            "columns; every subject column flows through."
         ),
     ),
     "expand": NodeTypeSpec(
@@ -238,7 +223,8 @@ NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
             "`filter_rows`' job. `enrich_with` maps each reference column to the name it "
             "lands under, usually the same. A join only ADDS: a landed name the subject "
             "already carries is refused — pick a new one (`score: score_r`). A same-named "
-            "key pair needs no entry. output_schema may name only columns the join produces."
+            "key pair needs no entry. The signature adds exactly the landed columns; every "
+            "subject column flows through."
         ),
     ),
 }

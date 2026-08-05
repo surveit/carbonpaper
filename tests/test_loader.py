@@ -17,14 +17,17 @@ def _valid(tmp_path):
         "id": "load", "name": "Load", "type": "input_data",
         "connector": {"kind": "file",
                       "params": {"path": str(tmp_path / "data" / "items.csv"), "format": "csv"}},
-        "output_schema": {"columns": [{"name": "k", "type": "str", "nullable": True}]},
+        "signature": {
+            "form": "replaces",
+            "produces": [{"name": "k", "type": "str", "nullable": True}],
+        },
     }
 
 
 INVALID = {  # file connector params.path is relative, not absolute
     "id": "bad", "name": "Bad", "type": "input_data",
     "connector": {"kind": "file", "params": {"path": "data/items.csv", "format": "csv"}},
-    "output_schema": {"columns": [{"name": "k", "type": "str", "nullable": True}]},
+    "signature": {"form": "replaces", "produces": [{"name": "k", "type": "str", "nullable": True}]},
 }
 
 
@@ -69,7 +72,16 @@ def test_strict_load_catches_cross_stage_issues(tmp_path):
                 "inputs": [{"id": "missing_upstream",
                             "schema": {"columns": [{"name": "k", "type": "str", "nullable": True}]}}],
                 "function": {"kind": "inline", "code": "def transform(row): return row"},
-                "output_schema": {"columns": [{"name": "k", "type": "str", "nullable": True}]}}
+                "signature": {
+                    "form": "replaces",
+                    "reads": [
+                        {
+                            "input": "missing_upstream",
+                            "columns": [{"name": "k", "type": "str", "nullable": True}],
+                        },
+                    ],
+                    "produces": [{"name": "k", "type": "str", "nullable": True}],
+                }}
     _write(tmp_path, "01_x.json", dangling)
     with pytest.raises(WorkflowLoadError) as exc:
         load_workflow(tmp_path)

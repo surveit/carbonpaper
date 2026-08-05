@@ -12,6 +12,7 @@ from typing import Any
 import pytest
 
 from app.models.workflow import parse_workflow
+from tools.stage_signatures import add_signature
 
 _REVISION = (Path(__file__).resolve().parents[1]
              / "alembic/versions/0002_name_queue_and_join_columns.py")
@@ -50,7 +51,8 @@ def _v1_stages() -> list[dict[str, Any]]:
          "queue": {"reviewer_instructions": "Confirm each row."},
          "output_schema": {"columns": [
              _column("id"), _column("verdict"), _column("extra"),
-             _column("decision"), _column("reviewer_id"), _column("reviewed_at")]}},
+             _column("decision"), _column("reviewer_id"), _column("reviewed_at"),
+         ]}},
     ]
 
 
@@ -60,6 +62,10 @@ def test_a_v1_document_validates_under_todays_model_after_upgrading():
     document = {"stages": _v1_stages()}
     rev._upgrade_document(document, "proj")
 
+    # 0002 brings the document to ITS shape; 0006's synthesis carries it the rest
+    # of the way, as a store crossing both revisions would be.
+    for stage in document["stages"]:
+        add_signature(stage)
     parse_workflow(document["stages"])  # raises if the upgraded shape is still invalid
 
     queue = document["stages"][3]["queue"]

@@ -28,11 +28,17 @@ def _write_stage(compiled: Path, order: int, sid: str, stype: str, inputs: list[
     compiled.mkdir(parents=True, exist_ok=True)
     stage: dict = {"id": sid, "name": f"{sid} step", "type": stype}
     stage.update(_config_block_by_type(compiled.parent).get(stype, {}))
-    # Every input declares the schema it expects and every non-publish stage
-    # declares its output_schema (app/models/stage.py: Stage._schemas_declared).
-    # llm_transform is additionally strictly 1:1: its input and output schemas
-    # must stay additive and the output must add a column.
-    stage["output_schema"] = _LLM_OUT_SCHEMA if stype == "llm_transform" else _LLM_IN_SCHEMA
+    # Every input declares the schema it expects and every stage declares a
+    # signature (app/models/stages/stage_base.py: StageBase._schemas_declared).
+    # llm_transform is additionally strictly 1:1, so it must add a column.
+    stage["signature"] = (
+        # An llm_transform's reads must match its template's placeholders exactly.
+        {"form": "extends",
+         "reads": [{"input": inputs[0], "columns": _LLM_IN_SCHEMA["columns"]}],
+         "adds": [c for c in _LLM_OUT_SCHEMA["columns"]
+                  if c not in _LLM_IN_SCHEMA["columns"]]}
+        if stype == "llm_transform"
+        else {"form": "replaces", "produces": _LLM_IN_SCHEMA["columns"]})
     if inputs:
         stage["inputs"] = [{"id": dep, "schema": _LLM_IN_SCHEMA} for dep in inputs]
     (compiled / f"{order:02d}_{sid}.json").write_text(json.dumps(stage), encoding="utf-8")

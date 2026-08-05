@@ -23,7 +23,11 @@ def _row_stage(tests=None) -> dict:
     stage = {
         "id": "double", "name": "Double the amount", "type": "python_row_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
-        "output_schema": _OUT_SCHEMA,
+        "signature": {
+            "form": "extends",
+            "reads": [{"input": "load", "columns": _IN_SCHEMA["columns"]}],
+            "adds": [{"name": "doubled", "type": "float", "nullable": False}],
+        },
         "function": {"kind": "inline",
                      "code": "def transform(row):\n    return {**row, 'doubled': row['amount'] * 2}\n"},
     }
@@ -119,6 +123,7 @@ def test_valid_test_parses_on_python_row_stage():
 def test_tests_rejected_on_non_python_stage():
     bad = {
         "id": "load", "name": "Load", "type": "input_data",
+        "signature": {"form": "replaces", "produces": [{"name": "id", "type": "str", "nullable": True}]},
         "connector": {"kind": "file"},
         "tests": [{"name": "x", "inputs": {}, "expected": []}],
     }
@@ -141,7 +146,7 @@ def test_multi_input_test_missing_one_input_is_rejected():
             {"id": "left", "schema": left_schema},
             {"id": "right", "schema": right_schema},
         ],
-        "output_schema": left_schema,
+        "signature": {"form": "replaces", "produces": left_schema["columns"]},
         "function": {"kind": "inline", "code": "def transform(a, b):\n    return a\n"},
         "tests": [{
             "name": "only_left_supplied",

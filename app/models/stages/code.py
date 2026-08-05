@@ -263,7 +263,7 @@ class PythonRowFunctionStage(CarriesPythonFunctionStage):
     # claimed writes at run time instead: the stage's output frame is validated
     # against output_schema, which find_signature_issues pins to this
     # signature.
-    signature: Optional[ExtendsSignature] = None
+    signature: ExtendsSignature
 
 
 class PythonFrameFunctionStage(CarriesPythonFunctionStage):
@@ -271,7 +271,7 @@ class PythonFrameFunctionStage(CarriesPythonFunctionStage):
     CARRIES_RUNNABLE_TESTS: ClassVar[bool] = True
     inputs: list[StageInput] = Field(default_factory=list, min_length=1)
     tests: Optional[Sequence[PythonFrameFunctionStageTest]] = None
-    signature: Optional[ReplacesSignature] = None
+    signature: ReplacesSignature
 
 # Authoring copy for this module's stage type(s); assembled into NODE_TYPES.
 NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {

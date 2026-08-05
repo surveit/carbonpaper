@@ -1,5 +1,5 @@
-"""A stage may omit its stored output_schema when a signature is declared —
-the outer resolves from it; a stored outer still wins and is still checked."""
+"""A stage's output schema resolves from its signature and nothing else: there
+is no stored outer to author, and a spec still carrying one is refused."""
 from __future__ import annotations
 
 import pytest
@@ -51,28 +51,34 @@ def test_a_replaces_signature_resolves_to_exactly_produces():
     assert [(c.name, c.type) for c in resolved.columns] == [("n", "int")]
 
 
-def test_a_stored_outer_still_wins_and_is_still_checked():
-    # Stored beside the signature, the outer must still agree with it.
-    with pytest.raises(ValidationError, match="output_schema disagrees"):
+def test_a_stored_outer_is_refused():
+    # The field is gone, so a spec that still carries one fails loudly rather
+    # than being quietly ignored.
+    with pytest.raises(ValidationError, match="output_schema"):
         parse_stage(_row_stage(output_schema={"columns": [
             {"name": "price", "type": "str", "nullable": True},
             {"name": "title", "type": "str", "nullable": True},
         ]}))
 
 
-def test_neither_outer_nor_signature_is_still_refused():
-    with pytest.raises(ValidationError, match="no output_schema and no signature"):
-        parse_stage(_row_stage(signature=None))
+def test_a_missing_signature_is_refused():
+    spec = _row_stage()
+    del spec["signature"]
+    with pytest.raises(ValidationError, match="signature"):
+        parse_stage(spec)
 
 
 def test_an_edge_is_satisfied_by_the_upstream_resolved_outer():
     source = parse_stage({
         "id": "bills", "name": "Bills", "type": "input_data",
         "connector": {"kind": "file", "params": {"format": "csv"}},
-        "output_schema": {"columns": [
-            {"name": "price", "type": "str", "nullable": True},
-            {"name": "title", "type": "str", "nullable": True},
-        ]},
+        "signature": {
+            "form": "replaces",
+            "produces": [
+                {"name": "price", "type": "str", "nullable": True},
+                {"name": "title", "type": "str", "nullable": True},
+            ],
+        },
     })
     upstream = parse_stage(_row_stage())
     downstream = parse_stage({
@@ -83,11 +89,7 @@ def test_an_edge_is_satisfied_by_the_upstream_resolved_outer():
             {"name": "note", "type": "str", "nullable": True},
         ]}}],
         "filter": {"code": "def should_include(row):\n    return True"},
-        "output_schema": {"columns": [
-            {"name": "price", "type": "float", "nullable": True},
-            {"name": "title", "type": "str", "nullable": True},
-            {"name": "note", "type": "str", "nullable": True},
-        ]},
+        "signature": {"form": "extends"},
     })
     assert validate_workflow([source, upstream, downstream]) == []
 

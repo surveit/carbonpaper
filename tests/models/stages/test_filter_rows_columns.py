@@ -8,30 +8,36 @@ from app.models import parse_stage
 _AB_SCHEMA = {"columns": [{"name": "a", "type": "str", "nullable": True}, {"name": "b", "type": "int", "nullable": True}]}
 
 
-def _filter_stage(*, output_schema=None, filter_cfg=None):
+def _filter_stage(*, signature=None, filter_cfg=None):
     return {
         "id": "f", "type": "filter_rows", "name": "f",
         "inputs": [{"id": "src", "schema": _AB_SCHEMA}],
-        "output_schema": output_schema or _AB_SCHEMA,
+        "signature": signature or {"form": "extends"},
         "filter": filter_cfg or {"code": "def should_include(row): return row['b'] > 0"},
     }
 
 
-def test_matching_output_schema_ok():
-    parse_stage(_filter_stage())
+def test_a_reads_only_signature_ok():
+    stage = parse_stage(_filter_stage())
+    assert [c.name for c in stage.resolve_output_schema().columns] == ["a", "b"]
 
 
-def test_output_schema_must_equal_input_schema():
-    wrong_output = {"columns": [{"name": "a", "type": "str", "nullable": True}]}
-    with pytest.raises(ValidationError, match="output_schema"):
-        parse_stage(_filter_stage(output_schema=wrong_output))
+def test_a_signature_that_adds_is_rejected():
+    with pytest.raises(ValidationError, match="never adds or rewrites"):
+        parse_stage(_filter_stage(signature={
+            "form": "extends",
+            "adds": [{"name": "c", "type": "str", "nullable": True}],
+        }))
 
 
-def test_output_schema_extra_column_rejected():
-    extra = {"columns": [{"name": "a", "type": "str", "nullable": True}, {"name": "b", "type": "int", "nullable": True},
-                          {"name": "c", "type": "str", "nullable": True}]}
-    with pytest.raises(ValidationError, match="output_schema"):
-        parse_stage(_filter_stage(output_schema=extra))
+def test_a_signature_that_rewrites_is_rejected():
+    with pytest.raises(ValidationError, match="never adds or rewrites"):
+        parse_stage(_filter_stage(signature={
+            "form": "extends",
+            "reads": [{"input": "src",
+                       "columns": [{"name": "a", "type": "str", "nullable": True}]}],
+            "rewrites": [{"name": "a", "type": "int", "nullable": True}],
+        }))
 
 
 def test_inline_code_must_define_should_include():

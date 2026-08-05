@@ -15,3 +15,7 @@ class WorkflowLoadError(Exception):
             f"{source}: {len(issues)} validation issue(s):\n  "
             + "\n  ".join(issues)
         )
+
+
+class SpecMigrationRefused(ValueError):
+    """A stored stage payload whose signature the read-side upgrade cannot determine."""

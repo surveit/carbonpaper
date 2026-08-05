@@ -68,7 +68,7 @@ class InputDataStage(StageBase):
     connector: Connector
     # The root of the schema graph: no inputs, so `produces` IS the declaration
     # of what the source supplies — the degenerate replaces form.
-    signature: Optional[ReplacesSignature] = None
+    signature: ReplacesSignature
 
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
         return {"connector": self.connector}
@@ -102,7 +102,7 @@ NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
             "rows or columns: sheet_name (name or 0-based position, default first "
             "sheet), header_row (0-based index of the header row, default 0) and "
             "first_column (0-based index of the first column read, default 0). "
-            "Takes no inputs, but must still declare its output_schema."
+            "Takes no inputs; the signature's `produces` declares what the source supplies."
         ),
     ),
 }

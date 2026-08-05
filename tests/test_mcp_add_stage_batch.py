@@ -20,21 +20,26 @@ _CLEANED = {"columns": [
 
 _LOAD = {
     "id": "load", "name": "Load claims", "type": "input_data",
-    "connector": {"kind": "file"}, "output_schema": _CLAIM,
+    "connector": {"kind": "file"}, "signature": {"form": "replaces", "produces": _CLAIM["columns"]},
 }
 _CLEAN = {
     "id": "clean", "name": "Clean", "type": "python_row_function",
     "inputs": [{"id": "load", "schema": _CLAIM}],
     "function": {"kind": "inline", "summary": "Test fixture step.", "corner_cases": [],
                  "code": "def transform(row):\n    return {**row, 'cleaned': True}\n"},
-    "output_schema": _CLEANED,
+    "signature": {
+        "form": "extends",
+        "reads": [{"input": "load", "columns": _CLAIM["columns"]}],
+        "adds": [{"name": "cleaned", "type": "bool", "nullable": False}],
+    },
 }
-# Refused by Stage: an llm_transform must be additive and 1:1, and this drops
-# `amount`. The failure is real validation, not a fixture trick.
+# Refused by Stage: an llm_transform's signature must read exactly what its
+# template injects, and this reads nothing. Real validation, not a fixture trick.
 _SCORE_UNADDITIVE = {
     "id": "score", "name": "Score", "type": "llm_transform",
     "inputs": [{"id": "clean", "schema": _CLEANED}],
-    "output_schema": {"columns": [{"name": "verdict", "type": "str", "nullable": True}]},
+    "signature": {"form": "extends",
+                  "adds": [{"name": "verdict", "type": "str", "nullable": True}]},
     "llm": {"prompt_data_template": "judge {amount}"},
 }
 _RANK = {
@@ -43,10 +48,16 @@ _RANK = {
         "columns": [{"name": "verdict", "type": "str", "nullable": True}]}}],
     "function": {"kind": "inline", "summary": "Test fixture step.", "corner_cases": [],
                  "code": "def transform(row):\n    return {**row, 'rank': 1}\n"},
-    "output_schema": {"columns": [
-        {"name": "verdict", "type": "str", "nullable": True},
-        {"name": "rank", "type": "int", "nullable": False},
-    ]},
+    "signature": {
+        "form": "extends",
+        "reads": [
+            {
+                "input": "score",
+                "columns": [{"name": "verdict", "type": "str", "nullable": True}],
+            },
+        ],
+        "adds": [{"name": "rank", "type": "int", "nullable": False}],
+    },
 }
 _REPORT = {
     "id": "report", "name": "Report", "type": "python_row_function",
@@ -54,10 +65,16 @@ _REPORT = {
         "columns": [{"name": "rank", "type": "int", "nullable": False}]}}],
     "function": {"kind": "inline", "summary": "Test fixture step.", "corner_cases": [],
                  "code": "def transform(row):\n    return {**row, 'note': 'x'}\n"},
-    "output_schema": {"columns": [
-        {"name": "rank", "type": "int", "nullable": False},
-        {"name": "note", "type": "str", "nullable": False},
-    ]},
+    "signature": {
+        "form": "extends",
+        "reads": [
+            {
+                "input": "rank",
+                "columns": [{"name": "rank", "type": "int", "nullable": False}],
+            },
+        ],
+        "adds": [{"name": "note", "type": "str", "nullable": False}],
+    },
 }
 
 
@@ -103,7 +120,7 @@ def test_one_failure_keeps_the_independents_and_skips_only_its_dependency_cone(p
     assert result["added"] == ["load", "clean"]
     [failure] = result["failed"]
     assert failure["id"] == "score"
-    assert any("1:1" in issue for issue in failure["issues"])
+    assert any("does not read it" in issue for issue in failure["issues"])
     assert result["skipped"] == [
         {"id": "rank", "because": "inputs from score"},
         # transitive, and named by its NEAREST cause rather than the root
@@ -153,7 +170,7 @@ def test_a_one_element_list_refuses_exactly_as_the_singular_call_did(project):
     result = _call_add_stage([_SCORE_UNADDITIVE])
 
     assert result["ok"] is False
-    assert any("1:1" in issue for issue in result["issues"])
+    assert any("does not read it" in issue for issue in result["issues"])
     assert _list_stored_stage_ids(project) == {"load", "clean"}
 
 

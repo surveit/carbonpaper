@@ -34,8 +34,16 @@ def _row_stage(code: str = _DOUBLING_CODE, *, cache: bool = True) -> Stage:
         "id": "double", "name": "Double", "type": "python_row_function",
         "inputs": [{"id": "src", "schema": {"columns": [{"name": "x", "type": "int", "nullable": True}]}}],
         "cache": cache,
-        "output_schema": {
-            "columns": [{"name": "x", "type": "int", "nullable": True}, {"name": "y", "type": "int", "nullable": True}]},
+        "signature": {
+            "form": "extends",
+            "reads": [
+                {
+                    "input": "src",
+                    "columns": [{"name": "x", "type": "int", "nullable": True}],
+                },
+            ],
+            "adds": [{"name": "y", "type": "int", "nullable": True}],
+        },
         "function": {"kind": "inline", "code": code},
     })
 
@@ -45,8 +53,11 @@ def _llm_stage(*, batch_size: int = 1, instructions: str = "score it") -> Stage:
         "id": "score", "name": "Score", "type": "llm_transform",
         "inputs": [{"id": "src", "schema": {
             "columns": [{"name": "x", "type": "int", "nullable": True}]}}],
-        "output_schema": {
-            "columns": [{"name": "x", "type": "int", "nullable": True}, {"name": "verdict", "type": "str", "nullable": True}]},
+        "signature": {
+            "form": "extends",
+            "reads": [{"input": "src",
+                       "columns": [{"name": "x", "type": "int", "nullable": True}]}],
+            "adds": [{"name": "verdict", "type": "str", "nullable": True}]},
         "llm": {"prompt_instructions": instructions, "prompt_data_template": "{x}",
                 "batch_size": batch_size},
     })

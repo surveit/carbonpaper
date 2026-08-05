@@ -37,21 +37,32 @@ _ROW_FUNCTION = {"kind": "inline", "code": "def transform(row):\n    return row\
 #                        load_sources ─┴→ attach_source
 _STAGES: list[dict[str, Any]] = [
     {"id": "load_rows", "name": "Load rows", "type": "input_data",
-     "connector": {"kind": "file"}, "output_schema": _ROWS},
+     "connector": {"kind": "file"}, "signature": {"form": "replaces", "produces": _ROWS["columns"]}},
     {"id": "load_sources", "name": "Load sources", "type": "input_data",
-     "connector": {"kind": "file"}, "output_schema": _SOURCES},
+     "connector": {"kind": "file"}, "signature": {"form": "replaces", "produces": _SOURCES["columns"]}},
     {"id": "add_flag", "name": "Flag rows", "type": "python_row_function",
      "inputs": [{"id": "load_rows", "schema": _ROWS}],
-     "function": _ROW_FUNCTION, "output_schema": _FLAGGED},
+     "function": _ROW_FUNCTION, "signature": {
+         "form": "extends",
+         "reads": [{"input": "load_rows", "columns": _ROWS["columns"]}],
+         "adds": [_FLAG],
+     }},
     {"id": "keep_flagged", "name": "Keep the flagged rows", "type": "filter_rows",
      "inputs": [{"id": "add_flag", "schema": _FLAGGED}],
      "filter": {"code": "def should_include(row):\n    return row['flag']\n"},
-     "output_schema": _FLAGGED},
+     "signature": {"form": "extends"}},
     {"id": "attach_source", "name": "Attach the source", "type": "enrich",
      "inputs": [{"id": "keep_flagged", "schema": _FLAGGED},
                 {"id": "load_sources", "schema": _SOURCES}],
      "join": {"keys": [{"left": "doc_id", "right": "doc_id"}], "enrich_with": {"source": "source"}},
-     "output_schema": _ATTACHED},
+     "signature": {
+         "form": "extends",
+         "reads": [
+             {"input": "keep_flagged", "columns": _ROWS["columns"]},
+             {"input": "load_sources", "columns": _ROWS["columns"]},
+         ],
+         "adds": [_SOURCE],
+     }},
 ]
 
 # attach_source is named first, though the run reaches it last.
@@ -220,11 +231,12 @@ def test_a_stage_id_the_version_does_not_define_is_kept_unresolved(project_dir):
 
 # ── list_written_columns on its own ──────────────────────────────────────────
 
-def test_a_publish_stage_declaring_no_output_schema_writes_nothing():
+def test_a_publish_stage_producing_nothing_writes_no_columns():
     publish = parse_stage({
         "id": "write_it", "name": "Write it", "type": "publish",
         "inputs": [{"id": "attach_source", "schema": _ATTACHED}],
         "publish": {"format": "csv", "destination": "out/"},
+        "signature": {"form": "replaces"},
         "function": {"kind": "inline",
                      "code": "def transform(df, output_dir):\n    return df\n"},
     })

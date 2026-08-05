@@ -32,15 +32,18 @@ def _stages(data_path: Path) -> list[dict]:
             "id": "load", "name": "Load rows", "type": "input_data",
             "connector": {"kind": "file",
                           "params": {"path": str(data_path), "format": "csv"}},
-            "output_schema": {"columns": _COLUMNS},
+            "signature": {"form": "replaces", "produces": _COLUMNS},
         },
         {
             "id": "classify", "name": "Classify", "type": "python_row_function",
             "inputs": [{"id": "load", "schema": {"columns": _COLUMNS}}],
             "function": {"kind": "inline",
                          "code": 'def transform(row):\n    return {**row, "label": "x"}\n'},
-            "output_schema": {
-                "columns": [*_COLUMNS, {"name": "label", "type": "str", "nullable": True}]},
+            "signature": {
+                "form": "extends",
+                "reads": [{"input": "load", "columns": _COLUMNS}],
+                "adds": [{"name": "label", "type": "str", "nullable": True}],
+            },
         },
     ]
 

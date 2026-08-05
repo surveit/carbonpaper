@@ -33,12 +33,11 @@ def _seed_version(root):
     versioning.publish_version(root, vid, reviewer="human")
 
 
-def _with_queue_output_schema(stage):
-    # `stage` plus the output_schema its input edge and `queue` block imply: the edge's
-    # own columns, each reviewed source repeated under its target name and spec, then the
-    # review-record columns. For the fixtures whose subject is something other than the
-    # output schema.
+def _with_queue_signature(stage):
     input_schema = stage["inputs"][0]["schema"]
+    # `stage` plus the signature its `queue` block implies: each reviewed source
+    # repeated under its target name and spec, then the review-record columns.
+    # For the fixtures whose subject is something other than the signature.
     by_name = {column["name"]: column for column in input_schema["columns"]}
     queue = stage["queue"]
     added = [{**by_name[source], "name": target}
@@ -47,8 +46,7 @@ def _with_queue_output_schema(stage):
               for field in ("verdict_column", "reviewer_column",
                             "reviewed_at_column", "review_notes_column")
               if queue.get(field) is not None]
-    return {**stage, "output_schema": {**input_schema,
-                                       "columns": input_schema["columns"] + added}}
+    return {**stage, "signature": {"form": "extends", "adds": added}}
 
 
 def _write_stage(root, filename, stage):
@@ -67,29 +65,40 @@ def _load_quotes_stage(root):
     return {"id": "load", "name": "Load quotes", "type": "input_data",
             "connector": {"kind": "file",
                           "params": {"path": str(csv_path), "format": "csv"}},
-            "output_schema": {
-                "columns": [{"name": "id", "type": "str", "nullable": True},
-                            {"name": "quote", "type": "str", "nullable": True}]}}
+            "signature": {
+                "form": "replaces",
+                "produces": [
+                    {"name": "id", "type": "str", "nullable": True},
+                    {"name": "quote", "type": "str", "nullable": True},
+                ],
+            }}
 
 
 # The reviewer columns app/services/review.py's _build_output_row (and the
 # runtime's pass-through/auto-approve rows) add on top of the frozen input row.
-# Every non-publish stage must declare its output_schema
+# Every non-publish stage's signature must say what it outputs
 # (app/models/stage.py: Stage._schemas_declared), and the runtime PROJECTS the
 # stage's output onto exactly those columns.
 _REVIEW_COLUMNS = queue_added_columns()
 
 
 def _score_stage():
-    # llm_transform: scores each quote. output_schema is additive (a stage invariant —
+    # llm_transform: scores each quote. The signature is additive (a stage invariant —
     # app/models/stage.py's _llm_transform_one_to_one), so `quote` survives onto the
     # queued row.
     return {"id": "score", "name": "Score quotes", "type": "llm_transform",
             "inputs": [{"id": "load", "schema": {
                 "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "quote", "type": "str", "nullable": True}]}}],
-            "output_schema": {
-                "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "quote", "type": "str", "nullable": True},
-                            {"name": "score", "type": "int", "nullable": False}]},
+            "signature": {
+                "form": "extends",
+                "reads": [
+                    {
+                        "input": "load",
+                        "columns": [{"name": "quote", "type": "str", "nullable": True}],
+                    },
+                ],
+                "adds": [{"name": "score", "type": "int", "nullable": False}],
+            },
             "llm": {"prompt_instructions": "Score each quote for tone.",
                     "prompt_data_template": "Rate this: {quote}"}}
 
@@ -101,9 +110,7 @@ def _review_stage():
             "inputs": [{"id": "score", "schema": {
                 "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "quote", "type": "str", "nullable": True},
                             {"name": "score", "type": "int", "nullable": True}]}}],
-            "output_schema": {
-                "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "quote", "type": "str", "nullable": True},
-                            {"name": "score", "type": "int", "nullable": True}] + _REVIEW_COLUMNS},
+            "signature": {"form": "extends", "adds": _REVIEW_COLUMNS},
             "queue": dict(QUEUE_COLUMNS)}
 
 
@@ -333,17 +340,20 @@ def _e2e_load_stage(root):
     pd.DataFrame({"id": ["a", "b", "c"], "score": [1, 2, 3]}).to_csv(csv_path, index=False)
     return {"id": "load", "name": "Load items", "type": "input_data",
             "connector": {"kind": "file", "params": {"path": str(csv_path), "format": "csv"}},
-            "output_schema": {
-                "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True}]}}
+            "signature": {
+                "form": "replaces",
+                "produces": [
+                    {"name": "id", "type": "str", "nullable": True},
+                    {"name": "score", "type": "int", "nullable": True},
+                ],
+            }}
 
 
 def _e2e_review_stage():
     return {"id": "review", "name": "Review items", "type": "human_review_queue",
             "inputs": [{"id": "load", "schema": {
                 "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True}]}}],
-            "output_schema": {
-                "columns": [{"name": "id", "type": "str", "nullable": True},
-                            {"name": "score", "type": "int", "nullable": True}] + _REVIEW_COLUMNS},
+            "signature": {"form": "extends", "adds": _REVIEW_COLUMNS},
             "queue": dict(QUEUE_COLUMNS)}
 
 
@@ -440,7 +450,7 @@ def test_decide_accepts_an_untouched_notes_box_as_no_note(tmp_path, monkeypatch)
 
 def _no_notes_review_stage():
     queue = {k: v for k, v in QUEUE_COLUMNS.items() if k != "review_notes_column"}
-    return _with_queue_output_schema({
+    return _with_queue_signature({
             "id": "review", "name": "Review items", "type": "human_review_queue",
             "inputs": [{"id": "load", "schema": {
                 "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True}]}}],
@@ -480,9 +490,9 @@ def _drift_the_review_stage(project_dir):
     # stage fingerprint no longer matches the sidecar's.
     drifted = _review_stage()
     drifted["queue"] = {**QUEUE_COLUMNS, "reviewed_columns": {"score": "checked_score"}}
-    drifted["output_schema"] = {**drifted["output_schema"], "columns": [
+    drifted["signature"] = {**drifted["signature"], "adds": [
         {"name": "checked_score", "type": "int", "nullable": True} if column["name"] == "human_score" else column
-        for column in drifted["output_schema"]["columns"]
+        for column in drifted["signature"]["adds"]
     ]}
     _write_stage(project_dir, "03_review.json", drifted)
 
@@ -563,7 +573,7 @@ def test_queue_page_prefills_a_decided_row_from_the_recorded_value(tmp_path, mon
 
 
 def _bool_review_stage(nullable):
-    return _with_queue_output_schema({
+    return _with_queue_signature({
         "id": "review", "name": "Review flags", "type": "human_review_queue",
         "inputs": [{"id": "load", "schema": {
             "columns": [{"name": "id", "type": "str", "nullable": True},
@@ -582,8 +592,9 @@ def _build_and_halt_bool_queue(tmp_path, monkeypatch, project, *, ai_value, null
     _write_stage(project_dir, "01_load.json", {
         "id": "load", "name": "Load flags", "type": "input_data",
         "connector": {"kind": "file", "params": {"path": str(csv_path), "format": "csv"}},
-        "output_schema": {"columns": [{"name": "id", "type": "str", "nullable": True},
-                                      {"name": "flag", "type": "bool", "nullable": nullable}]}})
+        "signature": {"form": "replaces", "produces": [
+            {"name": "id", "type": "str", "nullable": True},
+            {"name": "flag", "type": "bool", "nullable": nullable}]}})
     _write_stage(project_dir, "02_review.json", _bool_review_stage(nullable))
     _seed_version(project_dir)
     run_id = run_prepared(prepare_run(project_dir, project_dir, *pinned_stages(project_dir)))["run_id"]
@@ -676,7 +687,7 @@ def test_a_non_nullable_bool_select_opens_on_the_ai_value(tmp_path, monkeypatch)
 
 
 def _temporal_review_stage(column_type):
-    return _with_queue_output_schema({
+    return _with_queue_signature({
         "id": "review", "name": "Review times", "type": "human_review_queue",
         "inputs": [{"id": "load", "schema": {
             "columns": [{"name": "id", "type": "str", "nullable": True},
@@ -695,8 +706,9 @@ def _decide_a_temporal_row(tmp_path, monkeypatch, project, column_type, recorded
     _write_stage(project_dir, "01_load.json", {
         "id": "load", "name": "Load sightings", "type": "input_data",
         "connector": {"kind": "file", "params": {"path": str(csv_path), "format": "csv"}},
-        "output_schema": {"columns": [{"name": "id", "type": "str", "nullable": True},
-                                      {"name": "seen_at", "type": column_type, "nullable": True}]}})
+        "signature": {"form": "replaces", "produces": [
+            {"name": "id", "type": "str", "nullable": True},
+            {"name": "seen_at", "type": column_type, "nullable": True}]}})
     _write_stage(project_dir, "02_review.json", _temporal_review_stage(column_type))
     _seed_version(project_dir)
     run_id = run_prepared(prepare_run(project_dir, project_dir, *pinned_stages(project_dir)))["run_id"]
@@ -739,45 +751,50 @@ def test_a_temporal_control_opens_on_the_recorded_value_of_a_decided_row(
     assert _find_input_value(html, "human_seen_at") == recorded
 
 
-def _output_schema_review_stage():
-    # Declares an output_schema, so `human_score` resolves from THERE rather than from the
-    # input edge's `score`. The two differ on the one spec field the model lets them
-    # differ on: `score` is non-nullable, `human_score` is nullable. That is the evidence
-    # of which declaration the endpoint coerced against — a blank value is a null through
-    # the output_schema column and a refusal through the source column.
+def _declared_range_review_stage():
+    """`human_score` resolves from the signature, not the input edge's `score`."""
     return {"id": "review", "name": "Review items", "type": "human_review_queue",
             "inputs": [{"id": "load", "schema": {
                 "columns": [{"name": "id", "type": "str", "nullable": True},
                             {"name": "score", "type": "int", "nullable": False,
                              "range": [0, 5]}]}}],
-            "output_schema": {"columns": [
-                {"name": "id", "type": "str", "nullable": True},
-                {"name": "score", "type": "int", "nullable": False, "range": [0, 5]},
-                {"name": "human_score", "type": "int", "nullable": True, "range": [0, 5]},
-                {"name": "decision", "type": "str", "nullable": True}, {"name": "reviewer_id", "type": "str", "nullable": True},
-                {"name": "reviewed_at", "type": "str", "nullable": True}, {"name": "review_notes", "type": "str", "nullable": True}]},
+            "signature": {
+                "form": "extends",
+                "adds": [
+                    {
+                        "name": "human_score",
+                        "type": "int",
+                        "nullable": True,
+                        "range": [0, 5],
+                    },
+                    {"name": "decision", "type": "str", "nullable": True},
+                    {"name": "reviewer_id", "type": "str", "nullable": True},
+                    {"name": "reviewed_at", "type": "str", "nullable": True},
+                    {"name": "review_notes", "type": "str", "nullable": True},
+                ],
+            },
             "queue": dict(QUEUE_COLUMNS)}
 
 
-def _build_and_halt_output_schema_queue(tmp_path, monkeypatch, project):
+def _build_and_halt_declared_range_queue(tmp_path, monkeypatch, project):
     workspace.set_projects_dir(tmp_path)
     project_dir = tmp_path / project
     # The loader declares `score` exactly as the review stage's edge does: the
     # edge check requires the producer to be no more permissive than the consumer.
     load = _e2e_load_stage(project_dir)
-    load["output_schema"] = {"columns": [
+    load["signature"] = {"form": "replaces", "produces": [
         {"name": "id", "type": "str", "nullable": True},
         {"name": "score", "type": "int", "nullable": False, "range": [0, 5]}]}
     _write_stage(project_dir, "01_load.json", load)
-    _write_stage(project_dir, "02_review.json", _output_schema_review_stage())
+    _write_stage(project_dir, "02_review.json", _declared_range_review_stage())
     _seed_version(project_dir)
     run_id = run_prepared(prepare_run(project_dir, project_dir, *pinned_stages(project_dir)))["run_id"]
     return run_id, _read_fingerprints(project_dir / "runs" / run_id)
 
 
-def test_decide_coerces_against_the_output_schema_column_when_declared(tmp_path, monkeypatch):
+def test_decide_coerces_against_the_signature_column_when_declared(tmp_path, monkeypatch):
     project = "queue_route_output_schema"
-    run_id, fingerprints = _build_and_halt_output_schema_queue(tmp_path, monkeypatch, project)
+    run_id, fingerprints = _build_and_halt_declared_range_queue(tmp_path, monkeypatch, project)
     fp = fingerprints["input_fingerprints"][0]
 
     client = TestClient(app)
@@ -791,8 +808,8 @@ def test_decide_coerces_against_the_output_schema_column_when_declared(tmp_path,
     detail = refused.json()["detail"]
     assert "human_score" in detail and "less than or equal to 5" in detail
 
-    # Blank is a null only because output_schema's `human_score` is nullable; the
-    # input edge's `score` is not, so this is the output_schema path being read.
+    # Blank is a null only because the signature's `human_score` is nullable; the
+    # input edge's `score` is not, so this is the signature path being read.
     accepted = client.post(url, data=_decide_data(
         fp, {"human_score": ""}, prefilled={"human_score": 1}))
     assert accepted.status_code == 200, accepted.text
@@ -861,13 +878,23 @@ def _labelled_row_function_stage():
             "inputs": [{"id": "load", "schema": {
                 "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True}]}}],
             "function": {"kind": "inline", "code": code},
-            "output_schema": {"columns": [
-                {"name": "id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True},
-                {"name": "label", "type": "str", "nullable": True}]}}
+            "signature": {
+                "form": "extends",
+                "reads": [
+                    {
+                        "input": "load",
+                        "columns": [
+                            {"name": "id", "type": "str", "nullable": True},
+                            {"name": "score", "type": "int", "nullable": True},
+                        ],
+                    },
+                ],
+                "adds": [{"name": "label", "type": "str", "nullable": True}],
+            }}
 
 
 def _review_labels_stage():
-    return _with_queue_output_schema({
+    return _with_queue_signature({
         "id": "review", "name": "Review labels", "type": "human_review_queue",
         "inputs": [{"id": "label", "schema": {
             "columns": [
@@ -914,15 +941,21 @@ def _described_review_stage():
                      "description": "the score this row was labelled from", "nullable": True},
                     {"name": "label", "type": "str",
                      "description": "high when the score exceeds one", "nullable": True}]}}],
-            "output_schema": {"columns": [
-                {"name": "id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True},
-                {"name": "label", "type": "str", "nullable": True},
-                {"name": "human_label", "type": "str",
-                 "description": "the label after review", "nullable": True},
-                {"name": "decision", "type": "str", "nullable": True},
-                {"name": "reviewer_id", "type": "str", "nullable": True},
-                {"name": "reviewed_at", "type": "str", "nullable": True},
-                {"name": "review_notes", "type": "str", "nullable": True}]},
+            "signature": {
+                "form": "extends",
+                "adds": [
+                    {
+                        "name": "human_label",
+                        "type": "str",
+                        "description": "the label after review",
+                        "nullable": True,
+                    },
+                    {"name": "decision", "type": "str", "nullable": True},
+                    {"name": "reviewer_id", "type": "str", "nullable": True},
+                    {"name": "reviewed_at", "type": "str", "nullable": True},
+                    {"name": "review_notes", "type": "str", "nullable": True},
+                ],
+            },
             "queue": {**queue_columns(source="label", target="human_label"),
                       "reviewer_instructions": "Confirm the label against the score."}}
 
@@ -1027,9 +1060,13 @@ def _empty_string_load_stage(project_dir):
     return {"id": "load", "name": "Load rows", "type": "input_data",
             "connector": {"kind": "file",
                           "params": {"path": str(csv_path), "format": "csv"}},
-            "output_schema": {"columns": [
-                {"name": "id", "type": "str", "nullable": True},
-                {"name": "flag", "type": "bool", "nullable": True}]}}
+            "signature": {
+                "form": "replaces",
+                "produces": [
+                    {"name": "id", "type": "str", "nullable": True},
+                    {"name": "flag", "type": "bool", "nullable": True},
+                ],
+            }}
 
 
 _EMPTY_STRING_COLUMNS = [
@@ -1050,11 +1087,23 @@ def _empty_string_row_function_stage():
             "inputs": [{"id": "load", "schema": {
                 "columns": _EMPTY_STRING_COLUMNS[:2]}}],
             "function": {"kind": "inline", "code": code},
-            "output_schema": {"columns": _EMPTY_STRING_COLUMNS}}
+            "signature": {
+                "form": "extends",
+                "reads": [
+                    {
+                        "input": "load",
+                        "columns": [
+                            {"name": "id", "type": "str", "nullable": True},
+                            {"name": "flag", "type": "bool", "nullable": True},
+                        ],
+                    },
+                ],
+                "adds": [{"name": "note", "type": "str", "nullable": True}],
+            }}
 
 
 def _empty_string_review_stage():
-    return _with_queue_output_schema({
+    return _with_queue_signature({
         "id": "review", "name": "Review notes", "type": "human_review_queue",
         "inputs": [{"id": "note", "schema": {
             "columns": _EMPTY_STRING_COLUMNS}}],
@@ -1085,7 +1134,7 @@ def test_an_empty_string_cell_is_not_printed_as_a_null(tmp_path, monkeypatch):
 def _every_column_reviewed_stage():
     # A queue over a frame whose ONLY column is the one under review, so subtracting the
     # reviewed columns leaves no context at all.
-    return _with_queue_output_schema({
+    return _with_queue_signature({
         "id": "review", "name": "Review scores", "type": "human_review_queue",
         "inputs": [{"id": "load", "schema": {
             "columns": [{"name": "score", "type": "int", "nullable": True}]}}],
@@ -1102,7 +1151,10 @@ def test_no_context_table_is_rendered_when_every_column_is_under_review(tmp_path
     load = {"id": "load", "name": "Load scores", "type": "input_data",
             "connector": {"kind": "file",
                           "params": {"path": str(csv_path), "format": "csv"}},
-            "output_schema": {"columns": [{"name": "score", "type": "int", "nullable": True}]}}
+            "signature": {
+                "form": "replaces",
+                "produces": [{"name": "score", "type": "int", "nullable": True}],
+            }}
     run_id, _fingerprints = _build_and_halt_queue_over(
         tmp_path, monkeypatch, project, [load, _every_column_reviewed_stage()])
 

@@ -115,7 +115,13 @@ def _workflow_stages(source_path: str) -> list[dict]:
     classify = {
         "id": "classify", "name": "Classify claims", "type": "llm_transform",
         "inputs": [{"id": "load", "schema": load_schema}],
-        "output_schema": classified_schema,
+        # Reads must match the template's placeholders exactly: it injects {text}.
+        "signature": {
+            "form": "extends",
+            "reads": [{"input": "load", "columns": [
+                {"name": "text", "type": "str", "nullable": True}]}],
+            "adds": [{"name": "about_money", "type": "bool", "nullable": True}],
+        },
         "llm": llm,
     }
     return [
@@ -123,13 +129,14 @@ def _workflow_stages(source_path: str) -> list[dict]:
             "id": "load", "name": "Load claims", "type": "input_data",
             "connector": {"kind": "file",
                           "params": {"path": source_path, "format": "csv"}},
-            "output_schema": load_schema,
+            "signature": {"form": "replaces", "produces": load_schema["columns"]},
         },
         classify,
         {
             "id": "report", "name": "Publish classified claims", "type": "publish",
             "inputs": [{"id": "classify", "schema": classified_schema}],
             "publish": {"format": "csv", "destination": "report/"},
+            "signature": {"form": "replaces"},
             "function": {"kind": "inline", "code": (
                 "import pandas as pd\n"
                 "from pathlib import Path\n"

@@ -47,8 +47,8 @@ def start_stage_test_generation(project_dir: Path, *, stage_id: str, model: str)
     the (hidden, view-only) chat session streaming the turn. Loads document.md and the
     stage's current compiled spec — raising ValueError if the project has no document,
     `stage_id` names no stage in the compiled workflow, the stage's type carries no
-    runnable tests, or the stage has no output_schema (which a loaded stage always declares —
-    the check is a belt-and-braces guard, since tests need one to state expected rows).
+    runnable tests, or the stage resolves no output schema (tests need one to state
+    expected rows).
     Every one of these checks runs BEFORE the
     session/turn are started, so a rejected stage never creates an orphaned session
     (build_stage_test_generator / render_generation_task would raise the same errors, but only

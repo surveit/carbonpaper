@@ -14,7 +14,8 @@ def _stage_with_edge_schema(columns):
         "inputs": [{"id": "src", "schema": {
             "columns": [{"name": c, "type": "str", "nullable": False} for c in columns],
         }}],
-        "output_schema": {"columns": [{"name": "n", "type": "int", "nullable": False}]},
+        "signature": {"form": "replaces",
+                      "produces": [{"name": "n", "type": "int", "nullable": False}]},
         "aggregate": {"group_by": [], "aggregations": [{"output_column": "n", "formula": "count"}]},
     })
 
@@ -45,6 +46,9 @@ def test_find_config_column_issues_is_empty_for_a_type_that_names_no_column():
     load = parse_stage({
         "id": "load", "type": "input_data", "name": "load",
         "connector": {"kind": "file", "params": {}},
-        "output_schema": {"columns": [{"name": "a", "type": "str", "nullable": False}]},
+        "signature": {
+            "form": "replaces",
+            "produces": [{"name": "a", "type": "str", "nullable": False}],
+        },
     })
     assert load.find_config_column_issues() == []

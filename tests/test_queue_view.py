@@ -20,8 +20,8 @@ def _queue_stage(
     target_spec: dict[str, object] | None = None,
     input_ids: list[str] | None = None,
 ) -> Stage:
-    # A `human_review_queue` stage over `input_columns`, with the output_schema its input
-    # edge and `queue` block imply. `target_spec` overrides the reviewed TARGET column's
+    # A `human_review_queue` stage over `input_columns`, adding exactly what its
+    # `queue` block names. `target_spec` overrides the reviewed TARGET column's
     # declaration.
     added: list[dict[str, object]] = queue_added_columns(target, target_type)
     added[0] = {**added[0], **(target_spec or {})}
@@ -32,7 +32,7 @@ def _queue_stage(
     return parse_stage({
         "id": "review", "name": "Review", "type": "human_review_queue",
         "inputs": inputs,
-        "output_schema": {"columns": input_columns + added},
+        "signature": {"form": "extends", "adds": added},
         "queue": queue_columns(source=source, target=target),
     })
 
@@ -178,12 +178,11 @@ def test_the_notes_label_prefers_the_declared_description():
     assert queue_view.resolve_notes_label(stage, "review_notes") == "Review notes"
     assert queue_view.resolve_notes_label(stage, "reviewer_notes") == "Reviewer notes"
 
-    assert stage.output_schema is not None
-    described = stage.model_copy(update={"output_schema": stage.output_schema.model_copy(
-        update={"columns": [
+    described = stage.model_copy(update={"signature": stage.signature.model_copy(
+        update={"adds": [
             column.model_copy(update={"description": "Why you decided as you did"})
             if column.name == "review_notes" else column
-            for column in stage.output_schema.columns]})})
+            for column in stage.signature.adds]})})
     assert queue_view.resolve_notes_label(described, "review_notes") == (
         "Why you decided as you did")
 

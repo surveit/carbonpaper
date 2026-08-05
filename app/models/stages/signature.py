@@ -119,8 +119,6 @@ def find_signature_issues(stage: "StageBase") -> list[str]:
     issues = _find_read_issues(stage, signature.reads)
     if isinstance(signature, ExtendsSignature):
         issues.extend(_find_extends_issues(stage, signature))
-    else:
-        issues.extend(_find_replaces_issues(stage, signature))
     return issues
 
 
@@ -169,43 +167,14 @@ def _find_extends_issues(stage: "StageBase", signature: ExtendsSignature) -> lis
     )
 
     anchor_columns = {column.name for column in anchor.table_schema.columns}
-    colliding = [
-        column.name for column in signature.adds if column.name in anchor_columns
-    ]
     issues.extend(
-        _issue(stage, f"adds `{name}`, which the anchor input `{anchor.id}` "
+        _issue(stage, f"adds `{column.name}`, which the anchor input `{anchor.id}` "
                       f"already supplies — a collision is refused, never renamed; "
                       f"declare a rewrite or use a different name")
-        for name in colliding
+        for column in signature.adds
+        if column.name in anchor_columns
     )
-
-    # A colliding add makes the promised output ill-defined, so the comparison
-    # below only runs once the adds are genuinely new. The comparison exists
-    # because output_schema is authored BESIDE the signature — two accounts of
-    # one output can drift; an output_schema computed from the anchor edge and
-    # the signature satisfies it by construction.
-    if stage.output_schema is not None and not colliding:
-        expected = anchor.table_schema.extend(signature.rewrites, signature.adds)
-        differing = sorted(stage.output_schema.differing_column_names(expected))
-        if differing:
-            issues.append(_issue(
-                stage,
-                f"output_schema disagrees with the anchor edge extended by this "
-                f"signature on column(s) {differing}",
-            ))
     return issues
-
-
-def _find_replaces_issues(stage: "StageBase", signature: ReplacesSignature) -> list[str]:
-    if stage.output_schema is None or not signature.produces:
-        return []
-    produced = TableSchema(columns=signature.produces)
-    differing = sorted(stage.output_schema.differing_column_names(produced))
-    if differing:
-        return [_issue(
-            stage, f"output_schema disagrees with `produces` on column(s) {differing}"
-        )]
-    return []
 
 
 def promised_output_schema(stage: "StageBase") -> "TableSchema | None":

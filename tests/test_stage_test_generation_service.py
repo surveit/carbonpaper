@@ -47,12 +47,16 @@ def _seed_project(project_dir: Path, *, existing_tests: list[dict] | None = None
     (compiled / "01_load.json").write_text(json.dumps({
         "id": "load", "name": "Load", "type": "input_data",
         "connector": {"kind": "file"},
-        "output_schema": _IN_SCHEMA,
+        "signature": {"form": "replaces", "produces": _IN_SCHEMA["columns"]},
     }), encoding="utf-8")
     double_spec: dict[str, Any] = {
         "id": "double", "name": "Double", "type": "python_row_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
-        "output_schema": _OUT_SCHEMA,
+        "signature": {
+            "form": "extends",
+            "reads": [{"input": "load", "columns": _IN_SCHEMA["columns"]}],
+            "adds": [{"name": "doubled", "type": "float", "nullable": False}],
+        },
         "function": {"kind": "inline", "summary": "Test fixture step.", "corner_cases": [],
                      "code": "def transform(row):\n    return {**row, 'doubled': row['amount'] * 2}\n"},
     }
@@ -152,12 +156,13 @@ def test_finish_stage_tests_preserves_null_cells(tmp_path: Path):
     (compiled / "01_load.json").write_text(json.dumps({
         "id": "load", "name": "Load", "type": "input_data",
         "connector": {"kind": "file"},
-        "output_schema": _IN_SCHEMA,
+        "signature": {"form": "replaces", "produces": _IN_SCHEMA["columns"]},
     }), encoding="utf-8")
     (compiled / "02_double.json").write_text(json.dumps({
         "id": "double", "name": "Double", "type": "python_row_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
-        "output_schema": out_schema,
+        "signature": {"form": "extends", "adds": [
+            c for c in out_schema["columns"] if c not in _IN_SCHEMA["columns"]]},
         "function": {"kind": "inline", "summary": "Test fixture step.", "corner_cases": [],
                      "code": "def transform(row):\n    return {**row, 'flag': None}\n"},
     }), encoding="utf-8")

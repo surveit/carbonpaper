@@ -20,7 +20,7 @@ def _stage(path: Path, columns: list[dict], **params: object) -> Stage:
     return parse_stage({
         "id": "load", "name": "load", "type": "input_data",
         "connector": {"kind": "file", "params": {"path": str(path), **params}},
-        "output_schema": {"columns": columns},
+        "signature": {"form": "replaces", "produces": columns},
     })
 
 
@@ -179,11 +179,12 @@ def test_a_declared_column_absent_from_the_file_is_not_an_error(tmp_path):
 
 
 def test_missing_output_schema_falls_back_to_plain_inference(tmp_path):
-    # Stage validation requires output_schema on input_data, so this shape can
-    # only arrive off-model; the reader must degrade, not raise.
+    # Stage validation requires input_data's signature to produce columns, so an
+    # empty one can only arrive off-model; the reader must degrade, not raise.
     path = _csv(tmp_path, "id\n002\n")
     stage = _stage(path, [{"name": "id", "type": "str", "nullable": True}])
-    stage = stage.model_copy(update={"output_schema": None})
+    stage = stage.model_copy(
+        update={"signature": stage.signature.model_copy(update={"produces": []})})
     df = read_input_data(stage, ctx=make_run_context())
     assert list(df["id"]) == [2]
 

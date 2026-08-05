@@ -33,8 +33,13 @@ def _load_stage(data_path: Path) -> dict:
         "id": LOAD_ID, "name": "Load rows", "type": "input_data",
         "connector": {"kind": "file",
                       "params": {"path": str(data_path), "format": "csv"}},
-        "output_schema": {"columns": [{"name": "name", "type": "str", "nullable": True},
-                                      {"name": "val", "type": "int", "nullable": True}]},
+        "signature": {
+            "form": "replaces",
+            "produces": [
+                {"name": "name", "type": "str", "nullable": True},
+                {"name": "val", "type": "int", "nullable": True},
+            ],
+        },
     }
 
 
@@ -49,9 +54,19 @@ def _classify_stage(marker: str) -> dict:
                                            {"name": "val", "type": "int", "nullable": True}]}}],
         "function": {"kind": "inline",
                      "code": f'def transform(row):\n    return {{**row, "label": "{marker}"}}\n'},
-        "output_schema": {"columns": [{"name": "name", "type": "str", "nullable": True},
-                                      {"name": "val", "type": "int", "nullable": True},
-                                      {"name": "label", "type": "str", "nullable": True}]},
+        "signature": {
+            "form": "extends",
+            "reads": [
+                {
+                    "input": "load",
+                    "columns": [
+                        {"name": "name", "type": "str", "nullable": True},
+                        {"name": "val", "type": "int", "nullable": True},
+                    ],
+                },
+            ],
+            "adds": [{"name": "label", "type": "str", "nullable": True}],
+        },
     }
 
 

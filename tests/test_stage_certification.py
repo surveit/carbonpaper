@@ -8,13 +8,25 @@ from app import models as m
 from app.web.stage_test_views import build_certification
 
 _SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True}]}
+# Which signature form a type takes: the reshaping family replaces its input,
+# the anchored family extends it.
+_REPLACES_TYPES = {"python_frame_function", "aggregate", "union", "input_data", "publish"}
+
+
+def _signature_for(type_, schema):
+    if type_ == "publish":
+        return {"form": "replaces"}
+    if type_ in _REPLACES_TYPES:
+        return {"form": "replaces", "produces": schema["columns"]}
+    return {"form": "extends"}
+
 
 
 def _stage(*, summary=None, type_="python_row_function", handle="function"):
     spec = {
         "id": "s", "name": "S", "type": type_,
         "inputs": [{"id": "up", "schema": _SCHEMA}],
-        "output_schema": _SCHEMA,
+        "signature": _signature_for(type_, _SCHEMA),
     }
     if handle == "function":
         spec["function"] = {
@@ -70,7 +82,14 @@ def test_a_stage_whose_behaviour_is_not_code_is_not_applicable():
         "inputs": [{"id": "a", "schema": _SCHEMA},
                    {"id": "b", "schema": {"columns": [{"name": "id", "type": "str", "nullable": True},
                                                       {"name": "v", "type": "str", "nullable": True}]}}],
-        "output_schema": _SCHEMA,
+        "signature": {
+            "form": "extends",
+            "reads": [
+                {"input": "a", "columns": _SCHEMA["columns"]},
+                {"input": "b", "columns": _SCHEMA["columns"]},
+            ],
+            "adds": [{"name": "v", "type": "str", "nullable": True}],
+        },
         "join": {"keys": [{"left": "id", "right": "id"}], "enrich_with": {"v": "v"}},
     })
     assert build_certification(stage, []).status == "n/a"
@@ -87,6 +106,7 @@ def test_a_code_carrying_type_that_cannot_run_examples_is_untestable():
     """publish has a description no example can ever check, so `untestable`, not `n/a`."""
     stage = m.parse_stage({
         "id": "pub", "name": "Pub", "type": "publish",
+        "signature": {"form": "replaces"},
         "inputs": [{"id": "up", "schema": _SCHEMA}],
         "publish": {"format": "csv"},
         "function": {"kind": "inline", "summary": "Writes one file per row.",
@@ -118,6 +138,7 @@ def test_publish_carries_a_function_so_it_is_not_n_a():
     there is a real gap rather than nothing to say."""
     stage = m.parse_stage({
         "id": "pub", "name": "Pub", "type": "publish",
+        "signature": {"form": "replaces"},
         "inputs": [{"id": "up", "schema": _SCHEMA}],
         "publish": {"format": "csv"},
         "function": {"kind": "inline",

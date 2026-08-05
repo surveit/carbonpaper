@@ -41,7 +41,7 @@ def _one_stage_project(root):
     stage = {"id": "load", "name": "Load items", "type": "input_data",
              "connector": {"kind": "file",
                            "params": {"path": str(root / "data" / "items.csv"), "format": "csv"}},
-             "output_schema": _NAME_VAL_SCHEMA}
+             "signature": {"form": "replaces", "produces": _NAME_VAL_SCHEMA["columns"]}}
     (root / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
 
 
@@ -49,7 +49,11 @@ def _two_stage_project(root):
     _one_stage_project(root)
     consume = {"id": "consume", "name": "Consume items", "type": "python_frame_function",
                "inputs": [{"id": "load", "schema": _NAME_VAL_SCHEMA}],
-               "output_schema": _NAME_VAL_SCHEMA,
+               "signature": {
+                   "form": "replaces",
+                   "reads": [{"input": "load", "columns": _NAME_VAL_SCHEMA["columns"]}],
+                   "produces": _NAME_VAL_SCHEMA["columns"],
+               },
                "function": {"kind": "inline",
                             "code": "def transform(df):\n    return df\n"}}
     (root / "compiled" / "02_consume.json").write_text(json.dumps(consume), encoding="utf-8")
@@ -124,18 +128,31 @@ def _three_stage_llm_project(root):
         "id": "load", "name": "Load items", "type": "input_data",
         "connector": {"kind": "file",
                       "params": {"path": str(root / "data" / "items.csv"), "format": "csv"}},
-        "output_schema": _ID_TEXT_SCHEMA,
+        "signature": {"form": "replaces", "produces": _ID_TEXT_SCHEMA["columns"]},
     }
     score = {
         "id": "score", "name": "Score items", "type": "llm_transform",
         "inputs": [{"id": "load", "schema": _ID_TEXT_SCHEMA}],
-        "output_schema": _SCORED_SCHEMA,
+        "signature": {
+            "form": "extends",
+            "reads": [
+                {
+                    "input": "load",
+                    "columns": [{"name": "text", "type": "str", "nullable": True}],
+                },
+            ],
+            "adds": [{"name": "score", "type": "int", "nullable": False}],
+        },
         "llm": {"prompt_template": "Rate: {text}"},
     }
     downstream = {
         "id": "downstream", "name": "Downstream", "type": "python_frame_function",
         "inputs": [{"id": "score", "schema": _SCORED_SCHEMA}],
-        "output_schema": _SCORED_SCHEMA,
+        "signature": {
+            "form": "replaces",
+            "reads": [{"input": "score", "columns": _SCORED_SCHEMA["columns"]}],
+            "produces": _SCORED_SCHEMA["columns"],
+        },
         "function": {"kind": "inline", "code": "def transform(df):\n    return df\n"},
     }
     (root / "compiled" / "01_load.json").write_text(json.dumps(load), encoding="utf-8")
