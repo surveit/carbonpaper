@@ -30,10 +30,20 @@ _QUEUE = {
 
 
 def _stage_spec(*, queue=None, input_columns=None, output_columns=None):
+    """A queue stage outputting `output_columns`.
+
+    A review stage only ever ADDS, and every input column flows through, so the
+    signature's `adds` is whatever `output_columns` names beyond the input edge —
+    derived here so each test can keep saying what the stage OUTPUTS.
+    """
+    edge = input_columns or _INPUT_COLUMNS
+    outputs = output_columns or _OUTPUT_COLUMNS
+    flowing = {c["name"] for c in edge}
     return {
         "id": "wc", "type": "human_review_queue", "name": "wc",
-        "inputs": [{"id": "src", "schema": {"columns": input_columns or _INPUT_COLUMNS}}],
-        "output_schema": {"columns": output_columns or _OUTPUT_COLUMNS},
+        "inputs": [{"id": "src", "schema": {"columns": edge}}],
+        "signature": {"form": "extends",
+                      "adds": [c for c in outputs if c["name"] not in flowing]},
         "queue": {**_QUEUE, **(queue or {})},
     }
 
@@ -84,10 +94,10 @@ def test_a_non_scalar_reviewed_source_is_rejected():
         ))
 
 
-# ── 3. reviewed target columns on output_schema ──────────────────────────────
+# ── 3. reviewed target columns on the signature ──────────────────────────────
 
 
-def test_a_reviewed_target_missing_from_output_schema_is_rejected():
+def test_a_reviewed_target_missing_from_the_signature_is_rejected():
     with pytest.raises(ValidationError, match="human_verdict_score"):
         parse_stage(_stage_spec(
             queue={"reviewed_columns": {"score": "human_verdict_score"}}))
@@ -122,10 +132,10 @@ def test_a_reviewed_target_more_permissive_than_its_source_is_clean():
     assert find_queue_column_issues(stage) == []
 
 
-# ── 4. the review-record columns on output_schema ────────────────────────────
+# ── 4. the review-record columns on the signature ────────────────────────────
 
 
-def test_a_review_record_column_missing_from_output_schema_is_rejected():
+def test_a_review_record_column_missing_from_the_signature_is_rejected():
     with pytest.raises(ValidationError, match="who_reviewed"):
         parse_stage(_stage_spec(queue={"reviewer_column": "who_reviewed"}))
 
@@ -139,12 +149,12 @@ def test_a_review_record_column_declared_non_str_is_rejected():
         parse_stage(_stage_spec(output_columns=output_columns))
 
 
-def test_a_declared_notes_column_must_be_declared_on_output_schema():
+def test_a_declared_notes_column_must_be_added_by_the_signature():
     with pytest.raises(ValidationError, match="review_notes"):
         parse_stage(_stage_spec(queue={"review_notes_column": "review_notes"}))
 
 
-def test_a_declared_notes_column_present_on_output_schema_is_clean():
+def test_a_declared_notes_column_present_on_the_signature_is_clean():
     stage = parse_stage(_stage_spec(
         queue={"review_notes_column": "review_notes"},
         output_columns=_OUTPUT_COLUMNS + [{"name": "review_notes", "type": "str", "nullable": True}],

@@ -18,7 +18,7 @@ _EDGE = {
 }
 
 
-def _row_function_stage(*, signature=None, output_columns=None):
+def _row_function_stage(*, signature=None):
     """One python_row_function stage dict over a price/title input edge."""
     spec = {
         "id": "clean",
@@ -26,7 +26,6 @@ def _row_function_stage(*, signature=None, output_columns=None):
         "type": "python_row_function",
         "inputs": [{"id": "bills", "schema": _EDGE}],
         "function": {"kind": "inline", "code": "def transform(row):\n    return row"},
-        "output_schema": {"columns": output_columns or _EDGE["columns"]},
     }
     if signature is not None:
         spec["signature"] = signature
@@ -39,7 +38,7 @@ def _issues(stage_dict) -> str:
     return str(err.value)
 
 
-def _starlark_row_function_stage(*, signature=None, output_columns=None):
+def _starlark_row_function_stage(*, signature=None):
     """One starlark_row_function stage dict over a price/title input edge."""
     spec = {
         "id": "clean",
@@ -47,7 +46,6 @@ def _starlark_row_function_stage(*, signature=None, output_columns=None):
         "type": "starlark_row_function",
         "inputs": [{"id": "bills", "schema": _EDGE}],
         "starlark": {"code": "def transform(row):\n    return row"},
-        "output_schema": {"columns": output_columns or _EDGE["columns"]},
     }
     if signature is not None:
         spec["signature"] = signature
@@ -56,10 +54,9 @@ def _starlark_row_function_stage(*, signature=None, output_columns=None):
 
 # ── shape rules on the signature itself ──────────────────────────────────────
 
-def test_stage_without_signature_is_untouched():
-    stage = parse_stage(_row_function_stage())
-    assert stage.signature is None
-    assert "signature" not in stage.model_dump(mode="json", by_alias=True, exclude_none=True)
+def test_stage_without_signature_is_refused():
+    msg = _issues(_row_function_stage())
+    assert "signature" in msg and "Field required" in msg
 
 
 def test_duplicate_read_column_rejected():
@@ -134,10 +131,10 @@ def test_add_colliding_with_an_anchor_column_rejected():
     assert "adds `title`" in msg and "already supplies" in msg
 
 
-def test_output_schema_must_match_the_extended_anchor():
-    # The signature promises price rewritten to float + a new note column, but
-    # the declared output keeps price as str and omits the note.
-    msg = _issues(_row_function_stage(
+def test_the_signature_is_the_output_schema():
+    """The anchor edge extended by the signature IS the output — there is no
+    second account left for it to disagree with."""
+    stage = parse_stage(_row_function_stage(
         signature={
             "form": "extends",
             "reads": [{"input": "bills", "columns": [{"name": "price", "type": "str", "nullable": True}]}],
@@ -145,7 +142,9 @@ def test_output_schema_must_match_the_extended_anchor():
             "adds": [{"name": "note", "type": "str", "nullable": True}],
         },
     ))
-    assert "output_schema disagrees" in msg
+    resolved = stage.resolve_output_schema()
+    assert [(c.name, c.type) for c in resolved.columns] == [
+        ("price", "float"), ("title", "str"), ("note", "str")]
 
 
 def test_consistent_extends_signature_accepted():
@@ -156,33 +155,22 @@ def test_consistent_extends_signature_accepted():
             "rewrites": [{"name": "price", "type": "float", "nullable": True}],
             "adds": [{"name": "note", "type": "str", "nullable": True}],
         },
-        output_columns=[
-            {"name": "price", "type": "float", "nullable": True},
-            {"name": "title", "type": "str", "nullable": True},
-            {"name": "note", "type": "str", "nullable": True},
-        ],
     ))
     assert stage.signature is not None and stage.signature.form == "extends"
 
 
-def test_signature_changes_the_fingerprint_and_absence_preserves_it():
-    bare = parse_stage(_row_function_stage())
+def test_the_signature_feeds_the_fingerprint():
+    plain = parse_stage(_row_function_stage(signature={"form": "extends"}))
     signed = parse_stage(_row_function_stage(
         signature={
             "form": "extends",
             "reads": [{"input": "bills", "columns": [{"name": "price", "type": "str", "nullable": True}]}],
             "rewrites": [{"name": "price", "type": "float", "nullable": True}],
         },
-        output_columns=[
-            {"name": "price", "type": "float", "nullable": True},
-            {"name": "title", "type": "str", "nullable": True},
-        ],
     ))
-    assert bare.compute_definition_fingerprint() != signed.compute_definition_fingerprint()
-    # Absence dumps nothing, so a stage stored before signatures existed keeps
-    # its fingerprint: the payload has no signature key at all.
-    again = parse_stage(_row_function_stage())
-    assert bare.compute_definition_fingerprint() == again.compute_definition_fingerprint()
+    assert plain.compute_definition_fingerprint() != signed.compute_definition_fingerprint()
+    again = parse_stage(_row_function_stage(signature={"form": "extends"}))
+    assert plain.compute_definition_fingerprint() == again.compute_definition_fingerprint()
 
 
 def test_internal_namespace_refused_in_signature_columns():
@@ -195,10 +183,9 @@ def test_internal_namespace_refused_in_signature_columns():
 
 # ── starlark_row_function mirrors python_row_function's extends-form rules ────
 
-def test_starlark_stage_without_signature_is_untouched():
-    stage = parse_stage(_starlark_row_function_stage())
-    assert stage.signature is None
-    assert "signature" not in stage.model_dump(mode="json", by_alias=True, exclude_none=True)
+def test_starlark_stage_without_signature_is_refused():
+    msg = _issues(_starlark_row_function_stage())
+    assert "signature" in msg and "Field required" in msg
 
 
 def test_starlark_add_colliding_with_an_anchor_column_rejected():
@@ -217,8 +204,8 @@ def test_starlark_rewrite_without_reading_the_column_rejected():
     assert "rewrites `price` without reading it" in msg
 
 
-def test_starlark_output_schema_must_match_the_extended_anchor():
-    msg = _issues(_starlark_row_function_stage(
+def test_starlark_signature_is_the_output_schema():
+    stage = parse_stage(_starlark_row_function_stage(
         signature={
             "form": "extends",
             "reads": [{"input": "bills", "columns": [{"name": "price", "type": "str", "nullable": True}]}],
@@ -226,7 +213,9 @@ def test_starlark_output_schema_must_match_the_extended_anchor():
             "adds": [{"name": "note", "type": "str", "nullable": True}],
         },
     ))
-    assert "output_schema disagrees" in msg
+    resolved = stage.resolve_output_schema()
+    assert [(c.name, c.type) for c in resolved.columns] == [
+        ("price", "float"), ("title", "str"), ("note", "str")]
 
 
 def test_starlark_consistent_extends_signature_accepted():
@@ -237,11 +226,6 @@ def test_starlark_consistent_extends_signature_accepted():
             "rewrites": [{"name": "price", "type": "float", "nullable": True}],
             "adds": [{"name": "note", "type": "str", "nullable": True}],
         },
-        output_columns=[
-            {"name": "price", "type": "float", "nullable": True},
-            {"name": "title", "type": "str", "nullable": True},
-            {"name": "note", "type": "str", "nullable": True},
-        ],
     ))
     assert stage.signature is not None and stage.signature.form == "extends"
 
@@ -270,9 +254,6 @@ def _llm_stage(*, reads):
             "reads": [{"input": "bills", "columns": reads}],
             "adds": [{"name": "score", "type": "int", "nullable": True}],
         },
-        "output_schema": {
-            "columns": [*_EDGE["columns"], {"name": "score", "type": "int", "nullable": True}],
-        },
     }
 
 
@@ -291,7 +272,7 @@ def test_llm_matching_reads_accepted():
     assert stage.signature is not None
 
 
-def _join_stage(*, adds, reads=None, enrich_with=None, output_adds=None):
+def _join_stage(*, adds, reads=None, enrich_with=None):
     subject = {"columns": [
         {"name": "state", "type": "str", "nullable": True}, {"name": "bill", "type": "str", "nullable": True},
     ]}
@@ -312,11 +293,6 @@ def _join_stage(*, adds, reads=None, enrich_with=None, output_adds=None):
             ],
             "adds": adds,
         },
-        "output_schema": {"columns": [
-            {"name": "state", "type": "str", "nullable": True}, {"name": "bill", "type": "str", "nullable": True},
-            *[{"name": c["name"], "type": c["type"], "nullable": True}
-              for c in (adds if output_adds is None else output_adds)],
-        ]},
     }
 
 
@@ -329,9 +305,8 @@ def test_join_key_must_be_read_from_its_side():
 
 
 def test_join_add_must_be_landed():
-    # Output declares only subject columns, so the signature check speaks, not deliverability.
     msg = _issues(_join_stage(
-        adds=[{"name": "population", "type": "int", "nullable": True}], output_adds=[],
+        adds=[{"name": "population", "type": "int", "nullable": True}],
     ))
     assert "population" in msg and "join.enrich_with does not land" in msg
 
@@ -343,7 +318,7 @@ def test_join_landed_column_must_be_added_by_the_signature():
 
 def test_join_add_type_must_match_its_source():
     msg = _issues(_join_stage(
-        adds=[{"name": "region", "type": "int", "nullable": True}], output_adds=[],
+        adds=[{"name": "region", "type": "int", "nullable": True}],
     ))
     assert "its source `region` supplies" in msg
 

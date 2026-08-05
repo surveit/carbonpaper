@@ -12,7 +12,7 @@ def _row_function_stage(input_id="src", **overrides):
             "id": input_id,
             "schema": {"columns": [{"name": "a", "type": "str", "nullable": False}]},
         }],
-        "output_schema": {"columns": [{"name": "a", "type": "str", "nullable": False}]},
+        "signature": {"form": "extends"},
         "function": {"kind": "inline", "code": "def transform(row):\n    return row\n"},
     }
     base.update(overrides)
@@ -43,9 +43,8 @@ def _queue_stage(**queue_overrides):
                 {"name": "score", "type": "float", "nullable": False},
             ]},
         }],
-        # Every column the queue adds, since output_schema must declare them all.
-        "output_schema": {"columns": [
-            {"name": "id", "type": "str", "nullable": False},
+        # Every column the queue adds, since the signature must declare them all.
+        "signature": {"form": "extends", "adds": [
             {"name": "human_score", "type": "float", "nullable": True},
             {"name": "decision", "type": "str", "nullable": True},
             {"name": "reviewer_id", "type": "str", "nullable": True},
@@ -66,6 +65,7 @@ def _publish_stage(code="def transform(df, output_dir, trace_links):\n    return
         }],
         "publish": {"format": "html_report", "destination": "out/"},
         "function": {"kind": "inline", "code": code},
+        "signature": {"form": "replaces"},
     }
     base.update(overrides)
     return parse_stage(base)
@@ -90,13 +90,11 @@ def test_compute_definition_fingerprint_changes_with_config_block_content():
     assert a.compute_definition_fingerprint() != b.compute_definition_fingerprint()
 
 
-def test_compute_definition_fingerprint_changes_with_output_schema():
+def test_compute_definition_fingerprint_changes_with_the_signature():
     a = _row_function_stage()
     b = _row_function_stage(
-        output_schema={"columns": [
-            {"name": "a", "type": "str", "nullable": False},
-            {"name": "b", "type": "str", "nullable": True},
-        ]}
+        signature={"form": "extends",
+                   "adds": [{"name": "b", "type": "str", "nullable": True}]}
     )
     assert a.compute_definition_fingerprint() != b.compute_definition_fingerprint()
 
@@ -143,7 +141,7 @@ def test_compute_definition_fingerprint_survives_a_stored_round_trip():
     # model_dump(mode="json", by_alias=True, exclude_none=True) —
     # app.models.stage_to_spec_dict's exact dump options, the shape
     # a WorkflowVersion stores. Round-tripping a queue stage through that dump
-    # (a rich config block, QueueConfig, plus output_schema's nested Column
+    # (a rich config block, QueueConfig, plus the signature's nested Column
     # list) must reproduce the same fingerprint.
     stage = _queue_stage()
     dumped = stage.model_dump(mode="json", by_alias=True, exclude_none=True)

@@ -7,18 +7,27 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
+from app.core.prompt_template import find_template_fields
 from app.models import parse_stage
 
 
+_EDGE_COLUMNS = [{"name": "a", "type": "str", "nullable": False}]
+
+
 def _llm_stage(prompt_template):
+    # The signature must read exactly what the template injects, so derive it —
+    # these tests vary the template, and a hand-written read set would go stale.
+    injected = find_template_fields(prompt_template)
     return {
         "id": "ask", "type": "llm_transform", "name": "ask",
-        "inputs": [{"id": "src", "schema": {
-            "columns": [{"name": "a", "type": "str", "nullable": False}],
-        }}],
-        "output_schema": {
-            "columns": [{"name": "a", "type": "str", "nullable": False},
-                        {"name": "verdict", "type": "str", "nullable": False}],
+        "inputs": [{"id": "src", "schema": {"columns": _EDGE_COLUMNS}}],
+        "signature": {
+            "form": "extends",
+            # An InputReads entry needs at least one column, so a template that
+            # injects nothing reads nothing at all.
+            "reads": [{"input": "src", "columns": read}] if (
+                read := [c for c in _EDGE_COLUMNS if c["name"] in injected]) else [],
+            "adds": [{"name": "verdict", "type": "str", "nullable": False}],
         },
         "llm": {"prompt_template": prompt_template},
     }

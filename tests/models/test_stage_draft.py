@@ -93,11 +93,15 @@ def test_a_stage_that_breaks_a_cross_field_rule_parses_as_a_draft_and_is_refused
         "id": "score_rows",
         "type": "llm_transform",
         "name": "Score rows",
-        # the output drops the input's `text` -> the additive 1:1 rule fails
+        # the signature reads `text`, which the prompt never injects -> the
+        # signature-vs-config rule fails
         "inputs": [{"id": "raw", "schema": {"columns": [{"name": "text", "type": "str", "nullable": True}]}}],
-        "output_schema": {"columns": [
-            {"name": "score", "type": "float", "nullable": True},
-        ]},
+        "signature": {
+            "form": "extends",
+            "reads": [{"input": "raw",
+                       "columns": [{"name": "text", "type": "str", "nullable": True}]}],
+            "adds": [{"name": "score", "type": "float", "nullable": True}],
+        },
         "llm": {"prompt_data_template": "score this"},
     }
 

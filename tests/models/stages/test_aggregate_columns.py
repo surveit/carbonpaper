@@ -13,20 +13,28 @@ def _aggregate_stage(*, group_by, edge_columns, value_column=None, where=None, f
         aggregation["value_column"] = value_column
     if where is not None:
         aggregation["where"] = where
-    # output_schema's first column is named after group_by[0] (never a
-    # generic placeholder): the aggregate handle emits each group_by column
-    # under its own name, so a declared column must match it to be
-    # deliverable — see test_aggregate_output_schema.py.
+    # `produces` names each group_by column under its own name — the aggregate
+    # handle emits them that way — plus the aggregation's output column, whose
+    # declared type must match the formula's computed type: count gives int; sum
+    # over these all-str edge columns gives str (concatenation), per
+    # compute_aggregate_output_types.
+    #
+    # These tests vary group_by and value_column to exercise the CONFIG checks,
+    # so `reads` is derived from the config: a pinned read set would fail its own
+    # cross-check first and mask them.
+    edge = {c: {"name": c, "type": "str", "nullable": False} for c in edge_columns}
+    consumed = [name for name in dict.fromkeys([*group_by, value_column])
+                if name in edge]
     return {
         "id": "agg", "type": "aggregate", "name": "agg",
-        "inputs": [{"id": "src", "schema": {
-            "columns": [{"name": c, "type": "str", "nullable": False} for c in edge_columns],
-        }}],
-        # The aggregated column's declared type must match the formula's
-        # computed type: count gives int; sum over these all-str edge columns
-        # gives str (concatenation) — see compute_aggregate_output_types.
-        "output_schema": {"columns": [{"name": group_by[0], "type": "str", "nullable": False},
-                                      {"name": "n", "type": output_n_type, "nullable": False}]},
+        "inputs": [{"id": "src", "schema": {"columns": list(edge.values())}}],
+        "signature": {
+            "form": "replaces",
+            "reads": [{"input": "src", "columns": [edge[n] for n in consumed]}]
+                     if consumed else [],
+            "produces": [{"name": group_by[0], "type": "str", "nullable": False},
+                         {"name": "n", "type": output_n_type, "nullable": False}],
+        },
         "aggregate": {"group_by": group_by, "aggregations": [aggregation]},
     }
 

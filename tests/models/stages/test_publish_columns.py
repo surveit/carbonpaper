@@ -12,7 +12,7 @@ def _publish_stage(*, one_file_per, edge_columns):
         "inputs": [{"id": "src", "schema": {
             "columns": [{"name": c, "type": "str", "nullable": False} for c in edge_columns],
         }}],
-        "output_schema": {"columns": [{"name": "a", "type": "str", "nullable": False}]},
+        "signature": {"form": "replaces"},
         "publish": {"one_file_per": one_file_per},
         "function": {"kind": "inline", "code": "def transform(df, output_dir):\n    return df"},
     }
