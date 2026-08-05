@@ -25,6 +25,7 @@ def _load_stage(demo):
 _LOAD_SCHEMA = {"columns": [{"name": "doc_id", "type": "str", "nullable": True},
                             {"name": "score", "type": "int", "nullable": True}]}
 
+_CLASSIFY_ADDS = [{"name": "label", "type": "str", "nullable": True}]
 _CLASSIFY = {
     "id": "classify", "type": "python_row_function", "name": "Label by sign",
     "inputs": [{"id": "load", "schema": _LOAD_SCHEMA}],
@@ -35,7 +36,7 @@ _CLASSIFY = {
     "signature": {
         "form": "extends",
         "reads": [{"input": "load", "columns": _LOAD_SCHEMA["columns"]}],
-        "adds": [{"name": "label", "type": "str", "nullable": True}],
+        "adds": _CLASSIFY_ADDS,
     },
 }
 
@@ -50,7 +51,7 @@ _BOOM = {
     },
 }
 
-_CLASSIFY_SCHEMA = {"columns": _LOAD_SCHEMA["columns"] + _CLASSIFY["signature"]["adds"]}
+_CLASSIFY_SCHEMA = {"columns": _LOAD_SCHEMA["columns"] + _CLASSIFY_ADDS}
 
 _PUBLISH = {
     "id": "publish_report", "type": "publish", "name": "Publish",
