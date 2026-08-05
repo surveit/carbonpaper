@@ -293,11 +293,6 @@ class PersistedModel(BaseModel):
     # Must not include "mode" — that is fixed to "json".
     DUMP_OPTS: ClassVar[JsonDict] = {}
 
-    @classmethod
-    def _upgrade(cls, data: JsonDict) -> JsonDict:
-        """Idempotent upgrade of a stored payload to SCHEMA_VERSION, applied on every read."""
-        return data
-
     def save(self) -> None:
         self.updated_at = _now_iso()
         get_store().write(
@@ -309,16 +304,16 @@ class PersistedModel(BaseModel):
 
     @classmethod
     def load(cls, id: str) -> Self:
-        return cls.model_validate(cls._upgrade(get_store().read(cls.collection, id)))
+        return cls.model_validate(get_store().read(cls.collection, id))
 
     @classmethod
     def load_or_none(cls, id: str) -> Self | None:
         data = get_store().read_tolerant(cls.collection, id)
-        return cls.model_validate(cls._upgrade(data)) if data is not None else None
+        return cls.model_validate(data) if data is not None else None
 
     @classmethod
     def list(cls, prefix: str = "") -> list[Self]:
-        return [cls.model_validate(cls._upgrade(data))
+        return [cls.model_validate(data)
                 for _, data in get_store().read_all(cls.collection, prefix)]
 
     @classmethod

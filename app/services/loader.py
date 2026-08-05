@@ -19,7 +19,6 @@ from app.models.stages.starlark import StarlarkFunction
 from app.core.utils import format_errors
 
 from .errors import WorkflowLoadError
-from .spec_migrations import upgrade_stage_spec
 
 
 @dataclass
@@ -52,7 +51,7 @@ def load_compiled_dir(compiled_dir: Path) -> list[CompiledStageFile]:
             entry.issues.append("file contains no stage object")
             continue
         try:
-            entry.stage = parse_stage(upgrade_stage_spec(data))
+            entry.stage = parse_stage(data)
         except ValidationError as err:
             entry.issues.extend(format_errors(err))
     return entries
