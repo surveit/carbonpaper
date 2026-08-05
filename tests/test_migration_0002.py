@@ -48,9 +48,14 @@ def _v1_stages() -> list[dict[str, Any]]:
          "inputs": [{"id": "joined", "schema": {
              "columns": [_column("id"), _column("verdict"), _column("extra")]}}],
          "queue": {"reviewer_instructions": "Confirm each row."},
-         "output_schema": {"columns": [
-             _column("id"), _column("verdict"), _column("extra"),
-             _column("decision"), _column("reviewer_id"), _column("reviewed_at")]}},
+         "signature": {
+             "form": "extends",
+             "adds": [
+                 {"name": "decision", "type": "str", "nullable": True},
+                 {"name": "reviewer_id", "type": "str", "nullable": True},
+                 {"name": "reviewed_at", "type": "str", "nullable": True},
+             ],
+         }},
     ]
 
 

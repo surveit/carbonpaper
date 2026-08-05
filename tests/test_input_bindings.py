@@ -27,7 +27,7 @@ def _input_stage(stage_id: str, path: str | None) -> Stage:
     return parse_stage({
         "id": stage_id, "name": stage_id, "type": "input_data",
         "connector": {"kind": "file", "params": params},
-        "output_schema": _X_SCHEMA,
+        "signature": {"form": "replaces", "produces": _X_SCHEMA["columns"]},
     })
 
 
@@ -141,7 +141,7 @@ def _make_bound_project(root, filename="a.csv"):
     data = root / filename
     pd.DataFrame({"name": ["x", "y"], "val": [1, 2]}).to_csv(data, index=False)
     stage = {"id": "load", "name": "Load", "type": "input_data",
-             "output_schema": _ROWS_SCHEMA,
+             "signature": {"form": "replaces", "produces": _ROWS_SCHEMA["columns"]},
              "connector": {"kind": "file",
                            "params": {"path": str(data), "format": "csv"}}}
     (root / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
@@ -181,7 +181,7 @@ def test_unbound_input_leaves_no_run_dir(tmp_path):
     # No file is ever bound, so the declared columns are never materialised —
     # the stage declares the shape the rest of this file's data uses.
     stage = {"id": "load", "name": "Load", "type": "input_data",
-             "output_schema": _ROWS_SCHEMA,
+             "signature": {"form": "replaces", "produces": _ROWS_SCHEMA["columns"]},
              "connector": {"kind": "file", "params": {}}}
     (tmp_path / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
     vid = save_working_copy_as_version(tmp_path, message="seed", reviewer="test").version_id

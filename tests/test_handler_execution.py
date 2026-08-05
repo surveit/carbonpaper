@@ -48,7 +48,11 @@ def _two_input_stage():
         "id": "t2", "name": "t2", "type": "python_frame_function",
         "inputs": [{"id": "a", "schema": {"columns": _X_COLUMN}},
                    {"id": "b", "schema": {"columns": _X_COLUMN}}],
-        "output_schema": {"columns": _X_COLUMN},
+        "signature": {
+            "form": "replaces",
+            "reads": [{"input": "a", "columns": _X_COLUMN}, {"input": "b", "columns": _X_COLUMN}],
+            "produces": _X_COLUMN,
+        },
         "function": {"kind": "inline", "code": "def transform(a, b):\n    return a\n"},
     })
 

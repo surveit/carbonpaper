@@ -70,7 +70,14 @@ def test_a_stage_whose_behaviour_is_not_code_is_not_applicable():
         "inputs": [{"id": "a", "schema": _SCHEMA},
                    {"id": "b", "schema": {"columns": [{"name": "id", "type": "str", "nullable": True},
                                                       {"name": "v", "type": "str", "nullable": True}]}}],
-        "output_schema": _SCHEMA,
+        "signature": {
+            "form": "extends",
+            "reads": [
+                {"input": "a", "columns": _SCHEMA["columns"]},
+                {"input": "b", "columns": _SCHEMA["columns"]},
+            ],
+            "adds": [{"name": "v", "type": "str", "nullable": True}],
+        },
         "join": {"keys": [{"left": "id", "right": "id"}], "enrich_with": {"v": "v"}},
     })
     assert build_certification(stage, []).status == "n/a"

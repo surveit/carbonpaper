@@ -54,7 +54,7 @@ def _load_items_stage(root, *, stage_id="load"):
     return {"id": stage_id, "name": f"Load {stage_id}", "type": "input_data",
             "connector": {"kind": "file",
                           "params": {"path": str(csv_path), "format": "csv"}},
-            "output_schema": _ID_VAL_SCHEMA}
+            "signature": {"form": "replaces", "produces": _ID_VAL_COLUMNS}}
 
 
 def _raising_stage(stage_id, input_id, name="Boom", schema=_ID_VAL_SCHEMA):
@@ -86,7 +86,7 @@ def _score_load_stage(root):
     return {"id": "load", "name": "Load", "type": "input_data",
             "connector": {"kind": "file",
                           "params": {"path": str(csv_path), "format": "csv"}},
-            "output_schema": _ID_TEXT_SCHEMA}
+            "signature": {"form": "replaces", "produces": _ID_TEXT_SCHEMA["columns"]}}
 
 
 def _score_stage(stage_id, input_id, name="Score"):
@@ -117,7 +117,7 @@ def _five_item_load_stage(root):
     return {"id": "load", "name": "Load", "type": "input_data",
             "connector": {"kind": "file",
                           "params": {"path": str(csv_path), "format": "csv"}},
-            "output_schema": _ID_VAL_SCHEMA}
+            "signature": {"form": "replaces", "produces": _ID_VAL_COLUMNS}}
 
 
 def _filtered_queue_stage(stage_id, input_id, flt, name="Review"):
@@ -516,7 +516,7 @@ def test_resume_after_error_reruns_the_errored_stage_and_its_downstream(tmp_path
     pd.DataFrame({"id": ["a", "b"], "val": [1, 2]}).to_csv(csv_path, index=False)
     load = {"id": "load", "name": "Load", "type": "input_data",
             "connector": {"kind": "file", "params": {"path": str(csv_path), "format": "csv"}},
-            "output_schema": _ID_VAL_SCHEMA}
+            "signature": {"form": "replaces", "produces": _ID_VAL_COLUMNS}}
     _write_stage(tmp_path, "01_load.json", load)
     _write_stage(tmp_path, "02_mid.json", _passthrough_stage("mid", "load"))
     _write_stage(tmp_path, "03_tail.json", _passthrough_stage("tail", "mid"))

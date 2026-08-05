@@ -23,7 +23,11 @@ def _row_stage(tests=None) -> dict:
     stage = {
         "id": "double", "name": "Double the amount", "type": "python_row_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
-        "output_schema": _OUT_SCHEMA,
+        "signature": {
+            "form": "extends",
+            "reads": [{"input": "load", "columns": _IN_SCHEMA["columns"]}],
+            "adds": [{"name": "doubled", "type": "float", "nullable": False}],
+        },
         "function": {"kind": "inline",
                      "code": "def transform(row):\n    return {**row, 'doubled': row['amount'] * 2}\n"},
     }

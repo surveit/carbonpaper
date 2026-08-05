@@ -21,11 +21,15 @@ def _in(id_, schema=_K):
 
 def test_workflow_clean(tmp_path):
     wf = m.parse_workflow([
-        S(id="load", type="input_data", output_schema=_K,
+        S(id="load", type="input_data", signature={"form": "replaces", "produces": _K["columns"]},
           connector={"kind": "file", "params": {"path": str(tmp_path / "d.csv"), "format": "csv"}}),
         S(id="extract", type="python_frame_function", inputs=[_in("load")],
           function={"kind": "inline", "code": "def transform(row): return row"},
-          output_schema=_K),
+          signature={
+              "form": "replaces",
+              "reads": [{"input": "load", "columns": _K["columns"]}],
+              "produces": _K["columns"],
+          }),
     ])
     assert [s.id for s in wf.stages] == ["load", "extract"]
 
@@ -33,9 +37,9 @@ def test_workflow_clean(tmp_path):
 def test_workflow_duplicate_ids(tmp_path):
     with pytest.raises(ValidationError):
         m.parse_workflow([
-            S(id="a", type="input_data", output_schema=_K,
+            S(id="a", type="input_data", signature={"form": "replaces", "produces": _K["columns"]},
               connector={"kind": "file", "params": {"path": str(tmp_path / "d.csv")}}),
-            S(id="a", type="input_data", output_schema=_K,
+            S(id="a", type="input_data", signature={"form": "replaces", "produces": _K["columns"]},
               connector={"kind": "file", "params": {"path": str(tmp_path / "d.csv")}}),
         ])
 
@@ -45,16 +49,28 @@ def test_workflow_dangling_input():
         m.parse_workflow([
             S(id="b", type="python_frame_function", inputs=[_in("ghost")],
               function={"kind": "inline", "code": "def transform(row): return row"},
-              output_schema=_K),
+              signature={
+                  "form": "replaces",
+                  "reads": [{"input": "ghost", "columns": _K["columns"]}],
+                  "produces": _K["columns"],
+              }),
         ])
 
 
 def test_workflow_cycle():
     with pytest.raises(ValidationError):
         m.parse_workflow([
-            S(id="a", type="python_frame_function", inputs=[_in("b")], output_schema=_K,
+            S(id="a", type="python_frame_function", inputs=[_in("b")], signature={
+                "form": "replaces",
+                "reads": [{"input": "b", "columns": _K["columns"]}],
+                "produces": _K["columns"],
+            },
               function={"kind": "inline", "code": "def transform(row): return row"}),
-            S(id="b", type="python_frame_function", inputs=[_in("a")], output_schema=_K,
+            S(id="b", type="python_frame_function", inputs=[_in("a")], signature={
+                "form": "replaces",
+                "reads": [{"input": "a", "columns": _K["columns"]}],
+                "produces": _K["columns"],
+            },
               function={"kind": "inline", "code": "def transform(row): return row"}),
         ])
 
@@ -66,24 +82,43 @@ def test_validate_inputs_resolve_reports_all_dangling():
                                inputs=[_in("ghost1", {"columns": [{"name": "x", "type": "str", "nullable": True}]}),
                                        _in("ghost2", {"columns": [{"name": "y", "type": "str", "nullable": True}]})],
                                join={"keys": [{"left": "x", "right": "y"}], "enrich_with": {"y": "y"}},
-                               output_schema={"columns": [{"name": "x", "type": "str", "nullable": True}, {"name": "y", "type": "str", "nullable": True}]}))
+                               signature={
+                                   "form": "extends",
+                                   "reads": [
+                                       {"input": "ghost1", "columns": _X["columns"]},
+                                       {"input": "ghost2", "columns": _Y["columns"]},
+                                   ],
+                                   "adds": _Y["columns"],
+                               }))
     issues = m.validate_inputs_resolve([s])
     assert len(issues) == 2  # both dangling inputs, not just the first
     assert all("references no stage" in i for i in issues)
 
 
 def test_detect_cycle_reports_cycle():
-    a = parse_stage(S(id="a", type="python_frame_function", inputs=[_in("b")], output_schema=_K,
+    a = parse_stage(S(id="a", type="python_frame_function", inputs=[_in("b")], signature={
+        "form": "replaces",
+        "reads": [{"input": "b", "columns": _K["columns"]}],
+        "produces": _K["columns"],
+    },
                                function={"kind": "inline", "code": "def transform(row): return row"}))
-    b = parse_stage(S(id="b", type="python_frame_function", inputs=[_in("a")], output_schema=_K,
+    b = parse_stage(S(id="b", type="python_frame_function", inputs=[_in("a")], signature={
+        "form": "replaces",
+        "reads": [{"input": "a", "columns": _K["columns"]}],
+        "produces": _K["columns"],
+    },
                                function={"kind": "inline", "code": "def transform(row): return row"}))
     assert m.detect_cycle([a, b])  # non-empty
 
 
 def test_detect_cycle_empty_when_acyclic(tmp_path):
-    a = parse_stage(S(id="a", type="input_data", output_schema=_K,
+    a = parse_stage(S(id="a", type="input_data", signature={"form": "replaces", "produces": _K["columns"]},
                                connector={"kind": "file", "params": {"path": str(tmp_path / "d.csv")}}))
-    b = parse_stage(S(id="b", type="python_frame_function", inputs=[_in("a")], output_schema=_K,
+    b = parse_stage(S(id="b", type="python_frame_function", inputs=[_in("a")], signature={
+        "form": "replaces",
+        "reads": [{"input": "a", "columns": _K["columns"]}],
+        "produces": _K["columns"],
+    },
                                function={"kind": "inline", "code": "def transform(row): return row"}))
     assert m.detect_cycle([a, b]) == []
 
@@ -92,7 +127,7 @@ def test_detect_cycle_empty_when_acyclic(tmp_path):
 # check on already-validated stages and returns all issues at once ([] means clean).
 def test_validate_workflow_clean_is_empty(tmp_path):
     stages = [
-        parse_stage(S(id="load", type="input_data", output_schema=_K,
+        parse_stage(S(id="load", type="input_data", signature={"form": "replaces", "produces": _K["columns"]},
                                connector={"kind": "file",
                                           "params": {"path": str(tmp_path / "d.csv"), "format": "csv"}})),
     ]
@@ -104,7 +139,14 @@ def test_validate_workflow_reports_issues():
                                inputs=[_in("a", {"columns": [{"name": "x", "type": "str", "nullable": True}]}),
                                        _in("b", {"columns": [{"name": "y", "type": "str", "nullable": True}]})],
                                join={"keys": [{"left": "x", "right": "y"}], "enrich_with": {"y": "y"}},
-                               output_schema={"columns": [{"name": "x", "type": "str", "nullable": True}, {"name": "y", "type": "str", "nullable": True}]}))
+                               signature={
+                                   "form": "extends",
+                                   "reads": [
+                                       {"input": "a", "columns": _X["columns"]},
+                                       {"input": "b", "columns": _Y["columns"]},
+                                   ],
+                                   "adds": _Y["columns"],
+                               }))
     issues = m.validate_workflow([s])
     assert issues  # both inputs dangle — reported, not raised
 
@@ -120,9 +162,16 @@ def _llm_1to1_dict(**over):
             "schema": {"columns": [{"name": "id", "type": "str", "nullable": True},
                                    {"name": "text", "type": "str", "nullable": True}]},
         }],
-        output_schema={"columns": [{"name": "id", "type": "str", "nullable": True},
-                                   {"name": "text", "type": "str", "nullable": True},
-                                   {"name": "score", "type": "int", "nullable": True}]},
+        signature={
+            "form": "extends",
+            "reads": [
+                {
+                    "input": "load",
+                    "columns": [{"name": "text", "type": "str", "nullable": True}],
+                },
+            ],
+            "adds": [{"name": "score", "type": "int", "nullable": True}],
+        },
         llm={"prompt_template": "score {text}"},
     )
     base.update(over)
@@ -169,9 +218,14 @@ def _producer(**over):
     base = dict(
         id="up", type="input_data",
         connector={"kind": "file"},
-        output_schema={"columns": [{"name": "id", "type": "str", "nullable": True},
-                                   {"name": "text", "type": "str", "nullable": True},
-                                   {"name": "score", "type": "int", "nullable": True}]},
+        signature={
+            "form": "replaces",
+            "produces": [
+                {"name": "id", "type": "str", "nullable": True},
+                {"name": "text", "type": "str", "nullable": True},
+                {"name": "score", "type": "int", "nullable": True},
+            ],
+        },
     )
     base.update(over)
     return S(**base)
@@ -329,7 +383,7 @@ def _reader(stage_id, upstream):
 
 
 def _loader():
-    return S(id="load", type="input_data", connector={"kind": "file"}, output_schema=_K)
+    return S(id="load", type="input_data", connector={"kind": "file"}, signature={"form": "replaces", "produces": _K["columns"]})
 
 
 def test_validate_publish_is_terminal_flags_stage_reading_a_publish():
@@ -346,7 +400,14 @@ def test_validate_publish_is_terminal_reports_every_offending_edge():
         _reader("down_a", "pub_a"), _reader("down_b", "pub_b"),
         S(id="down_c", type="enrich", inputs=[_in("pub_a", _X), _in("pub_b", _Y)],
           join={"keys": [{"left": "x", "right": "y"}], "enrich_with": {"y": "y"}},
-          output_schema={"columns": [{"name": "x", "type": "str", "nullable": True}, {"name": "y", "type": "str", "nullable": True}]}),
+          signature={
+              "form": "extends",
+              "reads": [
+                  {"input": "pub_a", "columns": _X["columns"]},
+                  {"input": "pub_b", "columns": _Y["columns"]},
+              ],
+              "adds": _Y["columns"],
+          }),
     )]
     issues = m.validate_publish_is_terminal(stages)
     assert len(issues) == 4  # every offending edge in one pass, not just the first

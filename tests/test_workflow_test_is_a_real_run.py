@@ -48,12 +48,16 @@ def _write_project(root: Path) -> Path:
         "id": "load", "name": "Load items", "type": "input_data",
         "connector": {"kind": "file", "params": {
             "path": str(root / "data" / "items.csv"), "format": "csv"}},
-        "output_schema": {"columns": _LOADED},
+        "signature": {"form": "replaces", "produces": _LOADED},
     }), encoding="utf-8")
     (root / "compiled" / "02_clean.json").write_text(json.dumps({
         "id": "clean", "name": "Clean", "type": "python_row_function",
         "inputs": [{"id": "load", "schema": {"columns": _LOADED}}],
-        "output_schema": {"columns": _DOUBLED},
+        "signature": {
+            "form": "extends",
+            "reads": [{"input": "load", "columns": _LOADED}],
+            "adds": [{"name": "doubled", "type": "int", "nullable": True}],
+        },
         "function": {"kind": "inline", "code": _clean_code(probe)},
     }), encoding="utf-8")
     return probe

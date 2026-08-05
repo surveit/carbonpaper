@@ -30,7 +30,7 @@ def _stage(data_path: Path) -> dict:
         "id": "load", "name": "Load rows", "type": "input_data",
         "connector": {"kind": "file",
                       "params": {"path": str(data_path), "format": "csv"}},
-        "output_schema": _ROWS_SCHEMA,
+        "signature": {"form": "replaces", "produces": _ROWS_SCHEMA["columns"]},
     }
 
 
@@ -129,7 +129,7 @@ def test_run_this_version_400s_not_500s_on_unbound_input(
     unbound_stage = {
         "id": "load", "name": "Load rows", "type": "input_data",
         "connector": {"kind": "file", "params": {"format": "csv"}},
-        "output_schema": _ROWS_SCHEMA,
+        "signature": {"form": "replaces", "produces": _ROWS_SCHEMA["columns"]},
     }
     meta = versioning.create_version_from_stages(
         project, [unbound_stage], message="v-unbound", reviewer="local")

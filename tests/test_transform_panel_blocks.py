@@ -28,24 +28,24 @@ def _seed_project(root: Path) -> None:
     compiled.mkdir(parents=True)
     (compiled / "01_load.json").write_text(json.dumps({
         "id": "load", "name": "Load", "type": "input_data",
-        "connector": {"kind": "file"}, "output_schema": _SCHEMA,
+        "connector": {"kind": "file"}, "signature": {"form": "replaces", "produces": _SCHEMA["columns"]},
     }), encoding="utf-8")
     (compiled / "02_load_more.json").write_text(json.dumps({
         "id": "load_more", "name": "Load more", "type": "input_data",
-        "connector": {"kind": "file"}, "output_schema": _SCHEMA,
+        "connector": {"kind": "file"}, "signature": {"form": "replaces", "produces": _SCHEMA["columns"]},
     }), encoding="utf-8")
     (compiled / "03_all_filings.json").write_text(json.dumps({
         "id": "all_filings", "name": "Every filing", "type": "union",
         "inputs": [{"id": "load", "schema": _SCHEMA},
                    {"id": "load_more", "schema": _SCHEMA}],
-        "output_schema": _SCHEMA,
+        "signature": {"form": "replaces", "produces": _SCHEMA["columns"]},
         "union": {},
     }), encoding="utf-8")
     (compiled / "04_incidental.json").write_text(json.dumps({
         "id": "select_incidental_filings", "name": "The incidental mentions",
         "type": "filter_rows",
         "inputs": [{"id": "all_filings", "schema": _SCHEMA}],
-        "output_schema": _SCHEMA,
+        "signature": {"form": "extends"},
         "filter": {"code": _PREDICATE},
     }), encoding="utf-8")
 

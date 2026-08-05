@@ -51,7 +51,7 @@ def _make_project(root):
         "id": "load", "name": "Load items", "type": "input_data",
         "connector": {"kind": "file",
                       "params": {"path": str(root / "data" / "items.csv"), "format": "csv"}},
-        "output_schema": _NAME_VAL_SCHEMA,
+        "signature": {"form": "replaces", "produces": _NAME_VAL_SCHEMA["columns"]},
         "limit": 2,
     }
     (root / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
@@ -173,12 +173,15 @@ def _row_mapped_project(root, rows: list[dict], code: str):
         "id": "load", "name": "Load items", "type": "input_data",
         "connector": {"kind": "file",
                       "params": {"path": str(root / "data" / "items.csv"), "format": "csv"}},
-        "output_schema": _NAME_VAL_SCHEMA,
+        "signature": {"form": "replaces", "produces": _NAME_VAL_SCHEMA["columns"]},
     }
     keep = {
         "id": "keep", "name": "Keep items", "type": "python_row_function",
         "inputs": [{"id": "load", "schema": _NAME_VAL_SCHEMA}],
-        "output_schema": _NAME_VAL_SCHEMA,
+        "signature": {
+            "form": "extends",
+            "reads": [{"input": "load", "columns": _NAME_VAL_SCHEMA["columns"]}],
+        },
         "function": {"kind": "inline", "code": code},
     }
     (root / "compiled" / "01_load.json").write_text(json.dumps(load), encoding="utf-8")
@@ -231,12 +234,16 @@ def _two_stage_project(root, rows: list[dict]):
         "id": "load", "name": "Load items", "type": "input_data",
         "connector": {"kind": "file",
                       "params": {"path": str(root / "data" / "items.csv"), "format": "csv"}},
-        "output_schema": _NAME_VAL_SCHEMA,
+        "signature": {"form": "replaces", "produces": _NAME_VAL_SCHEMA["columns"]},
     }
     consume = {
         "id": "consume", "name": "Consume items", "type": "python_frame_function",
         "inputs": [{"id": "load", "schema": _NAME_VAL_SCHEMA}],
-        "output_schema": _NAME_VAL_SCHEMA,
+        "signature": {
+            "form": "replaces",
+            "reads": [{"input": "load", "columns": _NAME_VAL_SCHEMA["columns"]}],
+            "produces": _NAME_VAL_SCHEMA["columns"],
+        },
         "function": {"kind": "inline",
                      "code": "def transform(df):\n    return df\n"},
     }
@@ -295,18 +302,26 @@ def _output_schema_violation_project(root, transform_code: str):
         "id": "load", "name": "Load items", "type": "input_data",
         "connector": {"kind": "file",
                       "params": {"path": str(root / "data" / "items.csv"), "format": "csv"}},
-        "output_schema": _NAME_VAL_SCHEMA,
+        "signature": {"form": "replaces", "produces": _NAME_VAL_SCHEMA["columns"]},
     }
     shape = {
         "id": "shape", "name": "Shape items", "type": "python_frame_function",
         "inputs": [{"id": "load", "schema": _NAME_VAL_SCHEMA}],
-        "output_schema": _NAME_VAL_SCHEMA,
+        "signature": {
+            "form": "replaces",
+            "reads": [{"input": "load", "columns": _NAME_VAL_SCHEMA["columns"]}],
+            "produces": _NAME_VAL_SCHEMA["columns"],
+        },
         "function": {"kind": "inline", "code": transform_code},
     }
     tail = {
         "id": "tail", "name": "Tail", "type": "python_frame_function",
         "inputs": [{"id": "shape", "schema": _NAME_VAL_SCHEMA}],
-        "output_schema": _NAME_VAL_SCHEMA,
+        "signature": {
+            "form": "replaces",
+            "reads": [{"input": "shape", "columns": _NAME_VAL_SCHEMA["columns"]}],
+            "produces": _NAME_VAL_SCHEMA["columns"],
+        },
         "function": {"kind": "inline", "code": "def transform(df):\n    return df\n"},
     }
     for filename, stage in (("01_load.json", load), ("02_shape.json", shape),
@@ -364,13 +379,19 @@ def test_output_validation_error_other_than_a_missing_column_also_errors_the_sta
         "id": "load", "name": "Load items", "type": "input_data",
         "connector": {"kind": "file",
                       "params": {"path": str(tmp_path / "data" / "items.csv"), "format": "csv"}},
-        "output_schema": _NAME_VAL_SCHEMA,
+        "signature": {"form": "replaces", "produces": _NAME_VAL_SCHEMA["columns"]},
     }
     blank = {
         "id": "blank", "name": "Blank the value", "type": "python_frame_function",
         "inputs": [{"id": "load", "schema": _NAME_VAL_SCHEMA}],
-        "output_schema": {"columns": [{"name": "name", "type": "str", "nullable": True},
-                                      {"name": "val", "type": "int", "nullable": False}]},
+        "signature": {
+            "form": "replaces",
+            "reads": [{"input": "load", "columns": _NAME_VAL_SCHEMA["columns"]}],
+            "produces": [
+                {"name": "name", "type": "str", "nullable": True},
+                {"name": "val", "type": "int", "nullable": False},
+            ],
+        },
         "function": {"kind": "inline",
                      "code": "def transform(df):\n    df['val'] = None\n    return df\n"},
     }
@@ -399,7 +420,7 @@ def test_value_outside_a_declared_enum_errors_the_stage_and_blocks_downstream(tm
         "id": "load", "name": "Load items", "type": "input_data",
         "connector": {"kind": "file",
                       "params": {"path": str(tmp_path / "data" / "items.csv"), "format": "csv"}},
-        "output_schema": _NAME_VAL_SCHEMA,
+        "signature": {"form": "replaces", "produces": _NAME_VAL_SCHEMA["columns"]},
     }
     label = {
         "id": "label", "name": "Label items", "type": "python_frame_function",
@@ -441,14 +462,21 @@ def _llm_transform_project(root):
         "id": "load", "name": "Load items", "type": "input_data",
         "connector": {"kind": "file",
                       "params": {"path": str(root / "data" / "items.csv"), "format": "csv"}},
-        "output_schema": _ID_TEXT_SCHEMA,
+        "signature": {"form": "replaces", "produces": _ID_TEXT_SCHEMA["columns"]},
     }
     score = {
         "id": "score", "name": "Score items", "type": "llm_transform",
         "inputs": [{"id": "load", "schema": _ID_TEXT_SCHEMA}],
-        "output_schema": {
-            "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True},
-                        {"name": "score", "type": "int", "nullable": False}]},
+        "signature": {
+            "form": "extends",
+            "reads": [
+                {
+                    "input": "load",
+                    "columns": [{"name": "text", "type": "str", "nullable": True}],
+                },
+            ],
+            "adds": [{"name": "score", "type": "int", "nullable": False}],
+        },
         "llm": {"prompt_template": "Rate: {text}"},
     }
     (root / "compiled" / "01_load.json").write_text(json.dumps(load), encoding="utf-8")
@@ -495,14 +523,21 @@ def test_run_subset_surfaces_the_real_row_failure_message(tmp_path, monkeypatch)
     load = parse_stage({
         "id": "load", "name": "Load items", "type": "input_data",
         "connector": {"kind": "file"},
-        "output_schema": _ID_TEXT_SCHEMA,
+        "signature": {"form": "replaces", "produces": _ID_TEXT_SCHEMA["columns"]},
     })
     score = parse_stage({
         "id": "score", "name": "Score items", "type": "llm_transform",
         "inputs": [{"id": "load", "schema": _ID_TEXT_SCHEMA}],
-        "output_schema": {
-            "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True},
-                        {"name": "score", "type": "int", "nullable": False}]},
+        "signature": {
+            "form": "extends",
+            "reads": [
+                {
+                    "input": "load",
+                    "columns": [{"name": "text", "type": "str", "nullable": True}],
+                },
+            ],
+            "adds": [{"name": "score", "type": "int", "nullable": False}],
+        },
         "llm": {"prompt_template": "Rate: {text}"},
     })
     workflow = Workflow(stages=[load, score])
@@ -527,14 +562,16 @@ def test_run_subset_preserves_partial_work_in_the_manifest_on_a_mid_frontier_err
     load = parse_stage({
         "id": "load", "name": "Load items", "type": "input_data",
         "connector": {"kind": "file"},
-        "output_schema": _ID_TEXT_SCHEMA,
+        "signature": {"form": "replaces", "produces": _ID_TEXT_SCHEMA["columns"]},
     })
     clean = parse_stage({
         "id": "clean", "name": "Clean rows", "type": "python_row_function",
         "inputs": [{"id": "load", "schema": {
             "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}]}}],
-        "output_schema": {
-            "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}]},
+        "signature": {
+            "form": "extends",
+            "reads": [{"input": "load", "columns": _ID_TEXT_SCHEMA["columns"]}],
+        },
         "function": {"kind": "inline", "code": "def transform(row): return row"},
     })
     boom = parse_stage({
@@ -643,7 +680,7 @@ def test_create_version_rejects_invalid_working_copy(tmp_path):
     bad = {"id": "load", "name": "Load", "type": "input_data",
            "connector": {"kind": "file",
                          "params": {"path": "data/items.csv", "format": "csv"}},  # relative path
-           "output_schema": _NAME_VAL_SCHEMA}
+           "signature": {"form": "replaces", "produces": _NAME_VAL_SCHEMA["columns"]}}
     (tmp_path / "compiled" / "01_load.json").write_text(
         json.dumps(bad), encoding="utf-8")
 
@@ -665,7 +702,7 @@ def test_invalid_workflow_never_becomes_a_version_and_run_never_pins_stale(tmp_p
     bad = {"id": "load", "name": "Load", "type": "input_data",
            "connector": {"kind": "file",
                          "params": {"path": "data/items.csv", "format": "csv"}},
-           "output_schema": _NAME_VAL_SCHEMA}
+           "signature": {"form": "replaces", "produces": _NAME_VAL_SCHEMA["columns"]}}
     (tmp_path / "compiled" / "01_load.json").write_text(
         json.dumps(bad), encoding="utf-8")
 
@@ -688,7 +725,7 @@ def test_invalid_workflow_never_becomes_a_version_and_run_never_pins_stale(tmp_p
     good = {"id": "load", "name": "Load", "type": "input_data",
             "connector": {"kind": "file",
                           "params": {"path": str(tmp_path / "data" / "items.csv"), "format": "csv"}},
-            "output_schema": _NAME_VAL_SCHEMA}
+            "signature": {"form": "replaces", "produces": _NAME_VAL_SCHEMA["columns"]}}
     (tmp_path / "compiled" / "01_load.json").write_text(
         json.dumps(good), encoding="utf-8")
     with pytest.raises(NoVersionToRunError):
@@ -716,7 +753,7 @@ def test_resume_reapplies_run_bindings_for_a_pending_input_stage(tmp_path):
     (tmp_path / "compiled").mkdir(parents=True)
     stage = {"id": "load", "name": "Load items", "type": "input_data",
               "connector": {"kind": "file", "params": {}},  # no workflow-authored path
-              "output_schema": _NAME_VAL_SCHEMA}
+              "signature": {"form": "replaces", "produces": _NAME_VAL_SCHEMA["columns"]}}
     (tmp_path / "compiled" / "01_load.json").write_text(
         json.dumps(stage), encoding="utf-8")
     version_id = _seed_version(tmp_path)
@@ -793,8 +830,15 @@ def _add_frame_stage(root):
     (root / "compiled" / "02_totals.json").write_text(json.dumps({
         "id": "totals", "name": "Totals", "type": "python_frame_function",
         "inputs": [{"id": "load", "schema": _NAME_VAL_SCHEMA}],
-        "output_schema": {"columns": [*_NAME_VAL_SCHEMA["columns"],
-                                      {"name": "double", "type": "int", "nullable": True}]},
+        "signature": {
+            "form": "replaces",
+            "reads": [{"input": "load", "columns": _NAME_VAL_SCHEMA["columns"]}],
+            "produces": [
+                {"name": "name", "type": "str", "nullable": True},
+                {"name": "val", "type": "int", "nullable": True},
+                {"name": "double", "type": "int", "nullable": True},
+            ],
+        },
         "function": {"kind": "inline", "code": _FRAME_STAGE_CODE},
     }), encoding="utf-8")
 

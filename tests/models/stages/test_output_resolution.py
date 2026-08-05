@@ -69,10 +69,13 @@ def test_an_edge_is_satisfied_by_the_upstream_resolved_outer():
     source = parse_stage({
         "id": "bills", "name": "Bills", "type": "input_data",
         "connector": {"kind": "file", "params": {"format": "csv"}},
-        "output_schema": {"columns": [
-            {"name": "price", "type": "str", "nullable": True},
-            {"name": "title", "type": "str", "nullable": True},
-        ]},
+        "signature": {
+            "form": "replaces",
+            "produces": [
+                {"name": "price", "type": "str", "nullable": True},
+                {"name": "title", "type": "str", "nullable": True},
+            ],
+        },
     })
     upstream = parse_stage(_row_stage())
     downstream = parse_stage({
@@ -83,11 +86,7 @@ def test_an_edge_is_satisfied_by_the_upstream_resolved_outer():
             {"name": "note", "type": "str", "nullable": True},
         ]}}],
         "filter": {"code": "def should_include(row):\n    return True"},
-        "output_schema": {"columns": [
-            {"name": "price", "type": "float", "nullable": True},
-            {"name": "title", "type": "str", "nullable": True},
-            {"name": "note", "type": "str", "nullable": True},
-        ]},
+        "signature": {"form": "extends"},
     })
     assert validate_workflow([source, upstream, downstream]) == []
 

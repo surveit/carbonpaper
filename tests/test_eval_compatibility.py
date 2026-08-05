@@ -150,8 +150,14 @@ def test_dataset_schema_types_shared_column_differently(tmp_path):
     src = m.parse_stage(S(
         id="src", type="input_data",
         connector={"kind": "file", "params": {"path": str(tmp_path / "src.csv")}},
-        output_schema={"columns": [
-            {"name": "k", "type": "str", "nullable": True}, {"name": "v", "type": "int", "nullable": True}, {"name": "quote", "type": "str", "nullable": True}]}))
+        signature={
+            "form": "replaces",
+            "produces": [
+                {"name": "k", "type": "str", "nullable": True},
+                {"name": "v", "type": "int", "nullable": True},
+                {"name": "quote", "type": "str", "nullable": True},
+            ],
+        }))
     tgt = _row("tgt", [src], output_schema={
         "columns": [{"name": "k", "type": "str", "nullable": True}, {"name": "score", "type": "float", "nullable": True}]})
     config = _config(table=_ref(cols=["k", "quote", "expected_score"]))

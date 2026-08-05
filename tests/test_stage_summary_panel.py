@@ -34,13 +34,17 @@ def _seed_project(root: Path) -> None:
     compiled.mkdir(parents=True)
     (compiled / "01_load.json").write_text(json.dumps({
         "id": "load", "name": "Load", "type": "input_data",
-        "connector": {"kind": "file"}, "output_schema": _IN_SCHEMA,
+        "connector": {"kind": "file"}, "signature": {"form": "replaces", "produces": _IN_SCHEMA["columns"]},
     }), encoding="utf-8")
     (compiled / "02_flag.json").write_text(json.dumps({
         "id": "flag_withdrawn", "name": "Flag withdrawn bills",
         "type": "python_row_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
-        "output_schema": _OUT_SCHEMA,
+        "signature": {
+            "form": "extends",
+            "reads": [{"input": "load", "columns": _IN_SCHEMA["columns"]}],
+            "adds": [{"name": "withdrawn", "type": "bool", "nullable": False}],
+        },
         "function": {"kind": "inline", "summary": _SUMMARY, "code": _CODE},
         "tests": [{
             "name": "withdrawn_status_sets_the_flag",
@@ -52,7 +56,10 @@ def _seed_project(root: Path) -> None:
         "id": "no_summary", "name": "Unsummarized step",
         "type": "python_row_function",
         "inputs": [{"id": "flag_withdrawn", "schema": _OUT_SCHEMA}],
-        "output_schema": _OUT_SCHEMA,
+        "signature": {
+            "form": "extends",
+            "reads": [{"input": "flag_withdrawn", "columns": _OUT_SCHEMA["columns"]}],
+        },
         "function": {"kind": "inline", "code": "def transform(row):\n    return row\n"},
     }), encoding="utf-8")
 
@@ -86,7 +93,11 @@ def test_a_summary_does_not_change_what_the_stage_computes() -> None:
     spec = {
         "id": "flag", "name": "Flag", "type": "python_row_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
-        "output_schema": _OUT_SCHEMA,
+        "signature": {
+            "form": "extends",
+            "reads": [{"input": "load", "columns": _IN_SCHEMA["columns"]}],
+            "adds": [{"name": "withdrawn", "type": "bool", "nullable": False}],
+        },
         "function": function,
     }
     with_summary = parse_stage(spec)

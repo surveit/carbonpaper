@@ -75,8 +75,13 @@ def _make_project(root) -> None:
         "id": "load", "name": "Load items", "type": "input_data",
         "connector": {"kind": "file",
                       "params": {"path": str(root / "data" / "items.csv"), "format": "csv"}},
-        "output_schema": {"columns": [{"name": "name", "type": "str", "nullable": True},
-                                      {"name": "val", "type": "int", "nullable": True}]},
+        "signature": {
+            "form": "replaces",
+            "produces": [
+                {"name": "name", "type": "str", "nullable": True},
+                {"name": "val", "type": "int", "nullable": True},
+            ],
+        },
     }
     (root / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
 

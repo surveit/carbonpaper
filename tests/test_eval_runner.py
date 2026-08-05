@@ -20,8 +20,13 @@ def _load(tmp_path):
         "id": "load", "type": "input_data", "name": "Load rows",
         "connector": {"kind": "file",
                       "params": {"path": str(tmp_path / "data" / "rows.csv"), "format": "csv"}},
-        "output_schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": True},
-                                      {"name": "score", "type": "int", "nullable": True}]},
+        "signature": {
+            "form": "replaces",
+            "produces": [
+                {"name": "doc_id", "type": "str", "nullable": True},
+                {"name": "score", "type": "int", "nullable": True},
+            ],
+        },
     }
 # label = "pos" iff score >= 0 — a deterministic classifier we can predict.
 _CLASSIFY = {
@@ -32,9 +37,19 @@ _CLASSIFY = {
                  "def transform(row):\n"
                  "    return {'doc_id': row['doc_id'], 'score': row['score'],\n"
                  "            'label': 'pos' if row['score'] >= 0 else 'neg'}"},
-    "output_schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": True},
-                                  {"name": "score", "type": "int", "nullable": True},
-                                  {"name": "label", "type": "str", "nullable": True}]},
+    "signature": {
+        "form": "extends",
+        "reads": [
+            {
+                "input": "load",
+                "columns": [
+                    {"name": "doc_id", "type": "str", "nullable": True},
+                    {"name": "score", "type": "int", "nullable": True},
+                ],
+            },
+        ],
+        "adds": [{"name": "label", "type": "str", "nullable": True}],
+    },
 }
 
 
@@ -101,14 +116,17 @@ _QUEUE_REVIEW = {
     "inputs": [{"id": "load", "schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": True},
                                                      {"name": "score", "type": "int", "nullable": True}]}}],
     "queue": dict(QUEUE_COLUMNS),
-    "output_schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": True},
-                                  {"name": "score", "type": "int", "nullable": True},
-                                  {"name": "human_score", "type": "int", "nullable": True},
-                                  {"name": "decision", "type": "str", "nullable": True},
-                                  {"name": "reviewer_id", "type": "str", "nullable": True},
-                                  {"name": "reviewed_at", "type": "str", "nullable": True},
-                                  {"name": "review_notes", "type": "str", "nullable": True},
-                                  {"name": "final_score", "type": "int", "nullable": True}]},
+    "signature": {
+        "form": "extends",
+        "adds": [
+            {"name": "human_score", "type": "int", "nullable": True},
+            {"name": "decision", "type": "str", "nullable": True},
+            {"name": "reviewer_id", "type": "str", "nullable": True},
+            {"name": "reviewed_at", "type": "str", "nullable": True},
+            {"name": "review_notes", "type": "str", "nullable": True},
+            {"name": "final_score", "type": "int", "nullable": True},
+        ],
+    },
 }
 
 

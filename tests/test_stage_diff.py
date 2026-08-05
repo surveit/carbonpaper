@@ -73,7 +73,7 @@ def _filter_stage() -> Stage:
         "id": "keep", "name": "Keep", "type": "filter_rows",
         "inputs": [{"id": LOAD_ID, "schema": {"columns": _IN_COLUMNS}}],
         "filter": {"code": "def should_include(row):\n    return True\n"},
-        "output_schema": {"columns": _IN_COLUMNS},
+        "signature": {"form": "extends"},
     })
 
 
@@ -181,7 +181,16 @@ def test_an_llm_transform_is_admitted_to_the_row_aligned_diff(tmp_path: Path) ->
         "id": "judge", "name": "Judge", "type": "llm_transform",
         "inputs": [{"id": LOAD_ID, "schema": {"columns": _IN_COLUMNS}}],
         "llm": {"prompt_data_template": "{name}"},
-        "output_schema": {"columns": _OUT_COLUMNS},
+        "signature": {
+            "form": "extends",
+            "reads": [
+                {
+                    "input": "load",
+                    "columns": [{"name": "name", "type": "str", "nullable": True}],
+                },
+            ],
+            "adds": [{"name": "label", "type": "str", "nullable": True}],
+        },
     })
     _write_output(tmp_path, LOAD_ID, pd.DataFrame({"name": ["a"], "val": [1]}))
     out_rel = _write_output(tmp_path, "judge", pd.DataFrame(
@@ -461,7 +470,11 @@ def test_a_frame_function_gets_no_diff_even_at_matching_row_counts(tmp_path: Pat
         "inputs": [{"id": LOAD_ID, "schema": {"columns": _IN_COLUMNS}}],
         "function": {"kind": "inline",
                      "code": "def transform(df):\n    return df\n"},
-        "output_schema": {"columns": _IN_COLUMNS},
+        "signature": {
+            "form": "replaces",
+            "reads": [{"input": "load", "columns": _IN_COLUMNS}],
+            "produces": _IN_COLUMNS,
+        },
     })
     frame = pd.DataFrame({"name": ["a", "b"], "val": [1, 2]})
     _write_output(tmp_path, LOAD_ID, frame)
@@ -476,7 +489,7 @@ def test_a_union_gets_no_diff(tmp_path: Path) -> None:
         "inputs": [{"id": LOAD_ID, "schema": {"columns": _IN_COLUMNS}},
                    {"id": "more", "schema": {"columns": _IN_COLUMNS}}],
         "union": {},
-        "output_schema": {"columns": _IN_COLUMNS},
+        "signature": {"form": "replaces", "produces": _IN_COLUMNS},
     })
     _write_output(tmp_path, LOAD_ID, pd.DataFrame({"name": ["a"], "val": [1]}))
     out_rel = _write_output(tmp_path, "both", pd.DataFrame({"name": ["a"], "val": [1]}))

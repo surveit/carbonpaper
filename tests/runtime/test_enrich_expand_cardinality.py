@@ -85,8 +85,14 @@ def test_a_brought_column_lands_under_its_authored_name():
         "id": "m", "name": "Join", "type": "enrich",
         "inputs": [{"id": "subject", "schema": _SUBJECT},
                    {"id": "reference", "schema": _REFERENCE}],
-        "output_schema": {"columns": [{"name": "x", "type": "int", "nullable": True},
-                                      {"name": "z2", "type": "str", "nullable": True}]},
+        "signature": {
+            "form": "extends",
+            "reads": [
+                {"input": "subject", "columns": _SUBJECT["columns"]},
+                {"input": "reference", "columns": _SUBJECT["columns"]},
+            ],
+            "adds": [{"name": "z2", "type": "str", "nullable": True}],
+        },
         "join": {"keys": [{"left": "x", "right": "x"}], "enrich_with": {"z": "z2"}},
     })
     out = handle_enrich(
@@ -107,8 +113,17 @@ def test_a_right_key_sharing_a_subject_columns_name_is_dropped():
                    {"id": "reference",
                     "schema": {"columns": [{"name": "k", "type": "int", "nullable": True},
                                            {"name": "z", "type": "str", "nullable": True}]}}],
-        "output_schema": {"columns": [{"name": "x", "type": "int", "nullable": True},
-                                      {"name": "z", "type": "str", "nullable": True}]},
+        "signature": {
+            "form": "extends",
+            "reads": [
+                {"input": "subject", "columns": _SUBJECT["columns"]},
+                {
+                    "input": "reference",
+                    "columns": [{"name": "k", "type": "int", "nullable": True}],
+                },
+            ],
+            "adds": [{"name": "z", "type": "str", "nullable": True}],
+        },
         "join": {"keys": [{"left": "x", "right": "k"}], "enrich_with": {"z": "z"}},
     })
     out = handle_enrich(

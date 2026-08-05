@@ -23,7 +23,11 @@ _VALID = {
     "id": "score", "name": "Score rows", "type": "llm_transform",
     "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
     "llm": {"model": "claude-sonnet-4-6", "prompt_template": "score {doc_id}"},
-    "output_schema": _OUT_SCHEMA,
+    "signature": {
+        "form": "extends",
+        "reads": [{"input": "load", "columns": _IN_SCHEMA["columns"]}],
+        "adds": [{"name": "score", "type": "float", "nullable": False}],
+    },
 }
 
 
@@ -34,7 +38,7 @@ def _seed(tmp_path: Path) -> Path:
     # whole resulting workflow (graph included), not just the one edited stage.
     (compiled / "01_load.json").write_text(
         json.dumps({"id": "load", "name": "Load", "type": "input_data",
-                    "connector": {"kind": "file"}, "output_schema": _IN_SCHEMA}),
+                    "connector": {"kind": "file"}, "signature": {"form": "replaces", "produces": _IN_SCHEMA["columns"]}}),
         encoding="utf-8",
     )
     (compiled / "02_score.json").write_text(json.dumps(_VALID), encoding="utf-8")
@@ -85,7 +89,7 @@ def test_missing_stage_file_raises(tmp_path: Path) -> None:
     # A validly-shaped input_data spec (connector required) so the call reaches
     # the file-lookup step this test targets, rather than failing validation first.
     valid_ghost = {"id": "ghost", "name": "x", "type": "input_data",
-                   "connector": {"kind": "file"}, "output_schema": _IN_SCHEMA}
+                   "connector": {"kind": "file"}, "signature": {"form": "replaces", "produces": _IN_SCHEMA["columns"]}}
     with pytest.raises(FileNotFoundError):
         stage_edit.edit_stage_spec(pdir, "ghost", json.dumps(valid_ghost))
 
@@ -162,7 +166,7 @@ def _seed_load(tmp_path: Path) -> Path:
     compiled.mkdir(parents=True, exist_ok=True)
     (compiled / "01_load.json").write_text(
         json.dumps({"id": "load", "name": "Load", "type": "input_data",
-                    "connector": {"kind": "file"}, "output_schema": _IN_SCHEMA}),
+                    "connector": {"kind": "file"}, "signature": {"form": "replaces", "produces": _IN_SCHEMA["columns"]}}),
         encoding="utf-8",
     )
     return tmp_path / "beta"
@@ -173,7 +177,11 @@ def test_add_stage_creates_new_stage_referencing_existing_input(tmp_path: Path) 
     new = {"id": "score", "name": "Score", "type": "llm_transform",
            "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
            "llm": {"model": "claude-sonnet-4-6", "prompt_template": "score {doc_id}"},
-           "output_schema": _OUT_SCHEMA}
+           "signature": {
+               "form": "extends",
+               "reads": [{"input": "load", "columns": _IN_SCHEMA["columns"]}],
+               "adds": [{"name": "score", "type": "float", "nullable": False}],
+           }}
     result = stage_edit.add_stage_spec(pdir, json.dumps(new))
     assert result.ok is True and not result.issues
     # a new stage is named by its id (no NN_ prefix; file order is irrelevant)
@@ -187,7 +195,11 @@ def test_add_stage_rejects_dangling_input(tmp_path: Path) -> None:
     new = {"id": "score", "name": "Score", "type": "llm_transform",
            "inputs": [{"id": "does_not_exist", "schema": _IN_SCHEMA}],
            "llm": {"model": "claude-sonnet-4-6", "prompt_template": "score {doc_id}"},
-           "output_schema": _OUT_SCHEMA}
+           "signature": {
+               "form": "extends",
+               "reads": [{"input": "does_not_exist", "columns": _IN_SCHEMA["columns"]}],
+               "adds": [{"name": "score", "type": "float", "nullable": False}],
+           }}
     result = stage_edit.add_stage_spec(pdir, json.dumps(new))
     assert result.ok is False
     assert any("does_not_exist" in i for i in result.issues)
@@ -198,7 +210,7 @@ def test_add_stage_rejects_dangling_input(tmp_path: Path) -> None:
 def test_add_stage_rejects_duplicate_id(tmp_path: Path) -> None:
     pdir = _seed_load(tmp_path)
     dup = {"id": "load", "name": "Load again", "type": "input_data",
-           "connector": {"kind": "file"}, "output_schema": _IN_SCHEMA}
+           "connector": {"kind": "file"}, "signature": {"form": "replaces", "produces": _IN_SCHEMA["columns"]}}
     result = stage_edit.add_stage_spec(pdir, json.dumps(dup))
     assert result.ok is False and any("already exists" in i for i in result.issues)
 
@@ -218,7 +230,11 @@ def test_remove_stage_deletes_the_stage_and_its_file(tmp_path: Path) -> None:
     new = {"id": "score", "name": "Score", "type": "llm_transform",
            "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
            "llm": {"model": "claude-sonnet-4-6", "prompt_template": "score {doc_id}"},
-           "output_schema": _OUT_SCHEMA}
+           "signature": {
+               "form": "extends",
+               "reads": [{"input": "load", "columns": _IN_SCHEMA["columns"]}],
+               "adds": [{"name": "score", "type": "float", "nullable": False}],
+           }}
     assert stage_edit.add_stage_spec(pdir, json.dumps(new)).ok is True
 
     result = stage_edit.remove_stage_spec(pdir, "score")
@@ -236,7 +252,7 @@ def test_remove_nonexistent_stage_raises(tmp_path: Path) -> None:
 # ─── An empty workflow is a legitimate starting state ────────────────────────
 
 _FIRST_STAGE = {"id": "load", "name": "Load", "type": "input_data",
-                "connector": {"kind": "file"}, "output_schema": _IN_SCHEMA}
+                "connector": {"kind": "file"}, "signature": {"form": "replaces", "produces": _IN_SCHEMA["columns"]}}
 
 
 def _seed_empty(tmp_path: Path) -> Path:

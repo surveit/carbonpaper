@@ -35,7 +35,7 @@ def _load_stage(sid: str, df: pd.DataFrame, tmp_path) -> Stage:
     return parse_stage({
         "id": sid, "name": sid, "type": "input_data",
         "connector": {"kind": "file", "params": {"path": str(path), "format": "csv"}},
-        "output_schema": _NAME_VAL_SCHEMA,
+        "signature": {"form": "replaces", "produces": _NAME_VAL_SCHEMA["columns"]},
     })
 
 
@@ -55,7 +55,11 @@ def test_limit_caps_the_rows_a_frame_handler_is_given(tmp_path):
     counted = parse_stage({
         "id": "counted", "name": "counted", "type": "python_frame_function",
         "inputs": [{"id": "src", "schema": _NAME_VAL_SCHEMA}],
-        "output_schema": _SEEN_SCHEMA,
+        "signature": {
+            "form": "replaces",
+            "reads": [{"input": "src", "columns": _NAME_VAL_SCHEMA["columns"]}],
+            "produces": _SEEN_SCHEMA["columns"],
+        },
         "function": {"kind": "inline", "code": _COUNT_THE_FRAME},
         "limit": 3,
     })
@@ -74,7 +78,10 @@ def test_limit_keeps_the_row_mapper_off_the_rows_past_the_cap(tmp_path):
     mapper = parse_stage({
         "id": "m", "name": "m", "type": "python_row_function",
         "inputs": [{"id": "src", "schema": _NAME_VAL_SCHEMA}],
-        "output_schema": _NAME_VAL_SCHEMA,
+        "signature": {
+            "form": "extends",
+            "reads": [{"input": "src", "columns": _NAME_VAL_SCHEMA["columns"]}],
+        },
         "function": {"kind": "inline", "code": _REFUSE_PAST_ROW_2},
         "limit": 3,
     })
@@ -90,7 +97,10 @@ def test_the_uncapped_run_of_that_same_mapper_still_fails(tmp_path):
     mapper = parse_stage({
         "id": "m", "name": "m", "type": "python_row_function",
         "inputs": [{"id": "src", "schema": _NAME_VAL_SCHEMA}],
-        "output_schema": _NAME_VAL_SCHEMA,
+        "signature": {
+            "form": "extends",
+            "reads": [{"input": "src", "columns": _NAME_VAL_SCHEMA["columns"]}],
+        },
         "function": {"kind": "inline", "code": _REFUSE_PAST_ROW_2},
     })
 
@@ -105,7 +115,7 @@ def test_a_limit_cuts_the_same_window_off_every_input_of_a_union(tmp_path):
         "id": "u", "name": "u", "type": "union",
         "inputs": [{"id": "left", "schema": _NAME_VAL_SCHEMA},
                    {"id": "right", "schema": _NAME_VAL_SCHEMA}],
-        "output_schema": _NAME_VAL_SCHEMA,
+        "signature": {"form": "replaces", "produces": _NAME_VAL_SCHEMA["columns"]},
         "union": {}, "limit": 2,
     })
 
@@ -122,7 +132,7 @@ def test_union_lineage_counts_from_the_first_row_the_stage_actually_read():
         "id": "u", "name": "u", "type": "union",
         "inputs": [{"id": "left", "schema": _NAME_VAL_SCHEMA},
                    {"id": "right", "schema": _NAME_VAL_SCHEMA}],
-        "output_schema": _NAME_VAL_SCHEMA, "union": {},
+        "signature": {"form": "replaces", "produces": _NAME_VAL_SCHEMA["columns"]}, "union": {},
     })
     inputs = {"left": _rows("l", 2), "right": _rows("r", 2)}
 

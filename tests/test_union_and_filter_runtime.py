@@ -43,7 +43,7 @@ def _load_stage(sid: str, df: pd.DataFrame, tmp_path) -> Stage:
     return parse_stage({
         "id": sid, "name": sid, "type": "input_data",
         "connector": {"kind": "file", "params": {"path": str(path), "format": "csv"}},
-        "output_schema": _AB_SCHEMA,
+        "signature": {"form": "replaces", "produces": _AB_SCHEMA["columns"]},
     })
 
 
@@ -194,7 +194,10 @@ def test_a_row_mapper_that_may_not_drop_still_rejects_a_none_row(tmp_path):
     mapper = parse_stage({
         "id": "m", "name": "m", "type": "python_row_function",
         "inputs": [{"id": "src", "schema": _AB_SCHEMA}],
-        "output_schema": _AB_SCHEMA,
+        "signature": {
+            "form": "extends",
+            "reads": [{"input": "src", "columns": _AB_SCHEMA["columns"]}],
+        },
         "function": {"kind": "inline", "code": "def transform(row): return None"},
     })
     workflow = Workflow(stages=[load, mapper])

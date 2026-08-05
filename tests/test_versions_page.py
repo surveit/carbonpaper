@@ -24,7 +24,10 @@ _STAGE = {
     "name": "Load rows",
     "type": "input_data",
     "connector": {"kind": "file"},
-    "output_schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": False}]},
+    "signature": {
+        "form": "replaces",
+        "produces": [{"name": "doc_id", "type": "str", "nullable": False}],
+    },
 }
 
 

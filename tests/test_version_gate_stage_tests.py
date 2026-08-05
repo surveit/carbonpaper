@@ -21,12 +21,16 @@ def _seed_project(root: Path, expected_doubled: float) -> None:
     (compiled / "01_load.json").write_text(json.dumps({
         "id": "load", "name": "Load", "type": "input_data",
         "connector": {"kind": "file"},
-        "output_schema": _IN_SCHEMA,
+        "signature": {"form": "replaces", "produces": _IN_SCHEMA["columns"]},
     }), encoding="utf-8")
     (compiled / "02_double.json").write_text(json.dumps({
         "id": "double", "name": "Double", "type": "python_row_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
-        "output_schema": _OUT_SCHEMA,
+        "signature": {
+            "form": "extends",
+            "reads": [{"input": "load", "columns": _IN_SCHEMA["columns"]}],
+            "adds": [{"name": "doubled", "type": "float", "nullable": False}],
+        },
         "function": {"kind": "inline",
                      "code": "def transform(row):\n    return {**row, 'doubled': row['amount'] * 2}\n"},
         "tests": [{

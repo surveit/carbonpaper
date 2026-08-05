@@ -54,7 +54,7 @@ def _stage(
     return parse_stage({
         "id": "review", "name": "Review", "type": "human_review_queue",
         "inputs": [{"id": "scored", "schema": {"columns": input_columns}}],
-        "output_schema": {"columns": [*input_columns, *_REVIEW_COLUMNS]},
+        "signature": {"form": "extends", "adds": _REVIEW_COLUMNS},
         "queue": queue,
     })
 
@@ -438,9 +438,7 @@ def test_every_decided_row_is_emitted_with_only_the_declared_columns(tmp_path):
     stage = parse_stage({
         "id": "review", "name": "Review", "type": "human_review_queue",
         "inputs": [{"id": "scored", "schema": {"columns": _SCORED_COLUMNS}}],
-        "output_schema": {"columns": [{"name": "id", "type": "str", "nullable": True},
-                                      {"name": "score", "type": "int", "nullable": True}]
-                          + queue_added_columns()},
+        "signature": {"form": "extends", "adds": _REVIEW_COLUMNS},
         "queue": dict(QUEUE_COLUMNS),
     })
     src = _src(2)
@@ -698,7 +696,7 @@ def _load_stage(root):
     csv_path = root / "data" / "items.csv"
     pd.DataFrame({"id": ["a", "b"], "score": [1, 2]}).to_csv(csv_path, index=False)
     return {"id": "load", "name": "Load", "type": "input_data",
-            "output_schema": {"columns": _SCORED_COLUMNS},
+            "signature": {"form": "replaces", "produces": _SCORED_COLUMNS},
             "connector": {"kind": "file", "params": {"path": str(csv_path), "format": "csv"}}}
 
 
@@ -706,7 +704,7 @@ def _review_stage_full():
     return {"id": "review", "name": "Review", "type": "human_review_queue",
             "inputs": [{"id": "load", "schema": {
                 "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True}]}}],
-            "output_schema": {"columns": [*_SCORED_COLUMNS, *_REVIEW_COLUMNS]},
+            "signature": {"form": "extends", "adds": _REVIEW_COLUMNS},
             "queue": dict(QUEUE_COLUMNS)}
 
 

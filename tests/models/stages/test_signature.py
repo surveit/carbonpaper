@@ -380,9 +380,16 @@ def test_aggregate_signature_must_tell_the_config_story():
             "reads": [{"input": "facilities", "columns": [{"name": "company", "type": "str", "nullable": True}]}],
             "produces": [{"name": "company", "type": "str", "nullable": True}],
         },
-        "output_schema": {"columns": [
-            {"name": "company", "type": "str", "nullable": True}, {"name": "total", "type": "int", "nullable": True},
-        ]},
+        "signature": {
+            "form": "replaces",
+            "reads": [
+                {
+                    "input": "facilities",
+                    "columns": [{"name": "company", "type": "str", "nullable": True}],
+                },
+            ],
+            "produces": [{"name": "company", "type": "str", "nullable": True}],
+        },
     }
     msg = _issues(spec)
     assert "consumes `revenue` but the signature does not read it" in msg
@@ -401,7 +408,16 @@ def test_union_signature_reads_nothing_and_produces_from_every_input():
             "reads": [{"input": "house", "columns": [{"name": "price", "type": "str", "nullable": True}]}],
             "produces": _EDGE["columns"],
         },
-        "output_schema": {"columns": _EDGE["columns"]},
+        "signature": {
+            "form": "replaces",
+            "reads": [
+                {
+                    "input": "house",
+                    "columns": [{"name": "price", "type": "str", "nullable": True}],
+                },
+            ],
+            "produces": _EDGE["columns"],
+        },
     }
     msg = _issues(spec)
     assert "signature reads must be empty" in msg
@@ -423,13 +439,10 @@ def test_review_queue_add_outside_the_review_columns_rejected():
             "form": "extends",
             "adds": [{"name": "hunch", "type": "str", "nullable": True}],
         },
-        "output_schema": {"columns": [
-            *_EDGE["columns"],
-            {"name": "reviewed_price", "type": "str", "nullable": True},
-            {"name": "verdict", "type": "str", "nullable": False},
-            {"name": "reviewer", "type": "str", "nullable": True},
-            {"name": "reviewed_at", "type": "str", "nullable": True},
-        ]},
+        "signature": {
+            "form": "extends",
+            "adds": [{"name": "hunch", "type": "str", "nullable": True}],
+        },
     }
     msg = _issues(spec)
     assert "adds `hunch`, which the review runtime never writes" in msg

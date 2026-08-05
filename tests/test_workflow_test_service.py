@@ -10,7 +10,7 @@ from app.models import parse_stage
 from app.services import workspace
 from app.services.workflow_test import run_workflow_test
 from app.services.versioning import WorkflowVersion
-from conftest import QUEUE_COLUMNS, queue_added_columns
+from conftest import QUEUE_COLUMNS
 
 
 def _load_stage(demo):
@@ -18,8 +18,7 @@ def _load_stage(demo):
         "id": "load", "type": "input_data", "name": "Load rows",
         "connector": {"kind": "file",
                       "params": {"path": str(demo / "data" / "rows.csv"), "format": "csv"}},
-        "output_schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": True},
-                                      {"name": "score", "type": "int", "nullable": True}]},
+        "signature": {"form": "replaces", "produces": _LOAD_SCHEMA["columns"]},
     }
 
 
@@ -33,9 +32,11 @@ _CLASSIFY = {
                  "def transform(row):\n"
                  "    return {'doc_id': row['doc_id'], 'score': row['score'],\n"
                  "            'label': 'pos' if row['score'] >= 0 else 'neg'}"},
-    "output_schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": True},
-                                  {"name": "score", "type": "int", "nullable": True},
-                                  {"name": "label", "type": "str", "nullable": True}]},
+    "signature": {
+        "form": "extends",
+        "reads": [{"input": "load", "columns": _LOAD_SCHEMA["columns"]}],
+        "adds": [{"name": "label", "type": "str", "nullable": True}],
+    },
 }
 
 _BOOM = {
@@ -43,8 +44,10 @@ _BOOM = {
     "inputs": [{"id": "load", "schema": _LOAD_SCHEMA}],
     "function": {"kind": "inline", "code":
                  "def transform(row):\n    raise ValueError('boom')"},
-    "output_schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": True},
-                                  {"name": "score", "type": "int", "nullable": True}]},
+    "signature": {
+        "form": "extends",
+        "reads": [{"input": "load", "columns": _LOAD_SCHEMA["columns"]}],
+    },
 }
 
 _CLASSIFY_SCHEMA = _CLASSIFY["output_schema"]
@@ -68,7 +71,16 @@ _LOAD_PK_SCHEMA = {"columns": _LOAD_PK_COLUMNS}
 _QUEUE = {
     "id": "review", "type": "human_review_queue", "name": "Review rows",
     "inputs": [{"id": "load", "schema": _LOAD_PK_SCHEMA}],
-    "output_schema": {"columns": _LOAD_PK_COLUMNS + queue_added_columns()},
+    "signature": {
+        "form": "extends",
+        "adds": [
+            {"name": "human_score", "type": "int", "nullable": True},
+            {"name": "decision", "type": "str", "nullable": True},
+            {"name": "reviewer_id", "type": "str", "nullable": True},
+            {"name": "reviewed_at", "type": "str", "nullable": True},
+            {"name": "review_notes", "type": "str", "nullable": True},
+        ],
+    },
     "queue": {**QUEUE_COLUMNS, "reviewer_instructions": "check"},
 }
 
@@ -184,7 +196,11 @@ def test_workflow_test_raises_when_no_source_stage(demo):
     standalone = {
         "id": "standalone", "type": "python_frame_function", "name": "No source",
         "inputs": [{"id": "upstream", "schema": _LOAD_SCHEMA}],
-        "output_schema": _LOAD_SCHEMA,
+        "signature": {
+            "form": "replaces",
+            "reads": [{"input": "upstream", "columns": _LOAD_SCHEMA["columns"]}],
+            "produces": _LOAD_SCHEMA["columns"],
+        },
         "function": {"kind": "inline", "code": "def transform(df):\n    return df"},
     }
     # Build the version document directly; the guard fires before Workflow build.

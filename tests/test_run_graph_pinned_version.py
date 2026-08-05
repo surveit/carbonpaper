@@ -34,9 +34,13 @@ def _input_stage(stage_id: str, name: str, data_path: Path) -> dict:
         "id": stage_id, "name": name, "type": "input_data",
         "connector": {"kind": "file",
                       "params": {"path": str(data_path), "format": "csv"}},
-        "output_schema": {"columns": [
-            {"name": "name", "type": "str", "nullable": False},
-            {"name": "val", "type": "int", "nullable": False}]},
+        "signature": {
+            "form": "replaces",
+            "produces": [
+                {"name": "name", "type": "str", "nullable": False},
+                {"name": "val", "type": "int", "nullable": False},
+            ],
+        },
     }
 
 

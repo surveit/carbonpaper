@@ -20,10 +20,16 @@ def _python_stage(*, summary=_SUMMARY, corner_cases=None) -> Stage:
             {"name": "amount", "type": "float", "nullable": False},
         ]}}],
         "function": function,
-        "output_schema": {"columns": [
-            {"name": "amount", "type": "float", "nullable": False},
-            {"name": "doubled", "type": "float", "nullable": False},
-        ]},
+        "signature": {
+            "form": "extends",
+            "reads": [
+                {
+                    "input": "load",
+                    "columns": [{"name": "amount", "type": "float", "nullable": False}],
+                },
+            ],
+            "adds": [{"name": "doubled", "type": "float", "nullable": False}],
+        },
     })
 
 

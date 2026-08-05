@@ -34,8 +34,13 @@ def project(tmp_path, monkeypatch):
     stage = {"id": "load", "name": "Load", "type": "input_data",
              "connector": {"kind": "file",
                            "params": {"path": str(data), "format": "csv"}},
-             "output_schema": {"columns": [{"name": "name", "type": "str", "nullable": True},
-                                           {"name": "val", "type": "int", "nullable": True}]}}
+             "signature": {
+                 "form": "replaces",
+                 "produces": [
+                     {"name": "name", "type": "str", "nullable": True},
+                     {"name": "val", "type": "int", "nullable": True},
+                 ],
+             }}
     (proj / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
     vid = save_working_copy_as_version(proj, message="seed", reviewer="test").version_id
     versioning.publish_version(proj, vid, reviewer="human")

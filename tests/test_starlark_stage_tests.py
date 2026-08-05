@@ -53,7 +53,11 @@ def _starlark_stage(
     return parse_stage({
         "id": stage_id, "name": "Normalize spend", "type": "starlark_row_function",
         "inputs": [{"id": "filings", "schema": _IN_SCHEMA}],
-        "output_schema": _OUT_SCHEMA,
+        "signature": {
+            "form": "extends",
+            "reads": [{"input": "filings", "columns": _IN_SCHEMA["columns"]}],
+            "adds": [{"name": "amount_usd", "type": "float", "nullable": True}],
+        },
         "starlark": block,
         "tests": tests,
     })

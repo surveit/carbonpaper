@@ -18,11 +18,19 @@ def _rating_stage() -> Stage:
     return parse_stage({
         "id": "rate", "name": "Rate", "type": "python_row_function",
         "inputs": [{"id": "load", "schema": {"columns": [{"name": "id", "type": "str", "nullable": True}]}}],
-        "output_schema": {"columns": [
-            {"name": "id", "type": "str", "nullable": True},
-            {"name": "score", "type": "int", "nullable": True},
-            {"name": "verdict", "type": "str", "nullable": True},
-        ]},
+        "signature": {
+            "form": "extends",
+            "reads": [
+                {
+                    "input": "load",
+                    "columns": [{"name": "id", "type": "str", "nullable": True}],
+                },
+            ],
+            "adds": [
+                {"name": "score", "type": "int", "nullable": True},
+                {"name": "verdict", "type": "str", "nullable": True},
+            ],
+        },
         "function": {"kind": "inline", "code": "def transform(row): return row"},
     })
 
@@ -57,15 +65,16 @@ def test_human_review_queue_output_missing_a_declared_column_raises(tmp_path):
         "inputs": [{"id": "load", "schema": {"columns": [
             {"name": "claim_id", "type": "str", "nullable": False},
             {"name": "score", "type": "int", "nullable": True}]}}],
-        "output_schema": {"columns": [
-            {"name": "claim_id", "type": "str", "nullable": False},
-            {"name": "score", "type": "int", "nullable": True},
-            {"name": "human_score", "type": "int", "nullable": True},
-            {"name": "decision", "type": "str", "nullable": True},
-            {"name": "reviewer_id", "type": "str", "nullable": True},
-            {"name": "reviewed_at", "type": "str", "nullable": True},
-            {"name": "reviewer_note", "type": "str", "nullable": True},   # no row outcome produces this
-        ]},
+        "signature": {
+            "form": "extends",
+            "adds": [
+                {"name": "human_score", "type": "int", "nullable": True},
+                {"name": "decision", "type": "str", "nullable": True},
+                {"name": "reviewer_id", "type": "str", "nullable": True},
+                {"name": "reviewed_at", "type": "str", "nullable": True},
+                {"name": "reviewer_note", "type": "str", "nullable": True},
+            ],
+        },
         "queue": {**queue_columns(), "review_notes_column": None},
     })
     inputs = {"load": pd.DataFrame({"claim_id": ["c1"], "score": [1]})}

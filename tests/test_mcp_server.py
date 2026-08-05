@@ -122,7 +122,10 @@ _OUT_SCHEMA = {"columns": [
 _DOUBLE = "def transform(row):\n    return {**row, 'doubled': row['amount'] * 2}\n"
 _LOAD_STAGE = StageDraft.model_validate({
     "id": "load", "name": "Load", "type": "input_data", "connector": {"kind": "file"},
-    "output_schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": False}]},
+    "signature": {
+        "form": "replaces",
+        "produces": [{"name": "doc_id", "type": "str", "nullable": False}],
+    },
 })
 
 
@@ -136,9 +139,13 @@ def _write_compiled_workflow(pdir: Path) -> None:
     compiled.mkdir(parents=True)
     stages: list[dict[str, object]] = [
         {"id": "load", "name": "Load", "type": "input_data", "connector": {"kind": "file"},
-         "output_schema": _IN_SCHEMA},
+         "signature": {"form": "replaces", "produces": _IN_SCHEMA["columns"]}},
         {"id": "double", "name": "Double", "type": "python_row_function",
-         "inputs": [{"id": "load", "schema": _IN_SCHEMA}], "output_schema": _OUT_SCHEMA,
+         "inputs": [{"id": "load", "schema": _IN_SCHEMA}], "signature": {
+             "form": "extends",
+             "reads": [{"input": "load", "columns": _IN_SCHEMA["columns"]}],
+             "adds": [{"name": "doubled", "type": "float", "nullable": True}],
+         },
          "function": {"kind": "inline", "code": _DOUBLE},
          "tests": [
              {"name": "doubles", "inputs": {"load": [{"amount": 2.0}]},
@@ -147,7 +154,11 @@ def _write_compiled_workflow(pdir: Path) -> None:
               "expected": [{"amount": 2.0, "doubled": 5.0}]},
          ]},
         {"id": "untested", "name": "Untested", "type": "python_row_function",
-         "inputs": [{"id": "load", "schema": _IN_SCHEMA}], "output_schema": _OUT_SCHEMA,
+         "inputs": [{"id": "load", "schema": _IN_SCHEMA}], "signature": {
+             "form": "extends",
+             "reads": [{"input": "load", "columns": _IN_SCHEMA["columns"]}],
+             "adds": [{"name": "doubled", "type": "float", "nullable": True}],
+         },
          "function": {"kind": "inline", "code": _DOUBLE}},
     ]
     for spec in stages:
@@ -292,7 +303,10 @@ def test_mcp_add_stage_drops_server_owned_fields_and_names_them(tmp_path, monkey
     echoed = {
         "id": "load", "name": "Load", "type": "input_data",
         "connector": {"kind": "file"},
-        "output_schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": True}]},
+        "signature": {
+            "form": "replaces",
+            "produces": [{"name": "doc_id", "type": "str", "nullable": True}],
+        },
         "tests": [], "source": {"section": "para 3"},
     }
 

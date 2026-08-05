@@ -106,7 +106,10 @@ def test_typed_stage_input_renders_the_same_as_the_equivalent_draft_dict(tmp_pat
         "id": "load", "name": "Load", "type": "input_data",
         "connector": {"kind": "file",
                       "params": {"path": str(tmp_path / "d.csv"), "format": "csv"}},
-        "output_schema": {"columns": [{"name": "k", "type": "str", "nullable": True}]},
+        "signature": {
+            "form": "replaces",
+            "produces": [{"name": "k", "type": "str", "nullable": True}],
+        },
     })
     typed_graph = build_mermaid_graph([stage], "demo")
     dict_graph = build_mermaid_graph(

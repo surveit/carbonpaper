@@ -47,7 +47,14 @@ def test_a_config_only_stage_warns_about_nothing():
         "inputs": [{"id": "a", "schema": _SCHEMA},
                    {"id": "b", "schema": {"columns": [{"name": "id", "type": "str", "nullable": True},
                                                       {"name": "v", "type": "str", "nullable": True}]}}],
-        "output_schema": _SCHEMA,
+        "signature": {
+            "form": "extends",
+            "reads": [
+                {"input": "a", "columns": _SCHEMA["columns"]},
+                {"input": "b", "columns": _SCHEMA["columns"]},
+            ],
+            "adds": [{"name": "v", "type": "str", "nullable": True}],
+        },
         "join": {"keys": [{"left": "id", "right": "id"}], "enrich_with": {"v": "v"}},
     })
     assert _kinds(enrich) == []

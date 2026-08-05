@@ -69,25 +69,25 @@ def _seed_compiled(pdir: Path, data_path: Path, routes_path: Path) -> None:
             "id": LOAD_ID, "name": "Load rows", "type": "input_data",
             "connector": {"kind": "file",
                           "params": {"path": str(data_path), "format": "csv"}},
-            "output_schema": _LOAD_SCHEMA,
+            "signature": {"form": "replaces", "produces": _LOAD_SCHEMA["columns"]},
         }),
         ("02_classify.json", {
             "id": CLASSIFY_ID, "name": "Classify", "type": "python_row_function",
             "inputs": [{"id": LOAD_ID, "schema": _LOAD_SCHEMA}],
             "function": {"kind": "inline", "code": _CLASSIFY_CODE},
-            "output_schema": _CLASSIFY_SCHEMA,
+            "signature": {"form": "extends", "adds": _CLASSIFY_ADDS},
         }),
         ("03_keep.json", {
             "id": KEEP_ID, "name": "Keep the small ones", "type": "filter_rows",
             "inputs": [{"id": CLASSIFY_ID, "schema": _CLASSIFY_SCHEMA}],
             "filter": {"code": _KEEP_CODE},
-            "output_schema": _CLASSIFY_SCHEMA,
+            "signature": {"form": "extends"},
         }),
         ("04_routes.json", {
             "id": ROUTES_ID, "name": "Route reference", "type": "input_data",
             "connector": {"kind": "file",
                           "params": {"path": str(routes_path), "format": "csv"}},
-            "output_schema": _ROUTES_SCHEMA,
+            "signature": {"form": "replaces", "produces": _ROUTES_SCHEMA["columns"]},
         }),
         ("05_route.json", {
             "id": ROUTE_ID, "name": "Attach the route", "type": "enrich",
@@ -95,7 +95,20 @@ def _seed_compiled(pdir: Path, data_path: Path, routes_path: Path) -> None:
                        {"id": ROUTES_ID, "schema": _ROUTES_SCHEMA}],
             "join": {"keys": [{"left": "name", "right": "name"}],
                      "enrich_with": {"route": "route"}},
-            "output_schema": _ROUTE_SCHEMA,
+            "signature": {
+                "form": "extends",
+                "reads": [
+                    {
+                        "input": "classify",
+                        "columns": [{"name": "name", "type": "str", "nullable": True}],
+                    },
+                    {
+                        "input": "routes",
+                        "columns": [{"name": "name", "type": "str", "nullable": True}],
+                    },
+                ],
+                "adds": [{"name": "route", "type": "str", "nullable": True}],
+            },
         }),
     ]
     for filename, spec in stages:
