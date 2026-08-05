@@ -12,22 +12,19 @@ routers in `app/web/routers/`, which import the Runner (`app.runtime`) and the s
 - `/project/<m>/runs`, `/runs/<id>` — run history + detail.
 - `/project/<m>/runs/<id>/queue/<stage>` — the human-review queue UI (+ `/decide`, `/resume`).
 
-## The stage panel — two tabs (`run_stage_partial` → `_run_stage_panel.html`)
-**Data │ Transform** (under the Schema | Current-run tier switch):
-- **Data** — what goes in and what comes out, one pane. Schema tier: the input schemas, then
-  the output schema. Current-run tier: the stage's output — rendered as a **diff against its
+## The stage panel — three tabs (`run_stage_partial` → `_run_stage_panel.html`)
+**Data │ Schema │ Transform**, one flat strip; it opens on Transform:
+- **Data** — what this run's stage produced: its output — rendered as a **diff against its
   input** where the stage type permits one (below) — then validation **as part of the
   output** (input + output issues from the manifest), then the upstream input previews with
   the per-row checkboxes for the scratch re-run, folded in an `input rows` disclosure. URL
   cells are full clickable links. Compiler notes live on `/compile`, not here.
+- **Schema** — the static contract: the input schemas, then the output schema.
 - **Transform** — the *raw* transform config block (`_stage_executable.html`): llm prompt+model+tools,
   join keys, aggregate ops, connector/queue/publish spec — plus the scratch re-run
   result. An authored-code block (`function` / `filter`) reads **description → examples → code**:
   the block's plain-language `summary` leads, the test cases follow, and the source is rendered
   last and folded (`_stage_code.html`), because the reviewer is a journalist, not an engineer.
-  One pane serves **both** the Schema and Current-run tiers (its `data-pane` names both):
-  the definition the run pinned *is* what the current run transformed with, so switching tiers
-  here would show the same thing twice and push you off "Current run" mid-panel.
 - **The diff** (`app.web.stage_diff` → `_stage_diff.html`): a 1:1 stage
   (`python_row_function`, `llm_transform`, `enrich` — against its subject input) reads as a
   positional diff over its INPUT frame as the base: every input column holds its place, one the
