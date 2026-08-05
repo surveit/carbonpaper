@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from app.models.workflow import parse_workflow
+from tools.stage_signatures import add_signature
 
 _REVISION = (Path(__file__).resolve().parents[1]
              / "alembic/versions/0004_drop_primary_key_from_stage_schemas.py")
@@ -46,6 +47,10 @@ def test_a_v1_document_validates_under_todays_model_after_upgrading():
     rev = _load_revision()
     document = {"stages": _v1_stages()}
     assert rev._drop_primary_keys(document) is True
+    # 0006 carries the same document the rest of the way, as a store crossing
+    # both revisions would be.
+    for stage in document["stages"]:
+        add_signature(stage)
 
     parse_workflow(document["stages"])  # raises if the upgraded shape is still invalid
 

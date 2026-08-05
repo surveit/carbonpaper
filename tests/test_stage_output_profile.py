@@ -30,12 +30,14 @@ _LOAD_SCHEMA = {"columns": [{"name": "doc_id", "type": "str", "nullable": True},
 _CLASSIFY = {
     "id": "classify", "type": "python_row_function", "name": "Label by sign",
     "inputs": [{"id": "load", "schema": _LOAD_SCHEMA}],
+    # Carries `score` through: an `extends` signature flows every anchor column,
+    # so a row function cannot drop one.
     "function": {"kind": "inline", "code":
                  "def transform(row):\n"
-                 "    return {'doc_id': row['doc_id'],\n"
+                 "    return {**row,\n"
                  "            'label': 'pos' if row['score'] >= 0 else 'neg'}"},
-    "output_schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": True},
-                                  {"name": "label", "type": "str", "nullable": True}]},
+    "signature": {"form": "extends",
+                  "adds": [{"name": "label", "type": "str", "nullable": True}]},
 }
 
 
@@ -50,7 +52,7 @@ def demo(tmp_path):
     load = {
         "id": "load", "type": "input_data", "name": "Load rows",
         "connector": {"kind": "file", "params": {"path": str(source), "format": "csv"}},
-        "output_schema": _LOAD_SCHEMA,
+        "signature": {"form": "replaces", "produces": _LOAD_SCHEMA["columns"]},
     }
     WorkflowVersion(
         id="demo/v1", version_id="v1", created_at="2026-08-01T00:00:00",
@@ -131,7 +133,7 @@ def _load_stage(project) -> dict:
         "id": "load", "type": "input_data", "name": "Load rows",
         "connector": {"kind": "file", "params": {
             "path": str(project / "data" / "rows.csv"), "format": "csv"}},
-        "output_schema": _LOAD_SCHEMA,
+        "signature": {"form": "replaces", "produces": _LOAD_SCHEMA["columns"]},
     }
 
 

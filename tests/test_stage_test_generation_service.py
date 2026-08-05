@@ -161,7 +161,8 @@ def test_finish_stage_tests_preserves_null_cells(tmp_path: Path):
     (compiled / "02_double.json").write_text(json.dumps({
         "id": "double", "name": "Double", "type": "python_row_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
-        "output_schema": out_schema,
+        "signature": {"form": "extends", "adds": [
+            c for c in out_schema["columns"] if c not in _IN_SCHEMA["columns"]]},
         "function": {"kind": "inline", "summary": "Test fixture step.", "corner_cases": [],
                      "code": "def transform(row):\n    return {**row, 'flag': None}\n"},
     }), encoding="utf-8")

@@ -59,7 +59,7 @@ def _seed_project(root: Path) -> Path:
         "id": "publish", "name": "Publish", "type": "publish",
         "inputs": [{"id": "double", "schema": _OUT_SCHEMA}],
         "function": {"kind": "inline", "summary": "Test fixture step.", "corner_cases": [], "code": "def transform(df, output_dir):\n    return df\n"},
-        "publish": {},
+        "publish": {}, "signature": {"form": "replaces"},
     }), encoding="utf-8")
     return project_dir
 
@@ -205,12 +205,9 @@ def test_status_reports_error_after_failed_generation(client: TestClient, tmp_pa
     assert "tests" not in stage  # nothing written on a failed generation
 
 
-def test_generate_tests_rejects_python_stage_without_output_schema(client: TestClient, tmp_path: Path):
-    """`double` is a python_row_function (tests can be generated for its TYPE), and every
-    stage bar publish must declare an output_schema — which generated tests need anyway, to
-    state their expected rows. A stored stage lacking one no longer parses, so the route
-    rejects it while loading the workflow: 400, naming the missing declaration, and no
-    orphaned session, the same as the wrong-TYPE case above."""
+def test_generate_tests_rejects_python_stage_without_a_signature(client: TestClient, tmp_path: Path):
+    """A stored stage lacking a signature no longer parses, so the route rejects it
+    while loading the workflow: 400, and no orphaned session."""
     project_dir = _seed_project(tmp_path)
     (project_dir / "compiled" / "02_double.json").write_text(json.dumps({
         "id": "double", "name": "Double", "type": "python_row_function",

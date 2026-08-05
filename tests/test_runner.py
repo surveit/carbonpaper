@@ -425,7 +425,7 @@ def test_value_outside_a_declared_enum_errors_the_stage_and_blocks_downstream(tm
     label = {
         "id": "label", "name": "Label items", "type": "python_frame_function",
         "inputs": [{"id": "load", "schema": _NAME_VAL_SCHEMA}],
-        "output_schema": labelled_schema,
+        "signature": {"form": "replaces", "produces": labelled_schema["columns"]},
         "function": {"kind": "inline",
                      "code": "def transform(df):\n"
                              "    return df.assign(status='pending')[['name', 'status']]\n"},
@@ -433,7 +433,7 @@ def test_value_outside_a_declared_enum_errors_the_stage_and_blocks_downstream(tm
     tail = {
         "id": "tail", "name": "Tail", "type": "python_frame_function",
         "inputs": [{"id": "label", "schema": labelled_schema}],
-        "output_schema": labelled_schema,
+        "signature": {"form": "replaces", "produces": labelled_schema["columns"]},
         "function": {"kind": "inline", "code": "def transform(df):\n    return df\n"},
     }
     for filename, stage in (("01_load.json", load), ("02_label.json", label),
