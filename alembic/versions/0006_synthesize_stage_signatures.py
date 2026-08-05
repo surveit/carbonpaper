@@ -10,7 +10,7 @@ from typing import Any
 
 from alembic import op
 
-from tools.stage_signatures import add_signature
+from tools.stage_signatures import SignatureUndeterminable, add_signature
 
 revision = "0006"
 down_revision = "0005"
@@ -36,7 +36,15 @@ def upgrade() -> None:
         ).fetchall()
         for doc_id, data in rows:
             document = json.loads(data)
-            if not _add_signatures(document):
+            try:
+                changed = _add_signatures(document)
+            except SignatureUndeterminable as exc:
+                # Refuse the RECORD, not the run: this revision migrates what the
+                # stored payload determines, and 0007 carries the human decision
+                # about the rest. The document is left exactly as it was.
+                print(f"0006: left unmigrated — {doc_id}: {exc}")
+                continue
+            if not changed:
                 continue
             connection.exec_driver_sql(
                 "UPDATE documents SET data=? WHERE collection=? AND id=?",
@@ -55,4 +63,8 @@ def _add_signatures(document: Any) -> bool:
     stages = document.get("stages") if isinstance(document, dict) else None
     if not isinstance(stages, list):
         return False
-    return any(add_signature(stage) for stage in stages if isinstance(stage, dict))
+    # A list, not a generator: `any` short-circuits, so a generator would stop
+    # calling add_signature at the first stage it changed and leave the rest of
+    # the document carrying an output_schema no model still loads.
+    changed = [add_signature(stage) for stage in stages if isinstance(stage, dict)]
+    return any(changed)
