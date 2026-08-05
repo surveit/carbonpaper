@@ -9,7 +9,7 @@ import pytest
 from app.core.errors import StageNotInRun, StageOutputMissing
 from app.models import parse_stage
 from app.services import workspace
-from app.services.run import read_stage_output
+from app.services.run import read_run_status, read_stage_output
 from app.services.versioning import WorkflowVersion
 from app.services.workflow_test import run_workflow_test
 
@@ -86,6 +86,26 @@ def test_naming_a_stage_still_injects_the_slice_its_producer_owes_it(demo):
 def test_an_omitted_limit_injects_the_whole_source(demo):
     result = run_workflow_test("demo", stage_ids=["classify"])
     assert len(read_stage_output("demo", result["run_id"], "classify")) == _ROW_COUNT
+
+
+@pytest.mark.parametrize("stage_ids", [None, ["load", "classify"]], ids=["injected", "executed"])
+def test_the_window_is_the_same_rows_whether_the_source_is_injected_or_executed(
+    demo, stage_ids
+):
+    """The one thing scope must NOT change: `limit`/`offset` mean the same rows either way."""
+    result = run_workflow_test("demo", stage_ids=stage_ids, limit=3, offset=2)
+    frame = read_stage_output("demo", result["run_id"], "classify")
+    assert list(frame["doc_id"]) == ["003", "004", "005"]
+
+
+def test_a_source_stage_that_executes_notes_the_cut_it_took(demo):
+    """A row cut is never silent: the stage record says how many of how many it read."""
+    result = run_workflow_test("demo", stage_ids=["load"], limit=3)
+    record = next(
+        stage for stage in read_run_status("demo", result["run_id"])["stage_records"]
+        if stage["stage_id"] == "load"
+    )
+    assert any("limit=3" in note for note in record["notes"])
 
 
 def test_naming_an_unknown_stage_names_the_real_ones(demo):

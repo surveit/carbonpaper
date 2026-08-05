@@ -158,8 +158,8 @@ vocabulary — raise `max_values` before declaring an enum from it.
 
 `row_count` is that stage's OWN output: far below the source under a filter or an
 aggregate, and a sample either way off a sliced run. Naming a source stage in
-run_workflow_test's `stage_ids` executes it over its whole bound file — that is
-what gives an input column its complete vocabulary.
+run_workflow_test's `stage_ids` with `limit` null executes it over its whole
+bound file — that is what gives an input column its complete vocabulary.
 
 Reading the source file yourself answers a different question: the input stage
 pins the declared dtypes (a zero-padded "002" declared `str` stays "002"; a plain
@@ -256,11 +256,12 @@ exactly six axes:
    is the run's budget — every LLM stage pays per row, so state it; null is
    the whole source.
 3. SCOPE: `stage_ids` names the stages to execute. A source stage named there
-   EXECUTES over its WHOLE bound file instead of taking the injected slice —
-   the way to see an input column's complete vocabulary without paying for the
-   stages below it. Every producer a named stage reads must be named too, or
-   run over the injected slice, or that stage errors on its absent input. Omit
-   `stage_ids` and every non-input stage runs.
+   EXECUTES instead of taking an injected frame, over the SAME `limit`/`offset`
+   window — so naming a source with `limit` null is how you see an input
+   column's complete vocabulary without paying for the stages below it. Every
+   producer a named stage reads must be named too, or run over the injected
+   slice, or that stage errors on its absent input. Omit `stage_ids` and every
+   non-input stage runs.
 4. EXECUTION: synchronous — this returns when the run is done (run_workflow
    returns a run_id immediately and executes on a background thread).
 5. REVIEW QUEUE: a human_review_queue stage auto-approves every row in
