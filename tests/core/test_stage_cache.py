@@ -35,11 +35,9 @@ def test_compute_row_fingerprint_treats_every_null_form_as_json_null(null_value)
 
 
 def test_compute_row_fingerprint_is_stable_across_list_representations():
-    # A list[str] cell is an object ndarray when the frame was just read from
-    # parquet and a plain list when the row was replayed from the cache. Hashing
-    # those differently files a row under one identity and looks it up under
-    # another, so a stage never finds what it recorded.
+    # Hashing the two apart files a row under one identity and looks it up under another.
     values = ["grand chose", "proches de zéro"]
+    # A replayed row holds the list; a frame just read from parquet holds the ndarray.
     as_list = compute_row_fingerprint({"keyphrases": values})
     as_array = compute_row_fingerprint({"keyphrases": np.array(values, dtype=object)})
     assert as_list == as_array
@@ -119,11 +117,9 @@ def test_record_json_safes_both_rows():
 
 
 def test_record_keeps_an_array_valued_cell_a_list():
-    # A list[str] column read from parquet arrives as an object ndarray. Stored
-    # through str() it came back as numpy's repr — "['grand chose' 'proches de
-    # zéro']", space-separated and unquoted — so a cache hit replayed a str into a
-    # column declared list[str] and the stage failed its own output schema.
+    # Stored through str() this came back as numpy's repr, failing the stage's own schema.
     cache = StageCache()
+    # The repr was "['grand chose' 'proches de zéro']" — space-separated, unquoted, unparseable.
     keyphrases = np.array(["grand chose", "proches de zéro"], dtype=object)
     cache.record(
         project="proj", stage_id="relevance", stage_fingerprint="sf1", input_fingerprint="ifn",
