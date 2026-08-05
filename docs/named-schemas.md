@@ -9,7 +9,7 @@ This doc describes the models as they are.
 ## Named schemas — the data model as a first-class artifact
 
 The prototype began workflow-first: the data-model view was *read off* the
-workflow (it rendered each stage's inline `output_schema`). You could not model
+workflow (it rendered each stage's inline output schema). You could not model
 your data without first authoring the pipeline. **Named schemas** invert this:
 the data model can be authored as its own artifact, and the workflow wired over
 it.

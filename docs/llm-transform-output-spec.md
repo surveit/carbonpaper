@@ -4,16 +4,17 @@
 the JSON an LLM stage must return is **computable from its schemas**, so prompts stop
 hand-writing (and drifting from) output shapes. The set of columns the reply must
 carry — with their per-column type/nullability/enum/range and, for structured
-columns, their recursive shape — is computed from the stage's own input/output
-schemas (`output_schema − input_schema`) and rendered into the prompt, rather than
-written by hand. Validating the reply against that shape and guaranteeing it is a
+columns, their recursive shape — is computed from the stage's own input edge and
+resolved output schema (the difference between them) and rendered into the prompt,
+rather than written by hand. Validating the reply against that shape and guaranteeing it is a
 separate concern that belongs to the LLM layer, planned for a later PR (see Status).*
 
 ## Rules
 
 1. **1:1 and append-only.** An `llm_transform` maps one input row to one output row,
-   and may only ADD columns. The LLM's expected JSON object is exactly
-   `output_schema.columns − input.columns` — the set difference. Passthrough columns
+   and may only ADD columns. The LLM's expected JSON object is exactly the columns
+   the stage's `signature` adds — the difference between its resolved output schema
+   and its input edge. Passthrough columns
    are copied by the runtime, never round-tripped through the model (the LLM cannot
    mutate identity fields, and tokens aren't wasted re-emitting them).
 2. **1:N is expressed as one added JSON *array* column** — an array of scalars or of
@@ -56,15 +57,16 @@ separate concern that belongs to the LLM layer, planned for a later PR (see Stat
 
 This describes what the code does today, not an aspiration:
 
-- **Rule 1 is enforced by `Stage` construction, not in the handler.** The
-  `Stage` model's 1:1 validator (`app/models/stage.py`) rejects any
-  `llm_transform` whose *declared* schemas aren't 1:1: exactly one input, the
-  output keeping every input column unchanged (a transform never rewrites a
-  column's schema — checked via `TableSchema.is_subset_of`), and adding at
-  least one new column. Because a stage carries its own contract, an ineligible stage can't be
-  built — so it can't be loaded, versioned, or run — and `TableSchema.subtract`
-  (`output_schema − input_schema`) is exactly the reply columns and can never
-  throw when the runtime computes it.
+- **Rule 1 is enforced by `Stage` construction, not in the handler.** Two
+  validators in `app/models/stages/llm_transform.py` split it: the 1:1 validator
+  (`find_llm_one_to_one_issues`) requires exactly one input and at least one
+  added column, and the signature check (`find_llm_signature_issues`) refuses a
+  `rewrites` entry. Keeping every input column unchanged comes for free — an
+  `extends` signature flows every anchor column, so the output cannot drop one.
+  Because a stage carries its own contract, an ineligible stage can't be built —
+  so it can't be loaded, versioned, or run — and `TableSchema.subtract` (the
+  resolved output minus the input edge) is exactly the reply columns and can
+  never throw when the runtime computes it.
 - **The reply spec goes into the prompt; the call machinery is unchanged.**
   `make_llm_row_mapper` appends `subtract(...).to_prompt()` to the stage's
   prompt and calls `llm.call_llm` per row, driven by the runtime's row driver
