@@ -16,6 +16,8 @@ from app.models.review_guide import ReviewGuideStep
 from app.services import versioning, workspace
 from app.services.versioning import ReviewGuide
 from app.web.export import export_review_packet
+from app.web.export.pages import PACKET_MAX_TABLE_ROWS
+from app.web.loading import MAX_TABLE_ROWS
 from app.services.review_packet.checksums import compute_sha256
 
 _PROJECT = "proj"
@@ -313,6 +315,30 @@ def test_unreadable_version_is_stated_on_the_stage_page(project_dir, tmp_path, m
     page = (packet.root / "stages" / "double.html").read_text(encoding="utf-8")
     assert "no-such-version" in page
     assert [o.path for o in packet.omitted] == ["workflow.json"]
+
+
+def test_a_stage_page_holds_more_rows_than_a_served_page_would(project_dir, tmp_path):
+    # Rendered once to a file, not per request, so the packet carries its own cap.
+    assert PACKET_MAX_TABLE_ROWS > MAX_TABLE_ROWS
+    _make_project(project_dir)
+    rows = MAX_TABLE_ROWS + 1
+    pd.DataFrame(
+        {"name": [f"n{i}" for i in range(rows)], "val": list(range(rows))}
+    ).to_csv(project_dir / "data" / "items.csv", index=False)
+    _seed_version(project_dir)
+    run_id = run_service.start_run(_PROJECT)
+
+    packet = export_review_packet(_PROJECT, run_id, tmp_path / "packets")
+
+    page = (packet.root / "stages" / "double.html").read_text(encoding="utf-8")
+    assert f"n{rows - 1}" in page, "the last row was dropped by the served page's cap"
+
+
+def test_a_stage_page_offers_the_csv_rather_than_a_link_back_to_itself(exported):
+    # The stage page IS the full table in a packet, so "view all rows" has nowhere to go.
+    page = (exported.root / "stages" / "double.html").read_text(encoding="utf-8")
+    assert "view all rows" not in page
+    assert 'href="../data/double.csv"' in page
 
 
 def test_every_step_stays_reachable_when_no_diagram_is_drawn(project_dir, tmp_path):

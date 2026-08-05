@@ -100,7 +100,7 @@
     {% elif preview and preview.preview %}
     <div class="preview-block">
       <div class="preview-head">output data {% set shown = preview.preview | length %}<span class="muted">· {% if preview.rows_total > shown %}first {{ shown }} of {% endif %}{{ "{:,}".format(preview.rows_total) }} row{% if preview.rows_total != 1 %}s{% endif %}</span>
-        <span class="preview-actions">· <a href="{{ links.stage_rows(stage.stage_id) }}">view all rows</a>
+        <span class="preview-actions">{% set rows_href = links.stage_rows(stage.stage_id) %}{% if rows_href %}· <a href="{{ rows_href }}">view all rows</a>{% endif %}
         · <a href="{{ links.stage_csv(stage.stage_id) }}">⬇ CSV</a></span></div>
       <div class="table-scroll"><table class="data-preview">
         <thead><tr><th class="syw-col">lineage</th>{% for c in preview.columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
@@ -134,7 +134,9 @@
         <div class="preview-head">
           <a href="{{ links.stage_anchor(ip.id) }}"><code>{{ ip.id }}</code></a>
           {% if ip.preview and ip.preview.preview %}{% set shown = ip.preview.preview | length %}<span class="muted">· {% if ip.preview.rows_total > shown %}first {{ shown }} of {% endif %}{{ "{:,}".format(ip.preview.rows_total) }} row{% if ip.preview.rows_total != 1 %}s{% endif %}</span>
-          <span class="preview-actions">· <a href="{{ links.stage_rows(ip.id) }}">view all rows</a>
+          {# Omitted in the packet: the id beside it already opens that stage's own
+             full table, so this would be the same destination twice. #}
+          <span class="preview-actions">{% set rows_href = links.stage_rows(ip.id) %}{% if rows_href %}· <a href="{{ rows_href }}">view all rows</a>{% endif %}
           · <a href="{{ links.stage_csv(ip.id) }}">⬇ CSV</a></span>{% endif %}
         </div>
         {% if ip.preview and ip.preview.preview %}

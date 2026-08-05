@@ -16,6 +16,12 @@ from app.web.config import templates
 from app.web.loading import load_output_preview, load_output_table
 from app.web.panel_links import PacketPanelLinks
 
+# The packet has no route to a further page, so a stage's table has to carry the
+# rows outright. Still capped: a browser opening a static file has no pagination
+# to fall back on. Past this the page says so and the reader goes to data/*.csv,
+# which is written uncapped.
+PACKET_MAX_TABLE_ROWS = 50_000
+
 ASSETS_DIR = "assets"
 STAGES_DIR = "stages"
 APP_STYLESHEET = "style.css"
@@ -131,11 +137,11 @@ def _build_panel_context(run_dir: Path, view: RunView, stage: StageView) -> dict
 
 
 def _load_full_table(run_dir: Path, stage: StageView) -> dict[str, Any] | None:
-    # The whole table, not the 5-row preview: offline there is nowhere to click through to.
+    # Rendered once to a file, not per request, so it carries far more than a page would.
     source = resolve_output_path(run_dir, stage.output_path)
     if source is None or not source.is_file():
         return None
-    table = load_output_table(run_dir, stage.output_path)
+    table = load_output_table(run_dir, stage.output_path, PACKET_MAX_TABLE_ROWS)
     return {
         "columns": table["columns"],
         "preview": table["rows"],

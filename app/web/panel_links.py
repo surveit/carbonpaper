@@ -37,8 +37,9 @@ class PacketPanelLinks:
     def stage_anchor(self, stage_id: str) -> str:
         return f"{_segment(stage_id)}.html"
 
-    def stage_rows(self, stage_id: str) -> str:
-        return f"{_segment(stage_id)}.html"
+    def stage_rows(self, stage_id: str) -> None:
+        """The stage page IS the full table here, so the link would point at itself."""
+        return None
 
     def stage_csv(self, stage_id: str) -> str:
         return f"../data/{_segment(stage_id)}.csv"
