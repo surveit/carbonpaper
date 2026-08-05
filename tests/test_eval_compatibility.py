@@ -18,29 +18,46 @@ def _file_input(id_, tmp_path, cols=("k",)):
     return m.parse_stage(S(
         id=id_, type="input_data",
         connector={"kind": "file", "params": {"path": str(tmp_path / f"{id_}.csv")}},
-        output_schema={"columns": [{"name": c, "type": "str", "nullable": True} for c in cols]}))
+        signature={"form": "replaces",
+                   "produces": [{"name": c, "type": "str", "nullable": True} for c in cols]}))
 
 
 def _input_refs(inputs):
     """Input refs for the builders below. An upstream `Stage` contributes its own
-    declared output_schema as the edge's expected schema; a plain id (an upstream
+    resolved output schema as the edge's expected schema; a plain id (an upstream
     that does not exist as a Stage) must be paired with the schema to declare."""
     refs = []
     for upstream in inputs:
         if isinstance(upstream, m.StageBase):
-            refs.append({"id": upstream.id, "schema": upstream.output_schema})
+            refs.append({"id": upstream.id, "schema": upstream.resolve_output_schema()})
         else:
             id_, cols = upstream
             refs.append({"id": id_, "schema": {"columns": [{"name": c, "type": "str", "nullable": True} for c in cols]}})
     return refs
 
 
+def _extends(refs, output_schema):
+    """The extends signature that outputs `output_schema` over anchor `refs[0]`.
+
+    These builders take the schema a stage OUTPUTS, which is what each test is
+    about; a row function only adds, so the adds are whatever that names beyond
+    the anchor edge.
+    """
+    anchor = refs[0]["schema"] if refs else None
+    columns = getattr(anchor, "columns", None)
+    if columns is None:
+        columns = (anchor or {}).get("columns", [])
+    flowing = {c.name if hasattr(c, "name") else c["name"] for c in columns}
+    added = [c for c in (output_schema or {}).get("columns", []) if c["name"] not in flowing]
+    return {"form": "extends", "adds": added}
+
+
 def _row(id_, inputs, output_schema=None, **kw):
+    refs = _input_refs(inputs)
     return m.parse_stage(S(
-        id=id_, type="python_row_function",
-        inputs=_input_refs(inputs),
+        id=id_, type="python_row_function", inputs=refs,
         function={"kind": "inline", "code": "def transform(row): return row"},
-        output_schema=output_schema, **kw))
+        signature=_extends(refs, output_schema), **kw))
 
 
 def _frame(id_, inputs, output_schema=None, **kw):
@@ -48,7 +65,8 @@ def _frame(id_, inputs, output_schema=None, **kw):
         id=id_, type="python_frame_function",
         inputs=_input_refs(inputs),
         function={"kind": "inline", "code": "def transform(row): return row"},
-        output_schema=output_schema, **kw))
+        signature={"form": "replaces",
+                   "produces": (output_schema or {}).get("columns", [])}, **kw))
 
 
 def _agg(id_, inputs, output_schema=None):
@@ -57,7 +75,11 @@ def _agg(id_, inputs, output_schema=None):
         aggregate={"group_by": ["k"],
                    "aggregations": [{"formula": "sum", "output_column": "t",
                                      "value_column": "v"}]},
-        output_schema=output_schema))
+        signature={"form": "replaces",
+                   "reads": [{"input": _input_refs(inputs)[0]["id"], "columns": [
+                       {"name": "k", "type": "str", "nullable": True},
+                       {"name": "v", "type": "str", "nullable": True}]}],
+                   "produces": (output_schema or {}).get("columns", [])}))
 
 
 def _ref(path="x.csv", cols=("k",)):
@@ -125,7 +147,7 @@ def test_override_stage_has_no_output_schema(tmp_path):
     src = _file_input("src", tmp_path, cols=["k", "v", "quote"])
     pub = m.parse_stage(S(
         id="pub", type="publish", inputs=_input_refs([src]),
-        publish={"format": "json"},
+        publish={"format": "json"}, signature={"form": "replaces"},
         function={"kind": "inline", "code": "def transform(df, output_dir): return df"}))
     tgt = _row("tgt", [src], output_schema={
         "columns": [{"name": "k", "type": "str", "nullable": True}, {"name": "score", "type": "float", "nullable": True}]})
@@ -354,7 +376,9 @@ def test_get_injected_columns_is_the_override_side_of_the_column_rule(tmp_path):
 
 # ── fail loud: no silent degradation on a missing schema or checked column ───
 def test_get_output_columns_from_stage_raises_when_stage_has_no_output_schema(tmp_path):
-    stage = _file_input("src", tmp_path, cols=["k"]).model_copy(update={"output_schema": None})
+    stage = _file_input("src", tmp_path, cols=["k"])
+    stage = stage.model_copy(
+        update={"signature": stage.signature.model_copy(update={"produces": []})})
     with pytest.raises(ValueError, match="declares no output schema"):
         get_output_columns_from_stage(stage)
 

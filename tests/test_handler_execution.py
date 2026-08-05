@@ -35,10 +35,15 @@ _X_COLUMN = [{"name": "x", "type": "int", "nullable": True}]
 
 
 def _row_stage(output_schema=None, input_columns=_X_COLUMN):
+    """A row function outputting `output_schema` — extends-form, so its adds are
+    whatever that names beyond the input edge."""
+    flowing = {c["name"] for c in input_columns}
+    added = [c for c in (output_schema or {}).get("columns", [])
+             if c["name"] not in flowing]
     return parse_stage({
         "id": "t", "name": "t", "type": "python_row_function",
         "inputs": [{"id": "src", "schema": {"columns": input_columns}}],
-        "output_schema": output_schema or {"columns": input_columns},
+        "signature": {"form": "extends", "adds": added},
         "function": {"kind": "inline", "code": "def transform(row):\n    return row\n"},
     })
 

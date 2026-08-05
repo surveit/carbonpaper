@@ -8,6 +8,18 @@ from app import models as m
 from app.models import find_stage_compiler_warnings, find_workflow_compiler_warnings
 
 _SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True}]}
+# Which signature form a type takes: the reshaping family replaces its input,
+# the anchored family extends it.
+_REPLACES_TYPES = {"python_frame_function", "aggregate", "union", "input_data", "publish"}
+
+
+def _signature_for(type_, schema):
+    if type_ == "publish":
+        return {"form": "replaces"}
+    if type_ in _REPLACES_TYPES:
+        return {"form": "replaces", "produces": schema["columns"]}
+    return {"form": "extends"}
+
 _CODE = "def transform(row):\n    return row"
 _PASSING_EXAMPLE = {"name": "passes_through",
                     "inputs": {"up": [{"id": "r1"}]}, "expected": [{"id": "r1"}]}
@@ -24,7 +36,7 @@ def _stage(stage_id="s", type_="python_row_function", handle="function", **kw):
     spec = {
         "id": stage_id, "name": stage_id.replace("_", " ").title(), "type": type_,
         "inputs": [{"id": "up", "schema": _SCHEMA}],
-        "output_schema": _SCHEMA,
+        "signature": _signature_for(type_, _SCHEMA),
         handle: block,
         **kw,
     }
@@ -89,6 +101,7 @@ def _publish_stage(stage_id="pub"):
     """Authored code a reviewer must trust prose for, and no handler to run an example."""
     return m.parse_stage({
         "id": stage_id, "name": "Pub", "type": "publish",
+        "signature": {"form": "replaces"},
         "inputs": [{"id": "up", "schema": _SCHEMA}],
         "publish": {"format": "csv"},
         "function": {"kind": "inline", "summary": "Writes one file per row.",
