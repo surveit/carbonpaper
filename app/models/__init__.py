@@ -49,6 +49,7 @@ from app.models.stages.input_data import (
     ConnectorKind as ConnectorKind,
     FileFormat as FileFormat,
     XlsxReadParams as XlsxReadParams,
+    resolve_file_format as resolve_file_format,
 )
 from app.models.stages.join import (
     JoinConfig as JoinConfig,
