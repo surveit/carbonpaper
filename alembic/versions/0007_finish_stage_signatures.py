@@ -1,7 +1,7 @@
-"""synthesize a signature on every stored stage and drop its output_schema
+"""finish the signature synthesis 0006 short-circuited out of
 
-Revision ID: 0006
-Revises: 0005
+Revision ID: 0007
+Revises: 0006
 """
 from __future__ import annotations
 
@@ -12,19 +12,20 @@ from alembic import op
 
 from tools.stage_signatures import add_signature
 
-revision = "0006"
-down_revision = "0005"
+revision = "0007"
+down_revision = "0006"
 branch_labels = None
 depends_on = None
 
-# A stage's output schema now resolves from its `signature` alone, and the outer
-# is gone from the model, so a payload carrying one no longer loads. The
-# synthesis is shared with tools.migrate_compiled_stage_files — a project's
-# working copy carries the same specs and no revision can reach it.
+# 0006 drove its per-stage synthesis through `any(...)` over a GENERATOR, which
+# stops at the first stage it changed — so a store it upgraded carries stage 0
+# migrated and every later stage still holding an output_schema no model loads,
+# and every page that reads a version document 500s. 0006 is fixed in place for
+# a store that has not run it; this revision repairs one that has.
 #
-# add_signature RAISES (SignatureUndeterminable) on a stage whose outer dropped
-# an input column: an `extends` signature cannot express a drop, so the payload
-# does not determine one and a human must author it.
+# add_signature is idempotent (a stage already carrying a signature and no
+# output_schema returns False untouched), so this re-runs the whole pass rather
+# than trying to identify which stages 0006 reached.
 _COLLECTIONS = ("workflow_version", "draft")
 
 
@@ -45,9 +46,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # A signature records reads, which no stored outer ever carried; reversing
-    # would have to invent them.
-    raise NotImplementedError("0006 is not reversible: a signature records reads")
+    # Same as 0006: a signature records reads no stored outer ever carried.
+    raise NotImplementedError("0007 is not reversible: a signature records reads")
 
 
 def _add_signatures(document: Any) -> bool:
@@ -55,8 +55,5 @@ def _add_signatures(document: Any) -> bool:
     stages = document.get("stages") if isinstance(document, dict) else None
     if not isinstance(stages, list):
         return False
-    # A list, not a generator: `any` short-circuits, so a generator would stop
-    # calling add_signature at the first stage it changed and leave the rest of
-    # the document carrying an output_schema no model still loads.
     changed = [add_signature(stage) for stage in stages if isinstance(stage, dict)]
     return any(changed)
