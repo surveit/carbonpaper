@@ -30,6 +30,7 @@ from app.core.errors import (
     RunVersionUnresolvableError,
 )
 from app.core.run_status import RunStatus, StageStatus
+from app.models import resolve_file_format
 from app.services.errors import WorkflowLoadError
 from app.services.loader import resolve_function_code
 from app.services.versioning import list_versions
@@ -97,7 +98,8 @@ async def trigger_run(request: Request, project: str):
                                        bust_cache=_read_bust_cache(form))
     except (NoVersionToRunError, MissingInputBindingError, ValueError) as exc:
         # ValueError here is binding/limit/offset validation failures raised by
-        # apply_run_bindings / prepare_run — not a catch-all for other bugs.
+        # _collect_bindings (an unreadable file extension), apply_run_bindings or
+        # prepare_run — not a catch-all for other bugs.
         return JSONResponse({"detail": str(exc)}, status_code=400)
     except WorkflowLoadError as exc:
         return JSONResponse({"detail": "compiled workflow failed validation",
@@ -140,7 +142,13 @@ def _collect_bindings(
     form: FormData, project: str, version_id: str | None = None
 ) -> dict[str, dict[str, str]]:
     """Read `binding__<stage_id>` form fields into run bindings (each a
-    connector-params dict, {"path": ...}). A field whose value equals the
+    connector-params dict, {"path": ..., "format": ...}). The format is the one
+    the bound file's own extension designates: a binding merges OVER the authored
+    params, so carrying only a path would leave a `.csv` to be read by the
+    authored `format: parquet`. An extension no reader handles fails the trigger
+    (400) rather than binding a file the run would misread.
+
+    A field whose value equals the
     workflow-authored path is NOT a binding — the workflow is the designating
     source, and the manifest provenance should say so. `version_id` selects which
     version's authored paths to compare against (None -> latest), so a run pinned
@@ -154,7 +162,8 @@ def _collect_bindings(
         stage_id = key[len("binding__"):]
         path = str(value).strip()
         if path and path != authored.get(stage_id, ""):
-            bindings[stage_id] = {"path": path}
+            bindings[stage_id] = {"path": path,
+                                  "format": resolve_file_format(path).value}
     return bindings
 
 

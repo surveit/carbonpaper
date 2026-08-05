@@ -59,6 +59,28 @@ def test_changed_field_becomes_run_binding(project, tmp_path):
     assert _manifest(project)["input_bindings"]["load"]["source"] == "run"
 
 
+def test_binding_carries_the_bound_files_own_format(project, tmp_path):
+    # The authored connector says csv; a bound parquet must not be read as one.
+    other = tmp_path / "b.parquet"
+    pd.DataFrame({"name": ["z"], "val": [9]}).to_parquet(other, index=False)
+    resp = client.post("/project/demo/run",
+                       data={"binding__load": str(other)}, follow_redirects=False)
+    assert resp.status_code == 303
+    manifest = _manifest(project)
+    assert manifest["run_bindings"]["load"]["format"] == "parquet"
+    assert manifest["stage_records"][0]["status"] == "ok"
+
+
+def test_binding_a_file_with_an_unreadable_extension_returns_400(project, tmp_path):
+    other = tmp_path / "b.rtf"
+    other.write_text("not a table", encoding="utf-8")
+    resp = client.post("/project/demo/run",
+                       data={"binding__load": str(other)}, follow_redirects=False)
+    assert resp.status_code == 400
+    assert ".rtf" in resp.json()["detail"]
+    assert not (project / "runs").exists()
+
+
 def test_untouched_prefill_stays_workflow_source(project):
     authored = str(project / "a.csv")
     resp = client.post("/project/demo/run",
