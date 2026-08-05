@@ -312,6 +312,24 @@ def test_unreadable_version_is_stated_on_the_stage_page(project_dir, tmp_path, m
     assert [o.path for o in packet.omitted] == ["workflow.json"]
 
 
+def test_every_step_stays_reachable_when_no_diagram_is_drawn(project_dir, tmp_path):
+    # The diagram is the one networked element, so the step links are the offline route.
+    _make_project(project_dir)
+    _seed_version(project_dir)
+    run_id = run_service.start_run(_PROJECT)
+    manifest_path = project_dir / "runs" / run_id / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["workflow_version"] = "no-such-version"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    packet = export_review_packet(_PROJECT, run_id, tmp_path / "packets")
+
+    index = (packet.root / "index.html").read_text(encoding="utf-8")
+    assert 'class="mermaid"' not in index
+    assert 'href="stages/load.html"' in index
+    assert 'href="stages/double.html"' in index
+
+
 def test_missing_run_raises_rather_than_writing_an_empty_packet(project_dir, tmp_path):
     from app.core.errors import RunNotFoundError
 

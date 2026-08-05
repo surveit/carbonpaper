@@ -17,20 +17,21 @@ body.packet .run-stage-panel,
 body.packet .stage-panel-full { max-height: none; overflow: visible; }
 body.packet .table-scroll { max-height: none; }
 
-/* The guide is a fixed right-hand rail in the app; here it is a section in the
-   reading order, because there is no panel beside it to stay in view for. */
-.packet-guide .run-guide {
-  position: static;
-  width: auto;
-  max-width: none;
+/* The guide rail's grid and its collapse drawer come from _run_guide.html's own
+   <style>, so the index gets both by using the run view's structure. Only the
+   height model differs: the run view sizes the rail against a viewport-height
+   shell the packet has no equivalent of, so it sticks and caps itself instead. */
+body.packet .run-shell.with-guide { align-items: start; }
+body.packet .run-guide {
+  position: sticky;
+  top: 16px;
   height: auto;
-  max-height: none;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 4px 20px 16px;
-  overflow: visible;
+  max-height: calc(100vh - 32px);
 }
-.packet-guide .drawer-btn { display: none; }
+
+/* Every step as a plain link, under the diagram. With the network off the graph
+   never draws, and this is then the only route to a step page. */
+.packet-steps { font-size: 13.5px; margin: 10px 0 0; line-height: 2; }
 
 /* The section a reader must not skip: what the packet is NOT evidence of. */
 .packet-caveats {

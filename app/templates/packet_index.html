@@ -2,6 +2,12 @@
 {% block title %}Review packet · {{ run.project }} · {{ run.run_id }}{% endblock %}
 {% block content %}
 
+{# Same shell as the run view: body left, review guide as a right rail. The rail's
+   layout and its collapse drawer both live in _run_guide.html, so mirroring the
+   structure is what makes them work here. #}
+<div class="run-shell{% if guide %} with-guide{% endif %}" id="run-shell">
+<div class="run-main">
+
 <div class="stage-header">
   <h1>Run <code>{{ run.run_id }}</code></h1>
   <span class="run-status status-{{ run.status }}">{{ run.status }}</span>
@@ -14,18 +20,14 @@
 
 <p class="banner">📦 <strong>What this is.</strong> Everything this run read, did and produced —
   enough to check the result without the software that made it. Read
-  <a href="methodology.md">methodology.md</a> for what the author set out to do, the review guide
-  below for what they say is worth scrutinising, then each step for what actually ran.</p>
+  <a href="methodology.md">methodology.md</a> for what the author set out to do,
+  {% if guide %}the review guide beside this for what they say is worth scrutinising,{% endif %}
+  then each step for what actually ran.</p>
 
-{% if guide %}
-<section class="packet-guide">
-  {% include "_run_guide.html" %}
-</section>
-{% endif %}
-
-{% if mermaid %}
+{% if run.stages %}
 <section>
   <h2>The workflow this run executed</h2>
+  {% if mermaid %}
   <p class="muted packet-note">Click a step to open it.
     <strong>This diagram is the only thing in this packet that reaches the internet</strong> —
     it draws with <a href="{{ mermaid_url }}">mermaid</a> from a CDN, pinned to one exact version
@@ -35,22 +37,14 @@
   <pre class="mermaid">
 {{ mermaid }}
   </pre>
+  {% endif %}
+  {# Every step as a plain link, always. The diagram needs the network, and an
+     unreadable pinned version means no diagram at all — this is then the only
+     route to a step page. #}
+  <p class="packet-steps"><span class="muted">Steps:</span>
+    {% for stage in run.stages %}<a href="{{ stages_dir }}/{{ stage.stage_id }}.html">{{ type_glyph.get(stage.type, "") }} {{ stage.name }}</a>{% if not loop.last %} · {% endif %}{% endfor %}
+  </p>
 </section>
-<script src="{{ node_script }}"></script>
-<script src="{{ mermaid_url }}" integrity="{{ mermaid_sri }}" crossorigin="anonymous"></script>
-<script>
-  // mermaid resolves the graph's `click … call dvNode(…)` binding by name at click
-  // time; diagram_nodes.js re-broadcasts it, and subscribing is what makes the node
-  // clickable. In the packet a click navigates, there being no panel to load into.
-  if (window.mermaid) {
-    mermaid.initialize({ startOnLoad: true, theme: "default", securityLevel: "loose" });
-  }
-  if (window.onDiagramNode) {
-    onDiagramNode(function (stageId) {
-      location.href = "{{ stages_dir }}/" + encodeURIComponent(stageId) + ".html";
-    });
-  }
-</script>
 {% endif %}
 
 <section class="packet-caveats">
@@ -77,34 +71,6 @@
   </table>
 </section>
 {% endif %}
-
-<section>
-  <h2>Steps</h2>
-  <table class="stages">
-    <thead><tr><th>#</th><th>step</th><th>status</th><th>rows out</th><th>checks</th><th>data</th></tr></thead>
-    <tbody>
-      {% for stage in run.stages %}
-      <tr>
-        <td class="packet-num">{{ loop.index }}</td>
-        <td>
-          <a href="{{ stages_dir }}/{{ stage.stage_id }}.html">{{ type_glyph.get(stage.type, "") }} {{ stage.name }}</a>
-          <div class="stage-id"><code>{{ stage.stage_id }}</code> ·
-            <span class="type-tag {{ type_class.get(stage.type, 'custom') }}">{{ stage.type }}</span></div>
-        </td>
-        <td><span class="run-status status-{{ stage.status }}">{{ stage.status }}</span></td>
-        <td class="packet-num">{{ "{:,}".format(stage.row_count) }}</td>
-        <td>
-          {% set failures = stage.validations | rejectattr("ok") | list %}
-          {% if not stage.validations %}<span class="muted">none declared</span>
-          {% elif failures %}<span class="signal packet-bad">{{ failures|length }} failed</span>
-          {% else %}<span class="signal packet-good">passed</span>{% endif %}
-        </td>
-        <td>{% if stage.data_file %}<a href="{{ stage.data_file }}">CSV</a>{% else %}<span class="muted">—</span>{% endif %}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</section>
 
 <section>
   <h2>Inputs this run read</h2>
@@ -142,5 +108,28 @@
     </tbody>
   </table>
 </section>
+
+</div>{# /.run-main #}
+
+{% if guide %}{% include "_run_guide.html" %}{% endif %}
+</div>{# /.run-shell #}
+
+{% if mermaid %}
+<script src="{{ node_script }}"></script>
+<script src="{{ mermaid_url }}" integrity="{{ mermaid_sri }}" crossorigin="anonymous"></script>
+<script>
+  // mermaid resolves the graph's `click … call dvNode(…)` binding by name at click
+  // time; diagram_nodes.js re-broadcasts it, and subscribing is what makes the node
+  // clickable. In the packet a click navigates, there being no panel to load into.
+  if (window.mermaid) {
+    mermaid.initialize({ startOnLoad: true, theme: "default", securityLevel: "loose" });
+  }
+  if (window.onDiagramNode) {
+    onDiagramNode(function (stageId) {
+      location.href = "{{ stages_dir }}/" + encodeURIComponent(stageId) + ".html";
+    });
+  }
+</script>
+{% endif %}
 
 {% endblock %}
