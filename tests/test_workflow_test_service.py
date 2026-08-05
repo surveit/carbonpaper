@@ -50,7 +50,7 @@ _BOOM = {
     },
 }
 
-_CLASSIFY_SCHEMA = _CLASSIFY["output_schema"]
+_CLASSIFY_SCHEMA = {"columns": _LOAD_SCHEMA["columns"] + _CLASSIFY["signature"]["adds"]}
 
 _PUBLISH = {
     "id": "publish_report", "type": "publish", "name": "Publish",
@@ -62,6 +62,7 @@ _PUBLISH = {
                  "    df.to_json(path, orient='records')\n"
                  "    return df"},
     "publish": {"format": "json"},
+    "signature": {"form": "replaces"},
 }
 
 # A human_review_queue whose hash resolves off the upstream row content.

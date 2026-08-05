@@ -190,7 +190,7 @@ def test_draft_stage_input_schema_round_trips_in_alias_form(examples_root: Path)
         "name": "Transform rows",
         "type": "python_row_function",
         "inputs": [{"id": "load", "schema": upstream_schema}],
-        "output_schema": {"columns": [{"name": "id", "type": "str", "nullable": True}]},
+        "signature": {"form": "extends"},
         "function": {"kind": "inline", "code": "def transform(row): return row"},
     }
 

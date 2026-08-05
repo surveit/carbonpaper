@@ -123,8 +123,7 @@ def _queue_test_ctx(tmp_path, project: str) -> RunContext:
 
 
 def test_human_review_queue_carries_every_input_column_through(tmp_path):
-    """A review stage only ADDS: its signature extends the input edge, so no
-    input column can be left behind by declaring a narrower output."""
+    """A review stage only ADDS, so no input column can be left behind."""
     stage = _queue_stage(
         output_schema={"columns": [{"name": "evidence_id", "type": "str", "nullable": True},
                                     {"name": "final_score", "type": "int", "nullable": True}]},

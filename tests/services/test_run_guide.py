@@ -231,11 +231,12 @@ def test_a_stage_id_the_version_does_not_define_is_kept_unresolved(project_dir):
 
 # ── list_written_columns on its own ──────────────────────────────────────────
 
-def test_a_publish_stage_declaring_no_output_schema_writes_nothing():
+def test_a_publish_stage_producing_nothing_writes_no_columns():
     publish = parse_stage({
         "id": "write_it", "name": "Write it", "type": "publish",
         "inputs": [{"id": "attach_source", "schema": _ATTACHED}],
         "publish": {"format": "csv", "destination": "out/"},
+        "signature": {"form": "replaces"},
         "function": {"kind": "inline",
                      "code": "def transform(df, output_dir):\n    return df\n"},
     })

@@ -274,7 +274,7 @@ def test_omitted_column_in_expected_row_claims_none():
     stage = parse_stage({
         "id": "labelled", "name": "Labelled", "type": "python_frame_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
-        "output_schema": labelled_schema,
+        "signature": {"form": "replaces", "produces": labelled_schema["columns"]},
         "function": {"kind": "inline", "code": (
             # dtype=object keeps the returned None a real None; pandas' default
             # str dtype would store it as NaN, which is a different value here.
@@ -406,7 +406,7 @@ def test_multi_input_frame_positional_order_is_declared_order():
             {"id": "left", "schema": id_schema},
             {"id": "right", "schema": id_schema},
         ],
-        "output_schema": id_schema,
+        "signature": {"form": "replaces", "produces": id_schema["columns"]},
         "function": {"kind": "inline", "code": "def transform(a, b):\n    return a\n"},
         "tests": [{
             "name": "returns_first_declared_input",

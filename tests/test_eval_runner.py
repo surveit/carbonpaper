@@ -124,7 +124,6 @@ _QUEUE_REVIEW = {
             {"name": "reviewer_id", "type": "str", "nullable": True},
             {"name": "reviewed_at", "type": "str", "nullable": True},
             {"name": "review_notes", "type": "str", "nullable": True},
-            {"name": "final_score", "type": "int", "nullable": True},
         ],
     },
 }
@@ -150,7 +149,7 @@ def test_run_eval_through_a_queue_stage_records_an_error_never_a_score(project):
         message="queue pathway", reviewer="test",
         stages=[parse_stage(_load(repo_root)), parse_stage(_QUEUE_REVIEW)],
     ).save()
-    pd.DataFrame({"doc_id": ["a", "b"], "score": [1, 2], "final_score": [1, 2]}).to_csv(
+    pd.DataFrame({"doc_id": ["a", "b"], "score": [1, 2], "human_score": [1, 2]}).to_csv(
         demo / "eval_data" / "queue_cases.csv", index=False)
     config = EvalConfig(
         id="queue_check", project="demo", name="Queue check",
@@ -158,8 +157,8 @@ def test_run_eval_through_a_queue_stage_records_an_error_never_a_score(project):
         table=TableRef(path="demo/eval_data/queue_cases.csv", format=FileFormat.csv,
                        table_schema=TableSchema(columns=[
                            {"name": "doc_id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True},
-                           {"name": "final_score", "type": "int", "nullable": True}])),
-        expected_outputs=[ExpectedOutput(output_column="final_score", metric="exact")])
+                           {"name": "human_score", "type": "int", "nullable": True}])),
+        expected_outputs=[ExpectedOutput(output_column="human_score", metric="exact")])
 
     run = run_eval(demo, config, repo_root, version_id="v-queue")
 

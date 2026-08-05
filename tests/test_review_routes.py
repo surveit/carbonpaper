@@ -752,11 +752,7 @@ def test_a_temporal_control_opens_on_the_recorded_value_of_a_decided_row(
 
 
 def _declared_range_review_stage():
-    # Declares an output_schema, so `human_score` resolves from THERE rather than from the
-    # input edge's `score`. The two differ on the one spec field the model lets them
-    # differ on: `score` is non-nullable, `human_score` is nullable. That is the evidence
-    # of which declaration the endpoint coerced against — a blank value is a null through
-    # the output_schema column and a refusal through the source column.
+    """`human_score` resolves from the signature, not the input edge's `score`."""
     return {"id": "review", "name": "Review items", "type": "human_review_queue",
             "inputs": [{"id": "load", "schema": {
                 "columns": [{"name": "id", "type": "str", "nullable": True},

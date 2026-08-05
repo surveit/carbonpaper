@@ -55,6 +55,7 @@ _DANGLING_INPUT_STAGE = dict(
     _STAGE, id="later", type="python_row_function",
     inputs=[{"id": "missing", "schema": _ROWS_SCHEMA}],
     function={"kind": "inline", "code": "def transform(row): return row"},
+    signature={"form": "extends"},  # a row function extends; it never replaces
 )
 del _DANGLING_INPUT_STAGE["connector"]
 

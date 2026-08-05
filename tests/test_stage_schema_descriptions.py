@@ -39,9 +39,9 @@ def test_llm_transform_notes_document_the_additive_rule():
     assert "additive" in notes
 
 
-def test_output_schema_documents_the_signature_fallback():
-    d = _desc(StageBase, "output_schema")
-    assert "signature" in d and "resolves" in d
+def test_inputs_document_what_flows_down_an_edge():
+    d = _desc(StageBase, "inputs")
+    assert "required schema" in d and "upstream stage's output schema" in d
 
 
 def test_function_code_documents_the_three_signatures():

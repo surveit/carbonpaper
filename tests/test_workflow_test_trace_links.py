@@ -29,6 +29,7 @@ _LOAD = {
 _PUBLISH = {
     "id": "publish_report", "type": "publish", "name": "Publish",
     "inputs": [{"id": "load", "schema": _LOAD_SCHEMA}],
+    "signature": {"form": "replaces"},
     "function": {"kind": "inline", "code":
                  "def transform(df, output_dir, trace_links=None):\n"
                  "    import json, os\n"

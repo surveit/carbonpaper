@@ -351,11 +351,6 @@ def test_aggregate_signature_must_tell_the_config_story():
         },
         "signature": {
             "form": "replaces",
-            "reads": [{"input": "facilities", "columns": [{"name": "company", "type": "str", "nullable": True}]}],
-            "produces": [{"name": "company", "type": "str", "nullable": True}],
-        },
-        "signature": {
-            "form": "replaces",
             "reads": [
                 {
                     "input": "facilities",
@@ -377,11 +372,6 @@ def test_union_signature_reads_nothing_and_produces_from_every_input():
         "type": "union",
         "inputs": [{"id": "house", "schema": _EDGE}, {"id": "senate", "schema": _EDGE}],
         "union": {},
-        "signature": {
-            "form": "replaces",
-            "reads": [{"input": "house", "columns": [{"name": "price", "type": "str", "nullable": True}]}],
-            "produces": _EDGE["columns"],
-        },
         "signature": {
             "form": "replaces",
             "reads": [
@@ -408,10 +398,6 @@ def test_review_queue_add_outside_the_review_columns_rejected():
             "verdict_column": "verdict",
             "reviewer_column": "reviewer",
             "reviewed_at_column": "reviewed_at",
-        },
-        "signature": {
-            "form": "extends",
-            "adds": [{"name": "hunch", "type": "str", "nullable": True}],
         },
         "signature": {
             "form": "extends",

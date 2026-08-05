@@ -578,8 +578,8 @@ def test_run_subset_preserves_partial_work_in_the_manifest_on_a_mid_frontier_err
         "id": "score", "name": "Score rows", "type": "python_row_function",
         "inputs": [{"id": "clean", "schema": {
             "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}]}}],
-        "output_schema": {
-            "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True}]},
+        "signature": {"form": "extends",
+                      "adds": [{"name": "score", "type": "int", "nullable": True}]},
         "function": {"kind": "inline",
                      "code": "def transform(row):\n    raise ValueError('kaboom')"},
     })

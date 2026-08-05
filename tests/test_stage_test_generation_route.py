@@ -223,7 +223,7 @@ def test_generate_tests_rejects_python_stage_without_output_schema(client: TestC
     response = client.post("/project/alpha/node/double/generate-tests")
 
     assert response.status_code == 400
-    assert "declares no output_schema" in response.json()["detail"]
+    assert "signature" in response.json()["detail"]
     assert len(SessionStore().list_sessions()) == before  # no orphaned session
 
 
