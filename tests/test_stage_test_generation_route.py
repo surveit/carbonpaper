@@ -206,8 +206,7 @@ def test_status_reports_error_after_failed_generation(client: TestClient, tmp_pa
 
 
 def test_generate_tests_rejects_python_stage_without_a_signature(client: TestClient, tmp_path: Path):
-    """A stored stage lacking a signature no longer parses, so the route rejects it
-    while loading the workflow: 400, and no orphaned session."""
+    """A stage with no signature does not parse, so the route 400s while loading."""
     project_dir = _seed_project(tmp_path)
     (project_dir / "compiled" / "02_double.json").write_text(json.dumps({
         "id": "double", "name": "Double", "type": "python_row_function",
