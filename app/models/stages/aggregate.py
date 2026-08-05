@@ -1,8 +1,8 @@
 """aggregate stage: the config block, plus column validation on both the
 input and output side — `group_by`, each aggregation's `value_column`, and
 every column an aggregation's `where` references must resolve against the
-stage's input edge; and a declared output_schema must be deliverable by the
-columns group_by + the aggregations actually produce."""
+stage's input edge; and the signature's `produces` must be exactly what
+group_by + the aggregations compute."""
 from __future__ import annotations
 
 from enum import Enum
@@ -65,16 +65,13 @@ class AggregateStage(StageBase):
     type: Literal[StageType.aggregate]
     aggregate: AggregateConfig
     inputs: list[StageInput] = Field(default_factory=list, min_length=1, max_length=1)
-    signature: Optional[ReplacesSignature] = None
+    signature: ReplacesSignature
 
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
         return {"aggregate": self.aggregate}
 
     def find_config_column_issues(self) -> list[str]:
         return find_aggregate_column_issues(self)
-
-    def find_output_schema_issues(self) -> list[str]:
-        return find_aggregate_output_issues(self)
 
     def find_signature_config_issues(self) -> list[str]:
         return find_aggregate_signature_issues(self)
@@ -116,18 +113,6 @@ def find_aggregate_column_issues(stage: "AggregateStage") -> list[str]:
                 field=f"aggregate.aggregations[{op.output_column}].where", cols=cols,
             ))
     return issues
-
-
-def find_aggregate_output_issues(stage: "AggregateStage") -> list[str]:
-    """Every declared output_schema column the aggregate config cannot deliver:
-    a name outside group_by + aggregation output columns, or a type that
-    contradicts what the config computes. Type checks apply only where that
-    computed type can be known."""
-    aggregate = stage.aggregate
-    assert stage.output_schema is not None  # StageBase._schemas_declared guarantees this
-    edge = stage.inputs[0].table_schema
-    computed = compute_aggregate_output_types(aggregate, edge)
-    return find_declared_vs_computed_issues(stage.id, "aggregate", stage.output_schema, computed)
 
 
 def find_aggregate_signature_issues(stage: "AggregateStage") -> list[str]:

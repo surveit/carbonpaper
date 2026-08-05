@@ -26,6 +26,7 @@ from app.models.schema import (
 )
 from app.models.stages.shared import find_internal_namespace_column_issues
 from app.models.stages.signature import (
+    ReplacesSignature,
     TransformSignature,
     find_signature_issues,
     promised_output_schema,
@@ -124,7 +125,6 @@ class StageCommon(_Base):
     type: StageType
     name: str
     inputs: list[StageInput] = Field(default_factory=list)
-    output_schema: Optional[TableSchema] = None
 
     # False declares this stage INTENTIONALLY non-deterministic — it must
     # re-roll every run — so the runtime consults no stage-result cache for its
@@ -144,11 +144,11 @@ class StageCommon(_Base):
     # Declared here so StageDraft carries it too: the signature is authored, not
     # server-written. Each stored per-type model narrows it to its one form
     # (ExtendsSignature for the anchored family, ReplacesSignature for the
-    # reshaping family — app.models.stages.signature); the draft keeps the
-    # permissive union, per the StageDraft philosophy. Optional while the
-    # compiler still authors output_schema directly; when present it is checked
-    # against the config (find_signature_config_issues) and the declared
-    # schemas (find_signature_issues).
+    # reshaping family — app.models.stages.signature) and REQUIRES it: a stage's
+    # output schema resolves from the signature and nothing else. The draft
+    # keeps the permissive optional union, per the StageDraft philosophy. It is
+    # checked against the config (find_signature_config_issues) and the edges
+    # (find_signature_issues).
     signature: Optional[TransformSignature] = None
 
     @field_validator("inputs", mode="before")
@@ -171,7 +171,8 @@ class StageBase(StageCommon):
     type. Each type's own required config blocks and input arity are declared by
     its subclass under `app/models/stages/`."""
 
-    # False for the one type that emits files rather than a table (publish).
+    # False for the one type that emits files rather than a table (publish):
+    # every other type's signature must promise at least one output column.
     REQUIRES_OUTPUT_SCHEMA: ClassVar[bool] = True
 
     # True for the types whose registered handler can execute one authored
@@ -195,14 +196,7 @@ class StageBase(StageCommon):
         description=(
             "Upstream dependencies: each is an upstream stage id plus the REQUIRED schema "
             "this stage expects that input to satisfy — which is just the upstream stage's "
-            "output_schema."
-        ),
-    )
-    output_schema: Optional[TableSchema] = Field(
-        default=None,
-        description=(
-            "Columns this stage outputs. Optional when a `signature` is "
-            "declared — the output resolves from it; `publish` needs neither."
+            "output schema."
         ),
     )
     source: Optional[SourceRef] = None
@@ -229,11 +223,6 @@ class StageBase(StageCommon):
         supply. [] for a type whose config names no column."""
         return []
 
-    def find_output_schema_issues(self) -> list[str]:
-        """Every way the declared output_schema is undeliverable. [] for a type
-        whose internals, not its config, fix the output."""
-        return []
-
     def find_authored_code_block(self) -> Optional["AuthoredCode"]:
         """The block holding code a reviewer would otherwise have to read (it
         carries `summary` and `corner_cases`), None for a stage fixed entirely by
@@ -251,9 +240,7 @@ class StageBase(StageCommon):
         return None
 
     def resolve_output_schema(self) -> Optional[TableSchema]:
-        """The effective output schema: the stored one, else what the signature promises."""
-        if self.output_schema is not None and self.output_schema.columns:
-            return self.output_schema
+        """What the signature promises; None only for a stage that emits no table."""
         return promised_output_schema(self)
 
     def find_signature_config_issues(self) -> list[str]:
@@ -263,7 +250,7 @@ class StageBase(StageCommon):
     # ── the fingerprint ──────────────────────────────────────────────────────
     def compute_definition_fingerprint(self) -> str:
         """sha1[:16] over a sorted-key JSON dump of the output-determining subset
-        of this stage: {"type", "output_schema"} plus one entry per block
+        of this stage: {"type", "signature"} plus one entry per block
         `fingerprint_blocks` names.
         Every other field (id, name, source, inputs, review, cache, limit,
         compiler_notes, eval, tests) is incidental — it does not change what this
@@ -275,22 +262,15 @@ class StageBase(StageCommon):
         own fields — see e.g. QueueConfig, whose
         `routing`/`conflict_resolution`/`estimated_volume_per_week` route or match
         a decision without changing what the human is asked)."""
-        output_dump = (
-            self.output_schema.model_dump(mode="json", exclude_none=True)
-            if self.output_schema is not None else None
-        )
+        assert self.signature is not None  # _schemas_declared requires one
         fields: dict[str, Any] = {
             "type": self.type,
-            "output_schema": output_dump,
+            "signature": self.signature.model_dump(mode="json", exclude_none=True),
             **{
                 name: _trim_block_to_fingerprint_fields(block)
                 for name, block in self.fingerprint_blocks().items()
             },
         }
-        if self.signature is not None:
-            # Key absent when unset — like `tests` in the model dump — so every
-            # fingerprint recorded before signatures existed is unchanged.
-            fields["signature"] = self.signature.model_dump(mode="json", exclude_none=True)
         payload = json.dumps(fields, sort_keys=True, separators=(",", ":"), default=str)
         return compute_short_hash(payload)
 
@@ -330,10 +310,14 @@ class StageBase(StageCommon):
             for ref in self.inputs
             if not ref.table_schema.columns
         ]
-        if self.REQUIRES_OUTPUT_SCHEMA and not (
-            self.output_schema and self.output_schema.columns
-        ) and self.signature is None:
-            issues.append("declares no output_schema and no signature to resolve one from")
+        if self.signature is None:
+            issues.append("declares no signature, so nothing says what it outputs")
+        elif self.REQUIRES_OUTPUT_SCHEMA and isinstance(
+            self.signature, ReplacesSignature
+        ) and not self.signature.produces:
+            issues.append(
+                "its signature produces no columns — only publish emits no table"
+            )
         issues.extend(find_internal_namespace_column_issues(self))
         if issues:
             raise ValueError(f"type `{self.type}`: " + "; ".join(issues))
@@ -353,22 +337,6 @@ class StageBase(StageCommon):
         workflow. Cross-stage checks (unique ids, inputs resolve, acyclic) live
         in `workflow.graph_issues`."""
         issues = self.find_config_column_issues()
-        if issues:
-            raise ValueError("; ".join(issues))
-        return self
-
-    @model_validator(mode="after")
-    def _output_schema_deliverable(self) -> "StageBase":
-        """A declared output_schema must be deliverable by this stage's own
-        config: for the types whose output is fixed by config (join, aggregate,
-        union, filter_rows), every declared column must be producible by name,
-        with the declared type matching what the config computes, where that can be known.
-        EDGE-ONLY and per-stage, like _config_columns_resolve. Nothing to
-        check without a stored outer: deliverability compares two authored
-        accounts, and the signature's own cross-checks carry the rest."""
-        if self.output_schema is None:
-            return self
-        issues = self.find_output_schema_issues()
         if issues:
             raise ValueError("; ".join(issues))
         return self

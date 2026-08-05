@@ -27,7 +27,7 @@ one already in the workflow.
 Each stage is validated against the whole workflow-so-far before it is
 written: its own shape, unique ids, inputs resolving, no cycles, and edge
 conformance — a column a stage declares on an input that the upstream's
-output_schema does not supply is refused. The result reports every stage:
+resolved output does not supply is refused. The result reports every stage:
 
   added   — ids now in the workflow
   failed  — [{id, issues}]; that stage was NOT written, the rest still were

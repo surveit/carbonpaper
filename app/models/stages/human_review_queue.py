@@ -1,14 +1,20 @@
 """human_review_queue stage: the config block naming the columns the stage ADDS,
 the reviewer's verdict vocabulary, and the checks that every named column
-resolves — sources against the input edge, added names against output_schema."""
+resolves — sources against the input edge, added names against the signature."""
 from __future__ import annotations
 
 from enum import Enum
-from typing import ClassVar, Literal, Optional
+from typing import ClassVar, Literal, Mapping, Optional
 
 from pydantic import Field, field_validator
 
-from app.models.schema import SCALAR_COLUMN_TYPES, STR_COLUMN_TYPE, StageConfig, TableSchema
+from app.models.schema import (
+    SCALAR_COLUMN_TYPES,
+    STR_COLUMN_TYPE,
+    Column,
+    StageConfig,
+    TableSchema,
+)
 from app.models.stages.stage_base import StageBase, StageInput, StageType
 from app.models.stages.shared import find_predicate_column_issues
 from app.models.stages.node_spec import NodeTypeSpec
@@ -73,7 +79,7 @@ class HumanReviewQueueStage(StageBase):
     type: Literal[StageType.human_review_queue]
     queue: QueueConfig
     inputs: list[StageInput] = Field(default_factory=list, min_length=1, max_length=1)
-    signature: Optional[ExtendsSignature] = None
+    signature: ExtendsSignature
 
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
         return {"queue": self.queue}
@@ -88,40 +94,34 @@ class HumanReviewQueueStage(StageBase):
             + _find_added_column_collisions(sid, queue, input_schema)
         )
 
-    def find_output_schema_issues(self) -> list[str]:
-        sid, queue = self.id, self.queue
-        output_schema = self.resolve_output_schema()
-        assert output_schema is not None  # _schemas_declared runs first and requires one
-        input_schema = self.inputs[0].table_schema
-        return (
-            _find_reviewed_target_issues(sid, queue, input_schema, output_schema)
-            + _find_review_record_target_issues(sid, queue, output_schema)
-        )
-
-    # The signature is optional and names only what its author chose to declare, so it
-    # cannot own "this stage never overwrites an input column" — `queue` names the added
-    # columns whether or not a signature exists, and `_find_added_column_collisions` is
-    # the check that enforces it. What this adds is the tie between the two accounts: a
-    # signature may only claim adds the queue block already names, and may not claim a
-    # rewrite at all. Given that, the signature's own anchor-collision check
+    # `queue` names the added columns, and `_find_added_column_collisions` is what
+    # enforces "a review stage adds columns and never overwrites one" — it also catches
+    # two review stages in series reusing names. What this owns is the tie between the
+    # two accounts: the signature's adds and the queue block must name the SAME columns,
+    # each add carrying a spec the review runtime actually writes, and a rewrite is never
+    # claimable. Given that, the signature's own anchor-collision check
     # (signature._find_extends_issues) can only ever restate the config check's verdict.
     def find_signature_config_issues(self) -> list[str]:
-        signature = self.signature
-        assert signature is not None  # find_signature_config_issues runs only with one
         declared = {name for _, name in find_added_columns(self.queue)}
         issues = [
             f"stage '{self.id}': signature adds `{column.name}`, which the review "
             f"runtime never writes — this stage adds exactly the columns its queue "
             f"block names ({sorted(declared)})"
-            for column in signature.adds
+            for column in self.signature.adds
             if column.name not in declared
         ]
-        if signature.rewrites:
+        if self.signature.rewrites:
             issues.append(
                 f"stage '{self.id}': human_review_queue never revises an input "
                 f"column; rewrites are not supported"
             )
-        return issues
+        adds_by_name = {column.name: column for column in self.signature.adds}
+        input_schema = self.inputs[0].table_schema
+        return (
+            issues
+            + _find_reviewed_target_issues(self.id, self.queue, input_schema, adds_by_name)
+            + _find_review_record_target_issues(self.id, self.queue, adds_by_name)
+        )
 
 
 def resolve_queue_config(stage: StageBase) -> Optional[QueueConfig]:
@@ -132,8 +132,8 @@ def resolve_queue_config(stage: StageBase) -> Optional[QueueConfig]:
 
 
 def find_queue_column_issues(stage: HumanReviewQueueStage) -> list[str]:
-    """Every issue in one queue stage's column configuration, input side then output side."""
-    return stage.find_config_column_issues() + stage.find_output_schema_issues()
+    """Every issue in one queue stage's column configuration, config side then signature side."""
+    return stage.find_config_column_issues() + stage.find_signature_config_issues()
 
 
 def find_added_columns(queue: QueueConfig) -> list[tuple[str, str]]:
@@ -219,20 +219,21 @@ def _find_duplicate_added_names(sid: str, queue: QueueConfig) -> list[str]:
 
 
 def _find_reviewed_target_issues(
-    sid: str, queue: QueueConfig, input_schema: TableSchema, output_schema: TableSchema
+    sid: str, queue: QueueConfig, input_schema: TableSchema,
+    adds_by_name: Mapping[str, Column],
 ) -> list[str]:
-    # Each reviewed target must be declared on output_schema carrying its source
+    # Each reviewed target must be among the signature's adds carrying its source
     # column's full spec, and be at least as permissive about nulls. Framed as a
     # producer/consumer check over a one-column schema pair: the declared target is
     # the consumer, the source column renamed to the target is what supplies it.
     issues: list[str] = []
     for source, target in sorted(queue.reviewed_columns.items()):
         source_column = input_schema.column_for_name(source)
-        target_column = output_schema.column_for_name(target)
+        target_column = adds_by_name.get(target)
         if target_column is None:
             issues.append(
                 f"stage '{sid}': queue.reviewed_columns adds column '{target}', which "
-                f"output_schema does not declare"
+                f"the signature does not add"
             )
             continue
         if source_column is None:
@@ -249,27 +250,27 @@ def _find_reviewed_target_issues(
 
 
 def _find_review_record_target_issues(
-    sid: str, queue: QueueConfig, output_schema: TableSchema
+    sid: str, queue: QueueConfig, adds_by_name: Mapping[str, Column]
 ) -> list[str]:
     issues: list[str] = []
     for field, name in find_review_record_columns(queue):
-        column = output_schema.column_for_name(name)
+        column = adds_by_name.get(name)
         if column is None:
             issues.append(
-                f"stage '{sid}': {field} adds column '{name}', which output_schema "
-                f"does not declare"
+                f"stage '{sid}': {field} adds column '{name}', which the signature "
+                f"does not add"
             )
             continue
         if column.type != STR_COLUMN_TYPE:
             issues.append(
                 f"stage '{sid}': {field} column '{name}' is declared "
-                f"'{column.type}' in output_schema, but it is written as "
+                f"'{column.type}' in the signature, but it is written as "
                 f"'{STR_COLUMN_TYPE}'"
             )
         if not column.nullable and field != "queue.verdict_column":
             issues.append(
                 f"stage '{sid}': {field} column '{name}' is declared non-nullable in "
-                f"output_schema, but this stage writes no value into it for a row the "
+                f"the signature, but this stage writes no value into it for a row the "
                 f"filter skipped or auto-approve decided — declare it nullable. Only "
                 f"queue.verdict_column carries a value on every row."
             )
@@ -292,8 +293,7 @@ NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
             "the columns its own `queue` block names: one added column per "
             "`queue.reviewed_columns` entry, `queue.verdict_column`, `queue.reviewer_column`, "
             "`queue.reviewed_at_column`, and `queue.review_notes_column` when declared. "
-            "Declare all of them in output_schema; undeclared upstream columns are silently "
-            "dropped, so declare every column a later stage needs to read. The four "
+            "The signature `adds` all of them, with matching specs. The four "
             "record-of-review columns must be declared type str — `queue.reviewed_at_column` "
             "too, never date or datetime — and all but `queue.verdict_column` nullable, since "
             "a skipped or auto-approved row carries no reviewer, timestamp or note. "

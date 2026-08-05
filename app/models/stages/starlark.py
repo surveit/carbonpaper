@@ -116,7 +116,7 @@ class StarlarkRowFunctionStage(StageBase):
     # claimed writes at run time instead: the stage's output frame is validated
     # against output_schema, which find_signature_issues pins to this
     # signature.
-    signature: Optional[ExtendsSignature] = None
+    signature: ExtendsSignature
 
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
         return {"starlark": self.starlark}
