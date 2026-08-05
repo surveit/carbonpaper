@@ -1,5 +1,5 @@
-"""What one run's stage output actually holds, per column: the observed shape a
-schema gets declared from."""
+"""What one run's stage output actually holds, per column: the shape a schema gets
+declared from."""
 from __future__ import annotations
 
 from pydantic import BaseModel

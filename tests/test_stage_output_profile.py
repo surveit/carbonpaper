@@ -1,6 +1,6 @@
-"""Observing a stage's real output: a workflow test executes the stages you name over
-the slice you ask for, and observe_stage_output_data_range profiles several of that
-output's columns at once — never presenting a cut list as a whole vocabulary."""
+"""A stage's real output: a workflow test executes the stages you name over the slice
+you ask for, and profile_stage_output_data_range profiles several of that output's
+columns at once — never presenting a cut list as a whole vocabulary."""
 from __future__ import annotations
 
 import pandas as pd
@@ -138,17 +138,17 @@ def _load_stage(project) -> dict:
 # ── 3. The tool: several columns at once, never a cut list as a whole set ────
 
 
-def _observe(project_id, run_id, stage_id, columns, max_values=100):
+def _profile(project_id, run_id, stage_id, columns, max_values=100):
     from app.mcp import server
 
-    return server.observe_stage_output_data_range(
+    return server.profile_stage_output_data_range(
         project_id=project_id, run_id=run_id, stage_id=stage_id,
         columns=columns, max_values=max_values)
 
 
 def test_the_tool_profiles_several_columns_in_one_call(demo):
     run_id = run_workflow_test("demo", stage_ids=["load"])["run_id"]
-    result = _observe("demo", run_id, "load", ["status", "score"])
+    result = _profile("demo", run_id, "load", ["status", "score"])
     assert result["ok"] is True
     assert result["row_count"] == _ROW_COUNT
     assert [column["column"] for column in result["columns"]] == ["status", "score"]
@@ -156,7 +156,7 @@ def test_the_tool_profiles_several_columns_in_one_call(demo):
 
 def test_a_categorical_column_reports_a_count_per_value(demo):
     run_id = run_workflow_test("demo", stage_ids=["load"])["run_id"]
-    status = _observe("demo", run_id, "load", ["status"])["columns"][0]
+    status = _profile("demo", run_id, "load", ["status"])["columns"][0]
     assert status["values"] == [
         {"value": "awarded", "count": 8},
         {"value": "cancelled", "count": 8},
@@ -171,7 +171,7 @@ def test_a_categorical_column_reports_a_count_per_value(demo):
 def test_a_numeric_column_reports_its_range(demo):
     """min/max/mean/median is the answer for a numeric column; a value list is not."""
     run_id = run_workflow_test("demo", stage_ids=["load"])["run_id"]
-    score = _observe("demo", run_id, "load", ["score"])["columns"][0]
+    score = _profile("demo", run_id, "load", ["score"])["columns"][0]
     assert score["value_range"] == {
         "min": -2.0, "max": float(_ROW_COUNT - 3),
         "mean": float(_ROWS["score"].mean()), "median": float(_ROWS["score"].median()),
@@ -182,7 +182,7 @@ def test_a_numeric_column_reports_its_range(demo):
 def test_a_cut_list_reports_the_true_distinct_count_beside_it(demo):
     """The property that must not be lost: a cut list never reads as a whole set."""
     run_id = run_workflow_test("demo", stage_ids=["load"])["run_id"]
-    profile = _observe("demo", run_id, "load", ["doc_id"], max_values=2)["columns"][0]
+    profile = _profile("demo", run_id, "load", ["doc_id"], max_values=2)["columns"][0]
     assert len(profile["values"]) == 2
     assert profile["distinct_count"] == _ROW_COUNT
     assert profile["truncated"] is True
@@ -190,56 +190,56 @@ def test_a_cut_list_reports_the_true_distinct_count_beside_it(demo):
 
 def test_raising_max_values_returns_the_whole_vocabulary(demo):
     run_id = run_workflow_test("demo", stage_ids=["load"])["run_id"]
-    profile = _observe("demo", run_id, "load", ["doc_id"], max_values=500)["columns"][0]
+    profile = _profile("demo", run_id, "load", ["doc_id"], max_values=500)["columns"][0]
     assert profile["distinct_count"] == len(profile["values"]) == _ROW_COUNT
     assert profile["truncated"] is False
 
 
 def test_an_unknown_column_names_the_columns_the_output_has(demo):
     run_id = run_workflow_test("demo", stage_ids=["load"])["run_id"]
-    result = _observe("demo", run_id, "load", ["status", "stauts"])
+    result = _profile("demo", run_id, "load", ["status", "stauts"])
     assert result["ok"] is False
     assert "stauts" in result["error"] and "status" in result["error"]
     assert "columns" not in result
 
 
 def test_an_unknown_run_comes_back_as_a_loud_verdict(demo):
-    result = _observe("demo", "20990101T000000", "load", ["status"])
+    result = _profile("demo", "20990101T000000", "load", ["status"])
     assert result["ok"] is False
     assert result["error"]
 
 
-def test_a_column_a_stage_computes_is_observable_though_no_file_holds_it(demo):
+def test_a_column_a_stage_computes_is_profilable_though_no_file_holds_it(demo):
     """`label` exists only after classify runs — what a file read cannot answer."""
     run_id = run_workflow_test("demo", limit=6)["run_id"]
-    profile = _observe("demo", run_id, "classify", ["label"])["columns"][0]
+    profile = _profile("demo", run_id, "classify", ["label"])["columns"][0]
     assert [value["value"] for value in profile["values"]] == ["pos", "neg"]
 
 
 def test_the_tool_is_registered_on_the_glassbox_surface(demo):
     from app.mcp import server
 
-    assert "observe_stage_output_data_range" in {
+    assert "profile_stage_output_data_range" in {
         tool.name for tool in server.mcp._tool_manager.list_tools()}
 
 
 # ── The shared guidance rides both authoring surfaces ────────────────────────
 
 
-def test_both_authoring_surfaces_carry_the_observed_enum_guidance():
+def test_both_authoring_surfaces_carry_the_enum_from_data_guidance():
     from app.agents.compiler.prompt import EDITING_SYSTEM_PROMPT
     from app.mcp.server import INSTRUCTIONS
-    from app.models.observed_enum_note import OBSERVED_ENUM_GUIDANCE
+    from app.models.enum_from_data_note import ENUM_FROM_DATA_GUIDANCE
 
-    assert OBSERVED_ENUM_GUIDANCE in EDITING_SYSTEM_PROMPT
-    assert OBSERVED_ENUM_GUIDANCE in INSTRUCTIONS
+    assert ENUM_FROM_DATA_GUIDANCE in EDITING_SYSTEM_PROMPT
+    assert ENUM_FROM_DATA_GUIDANCE in INSTRUCTIONS
 
 
 def test_the_guidance_keeps_the_two_questions_and_the_sample_warning():
     from app.models.authoring_lifecycle_note import AUTHORING_LIFECYCLE_GUIDANCE
-    from app.models.observed_enum_note import OBSERVED_ENUM_GUIDANCE
+    from app.models.enum_from_data_note import ENUM_FROM_DATA_GUIDANCE
 
-    text = OBSERVED_ENUM_GUIDANCE
+    text = ENUM_FROM_DATA_GUIDANCE
     assert "GENERATION" in text and "thousands of values and still be closed" in text
     assert "Do WE consume it as a discrete set" in text and "MANDATORY" in text
     assert "distinct COUNT is evidence, never the criterion" in text
@@ -247,7 +247,7 @@ def test_the_guidance_keeps_the_two_questions_and_the_sample_warning():
     assert "SAMPLE, not the set" in text
     # No tool name in the shared text: the editing agent registers no run tool, so
     # each surface states its own recipe after embedding this.
-    for name in ("observe_stage_output_data_range", "run_workflow_test", "save_version"):
+    for name in ("profile_stage_output_data_range", "run_workflow_test", "save_version"):
         assert name not in text
     assert AUTHORING_LIFECYCLE_GUIDANCE not in text
 

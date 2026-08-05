@@ -1,5 +1,5 @@
 """Profile columns of a stage's stored output: the values one run really produced,
-so a declared schema comes from observation rather than from the methodology's prose."""
+so a declared schema comes from the data rather than from the methodology's prose."""
 from __future__ import annotations
 
 import pandas as pd

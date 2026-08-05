@@ -143,11 +143,11 @@ workflow. A just-created project appears here only once its first stage has
 been added, so a name missing from this list is a project with no stages
 yet, not a project that does not exist.""",
     ),
-    "observe_stage_output_data_range": ToolSpec(
-        name="observe_stage_output_data_range",
+    "profile_stage_output_data_range": ToolSpec(
+        name="profile_stage_output_data_range",
         description="""\
 Profile columns of one stage's stored output in a run: what the data actually
-holds, for declaring a schema from observation rather than from prose. `columns`
+holds, for declaring a schema from the data rather than from prose. `columns`
 is a LIST — ask for every column you are about to declare in one call.
 
 Per column: `null_count`, `distinct_count` (the TRUE count of distinct non-null
@@ -273,7 +273,7 @@ latest run. Returns the verdict {ok, run_id, version_id, stages_run, error}:
 `stages_run` is what actually executed, and `ok` False on any stage error with
 `error` naming what failed; poll get_run_status(project_id, run_id) for the
 same live/final manifest run_workflow exposes, or
-observe_stage_output_data_range for the values a stage produced. A project with
+profile_stage_output_data_range for the values a stage produced. A project with
 no stored version is a loud error.""",
     ),
     "set_draft_stage": ToolSpec(

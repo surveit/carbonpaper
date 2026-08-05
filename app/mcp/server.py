@@ -25,7 +25,7 @@ from app.models import (
     find_workflow_compiler_warnings,
 )
 from app.models.authoring_lifecycle_note import AUTHORING_LIFECYCLE_GUIDANCE
-from app.models.observed_enum_note import OBSERVED_ENUM_GUIDANCE
+from app.models.enum_from_data_note import ENUM_FROM_DATA_GUIDANCE
 from app.tools.tool_specs import SAVE_VERSION_FROM_WORKING_COPY, TOOL_SPECS
 from app.models.review_guide import ReviewGuideDraft
 from app.services.versioning import ReviewGuide
@@ -33,7 +33,7 @@ from app.models.stages.node_types import NODE_TYPES
 from app.runtime import stage_tests
 from app.services import generation
 from app.services import loader
-from app.services import observe as observe_service
+from app.services import frame_profile
 from app.services import project as project_service
 from app.services import run as run_service
 from app.services import versioning
@@ -83,10 +83,10 @@ the whole graph before it is stored.
 (Here, a limited run is run_workflow_test's `limit`/`offset` slice; a full run is
 run_workflow.)
 
-{OBSERVED_ENUM_GUIDANCE}
-(Here, to observe: save_version, then run_workflow_test(stage_ids=["<the input
+{ENUM_FROM_DATA_GUIDANCE}
+(Here: save_version, then run_workflow_test(stage_ids=["<the input
 stage id>"]) — naming a source stage EXECUTES it over its whole bound file — then
-observe_stage_output_data_range on what it wrote. edit_stage tightens the schema
+profile_stage_output_data_range on what it wrote. edit_stage tightens the schema
 afterwards.)
 
 # Setup
@@ -154,7 +154,7 @@ run_workflow(project_id, version_id?) starts a real run and returns a run_id,
 get_run_status(project_id, run_id) follows it to its outcome, and
 run_workflow_test(project_id, limit, version_id?, stage_ids?, offset?) executes any stored
 version — published or not — over `limit` rows of the real source, as a run marked
-is_test_run; observe_stage_output_data_range then profiles what a stage of it wrote.
+is_test_run; profile_stage_output_data_range then profiles what a stage of it wrote.
 
 # Constraints
 {_NODE_TYPE_CONSTRAINTS}
@@ -393,8 +393,8 @@ def run_workflow_test(
         return {"ok": False, "error": str(exc)}
 
 
-@mcp.tool(description=TOOL_SPECS["observe_stage_output_data_range"].description)
-def observe_stage_output_data_range(
+@mcp.tool(description=TOOL_SPECS["profile_stage_output_data_range"].description)
+def profile_stage_output_data_range(
     project_id: str,
     run_id: str,
     stage_id: str,
@@ -403,7 +403,7 @@ def observe_stage_output_data_range(
 ) -> dict[str, Any]:
     _resolve_existing_project(project_id)  # loud if the project doesn't exist
     try:
-        profile = observe_service.profile_stage_output(
+        profile = frame_profile.profile_stage_output(
             project_id, run_id, stage_id, columns, max_values=max_values)
     except _RUN_TOOL_ERRORS as exc:
         return {"ok": False, "error": str(exc)}
