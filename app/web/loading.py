@@ -12,11 +12,11 @@ from typing import Any
 import pandas as pd
 from fastapi import HTTPException
 
-from app.core.errors import NoVersionToRunError
-from app.core.frames import PARQUET_SUFFIX, list_rows
+from app.core.errors import NoVersionToRunError, StageOutputMissing
+from app.core.frames import list_rows, read_frame_file
 from app.models import Stage, StageType
 from app.models.stages.llm_transform import LLMTransformStage
-from app.runtime.manifest import load_manifest_model
+from app.runtime.manifest import load_manifest_model, resolve_output_path
 from app.services.run import resolve_version
 from app.services.loader import CompiledStageFile, load_compiled_dir
 from app.services.versioning import list_versions, load_version_stages
@@ -228,11 +228,6 @@ def load_manifest(run_dir: Path) -> dict[str, Any]:
 MAX_TABLE_ROWS = 5000
 
 
-def read_table(path: Path) -> pd.DataFrame:
-    """Read a stage output file (parquet or csv) into a DataFrame."""
-    return pd.read_parquet(path) if path.suffix == PARQUET_SUFFIX else pd.read_csv(path)
-
-
 # Excel on Windows reads a .csv in the machine's legacy code page (cp1252 on a
 # Western install) unless the file opens with a UTF-8 byte-order mark. Without
 # the mark, a run whose rows hold French or Dutch text downloads clean and then
@@ -264,15 +259,18 @@ def manifest_stage(run_dir: Path, stage_id: str) -> dict[str, Any]:
 def read_output_df(run_dir: Path, rel_path: str | None) -> pd.DataFrame:
     """A stage output file as a DataFrame. 404 if the stage has no output, the
     path escapes the run directory, or the file is missing on disk."""
-    if not rel_path:
+    try:
+        path = resolve_output_path(run_dir, rel_path)
+    except StageOutputMissing as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    if path is None:
         raise HTTPException(status_code=404, detail="Stage has no output file")
-    path = (run_dir / rel_path).resolve()
-    if not str(path).startswith(str(run_dir.resolve())) or not path.exists():
+    if not path.exists():
         raise HTTPException(
             status_code=404, detail=f"Output file missing on disk: {rel_path}"
         )
     try:
-        return read_table(path)
+        return read_frame_file(path)
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(
             status_code=500, detail=f"Could not read output file: {exc}"
@@ -333,11 +331,14 @@ def load_output_row(run_dir: Path, rel_path: str | None, row: int) -> dict[str, 
     an empty `preview` with `out_of_range` when the ordinal is past the end."""
     if not rel_path:
         return None
-    path = run_dir / rel_path
-    if not path.exists():
+    try:
+        path = resolve_output_path(run_dir, rel_path)
+    except StageOutputMissing as exc:
+        return {"error": str(exc)}
+    if path is None or not path.exists():
         return {"error": f"missing on disk: {rel_path}"}
     try:
-        df = read_table(path)
+        df = read_frame_file(path)
     except Exception as exc:  # noqa: BLE001
         return {"error": str(exc)}
     if row < 0 or row >= len(df):
@@ -357,11 +358,14 @@ def load_output_preview(run_dir: Path, rel_path: str | None) -> dict[str, Any] |
     file is missing on disk or can't be read."""
     if not rel_path:
         return None
-    path = run_dir / rel_path
-    if not path.exists():
+    try:
+        path = resolve_output_path(run_dir, rel_path)
+    except StageOutputMissing as exc:
+        return {"error": str(exc)}
+    if path is None or not path.exists():
         return {"error": f"missing on disk: {rel_path}"}
     try:
-        df = read_table(path)
+        df = read_frame_file(path)
     except Exception as exc:  # noqa: BLE001
         return {"error": str(exc)}
     return {
@@ -378,7 +382,7 @@ def queue_snapshot(project: str, run_id: str, stage_id: str) -> pd.DataFrame | N
     for ext in (".parquet", ".csv"):
         p = run_dir / "queue" / f"{stage_id}{ext}"
         if p.exists():
-            return read_table(p)
+            return read_frame_file(p)
     return None
 
 

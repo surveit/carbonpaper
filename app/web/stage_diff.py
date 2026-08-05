@@ -15,7 +15,9 @@ import pandas as pd
 
 from app.models import Stage, StageType
 from app.runtime.lineage import RowLineage, lineage_sidecar_path
-from app.web.loading import read_table, render_frame_as_text
+from app.runtime.manifest import resolve_output_path
+from app.core.frames import read_frame_file
+from app.web.loading import render_frame_as_text
 
 # The 1:1-by-position stage types the aligned diff covers: their runtime
 # contract maps output row i to input row i, so a positional comparison states
@@ -390,11 +392,11 @@ def _read_frame(run_dir: Path, rel_path: Optional[str]) -> Optional[pd.DataFrame
     """The persisted frame at `rel_path` under `run_dir`, or None where it cannot be read."""
     if not rel_path:
         return None
-    path = run_dir / rel_path
-    if not path.exists():
-        return None
     try:
-        return read_table(path)
+        path = resolve_output_path(run_dir, rel_path)
+        if path is None or not path.exists():
+            return None
+        return read_frame_file(path)
     except (OSError, ValueError):
         # An unreadable frame means fallback to the plain output view, whose own
         # loader reports the read error in the pane — nothing is hidden here.

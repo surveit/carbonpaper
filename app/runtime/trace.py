@@ -14,7 +14,7 @@ from typing import Any
 import pandas as pd
 
 from app.core.errors import RowOutOfRange, StageNotInRun
-from app.core.frames import PARQUET_SUFFIX
+from app.core.frames import read_frame_file
 from app.models.stage import StageType, is_grain_and_order_preserving
 from app.runtime.lineage import (
     EdgeKind,
@@ -22,6 +22,7 @@ from app.runtime.lineage import (
     RowParent,
     lineage_sidecar_path,
 )
+from app.runtime.manifest import resolve_output_path
 
 
 def _is_row_preserving(stage_type: str) -> bool:
@@ -99,13 +100,10 @@ def _origin(stage_type: str) -> str:
 
 
 def _read_output(run_dir: Path, stage_record: dict[str, Any]) -> pd.DataFrame | None:
-    rel = stage_record.get("output_path")
-    if not rel:
+    path = resolve_output_path(Path(run_dir), stage_record.get("output_path"))
+    if path is None or not path.exists():
         return None
-    path = Path(run_dir) / rel
-    if not path.exists():
-        return None
-    return pd.read_parquet(path) if path.suffix == PARQUET_SUFFIX else pd.read_csv(path)
+    return read_frame_file(path)
 
 
 def _scalar(value: Any) -> Any:

@@ -8,6 +8,10 @@ class StageNotInRun(ValueError):
     bad path/param (→ 404), not an internal fault."""
 
 
+class StageOutputMissing(ValueError):
+    """A stage of a run wrote no output frame — it errored, halted, or never started."""
+
+
 class RowOutOfRange(ValueError):
     """A trace was requested for a row ordinal outside a stage's output — a bad
     path/param (→ 400), not an internal fault."""

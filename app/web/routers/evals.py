@@ -24,7 +24,8 @@ from app.evals.store import (
 )
 from app.services.versioning import list_versions
 from app.web.config import projects_dir, REPO_ROOT, templates
-from app.web.loading import load_stages_or_empty, read_table, render_frame_as_text
+from app.core.frames import read_frame_file
+from app.web.loading import load_stages_or_empty, render_frame_as_text
 from app.web.project_view import shell_state
 
 router = APIRouter()
@@ -129,7 +130,7 @@ def _read_eval_dataset_preview(config: EvalConfig) -> dict[str, Any]:
     error: str | None = None
     capped = False
     try:
-        frame = read_table(REPO_ROOT / config.table.path)
+        frame = read_frame_file(REPO_ROOT / config.table.path)
         capped = len(frame) > DATASET_PREVIEW_ROWS
         rows = list_rows(render_frame_as_text(frame.head(DATASET_PREVIEW_ROWS)))
     except (OSError, ValueError) as exc:

@@ -143,6 +143,28 @@ workflow. A just-created project appears here only once its first stage has
 been added, so a name missing from this list is a project with no stages
 yet, not a project that does not exist.""",
     ),
+    "profile_stage_output_data_range": ToolSpec(
+        name="profile_stage_output_data_range",
+        description="""\
+Profile columns of one stage's stored output in a run: what the data actually
+holds, for declaring a schema from the data rather than from prose. `columns`
+is a LIST — ask for every column you are about to declare in one call.
+
+Per column: `null_count`, `distinct_count` (the TRUE count of distinct non-null
+values), `values` (commonest first, as text with their counts, cut to
+`max_values`), `truncated`, and on a numerically typed column `value_range`
+(min/max/mean/median). `truncated` means `values` is a prefix, not the
+vocabulary — raise `max_values` before declaring an enum from it.
+
+`row_count` is that stage's OWN output: far below the source under a filter or an
+aggregate, and a sample either way off a sliced run. Naming a source stage in
+run_workflow_test's `stage_ids` executes it over its whole bound file — that is
+what gives an input column its complete vocabulary.
+
+Reading the source file yourself answers a different question: the input stage
+pins the declared dtypes (a zero-padded "002" declared `str` stays "002"; a plain
+CSV read makes it 2), and a computed column is in no file at all.""",
+    ),
     "read_data_model": ToolSpec(
         name="read_data_model",
         description="""\
@@ -224,24 +246,35 @@ published, an unbound input) returns {ok: False, error} and starts no run.""",
 Run a workflow test, so an author can watch the pipeline execute on real
 data before publishing. It IS a real run — same `runs/` dir, manifest, and
 trace/view routes as run_workflow's — and differs from run_workflow on
-exactly five axes:
+exactly six axes:
 
 1. VERSION: any stored version, published or not (run_workflow pins a
-   published one). Omit `version_id` for the newest stored.
+   published one). Omit `version_id` for the newest stored. Runs execute a
+   STORED version, so save_version first — there is no unsaved-edits mode.
 2. SOURCE: the `limit` rows from `offset` of the workflow's bound source,
-   injected (run_workflow reads the whole source through input_data).
-3. EXECUTION: synchronous — this returns when the run is done (run_workflow
+   injected (run_workflow reads the whole source through input_data). `limit`
+   is the run's budget — every LLM stage pays per row, so state it; null is
+   the whole source.
+3. SCOPE: `stage_ids` names the stages to execute. A source stage named there
+   EXECUTES over its WHOLE bound file instead of taking the injected slice —
+   the way to see an input column's complete vocabulary without paying for the
+   stages below it. Every producer a named stage reads must be named too, or
+   run over the injected slice, or that stage errors on its absent input. Omit
+   `stage_ids` and every non-input stage runs.
+4. EXECUTION: synchronous — this returns when the run is done (run_workflow
    returns a run_id immediately and executes on a background thread).
-4. REVIEW QUEUE: a human_review_queue stage auto-approves every row in
+5. REVIEW QUEUE: a human_review_queue stage auto-approves every row in
    memory (run_workflow halts there and waits for a human).
-5. STAGE CACHE: read-only — it may replay a workflow run's cached results
+6. STAGE CACHE: read-only — it may replay a workflow run's cached results
    but records none of its own, so it cannot affect a later run.
 
 Marked `is_test_run` on the manifest, so it never counts as the project's
 latest run. Returns the verdict {ok, run_id, version_id, stages_run, error}:
-`ok` False on any stage error, with `error` naming what failed; poll
-get_run_status(project_id, run_id) for the same live/final manifest
-run_workflow exposes. A project with no stored version is a loud error.""",
+`stages_run` is what actually executed, and `ok` False on any stage error with
+`error` naming what failed; poll get_run_status(project_id, run_id) for the
+same live/final manifest run_workflow exposes, or
+profile_stage_output_data_range for the values a stage produced. A project with
+no stored version is a loud error.""",
     ),
     "set_draft_stage": ToolSpec(
         name="set_draft_stage",

@@ -25,6 +25,11 @@ from app.core.utils import compute_short_hash
 PARQUET_SUFFIX = ".parquet"
 
 
+def read_frame_file(path: Path) -> pd.DataFrame:
+    """Parquet, or the CSV a writer falls back to for a frame parquet cannot hold — by suffix."""
+    return pd.read_parquet(path) if path.suffix == PARQUET_SUFFIX else pd.read_csv(path)
+
+
 def list_rows(frame: pd.DataFrame) -> list[dict[str, Any]]:
     """`frame` as one dict per row, column label → cell value. The labels are
     pinned to `str`: pandas types them as `Hashable`, so a caller that keys a row

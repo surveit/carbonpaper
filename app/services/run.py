@@ -6,11 +6,14 @@ from __future__ import annotations
 import threading
 import traceback
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Mapping
+
+import pandas as pd
 
 from app.core.errors import RunNotFoundError, RunVersionUnresolvableError
 from app.models import Stage
-from app.runtime.manifest import load_manifest_model
+from app.runtime.manifest import load_manifest_model, read_stage_output_frame
 from app.runtime.runner import prepare_run, resume_run, run_prepared
 from app.services.errors import WorkflowLoadError
 from app.services.versioning import (
@@ -19,7 +22,7 @@ from app.services.versioning import (
     load_version_stages,
     resolve_version_id,
 )
-from app.services.workspace import repo_root, resolve_project_dir
+from app.services.workspace import repo_root, resolve_project_dir, resolve_run_dir
 
 
 def start_run(
@@ -112,7 +115,7 @@ def read_pinned_version(project: str, run_id: str) -> str:
     """The workflow version a run is pinned to, off its manifest."""
     # A run carrying no workflow_version predates the version model; fail loudly
     # rather than guessing which snapshot it meant.
-    run_dir = resolve_project_dir(project) / "runs" / run_id
+    run_dir = resolve_run_dir(project, run_id)
     workflow_version = load_manifest_model(run_dir).workflow_version
     if not workflow_version:
         raise RunVersionUnresolvableError(
@@ -123,19 +126,30 @@ def read_pinned_version(project: str, run_id: str) -> str:
     return workflow_version
 
 
+def read_stage_output(project: str, run_id: str, stage_id: str) -> pd.DataFrame:
+    """The rows one stage of one run actually produced. Every miss raises, naming what exists."""
+    run_dir = resolve_run_dir(project, run_id)
+    _validate_run_exists(run_dir, project, run_id)
+    return read_stage_output_frame(run_dir, stage_id)
+
+
 def read_run_status(project: str, run_id: str) -> dict[str, Any]:
     """A run's manifest.json as a dict, parsed through the typed `RunManifest`
     (so a legacy scalar `halted_at` is normalized to a list and unset optional
     fields stay omitted — the same shape the executor persisted). Raises
     RunNotFoundError if the run has no manifest — a bad/expired run id, surfaced
     loudly rather than as an empty or fabricated status."""
-    run_dir = resolve_project_dir(project) / "runs" / run_id
+    run_dir = resolve_run_dir(project, run_id)
+    _validate_run_exists(run_dir, project, run_id)
+    return load_manifest_model(run_dir).to_dict()
+
+
+def _validate_run_exists(run_dir: Path, project: str, run_id: str) -> None:
     if not (run_dir / "manifest.json").exists():
         raise RunNotFoundError(
             f"no run '{run_id}' for project '{project}' "
             f"(no manifest at {run_dir / 'manifest.json'})"
         )
-    return load_manifest_model(run_dir).to_dict()
 
 
 def resolve_version(project: str, version_id: str | None) -> str:
