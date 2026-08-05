@@ -3,7 +3,7 @@ chronological story/graph payload the template renders."""
 from __future__ import annotations
 
 from app.models import parse_stage, Stage
-from app.runtime.trace_view import build_trace_view
+from app.web.trace_view import build_trace_view
 
 
 def _stage(data: dict) -> Stage:

@@ -302,7 +302,7 @@ def _run_in_a_fresh_process(project: Path, *, db: Path, cwd: Path) -> None:
     repo_root = Path(__file__).resolve().parents[1]
     env = {k: v for k, v in os.environ.items() if k != "CARBONPAPER_FRAMES_ROOT"}
     result = subprocess.run(
-        [sys.executable, "-m", "app.runtime", project.name],
+        [sys.executable, "-m", "app.cli", project.name],
         cwd=cwd,
         env={**env, "PYTHONPATH": str(repo_root), "CARBONPAPER_DB_PATH": str(db),
              # The CLI takes a project NAME, so the fresh process needs the root to

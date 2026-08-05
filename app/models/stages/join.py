@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, ClassVar, Literal, Optional
 from pydantic import Field, model_validator
 
 from app.models.schema import StageConfig, _Base
-from app.models.stage_base import StageBase, StageInput, StageType
+from app.models.stages.stage_base import StageBase, StageInput, StageType
 from app.models.stages.shared import (
     COLUMN_ISSUE,
     INTERNAL_COLUMN_PREFIX,

@@ -1,21 +1,19 @@
 """Load + save for a project's compiled stage files.
 
 One JSON file per stage under `<project>/compiled/`. This module is the ONE place
-that knows the on-disk stage format, in both directions: nothing else should call
-`model_dump_json` on a stage or glob `compiled/*.json`.
+that reaches the disk for them: nothing else globs `compiled/*.json`.
 """
 from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
 
 from pydantic import ValidationError
 
 from app.core.paths import repo_root
 from app.models.workflow import Workflow, validate_workflow
-from app.models.stage import Stage, parse_stage
+from app.models.stage import Stage, parse_stage, stage_to_json
 from app.models.stages.code import PythonFunction
 from app.models.stages.starlark import StarlarkFunction
 from app.core.utils import format_errors
@@ -85,23 +83,7 @@ def load_workflow(project_dir: Path) -> list[Stage]:
     return load_workflow_object(project_dir).stages
 
 
-# ─── Serialize & save ────────────────────────────────────────────────────────
-
-def stage_to_spec_dict(stage: Stage) -> dict[str, Any]:
-    """The spec-dict form of a stage: field aliases restored (`schema`, not
-    `table_schema`), unset optionals dropped, enums/nested models JSON-normalised.
-    This is the ONE definition of 'a stage as data' — the on-disk JSON is a dump
-    of it, the belief hash is computed over it, and the raw-spec views render it,
-    so all three move together if the shape changes."""
-    return stage.model_dump(mode="json", by_alias=True, exclude_none=True)
-
-
-def stage_to_json(stage: Stage) -> str:
-    """The on-disk JSON text for one compiled stage — an indented dump
-    equal to `json.dumps(stage_to_spec_dict(stage))`. The single source of the
-    persisted format; write_stage and the raw-spec endpoints go through it."""
-    return stage.model_dump_json(indent=2, by_alias=True, exclude_none=True)
-
+# ─── Find & save ─────────────────────────────────────────────────────────────
 
 def find_stage_file(compiled_dir: Path, stage_id: str) -> Path | None:
     """The compiled file whose stage carries this id, or None. Reads each file

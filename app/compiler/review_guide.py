@@ -13,10 +13,9 @@ from app.core.agent.agent import Agent
 from app.core.agent.store import open_session_store
 from app.core.agent.turns import default_turn_manager
 from app.core.errors import GenerationError, ReviewGuideValidationError
-from app.models import Stage
+from app.models import Stage, stage_to_json
 from app.models.review_guide import ReviewGuideDraft
 from app.models.workflow import sort_stages_by_dependency
-from app.services.loader import stage_to_json
 
 # What the journalist's click asks for; the version's stages and the methodology
 # document follow it in the task, and it is what the session shows as their message.

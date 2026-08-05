@@ -29,6 +29,8 @@ from app.models.stage import (
     StageInput as StageInput,
     StageType as StageType,
     parse_stage as parse_stage,
+    stage_to_json as stage_to_json,
+    stage_to_spec_dict as stage_to_spec_dict,
     validate_stage as validate_stage,
 )
 from app.models.stages.aggregate import (

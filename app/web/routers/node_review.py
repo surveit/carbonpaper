@@ -14,8 +14,8 @@ from app.core.agent.store import MessageRole, PartType, open_session_store
 from app.services import generation, node_review, stage_edit, versioning
 from app.services import project as project_service
 from app.services.errors import WorkflowLoadError
-from app.services.loader import resolve_function_code, stage_to_json, stage_to_spec_dict
-from app.models import Stage
+from app.services.loader import resolve_function_code
+from app.models import Stage, stage_to_json, stage_to_spec_dict
 from app.runtime.stage_tests import find_failing_stage_tests
 from app.web.config import projects_dir, templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph

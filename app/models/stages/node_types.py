@@ -1,8 +1,7 @@
 """The node types as prompt copy, assembled from each stage module's own entry.
 
-Assembled here rather than in `app/models/stages/__init__.py`: `app.models.stage_base`
-imports `app.models.stages.shared`, so the package `__init__` runs before `StageBase`
-exists and cannot import modules that subclass it.
+Kept out of `app/models/stages/__init__.py`, which imports nothing: importing one
+stage module does not pull in the other nine.
 """
 from __future__ import annotations
 

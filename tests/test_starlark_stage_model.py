@@ -4,7 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.models.schema import Column, TableSchema
-from app.models.stage_base import StageInput, StageType
+from app.models.stages.stage_base import StageInput, StageType
 from app.models.stages.node_types import NODE_TYPES
 from app.models.stages.starlark import StarlarkFunction, StarlarkRowFunctionStage
 

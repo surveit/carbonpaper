@@ -17,11 +17,13 @@ from fastapi.responses import (
 from app.core.errors import ProjectExistsError
 from app.models import (
     find_workflow_compiler_warnings,
+    stage_to_json,
+    stage_to_spec_dict,
     validate_named_schema,
     validate_schema_library,
 )
 from app.services import generation, node_review, project, versioning
-from app.services.loader import resolve_function_code, stage_to_json, stage_to_spec_dict
+from app.services.loader import resolve_function_code
 from app.web.config import projects_dir, templates
 from app.runtime.stage_tests import run_stage_tests
 from app.web.stage_test_views import build_certification, shape_test_views

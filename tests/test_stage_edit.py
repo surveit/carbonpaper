@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from app.models import parse_stage
-from app.services import loader, node_review, stage_edit
+from app.models import parse_stage, stage_to_spec_dict
+from app.services import node_review, stage_edit
 from app.services.errors import WorkflowLoadError
 
 # A strictly-1:1 llm_transform (app/models/stage.py): its input and output
@@ -67,7 +67,7 @@ def test_id_mismatch_rejected(tmp_path: Path) -> None:
 def test_edit_after_approval_drops_to_edited_stale(tmp_path: Path) -> None:
     pdir = _seed(tmp_path)
     # Approve the CURRENT spec (hash it the same way the service does), then edit it.
-    original_hash = node_review.node_content_hash(loader.stage_to_spec_dict(parse_stage(_VALID)))
+    original_hash = node_review.node_content_hash(stage_to_spec_dict(parse_stage(_VALID)))
     node_review.record_node_decision(pdir, stage_id="score", content_hash=original_hash,
                                      decision="approve", reviewer="human")
     result = stage_edit.edit_stage_spec(pdir, "score", json.dumps({**_VALID, "name": "Score rows v2"}))
@@ -75,7 +75,7 @@ def test_edit_after_approval_drops_to_edited_stale(tmp_path: Path) -> None:
     # The writer no longer reports colour; recompute it the way the review layer
     # (and the node-edit route) does — the approved node still drops to amber.
     edited = json.loads((pdir / "compiled" / "02_score.json").read_text(encoding="utf-8"))
-    spec = loader.stage_to_spec_dict(parse_stage(edited))
+    spec = stage_to_spec_dict(parse_stage(edited))
     decisions = node_review.load_node_decisions(pdir)
     assert node_review.approval_state_for(spec, decisions)["state"] == "edited_stale"
 

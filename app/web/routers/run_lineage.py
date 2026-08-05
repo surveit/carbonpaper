@@ -13,8 +13,8 @@ from app.core.errors import RowOutOfRange, RunVersionUnresolvableError, StageNot
 from app.services.loader import resolve_function_code
 from app.services import run as run_service
 from app.runtime.trace import trace_row, trace_to_dict
-from app.runtime.trace_view import build_trace_view
 from app.web.stage_test_views import build_certification, shape_test_views
+from app.web.trace_view import build_trace_view
 from app.web.config import templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
 from app.web.loading import load_manifest, load_output_row, runs_dir

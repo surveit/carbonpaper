@@ -19,13 +19,13 @@ the base ref — passing `--root` at the base checkout's path, so the base
 ref never needs its own copy of this script.
 
 Reuses `tests/arch/test_import_graph.py`'s edge-finding, fan-in/fan-out
-degree, cycle-detection, and core-module-exemption logic (imported from
-*this* checkout's tests/ regardless of which root's `app` package is being
-scanned — that logic is pure Python over an edge list, not tied to a
-particular checkout's tests/ directory being present). That is the same
-logic the `app` architecture gate itself runs, so the report can never drift
-from what the gate enforces. Propagation cost is new logic the gate doesn't
-need, and lives here instead.
+degree, cycle-detection, and core-module logic (imported from *this*
+checkout's tests/ regardless of which root's `app` package is being scanned
+— that logic is pure Python over an edge list, not tied to a particular
+checkout's tests/ directory being present). Where the gate enforces a metric
+(cycles, fan-out) it runs this same code, so the report cannot drift from
+it. Propagation cost is new logic the gate doesn't need, and lives here
+instead.
 """
 from __future__ import annotations
 
@@ -181,10 +181,10 @@ def find_fan_extreme(
     degrees: dict[str, "ModuleDegree"], exclude: Callable[[str], bool]
 ) -> FanExtremeReport | None:
     """The maximum-degree module(s) among `degrees`, skipping any module
-    `exclude` rejects (the fan-in core exemption; fan-out has none, so its
-    caller passes a predicate that rejects nothing). Returns every module
-    tied for the maximum, or None if nothing qualifies (e.g. an empty
-    graph)."""
+    `exclude` rejects (max fan-in skips the core packages, whose popularity
+    is their job; fan-out skips nothing, so its caller passes a predicate
+    that rejects nothing). Returns every module tied for the maximum, or None
+    if nothing qualifies (e.g. an empty graph)."""
     candidates = [degree for degree in degrees.values() if not exclude(degree.module)]
     if not candidates:
         return None
@@ -240,16 +240,16 @@ def render_comment_body(head: ImportGraphMetricsReport, base: ImportGraphMetrics
 
 def _render_legend() -> str:
     """The table's one-line legend, naming the same core-package prefixes
-    `is_core_module` exempts from the fan-in ceiling — imported from
-    `tests/arch/test_import_graph.py` rather than re-typed, so this text can
-    never drift from what the exemption actually checks."""
+    `is_core_module` matches — imported from `tests/arch/test_import_graph.py`
+    rather than re-typed, so this text can never drift from what the max
+    fan-in row actually skips."""
     _make_tests_dir_importable()
     from arch.test_import_graph import describe_core_package_prefixes
 
     core_prefixes = ", ".join(f"`{prefix}`" for prefix in describe_core_package_prefixes())
     return (
         "_Δ = head vs base. ▲/▼/= = increased/decreased/unchanged. "
-        f"pp = percentage points. Core (fan-in exempt) = {core_prefixes}._"
+        f"pp = percentage points. Core (skipped by max fan-in) = {core_prefixes}._"
     )
 
 

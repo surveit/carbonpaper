@@ -5,22 +5,27 @@ A FastAPI app over a file-backed project artifact — one directory per project 
 Python across six packages. Vocabulary: **project**/**methodology**/**workflow** per
 [overview.md](overview.md).
 
+Two entrypoints sit above the packages, importing them and imported by nothing:
+`app/main.py` (the ASGI app — `python -m uvicorn app.main:app`) and `app/cli.py`
+(`python -m app.cli <project>` — one run of a project's newest published version,
+driven through `app/services/run.py`).
+
 ## `app/models/` — the schema layer (Pydantic)
 THE definition of what a workflow is. Constructing a model validates it;
 `validate_*` return issue lists, `parse_*` raise. **Dependency rule: imports nothing from
 runtime or web — keep it pure.** Checks the *spec*, distinct from RUNTIME data validation
 (`app/runtime/validation.py`, which checks dataframes).
-- `stage_base.py` — the stage types, and `StageBase`: the fields and rules every stored
-  stage satisfies whatever its type, plus `is_grain_and_order_preserving` (1:1 row
-  correspondence in order — the eval gate depends on it).
 - `stage.py` — `Stage`, the pydantic discriminated union over the per-type models keyed on
   `type` (parse a stage dict with `parse_stage`; `Stage` is an annotation, not a class), and
   `StageDraft`, the flat all-optional shape an authoring client submits.
-- `stages/` — one module per stage type, holding that type's config class, its `StageBase`
-  subclass (which declares the blocks that type REQUIRES and its input arity), and its own
-  validation helpers. `PythonFunction` and both python-transform stage models live in
-  `stages/code.py`; `StarlarkFunction` and `StarlarkRowFunctionStage` live in
-  `stages/starlark.py`.
+- `stages/stage_base.py` — the stage types, and `StageBase`: the fields and rules every
+  stored stage satisfies whatever its type, plus `is_grain_and_order_preserving` (1:1 row
+  correspondence in order — the eval gate depends on it).
+- `stages/` — one module per stage type alongside `stage_base.py`, holding that type's
+  config class, its `StageBase` subclass (which declares the blocks that type REQUIRES and
+  its input arity), and its own validation helpers. `PythonFunction` and both
+  python-transform stage models live in `stages/code.py`; `StarlarkFunction` and
+  `StarlarkRowFunctionStage` live in `stages/starlark.py`.
 - `schema.py` — `Column`, `TableSchema`, column-type vocab. `workflow.py` — graph checks
   (unique ids, inputs resolve, cycles). `named_schemas.py` — named schemas + FK `references`.
   `eval.py` — `EvalConfig` + grain-preservation gate. `table.py` — `TableRef`.
@@ -37,8 +42,7 @@ stages of the version the run pins. The runner reads no versions: the caller res
 the working copy, never a draft, never an unpublished version), loads its frozen stages and
 hands them in. `app/services/run.py` is the one place that composes this, and an
 import-linter contract keeps `runner.py` free of `app.services` so the arrow between the two
-points one way. `__main__.py` — the `python -m app.runtime <project>` CLI, over that same
-seam. Per stage: validate
+points one way; `app/cli.py` drives that same seam. Per stage: validate
 inputs, reject duplicate rows, dispatch, validate output, write `outputs/<stage>.parquet`,
 flush `manifest.json` mid-run; halt-on-review + resume; per-run `--limit`/`--offset`
 capping the rows a stage READS (cut off its inputs before its handler runs);

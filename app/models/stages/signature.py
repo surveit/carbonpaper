@@ -13,8 +13,8 @@ from app.models.schema import Column, StageId, TableSchema, _Base
 
 if TYPE_CHECKING:
     # Only under TYPE_CHECKING, mirroring app.models.stages.shared:
-    # app.models.stage_base imports this module at runtime.
-    from app.models.stage_base import StageBase
+    # app.models.stages.stage_base imports this module at runtime.
+    from app.models.stages.stage_base import StageBase
 
 
 class InputReads(_Base):

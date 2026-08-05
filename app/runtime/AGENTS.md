@@ -118,9 +118,10 @@ expected, an enum the possible.
 
 ## Run / debug
 ```
-python -m app.runtime <project>
+python -m app.cli <project>
 ```
-`__main__.py` is the CLI: it drives `app/services/run.py` (which resolves the newest
-published version and loads its stages), never `runner.py` directly. `<project>` is a
+`app/cli.py` is the CLI — a top-level entrypoint beside `app/main.py`, outside this
+package: it drives `app/services/run.py` (which resolves the newest published version and
+loads its stages), never `runner.py` directly. `<project>` is a
 NAME under the projects root, so a project outside it needs `CARBONPAPER_PROJECTS_DIR`.
 Outputs: `runs/<id>/{manifest.json, events.jsonl, outputs/*.parquet, artifacts/, queue/}`.

@@ -13,11 +13,10 @@ from typing import Any, ClassVar
 from pydantic import BaseModel, Field, ValidationError
 
 from app.core.errors import DocumentNotFound, DraftNotFoundError
-from app.models import Stage, parse_stage, validate_workflow
+from app.models import Stage, parse_stage, stage_to_spec_dict, validate_workflow
 from app.core.persistence import JsonDict, PersistedModel, PersistenceScope
 from app.core.utils import format_errors, generate_word_triplet_id
 from app.services import versioning, workspace
-from app.services.loader import stage_to_spec_dict
 from app.services.spec_migrations import (
     STAGE_SPEC_SCHEMA_VERSION,
     upgrade_stage_spec,

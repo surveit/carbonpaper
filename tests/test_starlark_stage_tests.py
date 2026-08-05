@@ -6,7 +6,7 @@ import pytest
 
 from app.compiler.stage_tests import build_stage_test_generator, render_generation_task
 from app.models import Stage, parse_stage
-from app.models.stage_base import find_stage_test_class
+from app.models.stages.stage_base import find_stage_test_class
 from app.models.stages.stage_tests import StarlarkRowFunctionStageTest
 from app.models.stages.starlark import StarlarkRowFunctionStage
 from app.runtime.stage_tests import (

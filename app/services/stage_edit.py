@@ -13,7 +13,7 @@ from pathlib import Path
 
 from typing import Sequence
 
-from app.models import StageDraft, parse_stage
+from app.models import StageDraft, parse_stage, stage_to_spec_dict
 from app.models.stages.code import SUMMARY_MAX_CHARS
 from app.models.workflow import (
     detect_cycle,
@@ -26,7 +26,6 @@ from app.services.loader import (
     find_stage_file,
     list_stage_files,
     load_workflow_object,
-    stage_to_spec_dict,
     write_stage,
 )
 

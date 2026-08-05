@@ -16,7 +16,14 @@ from typing import Any, ClassVar, Sequence
 from pydantic import BaseModel, field_validator
 
 from app.core.errors import ProjectExistsError
-from app.models import Coverage, SchemaLibrary, Stage, StageDraft
+from app.models import (
+    Coverage,
+    SchemaLibrary,
+    Stage,
+    StageDraft,
+    stage_to_json,
+    stage_to_spec_dict,
+)
 from app.models.review_guide import ReviewGuideDraft
 from app.services.versioning import ReviewGuide
 from app.core.persistence import PersistedModel, PersistenceScope
@@ -25,8 +32,6 @@ from app.services import data_model, node_review, stage_edit, versioning, worksp
 from app.services.loader import (
     load_compiled_dir,
     load_workflow,
-    stage_to_json,
-    stage_to_spec_dict,
     write_stage,
 )
 from app.services.errors import WorkflowLoadError

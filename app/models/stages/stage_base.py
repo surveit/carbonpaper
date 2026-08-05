@@ -1,8 +1,8 @@
 """Everything a stage carries whatever its type: the type vocabulary, the shared
 field list, and the base class each per-type stage model extends.
 
-Sits below `app/models/stages/*`, which define those per-type models, and below
-`app/models/stage.py`, which unions them into `Stage`.
+Sits below the per-type modules alongside it, and below `app/models/stage.py`,
+which unions them into `Stage`.
 """
 from __future__ import annotations
 

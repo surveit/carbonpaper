@@ -4,15 +4,14 @@ from typing import ClassVar, Literal, get_args
 import pytest
 from pydantic import ValidationError
 
-from app.models import Stage, parse_stage, StageTest, TableSchema
-from app.models.stage_base import StageBase, StageType, find_stage_test_class
+from app.models import Stage, parse_stage, stage_to_spec_dict, StageTest, TableSchema
+from app.models.stages.stage_base import StageBase, StageType, find_stage_test_class
 from app.models.stages.stage_tests import (
     FilterRowsStageTest,
     PythonFrameFunctionStageTest,
     PythonRowFunctionStageTest,
     build_stage_tests_model,
 )
-from app.services.loader import stage_to_spec_dict
 
 _IN_SCHEMA = {"columns": [{"name": "amount", "type": "float", "nullable": False}]}
 _OUT_SCHEMA = {"columns": [

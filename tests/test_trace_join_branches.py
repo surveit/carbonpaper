@@ -127,7 +127,7 @@ def test_branches_reach_the_render_payload(tmp_path):
     # The view offers a branch as a promotable trace; the template turns it into a
     # link back into this same page at that row.
     from app.runtime.trace import trace_to_dict
-    from app.runtime.trace_view import build_trace_view
+    from app.web.trace_view import build_trace_view
     view = build_trace_view(trace_to_dict(trace_row(_join_run(tmp_path), "j", 0)), {})
     by_stage = {n["stage_id"]: n for n in view["nodes"]}
     assert by_stage["j"]["branches"] == [
