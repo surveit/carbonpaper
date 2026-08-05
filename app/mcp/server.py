@@ -84,10 +84,10 @@ the whole graph before it is stored.
 run_workflow.)
 
 {ENUM_FROM_DATA_GUIDANCE}
-(Here: save_version, then run_workflow_test(stage_ids=["<the input
-stage id>"]) — naming a source stage EXECUTES it over its whole bound file — then
-profile_stage_output_data_range on what it wrote. edit_stage tightens the schema
-afterwards.)
+(Here: save_version, then run_workflow_test(stage_ids=["<the input stage id>"],
+limit=null) — a named source stage EXECUTES, and a null limit is the whole bound
+file — then profile_stage_output_data_range on what it wrote. edit_stage tightens
+the schema afterwards.)
 
 # Setup
 1. create_project(name, document) — the methodology prose becomes the project's source

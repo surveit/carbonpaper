@@ -36,10 +36,11 @@ def run_workflow_test(
 
     1. VERSION: any stored version, published or not (_resolve_workflow_test_version).
     2. SOURCE: `limit` rows from `offset`, injected (_read_source_slices) rather than
-       read whole through the input_data stage. `limit=None` injects the whole source.
+       read whole through the input_data stage. `limit=None` means the whole source.
     3. SCOPE: `stage_ids` names the stages to execute; None runs every non-input stage
-       (_frontier_stages). A source stage named here EXECUTES, reading its own whole
-       bound file — nothing is injected over a stage that runs.
+       (_frontier_stages). A source stage named here EXECUTES rather than taking an
+       injected frame, and reads the SAME window through the runtime's per-stage
+       limit — so `limit` means one thing either way (_source_row_windows).
     4. EXECUTION: synchronous; start_run launches a background daemon thread.
     5. REVIEW QUEUE: auto-approves in memory (queue_auto_approve) instead of halting.
     6. STAGE CACHE: read-only (RunContext.for_workflow_test_run) instead of read+write.
@@ -60,9 +61,11 @@ def run_workflow_test(
     run_dir = resolve_run_dir(project, run_id)
 
     executed_ids = [stage.id for stage in executing]
+    limits, offsets = _source_row_windows(executing, limit, offset)
     ok, error = _run_frontier(
         workflow, injected, executed_ids, run_dir, repo_root(),
-        project=project_dir.name, run_id=run_id, workflow_version=version)
+        project=project_dir.name, run_id=run_id, workflow_version=version,
+        limits=limits, offsets=offsets)
 
     return {
         "ok": ok,
@@ -100,6 +103,8 @@ def _run_frontier(
     project: str,
     run_id: str,
     workflow_version: str,
+    limits: dict[str, int],
+    offsets: dict[str, int],
 ) -> tuple[bool, str | None]:
     """Execute the frontier subset: normal return -> (True, None); a SubsetRunError
     (a stage errored) -> (False, its message). run_subset owns the manifest under
@@ -113,7 +118,8 @@ def _run_frontier(
             workflow, injected_outputs=injected, stage_ids=stage_ids,
             run_dir=run_dir, repo_root=repo_root, queue_auto_approve=True,
             project=project, workflow_version=workflow_version,
-            identity=RunIdentity(project=project, run_id=run_id), is_test_run=True)
+            identity=RunIdentity(project=project, run_id=run_id), is_test_run=True,
+            limits=limits, offsets=offsets)
     except SubsetRunError as exc:
         return False, str(exc)
     return True, None
@@ -137,6 +143,18 @@ def _frontier_stages(stages: list[Stage]) -> list[Stage]:
     (input_data — its output is injected, not computed). Publish stages run; their
     artifacts land run-scoped under the run dir, like any production run's."""
     return [stage for stage in stages if stage.type != StageType.input_data.value]
+
+
+def _source_row_windows(
+    executing: list[Stage], limit: int | None, offset: int,
+) -> tuple[dict[str, int], dict[str, int]]:
+    """The same `limit`/`offset` window, for each source stage that executes instead."""
+    sources = [
+        stage.id for stage in executing if stage.type == StageType.input_data.value
+    ]
+    limits = {} if limit is None else {sid: limit for sid in sources}
+    offsets = {} if offset == 0 else {sid: offset for sid in sources}
+    return limits, offsets
 
 
 def _read_source_slices(
