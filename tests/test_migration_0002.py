@@ -12,7 +12,7 @@ from typing import Any
 import pytest
 
 from app.models.workflow import parse_workflow
-from app.services.spec_migrations import upgrade_stage_spec
+from tools.stage_signatures import add_signature
 
 _REVISION = (Path(__file__).resolve().parents[1]
              / "alembic/versions/0002_name_queue_and_join_columns.py")
@@ -62,10 +62,11 @@ def test_a_v1_document_validates_under_todays_model_after_upgrading():
     document = {"stages": _v1_stages()}
     rev._upgrade_document(document, "proj")
 
-    # The revision brings the document to ITS shape; the read path then carries it
-    # the rest of the way, as the loader does for any stored payload.
-    stages = [upgrade_stage_spec(stage) for stage in document["stages"]]
-    parse_workflow(stages)  # raises if the upgraded shape is still invalid
+    # 0002 brings the document to ITS shape; 0006's synthesis carries it the rest
+    # of the way, as a store crossing both revisions would be.
+    for stage in document["stages"]:
+        add_signature(stage)
+    parse_workflow(document["stages"])  # raises if the upgraded shape is still invalid
 
     queue = document["stages"][3]["queue"]
     assert queue["verdict_column"] == "decision"
