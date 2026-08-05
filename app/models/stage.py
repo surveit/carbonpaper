@@ -87,6 +87,12 @@ def validate_stage(spec: Any) -> list[str]:
         return format_errors(err)
 
 
+# The version of the shape below: what a record embedding stages stamps into its
+# schema_version column, and what an alembic revision rewrites a payload up to.
+# v2: primary_key left the stage vocabulary (the data model keeps its own).
+STAGE_SPEC_SCHEMA_VERSION = 2
+
+
 def stage_to_spec_dict(stage: Stage) -> dict[str, Any]:
     """Aliases restored (`schema`, not `table_schema`); None-valued keys dropped."""
     return stage.model_dump(mode="json", by_alias=True, exclude_none=True)

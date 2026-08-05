@@ -13,16 +13,12 @@ from typing import Any, ClassVar
 from pydantic import Field, ValidationError
 
 from app.core.errors import DocumentNotFound, NoVersionToRunError, ReviewGuideValidationError
-from app.models import Coverage, Stage, stage_to_spec_dict
+from app.models import STAGE_SPEC_SCHEMA_VERSION, Coverage, Stage, stage_to_spec_dict
 from app.models.review_guide import ReviewGuideStep
 from app.models.workflow import parse_workflow
-from app.core.persistence import JsonDict, PersistedModel, PersistenceScope, get_store
+from app.core.persistence import PersistedModel, PersistenceScope, get_store
 from app.core.utils import format_errors
 from app.services import node_review
-from app.services.spec_migrations import (
-    STAGE_SPEC_SCHEMA_VERSION,
-    upgrade_stage_spec,
-)
 from app.services.errors import WorkflowLoadError
 from app.services.workspace import load_schemas
 
@@ -62,14 +58,6 @@ class WorkflowVersion(PersistedModel):
     published: bool = False
     published_at: str | None = None
     published_by: str | None = None
-
-    @classmethod
-    def _upgrade(cls, data: JsonDict) -> JsonDict:
-        """In-memory only, and never `schemas` — the data model keeps its keys."""
-        for spec in data.get("stages") or []:
-            if isinstance(spec, dict):
-                upgrade_stage_spec(spec)
-        return data
 
 
 class ReviewGuide(PersistedModel):

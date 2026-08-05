@@ -28,6 +28,7 @@ from app.models.stage import (
     StageDraft as StageDraft,
     StageInput as StageInput,
     StageType as StageType,
+    STAGE_SPEC_SCHEMA_VERSION as STAGE_SPEC_SCHEMA_VERSION,
     parse_stage as parse_stage,
     stage_to_json as stage_to_json,
     stage_to_spec_dict as stage_to_spec_dict,

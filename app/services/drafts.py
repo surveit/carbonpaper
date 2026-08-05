@@ -13,14 +13,16 @@ from typing import Any, ClassVar
 from pydantic import BaseModel, Field, ValidationError
 
 from app.core.errors import DocumentNotFound, DraftNotFoundError
-from app.models import Stage, parse_stage, stage_to_spec_dict, validate_workflow
-from app.core.persistence import JsonDict, PersistedModel, PersistenceScope
+from app.models import (
+    STAGE_SPEC_SCHEMA_VERSION,
+    Stage,
+    parse_stage,
+    stage_to_spec_dict,
+    validate_workflow,
+)
+from app.core.persistence import PersistedModel, PersistenceScope
 from app.core.utils import format_errors, generate_word_triplet_id
 from app.services import versioning, workspace
-from app.services.spec_migrations import (
-    STAGE_SPEC_SCHEMA_VERSION,
-    upgrade_stage_spec,
-)
 
 
 class Draft(PersistedModel):
@@ -42,13 +44,6 @@ class Draft(PersistedModel):
     draft_id: str
     parent_version: str | None = None
     stages: list[Stage] = Field(default_factory=list)
-
-    @classmethod
-    def _upgrade(cls, data: JsonDict) -> JsonDict:
-        for spec in data.get("stages") or []:
-            if isinstance(spec, dict):
-                upgrade_stage_spec(spec)
-        return data
 
 
 class DraftView(BaseModel):
