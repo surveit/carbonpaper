@@ -64,8 +64,11 @@ def _llm_stage(batch_size: int) -> Stage:
         "id": "score", "name": "Score", "type": "llm_transform",
         "inputs": [{"id": "src", "schema": {
             "columns": [{"name": "x", "type": "int", "nullable": True}]}}],
-        "output_schema": {
-            "columns": [{"name": "x", "type": "int", "nullable": True}, {"name": "verdict", "type": "str", "nullable": True}]},
+        "signature": {
+            "form": "extends",
+            "reads": [{"input": "src",
+                       "columns": [{"name": "x", "type": "int", "nullable": True}]}],
+            "adds": [{"name": "verdict", "type": "str", "nullable": True}]},
         "llm": {"prompt_instructions": "score it", "prompt_data_template": "{x}",
                 "batch_size": batch_size},
     })

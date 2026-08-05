@@ -19,8 +19,7 @@ def test_bad_filter_raises_instead_of_skipping_review(tmp_path):
             {"name": "claim_id", "type": "str", "nullable": False},
             {"name": "score", "type": "int", "nullable": True},
             {"name": "nonexistent", "type": "bool", "nullable": True}]}}],
-        "output_schema": {"columns": [{"name": "claim_id", "type": "str", "nullable": False}]
-                          + queue_added_columns()},
+        "signature": {"form": "extends", "adds": queue_added_columns()},
         "queue": {**QUEUE_COLUMNS, "filter": "nonexistent == True"},
     })
     # `score` is here because QUEUE_COLUMNS reviews it: the stage refuses a frame
@@ -46,8 +45,7 @@ def test_a_cell_the_filter_cannot_answer_names_the_stage_and_the_filter(tmp_path
         "inputs": [{"id": "a", "schema": {"columns": [
             {"name": "claim_id", "type": "str", "nullable": False},
             {"name": "score", "type": "int", "nullable": True}]}}],
-        "output_schema": {"columns": [{"name": "claim_id", "type": "str", "nullable": False}]
-                          + queue_added_columns()},
+        "signature": {"form": "extends", "adds": queue_added_columns()},
         "queue": {**QUEUE_COLUMNS, "filter": "score > 1"},
     })
     inputs = {"a": pd.DataFrame({

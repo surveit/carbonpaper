@@ -350,7 +350,7 @@ def test_publish_runs_its_side_effect_every_run_and_writes_no_entry(tmp_path):
     stage = parse_stage({
         "id": "pub", "name": "Publish", "type": "publish",
         "inputs": [{"id": "src", "schema": _X}],
-        "publish": {"destination": "build/"},
+        "publish": {"destination": "build/"}, "signature": {"form": "replaces"},
         "function": {"kind": "inline", "code": code},
     })
     handler = HANDLERS[StageType.publish]

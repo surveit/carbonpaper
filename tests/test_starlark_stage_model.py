@@ -6,6 +6,7 @@ from pydantic import ValidationError
 from app.models.schema import Column, TableSchema
 from app.models.stages.stage_base import StageInput, StageType
 from app.models.stages.node_types import NODE_TYPES
+from app.models.stages.signature import ExtendsSignature
 from app.models.stages.starlark import StarlarkFunction, StarlarkRowFunctionStage
 
 GOOD = "def transform(row):\n    return {'n': row['n'] + 1}\n"
@@ -17,7 +18,7 @@ _INPUT = StageInput(id="load", schema=_SCHEMA)
 def _stage(**overrides):
     fields = dict(
         id="bump", name="Bump n", type=StageType.starlark_row_function,
-        inputs=[_INPUT], output_schema=_SCHEMA,
+        inputs=[_INPUT], signature=ExtendsSignature(),
         starlark=StarlarkFunction(code=GOOD),
     )
     fields.update(overrides)

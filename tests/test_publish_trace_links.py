@@ -74,6 +74,7 @@ def _publish_stage(code: str, input_columns=_NAME_COLUMN) -> Stage:
         "name": "Report",
         "inputs": [{"id": "enrich", "schema": {"columns": input_columns}}],
         "publish": {"format": "html_report", "destination": "build/"},
+        "signature": {"form": "replaces"},
         "function": {"kind": "inline", "code": "import pandas as pd\n" + code},
     })
 

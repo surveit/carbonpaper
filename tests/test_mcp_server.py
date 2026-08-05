@@ -343,9 +343,13 @@ def test_mcp_add_stage_still_refuses_an_unknown_field(tmp_path, monkeypatch):
 _UNADDITIVE_LLM_STAGE = {
     "id": "score", "name": "Score", "type": "llm_transform",
     "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
-    # llm_transform must be additive and 1:1 — dropping the input's `amount`
-    # column breaks that, and `Stage` is where that rule lives.
-    "output_schema": {"columns": [{"name": "verdict", "type": "str", "nullable": True}]},
+    # The signature must read exactly what the template injects; reading `id`
+    # instead of `amount` breaks that, and `Stage` is where that rule lives.
+    "signature": {
+        "form": "extends",
+        "reads": [{"input": "load", "columns": [{"name": "id", "type": "str", "nullable": True}]}],
+        "adds": [{"name": "verdict", "type": "str", "nullable": True}],
+    },
     "llm": {"prompt_data_template": "judge {amount}"},
 }
 
@@ -366,7 +370,7 @@ def test_mcp_add_stage_refuses_an_invalid_stage_on_the_issues_channel(tmp_path, 
     )
 
     assert refused["ok"] is False
-    assert any("1:1" in issue for issue in refused["issues"])
+    assert any("prompt template" in issue for issue in refused["issues"])
     assert not (tmp_path / "trail" / "compiled" / "score.json").exists()
 
 

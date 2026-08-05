@@ -123,6 +123,7 @@ def test_valid_test_parses_on_python_row_stage():
 def test_tests_rejected_on_non_python_stage():
     bad = {
         "id": "load", "name": "Load", "type": "input_data",
+        "signature": {"form": "replaces", "produces": [{"name": "id", "type": "str", "nullable": True}]},
         "connector": {"kind": "file"},
         "tests": [{"name": "x", "inputs": {}, "expected": []}],
     }
@@ -145,7 +146,7 @@ def test_multi_input_test_missing_one_input_is_rejected():
             {"id": "left", "schema": left_schema},
             {"id": "right", "schema": right_schema},
         ],
-        "output_schema": left_schema,
+        "signature": {"form": "replaces", "produces": left_schema["columns"]},
         "function": {"kind": "inline", "code": "def transform(a, b):\n    return a\n"},
         "tests": [{
             "name": "only_left_supplied",

@@ -33,12 +33,13 @@ _CLEAN = {
         "adds": [{"name": "cleaned", "type": "bool", "nullable": False}],
     },
 }
-# Refused by Stage: an llm_transform must be additive and 1:1, and this drops
-# `amount`. The failure is real validation, not a fixture trick.
+# Refused by Stage: an llm_transform's signature must read exactly what its
+# template injects, and this reads nothing. Real validation, not a fixture trick.
 _SCORE_UNADDITIVE = {
     "id": "score", "name": "Score", "type": "llm_transform",
     "inputs": [{"id": "clean", "schema": _CLEANED}],
-    "output_schema": {"columns": [{"name": "verdict", "type": "str", "nullable": True}]},
+    "signature": {"form": "extends",
+                  "adds": [{"name": "verdict", "type": "str", "nullable": True}]},
     "llm": {"prompt_data_template": "judge {amount}"},
 }
 _RANK = {
@@ -119,7 +120,7 @@ def test_one_failure_keeps_the_independents_and_skips_only_its_dependency_cone(p
     assert result["added"] == ["load", "clean"]
     [failure] = result["failed"]
     assert failure["id"] == "score"
-    assert any("1:1" in issue for issue in failure["issues"])
+    assert any("does not read it" in issue for issue in failure["issues"])
     assert result["skipped"] == [
         {"id": "rank", "because": "inputs from score"},
         # transitive, and named by its NEAREST cause rather than the root
@@ -169,7 +170,7 @@ def test_a_one_element_list_refuses_exactly_as_the_singular_call_did(project):
     result = _call_add_stage([_SCORE_UNADDITIVE])
 
     assert result["ok"] is False
-    assert any("1:1" in issue for issue in result["issues"])
+    assert any("does not read it" in issue for issue in result["issues"])
     assert _list_stored_stage_ids(project) == {"load", "clean"}
 
 

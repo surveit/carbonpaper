@@ -19,8 +19,13 @@ def _join_stage(stage_type: str) -> Stage:
         "id": "m", "name": "Join", "type": stage_type,
         "inputs": [{"id": "subject", "schema": _SUBJECT},
                    {"id": "reference", "schema": _REFERENCE}],
-        "output_schema": {"columns": [{"name": "x", "type": "int", "nullable": True},
-                                      {"name": "z", "type": "str", "nullable": True}]},
+        "signature": {
+            "form": "extends",
+            "reads": [{"input": "subject", "columns": [
+                          {"name": "x", "type": "int", "nullable": True}]},
+                      {"input": "reference", "columns": [
+                          {"name": "x", "type": "int", "nullable": True}]}],
+            "adds": [{"name": "z", "type": "str", "nullable": True}]},
         "join": {"keys": [{"left": "x", "right": "x"}], "enrich_with": {"z": "z"}},
     })
 
