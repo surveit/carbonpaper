@@ -19,7 +19,7 @@ def _union_stage(sid: str, input_ids: list[str]) -> Stage:
     return parse_stage({
         "id": sid, "name": sid, "type": "union",
         "inputs": [{"id": i, "schema": _AB_SCHEMA} for i in input_ids],
-        "output_schema": _AB_SCHEMA,
+        "signature": {"form": "replaces", "produces": _AB_SCHEMA["columns"]},
         "union": {},
     })
 
@@ -28,7 +28,7 @@ def _filter_stage(sid: str, input_id: str, predicate_code: str) -> Stage:
     return parse_stage({
         "id": sid, "name": sid, "type": "filter_rows",
         "inputs": [{"id": input_id, "schema": _AB_SCHEMA}],
-        "output_schema": _AB_SCHEMA,
+        "signature": {"form": "extends"},
         "filter": {"code": predicate_code},
     })
 

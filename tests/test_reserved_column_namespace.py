@@ -12,13 +12,21 @@ from app import models as m
 
 
 def _row_function(output_schema: dict, input_columns: list[dict] | None = None) -> dict:
-    """A minimal python_row_function stage, so a test varies only its schemas."""
+    """A minimal python_row_function stage, so a test varies only its schemas.
+
+    `output_schema` names what the stage outputs; a row function only adds, so
+    whatever that names beyond the input edge becomes the signature's adds.
+    """
+    edge = input_columns or [{"name": "id", "type": "str", "nullable": True}]
+    flowing = {c["name"] for c in edge}
     return {
         "id": "t",
         "name": "t",
         "type": "python_row_function",
-        "inputs": [{"id": "up", "schema": {"columns": input_columns or [{"name": "id", "type": "str", "nullable": True}]}}],
-        "output_schema": output_schema,
+        "inputs": [{"id": "up", "schema": {"columns": edge}}],
+        "signature": {"form": "extends",
+                      "adds": [c for c in output_schema["columns"]
+                               if c["name"] not in flowing]},
         "function": {
             "kind": "inline",
             "code": "def transform(row: dict) -> dict:\n    return row\n",
@@ -60,7 +68,7 @@ def test_an_underscore_inside_a_column_name_is_fine():
     stage = m.parse_stage(
         _row_function({"columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "issue_area", "type": "str", "nullable": True}]})
     )
-    assert [c.name for c in stage.output_schema.columns] == ["id", "issue_area"]
+    assert [c.name for c in stage.resolve_output_schema().columns] == ["id", "issue_area"]
 
 
 def test_an_underscore_prefixed_key_nested_in_a_json_column_is_fine():
@@ -80,7 +88,7 @@ def test_an_underscore_prefixed_key_nested_in_a_json_column_is_fine():
             }
         )
     )
-    assert stage.output_schema.columns[1].fields[0].name == "_raw"
+    assert stage.resolve_output_schema().columns[1].fields[0].name == "_raw"
 
 
 def test_validate_stage_reports_it_as_a_non_fatal_issue():

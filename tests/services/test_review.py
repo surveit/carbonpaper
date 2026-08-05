@@ -26,13 +26,13 @@ def _stage(queue: dict[str, object] | None = None) -> Stage:
     return parse_stage({
         "id": "review", "name": "Review", "type": "human_review_queue",
         "inputs": [{"id": "scored", "schema": {"columns": _INPUT_COLUMNS}}],
-        "output_schema": {"columns": _INPUT_COLUMNS + _added_columns(block)},
+        "signature": {"form": "extends", "adds": _added_columns(block)},
         "queue": block,
     })
 
 
 def _added_columns(queue: Mapping[str, object]) -> list[dict[str, object]]:
-    # output_schema must declare every column the queue block adds, so the fixture reads
+    # The signature must add every column the queue block names, so the fixture reads
     # them off the block rather than restating them.
     reviewed = queue["reviewed_columns"]
     assert isinstance(reviewed, dict)

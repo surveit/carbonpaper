@@ -45,8 +45,16 @@ def _row_stage(output_columns: list[dict] | None = None) -> Stage:
         "inputs": [{"id": LOAD_ID, "schema": {"columns": _IN_COLUMNS}}],
         "function": {"kind": "inline",
                      "code": "def transform(row):\n    return row\n"},
-        "output_schema": {"columns": output_columns or _OUT_COLUMNS},
+        "signature": {"form": "extends", "adds": _added(output_columns or _OUT_COLUMNS,
+                                                       _IN_COLUMNS)},
     })
+
+
+def _added(output_columns, edge_columns):
+    """What `output_columns` names beyond `edge_columns` — an extends signature's
+    adds, since every anchor column flows through untouched."""
+    flowing = {c["name"] for c in edge_columns}
+    return [c for c in output_columns if c["name"] not in flowing]
 
 
 _REF_COLUMNS = [
@@ -64,7 +72,13 @@ def _join_stage(stage_type: str, output_columns: list[dict] | None = None) -> St
         "inputs": [{"id": LOAD_ID, "schema": {"columns": _IN_COLUMNS}},
                    {"id": REF_ID, "schema": {"columns": _REF_COLUMNS}}],
         "join": {"keys": [{"left": "name", "right": "name"}], "enrich_with": {"extra": "extra"}},
-        "output_schema": {"columns": output_columns or _ENRICHED_COLUMNS},
+        "signature": {
+            "form": "extends",
+            "reads": [{"input": LOAD_ID, "columns": [
+                          {"name": "name", "type": "str", "nullable": True}]},
+                      {"input": REF_ID, "columns": [
+                          {"name": "name", "type": "str", "nullable": True}]}],
+            "adds": _added(output_columns or _ENRICHED_COLUMNS, _IN_COLUMNS)},
     })
 
 

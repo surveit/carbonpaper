@@ -28,7 +28,9 @@ def _stage(code, function=None, output_schema=None, input_columns=_N_COLUMN):
     return parse_stage({
         "id": "t", "name": "t", "type": "starlark_row_function",
         "inputs": [{"id": "src", "schema": {"columns": input_columns}}],
-        "output_schema": output_schema or {"columns": input_columns},
+        "signature": {"form": "extends", "adds": [
+            c for c in (output_schema or {"columns": []})["columns"]
+            if c["name"] not in {i["name"] for i in input_columns}]},
         "starlark": starlark,
     })
 

@@ -22,18 +22,21 @@ _QUEUE_OUT = {"columns": _QUEUE_IN["columns"] + queue_added_columns()}
 
 
 def _file_input(id_, tmp_path, output_schema=_K):
-    return S(id=id_, type="input_data", output_schema=output_schema,
+    return S(id=id_, type="input_data",
+             signature={"form": "replaces", "produces": output_schema["columns"]},
              connector={"kind": "file", "params": {"path": str(tmp_path / f"{id_}.csv")}})
 
 
 def _py(id_, inputs, granularity="frame", schema=_K, **kw):
     """granularity 'row' -> python_row_function, else python_frame_function.
-    `schema` is both the schema declared on every input edge and the
-    output_schema — the inline transform is the identity."""
+    `schema` is both the schema declared on every input edge and what the stage
+    outputs — the inline transform is the identity."""
     type_ = "python_row_function" if granularity == "row" else "python_frame_function"
+    signature = ({"form": "extends"} if granularity == "row"
+                 else {"form": "replaces", "produces": schema["columns"]})
     return S(id=id_, type=type_, inputs=[{"id": i, "schema": schema} for i in inputs],
              function={"kind": "inline", "code": "def transform(row): return row"},
-             output_schema=schema, **kw)
+             signature=signature, **kw)
 
 
 def _ref(path="x.csv", cols=("k",)):
@@ -103,6 +106,7 @@ def test_publish_not_grain_and_order_preserving():
     # artifact paths — different rows from its input, never row-alignable.
     s = m.parse_stage(S(id="pub", type="publish",
                                  inputs=[{"id": "a", "schema": _K}], publish={},
+                                 signature={"form": "replaces"},
                                  function={"kind": "inline", "code": "def transform(row): return row"}))
     assert s.is_grain_and_order_preserving is False
 
@@ -140,8 +144,11 @@ def test_joins_and_aggregate_change_grain():
                                    aggregate={"group_by": ["g"],
                                               "aggregations": [{"formula": "sum", "output_column": "t",
                                                                 "value_column": "x"}]},
-                                   output_schema={"columns": [{"name": "g", "type": "str", "nullable": True},
-                                                              {"name": "t", "type": "int", "nullable": True}]}))
+                                   signature={
+                                       "form": "replaces",
+                                       "reads": [{"input": "a", "columns": agg_in["columns"]}],
+                                       "produces": [{"name": "g", "type": "str", "nullable": True},
+                                                    {"name": "t", "type": "int", "nullable": True}]}))
     assert j.is_grain_and_order_preserving is False    # fan-out
     assert agg.is_grain_and_order_preserving is False  # fan-in
 
