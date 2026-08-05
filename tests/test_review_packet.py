@@ -67,14 +67,12 @@ def _load_stage(root):
             "kind": "file",
             "params": {"path": str(root / "data" / "items.csv"), "format": "csv"},
         },
-        "output_schema": {"columns": _COLUMNS},
+        "signature": {"form": "replaces", "produces": _COLUMNS},
     }
 
 
-_COLUMNS = [
-    {"name": "name", "type": "str", "nullable": False},
-    {"name": "val", "type": "int", "nullable": False},
-]
+_VAL_COLUMN = {"name": "val", "type": "int", "nullable": False}
+_COLUMNS = [{"name": "name", "type": "str", "nullable": False}, _VAL_COLUMN]
 
 
 def _double_stage():
@@ -94,7 +92,12 @@ def _double_stage():
             ],
             "code": "def transform(row):\n    return {**row, 'val': row['val'] * 2}\n",
         },
-        "output_schema": {"columns": _COLUMNS},
+        # `name` flows through untouched, so it is neither read nor rewritten.
+        "signature": {
+            "form": "extends",
+            "reads": [{"input": "load", "columns": [_VAL_COLUMN]}],
+            "rewrites": [_VAL_COLUMN],
+        },
     }
 
 
