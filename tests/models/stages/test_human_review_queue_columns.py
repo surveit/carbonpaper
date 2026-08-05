@@ -30,13 +30,11 @@ _QUEUE = {
 
 
 def _stage_spec(*, queue=None, input_columns=None, output_columns=None):
-    """A queue stage outputting `output_columns`.
-
-    A review stage only ever ADDS, and every input column flows through, so the
-    signature's `adds` is whatever `output_columns` names beyond the input edge —
-    derived here so each test can keep saying what the stage OUTPUTS.
-    """
+    """A queue stage outputting `output_columns`."""
     edge = input_columns or _INPUT_COLUMNS
+    # A review stage only ADDS and every input column flows, so `adds` is
+    # whatever `output_columns` names beyond the edge — computed here so each
+    # test can keep saying what the stage OUTPUTS.
     outputs = output_columns or _OUTPUT_COLUMNS
     flowing = {c["name"] for c in edge}
     return {

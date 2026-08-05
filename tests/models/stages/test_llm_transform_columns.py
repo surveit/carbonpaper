@@ -15,8 +15,6 @@ _EDGE_COLUMNS = [{"name": "a", "type": "str", "nullable": False}]
 
 
 def _llm_stage(prompt_template):
-    # The signature must read exactly what the template injects, so derive it —
-    # these tests vary the template, and a hand-written read set would go stale.
     injected = find_template_fields(prompt_template)
     return {
         "id": "ask", "type": "llm_transform", "name": "ask",

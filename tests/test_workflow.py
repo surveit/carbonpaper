@@ -183,9 +183,7 @@ def test_llm_transform_valid_1to1_constructs():
 
 
 def test_llm_transform_rewriting_a_column_rejected():
-    """An llm_transform passes its input through untouched, so it may not revise
-    a column — dropping one it cannot even express, since every anchor column
-    flows through an `extends` signature."""
+    """It passes its input through untouched, so it may not revise a column."""
     with pytest.raises(ValidationError, match="rewrites are not supported"):
         parse_stage(_llm_1to1_dict(signature={
             "form": "extends",
@@ -336,9 +334,7 @@ def _publish_upstream_stages():
 
 
 def test_check_edge_schemas_raises_on_an_upstream_resolving_no_output():
-    """Every type but publish resolves an output schema, and a publish stage may
-    not be an upstream — so an upstream without one means validation was
-    bypassed, not a finding to report."""
+    """An upstream resolving none means validation was bypassed, not a finding to report."""
     with pytest.raises(ValueError, match="resolves no output schema"):
         m.validate_edge_schemas(_publish_upstream_stages())
 

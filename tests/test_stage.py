@@ -800,9 +800,7 @@ def test_fully_declared_stage_accepted(t):
 
 
 def test_input_data_rejects_a_missing_signature(tmp_path):
-    """input_data's exemption is input-side only: it takes no inputs, but its
-    signature still says what it produces — otherwise the first edge of every
-    workflow goes unchecked."""
+    """Its exemption is input-side only: the signature still says what it produces."""
     msg = _rejection_message(_input_data_spec(tmp_path, declare_output=False))
     assert "signature" in msg and "Field required" in msg
 

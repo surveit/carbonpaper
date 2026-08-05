@@ -20,8 +20,8 @@ def _aggregate_stage(*, group_by, edge_columns, value_column=None, where=None, f
     # compute_aggregate_output_types.
     #
     # These tests vary group_by and value_column to exercise the CONFIG checks,
-    # so `reads` is derived from the config: a pinned read set would fail its own
-    # cross-check first and mask them.
+    # so `reads` is computed from that config: a pinned read set would fail its
+    # own cross-check first and mask them.
     edge = {c: {"name": c, "type": "str", "nullable": False} for c in edge_columns}
     consumed = [name for name in dict.fromkeys([*group_by, value_column])
                 if name in edge]

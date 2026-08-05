@@ -37,13 +37,10 @@ def _input_refs(inputs):
 
 
 def _extends(refs, output_schema):
-    """The extends signature that outputs `output_schema` over anchor `refs[0]`.
-
-    These builders take the schema a stage OUTPUTS, which is what each test is
-    about; a row function only adds, so the adds are whatever that names beyond
-    the anchor edge.
-    """
+    """The extends signature outputting `output_schema` over anchor `refs[0]`."""
     anchor = refs[0]["schema"] if refs else None
+    # A row function only adds, so the adds are whatever `output_schema` names
+    # beyond the anchor edge — letting each test keep saying what it OUTPUTS.
     columns = getattr(anchor, "columns", None)
     if columns is None:
         columns = (anchor or {}).get("columns", [])

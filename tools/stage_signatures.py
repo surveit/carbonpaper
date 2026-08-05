@@ -58,15 +58,15 @@ def _synthesize_extends(spec: dict[str, Any], stage_type: str) -> dict[str, Any]
     edges = _edges(spec)
     if not edges:
         return None
-    if stage_type in ("enrich", "expand"):
+    if stage_type in (StageType.enrich, StageType.expand):
         return _synthesize_join(spec, edges)
     anchor_id, anchor_columns = edges[0]
     adds, rewrites = _split_outer_against_anchor(spec, anchor_columns)
-    if stage_type == "filter_rows":
+    if stage_type == StageType.filter_rows:
         return {"form": "extends"}  # keeps every kept row's columns unchanged
-    if stage_type == "human_review_queue":
+    if stage_type == StageType.human_review_queue:
         return {"form": "extends", "adds": adds}
-    if stage_type == "llm_transform":
+    if stage_type == StageType.llm_transform:
         injected = _template_fields(spec)
         reads = [c for c in anchor_columns if c.get("name") in injected]
         return {"form": "extends", "reads": _reads(anchor_id, reads), "adds": adds}
@@ -83,13 +83,10 @@ def _synthesize_extends(spec: dict[str, Any], stage_type: str) -> dict[str, Any]
 def _split_outer_against_anchor(
     spec: dict[str, Any], anchor_columns: list[dict[str, Any]]
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """The outer's columns as (adds, rewrites) against the anchor edge.
-
-    Refuses an outer that DROPPED an anchor column: an extends signature cannot
-    express a drop — every anchor column flows — so the stored payload does not
-    determine one.
-    """
+    """As (adds, rewrites) against the anchor edge; refuses an outer that DROPPED a column."""
     outer = _columns(spec.get("output_schema"))
+    # A drop is inexpressible in `extends` — every anchor column flows — so the
+    # payload does not determine a signature and a human must author it.
     anchor_by_name = {c.get("name"): c for c in anchor_columns}
     outer_names = {c.get("name") for c in outer}
     dropped = sorted(str(name) for name in anchor_by_name if name not in outer_names)
@@ -144,12 +141,12 @@ def _synthesize_replaces(spec: dict[str, Any], stage_type: str) -> dict[str, Any
     """A reshaping type: the outer IS `produces`; only the read set varies."""
     edges = _edges(spec)
     produces = _columns(spec.get("output_schema"))
-    if stage_type == "publish":
+    if stage_type == StageType.publish:
         return {"form": "replaces", "reads": _all_edge_reads(edges)}
-    if stage_type in ("union", "input_data"):
+    if stage_type in (StageType.union, StageType.input_data):
         # A union consumes no column; input_data has no input to read from.
         return {"form": "replaces", "produces": produces}
-    if stage_type == "aggregate":
+    if stage_type == StageType.aggregate:
         if not edges:
             return None
         anchor_id, anchor_columns = edges[0]

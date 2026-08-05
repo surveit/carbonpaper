@@ -12,12 +12,10 @@ from app import models as m
 
 
 def _row_function(output_schema: dict, input_columns: list[dict] | None = None) -> dict:
-    """A minimal python_row_function stage, so a test varies only its schemas.
-
-    `output_schema` names what the stage outputs; a row function only adds, so
-    whatever that names beyond the input edge becomes the signature's adds.
-    """
+    """A minimal python_row_function stage, so a test varies only its schemas."""
     edge = input_columns or [{"name": "id", "type": "str", "nullable": True}]
+    # A row function only adds, so whatever `output_schema` names beyond the
+    # input edge becomes the signature's adds.
     flowing = {c["name"] for c in edge}
     return {
         "id": "t",

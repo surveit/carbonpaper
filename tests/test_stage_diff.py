@@ -51,8 +51,7 @@ def _row_stage(output_columns: list[dict] | None = None) -> Stage:
 
 
 def _added(output_columns, edge_columns):
-    """What `output_columns` names beyond `edge_columns` — an extends signature's
-    adds, since every anchor column flows through untouched."""
+    """What `output_columns` names beyond `edge_columns` — an extends signature's adds."""
     flowing = {c["name"] for c in edge_columns}
     return [c for c in output_columns if c["name"] not in flowing]
 

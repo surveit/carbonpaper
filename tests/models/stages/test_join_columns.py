@@ -19,7 +19,7 @@ def _enrich_stage(*, left_columns, right_columns, key_left, key_right, enrich_wi
         ],
         "join": {"keys": [{"left": key_left, "right": key_right}], "enrich_with": enrich_with},
         # These tests vary the keys and the landed columns to exercise the CONFIG
-        # checks, so the signature is derived from the config rather than pinned:
+        # checks, so the signature is computed from that config rather than pinned:
         # a hand-written one would fail its own cross-check first and mask them.
         "signature": {
             "form": "extends",

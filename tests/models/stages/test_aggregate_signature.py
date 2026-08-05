@@ -7,8 +7,7 @@ from app.models.stage import parse_stage
 
 
 def _aggregate_stage(*, produces, aggregations):
-    """One aggregate stage dict grouping facilities by company, its input edge
-    declaring company:str, revenue:int, region:str."""
+    """One aggregate stage grouping facilities by company."""
     edge_schema = {
         "columns": [
             {"name": "company", "type": "str", "nullable": True},
@@ -31,7 +30,7 @@ def _aggregate_stage(*, produces, aggregations):
 
 
 def _reads_for(aggregations, edge_schema):
-    """Exactly what the aggregate config consumes: group_by plus each value column."""
+    """Exactly what the config consumes: group_by plus value columns."""
     consumed = ["company", *(op["value_column"] for op in aggregations
                              if op.get("value_column"))]
     by_name = {c["name"]: c for c in edge_schema["columns"]}

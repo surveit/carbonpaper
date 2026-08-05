@@ -35,8 +35,7 @@ _X_COLUMN = [{"name": "x", "type": "int", "nullable": True}]
 
 
 def _row_stage(output_schema=None, input_columns=_X_COLUMN):
-    """A row function outputting `output_schema` — extends-form, so its adds are
-    whatever that names beyond the input edge."""
+    """A row function outputting `output_schema`; its adds are what that names beyond the edge."""
     flowing = {c["name"] for c in input_columns}
     added = [c for c in (output_schema or {}).get("columns", [])
              if c["name"] not in flowing]

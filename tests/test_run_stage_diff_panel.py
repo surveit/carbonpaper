@@ -35,15 +35,17 @@ _LOAD_SCHEMA = {"columns": [{"name": "name", "type": "str", "nullable": True},
                             {"name": "junk", "type": "str", "nullable": True}]}
 _CLASSIFY_SCHEMA = {"columns": [{"name": "name", "type": "str", "nullable": True},
                                 {"name": "val", "type": "int", "nullable": True},
+                                {"name": "junk", "type": "str", "nullable": True},
                                 {"name": "label", "type": "str", "nullable": True}]}
 
-# Uppercases `name` where val > 1 (a changed cell), adds `label` (an added
-# column) and returns no `junk` (a dropped column), so the classify diff has
-# one of each to show.
+# Uppercases `name` where val > 1 (a changed cell) and adds `label` (an added
+# column), so the classify diff has one of each to show. It carries `junk`
+# through because it must: an `extends` signature flows every anchor column, so
+# a row-mapped stage cannot drop one — that is python_frame_function's job.
 _CLASSIFY_CODE = (
     "def transform(row):\n"
     "    name = row['name'].upper() if row['val'] > 1 else row['name']\n"
-    "    return {'name': name, 'val': row['val'],\n"
+    "    return {'name': name, 'val': row['val'], 'junk': row['junk'],\n"
     "            'label': 'big' if row['val'] > 1 else 'small'}\n"
 )
 
@@ -75,7 +77,8 @@ def _seed_compiled(pdir: Path, data_path: Path, routes_path: Path) -> None:
             "id": CLASSIFY_ID, "name": "Classify", "type": "python_row_function",
             "inputs": [{"id": LOAD_ID, "schema": _LOAD_SCHEMA}],
             "function": {"kind": "inline", "code": _CLASSIFY_CODE},
-            "signature": {"form": "extends", "adds": _CLASSIFY_ADDS},
+            "signature": {"form": "extends",
+                          "adds": [{"name": "label", "type": "str", "nullable": True}]},
         }),
         ("03_keep.json", {
             "id": KEEP_ID, "name": "Keep the small ones", "type": "filter_rows",
@@ -183,8 +186,8 @@ def test_the_rail_tallies_what_the_stage_did_in_one_line(run_ctx) -> None:
     """The header says what changed; the prose paragraph and caption that said it are gone."""
     _pdir, run_id = run_ctx
     strip = _diff_head(_panel(run_id, CLASSIFY_ID))
-    # classify adds `label`, drops `junk` and uppercases one name.
-    assert ">+1 col · −1 col · 1 cell changed</span>" in strip
+    # classify adds `label` and uppercases one name.
+    assert ">+1 col · 1 cell changed</span>" in strip
     assert "diff-summary" not in strip
 
 
@@ -345,20 +348,6 @@ def test_an_enrich_reads_as_a_diff_against_its_subject_input(run_ctx) -> None:
     # subject column.
     assert ">+1 col · 0 cells changed</span>" in strip
     assert "diff-col-new" in html and "north" in html
-
-
-def test_a_dropped_column_is_drawn_in_the_table_carrying_its_input_value(run_ctx) -> None:
-    _pdir, run_id = run_ctx
-    html = _panel(run_id, CLASSIFY_ID)
-    # classify returned no `junk`; the reader still sees what it held.
-    assert "diff-col-dropped" in html
-    assert 'title="dropped by this stage, carrying the input value"' in html
-    # The − is the colour-free mark; the strike stays on the NAME, so the mark
-    # itself is never drawn through (app/static/style.css splits the two).
-    assert '<span class="diff-mark">−</span><span class="diff-col-name">junk</span>' in html
-    # The input is the base, so `junk` holds its input position — ahead of the
-    # added `label` — rather than being exiled to the end of the table.
-    assert html.index('diff-col-name">junk') < html.index('diff-col-name">label')
 
 
 def test_the_two_tab_strip_replaces_inputs_and_outputs(run_ctx) -> None:
