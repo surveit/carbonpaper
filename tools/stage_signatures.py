@@ -11,9 +11,12 @@ from __future__ import annotations
 
 from typing import Any
 
+from pydantic import ValidationError as PydanticValidationError
+
 from app.core.errors import PredicateError
 from app.core.predicate import parse_predicate
 from app.core.prompt_template import find_template_fields
+from app.models.stages.human_review_queue import QueueConfig, find_added_columns
 from app.models.stages.stage_base import StageType
 
 _EXTENDS_TYPES = frozenset({
@@ -88,7 +91,7 @@ def _synthesize_extends(
     if stage_type == StageType.filter_rows:
         return {"form": "extends"}  # keeps every kept row's columns unchanged
     if stage_type == StageType.human_review_queue:
-        return {"form": "extends", "adds": adds}
+        return {"form": "extends", "adds": _queue_adds(spec)}
     if stage_type == StageType.llm_transform:
         injected = _template_fields(spec)
         reads = [c for c in anchor_columns if c.get("name") in injected]
@@ -128,6 +131,28 @@ def _split_outer_against_anchor(
         if c.get("name") in anchor_by_name and c != anchor_by_name[c.get("name")]
     ]
     return adds, rewrites
+
+
+def _queue_adds(spec: dict[str, Any]) -> list[dict[str, Any]]:
+    """A queue stage's adds: the columns its queue block names, in that order."""
+    # NOT the outer-minus-anchor diff every other anchored type uses. The model
+    # ties the two accounts together — signature.adds and the queue block must
+    # name the same columns — so a stored outer that also carried upstream
+    # columns would synthesize adds the review runtime never writes.
+    try:
+        queue = QueueConfig.model_validate(spec.get("queue") or {})
+    except PydanticValidationError as err:
+        raise SignatureUndeterminable(
+            f"stage {spec.get('id')!r} (human_review_queue): its queue block does "
+            f"not read, so what the stage adds is unknown: {err}"
+        ) from err
+    outer_by_name = {c.get("name"): c for c in _columns(spec.get("output_schema"))}
+    adds: list[dict[str, Any]] = []
+    for _, name in find_added_columns(queue):
+        column = outer_by_name.get(name)
+        if column is not None and column not in adds:
+            adds.append(column)
+    return adds
 
 
 def _synthesize_join(

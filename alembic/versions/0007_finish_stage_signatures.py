@@ -10,7 +10,11 @@ from typing import Any
 
 from alembic import op
 
-from tools.stage_signatures import add_signature, find_dropped_anchor_columns
+from tools.stage_signatures import (
+    SignatureUndeterminable,
+    add_signature,
+    find_dropped_anchor_columns,
+)
 
 revision = "0007"
 down_revision = "0006"
@@ -38,29 +42,41 @@ _COLLECTIONS = ("workflow_version", "draft")
 def upgrade() -> None:
     connection = op.get_bind()
     widened: list[str] = []
+    refused: list[str] = []
     for collection in _COLLECTIONS:
         rows = connection.exec_driver_sql(
             "SELECT id, data FROM documents WHERE collection=?", (collection,)
         ).fetchall()
         for doc_id, data in rows:
             document = json.loads(data)
-            if not _add_signatures(document, str(doc_id), widened):
+            try:
+                changed = _add_signatures(document, str(doc_id), widened)
+            except SignatureUndeterminable as exc:
+                # Refuse the RECORD, not the run: one document nothing can
+                # determine must not hold back every other project's repair. The
+                # document is left exactly as it was and named below.
+                refused.append(f"{doc_id}: {exc}")
+                continue
+            if not changed:
                 continue
             connection.exec_driver_sql(
                 "UPDATE documents SET data=? WHERE collection=? AND id=?",
                 (json.dumps(document), collection, str(doc_id)),
             )
-    _report(widened)
+    _report(widened, refused)
 
 
-def _report(widened: list[str]) -> None:
-    if not widened:
-        print("0007: no stage widened; every signature was determinable")
-        return
-    print(f"0007: {len(widened)} stage(s) WIDENED — each now emits columns its "
-          f"stored output_schema dropped:")
-    for line in widened:
-        print(f"  {line}")
+def _report(widened: list[str], refused: list[str]) -> None:
+    if widened:
+        print(f"0007: {len(widened)} stage(s) WIDENED — each now emits columns its "
+              f"stored output_schema dropped:")
+        for line in widened:
+            print(f"  {line}")
+    if refused:
+        print(f"0007: {len(refused)} document(s) REFUSED and left unmigrated — a "
+              f"human must author these before they will load:")
+        for line in refused:
+            print(f"  {line}")
 
 
 def downgrade() -> None:

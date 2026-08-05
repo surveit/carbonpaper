@@ -96,3 +96,19 @@ def test_0007_leaves_an_already_complete_document_untouched():
     rev = _load_revision("0007")
     rev._add_signatures(document, "proj/v1", [])
     assert rev._add_signatures(document, "proj/v1", []) is False
+
+
+def _queueless_queue_stage() -> dict[str, Any]:
+    """A queue stage whose queue block does not read — nothing determines its adds."""
+    return {"id": "gate", "name": "Gate", "type": "human_review_queue",
+            "inputs": [{"id": "src", "schema": {"columns": [
+                {"name": "id", "type": "str", "nullable": True}]}}],
+            "queue": {"filter": "id != ''"},
+            "output_schema": {"columns": [{"name": "id", "type": "str", "nullable": True}]}}
+
+
+def test_an_unreadable_queue_block_is_refused_not_guessed():
+    from tools.stage_signatures import SignatureUndeterminable, add_signature
+    import pytest
+    with pytest.raises(SignatureUndeterminable, match="queue block does not read"):
+        add_signature(_queueless_queue_stage(), allow_drops=True)
