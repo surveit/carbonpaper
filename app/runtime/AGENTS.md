@@ -107,9 +107,10 @@ stays the source of truth for stage status; this log is only ever the drill-down
   a pure function of its input row: re-running it may legitimately return a different answer,
   so `Stage.cache: false` belongs on it unless the answer is genuinely expected to be stable.
 
-`validation.py` — DATA validation of a dataframe against an `output_schema` (columns, types,
-enum vocabularies, ranges, nullability), distinct from the stage schemas in
-`app/models/`. An error-severity issue in the OUTPUT report (missing column, failed coercion,
+`validation.py` — DATA validation of a dataframe against a stage's resolved output
+schema (columns, types, enum vocabularies, ranges, nullability), distinct from the
+stage schemas in `app/models/`. `publish` is the one type that resolves none, and
+the report says so rather than checking nothing silently. An error-severity issue in the OUTPUT report (missing column, failed coercion,
 value outside a declared enum, null in a non-nullable column) fails the
 stage: the record is `error` with an `OutputSchemaViolation` and downstream stages are blocked.
 `validation_warnings` means warning-severity issues only. Input-side issues alone still only warn.
