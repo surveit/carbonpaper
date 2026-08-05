@@ -5,6 +5,7 @@ import pytest
 from app.core.frames import (
     FrameStore,
     collapse_null_forms,
+    compute_frame_fingerprint,
     is_bool_cell,
     is_exact_float_cell,
     is_exact_int_cell,
@@ -13,6 +14,7 @@ from app.core.frames import (
     is_sequence_cell,
     list_rows,
 )
+from app.core.stage_cache import compute_row_fingerprint
 
 
 @pytest.fixture
@@ -25,6 +27,68 @@ def test_save_then_load_roundtrips(frames):
     frames.save_frame("run_output", "proj/run1/stageA", df)
     loaded = frames.load_frame("run_output", "proj/run1/stageA")
     pd.testing.assert_frame_equal(loaded, df)
+
+
+# ── save_frame/load_frame are inverses ───────────────────────────────────────
+# One frame carrying every cell shape the store must hand back unchanged: the
+# list forms parquet is lossy about at the pandas boundary, and the scalar
+# columns whose Python types must not move to buy that.
+
+
+def build_every_cell_shape_frame() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "keywords": [["a", "b"], [], ["c", None]],
+            "count": [1, 2, 3],
+            "score": [1.5, 2.0, 3.25],
+            "flag": [True, False, True],
+            "name": ["x", "y", "z"],
+            "seen_at": pd.to_datetime(["2024-01-01", "2024-02-01", "2024-03-01"]),
+            "maybe_score": [1.0, None, 3.0],
+        }
+    )
+
+
+@pytest.fixture
+def round_tripped(frames):
+    df = build_every_cell_shape_frame()
+    frames.save_frame("run_output", "proj/every_shape", df)
+    return df, frames.load_frame("run_output", "proj/every_shape")
+
+
+def test_a_list_column_comes_back_as_python_lists(round_tripped):
+    saved, loaded = round_tripped
+    assert [type(cell) for cell in loaded["keywords"]] == [list, list, list]
+    assert list(loaded["keywords"]) == list(saved["keywords"])
+
+
+@pytest.mark.parametrize("column", ["count", "score", "flag", "name", "seen_at"])
+def test_a_scalar_columns_cell_types_survive_the_round_trip(round_tripped, column):
+    """int/float/bool/str/datetime keep their numpy-backed dtype and their exact cell
+    type."""
+    saved, loaded = round_tripped
+    assert [type(cell) for cell in loaded[column]] == [type(cell) for cell in saved[column]]
+    assert loaded[column].dtype == saved[column].dtype
+
+
+def test_a_null_bearing_column_comes_back_with_its_null_in_place(round_tripped):
+    saved, loaded = round_tripped
+    assert [is_null_form(cell) for cell in loaded["maybe_score"]] == [False, True, False]
+    assert loaded["maybe_score"].dtype == saved["maybe_score"].dtype
+
+
+def test_a_round_tripped_frame_keeps_its_frame_fingerprint(round_tripped):
+    """The frame-grain cache hit must not re-key the frame it answers with."""
+    saved, loaded = round_tripped
+    assert compute_frame_fingerprint(loaded) == compute_frame_fingerprint(saved)
+
+
+def test_a_round_tripped_frames_rows_keep_their_row_fingerprints(round_tripped):
+    """A frame-grain hit feeds the next stage's row cache — same rows, same keys."""
+    saved, loaded = round_tripped
+    assert [compute_row_fingerprint(row) for row in list_rows(loaded)] == [
+        compute_row_fingerprint(row) for row in list_rows(saved)
+    ]
 
 
 def test_load_missing_returns_none(frames):
@@ -146,7 +210,7 @@ def test_is_bool_cell_rejects_non_bools(value):
 
 @pytest.mark.parametrize("cell", [[1], (1,), np.array([1])])
 def test_is_sequence_cell_accepts_lists_tuples_and_arrays(cell):
-    # ndarray matters: a list column round-trips through parquet as one.
+    # ndarray matters: pandas' own parquet reader materializes a written list as one.
     assert is_sequence_cell(cell)
 
 
