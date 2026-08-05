@@ -29,31 +29,54 @@ class SignatureUndeterminable(ValueError):
     """A stored stage spec whose signature cannot be read off what it stored."""
 
 
-def add_signature(spec: dict[str, Any]) -> bool:
+def add_signature(spec: dict[str, Any], *, allow_drops: bool = False) -> bool:
     """Give `spec` the signature its outer implies and drop the outer; False if unchanged."""
+    # allow_drops=True turns the refusal below into a widening: the dropped
+    # columns FLOW into this stage's output, so the migrated stage emits columns
+    # the stored spec said it did not. Callers report what they widened —
+    # find_dropped_anchor_columns names them before the signature is written.
     if "signature" in spec and "output_schema" not in spec:
         return False
     if "signature" not in spec:
-        signature = _synthesize_signature(spec)
+        signature = _synthesize_signature(spec, allow_drops)
         if signature is not None:
             spec["signature"] = signature
     return spec.pop("output_schema", _MISSING) is not _MISSING or "signature" in spec
+
+
+def find_dropped_anchor_columns(spec: dict[str, Any]) -> list[str]:
+    """The anchor columns a stored outer dropped — what `extends` cannot express."""
+    if spec.get("type") not in _EXTENDS_TYPES:
+        return []
+    # A join's adds come from `enrich_with`, not from diffing the outer, so it has
+    # no anchor to drop from.
+    if spec.get("type") in (StageType.enrich, StageType.expand):
+        return []
+    edges = _edges(spec)
+    if not edges:
+        return []
+    _, anchor_columns = edges[0]
+    outer_names = {c.get("name") for c in _columns(spec.get("output_schema"))}
+    return sorted(str(c.get("name")) for c in anchor_columns
+                  if c.get("name") not in outer_names)
 
 
 _MISSING = object()
 
 
 # ── v3: the signature the stored outer and config imply ──────────────────────
-def _synthesize_signature(spec: dict[str, Any]) -> dict[str, Any] | None:
+def _synthesize_signature(spec: dict[str, Any], allow_drops: bool) -> dict[str, Any] | None:
     stage_type = spec.get("type")
     if stage_type in _EXTENDS_TYPES:
-        return _synthesize_extends(spec, stage_type)
+        return _synthesize_extends(spec, stage_type, allow_drops)
     if stage_type in _REPLACES_TYPES:
         return _synthesize_replaces(spec, stage_type)
     return None
 
 
-def _synthesize_extends(spec: dict[str, Any], stage_type: str) -> dict[str, Any] | None:
+def _synthesize_extends(
+    spec: dict[str, Any], stage_type: str, allow_drops: bool
+) -> dict[str, Any] | None:
     """An anchored type: what the outer added to (or revised on) its first input."""
     edges = _edges(spec)
     if not edges:
@@ -61,7 +84,7 @@ def _synthesize_extends(spec: dict[str, Any], stage_type: str) -> dict[str, Any]
     if stage_type in (StageType.enrich, StageType.expand):
         return _synthesize_join(spec, edges)
     anchor_id, anchor_columns = edges[0]
-    adds, rewrites = _split_outer_against_anchor(spec, anchor_columns)
+    adds, rewrites = _split_outer_against_anchor(spec, anchor_columns, allow_drops)
     if stage_type == StageType.filter_rows:
         return {"form": "extends"}  # keeps every kept row's columns unchanged
     if stage_type == StageType.human_review_queue:
@@ -81,16 +104,18 @@ def _synthesize_extends(spec: dict[str, Any], stage_type: str) -> dict[str, Any]
 
 
 def _split_outer_against_anchor(
-    spec: dict[str, Any], anchor_columns: list[dict[str, Any]]
+    spec: dict[str, Any], anchor_columns: list[dict[str, Any]], allow_drops: bool = False
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """As (adds, rewrites) against the anchor edge; refuses an outer that DROPPED a column."""
     outer = _columns(spec.get("output_schema"))
     # A drop is inexpressible in `extends` — every anchor column flows — so the
-    # payload does not determine a signature and a human must author it.
+    # payload does not determine a signature and a human must author it. Under
+    # allow_drops the caller has decided the drop was not intended: the columns
+    # flow and this stage's output widens by exactly them.
     anchor_by_name = {c.get("name"): c for c in anchor_columns}
     outer_names = {c.get("name") for c in outer}
     dropped = sorted(str(name) for name in anchor_by_name if name not in outer_names)
-    if dropped:
+    if dropped and not allow_drops:
         raise SignatureUndeterminable(
             f"stage {spec.get('id')!r} ({spec.get('type')}): its stored output_schema "
             f"drops input column(s) {dropped}, which an `extends` signature cannot "

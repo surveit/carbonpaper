@@ -36,11 +36,48 @@ def _stale_stage_ids(document: dict[str, Any]) -> list[str]:
     return [s["id"] for s in document["stages"] if "output_schema" in s]
 
 
+def _dropping_stage() -> dict[str, Any]:
+    """A row function whose stored outer dropped an anchor column."""
+    return {"id": "gate", "name": "Gate", "type": "python_row_function",
+            "inputs": [{"id": "src", "schema": {"columns": [
+                {"name": "id", "type": "str", "nullable": True},
+                {"name": "scratch", "type": "str", "nullable": True}]}}],
+            "function": {"kind": "inline", "summary": "Passes rows through.",
+                         "code": "def transform(row):\n    return row"},
+            "output_schema": {"columns": [{"name": "id", "type": "str", "nullable": True}]}}
+
+
 def test_every_stage_is_migrated_not_only_the_first():
     document = _document()
     assert _load_revision("0006")._add_signatures(document) is True
     assert _stale_stage_ids(document) == []
     assert all("signature" in s for s in document["stages"])
+
+
+def test_a_dropping_stage_is_widened_and_reported():
+    document = {"stages": [_dropping_stage()]}
+    widened: list[str] = []
+    assert _load_revision("0007")._add_signatures(document, "proj/v1", widened) is True
+    assert widened == ["proj/v1 :: gate (python_row_function) regains ['scratch']"]
+
+    from app.models import parse_stage
+    stage = parse_stage(document["stages"][0])
+    # The dropped column flows: it is back in the resolved output.
+    assert [c.name for c in stage.resolve_output_schema().columns] == ["id", "scratch"]
+
+
+def test_a_determinable_stage_is_not_reported_as_widened():
+    document = _document()
+    widened: list[str] = []
+    _load_revision("0007")._add_signatures(document, "proj/v1", widened)
+    assert widened == []
+
+
+def test_the_synthesis_still_refuses_a_drop_by_default():
+    from tools.stage_signatures import SignatureUndeterminable, add_signature
+    import pytest
+    with pytest.raises(SignatureUndeterminable):
+        add_signature(_dropping_stage())
 
 
 def test_0007_finishes_a_document_left_half_migrated():
@@ -50,11 +87,12 @@ def test_0007_finishes_a_document_left_half_migrated():
     add_signature(document["stages"][0])
     assert _stale_stage_ids(document) == ["b", "c"]
 
-    assert _load_revision("0007")._add_signatures(document) is True
+    assert _load_revision("0007")._add_signatures(document, "proj/v1", []) is True
     assert _stale_stage_ids(document) == []
 
 
 def test_0007_leaves_an_already_complete_document_untouched():
     document = _document()
-    _load_revision("0007")._add_signatures(document)
-    assert _load_revision("0007")._add_signatures(document) is False
+    rev = _load_revision("0007")
+    rev._add_signatures(document, "proj/v1", [])
+    assert rev._add_signatures(document, "proj/v1", []) is False
