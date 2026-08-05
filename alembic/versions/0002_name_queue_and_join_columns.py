@@ -31,7 +31,15 @@ _VERDICT, _REVIEWER, _REVIEWED_AT, _NOTES = (
 # project ever had), so nothing on disk answers this. Fill in one entry per
 # project, {project: {source column: added column}}, and re-run. Leaving a project
 # out fails the migration rather than inventing a reviewed column for it.
-_REVIEWED_COLUMNS_BY_PROJECT: dict[str, dict[str, str]] = {}
+_REVIEWED_COLUMNS_BY_PROJECT: dict[str, dict[str, str]] = {
+    "anti_activist_hate_on_x": {"severity_tier": "severity_tier_reviewed"},
+    "dsa_evidence_capture": {"severity_tier": "severity_tier_reviewed"},
+    "hate_on_activist_pages": {
+        "final_flag": "final_flag_reviewed",
+        "severity_tier": "severity_tier_reviewed",
+    },
+    "palm_oil_facility_asset": {"review_status": "review_status_reviewed"},
+}
 
 
 class UnmigratableRecord(Exception):
@@ -92,18 +100,17 @@ def _name_queue_columns(stage: dict[str, Any], project: str) -> None:
     if _NOTES in _column_names(stage.get("output_schema")):
         queue["review_notes_column"] = _NOTES
     queue["reviewed_columns"] = dict(_REVIEWED_COLUMNS_BY_PROJECT[project])
-    # The runtime writes every review-record column as text, whatever a v1 schema
-    # declared; a reviewed column carries its SOURCE column's type.
+    # The runtime writes every review-record column as text, whatever a v1 schema declared.
     for name in (_VERDICT, _REVIEWER, _REVIEWED_AT, queue.get("review_notes_column")):
         if name:
             _declare_column(stage, name, "str")
-    source_types = _column_types(stage["inputs"][0].get("schema"))
+    source_columns = _columns_by_name(stage["inputs"][0].get("schema"))
     for source, target in queue["reviewed_columns"].items():
-        if source not in source_types:
+        if source not in source_columns:
             raise UnmigratableRecord(
                 f"stage '{stage.get('id')}': reviewed column '{source}' is not on the input"
             )
-        _declare_column(stage, target, source_types[source])
+        _declare_reviewed_column(stage, source_columns[source], target)
 
 
 def _name_brought_columns(stage: dict[str, Any]) -> None:
@@ -128,6 +135,19 @@ def _name_brought_columns(stage: dict[str, Any]) -> None:
     join.pop("select", None)
 
 
+def _declare_reviewed_column(
+    stage: dict[str, Any], source_column: dict[str, Any], target: str
+) -> None:
+    """Carries the source's WHOLE spec — enum and nullability too, not just its type."""
+    columns = stage.setdefault("output_schema", {}).setdefault("columns", [])
+    declared = {**source_column, "name": target}
+    for index, column in enumerate(columns):
+        if column["name"] == target:
+            columns[index] = declared
+            return
+    columns.append(declared)
+
+
 def _declare_column(stage: dict[str, Any], name: str, type_name: str) -> None:
     """Add the column to the output schema, or correct the type a v1 schema gave it."""
     columns = stage.setdefault("output_schema", {}).setdefault("columns", [])
@@ -142,5 +162,5 @@ def _column_names(schema: dict[str, Any] | None) -> list[str]:
     return [column["name"] for column in (schema or {}).get("columns", [])]
 
 
-def _column_types(schema: dict[str, Any] | None) -> dict[str, str]:
-    return {column["name"]: column["type"] for column in (schema or {}).get("columns", [])}
+def _columns_by_name(schema: dict[str, Any] | None) -> dict[str, dict[str, Any]]:
+    return {column["name"]: column for column in (schema or {}).get("columns", [])}
