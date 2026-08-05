@@ -182,39 +182,46 @@ def test_llm_transform_valid_1to1_constructs():
     assert parse_stage(_llm_1to1_dict()).id == "score"
 
 
-def test_llm_transform_drops_input_column_rejected():
-    with pytest.raises(ValidationError, match="text"):
-        parse_stage(_llm_1to1_dict(output_schema={
-            "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True}]}))  # dropped `text`
-
-
-def test_llm_transform_modifies_column_schema_rejected():
-    with pytest.raises(ValidationError, match="text"):
-        parse_stage(_llm_1to1_dict(output_schema={
-            "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "int", "nullable": True},
-                        {"name": "score", "type": "int", "nullable": True}]}))  # `text` str -> int
+def test_llm_transform_rewriting_a_column_rejected():
+    """An llm_transform passes its input through untouched, so it may not revise
+    a column — dropping one it cannot even express, since every anchor column
+    flows through an `extends` signature."""
+    with pytest.raises(ValidationError, match="rewrites are not supported"):
+        parse_stage(_llm_1to1_dict(signature={
+            "form": "extends",
+            "reads": [{"input": "load",
+                       "columns": [{"name": "text", "type": "str", "nullable": True}]}],
+            "rewrites": [{"name": "text", "type": "int", "nullable": True}],
+            "adds": [{"name": "score", "type": "int", "nullable": True}],
+        }))
 
 
 def test_llm_transform_adds_nothing_rejected():
     with pytest.raises(ValidationError, match="adds no columns"):
-        parse_stage(_llm_1to1_dict(output_schema={
-            "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}]}))  # adds no new column
+        parse_stage(_llm_1to1_dict(signature={
+            "form": "extends",
+            "reads": [{"input": "load",
+                       "columns": [{"name": "text", "type": "str", "nullable": True}]}],
+        }))
 
 
 def test_parse_workflow_rejects_ineligible_llm_transform():
     """The load seam (parse_workflow → Stage construction) rejects a non-1:1 stage."""
-    bad = _llm_1to1_dict(output_schema={
-        "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}]})
+    bad = _llm_1to1_dict(signature={
+            "form": "extends",
+            "reads": [{"input": "load",
+                       "columns": [{"name": "text", "type": "str", "nullable": True}]}],
+        })
     with pytest.raises(ValidationError, match="adds no columns"):
         m.parse_workflow([bad])
 
 
 # ── Edge schema conformance (validate_edge_schemas) ───────────────────────────
 # A downstream stage's declared input schema (`inputs[i].schema`) is a REQUIREMENT
-# — possibly a projection — that the upstream stage's declared output_schema must
+# — possibly a projection — that the upstream stage's resolved output schema must
 # satisfy. Checked at save time as a cross-stage graph invariant.
 def _producer(**over):
-    """input_data stage `up` declaring an output_schema of {id, text, score}."""
+    """input_data stage `up` producing {id, text, score}."""
     base = dict(
         id="up", type="input_data",
         connector={"kind": "file"},
@@ -238,7 +245,7 @@ def _consumer(input_schema, **over):
         id="down", type="python_frame_function",
         inputs=[{"id": "up", "schema": input_schema}],
         function={"kind": "inline", "code": "def transform(df): return df"},
-        output_schema=input_schema,
+        signature={"form": "replaces", "produces": input_schema["columns"]},
     )
     base.update(over)
     return S(**base)
@@ -279,7 +286,7 @@ def test_check_edge_schemas_clean_when_producer_non_null_feeds_nullable_requirem
     # The review-queue pattern: producer emits `score` non-null; the consumer's
     # input schema requires it only as nullable — a compatible (safe) edge.
     stages = m.parse_workflow([
-        _producer(output_schema={"columns": [
+        _producer(signature={"form": "replaces", "produces": [
             {"name": "id", "type": "str", "nullable": True},
             {"name": "score", "type": "int", "nullable": False}]}),
         _consumer({"columns": [{"name": "score", "type": "int", "nullable": True}]}),
@@ -289,7 +296,7 @@ def test_check_edge_schemas_clean_when_producer_non_null_feeds_nullable_requirem
 
 def test_check_edge_schemas_flags_required_non_null_fed_by_nullable_producer():
     stages = [
-        parse_stage(_producer(output_schema={"columns": [
+        parse_stage(_producer(signature={"form": "replaces", "produces": [
             {"name": "id", "type": "str", "nullable": True},
             {"name": "score", "type": "int", "nullable": True}]})),
         parse_stage(_consumer(
@@ -311,14 +318,14 @@ def test_check_edge_schemas_flags_type_disagreement():
 
 
 def _publish_upstream_stages():
-    """`down` reads `pub`, the one stage type exempt from declaring an
-    output_schema — built without the graph validator, which rejects the edge."""
+    """`down` reads `pub`, the one stage type whose signature produces nothing —
+    built without the graph validator, which rejects the edge."""
     return [
         parse_stage(_producer()),
         parse_stage(
             S(id="pub", type="publish",
               inputs=[{"id": "up", "schema": {"columns": [{"name": "id", "type": "str", "nullable": True}]}}],
-              publish={"format": "json"},
+              publish={"format": "json"}, signature={"form": "replaces"},
               function={"kind": "inline",
                         "code": "def transform(df, output_dir): return df"})),
         parse_stage(
@@ -328,11 +335,11 @@ def _publish_upstream_stages():
     ]
 
 
-def test_check_edge_schemas_raises_on_an_upstream_declaring_no_output_schema():
-    """Every type but publish must declare an output_schema, and a publish stage
-    may not be an upstream — so an upstream without one means validation was
+def test_check_edge_schemas_raises_on_an_upstream_resolving_no_output():
+    """Every type but publish resolves an output schema, and a publish stage may
+    not be an upstream — so an upstream without one means validation was
     bypassed, not a finding to report."""
-    with pytest.raises(ValueError, match="declares no output_schema"):
+    with pytest.raises(ValueError, match="resolves no output schema"):
         m.validate_edge_schemas(_publish_upstream_stages())
 
 
@@ -363,12 +370,12 @@ def test_graph_issues_reports_a_dangling_input_instead_of_raising():
 
 # ── A publish stage may not be another stage's input (validate_publish_is_terminal) ─
 # A publish stage writes files instead of producing a table, so nothing downstream
-# can read from it. It is also the one type exempt from declaring an output_schema,
+# can read from it. It is also the one type whose signature produces nothing,
 # so this check is what keeps validate_edge_schemas from meeting an upstream it
 # cannot check.
 def _publish(stage_id="pub", inputs=("load",)):
     return S(id=stage_id, type="publish", inputs=[_in(i) for i in inputs],
-             publish={"format": "json"},
+             publish={"format": "json"}, signature={"form": "replaces"},
              function={"kind": "inline", "code": "def transform(df, output_dir): return df"})
 
 
@@ -379,7 +386,7 @@ _Y = {"columns": [{"name": "y", "type": "str", "nullable": True}]}
 def _reader(stage_id, upstream):
     return S(id=stage_id, type="python_frame_function", inputs=[_in(upstream)],
              function={"kind": "inline", "code": "def transform(df): return df"},
-             output_schema=_K)
+             signature={"form": "replaces", "produces": _K["columns"]})
 
 
 def _loader():
