@@ -28,7 +28,7 @@ _LOAD_SCHEMA = {"columns": [{"name": "doc_id", "type": "str", "nullable": True},
                             {"name": "score", "type": "int", "nullable": True}]}
 
 _CLASSIFY = {
-    "id": "classify", "type": "python_row_function", "name": "Label by sign",
+    "id": "classify", "type": "python_row_function", "description": "Label by sign",
     "inputs": [{"id": "load", "schema": _LOAD_SCHEMA}],
     # Carries `score` through: an `extends` signature flows every anchor column,
     # so a row function cannot drop one.
@@ -50,7 +50,7 @@ def demo(tmp_path):
     source = project / "data" / "rows.csv"
     _ROWS.to_csv(source, index=False)
     load = {
-        "id": "load", "type": "input_data", "name": "Load rows",
+        "id": "load", "type": "input_data", "description": "Load rows",
         "connector": {"kind": "file", "params": {"path": str(source), "format": "csv"}},
         "signature": {"form": "replaces", "produces": _LOAD_SCHEMA["columns"]},
     }
@@ -150,7 +150,7 @@ def test_reading_a_stage_that_wrote_no_output_is_loud(demo):
 
 def _load_stage(project) -> dict:
     return {
-        "id": "load", "type": "input_data", "name": "Load rows",
+        "id": "load", "type": "input_data", "description": "Load rows",
         "connector": {"kind": "file", "params": {
             "path": str(project / "data" / "rows.csv"), "format": "csv"}},
         "signature": {"form": "replaces", "produces": _LOAD_SCHEMA["columns"]},

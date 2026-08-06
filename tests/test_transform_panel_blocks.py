@@ -27,22 +27,22 @@ def _seed_project(root: Path) -> None:
     compiled = root / "alpha" / "compiled"
     compiled.mkdir(parents=True)
     (compiled / "01_load.json").write_text(json.dumps({
-        "id": "load", "name": "Load", "type": "input_data",
+        "id": "load", "description": "Load", "type": "input_data",
         "connector": {"kind": "file"}, "signature": {"form": "replaces", "produces": _SCHEMA["columns"]},
     }), encoding="utf-8")
     (compiled / "02_load_more.json").write_text(json.dumps({
-        "id": "load_more", "name": "Load more", "type": "input_data",
+        "id": "load_more", "description": "Load more", "type": "input_data",
         "connector": {"kind": "file"}, "signature": {"form": "replaces", "produces": _SCHEMA["columns"]},
     }), encoding="utf-8")
     (compiled / "03_all_filings.json").write_text(json.dumps({
-        "id": "all_filings", "name": "Every filing", "type": "union",
+        "id": "all_filings", "description": "Every filing", "type": "union",
         "inputs": [{"id": "load", "schema": _SCHEMA},
                    {"id": "load_more", "schema": _SCHEMA}],
         "signature": {"form": "replaces", "produces": _SCHEMA["columns"]},
         "union": {},
     }), encoding="utf-8")
     (compiled / "04_incidental.json").write_text(json.dumps({
-        "id": "select_incidental_filings", "name": "The incidental mentions",
+        "id": "select_incidental_filings", "description": "The incidental mentions",
         "type": "filter_rows",
         "inputs": [{"id": "all_filings", "schema": _SCHEMA}],
         "signature": {"form": "extends"},

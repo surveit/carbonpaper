@@ -492,7 +492,6 @@ _GRANDFATHERED: frozenset[str] = frozenset(
         "app/web/chat_router.py::new_agent_session",
         "app/web/chat_router.py::post_message",
         "app/web/config.py::friendly_time",
-        "app/web/diagrams.py::_build_workflow_node_label",
         "app/web/diagrams.py::_collect_er_fk_edges",
         "app/web/diagrams.py::_collect_table_fk_edges",
         "app/web/diagrams.py::_node_view",

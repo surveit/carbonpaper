@@ -25,7 +25,7 @@ def _v1_draft() -> dict[str, Any]:
               "primary_key": ["id"]}
     return {
         "id": "proj/brisk-otter-lamp", "draft_id": "brisk-otter-lamp",
-        "stages": [{"id": "tag", "name": "Tag", "type": "python_row_function",
+        "stages": [{"id": "tag", "description": "Tag", "type": "python_row_function",
                     "inputs": [{"id": "src", "schema": dict(schema)}],
                     "function": {"kind": "inline", "summary": "Passes rows through.",
                                  "code": "def transform(row):\n    return row"},

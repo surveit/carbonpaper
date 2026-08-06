@@ -21,7 +21,6 @@
     {
       "stage_id": "load",
       "type": "input_data",
-      "name": "Load load",
       "started_at": "2026-07-24T16:42:39",
       "status": "ok",
       "input_validation_report": [],
@@ -47,7 +46,6 @@
     {
       "stage_id": "boom",
       "type": "python_frame_function",
-      "name": "Boom",
       "started_at": "2026-07-24T16:42:39",
       "status": "error",
       "input_validation_report": [],
@@ -64,7 +62,6 @@
     {
       "stage_id": "tail",
       "type": "python_frame_function",
-      "name": "Tail",
       "status": "pending",
       "input_validation_report": [],
       "output_validation_report": null,

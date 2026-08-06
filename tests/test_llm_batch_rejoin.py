@@ -15,7 +15,7 @@ _SRC = pd.DataFrame({"post_id": ["a", "b", "c"], "text": ["ta", "tb", "tc"]})
 
 def _stage(batch_size: int = 3, max_retries: int = 0) -> Stage:
     return parse_stage({
-        "id": "process", "name": "Process", "type": "llm_transform",
+        "id": "process", "description": "Process", "type": "llm_transform",
         "inputs": [{"id": "load", "schema": {
             "columns": [{"name": "post_id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}]}}],
         "signature": {

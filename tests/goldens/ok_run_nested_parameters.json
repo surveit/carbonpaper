@@ -23,7 +23,6 @@
     {
       "stage_id": "load",
       "type": "input_data",
-      "name": "Load load",
       "started_at": "2026-07-24T16:42:39",
       "status": "ok",
       "input_validation_report": [],

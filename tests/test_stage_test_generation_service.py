@@ -45,12 +45,12 @@ def _seed_project(project_dir: Path, *, existing_tests: list[dict] | None = None
     compiled = project_dir / "compiled"
     compiled.mkdir()
     (compiled / "01_load.json").write_text(json.dumps({
-        "id": "load", "name": "Load", "type": "input_data",
+        "id": "load", "description": "Load", "type": "input_data",
         "connector": {"kind": "file"},
         "signature": {"form": "replaces", "produces": _IN_SCHEMA["columns"]},
     }), encoding="utf-8")
     double_spec: dict[str, Any] = {
-        "id": "double", "name": "Double", "type": "python_row_function",
+        "id": "double", "description": "Double", "type": "python_row_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
         "signature": {
             "form": "extends",
@@ -154,12 +154,12 @@ def test_finish_stage_tests_preserves_null_cells(tmp_path: Path):
         {"name": "flag", "type": "bool", "nullable": True},
     ]}
     (compiled / "01_load.json").write_text(json.dumps({
-        "id": "load", "name": "Load", "type": "input_data",
+        "id": "load", "description": "Load", "type": "input_data",
         "connector": {"kind": "file"},
         "signature": {"form": "replaces", "produces": _IN_SCHEMA["columns"]},
     }), encoding="utf-8")
     (compiled / "02_double.json").write_text(json.dumps({
-        "id": "double", "name": "Double", "type": "python_row_function",
+        "id": "double", "description": "Double", "type": "python_row_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
         "signature": {"form": "extends", "adds": [
             c for c in out_schema["columns"] if c not in _IN_SCHEMA["columns"]]},

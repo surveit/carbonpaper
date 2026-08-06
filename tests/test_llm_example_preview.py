@@ -9,7 +9,7 @@ from app.web.loading import build_llm_example
 
 def _llm_stage() -> Stage:
     return parse_stage({
-        "id": "score", "type": "llm_transform", "name": "Score",
+        "id": "score", "type": "llm_transform", "description": "Score",
         "inputs": [{"id": "load", "schema": {
             "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "quote", "type": "str", "nullable": True}]}}],
         "signature": {
@@ -40,7 +40,7 @@ def test_no_input_rows_reports_error():
 
 def test_non_llm_stage_returns_none():
     stage = parse_stage({
-        "id": "load", "name": "Load", "type": "input_data",
+        "id": "load", "description": "Load", "type": "input_data",
         "signature": {
             "form": "replaces",
             "produces": [{"name": "quote", "type": "str", "nullable": True}],

@@ -145,7 +145,7 @@ def test_handler_lineage_reaches_the_executor_channel():
     # `.attrs` channel against a later rebuild of the frame dropping it silently —
     # the projection and the temp-column drop both rebuild.
     stage = parse_stage({
-        "id": "j", "type": "enrich", "name": "j",
+        "id": "j", "type": "enrich", "description": "j",
         "inputs": [
             {"id": "filings", "schema": {"columns": [
                 {"name": "client", "type": "str", "nullable": False},
@@ -187,7 +187,7 @@ def test_expand_records_the_subject_row_each_fanned_out_row_came_from():
     # expand is where recording is the ONLY route: m:n means output row i need not
     # be subject row i, so nothing positional can recover the pairing afterwards.
     stage = parse_stage({
-        "id": "x", "type": "expand", "name": "x",
+        "id": "x", "type": "expand", "description": "x",
         "inputs": [
             {"id": "filings", "schema": {"columns": [
                 {"name": "client", "type": "str", "nullable": False},

@@ -132,7 +132,7 @@ def render_generation_task(document: str, stage: Stage) -> str:
         f"----- DESCRIPTION OF `{stage.id}` -----\n{summary}\n"
         f"{_render_corner_cases(stage)}"
         f"----- END DESCRIPTION -----\n\n"
-        f"Write examples for stage `{stage.id}` ({stage.type}): {stage.name}\n\n"
+        f"Write examples for stage `{stage.id}` ({stage.type}): {stage.description}\n\n"
         f"{inputs}\n\n"
         f"Output schema:\n{output_schema.to_prompt()}"
     )

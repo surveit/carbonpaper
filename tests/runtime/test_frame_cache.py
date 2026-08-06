@@ -22,7 +22,7 @@ _DOUBLING_CODE = "def transform(df):\n    return df.assign(y=df['x'] * 2)\n"
 
 def _frame_stage(code: str = _DOUBLING_CODE, *, cache: bool = True) -> Stage:
     return parse_stage({
-        "id": "double", "name": "Double", "type": "python_frame_function",
+        "id": "double", "description": "Double", "type": "python_frame_function",
         "inputs": [{"id": "src", "schema": _X}], "cache": cache,
         "signature": {
             "form": "replaces",
@@ -133,7 +133,7 @@ def test_reordering_the_input_rows_invalidates_the_cached_frame():
 
 def _two_input_stage() -> Stage:
     return parse_stage({
-        "id": "merge", "name": "Merge", "type": "python_frame_function",
+        "id": "merge", "description": "Merge", "type": "python_frame_function",
         "inputs": [{"id": "left", "schema": _X}, {"id": "right", "schema": _X}],
         "signature": {
             "form": "replaces",
@@ -166,7 +166,7 @@ def test_the_key_covers_every_input_in_declared_order():
 
 def _enrich_stage() -> Stage:
     return parse_stage({
-        "id": "j", "name": "Enrich", "type": "enrich",
+        "id": "j", "description": "Enrich", "type": "enrich",
         "inputs": [{"id": "left", "schema": _X},
                    {"id": "right", "schema": {"columns": [{"name": "x", "type": "int", "nullable": True},
                                                           {"name": "z", "type": "str", "nullable": True}]}}],
@@ -184,7 +184,7 @@ def _enrich_stage() -> Stage:
 
 def _aggregate_stage() -> Stage:
     return parse_stage({
-        "id": "agg", "name": "Agg", "type": "aggregate",
+        "id": "agg", "description": "Agg", "type": "aggregate",
         "inputs": [{"id": "src", "schema": {"columns": [{"name": "g", "type": "str", "nullable": True}]}}],
         "signature": {
             "form": "replaces",
@@ -348,7 +348,7 @@ def test_publish_runs_its_side_effect_every_run_and_writes_no_entry(tmp_path):
         "    return pd.DataFrame({'path': [output_dir]})\n"
     )
     stage = parse_stage({
-        "id": "pub", "name": "Publish", "type": "publish",
+        "id": "pub", "description": "Publish", "type": "publish",
         "inputs": [{"id": "src", "schema": _X}],
         "publish": {"destination": "build/"}, "signature": {"form": "replaces"},
         "function": {"kind": "inline", "code": code},

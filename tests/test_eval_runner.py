@@ -18,7 +18,7 @@ from conftest import QUEUE_COLUMNS
 
 def _load(tmp_path):
     return {
-        "id": "load", "type": "input_data", "name": "Load rows",
+        "id": "load", "type": "input_data", "description": "Load rows",
         "connector": {"kind": "file",
                       "params": {"path": str(tmp_path / "data" / "rows.csv"), "format": "csv"}},
         "signature": {
@@ -31,7 +31,7 @@ def _load(tmp_path):
     }
 # label = "pos" iff score >= 0 — a deterministic classifier we can predict.
 _CLASSIFY = {
-    "id": "classify", "type": "python_row_function", "name": "Label by sign",
+    "id": "classify", "type": "python_row_function", "description": "Label by sign",
     "inputs": [{"id": "load", "schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": True},
                                                      {"name": "score", "type": "int", "nullable": True}]}}],
     "function": {"kind": "inline", "code":
@@ -113,7 +113,7 @@ def test_run_eval_writes_a_per_row_result_table(project):
 # A queue stage as the eval target: grain-and-order preserving, so the pathway
 # through it is row-alignable and no longer vetoed before it runs.
 _QUEUE_REVIEW = {
-    "id": "review", "type": "human_review_queue", "name": "Review scores",
+    "id": "review", "type": "human_review_queue", "description": "Review scores",
     "inputs": [{"id": "load", "schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": True},
                                                      {"name": "score", "type": "int", "nullable": True}]}}],
     "queue": dict(QUEUE_COLUMNS),

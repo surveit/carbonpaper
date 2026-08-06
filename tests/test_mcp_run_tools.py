@@ -19,7 +19,7 @@ def _make_run_project(root):
     pd.DataFrame({"name": ["a", "b"], "val": [1, 2]}).to_csv(
         root / "data" / "items.csv", index=False)
     stage = {
-        "id": "load", "name": "Load items", "type": "input_data",
+        "id": "load", "description": "Load items", "type": "input_data",
         "connector": {"kind": "file",
                       "params": {"path": str(root / "data" / "items.csv"),
                                  "format": "csv"}},
@@ -40,11 +40,11 @@ def _make_run_project(root):
 _LOAD_SCHEMA = {"columns": [{"name": "doc_id", "type": "str", "nullable": True},
                             {"name": "score", "type": "int", "nullable": True}]}
 _LOAD_STAGE_TMPL = {
-    "id": "load", "type": "input_data", "name": "Load rows",
+    "id": "load", "type": "input_data", "description": "Load rows",
     "signature": {"form": "replaces", "produces": _LOAD_SCHEMA["columns"]},
 }
 _CLASSIFY = {
-    "id": "classify", "type": "python_row_function", "name": "Label by sign",
+    "id": "classify", "type": "python_row_function", "description": "Label by sign",
     "inputs": [{"id": "load", "schema": _LOAD_SCHEMA}],
     "function": {"kind": "inline", "code":
                  "def transform(row):\n"

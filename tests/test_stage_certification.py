@@ -24,7 +24,7 @@ def _signature_for(type_, schema):
 
 def _stage(*, summary=None, type_="python_row_function", handle="function"):
     spec = {
-        "id": "s", "name": "S", "type": type_,
+        "id": "s", "description": "S", "type": type_,
         "inputs": [{"id": "up", "schema": _SCHEMA}],
         "signature": _signature_for(type_, _SCHEMA),
     }
@@ -78,7 +78,7 @@ def test_a_stage_whose_behaviour_is_not_code_is_not_applicable():
     """An enrich's keys are config a reviewer reads directly — there is no authored
     description standing between them and the behaviour, so nothing to certify."""
     stage = m.parse_stage({
-        "id": "j", "name": "J", "type": "enrich",
+        "id": "j", "description": "J", "type": "enrich",
         "inputs": [{"id": "a", "schema": _SCHEMA},
                    {"id": "b", "schema": {"columns": [{"name": "id", "type": "str", "nullable": True},
                                                       {"name": "v", "type": "str", "nullable": True}]}}],
@@ -105,7 +105,7 @@ def test_a_frame_function_is_certifiable_too():
 def test_a_code_carrying_type_that_cannot_run_examples_is_untestable():
     """publish has a description no example can ever check, so `untestable`, not `n/a`."""
     stage = m.parse_stage({
-        "id": "pub", "name": "Pub", "type": "publish",
+        "id": "pub", "description": "Pub", "type": "publish",
         "signature": {"form": "replaces"},
         "inputs": [{"id": "up", "schema": _SCHEMA}],
         "publish": {"format": "csv"},
@@ -137,7 +137,7 @@ def test_publish_carries_a_function_so_it_is_not_n_a():
     """A publish stage's behaviour is authored code too, so a missing description
     there is a real gap rather than nothing to say."""
     stage = m.parse_stage({
-        "id": "pub", "name": "Pub", "type": "publish",
+        "id": "pub", "description": "Pub", "type": "publish",
         "signature": {"form": "replaces"},
         "inputs": [{"id": "up", "schema": _SCHEMA}],
         "publish": {"format": "csv"},

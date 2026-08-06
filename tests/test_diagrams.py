@@ -11,7 +11,7 @@ def test_cancelled_stage_gets_glyph_and_grey_stroke() -> None:
     stroke override — the same distinct treatment other terminal statuses get,
     so the cancelled stage is visible in the graph rather than rendering as an
     unstyled default node."""
-    stages = [{"id": "s1", "name": "Stage One", "type": "input_data"}]
+    stages = [{"id": "s1", "description": "Stage One", "type": "input_data"}]
     graph = build_mermaid_graph(stages, "demo", status_by_id={"s1": "cancelled"})
     assert "✖" in graph
     assert "stroke:#7b8089" in graph
@@ -21,11 +21,11 @@ def test_plain_stage_with_no_status_or_review_renders_the_bare_node() -> None:
     """No status_by_id and no review_by_id: no status prefix, no stroke
     override line at all, and the type-class/glyph/classDef scaffold is the
     same regardless."""
-    stages = [{"id": "s1", "name": "Stage One", "type": "input_data"}]
+    stages = [{"id": "s1", "description": "Stage One", "type": "input_data"}]
     graph = build_mermaid_graph(stages, "demo")
     assert graph.startswith("flowchart LR")
-    assert '    s1["<b>⬆️ Stage One</b><br/><span' in graph
-    assert 'click s1 call dvNode("s1") "Open stage"' in graph
+    assert '    s1["<b>⬆️ s1</b><br/><span' in graph   # the id is the node's one name
+    assert 'click s1 call dvNode("s1") "Stage One"' in graph   # description is the tooltip
     assert "]:::input" in graph
     assert "stroke:" not in graph.split("classDef")[0]
     assert "    classDef input fill:#f7f7f4,stroke:#d4d4d0,color:#1a1a1a" in graph
@@ -43,7 +43,7 @@ def test_every_node_class_gets_the_same_neutral_surface() -> None:
 
 def test_notes_eval_and_review_indicators_all_appear() -> None:
     stages = [{
-        "id": "s1", "name": "Stage One", "type": "aggregate",
+        "id": "s1", "description": "Stage One", "type": "aggregate",
         "compiler_notes": "watch this", "eval": {"metrics": ["recall"]},
         "review": {"belief": "approved"},
     }]
@@ -54,13 +54,13 @@ def test_notes_eval_and_review_indicators_all_appear() -> None:
 
 
 def test_review_belief_colours_the_stroke_when_no_status_given() -> None:
-    stages = [{"id": "s1", "name": "Stage One", "type": "input_data"}]
+    stages = [{"id": "s1", "description": "Stage One", "type": "input_data"}]
     graph = build_mermaid_graph(stages, "demo", review_by_id={"s1": "rejected"})
     assert "stroke:#cc2a2a,stroke-width:3px" in graph
 
 
 def test_run_status_stroke_wins_over_review_belief_when_both_given() -> None:
-    stages = [{"id": "s1", "name": "Stage One", "type": "input_data"}]
+    stages = [{"id": "s1", "description": "Stage One", "type": "input_data"}]
     graph = build_mermaid_graph(
         stages, "demo",
         status_by_id={"s1": "error"}, review_by_id={"s1": "approved"},
@@ -74,7 +74,7 @@ def test_unrecognized_status_falls_back_to_review_belief_stroke() -> None:
     stroke, but does not suppress the belief fallback either — the `else`
     branch runs whenever `status` isn't a stroke-carrying status, whether or
     not it was given at all."""
-    stages = [{"id": "s1", "name": "Stage One", "type": "input_data"}]
+    stages = [{"id": "s1", "description": "Stage One", "type": "input_data"}]
     graph = build_mermaid_graph(
         stages, "demo",
         status_by_id={"s1": "some_unmapped_status"}, review_by_id={"s1": "approved"},
@@ -83,16 +83,16 @@ def test_unrecognized_status_falls_back_to_review_belief_stroke() -> None:
 
 
 def test_unknown_stage_type_gets_the_custom_class_and_no_glyph() -> None:
-    stages = [{"id": "s1", "name": "Stage One", "type": "mystery"}]
+    stages = [{"id": "s1", "description": "Stage One", "type": "mystery"}]
     graph = build_mermaid_graph(stages, "demo")
     assert "]:::custom" in graph
-    assert '"<b> Stage One</b>' in graph   # no glyph prefix (glyph slot left as a bare space)
+    assert '"<b> s1</b>' in graph   # no glyph prefix (glyph slot left as a bare space)
 
 
 def test_edges_are_drawn_from_input_ids() -> None:
     stages: list[dict[str, object]] = [
-        {"id": "a", "name": "A", "type": "input_data"},
-        {"id": "b", "name": "B", "type": "aggregate", "inputs": ["a"]},
+        {"id": "a", "description": "A", "type": "input_data"},
+        {"id": "b", "description": "B", "type": "aggregate", "inputs": ["a"]},
     ]
     graph = build_mermaid_graph(stages, "demo")
     assert "    a --> b" in graph
@@ -103,7 +103,7 @@ def test_typed_stage_input_renders_the_same_as_the_equivalent_draft_dict(tmp_pat
     Stage) branch of _node_view) — pinned so the two input shapes stay
     interchangeable."""
     stage = parse_stage({
-        "id": "load", "name": "Load", "type": "input_data",
+        "id": "load", "description": "Load", "type": "input_data",
         "connector": {"kind": "file",
                       "params": {"path": str(tmp_path / "d.csv"), "format": "csv"}},
         "signature": {
@@ -113,6 +113,6 @@ def test_typed_stage_input_renders_the_same_as_the_equivalent_draft_dict(tmp_pat
     })
     typed_graph = build_mermaid_graph([stage], "demo")
     dict_graph = build_mermaid_graph(
-        [{"id": "load", "name": "Load", "type": "input_data"}], "demo"
+        [{"id": "load", "description": "Load", "type": "input_data"}], "demo"
     )
     assert typed_graph == dict_graph

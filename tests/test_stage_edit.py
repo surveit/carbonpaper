@@ -20,7 +20,7 @@ _OUT_SCHEMA = {
     ],
 }
 _VALID = {
-    "id": "score", "name": "Score rows", "type": "llm_transform",
+    "id": "score", "description": "Score rows", "type": "llm_transform",
     "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
     "llm": {"model": "claude-sonnet-4-6", "prompt_template": "score {doc_id}"},
     "signature": {
@@ -37,7 +37,7 @@ def _seed(tmp_path: Path) -> Path:
     # `load` must exist so score's input resolves: the write gate validates the
     # whole resulting workflow (graph included), not just the one edited stage.
     (compiled / "01_load.json").write_text(
-        json.dumps({"id": "load", "name": "Load", "type": "input_data",
+        json.dumps({"id": "load", "description": "Load", "type": "input_data",
                     "connector": {"kind": "file"}, "signature": {"form": "replaces", "produces": _IN_SCHEMA["columns"]}}),
         encoding="utf-8",
     )
@@ -47,7 +47,7 @@ def _seed(tmp_path: Path) -> Path:
 
 def test_valid_edit_writes(tmp_path: Path) -> None:
     pdir = _seed(tmp_path)
-    edited = json.dumps({**_VALID, "name": "Score every row"})
+    edited = json.dumps({**_VALID, "description": "Score every row"})
     result = stage_edit.edit_stage_spec(pdir, "score", edited)
     # The writer reports only success; it no longer computes the review colour.
     assert result.ok is True and not result.issues
@@ -57,7 +57,7 @@ def test_valid_edit_writes(tmp_path: Path) -> None:
 def test_invalid_edit_writes_nothing(tmp_path: Path) -> None:
     pdir = _seed(tmp_path)
     before = (pdir / "compiled" / "02_score.json").read_text(encoding="utf-8")
-    result = stage_edit.edit_stage_spec(pdir, "score", json.dumps({"id": "score", "type": "not_a_real_type", "name": "x"}))
+    result = stage_edit.edit_stage_spec(pdir, "score", json.dumps({"id": "score", "type": "not_a_real_type", "description": "x"}))
     assert result.ok is False and result.issues
     assert (pdir / "compiled" / "02_score.json").read_text(encoding="utf-8") == before
 
@@ -74,7 +74,7 @@ def test_edit_after_approval_drops_to_edited_stale(tmp_path: Path) -> None:
     original_hash = node_review.node_content_hash(stage_to_spec_dict(parse_stage(_VALID)))
     node_review.record_node_decision(pdir, stage_id="score", content_hash=original_hash,
                                      decision="approve", reviewer="human")
-    result = stage_edit.edit_stage_spec(pdir, "score", json.dumps({**_VALID, "name": "Score rows v2"}))
+    result = stage_edit.edit_stage_spec(pdir, "score", json.dumps({**_VALID, "description": "Score rows v2"}))
     assert result.ok is True
     # The writer no longer reports colour; recompute it the way the review layer
     # (and the node-edit route) does — the approved node still drops to amber.
@@ -88,7 +88,7 @@ def test_missing_stage_file_raises(tmp_path: Path) -> None:
     pdir = _seed(tmp_path)
     # A validly-shaped input_data spec (connector required) so the call reaches
     # the file-lookup step this test targets, rather than failing validation first.
-    valid_ghost = {"id": "ghost", "name": "x", "type": "input_data",
+    valid_ghost = {"id": "ghost", "description": "x", "type": "input_data",
                    "connector": {"kind": "file"}, "signature": {"form": "replaces", "produces": _IN_SCHEMA["columns"]}}
     with pytest.raises(FileNotFoundError):
         stage_edit.edit_stage_spec(pdir, "ghost", json.dumps(valid_ghost))
@@ -105,7 +105,7 @@ def test_patch_changes_only_named_field_and_preserves_the_rest(tmp_path: Path) -
     after = _score(pdir)
     assert after["limit"] == 100
     # everything not named in the patch is preserved verbatim — the fidelity guarantee
-    assert after["name"] == "Score rows"
+    assert after["description"] == "Score rows"
     assert after["llm"]["model"] == "claude-sonnet-4-6"
     assert after["llm"]["prompt_data_template"] == "score {doc_id}"
 
@@ -165,7 +165,7 @@ def _seed_load(tmp_path: Path) -> Path:
     compiled = tmp_path / "beta" / "compiled"
     compiled.mkdir(parents=True, exist_ok=True)
     (compiled / "01_load.json").write_text(
-        json.dumps({"id": "load", "name": "Load", "type": "input_data",
+        json.dumps({"id": "load", "description": "Load", "type": "input_data",
                     "connector": {"kind": "file"}, "signature": {"form": "replaces", "produces": _IN_SCHEMA["columns"]}}),
         encoding="utf-8",
     )
@@ -174,7 +174,7 @@ def _seed_load(tmp_path: Path) -> Path:
 
 def test_add_stage_creates_new_stage_referencing_existing_input(tmp_path: Path) -> None:
     pdir = _seed_load(tmp_path)
-    new = {"id": "score", "name": "Score", "type": "llm_transform",
+    new = {"id": "score", "description": "Score", "type": "llm_transform",
            "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
            "llm": {"model": "claude-sonnet-4-6", "prompt_template": "score {doc_id}"},
            "signature": {
@@ -192,7 +192,7 @@ def test_add_stage_rejects_dangling_input(tmp_path: Path) -> None:
     pdir = _seed_load(tmp_path)
     # otherwise-valid stage, but its input references a stage that doesn't exist —
     # so validation passes and the referential check is what rejects it
-    new = {"id": "score", "name": "Score", "type": "llm_transform",
+    new = {"id": "score", "description": "Score", "type": "llm_transform",
            "inputs": [{"id": "does_not_exist", "schema": _IN_SCHEMA}],
            "llm": {"model": "claude-sonnet-4-6", "prompt_template": "score {doc_id}"},
            "signature": {
@@ -209,7 +209,7 @@ def test_add_stage_rejects_dangling_input(tmp_path: Path) -> None:
 
 def test_add_stage_rejects_duplicate_id(tmp_path: Path) -> None:
     pdir = _seed_load(tmp_path)
-    dup = {"id": "load", "name": "Load again", "type": "input_data",
+    dup = {"id": "load", "description": "Load again", "type": "input_data",
            "connector": {"kind": "file"}, "signature": {"form": "replaces", "produces": _IN_SCHEMA["columns"]}}
     result = stage_edit.add_stage_spec(pdir, json.dumps(dup))
     assert result.ok is False and any("already exists" in i for i in result.issues)
@@ -227,7 +227,7 @@ def test_remove_stage_rejected_when_a_downstream_depends_on_it(tmp_path: Path) -
 
 def test_remove_stage_deletes_the_stage_and_its_file(tmp_path: Path) -> None:
     pdir = _seed_load(tmp_path)
-    new = {"id": "score", "name": "Score", "type": "llm_transform",
+    new = {"id": "score", "description": "Score", "type": "llm_transform",
            "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
            "llm": {"model": "claude-sonnet-4-6", "prompt_template": "score {doc_id}"},
            "signature": {
@@ -251,7 +251,7 @@ def test_remove_nonexistent_stage_raises(tmp_path: Path) -> None:
 
 # ─── An empty workflow is a legitimate starting state ────────────────────────
 
-_FIRST_STAGE = {"id": "load", "name": "Load", "type": "input_data",
+_FIRST_STAGE = {"id": "load", "description": "Load", "type": "input_data",
                 "connector": {"kind": "file"}, "signature": {"form": "replaces", "produces": _IN_SCHEMA["columns"]}}
 
 
@@ -285,7 +285,7 @@ def test_add_stage_still_refuses_when_the_existing_workflow_is_unloadable(tmp_pa
     pdir = tmp_path / "epsilon"
     (pdir / "compiled").mkdir(parents=True)
     (pdir / "compiled" / "01_broken.json").write_text(
-        json.dumps({"id": "broken", "name": "Broken", "type": "not_a_real_type"}),
+        json.dumps({"id": "broken", "description": "Broken", "type": "not_a_real_type"}),
         encoding="utf-8",
     )
     with pytest.raises(WorkflowLoadError):

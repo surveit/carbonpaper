@@ -36,7 +36,7 @@
      unreadable pinned version means no diagram at all — this is then the only
      route to a step page. #}
   <p class="packet-steps"><span class="muted">Steps:</span>
-    {% for stage in run.stages %}<a href="{{ stages_dir }}/{{ stage.stage_id }}.html">{{ type_glyph.get(stage.type, "") }} {{ stage.name }}</a>{% if not loop.last %} · {% endif %}{% endfor %}
+    {% for stage in run.stages %}<a href="{{ stages_dir }}/{{ stage.stage_id }}.html">{{ type_glyph.get(stage.type, "") }} <code>{{ stage.stage_id }}</code></a>{% if not loop.last %} · {% endif %}{% endfor %}
   </p>
 </section>
 {% endif %}

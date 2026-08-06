@@ -19,7 +19,7 @@ def _row_function(output_schema: dict, input_columns: list[dict] | None = None) 
     flowing = {c["name"] for c in edge}
     return {
         "id": "t",
-        "name": "t",
+        "description": "t",
         "type": "python_row_function",
         "inputs": [{"id": "up", "schema": {"columns": edge}}],
         "signature": {"form": "extends",

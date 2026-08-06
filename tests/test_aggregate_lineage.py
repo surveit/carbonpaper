@@ -26,7 +26,7 @@ _IN_SCHEMA = {"columns": [{"name": "firm", "type": "str", "nullable": True},
 
 def _stage(aggregations, out_columns):
     return parse_stage({
-        "id": "agg", "type": "aggregate", "name": "agg",
+        "id": "agg", "type": "aggregate", "description": "agg",
         "inputs": [{"id": "filings", "schema": _IN_SCHEMA}],
         "signature": {
             "form": "replaces",

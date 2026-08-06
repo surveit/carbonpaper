@@ -10,7 +10,7 @@ _AB_SCHEMA = {"columns": [{"name": "a", "type": "str", "nullable": True}, {"name
 
 def _union_stage(*, input_schemas, produces=None):
     return {
-        "id": "u", "type": "union", "name": "u",
+        "id": "u", "type": "union", "description": "u",
         "inputs": [
             {"id": f"in{i}", "schema": schema} for i, schema in enumerate(input_schemas)
         ],

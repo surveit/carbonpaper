@@ -10,7 +10,7 @@ from app.evals.run_settings import resolve_eval_run_settings
 
 
 def S(**kw):
-    kw.setdefault("name", kw.get("id", "x"))
+    kw.setdefault("description", kw.get("id", "x"))
     return kw
 
 

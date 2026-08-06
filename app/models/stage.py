@@ -90,7 +90,8 @@ def validate_stage(spec: Any) -> list[str]:
 # The version of the shape below: what a record embedding stages stamps into its
 # schema_version column, and what an alembic revision rewrites a payload up to.
 # v2: primary_key left the stage vocabulary (the data model keeps its own).
-STAGE_SPEC_SCHEMA_VERSION = 2
+# v3: `name` became `description` — a stage has one name, its id.
+STAGE_SPEC_SCHEMA_VERSION = 3
 
 
 def stage_to_spec_dict(stage: Stage) -> dict[str, Any]:

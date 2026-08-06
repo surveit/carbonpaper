@@ -10,7 +10,7 @@ _AB_SCHEMA = {"columns": [{"name": "a", "type": "str", "nullable": True}, {"name
 
 def _filter_stage(*, signature=None, filter_cfg=None):
     return {
-        "id": "f", "type": "filter_rows", "name": "f",
+        "id": "f", "type": "filter_rows", "description": "f",
         "inputs": [{"id": "src", "schema": _AB_SCHEMA}],
         "signature": signature or {"form": "extends"},
         "filter": filter_cfg or {"code": "def should_include(row): return row['b'] > 0"},

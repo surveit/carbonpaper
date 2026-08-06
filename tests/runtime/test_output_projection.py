@@ -12,7 +12,7 @@ def _rating_stage() -> Stage:
     """A row-mapped stage declaring three output columns. The id is distinct
     from every column name so a message can be checked for both."""
     return parse_stage({
-        "id": "rate", "name": "Rate", "type": "python_row_function",
+        "id": "rate", "description": "Rate", "type": "python_row_function",
         "inputs": [{"id": "load", "schema": {"columns": [{"name": "id", "type": "str", "nullable": True}]}}],
         "signature": {
             "form": "extends",

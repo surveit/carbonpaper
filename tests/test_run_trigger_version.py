@@ -32,7 +32,7 @@ def project_two_versions(tmp_path, monkeypatch):
     (proj / "compiled").mkdir(parents=True)
     data = proj / "a.csv"
     pd.DataFrame({"name": ["x", "y"], "val": [1, 2]}).to_csv(data, index=False)
-    stage = {"id": "load", "name": "Load", "type": "input_data",
+    stage = {"id": "load", "description": "Load", "type": "input_data",
              "signature": {"form": "replaces", "produces": _ROWS_SCHEMA["columns"]},
              "connector": {"kind": "file",
                            "params": {"path": str(data), "format": "csv"}}}
@@ -93,7 +93,7 @@ def _seed_load_stage(proj):
     (proj / "compiled").mkdir(parents=True)
     data = proj / "a.csv"
     pd.DataFrame({"name": ["x"], "val": [1]}).to_csv(data, index=False)
-    stage = {"id": "load", "name": "Load", "type": "input_data",
+    stage = {"id": "load", "description": "Load", "type": "input_data",
              "signature": {"form": "replaces", "produces": _ROWS_SCHEMA["columns"]},
              "connector": {"kind": "file",
                            "params": {"path": str(data), "format": "csv"}}}
@@ -146,7 +146,7 @@ def project_versions_diff_paths(tmp_path, monkeypatch):
 
     def _author(path):
         compiled.write_text(json.dumps(
-            {"id": "load", "name": "Load", "type": "input_data",
+            {"id": "load", "description": "Load", "type": "input_data",
              "signature": {"form": "replaces", "produces": _ROWS_SCHEMA["columns"]},
              "connector": {"kind": "file",
                            "params": {"path": str(path), "format": "csv"}}}),
@@ -192,7 +192,6 @@ def test_run_inputs_endpoint_returns_the_selected_versions_inputs(
     latest, older = versions[0].version_id, versions[-1].version_id
 
     latest_inputs = client.get(f"/project/demo/run-inputs?version_id={latest}").json()
-    assert latest_inputs == [{"stage_id": "load", "name": "Load",
-                              "path": str(proj / "b.csv")}]
+    assert latest_inputs == [{"stage_id": "load", "path": str(proj / "b.csv")}]
     older_inputs = client.get(f"/project/demo/run-inputs?version_id={older}").json()
     assert older_inputs[0]["path"] == str(proj / "a.csv")

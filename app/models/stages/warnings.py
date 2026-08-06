@@ -46,7 +46,6 @@ class CompilerWarning(_Base):
 
     kind: WarningKind
     stage_id: str
-    stage_name: str
     detail: str
 
     @property
@@ -57,7 +56,4 @@ class CompilerWarning(_Base):
 
 
 def warn(stage: "StageBase", kind: WarningKind, detail: str) -> CompilerWarning:
-    """A warning about `stage`, named for the reader rather than for the field."""
-    return CompilerWarning(
-        kind=kind, stage_id=stage.id, stage_name=stage.name, detail=detail
-    )
+    return CompilerWarning(kind=kind, stage_id=stage.id, detail=detail)

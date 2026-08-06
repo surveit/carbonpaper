@@ -117,7 +117,6 @@ class StageRecord(BaseModel):
 
     stage_id: str
     type: StageType
-    name: str
     started_at: str | None = None
     status: StageStatus
     input_validation_report: list[dict[str, object]]
@@ -141,7 +140,7 @@ class StageRecord(BaseModel):
         key explicitly."""
         running = status is StageStatus.RUNNING
         record = cls(
-            stage_id=stage.id, type=stage.type, name=stage.name,
+            stage_id=stage.id, type=stage.type,
             started_at=datetime.now().isoformat(timespec="seconds") if running else None,
             status=status,
             input_validation_report=[], output_validation_report=None,

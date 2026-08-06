@@ -11,7 +11,7 @@ _OUT_SCHEMA = {"columns": [
 
 def _row_stage(code: str, tests: list[dict]) -> Stage:
     return parse_stage({
-        "id": "double", "name": "Double", "type": "python_row_function",
+        "id": "double", "description": "Double", "type": "python_row_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
         "signature": {
             "form": "extends",
@@ -238,7 +238,7 @@ def test_find_failing_stage_tests_reports_a_failed_failure_case():
 
 def _frame_stage(code: str, tests: list[dict]) -> Stage:
     return parse_stage({
-        "id": "reshape", "name": "Reshape", "type": "python_frame_function",
+        "id": "reshape", "description": "Reshape", "type": "python_frame_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
         "signature": {
             "form": "replaces",
@@ -272,7 +272,7 @@ def test_omitted_column_in_expected_row_claims_none():
         {"name": "label", "type": "str", "nullable": True},
     ]}
     stage = parse_stage({
-        "id": "labelled", "name": "Labelled", "type": "python_frame_function",
+        "id": "labelled", "description": "Labelled", "type": "python_frame_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
         "signature": {"form": "replaces", "produces": labelled_schema["columns"]},
         "function": {"kind": "inline", "code": (
@@ -360,7 +360,7 @@ _MERGED_SCHEMA = {"columns": [
 
 def _multi_input_frame_stage(code: str, tests: list[dict]) -> Stage:
     return parse_stage({
-        "id": "merge", "name": "Merge", "type": "python_frame_function",
+        "id": "merge", "description": "Merge", "type": "python_frame_function",
         "inputs": [
             {"id": "left", "schema": _LEFT_SCHEMA},
             {"id": "right", "schema": _RIGHT_SCHEMA},
@@ -401,7 +401,7 @@ def test_multi_input_frame_positional_order_is_declared_order():
     # the `right` input's row instead of `left`'s.
     id_schema = {"columns": [{"name": "id", "type": "str", "nullable": False}]}
     stage = parse_stage({
-        "id": "first", "name": "First", "type": "python_frame_function",
+        "id": "first", "description": "First", "type": "python_frame_function",
         "inputs": [
             {"id": "left", "schema": id_schema},
             {"id": "right", "schema": id_schema},
@@ -437,7 +437,7 @@ def test_find_failing_stage_tests_names_stage_and_test():
 
 def test_stage_without_tests_contributes_no_failures():
     plain = parse_stage({
-        "id": "load", "name": "Load", "type": "input_data",
+        "id": "load", "description": "Load", "type": "input_data",
         "connector": {"kind": "file"},
         "signature": {"form": "replaces", "produces": _IN_SCHEMA["columns"]},
     })

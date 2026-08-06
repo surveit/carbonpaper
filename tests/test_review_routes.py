@@ -63,7 +63,7 @@ def _load_quotes_stage(root):
         "id": ["a", "b"],
         "quote": ["Quote about widgets.", "Quote about gadgets."],
     }).to_csv(csv_path, index=False)
-    return {"id": "load", "name": "Load quotes", "type": "input_data",
+    return {"id": "load", "description": "Load quotes", "type": "input_data",
             "connector": {"kind": "file",
                           "params": {"path": str(csv_path), "format": "csv"}},
             "signature": {
@@ -87,7 +87,7 @@ def _score_stage():
     # llm_transform: scores each quote. The signature is additive (a stage invariant —
     # app/models/stage.py's _llm_transform_one_to_one), so `quote` survives onto the
     # queued row.
-    return {"id": "score", "name": "Score quotes", "type": "llm_transform",
+    return {"id": "score", "description": "Score quotes", "type": "llm_transform",
             "inputs": [{"id": "load", "schema": {
                 "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "quote", "type": "str", "nullable": True}]}}],
             "signature": {
@@ -107,7 +107,7 @@ def _score_stage():
 def _review_stage():
     # human_review_queue reviewing `score`'s output; no cached decisions yet, so the run
     # halts and snapshots both rows.
-    return {"id": "review", "name": "Review scores", "type": "human_review_queue",
+    return {"id": "review", "description": "Review scores", "type": "human_review_queue",
             "inputs": [{"id": "score", "schema": {
                 "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "quote", "type": "str", "nullable": True},
                             {"name": "score", "type": "int", "nullable": True}]}}],
@@ -339,7 +339,7 @@ def _e2e_load_stage(root):
     (root / "data").mkdir(parents=True, exist_ok=True)
     csv_path = root / "data" / "items.csv"
     pd.DataFrame({"id": ["a", "b", "c"], "score": [1, 2, 3]}).to_csv(csv_path, index=False)
-    return {"id": "load", "name": "Load items", "type": "input_data",
+    return {"id": "load", "description": "Load items", "type": "input_data",
             "connector": {"kind": "file", "params": {"path": str(csv_path), "format": "csv"}},
             "signature": {
                 "form": "replaces",
@@ -351,7 +351,7 @@ def _e2e_load_stage(root):
 
 
 def _e2e_review_stage():
-    return {"id": "review", "name": "Review items", "type": "human_review_queue",
+    return {"id": "review", "description": "Review items", "type": "human_review_queue",
             "inputs": [{"id": "load", "schema": {
                 "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True}]}}],
             "signature": {"form": "extends", "adds": _REVIEW_COLUMNS},
@@ -452,7 +452,7 @@ def test_decide_accepts_an_untouched_notes_box_as_no_note(tmp_path, monkeypatch)
 def _no_notes_review_stage():
     queue = {k: v for k, v in QUEUE_COLUMNS.items() if k != "review_notes_column"}
     return _with_queue_signature({
-            "id": "review", "name": "Review items", "type": "human_review_queue",
+            "id": "review", "description": "Review items", "type": "human_review_queue",
             "inputs": [{"id": "load", "schema": {
                 "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True}]}}],
             "queue": queue})
@@ -575,7 +575,7 @@ def test_queue_page_prefills_a_decided_row_from_the_recorded_value(tmp_path, mon
 
 def _bool_review_stage(nullable):
     return _with_queue_signature({
-        "id": "review", "name": "Review flags", "type": "human_review_queue",
+        "id": "review", "description": "Review flags", "type": "human_review_queue",
         "inputs": [{"id": "load", "schema": {
             "columns": [{"name": "id", "type": "str", "nullable": True},
                         {"name": "flag", "type": "bool", "nullable": nullable}]}}],
@@ -591,7 +591,7 @@ def _build_and_halt_bool_queue(tmp_path, monkeypatch, project, *, ai_value, null
     csv_path = project_dir / "data" / "flags.csv"
     pd.DataFrame({"id": ["a"], "flag": [ai_value]}).to_csv(csv_path, index=False)
     _write_stage(project_dir, "01_load.json", {
-        "id": "load", "name": "Load flags", "type": "input_data",
+        "id": "load", "description": "Load flags", "type": "input_data",
         "connector": {"kind": "file", "params": {"path": str(csv_path), "format": "csv"}},
         "signature": {"form": "replaces", "produces": [
             {"name": "id", "type": "str", "nullable": True},
@@ -689,7 +689,7 @@ def test_a_non_nullable_bool_select_opens_on_the_ai_value(tmp_path, monkeypatch)
 
 def _temporal_review_stage(column_type):
     return _with_queue_signature({
-        "id": "review", "name": "Review times", "type": "human_review_queue",
+        "id": "review", "description": "Review times", "type": "human_review_queue",
         "inputs": [{"id": "load", "schema": {
             "columns": [{"name": "id", "type": "str", "nullable": True},
                         {"name": "seen_at", "type": column_type, "nullable": True}]}}],
@@ -705,7 +705,7 @@ def _decide_a_temporal_row(tmp_path, monkeypatch, project, column_type, recorded
     csv_path = project_dir / "data" / "sightings.csv"
     pd.DataFrame({"id": ["a"], "seen_at": ["2026-01-01T08:00:00"]}).to_csv(csv_path, index=False)
     _write_stage(project_dir, "01_load.json", {
-        "id": "load", "name": "Load sightings", "type": "input_data",
+        "id": "load", "description": "Load sightings", "type": "input_data",
         "connector": {"kind": "file", "params": {"path": str(csv_path), "format": "csv"}},
         "signature": {"form": "replaces", "produces": [
             {"name": "id", "type": "str", "nullable": True},
@@ -754,7 +754,7 @@ def test_a_temporal_control_opens_on_the_recorded_value_of_a_decided_row(
 
 def _declared_range_review_stage():
     """`human_score` resolves from the signature, not the input edge's `score`."""
-    return {"id": "review", "name": "Review items", "type": "human_review_queue",
+    return {"id": "review", "description": "Review items", "type": "human_review_queue",
             "inputs": [{"id": "load", "schema": {
                 "columns": [{"name": "id", "type": "str", "nullable": True},
                             {"name": "score", "type": "int", "nullable": False,
@@ -875,7 +875,7 @@ def _labelled_row_function_stage():
         "    return {'id': row['id'], 'score': row['score'],\n"
         "            'label': 'high' if row['score'] > 1 else 'low'}"
     )
-    return {"id": "label", "name": "Label items", "type": "python_row_function",
+    return {"id": "label", "description": "Label items", "type": "python_row_function",
             "inputs": [{"id": "load", "schema": {
                 "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True}]}}],
             "function": {"kind": "inline", "code": code},
@@ -896,7 +896,7 @@ def _labelled_row_function_stage():
 
 def _review_labels_stage():
     return _with_queue_signature({
-        "id": "review", "name": "Review labels", "type": "human_review_queue",
+        "id": "review", "description": "Review labels", "type": "human_review_queue",
         "inputs": [{"id": "label", "schema": {
             "columns": [
                 {"name": "id", "type": "str", "nullable": True},
@@ -934,7 +934,7 @@ def test_a_queue_whose_upstream_is_not_an_llm_transform_renders_and_links(tmp_pa
 def _described_review_stage():
     # The queue's input edge describes the columns it queues, and its output schema
     # describes what the reviewer writes back.
-    return {"id": "review", "name": "Review labels", "type": "human_review_queue",
+    return {"id": "review", "description": "Review labels", "type": "human_review_queue",
             "inputs": [{"id": "label", "schema": {
                 "columns": [
                     {"name": "id", "type": "str", "nullable": True},
@@ -1058,7 +1058,7 @@ def _empty_string_load_stage(project_dir):
     csv_path = project_dir / "data" / "rows.csv"
     csv_path.parent.mkdir(parents=True, exist_ok=True)
     csv_path.write_text("id,flag\ne,true\nn,false\n", encoding="utf-8")
-    return {"id": "load", "name": "Load rows", "type": "input_data",
+    return {"id": "load", "description": "Load rows", "type": "input_data",
             "connector": {"kind": "file",
                           "params": {"path": str(csv_path), "format": "csv"}},
             "signature": {
@@ -1084,7 +1084,7 @@ def _empty_string_row_function_stage():
     code = ("def transform(row):\n"
             "    return {'id': row['id'], 'flag': row['flag'],\n"
             "            'note': '' if row['id'] == 'e' else None}")
-    return {"id": "note", "name": "Add notes", "type": "python_row_function",
+    return {"id": "note", "description": "Add notes", "type": "python_row_function",
             "inputs": [{"id": "load", "schema": {
                 "columns": _EMPTY_STRING_COLUMNS[:2]}}],
             "function": {"kind": "inline", "code": code},
@@ -1105,7 +1105,7 @@ def _empty_string_row_function_stage():
 
 def _empty_string_review_stage():
     return _with_queue_signature({
-        "id": "review", "name": "Review notes", "type": "human_review_queue",
+        "id": "review", "description": "Review notes", "type": "human_review_queue",
         "inputs": [{"id": "note", "schema": {
             "columns": _EMPTY_STRING_COLUMNS}}],
         "queue": {**queue_columns(source="flag", target="human_flag")}})
@@ -1136,7 +1136,7 @@ def _every_column_reviewed_stage():
     # A queue over a frame whose ONLY column is the one under review, so subtracting the
     # reviewed columns leaves no context at all.
     return _with_queue_signature({
-        "id": "review", "name": "Review scores", "type": "human_review_queue",
+        "id": "review", "description": "Review scores", "type": "human_review_queue",
         "inputs": [{"id": "load", "schema": {
             "columns": [{"name": "score", "type": "int", "nullable": True}]}}],
         "queue": dict(QUEUE_COLUMNS)})
@@ -1149,7 +1149,7 @@ def test_no_context_table_is_rendered_when_every_column_is_under_review(tmp_path
     csv_path = project_dir / "data" / "scores.csv"
     csv_path.parent.mkdir(parents=True, exist_ok=True)
     csv_path.write_text("score\n1\n2\n", encoding="utf-8")
-    load = {"id": "load", "name": "Load scores", "type": "input_data",
+    load = {"id": "load", "description": "Load scores", "type": "input_data",
             "connector": {"kind": "file",
                           "params": {"path": str(csv_path), "format": "csv"}},
             "signature": {

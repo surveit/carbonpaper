@@ -116,14 +116,46 @@ class StageInput(_Base):
     table_schema: TableSchema = Field(alias="schema")
 
 
+# ── The one name, and the line under it ──────────────────────────────────────
+# A stage has ONE name — its `id` — and every surface shows that one: the graph
+# node, every heading, the URL, the `inputs` of downstream stages, the run
+# manifest. `description` explains that name and is never rendered as a name, so
+# a reader is never asked to hold two strings for one stage.
+# The ceilings are what keep them in their roles. Measured against all 895 stored
+# stages and all 138 compiled ones when they were set: the longest id was 35
+# characters and the longest description 96, so neither refuses anything already
+# written.
+STAGE_ID_MAX_CHARS = 60
+# Tighter than SUMMARY_MAX_CHARS (app.models.stages.code): a summary explains code
+# in a paragraph a non-engineer reads; this is one line under a heading and a graph
+# tooltip, and stops being one line at a paragraph's length.
+STAGE_DESCRIPTION_MAX_CHARS = 200
+
+STAGE_ID_DESCRIPTION = (
+    "The stage's ONE name, snake_case. Every surface shows this and only this — the "
+    "workflow graph node, every page heading, the URL, the run manifest, and the "
+    "`inputs` of every downstream stage — so name the step well enough that a reader "
+    f"needs no gloss. HARD LIMIT: {STAGE_ID_MAX_CHARS} characters, refused above that."
+)
+STAGE_DESCRIPTION_DESCRIPTION = (
+    "ONE line saying what this step does, shown UNDER the id and as the graph node's "
+    "tooltip — never as a heading and never as a label, so it must not restate the id "
+    "in prose. Say what the id cannot: the reason the step exists, what it decides, "
+    "which snapshot it is. Plain language, no Python vocabulary. HARD LIMIT: "
+    f"{STAGE_DESCRIPTION_MAX_CHARS} characters, refused above that."
+)
+
+
 # ── The shared field list ────────────────────────────────────────────────────
 class StageCommon(_Base):
     """The fields every stage carries whether it is being authored (`StageDraft`)
     or stored (`StageBase` and its per-type subclasses), declared once so the two
     cannot drift apart."""
-    id: str
+    id: str = Field(max_length=STAGE_ID_MAX_CHARS, description=STAGE_ID_DESCRIPTION)
     type: StageType
-    name: str
+    description: str = Field(
+        max_length=STAGE_DESCRIPTION_MAX_CHARS, description=STAGE_DESCRIPTION_DESCRIPTION
+    )
     inputs: list[StageInput] = Field(default_factory=list)
 
     # False declares this stage INTENTIONALLY non-deterministic — it must
@@ -252,7 +284,7 @@ class StageBase(StageCommon):
         """sha1[:16] over a sorted-key JSON dump of the output-determining subset
         of this stage: {"type", "signature"} plus one entry per block
         `fingerprint_blocks` names.
-        Every other field (id, name, source, inputs, review, cache, limit,
+        Every other field (id, description, source, inputs, review, cache, limit,
         compiler_notes, eval, tests) is incidental — it does not change what this
         stage computes — and stays out, `cache` included: it decides whether the
         cache is consulted, not what the stage computes, so flipping it must not

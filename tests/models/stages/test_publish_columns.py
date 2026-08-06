@@ -8,7 +8,7 @@ from app.models import parse_stage
 
 def _publish_stage(*, one_file_per, edge_columns):
     return {
-        "id": "pub", "type": "publish", "name": "pub",
+        "id": "pub", "type": "publish", "description": "pub",
         "inputs": [{"id": "src", "schema": {
             "columns": [{"name": c, "type": "str", "nullable": False} for c in edge_columns],
         }}],

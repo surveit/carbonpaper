@@ -18,7 +18,7 @@ _ROWS_SCHEMA = {"columns": [{"name": "doc_id", "type": "str", "nullable": False}
 
 _STAGE = {
     "id": "load",
-    "name": "Load rows",
+    "description": "Load rows",
     "type": "input_data",
     "connector": {"kind": "file"},
     "signature": {"form": "replaces", "produces": _ROWS_SCHEMA["columns"]},
@@ -72,12 +72,12 @@ def test_set_stage_upserts_and_tolerates_dangling_input(examples: Path) -> None:
 def test_set_stage_replaces_existing_id_in_place(examples: Path) -> None:
     draft = drafts.create_draft("demo")
     drafts.set_draft_stage("demo", draft.id, json.dumps(_STAGE))
-    renamed = dict(_STAGE, name="Load rows (renamed)")
+    renamed = dict(_STAGE, description="Load rows (renamed)")
     result = drafts.set_draft_stage("demo", draft.id, json.dumps(renamed))
     assert result.stage_ids == ["load"]
     after = drafts.read_draft("demo", draft.id)
     assert len(after.stages) == 1
-    assert after.stages[0].name == "Load rows (renamed)"
+    assert after.stages[0].description == "Load rows (renamed)"
 
 
 def test_set_stage_rejects_non_object_json(examples: Path) -> None:

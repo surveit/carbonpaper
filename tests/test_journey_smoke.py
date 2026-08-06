@@ -145,13 +145,13 @@ def _workflow_stages(authored_path: str) -> list[dict]:
     }
     return [
         {
-            "id": "load", "name": "Load rows", "type": "input_data",
+            "id": "load", "description": "Load rows", "type": "input_data",
             "connector": {"kind": "file",
                           "params": {"path": authored_path, "format": "csv"}},
             "signature": {"form": "replaces", "produces": load_schema["columns"]},
         },
         {
-            "id": "flag", "name": "Flag rows over threshold", "type": "python_row_function",
+            "id": "flag", "description": "Flag rows over threshold", "type": "python_row_function",
             "inputs": [{"id": "load", "schema": load_schema}],
             "function": {"kind": "inline", "code": (
                 "def transform(row):\n"
@@ -162,7 +162,7 @@ def _workflow_stages(authored_path: str) -> list[dict]:
                           "adds": [{"name": "flagged", "type": "bool", "nullable": True}]},
         },
         {
-            "id": "totals", "name": "Total per flag", "type": "python_frame_function",
+            "id": "totals", "description": "Total per flag", "type": "python_frame_function",
             "inputs": [{"id": "flag", "schema": flag_schema}],
             "function": {"kind": "inline", "code": (
                 "def transform(df):\n"
@@ -171,7 +171,7 @@ def _workflow_stages(authored_path: str) -> list[dict]:
             "signature": {"form": "replaces", "produces": totals_schema["columns"]},
         },
         {
-            "id": "report", "name": "Publish totals", "type": "publish",
+            "id": "report", "description": "Publish totals", "type": "publish",
             "inputs": [{"id": "totals", "schema": totals_schema}],
             "publish": {"format": "csv", "destination": "report/"},
             "signature": {"form": "replaces"},

@@ -17,7 +17,7 @@ def _aggregate_stage(*, produces, aggregations):
     }
     return {
         "id": "totals",
-        "name": "Company totals",
+        "description": "Company totals",
         "type": "aggregate",
         "inputs": [{"id": "facilities", "schema": edge_schema}],
         "aggregate": {"group_by": ["company"], "aggregations": aggregations},

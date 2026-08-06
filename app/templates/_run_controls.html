@@ -26,7 +26,7 @@
   Context (inherited from the including template):
     state       = shell_state(pdir)         — state.name for the form action
     versions    = the project's PUBLISHED versions, newest-first (may be empty)
-    file_inputs = loading.list_file_inputs(pdir)   — [{stage_id, name, path}]
+    file_inputs = loading.list_file_inputs(pdir)   — [{stage_id, path}]
 #}
 {% if versions %}
 <form action="/project/{{ state.name }}/run" method="post" class="run-controls"

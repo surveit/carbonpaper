@@ -19,7 +19,7 @@ from conftest import contribution_of, make_run_context
 
 def _stage():
     return parse_stage({
-        "id": "score", "name": "score", "type": "llm_transform",
+        "id": "score", "description": "score", "type": "llm_transform",
         "inputs": [{"id": "load", "schema": {
             "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}]}}],
         "signature": {

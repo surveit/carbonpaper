@@ -38,7 +38,7 @@ def _stage(queue: dict[str, object], flt: str | None = None) -> Stage:
                             "reviewed_at_column", "review_notes_column")
               if queue.get(field) is not None]
     return parse_stage({
-        "id": "review", "name": "Review", "type": "human_review_queue",
+        "id": "review", "description": "Review", "type": "human_review_queue",
         "inputs": [{"id": "scored", "schema": {"columns": input_columns}}],
         "signature": {"form": "extends", "adds": added},
         "queue": queue,

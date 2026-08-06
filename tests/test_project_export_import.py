@@ -69,7 +69,7 @@ def test_round_trip_through_json_reproduces_the_source_and_mints_a_version(tmp_p
     compiled = pdir / "compiled"
     compiled.mkdir()
     stage = InputDataStage(
-        id="load_entities", name="Load Entities", type=StageType.input_data,
+        id="load_entities", description="Load Entities", type=StageType.input_data,
         connector=Connector(kind=ConnectorKind.file, params={"format": "csv"}),
         # The `entity` schema this project's data model declares.
         signature=ReplacesSignature(produces=[
@@ -131,7 +131,7 @@ def test_a_bundle_from_before_per_type_stages_still_imports(tmp_path):
         "name": "legacy", "document": "# doc", "model": "m", "source": "s",
         "data_model": _TINY_LIBRARY.model_dump(mode="json"),
         "stages": [{
-            "id": "load", "type": "input_data", "name": "Load",
+            "id": "load", "type": "input_data", "description": "Load",
             "connector": {"kind": "file", "params": {"format": "csv"}},
             "signature": {
                 "form": "replaces",
@@ -153,7 +153,7 @@ def test_a_non_null_foreign_config_block_is_still_refused(tmp_path):
         "name": "bad", "document": "# doc", "model": "m", "source": "s",
         "data_model": _TINY_LIBRARY.model_dump(mode="json"),
         "stages": [{
-            "id": "load", "type": "input_data", "name": "Load",
+            "id": "load", "type": "input_data", "description": "Load",
             "connector": {"kind": "file", "params": {"format": "csv"}},
             "signature": {
                 "form": "replaces",

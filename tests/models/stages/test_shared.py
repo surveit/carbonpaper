@@ -10,7 +10,7 @@ from app.models.stages.shared import (
 
 def _stage_with_edge_schema(columns):
     return parse_stage({
-        "id": "agg", "type": "aggregate", "name": "agg",
+        "id": "agg", "type": "aggregate", "description": "agg",
         "inputs": [{"id": "src", "schema": {
             "columns": [{"name": c, "type": "str", "nullable": False} for c in columns],
         }}],
@@ -44,7 +44,7 @@ def test_find_predicate_column_issues_turns_a_parse_failure_into_one_issue_not_r
 
 def test_find_config_column_issues_is_empty_for_a_type_that_names_no_column():
     load = parse_stage({
-        "id": "load", "type": "input_data", "name": "load",
+        "id": "load", "type": "input_data", "description": "load",
         "connector": {"kind": "file", "params": {}},
         "signature": {
             "form": "replaces",

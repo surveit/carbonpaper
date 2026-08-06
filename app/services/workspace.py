@@ -132,7 +132,7 @@ def project_workflow_summary(project_dir: Path) -> dict[str, Any]:
         stages.append({
             "id": stage.id,
             "type": stage.type,
-            "name": stage.name,
+            "description": stage.description,
             "inputs": [ref.id for ref in stage.inputs],
             "review_state": state,
         })

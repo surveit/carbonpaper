@@ -15,7 +15,7 @@ def _llm_stage(input_columns, output_columns, pk=("id",)):
     """A strictly-1:1 llm_transform outputting `output_columns`."""
     flowing = {c["name"] for c in input_columns}
     return parse_stage({
-        "id": "evidence_extraction", "name": "Extract evidence", "type": "llm_transform",
+        "id": "evidence_extraction", "description": "Extract evidence", "type": "llm_transform",
         "inputs": [{"id": "load", "schema": {"columns": input_columns}}],
         "signature": {
             "form": "extends",
@@ -93,7 +93,7 @@ def _queue_stage(output_schema, flt=None):
     flowing = {c["name"] for c in _SCORED_COLUMNS}
     outputs = output_schema["columns"] + _REVIEW_RECORD_COLUMNS
     return parse_stage({
-        "id": "review", "name": "Human review", "type": "human_review_queue",
+        "id": "review", "description": "Human review", "type": "human_review_queue",
         "inputs": [{"id": "scored", "schema": {"columns": _SCORED_COLUMNS}}],
         "signature": {"form": "extends",
                       "adds": [c for c in outputs if c["name"] not in flowing]},

@@ -46,7 +46,7 @@ def _write_run(
             {
                 "stage_id": STAGE,
                 "type": "input_data",
-                "name": STAGE,
+                "description": STAGE,
                 "status": "ok",
                 "input_validation_report": [],
                 "output_validation_report": None,

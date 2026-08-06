@@ -144,7 +144,6 @@
     {
       "id": "raw_filings",
       "type": "input_data",
-      "name": "Sample Lobbying Filings CSV",
       "inputs": [],
       "cache": true,
       "compiler_notes": [],
@@ -200,12 +199,12 @@
             "description": "Filer's free-text description of specific issues lobbied \u2014 the messy field the pipeline triages."
           }
         ]
-      }
+      },
+      "description": "Sample Lobbying Filings CSV"
     },
     {
       "id": "classify_issues",
       "type": "llm_transform",
-      "name": "Classify Issue Text per Filing",
       "inputs": [
         {
           "id": "raw_filings",
@@ -322,12 +321,12 @@
             "description": "One plain-language sentence summarising what the client appears to want."
           }
         ]
-      }
+      },
+      "description": "Classify Issue Text per Filing"
     },
     {
       "id": "rank_by_spend",
       "type": "python_frame_function",
-      "name": "Rank Filings by Reported Spend",
       "inputs": [
         {
           "id": "classify_issues",
@@ -547,12 +546,12 @@
             ]
           }
         ]
-      }
+      },
+      "description": "Rank Filings by Reported Spend"
     },
     {
       "id": "publish_report",
       "type": "publish",
-      "name": "Publish HTML Triage Report",
       "inputs": [
         {
           "id": "rank_by_spend",
@@ -722,7 +721,8 @@
             ]
           }
         ]
-      }
+      },
+      "description": "Publish HTML Triage Report"
     }
   ]
 }

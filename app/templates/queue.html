@@ -9,8 +9,8 @@
 {% block content %}
 <div class="stage-header">
     <span class="type-tag human">👤 human_review_queue</span>
-    <h1>{{ stage_def.name }}</h1>
-    <p class="stage-id"><code>{{ stage_id }}</code> · run <code>{{ run_id }}</code></p>
+    <h1><code>{{ stage_id }}</code></h1>
+    <p class="stage-id">{{ stage_def.description }} · run <code>{{ run_id }}</code></p>
 </div>
 
 <div class="reviewer-gate">

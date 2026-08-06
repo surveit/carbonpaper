@@ -12,8 +12,10 @@ TOOL_SPECS: dict[str, ToolSpec] = {
         description="""\
 Create NEW stages in the workflow. `stages` is a LIST — submit every stage
 you are ready to author in ONE call; a list of one is the single-stage case.
-Each is a FULL stage: id (new and unique — use edit_stage to change an
-existing one), name, type, the config block(s) its type requires — connector
+Each is a FULL stage: id (new and unique, and the stage's ONLY name — every
+surface shows it, so name the step well; use edit_stage to change an existing
+one), description (ONE line under that name, never a name itself), type, the
+config block(s) its type requires — connector
 / llm / function / join / aggregate / queue / union / filter, and `publish`
 needs BOTH its `publish` block and a `function` block — output_schema, inputs,
 and `signature` (REQUIRED for every NEW stage: what the transform reads and
@@ -74,8 +76,8 @@ generate_data_model(project_id).""",
     "describe_workflow": ToolSpec(
         name="describe_workflow",
         description="""\
-Summarize a project's workflow: each stage's id, type, name, upstream input
-ids, and review state. Read this before editing so you know the current
+Summarize a project's workflow: each stage's id, type, description, upstream
+input ids, and review state. Read this before editing so you know the current
 shape. Does not return full stage specs — use read_stage for one.""",
     ),
     "edit_stage": ToolSpec(
@@ -84,7 +86,7 @@ shape. Does not return full stage specs — use read_stage for one.""",
 Change specific fields of one stage. `changes_json` is a JSON object of
 ONLY the fields to change (a JSON Merge Patch): {"limit": 100} sets limit;
 {"llm": {"model": "claude-opus-5"}} changes only llm.model and leaves the rest of the
-llm block intact; {"name": null} deletes a field. Fields you do not mention
+llm block intact; {"limit": null} deletes a field. Fields you do not mention
 are preserved exactly. Validated first; if invalid, nothing is written and
 the issues are returned. A successful edit drops the node to 'edited_stale'
 for a human to re-approve — you cannot approve it yourself. You cannot

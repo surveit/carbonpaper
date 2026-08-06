@@ -15,7 +15,7 @@ def _python_stage(*, summary=_SUMMARY, corner_cases=None) -> Stage:
     if corner_cases is not None:
         function["corner_cases"] = corner_cases
     return parse_stage({
-        "id": "double", "name": "Double", "type": "python_row_function",
+        "id": "double", "description": "Double", "type": "python_row_function",
         "inputs": [{"id": "load", "schema": {"columns": [
             {"name": "amount", "type": "float", "nullable": False},
         ]}}],
@@ -97,7 +97,7 @@ def test_a_stage_with_no_summary_cannot_generate_examples():
 
 def test_generator_rejects_non_python_stages():
     bad = parse_stage({
-        "id": "pub", "name": "Publish", "type": "publish",
+        "id": "pub", "description": "Publish", "type": "publish",
         "signature": {"form": "replaces"},
         "inputs": [{"id": "double", "schema": {"columns": [
             {"name": "amount", "type": "float", "nullable": False},

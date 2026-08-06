@@ -18,7 +18,7 @@ _X_COLUMN = [{"name": "x", "type": "int", "nullable": True}]
 
 def _stage(code, inputs=("src",), output_columns=_X_COLUMN):
     return parse_stage({
-        "id": "t", "name": "t", "type": "python_row_function",
+        "id": "t", "description": "t", "type": "python_row_function",
         "inputs": [{"id": i, "schema": {"columns": _X_COLUMN}} for i in inputs],
         "signature": {"form": "extends", "adds": [
             c for c in output_columns if c["name"] not in {i["name"] for i in _X_COLUMN}]},

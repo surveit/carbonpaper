@@ -18,7 +18,7 @@ _IN_SCHEMA = {"columns": [{"name": "firm", "type": "str", "nullable": False},
 
 def _counts() -> pd.DataFrame:
     stage = parse_stage({
-        "id": "agg", "type": "aggregate", "name": "agg",
+        "id": "agg", "type": "aggregate", "description": "agg",
         "inputs": [{"id": "filings", "schema": _IN_SCHEMA}],
         "signature": {
             "form": "replaces",

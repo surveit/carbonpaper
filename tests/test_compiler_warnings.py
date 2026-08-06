@@ -34,7 +34,7 @@ def _stage(stage_id="s", type_="python_row_function", handle="function", **kw):
             block = {**block, "module": kw.pop("module", "pkg.mod")}
             block.pop("code")
     spec = {
-        "id": stage_id, "name": stage_id.replace("_", " ").title(), "type": type_,
+        "id": stage_id, "description": stage_id.replace("_", " ").title(), "type": type_,
         "inputs": [{"id": "up", "schema": _SCHEMA}],
         "signature": _signature_for(type_, _SCHEMA),
         handle: block,
@@ -55,7 +55,7 @@ def test_a_described_and_exemplified_stage_warns_about_nothing():
 def test_a_config_only_stage_warns_about_nothing():
     """An enrich's keys are config a reviewer reads directly — no description to miss."""
     enrich = m.parse_stage({
-        "id": "j", "name": "J", "type": "enrich",
+        "id": "j", "description": "J", "type": "enrich",
         "inputs": [{"id": "a", "schema": _SCHEMA},
                    {"id": "b", "schema": {"columns": [{"name": "id", "type": "str", "nullable": True},
                                                       {"name": "v", "type": "str", "nullable": True}]}}],
@@ -100,7 +100,7 @@ def test_module_code_is_blocking_because_the_panel_cannot_show_it():
 def _publish_stage(stage_id="pub"):
     """Authored code a reviewer must trust prose for, and no handler to run an example."""
     return m.parse_stage({
-        "id": stage_id, "name": "Pub", "type": "publish",
+        "id": stage_id, "description": "Pub", "type": "publish",
         "signature": {"form": "replaces"},
         "inputs": [{"id": "up", "schema": _SCHEMA}],
         "publish": {"format": "csv"},

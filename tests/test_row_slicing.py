@@ -33,7 +33,7 @@ def _load_stage(sid: str, df: pd.DataFrame, tmp_path) -> Stage:
     path = tmp_path / f"{sid}.csv"
     df.to_csv(path, index=False)
     return parse_stage({
-        "id": sid, "name": sid, "type": "input_data",
+        "id": sid, "description": sid, "type": "input_data",
         "connector": {"kind": "file", "params": {"path": str(path), "format": "csv"}},
         "signature": {"form": "replaces", "produces": _NAME_VAL_SCHEMA["columns"]},
     })
@@ -53,7 +53,7 @@ def test_limit_caps_the_rows_a_frame_handler_is_given(tmp_path):
     # leave 3 rows all saying the handler had been given 5.
     load = _load_stage("src", _rows("s", 5), tmp_path)
     counted = parse_stage({
-        "id": "counted", "name": "counted", "type": "python_frame_function",
+        "id": "counted", "description": "counted", "type": "python_frame_function",
         "inputs": [{"id": "src", "schema": _NAME_VAL_SCHEMA}],
         "signature": {
             "form": "replaces",
@@ -76,7 +76,7 @@ def test_limit_keeps_the_row_mapper_off_the_rows_past_the_cap(tmp_path):
     # a capped llm_transform makes N calls, it does not make them all and discard.
     load = _load_stage("src", _rows("s", 5), tmp_path)
     mapper = parse_stage({
-        "id": "m", "name": "m", "type": "python_row_function",
+        "id": "m", "description": "m", "type": "python_row_function",
         "inputs": [{"id": "src", "schema": _NAME_VAL_SCHEMA}],
         "signature": {
             "form": "extends",
@@ -95,7 +95,7 @@ def test_the_uncapped_run_of_that_same_mapper_still_fails(tmp_path):
     # The cap is doing the work above, not a mapper that never refuses anything.
     load = _load_stage("src", _rows("s", 5), tmp_path)
     mapper = parse_stage({
-        "id": "m", "name": "m", "type": "python_row_function",
+        "id": "m", "description": "m", "type": "python_row_function",
         "inputs": [{"id": "src", "schema": _NAME_VAL_SCHEMA}],
         "signature": {
             "form": "extends",
@@ -112,7 +112,7 @@ def test_a_limit_cuts_the_same_window_off_every_input_of_a_union(tmp_path):
     left = _load_stage("left", _rows("l", 3), tmp_path)
     right = _load_stage("right", _rows("r", 3, first=10), tmp_path)
     union = parse_stage({
-        "id": "u", "name": "u", "type": "union",
+        "id": "u", "description": "u", "type": "union",
         "inputs": [{"id": "left", "schema": _NAME_VAL_SCHEMA},
                    {"id": "right", "schema": _NAME_VAL_SCHEMA}],
         "signature": {"form": "replaces", "produces": _NAME_VAL_SCHEMA["columns"]},
@@ -129,7 +129,7 @@ def test_union_lineage_counts_from_the_first_row_the_stage_actually_read():
     # The runtime hands a union already-sliced frames, so their row 0 is the
     # upstream's row `first_row_ordinal` — the sidecar has to say so.
     stage = parse_stage({
-        "id": "u", "name": "u", "type": "union",
+        "id": "u", "description": "u", "type": "union",
         "inputs": [{"id": "left", "schema": _NAME_VAL_SCHEMA},
                    {"id": "right", "schema": _NAME_VAL_SCHEMA}],
         "signature": {"form": "replaces", "produces": _NAME_VAL_SCHEMA["columns"]}, "union": {},

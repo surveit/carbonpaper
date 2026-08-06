@@ -46,7 +46,6 @@ class StageView(BaseModel):
 
     record: dict[str, Any]
     stage_id: str
-    name: str
     type: str
     status: str
     row_count: int
@@ -119,7 +118,6 @@ def _build_stage_view(
     return StageView(
         record=record,
         stage_id=stage_id,
-        name=str(record.get("name") or stage_id),
         type=_read_plain_str(record.get("type")),
         status=_read_plain_str(record.get("status")),
         row_count=int(record.get("output_row_count") or 0),

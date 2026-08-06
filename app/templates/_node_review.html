@@ -28,7 +28,7 @@
   <div class="nr-bar">
     <div class="nr-bar-id">
       <span class="type-tag big {{ type_class.get(stage.type, 'custom') }}">{{ type_glyph.get(stage.type, '') }} {{ stage.type }}</span>
-      <div class="nr-bar-name"><h2>{{ stage.name }}</h2><code>{{ stage.id }}</code></div>
+      <div class="nr-bar-name"><h2><code>{{ stage.id }}</code></h2><p>{{ stage.description }}</p></div>
     </div>
     <div class="nr-bar-decide">
       <span class="belief-chip belief-{{ 'stale' if state == 'edited_stale' else state }}" data-role="state-chip">{{ belief_label.get(state, state) }}</span>

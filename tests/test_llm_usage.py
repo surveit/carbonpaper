@@ -23,7 +23,7 @@ def test_summed_of_nothing_is_the_zero_instance():
 
 def _llm_stage() -> Stage:
     return parse_stage({
-        "id": "classify", "name": "Classify", "type": "llm_transform",
+        "id": "classify", "description": "Classify", "type": "llm_transform",
         "inputs": [{"id": "load", "schema": {
             "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}],
         }}],
@@ -87,7 +87,7 @@ def test_run_manifest_records_stage_llm_usage(tmp_path, monkeypatch):
     (tmp_path / "data").mkdir(parents=True)
     pd.DataFrame({"id": ["a", "b"], "text": ["x", "y"]}).to_csv(
         tmp_path / "data" / "in.csv", index=False)
-    load = {"id": "load", "name": "Load", "type": "input_data",
+    load = {"id": "load", "description": "Load", "type": "input_data",
             "connector": {"kind": "file", "params": {
                 "path": str(tmp_path / "data" / "in.csv"), "format": "csv"}},
             "signature": {
@@ -97,7 +97,7 @@ def test_run_manifest_records_stage_llm_usage(tmp_path, monkeypatch):
                     {"name": "text", "type": "str", "nullable": True},
                 ],
             }}
-    classify = {"id": "classify", "name": "Classify", "type": "llm_transform",
+    classify = {"id": "classify", "description": "Classify", "type": "llm_transform",
                 "inputs": [{"id": "load", "schema": {"columns": [
                     {"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}]}}],
                 "signature": {

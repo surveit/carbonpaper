@@ -36,7 +36,7 @@ def _join_stage(*, adds=None, enrich_with=None, left=_LEFT, right=_RIGHT,
                 keys=None, stage_type="enrich"):
     return {
         "id": "add_filings",
-        "name": "Enrich facilities with filings",
+        "description": "Enrich facilities with filings",
         "type": stage_type,
         "inputs": [
             {"id": "facilities", "schema": left},

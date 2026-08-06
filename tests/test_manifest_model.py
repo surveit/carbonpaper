@@ -87,7 +87,7 @@ def test_minted_manifest_omits_the_run_level_optionals():
     `cancelled_at`, `resumed_at`, `updated_at`)."""
     abs_path = str((Path.cwd() / "x.csv").resolve())
     stage = parse_stage(
-        {"id": "s", "name": "S", "type": "input_data",
+        {"id": "s", "description": "S", "type": "input_data",
          "connector": {"kind": "file", "params": {"path": abs_path, "format": "csv"}},
          "signature": {
              "form": "replaces",

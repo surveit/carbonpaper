@@ -59,7 +59,7 @@ def _tools(name: str) -> list[BoundToolSpec]:
 
 
 def _stage(sid: str, name: str, stype: str, inputs: list[str] | None = None) -> dict:
-    stage: dict = {"id": sid, "name": name, "type": stype}
+    stage: dict = {"id": sid, "description": name, "type": stype}
     stage.update(_HANDLE_BY_TYPE.get(stype, {}))
     if stype in _SIGNATURE_BY_TYPE:
         stage["signature"] = _SIGNATURE_BY_TYPE[stype]
@@ -120,7 +120,7 @@ def test_edit_stage_tool_invalid_writes_nothing_and_reports_issues(examples_root
     before = (pdir / "compiled" / "01_load.json").read_text(encoding="utf-8")
     tools = _tools("alpha")
     out = _tool(tools, "edit_stage")(
-        "alpha", "load", json.dumps({"id": "load", "name": "x", "type": "not_a_real_type"})
+        "alpha", "load", json.dumps({"id": "load", "description": "x", "type": "not_a_real_type"})
     )
     assert out["ok"] is False and out["issues"]
     assert (pdir / "compiled" / "01_load.json").read_text(encoding="utf-8") == before

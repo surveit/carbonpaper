@@ -30,7 +30,7 @@ def _queue_stage(
         for upstream in (input_ids or ["upstream"])
     ]
     return parse_stage({
-        "id": "review", "name": "Review", "type": "human_review_queue",
+        "id": "review", "description": "Review", "type": "human_review_queue",
         "inputs": inputs,
         "signature": {"form": "extends", "adds": added},
         "queue": queue_columns(source=source, target=target),

@@ -21,7 +21,7 @@ def _load_revision(name: str) -> Any:
 
 def _stage(stage_id: str) -> dict[str, Any]:
     columns = [{"name": "id", "type": "str", "nullable": True}]
-    return {"id": stage_id, "name": stage_id, "type": "python_frame_function",
+    return {"id": stage_id, "description": stage_id, "type": "python_frame_function",
             "inputs": [{"id": "src", "schema": {"columns": list(columns)}}],
             "function": {"kind": "inline", "summary": "Passes rows through.",
                          "code": "def transform(df):\n    return df"},
@@ -38,7 +38,7 @@ def _stale_stage_ids(document: dict[str, Any]) -> list[str]:
 
 def _dropping_stage() -> dict[str, Any]:
     """A row function whose stored outer dropped an anchor column."""
-    return {"id": "gate", "name": "Gate", "type": "python_row_function",
+    return {"id": "gate", "description": "Gate", "type": "python_row_function",
             "inputs": [{"id": "src", "schema": {"columns": [
                 {"name": "id", "type": "str", "nullable": True},
                 {"name": "scratch", "type": "str", "nullable": True}]}}],
@@ -100,7 +100,7 @@ def test_0007_leaves_an_already_complete_document_untouched():
 
 def _queueless_queue_stage() -> dict[str, Any]:
     """A queue stage whose queue block does not read — nothing determines its adds."""
-    return {"id": "gate", "name": "Gate", "type": "human_review_queue",
+    return {"id": "gate", "description": "Gate", "type": "human_review_queue",
             "inputs": [{"id": "src", "schema": {"columns": [
                 {"name": "id", "type": "str", "nullable": True}]}}],
             "queue": {"filter": "id != ''"},

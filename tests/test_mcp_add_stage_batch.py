@@ -19,11 +19,11 @@ _CLEANED = {"columns": [
 ]}
 
 _LOAD = {
-    "id": "load", "name": "Load claims", "type": "input_data",
+    "id": "load", "description": "Load claims", "type": "input_data",
     "connector": {"kind": "file"}, "signature": {"form": "replaces", "produces": _CLAIM["columns"]},
 }
 _CLEAN = {
-    "id": "clean", "name": "Clean", "type": "python_row_function",
+    "id": "clean", "description": "Clean", "type": "python_row_function",
     "inputs": [{"id": "load", "schema": _CLAIM}],
     "function": {"kind": "inline", "summary": "Test fixture step.", "corner_cases": [],
                  "code": "def transform(row):\n    return {**row, 'cleaned': True}\n"},
@@ -36,14 +36,14 @@ _CLEAN = {
 # Refused by Stage: an llm_transform's signature must read exactly what its
 # template injects, and this reads nothing. Real validation, not a fixture trick.
 _SCORE_UNADDITIVE = {
-    "id": "score", "name": "Score", "type": "llm_transform",
+    "id": "score", "description": "Score", "type": "llm_transform",
     "inputs": [{"id": "clean", "schema": _CLEANED}],
     "signature": {"form": "extends",
                   "adds": [{"name": "verdict", "type": "str", "nullable": True}]},
     "llm": {"prompt_data_template": "judge {amount}"},
 }
 _RANK = {
-    "id": "rank", "name": "Rank", "type": "python_row_function",
+    "id": "rank", "description": "Rank", "type": "python_row_function",
     "inputs": [{"id": "score", "schema": {
         "columns": [{"name": "verdict", "type": "str", "nullable": True}]}}],
     "function": {"kind": "inline", "summary": "Test fixture step.", "corner_cases": [],
@@ -60,7 +60,7 @@ _RANK = {
     },
 }
 _REPORT = {
-    "id": "report", "name": "Report", "type": "python_row_function",
+    "id": "report", "description": "Report", "type": "python_row_function",
     "inputs": [{"id": "rank", "schema": {
         "columns": [{"name": "rank", "type": "int", "nullable": False}]}}],
     "function": {"kind": "inline", "summary": "Test fixture step.", "corner_cases": [],
@@ -155,7 +155,7 @@ def test_a_cycle_among_the_submitted_stages_refuses_the_whole_batch(project):
 def test_two_stages_sharing_an_id_refuse_the_whole_batch(project):
     """Also unorderable: which of the two is the stage `clean` inputs from has no
     answer. Writing one and failing the other would pick one arbitrarily."""
-    result = _call_add_stage([_LOAD, {**_LOAD, "name": "Load again"}])
+    result = _call_add_stage([_LOAD, {**_LOAD, "description": "Load again"}])
 
     assert result["ok"] is False and result["added"] == []
     assert any("duplicate" in issue for issue in result["issues"])

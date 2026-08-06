@@ -30,7 +30,7 @@ DRIFTED_MARKER = "DRIFTED_LABEL"
 
 def _load_stage(data_path: Path) -> dict:
     return {
-        "id": LOAD_ID, "name": "Load rows", "type": "input_data",
+        "id": LOAD_ID, "description": "Load rows", "type": "input_data",
         "connector": {"kind": "file",
                       "params": {"path": str(data_path), "format": "csv"}},
         "signature": {
@@ -47,7 +47,7 @@ def _classify_stage(marker: str) -> dict:
     """A python_row_function whose only observable difference between the pinned
     version and the drifted working copy is the label it writes."""
     return {
-        "id": CLASSIFY_ID, "name": f"Classify ({marker})",
+        "id": CLASSIFY_ID, "description": f"Classify ({marker})",
         "type": "python_row_function",
         "inputs": [{"id": LOAD_ID,
                     "schema": {"columns": [{"name": "name", "type": "str", "nullable": True},

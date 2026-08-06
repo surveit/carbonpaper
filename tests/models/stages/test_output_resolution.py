@@ -11,7 +11,7 @@ from app.models.stage import Stage
 
 def _row_stage(**overrides) -> dict:
     spec = {
-        "id": "clean", "name": "Clean", "type": "python_row_function",
+        "id": "clean", "description": "Clean", "type": "python_row_function",
         "inputs": [{"id": "bills", "schema": {"columns": [
             {"name": "price", "type": "str", "nullable": True},
             {"name": "title", "type": "str", "nullable": True},
@@ -37,7 +37,7 @@ def test_an_extends_signature_resolves_the_outer():
 
 def test_a_replaces_signature_resolves_to_exactly_produces():
     stage = parse_stage({
-        "id": "shape", "name": "Shape", "type": "python_frame_function",
+        "id": "shape", "description": "Shape", "type": "python_frame_function",
         "inputs": [{"id": "bills", "schema": {"columns": [
             {"name": "price", "type": "str", "nullable": True}]}}],
         "function": {"kind": "inline", "code": "def transform(df):\n    return df"},
@@ -70,7 +70,7 @@ def test_a_missing_signature_is_refused():
 
 def test_an_edge_is_satisfied_by_the_upstream_resolved_outer():
     source = parse_stage({
-        "id": "bills", "name": "Bills", "type": "input_data",
+        "id": "bills", "description": "Bills", "type": "input_data",
         "connector": {"kind": "file", "params": {"format": "csv"}},
         "signature": {
             "form": "replaces",
@@ -82,7 +82,7 @@ def test_an_edge_is_satisfied_by_the_upstream_resolved_outer():
     })
     upstream = parse_stage(_row_stage())
     downstream = parse_stage({
-        "id": "keep", "name": "Keep", "type": "filter_rows",
+        "id": "keep", "description": "Keep", "type": "filter_rows",
         "inputs": [{"id": "clean", "schema": {"columns": [
             {"name": "price", "type": "float", "nullable": True},
             {"name": "title", "type": "str", "nullable": True},
@@ -96,7 +96,7 @@ def test_an_edge_is_satisfied_by_the_upstream_resolved_outer():
 
 def test_a_signature_only_llm_stage_resolves_its_reply_schema():
     stage: Stage = parse_stage({
-        "id": "score", "name": "Score", "type": "llm_transform",
+        "id": "score", "description": "Score", "type": "llm_transform",
         "inputs": [{"id": "bills", "schema": {"columns": [
             {"name": "title", "type": "str", "nullable": True}]}}],
         "llm": {"prompt_data_template": "Title: {title}"},
@@ -112,7 +112,7 @@ def test_a_signature_only_llm_stage_resolves_its_reply_schema():
 
 def test_a_signature_only_enrich_resolves_from_bring_and_anchor():
     stage = parse_stage({
-        "id": "add_region", "name": "Add region", "type": "enrich",
+        "id": "add_region", "description": "Add region", "type": "enrich",
         "inputs": [
             {"id": "bills", "schema": {"columns": [
                 {"name": "state", "type": "str", "nullable": True}]}},

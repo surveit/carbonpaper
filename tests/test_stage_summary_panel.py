@@ -33,11 +33,11 @@ def _seed_project(root: Path) -> None:
     compiled = root / "alpha" / "compiled"
     compiled.mkdir(parents=True)
     (compiled / "01_load.json").write_text(json.dumps({
-        "id": "load", "name": "Load", "type": "input_data",
+        "id": "load", "description": "Load", "type": "input_data",
         "connector": {"kind": "file"}, "signature": {"form": "replaces", "produces": _IN_SCHEMA["columns"]},
     }), encoding="utf-8")
     (compiled / "02_flag.json").write_text(json.dumps({
-        "id": "flag_withdrawn", "name": "Flag withdrawn bills",
+        "id": "flag_withdrawn", "description": "Flag withdrawn bills",
         "type": "python_row_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
         "signature": {
@@ -53,7 +53,7 @@ def _seed_project(root: Path) -> None:
         }],
     }), encoding="utf-8")
     (compiled / "03_unsummarized.json").write_text(json.dumps({
-        "id": "no_summary", "name": "Unsummarized step",
+        "id": "no_summary", "description": "Unsummarized step",
         "type": "python_row_function",
         "inputs": [{"id": "flag_withdrawn", "schema": _OUT_SCHEMA}],
         "signature": {
@@ -91,7 +91,7 @@ def test_a_summary_does_not_change_what_the_stage_computes() -> None:
     # heterogeneous dict literal's values as a union, which `**` cannot spread.
     function = {"kind": "inline", "summary": _SUMMARY, "code": _CODE}
     spec = {
-        "id": "flag", "name": "Flag", "type": "python_row_function",
+        "id": "flag", "description": "Flag", "type": "python_row_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
         "signature": {
             "form": "extends",

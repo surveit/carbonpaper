@@ -185,8 +185,8 @@ def _read_bust_cache(form: FormData) -> bool:
 
 @router.get("/project/{project}/run-inputs")
 async def run_inputs(project: str, version_id: str | None = None):
-    """The file-kind input stages of one version as JSON ([{stage_id, name,
-    path}]). The run form fetches this when the version dropdown changes so its
+    """The file-kind input stages of one version as JSON ([{stage_id, path}]).
+    The run form fetches this when the version dropdown changes so its
     path fields describe the version about to run — a different version can author
     different input stages/paths. `version_id` None resolves to the latest."""
     project_dir = projects_dir() / project

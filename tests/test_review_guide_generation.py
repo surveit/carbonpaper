@@ -31,11 +31,11 @@ _DOUBLED = {"columns": [
 ]}
 
 _LOAD = {
-    "id": "load", "name": "Load", "type": "input_data",
+    "id": "load", "description": "Load", "type": "input_data",
     "connector": {"kind": "file"}, "signature": {"form": "replaces", "produces": _ROWS["columns"]},
 }
 _DOUBLE = {
-    "id": "double", "name": "Double", "type": "python_row_function",
+    "id": "double", "description": "Double", "type": "python_row_function",
     "inputs": [{"id": "load", "schema": _ROWS}], "signature": {
         "form": "extends",
         "reads": [{"input": "load", "columns": _ROWS["columns"]}],
@@ -47,7 +47,7 @@ _DOUBLE = {
 # Added to the WORKING COPY after the version is cut, never to the version itself:
 # a guide naming it would be describing a workflow the version does not contain.
 _TRIPLE = {
-    "id": "triple", "name": "Triple", "type": "python_row_function",
+    "id": "triple", "description": "Triple", "type": "python_row_function",
     "inputs": [{"id": "load", "schema": _ROWS}], "signature": {
         "form": "extends",
         "reads": [{"input": "load", "columns": _ROWS["columns"]}],
