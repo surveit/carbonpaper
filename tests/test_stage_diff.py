@@ -9,18 +9,20 @@ from pathlib import Path
 
 import pandas as pd
 
-from app.models.stage import Stage, parse_stage
+from app.models.stage import Stage, StageType, is_grain_and_order_preserving, parse_stage
 from app.runtime.lineage import (
     TRACE_SOURCE_ROW_KEY,
     TRACE_SOURCE_STAGE_KEY,
     lineage_sidecar_path,
 )
 from app.web.stage_diff import (
+    _NO_ALIGNED_DIFF,
     BASE_INPUT_ROLE,
     DIFF_ROWS_SHOWN,
     FILTER_ROWS_KIND,
     REFERENCE_INPUT_ROLE,
     ROW_ALIGNED_KIND,
+    ROW_ALIGNED_TYPES,
     SOLE_INPUT_ROLE,
     CellDiffState,
     ColumnDiffState,
@@ -213,6 +215,48 @@ def test_an_llm_transform_is_admitted_to_the_row_aligned_diff(tmp_path: Path) ->
 
     assert isinstance(diff, RowAlignedDiff) and diff.kind == ROW_ALIGNED_KIND
     assert diff.added_column_names == ["label"]
+
+
+def test_a_starlark_row_function_is_admitted_to_the_row_aligned_diff(tmp_path: Path) -> None:
+    stage = parse_stage({
+        "id": "classify", "name": "Classify", "type": "starlark_row_function",
+        "inputs": [{"id": LOAD_ID, "schema": {"columns": _IN_COLUMNS}}],
+        "starlark": {"code": "def transform(row):\n    return row"},
+        "signature": {
+            "form": "extends",
+            "reads": [
+                {
+                    "input": "load",
+                    "columns": [{"name": "name", "type": "str", "nullable": True}],
+                },
+            ],
+            "adds": [{"name": "basis", "type": "str", "nullable": True}],
+        },
+    })
+    _write_output(tmp_path, LOAD_ID, pd.DataFrame({"name": ["a"], "val": [1]}))
+    out_rel = _write_output(tmp_path, "classify", pd.DataFrame(
+        {"name": ["a"], "val": [1], "basis": ["x"]}))
+
+    diff = build_stage_diff(stage, tmp_path, out_rel, {LOAD_ID: _LOAD_PATH})
+
+    assert isinstance(diff, RowAlignedDiff) and diff.kind == ROW_ALIGNED_KIND
+    assert diff.added_column_names == ["basis"]
+
+
+def test_every_grain_preserving_type_gets_a_diff_unless_it_has_nothing_to_compare() -> None:
+    """A new preserving type is covered without this pane being edited."""
+    for stage_type in StageType:
+        if not is_grain_and_order_preserving(stage_type):
+            continue
+        assert (stage_type in ROW_ALIGNED_TYPES) != (stage_type in _NO_ALIGNED_DIFF), (
+            f"{stage_type.value} is grain-and-order-preserving, so it is either "
+            f"covered by the aligned diff or listed in _NO_ALIGNED_DIFF with a reason"
+        )
+
+
+def test_the_excluded_types_are_the_two_with_no_transform_to_show() -> None:
+    # Growing this list means a type stopped getting a diff — a decision, not a refactor.
+    assert _NO_ALIGNED_DIFF == {StageType.input_data, StageType.human_review_queue}
 
 
 # ─── enrich: the row-aligned diff against its SUBJECT input ──────────────────
