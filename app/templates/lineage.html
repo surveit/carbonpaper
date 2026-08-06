@@ -118,7 +118,10 @@ const JOIN_KINDS = ['enrich', 'expand'];
 let sel = V.nodes.length - 1, tab = 'row', scope = 'changed';
 const transformCache = {};
 
-const branchCount = V.nodes.reduce((n, x) => n + ((x.branches || []).length), 0);
+// Summed off each cohort's `total`, not the rows it links, so "one of N paths"
+// states how many paths the run RECORDED rather than how many this page opens.
+const branchCount = V.nodes.reduce((n, x) => n + (x.branches || []).length
+  + (x.contributor_groups || []).reduce((m, g) => m + g.total, 0), 0);
 document.getElementById('sub').textContent = `run ${V.run_id} · ${V.start_stage} row ${V.start_row}`
   + ` · reads top to bottom, step 1 first`
   + (branchCount ? ` · one of ${branchCount + 1} paths — the others are listed below` : '');
@@ -166,53 +169,40 @@ function renderStory(){
 }
 
 // ---- Off-spine branches, so a path not taken is never merely hidden --------
-// A fan-in row has one branch per contributing input row — fifty of them reads
-// as noise, so they collapse to a count. Branches carrying the same `columns`
-// share a chip: an aggregate whose columns all rest on the same rows shows one,
-// and only a per-column `where` splits it into several.
-const CONTRIBUTORS_SHOWN = 3;
-// A `group_by: []` aggregate makes one row out of EVERY input row, so a group
-// here runs to tens of thousands. The row numbers ride in the query string, and
-// a request line that long is refused by the server before any handler sees it
-// (h11 caps an incomplete event at 16KB), so the link carries at most
-// CONTRIBUTORS_LINKED of them. The COUNT below is always the true group size,
-// read off the full sidecar, and a shortened link says so in its own words —
-// the cap is on what one URL can address, never on what was recorded.
-const CONTRIBUTORS_LINKED = 500;
-function contributorGroups(branches){
-  const groups = new Map();
-  branches.forEach(b => {
-    const key = (b.columns || []).join(',');
-    if(!groups.has(key)) groups.set(key, { columns: b.columns, rows: [] });
-    groups.get(key).rows.push(b);
-  });
-  return [...groups.values()];
-}
 function bchip(b){
   return `<a class="branch" href="${b.links.trace}" title="trace this row instead">`
        + `${esc(b.stage_id)} row ${b.row_ordinal}</a>`;
 }
-// Opens the contributing rows in the parent stage's own rows view, filtered to
-// them. Highlight-in-place would mean paging a reader to the right offset of a
-// large table; the filtered list answers the question directly.
+// A fan-in row has one contributor per input row it summarizes — fifty of them
+// reads as noise, so they collapse to a count. `contributor_groups` arrives
+// already grouped by the columns each cohort fed, and already bounded, from
+// build_trace_view: an aggregate whose columns all rest on the same rows shows
+// one chip, and only a per-column `where` splits it into several.
+//
+// `g.total` is the cohort's TRUE size, counted over the whole sidecar, so the
+// number the reader sees is never the bounded one — `g.linked` says how many
+// rows the link opens where it cannot open them all. `g.named` is non-empty
+// only for a cohort small enough to name row by row, and `g.rows_link` is built
+// server-side, so no route is spelled out again here.
 function gchip(g){
   const into = g.columns ? ` into ${g.columns.map(esc).join(' and ')}` : '';
-  if(g.rows.length <= CONTRIBUTORS_SHOWN) return g.rows.map(bchip).join(' ') + into;
-  const stage = g.rows[0].stage_id;
-  const linked = g.rows.slice(0, CONTRIBUTORS_LINKED);
-  const ordinals = linked.map(b => b.row_ordinal).join(',');
-  const label = linked.length < g.rows.length
-    ? `${g.rows.length} rows of ${esc(stage)} contributed — open the first ${linked.length}`
-    : `${g.rows.length} rows of ${esc(stage)} contributed`;
-  return `<a class="branch" href="${g.rows[0].links.rows}?ordinals=${encodeURIComponent(ordinals)}"`
-       + ` title="open these rows of ${esc(stage)}">${label}</a>${into}`;
+  if(g.named.length) return g.named.map(bchip).join(' ') + into;
+  const label = g.linked < g.total
+    ? `${g.total} rows of ${esc(g.stage_id)} contributed — open the first ${g.linked}`
+    : `${g.total} rows of ${esc(g.stage_id)} contributed`;
+  // No rows view to point at (the review packet's link set): still say the count.
+  if(!g.rows_link) return `${label}${into}`;
+  return `<a class="branch" href="${g.rows_link}"`
+       + ` title="open these rows of ${esc(g.stage_id)}">${label}</a>${into}`;
 }
 function renderOffPath(){
   if(!branchCount) return;
   const off = document.getElementById('offpath');
   off.innerHTML = '<b>Not on this path:</b> '
-    + V.nodes.flatMap(n => contributorGroups(n.branches || []).map(g =>
-        `${gchip(g)} <span class="stepno">(step ${n.step})</span>`)).join(' · ')
+    + V.nodes.flatMap(n => [
+        ...(n.contributor_groups || []).map(gchip),
+        ...(n.branches || []).map(bchip),
+      ].map(chip => `${chip} <span class="stepno">(step ${n.step})</span>`)).join(' · ')
     + ' — each is a trace of its own; opening one makes it the path shown.';
   off.classList.remove('hidden');
 }
