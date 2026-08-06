@@ -1,13 +1,8 @@
-{# Per-run stage detail panel. Two layers of tabs:
-     L1: Schema (the static contract) | Current run (this run's data)
-     L2: Data | Transform
-   3 panes: Data differs by tier, Transform does not. Data folds what were
-   separate Inputs/Outputs tabs into one pane — the run-tier output now reads
-   as a diff AGAINST its input where the stage type permits one, so keeping
-   the two apart made the reader reconcile them mentally. The stage
-   definition this run pinned IS what the current run transformed with, so one
-   Transform pane serves both tiers (`data-pane` lists both) and you can stay
-   on "Current run" for the whole panel. #}
+{# Per-run stage detail panel. One tab strip: Data | Schema | Transform.
+   Data folds what were separate Inputs/Outputs tabs into one pane — the output
+   reads as a diff AGAINST its input where the stage type permits one, so
+   keeping the two apart made the reader reconcile them mentally. Schema is the
+   static contract: the input schemas, then the output schema. #}
 {% from "_schema_table.html" import schema_table %}
 {% from "_stage_code.html" import stage_code %}
 
@@ -50,22 +45,19 @@
 {% for v in stage.input_validation_report %}{% for i in v.issues %}{% set _ = in_issues.append(i) %}{% endfor %}{% endfor %}
 {% set out_issues = (stage.output_validation_report.issues if stage.output_validation_report else []) %}
 
-{# ── Tab bars ── #}
+{# ── Tab bar ── #}
 <div class="stage-tabs">
-    <div class="tabs tabs-l1">
-        <button data-l1="schema">Schema</button>
-        <button data-l1="run" class="active">Current run</button>
-    </div>
-    <div class="tabs tabs-l2">
-        <button data-l2="data">Data</button>
-        <button data-l2="transform" class="active">Transform</button>
+    <div class="tabs">
+        <button data-tab="data">Data</button>
+        <button data-tab="schema">Schema</button>
+        <button data-tab="transform" class="active">Transform</button>
     </div>
 </div>
 
 <div class="panes">
 
-  {# ─────────── SCHEMA × DATA (input schemas, then the output schema) ─────────── #}
-  <div class="pane" data-pane="schema-data" hidden>
+  {# ─────────── SCHEMA (input schemas, then the output schema) ─────────── #}
+  <div class="pane" data-pane="schema" hidden>
     {% if stage_def and stage_def.inputs %}
       {% for inp in stage_def.inputs %}
       <div class="schema-card">
@@ -79,8 +71,8 @@
     {% else %}<p class="muted"><em>No output schema declared.</em></p>{% endif %}
   </div>
 
-  {# ─────────── TRANSFORM (both tiers) ─────────── #}
-  <div class="pane" data-pane="schema-transform run-transform" hidden>
+  {# ─────────── TRANSFORM ─────────── #}
+  <div class="pane" data-pane="transform" hidden>
     {% if stage_def %}{% with stage = stage_def %}{% include "_stage_executable.html" %}{% endwith %}
     {% include "_stage_tests.html" %}
     {{ stage_code(stage_def, function_code) }}
@@ -90,8 +82,8 @@
     {% if previewable %}<p class="muted"><em>Pick rows under <b>Data</b> › input rows and run the transform to preview it here.</em></p>{% endif %}
   </div>
 
-  {# ─────────── RUN × DATA (diff-aware output, then the input rows) ─────────── #}
-  <div class="pane" data-pane="run-data" hidden>
+  {# ─────────── DATA (diff-aware output, then the input rows) ─────────── #}
+  <div class="pane" data-pane="data" hidden>
     {# Stage-aware diff (app.web.stage_diff): a row_aligned diff or a
        filter_rows merged table REPLACES the plain preview below — same rows,
        annotated. diff is None for out-of-scope stage types and whenever
@@ -161,7 +153,7 @@
     <div class="scratch-controls">
       <label class="scratch-firstn">run first <input type="number" class="firstn-input" min="1" max="5" value="1"> row(s)</label>
       <button type="button" class="btn scratch-run">▶ Run transform on selected</button>
-      <p class="scratch-hint muted">In-memory only; nothing saved. Result shows under <b>Current run › Transform</b>.
+      <p class="scratch-hint muted">In-memory only; nothing saved. Result shows under <b>Transform</b>.
       {% if stage.type == 'llm_transform' %}<strong>Makes real LLM calls</strong> — keep the selection small.{% endif %}</p>
     </div>
     {% endif %}
@@ -177,21 +169,18 @@
   if (!root || root._wired) return;
   root._wired = true;
 
-  // ── two-layer tabs ──
+  // ── tabs ──
   // Opens on the transform: someone arriving from the review guide, the graph or a
   // deep link is asking what this step DOES; the rows it produced are one click away.
-  let l1 = 'run', l2 = 'transform';
+  let tab = 'transform';
   function apply() {
-    root.querySelectorAll('[data-l1]').forEach(b => b.classList.toggle('active', b.dataset.l1 === l1));
-    root.querySelectorAll('[data-l2]').forEach(b => b.classList.toggle('active', b.dataset.l2 === l2));
-    // A pane may serve more than one tier — data-pane is a space-separated list.
-    root.querySelectorAll('.pane').forEach(p => { p.hidden = !p.dataset.pane.split(' ').includes(l1 + '-' + l2); });
+    root.querySelectorAll('[data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+    root.querySelectorAll('.pane').forEach(p => { p.hidden = p.dataset.pane !== tab; });
   }
-  root.querySelectorAll('[data-l1]').forEach(b => b.addEventListener('click', () => { l1 = b.dataset.l1; apply(); }));
-  root.querySelectorAll('[data-l2]').forEach(b => b.addEventListener('click', () => { l2 = b.dataset.l2; apply(); }));
+  root.querySelectorAll('[data-tab]').forEach(b => b.addEventListener('click', () => { tab = b.dataset.tab; apply(); }));
   apply();
 
-  // ── scratch re-run (row picker in run-data's input rows, result in run-transform) ──
+  // ── scratch re-run (row picker in the Data pane's input rows, result in Transform) ──
   const meth = root.dataset.project, run = root.dataset.run, stage = root.dataset.stage;
   const primary = root.querySelector('.input-preview[data-primary] table.selectable');
   const rowPicks = () => primary ? Array.from(primary.querySelectorAll('.row-pick')) : [];
@@ -207,7 +196,7 @@
     return rowPicks().slice(0, n).map(cb => parseInt(cb.value, 10));
   }
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  function gotoResult() { l1 = 'run'; l2 = 'transform'; apply(); }
+  function gotoResult() { tab = 'transform'; apply(); }
   function renderResult(d) {
     resultEl.hidden = false;
     if (!d.ok) { resultEl.innerHTML = `<div class="scratch-head err">scratch preview failed</div><p class="muted">${esc(d.error || 'unknown')}</p>` + (d.traceback ? `<details><summary>traceback</summary><pre>${esc(d.traceback)}</pre></details>` : ''); return; }

@@ -350,13 +350,13 @@ def test_an_enrich_reads_as_a_diff_against_its_subject_input(run_ctx) -> None:
     assert "diff-col-new" in html and "north" in html
 
 
-def test_the_two_tab_strip_replaces_inputs_and_outputs(run_ctx) -> None:
+def test_the_tab_strip_replaces_inputs_and_outputs(run_ctx) -> None:
     _pdir, run_id = run_ctx
     for stage_id in (CLASSIFY_ID, LOAD_ID):  # in-scope and out-of-scope alike
         html = _panel(run_id, stage_id)
-        assert 'data-l2="data"' in html and 'data-l2="transform"' in html
-        assert 'data-l2="inputs"' not in html and 'data-l2="outputs"' not in html
-        assert 'data-pane="schema-data"' in html and 'data-pane="run-data"' in html
+        assert 'data-tab="data"' in html and 'data-tab="transform"' in html
+        assert 'data-tab="inputs"' not in html and 'data-tab="outputs"' not in html
+        assert 'data-pane="data"' in html and 'data-pane="schema"' in html
         assert "run-inputs" not in html and "run-outputs" not in html
         assert "schema-inputs" not in html and "schema-outputs" not in html
 

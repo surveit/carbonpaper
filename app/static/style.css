@@ -1387,12 +1387,10 @@ table.data-preview.scratch th { background: #f3ecd0; }
 .stage-tabs { display: flex; gap: 1.2rem; align-items: stretch; border-bottom: 1px solid var(--border);
     margin: .8rem 0 1rem; flex-wrap: wrap; }
 .tabs { display: flex; gap: .25rem; }
-.tabs-l1 { border-right: 1px solid var(--border); padding-right: 1.2rem; }
 .tabs button { background: none; border: none; padding: .45rem .85rem; cursor: pointer; font: inherit;
     color: var(--muted); border-radius: 6px 6px 0 0; border-bottom: 2px solid transparent; margin-bottom: -1px; }
 .tabs button:hover { background: var(--hover); color: var(--fg); }
 .tabs button.active { color: var(--fg); background: var(--hover); border-bottom-color: var(--accent); font-weight: 600; }
-.tabs-l1 button.active { border-bottom-color: #7b3aa8; }
 .pane[hidden] { display: none; }
 .prompt-rendered { background: var(--code-deep); color: var(--code-fg); padding: .8rem; border-radius: 6px;
     white-space: pre-wrap; max-height: 420px; overflow: auto; font-size: 12px; line-height: 1.45; }

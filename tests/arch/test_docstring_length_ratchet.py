@@ -890,7 +890,6 @@ _GRANDFATHERED: frozenset[str] = frozenset(
         "tests/test_run_stage_views_pinned_version.py::_unpin_the_run",
         "tests/test_run_stage_views_pinned_version.py::test_scratch_preview_executes_the_stage_that_ran_not_the_working_copy",
         "tests/test_run_stage_views_pinned_version.py::test_scratch_preview_refuses_to_execute_an_unresolvable_version",
-        "tests/test_run_stage_views_pinned_version.py::test_transform_pane_serves_both_the_schema_and_current_run_tiers",
         "tests/test_run_trigger_bindings.py::_corrupt_version_document_with_relative_path",
         "tests/test_run_trigger_version.py::project_two_versions",
         "tests/test_run_trigger_version.py::project_versions_diff_paths",

@@ -30,20 +30,18 @@ reviewing flagged rows, and approving/versioning the workflow itself. Code:
   completed upstream outputs** — no re-running finished stages, no new LLM calls
   for them. (The same mechanism powers "continue after review".)
 
-### The stage panel (`_run_stage_panel.html`) — two layers of tabs
+### The stage panel (`_run_stage_panel.html`) — one strip of tabs
 
 Loaded into the page via `innerHTML`. **Gotcha that bit us:** `innerHTML` does
 NOT execute injected `<script>` tags, so `loadStage` re-creates script nodes
 after injection — without that, the panel's JS (tabs + scratch tool) is dead.
 
-- L1: **Schema** (the static spec) | **Current run** (this run's data).
-- L2: **Data** | **Transform**. 3 panes: Data differs by tier, Transform
-  serves both. Data folds the old Inputs/Outputs tabs into one pane, because
-  the run-tier output now reads as a diff *against* its input.
-- **Data, run tier**: the stage's output (the stage-aware diff below, or the
-  plain preview), validation, then the upstream input previews in an
-  `input rows` disclosure. **Schema tier**: input schemas, then the output
-  schema.
+- **Data** | **Schema** | **Transform**, opening on Transform. Data folds the
+  old Inputs/Outputs tabs into one pane, because the output now reads as a diff
+  *against* its input.
+- **Data**: the stage's output (the stage-aware diff below, or the plain
+  preview), validation, then the upstream input previews in an `input rows`
+  disclosure. **Schema**: input schemas, then the output schema.
 - The **scratch tool** (in-memory re-run on picked rows; real LLM calls for
   `llm_transform`) lives in Data's input-rows disclosure (row picker) and
   shows its result in Transform. Nothing is persisted.
