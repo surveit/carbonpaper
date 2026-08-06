@@ -90,9 +90,11 @@ def read_foreign_csv(path: Path, *, dtype: Mapping[Hashable, Any] | None = None)
     return pd.read_csv(path, dtype=dtype)
 
 
+# Parquet carries its own types, so who wrote the file changes nothing about how to
+# read it: the same reader as `read_frame_file`. The dtype pins the other foreign
+# readers take exist only because csv/xlsx/json hold no types to read.
 def read_foreign_parquet(path: Path) -> pd.DataFrame:
-    """Parquet's own types, as pandas materializes them — NOT `read_frame_file`'s list mapping."""
-    return pd.read_parquet(path)  # so a list cell arrives as np.ndarray, not list
+    return _read_frame_parquet(path)
 
 
 def read_foreign_json_lines(
