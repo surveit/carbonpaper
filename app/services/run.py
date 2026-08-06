@@ -13,12 +13,8 @@ import pandas as pd
 
 from app.core.errors import RunNotFoundError, RunVersionUnresolvableError
 from app.models import Stage
-from app.runtime.manifest import (
-    load_manifest_model,
-    read_run_bindings,
-    read_stage_output_frame,
-    records_a_test_run,
-)
+from app.models.run_manifest import read_run_bindings
+from app.runtime.manifest import load_manifest_model, read_stage_output_frame
 from app.runtime.runner import apply_run_bindings, prepare_run, resume_run, run_prepared
 from app.services.errors import WorkflowLoadError
 from app.services.versioning import (
@@ -114,11 +110,6 @@ def resume(project: str, run_id: str) -> None:
         load_version_stages(project_dir, workflow_version),
         workflow_version,
     )
-
-
-def reads_as_test_run(raw_manifest: dict[str, Any]) -> bool:
-    """Here because app.services.project counts runs off disk and cannot import app.runtime."""
-    return records_a_test_run(raw_manifest)
 
 
 def read_pinned_version(project: str, run_id: str) -> str:

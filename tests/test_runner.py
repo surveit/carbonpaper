@@ -13,7 +13,7 @@ from app.core.run_status import RunStatus
 from app.models import parse_stage, Workflow
 from app.runtime.runner import execute_run, resume_run
 from app.runtime.executor import _raise_if_run_failed, run_subset
-from app.runtime.manifest import RunManifest
+from app.models.run_manifest import RunManifest
 from app.runtime.trace import trace_row
 from app.runtime.stages import llm_transform as lt
 from app.services.loader import WorkflowLoadError

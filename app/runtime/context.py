@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict, model_validator
 from app.core.stage_cache import ReadOnlyStageCache, StageCache, StageCacheEntry
 
 from .run_log import RunLog
-from .run_parameters import RunParameters
+from app.models.run_parameters import RunParameters
 
 
 @dataclass(frozen=True)

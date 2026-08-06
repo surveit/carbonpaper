@@ -12,6 +12,7 @@ from typing import Any, Callable, NamedTuple, Protocol, TypeVar, runtime_checkab
 import pandas as pd
 
 from app.models import Stage
+from app.models.run_manifest import RowError, StageContribution
 from app.models.stage import StageBase, StageType, is_grain_and_order_preserving
 from app.models.stages.llm_transform import LLMTransformStage
 
@@ -28,7 +29,7 @@ from .frame_caching import (
 from ..cancellation import consume_cancel
 from ..context import RunContext
 from ..lineage import attach_row_lineage, kept_rows_lineage
-from ..manifest import CONTRIBUTION_ATTR, RowError, StageContribution
+from ..manifest import CONTRIBUTION_ATTR
 from ..errors import RunCancelled
 from ..run_log import RunLog, bind_row_sink, unbind_detail_sink
 from .row_events import (
