@@ -33,7 +33,7 @@ def test_hrq_note_names_the_decision_values_the_runtime_actually_emits():
     # safe without reasoning about a missing value. Pinned in BOTH directions against the
     # enum: a member added or renamed there and not taught here fails, and so does a
     # verdict the note still names after the enum stopped emitting it.
-    from app.models import ReviewVerdict
+    from app.models.stages.human_review_queue import ReviewVerdict
 
     quoted = set(re.findall(r'"([a-z_]+)"', NODE_TYPES["human_review_queue"].notes))
     assert quoted == {verdict.value for verdict in ReviewVerdict}
@@ -47,8 +47,7 @@ def test_hrq_note_names_every_queue_field_that_adds_a_column():
     # taught here leaves the note describing a smaller output than the runtime produces
     # (the class of falsehood this note has already carried once), and a `queue.<field>`
     # the note names after `QueueConfig` dropped it no longer resolves.
-    from app.models import QueueConfig
-    from app.models.stages.human_review_queue import find_added_columns
+    from app.models.stages.human_review_queue import QueueConfig, find_added_columns
 
     queue = QueueConfig(
         reviewed_columns={"src": "reviewed_src"}, verdict_column="v",

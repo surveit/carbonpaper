@@ -16,7 +16,7 @@ from app.core.agent.agent import Agent
 from app.core.agent.usage import LlmUsage
 from app.core.errors import LLMError
 from app.core.llm_sdk import run_sync
-from app.models import LLMConfig
+from app.models.stages.llm_transform import LLMConfig
 
 from .options import (
     DEFAULT_MODEL,

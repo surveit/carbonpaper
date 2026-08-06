@@ -20,7 +20,8 @@ from app.runtime.stages import llm_transform as lt
 from app.services import review, versioning
 from app.core.stage_cache import StageCacheEntry
 from app.services.project import save_working_copy_as_version
-from app.models import ReviewVerdict, Stage, parse_stage
+from app.models import Stage, parse_stage
+from app.models.stages.human_review_queue import ReviewVerdict
 from conftest import (
     QUEUE_COLUMNS, pinned_stages, queue_added_columns, queue_columns, resumed_stages,
 )

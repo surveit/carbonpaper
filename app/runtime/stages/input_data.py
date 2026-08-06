@@ -23,12 +23,10 @@ from app.core.frames import (
 from app.models import (
     JSON_COLUMN_TYPE,
     STR_COLUMN_TYPE,
-    FileFormat,
     Stage,
     TableSchema,
-    XlsxReadParams,
 )
-from app.models.stages.input_data import InputDataStage
+from app.models.stages.input_data import FileFormat, InputDataStage, XlsxReadParams
 
 from ..context import RunContext
 from .execution import narrow_stage

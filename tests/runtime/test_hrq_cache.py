@@ -6,8 +6,9 @@ import pandas as pd
 import pytest
 
 import app.runtime.runner as runner
-from app.models import parse_stage, ReviewVerdict, Stage
+from app.models import parse_stage, Stage
 from app.models.stage import StageType
+from app.models.stages.human_review_queue import ReviewVerdict
 from app.runtime.cancellation import request_cancel
 from app.runtime.context import RunIdentity
 from app.runtime.errors import HaltForReview, RunCancelled

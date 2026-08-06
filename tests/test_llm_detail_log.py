@@ -11,7 +11,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from app.models import LLMConfig
+from app.models.stages.llm_transform import LLMConfig
 from app.runtime import llm as llm_module
 from app.runtime import options
 from app.runtime.run_log import (

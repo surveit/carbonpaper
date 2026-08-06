@@ -12,7 +12,8 @@ import pandas as pd
 from fastapi import HTTPException
 
 from app.core.stage_cache import StageCacheEntry
-from app.models import Column, QueueConfig, Stage
+from app.models import Column, Stage
+from app.models.stages.human_review_queue import QueueConfig
 from app.runtime.trace_links import RowTraceLinker
 from app.web.loading import QueueFingerprints, display_cell
 

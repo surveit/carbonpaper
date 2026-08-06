@@ -6,7 +6,8 @@ import pytest
 
 from app.core.errors import ReviewValidationError
 from app.core.stage_cache import StageCacheEntry
-from app.models import ReviewVerdict, Stage, parse_stage
+from app.models import Stage, parse_stage
+from app.models.stages.human_review_queue import ReviewVerdict
 from app.services import review
 from conftest import queue_columns
 

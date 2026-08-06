@@ -12,8 +12,6 @@ from pydantic import ValidationError
 
 from app.models import (
     Column,
-    Connector,
-    ConnectorKind,
     NamedColumn,
     NamedSchema,
     SchemaKind,
@@ -21,7 +19,7 @@ from app.models import (
     StageType,
     stage_to_spec_dict,
 )
-from app.models.stages.input_data import InputDataStage
+from app.models.stages.input_data import Connector, ConnectorKind, InputDataStage
 from app.models.stages.signature import ReplacesSignature
 from app.services import data_model, node_review, project, versioning, workspace
 from app.services.loader import load_compiled_dir, write_stage

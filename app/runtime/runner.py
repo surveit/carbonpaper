@@ -16,8 +16,8 @@ from pydantic import ValidationError as PydanticValidationError
 
 from app.core.errors import MissingInputBindingError
 from app.core.frames import read_frame_file
-from app.models import Connector, Stage, StageType
-from app.models.stages.input_data import InputDataStage
+from app.models import Stage, StageType
+from app.models.stages.input_data import Connector, InputDataStage
 from app.core.run_status import StageStatus
 
 from .context import RunContext

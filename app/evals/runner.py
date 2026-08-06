@@ -21,8 +21,9 @@ from app.core.frames import (
 )
 from app.evals.scoring import score_expected_outputs
 from app.models import (
-    EvalConfig, EvalRun, EvalRunSettings, FileFormat, Stage, TableRef, Workflow,
+    EvalConfig, EvalRun, EvalRunSettings, Stage, TableRef, Workflow,
 )
+from app.models.stages.input_data import FileFormat
 from app.runtime.executor import run_subset
 from app.evals.compatibility import CompatibilityReport, validate_eval_compatibility
 from app.evals.dataset_columns import (

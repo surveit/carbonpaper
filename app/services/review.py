@@ -6,8 +6,12 @@ from collections.abc import Mapping
 
 from app.core.errors import ReviewValidationError
 from app.core.stage_cache import StageCacheEntry
-from app.models import QueueConfig, ReviewVerdict, Stage
-from app.models.stages.human_review_queue import resolve_queue_config
+from app.models import Stage
+from app.models.stages.human_review_queue import (
+    QueueConfig,
+    ReviewVerdict,
+    resolve_queue_config,
+)
 
 
 def resolve_verdict(
