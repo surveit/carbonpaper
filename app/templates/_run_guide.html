@@ -22,6 +22,8 @@
    list is taller than the step it belongs to and the prose stops being readable. #}
 {% set _FOLD_WRITES = 6 %}
 
+{% macro row_word(n) %}{{ "{:,}".format(n) }} row{% if n != 1 %}s{% endif %}{% endmacro %}
+
 {# The rows a stage's output holds, as this run measured them, and how that count moved
    from its first input's. `rows unknown` is a stage the run holds no count for; it is
    deliberately worded, not punctuated, so it cannot be misread as a measured 0. #}
@@ -29,7 +31,7 @@
 {%- if s.output_row_count is none %}
 <span class="guide-rows unknown" title="This run recorded no row count for this stage">rows unknown</span>
 {%- else %}
-<span class="guide-rows" title="Rows this stage's output holds, measured by this run">{{ "{:,}".format(s.output_row_count) }} row{% if s.output_row_count != 1 %}s{% endif %}</span>
+<span class="guide-rows" title="Rows this stage's output holds, measured by this run">{{ row_word(s.output_row_count) }}</span>
 {%- if s.row_delta is not none and s.row_delta != 0 %}
 <span class="guide-delta {{ 'drop' if s.row_delta < 0 else 'gain' }}"
       title="{{ "{:,}".format(s.row_delta | abs) }} {{ 'fewer' if s.row_delta < 0 else 'more' }} rows than its first input held — this stage changed which rows exist">{{ '−' if s.row_delta < 0 else '+' }}{{ "{:,}".format(s.row_delta | abs) }}</span>
@@ -151,6 +153,18 @@
   .guide-step-mark { border-radius: 3px; padding: 0 4px; color: var(--state-warn-ink);
                      background: var(--state-warn-bg); }
   .guide-step-mark.muted-mark { color: var(--muted); background: var(--code-bg); }
+  /* One line per branch where the step forked, name against count. Deliberately no
+     total: these are separate frames, and adding them up states a row count the run
+     never measured. */
+  .guide-step-branches { list-style: none; margin: -2px 0 6px; padding: 0 0 0 8px;
+                         border-left: 2px solid var(--border); }
+  .guide-step-branches li { display: flex; gap: 6px; font-size: 10.5px;
+                            color: var(--muted); font-variant-numeric: tabular-nums; }
+  .guide-step-branches a { color: var(--fg); text-decoration: none;
+                           border-bottom: 1px dotted var(--border); }
+  .guide-step-branches a:hover { border-bottom-color: var(--muted); }
+  .guide-step-branches span { margin-left: auto; white-space: nowrap; }
+  .guide-step-branches .unknown { font-style: italic; }
   /* A step that moved the row set is the one asking a different question of the
      reviewer — how many rows, and on what rule — so its number carries the mark. */
   .guide-steps > li.changes-rows .n { background: var(--state-warn); }
@@ -200,18 +214,32 @@
         <h3>{{ step.title }}</h3>
         <p>{{ prose_with_column_chips(step.prose) }}</p>
         {# The step's own shape, under the prose it belongs to and above the stages it
-           was measured from: the count the step's LAST stage left behind, and only
-           where every other stage of the step feeds that one. A step whose stages do
-           not meet gets no number — the per-stage counts below are then all there is,
-           and nothing invents a step total by assuming the stages form a line. #}
-        {% if step.output_row_count is not none %}
+           was measured from: what the step LEAVES, one frame per terminal stage. One
+           terminal is the ordinary case and reads as a plain count; a step that forked
+           names each branch instead, never a total over them. A step whose terminals
+           the run measured none of says nothing about its rows. #}
+        {% set measured = step.outputs | rejectattr('output_row_count', 'none') | list %}
+        {% set mark %}
+          {%- if step.changes_row_set %} <span class="guide-step-mark">changes which rows exist</span>
+          {%- elif step.passes_rows_through %} <span class="guide-step-mark muted-mark">adds columns only</span>{% endif %}
+        {%- endset %}
+        {% if measured and step.outputs | length == 1 %}
         <p class="guide-step-rows"
            title="What this step leaves behind: the rows its last stage produced, measured by this run">
-          leaves {{ "{:,}".format(step.output_row_count) }} row{% if step.output_row_count != 1 %}s{% endif %}
-          {%- if step.changes_row_set %} <span class="guide-step-mark">changes which rows exist</span>
-          {%- elif step.passes_rows_through %} <span class="guide-step-mark muted-mark">adds columns only</span>{% endif %}</p>
+          leaves {{ row_word(step.outputs[0].output_row_count) }}{{ mark }}</p>
+        {% elif measured %}
+        <p class="guide-step-rows"
+           title="This step forks: it leaves one frame per branch, each measured by this run and each counted on its own">
+          leaves {{ step.outputs | length }} branches{{ mark }}</p>
+        <ul class="guide-step-branches">
+          {% for out in step.outputs %}
+          <li><a href="{{ links.guide_stage(out.stage_id) }}" data-stage-link="{{ out.stage_id }}">{{ out.stage.name if out.stage else out.stage_id }}</a>
+            {% if out.output_row_count is none %}<span class="unknown">rows unknown</span>
+            {%- else %}<span>{{ row_word(out.output_row_count) }}</span>{% endif %}</li>
+          {% endfor %}
+        </ul>
         {% elif step.changes_row_set %}
-        <p class="guide-step-rows"><span class="guide-step-mark">changes which rows exist</span></p>
+        <p class="guide-step-rows">{{ mark }}</p>
         {% endif %}
         <ul class="guide-stage-list">
           {% for s in step.stages %}{{ guide_stage(s) }}{% endfor %}

@@ -38,12 +38,12 @@ class GuideStepView:
     title: str
     prose: str
     stages: list[GuideStageView]
-    # What the step leaves behind, and ONLY where that is one measured frame: the output
-    # count of its last stage in execution order, given every other stage of the step
-    # feeds that stage through the version's graph. A step naming stages that do not
-    # meet in one place has no single count to state, so this is None and the per-stage
-    # counts are all there is to show. Nothing here assumes the stages form a chain.
-    output_row_count: int | None
+    # What the step leaves behind: every stage of it that feeds no OTHER stage of the
+    # same step, in execution order, each carrying its own measured count. One entry is
+    # the ordinary case; several mean the step forked, and each branch is reported
+    # beside the others. They are never summed — a sum would double-count a fan-out and
+    # read as a total the run never measured.
+    outputs: list[GuideStageView]
     # True where a stage of this step measurably changed the row set — a different
     # review task from a step that only added columns to rows that already existed.
     changes_row_set: bool
@@ -137,23 +137,30 @@ def _view_step(
         title=step.title,
         prose=step.prose,
         stages=stages,
-        output_row_count=_find_step_output_count(stages, by_id),
+        outputs=_find_step_outputs(stages, by_id),
         changes_row_set=any(s.row_delta not in (None, 0) for s in stages),
         passes_rows_through=bool(stages) and all(s.row_delta == 0 for s in stages),
     )
 
 
-def _find_step_output_count(
+def _find_step_outputs(
     stages: list[GuideStageView], by_id: dict[str, Stage]
-) -> int | None:
-    """The last stage's count, and only where every other stage of the step feeds it."""
-    if not stages:
-        return None
-    last = stages[-1]
-    upstream = _walk_upstream_stage_ids(last.stage_id, by_id)
-    if any(s.stage_id not in upstream for s in stages[:-1]):
-        return None
-    return last.output_row_count
+) -> list[GuideStageView]:
+    """The step's terminals: the stages no OTHER stage of the same step feeds."""
+    feeding = {
+        upstream_id
+        for view in stages
+        for upstream_id in _walk_upstream_stage_ids(view.stage_id, by_id)
+    }
+    # Upstream is walked through the WHOLE version graph, not just the step's own
+    # stages, so a step that narrates A and C while leaving B unnarrated still reports
+    # C alone — A's frame was fed onward inside this step's own story, and calling it
+    # something the step leaves would be false. Only stages OUTSIDE the step reading a
+    # terminal are ignored; the step is what is being described, not the workflow.
+    # Several terminals mean the step forked, and each is reported on its own: summing
+    # them would double-count a fan-out, and even where they partition one input the
+    # total is a property of that workflow rather than a rule.
+    return [view for view in stages if view.stage_id not in feeding]
 
 
 def _walk_upstream_stage_ids(stage_id: str, by_id: dict[str, Stage]) -> set[str]:

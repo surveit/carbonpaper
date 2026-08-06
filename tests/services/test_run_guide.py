@@ -324,14 +324,18 @@ def test_a_delta_is_taken_against_the_first_input_of_a_join(project_dir):
 
 # ── the step's own shape ─────────────────────────────────────────────────────
 
-def test_a_step_leaves_the_count_its_stages_meet_at(project_dir):
-    """add_flag feeds attach_source through keep_flagged, so the step ends at its 4."""
+def _outputs(step) -> list[tuple[str, int | None]]:
+    return [(s.stage_id, s.output_row_count) for s in step.outputs]
+
+
+def test_a_step_leaves_the_stage_none_of_its_others_reads(project_dir):
+    """add_flag is read by keep_flagged, which attach_source reads — one terminal."""
     view = build_run_guide_view("demo", _manifest(_version_with_guide(project_dir)))
 
-    assert view.steps[1].output_row_count == 4
+    assert _outputs(view.steps[1]) == [("attach_source", 4)]
 
 
-def test_a_step_whose_stages_do_not_meet_states_no_count(project_dir):
+def test_a_step_that_forks_leaves_every_branch_counted_on_its_own(project_dir):
     steps = [ReviewGuideStep(title="Both roots", prose="Two inputs that never meet.",
                              stage_ids=["load_rows", "load_sources"])]
     version_id = _version_with_guide(project_dir, steps=steps, unnarrated=[
@@ -340,14 +344,27 @@ def test_a_step_whose_stages_do_not_meet_states_no_count(project_dir):
 
     view = build_run_guide_view("demo", _manifest(version_id))
 
-    assert view.steps[0].output_row_count is None
+    assert _outputs(view.steps[0]) == [("load_rows", 10), ("load_sources", 3)]
 
 
-def test_a_step_reaching_a_stage_the_run_did_not_execute_leaves_no_count(project_dir):
+def test_a_stage_read_only_from_outside_the_step_is_still_a_terminal(project_dir):
+    """keep_flagged feeds attach_source, but no stage of THIS step reads it."""
+    steps = [_STEPS[0], ReviewGuideStep(
+        title="Cut it down", prose="Keeps the flagged rows.",
+        stage_ids=["add_flag", "keep_flagged"])]
+    version_id = _version_with_guide(project_dir, steps=steps,
+                                     unnarrated=["load_sources", "attach_source"])
+
+    view = build_run_guide_view("demo", _manifest(version_id))
+
+    assert _outputs(view.steps[1]) == [("keep_flagged", 4)]
+
+
+def test_a_terminal_the_run_did_not_execute_stays_unknown(project_dir):
     manifest = _manifest(_version_with_guide(project_dir), executed=["add_flag"])
     view = build_run_guide_view("demo", manifest)
 
-    assert view.steps[1].output_row_count is None
+    assert _outputs(view.steps[1]) == [("attach_source", None)]
 
 
 def test_a_step_holding_a_row_dropping_stage_is_marked_as_changing_the_row_set(project_dir):
@@ -382,7 +399,7 @@ def test_a_step_of_inputs_alone_claims_neither_shape(project_dir):
 
     assert view.steps[0].changes_row_set is False
     assert view.steps[0].passes_rows_through is False
-    assert view.steps[0].output_row_count == 10
+    assert _outputs(view.steps[0]) == [("load_rows", 10)]
 
 
 # ── list_written_columns on its own ──────────────────────────────────────────
