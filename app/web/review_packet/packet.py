@@ -17,7 +17,7 @@ from app.services.review_packet.views import RunView, build_run_view
 from app.services.run_guide import RunGuideView, build_run_guide_view
 from app.services.workspace import resolve_project_dir
 from app.web.diagrams import build_mermaid_graph
-from app.web.export.pages import write_packet_pages
+from app.web.review_packet.pages import write_packet_pages
 
 
 def export_review_packet(project: str, run_id: str, dest_root: Path) -> ReviewPacket:
@@ -82,6 +82,3 @@ def _load_pinned_workflow(
 
 def _dump_workflow(stages: list[Stage]) -> str:
     return json.dumps([stage_to_spec_dict(s) for s in stages], indent=2, sort_keys=True)
-
-
-__all__ = ["export_review_packet"]

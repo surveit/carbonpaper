@@ -5,10 +5,9 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-import pandas as pd
 from pydantic import BaseModel
 
-from app.core.frames import PARQUET_SUFFIX
+from app.core.frames import read_frame_file
 from app.services.project import find_document_path
 from app.services.review_packet.views import RunView, StageView
 
@@ -124,16 +123,8 @@ def _write_csv(root: Path, source: Path, stage_id: str, report: DataReport) -> N
     relative = f"{DATA_DIR}/{stage_id}.csv"
     dest = root / relative
     dest.parent.mkdir(parents=True, exist_ok=True)
-    read_stage_output(source).to_csv(dest, index=False)
+    read_frame_file(source).to_csv(dest, index=False)
     report.written.append(relative)
-
-
-def read_stage_output(path: Path) -> pd.DataFrame:
-    """A stage output file as a frame; the runtime writes parquet, or CSV when a
-    frame would not serialize."""
-    if path.suffix == PARQUET_SUFFIX:
-        return pd.read_parquet(path)
-    return pd.read_csv(path)
 
 
 def _copy_input_file(
@@ -168,18 +159,3 @@ def _write_text(dest: Path, text: str, relative: str, report: DataReport) -> Non
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_text(text, encoding="utf-8")
     report.written.append(relative)
-
-
-__all__ = [
-    "DATA_DIR",
-    "DOCUMENT_FILE",
-    "EVENTS_FILE",
-    "INPUTS_DIR",
-    "MANIFEST_FILE",
-    "RAW_DIR",
-    "WORKFLOW_FILE",
-    "DataReport",
-    "OmittedFile",
-    "read_stage_output",
-    "write_packet_data",
-]

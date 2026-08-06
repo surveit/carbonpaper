@@ -34,6 +34,3 @@ def _list_packet_files(root: Path) -> list[Path]:
         for path in root.rglob("*")
         if path.is_file() and path.name != CHECKSUMS_FILE
     )
-
-
-__all__ = ["CHECKSUMS_FILE", "compute_sha256", "write_checksums"]

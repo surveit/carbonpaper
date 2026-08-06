@@ -18,7 +18,7 @@ from app.web.panel_links import AppPanelLinks
 
 
 def resolve_panel_links(project: str, run_id: str) -> AppPanelLinks:
-    # The app's one pick; the packet picks PacketPanelLinks in app/web/export/pages.py.
+    # The app's one pick; the packet picks PacketPanelLinks in app/web/review_packet/pages.py.
     return AppPanelLinks(project, run_id)
 
 

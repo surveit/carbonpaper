@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from app.core.stage_display import TYPE_CLASS, TYPE_GLYPH
+from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH
 from app.runtime.manifest import resolve_output_path
 from app.services.loader import resolve_function_code
 from app.services.review_packet.checksums import CHECKSUMS_FILE
@@ -187,6 +187,3 @@ def _copy_stylesheet(root: Path, name: str, source_dir: Path) -> str:
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_text((source_dir / name).read_text(encoding="utf-8"), encoding="utf-8")
     return relative
-
-
-__all__ = ["ASSETS_DIR", "STAGES_DIR", "STYLESHEETS", "write_packet_pages"]

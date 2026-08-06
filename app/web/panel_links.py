@@ -60,6 +60,3 @@ class PacketPanelLinks:
 def _segment(value: str) -> str:
     """Escapes `/` too, so an id carrying a slash cannot widen the path."""
     return quote(value, safe="")
-
-
-__all__ = ["AppPanelLinks", "PacketPanelLinks"]

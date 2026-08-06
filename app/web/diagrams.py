@@ -1,6 +1,5 @@
 """Pure presentation helpers: build the Mermaid flowchart and ER diagram from a
-project's stages. No I/O — stages in, diagram source out. The stage-type →
-CSS-class / glyph maps it decorates nodes with live in app.core.stage_display."""
+project's stages. No I/O — stages in, diagram source out."""
 
 from __future__ import annotations
 
@@ -8,8 +7,43 @@ from typing import Any
 
 from app.models import Stage, StageBase
 from app.core.run_status import StageStatus
-from app.core.stage_display import TYPE_CLASS as TYPE_CLASS
-from app.core.stage_display import TYPE_GLYPH as TYPE_GLYPH
+
+
+# Stage-type → CSS class for workflow node + badges, and its glyph. Every StageType
+# must appear in both maps: an unmapped type falls back to `custom`, the red badge
+# palette that elsewhere means error. tests/arch/test_stage_type_presentation.py
+# fails when one is missing. Read by the exported review packet too, which vendors
+# this app's stylesheet so a packet looks like the app it came from.
+TYPE_CLASS = {
+    "input_data": "input",
+    "llm_transform": "llm",
+    "python_row_function": "python",
+    "python_frame_function": "python",
+    "starlark_row_function": "python",
+    "enrich": "join",
+    "expand": "join",
+    "aggregate": "aggregate",
+    "human_review_queue": "human",
+    "publish": "publish",
+    # Row-set operations: union stacks frames, filter_rows drops subject rows.
+    "union": "rowset",
+    "filter_rows": "rowset",
+}
+
+TYPE_GLYPH = {
+    "input_data": "⬆️",
+    "llm_transform": "✨",
+    "python_row_function": "🔂",
+    "python_frame_function": "🧨",
+    "starlark_row_function": "🛡️",
+    "enrich": "🔗",
+    "expand": "🌿",
+    "aggregate": "📊",
+    "human_review_queue": "👤",
+    "publish": "📤",
+    "union": "➕",
+    "filter_rows": "🔽",
+}
 
 
 def _safe_mermaid_type(t: str) -> str:

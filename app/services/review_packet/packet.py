@@ -1,4 +1,4 @@
-"""What an export produced. The assembling lives in app.web.export.packet — the
+"""What an export produced. The assembling lives in app.web.review_packet.packet — the
 pages are the app's own run templates, which only the web layer may reach."""
 from __future__ import annotations
 
@@ -17,6 +17,3 @@ class ReviewPacket(BaseModel):
     root: Path
     files: list[str]
     omitted: list[OmittedFile]
-
-
-__all__ = ["ReviewPacket"]
