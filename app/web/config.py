@@ -80,7 +80,7 @@ def friendly_duration(v: object) -> str:
     """Milliseconds as read-at-a-glance time: 834 ms, 42s, 29m 34s, 1h 12m."""
     if v is None or v == "":
         return ""
-    ms = int(v)
+    ms = int(read_number(v, "friendly_duration"))
     if ms < 1000:
         return f"{ms} ms"
     seconds = round(ms / 1000)
@@ -97,8 +97,15 @@ def usd(v: object) -> str:
     """Dollars at a precision that survives rounding: $13.14, but $0.0032 under a cent."""
     if v is None or v == "":
         return ""
-    amount = float(v)
+    amount = read_number(v, "usd")
     return f"${amount:.4f}" if 0 < amount < 0.01 else f"${amount:,.2f}"
+
+
+def read_number(v: object, filter_name: str) -> float:
+    """A template value as a number, or a raise naming the filter that got handed junk."""
+    if isinstance(v, bool) or not isinstance(v, (int, float, str)):
+        raise TypeError(f"{filter_name} got {type(v).__name__}, which is not a number")
+    return float(v)
 
 
 def plain_value(v: object) -> str:
