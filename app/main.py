@@ -19,7 +19,8 @@ from app.web.config import (
     STATIC_DIR, RevalidatedStaticFiles, configure_projects_dir_from_env,
 )
 from app.web.routers import (
-    admin, editing, evals, guide, project, node_review, review, run_lineage, runs,
+    admin, editing, evals, guide, project, node_review, review, review_packet,
+    run_lineage, runs,
 )
 
 from app.web.chat_router import router as chat_router
@@ -59,6 +60,7 @@ app.mount("/static", RevalidatedStaticFiles(directory=str(STATIC_DIR)), name="st
 app.include_router(project.router)
 app.include_router(runs.router)
 app.include_router(run_lineage.router)
+app.include_router(review_packet.router)
 app.include_router(evals.router)
 app.include_router(review.router)
 app.include_router(node_review.router)

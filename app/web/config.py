@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import os
 from datetime import date, datetime
+from enum import Enum
 from pathlib import Path
 
 from fastapi.templating import Jinja2Templates
@@ -75,5 +76,11 @@ def _time_element(v: object, attrs: str) -> Markup:
     return Markup(f'<time datetime="{escape(iso)}"{attrs}>{escape(iso)}</time>')
 
 
+def plain_value(v: object) -> str:
+    # Bare `{{ x }}` on an Enum renders "StageType.input_data".
+    return str(v.value) if isinstance(v, Enum) else ("" if v is None else str(v))
+
+
 templates.env.filters["friendly_time"] = friendly_time
 templates.env.filters["relative_time"] = relative_time
+templates.env.filters["plain_value"] = plain_value

@@ -224,7 +224,9 @@ def load_manifest(run_dir: Path) -> dict[str, Any]:
 # ─── Tabular output previews ─────────────────────────────────────────────────
 
 # Hard cap on rows rendered in the full-table view of a stage output. The CSV
-# download endpoint has no cap — it always serves the complete file.
+# download endpoint has no cap — it always serves the complete file. A caller
+# that renders once to a file rather than per request may raise it (the review
+# packet does), so load_output_table takes it as an argument.
 MAX_TABLE_ROWS = 5000
 
 
@@ -291,11 +293,16 @@ def render_cells_as_text(frame: pd.DataFrame) -> list[dict[str, Any]]:
 SELECTED_ORDINAL_KEY = "_row_ordinal"
 
 
-def load_output_table(run_dir: Path, rel_path: str | None) -> dict[str, Any]:
+def load_output_table(
+    run_dir: Path, rel_path: str | None, max_rows: int | None = None
+) -> dict[str, Any]:
     """Full (capped) table of a stage output: columns, total row count, up to
-    MAX_TABLE_ROWS rows as strings, and whether the render was capped."""
+    `max_rows` rows as strings, and whether the render was capped."""
+    # `None`, not MAX_TABLE_ROWS, as the default: a default argument binds once at
+    # import, which would freeze the value past any later rebinding of the module
+    # global — including the test suite's monkeypatch of it.
     df = read_output_df(run_dir, rel_path)
-    rows = render_cells_as_text(df.head(MAX_TABLE_ROWS))
+    rows = render_cells_as_text(df.head(MAX_TABLE_ROWS if max_rows is None else max_rows))
     return {
         "columns": list(df.columns),
         "rows": rows,

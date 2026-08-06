@@ -1,0 +1,14 @@
+{% extends "_packet_layout.html" %}
+{% block title %}{{ stage.name }} · {{ run.project }} · {{ run.run_id }}{% endblock %}
+{% block content %}
+
+<p><a href="{{ index_href }}" class="back-link">← review packet</a></p>
+
+{# The app's own stage panel, rendered to a file. `links` points at the packet's
+   own pages, `previewable` is False and `test_views` empty, so the controls that
+   need a server are absent rather than dead. #}
+<div class="stage-panel-full">
+{% include "_run_stage_panel.html" %}
+</div>
+
+{% endblock %}

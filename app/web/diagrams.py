@@ -1,6 +1,5 @@
 """Pure presentation helpers: build the Mermaid flowchart and ER diagram from a
-project's stages, plus the stage-type → CSS-class / glyph maps they share
-with the templates. No I/O — stages in, diagram source out."""
+project's stages. No I/O — stages in, diagram source out."""
 
 from __future__ import annotations
 
@@ -10,10 +9,11 @@ from app.models import Stage, StageBase
 from app.core.run_status import StageStatus
 
 
-# Stage-type → CSS class for workflow node + badges. Every StageType must appear in
-# both maps: an unmapped type falls back to `custom`, the red badge palette that
-# elsewhere means error. tests/arch/test_stage_type_presentation.py fails when one
-# is missing.
+# Stage-type → CSS class for workflow node + badges, and its glyph. Every StageType
+# must appear in both maps: an unmapped type falls back to `custom`, the red badge
+# palette that elsewhere means error. tests/arch/test_stage_type_presentation.py
+# fails when one is missing. Read by the exported review packet too, which vendors
+# this app's stylesheet so a packet looks like the app it came from.
 TYPE_CLASS = {
     "input_data": "input",
     "llm_transform": "llm",

@@ -1,0 +1,114 @@
+{% extends "_packet_layout.html" %}
+{% block title %}Review packet · {{ run.project }} · {{ run.run_id }}{% endblock %}
+{% block content %}
+
+{# Same shell as the run view: body left, review guide as a right rail. The rail's
+   layout and its collapse drawer both live in _run_guide.html, so mirroring the
+   structure is what makes them work here. #}
+<div class="run-shell{% if guide %} with-guide{% endif %}" id="run-shell">
+<div class="run-main">
+
+<div class="stage-header">
+  <h1>Run <code>{{ run.run_id }}</code></h1>
+  <span class="run-status status-{{ run.status }}">{{ run.status }}</span>
+  <p class="stage-id">project <strong>{{ run.project }}</strong> · started {{ run.started_at }}{% if run.finished_at %} · finished {{ run.finished_at }}{% endif %}{% if run.workflow_version %} · workflow version <code>{{ run.workflow_version }}</code>{% endif %}</p>
+</div>
+
+{% if run.is_test_run %}
+<p class="banner banner-review">🧪 <strong>Workflow test</strong> — this was a test run. Its numbers are not the project's published output.</p>
+{% endif %}
+
+<p class="banner">📦 <strong>What this is.</strong> Everything this run read, did and produced —
+  enough to check the result without the software that made it. Read
+  <a href="methodology.md">methodology.md</a> for what the author set out to do,
+  {% if guide %}the review guide beside this for what they say is worth scrutinising,{% endif %}
+  then each step for what actually ran.</p>
+
+{% if run.stages %}
+<section>
+  <h2>The workflow this run executed</h2>
+  {% if mermaid %}
+  <pre class="mermaid">
+{{ mermaid }}
+  </pre>
+  {% endif %}
+  {# Every step as a plain link, always. The diagram needs the network, and an
+     unreadable pinned version means no diagram at all — this is then the only
+     route to a step page. #}
+  <p class="packet-steps"><span class="muted">Steps:</span>
+    {% for stage in run.stages %}<a href="{{ stages_dir }}/{{ stage.stage_id }}.html">{{ type_glyph.get(stage.type, "") }} {{ stage.name }}</a>{% if not loop.last %} · {% endif %}{% endfor %}
+  </p>
+</section>
+{% endif %}
+
+{% if omitted %}
+<section>
+  <h2>Files that could not be written ({{ omitted|length }})</h2>
+  <table class="stages">
+    <thead><tr><th>expected file</th><th>why it is missing</th></tr></thead>
+    <tbody>{% for item in omitted %}<tr><td><code>{{ item.path }}</code></td><td>{{ item.reason }}</td></tr>{% endfor %}</tbody>
+  </table>
+</section>
+{% endif %}
+
+<section>
+  <h2>Inputs this run read</h2>
+  {% if run.inputs %}
+  <p class="muted packet-note">The hash is what the run recorded when it read the file — check the
+    copy in <code>inputs/</code> against it to confirm these are the same bytes. The full path each
+    file was read from is in <a href="manifest.json">manifest.json</a>.</p>
+  <table class="stages">
+    <thead><tr><th>step</th><th>file</th><th>SHA-256</th><th>bytes</th><th>source</th></tr></thead>
+    <tbody>
+      {% for input in run.inputs %}
+      <tr>
+        <td><code>{{ input.stage_id }}</code></td>
+        <td>{{ input.filename }}</td>
+        <td><code class="packet-hash">{{ input.sha256 or "not recorded" }}</code></td>
+        <td class="packet-num">{{ input.bytes if input.bytes is not none else "—" }}</td>
+        <td>{{ input.source or "—" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="muted">This run recorded no bound input files.</p>{% endif %}
+</section>
+
+<section>
+  <h2>Everything else in this folder</h2>
+  <table class="stages">
+    <tbody>
+      <tr><td><a href="methodology.md">methodology.md</a></td><td>the prose the workflow was compiled from</td></tr>
+      <tr><td><a href="workflow.json">workflow.json</a></td><td>the frozen step definitions this run executed</td></tr>
+      <tr><td><a href="manifest.json">manifest.json</a></td><td>the run's own record: timings, statuses, checks, input bindings</td></tr>
+      <tr><td><a href="events.jsonl">events.jsonl</a></td><td>the run event log, including the prompt text sent to the model</td></tr>
+      <tr><td><code>data/</code></td><td>one CSV per step, uncapped; <code>data/raw/</code> holds the files the run actually wrote</td></tr>
+      <tr><td><a href="{{ checksums_href }}">checksums.txt</a></td><td>SHA-256 of every file above</td></tr>
+    </tbody>
+  </table>
+</section>
+
+</div>{# /.run-main #}
+
+{% if guide %}{% include "_run_guide.html" %}{% endif %}
+</div>{# /.run-shell #}
+
+{% if mermaid %}
+<script src="{{ node_script }}"></script>
+<script src="{{ mermaid_url }}" integrity="{{ mermaid_sri }}" crossorigin="anonymous"></script>
+<script>
+  // mermaid resolves the graph's `click … call dvNode(…)` binding by name at click
+  // time; diagram_nodes.js re-broadcasts it, and subscribing is what makes the node
+  // clickable. In the packet a click navigates, there being no panel to load into.
+  if (window.mermaid) {
+    mermaid.initialize({ startOnLoad: true, theme: "default", securityLevel: "loose" });
+  }
+  if (window.onDiagramNode) {
+    onDiagramNode(function (stageId) {
+      location.href = "{{ stages_dir }}/" + encodeURIComponent(stageId) + ".html";
+    });
+  }
+</script>
+{% endif %}
+
+{% endblock %}
