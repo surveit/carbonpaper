@@ -125,11 +125,11 @@ class StageInput(_Base):
 # stages and all 138 compiled ones when they were set: the longest id was 35
 # characters and the longest description 96, so neither refuses anything already
 # written.
-STAGE_ID_MAX_CHARS = 48
-# Deliberately tighter than SUMMARY_MAX_CHARS (app.models.stages.code): a summary
-# explains code in a paragraph a non-engineer reads; this is one line under a
-# heading and a graph tooltip, and stops being one at a paragraph's length.
-STAGE_DESCRIPTION_MAX_CHARS = 120
+STAGE_ID_MAX_CHARS = 60
+# Tighter than SUMMARY_MAX_CHARS (app.models.stages.code): a summary explains code
+# in a paragraph a non-engineer reads; this is one line under a heading and a graph
+# tooltip, and stops being one line at a paragraph's length.
+STAGE_DESCRIPTION_MAX_CHARS = 200
 
 STAGE_ID_DESCRIPTION = (
     "The stage's ONE name, snake_case. Every surface shows this and only this — the "

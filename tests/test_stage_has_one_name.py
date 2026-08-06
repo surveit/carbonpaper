@@ -38,12 +38,14 @@ def test_a_stage_without_a_description_is_refused():
 
 
 def test_an_id_over_the_ceiling_is_refused():
-    with pytest.raises(ValidationError, match="at most 48 characters"):
+    with pytest.raises(ValidationError, match=f"at most {STAGE_ID_MAX_CHARS} characters"):
         parse_stage(_spec(id="a" * (STAGE_ID_MAX_CHARS + 1)))
 
 
 def test_a_description_over_the_ceiling_is_refused():
-    with pytest.raises(ValidationError, match="at most 120 characters"):
+    with pytest.raises(
+        ValidationError, match=f"at most {STAGE_DESCRIPTION_MAX_CHARS} characters"
+    ):
         parse_stage(_spec(description="d" * (STAGE_DESCRIPTION_MAX_CHARS + 1)))
 
 
