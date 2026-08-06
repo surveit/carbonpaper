@@ -4,10 +4,12 @@
    The prose is the ONLY thing here that was authored. Everything shown around it —
    each stage's name, type, position in the execution order and the columns it writes
    — is read off the same pinned version at render time (services/run_guide.py),
-   so it cannot drift from the workflow the run actually executed. The row counts come
-   the same way, off this run's own manifest: a count is what the run measured, never
-   an estimate, and a stage the run holds no count for reads `rows unknown` — which is
-   not `0 rows`, a frame measured and found empty.
+   so it cannot drift from the workflow the run actually executed. Each stage's SHAPE is
+   read the same way but from two places at once: the row count off this run's manifest,
+   the column count off the pinned version's output schema. Both are measured, never
+   estimated, and either can be missing on its own — a half that is missing is said in
+   words (`shape unknown`, or the half that is known), never rendered as a 0, which here
+   means a frame measured and found empty.
 
    Context: guide (RunGuideView) · project · type_class / type_glyph — the type-tag maps.
    Included only when `guide` is set; a version with no guide gets no rail at all.
@@ -23,15 +25,28 @@
 {% set _FOLD_WRITES = 6 %}
 
 {% macro row_word(n) %}{{ "{:,}".format(n) }} row{% if n != 1 %}s{% endif %}{% endmacro %}
+{% macro column_word(n) %}{{ n }} column{% if n != 1 %}s{% endif %}{% endmacro %}
 
-{# The rows a stage's output holds, as this run measured them, and how that count moved
-   from its first input's. `rows unknown` is a stage the run holds no count for; it is
-   deliberately worded, not punctuated, so it cannot be misread as a measured 0. #}
-{% macro row_count(s) %}
-{%- if s.output_row_count is none %}
-<span class="guide-rows unknown" title="This run recorded no row count for this stage">rows unknown</span>
+{# The shape of the frame a stage leaves — `24,797 × 21`, rows by columns — and how its
+   row count moved from its first input's.
+
+   The two halves come from different places: the rows from THIS RUN's manifest record,
+   the columns from the PINNED VERSION's declared output schema. So each half can be
+   missing on its own, and the pair form is only used when both are known; with one half
+   the macro states that half in words (`24,797 rows`, `21 columns`) rather than pairing
+   a measured number with a placeholder. `shape unknown` is worded, not punctuated, so
+   nothing here can be misread as a measured 0. #}
+{% macro frame_shape(s) %}
+{%- if s.output_row_count is not none and s.column_count is not none %}
+<span class="guide-rows" title="{{ row_word(s.output_row_count) }} × {{ column_word(s.column_count) }} — the rows this run measured, the columns the pinned version declares">{{ "{:,}".format(s.output_row_count) }} × {{ s.column_count }}</span>
+{%- elif s.column_count is none and s.output_row_count is none %}
+<span class="guide-rows unknown" title="This run recorded no row count for this stage, and the pinned version declares no output schema for it">shape unknown</span>
+{%- elif s.column_count is none %}
+<span class="guide-rows" title="Rows this run measured. The pinned version declares no output schema for this stage, so its column count is unknown">{{ row_word(s.output_row_count) }}</span>
 {%- else %}
-<span class="guide-rows" title="Rows this stage's output holds, measured by this run">{{ row_word(s.output_row_count) }}</span>
+<span class="guide-rows" title="Columns the pinned version declares for this stage's output. This run recorded no row count for it">{{ column_word(s.column_count) }}</span>
+{%- endif %}
+{%- if s.output_row_count is not none %}
 {%- if s.row_delta is not none and s.row_delta != 0 %}
 <span class="guide-delta {{ 'drop' if s.row_delta < 0 else 'gain' }}"
       title="{{ "{:,}".format(s.row_delta | abs) }} {{ 'fewer' if s.row_delta < 0 else 'more' }} rows than its first input held — this stage changed which rows exist">{{ '−' if s.row_delta < 0 else '+' }}{{ "{:,}".format(s.row_delta | abs) }}</span>
@@ -58,7 +73,7 @@
      {% if not s.executed %}title="This run has no record for this stage"{% endif %}>
     <span class="guide-stage-name"><code>{{ s.stage.id }}</code></span>
     <span class="type-tag {{ type_class.get(s.stage.type, 'custom') }}">{{ type_glyph.get(s.stage.type, '') }} {{ s.stage.type }}</span>
-    {{ row_count(s) }}
+    {{ frame_shape(s) }}
   </a>
   {# A wide stage's column list is longer than the step's own prose, so past
      _FOLD_WRITES it folds behind its exact count — every column is still there,
@@ -151,7 +166,7 @@
   .guide-step-rows { font-size: 10.5px; color: var(--muted);
                      font-variant-numeric: tabular-nums; margin: 0 0 5px; }
   .guide-step-mark { border-radius: 3px; padding: 0 4px; color: var(--state-warn-ink);
-                     background: var(--state-warn-bg); }
+                     background: var(--state-warn-bg); white-space: nowrap; }
   .guide-step-mark.muted-mark { color: var(--muted); background: var(--code-bg); }
   /* One line per branch where the step forked, name against count. Deliberately no
      total: these are separate frames, and adding them up states a row count the run
@@ -163,8 +178,6 @@
   .guide-step-branches a { color: var(--fg); text-decoration: none;
                            border-bottom: 1px dotted var(--border); }
   .guide-step-branches a:hover { border-bottom-color: var(--muted); }
-  .guide-step-branches span { margin-left: auto; white-space: nowrap; }
-  .guide-step-branches .unknown { font-style: italic; }
   /* A step that moved the row set is the one asking a different question of the
      reviewer — how many rows, and on what rule — so its number carries the mark. */
   .guide-steps > li.changes-rows .n { background: var(--state-warn); }
@@ -205,7 +218,10 @@
       </svg>
     </button>
   </div>
-  <p class="run-guide-lead">AI generated summary of what this run did</p>
+  {# The shape notation is explained once, here, so `24,797 × 21` needs no legend of
+     its own on every stage row. #}
+  <p class="run-guide-lead">AI generated summary of what this run did. A stage's
+    <b>shape</b> reads rows × columns.</p>
   <ol class="guide-steps">
     {% for step in guide.steps %}
     <li{% if step.changes_row_set %} class="changes-rows"{% endif %}>
@@ -224,9 +240,11 @@
           {%- elif step.passes_rows_through %} <span class="guide-step-mark muted-mark">adds columns only</span>{% endif %}
         {%- endset %}
         {% if measured and step.outputs | length == 1 %}
+        {% set out = step.outputs[0] %}
         <p class="guide-step-rows"
-           title="What this step leaves behind: the rows its last stage produced, measured by this run">
-          leaves {{ row_word(step.outputs[0].output_row_count) }}{{ mark }}</p>
+           title="What this step leaves behind: the rows its last stage produced, measured by this run, by the columns the pinned version declares for it">
+          leaves {{ row_word(out.output_row_count) }}
+          {%- if out.column_count is not none %} × {{ column_word(out.column_count) }}{% endif %}{{ mark }}</p>
         {% elif measured %}
         <p class="guide-step-rows"
            title="This step forks: it leaves one frame per branch, each measured by this run and each counted on its own">
@@ -234,8 +252,7 @@
         <ul class="guide-step-branches">
           {% for out in step.outputs %}
           <li><a href="{{ links.guide_stage(out.stage_id) }}" data-stage-link="{{ out.stage_id }}">{{ out.stage.name if out.stage else out.stage_id }}</a>
-            {% if out.output_row_count is none %}<span class="unknown">rows unknown</span>
-            {%- else %}<span>{{ row_word(out.output_row_count) }}</span>{% endif %}</li>
+            {{ frame_shape(out) }}</li>
           {% endfor %}
         </ul>
         {% elif step.changes_row_set %}

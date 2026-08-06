@@ -14,6 +14,7 @@ from app.services.versioning import ReviewGuide
 from app.services import workspace
 from app.services.run_guide import (
     build_run_guide_view,
+    count_output_columns,
     find_guideless_version_id,
     list_written_columns,
 )
@@ -322,6 +323,46 @@ def test_a_delta_is_taken_against_the_first_input_of_a_join(project_dir):
     assert _stages_by_id(view)["attach_source"].row_delta == 0
 
 
+# ── the other half of the shape: the columns ─────────────────────────────────
+
+def test_each_stage_carries_the_column_count_the_pinned_version_declares(project_dir):
+    view = build_run_guide_view("demo", _manifest(_version_with_guide(project_dir)))
+
+    columns = {s.stage_id: s.column_count for s in _stages_by_id(view).values()}
+    assert columns == {
+        "load_rows": 1, "load_sources": 2, "add_flag": 2,
+        "keep_flagged": 2, "attach_source": 3,
+    }
+
+
+def test_the_two_halves_of_the_shape_are_measured_apart(project_dir):
+    """The columns come off the version, so a stage the run never reached still has them."""
+    manifest = _manifest(_version_with_guide(project_dir), executed=["load_rows"])
+    view = build_run_guide_view("demo", manifest)
+
+    absent = _stages_by_id(view)["attach_source"]
+    assert absent.output_row_count is None
+    assert absent.column_count == 3
+
+
+def test_a_stage_the_version_does_not_define_has_neither_half(project_dir):
+    version_id = _version_with_guide(project_dir)
+    ReviewGuide(
+        project=project_dir.name,
+        version_id=version_id,
+        steps=[ReviewGuideStep(title="Read the rows", prose="Reads every `doc_id`.",
+                               stage_ids=["renamed_away"])],
+        unnarrated=["load_rows", "load_sources", "add_flag", "keep_flagged",
+                    "attach_source"],
+    ).save()
+
+    view = build_run_guide_view("demo", _manifest(version_id))
+
+    [unresolved] = view.steps[0].stages
+    assert unresolved.output_row_count is None
+    assert unresolved.column_count is None
+
+
 # ── the step's own shape ─────────────────────────────────────────────────────
 
 def _outputs(step) -> list[tuple[str, int | None]]:
@@ -414,3 +455,16 @@ def test_a_publish_stage_producing_nothing_writes_no_columns():
                      "code": "def transform(df, output_dir):\n    return df\n"},
     })
     assert list_written_columns(publish) == []
+
+
+def test_a_stage_declaring_no_output_schema_has_an_unknown_column_count():
+    """`None`, not 0 — a publish stage's frame is not a frame of no columns."""
+    publish = parse_stage({
+        "id": "write_it", "name": "Write it", "type": "publish",
+        "inputs": [{"id": "attach_source", "schema": _ATTACHED}],
+        "publish": {"format": "csv", "destination": "out/"},
+        "signature": {"form": "replaces"},
+        "function": {"kind": "inline",
+                     "code": "def transform(df, output_dir):\n    return df\n"},
+    })
+    assert count_output_columns(publish) is None
