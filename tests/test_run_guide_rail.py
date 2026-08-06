@@ -24,16 +24,16 @@ def _stage(stage_id: str, description: str) -> Stage:
 
 
 def _stage_view(
-    stage_id: str, description: str, *, rows: int | None, columns: int | None
+    stage_id: str, description: str, *, rows: int | None, columns: int | None,
+    executed: bool = True,
 ) -> GuideStageView:
     return GuideStageView(
         stage_id=stage_id,
         stage=_stage(stage_id, description),
         written_columns=["doc_id"],
-        executed=True,
+        executed=executed,
         output_row_count=rows,
         column_count=columns,
-        row_delta=None,
     )
 
 
@@ -59,8 +59,6 @@ def _section(
         data_description=data_description,
         stages=list(outputs) if stages is None else stages,
         outputs=list(outputs),
-        changes_row_set=False,
-        passes_rows_through=False,
     )
 
 
@@ -120,7 +118,6 @@ def test_the_exact_count_rides_on_the_links_own_title() -> None:
     [
         (None, 15, "15 columns"),
         (7_400, None, "7.4k rows"),
-        (None, None, "size unknown"),
     ],
 )
 def test_an_unmeasured_half_says_so_and_is_never_rendered_as_a_zero(
@@ -128,9 +125,40 @@ def test_an_unmeasured_half_says_so_and_is_never_rendered_as_a_zero(
 ) -> None:
     html = _render(_section(_stage_view("s", "S", rows=rows, columns=columns)))
 
-    [size] = re.findall(r'<span class="guide-output-size">(.*?)</span>', html, re.S)
+    [size] = re.findall(r'<span class="guide-output-size[^"]*">(.*?)</span>', html, re.S)
     assert size.strip() == expected
     assert "0" not in expected
+
+
+def test_a_stage_the_run_never_executed_says_so_rather_than_calling_it_unknown() -> None:
+    """"Unknown" describes the interface's knowledge; the reader needs what happened."""
+    html = _render(_section(
+        _stage_view("s", "S", rows=None, columns=None, executed=False)
+    ))
+
+    assert '-<span class="guide-output-x">\u00d7</span>-' in html
+    [title] = re.findall(r'<a class="guide-output"[^>]*title="([^"]*)"', html)
+    assert title.startswith("This data was not produced in this run")
+    assert "unknown" not in html
+
+
+def test_a_stage_that_ran_but_measured_nothing_is_not_called_unexecuted() -> None:
+    """A different fact from never having run, so it does not borrow that sentence."""
+    html = _render(_section(
+        _stage_view("s", "S", rows=None, columns=None, executed=True)
+    ))
+
+    [title] = re.findall(r'<a class="guide-output"[^>]*title="([^"]*)"', html)
+    assert title.startswith("This run produced this data but recorded neither")
+
+
+def test_the_unmeasured_link_is_not_dressed_as_a_measured_one() -> None:
+    """The accent is link affordance; on the one link with no number it would mislead."""
+    html = _render(_section(
+        _stage_view("s", "S", rows=None, columns=None, executed=False)
+    ))
+
+    assert 'class="guide-output-size unmeasured"' in html
 
 
 def test_a_measured_empty_frame_still_reads_as_a_zero() -> None:
@@ -174,16 +202,3 @@ def test_a_section_with_no_authored_sentence_gets_its_link_and_no_sentence() -> 
     assert "45.1k" in html
     assert 'class="guide-output-what"' not in html
 
-
-# ── colour carries no claim ──────────────────────────────────────────────────
-
-def test_no_colour_variant_marks_a_section_that_dropped_rows() -> None:
-    """The number already says the rows moved; a colour saying it too is a claim."""
-    section = _section(_union())
-    dropping = GuideStepView(
-        title=section.title, prose=section.prose, data_description=None,
-        stages=section.stages, outputs=section.outputs,
-        changes_row_set=True, passes_rows_through=False,
-    )
-
-    assert _render(dropping) == _render(section)

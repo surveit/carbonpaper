@@ -15,8 +15,10 @@
    record names. It is deliberately NOT the version's declared output schema, which
    states only the columns a stage reads and adds and so runs narrower than the frame
    — the Schema tab answers that question and will show a smaller number for the same
-   stage. Either half can be missing on its own, and a missing half is said in words,
-   never rendered as a 0, which means measured and empty.
+   stage. Either half can be missing on its own, and a missing half is said in words
+   (`45.1k rows`, `15 columns`), never rendered as a 0, which means measured and empty.
+   With NEITHER half the link reads `- × -`, and its hover says what happened rather
+   than what the interface knows: `This data was not produced in this run`.
 
    The size on the link is ABBREVIATED (`45.1k × 15`) because the rail is 360px wide.
    That is the first place this interface renders a measured number lossily, so the
@@ -46,16 +48,21 @@
 {%- elif s.column_count is not none -%}
 {{ column_word(s.column_count) }}
 {%- else -%}
-size unknown
+-<span class="guide-output-x">×</span>-
 {%- endif %}
 {% endmacro %}
 
 {# The same size UNABBREVIATED, for the link's title. The abbreviation above rounds a
    measured number, so this is where the number the run actually recorded lives; an
-   unmeasured half says it is unknown rather than being left out of the sentence. #}
+   unmeasured half says it is unknown rather than being left out of the sentence.
+
+   With NEITHER half, `- × -` on the link carries no explanation, so this says what
+   happened rather than what the interface knows: a stage this run has no record for
+   did not produce the data at all, which is what the reader needs, while a stage it
+   DID execute and measured nothing for is a different fact and says so. #}
 {% macro exact_size_words(s) %}
 {%- if s.output_row_count is none and s.column_count is none -%}
-This run measured neither the rows nor the columns of this frame
+{% if not s.executed %}This data was not produced in this run{% else %}This run produced this data but recorded neither its rows nor its columns{% endif %}
 {%- else -%}
 {% if s.output_row_count is not none %}{{ row_word(s.output_row_count) }}{% else %}row count unknown{% endif %} × {% if s.column_count is not none %}{{ column_word(s.column_count) }}{% else %}column count unknown{% endif %}
 {%- endif %}
@@ -179,6 +186,7 @@ This run measured neither the rows nor the columns of this frame
   .guide-output-size { font-family: ui-monospace, monospace; font-size: 12px;
                        font-weight: 600; font-variant-numeric: tabular-nums;
                        white-space: nowrap; color: var(--accent); }
+  .guide-output-size.unmeasured { color: var(--muted); font-weight: 400; }
   .guide-output-x { color: var(--muted); font-weight: 400; margin: 0 .12em; }
   .guide-output:hover .guide-output-size { border-bottom: 1px solid var(--accent); }
   .guide-output-what { font-size: 10.5px; color: var(--muted); line-height: 1.4;
@@ -260,7 +268,9 @@ This run measured neither the rows nor the columns of this frame
           <a class="guide-output" href="{{ links.guide_stage(out.stage_id) }}"
              data-stage-link="{{ out.stage_id }}"
              title="{{ exact_size_words(out) | trim }} — open this data">
-            <span class="guide-output-size">{{ output_size(out) | trim }}</span>
+            {# Muted where neither half was measured: the accent is link affordance,
+               and `- × -` in it would draw the eye to the one link with no number. #}
+            <span class="guide-output-size{% if out.output_row_count is none and out.column_count is none %} unmeasured{% endif %}">{{ output_size(out) | trim }}</span>
             {%- if forked %}
             <span class="guide-output-what">{{ out.stage_id }}</span>
             {%- elif step.data_description %}
