@@ -4,7 +4,8 @@
 {% block section_head %}
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 <script>
-  onDiagramNode(function (stageId) { if (window._loadStage) window._loadStage(stageId); });
+  // pulse:false — the reader clicked this node, so it needs no arrival cue.
+  onDiagramNode(function (stageId) { if (window._loadStage) window._loadStage(stageId, { pulse: false }); });
   document.addEventListener("DOMContentLoaded", function () {
     // startOnLoad:false + useMaxWidth:false — diagram_viewport.js renders the graph and
     // sizes the svg itself, so zoom is real and a focused node can be centred.
@@ -179,15 +180,20 @@
 
   // Outline the node and centre it, zooming to at least half size so it is readable.
   // A re-render can replace the svg mid-click, so a miss retries a few times.
-  function focusGraphNode(stageId, tries) {
+  // opts.pulse asks for the arrival animation: on for a jump the reader did not aim
+  // (deep link, guide step), off when they clicked the node itself.
+  function focusGraphNode(stageId, opts, tries) {
     if (!viewport || !viewport._focusNode) return;
-    if (!viewport._focusNode(stageId, 0.5) && (tries || 0) < 8) {
-      setTimeout(() => focusGraphNode(stageId, (tries || 0) + 1), 250);
+    if (!viewport._focusNode(stageId, { minScale: 0.5, pulse: !!(opts && opts.pulse) })
+        && (tries || 0) < 8) {
+      setTimeout(() => focusGraphNode(stageId, opts, (tries || 0) + 1), 250);
     }
   }
   window._focusGraphNode = focusGraphNode;
 
-  async function loadStage(stageId) {
+  // opts.pulse defaults to true: every caller but the graph-node click is a jump
+  // away from where the reader was looking.
+  async function loadStage(stageId, opts) {
     if (!stageId) return;
     panel.classList.add('loading');
     try {
@@ -204,7 +210,7 @@
       if (location.hash !== `#${stageId}`) history.replaceState(null, '', `#${stageId}`);
       // The graph moves to the stage; the page does not. Scrolling down to the panel
       // took the diagram off screen, which is the thing the click was about.
-      focusGraphNode(stageId);
+      focusGraphNode(stageId, { pulse: !opts || opts.pulse !== false });
     } finally { panel.classList.remove('loading'); }
   }
   window._loadStage = loadStage;
@@ -240,7 +246,7 @@
         // The svg is new: re-measure it, then put the outline back on the open stage.
         if (viewport && viewport._refit) viewport._refit();
         const open = location.hash ? decodeURIComponent(location.hash.slice(1)) : '';
-        if (open) focusGraphNode(open);
+        if (open) focusGraphNode(open, { pulse: false });   // the reader did not move: restore only
       } catch (e) {}
     }
     function paintStrip(stages, tallies) {
