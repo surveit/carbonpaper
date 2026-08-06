@@ -72,21 +72,27 @@ def test_trace_endpoint_400_for_out_of_range_row(tmp_path, monkeypatch):
     assert resp.status_code == 400
 
 
-def test_trace_view_renders_story_and_graph(tmp_path, monkeypatch):
+def test_trace_view_renders_the_story_and_the_row_panel(tmp_path, monkeypatch):
     client = _project_run(tmp_path, monkeypatch)
     resp = client.get("/project/proj/runs/R1/stage/enrich/row/0/trace/view")
     assert resp.status_code == 200
     assert "text/html" in resp.headers["content-type"]
     body = resp.text
-    assert "Story" in body and "Graph" in body        # the two-view toggle
     assert "mermaid" in body                            # reuses the central graph
-    assert "stage-panel" in body                        # loads the shared stage panel
-    assert "/lineage_panel?row=" in body                # trimmed to the traced row
-    assert 'data-disc="transform"' in body              # transform-link target
-    assert 'data-disc="output"' in body                 # row-chip target
+    assert "/lineage_panel?row=" in body                # the Transform tab's fetch
     assert "filtered to this single row" in body        # single-row subheader
     assert "enrich" in body and "seeds" in body        # both stages, in the payload
     assert '"step": 1' in body and '"step": 2' in body  # numbered steps in payload
+    assert '"row_diff"' in body                         # the row, marked, in the payload
+    assert '/runs/R1#enrich' in body                    # back to the stage in the run
+
+
+def test_the_graph_is_folded_away_and_the_row_is_not(tmp_path, monkeypatch):
+    """The graph draws the workflow, not this row's path, so it opens closed."""
+    client = _project_run(tmp_path, monkeypatch)
+    body = client.get("/project/proj/runs/R1/stage/enrich/row/0/trace/view").text
+    graph = body.split('class="lin-graph"')[1][:40]
+    assert "open" not in graph
 
 
 def test_trace_view_404_for_unknown_stage(tmp_path, monkeypatch):
@@ -95,14 +101,15 @@ def test_trace_view_404_for_unknown_stage(tmp_path, monkeypatch):
     assert resp.status_code == 404
 
 
-def test_lineage_panel_is_trimmed_to_the_row(tmp_path, monkeypatch):
+def test_lineage_panel_is_the_transform_not_the_row(tmp_path, monkeypatch):
+    """The page renders the row itself, so the fetched panel is the transform alone."""
     client = _project_run(tmp_path, monkeypatch)  # enrich rows: a/A, b/B (+score)
     resp = client.get("/project/proj/runs/R1/stage/enrich/lineage_panel?row=1")
     assert resp.status_code == 200
     body = resp.text
-    assert "row 1" in body                    # scoped badge
-    assert ">b<" in body or "b</td>" in body  # row 1's data (facility_id b)
-    assert "A" not in body.split("Output")[-1]  # row 0's data not in the output table
+    assert "lineage-stage" in body     # the panel rendered
+    assert "data-preview" not in body  # and carries no row table
+    assert "b</td>" not in body        # not row 1's cells either
 
 
 def test_trace_view_says_reshaping_not_traceable(tmp_path, monkeypatch):

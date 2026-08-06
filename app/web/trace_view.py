@@ -15,6 +15,8 @@ from app.models.stages.join import EnrichStage, ExpandStage
 from app.models.stages.llm_transform import LLMTransformStage
 from app.models.stages.starlark import StarlarkRowFunctionStage
 from app.services.loader import resolve_function_code
+from app.web.panel_links import AppPanelLinks
+from app.web.trace_row_diff import build_row_diff, row_diff_to_dict
 
 
 def _transform_of(stage: Stage | None) -> dict[str, Any]:
@@ -46,41 +48,20 @@ def _transform_of(stage: Stage | None) -> dict[str, Any]:
     return {"kind": str(stage.type), "detail": None}
 
 
-def build_trace_view(trace: dict[str, Any], stages: dict[str, Stage]) -> dict[str, Any]:
+def build_trace_view(
+    trace: dict[str, Any], stages: dict[str, Stage], links: AppPanelLinks
+) -> dict[str, Any]:
     """Turn `trace` into the render payload: nodes chronological, claim last."""
-    # Each node carries its row, the columns new at that stage, its transform,
-    # and any `branches` — parents the walk did not follow, offered as promotable
-    # traces rather than expanded inline, so the page stays one story. `upstream`
-    # folds the terminal stop reason onto the earliest node, not its own step.
+    # Each node carries its row — as fields marked against the parent row the
+    # walk came from — its transform, and any `branches`: parents the walk did
+    # not follow, offered as promotable traces rather than expanded inline, so
+    # the page stays one story. `upstream` folds the terminal stop reason onto
+    # the earliest node, not its own step.
     chrono = list(reversed(trace["steps"]))
     end = trace["end"]
     truncated = not end["reached_origin"]
 
-    nodes: list[dict[str, Any]] = []
-    for i, step in enumerate(chrono):
-        is_claim = i == len(chrono) - 1
-        is_first = i == 0
-        if is_claim:
-            role = "claim"
-        elif is_first and not truncated:
-            role = "source"
-        else:
-            role = "step"
-        nodes.append({
-            "step": i + 1,  # 1-based, chronological — so the story can say "step 4"
-            "stage_id": step["stage_id"],
-            "row_ordinal": step["row_ordinal"],  # for loading the row-trimmed panel
-            "stage_type": step["stage_type"],
-            "origin": step["origin"],
-            "role": role,
-            "columns_new": step["columns_new"],
-            "row": step["row"],
-            "transform": _transform_of(stages.get(step["stage_id"])),
-            # Recorded parents this walk did not follow (the other side of a
-            # join). Each is a trace of its own the reader can promote onto the
-            # spine; the template builds the link from the run it is already on.
-            "branches": step.get("branches") or [],
-        })
+    nodes = [_build_node(i, chrono, stages, links, truncated) for i in range(len(chrono))]
 
     edges = [
         {"from": chrono[i]["stage_id"], "to": chrono[i + 1]["stage_id"],
@@ -99,4 +80,56 @@ def build_trace_view(trace: dict[str, Any], stages: dict[str, Stage]) -> dict[st
             "at_stage": end["at_stage"],
             "message": end["message"],
         },
+    }
+
+
+def _build_node(
+    i: int, chrono: list[dict[str, Any]], stages: dict[str, Stage],
+    links: AppPanelLinks, truncated: bool,
+) -> dict[str, Any]:
+    """One step as the page reads it: its row against its parent's, and where it links."""
+    step = chrono[i]
+    parent = chrono[i - 1] if i else None
+    diff = build_row_diff(
+        step["row"],
+        parent["row"] if parent else None,
+        is_origin=(i == 0 and not truncated),
+    )
+    return {
+        "step": i + 1,  # 1-based, chronological — so the story can say "step 4"
+        "stage_id": step["stage_id"],
+        "row_ordinal": step["row_ordinal"],
+        "stage_type": step["stage_type"],
+        "origin": step["origin"],
+        "role": _role_of(i, len(chrono), truncated),
+        "columns_new": step["columns_new"],
+        "row": step["row"],
+        "row_diff": row_diff_to_dict(diff),
+        # What the row was compared against, named so the panel can state it
+        # rather than leaving the reader to assume which frame the diff used.
+        "base": None if parent is None else {
+            "stage_id": parent["stage_id"], "row_ordinal": parent["row_ordinal"],
+        },
+        "transform": _transform_of(stages.get(step["stage_id"])),
+        "links": _links_of(links, step["stage_id"], step["row_ordinal"]),
+        "branches": [
+            {**branch, "links": _links_of(links, branch["stage_id"], branch["row_ordinal"])}
+            for branch in (step.get("branches") or [])
+        ],
+    }
+
+
+def _role_of(i: int, total: int, truncated: bool) -> str:
+    """`claim` last, `source` first where the walk reached an origin, else `step`."""
+    if i == total - 1:
+        return "claim"
+    return "source" if i == 0 and not truncated else "step"
+
+
+def _links_of(links: AppPanelLinks, stage_id: str, row_ordinal: int) -> dict[str, str]:
+    """Where one node points, in the app's own link vocabulary rather than a hand-built URL."""
+    return {
+        "stage": links.stage_anchor(stage_id),
+        "rows": links.stage_rows(stage_id),
+        "trace": links.row_trace(stage_id, row_ordinal),
     }
