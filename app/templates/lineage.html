@@ -1,23 +1,38 @@
 <!doctype html><html><head><meta charset="utf-8">
+{# standalone page, so it repeats what base.html would have given it #}
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>lineage · {{ title }}</title>
 <link rel="stylesheet" href="/static/style.css">
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 {# standalone page (does not extend base.html), so it loads the node dispatcher itself #}
 <script src="/static/diagram_nodes.js"></script>
 <style>
-.lin-head{padding:12px 22px;border-bottom:1px solid var(--border);background:#fff}
+/* The page is exactly the viewport: header, then two columns that scroll inside
+   themselves. A sticky 100vh panel BELOW a header makes the document taller than
+   the screen, which is a second scrollbar for nothing. */
+html,body{height:100%}
+body{display:flex;flex-direction:column;overflow:hidden}
+.lin-head{flex:none;padding:12px 22px;border-bottom:1px solid var(--border);background:#fff}
 .lin-head h1{font-size:17px;margin:0 0 2px}
 .lin-sub{color:var(--muted);font-size:12.5px}
-.lin-split{display:grid;grid-template-columns:minmax(400px,1fr) minmax(480px,1.1fr);align-items:start}
-/* Too narrow to stand them side by side: the story runs full width and the panel
-   follows it, rather than the page scrolling sideways. */
-@media (max-width:900px){
-  .lin-split{grid-template-columns:1fr}
-  .lin-side{position:static;height:auto;border-left:0;border-top:1px solid var(--border)}
-}
-.lin-story{padding:16px 20px 60px}
-.lin-side{position:sticky;top:0;height:100vh;border-left:1px solid var(--border);background:#fff;
+.lin-split{flex:1;min-height:0;display:grid;grid-template-columns:minmax(400px,1fr) minmax(480px,1.1fr)}
+.lin-story{overflow:auto;padding:16px 20px 40px}
+.lin-side{min-height:0;border-left:1px solid var(--border);background:#fff;
   display:flex;flex-direction:column;overflow:hidden}
+/* Too narrow to stand them side by side: one column, and the document scrolls as
+   a whole again rather than two panes scrolling against each other. */
+@media (max-width:900px){
+  html,body{height:auto}
+  body{display:block;overflow:visible}
+  .lin-split{display:block}
+  .lin-story{overflow:visible}
+  .lin-side{border-left:0;border-top:1px solid var(--border);overflow:visible}
+  .lin-pbody{overflow:visible}
+  /* The row chip and the delta take their own line rather than pushing the
+     sentence off the screen. */
+  .step{grid-template-columns:52px 1fr;row-gap:2px}
+  .step .right{grid-column:2;white-space:normal}
+}
 .lin-note{color:var(--muted);font-size:12.5px;margin:0 0 12px}
 /* A step is one line of the story AND the control that puts that row in the panel. */
 .step{display:grid;grid-template-columns:52px 1fr auto;gap:6px;align-items:baseline;width:100%;
@@ -43,8 +58,6 @@
   font-size:12.5px;white-space:nowrap;text-decoration:none;display:inline-block}
 .branch:hover{background:#f6f0fd}
 .branch::before{content:"⟨"}.branch::after{content:"⟩ ⇄"}
-.offpath{margin-top:14px;border-top:1px dashed var(--border);padding-top:10px;font-size:12.5px;color:var(--muted)}
-.offpath b{color:#555;font-weight:600}
 .trunc{background:var(--warn-bg);color:var(--state-warn-ink);border-radius:8px;padding:8px 12px;
   font-size:13px;margin-bottom:12px}
 .lin-graph{margin-top:18px;border-top:1px solid var(--border);padding-top:10px}
@@ -93,9 +106,8 @@ tr.carried td.lin-v{color:#555}
 <div class="lin-head"><h1>Lineage</h1><div class="lin-sub" id="sub"></div></div>
 <div class="lin-split">
   <div class="lin-story">
-    <div class="lin-note">Tracing the pipeline filtered to this single row — every step below is the one row on this row's path. Click a step to put its row in the panel; its transform is a tab away.</div>
+    <div class="lin-note">Every step below is this one row, as it stood after that stage. Click a step to see it.</div>
     <div id="story"></div>
-    <div id="offpath" class="offpath hidden"></div>
     <details class="lin-graph"><summary>Workflow graph</summary>
       <pre class="mermaid" id="mmd">{{ mermaid }}</pre>
       <div id="nograph" class="nograph hidden">Graph needs the compiled workflow, which isn't available for this run.</div>
@@ -118,13 +130,8 @@ const JOIN_KINDS = ['enrich', 'expand'];
 let sel = V.nodes.length - 1, tab = 'row', scope = 'changed';
 const transformCache = {};
 
-// Summed off each cohort's `total`, not the rows it links, so "one of N paths"
-// states how many paths the run RECORDED rather than how many this page opens.
-const branchCount = V.nodes.reduce((n, x) => n + (x.branches || []).length
-  + (x.contributor_groups || []).reduce((m, g) => m + g.total, 0), 0);
-document.getElementById('sub').textContent = `run ${V.run_id} · ${V.start_stage} row ${V.start_row}`
-  + ` · reads top to bottom, step 1 first`
-  + (branchCount ? ` · one of ${branchCount + 1} paths — the others are listed below` : '');
+document.getElementById('sub').textContent =
+  `run ${V.run_id} · ${V.start_stage} row ${V.start_row}`;
 
 // ---- Story ----------------------------------------------------------------
 function verb(n){
@@ -136,6 +143,7 @@ function verb(n){
   if(k==='expand') return `expand with ${sid}`;
   if(k==='union') return `carry through ${sid}`;
   if(k==='filter_rows') return `keep the row through ${sid}`;
+  if(k==='aggregate') return `run aggregation ${sid}`;
   if(k==='source') return `read ${sid}`;
   return sid;
 }
@@ -150,25 +158,35 @@ function deltaOf(n){
   if(!parts.length && !n.base) return '';
   return `<span class="delta">${parts.length ? parts.join(' · ') : 'no cell changed'}</span>`;
 }
-// A join row with no recorded parent matched nothing on its reference side. That
-// is a recorded fact, not an inference from null cells — which is what separates
-// it from having matched a row whose columns are null.
-function nomatch(n){
-  return JOIN_KINDS.includes(n.transform.kind) && !(n.branches || []).length
+// Where the row's OTHER parents go: in the sentence, at the step they belong to.
+// A join names the reference row it matched — or that it matched none, a recorded
+// fact rather than an inference from null cells. A fan-in names what it summarized.
+function fromOf(n){
+  const groups = n.contributor_groups || [], branches = n.branches || [];
+  if(groups.length){
+    return ' from ' + groups.map(g => gchip(g, groups.length > 1)).join('; ');
+  }
+  if(branches.length) return ' matched to ' + branches.map(bchip).join(' and ');
+  return JOIN_KINDS.includes(n.transform.kind)
     ? ' <span class="nomatch">no reference row matched</span>' : '';
 }
 function renderStory(){
   let html = '';
-  if(V.upstream.truncated){ html += `<div class="trunc">⋯ upstream not traced — ${esc(V.upstream.message)}</div>`; }
+  // The banner is for a stop the story cannot otherwise show. A fan-in row says
+  // what it summarized in its own sentence, so it needs no second telling.
+  const fanIn = (V.nodes[0].contributor_groups || []).length > 0;
+  if(V.upstream.truncated && !fanIn){
+    html += `<div class="trunc">⋯ upstream not traced — ${esc(V.upstream.message)}</div>`;
+  }
   html += V.nodes.map((n, i) => `<button class="step ${i===sel?'on':''}" data-i="${i}">
       <span class="stepno">step ${n.step}</span>
-      <span>${verb(n)}${nomatch(n)}${n.role==='claim' ? ' <span class="claim-tag">published claim</span>' : ''}</span>
-      <span class="right"><span class="row-chip">row ${n.row_ordinal}</span>${deltaOf(n)}</span>
+      <span>${verb(n)}${fromOf(n)}</span>
+      <span class="right">${n.role==='claim' ? '<span class="claim-tag">published claim</span> ' : ''}<span class="row-chip">row ${n.row_ordinal}</span>${deltaOf(n)}</span>
     </button>`).join('');
   document.getElementById('story').innerHTML = html;
 }
 
-// ---- Off-spine branches, so a path not taken is never merely hidden --------
+// ---- The other parents, named in the sentence that owns them --------------
 function bchip(b){
   return `<a class="branch" href="${b.links.trace}" title="trace this row instead">`
        + `${esc(b.stage_id)} row ${b.row_ordinal}</a>`;
@@ -184,30 +202,34 @@ function bchip(b){
 // rows the link opens where it cannot open them all. `g.named` is non-empty
 // only for a cohort small enough to name row by row, and `g.rows_link` is built
 // server-side, so no route is spelled out again here.
-function gchip(g){
-  const into = g.columns ? ` into ${g.columns.map(esc).join(' and ')}` : '';
-  if(g.named.length) return g.named.map(bchip).join(' ') + into;
+// `showColumns` only where there IS more than one cohort: with a single one the
+// columns are just the output's own, which is a list nobody needs to read.
+function gchip(g, showColumns){
+  const stage = esc(g.stage_id);
+  const into = (showColumns && g.columns) ? ` into ${g.columns.map(esc).join(' and ')}` : '';
+  // Named row by row: the stage once, then the ordinals, which is what the
+  // reader is after — repeating the stage per row buries them.
+  if(g.named.length){
+    const rows = g.named.map(b =>
+      `<a class="branch" href="${b.links.trace}" title="trace this row instead">${b.row_ordinal}</a>`);
+    return `${stage} ${g.named.length > 1 ? 'rows' : 'row'} ${rows.join(' ')}${into}`;
+  }
   const label = g.linked < g.total
-    ? `${g.total} rows of ${esc(g.stage_id)} contributed — open the first ${g.linked}`
-    : `${g.total} rows of ${esc(g.stage_id)} contributed`;
+    ? `${g.total} rows of ${stage} — open the first ${g.linked}`
+    : `${g.total} rows of ${stage}`;
   // No rows view to point at (the review packet's link set): still say the count.
   if(!g.rows_link) return `${label}${into}`;
   return `<a class="branch" href="${g.rows_link}"`
-       + ` title="open these rows of ${esc(g.stage_id)}">${label}</a>${into}`;
-}
-function renderOffPath(){
-  if(!branchCount) return;
-  const off = document.getElementById('offpath');
-  off.innerHTML = '<b>Not on this path:</b> '
-    + V.nodes.flatMap(n => [
-        ...(n.contributor_groups || []).map(gchip),
-        ...(n.branches || []).map(bchip),
-      ].map(chip => `${chip} <span class="stepno">(step ${n.step})</span>`)).join(' · ')
-    + ' — each is a trace of its own; opening one makes it the path shown.';
-  off.classList.remove('hidden');
+       + ` title="open these rows of ${stage}">${label}</a>${into}`;
 }
 
 // ---- The panel: the row first, its transform a tab away -------------------
+function fanInOf(n){
+  const groups = n.contributor_groups || [];
+  if(!groups.length) return '';
+  const total = groups.reduce((sum, g) => sum + g.total, 0);
+  return `${total} row${total > 1 ? 's' : ''} of ${esc(groups[0].stage_id)}`;
+}
 function fieldRow(f){
   const mark = {added:'+', changed:'~', dropped:'−', carried:''}[f.state];
   const text = f.text === '' ? '<span class="lin-null">(empty)</span>' : esc(f.text);
@@ -223,13 +245,13 @@ function saidOf(n, touched){
   const d = n.row_diff;
   if(JOIN_KINDS.includes(n.transform.kind) && d.added){
     const matched = (n.branches || []).length
-      ? `from ${n.branches.map(b => `${esc(b.stage_id)} row ${b.row_ordinal}`).join(' and ')}`
-      : 'from the reference input — but this subject row matched <b>no</b> reference row, so the field landed empty rather than absent';
-    return `<div class="lin-said lin-said-join">${d.added} field${d.added>1?'s':''} landed ${matched}, not computed here.</div>`;
+      ? `landed from ${n.branches.map(b => `${esc(b.stage_id)} row ${b.row_ordinal}`).join(' and ')}, not computed here.`
+      : 'landed empty: this row matched <b>no</b> reference row.';
+    return `<div class="lin-said lin-said-join">${d.added} field${d.added>1?'s':''} ${matched}</div>`;
   }
   if(touched.length || !n.base) return '';
-  return `<div class="lin-said lin-said-idle">No cell changed at this step. What it did do:`
-       + ` <b>row ${n.base.row_ordinal} → row ${n.row_ordinal}</b> — the row kept its cells and took a new position.</div>`;
+  return `<div class="lin-said lin-said-idle">No cell changed — the row kept every value and`
+       + ` moved from <b>row ${n.base.row_ordinal}</b> to <b>row ${n.row_ordinal}</b>.</div>`;
 }
 function renderRowTab(n){
   const fields = n.row_diff.fields;
@@ -245,10 +267,12 @@ function renderRowTab(n){
   return `${picker}
     ${saidOf(n, touched)}
     <p class="lin-base">${n.base
-      ? `compared against <code>${esc(n.base.stage_id)}</code> row ${n.base.row_ordinal} — the parent this row was traced from, not a guess at one.`
-      : (V.upstream.truncated
-          ? `upstream was not traced, so this row is shown unmarked — nothing here claims which stage added what.`
-          : `origin row — read from the source, so there is nothing to compare it against.`)}</p>
+      ? `compared against its parent, <code>${esc(n.base.stage_id)}</code> row ${n.base.row_ordinal}.`
+      : (fanInOf(n)
+          ? `unmarked: this row summarizes ${fanInOf(n)}, so no single row precedes it.`
+          : (V.upstream.truncated
+              ? `unmarked: the walk stopped here, so which stage added what is unknown.`
+              : `the origin row, read from the source — nothing precedes it.`))}</p>
     <table class="lin-row">${shown.map(fieldRow).join('')}</table>`;
 }
 async function renderTransformTab(n){
@@ -316,6 +340,5 @@ document.querySelector('.lin-graph').addEventListener('toggle', async e => {
   try { await mermaid.run({ nodes:[mmd] }); } catch(err){ graphRendered = false; }
 });
 
-renderOffPath();
 render();
 </script></body></html>
