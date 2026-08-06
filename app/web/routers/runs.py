@@ -44,7 +44,6 @@ from app.web import loading
 from app.web.config import projects_dir, REPO_ROOT, templates
 from app.web.stage_test_views import build_certification, shape_test_views
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
-from app.web.panel_links import AppPanelLinks
 from app.web.loading import (
     build_llm_example,
     csv_download_body,
@@ -61,7 +60,7 @@ from app.web.loading import (
 from app.web.project_view import shell_state
 from app.web.run_header import build_live_view, build_run_header
 from app.web.run_index import build_run_index_rows
-from app.web.run_stage_panel import not_executed_panel
+from app.web.run_stage_panel import not_executed_panel, resolve_panel_links
 from app.web.stage_diff import StageDiff, build_stage_diff
 
 router = APIRouter()
@@ -449,7 +448,7 @@ async def run_detail(request: Request, project: str, run_id: str):
             "guideless_version": find_guideless_version_id(project, manifest),
             # The guide rail's stage chips resolve through the same links object
             # the stage panel uses, so the packet can point them at its own pages.
-            "links": AppPanelLinks(project, run_id),
+            "links": resolve_panel_links(project, run_id),
             "type_glyph": TYPE_GLYPH,
             "type_class": TYPE_CLASS,
         },
@@ -520,7 +519,7 @@ async def run_stage_partial(
             "test_views": (views := shape_test_views(stage_def)),
             "certification": build_certification(stage_def, views) if stage_def else None,
             "previewable": stage_def is not None and stage_def.type in PREVIEWABLE_TYPES,
-            "links": AppPanelLinks(project, run_id),
+            "links": resolve_panel_links(project, run_id),
             "type_glyph": TYPE_GLYPH,
             "type_class": TYPE_CLASS,
         },
@@ -564,7 +563,7 @@ async def run_stage_rows(
                 else _build_full_rows_diff(project, run_dir, stage_id, stage_record)
             ),
             "raw": raw,
-            "links": AppPanelLinks(project, run_id),
+            "links": resolve_panel_links(project, run_id),
             # The page's own treatments (row numbers, click-to-expand cells,
             # sticky-header scroll box) the shared diff partial renders on request.
             "full_rows": True,
