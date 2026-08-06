@@ -34,19 +34,23 @@ class GuideStageView:
     # frame measured and found empty.
     output_row_count: int | None
     column_count: int | None
-    # How each half moved from the same half of its FIRST declared input's stage. 0 says
-    # that half did not change — a row delta of 0 is a stage that passed every row
-    # through — and non-zero is how many rows or columns it dropped or added. Each is
-    # None when there is nothing to subtract: a stage with no input (`input_data`), or
-    # either side's count unknown. Neither is 0 in that case.
+    # How the row count moved from its FIRST declared input's stage: 0 is a stage that
+    # passed every row through, non-zero is how many it dropped or added. None when
+    # there is nothing to subtract — a stage with no input (`input_data`), or either
+    # side's count unknown — and never 0 in that case.
     row_delta: int | None
-    column_delta: int | None
 
 
 @dataclass(frozen=True)
 class GuideStepView:
+    """A Workflow section, as the rail names it: the authored step and what it left."""
+
     title: str
     prose: str
+    # The authored sentence saying what the data leaving this section IS, or None where
+    # the guide was written before the field existed or its author left it out. Nothing
+    # stands in for it — a section without one gets a data link carrying only the shape.
+    data_description: str | None
     stages: list[GuideStageView]
     # What the step leaves behind: every stage of it that feeds no OTHER stage of the
     # same step, in execution order, each carrying its own measured count. One entry is
@@ -149,6 +153,7 @@ def _view_step(
     return GuideStepView(
         title=step.title,
         prose=step.prose,
+        data_description=step.data_description,
         stages=stages,
         outputs=_find_step_outputs(stages, by_id),
         changes_row_set=any(s.row_delta not in (None, 0) for s in stages),
@@ -211,9 +216,6 @@ def _view_stage(
         output_row_count=output_rows,
         column_count=measured.column_counts.get(stage_id),
         row_delta=_measure_delta(stage, output_rows, measured.row_counts),
-        column_delta=_measure_delta(
-            stage, measured.column_counts.get(stage_id), measured.column_counts
-        ),
     )
 
 

@@ -1,5 +1,6 @@
 {# The review guide the run's pinned version carries, as a rail beside the run: the
-   ordered walkthrough its author wrote, each step next to the stages it narrates.
+   ordered walkthrough its author wrote. Each numbered entry is a WORKFLOW SECTION —
+   the term the UI uses for one authored step — and carries the stages it narrates.
 
    The prose is the ONLY thing here that was authored. Everything shown around it —
    each stage's name, type, position in the execution order and the columns it writes
@@ -41,21 +42,6 @@
    (`24,797 rows`, `21 columns`) rather than pairing a measured number with a
    placeholder. `shape unknown` is worded, not punctuated, so nothing here can be
    misread as a measured 0. #}
-{# The frame WEDGED BETWEEN two stage rows: the output of the row above it, opened in
-   the stage panel — which opens on its Data. Labelled with the shape, so the reader
-   knows what they are about to open. It is an anchor of the same kind as the stage row
-   (`data-stage-link`), so the panel, the hash deep-link and the graph highlight are the
-   run view's own, unchanged. A stage id the version defines nothing for has no frame to
-   open, so it gets no link. #}
-{% macro frame_link(s) %}
-{%- if s.stage is not none %}
-<li class="guide-frame">
-  <a href="{{ links.guide_stage(s.stage_id) }}" data-stage-link="{{ s.stage_id }}"
-     title="Open the data at this point — the frame «{{ s.stage.name }}» left, as this run wrote it">{{ shape_words(s) | trim }}</a>
-</li>
-{%- endif %}
-{% endmacro %}
-
 {% macro shape_words(s) %}
 {%- if s.output_row_count is not none and s.column_count is not none -%}
 {{ "{:,}".format(s.output_row_count) }} × {{ s.column_count }}
@@ -67,32 +53,6 @@
 shape unknown
 {%- endif %}
 {% endmacro %}
-
-{# What that shape did to its FIRST input's, per half and only where measured: a stage
-   that dropped rows and one that only widened are different things to review, so they
-   are never merged into one word. `same` is said only of a half that was measured on
-   both sides and found equal — a half with nothing to compare says nothing at all. #}
-{% macro change_words(s) %}
-{%- set parts = [] -%}
-{%- if s.row_delta %}{{ parts.append(("−" if s.row_delta < 0 else "+") ~ "{:,}".format(s.row_delta | abs) ~ " rows") or "" }}{% endif -%}
-{%- if s.column_delta %}{{ parts.append(("−" if s.column_delta < 0 else "+") ~ (s.column_delta | abs) ~ " cols") or "" }}{% endif -%}
-{%- if not parts and s.row_delta == 0 and s.column_delta == 0 %}{{ parts.append("same") or "" }}{% endif -%}
-{%- if not parts and s.row_delta == 0 %}{{ parts.append("same rows") or "" }}{% endif -%}
-{%- if not parts and s.column_delta == 0 %}{{ parts.append("same cols") or "" }}{% endif -%}
-{{ parts | join(" · ") }}
-{%- endmacro %}
-
-{# The slab: the shape of what this stage left, set apart at the end of its row by a
-   rule and a background of its own, with the change under it. A stage whose ROW count
-   moved is tinted — that is a different review act from one that only widened. #}
-{% macro shape_slab(s) %}
-{%- set change = change_words(s) | trim %}
-<span class="guide-slab{% if s.row_delta %} row-changing{% endif %}"
-      title="Rows × columns of the frame this stage left, measured from what this run wrote — not the version's DECLARED schema, which the Schema tab shows and which is usually a smaller number">
-  <span class="guide-shape">{{ shape_words(s) | trim }}</span>
-  {%- if change %}<span class="guide-change">{{ change }}</span>{% endif %}
-</span>
-{%- endmacro %}
 
 {% macro guide_stage(s) %}
 <li class="guide-stage">
@@ -109,11 +69,8 @@ shape unknown
   <a class="guide-stage-row{% if not s.executed %} absent{% endif %}"
      href="{{ links.guide_stage(s.stage_id) }}" data-stage-link="{{ s.stage_id }}"
      {% if not s.executed %}title="This run has no record for this stage"{% endif %}>
-    <span class="guide-stage-head">
-      <span class="guide-stage-name"><code>{{ s.stage.id }}</code></span>
-      <span class="type-tag {{ type_class.get(s.stage.type, 'custom') }}">{{ type_glyph.get(s.stage.type, '') }} {{ s.stage.type }}</span>
-    </span>
-    {{ shape_slab(s) }}
+    <span class="guide-stage-name"><code>{{ s.stage.id }}</code></span>
+    <span class="type-tag {{ type_class.get(s.stage.type, 'custom') }}">{{ type_glyph.get(s.stage.type, '') }} {{ s.stage.type }}</span>
   </a>
   {# A wide stage's column list is longer than the step's own prose, so past
      _FOLD_WRITES it folds behind its exact count — every column is still there,
@@ -163,11 +120,10 @@ shape unknown
 
   .guide-stage-list { list-style: none; margin: 0; padding: 0;
                       display: flex; flex-direction: column; gap: 4px; }
-  .guide-stage-row { display: flex; align-items: stretch; font-size: 11px;
-                     text-decoration: none; color: var(--fg); overflow: hidden;
-                     border: 1px solid var(--border); border-radius: 3px; }
-  .guide-stage-head { display: flex; align-items: baseline; gap: 5px; flex-wrap: wrap;
-                      padding: 3px 6px; min-width: 0; flex: 1 1 auto; }
+  .guide-stage-row { display: flex; align-items: baseline; gap: 5px; flex-wrap: wrap;
+                     font-size: 11px; text-decoration: none; color: var(--fg);
+                     border: 1px solid var(--border); border-radius: 3px;
+                     padding: 3px 6px; }
   a.guide-stage-row:hover { background: var(--hover); border-color: var(--muted); }
   /* Selected: the stage NAME is washed, the way a marker pen marks a word — not a
      filled box drawn round the whole row, which at this size read as the loudest
@@ -189,56 +145,33 @@ shape unknown
   .guide-stage-row .type-tag { font-size: 9px; padding: 0 3px; }
   /* Named by the guide but not executed by THIS run: still shown, not linkable. */
   .guide-stage-row.absent { border-style: dashed; color: var(--muted); }
-  .guide-stage-row.unresolved { display: block; border-style: dashed;
-                                border-color: var(--warn-border); padding: 3px 6px;
+  .guide-stage-row.unresolved { border-style: dashed; border-color: var(--warn-border);
                                 background: var(--warn-bg); color: var(--fg); }
 
-  /* The frame between two stages: a hairline across the rail with the shape on it,
-     linking the data the stage above left. The affordance for a reader who wants to
-     stop reading about the data and look at it. */
-  .guide-frame { display: flex; align-items: center; gap: 6px; }
-  .guide-frame::before, .guide-frame::after { content: ""; flex: 1 1 auto; height: 1px;
-                                              background: var(--border); }
-  .guide-frame a { font-size: 10px; color: var(--accent); text-decoration: none;
-                   font-variant-numeric: tabular-nums; white-space: nowrap;
-                   border-bottom: 1px dotted transparent; }
-  .guide-frame a:hover { border-bottom-color: var(--accent); }
-
-  /* The measured shape, set apart at the end of the row: its own ground, its own rule,
-     the change under it. Tinted only where the ROW count moved — a stage that dropped
-     rows asks a different question of the reviewer than one that only widened. */
-  .guide-slab { flex: 0 0 auto; display: flex; flex-direction: column; gap: 1px;
-                align-items: flex-end; justify-content: center; text-align: right;
-                padding: 3px 6px; border-left: 1px solid var(--border);
-                background: var(--code-bg); color: var(--muted);
-                font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .guide-slab .guide-shape { font-size: 10.5px; color: var(--fg); }
-  .guide-slab .guide-change { font-size: 9.5px; }
-  .guide-slab.row-changing { background: var(--state-warn-bg); }
-  .guide-slab.row-changing .guide-shape, .guide-slab.row-changing .guide-change {
-    color: var(--state-warn-ink); }
-  .guide-stage-row.absent .guide-slab { background: transparent; }
-  a.guide-stage-row.active .guide-slab { background: transparent; color: #fff;
-                                         border-left-color: rgba(255, 255, 255, .35); }
-  a.guide-stage-row.active .guide-slab .guide-shape,
-  a.guide-stage-row.active .guide-slab .guide-change { color: #fff; }
+  /* THE DATA LINK — the one affordance in the rail: leave the walkthrough and look
+     at the rows. One per Workflow section, or one per pathway out of it. Given the
+     accent and a ground of its own, because everything else here is annotation. */
+  .section-data { list-style: none; margin: 0 0 6px; padding: 0;
+                  display: flex; flex-direction: column; gap: 3px; }
+  .section-data a { display: flex; align-items: baseline; gap: 6px;
+                    text-decoration: none; padding: 3px 6px; border-radius: 3px;
+                    border: 1px solid var(--border);
+                    border-left: 2px solid var(--accent);
+                    font-size: 11px; color: var(--accent); }
+  .section-data a:hover { background: var(--hover); border-color: var(--muted);
+                          border-left-color: var(--accent); }
+  .section-data-shape { font-weight: 600; font-variant-numeric: tabular-nums;
+                        white-space: nowrap; }
+  /* Drawn only where the section has several pathways out, to tell them apart. */
+  .section-data-branch { color: var(--muted); min-width: 0; overflow: hidden;
+                         text-overflow: ellipsis; white-space: nowrap; }
+  .section-data-what { font-size: 11px; color: var(--fg); margin: 0 0 3px; }
 
   .guide-step-rows { font-size: 10.5px; color: var(--muted);
                      font-variant-numeric: tabular-nums; margin: 0 0 5px; }
   .guide-step-mark { border-radius: 3px; padding: 0 4px; color: var(--state-warn-ink);
                      background: var(--state-warn-bg); white-space: nowrap; }
   .guide-step-mark.muted-mark { color: var(--muted); background: var(--code-bg); }
-  /* One line per branch where the step forked, name against count. Deliberately no
-     total: these are separate frames, and adding them up states a row count the run
-     never measured. */
-  .guide-step-branches { list-style: none; margin: -2px 0 6px; padding: 0 0 0 8px;
-                         border-left: 2px solid var(--border); }
-  .guide-step-branches li { display: flex; gap: 6px; font-size: 10.5px;
-                            color: var(--muted); font-variant-numeric: tabular-nums; }
-  .guide-step-branches a { color: var(--fg); text-decoration: none;
-                           border-bottom: 1px dotted var(--border); }
-  .guide-step-branches a:hover { border-bottom-color: var(--muted); }
-  .guide-step-branches .guide-shape { margin-left: auto; white-space: nowrap; }
   /* A step that moved the row set is the one asking a different question of the
      reviewer — how many rows, and on what rule — so its number carries the mark. */
   .guide-steps > li.changes-rows .n { background: var(--state-warn); }
@@ -281,8 +214,9 @@ shape unknown
   </div>
   {# The shape notation is explained once, here, so `24,797 × 21` needs no legend of
      its own on every stage row. #}
-  <p class="run-guide-lead">AI generated summary of what this run did. A stage's
-    <b>shape</b> reads rows × columns, as this run wrote them.</p>
+  <p class="run-guide-lead">AI generated summary of what this run did, one Workflow
+    section at a time. Open a section's data to see it — the link states the shape you
+    would be opening, rows × columns, as this run wrote them.</p>
   <ol class="guide-steps">
     {% for step in guide.steps %}
     <li{% if step.changes_row_set %} class="changes-rows"{% endif %}>
@@ -290,37 +224,43 @@ shape unknown
       <div>
         <h3>{{ step.title }}</h3>
         <p>{{ prose_with_column_chips(step.prose) }}</p>
-        {# The step's own shape, under the prose it belongs to and above the stages it
-           was measured from: what the step LEAVES, one frame per terminal stage. One
-           terminal is the ordinary case and reads as a plain count; a step that forked
-           names each branch instead, never a total over them. A step whose terminals
-           the run measured none of says nothing about its rows. #}
-        {% set measured = step.outputs | rejectattr('output_row_count', 'none') | list %}
-        {% set mark %}
-          {%- if step.changes_row_set %} <span class="guide-step-mark">changes which rows exist</span>
-          {%- elif step.passes_rows_through %} <span class="guide-step-mark muted-mark">adds columns only</span>{% endif %}
-        {%- endset %}
-        {% if measured and step.outputs | length == 1 %}
-        {% set out = step.outputs[0] %}
-        <p class="guide-step-rows"
-           title="What this step leaves behind, measured from the frame its last stage wrote: rows by columns">
-          leaves {{ row_word(out.output_row_count) }}
-          {%- if out.column_count is not none %} × {{ column_word(out.column_count) }}{% endif %}{{ mark }}</p>
-        {% elif measured %}
-        <p class="guide-step-rows"
-           title="This step forks: it leaves one frame per branch, each measured by this run and each counted on its own">
-          leaves {{ step.outputs | length }} branches{{ mark }}</p>
-        <ul class="guide-step-branches">
+        {# THE DATA LINK — one per Workflow section, or one per pathway where the
+           section genuinely has several ways out (its terminal stages: the ones that
+           feed no other stage of the same section). It opens that stage's panel, which
+           opens on its Data, so this is the way from the walkthrough into the rows.
+
+           The label is the measured shape of the frame the reader would be opening.
+           The sentence above it is the only AUTHORED thing here, and only where the
+           guide carries one — a section written before the field existed, or whose
+           author left it out, gets the link and no sentence. Nothing is made up from
+           the stage names to fill it. #}
+        {% if step.data_description %}
+        <p class="section-data-what">{{ step.data_description }}</p>
+        {% endif %}
+        <ul class="section-data">
           {% for out in step.outputs %}
-          <li><a href="{{ links.guide_stage(out.stage_id) }}" data-stage-link="{{ out.stage_id }}">{{ out.stage.name if out.stage else out.stage_id }}</a>
-            <span class="guide-shape">{{ shape_words(out) | trim }}</span></li>
+          <li>
+            <a href="{{ links.guide_stage(out.stage_id) }}" data-stage-link="{{ out.stage_id }}"
+               title="Open this data — the frame «{{ out.stage.name if out.stage else out.stage_id }}» left, as this run wrote it">
+              <span class="section-data-shape">{{ shape_words(out) | trim }}</span>
+              {%- if step.outputs | length > 1 %}
+              <span class="section-data-branch">{{ out.stage.name if out.stage else out.stage_id }}</span>
+              {%- endif %}
+            </a>
+          </li>
           {% endfor %}
         </ul>
-        {% elif step.changes_row_set %}
-        <p class="guide-step-rows">{{ mark }}</p>
+        {# What the section did to the ROW SET, where the run measured enough to say:
+           dropping rows and only widening them are different things to check. A section
+           that measured neither — one built of `input_data` stages, which have no input
+           to compare against — says nothing here rather than guessing. #}
+        {% if step.changes_row_set %}
+        <p class="guide-step-rows"><span class="guide-step-mark">changes which rows exist</span></p>
+        {% elif step.passes_rows_through %}
+        <p class="guide-step-rows"><span class="guide-step-mark muted-mark">adds columns only</span></p>
         {% endif %}
         <ul class="guide-stage-list">
-          {% for s in step.stages %}{{ guide_stage(s) }}{% if not loop.last %}{{ frame_link(s) }}{% endif %}{% endfor %}
+          {% for s in step.stages %}{{ guide_stage(s) }}{% endfor %}
         </ul>
       </div>
     </li>
@@ -329,10 +269,10 @@ shape unknown
   {% if guide.unnarrated %}
   <div class="guide-unnarrated">
     <h3>Not narrated</h3>
-    <p>The guide's author placed these stages outside the walkthrough, as carrying no
+    <p>The guide's author placed these stages in no Workflow section, as carrying no
       judgement a reviewer could act on.</p>
     <ul class="guide-stage-list">
-      {% for s in guide.unnarrated %}{{ guide_stage(s) }}{% if not loop.last %}{{ frame_link(s) }}{% endif %}{% endfor %}
+      {% for s in guide.unnarrated %}{{ guide_stage(s) }}{% endfor %}
     </ul>
   </div>
   {% endif %}

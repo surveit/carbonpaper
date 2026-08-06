@@ -20,6 +20,7 @@ from app.services.run_guide import (
 )
 from app.services.versioning import (
     create_version_from_stages,
+    find_latest_review_guide,
     save_version_guide,
 )
 
@@ -437,47 +438,50 @@ def test_a_stage_the_version_does_not_define_has_neither_half(project_dir):
     assert unresolved.column_count is None
 
 
-def test_a_stage_that_widened_its_frame_measures_the_columns_it_added(project_dir):
-    """add_flag wrote `flag` onto the same 10 rows: no row change, one more column."""
+def test_a_row_dropping_stage_measures_the_rows_it_dropped_against_its_input(project_dir):
     version_id = _version_with_guide(project_dir)
     _write_run_outputs(project_dir)
 
     view = build_run_guide_view("demo", _manifest(version_id))
 
-    flagged = _stages_by_id(view)["add_flag"]
-    assert flagged.row_delta == 0
-    assert flagged.column_delta == 1
+    assert _stages_by_id(view)["keep_flagged"].row_delta == -6
 
 
-def test_a_row_dropping_stage_that_kept_its_columns_measures_only_the_rows(project_dir):
-    version_id = _version_with_guide(project_dir)
-    _write_run_outputs(project_dir)
+# ── the authored sentence on a Workflow section's data link ──────────────────
 
-    view = build_run_guide_view("demo", _manifest(version_id))
-
-    kept = _stages_by_id(view)["keep_flagged"]
-    assert kept.row_delta == -6
-    assert kept.column_delta == 0
-
-
-def test_a_column_delta_against_an_unmeasured_input_is_unknown(project_dir):
-    version_id = _version_with_guide(project_dir)
-    _write_run_outputs(project_dir, columns={"add_flag": ["doc_id", "note", "flag"]})
+def test_a_section_carries_the_authored_sentence_about_its_data(project_dir):
+    steps = [ReviewGuideStep(
+        title="Read the rows", prose="Reads every `doc_id` filed.",
+        stage_ids=["load_rows"],
+        data_description="Every row the source filed, as filed.")]
+    version_id = _version_with_guide(project_dir, steps=steps, unnarrated=[
+        "load_sources", "add_flag", "keep_flagged", "attach_source",
+    ])
 
     view = build_run_guide_view("demo", _manifest(version_id))
 
-    flagged = _stages_by_id(view)["add_flag"]
-    assert flagged.column_count == 3
-    assert flagged.column_delta is None
+    assert view.steps[0].data_description == "Every row the source filed, as filed."
 
 
-def test_a_stage_with_no_input_has_no_column_delta(project_dir):
+def test_a_section_written_before_the_field_existed_still_loads(project_dir):
+    """The case a REQUIRED field would orphan: extra="forbid" still parses the record."""
     version_id = _version_with_guide(project_dir)
-    _write_run_outputs(project_dir)
+    stored = find_latest_review_guide("demo", version_id)
+    payload = stored.model_dump()
+    for step in payload["steps"]:
+        del step["data_description"]
+    ReviewGuide.model_validate(payload).save()
 
     view = build_run_guide_view("demo", _manifest(version_id))
 
-    assert _stages_by_id(view)["load_rows"].column_delta is None
+    assert [s.data_description for s in view.steps] == [None, None]
+
+
+def test_nothing_stands_in_for_a_missing_sentence(project_dir):
+    """No fallback to the title or a stage name — an absent sentence stays absent."""
+    view = build_run_guide_view("demo", _manifest(_version_with_guide(project_dir)))
+
+    assert view.steps[0].data_description is None
 
 
 # ── the step's own shape ─────────────────────────────────────────────────────

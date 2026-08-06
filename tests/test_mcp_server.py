@@ -530,7 +530,11 @@ def test_mcp_review_guide_round_trips_through_the_tool_boundary(tmp_path, monkey
     asyncio.run(server.mcp.call_tool("write_review_guide", {**args, "guide": _GUIDE}))
 
     _content, stored = asyncio.run(server.mcp.call_tool("read_review_guide", args))
-    assert stored["result"]["steps"] == _GUIDE["steps"]
+    # A step written without the optional `data_description` reads back carrying it as
+    # None — the boundary defaults it rather than refusing the guide or dropping it.
+    assert stored["result"]["steps"] == [
+        {**step, "data_description": None} for step in _GUIDE["steps"]
+    ]
     assert stored["result"]["unnarrated"] == _GUIDE["unnarrated"]
 
 

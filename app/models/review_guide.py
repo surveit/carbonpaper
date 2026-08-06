@@ -9,10 +9,12 @@ from app.models.schema import _Base
 
 # A step a journalist will actually skim is short.
 PROSE_MAX_CHARS = 255
+# The data sentence sits on a link, beside a measured shape, and wraps in a 360px rail.
+DATA_DESCRIPTION_MAX_CHARS = 120
 
 
 class ReviewGuideStep(_Base):
-    """One step of the walkthrough. `prose` may carry `backticked` column names."""
+    """One step — a Workflow section in the UI. `prose` may carry `backticked` columns."""
 
     title: str
     prose: str = Field(
@@ -24,6 +26,23 @@ class ReviewGuideStep(_Base):
         ),
     )
     stage_ids: list[str]
+    # OPTIONAL, and must stay so: every guide stored before this field existed parses
+    # through PersistedModel.load's extra="forbid" model_validate, and a required field
+    # would orphan all of them. A section without it renders its data link without a
+    # sentence — nothing is synthesised from the stage names to fill the gap.
+    data_description: str | None = Field(
+        default=None,
+        max_length=DATA_DESCRIPTION_MAX_CHARS,
+        description=(
+            "One short sentence naming what the data LEAVING this section is — the rows "
+            "themselves, not what the section did to them. 'Every filing both quarters "
+            "reported.' 'The filings that named Venezuela, plus the ones the reporter "
+            "listed by hand.' It is shown on the link into that data, beside its "
+            "measured row and column counts, and is what the reader decides on before "
+            "opening a table of tens of thousands of rows. Omit it rather than "
+            "restating the title."
+        ),
+    )
 
 
 class ReviewGuideDraft(_Base):
