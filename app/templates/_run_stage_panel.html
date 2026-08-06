@@ -195,6 +195,9 @@
     root.querySelectorAll('.pane').forEach(p => { p.hidden = p.dataset.pane !== tab; });
   }
   root.querySelectorAll('[data-tab]').forEach(b => b.addEventListener('click', () => { tab = b.dataset.tab; apply(); }));
+  // The run page's issue index deep-links a line to the tab that answers it, so
+  // the panel publishes its switcher rather than each caller re-finding the buttons.
+  root._selectTab = function (name) { tab = name; apply(); };
   apply();
 
   // ── scratch re-run (row picker in the Data pane's input rows, result in Transform) ──

@@ -70,6 +70,12 @@ class StageContribution(BaseModel):
     notes: list[str] = []
 
 
+# The `StageErrorInfo.type` a stage carries when its own OUTPUT does not satisfy the
+# schema it declares. Nothing was raised: the data is not what the stage says it is,
+# which is the data owner's to fix, not the author of the code's.
+SCHEMA_REFUSAL_ERROR_TYPE = "OutputSchemaViolation"
+
+
 class StageErrorInfo(BaseModel):
     """A stage's `error` field once it has failed: the exception's type name, a
     human-readable message, and its traceback — `None` for a row-generation

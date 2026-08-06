@@ -12,6 +12,23 @@ routers in `app/web/routers/`, which import the Runner (`app.runtime`) and the s
 - `/project/<m>/runs`, `/runs/<id>` — run history + detail.
 - `/project/<m>/runs/<id>/queue/<stage>` — the human-review queue UI (+ `/decide`, `/resume`).
 
+## The run page's issue index (`app.web.run_issues` → `_run_issues.html`)
+Between the header and the graph, an INDEX into the stage panels — every entry is one line
+plus a deep link, and the detail stays in the panel's own validation block.
+- **"Why this run stopped"** — one card per `error` stage, leading with which story it is,
+  because they route to different people: a schema refusal (`OutputSchemaViolation`) and an
+  authored `StepRefused` are the data's and link the panel's **Data** / **Transform** tab; any
+  other exception is the code's and keeps its type, message and traceback. Each card names the
+  stages downstream of it that never ran, read off the pinned version's edges — with no readable
+  version it names none rather than blaming the pending stages it can see.
+- **"Worth a look"** — every issue the cards do not carry (warnings anywhere, plus an
+  error-severity INPUT issue, which only warns its stage), one line per stage × column ×
+  message, stages in the run's own order. Folded when something stopped the run; open when
+  nothing did, which is the run whose warnings would otherwise go unread.
+
+A deep link loads the panel through `_loadStage(id, {tab, reveal})`, which the panel serves by
+publishing `_selectTab` on its root element.
+
 ## The stage panel — three tabs (`run_stage_partial` → `_run_stage_panel.html`)
 **Data │ Schema │ Transform**, one flat strip; it opens on Transform:
 - **Data** — what this run's stage produced: its output — rendered as a **diff against its

@@ -81,8 +81,13 @@
 
 {% include "_run_header.html" %}
 
+{# What this run's own records say went wrong, above everything else it shows. #}
+{% include "_run_issues.html" %}
+
 {% if not is_running %}
-<p class="banner">📦 <a href="/project/{{ project }}/runs/{{ run_id }}/packet.zip">Download review packet</a>
+{# An offer, not an alert: `.banner` is the page's alert styling and the issue
+   index above is what earns it here. #}
+<p class="run-packet">📦 <a href="/project/{{ project }}/runs/{{ run_id }}/packet.zip">Download review packet</a>
     <span class="muted">— this run's data, records, workflow and methodology as an offline
     folder someone outside can fact-check without this app.</span>
 </p>
@@ -91,6 +96,9 @@
 {# ── The workflow is the main object: full width, on top. Built from the version
       this run pinned; with graph_error set NO graph is drawn, because the
       working copy may not be what ran. ── #}
+<section class="run-section" id="run-workflow-section">
+<h2>Workflow</h2>
+<p class="lede">Every stage of the version this run pinned, coloured by how it went. Click one to load its detail below.</p>
 {% if graph_error %}
 <p class="banner banner-warn" id="graph-error">⚠ Workflow graph unavailable — {{ graph_error }}</p>
 {% else %}
@@ -109,11 +117,16 @@
     </div>
 </div>
 {% endif %}
+</section>
 
 {# ── Stage detail panel, below the workflow, full width. ── #}
+<section class="run-section" id="run-stage-section">
+<h2>Stage detail</h2>
+<p class="lede">One stage of this run: what it produced, the contract it declares, and the transform it applied.</p>
 <div class="stage-panel-full" id="stage-panel">
-    <div class="empty-state"><h2>Select a stage</h2><p>Click any node in the workflow to load its run details.</p></div>
+    <div class="empty-state"><p>Pick a stage — a node in the workflow above, or any line in the index at the top of this page.</p></div>
 </div>
+</section>
 
 <details class="raw-yaml"><summary>Raw manifest</summary><pre>{{ manifest | tojson(indent=2) }}</pre></details>
 
@@ -126,9 +139,6 @@
       the WHOLE run, not the stage loaded in the panel above, and sitting
       directly under that panel made it read as part of the stage detail. ── #}
 <style>
-  .run-log-section { margin-top: 2.4rem; border-top: 2px solid var(--border); padding-top: 1.1rem; }
-  .run-log-section > h2 { margin: 0 0 .15rem; }
-  .run-log-section > .lede { margin-bottom: .8rem; }
   .run-log-panel .run-log-toolbar { display: flex; gap: 1.2em; align-items: center; margin: .4em 0; font-size: .85em; }
   .run-log { max-height: 22em; overflow: auto; font-size: .82em; line-height: 1.45; }
   .run-log a.run-log-row { display: block; color: inherit; text-decoration: none; }
@@ -138,7 +148,7 @@
   .run-log .run-log-detail-head { color: #8a5cf6; }
   .run-log .run-log-detail-body { display: block; white-space: pre-wrap; max-height: 6.5em; overflow: auto; margin: 0 0 .3em 2em; padding-left: .6em; border-left: 2px solid #d7cdf5; }
 </style>
-<section class="run-log-section" id="run-log-section">
+<section class="run-section run-log-section" id="run-log-section">
     <h2>Run log</h2>
     <p class="lede">Every lifecycle event for this whole run — all stages, in the order they happened. Not scoped to the stage selected above.</p>
     <details class="run-log-panel" id="run-log-panel" open>
@@ -192,7 +202,9 @@
   window._focusGraphNode = focusGraphNode;
 
   // opts.pulse defaults to true: every caller but the graph-node click is a jump
-  // away from where the reader was looking.
+  // away from where the reader was looking. opts.tab opens the panel on a named
+  // tab; opts.reveal scrolls the panel into view, for a caller whose own link is
+  // far enough up the page that the panel is off screen.
   async function loadStage(stageId, opts) {
     if (!stageId) return;
     panel.classList.add('loading');
@@ -207,10 +219,15 @@
         if (old.src) s.src = old.src; else s.textContent = old.textContent;
         old.replaceWith(s);
       });
+      // The re-created scripts have run by now, so the panel has published its
+      // tab switcher.
+      const card = panel.querySelector('.run-stage-panel');
+      if (opts && opts.tab && card && card._selectTab) card._selectTab(opts.tab);
       if (location.hash !== `#${stageId}`) history.replaceState(null, '', `#${stageId}`);
       // The graph moves to the stage; the page does not. Scrolling down to the panel
       // took the diagram off screen, which is the thing the click was about.
       focusGraphNode(stageId, { pulse: !opts || opts.pulse !== false });
+      if (opts && opts.reveal) panel.scrollIntoView({ block: 'start' });
     } finally { panel.classList.remove('loading'); }
   }
   window._loadStage = loadStage;
