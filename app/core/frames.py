@@ -144,9 +144,7 @@ def _map_list_type_to_arrow_dtype(arrow_type: pa.DataType) -> pd.ArrowDtype | No
 def read_frame_column_names(path: Path) -> list[str]:
     """The labels `read_frame_file` would return, without reading a row of data."""
     if path.suffix == PARQUET_SUFFIX:
-        # The schema lives in the footer, so the width of a 45k-row frame costs one
-        # metadata read. Every writer here saves with index=False, so the footer
-        # carries no index column to subtract.
+        # Every writer here saves with index=False, so there is no index column to subtract.
         return [str(name) for name in pq.read_schema(path).names]
     return [str(name) for name in pd.read_csv(path, nrows=0).columns]
 
