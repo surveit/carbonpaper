@@ -5,6 +5,7 @@ stays in the stage panel's own validation block, so there is one copy of it.
 
 from __future__ import annotations
 
+from collections import Counter
 from enum import Enum
 from typing import Any, Mapping, Sequence
 
@@ -74,8 +75,17 @@ class RunIssues(BaseModel):
     flagged: list[FlaggedStage]
 
     @property
-    def flagged_count(self) -> int:
-        return sum(len(stage.issues) for stage in self.flagged)
+    def flagged_headline(self) -> str:
+        """The flagged section's title: its counts by severity, a zero left out entirely."""
+        counts = Counter(
+            issue.severity for stage in self.flagged for issue in stage.issues
+        )
+        return ", ".join(
+            f"{counts[severity.value]} {severity.value}"
+            f"{'' if counts[severity.value] == 1 else 's'}"
+            for severity in (Severity.warning, Severity.error)
+            if counts[severity.value]
+        )
 
 
 def build_run_issues(
