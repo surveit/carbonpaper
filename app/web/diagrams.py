@@ -235,7 +235,7 @@ def _node_view(s: Stage | dict[str, Any]) -> dict[str, Any]:
     if isinstance(s, StageBase):
         return {
             "id": s.id,
-            "name": s.name,
+            "description": s.description,
             "type": s.type,
             "has_notes": bool(s.compiler_notes),
             "has_eval": s.eval is not None,
@@ -251,7 +251,7 @@ def _node_view(s: Stage | dict[str, Any]) -> dict[str, Any]:
     sid = s.get("id") or s.get("_filename") or "?"
     return {
         "id": sid,
-        "name": s.get("name") or sid,
+        "description": s.get("description") or "",
         "type": s.get("type") or "?",
         "has_notes": bool(s.get("compiler_notes")),
         "has_eval": bool(s.get("eval")),
@@ -332,7 +332,7 @@ def _render_workflow_node_lines(
     label = _build_workflow_node_label(n, status)
     lines = [
         f"    {sid}[{label}]:::{TYPE_CLASS.get(stype, _FALLBACK_NODE_CLASS)}",
-        f'    click {sid} call dvNode("{sid}") "Open stage"',
+        f'    click {sid} call dvNode("{sid}") "{_build_node_tooltip(n)}"',
     ]
     stroke_line = _resolve_stroke_line(sid, status, review_by_id.get(sid))
     if stroke_line is not None:
@@ -341,10 +341,8 @@ def _render_workflow_node_lines(
 
 
 def _build_workflow_node_label(n: dict[str, Any], status: str | None) -> str:
-    """The `"<b>...</b><br/>..."` HTML label for one node: status glyph
-    (if any), notes/type glyphs, name, small type-name subtitle, and an
-    eval/review flags line (only when at least one flag is set)."""
-    name = n["name"]
+    """The node's HTML label: glyphs, the stage id — its one name — then type and flags."""
+    sid = n["id"]
     stype = n["type"]
     glyph = TYPE_GLYPH.get(stype, "")
     notes_indicator = "⚠ " if n["has_notes"] else ""
@@ -354,11 +352,17 @@ def _build_workflow_node_label(n: dict[str, Any], status: str | None) -> str:
     flags = " ".join(filter(None, [eval_indicator, review_indicator]))
     status_prefix = f"{_STATUS_GLYPH.get(status, '')} " if status else ""
     return (
-        f'"<b>{status_prefix}{notes_indicator}{glyph} {name}</b>'
+        f'"<b>{status_prefix}{notes_indicator}{glyph} {sid}</b>'
         f'<br/><span style=\'font-size:10px;color:#888\'>{small_line}</span>'
         + (f"<br/><span style='font-size:11px'>{flags}</span>" if flags else "")
         + '"'
     )
+
+
+def _build_node_tooltip(n: dict[str, Any]) -> str:
+    # A `"` would close the mermaid string early; a draft mid-edit may carry no
+    # description at all.
+    return (n["description"] or "Open stage").replace('"', "'")
 
 
 def _resolve_stroke_line(sid: str, status: str | None, belief: str | None) -> str | None:

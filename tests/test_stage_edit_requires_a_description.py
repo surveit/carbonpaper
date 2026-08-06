@@ -19,7 +19,7 @@ _CODE = "def transform(row):\n    return row\n"
 
 def _spec(stage_id="tag", **function_extra):
     return {
-        "id": stage_id, "name": "Tag", "type": "python_row_function",
+        "id": stage_id, "description": "Tag", "type": "python_row_function",
         "inputs": [{"id": "src", "schema": _SCHEMA}],
         "signature": {"form": "extends", "reads": [{"input": "src", "columns": _SCHEMA["columns"]}]},
         "function": {"kind": "inline", "code": _CODE,
@@ -29,7 +29,7 @@ def _spec(stage_id="tag", **function_extra):
 
 def _source_spec():
     return {
-        "id": "src", "name": "Source", "type": "input_data",
+        "id": "src", "description": "Source", "type": "input_data",
         "connector": {"kind": "file", "params": {"format": "csv"}},
         "signature": {"form": "replaces", "produces": _SCHEMA["columns"]},
     }
@@ -73,7 +73,7 @@ def test_a_config_only_stage_needs_no_summary(project):
     """An enrich's keys are config a reviewer reads directly — there is no authored
     code for prose to stand in for."""
     result = add_stage_spec(project, json.dumps({
-        "id": "j", "name": "J", "type": "enrich",
+        "id": "j", "description": "J", "type": "enrich",
         "inputs": [{"id": "src", "schema": _SCHEMA},
                    {"id": "src2", "schema": {"columns": [{"name": "id", "type": "str", "nullable": True},
                                                          {"name": "v", "type": "str", "nullable": True}]}}],

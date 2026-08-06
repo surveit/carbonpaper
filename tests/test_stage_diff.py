@@ -43,7 +43,7 @@ _OUT_COLUMNS = _IN_COLUMNS + [{"name": "label", "type": "str", "nullable": True}
 
 def _row_stage(output_columns: list[dict] | None = None) -> Stage:
     return parse_stage({
-        "id": "classify", "name": "Classify", "type": "python_row_function",
+        "id": "classify", "description": "Classify", "type": "python_row_function",
         "inputs": [{"id": LOAD_ID, "schema": {"columns": _IN_COLUMNS}}],
         "function": {"kind": "inline",
                      "code": "def transform(row):\n    return row\n"},
@@ -69,7 +69,7 @@ _REF_PATH = f"outputs/{REF_ID}.parquet"
 
 def _join_stage(stage_type: str, output_columns: list[dict] | None = None) -> Stage:
     return parse_stage({
-        "id": "route", "name": "Route", "type": stage_type,
+        "id": "route", "description": "Route", "type": stage_type,
         "inputs": [{"id": LOAD_ID, "schema": {"columns": _IN_COLUMNS}},
                    {"id": REF_ID, "schema": {"columns": _REF_COLUMNS}}],
         "join": {"keys": [{"left": "name", "right": "name"}], "enrich_with": {"extra": "extra"}},
@@ -85,7 +85,7 @@ def _join_stage(stage_type: str, output_columns: list[dict] | None = None) -> St
 
 def _filter_stage() -> Stage:
     return parse_stage({
-        "id": "keep", "name": "Keep", "type": "filter_rows",
+        "id": "keep", "description": "Keep", "type": "filter_rows",
         "inputs": [{"id": LOAD_ID, "schema": {"columns": _IN_COLUMNS}}],
         "filter": {"code": "def should_include(row):\n    return True\n"},
         "signature": {"form": "extends"},
@@ -193,7 +193,7 @@ def test_the_column_spine_is_the_input_frame_with_the_added_columns_after_it(
 
 def test_an_llm_transform_is_admitted_to_the_row_aligned_diff(tmp_path: Path) -> None:
     stage = parse_stage({
-        "id": "judge", "name": "Judge", "type": "llm_transform",
+        "id": "judge", "description": "Judge", "type": "llm_transform",
         "inputs": [{"id": LOAD_ID, "schema": {"columns": _IN_COLUMNS}}],
         "llm": {"prompt_data_template": "{name}"},
         "signature": {
@@ -557,7 +557,7 @@ def test_a_frame_function_gets_no_diff_even_at_matching_row_counts(tmp_path: Pat
     # Same row count is not the contract — a frame function may reorder rows,
     # so a positional diff would be a fabricated alignment.
     stage = parse_stage({
-        "id": "reshape", "name": "Reshape", "type": "python_frame_function",
+        "id": "reshape", "description": "Reshape", "type": "python_frame_function",
         "inputs": [{"id": LOAD_ID, "schema": {"columns": _IN_COLUMNS}}],
         "function": {"kind": "inline",
                      "code": "def transform(df):\n    return df\n"},
@@ -576,7 +576,7 @@ def test_a_frame_function_gets_no_diff_even_at_matching_row_counts(tmp_path: Pat
 
 def test_a_union_gets_no_diff(tmp_path: Path) -> None:
     stage = parse_stage({
-        "id": "both", "name": "Both", "type": "union",
+        "id": "both", "description": "Both", "type": "union",
         "inputs": [{"id": LOAD_ID, "schema": {"columns": _IN_COLUMNS}},
                    {"id": "more", "schema": {"columns": _IN_COLUMNS}}],
         "union": {},

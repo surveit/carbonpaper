@@ -42,7 +42,7 @@ _RAISING_CODE = "def transform(row):\n    raise ValueError('bad row')\n"
 
 def _row_stage(code: str = _DOUBLING_CODE) -> Stage:
     return parse_stage({
-        "id": "double", "name": "Double", "type": "python_row_function",
+        "id": "double", "description": "Double", "type": "python_row_function",
         "inputs": [{"id": "src", "schema": {"columns": [{"name": "x", "type": "int", "nullable": True}]}}],
         "cache": True,
         "signature": {
@@ -61,7 +61,7 @@ def _row_stage(code: str = _DOUBLING_CODE) -> Stage:
 
 def _llm_stage(batch_size: int) -> Stage:
     return parse_stage({
-        "id": "score", "name": "Score", "type": "llm_transform",
+        "id": "score", "description": "Score", "type": "llm_transform",
         "inputs": [{"id": "src", "schema": {
             "columns": [{"name": "x", "type": "int", "nullable": True}]}}],
         "signature": {
@@ -198,7 +198,7 @@ def test_a_run_writes_its_lifecycle_spine_to_the_run_dir(tmp_path):
     executor — so a run always leaves runs/<id>/events.jsonl behind, terminated
     by the run_done marker the SSE tail stops on."""
     source = parse_stage({
-        "id": "src", "name": "Source", "type": "input_data",
+        "id": "src", "description": "Source", "type": "input_data",
         "connector": {"kind": "file"},
         "signature": {
             "form": "replaces",

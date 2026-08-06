@@ -21,7 +21,7 @@ client = TestClient(app)
 # (app/models/stage.py: Stage._schemas_declared).
 _STAGE = {
     "id": "load",
-    "name": "Load rows",
+    "description": "Load rows",
     "type": "input_data",
     "connector": {"kind": "file"},
     "signature": {

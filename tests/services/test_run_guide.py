@@ -36,22 +36,22 @@ _ROW_FUNCTION = {"kind": "inline", "code": "def transform(row):\n    return row\
 # load_rows → add_flag → keep_flagged ─┐
 #                        load_sources ─┴→ attach_source
 _STAGES: list[dict[str, Any]] = [
-    {"id": "load_rows", "name": "Load rows", "type": "input_data",
+    {"id": "load_rows", "description": "Load rows", "type": "input_data",
      "connector": {"kind": "file"}, "signature": {"form": "replaces", "produces": _ROWS["columns"]}},
-    {"id": "load_sources", "name": "Load sources", "type": "input_data",
+    {"id": "load_sources", "description": "Load sources", "type": "input_data",
      "connector": {"kind": "file"}, "signature": {"form": "replaces", "produces": _SOURCES["columns"]}},
-    {"id": "add_flag", "name": "Flag rows", "type": "python_row_function",
+    {"id": "add_flag", "description": "Flag rows", "type": "python_row_function",
      "inputs": [{"id": "load_rows", "schema": _ROWS}],
      "function": _ROW_FUNCTION, "signature": {
          "form": "extends",
          "reads": [{"input": "load_rows", "columns": _ROWS["columns"]}],
          "adds": [_FLAG],
      }},
-    {"id": "keep_flagged", "name": "Keep the flagged rows", "type": "filter_rows",
+    {"id": "keep_flagged", "description": "Keep the flagged rows", "type": "filter_rows",
      "inputs": [{"id": "add_flag", "schema": _FLAGGED}],
      "filter": {"code": "def should_include(row):\n    return row['flag']\n"},
      "signature": {"form": "extends"}},
-    {"id": "attach_source", "name": "Attach the source", "type": "enrich",
+    {"id": "attach_source", "description": "Attach the source", "type": "enrich",
      "inputs": [{"id": "keep_flagged", "schema": _FLAGGED},
                 {"id": "load_sources", "schema": _SOURCES}],
      "join": {"keys": [{"left": "doc_id", "right": "doc_id"}], "enrich_with": {"source": "source"}},
@@ -166,7 +166,7 @@ def test_each_stage_carries_its_definition_from_the_pinned_version(project_dir):
     view = build_run_guide_view("demo", _manifest(_version_with_guide(project_dir)))
 
     [loaded] = view.steps[0].stages
-    assert loaded.stage.name == "Load rows"
+    assert loaded.stage.description == "Load rows"
     assert loaded.stage.type == "input_data"
 
 
@@ -233,7 +233,7 @@ def test_a_stage_id_the_version_does_not_define_is_kept_unresolved(project_dir):
 
 def test_a_publish_stage_producing_nothing_writes_no_columns():
     publish = parse_stage({
-        "id": "write_it", "name": "Write it", "type": "publish",
+        "id": "write_it", "description": "Write it", "type": "publish",
         "inputs": [{"id": "attach_source", "schema": _ATTACHED}],
         "publish": {"format": "csv", "destination": "out/"},
         "signature": {"form": "replaces"},

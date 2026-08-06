@@ -166,7 +166,7 @@ def list_file_inputs(project: str, version_id: str | None = None) -> list[dict[s
         return []
     stages = load_version_stages(resolve_project_dir(project), version_id)
     return [
-        {"stage_id": s.id, "name": s.name,
+        {"stage_id": s.id,
          "path": str((s.connector.params or {}).get("path") or "")}
         for s in stages
         if s.type == StageType.input_data and s.connector.kind == "file"

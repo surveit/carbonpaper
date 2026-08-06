@@ -35,7 +35,7 @@ def test_every_stage_model_names_the_blocks_NODE_TYPES_advertises() -> None:
         # block — the catalog advertises it as `signature_form` instead.
         required = {
             name for name, field in cls.model_fields.items()
-            if field.is_required() and name not in ("id", "name", "type", "signature")
+            if field.is_required() and name not in ("id", "description", "type", "signature")
         }
         assert required == set(node_types.NODE_TYPES[stage_type].blocks), stage_type
 

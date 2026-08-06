@@ -113,7 +113,7 @@ def _workflow_stages(source_path: str) -> list[dict]:
     }
     assert llm["max_retries"] == MAX_RETRIES  # budget bound survives edits
     classify = {
-        "id": "classify", "name": "Classify claims", "type": "llm_transform",
+        "id": "classify", "description": "Classify claims", "type": "llm_transform",
         "inputs": [{"id": "load", "schema": load_schema}],
         # Reads must match the template's placeholders exactly: it injects {text}.
         "signature": {
@@ -126,14 +126,14 @@ def _workflow_stages(source_path: str) -> list[dict]:
     }
     return [
         {
-            "id": "load", "name": "Load claims", "type": "input_data",
+            "id": "load", "description": "Load claims", "type": "input_data",
             "connector": {"kind": "file",
                           "params": {"path": source_path, "format": "csv"}},
             "signature": {"form": "replaces", "produces": load_schema["columns"]},
         },
         classify,
         {
-            "id": "report", "name": "Publish classified claims", "type": "publish",
+            "id": "report", "description": "Publish classified claims", "type": "publish",
             "inputs": [{"id": "classify", "schema": classified_schema}],
             "publish": {"format": "csv", "destination": "report/"},
             "signature": {"form": "replaces"},

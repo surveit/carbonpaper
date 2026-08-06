@@ -17,7 +17,7 @@ _AB_SCHEMA = {"columns": [{"name": "a", "type": "str", "nullable": True}, {"name
 
 def _union_stage(sid: str, input_ids: list[str]) -> Stage:
     return parse_stage({
-        "id": sid, "name": sid, "type": "union",
+        "id": sid, "description": sid, "type": "union",
         "inputs": [{"id": i, "schema": _AB_SCHEMA} for i in input_ids],
         "signature": {"form": "replaces", "produces": _AB_SCHEMA["columns"]},
         "union": {},
@@ -26,7 +26,7 @@ def _union_stage(sid: str, input_ids: list[str]) -> Stage:
 
 def _filter_stage(sid: str, input_id: str, predicate_code: str) -> Stage:
     return parse_stage({
-        "id": sid, "name": sid, "type": "filter_rows",
+        "id": sid, "description": sid, "type": "filter_rows",
         "inputs": [{"id": input_id, "schema": _AB_SCHEMA}],
         "signature": {"form": "extends"},
         "filter": {"code": predicate_code},
@@ -41,7 +41,7 @@ def _load_stage(sid: str, df: pd.DataFrame, tmp_path) -> Stage:
     path = tmp_path / f"{sid}.csv"
     df.to_csv(path, index=False)
     return parse_stage({
-        "id": sid, "name": sid, "type": "input_data",
+        "id": sid, "description": sid, "type": "input_data",
         "connector": {"kind": "file", "params": {"path": str(path), "format": "csv"}},
         "signature": {"form": "replaces", "produces": _AB_SCHEMA["columns"]},
     })
@@ -192,7 +192,7 @@ def test_a_row_mapper_that_may_not_drop_still_rejects_a_none_row(tmp_path):
     src = pd.DataFrame({"a": ["x"], "b": [1]})
     load = _load_stage("src", src, tmp_path)
     mapper = parse_stage({
-        "id": "m", "name": "m", "type": "python_row_function",
+        "id": "m", "description": "m", "type": "python_row_function",
         "inputs": [{"id": "src", "schema": _AB_SCHEMA}],
         "signature": {
             "form": "extends",

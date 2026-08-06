@@ -71,7 +71,7 @@ def _publish_stage(code: str, input_columns=_NAME_COLUMN) -> Stage:
     return parse_stage({
         "id": "report",
         "type": "publish",
-        "name": "Report",
+        "description": "Report",
         "inputs": [{"id": "enrich", "schema": {"columns": input_columns}}],
         "publish": {"format": "html_report", "destination": "build/"},
         "signature": {"form": "replaces"},

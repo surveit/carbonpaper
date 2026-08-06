@@ -51,7 +51,7 @@ def _starlark_stage(
     if summary is not None:
         block["summary"] = summary
     return parse_stage({
-        "id": stage_id, "name": "Normalize spend", "type": "starlark_row_function",
+        "id": stage_id, "description": "Normalize spend", "type": "starlark_row_function",
         "inputs": [{"id": "filings", "schema": _IN_SCHEMA}],
         "signature": {
             "form": "extends",

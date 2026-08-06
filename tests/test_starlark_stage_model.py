@@ -17,7 +17,7 @@ _INPUT = StageInput(id="load", schema=_SCHEMA)
 
 def _stage(**overrides):
     fields = dict(
-        id="bump", name="Bump n", type=StageType.starlark_row_function,
+        id="bump", description="Bump n", type=StageType.starlark_row_function,
         inputs=[_INPUT], signature=ExtendsSignature(),
         starlark=StarlarkFunction(code=GOOD),
     )

@@ -121,7 +121,7 @@ _OUT_SCHEMA = {"columns": [
 ]}
 _DOUBLE = "def transform(row):\n    return {**row, 'doubled': row['amount'] * 2}\n"
 _LOAD_STAGE = StageDraft.model_validate({
-    "id": "load", "name": "Load", "type": "input_data", "connector": {"kind": "file"},
+    "id": "load", "description": "Load", "type": "input_data", "connector": {"kind": "file"},
     "signature": {
         "form": "replaces",
         "produces": [{"name": "doc_id", "type": "str", "nullable": False}],
@@ -138,9 +138,9 @@ def _write_compiled_workflow(pdir: Path) -> None:
     compiled = pdir / "compiled"
     compiled.mkdir(parents=True)
     stages: list[dict[str, object]] = [
-        {"id": "load", "name": "Load", "type": "input_data", "connector": {"kind": "file"},
+        {"id": "load", "description": "Load", "type": "input_data", "connector": {"kind": "file"},
          "signature": {"form": "replaces", "produces": _IN_SCHEMA["columns"]}},
-        {"id": "double", "name": "Double", "type": "python_row_function",
+        {"id": "double", "description": "Double", "type": "python_row_function",
          "inputs": [{"id": "load", "schema": _IN_SCHEMA}], "signature": {
              "form": "extends",
              "reads": [{"input": "load", "columns": _IN_SCHEMA["columns"]}],
@@ -153,7 +153,7 @@ def _write_compiled_workflow(pdir: Path) -> None:
              {"name": "wrong", "inputs": {"load": [{"amount": 2.0}]},
               "expected": [{"amount": 2.0, "doubled": 5.0}]},
          ]},
-        {"id": "untested", "name": "Untested", "type": "python_row_function",
+        {"id": "untested", "description": "Untested", "type": "python_row_function",
          "inputs": [{"id": "load", "schema": _IN_SCHEMA}], "signature": {
              "form": "extends",
              "reads": [{"input": "load", "columns": _IN_SCHEMA["columns"]}],
@@ -301,7 +301,7 @@ def test_mcp_add_stage_drops_server_owned_fields_and_names_them(tmp_path, monkey
     workspace.set_projects_dir(tmp_path)
     server.create_project(name="trail", document="Follow the filings.")
     echoed = {
-        "id": "load", "name": "Load", "type": "input_data",
+        "id": "load", "description": "Load", "type": "input_data",
         "connector": {"kind": "file"},
         "signature": {
             "form": "replaces",
@@ -332,7 +332,7 @@ def test_mcp_add_stage_still_refuses_an_unknown_field(tmp_path, monkeypatch):
     workspace.set_projects_dir(tmp_path)
     server.create_project(name="trail", document="Follow the filings.")
     typo = {
-        "id": "load", "name": "Load", "type": "input_data",
+        "id": "load", "description": "Load", "type": "input_data",
         "connector": {"kind": "file"}, "nonsense": 1,
     }
 
@@ -341,7 +341,7 @@ def test_mcp_add_stage_still_refuses_an_unknown_field(tmp_path, monkeypatch):
 
 
 _UNADDITIVE_LLM_STAGE = {
-    "id": "score", "name": "Score", "type": "llm_transform",
+    "id": "score", "description": "Score", "type": "llm_transform",
     "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
     # The signature must read exactly what the template injects; reading `id`
     # instead of `amount` breaks that, and `Stage` is where that rule lives.

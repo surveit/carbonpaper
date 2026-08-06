@@ -19,7 +19,7 @@ from app.web import loading
 _LOAD_SCHEMA = {"columns": [{"name": "doc_id", "type": "str", "nullable": True}]}
 
 _LOAD = {
-    "id": "load", "type": "input_data", "name": "Load rows",
+    "id": "load", "type": "input_data", "description": "Load rows",
     "signature": {"form": "replaces", "produces": _LOAD_SCHEMA["columns"]},
 }
 
@@ -27,7 +27,7 @@ _LOAD = {
 # signature is what makes handle_publish resolve a RowTraceLinker for it
 # (app.runtime.stages.publish._accepts_trace_links).
 _PUBLISH = {
-    "id": "publish_report", "type": "publish", "name": "Publish",
+    "id": "publish_report", "type": "publish", "description": "Publish",
     "inputs": [{"id": "load", "schema": _LOAD_SCHEMA}],
     "signature": {"form": "replaces"},
     "function": {"kind": "inline", "code":

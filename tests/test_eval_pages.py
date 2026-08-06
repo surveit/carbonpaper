@@ -30,7 +30,7 @@ client = TestClient(app)
 
 def _override(tmp_path):
     return {
-        "id": "load", "type": "input_data", "name": "Load documents",
+        "id": "load", "type": "input_data", "description": "Load documents",
         "connector": {"kind": "file",
                       "params": {"path": str(tmp_path / "data" / "docs.csv"), "format": "csv"}},
         "signature": {
@@ -42,7 +42,7 @@ def _override(tmp_path):
         },
     }
 _TARGET = {
-    "id": "classify", "type": "python_row_function", "name": "Classify each row",
+    "id": "classify", "type": "python_row_function", "description": "Classify each row",
     "inputs": [{"id": "load", "schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": True},
                                                      {"name": "text", "type": "str", "nullable": True}]}}],
     "function": {"kind": "inline", "code": "def transform(row): return row"},

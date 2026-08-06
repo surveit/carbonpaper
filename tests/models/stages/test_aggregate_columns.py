@@ -26,7 +26,7 @@ def _aggregate_stage(*, group_by, edge_columns, value_column=None, where=None, f
     consumed = [name for name in dict.fromkeys([*group_by, value_column])
                 if name in edge]
     return {
-        "id": "agg", "type": "aggregate", "name": "agg",
+        "id": "agg", "type": "aggregate", "description": "agg",
         "inputs": [{"id": "src", "schema": {"columns": list(edge.values())}}],
         "signature": {
             "form": "replaces",

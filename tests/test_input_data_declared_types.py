@@ -18,7 +18,7 @@ from conftest import make_run_context
 
 def _stage(path: Path, columns: list[dict], **params: object) -> Stage:
     return parse_stage({
-        "id": "load", "name": "load", "type": "input_data",
+        "id": "load", "description": "load", "type": "input_data",
         "connector": {"kind": "file", "params": {"path": str(path), **params}},
         "signature": {"form": "replaces", "produces": columns},
     })

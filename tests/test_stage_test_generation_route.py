@@ -41,11 +41,11 @@ def _seed_project(root: Path) -> Path:
     compiled = project_dir / "compiled"
     compiled.mkdir()
     (compiled / "01_load.json").write_text(json.dumps({
-        "id": "load", "name": "Load", "type": "input_data",
+        "id": "load", "description": "Load", "type": "input_data",
         "connector": {"kind": "file"}, "signature": {"form": "replaces", "produces": _IN_SCHEMA["columns"]},
     }), encoding="utf-8")
     (compiled / "02_double.json").write_text(json.dumps({
-        "id": "double", "name": "Double", "type": "python_row_function",
+        "id": "double", "description": "Double", "type": "python_row_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
         "signature": {
             "form": "extends",
@@ -56,7 +56,7 @@ def _seed_project(root: Path) -> Path:
                      "code": "def transform(row):\n    return {**row, 'doubled': row['amount'] * 2}\n"},
     }), encoding="utf-8")
     (compiled / "03_publish.json").write_text(json.dumps({
-        "id": "publish", "name": "Publish", "type": "publish",
+        "id": "publish", "description": "Publish", "type": "publish",
         "inputs": [{"id": "double", "schema": _OUT_SCHEMA}],
         "function": {"kind": "inline", "summary": "Test fixture step.", "corner_cases": [], "code": "def transform(df, output_dir):\n    return df\n"},
         "publish": {}, "signature": {"form": "replaces"},
@@ -209,7 +209,7 @@ def test_generate_tests_rejects_python_stage_without_a_signature(client: TestCli
     """A stage with no signature does not parse, so the route 400s while loading."""
     project_dir = _seed_project(tmp_path)
     (project_dir / "compiled" / "02_double.json").write_text(json.dumps({
-        "id": "double", "name": "Double", "type": "python_row_function",
+        "id": "double", "description": "Double", "type": "python_row_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
         "function": {"kind": "inline", "summary": "Test fixture step.", "corner_cases": [],
                      "code": "def transform(row):\n    return {**row, 'doubled': row['amount'] * 2}\n"},

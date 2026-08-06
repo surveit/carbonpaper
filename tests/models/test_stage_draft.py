@@ -61,7 +61,7 @@ def test_an_input_schema_round_trips_under_the_key_a_compiled_stage_spells():
     draft = StageDraft.model_validate({
         "id": "flag_rows",
         "type": "python_row_function",
-        "name": "Flag rows",
+        "description": "Flag rows",
         "inputs": [{"id": "raw", "schema": {
             "columns": [{"name": "filing_id", "type": "str", "nullable": True}],
         }}],
@@ -92,7 +92,7 @@ def test_a_stage_that_breaks_a_cross_field_rule_parses_as_a_draft_and_is_refused
     broken = {
         "id": "score_rows",
         "type": "llm_transform",
-        "name": "Score rows",
+        "description": "Score rows",
         # the signature reads `text`, which the prompt never injects -> the
         # signature-vs-config rule fails
         "inputs": [{"id": "raw", "schema": {"columns": [{"name": "text", "type": "str", "nullable": True}]}}],
@@ -141,7 +141,7 @@ def test_a_draft_that_echoes_back_server_owned_fields_parses_and_records_them():
     """A client copying a stage out of read_stage sends fields only the server
     writes. They are dropped, not refused — and named, so the drop is not silent."""
     draft = StageDraft.model_validate({
-        "id": "load", "type": "input_data", "name": "Load",
+        "id": "load", "type": "input_data", "description": "Load",
         "connector": {"kind": "file"},
         "tests": [], "source": {"section": "para 3"},
     })
@@ -153,7 +153,7 @@ def test_a_draft_that_echoes_back_server_owned_fields_parses_and_records_them():
 def test_an_unknown_field_is_still_refused():
     with pytest.raises(ValidationError, match="nonsense"):
         StageDraft.model_validate({
-            "id": "load", "type": "input_data", "name": "Load",
+            "id": "load", "type": "input_data", "description": "Load",
             "connector": {"kind": "file"}, "nonsense": 1,
         })
 
@@ -163,7 +163,7 @@ def test_stage_keeps_the_server_owned_fields_the_draft_drops():
     tests and provenance it drops, and does not declare the bookkeeping field
     that records the drop."""
     stage = parse_stage({
-        "id": "load", "type": "input_data", "name": "Load",
+        "id": "load", "type": "input_data", "description": "Load",
         "connector": {"kind": "file"}, "source": {"section": "para 3"},
         "signature": {
             "form": "replaces",

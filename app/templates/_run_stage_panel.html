@@ -13,7 +13,9 @@
     <span class="type-tag {{ type_class.get(stage.type, 'custom') }}">{{ type_glyph.get(stage.type, '') }} {{ stage.type | plain_value }}</span>
     <span class="run-status status-{{ stage.status }}">{{ stage.status }}</span>
     <h2><code>{{ stage.stage_id }}</code></h2>
-    <p class="stage-id">{{ stage.name }}</p>
+    {# The description comes from the pinned definition, so a run whose version
+       no longer resolves shows no line rather than a guessed one. #}
+    {% if stage_def %}<p class="stage-id">{{ stage_def.description }}</p>{% endif %}
     <p class="muted">{{ stage.elapsed_ms }} ms · {{ "{:,}".format(stage.output_row_count or 0) }} row{% if (stage.output_row_count or 0) != 1 %}s{% endif %}
         {% if stage.llm_usage %}{% set u = stage.llm_usage %} · <span title="Token usage and estimated cost of this stage's model calls (input + output tokens summed over every row and retry; cost is the CLI's estimate).">{{ "{:,}".format(u.input_tokens) }} in / {{ "{:,}".format(u.output_tokens) }} out tokens · ~${{ "%.4f"|format(u.cost_usd) }} ({{ u.calls }} call{% if u.calls != 1 %}s{% endif %})</span>{% endif %}
         {% if stage.finished_at %} · finished {{ stage.finished_at | friendly_time }}{% endif %}</p>

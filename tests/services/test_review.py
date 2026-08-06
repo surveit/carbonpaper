@@ -25,7 +25,7 @@ _SOURCE_TYPES = {column["name"]: column["type"] for column in _INPUT_COLUMNS}
 def _stage(queue: dict[str, object] | None = None) -> Stage:
     block = queue if queue is not None else queue_columns()
     return parse_stage({
-        "id": "review", "name": "Review", "type": "human_review_queue",
+        "id": "review", "description": "Review", "type": "human_review_queue",
         "inputs": [{"id": "scored", "schema": {"columns": _INPUT_COLUMNS}}],
         "signature": {"form": "extends", "adds": _added_columns(block)},
         "queue": block,

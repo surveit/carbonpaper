@@ -10,7 +10,7 @@ from app.evals.compatibility import CompatibilityReport, validate_eval_compatibi
 
 
 def S(**kw):
-    kw.setdefault("name", kw.get("id", "x"))
+    kw.setdefault("description", kw.get("id", "x"))
     return kw
 
 

@@ -27,7 +27,7 @@ _ROWS_SCHEMA = {"columns": [{"name": "name", "type": "str", "nullable": False},
 
 def _stage(data_path: Path) -> dict:
     return {
-        "id": "load", "name": "Load rows", "type": "input_data",
+        "id": "load", "description": "Load rows", "type": "input_data",
         "connector": {"kind": "file",
                       "params": {"path": str(data_path), "format": "csv"}},
         "signature": {"form": "replaces", "produces": _ROWS_SCHEMA["columns"]},
@@ -127,7 +127,7 @@ def test_run_this_version_400s_not_500s_on_unbound_input(
     report this as a 400, the same way trigger_run does, not let it fall
     through to an unhandled 500."""
     unbound_stage = {
-        "id": "load", "name": "Load rows", "type": "input_data",
+        "id": "load", "description": "Load rows", "type": "input_data",
         "connector": {"kind": "file", "params": {"format": "csv"}},
         "signature": {"form": "replaces", "produces": _ROWS_SCHEMA["columns"]},
     }

@@ -68,32 +68,32 @@ def _seed_compiled(pdir: Path, data_path: Path, routes_path: Path) -> None:
     compiled.mkdir(parents=True)
     stages = [
         ("01_load.json", {
-            "id": LOAD_ID, "name": "Load rows", "type": "input_data",
+            "id": LOAD_ID, "description": "Load rows", "type": "input_data",
             "connector": {"kind": "file",
                           "params": {"path": str(data_path), "format": "csv"}},
             "signature": {"form": "replaces", "produces": _LOAD_SCHEMA["columns"]},
         }),
         ("02_classify.json", {
-            "id": CLASSIFY_ID, "name": "Classify", "type": "python_row_function",
+            "id": CLASSIFY_ID, "description": "Classify", "type": "python_row_function",
             "inputs": [{"id": LOAD_ID, "schema": _LOAD_SCHEMA}],
             "function": {"kind": "inline", "code": _CLASSIFY_CODE},
             "signature": {"form": "extends",
                           "adds": [{"name": "label", "type": "str", "nullable": True}]},
         }),
         ("03_keep.json", {
-            "id": KEEP_ID, "name": "Keep the small ones", "type": "filter_rows",
+            "id": KEEP_ID, "description": "Keep the small ones", "type": "filter_rows",
             "inputs": [{"id": CLASSIFY_ID, "schema": _CLASSIFY_SCHEMA}],
             "filter": {"code": _KEEP_CODE},
             "signature": {"form": "extends"},
         }),
         ("04_routes.json", {
-            "id": ROUTES_ID, "name": "Route reference", "type": "input_data",
+            "id": ROUTES_ID, "description": "Route reference", "type": "input_data",
             "connector": {"kind": "file",
                           "params": {"path": str(routes_path), "format": "csv"}},
             "signature": {"form": "replaces", "produces": _ROUTES_SCHEMA["columns"]},
         }),
         ("05_route.json", {
-            "id": ROUTE_ID, "name": "Attach the route", "type": "enrich",
+            "id": ROUTE_ID, "description": "Attach the route", "type": "enrich",
             "inputs": [{"id": CLASSIFY_ID, "schema": _CLASSIFY_SCHEMA},
                        {"id": ROUTES_ID, "schema": _ROUTES_SCHEMA}],
             "join": {"keys": [{"left": "name", "right": "name"}],

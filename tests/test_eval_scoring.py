@@ -15,7 +15,7 @@ from app.evals.scoring import score_expected_outputs
 def _stage(id_, output_cols, tmp_path):
     """A minimal input_data stage producing `output_cols`."""
     return m.parse_stage({
-        "id": id_, "type": "input_data", "name": id_,
+        "id": id_, "type": "input_data", "description": id_,
         "connector": {"kind": "file", "params": {"path": str(tmp_path / f"{id_}.csv")}},
         "signature": {"form": "replaces", "produces": output_cols},
     })

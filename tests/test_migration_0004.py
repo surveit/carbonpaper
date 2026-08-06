@@ -32,10 +32,10 @@ def _v1_stages() -> list[dict[str, Any]]:
     """A v1 workflow: every table schema still carries the key stages no longer take."""
     schema = {"columns": [_column("id")], "primary_key": ["id"]}
     return [
-        {"id": "src", "name": "Source", "type": "input_data",
+        {"id": "src", "description": "Source", "type": "input_data",
          "connector": {"kind": "file", "params": {"format": "csv", "path": "/tmp/a.csv"}},
          "inputs": [], "output_schema": dict(schema)},
-        {"id": "tag", "name": "Tag", "type": "python_row_function",
+        {"id": "tag", "description": "Tag", "type": "python_row_function",
          "inputs": [{"id": "src", "schema": dict(schema)}],
          "function": {"kind": "inline", "summary": "Passes rows through.",
                       "code": "def transform(row):\n    return row"},

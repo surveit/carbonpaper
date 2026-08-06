@@ -48,7 +48,7 @@ def _make_project(root):
     pd.DataFrame({"name": [f"row{i}" for i in range(5)], "val": list(range(5))}) \
         .to_csv(root / "data" / "items.csv", index=False)
     stage = {
-        "id": "load", "name": "Load items", "type": "input_data",
+        "id": "load", "description": "Load items", "type": "input_data",
         "connector": {"kind": "file",
                       "params": {"path": str(root / "data" / "items.csv"), "format": "csv"}},
         "signature": {"form": "replaces", "produces": _NAME_VAL_SCHEMA["columns"]},
@@ -170,13 +170,13 @@ def _row_mapped_project(root, rows: list[dict], code: str):
     (root / "data").mkdir(parents=True)
     pd.DataFrame(rows).to_csv(root / "data" / "items.csv", index=False)
     load = {
-        "id": "load", "name": "Load items", "type": "input_data",
+        "id": "load", "description": "Load items", "type": "input_data",
         "connector": {"kind": "file",
                       "params": {"path": str(root / "data" / "items.csv"), "format": "csv"}},
         "signature": {"form": "replaces", "produces": _NAME_VAL_SCHEMA["columns"]},
     }
     keep = {
-        "id": "keep", "name": "Keep items", "type": "python_row_function",
+        "id": "keep", "description": "Keep items", "type": "python_row_function",
         "inputs": [{"id": "load", "schema": _NAME_VAL_SCHEMA}],
         "signature": {
             "form": "extends",
@@ -231,13 +231,13 @@ def _two_stage_project(root, rows: list[dict]):
     (root / "data").mkdir(parents=True)
     pd.DataFrame(rows).to_csv(root / "data" / "items.csv", index=False)
     load = {
-        "id": "load", "name": "Load items", "type": "input_data",
+        "id": "load", "description": "Load items", "type": "input_data",
         "connector": {"kind": "file",
                       "params": {"path": str(root / "data" / "items.csv"), "format": "csv"}},
         "signature": {"form": "replaces", "produces": _NAME_VAL_SCHEMA["columns"]},
     }
     consume = {
-        "id": "consume", "name": "Consume items", "type": "python_frame_function",
+        "id": "consume", "description": "Consume items", "type": "python_frame_function",
         "inputs": [{"id": "load", "schema": _NAME_VAL_SCHEMA}],
         "signature": {
             "form": "replaces",
@@ -299,13 +299,13 @@ def _output_schema_violation_project(root, transform_code: str):
     pd.DataFrame({"name": ["a", "b"], "val": [1, 2]}).to_csv(
         root / "data" / "items.csv", index=False)
     load = {
-        "id": "load", "name": "Load items", "type": "input_data",
+        "id": "load", "description": "Load items", "type": "input_data",
         "connector": {"kind": "file",
                       "params": {"path": str(root / "data" / "items.csv"), "format": "csv"}},
         "signature": {"form": "replaces", "produces": _NAME_VAL_SCHEMA["columns"]},
     }
     shape = {
-        "id": "shape", "name": "Shape items", "type": "python_frame_function",
+        "id": "shape", "description": "Shape items", "type": "python_frame_function",
         "inputs": [{"id": "load", "schema": _NAME_VAL_SCHEMA}],
         "signature": {
             "form": "replaces",
@@ -315,7 +315,7 @@ def _output_schema_violation_project(root, transform_code: str):
         "function": {"kind": "inline", "code": transform_code},
     }
     tail = {
-        "id": "tail", "name": "Tail", "type": "python_frame_function",
+        "id": "tail", "description": "Tail", "type": "python_frame_function",
         "inputs": [{"id": "shape", "schema": _NAME_VAL_SCHEMA}],
         "signature": {
             "form": "replaces",
@@ -376,13 +376,13 @@ def test_output_validation_error_other_than_a_missing_column_also_errors_the_sta
     pd.DataFrame({"name": ["a"], "val": [1]}).to_csv(
         tmp_path / "data" / "items.csv", index=False)
     load = {
-        "id": "load", "name": "Load items", "type": "input_data",
+        "id": "load", "description": "Load items", "type": "input_data",
         "connector": {"kind": "file",
                       "params": {"path": str(tmp_path / "data" / "items.csv"), "format": "csv"}},
         "signature": {"form": "replaces", "produces": _NAME_VAL_SCHEMA["columns"]},
     }
     blank = {
-        "id": "blank", "name": "Blank the value", "type": "python_frame_function",
+        "id": "blank", "description": "Blank the value", "type": "python_frame_function",
         "inputs": [{"id": "load", "schema": _NAME_VAL_SCHEMA}],
         "signature": {
             "form": "replaces",
@@ -417,13 +417,13 @@ def test_value_outside_a_declared_enum_errors_the_stage_and_blocks_downstream(tm
         {"name": "status", "type": "str", "enum": ["open", "closed"], "nullable": True},
     ]}
     load = {
-        "id": "load", "name": "Load items", "type": "input_data",
+        "id": "load", "description": "Load items", "type": "input_data",
         "connector": {"kind": "file",
                       "params": {"path": str(tmp_path / "data" / "items.csv"), "format": "csv"}},
         "signature": {"form": "replaces", "produces": _NAME_VAL_SCHEMA["columns"]},
     }
     label = {
-        "id": "label", "name": "Label items", "type": "python_frame_function",
+        "id": "label", "description": "Label items", "type": "python_frame_function",
         "inputs": [{"id": "load", "schema": _NAME_VAL_SCHEMA}],
         "signature": {"form": "replaces", "produces": labelled_schema["columns"]},
         "function": {"kind": "inline",
@@ -431,7 +431,7 @@ def test_value_outside_a_declared_enum_errors_the_stage_and_blocks_downstream(tm
                              "    return df.assign(status='pending')[['name', 'status']]\n"},
     }
     tail = {
-        "id": "tail", "name": "Tail", "type": "python_frame_function",
+        "id": "tail", "description": "Tail", "type": "python_frame_function",
         "inputs": [{"id": "label", "schema": labelled_schema}],
         "signature": {"form": "replaces", "produces": labelled_schema["columns"]},
         "function": {"kind": "inline", "code": "def transform(df):\n    return df\n"},
@@ -459,13 +459,13 @@ def _llm_transform_project(root):
     pd.DataFrame({"id": ["r1"], "text": ["hi"]}).to_csv(
         root / "data" / "items.csv", index=False)
     load = {
-        "id": "load", "name": "Load items", "type": "input_data",
+        "id": "load", "description": "Load items", "type": "input_data",
         "connector": {"kind": "file",
                       "params": {"path": str(root / "data" / "items.csv"), "format": "csv"}},
         "signature": {"form": "replaces", "produces": _ID_TEXT_SCHEMA["columns"]},
     }
     score = {
-        "id": "score", "name": "Score items", "type": "llm_transform",
+        "id": "score", "description": "Score items", "type": "llm_transform",
         "inputs": [{"id": "load", "schema": _ID_TEXT_SCHEMA}],
         "signature": {
             "form": "extends",
@@ -521,12 +521,12 @@ def test_run_subset_surfaces_the_real_row_failure_message(tmp_path, monkeypatch)
     # Path-free connector: `load`'s output is injected below, so no file exists
     # or is read — declaring one would be a fabricated fixture value.
     load = parse_stage({
-        "id": "load", "name": "Load items", "type": "input_data",
+        "id": "load", "description": "Load items", "type": "input_data",
         "connector": {"kind": "file"},
         "signature": {"form": "replaces", "produces": _ID_TEXT_SCHEMA["columns"]},
     })
     score = parse_stage({
-        "id": "score", "name": "Score items", "type": "llm_transform",
+        "id": "score", "description": "Score items", "type": "llm_transform",
         "inputs": [{"id": "load", "schema": _ID_TEXT_SCHEMA}],
         "signature": {
             "form": "extends",
@@ -560,12 +560,12 @@ def test_run_subset_preserves_partial_work_in_the_manifest_on_a_mid_frontier_err
     # stage as ok and the failing stage's error — partial work is preserved for a
     # caller (workflow test / eval) to read back, not lost to a save-at-the-end.
     load = parse_stage({
-        "id": "load", "name": "Load items", "type": "input_data",
+        "id": "load", "description": "Load items", "type": "input_data",
         "connector": {"kind": "file"},
         "signature": {"form": "replaces", "produces": _ID_TEXT_SCHEMA["columns"]},
     })
     clean = parse_stage({
-        "id": "clean", "name": "Clean rows", "type": "python_row_function",
+        "id": "clean", "description": "Clean rows", "type": "python_row_function",
         "inputs": [{"id": "load", "schema": {
             "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}]}}],
         "signature": {
@@ -575,7 +575,7 @@ def test_run_subset_preserves_partial_work_in_the_manifest_on_a_mid_frontier_err
         "function": {"kind": "inline", "code": "def transform(row): return row"},
     })
     boom = parse_stage({
-        "id": "score", "name": "Score rows", "type": "python_row_function",
+        "id": "score", "description": "Score rows", "type": "python_row_function",
         "inputs": [{"id": "clean", "schema": {
             "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}]}}],
         "signature": {"form": "extends",
@@ -677,7 +677,7 @@ def test_create_version_rejects_invalid_working_copy(tmp_path):
     working copy raises WorkflowLoadError and writes NOTHING, so no invalid
     workflow can be immortalised as a version."""
     (tmp_path / "compiled").mkdir(parents=True)
-    bad = {"id": "load", "name": "Load", "type": "input_data",
+    bad = {"id": "load", "description": "Load", "type": "input_data",
            "connector": {"kind": "file",
                          "params": {"path": "data/items.csv", "format": "csv"}},  # relative path
            "signature": {"form": "replaces", "produces": _NAME_VAL_SCHEMA["columns"]}}
@@ -699,7 +699,7 @@ def test_invalid_workflow_never_becomes_a_version_and_run_never_pins_stale(tmp_p
     impossible."""
     # Invalid working copy: file connector params.path is relative, not absolute.
     (tmp_path / "compiled").mkdir(parents=True)
-    bad = {"id": "load", "name": "Load", "type": "input_data",
+    bad = {"id": "load", "description": "Load", "type": "input_data",
            "connector": {"kind": "file",
                          "params": {"path": "data/items.csv", "format": "csv"}},
            "signature": {"form": "replaces", "produces": _NAME_VAL_SCHEMA["columns"]}}
@@ -722,7 +722,7 @@ def test_invalid_workflow_never_becomes_a_version_and_run_never_pins_stale(tmp_p
     (tmp_path / "data").mkdir(parents=True)
     pd.DataFrame({"name": ["a"], "val": [1]}).to_csv(
         tmp_path / "data" / "items.csv", index=False)
-    good = {"id": "load", "name": "Load", "type": "input_data",
+    good = {"id": "load", "description": "Load", "type": "input_data",
             "connector": {"kind": "file",
                           "params": {"path": str(tmp_path / "data" / "items.csv"), "format": "csv"}},
             "signature": {"form": "replaces", "produces": _NAME_VAL_SCHEMA["columns"]}}
@@ -751,7 +751,7 @@ def test_resume_reapplies_run_bindings_for_a_pending_input_stage(tmp_path):
     would have produced) naming a pending input stage with a `source: "run"`
     binding, and a workflow that authors NO path for it."""
     (tmp_path / "compiled").mkdir(parents=True)
-    stage = {"id": "load", "name": "Load items", "type": "input_data",
+    stage = {"id": "load", "description": "Load items", "type": "input_data",
               "connector": {"kind": "file", "params": {}},  # no workflow-authored path
               "signature": {"form": "replaces", "produces": _NAME_VAL_SCHEMA["columns"]}}
     (tmp_path / "compiled" / "01_load.json").write_text(
@@ -774,7 +774,7 @@ def test_resume_reapplies_run_bindings_for_a_pending_input_stage(tmp_path):
                      "sha256": "unused-in-this-test", "bytes": bound_csv.stat().st_size},
         },
         "human_review_queue_stats": {},
-        "stage_records": [{"stage_id": "load", "type": "input_data", "name": "Load items",
+        "stage_records": [{"stage_id": "load", "type": "input_data", "description": "Load items",
                     "status": "pending", "input_validation_report": [],
                     "output_validation_report": None,
                     "elapsed_ms": 0, "output_row_count": 0, "error": None,
@@ -828,7 +828,7 @@ def _add_frame_stage(root):
     """A python_frame_function downstream of `load` — the shape the frame cache
     intercepts, so a run of this project exercises the frame store."""
     (root / "compiled" / "02_totals.json").write_text(json.dumps({
-        "id": "totals", "name": "Totals", "type": "python_frame_function",
+        "id": "totals", "description": "Totals", "type": "python_frame_function",
         "inputs": [{"id": "load", "schema": _NAME_VAL_SCHEMA}],
         "signature": {
             "form": "replaces",

@@ -31,7 +31,7 @@ _DOUBLING_CODE = "def transform(row):\n    return {**row, 'y': row['x'] * 2}\n"
 
 def _row_stage(code: str = _DOUBLING_CODE, *, cache: bool = True) -> Stage:
     return parse_stage({
-        "id": "double", "name": "Double", "type": "python_row_function",
+        "id": "double", "description": "Double", "type": "python_row_function",
         "inputs": [{"id": "src", "schema": {"columns": [{"name": "x", "type": "int", "nullable": True}]}}],
         "cache": cache,
         "signature": {
@@ -50,7 +50,7 @@ def _row_stage(code: str = _DOUBLING_CODE, *, cache: bool = True) -> Stage:
 
 def _llm_stage(*, batch_size: int = 1, instructions: str = "score it") -> Stage:
     return parse_stage({
-        "id": "score", "name": "Score", "type": "llm_transform",
+        "id": "score", "description": "Score", "type": "llm_transform",
         "inputs": [{"id": "src", "schema": {
             "columns": [{"name": "x", "type": "int", "nullable": True}]}}],
         "signature": {

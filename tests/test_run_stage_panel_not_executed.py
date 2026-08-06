@@ -29,13 +29,13 @@ _COLUMNS = [{"name": "name", "type": "str", "nullable": True}, {"name": "val", "
 def _stages(data_path: Path) -> list[dict]:
     return [
         {
-            "id": "load", "name": "Load rows", "type": "input_data",
+            "id": "load", "description": "Load rows", "type": "input_data",
             "connector": {"kind": "file",
                           "params": {"path": str(data_path), "format": "csv"}},
             "signature": {"form": "replaces", "produces": _COLUMNS},
         },
         {
-            "id": "classify", "name": "Classify", "type": "python_row_function",
+            "id": "classify", "description": "Classify", "type": "python_row_function",
             "inputs": [{"id": "load", "schema": {"columns": _COLUMNS}}],
             "function": {"kind": "inline",
                          "code": 'def transform(row):\n    return {**row, "label": "x"}\n'},

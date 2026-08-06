@@ -53,7 +53,7 @@ def _stage(
     if flt is not None:
         queue["filter"] = flt
     return parse_stage({
-        "id": "review", "name": "Review", "type": "human_review_queue",
+        "id": "review", "description": "Review", "type": "human_review_queue",
         "inputs": [{"id": "scored", "schema": {"columns": input_columns}}],
         "signature": {"form": "extends", "adds": _REVIEW_COLUMNS},
         "queue": queue,
@@ -437,7 +437,7 @@ def test_every_decided_row_is_emitted_with_only_the_declared_columns(tmp_path):
     # output_schema declares. A queue stage can no longer hand a non-empty input on as a
     # zero-row frame at all, whatever the reviewer decided.
     stage = parse_stage({
-        "id": "review", "name": "Review", "type": "human_review_queue",
+        "id": "review", "description": "Review", "type": "human_review_queue",
         "inputs": [{"id": "scored", "schema": {"columns": _SCORED_COLUMNS}}],
         "signature": {"form": "extends", "adds": _REVIEW_COLUMNS},
         "queue": dict(QUEUE_COLUMNS),
@@ -696,13 +696,13 @@ def _load_stage(root):
     (root / "data").mkdir(parents=True, exist_ok=True)
     csv_path = root / "data" / "items.csv"
     pd.DataFrame({"id": ["a", "b"], "score": [1, 2]}).to_csv(csv_path, index=False)
-    return {"id": "load", "name": "Load", "type": "input_data",
+    return {"id": "load", "description": "Load", "type": "input_data",
             "signature": {"form": "replaces", "produces": _SCORED_COLUMNS},
             "connector": {"kind": "file", "params": {"path": str(csv_path), "format": "csv"}}}
 
 
 def _review_stage_full():
-    return {"id": "review", "name": "Review", "type": "human_review_queue",
+    return {"id": "review", "description": "Review", "type": "human_review_queue",
             "inputs": [{"id": "load", "schema": {
                 "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True}]}}],
             "signature": {"form": "extends", "adds": _REVIEW_COLUMNS},

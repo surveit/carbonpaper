@@ -35,7 +35,7 @@ from app.services.versioning import (
 _ROWS_SCHEMA = {"columns": [{"name": "doc_id", "type": "str", "nullable": False}]}
 
 _LOAD_STAGE = {
-    "id": "load", "name": "Load", "type": "input_data",
+    "id": "load", "description": "Load", "type": "input_data",
     "connector": {"kind": "file"},
     "signature": {"form": "replaces", "produces": _ROWS_SCHEMA["columns"]},
 }
@@ -129,7 +129,7 @@ def test_create_version_invalid_workflow_raises_and_writes_nothing(tmp_path):
     working copy raises WorkflowLoadError and saves NOTHING, so no invalid
     workflow can be immortalised as a version."""
     (tmp_path / "compiled").mkdir()
-    bad = {"id": "load", "name": "Load", "type": "input_data",
+    bad = {"id": "load", "description": "Load", "type": "input_data",
            "signature": {"form": "replaces", "produces": _ROWS_SCHEMA["columns"]},
            "connector": {"kind": "file",
                          "params": {"path": "data/items.csv", "format": "csv"}}}  # relative path
@@ -281,7 +281,7 @@ def test_create_version_from_stages_invalid_raises_and_writes_nothing(tmp_path):
     validation as a pydantic.ValidationError, straight from the raw dicts —
     create_version_from_stages never writes a version for an invalid graph."""
     dangling_input = {
-        "id": "consume", "name": "Consume", "type": "python_frame_function",
+        "id": "consume", "description": "Consume", "type": "python_frame_function",
         "inputs": [{"id": "no-such-stage", "schema": _ROWS_SCHEMA}],
         "signature": {
             "form": "replaces",
@@ -300,7 +300,7 @@ def test_create_version_from_stages_invalid_raises_and_writes_nothing(tmp_path):
 # ── the version's review guide ───────────────────────────────────────────────
 
 _TALLY_STAGE = {
-    "id": "tally", "name": "Tally", "type": "input_data",
+    "id": "tally", "description": "Tally", "type": "input_data",
     "connector": {"kind": "file"},
     "signature": {"form": "replaces", "produces": _ROWS_SCHEMA["columns"]},
 }

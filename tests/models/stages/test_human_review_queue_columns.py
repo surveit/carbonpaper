@@ -38,7 +38,7 @@ def _stage_spec(*, queue=None, input_columns=None, output_columns=None):
     outputs = output_columns or _OUTPUT_COLUMNS
     flowing = {c["name"] for c in edge}
     return {
-        "id": "wc", "type": "human_review_queue", "name": "wc",
+        "id": "wc", "type": "human_review_queue", "description": "wc",
         "inputs": [{"id": "src", "schema": {"columns": edge}}],
         "signature": {"form": "extends",
                       "adds": [c for c in outputs if c["name"] not in flowing]},

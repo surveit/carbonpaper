@@ -15,7 +15,7 @@ from conftest import QUEUE_COLUMNS
 
 def _load_stage(demo):
     return {
-        "id": "load", "type": "input_data", "name": "Load rows",
+        "id": "load", "type": "input_data", "description": "Load rows",
         "connector": {"kind": "file",
                       "params": {"path": str(demo / "data" / "rows.csv"), "format": "csv"}},
         "signature": {"form": "replaces", "produces": _LOAD_SCHEMA["columns"]},
@@ -27,7 +27,7 @@ _LOAD_SCHEMA = {"columns": [{"name": "doc_id", "type": "str", "nullable": True},
 
 _CLASSIFY_ADDS = [{"name": "label", "type": "str", "nullable": True}]
 _CLASSIFY = {
-    "id": "classify", "type": "python_row_function", "name": "Label by sign",
+    "id": "classify", "type": "python_row_function", "description": "Label by sign",
     "inputs": [{"id": "load", "schema": _LOAD_SCHEMA}],
     "function": {"kind": "inline", "code":
                  "def transform(row):\n"
@@ -41,7 +41,7 @@ _CLASSIFY = {
 }
 
 _BOOM = {
-    "id": "boom", "type": "python_row_function", "name": "Always errors",
+    "id": "boom", "type": "python_row_function", "description": "Always errors",
     "inputs": [{"id": "load", "schema": _LOAD_SCHEMA}],
     "function": {"kind": "inline", "code":
                  "def transform(row):\n    raise ValueError('boom')"},
@@ -54,7 +54,7 @@ _BOOM = {
 _CLASSIFY_SCHEMA = {"columns": _LOAD_SCHEMA["columns"] + _CLASSIFY_ADDS}
 
 _PUBLISH = {
-    "id": "publish_report", "type": "publish", "name": "Publish",
+    "id": "publish_report", "type": "publish", "description": "Publish",
     "inputs": [{"id": "classify", "schema": _CLASSIFY_SCHEMA}],
     "function": {"kind": "inline", "code":
                  "def transform(df, output_dir):\n"
@@ -71,7 +71,7 @@ _LOAD_PK_COLUMNS = [{"name": "doc_id", "type": "str", "nullable": True},
                     {"name": "score", "type": "int", "nullable": True}]
 _LOAD_PK_SCHEMA = {"columns": _LOAD_PK_COLUMNS}
 _QUEUE = {
-    "id": "review", "type": "human_review_queue", "name": "Review rows",
+    "id": "review", "type": "human_review_queue", "description": "Review rows",
     "inputs": [{"id": "load", "schema": _LOAD_PK_SCHEMA}],
     "signature": {
         "form": "extends",
@@ -196,7 +196,7 @@ def test_workflow_test_raises_when_no_source_stage(demo):
     # validates as a Stage on its own, and is enough to exercise the guard, which
     # runs before workflow graph validation.
     standalone = {
-        "id": "standalone", "type": "python_frame_function", "name": "No source",
+        "id": "standalone", "type": "python_frame_function", "description": "No source",
         "inputs": [{"id": "upstream", "schema": _LOAD_SCHEMA}],
         "signature": {
             "form": "replaces",

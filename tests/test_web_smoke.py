@@ -19,7 +19,7 @@ client = TestClient(app)
 
 def _load(tmp_path):
     return {
-        "id": "load", "type": "input_data", "name": "Load documents",
+        "id": "load", "type": "input_data", "description": "Load documents",
         "connector": {"kind": "file",
                       "params": {"path": str(tmp_path / "data" / "docs.csv"), "format": "csv"}},
         "signature": {
@@ -28,7 +28,7 @@ def _load(tmp_path):
         },
     }
 _EXTRACT = {
-    "id": "extract", "type": "llm_transform", "name": "Extract evidence pieces",
+    "id": "extract", "type": "llm_transform", "description": "Extract evidence pieces",
     "inputs": [{"id": "load", "schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": True}]}}],
     "llm": {"prompt_template": "You are reading a document {doc_id}. Extract evidence."},
     "signature": {

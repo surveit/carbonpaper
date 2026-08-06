@@ -45,13 +45,13 @@ def _write_project(root: Path) -> Path:
     (root / "data").mkdir(parents=True, exist_ok=True)
     _write_rows(root, _ROWS[:2])
     (root / "compiled" / "01_load.json").write_text(json.dumps({
-        "id": "load", "name": "Load items", "type": "input_data",
+        "id": "load", "description": "Load items", "type": "input_data",
         "connector": {"kind": "file", "params": {
             "path": str(root / "data" / "items.csv"), "format": "csv"}},
         "signature": {"form": "replaces", "produces": _LOADED},
     }), encoding="utf-8")
     (root / "compiled" / "02_clean.json").write_text(json.dumps({
-        "id": "clean", "name": "Clean", "type": "python_row_function",
+        "id": "clean", "description": "Clean", "type": "python_row_function",
         "inputs": [{"id": "load", "schema": {"columns": _LOADED}}],
         "signature": {
             "form": "extends",

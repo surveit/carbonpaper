@@ -19,7 +19,7 @@ _SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True}]}
 _CLEAN_LINE = "0 errors, 0 warnings"
 
 _UNDESCRIBED = {
-    "id": "shape", "name": "Shape", "type": "python_row_function",
+    "id": "shape", "description": "Shape", "type": "python_row_function",
     "inputs": [{"id": "load", "schema": _SCHEMA}],
     "signature": {"form": "extends", "reads": [{"input": "load", "columns": _SCHEMA["columns"]}]},
     "function": {"kind": "inline", "code": "def transform(row):\n    return row"},
@@ -28,7 +28,7 @@ _UNDESCRIBED = {
 
 def _make_load_stage(path):
     return {
-        "id": "load", "name": "Load", "type": "input_data",
+        "id": "load", "description": "Load", "type": "input_data",
         "signature": {"form": "replaces", "produces": _SCHEMA["columns"]},
         "connector": {"kind": "file", "params": {"path": path, "format": "csv"}},
     }

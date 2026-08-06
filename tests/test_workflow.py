@@ -11,7 +11,7 @@ _K = {"columns": [{"name": "k", "type": "str", "nullable": True}]}
 
 
 def S(**kw):
-    kw.setdefault("name", kw.get("id", "x"))
+    kw.setdefault("description", kw.get("id", "x"))
     return kw
 
 
@@ -454,7 +454,7 @@ def _build_stage_draft(id_, inputs=()):
     from app.models import StageDraft
 
     return StageDraft.model_validate({
-        "id": id_, "name": id_, "type": "input_data", "connector": {"kind": "file"},
+        "id": id_, "description": id_, "type": "input_data", "connector": {"kind": "file"},
         "inputs": [_in(i) for i in inputs],
     })
 

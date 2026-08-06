@@ -25,7 +25,7 @@ _X_SCHEMA = {"columns": [{"name": "x", "type": "int", "nullable": True}]}
 def _input_stage(stage_id: str, path: str | None) -> Stage:
     params: dict = {"path": path, "format": "csv"} if path else {}
     return parse_stage({
-        "id": stage_id, "name": stage_id, "type": "input_data",
+        "id": stage_id, "description": stage_id, "type": "input_data",
         "connector": {"kind": "file", "params": params},
         "signature": {"form": "replaces", "produces": _X_SCHEMA["columns"]},
     })
@@ -33,7 +33,7 @@ def _input_stage(stage_id: str, path: str | None) -> Stage:
 
 def _connectorless_stage(stage_id: str, input_id: str) -> Stage:
     return parse_stage({
-        "id": stage_id, "name": stage_id, "type": "python_row_function",
+        "id": stage_id, "description": stage_id, "type": "python_row_function",
         "inputs": [{"id": input_id, "schema": _X_SCHEMA}],
         "signature": {"form": "extends"},
         "function": {"kind": "inline", "code": "def transform(row):\n    return row\n"},
@@ -140,7 +140,7 @@ def _make_bound_project(root, filename="a.csv"):
     (root / "compiled").mkdir(parents=True)
     data = root / filename
     pd.DataFrame({"name": ["x", "y"], "val": [1, 2]}).to_csv(data, index=False)
-    stage = {"id": "load", "name": "Load", "type": "input_data",
+    stage = {"id": "load", "description": "Load", "type": "input_data",
              "signature": {"form": "replaces", "produces": _ROWS_SCHEMA["columns"]},
              "connector": {"kind": "file",
                            "params": {"path": str(data), "format": "csv"}}}
@@ -180,7 +180,7 @@ def test_unbound_input_leaves_no_run_dir(tmp_path):
     (tmp_path / "compiled").mkdir(parents=True)
     # No file is ever bound, so the declared columns are never materialised —
     # the stage declares the shape the rest of this file's data uses.
-    stage = {"id": "load", "name": "Load", "type": "input_data",
+    stage = {"id": "load", "description": "Load", "type": "input_data",
              "signature": {"form": "replaces", "produces": _ROWS_SCHEMA["columns"]},
              "connector": {"kind": "file", "params": {}}}
     (tmp_path / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")

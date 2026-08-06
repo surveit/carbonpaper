@@ -28,7 +28,6 @@
     {
       "stage_id": "load",
       "type": "input_data",
-      "name": "Load load",
       "started_at": "2026-07-24T16:42:39",
       "status": "ok",
       "input_validation_report": [],
@@ -54,7 +53,6 @@
     {
       "stage_id": "review",
       "type": "human_review_queue",
-      "name": "Review",
       "started_at": "2026-07-24T16:42:39",
       "status": "awaiting_review",
       "input_validation_report": [
@@ -76,7 +74,6 @@
     {
       "stage_id": "tail",
       "type": "python_frame_function",
-      "name": "Tail",
       "status": "pending",
       "input_validation_report": [],
       "output_validation_report": null,

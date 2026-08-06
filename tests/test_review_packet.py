@@ -63,7 +63,7 @@ def _write_stage(root, filename, stage):
 def _load_stage(root):
     return {
         "id": "load",
-        "name": "Load items",
+        "description": "Load items",
         "type": "input_data",
         "connector": {
             "kind": "file",
@@ -80,7 +80,7 @@ _COLUMNS = [{"name": "name", "type": "str", "nullable": False}, _VAL_COLUMN]
 def _double_stage():
     return {
         "id": "double",
-        "name": "Double the value",
+        "description": "Double the value",
         "type": "python_row_function",
         "inputs": [{"id": "load", "schema": {"columns": _COLUMNS}}],
         "function": {

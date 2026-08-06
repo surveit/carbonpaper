@@ -35,17 +35,17 @@ def _v1_stages() -> list[dict[str, Any]]:
     subject = {"columns": [_column("id"), _column("verdict")]}
     reference = {"columns": [_column("id"), _column("extra")]}
     return [
-        {"id": "src", "name": "Source", "type": "input_data",
+        {"id": "src", "description": "Source", "type": "input_data",
          "connector": {"kind": "file", "params": {"format": "csv", "path": "/tmp/a.csv"}},
          "inputs": [], "output_schema": subject},
-        {"id": "ref", "name": "Reference", "type": "input_data",
+        {"id": "ref", "description": "Reference", "type": "input_data",
          "connector": {"kind": "file", "params": {"format": "csv", "path": "/tmp/b.csv"}},
          "inputs": [], "output_schema": reference},
-        {"id": "joined", "name": "Join", "type": "enrich",
+        {"id": "joined", "description": "Join", "type": "enrich",
          "inputs": [{"id": "src", "schema": subject}, {"id": "ref", "schema": reference}],
          "join": {"keys": [{"left": "id", "right": "id"}]},
          "output_schema": {"columns": [_column("id"), _column("verdict"), _column("extra")]}},
-        {"id": "gate", "name": "Review", "type": "human_review_queue",
+        {"id": "gate", "description": "Review", "type": "human_review_queue",
          "inputs": [{"id": "joined", "schema": {
              "columns": [_column("id"), _column("verdict"), _column("extra")]}}],
          "queue": {"reviewer_instructions": "Confirm each row."},

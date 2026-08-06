@@ -31,7 +31,7 @@ def project(tmp_path, monkeypatch):
     (proj / "compiled").mkdir(parents=True)
     data = proj / "a.csv"
     pd.DataFrame({"name": ["x", "y"], "val": [1, 2]}).to_csv(data, index=False)
-    stage = {"id": "load", "name": "Load", "type": "input_data",
+    stage = {"id": "load", "description": "Load", "type": "input_data",
              "connector": {"kind": "file",
                            "params": {"path": str(data), "format": "csv"}},
              "signature": {

@@ -22,7 +22,7 @@ def _row_function_stage(*, signature=None):
     """One python_row_function stage dict over a price/title input edge."""
     spec = {
         "id": "clean",
-        "name": "Clean prices",
+        "description": "Clean prices",
         "type": "python_row_function",
         "inputs": [{"id": "bills", "schema": _EDGE}],
         "function": {"kind": "inline", "code": "def transform(row):\n    return row"},
@@ -42,7 +42,7 @@ def _starlark_row_function_stage(*, signature=None):
     """One starlark_row_function stage dict over a price/title input edge."""
     spec = {
         "id": "clean",
-        "name": "Clean prices",
+        "description": "Clean prices",
         "type": "starlark_row_function",
         "inputs": [{"id": "bills", "schema": _EDGE}],
         "starlark": {"code": "def transform(row):\n    return row"},
@@ -242,7 +242,7 @@ def test_starlark_replaces_form_rejected():
 def _llm_stage(*, reads):
     return {
         "id": "score",
-        "name": "Score bills",
+        "description": "Score bills",
         "type": "llm_transform",
         "inputs": [{"id": "bills", "schema": {
             "columns": _EDGE["columns"],
@@ -280,7 +280,7 @@ def _join_stage(*, adds, reads=None, enrich_with=None):
     ]}
     return {
         "id": "add_region",
-        "name": "Add region",
+        "description": "Add region",
         "type": "enrich",
         "inputs": [{"id": "bills", "schema": subject}, {"id": "states", "schema": reference}],
         "join": {"keys": [{"left": "state", "right": "code"}], "enrich_with": enrich_with or {"region": "region"}},
@@ -338,7 +338,7 @@ def test_join_consistent_signature_accepted():
 def test_aggregate_signature_must_tell_the_config_story():
     spec = {
         "id": "totals",
-        "name": "Totals",
+        "description": "Totals",
         "type": "aggregate",
         "inputs": [{"id": "facilities", "schema": {"columns": [
             {"name": "company", "type": "str", "nullable": True}, {"name": "revenue", "type": "int", "nullable": True},
@@ -368,7 +368,7 @@ def test_aggregate_signature_must_tell_the_config_story():
 def test_union_signature_reads_nothing_and_produces_from_every_input():
     spec = {
         "id": "all_bills",
-        "name": "All bills",
+        "description": "All bills",
         "type": "union",
         "inputs": [{"id": "house", "schema": _EDGE}, {"id": "senate", "schema": _EDGE}],
         "union": {},
@@ -390,7 +390,7 @@ def test_union_signature_reads_nothing_and_produces_from_every_input():
 def test_review_queue_add_outside_the_review_columns_rejected():
     spec = {
         "id": "check",
-        "name": "Check",
+        "description": "Check",
         "type": "human_review_queue",
         "inputs": [{"id": "bills", "schema": _EDGE}],
         "queue": {
@@ -411,7 +411,7 @@ def test_review_queue_add_outside_the_review_columns_rejected():
 def test_publish_signature_must_produce_nothing():
     spec = {
         "id": "report",
-        "name": "Report",
+        "description": "Report",
         "type": "publish",
         "inputs": [{"id": "bills", "schema": _EDGE}],
         "publish": {"format": "csv"},

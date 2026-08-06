@@ -72,7 +72,7 @@ def _make_project(root) -> None:
     (root / "data").mkdir(parents=True)
     pd.DataFrame({"name": ["a", "b"], "val": [1, 2]}).to_csv(root / "data" / "items.csv", index=False)
     stage = {
-        "id": "load", "name": "Load items", "type": "input_data",
+        "id": "load", "description": "Load items", "type": "input_data",
         "connector": {"kind": "file",
                       "params": {"path": str(root / "data" / "items.csv"), "format": "csv"}},
         "signature": {

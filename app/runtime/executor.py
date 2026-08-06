@@ -653,10 +653,7 @@ def _run_stage(
 
 def _emit_stage_start(log: RunLog | None, stage: Stage) -> None:
     if log is not None:
-        log.emit({
-            "kind": STAGE_START, "stage": stage.id, "type": stage.type,
-            "name": stage.name,
-        })
+        log.emit({"kind": STAGE_START, "stage": stage.id, "type": stage.type})
 
 
 def _emit_stage_done(log: RunLog | None, record: StageRecord) -> None:

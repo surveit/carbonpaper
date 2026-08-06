@@ -19,12 +19,12 @@ def _seed_project(root: Path, expected_doubled: float) -> None:
     compiled = root / "alpha" / "compiled"
     compiled.mkdir(parents=True)
     (compiled / "01_load.json").write_text(json.dumps({
-        "id": "load", "name": "Load", "type": "input_data",
+        "id": "load", "description": "Load", "type": "input_data",
         "connector": {"kind": "file"},
         "signature": {"form": "replaces", "produces": _IN_SCHEMA["columns"]},
     }), encoding="utf-8")
     (compiled / "02_double.json").write_text(json.dumps({
-        "id": "double", "name": "Double", "type": "python_row_function",
+        "id": "double", "description": "Double", "type": "python_row_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
         "signature": {
             "form": "extends",

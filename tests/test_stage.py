@@ -16,7 +16,7 @@ from app.models.stages.publish import PublishFormat
 
 def S(**kw):
     """Stage dict with a default name (name is required)."""
-    kw.setdefault("name", kw.get("id", "x"))
+    kw.setdefault("description", kw.get("id", "x"))
     return kw
 
 
@@ -424,7 +424,7 @@ def test_validate_stage_helper(tmp_path):
     assert m.validate_stage(S(id="load", type="input_data",
                               connector={"kind": "file", "params": {"path": str(tmp_path / "d.csv")}},
                               signature={"form": "replaces", "produces": _PK_ID_SCHEMA["columns"]})) == []
-    assert m.validate_stage({"id": "BadId", "type": "input_data", "name": "x", "connector": {"kind": "file"}})
+    assert m.validate_stage({"id": "BadId", "type": "input_data", "description": "x", "connector": {"kind": "file"}})
 
 
 # ── PR: typed stage contract ─────────────────────────────────────────────────
@@ -673,7 +673,7 @@ def test_output_schema_issues_raise_at_stage_construction():
     declared column fails construction, naming the column."""
     spec = {
         "id": "totals",
-        "name": "Totals",
+        "description": "Totals",
         "type": "aggregate",
         # `rows` carries a schema so the mandate is satisfied and the
         # deliverability issue below is the one that surfaces.
@@ -856,7 +856,7 @@ def test_output_schema_issues_surface_in_draft_validation():
 
     issues = validate_workflow_draft([{
         "id": "totals",
-        "name": "Totals",
+        "description": "Totals",
         "type": "aggregate",
         # `rows` carries a schema so the mandate is satisfied and the
         # deliverability issue below is the one that surfaces.

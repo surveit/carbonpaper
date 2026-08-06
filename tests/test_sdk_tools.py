@@ -44,7 +44,7 @@ def _seed(examples: Path, name: str) -> Path:
     compiled.mkdir(parents=True, exist_ok=True)
     stage = {
         "id": "load",
-        "name": "Load rows",
+        "description": "Load rows",
         "type": "input_data",
         "connector": {"kind": "file"},
         "signature": {
@@ -92,7 +92,7 @@ def test_draft_round_trip_creates_an_unpublished_version(examples_root: Path) ->
     connector = {"kind": "file"}
     stage = {
         "id": "load",
-        "name": "Load rows",
+        "description": "Load rows",
         "type": "input_data",
         "connector": connector,
         "signature": {
@@ -130,7 +130,7 @@ def test_draft_round_trip_creates_an_unpublished_version(examples_root: Path) ->
     assert len(read_result["stages"]) == 1
     read_stage = read_result["stages"][0]
     assert read_stage["id"] == stage["id"]
-    assert read_stage["name"] == stage["name"]
+    assert read_stage["description"] == stage["description"]
     assert read_stage["type"] == stage["type"]
     assert read_stage["connector"]["kind"] == connector["kind"]
 
@@ -187,7 +187,7 @@ def test_draft_stage_input_schema_round_trips_in_alias_form(examples_root: Path)
     upstream_schema = {"columns": [{"name": "id", "type": "str", "nullable": True}]}
     downstream = {
         "id": "transform",
-        "name": "Transform rows",
+        "description": "Transform rows",
         "type": "python_row_function",
         "inputs": [{"id": "load", "schema": upstream_schema}],
         "signature": {"form": "extends"},

@@ -16,7 +16,7 @@ _REFERENCE = {"columns": [{"name": "x", "type": "int", "nullable": True}, {"name
 
 def _join_stage(stage_type: str) -> Stage:
     return parse_stage({
-        "id": "m", "name": "Join", "type": stage_type,
+        "id": "m", "description": "Join", "type": stage_type,
         "inputs": [{"id": "subject", "schema": _SUBJECT},
                    {"id": "reference", "schema": _REFERENCE}],
         "signature": {
@@ -87,7 +87,7 @@ def test_output_is_subject_columns_plus_enrich_with_only():
 def test_a_brought_column_lands_under_its_authored_name():
     # `{z: z2}` lands the reference's z as z2 — an authored rename, never a silent suffix.
     stage = parse_stage({
-        "id": "m", "name": "Join", "type": "enrich",
+        "id": "m", "description": "Join", "type": "enrich",
         "inputs": [{"id": "subject", "schema": _SUBJECT},
                    {"id": "reference", "schema": _REFERENCE}],
         "signature": {
@@ -113,7 +113,7 @@ def test_a_brought_column_lands_under_its_authored_name():
 def test_a_right_key_sharing_a_subject_columns_name_is_dropped():
     # The reference's own `x` collides, but is narrowed away un-brought.
     stage = parse_stage({
-        "id": "m", "name": "Join", "type": "enrich",
+        "id": "m", "description": "Join", "type": "enrich",
         "inputs": [{"id": "subject", "schema": _SUBJECT},
                    {"id": "reference",
                     "schema": {"columns": [{"name": "k", "type": "int", "nullable": True},

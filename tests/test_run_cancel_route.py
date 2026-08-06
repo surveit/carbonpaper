@@ -68,7 +68,7 @@ def _write_one_stage_project(examples_dir: Path) -> None:
     (proj_dir / "compiled").mkdir(parents=True)
     (proj_dir / "data").mkdir(parents=True)
     pd.DataFrame({"name": ["a"], "val": [1]}).to_csv(proj_dir / "data" / "items.csv", index=False)
-    stage = {"id": "load", "name": "Load items", "type": "input_data",
+    stage = {"id": "load", "description": "Load items", "type": "input_data",
              "connector": {"kind": "file",
                            "params": {"path": str(proj_dir / "data" / "items.csv"), "format": "csv"}}}
     (proj_dir / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
@@ -80,7 +80,7 @@ def _write_status_manifest(examples_dir: Path, stage_statuses: list[tuple[str, s
     run_dir = examples_dir / PROJ / "runs" / RUN
     run_dir.mkdir(parents=True, exist_ok=True)
     stages: list[dict[str, object]] = [
-        {"stage_id": sid, "type": "input_data", "name": sid, "status": status,
+        {"stage_id": sid, "type": "input_data", "description": sid, "status": status,
          "input_validation_report": [], "output_validation_report": None,
          "output_row_count": 0}
         for sid, status in stage_statuses]

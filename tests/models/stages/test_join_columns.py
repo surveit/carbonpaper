@@ -12,7 +12,7 @@ from app.models.stages.join import JoinConfig, JoinStage, find_join_column_issue
 
 def _enrich_stage(*, left_columns, right_columns, key_left, key_right, enrich_with):
     return {
-        "id": "j", "type": "enrich", "name": "j",
+        "id": "j", "type": "enrich", "description": "j",
         "inputs": [
             {"id": "L", "schema": {"columns": [{"name": c, "type": "str", "nullable": False} for c in left_columns]}},
             {"id": "R", "schema": {"columns": [{"name": c, "type": "str", "nullable": False} for c in right_columns]}},

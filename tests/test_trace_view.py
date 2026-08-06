@@ -25,11 +25,11 @@ _ENRICH_SCHEMA = {"columns": [{"name": "facility_id", "type": "str", "nullable":
 
 def _stages() -> dict[str, Stage]:
     return {
-        "seeds": _stage({"id": "seeds", "type": "input_data", "name": "Load seeds",
+        "seeds": _stage({"id": "seeds", "type": "input_data", "description": "Load seeds",
                          "connector": {"kind": "file"},
                          "signature": {"form": "replaces", "produces": _SEEDS_SCHEMA["columns"]}}),
         "enrich": _stage({
-            "id": "enrich", "type": "python_row_function", "name": "Enrich",
+            "id": "enrich", "type": "python_row_function", "description": "Enrich",
             "inputs": [{"id": "seeds", "schema": _SEEDS_SCHEMA}],
             "signature": {
                 "form": "extends",
@@ -93,7 +93,7 @@ def test_edges_connect_consecutive_and_carry_the_source_row():
 def test_trace_shows_instructions_and_data():
     stages = _stages()
     stages["score"] = _stage({
-        "id": "score", "type": "llm_transform", "name": "Score",
+        "id": "score", "type": "llm_transform", "description": "Score",
         "inputs": [{"id": "enrich", "schema": {
             "columns": [{"name": "facility_id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True}]}}],
         "signature": {

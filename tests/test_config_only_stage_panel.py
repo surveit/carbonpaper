@@ -22,14 +22,14 @@ def _seed_project(root: Path) -> None:
     compiled = root / "alpha" / "compiled"
     compiled.mkdir(parents=True)
     stages: list[dict[str, Any]] = [
-        {"id": "q1", "name": "Q1", "type": "input_data",
+        {"id": "q1", "description": "Q1", "type": "input_data",
          "connector": {"kind": "file"}, "signature": {"form": "replaces", "produces": _SCHEMA["columns"]}},
-        {"id": "q2", "name": "Q2", "type": "input_data",
+        {"id": "q2", "description": "Q2", "type": "input_data",
          "connector": {"kind": "file"}, "signature": {"form": "replaces", "produces": _SCHEMA["columns"]}},
-        {"id": "both", "name": "Both quarters", "type": "union",
+        {"id": "both", "description": "Both quarters", "type": "union",
          "inputs": [{"id": "q1", "schema": _SCHEMA}, {"id": "q2", "schema": _SCHEMA}],
          "signature": {"form": "replaces", "produces": _SCHEMA["columns"]}, "union": {}},
-        {"id": "score", "name": "Score", "type": "llm_transform",
+        {"id": "score", "description": "Score", "type": "llm_transform",
          "inputs": [{"id": "both", "schema": _SCHEMA}],
          "signature": {
              "form": "extends",

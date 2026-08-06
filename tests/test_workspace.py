@@ -26,7 +26,7 @@ _LLM_OUT_SCHEMA = {"columns": [{"name": "doc_id", "type": "str", "nullable": Fal
 
 def _write_stage(compiled: Path, order: int, sid: str, stype: str, inputs: list[str]) -> None:
     compiled.mkdir(parents=True, exist_ok=True)
-    stage: dict = {"id": sid, "name": f"{sid} step", "type": stype}
+    stage: dict = {"id": sid, "description": f"{sid} step", "type": stype}
     stage.update(_config_block_by_type(compiled.parent).get(stype, {}))
     # Every input declares the schema it expects and every stage declares a
     # signature (app/models/stages/stage_base.py: StageBase._schemas_declared).

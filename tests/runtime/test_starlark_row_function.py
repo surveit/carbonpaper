@@ -26,7 +26,7 @@ def _stage(code, function=None, output_schema=None, input_columns=_N_COLUMN):
     if function is not None:
         starlark["function"] = function
     return parse_stage({
-        "id": "t", "name": "t", "type": "starlark_row_function",
+        "id": "t", "description": "t", "type": "starlark_row_function",
         "inputs": [{"id": "src", "schema": {"columns": input_columns}}],
         "signature": {"form": "extends", "adds": [
             c for c in (output_schema or {"columns": []})["columns"]

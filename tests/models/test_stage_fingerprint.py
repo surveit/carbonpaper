@@ -7,7 +7,7 @@ def _row_function_stage(input_id="src", **overrides):
     base = {
         "id": "step",
         "type": "python_row_function",
-        "name": "Step",
+        "description": "Step",
         "inputs": [{
             "id": input_id,
             "schema": {"columns": [{"name": "a", "type": "str", "nullable": False}]},
@@ -35,7 +35,7 @@ def _queue_stage(**queue_overrides):
     return parse_stage({
         "id": "review",
         "type": "human_review_queue",
-        "name": "review",
+        "description": "review",
         "inputs": [{
             "id": "src",
             "schema": {"columns": [
@@ -58,7 +58,7 @@ def _publish_stage(code="def transform(df, output_dir, trace_links):\n    return
     base = {
         "id": "report",
         "type": "publish",
-        "name": "report",
+        "description": "report",
         "inputs": [{
             "id": "src",
             "schema": {"columns": [{"name": "a", "type": "str", "nullable": False}]},
@@ -77,8 +77,8 @@ def test_compute_definition_fingerprint_is_deterministic():
 
 
 def test_compute_definition_fingerprint_ignores_incidental_fields():
-    a = _row_function_stage(input_id="src_a", id="step_a", name="Step A")
-    b = _row_function_stage(input_id="src_b", id="step_b", name="Step B")
+    a = _row_function_stage(input_id="src_a", id="step_a", description="Step A")
+    b = _row_function_stage(input_id="src_b", id="step_b", description="Step B")
     assert a.compute_definition_fingerprint() == b.compute_definition_fingerprint()
 
 

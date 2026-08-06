@@ -40,7 +40,7 @@ def write_run(tmp_path: Path, stages: list[dict], run_id: str = "T1") -> Path:
         records.append({
             "stage_id": spec["id"],
             "type": spec["type"],
-            "name": spec["id"],
+            "description": spec["id"],
             "status": "ok",
             "output_row_count": len(spec["df"]),
             "output_path": rel,

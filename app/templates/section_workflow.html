@@ -98,7 +98,7 @@
     {% for warning in compiler_warnings.warnings %}
     <li class="wf-issue wf-issue-{{ 'error' if warning.blocking else 'note' }}">
       <span class="wf-issue-kind">{{ warning.kind.replace('_', ' ') }}</span>
-      <a href="#" data-stage-link="{{ warning.stage_id }}">{{ warning.stage_name }}</a>
+      <a href="#" data-stage-link="{{ warning.stage_id }}"><code>{{ warning.stage_id }}</code></a>
       <span class="muted">— {{ warning.detail }}</span>
     </li>
     {% endfor %}

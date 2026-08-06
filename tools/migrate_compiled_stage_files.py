@@ -10,6 +10,7 @@ Applied here, matching the revisions that do the same to the store:
          so a compiled file still carrying it no longer loads.
   0006 — the stored `output_schema` left too; a stage's output resolves from its
          `signature`, synthesized here from the outer the file stored.
+  0008 — `name` became `description`: a stage has one name, its id.
 
 Usage:  python -m tools.migrate_compiled_stage_files [--apply] [--projects-dir PATH]
 Without --apply it is a dry run and writes nothing.
@@ -23,7 +24,11 @@ from pathlib import Path
 from typing import Any
 
 from app.core.paths import repo_root
-from tools.stage_signatures import add_signature
+from tools.stage_description import (
+    DescriptionUndeterminable,
+    rename_name_to_description,
+)
+from tools.stage_signatures import SignatureUndeterminable, add_signature
 
 _KEY = "primary_key"
 
@@ -34,9 +39,10 @@ def main() -> None:
     parser.add_argument("--projects-dir", type=Path, default=repo_root() / "examples")
     args = parser.parse_args()
 
-    stale = find_stale_stage_files(args.projects_dir)
+    stale, refused = find_stale_stage_files(args.projects_dir)
+    _report_refusals(refused, args.projects_dir)
     if not stale:
-        print("every compiled stage file is already in today's shape")
+        print("every compiled stage file this can migrate is already in today's shape")
         return
 
     print(f"{len(stale)} file(s) {'-> rewriting' if args.apply else '(dry run)'}:")
@@ -48,16 +54,37 @@ def main() -> None:
         print(f"rewrote {len(stale)} file(s)")
 
 
-def find_stale_stage_files(projects_dir: Path) -> list[Path]:
-    """Every compiled stage file under `projects_dir` today's model cannot load."""
-    return [path for path in sorted(projects_dir.glob("*/compiled/*.json"))
-            if _migrate(_read(path))]
+def find_stale_stage_files(projects_dir: Path) -> tuple[list[Path], list[tuple[Path, str]]]:
+    """The files this can bring to today's shape, and the ones it refuses with why.
+
+    Refuse the FILE, not the run: one stage a human must author must not hold back
+    every other project's migration (the same rule the alembic revisions follow)."""
+    stale: list[Path] = []
+    refused: list[tuple[Path, str]] = []
+    for path in sorted(projects_dir.glob("*/compiled/*.json")):
+        try:
+            if _migrate(_read(path)):
+                stale.append(path)
+        except (SignatureUndeterminable, DescriptionUndeterminable) as exc:
+            refused.append((path, str(exc)))
+    return stale, refused
+
+
+def _report_refusals(refused: list[tuple[Path, str]], projects_dir: Path) -> None:
+    if not refused:
+        return
+    print(f"{len(refused)} file(s) REFUSED and left untouched — a human must author "
+          f"these before they will load:")
+    for path, reason in refused:
+        print(f"  {path.relative_to(projects_dir)}: {reason}")
 
 
 def _migrate(spec: Any) -> bool:
     """Bring one stage spec to today's shape; True if anything changed."""
     changed = _drop_primary_keys(spec)
-    return add_signature(spec) | changed if isinstance(spec, dict) else changed
+    if not isinstance(spec, dict):
+        return changed
+    return rename_name_to_description(spec) | add_signature(spec) | changed
 
 
 def _rewrite(path: Path) -> None:
