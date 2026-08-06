@@ -1,41 +1,21 @@
-{# Minimal stage view for the lineage page: three disclosures — transform,
-   output (trimmed to one row), output schema. The story opens a specific one
-   (data-disc). Reuses the shared _stage_executable.html + schema_table; no
-   status / validation / scratch / tabs.
+{# The lineage page's Transform tab: the pinned transform, its tests and code,
+   then the output schema. The row itself is rendered by the page from its own
+   payload (app.web.trace_row_diff), so nothing here reads the output frame.
+   Reuses the shared _stage_executable.html + schema_table; no status /
+   validation / scratch / tabs.
 
    Context: stage (manifest record), stage_def (the pinned version's Stage |
    None), stage_def_error (why the pinned version could not be read | None),
-   function_code, preview (row-scoped output), scoped_row, type_glyph, type_class. #}
+   function_code, scoped_row, type_glyph, type_class. #}
 {% from "_schema_table.html" import schema_table %}
 {% from "_stage_code.html" import stage_code %}
 
 <div class="run-stage-panel lineage-stage">
-  <div class="stage-header">
-    <span class="type-tag {{ type_class.get(stage.type, 'custom') }}">{{ type_glyph.get(stage.type, '') }} {{ stage.type }}</span>
-    <h2><code>{{ stage.stage_id }}</code> <span class="row-scope">row {{ scoped_row }}</span></h2>
-    <p class="stage-id">{{ stage.name }}</p>
-  </div>
-
-  <details class="lin-disc" data-disc="transform"><summary class="disclosure">Transform</summary>
-    {% if stage_def %}{% with stage = stage_def %}{% include "_stage_executable.html" %}{% endwith %}
-    {% include "_stage_tests.html" %}
-    {{ stage_code(stage_def, function_code) }}
-    {% elif stage_def_error %}<p class="banner banner-warn" id="stage-def-error">⚠ Stage definition unavailable — {{ stage_def_error }}</p>
-    {% else %}<p class="muted"><em>No stage definition available.</em></p>{% endif %}
-  </details>
-
-  <details class="lin-disc" data-disc="output"><summary class="disclosure">Output · row {{ scoped_row }}</summary>
-    {% if preview and preview.preview %}
-    <div class="table-scroll"><table class="data-preview">
-      <thead><tr>{% for c in preview.columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
-      <tbody>{% for row in preview.preview %}<tr>
-        {% for c in preview.columns %}{% set v = row[c] | string %}{% if v[:4] == 'http' %}<td class="cell-url"><a href="{{ v }}" target="_blank" rel="noopener">{{ v }}</a></td>{% else %}<td>{{ v | truncate(240) }}</td>{% endif %}{% endfor %}
-      </tr>{% endfor %}</tbody>
-    </table></div>
-    {% elif preview and preview.out_of_range %}<p class="muted"><em>row {{ scoped_row }} is out of range ({{ preview.rows_total }} rows).</em></p>
-    {% elif preview and preview.error %}<p class="muted"><em>output unavailable: {{ preview.error }}</em></p>
-    {% else %}<p class="muted"><em>no output for this stage.</em></p>{% endif %}
-  </details>
+  {% if stage_def %}{% with stage = stage_def %}{% include "_stage_executable.html" %}{% endwith %}
+  {% include "_stage_tests.html" %}
+  {{ stage_code(stage_def, function_code) }}
+  {% elif stage_def_error %}<p class="banner banner-warn" id="stage-def-error">⚠ Stage definition unavailable — {{ stage_def_error }}</p>
+  {% else %}<p class="muted"><em>No stage definition available.</em></p>{% endif %}
 
   {% if stage_def and stage_def.resolve_output_schema() %}
   <details class="lin-disc" data-disc="schema"><summary class="disclosure">Output schema</summary>{{ schema_table(stage_def.resolve_output_schema()) }}</details>

@@ -14,10 +14,11 @@ from app.services.loader import resolve_function_code
 from app.services import run as run_service
 from app.runtime.trace import trace_row, trace_to_dict
 from app.web.stage_test_views import build_certification, shape_test_views
+from app.web.panel_links import AppPanelLinks
 from app.web.trace_view import build_trace_view
 from app.web.config import templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
-from app.web.loading import load_manifest, load_output_row, runs_dir
+from app.web.loading import load_manifest, runs_dir
 
 router = APIRouter()
 
@@ -29,9 +30,9 @@ router = APIRouter()
 async def run_stage_lineage_panel(
     request: Request, project: str, run_id: str, stage_id: str, row: int
 ):
-    """Minimal stage view for the lineage page, its output trimmed to `row`."""
-    # Reuses `_stage_executable.html` and `schema_table` — not the whole
-    # run-detail panel.
+    """The lineage page's Transform tab: the pinned stage definition, no output table."""
+    # The row itself is already in the page's payload, marked against its parent
+    # (app.web.trace_row_diff), so only the transform is fetched.
     run_dir = runs_dir(project) / run_id
     manifest = load_manifest(run_dir)
     stage_record = next(
@@ -42,7 +43,7 @@ async def run_stage_lineage_panel(
         raise HTTPException(status_code=404, detail=f"No stage '{stage_id}' in run")
     # Transform detail is part of the lineage of THIS run, so it comes from the
     # version the run pinned. Unresolvable → no transform and a stated reason;
-    # the row's output table still renders, because that data is still true.
+    # the page's own row view is unaffected, because that data is still true.
     pinned = run_service.load_pinned_stage_def(project, manifest, stage_id)
     return templates.TemplateResponse(
         request,
@@ -58,7 +59,6 @@ async def run_stage_lineage_panel(
             "certification": (
                 build_certification(pinned.stage, lineage_views) if pinned.stage else None
             ),
-            "preview": load_output_row(run_dir, stage_record.get("output_path"), row),
             "scoped_row": row,
             "type_glyph": TYPE_GLYPH,
             "type_class": TYPE_CLASS,
@@ -110,7 +110,7 @@ async def run_stage_row_trace_view(
         stages = []
     stages_by_id = {s.id: s for s in stages}
 
-    view = build_trace_view(trace_to_dict(trace), stages_by_id)
+    view = build_trace_view(trace_to_dict(trace), stages_by_id, AppPanelLinks(project, run_id))
     ordered = [stages_by_id[n["stage_id"]] for n in view["nodes"]
                if n["stage_id"] in stages_by_id]
     mermaid = build_mermaid_graph(ordered, project) if len(ordered) == len(view["nodes"]) else ""

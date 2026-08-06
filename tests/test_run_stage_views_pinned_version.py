@@ -204,8 +204,6 @@ def test_lineage_panel_says_the_definition_is_unavailable_when_the_run_is_unpinn
     assert panel.status_code == 200
     assert "Stage definition unavailable" in panel.text
     assert DRIFTED_MARKER not in panel.text
-    # The row's own output data is still true, so it still renders.
-    assert "Output · row 0" in panel.text
 
 
 def test_scratch_preview_refuses_to_execute_an_unresolvable_version(
