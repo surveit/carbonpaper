@@ -116,6 +116,39 @@ def test_sum_of_str_declared_int_rejected():
     assert "all_regions" in msg and "str" in msg
 
 
+def test_count_distinct_without_a_value_column_rejected():
+    # Unlike bare `count`, which counts rows, count_distinct counts a column's values.
+    msg = _issues(_aggregate_stage(
+        produces=[{"name": "company", "type": "str", "nullable": True},
+                        {"name": "n_regions", "type": "int", "nullable": True}],
+        aggregations=[{"output_column": "n_regions", "formula": "count_distinct"}],
+    ))
+    assert "n_regions" in msg and "value_column" in msg
+
+
+def test_count_distinct_output_declared_int_accepted():
+    stage = parse_stage(_aggregate_stage(
+        produces=[{"name": "company", "type": "str", "nullable": True},
+                        {"name": "n_regions", "type": "int", "nullable": True}],
+        aggregations=[
+            {"output_column": "n_regions", "formula": "count_distinct",
+             "value_column": "region"},
+        ],
+    ))
+    assert stage.id == "totals"
+
+
+def test_count_distinct_output_declared_as_the_value_type_rejected():
+    msg = _issues(_aggregate_stage(
+        produces=[{"name": "n_regions", "type": "str", "nullable": True}],
+        aggregations=[
+            {"output_column": "n_regions", "formula": "count_distinct",
+             "value_column": "region"},
+        ],
+    ))
+    assert "n_regions" in msg and "int" in msg
+
+
 def test_list_op_declared_list_of_value_type_accepted():
     stage = parse_stage(_aggregate_stage(
         produces=[{"name": "company", "type": "str", "nullable": True},
