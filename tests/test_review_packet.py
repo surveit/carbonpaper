@@ -311,11 +311,11 @@ def test_unreadable_version_is_stated_on_the_stage_page(project_dir, tmp_path, m
     assert [o.path for o in packet.omitted] == ["workflow.json"]
 
 
-def test_a_stage_page_holds_more_rows_than_a_served_page_would(project_dir, tmp_path):
-    # Rendered once to a file, not per request, so the packet carries its own cap.
-    assert PACKET_MAX_TABLE_ROWS > MAX_TABLE_ROWS
+def test_a_stage_page_never_holds_less_than_a_served_page_would(project_dir, tmp_path):
+    # The packet may exceed the served cap but never fall under it.
+    assert PACKET_MAX_TABLE_ROWS >= MAX_TABLE_ROWS
     _make_project(project_dir)
-    rows = MAX_TABLE_ROWS + 1
+    rows = MAX_TABLE_ROWS
     pd.DataFrame(
         {"name": [f"n{i}" for i in range(rows)], "val": list(range(rows))}
     ).to_csv(project_dir / "data" / "items.csv", index=False)
@@ -326,6 +326,26 @@ def test_a_stage_page_holds_more_rows_than_a_served_page_would(project_dir, tmp_
 
     page = (packet.root / "stages" / "double.html").read_text(encoding="utf-8")
     assert f"n{rows - 1}" in page, "the last row was dropped by the served page's cap"
+
+
+def test_a_capped_stage_page_names_the_true_total_and_points_at_the_csv(
+    project_dir, tmp_path
+):
+    # A truncated table reads as the whole output unless the page says otherwise.
+    _make_project(project_dir)
+    rows = PACKET_MAX_TABLE_ROWS + 1
+    pd.DataFrame(
+        {"name": [f"n{i}" for i in range(rows)], "val": list(range(rows))}
+    ).to_csv(project_dir / "data" / "items.csv", index=False)
+    _seed_version(project_dir)
+    run_id = run_service.start_run(_PROJECT)
+
+    packet = export_review_packet(_PROJECT, run_id, tmp_path / "packets")
+
+    page = (packet.root / "stages" / "double.html").read_text(encoding="utf-8")
+    assert f"first {PACKET_MAX_TABLE_ROWS} of {rows:,} rows" in page
+    assert 'href="../data/double.csv"' in page
+    assert f"n{rows - 1}" not in page, "the cap did not actually truncate"
 
 
 def test_a_stage_page_offers_the_csv_rather_than_a_link_back_to_itself(exported):

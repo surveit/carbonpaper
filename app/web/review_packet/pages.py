@@ -20,7 +20,12 @@ from app.web.panel_links import PacketPanelLinks
 # rows outright. Still capped: a browser opening a static file has no pagination
 # to fall back on. Past this the page says so and the reader goes to data/*.csv,
 # which is written uncapped.
-PACKET_MAX_TABLE_ROWS = 50_000
+#
+# The number is bounded by layout, not by bytes: a cold full layout — what any
+# resize, zoom or find-in-page pays — scales with rendered cells. Measured on a
+# 45k-row x 22-col stage: at the old 50,000 the whole frame rendered as 1M cells
+# and froze the tab for 13.7s; 5,000 rows of it costs ~0.5s, and 1,000 ~0.12s.
+PACKET_MAX_TABLE_ROWS = 5_000
 
 ASSETS_DIR = "assets"
 STAGES_DIR = "stages"
