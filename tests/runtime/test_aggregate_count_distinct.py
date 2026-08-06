@@ -4,6 +4,7 @@ from __future__ import annotations
 import pandas as pd
 
 from app.models import parse_stage
+from app.runtime.context import RunContext
 from app.runtime.stages.aggregate import handle_aggregate
 
 # `a` repeats a registrant, `b` has nothing but nulls, `c` mixes a value with a null.
@@ -28,7 +29,8 @@ def _counts() -> pd.DataFrame:
             {"output_column": "n_registrants", "formula": "count_distinct",
              "value_column": "registrant"}]},
     })
-    return handle_aggregate(stage, {"filings": FILINGS}, None)
+    ctx = RunContext.for_stages_outside_a_run(repo_root=None, run_dir=None)
+    return handle_aggregate(stage, {"filings": FILINGS}, ctx)
 
 
 def _by_firm() -> dict[str, int]:
