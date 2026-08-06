@@ -15,10 +15,10 @@ from app.runtime.lineage import (
     TRACE_SOURCE_STAGE_KEY,
     lineage_sidecar_path,
 )
+from app.web.loading import PREVIEW_ROWS_SHOWN, load_output_preview
 from app.web.stage_diff import (
     _NO_ALIGNED_DIFF,
     BASE_INPUT_ROLE,
-    DIFF_ROWS_SHOWN,
     FILTER_ROWS_KIND,
     REFERENCE_INPUT_ROLE,
     ROW_ALIGNED_KIND,
@@ -417,7 +417,7 @@ def test_filter_rows_that_dropped_nothing_still_gets_the_merged_table(tmp_path: 
 
 
 def test_filter_rows_counts_the_drops_beyond_the_shown_window(tmp_path: Path) -> None:
-    total = DIFF_ROWS_SHOWN + 3
+    total = PREVIEW_ROWS_SHOWN + 3
     kept = list(range(total - 1))  # the LAST input row is dropped, past the window
     _write_output(tmp_path, LOAD_ID, _numbered_frame(total))
     out_rel = _write_output(tmp_path, "keep", _numbered_frame(total - 1))
@@ -426,7 +426,7 @@ def test_filter_rows_counts_the_drops_beyond_the_shown_window(tmp_path: Path) ->
     diff = _diff(tmp_path, _filter_stage(), out_rel)
 
     assert diff is not None and diff.kind == FILTER_ROWS_KIND
-    assert len(diff.rows) == DIFF_ROWS_SHOWN
+    assert len(diff.rows) == PREVIEW_ROWS_SHOWN
     assert all(not row.dropped for row in diff.rows)
     assert diff.dropped_total == 1 and diff.dropped_beyond_window == 1
 
@@ -505,7 +505,7 @@ def test_both_shapes_expose_the_output_row_count_under_one_name(tmp_path: Path) 
 # ─── the row budget is a parameter, and each shape windows its own frame ─────
 
 def test_the_stage_panels_default_window_draws_a_hundred_rows(tmp_path: Path) -> None:
-    """The panel's window is a hundred rows — enough to read a stage, not a five-row taste."""
+    """The panel's window is a hundred rows — deep enough to read a stage, not sample it."""
     _write_output(tmp_path, LOAD_ID, _numbered_frame(120))
     out_rel = _write_output(tmp_path, "classify", _numbered_frame(120))
 
@@ -515,9 +515,24 @@ def test_the_stage_panels_default_window_draws_a_hundred_rows(tmp_path: Path) ->
     assert len(diff.rows) == 100 and diff.rows_total == 120
 
 
+def test_a_diffed_and_an_undiffed_stage_draw_the_same_number_of_rows(tmp_path: Path) -> None:
+    total = PREVIEW_ROWS_SHOWN + 20
+    # The two paths render into the same tab and look alike, so a reader who saw
+    # 100 rows under one stage and 5 under the next read it as a fact about the data.
+    _write_output(tmp_path, LOAD_ID, _numbered_frame(total))
+    out_rel = _write_output(tmp_path, "classify", _numbered_frame(total))
+
+    diff = _diff(tmp_path, _row_stage(_IN_COLUMNS), out_rel)
+    plain = load_output_preview(tmp_path, out_rel)
+
+    assert isinstance(diff, RowAlignedDiff) and plain is not None
+    assert len(diff.rows) == len(plain["preview"]) == PREVIEW_ROWS_SHOWN
+    assert diff.rows_total == plain["rows_total"] == total
+
+
 def test_the_row_budget_windows_the_output_frame_of_an_aligned_diff(tmp_path: Path) -> None:
     # The caller sets how many rows are drawn; the whole-frame counts do not move.
-    total = DIFF_ROWS_SHOWN + 2
+    total = PREVIEW_ROWS_SHOWN + 2
     _write_output(tmp_path, LOAD_ID, _numbered_frame(total))
     changed = _numbered_frame(total)
     changed["name"] = changed["name"].str.upper()
@@ -528,7 +543,7 @@ def test_the_row_budget_windows_the_output_frame_of_an_aligned_diff(tmp_path: Pa
     default = build_stage_diff(stage, tmp_path, out_rel, {LOAD_ID: _LOAD_PATH})
 
     assert isinstance(wide, RowAlignedDiff) and isinstance(default, RowAlignedDiff)
-    assert len(wide.rows) == total and len(default.rows) == DIFF_ROWS_SHOWN
+    assert len(wide.rows) == total and len(default.rows) == PREVIEW_ROWS_SHOWN
     assert wide.rows_total == default.rows_total == total
     assert wide.changed_cells_total == default.changed_cells_total == total
 

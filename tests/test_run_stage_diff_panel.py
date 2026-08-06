@@ -492,7 +492,7 @@ def test_a_filter_full_rows_page_shows_its_dropped_rows_in_place(run_ctx) -> Non
 
 
 def test_the_full_rows_diff_is_windowed_by_the_table_row_cap(run_ctx, monkeypatch) -> None:
-    # The budget is the page's own MAX_TABLE_ROWS, not the panel's five.
+    # The budget is the page's own MAX_TABLE_ROWS, not the panel's preview window.
     monkeypatch.setattr(loading, "MAX_TABLE_ROWS", 2)
     _pdir, run_id = run_ctx
     html = _rows_page(run_id, CLASSIFY_ID)

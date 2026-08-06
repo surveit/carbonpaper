@@ -230,6 +230,14 @@ def load_manifest(run_dir: Path) -> dict[str, Any]:
 # packet does), so load_output_table takes it as an argument.
 MAX_TABLE_ROWS = 5000
 
+# One budget for every truncated table the stage panel draws — the output preview,
+# the input previews, the diff, the scratch re-run. They sit in the same panel and
+# look alike, so a per-path number reads as a property of the data rather than of
+# the surface: the same reader saw 100 rows under one stage and 5 under the next,
+# with nothing on screen to say why. The full-rows page and the review packet are
+# separate surfaces and keep their own, larger budgets.
+PREVIEW_ROWS_SHOWN = 100
+
 
 # Excel on Windows reads a .csv in the machine's legacy code page (cp1252 on a
 # Western install) unless the file opens with a UTF-8 byte-order mark. Without
@@ -361,9 +369,8 @@ def load_output_row(run_dir: Path, rel_path: str | None, row: int) -> dict[str, 
 
 
 def load_output_preview(run_dir: Path, rel_path: str | None) -> dict[str, Any] | None:
-    """Small JSON-able preview of a stage output: columns, total row count, and
-    the first 5 rows as strings. None if no path is given; {"error": ...} if the
-    file is missing on disk or can't be read."""
+    """Preview of a stage output, capped at `PREVIEW_ROWS_SHOWN` rows. None if no
+    path; {"error": ...} if the file is missing on disk or can't be read."""
     if not rel_path:
         return None
     try:
@@ -379,7 +386,7 @@ def load_output_preview(run_dir: Path, rel_path: str | None) -> dict[str, Any] |
     return {
         "columns": list(df.columns),
         "rows_total": len(df),
-        "preview": render_cells_as_text(df.head(5)),
+        "preview": render_cells_as_text(df.head(PREVIEW_ROWS_SHOWN)),
     }
 
 

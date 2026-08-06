@@ -100,7 +100,9 @@
       <button type="button" data-zoom="out" title="Zoom out">−</button>
       <button type="button" data-zoom="reset" title="Fit to width">reset</button>
       <button type="button" class="diagram-fs" title="Fullscreen">⛶ fullscreen</button>
-      <span class="muted diagram-hint">drag to pan · ⌘/Ctrl-scroll to zoom · click a node or a guide step to focus it</span>
+      {# Names what a click OPENS, not that it moves the graph: the panel below is
+         the thing a reader has no other way to discover is there. #}
+      <span class="muted diagram-hint">drag to pan · ⌘/Ctrl-scroll to zoom · click a node — or a guide step — for that stage's data, schema and transform below</span>
     </div>
     <div class="diagram-viewport">
       <pre class="mermaid">

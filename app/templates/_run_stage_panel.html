@@ -217,7 +217,9 @@
   function renderResult(d) {
     resultEl.hidden = false;
     if (!d.ok) { resultEl.innerHTML = `<div class="scratch-head err">scratch preview failed</div><p class="muted">${esc(d.error || 'unknown')}</p>` + (d.traceback ? `<details><summary>traceback</summary><pre>${esc(d.traceback)}</pre></details>` : ''); return; }
-    let h = `<div class="scratch-head">⚡ scratch preview — not saved</div><p class="muted">${d.input_rows} input row(s) → ${d.rows_total} output row(s)</p>`;
+    const shown = (d.preview || []).length;
+    const capped = d.rows_total > shown ? ` — showing the first ${shown}` : '';
+    let h = `<div class="scratch-head">⚡ scratch preview — not saved</div><p class="muted">${d.input_rows} input row(s) → ${d.rows_total} output row(s)${capped}</p>`;
     if (d.rows_total === 0) h += `<p class="muted"><em>transform returned no rows</em></p>`;
     else {
       h += '<div class="table-scroll"><table class="data-preview scratch"><thead><tr>' + d.columns.map(c => `<th>${esc(c)}</th>`).join('') + '</tr></thead><tbody>';
