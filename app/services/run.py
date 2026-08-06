@@ -12,9 +12,14 @@ from typing import Any, Mapping
 import pandas as pd
 
 from app.core.errors import RunNotFoundError, RunVersionUnresolvableError
+from app.core.frames import read_frame_column_names
 from app.models import Stage
 from app.models.run_manifest import read_run_bindings
-from app.runtime.manifest import load_manifest_model, read_stage_output_frame
+from app.runtime.manifest import (
+    load_manifest_model,
+    read_stage_output_frame,
+    resolve_output_path,
+)
 from app.runtime.runner import apply_run_bindings, prepare_run, resume_run, run_prepared
 from app.services.errors import WorkflowLoadError
 from app.services.versioning import (
@@ -134,6 +139,23 @@ def read_stage_output(project: str, run_id: str, stage_id: str) -> pd.DataFrame:
     return read_stage_output_frame(run_dir, stage_id)
 
 
+def read_output_column_counts(project: str, manifest: Mapping[str, Any]) -> dict[str, int]:
+    """Columns each stage's WRITTEN frame holds, by stage id; absent where unreadable."""
+    run_id = manifest.get("run_id")
+    if not run_id:
+        return {}
+    run_dir = resolve_run_dir(project, str(run_id))
+    # Off the frames the run wrote, never off the version's declared output schema: a
+    # stage declares the columns it reads and adds, while every other upstream column
+    # flows through it undeclared, so the declaration runs narrower than the frame by
+    # an unbounded margin. A frame that cannot be read has no count here at all.
+    counted = {
+        str(record["stage_id"]): _count_output_columns(run_dir, record.get("output_path"))
+        for record in manifest.get("stage_records", [])
+    }
+    return {stage_id: count for stage_id, count in counted.items() if count is not None}
+
+
 def read_run_status(project: str, run_id: str) -> dict[str, Any]:
     """A run's manifest.json as a dict, parsed through the typed `RunManifest`
     (so a legacy scalar `halted_at` is normalized to a list and unset optional
@@ -143,6 +165,18 @@ def read_run_status(project: str, run_id: str) -> dict[str, Any]:
     run_dir = resolve_run_dir(project, run_id)
     _validate_run_exists(run_dir, project, run_id)
     return load_manifest_model(run_dir).to_dict()
+
+
+def _count_output_columns(run_dir: Path, output_path: str | None) -> int | None:
+    try:
+        path = resolve_output_path(run_dir, output_path)
+        if path is None or not path.exists():
+            return None
+        return len(read_frame_column_names(path))
+    except (OSError, ValueError):
+        # An unreadable frame (a path escaping the run, a truncated file) leaves the
+        # width unknown. StageOutputMissing is a ValueError, so it lands here too.
+        return None
 
 
 def _validate_run_exists(run_dir: Path, project: str, run_id: str) -> None:

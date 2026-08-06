@@ -11,7 +11,7 @@ from app.core.errors import RunVersionUnresolvableError
 from app.models import Stage
 from app.models.review_guide import ReviewGuideStep
 from app.models.workflow import sort_stages_by_dependency
-from app.services.run import load_run_version
+from app.services.run import load_run_version, read_output_column_counts
 from app.services.versioning import find_latest_review_guide
 
 
@@ -23,15 +23,16 @@ class GuideStageView:
     stage: Stage | None
     written_columns: list[str]
     executed: bool
-    # The two halves of the output frame's shape, and they come from DIFFERENT places:
-    # the rows off this run's manifest record, the columns off the pinned version's
-    # declared output schema. Either can be None on its own, so a reader must state the
-    # half it has rather than pair a measured number with a missing one.
+    # The two halves of the output frame's shape, both measured off what THIS RUN wrote
+    # — the rows off its manifest record, the columns off the footer of the frame file
+    # that record names. Neither is the version's DECLARED schema, which states only
+    # the columns a stage reads and adds and so is narrower than the frame it wrote.
     #
-    # None is UNKNOWN — no record for the stage — and is not 0, a measured empty frame.
+    # They are read separately and either can be None on its own, so a reader must
+    # state the half it has rather than pair a measured number with a missing one.
+    # None is UNKNOWN — no record, or no readable frame — and is never 0, which is a
+    # frame measured and found empty.
     output_row_count: int | None
-    # None where the pinned version declares no output schema for the stage, which is
-    # not a frame of 0 columns.
     column_count: int | None
     # This stage's own count minus the count of its FIRST declared input's stage: 0 says
     # it passed every row through and only wrote columns, non-zero is how many rows it
@@ -79,7 +80,7 @@ def build_run_guide_view(project: str, manifest: dict[str, Any]) -> RunGuideView
     if guide is None:
         return None
     by_id = _index_stages_in_execution_order(version.stages)
-    measured = _read_run_measurements(manifest)
+    measured = _read_run_measurements(project, manifest)
     return RunGuideView(
         steps=[_view_step(step, by_id, measured) for step in guide.steps],
         unnarrated=_view_stages(guide.unnarrated, by_id, measured),
@@ -94,12 +95,6 @@ def find_guideless_version_id(project: str, manifest: dict[str, Any]) -> str | N
         return None
     has_guide = find_latest_review_guide(project, version.version_id) is not None
     return None if has_guide else version.version_id
-
-
-def count_output_columns(stage: Stage) -> int | None:
-    """Columns the output holds; None where the version declares no schema for it."""
-    output_schema = stage.resolve_output_schema()
-    return None if output_schema is None else len(output_schema.columns)
 
 
 def list_written_columns(stage: Stage) -> list[str]:
@@ -126,9 +121,10 @@ class _RunMeasurements:
 
     executed: set[str]
     row_counts: dict[str, int]
+    column_counts: dict[str, int]
 
 
-def _read_run_measurements(manifest: dict[str, Any]) -> _RunMeasurements:
+def _read_run_measurements(project: str, manifest: dict[str, Any]) -> _RunMeasurements:
     records = manifest.get("stage_records", [])
     return _RunMeasurements(
         executed={record["stage_id"] for record in records},
@@ -139,6 +135,8 @@ def _read_run_measurements(manifest: dict[str, Any]) -> _RunMeasurements:
             for record in records
             if record.get("output_row_count") is not None
         },
+        # Off the written frames themselves, and likewise absent where unreadable.
+        column_counts=read_output_column_counts(project, manifest),
     )
 
 
@@ -209,7 +207,7 @@ def _view_stage(
         written_columns=list_written_columns(stage) if stage is not None else [],
         executed=stage_id in measured.executed,
         output_row_count=output_rows,
-        column_count=count_output_columns(stage) if stage is not None else None,
+        column_count=measured.column_counts.get(stage_id),
         row_delta=_measure_row_delta(stage, output_rows, measured),
     )
 

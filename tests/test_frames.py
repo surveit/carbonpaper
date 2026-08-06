@@ -13,6 +13,7 @@ from app.core.frames import (
     is_null_form,
     is_sequence_cell,
     list_rows,
+    read_frame_column_names,
     read_frame_file,
     render_frame_as_csv_text,
     write_frame_file,
@@ -259,3 +260,16 @@ def test_render_frame_as_csv_text_matches_what_write_frame_file_puts_on_disk(tmp
     path = tmp_path / "f.csv"
     write_frame_file(frame, path)
     assert render_frame_as_csv_text(frame) == path.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("suffix", [".parquet", ".csv"])
+def test_read_frame_column_names_matches_what_reading_the_frame_would_give(tmp_path, suffix):
+    frame = pd.DataFrame({"doc_id": ["a", "b"], "flag": [True, False], "note": ["x", "y"]})
+    path = tmp_path / f"frame{suffix}"
+    if suffix == ".parquet":
+        frame.to_parquet(path, index=False)
+    else:
+        frame.to_csv(path, index=False)
+
+    assert read_frame_column_names(path) == list(read_frame_file(path).columns)
+    assert read_frame_column_names(path) == ["doc_id", "flag", "note"]

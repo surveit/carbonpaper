@@ -4,12 +4,18 @@
    The prose is the ONLY thing here that was authored. Everything shown around it —
    each stage's name, type, position in the execution order and the columns it writes
    — is read off the same pinned version at render time (services/run_guide.py),
-   so it cannot drift from the workflow the run actually executed. Each stage's SHAPE is
-   read the same way but from two places at once: the row count off this run's manifest,
-   the column count off the pinned version's output schema. Both are measured, never
-   estimated, and either can be missing on its own — a half that is missing is said in
-   words (`shape unknown`, or the half that is known), never rendered as a 0, which here
-   means a frame measured and found empty.
+   so it cannot drift from the workflow the run actually executed.
+
+   A stage's SHAPE is measured off what the run WROTE, both halves: the row count from
+   its manifest record, the column count from the footer of the frame file that record
+   names. It is deliberately NOT the version's declared output schema, which states only
+   the columns a stage reads and adds and so runs narrower than the frame — the Schema
+   tab answers that question and will show a smaller number for the same stage. Either
+   half can be missing on its own, and a missing half is said in words (`shape unknown`,
+   or the half that is known), never rendered as a 0, which means measured and empty.
+
+   `writes …` below each row stays what it always was: the version's DECLARED delta,
+   the columns the stage says it adds. It is not part of the measured shape.
 
    Context: guide (RunGuideView) · project · type_class / type_glyph — the type-tag maps.
    Included only when `guide` is set; a version with no guide gets no rail at all.
@@ -30,21 +36,21 @@
 {# The shape of the frame a stage leaves — `24,797 × 21`, rows by columns — and how its
    row count moved from its first input's.
 
-   The two halves come from different places: the rows from THIS RUN's manifest record,
-   the columns from the PINNED VERSION's declared output schema. So each half can be
-   missing on its own, and the pair form is only used when both are known; with one half
-   the macro states that half in words (`24,797 rows`, `21 columns`) rather than pairing
-   a measured number with a placeholder. `shape unknown` is worded, not punctuated, so
-   nothing here can be misread as a measured 0. #}
+   The two halves are read separately — the rows from THIS RUN's manifest record, the
+   columns from the frame that run wrote — so each can be missing on its own. The pair
+   form is used only when both are known; with one half the macro states that half in
+   words (`24,797 rows`, `21 columns`) rather than pairing a measured number with a
+   placeholder. `shape unknown` is worded, not punctuated, so nothing here can be
+   misread as a measured 0. #}
 {% macro frame_shape(s) %}
 {%- if s.output_row_count is not none and s.column_count is not none %}
-<span class="guide-rows" title="{{ row_word(s.output_row_count) }} × {{ column_word(s.column_count) }} — the rows this run measured, the columns the pinned version declares">{{ "{:,}".format(s.output_row_count) }} × {{ s.column_count }}</span>
+<span class="guide-rows" title="{{ row_word(s.output_row_count) }} × {{ column_word(s.column_count) }}, measured from the frame this run wrote. The Schema tab shows the version's DECLARED columns, which is a different, usually smaller number">{{ "{:,}".format(s.output_row_count) }} × {{ s.column_count }}</span>
 {%- elif s.column_count is none and s.output_row_count is none %}
-<span class="guide-rows unknown" title="This run recorded no row count for this stage, and the pinned version declares no output schema for it">shape unknown</span>
+<span class="guide-rows unknown" title="This run recorded no row count for this stage and wrote no frame that could be read, so neither half of its shape is known">shape unknown</span>
 {%- elif s.column_count is none %}
-<span class="guide-rows" title="Rows this run measured. The pinned version declares no output schema for this stage, so its column count is unknown">{{ row_word(s.output_row_count) }}</span>
+<span class="guide-rows" title="Rows this run measured. Its output frame could not be read, so the column count is unknown">{{ row_word(s.output_row_count) }}</span>
 {%- else %}
-<span class="guide-rows" title="Columns the pinned version declares for this stage's output. This run recorded no row count for it">{{ column_word(s.column_count) }}</span>
+<span class="guide-rows" title="Columns the frame this run wrote holds. The run recorded no row count for this stage">{{ column_word(s.column_count) }}</span>
 {%- endif %}
 {%- if s.output_row_count is not none %}
 {%- if s.row_delta is not none and s.row_delta != 0 %}
@@ -221,7 +227,7 @@
   {# The shape notation is explained once, here, so `24,797 × 21` needs no legend of
      its own on every stage row. #}
   <p class="run-guide-lead">AI generated summary of what this run did. A stage's
-    <b>shape</b> reads rows × columns.</p>
+    <b>shape</b> reads rows × columns, as this run wrote them.</p>
   <ol class="guide-steps">
     {% for step in guide.steps %}
     <li{% if step.changes_row_set %} class="changes-rows"{% endif %}>
@@ -242,7 +248,7 @@
         {% if measured and step.outputs | length == 1 %}
         {% set out = step.outputs[0] %}
         <p class="guide-step-rows"
-           title="What this step leaves behind: the rows its last stage produced, measured by this run, by the columns the pinned version declares for it">
+           title="What this step leaves behind, measured from the frame its last stage wrote: rows by columns">
           leaves {{ row_word(out.output_row_count) }}
           {%- if out.column_count is not none %} × {{ column_word(out.column_count) }}{% endif %}{{ mark }}</p>
         {% elif measured %}

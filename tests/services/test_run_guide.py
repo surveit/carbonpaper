@@ -6,6 +6,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import pandas as pd
 import pytest
 
 from app.models import parse_stage
@@ -14,7 +15,6 @@ from app.services.versioning import ReviewGuide
 from app.services import workspace
 from app.services.run_guide import (
     build_run_guide_view,
-    count_output_columns,
     find_guideless_version_id,
     list_written_columns,
 )
@@ -33,6 +33,8 @@ _FLAGGED = {"columns": [_DOC_ID, _FLAG]}
 _ATTACHED = {"columns": [_DOC_ID, _FLAG, _SOURCE]}
 
 _ROW_FUNCTION = {"kind": "inline", "code": "def transform(row):\n    return row\n"}
+
+_RUN_ID = "20260101T000000"
 
 # load_rows → add_flag → keep_flagged ─┐
 #                        load_sources ─┴→ attach_source
@@ -94,6 +96,18 @@ _COUNTS = {
 }
 
 
+# The frames such a run WROTE, as column labels. Wider than the stages declare:
+# `keep_flagged` and `attach_source` carry `note` through without naming it, which is
+# what makes the declared schema the wrong place to read a frame's width from.
+_WRITTEN_COLUMNS = {
+    "load_rows": ["doc_id", "note"],
+    "load_sources": ["doc_id", "source"],
+    "add_flag": ["doc_id", "note", "flag"],
+    "keep_flagged": ["doc_id", "note", "flag"],
+    "attach_source": ["doc_id", "note", "flag", "source"],
+}
+
+
 def _manifest(
     version_id: str,
     *,
@@ -103,13 +117,24 @@ def _manifest(
     ran = _STAGES if executed is None else [s for s in _STAGES if s["id"] in executed]
     measured = _COUNTS if counts is None else counts
     return {
+        "run_id": _RUN_ID,
         "workflow_version": version_id,
         "stage_records": [
             {"stage_id": s["id"], "status": "ok",
-             "output_row_count": measured.get(s["id"])}
+             "output_row_count": measured.get(s["id"]),
+             "output_path": f"outputs/{s['id']}.parquet"}
             for s in ran
         ],
     }
+
+
+def _write_run_outputs(project_dir: Path, *, columns: dict[str, list[str]] | None = None):
+    """The frames a run leaves on disk — real parquet, so the width is a measured one."""
+    outputs = project_dir / "runs" / _RUN_ID / "outputs"
+    outputs.mkdir(parents=True, exist_ok=True)
+    for stage_id, names in (columns if columns is not None else _WRITTEN_COLUMNS).items():
+        frame = pd.DataFrame({name: ["x"] * _COUNTS[stage_id] for name in names})
+        frame.to_parquet(outputs / f"{stage_id}.parquet", index=False)
 
 
 def _stages_by_id(view) -> dict:
@@ -325,24 +350,73 @@ def test_a_delta_is_taken_against_the_first_input_of_a_join(project_dir):
 
 # ── the other half of the shape: the columns ─────────────────────────────────
 
-def test_each_stage_carries_the_column_count_the_pinned_version_declares(project_dir):
-    view = build_run_guide_view("demo", _manifest(_version_with_guide(project_dir)))
+def test_each_stage_carries_the_column_count_of_the_frame_the_run_wrote(project_dir):
+    version_id = _version_with_guide(project_dir)
+    _write_run_outputs(project_dir)
+
+    view = build_run_guide_view("demo", _manifest(version_id))
 
     columns = {s.stage_id: s.column_count for s in _stages_by_id(view).values()}
     assert columns == {
-        "load_rows": 1, "load_sources": 2, "add_flag": 2,
-        "keep_flagged": 2, "attach_source": 3,
+        "load_rows": 2, "load_sources": 2, "add_flag": 3,
+        "keep_flagged": 3, "attach_source": 4,
     }
 
 
-def test_the_two_halves_of_the_shape_are_measured_apart(project_dir):
-    """The columns come off the version, so a stage the run never reached still has them."""
-    manifest = _manifest(_version_with_guide(project_dir), executed=["load_rows"])
-    view = build_run_guide_view("demo", manifest)
+def test_the_column_count_is_the_frames_width_not_the_declared_schemas(project_dir):
+    """`keep_flagged` declares doc_id + flag and wrote a `note` column besides."""
+    version_id = _version_with_guide(project_dir)
+    _write_run_outputs(project_dir)
+
+    view = build_run_guide_view("demo", _manifest(version_id))
+
+    kept = _stages_by_id(view)["keep_flagged"]
+    declared = len(kept.stage.resolve_output_schema().columns)
+    assert declared == 2
+    assert kept.column_count == 3
+
+
+def test_a_stage_whose_frame_is_missing_has_an_unknown_column_count(project_dir):
+    version_id = _version_with_guide(project_dir)
+    _write_run_outputs(project_dir)
+    (project_dir / "runs" / _RUN_ID / "outputs" / "attach_source.parquet").unlink()
+
+    view = build_run_guide_view("demo", _manifest(version_id))
 
     absent = _stages_by_id(view)["attach_source"]
-    assert absent.output_row_count is None
-    assert absent.column_count == 3
+    assert absent.column_count is None
+    assert absent.output_row_count == 4
+
+
+def test_an_unreadable_frame_leaves_the_column_count_unknown(project_dir):
+    version_id = _version_with_guide(project_dir)
+    _write_run_outputs(project_dir)
+    path = project_dir / "runs" / _RUN_ID / "outputs" / "add_flag.parquet"
+    path.write_bytes(b"not a parquet file")
+
+    view = build_run_guide_view("demo", _manifest(version_id))
+
+    assert _stages_by_id(view)["add_flag"].column_count is None
+
+
+def test_the_two_halves_of_the_shape_are_measured_apart(project_dir):
+    """The run wrote a frame for a stage its manifest holds no row count for."""
+    version_id = _version_with_guide(project_dir)
+    _write_run_outputs(project_dir)
+    manifest = _manifest(version_id)
+    manifest["stage_records"][4]["output_row_count"] = None
+
+    view = build_run_guide_view("demo", manifest)
+
+    half = _stages_by_id(view)["attach_source"]
+    assert half.output_row_count is None
+    assert half.column_count == 4
+
+
+def test_a_run_with_no_frames_on_disk_knows_no_column_counts(project_dir):
+    view = build_run_guide_view("demo", _manifest(_version_with_guide(project_dir)))
+
+    assert all(s.column_count is None for s in _stages_by_id(view).values())
 
 
 def test_a_stage_the_version_does_not_define_has_neither_half(project_dir):
@@ -455,16 +529,3 @@ def test_a_publish_stage_producing_nothing_writes_no_columns():
                      "code": "def transform(df, output_dir):\n    return df\n"},
     })
     assert list_written_columns(publish) == []
-
-
-def test_a_stage_declaring_no_output_schema_has_an_unknown_column_count():
-    """`None`, not 0 — a publish stage's frame is not a frame of no columns."""
-    publish = parse_stage({
-        "id": "write_it", "name": "Write it", "type": "publish",
-        "inputs": [{"id": "attach_source", "schema": _ATTACHED}],
-        "publish": {"format": "csv", "destination": "out/"},
-        "signature": {"form": "replaces"},
-        "function": {"kind": "inline",
-                     "code": "def transform(df, output_dir):\n    return df\n"},
-    })
-    assert count_output_columns(publish) is None
