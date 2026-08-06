@@ -1,7 +1,7 @@
 """The run stage panel's not-executed case: a stage the run's graph draws (the graph
 comes from the whole pinned version) but the run never executed, so its manifest holds
-no record for it. Its own module because app.web.routers.runs sits at the file-size
-ratchet's ceiling."""
+no record for it. Its own module because app.web.routers.runs and .run_stage both
+resolve their panel links through it."""
 
 from __future__ import annotations
 
