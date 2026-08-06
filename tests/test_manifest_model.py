@@ -13,6 +13,7 @@ from pydantic import ValidationError
 
 from app.core.run_status import RunStatus, StageStatus
 from app.models import parse_stage
+from app.runtime.context import RunContext
 from app.runtime.manifest import (
     RunManifest,
     StageContribution,
@@ -78,9 +79,9 @@ def test_minted_manifest_omits_the_run_level_optionals():
          }}
     )
     manifest = create_run_manifest(
-        [stage], run_id="r", project="p", workflow_version="v",
-        run_bindings={}, input_bindings={}, limits={}, offsets={}, bust_cache=False,
-        is_test_run=False)
+        [stage], RunContext(repo_root=None, run_dir=None),
+        run_id="r", project="p", workflow_version="v",
+        run_bindings={}, input_bindings={}, is_test_run=False)
     dumped = manifest.to_dict()
 
     assert dumped["status"] == RunStatus.RUNNING

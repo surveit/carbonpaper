@@ -80,6 +80,8 @@ def run_subset(
     workflow_version: str | None = None,
     identity: RunIdentity | None = None,
     is_test_run: bool = False,
+    limits: dict[str, int] | None = None,
+    offsets: dict[str, int] | None = None,
 ) -> dict[str, pd.DataFrame]:
     """Run only `stage_ids` of `workflow`, with `injected_outputs` seeded as the
     outputs of stages OUTSIDE the subset (their upstream is cut off — the output is
@@ -113,28 +115,35 @@ def run_subset(
     (`RunContext.for_stages_outside_a_run`): no identity, no cache access,
     `trace_links` unavailable to a publish stage.
     `is_test_run` is recorded on the manifest (`RunManifest.is_test_run`);
-    default False, so an ordinary subset run's manifest reads as a real run."""
+    default False, so an ordinary subset run's manifest reads as a real run.
+
+    `limits`/`offsets` are the per-stage row window a production run takes them as
+    (prepare_run) — for a stage with no inputs, the window is taken on the frame it
+    loads, so a source stage inside the subset reads the same rows an injected
+    slice would have given it. Recorded on the manifest, and every cut taken is
+    noted on the stage record."""
     by_id = workflow.index_stages_by_id()
     missing = [sid for sid in stage_ids if sid not in by_id]
     if missing:
         raise SubsetRunError(f"subset names stage(s) not in the workflow: {missing}")
     ordered = topological_sort([by_id[sid] for sid in stage_ids])
     (run_dir / "outputs").mkdir(parents=True, exist_ok=True)
+    ctx = _subset_ctx(repo_root, run_dir, queue_auto_approve, identity,
+                      limits=limits, offsets=offsets)
     manifest = create_run_manifest(
-        ordered, run_id=run_dir.name, project=project,
+        ordered, ctx, run_id=run_dir.name, project=project,
         workflow_version=workflow_version, run_bindings={}, input_bindings={},
-        limits={}, offsets={}, bust_cache=False, is_test_run=is_test_run)
+        is_test_run=is_test_run)
     write_manifest(run_dir, manifest)
     outputs: dict[str, pd.DataFrame] = dict(injected_outputs)
-    manifest = _execute_stages(
-        ordered, _subset_ctx(repo_root, run_dir, queue_auto_approve, identity),
-        manifest, run_dir, outputs)
+    manifest = _execute_stages(ordered, ctx, manifest, run_dir, outputs)
     _raise_if_run_failed(manifest)
     return outputs
 
 
 def _subset_ctx(
-    repo_root: Path, run_dir: Path, queue_auto_approve: bool, identity: RunIdentity | None
+    repo_root: Path, run_dir: Path, queue_auto_approve: bool, identity: RunIdentity | None,
+    *, limits: dict[str, int] | None = None, offsets: dict[str, int] | None = None,
 ) -> RunContext:
     # `identity` is what makes this a workflow test's run rather than a bare
     # subset: it grants project scope, read-only. Without it a subset run is keyed
@@ -145,9 +154,11 @@ def _subset_ctx(
     # through in memory instead.
     if identity is not None:
         return RunContext.for_workflow_test_run(
-            repo_root, run_dir, identity.project, identity.run_id)
+            repo_root, run_dir, identity.project, identity.run_id,
+            limits=limits, offsets=offsets)
     return RunContext.for_stages_outside_a_run(
-        repo_root, run_dir, queue_auto_approve=queue_auto_approve)
+        repo_root, run_dir, queue_auto_approve=queue_auto_approve,
+        limits=limits, offsets=offsets)
 
 
 def _raise_if_run_failed(manifest: RunManifest) -> None:

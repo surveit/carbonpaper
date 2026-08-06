@@ -208,14 +208,12 @@ def prepare_run(
     # provenance records in input_bindings.
     manifest = create_run_manifest(
         ordered,
+        ctx,
         run_id=run_id,
         project=project_dir.name,
         workflow_version=workflow_version,
         run_bindings={sid: dict(params) for sid, params in (bindings or {}).items()},
         input_bindings=input_records,
-        limits=limits,
-        offsets=offsets,
-        bust_cache=bust_cache,
         is_test_run=False,
     )
     write_manifest(run_dir, manifest)
