@@ -13,7 +13,9 @@ routers in `app/web/routers/`, which import the Runner (`app.runtime`) and the s
 - `/project/<m>/runs/<id>/queue/<stage>` — the human-review queue UI (+ `/decide`, `/resume`).
 
 ## The stage panel — three tabs (`run_stage_partial` → `_run_stage_panel.html`)
-**Data │ Schema │ Transform**, one flat strip; it opens on Transform:
+**Data │ Schema │ Transform**, one flat strip; it opens on Data — a reader arriving from
+the review guide, the graph or a deep link is checking the numbers this stage produced,
+and descends to the code when the numbers look wrong:
 - **Data** — what this run's stage produced: its output — rendered as a **diff against its
   input** where the stage type permits one (below) — then validation **as part of the
   output** (input + output issues from the manifest), then the upstream input previews with

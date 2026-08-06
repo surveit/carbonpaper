@@ -41,6 +41,21 @@
    (`24,797 rows`, `21 columns`) rather than pairing a measured number with a
    placeholder. `shape unknown` is worded, not punctuated, so nothing here can be
    misread as a measured 0. #}
+{# The frame WEDGED BETWEEN two stage rows: the output of the row above it, opened in
+   the stage panel — which opens on its Data. Labelled with the shape, so the reader
+   knows what they are about to open. It is an anchor of the same kind as the stage row
+   (`data-stage-link`), so the panel, the hash deep-link and the graph highlight are the
+   run view's own, unchanged. A stage id the version defines nothing for has no frame to
+   open, so it gets no link. #}
+{% macro frame_link(s) %}
+{%- if s.stage is not none %}
+<li class="guide-frame">
+  <a href="{{ links.guide_stage(s.stage_id) }}" data-stage-link="{{ s.stage_id }}"
+     title="Open the data at this point — the frame «{{ s.stage.name }}» left, as this run wrote it">{{ shape_words(s) | trim }}</a>
+</li>
+{%- endif %}
+{% endmacro %}
+
 {% macro shape_words(s) %}
 {%- if s.output_row_count is not none and s.column_count is not none -%}
 {{ "{:,}".format(s.output_row_count) }} × {{ s.column_count }}
@@ -178,6 +193,17 @@ shape unknown
                                 border-color: var(--warn-border); padding: 3px 6px;
                                 background: var(--warn-bg); color: var(--fg); }
 
+  /* The frame between two stages: a hairline across the rail with the shape on it,
+     linking the data the stage above left. The affordance for a reader who wants to
+     stop reading about the data and look at it. */
+  .guide-frame { display: flex; align-items: center; gap: 6px; }
+  .guide-frame::before, .guide-frame::after { content: ""; flex: 1 1 auto; height: 1px;
+                                              background: var(--border); }
+  .guide-frame a { font-size: 10px; color: var(--accent); text-decoration: none;
+                   font-variant-numeric: tabular-nums; white-space: nowrap;
+                   border-bottom: 1px dotted transparent; }
+  .guide-frame a:hover { border-bottom-color: var(--accent); }
+
   /* The measured shape, set apart at the end of the row: its own ground, its own rule,
      the change under it. Tinted only where the ROW count moved — a stage that dropped
      rows asks a different question of the reviewer than one that only widened. */
@@ -294,7 +320,7 @@ shape unknown
         <p class="guide-step-rows">{{ mark }}</p>
         {% endif %}
         <ul class="guide-stage-list">
-          {% for s in step.stages %}{{ guide_stage(s) }}{% endfor %}
+          {% for s in step.stages %}{{ guide_stage(s) }}{% if not loop.last %}{{ frame_link(s) }}{% endif %}{% endfor %}
         </ul>
       </div>
     </li>
@@ -306,7 +332,7 @@ shape unknown
     <p>The guide's author placed these stages outside the walkthrough, as carrying no
       judgement a reviewer could act on.</p>
     <ul class="guide-stage-list">
-      {% for s in guide.unnarrated %}{{ guide_stage(s) }}{% endfor %}
+      {% for s in guide.unnarrated %}{{ guide_stage(s) }}{% if not loop.last %}{{ frame_link(s) }}{% endif %}{% endfor %}
     </ul>
   </div>
   {% endif %}

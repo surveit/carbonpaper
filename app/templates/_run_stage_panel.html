@@ -63,9 +63,9 @@
 {# ── Tab bar ── #}
 <div class="stage-tabs">
     <div class="tabs">
-        <button data-tab="data">Data</button>
+        <button data-tab="data" class="active">Data</button>
         <button data-tab="schema">Schema</button>
-        <button data-tab="transform" class="active">Transform</button>
+        <button data-tab="transform">Transform</button>
     </div>
 </div>
 
@@ -98,7 +98,7 @@
   </div>
 
   {# ─────────── DATA (diff-aware output, then the input rows) ─────────── #}
-  <div class="pane" data-pane="data" hidden>
+  <div class="pane" data-pane="data">
     {# Stage-aware diff (app.web.stage_diff): a row_aligned diff or a
        filter_rows merged table REPLACES the plain preview below — same rows,
        annotated. diff is None for out-of-scope stage types and whenever
@@ -187,9 +187,11 @@
   root._wired = true;
 
   // ── tabs ──
-  // Opens on the transform: someone arriving from the review guide, the graph or a
-  // deep link is asking what this step DOES; the rows it produced are one click away.
-  let tab = 'transform';
+  // Opens on the data: someone arriving from the review guide, the graph or a deep
+  // link is checking the numbers this step produced; the code is what they descend
+  // to when the numbers look wrong. The markup opens the same pane, so the first
+  // paint needs no script.
+  let tab = 'data';
   function apply() {
     root.querySelectorAll('[data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
     root.querySelectorAll('.pane').forEach(p => { p.hidden = p.dataset.pane !== tab; });
