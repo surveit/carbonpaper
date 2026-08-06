@@ -16,9 +16,22 @@
     {# The description comes from the pinned definition, so a run whose version
        no longer resolves shows no line rather than a guessed one. #}
     {% if stage_def %}<p class="stage-id">{{ stage_def.description }}</p>{% endif %}
-    <p class="muted">{{ stage.elapsed_ms }} ms · {{ "{:,}".format(stage.output_row_count or 0) }} row{% if (stage.output_row_count or 0) != 1 %}s{% endif %}
-        {% if stage.llm_usage %}{% set u = stage.llm_usage %} · <span title="Token usage and estimated cost of this stage's model calls (input + output tokens summed over every row and retry; cost is the CLI's estimate).">{{ "{:,}".format(u.input_tokens) }} in / {{ "{:,}".format(u.output_tokens) }} out tokens · ~${{ "%.4f"|format(u.cost_usd) }} ({{ u.calls }} call{% if u.calls != 1 %}s{% endif %})</span>{% endif %}
+    <p class="muted">{{ stage.elapsed_ms | friendly_duration }} · {{ "{:,}".format(stage.output_row_count or 0) }} row{% if (stage.output_row_count or 0) != 1 %}s{% endif %}
         {% if stage.finished_at %} · finished {{ stage.finished_at | friendly_time }}{% endif %}</p>
+
+{# What the model cost this run. `calls` and `cost_usd` are the fields that hold up:
+   calls equals ceil(rows / batch_size) and cost tracks it. LlmUsage's token counts
+   do not agree with either and are not shown. #}
+{% if stage.llm_usage and stage.llm_usage.calls %}
+{% set u = stage.llm_usage %}
+<dl class="llm-stats">
+    {% if stage_def and stage_def.llm %}
+    <div><dt>model</dt><dd><code>{{ stage_def.llm.model }}</code></dd></div>
+    {% endif %}
+    <div><dt>calls</dt><dd>{{ "{:,}".format(u.calls) }}</dd></div>
+    <div><dt>cost</dt><dd>{{ u.cost_usd | usd }}</dd></div>
+</dl>
+{% endif %}
 </div>
 
 {# The stage definition comes from the version this run pinned; with
