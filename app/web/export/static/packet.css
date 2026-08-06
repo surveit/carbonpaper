@@ -33,19 +33,6 @@ body.packet .run-guide {
    never draws, and this is then the only route to a step page. */
 .packet-steps { font-size: 13.5px; margin: 10px 0 0; line-height: 2; }
 
-/* The section a reader must not skip: what the packet is NOT evidence of. */
-.packet-caveats {
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--muted);
-  border-radius: 6px;
-  background: var(--code-bg);
-  padding: 4px 20px 14px;
-  margin: 22px 0;
-}
-.packet-caveats h2 { font-size: 15px; margin-bottom: 4px; }
-.packet-caveats ul { margin: 0; padding-left: 18px; font-size: 14px; line-height: 1.65; }
-.packet-caveats li { margin-bottom: 7px; color: var(--muted); }
-
 .packet-note { font-size: 13px; margin: 4px 0 8px; max-width: 80ch; }
 .packet-num { text-align: right; font-variant-numeric: tabular-nums; }
 .packet-hash { font-size: 11px; word-break: break-all; }

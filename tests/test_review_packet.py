@@ -278,12 +278,6 @@ def test_index_names_the_input_file_and_its_hash(exported):
     assert re.search(r"[0-9a-f]{64}", index)
 
 
-def test_index_states_the_cache_caveat(exported):
-    """A cache-filled row's prompt is absent from events.jsonl; the packet says so."""
-    index = (exported.root / "index.html").read_text(encoding="utf-8")
-    assert "stage cache" in index
-
-
 def test_missing_output_file_is_reported_not_skipped(project_dir, tmp_path):
     """A missing output is named on the index, never dropped silently."""
     _make_project(project_dir)

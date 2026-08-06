@@ -80,7 +80,6 @@ def _write_index(
         mermaid=diagram,
         mermaid_url=MERMAID_URL,
         mermaid_sri=MERMAID_SRI,
-        diagram_source_href=WORKFLOW_DIAGRAM_FILE,
         node_script=f"{ASSETS_DIR}/{NODE_SCRIPT}",
         type_glyph=TYPE_GLYPH,
         type_class=TYPE_CLASS,

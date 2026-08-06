@@ -28,12 +28,6 @@
 <section>
   <h2>The workflow this run executed</h2>
   {% if mermaid %}
-  <p class="muted packet-note">Click a step to open it.
-    <strong>This diagram is the only thing in this packet that reaches the internet</strong> —
-    it draws with <a href="{{ mermaid_url }}">mermaid</a> from a CDN, pinned to one exact version
-    and checked against a hash, so a substituted file will not run. Open this folder with the
-    network off and you lose the picture and nothing else; the same flowchart is in
-    <a href="{{ diagram_source_href }}">{{ diagram_source_href }}</a> as text.</p>
   <pre class="mermaid">
 {{ mermaid }}
   </pre>
@@ -46,21 +40,6 @@
   </p>
 </section>
 {% endif %}
-
-<section class="packet-caveats">
-  <h2>What this packet cannot tell you</h2>
-  <ul>
-    <li><strong>Cached rows.</strong> Rows served from the stage cache were computed by an
-      <em>earlier</em> run, and the manifest does not record which one — so their model prompts are
-      not in this packet's <code>events.jsonl</code>. This run
-      {% if run.bust_cache %}<strong>bypassed the cache entirely</strong>, so every row was computed fresh{% else %}<strong>used the cache where it could</strong>, so an unknown number of rows were not recomputed{% endif %}.</li>
-    <li><strong>Row lineage.</strong> Which input row produced which output row is not recorded here,
-      so each step's rows carry no lineage link.</li>
-    <li><strong>Example results.</strong> A step's authored examples are not included. Running them
-      now would report today's code, not the code this run executed — a pass here would not be
-      evidence about this run.</li>
-  </ul>
-</section>
 
 {% if omitted %}
 <section>
