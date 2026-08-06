@@ -490,12 +490,25 @@ def test_the_refusal_reaches_through_intermediate_stages(tmp_path):
     assert "'load'" in str(exc.value)
 
 
-def test_a_publish_stage_may_not_be_unnarrated_either(tmp_path):
+def test_a_publish_stage_may_be_unnarrated_because_it_narrates_itself(tmp_path):
+    """The other half of the rule: `pub` does not carry work INTO the publishing."""
     vid = _published_version(tmp_path, publish_reads="mid")
     guide = _guide(tmp_path, vid, ["load", "mid", "checked"], ["pub"])
 
-    with pytest.raises(ReviewGuideValidationError, match="pub"):
-        save_version_guide(tmp_path, vid, guide)
+    saved = save_version_guide(tmp_path, vid, guide)
+
+    assert saved.unnarrated == ["pub"]
+
+
+def test_the_stage_feeding_publish_is_refused_where_publish_itself_is_allowed(tmp_path):
+    """Both halves in one place: the ancestor is the rule, the publish stage is not."""
+    vid = _published_version(tmp_path, publish_reads="mid")
+
+    save_version_guide(
+        tmp_path, vid, _guide(tmp_path, vid, ["load", "mid", "checked"], ["pub"]))
+    with pytest.raises(ReviewGuideValidationError, match="mid"):
+        save_version_guide(
+            tmp_path, vid, _guide(tmp_path, vid, ["load", "checked", "pub"], ["mid"]))
 
 
 def test_a_stage_reaching_no_publish_stage_may_still_be_unnarrated(tmp_path):

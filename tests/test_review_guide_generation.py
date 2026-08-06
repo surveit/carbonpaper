@@ -226,8 +226,9 @@ def test_the_task_labels_each_stage_with_whether_it_may_be_left_unnarrated() -> 
 
     assert "MUST BE NARRATED" in _duty_line(task, "load")
     assert "MUST BE NARRATED" in _duty_line(task, "double")
-    assert "MUST BE NARRATED" in _duty_line(task, "pub")
     assert "may be left unnarrated" in _duty_line(task, "audit")
+    # The publish stage narrates itself, so it carries the same label as the leaf.
+    assert "may be left unnarrated" in _duty_line(task, "pub")
 
 
 def test_the_labels_come_from_the_walk_the_validator_refuses_on() -> None:
