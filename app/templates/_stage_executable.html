@@ -34,29 +34,13 @@
 {% if stage.llm %}
 <section class="exec-block">
     <h2>✨ LLM call</h2>
-    <dl class="kv">
-        <dt>model</dt><dd><code>{{ stage.llm.model }}</code></dd>
-        <dt>temperature</dt><dd>{{ stage.llm.temperature }}</dd>
-        <dt>response_format</dt><dd>{{ stage.llm.response_format }}</dd>
-        {% if stage.llm.max_retries is defined %}<dt>max_retries</dt><dd>{{ stage.llm.max_retries }}</dd>{% endif %}
-        <dt>tools</dt><dd>
-            {% if stage.llm.tools %}
-                {% for t in stage.llm.tools %}<code>{{ t }}</code>{% if not loop.last %}, {% endif %}{% endfor %}
-                <span class="muted">— not supported by the live backend; this stage fails at run time</span>
-            {% else %}
-                <span class="muted">none — blind completion from training knowledge</span>
-            {% endif %}
-        </dd>
-    </dl>
-    <h3>prompt instructions</h3>
-    <pre class="prompt">{{ stage.llm.prompt_instructions }}</pre>
-    <h3>prompt data template</h3>
-    <pre class="prompt">{{ stage.llm.prompt_data_template }}</pre>
+    {# Reply schema first, prompt second, settings last: a reviewer's first question
+       is how much of the data this stage can touch, and the reply schema bounds it. #}
     {# The reply spec the runtime compiles the model's response format from —
        stage.llm_reply_schema() is that exact object, not a rebuilt copy. #}
     {% set reply_schema = stage.llm_reply_schema() %}
     {% if reply_schema %}
-    <h3>expected reply schema</h3>
+    <h3>the model may only return</h3>
     <p class="muted">What the model must return per row: the output schema minus the input
         schema — the columns this stage adds. Input columns are rejoined by the runtime and
         are not part of the reply.{% if stage.llm.batch_size and stage.llm.batch_size > 1 %}
@@ -65,6 +49,10 @@
         <code>row_number</code> it was shown, which rejoins it to its row.{% endif %}</p>
     {{ schema_table(reply_schema) }}
     {% endif %}
+    <h3>what the model is asked</h3>
+    <pre class="prompt">{{ stage.llm.prompt_instructions }}</pre>
+    <h3>what it sees, per row</h3>
+    <pre class="prompt">{{ stage.llm.prompt_data_template }}</pre>
     {% if llm_example %}
     <details {% if llm_example.error %}{% else %}open{% endif %}>
         <summary>Example rendered prompt (first input row{% if llm_example.source_id %} from <code>{{ llm_example.source_id }}</code>{% endif %})</summary>
@@ -81,6 +69,21 @@
         <pre class="yaml-block">{{ stage.llm.rubric | tojson(indent=2) }}</pre>
     </details>
     {% endif %}
+    <h3>settings</h3>
+    <dl class="kv">
+        <dt>model</dt><dd><code>{{ stage.llm.model }}</code></dd>
+        <dt>temperature</dt><dd>{{ stage.llm.temperature }}</dd>
+        <dt>response_format</dt><dd>{{ stage.llm.response_format }}</dd>
+        {% if stage.llm.max_retries is defined %}<dt>max_retries</dt><dd>{{ stage.llm.max_retries }}</dd>{% endif %}
+        <dt>tools</dt><dd>
+            {% if stage.llm.tools %}
+                {% for t in stage.llm.tools %}<code>{{ t }}</code>{% if not loop.last %}, {% endif %}{% endfor %}
+                <span class="muted">— not supported by the live backend; this stage fails at run time</span>
+            {% else %}
+                <span class="muted">none — blind completion from training knowledge</span>
+            {% endif %}
+        </dd>
+    </dl>
 </section>
 {% endif %}
 

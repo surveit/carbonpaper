@@ -76,6 +76,38 @@ def _time_element(v: object, attrs: str) -> Markup:
     return Markup(f'<time datetime="{escape(iso)}"{attrs}>{escape(iso)}</time>')
 
 
+def friendly_duration(v: object) -> str:
+    """Milliseconds as read-at-a-glance time: 834 ms, 42s, 29m 34s, 1h 12m."""
+    if v is None or v == "":
+        return ""
+    ms = int(read_number(v, "friendly_duration"))
+    if ms < 1000:
+        return f"{ms} ms"
+    seconds = round(ms / 1000)
+    if seconds < 60:
+        return f"{seconds}s"
+    minutes, seconds = divmod(seconds, 60)
+    if minutes < 60:
+        return f"{minutes}m {seconds}s"
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours}h {minutes}m"
+
+
+def usd(v: object) -> str:
+    """Dollars at a precision that survives rounding: $13.14, but $0.0032 under a cent."""
+    if v is None or v == "":
+        return ""
+    amount = read_number(v, "usd")
+    return f"${amount:.4f}" if 0 < amount < 0.01 else f"${amount:,.2f}"
+
+
+def read_number(v: object, filter_name: str) -> float:
+    """A template value as a number, or a raise naming the filter that got handed junk."""
+    if isinstance(v, bool) or not isinstance(v, (int, float, str)):
+        raise TypeError(f"{filter_name} got {type(v).__name__}, which is not a number")
+    return float(v)
+
+
 def plain_value(v: object) -> str:
     # Bare `{{ x }}` on an Enum renders "StageType.input_data".
     return str(v.value) if isinstance(v, Enum) else ("" if v is None else str(v))
@@ -83,4 +115,6 @@ def plain_value(v: object) -> str:
 
 templates.env.filters["friendly_time"] = friendly_time
 templates.env.filters["relative_time"] = relative_time
+templates.env.filters["friendly_duration"] = friendly_duration
+templates.env.filters["usd"] = usd
 templates.env.filters["plain_value"] = plain_value

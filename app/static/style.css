@@ -398,6 +398,40 @@ table.stages a { text-decoration: none; }
 .stage-header h1 { margin: 0; }
 .stage-id { color: var(--muted); margin: 0; flex-basis: 100%; }
 
+/* What a stage's model calls cost, on the run panel. flex-basis pushes it onto its
+   own line inside .stage-header's baseline row. */
+dl.llm-stats {
+    display: flex;
+    flex-basis: 100%;
+    flex-wrap: wrap;
+    gap: 0;
+    margin: 4px 0 0;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    overflow: hidden;
+}
+dl.llm-stats > div {
+    flex: 1 1 auto;
+    min-width: 104px;
+    padding: 8px 12px;
+    border-right: 1px solid var(--border);
+}
+dl.llm-stats > div:last-child { border-right: 0; }
+dl.llm-stats dt {
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 3px;
+}
+dl.llm-stats dd {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+dl.llm-stats dd code { font-size: 13px; font-weight: 500; }
+
 .notes-block {
     background: var(--warn-bg);
     border-left: 4px solid var(--warn-border);
