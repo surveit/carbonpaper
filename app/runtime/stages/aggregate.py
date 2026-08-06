@@ -107,15 +107,17 @@ def _grouped_value(slice_df: pd.DataFrame, group_by: list[str], op: AggregationO
 
 
 def _whole_frame_value(slice_df: pd.DataFrame, op: AggregationOp) -> Any:
-    """Each formula over the slice, an EMPTY slice reported rather than the group going missing."""
+    """Each formula over the slice; an EMPTY slice is null, whatever the formula."""
+    if slice_df.empty:
+        # 0 is an outcome — it claims something was measured and found to be
+        # none. Nothing was measured here, so the honest answer is absence.
+        # This is also what the grouped path emits: a group no row survived is
+        # missing from that aggregation's partial, and the outer merge fills it
+        # null. Emptiness is emptiness whether it came from a `where` that
+        # admitted no row or from an input frame that held none.
+        return np.nan
     if op.formula == AGG_FORMULA_COUNT:
         return len(slice_df)
-    # With no group keys the one group is declared by the config rather than
-    # found in the data, so it exists however few rows survive this
-    # aggregation's `where` — zero included, an empty input frame included.
-    # count and count_distinct therefore report 0, sum 0 (the empty sum), list
-    # [], and mean/min/max/first null, which is what undefined over no rows is.
-    # None of them fills in a value the rows do not carry.
     values = slice_df[_value_column(op)]
     if op.formula in {"sum", "mean", "min", "max"}:
         return getattr(values, op.formula)()
@@ -131,7 +133,7 @@ def _whole_frame_value(slice_df: pd.DataFrame, op: AggregationOp) -> Any:
 def _first_present(values: pd.Series) -> Any:
     """Matches groupby.first(): the first NON-null value, null where the slice holds none."""
     present = values.dropna()
-    return present.iloc[0] if len(present) else None
+    return present.iloc[0] if len(present) else np.nan
 
 
 def _value_column(op: AggregationOp) -> str:

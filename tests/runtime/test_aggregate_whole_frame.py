@@ -116,35 +116,54 @@ def test_a_count_is_a_whole_number():
 
 
 # ---- The empty input frame -------------------------------------------------
-# One row, not zero. With no group keys the group is declared by the config
-# rather than found in the data, so it exists whatever the input holds, and a
-# stage that publishes "how many filings named X" answers 0 instead of vanishing
-# and leaving a downstream publish with nothing. Each formula reports its value
-# over an empty slice; none of them fills in a figure the rows do not carry.
+# One row, not zero: with no group keys the group is declared by the config
+# rather than found in the data, so it exists whatever the input holds. Every
+# figure in it is NULL — 0 is an outcome, claiming something was measured and
+# found to be none, and nothing was measured here.
 
 def test_an_empty_input_still_emits_exactly_one_row():
     assert len(_run(_ALL_FORMULAS, _ALL_PRODUCES, _EMPTY)) == 1
 
 
-@pytest.mark.parametrize("column,expected", [
-    ("total", 0),        # the empty sum
-    ("n_rows", 0),
-    ("n_firms", 0),
-    ("all_amts", []),
-])
-def test_a_counting_formula_over_no_rows_reports_zero(column, expected):
-    assert _all_formulas(_EMPTY)[column] == expected
-
-
-@pytest.mark.parametrize("column", ["avg", "lowest", "highest", "first_firm"])
-def test_an_undefined_formula_over_no_rows_reports_null(column):
-    # Undefined over nothing, so null — never a 0 that would read as a measurement.
+@pytest.mark.parametrize("column", [op["output_column"] for op in _ALL_FORMULAS])
+def test_every_formula_over_an_empty_input_reports_null(column):
+    # Counting formulas included: `count` of nothing is absent, not 0.
     assert pd.isna(_all_formulas(_EMPTY)[column])
 
 
-def test_a_where_that_admits_no_row_reports_the_same_as_an_empty_input():
+def test_a_where_that_admits_no_row_reports_null_too():
     none_pass = {"output_column": "big_n", "formula": "count", "where": "amt > 999"}
-    assert _run([none_pass], [_BIG_N_COL]).iloc[0]["big_n"] == 0
+    # Emptiness is emptiness — a predicate that admitted nothing reads the same
+    # as an input that held nothing, and neither reads as a measured zero.
+    assert pd.isna(_run([none_pass], [_BIG_N_COL]).iloc[0]["big_n"])
+
+
+def test_an_empty_slice_matches_what_the_grouped_path_emits_for_that_group():
+    none_pass = {"output_column": "big_n", "formula": "count", "where": "amt > 999"}
+    # The discriminating check: one constant group key makes the grouped path
+    # emit exactly one row too, so the two paths are directly comparable. The
+    # grouped path drops a group no row survived from that aggregation's partial
+    # and the outer merge fills it null; the whole-frame path must agree.
+    total = {"output_column": "total", "formula": "sum", "value_column": "amt"}
+    produces = [{"name": "total", "type": "int", "nullable": True}, _BIG_N_COL]
+    whole = _run([total, none_pass], produces).iloc[0]
+
+    amt = [c for c in _IN_SCHEMA["columns"] if c["name"] == "amt"]
+    key = {"name": "k", "type": "str", "nullable": False}
+    grouped = parse_stage({
+        "id": "agg", "type": "aggregate", "name": "agg",
+        "inputs": [{"id": "filings", "schema": {"columns": [*_IN_SCHEMA["columns"], key]}}],
+        "signature": {
+            "form": "replaces",
+            "reads": [{"input": "filings", "columns": [*amt, key]}],
+            "produces": [key, *produces]},
+        "aggregate": {"group_by": ["k"], "aggregations": [total, none_pass]},
+    })
+    ctx = RunContext.for_stages_outside_a_run(repo_root=None, run_dir=None)
+    by_group = handle_aggregate(grouped, {"filings": FILINGS.assign(k="all")}, ctx).iloc[0]
+
+    assert whole["total"] == by_group["total"]
+    assert pd.isna(whole["big_n"]) and pd.isna(by_group["big_n"])
 
 
 # ---- Lineage ---------------------------------------------------------------
