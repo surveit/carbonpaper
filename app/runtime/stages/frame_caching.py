@@ -8,13 +8,14 @@ from typing import NamedTuple
 import pandas as pd
 
 from app.models import Stage
+from app.models.run_manifest import StageContribution
 
 from app.core.errors import FrameNotSerializableError
 from app.core.frames import is_frame_store_configured
 from app.core.stage_cache import ReadOnlyStageCache, StageCache
 
 from ..context import RunContext
-from ..manifest import CONTRIBUTION_ATTR, StageContribution
+from ..manifest import CONTRIBUTION_ATTR
 
 
 class StageCacheKey(NamedTuple):

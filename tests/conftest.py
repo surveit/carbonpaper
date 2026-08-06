@@ -7,14 +7,15 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+from app.core.stage_cache import ReadOnlyStageCache
+from app.models import Stage
+from app.models.run_manifest import StageContribution
+from app.models.run_parameters import RunParameters
 from app.runtime.context import (
     RunContext,
     RunIdentity,
 )
-from app.runtime.manifest import CONTRIBUTION_ATTR, StageContribution, load_manifest_model
-from app.runtime.run_parameters import RunParameters
-from app.core.stage_cache import ReadOnlyStageCache
-from app.models import Stage
+from app.runtime.manifest import CONTRIBUTION_ATTR, load_manifest_model
 from app.services.versioning import load_version_stages, resolve_version_id
 
 

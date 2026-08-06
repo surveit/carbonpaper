@@ -16,11 +16,8 @@ from app.core.errors import NoVersionToRunError, StageOutputMissing
 from app.core.frames import list_rows, read_frame_file, render_frame_as_csv_text
 from app.models import Stage, StageType
 from app.models.stages.llm_transform import LLMTransformStage
-from app.runtime.manifest import (
-    load_manifest_model,
-    records_a_test_run,
-    resolve_output_path,
-)
+from app.models.run_manifest import records_a_test_run
+from app.runtime.manifest import load_manifest_model, resolve_output_path
 from app.services.run import resolve_version
 from app.services.loader import CompiledStageFile, load_compiled_dir
 from app.services.versioning import list_versions, load_version_stages

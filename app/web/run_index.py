@@ -8,7 +8,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, ValidationError
 
-from app.runtime.manifest import RunManifest
+from app.models.run_manifest import RunManifest
 from app.web.loading import load_manifest_model, runs_dir
 from app.web.run_header import (
     VersionNote,

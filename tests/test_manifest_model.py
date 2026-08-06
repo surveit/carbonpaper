@@ -13,12 +13,9 @@ from pydantic import ValidationError
 
 from app.core.run_status import RunStatus, StageStatus
 from app.models import parse_stage
+from app.models.run_manifest import RunManifest, StageContribution
 from app.runtime.context import RunContext
-from app.runtime.manifest import (
-    RunManifest,
-    StageContribution,
-    create_run_manifest,
-)
+from app.runtime.manifest import create_run_manifest
 
 GOLDENS = Path(__file__).parent / "goldens"
 

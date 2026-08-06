@@ -6,7 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.runtime.context import RunContext, RunIdentity
-from app.runtime.run_parameters import RunParameters
+from app.models.run_parameters import RunParameters
 from app.core.stage_cache import StageCacheEntry
 
 

@@ -16,6 +16,7 @@ import pandas as pd
 from app.core.frames import write_frame_file_with_csv_fallback
 from app.core.predicate import parse_predicate
 from app.models import Stage
+from app.models.run_manifest import QueueStats, StageContribution
 from app.models.stages.human_review_queue import (
     HumanReviewQueueStage,
     QueueConfig,
@@ -24,7 +25,6 @@ from app.models.stages.human_review_queue import (
 from app.core.stage_cache import compute_row_fingerprint
 
 from ..context import RunContext
-from ..manifest import QueueStats, StageContribution
 from ..errors import HaltForReview
 from .execution import ROW_DEFERRED_KEY, Row, RowMapper, narrow_stage
 

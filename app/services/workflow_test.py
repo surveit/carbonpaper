@@ -15,7 +15,7 @@ from app.core.errors import NoWorkflowTestSourceError, NoWorkflowTestVersionErro
 from app.models import Stage, StageType, Workflow
 from app.runtime.context import RunContext, RunIdentity
 from app.runtime.executor import run_subset, topological_sort
-from app.runtime.run_parameters import RunParameters
+from app.models.run_parameters import RunParameters
 from app.runtime.stages.input_data import read_input_data
 from app.services.versioning import list_versions, load_version, load_version_stages
 from app.services.workspace import repo_root, resolve_project_dir, resolve_run_dir

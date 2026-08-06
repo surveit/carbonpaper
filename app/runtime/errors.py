@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .manifest import StageContribution
+from app.models.run_manifest import StageContribution
 
 
 class HaltForReview(Exception):

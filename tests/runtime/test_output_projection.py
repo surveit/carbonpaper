@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 
 from app.models import parse_stage, Stage
-from app.runtime.manifest import StageContribution
+from app.models.run_manifest import StageContribution
 from app.runtime.stages.execution import _project_onto_declared_columns
 
 

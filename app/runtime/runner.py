@@ -17,12 +17,12 @@ from pydantic import ValidationError as PydanticValidationError
 from app.core.errors import MissingInputBindingError
 from app.core.frames import read_frame_file
 from app.models import Stage, StageType
+from app.models.run_parameters import RunParameters
 from app.models.stages.input_data import Connector, InputDataStage
 from app.core.run_status import StageStatus
 
 from .context import RunContext
 from .executor import _execute_stages, topological_sort
-from .run_parameters import RunParameters
 from .manifest import (
     create_run_manifest,
     load_manifest_model,

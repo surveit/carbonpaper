@@ -25,11 +25,11 @@ from app.models import (
     stage_to_spec_dict,
 )
 from app.models.review_guide import ReviewGuideDraft
+from app.models.run_manifest import records_a_test_run
 from app.services.versioning import ReviewGuide
 from app.core.persistence import PersistedModel, PersistenceScope
 from app.core.run_status import RunStatus
 from app.services import data_model, node_review, stage_edit, versioning, workspace
-from app.services import run as run_service
 from app.services.loader import (
     load_compiled_dir,
     load_workflow,
@@ -186,12 +186,12 @@ def _load_compiled_stages(pdir: Path) -> list[dict[str, Any]]:
 def _runs_summary(pdir: Path) -> RunsSummary:
     """Summarise the project's runs/ dir into a RunsSummary (n / awaiting_review /
     latest_status) — NON-TEST runs only, so a workflow test (a real run under the
-    same runs/ dir, but marked `is_test_run: true` — see RunManifest.is_test_run)
+    same runs/ dir, but marked `is_test_run: true` — see RunParameters.is_test_run)
     never counts as, or masquerades as, the project's latest production run.
 
-    Mirrors loading.list_runs exactly: a run is a child dir of runs/ WITH a readable
-    manifest.json; dirs lacking one (partial / legacy-output-only) are not counted,
-    so n is the count of real non-test runs, never inflated. `awaiting_review`
+    A run is a child dir of runs/ WITH a readable manifest.json; dirs lacking one
+    (partial / legacy-output-only) are not counted, so n is the count of real
+    non-test runs, never inflated. `awaiting_review`
     counts non-test runs whose status is 'awaiting_review' (halted at a
     human_review_queue) — the driver of the "review the run" rung of the ladder.
     `latest_status` is the newest non-test run's status (runs are timestamp-id'd,
@@ -213,7 +213,7 @@ def _runs_summary(pdir: Path) -> RunsSummary:
         try:
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             status = manifest.get("status", "unknown")
-            is_test_run = run_service.reads_as_test_run(manifest)
+            is_test_run = records_a_test_run(manifest)
         except json.JSONDecodeError:
             status = "corrupt"
             is_test_run = False
