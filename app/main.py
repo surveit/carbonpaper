@@ -13,6 +13,7 @@ from typing import AsyncIterator
 from fastapi import FastAPI
 from starlette.routing import Route
 
+from app.core.logging_config import configure_app_logging
 from app.core.store_config import configure_default_stores
 from app.seeds.seed import seed_demo_data_if_enabled
 from app.web.config import (
@@ -34,6 +35,9 @@ from app.agents.compiler import config as _editing_agent_config  # noqa: F401
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    # Without this an app INFO record goes nowhere: uvicorn's own dictConfig
+    # leaves the root logger at WARNING with no handler attached.
+    configure_app_logging()
     # Guarded inside configure_default_stores, so a store configured ahead of
     # time (the test suite's autouse fixtures) wins over the on-disk defaults —
     # the app never reconfigures a store that's already set.
