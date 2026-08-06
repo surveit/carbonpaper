@@ -442,6 +442,85 @@ def test_save_version_guide_reports_every_offending_id_at_once(tmp_path):
     assert "ghost" in message and "tally" in message and "load" in message
 
 
+# ── `unnarrated` may not hide a stage the published files carry ──────────────
+# The escape hatch a guide author reaches for when a stage will not fit a section.
+# A stage feeding publish is one a reader may have to check to trust a published
+# figure, so it must be narrated; a stage reaching no publish stage still may not be.
+
+def _published_version(project_dir: Path, publish_reads: str) -> str:
+    """A four-stage version: load -> mid -> {`checked`, publish}, so both cases exist."""
+    stages: list[dict] = [
+        _LOAD_STAGE,
+        {"id": "mid", "description": "Middle", "type": "python_frame_function",
+         "inputs": [{"id": "load", "schema": _ROWS_SCHEMA}],
+         "function": {"kind": "inline", "code": "def transform(df): return df"},
+         "signature": {"form": "replaces", "produces": _ROWS_SCHEMA["columns"]}},
+        {"id": "checked", "description": "Assert something", "type": "python_frame_function",
+         "inputs": [{"id": "mid", "schema": _ROWS_SCHEMA}],
+         "function": {"kind": "inline", "code": "def transform(df): return df"},
+         "signature": {"form": "replaces", "produces": _ROWS_SCHEMA["columns"]}},
+        {"id": "pub", "description": "Publish", "type": "publish",
+         "inputs": [{"id": publish_reads, "schema": _ROWS_SCHEMA}],
+         "publish": {"format": "csv"},
+         "function": {"kind": "inline",
+                      "code": "def transform(df, output_dir, trace_links): return df"},
+         "signature": {"form": "replaces"}},
+    ]
+    return create_version_from_stages(
+        project_dir, stages, message="published", reviewer="ada",
+    ).version_id
+
+
+def test_save_version_guide_refuses_an_unnarrated_stage_that_feeds_publish(tmp_path):
+    vid = _published_version(tmp_path, publish_reads="mid")
+    guide = _guide(tmp_path, vid, ["load", "checked", "pub"], ["mid"])
+
+    with pytest.raises(ReviewGuideValidationError, match="mid"):
+        save_version_guide(tmp_path, vid, guide)
+    assert find_latest_review_guide(tmp_path.name, vid) is None
+
+
+def test_the_refusal_reaches_through_intermediate_stages(tmp_path):
+    """`load` is two hops from publish, and is as load-bearing as the stage feeding it."""
+    vid = _published_version(tmp_path, publish_reads="mid")
+    guide = _guide(tmp_path, vid, ["mid", "checked", "pub"], ["load"])
+
+    with pytest.raises(ReviewGuideValidationError) as exc:
+        save_version_guide(tmp_path, vid, guide)
+    assert "'load'" in str(exc.value)
+
+
+def test_a_publish_stage_may_not_be_unnarrated_either(tmp_path):
+    vid = _published_version(tmp_path, publish_reads="mid")
+    guide = _guide(tmp_path, vid, ["load", "mid", "checked"], ["pub"])
+
+    with pytest.raises(ReviewGuideValidationError, match="pub"):
+        save_version_guide(tmp_path, vid, guide)
+
+
+def test_a_stage_reaching_no_publish_stage_may_still_be_unnarrated(tmp_path):
+    """The carve-out, kept on purpose: `checked` asserts something and feeds nothing
+    published."""
+    vid = _published_version(tmp_path, publish_reads="mid")
+    guide = _guide(tmp_path, vid, ["load", "mid", "pub"], ["checked"])
+
+    saved = save_version_guide(tmp_path, vid, guide)
+
+    assert find_latest_review_guide(tmp_path.name, vid).id == saved.id
+    assert saved.unnarrated == ["checked"]
+
+
+def test_the_refusal_names_every_hidden_stage_and_says_why(tmp_path):
+    vid = _published_version(tmp_path, publish_reads="mid")
+    guide = _guide(tmp_path, vid, ["checked", "pub"], ["load", "mid"])
+
+    with pytest.raises(ReviewGuideValidationError) as exc:
+        save_version_guide(tmp_path, vid, guide)
+    message = str(exc.value)
+    assert "'load'" in message and "'mid'" in message
+    assert "reaches a publish stage" in message and "Narrate each in a section" in message
+
+
 # ── the data sentence: required to WRITE a guide, optional in the store ──────
 
 def _guide_with_data_descriptions(

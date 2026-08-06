@@ -15,7 +15,7 @@ from pydantic import Field, ValidationError
 from app.core.errors import DocumentNotFound, NoVersionToRunError, ReviewGuideValidationError
 from app.models import STAGE_SPEC_SCHEMA_VERSION, Coverage, Stage, stage_to_spec_dict
 from app.models.review_guide import ReviewGuideStep
-from app.models.workflow import parse_workflow
+from app.models.workflow import find_stages_reaching_publish, parse_workflow
 from app.core.persistence import PersistedModel, PersistenceScope, get_store
 from app.core.utils import format_errors
 from app.services import node_review
@@ -196,10 +196,26 @@ def validate_review_guide(guide: ReviewGuide, stages: list[Stage]) -> None:
     """Raises ReviewGuideValidationError naming every offending stage id and section."""
     refusals = [
         *_describe_stage_mismatch(guide, stages),
+        *_describe_unnarrated_stages_reaching_publish(guide, stages),
         *_describe_sections_missing_data_description(guide),
     ]
     if refusals:
         raise ReviewGuideValidationError(" ".join(refusals))
+
+
+def _describe_unnarrated_stages_reaching_publish(
+    guide: ReviewGuide, stages: list[Stage]
+) -> list[str]:
+    hidden = sorted(set(guide.unnarrated) & find_stages_reaching_publish(stages))
+    if not hidden:
+        return []
+    return [
+        f"stage(s) listed unnarrated whose output reaches a publish stage: {hidden} — "
+        "each one's work is carried into the published files, so a reader checking a "
+        "published figure may have to check it, and leaving it out of the walkthrough "
+        "hides it. Narrate each in a section. `unnarrated` is only for a stage that "
+        "reaches NO publish stage."
+    ]
 
 
 def _describe_stage_mismatch(guide: ReviewGuide, stages: list[Stage]) -> list[str]:

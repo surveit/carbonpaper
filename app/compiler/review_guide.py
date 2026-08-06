@@ -15,7 +15,7 @@ from app.core.agent.turns import default_turn_manager
 from app.core.errors import GenerationError, ReviewGuideValidationError
 from app.models import Stage, stage_to_json
 from app.models.review_guide import ReviewGuideDraft
-from app.models.workflow import sort_stages_by_dependency
+from app.models.workflow import find_stages_reaching_publish, sort_stages_by_dependency
 
 # What the journalist's click asks for; the version's stages and the methodology
 # document follow it in the task, and it is what the session shows as their message.
@@ -98,6 +98,19 @@ def render_guide_task(stages: list[Stage], version_id: str, document: str) -> st
 def _render_stages(stages: list[Stage]) -> str:
     ordered = sort_stages_by_dependency(stages)
     by_id = {stage.id: stage for stage in stages}
+    # Each stage is LABELLED with whether it may be left unnarrated, from the same
+    # find_stages_reaching_publish the validator refuses on — so the model reads the
+    # answer instead of topologically sorting an inputs list in prose, and the label
+    # it is given can never contradict the rule it is judged by.
+    reaching = find_stages_reaching_publish(stages)
     return "\n\n".join(
-        f"Stage `{draft.id}`:\n{stage_to_json(by_id[draft.id])}" for draft in ordered
+        f"Stage `{draft.id}` — {_narration_duty(draft.id in reaching)}:\n"
+        f"{stage_to_json(by_id[draft.id])}"
+        for draft in ordered
     )
+
+
+def _narration_duty(reaches_publish: bool) -> str:
+    if reaches_publish:
+        return "MUST BE NARRATED (its output reaches a publish stage)"
+    return "may be left unnarrated (its output reaches no publish stage)"

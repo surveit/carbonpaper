@@ -137,6 +137,26 @@ def validate_publish_is_terminal(stages: list[Stage]) -> list[str]:
     ]
 
 
+def find_stages_reaching_publish(stages: Sequence[Stage]) -> set[str]:
+    """Ids of every stage whose output reaches a publish stage, the publish stages included."""
+    inputs_of = {stage.id: stage.input_ids for stage in stages}
+    reaching: set[str] = set()
+    # Walked BACKWARD from the publish stages along `input_ids`, so a stage any number
+    # of hops upstream is found. A publish stage is terminal (validate_publish_is_terminal),
+    # so its ancestors are exactly the stages whose work the published files carry.
+    frontier = [s.id for s in stages if s.type == StageType.publish]
+    while frontier:
+        stage_id = frontier.pop()
+        if stage_id in reaching:
+            continue
+        reaching.add(stage_id)
+        # Indexed, not `.get`: an id that resolves to no stage is a broken graph
+        # parse_workflow already refuses, and silently treating it as a dead end
+        # would UNDER-report reachability — the unsafe direction for a guard.
+        frontier.extend(inputs_of[stage_id])
+    return reaching
+
+
 def graph_issues(stages: list[Stage]) -> list[str]:
     """Every cross-stage problem in the workflow graph: duplicate ids, dangling
     inputs, a cycle, an edge reading a publish stage, and any edge whose declared

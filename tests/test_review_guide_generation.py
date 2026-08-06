@@ -20,6 +20,7 @@ from app.core.agent.store import SessionStore
 from app.core.agent.turns import TurnManager
 from app.core.errors import GenerationError, ReviewGuideValidationError
 from app.main import app
+from app.models import find_stages_reaching_publish, parse_stage
 from app.models.review_guide import ReviewGuideDraft, ReviewGuideStep
 from app.services import versioning, workspace
 from app.services import project as project_service
@@ -197,6 +198,49 @@ def test_render_guide_task_carries_the_request_the_document_and_the_stages(
     # In execution order, and carrying the code the reviewer would be judging.
     assert task.index("Stage `load`") < task.index("Stage `double`")
     assert "row['amount'] * 2" in task
+
+
+def _published_stages() -> list:
+    """load -> double -> publish, plus `audit` off `load` reaching no publish stage."""
+    audit = {**_TRIPLE, "id": "audit", "description": "Audit"}
+    publish = {
+        "id": "pub", "description": "Publish", "type": "publish",
+        "inputs": [{"id": "double", "schema": _DOUBLED}],
+        "publish": {"format": "csv"}, "signature": {"form": "replaces"},
+        "function": {"kind": "inline",
+                     "code": "def transform(df, output_dir, trace_links): return df"},
+    }
+    return [parse_stage(s) for s in (_LOAD, _DOUBLE, audit, publish)]
+
+
+def _duty_line(task: str, stage_id: str) -> str:
+    [line] = [ln for ln in task.splitlines() if ln.startswith(f"Stage `{stage_id}`")]
+    return line
+
+
+def test_the_task_labels_each_stage_with_whether_it_may_be_left_unnarrated() -> None:
+    """The model reads the answer instead of topologically sorting an inputs list."""
+    task = compiler_review_guide.render_guide_task(
+        _published_stages(), "20260101T000000", "Double the amount."
+    )
+
+    assert "MUST BE NARRATED" in _duty_line(task, "load")
+    assert "MUST BE NARRATED" in _duty_line(task, "double")
+    assert "MUST BE NARRATED" in _duty_line(task, "pub")
+    assert "may be left unnarrated" in _duty_line(task, "audit")
+
+
+def test_the_labels_come_from_the_walk_the_validator_refuses_on() -> None:
+    """One function, so a label can never say optional where the validator would refuse."""
+    stages = _published_stages()
+    task = compiler_review_guide.render_guide_task(
+        stages, "20260101T000000", "Double the amount."
+    )
+    reaching = find_stages_reaching_publish(stages)
+
+    for stage in stages:
+        must = "MUST BE NARRATED" in _duty_line(task, stage.id)
+        assert must is (stage.id in reaching)
 
 
 def test_the_author_holds_no_tool_but_submit_answer(tmp_path: Path) -> None:

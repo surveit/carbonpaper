@@ -427,6 +427,48 @@ def test_validate_publish_is_terminal_clean_with_several_unconsumed_publishes():
     assert m.validate_publish_is_terminal(stages) == []
 
 
+# ── Which stages the published files carry (find_stages_reaching_publish) ────
+# The review guide uses this to refuse a guide that declares a publish-reaching stage
+# `unnarrated`. Under-reporting would hide a load-bearing stage, so the transitive
+# cases below are the ones that matter.
+
+def test_find_stages_reaching_publish_takes_the_direct_feeder():
+    stages = [parse_stage(s) for s in (_loader(), _publish())]
+    assert m.find_stages_reaching_publish(stages) == {"load", "pub"}
+
+
+def test_find_stages_reaching_publish_reaches_through_intermediate_stages():
+    """Two hops from publish is as load-bearing as one — the whole chain comes back."""
+    stages = [parse_stage(s) for s in (
+        _loader(), _reader("mid", "load"), _reader("near", "mid"), _publish(inputs=("near",)),
+    )]
+    assert m.find_stages_reaching_publish(stages) == {"load", "mid", "near", "pub"}
+
+
+def test_find_stages_reaching_publish_leaves_out_a_stage_nothing_published_reads():
+    """The carve-out: an assertion-style leaf feeding no publish stage is not in the set."""
+    stages = [parse_stage(s) for s in (
+        _loader(), _reader("checked", "load"), _publish(inputs=("load",)),
+    )]
+    assert m.find_stages_reaching_publish(stages) == {"load", "pub"}
+
+
+def test_find_stages_reaching_publish_is_empty_without_a_publish_stage():
+    stages = [parse_stage(s) for s in (_loader(), _reader("mid", "load"))]
+    assert m.find_stages_reaching_publish(stages) == set()
+
+
+def test_find_stages_reaching_publish_unions_over_several_publish_stages():
+    """A stage reaching ANY publish stage counts, and a shared ancestor is not doubled."""
+    stages = [parse_stage(s) for s in (
+        _loader(), _reader("left", "load"), _reader("right", "load"),
+        _publish("pub_a", inputs=("left",)), _publish("pub_b", inputs=("right",)),
+    )]
+    assert m.find_stages_reaching_publish(stages) == {
+        "load", "left", "right", "pub_a", "pub_b",
+    }
+
+
 def test_parse_workflow_rejects_stage_reading_a_publish():
     with pytest.raises(ValidationError, match="publish"):
         m.parse_workflow([_loader(), _publish(), _reader("down", "pub")])

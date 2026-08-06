@@ -36,6 +36,7 @@ from app.models.stage import (
 from app.models.workflow import (
     Workflow as Workflow,
     detect_cycle as detect_cycle,
+    find_stages_reaching_publish as find_stages_reaching_publish,
     parse_workflow as parse_workflow,
     validate_edge_schemas as validate_edge_schemas,
     validate_inputs_resolve as validate_inputs_resolve,
