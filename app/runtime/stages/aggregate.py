@@ -9,6 +9,7 @@ from app.core.predicate import parse_predicate
 from app.models import Stage
 from app.models.stages.aggregate import (
     AGG_FORMULA_COUNT,
+    AGG_FORMULA_COUNT_DISTINCT,
     AGG_FORMULA_LIST,
     AggregateStage,
 )
@@ -53,6 +54,15 @@ def handle_aggregate(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunCont
                 series = slice_df.groupby(group_by, dropna=False)[value].agg(formula).rename(out)
             elif formula == "first":
                 series = slice_df.groupby(group_by, dropna=False)[value].first().rename(out)
+            elif formula == AGG_FORMULA_COUNT_DISTINCT:
+                # dropna=True is pandas' default, passed explicitly because it is the
+                # semantics being chosen: a null is the absence of a value, so it is
+                # not one of the distinct values (SQL's COUNT(DISTINCT col)). A group
+                # whose every value is null therefore counts 0, not 1.
+                series = (
+                    slice_df.groupby(group_by, dropna=False)[value]
+                    .nunique(dropna=True).rename(out)
+                )
             elif formula == AGG_FORMULA_LIST:
                 series = slice_df.groupby(group_by, dropna=False)[value].apply(list).rename(out)
             else:

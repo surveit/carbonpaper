@@ -29,6 +29,7 @@ class AggFormula(str, Enum):
     sum = "sum"
     mean = "mean"
     count_ = "count"  # trailing underscore: `count` would shadow str.count
+    count_distinct = "count_distinct"
     min = "min"
     max = "max"
     first = "first"
@@ -82,6 +83,7 @@ class AggregateStage(StageBase):
 # (app.runtime.stages.aggregate.handle_aggregate, which executes the same
 # dispatch on real data) — named here so the two sites can't drift apart.
 AGG_FORMULA_COUNT = "count"
+AGG_FORMULA_COUNT_DISTINCT = "count_distinct"
 AGG_FORMULA_LIST = "list"
 
 
@@ -165,12 +167,10 @@ def compute_aggregate_output_types(
     aggregate: "AggregateConfig", edge: "TableSchema"
 ) -> dict[str, str | None]:
     """The columns the aggregate config emits, each mapped to its computed type
-    (None = unknowable): every group_by column carries its edge type through
-    unchanged, and each aggregation's output column follows its formula —
-    count->int and mean->float unconditionally; sum->the value column's type
-    for int/float and for str (pandas sum of strings concatenates them);
-    min/max/first->the value column's type; list->list[<value column's
-    type>]."""
+    (None = unknowable): a group_by column carries its edge type through, and an
+    aggregation follows its formula — count/count_distinct->int, mean->float;
+    sum->the value column's type for int/float/str (pandas sum of strings
+    concatenates); min/max/first->that type; list->list[<that type>]."""
     def edge_type(name: str | None) -> str | None:
         if name is None:
             return None
@@ -180,7 +180,7 @@ def compute_aggregate_output_types(
     computed: dict[str, str | None] = {g: edge_type(g) for g in aggregate.group_by}
     for op in aggregate.aggregations:
         value_type = edge_type(op.value_column)
-        if op.formula == AGG_FORMULA_COUNT:
+        if op.formula in (AGG_FORMULA_COUNT, AGG_FORMULA_COUNT_DISTINCT):
             computed[op.output_column] = "int"
         elif op.formula == "mean":
             computed[op.output_column] = "float"
@@ -207,10 +207,12 @@ NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
         notes=(
             "Output columns are exactly group_by plus each aggregation's output_column — every "
             "other input column is DROPPED, so carry anything needed downstream via group_by "
-            "or a `first` aggregation. formula `count` takes no value_column; every other "
-            "formula requires one. Declared output types must match "
-            "what the formula computes: count->int, mean->float, min/max/first->the value "
-            "column's type, list->list[<that type>]."
+            "or a `first` aggregation. formula `count` counts ROWS and takes no value_column; "
+            "every other formula requires one — `count_distinct` counts the distinct NON-NULL "
+            "values of its value_column (nulls are not a value), so use it instead of a frame "
+            "function for a unique-count. Declared output types must match "
+            "what the formula computes: count/count_distinct->int, mean->float, "
+            "min/max/first->the value column's type, list->list[<that type>]."
         ),
     ),
 }
