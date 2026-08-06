@@ -465,6 +465,38 @@ table.schema tr:last-child td { border-bottom: 0; }
     font-size: 11px;
     color: #555;
 }
+
+/* An enum vocabulary: one chip per value, so a multi-word value reads as one thing
+   even when the constraint column is only ~110px wide and the chip has to wrap. */
+.enum-set, .enum-fold > summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px 4px;
+    align-items: baseline;
+}
+.enum-val {
+    padding: 0 5px;
+    border-radius: 3px;
+    background: #f2f4f8;
+    border: 1px solid var(--border);
+    font-family: "SFMono-Regular", "Consolas", monospace;
+    font-size: 11px;
+    color: #555;
+}
+/* Folded by default: a long vocabulary left inline wraps to a dozen lines and buries
+   every other row of the table. The count is always shown, so nothing is silently cut. */
+.enum-fold > summary { cursor: pointer; list-style: none; }
+.enum-fold > summary::-webkit-details-marker { display: none; }
+.enum-preview { display: contents; }
+.enum-fold[open] > summary .enum-preview { display: none; }
+.enum-count {
+    font-size: 10px;
+    color: var(--muted);
+    white-space: nowrap;
+    text-decoration: underline dotted;
+}
+.enum-fold[open] > .enum-set { margin-top: 4px; }
+
 .schema-meta {
     color: var(--muted);
     font-size: 12px;

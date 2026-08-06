@@ -107,7 +107,7 @@ def test_an_input_row_breaking_the_declared_schema_is_malformed_not_error():
     }])
     [result] = run_tests_for_stage(stage)
     assert result.status == "malformed"
-    assert "null" in (result.message or "").lower()
+    assert "no value" in (result.message or "").lower()
 
 
 def test_a_failure_case_the_code_does_not_refuse_is_mismatch():

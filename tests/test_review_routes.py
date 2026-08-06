@@ -626,8 +626,8 @@ def test_a_null_bool_ai_value_is_never_rendered_as_false(tmp_path, monkeypatch):
     html = TestClient(app).get(f"/project/queue_route_bool_null/runs/{run_id}/queue/review").text
 
     assert 'type="checkbox"' not in html
-    # the null upstream value shown as null, not as "false"
-    assert "received <code>flag</code>: <strong><em>null</em></strong>" in " ".join(html.split())
+    # the absent upstream value shown as absent, not as "false"
+    assert "received <code>flag</code>: <strong><em>no value</em></strong>" in " ".join(html.split())
     assert "— unset —" in html
     assert _find_selected_option(html, "human_flag") == ""
 
@@ -1125,8 +1125,8 @@ def test_an_empty_string_cell_is_not_printed_as_a_null(tmp_path, monkeypatch):
     html = TestClient(app).get(f"/project/{project}/runs/{run_id}/queue/review").text
 
     cells = re.findall(r'<td class="kv-value">\s*(.*?)\s*</td>', html, re.DOTALL)
-    assert "<em>empty string</em>" in cells
-    assert "<em>null</em>" in cells
+    assert "<em>empty text</em>" in cells
+    assert "<em>no value</em>" in cells
 
 
 # ── 10. Values a display must not flatten, and the empty context table ──────

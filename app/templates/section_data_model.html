@@ -1,4 +1,5 @@
 {% extends "project_shell.html" %}
+{% from "_schema_table.html" import constraint_cell %}
 {#
   DATA MODEL — two tiers over the named schemas + the approval GATE.
 
@@ -162,7 +163,7 @@
           mis-sizes diagrams laid out inside a closed <details>). ───────────── #}
     <div class="dm-ref-heading" id="dm-reference">
       <h2>Reference — full schemas</h2>
-      <p class="muted">Every column with its type, nullability, references, and
+      <p class="muted">Every column with its type, whether it is required, references, and
         constraints, plus the entity-relationship view. Open a table when you need
         the exact field; edits here change the library hash and drop any approval
         to edited&nbsp;·&nbsp;stale.</p>
@@ -191,15 +192,15 @@
         </summary>
         {% if sch.source and sch.source.ref %}<p class="schema-meta"><span><b>source:</b> <a href="{{ sch.source.ref }}" target="_blank" rel="noopener">{{ sch.source.ref }}</a></span></p>{% endif %}
         <table class="schema">
-          <thead><tr><th>column</th><th>type</th><th>null?</th><th>references</th><th>range / enum</th><th>description</th></tr></thead>
+          <thead><tr><th>column</th><th>type</th><th>required?</th><th>references</th><th>range / enum</th><th>description</th></tr></thead>
           <tbody>
           {% for c in sch.columns or [] %}
             <tr>
               <td><code>{{ c.name }}</code>{% if sch.primary_key and c.name in sch.primary_key %} <span class="strong">PK</span>{% endif %}</td>
               <td><span class="type-pill">{{ c.type }}</span></td>
-              <td>{% if c.nullable %}<span class="muted">nullable</span>{% else %}<span class="strong">not null</span>{% endif %}</td>
+              <td>{% if c.nullable %}<span class="muted">optional</span>{% else %}<span class="strong">required</span>{% endif %}</td>
               <td>{% if c.references %}<code class="range">→ {{ c.references }}</code>{% else %}<span class="muted">—</span>{% endif %}</td>
-              <td>{% if c.range %}<code class="range">{{ c.range }}</code>{% elif c.enum %}<code class="range">{{ c.enum | join(' · ') }}</code>{% else %}<span class="muted">—</span>{% endif %}</td>
+              <td>{{ constraint_cell(c) }}</td>
               <td>{{ c.description or '' }}</td>
             </tr>
           {% endfor %}
