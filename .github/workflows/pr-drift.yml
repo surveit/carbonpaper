@@ -1,0 +1,85 @@
+name: PR drift
+
+# Labels every open pull request with how far its base has moved since the pull
+# request forked from it. See .github/scripts/pr-drift.sh for the measurement and
+# for where the band boundaries come from.
+#
+# A label rather than a comment: drift changes every time master moves, so a
+# comment-based indicator would either accumulate dozens of stale comments on a
+# long-lived pull request or need edit-in-place bookkeeping. A label is a single
+# mutable piece of state and shows up in the pull request list without opening
+# anything.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    types: [opened, reopened, synchronize]
+  schedule:
+    # Catches drift that accrued while nothing was pushed to this repo (e.g. a
+    # pull request whose base is a long-lived branch someone else moved).
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: pr-drift
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Pull request head commits are not branches from this checkout's point of
+      # view (and for forks are not in origin at all), so the merge-base needs
+      # the refs/pull/*/head namespace explicitly.
+      - name: Fetch pull request heads
+        run: git fetch --quiet origin '+refs/pull/*/head:refs/remotes/pr/*'
+
+      - name: Ensure drift labels exist
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh label create 'drift:0-7'   --color 0e8a16 --description 'Base moved 0-7 commits since fork point (~24-41% historical conflict rate)' --force
+          gh label create 'drift:8-19'  --color fbca04 --description 'Base moved 8-19 commits since fork point (~72% historical conflict rate)' --force
+          gh label create 'drift:20+'   --color d93f0b --description 'Base moved 20+ commits since fork point (~72% historical conflict rate; likely stale)' --force
+
+      - name: Compute drift
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/pr-drift.sh | tee drift.tsv
+
+      - name: Apply labels
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          all_bands='drift:0-7 drift:8-19 drift:20+'
+          tail -n +2 drift.tsv | while IFS=$'\t' read -r number base drift band; do
+            case "$band" in
+              drift:*) ;;
+              # base-ref-missing / commit-missing: report and leave labels alone
+              # rather than guessing a band from a measurement that did not run.
+              *) echo "::warning::PR #$number: drift not measurable ($band)"; continue ;;
+            esac
+            remove=()
+            for candidate in $all_bands; do
+              [ "$candidate" = "$band" ] || remove+=(--remove-label "$candidate")
+            done
+            gh pr edit "$number" --add-label "$band" "${remove[@]}" \
+              || echo "::warning::PR #$number: could not update drift label"
+          done
+
+      - name: Upload raw drift data
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-drift
+          path: drift.tsv
+          retention-days: 14

@@ -1,0 +1,141 @@
+name: Auto-rebase open pull requests
+
+# When master moves, every open pull request based on it gains drift, and drift
+# is what causes merge conflicts here (see .github/scripts/pr-drift.sh for the
+# measured rates). This job replays the cheap half of that fix: any pull request
+# that still rebases cleanly onto the new master is rebased and force-pushed, so
+# it re-enters the 0-drift band before the conflicting change has time to age.
+#
+# It never resolves a conflict. A rebase that stops for any reason is aborted,
+# the branch is left exactly as it was, and the pull request is labelled
+# needs-manual-rebase.
+#
+# OPT-IN, by label. Rebasing rewrites someone else's branch; --force-with-lease
+# protects the remote ref but knows nothing about unpushed local commits, and
+# this repository is worked by many long-lived parallel checkouts that hold
+# commits locally for hours. Anyone whose local branch is force-pushed out from
+# under them gets a non-fast-forward on their next push and has to reconcile by
+# hand -- which is the exact cost this workflow exists to remove. So a pull
+# request is rebased only if it carries the `auto-rebase` label, and even then
+# only if its head has been untouched for QUIET_MINUTES. `no-auto-rebase` is
+# honoured as a hard veto on top, so a branch can be frozen without hunting for
+# which labels were added.
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+concurrency:
+  group: auto-rebase
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  # A branch whose head was pushed within this window is assumed to have someone
+  # actively working on it, with commits that may not be pushed yet.
+  QUIET_MINUTES: "60"
+
+jobs:
+  rebase:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # The default GITHUB_TOKEN can push, but pushes made with it do not
+          # trigger workflow runs -- so a rebased pull request would show the
+          # check results of its pre-rebase commits. Supply AUTO_REBASE_TOKEN (a
+          # PAT or app token with contents:write) to get CI re-run on the
+          # rebased head; without it the rebase still happens and CI reruns on
+          # the next human push.
+          token: ${{ secrets.AUTO_REBASE_TOKEN || github.token }}
+          persist-credentials: true
+
+      - name: Configure bot identity
+        # Only the committer identity. `git rebase` replays each commit with its
+        # original author name, email and author date intact; only the committer
+        # fields are rewritten, which is what "preserves authorship" means here.
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+      - name: Ensure needs-manual-rebase label exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh label create 'needs-manual-rebase' --color b60205 \
+            --description 'Does not rebase cleanly onto master; a human has to resolve it' --force
+          gh label create 'auto-rebase' --color 1d76db \
+            --description 'Opt in: rebase and force-push this branch when master moves' --force
+          gh label create 'no-auto-rebase' --color 5319e7 \
+            --description 'Hard veto on any automated rebase of this branch' --force
+
+      - name: Rebase eligible pull requests
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git fetch --quiet origin master
+          master_sha="$(git rev-parse origin/master)"
+          now="$(date +%s)"
+
+          gh pr list --state open --base master --limit 200 \
+            --json number,headRefName,headRefOid,isDraft,isCrossRepository,labels \
+            --jq '.[] | [.number, .headRefName, .headRefOid, .isDraft, .isCrossRepository,
+                         ([.labels[].name] | join(","))] | @tsv' > candidates.tsv
+
+          while IFS=$'\t' read -r number branch head_sha is_draft is_fork labels; do
+            skip() { echo "PR #$number ($branch): skipped -- $1"; }
+
+            # A fork head lives in a repository this token has no write access
+            # to, and rewriting a contributor's own fork branch is not ours to do.
+            [ "$is_fork" = "true" ] && { skip "head is a fork"; continue; }
+            [ "$is_draft" = "true" ] && { skip "draft"; continue; }
+            case ",$labels," in *,no-auto-rebase,*) skip "no-auto-rebase label"; continue ;; esac
+            case ",$labels," in *,auto-rebase,*) ;; *) skip "not opted in (no auto-rebase label)"; continue ;; esac
+
+            git fetch --quiet origin "+refs/pull/$number/head:refs/remotes/pr/$number"
+            fetched_sha="$(git rev-parse "refs/remotes/pr/$number")"
+            # The listing is a snapshot; if the branch moved between the list call
+            # and now, the lease we are about to take is already stale. Bail.
+            [ "$fetched_sha" = "$head_sha" ] || { skip "head moved during this run"; continue; }
+
+            # Already current: nothing to rebase.
+            if git merge-base --is-ancestor "$master_sha" "$head_sha"; then
+              skip "already on top of master"
+              gh pr edit "$number" --remove-label 'needs-manual-rebase' >/dev/null 2>&1 || true
+              continue
+            fi
+
+            pushed_at="$(git log -1 --format=%ct "$head_sha")"
+            quiet_seconds=$(( ${QUIET_MINUTES} * 60 ))
+            if (( now - pushed_at < quiet_seconds )); then
+              skip "head pushed less than ${QUIET_MINUTES}m ago -- someone is probably mid-work"
+              continue
+            fi
+
+            git checkout --quiet --detach "$head_sha"
+            if ! git rebase "$master_sha" >rebase.log 2>&1; then
+              git rebase --abort || true
+              echo "PR #$number ($branch): conflicts -- branch left untouched"
+              sed 's/^/    /' rebase.log
+              gh pr edit "$number" --add-label 'needs-manual-rebase' >/dev/null \
+                || echo "::warning::PR #$number: could not apply needs-manual-rebase"
+              continue
+            fi
+
+            # --force-with-lease pinned to the exact sha we rebased from, not to
+            # a remote-tracking ref: an implicit lease can be satisfied by a
+            # ref this same job refreshed, which silently defeats the check.
+            if git push --force-with-lease="refs/heads/$branch:$head_sha" \
+                 origin "HEAD:refs/heads/$branch"; then
+              echo "PR #$number ($branch): rebased $head_sha -> $(git rev-parse HEAD)"
+              gh pr edit "$number" --remove-label 'needs-manual-rebase' >/dev/null 2>&1 || true
+            else
+              echo "::warning::PR #$number ($branch): lease rejected, branch moved -- not pushed"
+            fi
+          done < candidates.tsv

@@ -27,6 +27,8 @@ saydo/
 # scripts stay on the working machine, not in the repo/PRs.
 docs/superpowers/
 scripts/
+# ...except CI's own scripts, which are part of the repo, not scratch.
+!.github/scripts/
 
 # agent chat session scratch (dev-only, never committed)
 app/agent/_sessions/
