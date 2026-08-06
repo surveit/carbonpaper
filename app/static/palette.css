@@ -1,0 +1,45 @@
+/* The carbon-paper palette: every colour the app's chrome is made of.
+ *
+ * Carbon paper is a cream sheet and a blue-black transfer ink, and each copy
+ * down the stack comes out fainter. That is the whole scheme: --bg is the sheet,
+ * --fg / --muted are the first and second copy in charcoal, --accent is the
+ * transfer ink.
+ *
+ * The run-state (--state-*) and belief (--belief-*) palettes are deliberately NOT
+ * here. They are pinned to their Python twins in app/web/diagrams.py and their
+ * ink/tint pairs are contrast-measured, both by
+ * tests/arch/test_status_colour_contract.py, which reads style.css. They stay
+ * there: they carry meaning, not style, and are not a theme to be swapped.
+ */
+
+:root {
+    /* The sheet */
+    --bg: #f8f6f1;
+    --border: #ddd8ce;
+    --hover: #ede9e0;
+
+    /* The ink, first copy then second */
+    --fg: #24272b;
+    --muted: #5c6169;
+
+    /* The transfer */
+    --accent: #35538d;
+
+    /* Sunk surfaces — inline code, the executable-spec block */
+    --code-bg: #efebe2;
+    --exec-bg: #f3f0e9;
+    --exec-border: #c8c1b3;
+
+    /* Code printed light-on-dark */
+    --code-deep: #1e2125;
+    --code-fg: #e6e8ea;
+    --code-comment: #878c93;
+
+    /* Callout tints, warmed to sit on the sheet */
+    --warn-bg: #fbf2e3;
+    --warn-border: #c07c12;
+    --eval-bg: #e9f1f5;
+    --eval-border: #3d8298;
+    --review-bg: #f6e9f2;
+    --review-border: #a8489a;
+}
