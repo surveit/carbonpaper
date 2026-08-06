@@ -1,10 +1,13 @@
 import numpy as np
 import pandas as pd
+import pyarrow.lib as pa_lib
 import pytest
 
+from app.core.errors import FrameConcatMismatchError
 from app.core.frames import (
     FrameStore,
     collapse_null_forms,
+    concat_frames,
     compute_frame_fingerprint,
     is_bool_cell,
     is_exact_float_cell,
@@ -259,3 +262,74 @@ def test_render_frame_as_csv_text_matches_what_write_frame_file_puts_on_disk(tmp
     path = tmp_path / "f.csv"
     write_frame_file(frame, path)
     assert render_frame_as_csv_text(frame) == path.read_text(encoding="utf-8")
+
+
+# ── concat_frames ────────────────────────────────────────────────────────────
+# The case these guard is a union whose inputs did not arrive the same way: one
+# frame answered from the stage-result cache (so it round-tripped through
+# parquet) beside one the run just computed in memory.
+
+
+def _round_tripped(frame, tmp_path):
+    """`frame` as it comes back from the frame store — the shape a cache hit has."""
+    path = tmp_path / "cached.parquet"
+    write_frame_file(frame, path)
+    return read_frame_file(path)
+
+
+def test_concat_gives_a_list_column_one_python_type_across_cached_and_computed(tmp_path):
+    cached = _round_tripped(pd.DataFrame({"id": ["a"], "tags": [["x", "y"]]}), tmp_path)
+    computed = pd.DataFrame({"id": ["b"], "tags": [["x", "y"]]})
+
+    combined = concat_frames([cached, computed])
+
+    assert [type(cell) for cell in combined["tags"]] == [list, list]
+
+
+def test_concat_leaves_every_cell_usable_as_a_list(tmp_path):
+    """An ndarray cell passes `len` but raises on `+` — the difference authored code meets."""
+    cached = _round_tripped(pd.DataFrame({"tags": [["x"]]}), tmp_path)
+    computed = pd.DataFrame({"tags": [["y"]]})
+
+    combined = concat_frames([cached, computed])
+
+    assert [cell + ["z"] for cell in combined["tags"]] == [["x", "z"], ["y", "z"]]
+    assert [["x"] in [cell] for cell in combined["tags"]] == [True, False]
+
+
+def test_concat_keeps_the_declared_order_of_its_frames(tmp_path):
+    combined = concat_frames([
+        pd.DataFrame({"a": [1, 2]}),
+        pd.DataFrame({"a": [3]}),
+        pd.DataFrame({"a": [4]}),
+    ])
+    assert list(combined["a"]) == [1, 2, 3, 4]
+    assert list(combined.index) == [0, 1, 2, 3]
+
+
+def test_concat_takes_the_first_frames_column_order(tmp_path):
+    combined = concat_frames([pd.DataFrame({"b": [1], "a": ["x"]}), pd.DataFrame({"a": ["y"], "b": [2]})])
+    assert list(combined.columns) == ["b", "a"]
+    assert list(combined["a"]) == ["x", "y"]
+
+
+def test_concat_promotes_an_all_null_column_to_its_siblings_type():
+    """An all-null column is arrow `null`, which carries no type of its own."""
+    combined = concat_frames([pd.DataFrame({"n": [1]}), pd.DataFrame({"n": [None]})])
+    assert str(combined["n"].dtype) == "float64"
+    assert combined["n"].iloc[0] == 1
+
+
+def test_concat_refuses_two_frames_that_disagree_on_a_columns_type():
+    with pytest.raises(pa_lib.ArrowTypeError, match="n"):
+        concat_frames([pd.DataFrame({"n": ["a"]}), pd.DataFrame({"n": [1]})])
+
+
+def test_concat_names_the_columns_when_a_frame_is_missing_one():
+    with pytest.raises(FrameConcatMismatchError) as caught:
+        concat_frames([pd.DataFrame({"a": [1], "b": [2]}), pd.DataFrame({"a": [3]})])
+    assert "only in frame 0 ['b']" in str(caught.value)
+
+
+def test_concat_of_no_frames_is_an_empty_frame():
+    assert concat_frames([]).empty

@@ -17,7 +17,7 @@ import pyarrow as pa
 import pyarrow.lib as pa_lib
 import pyarrow.parquet as pq
 
-from app.core.errors import FrameNotSerializableError
+from app.core.errors import FrameConcatMismatchError, FrameNotSerializableError
 from app.core.persistence import validate_id
 from app.core.utils import compute_short_hash
 
@@ -139,6 +139,44 @@ def _map_list_type_to_arrow_dtype(arrow_type: pa.DataType) -> pd.ArrowDtype | No
     ):
         return pd.ArrowDtype(arrow_type)
     return None
+
+
+# Concatenation runs at the Arrow layer because `object` dtype gives `pd.concat`
+# no type rule to follow. A frame read back from the store carries its list
+# column as `pd.ArrowDtype` (cells are `list`); one just computed in memory
+# carries the same column as `object` (cells are also `list`). `pd.concat` of the
+# two downcasts the first back to `object` and materializes its cells as
+# `np.ndarray`, so ONE column ends up holding two Python types, decided by
+# nothing but cache state — `len(x)` works on both, `x + ["b"]` and `x in seen`
+# do not. Arrow has no `object` to fall back to, so the concatenated table is
+# typed throughout and comes back through the same `types_mapper` a store read
+# uses, giving cells identical to a frame that round-tripped through parquet.
+def concat_frames(frames: Sequence[pd.DataFrame]) -> pd.DataFrame:
+    if not frames:
+        return pd.DataFrame()
+    tables = [pa.Table.from_pandas(frame, preserve_index=False) for frame in frames]
+    _reject_mismatched_columns(tables)
+    # Permissive promotion resolves the two ways pandas legitimately types one
+    # column differently across frames: an all-null column arrives as arrow
+    # `null` and takes its sibling's type, and a column pandas upcast to float on
+    # meeting a null joins an int sibling as double — both are what `pd.concat`
+    # already yields. A genuine conflict (str vs int) still raises here, where
+    # `pd.concat` would have merged it into an untyped object column.
+    combined = pa.concat_tables(tables, promote_options="permissive")
+    return combined.to_pandas(types_mapper=_map_list_type_to_arrow_dtype)
+
+
+def _reject_mismatched_columns(tables: Sequence[pa.Table]) -> None:
+    """Column ORDER is not checked: arrow matches fields by name and keeps the first table's."""
+    reference = set(tables[0].schema.names)
+    for position, table in enumerate(tables[1:], start=1):
+        names = set(table.schema.names)
+        if names != reference:
+            raise FrameConcatMismatchError(
+                f"frame {position} does not carry the same columns as frame 0: "
+                f"only in frame 0 {sorted(reference - names)}, "
+                f"only in frame {position} {sorted(names - reference)}"
+            )
 
 
 def list_rows(frame: pd.DataFrame) -> list[dict[str, Any]]:

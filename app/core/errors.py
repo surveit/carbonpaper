@@ -106,6 +106,13 @@ class FrameNotSerializableError(Exception):
     is NOT reported this way — it propagates."""
 
 
+# Named rather than null-filled: a union's inputs are declared schema-identical,
+# so a column present on one side and not the other is a bug upstream, not a
+# shape for the concatenation to paper over with a value nothing supplied.
+class FrameConcatMismatchError(ValueError):
+    """Frames given to `concat_frames` disagree on their column names."""
+
+
 class ProjectExistsError(Exception):
     """A project create was requested for a name whose examples/<name>/ directory
     already exists. Raised (loudly) rather than clobbering existing data — the
