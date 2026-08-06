@@ -57,9 +57,13 @@
     vp._refit = function () { if (grabSvg()) fit(); };
 
     // Outline one node and bring it into view, zooming in first when the diagram is
-    // fitted so small that the node is unreadable. Returns false when the id names no
-    // node — the caller may be racing a re-render and want to retry.
-    vp._focusNode = function (stageId, minScale) {
+    // fitted so small that the node is unreadable. opts.minScale is that floor;
+    // opts.pulse plays the arrival animation, which is for a jump the reader did not
+    // aim (a deep link, a step in the guide rail) — clicking the node needs no cue,
+    // the pointer is already on it. Returns false when the id names no node — the
+    // caller may be racing a re-render and want to retry.
+    vp._focusNode = function (stageId, opts) {
+      var o = opts || {};
       if (!svg && !grabSvg()) return false;
       svg.querySelectorAll("g.node.wf-node-active")
         .forEach(function (n) { n.classList.remove("wf-node-active"); });
@@ -67,7 +71,7 @@
       var node = findNode(stageId);
       if (!node) return false;
       node.classList.add("wf-node-active");
-      if (scale < (minScale || 1)) { scale = minScale || 1; apply(); }
+      if (scale < (o.minScale || 1)) { scale = o.minScale || 1; apply(); }
       // Measure AFTER any zoom: the box moves when the svg is rescaled. clientWidth,
       // not the rect's width, so a visible scrollbar does not shift the centre.
       var box = node.getBoundingClientRect(), port = vp.getBoundingClientRect();
@@ -76,7 +80,7 @@
         top: vp.scrollTop + (box.top + box.height / 2) - (port.top + vp.clientHeight / 2),
         behavior: "smooth",
       });
-      pulse(node);
+      if (o.pulse) pulse(node);
       return true;
     };
 
