@@ -271,7 +271,6 @@ _GRANDFATHERED: frozenset[str] = frozenset(
         "app/runtime/executor.py::_gather_stage_inputs",
         "app/runtime/executor.py::_merge_stage_contribution",
         "app/runtime/executor.py::_persist_row_lineage",
-        "app/runtime/executor.py::_persist_stage_output",
         "app/runtime/executor.py::_raise_if_run_failed",
         "app/runtime/executor.py::_read_run_identity",
         "app/runtime/executor.py::_read_stage_contribution",

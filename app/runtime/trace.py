@@ -128,7 +128,7 @@ def _lineage_hops(run_dir: Path, stage_id: str, row_ordinal: int) -> list[RowPar
     path = lineage_sidecar_path(run_dir, stage_id)
     if not path.exists():
         return []
-    lineage = RowLineage.from_frame(pd.read_parquet(path))
+    lineage = RowLineage.from_frame(read_frame_file(path))
     if row_ordinal < 0 or row_ordinal >= len(lineage):
         return []
     return list(lineage.parents[row_ordinal])

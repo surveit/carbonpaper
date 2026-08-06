@@ -8,12 +8,18 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Hashable, Mapping
+from collections.abc import Hashable
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import pandas as pd
 
+from app.core.frames import (
+    read_foreign_csv,
+    read_foreign_excel,
+    read_foreign_json_lines,
+    read_foreign_parquet,
+)
 from app.models import (
     JSON_COLUMN_TYPE,
     STR_COLUMN_TYPE,
@@ -83,11 +89,11 @@ def read_input_data(stage: Stage, ctx: RunContext) -> pd.DataFrame:
     fmt = params.get("format", FileFormat.csv)
     schema = input_stage.resolve_output_schema()  # input_data's produces is non-empty by validation
     if fmt == FileFormat.csv:
-        df = pd.read_csv(path, dtype=_read_dtype(schema, fmt, params))
+        df = read_foreign_csv(path, dtype=_read_dtype(schema, fmt, params))
     elif fmt == FileFormat.parquet:
-        df = pd.read_parquet(path)
+        df = read_foreign_parquet(path)
     elif fmt == FileFormat.json:
-        df = pd.read_json(path, lines=True, dtype=_read_dtype(schema, fmt, params))
+        df = read_foreign_json_lines(path, dtype=_read_dtype(schema, fmt, params))
     elif fmt == FileFormat.geojson:
         df = _read_geojson(path)
     elif fmt == FileFormat.xlsx:
@@ -183,16 +189,11 @@ def _read_xlsx(
 ) -> pd.DataFrame:
     # header_row/first_column are 0-based indices into the sheet as it appears in
     # Excel; rows above and columns left of them are discarded before parsing.
-    # sheet_name is str|int (exactly one sheet), so pd.read_excel always hands back
-    # a single DataFrame here, never the dict it returns for a None/list sheet_name.
     # dtype keys on the header row's names, so first_column's later slicing cannot
-    # shift it; pandas types this parameter Mapping[str, ...] here and
-    # Mapping[Hashable, ...] on read_csv, and an invariant key blocks one of the two.
-    frame = pd.read_excel(
-        path, sheet_name=params.sheet_name, header=params.header_row, engine="openpyxl",
-        dtype=cast("Mapping[str, Any] | None", dtype),
+    # shift it.
+    frame = read_foreign_excel(
+        path, sheet_name=params.sheet_name, header_row=params.header_row, dtype=dtype
     )
-    assert isinstance(frame, pd.DataFrame)
     if params.first_column:
         _validate_first_column_in_range(params.first_column, frame, path, params.sheet_name)
         frame = frame.iloc[:, params.first_column:].copy()

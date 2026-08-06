@@ -368,7 +368,7 @@ def _read_kept_ordinals(
     if not path.exists():
         return None
     try:
-        lineage = RowLineage.from_frame(pd.read_parquet(path))
+        lineage = RowLineage.from_frame(read_frame_file(path))
     except (OSError, ValueError):
         return None
     if len(lineage) != rows_out:

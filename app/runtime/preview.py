@@ -13,7 +13,7 @@ from pathlib import Path
 import pandas as pd
 import pyarrow
 
-from app.core.frames import PARQUET_SUFFIX
+from app.core.frames import read_frame_file
 from app.models import Stage
 
 from .context import RunContext
@@ -32,12 +32,6 @@ PREVIEWABLE_TYPES: set[str] = {
     "expand",
     "aggregate",
 }
-
-
-def _read_output(path: Path) -> pd.DataFrame:
-    if path.suffix == PARQUET_SUFFIX:
-        return pd.read_parquet(path)
-    return pd.read_csv(path)
 
 
 def _load_upstream_inputs(
@@ -59,7 +53,7 @@ def _load_upstream_inputs(
         if not path.exists():
             raise PreviewError(f"upstream output for '{iid}' missing on disk: {rel}")
         try:
-            inputs[iid] = _read_output(path)
+            inputs[iid] = read_frame_file(path)
         except (OSError, ValueError, pyarrow.lib.ArrowException) as exc:
             raise PreviewError(f"could not read upstream '{iid}': {exc}") from exc
     return inputs

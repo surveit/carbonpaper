@@ -12,8 +12,8 @@ from functools import partial
 from pathlib import Path
 
 import pandas as pd
-import pyarrow.lib as pa_lib
 
+from app.core.frames import write_frame_file_with_csv_fallback
 from app.core.predicate import parse_predicate
 from app.models import Stage
 from app.models.stages.human_review_queue import (
@@ -273,19 +273,7 @@ def _write_pending_snapshot(queue_dir: Path, sid: str, pending: list[PendingRevi
     exactly their original upstream columns — there is no step at which a
     fingerprint or decision column could be added to it."""
     frame = pd.DataFrame([item.frozen_row for item in pending])
-    queue_path = queue_dir / f"{sid}.parquet"
-    try:
-        frame.to_parquet(queue_path, index=False)
-    except (pa_lib.ArrowException, ValueError, TypeError):
-        # A column whose dtype/shape parquet can't represent (mixed-type
-        # object columns, nested Python values) — CSV stringifies those and
-        # succeeds. A disk/OS error (ENOSPC, permission) is deliberately NOT
-        # caught here: it would fail identically for CSV, so it propagates
-        # (and is recorded by the runner) rather than silently degrading the
-        # queue snapshot.
-        queue_path = queue_dir / f"{sid}.csv"
-        frame.to_csv(queue_path, index=False)
-    return queue_path
+    return write_frame_file_with_csv_fallback(frame, queue_dir / f"{sid}.parquet").path
 
 
 def _write_fingerprint_sidecar(
