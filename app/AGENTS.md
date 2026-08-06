@@ -32,6 +32,14 @@ publishing `_selectTab` on its root element. `reveal` smooth-scrolls the panel's
 run column; every click the reader aims — the guide's steps and output links, an issue link, a
 graph node — uses it, and a load they did not ask for (deep link, panel self-refresh) does not.
 
+## The run page's workflow minimap (`.diagram-minimap` in `run_detail.html`)
+The graph is a 200px band held at `data-zoom-floor` — `diagram_viewport.js` will not fit a
+wide graph below that scale, so labels stay readable and the band is panned instead. Zoom,
+fit and fullscreen are icon buttons overlaid in its top-right. It opens parked on the run's
+first stage (`_focusNode(..., {select: false})` — scrolls without outlining, so the band
+shows the flow's start while the panel below still says no stage is open). Clicking a node
+loads the stage panel, exactly as a guide step does; ⛶ is where the whole graph is read.
+
 ## The stage panel — three tabs (`run_stage_partial` → `_run_stage_panel.html`)
 **Data │ Schema │ Transform**, one flat strip; it opens on Data:
 - **Data** — what this run's stage produced: its output — rendered as a **diff against its

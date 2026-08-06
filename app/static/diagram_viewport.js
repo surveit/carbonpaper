@@ -14,6 +14,9 @@
  *     <div class="diagram-viewport"><pre class="mermaid">...</pre></div>
  *   </div>
  *
+ * data-zoom-floor on the viewport sets the smallest scale fit-to-width may choose, so a
+ * short band can hold a wide graph at a readable size and pan instead of shrinking it.
+ *
  * The page must call mermaid.initialize({ startOnLoad: false, ... }) BEFORE loading this
  * file; boot() renders the diagrams then wires each viewport. A caller that re-renders a
  * diagram in place (e.g. the workflow graph after a spec edit) should call viewport._refit() after
@@ -26,7 +29,10 @@
     if (!vp || vp._dvInit) return;
     vp._dvInit = true;
     var block = vp.closest(".diagram-block") || document;
+    // zoomFloor is the smallest scale this viewport considers legible: fit-to-width
+    // will not go below it, and focusing a node lifts a smaller scale up to it.
     var svg = null, baseW = 1000, scale = 1;
+    var zoomFloor = Number(vp.dataset.zoomFloor) || 0;
 
     function grabSvg() {
       svg = vp.querySelector("svg");
@@ -43,7 +49,7 @@
       // Collapse the svg FIRST so the diagram's own width can't inflate the viewport
       // (its container is content-sized in some layouts); then measure the real width.
       svg.style.width = "0px";
-      scale = Math.min(1, (vp.clientWidth - 24) / baseW);
+      scale = Math.max(zoomFloor, Math.min(1, (vp.clientWidth - 24) / baseW));
       apply();
     }
     function zoom(f) {
@@ -56,12 +62,14 @@
     // Re-grab the (possibly new) svg after a re-render and fit to width again.
     vp._refit = function () { if (grabSvg()) fit(); };
 
-    // Outline one node and bring it into view, zooming in first when the diagram is
-    // fitted so small that the node is unreadable. opts.minScale is that floor;
+    // Outline one node and bring it into view, lifting the zoom to zoomFloor first when
+    // the diagram is fitted so small that the node is unreadable.
     // opts.pulse plays the arrival animation, which is for a jump the reader did not
     // aim (a deep link, a step in the guide rail) — clicking the node needs no cue,
-    // the pointer is already on it. Returns false when the id names no node — the
-    // caller may be racing a re-render and want to retry.
+    // the pointer is already on it. opts.select:false scrolls to the node WITHOUT
+    // outlining it, for a caller parking the view somewhere the reader has not
+    // chosen. Returns false when the id names no node — the caller may be racing a
+    // re-render and want to retry.
     vp._focusNode = function (stageId, opts) {
       var o = opts || {};
       if (!svg && !grabSvg()) return false;
@@ -70,15 +78,17 @@
       if (!stageId) return true;
       var node = findNode(stageId);
       if (!node) return false;
-      node.classList.add("wf-node-active");
-      if (scale < (o.minScale || 1)) { scale = o.minScale || 1; apply(); }
+      if (o.select !== false) node.classList.add("wf-node-active");
+      if (scale < zoomFloor) { scale = zoomFloor; apply(); }
       // Measure AFTER any zoom: the box moves when the svg is rescaled. clientWidth,
       // not the rect's width, so a visible scrollbar does not shift the centre.
       var box = node.getBoundingClientRect(), port = vp.getBoundingClientRect();
       vp.scrollTo({
         left: vp.scrollLeft + (box.left + box.width / 2) - (port.left + vp.clientWidth / 2),
         top: vp.scrollTop + (box.top + box.height / 2) - (port.top + vp.clientHeight / 2),
-        behavior: "smooth",
+        // Smooth only when the reader is being MOVED from somewhere they were looking.
+        // Parking the view has no from, so animating it plays a scroll nobody asked for.
+        behavior: o.select === false ? "auto" : "smooth",
       });
       if (o.pulse) pulse(node);
       return true;

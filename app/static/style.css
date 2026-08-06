@@ -2197,6 +2197,25 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
     .diagram-viewport svg g.node.wf-node-arriving { animation: none; }
 }
 
+/* ── Minimap variant: the same viewport as a short band, held at its own zoom
+   (data-zoom-floor) rather than fitted to width, so the labels stay readable and a
+   wide graph is panned. The controls move INTO the band's top-right corner as icons,
+   because a toolbar row above a 170px band is a third of its height. resize:vertical
+   is inherited on purpose — a reader who wants more of the graph can drag it taller
+   without leaving for fullscreen. ── */
+.diagram-minimap { position: relative; }
+/* ~2 rows of stage nodes at the floor zoom: enough to read the node you are on and
+   see what it feeds, without the band becoming a second panel. */
+.diagram-minimap .diagram-viewport { height: 200px; }
+.diagram-minimap .diagram-viewport:fullscreen { height: 100vh; max-height: none; }
+.diagram-minimap .diagram-tools { position: absolute; top: 7px; right: 7px; z-index: 2;
+    margin: 0; gap: .2rem; }
+/* Square, so the four read as one control cluster rather than four words; and they
+   sit ON the graph, so they need a resting edge the flat toolbar did not. */
+.diagram-minimap .diagram-tools button { width: 26px; height: 26px; padding: 0;
+    display: flex; align-items: center; justify-content: center; line-height: 1;
+    background: var(--bg); box-shadow: 0 1px 2px rgba(0, 0, 0, .12); }
+
 /* Stage nodes carry mermaid's .clickable (and its pointer cursor) because the graph
    DECLARES a click handler — whether or not this page listens for one. onDiagramNode()
    sets data-diagram-clickable on <html>, so the cursor promises a click only where one

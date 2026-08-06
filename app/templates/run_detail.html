@@ -94,26 +94,35 @@
 </p>
 {% endif %}
 
-{# ── The workflow is the main object: full width, on top. Built from the version
+{# ── The workflow as a MINIMAP: a short band held at a readable zoom rather than
+      the whole graph fitted to width. The reader's continuous act is picking a
+      stage — the guide rail and this band both do that — and surveying the whole
+      shape is a once-per-run act, which is what ⛶ is for. Built from the version
       this run pinned; with graph_error set NO graph is drawn, because the
       working copy may not be what ran. ── #}
 <section class="run-section" id="run-workflow-section">
 <h2>Workflow</h2>
-<p class="lede">Every stage of the version this run pinned, coloured by how it went. Click one to load its detail below.</p>
+{# Names what a click OPENS, not that it moves the band: the panel below is the
+   thing a reader has no other way to discover is there. #}
+<p class="lede">Every stage of the version this run pinned, coloured by how it went.
+  Click a node — or a guide step — for that stage's data, schema and transform below.
+  <span class="muted">Drag to pan · ⌘/Ctrl-scroll to zoom · ⛶ for the whole graph.</span></p>
 {% if graph_error %}
 <p class="banner banner-warn" id="graph-error">⚠ Workflow graph unavailable — {{ graph_error }}</p>
 {% else %}
-<div class="workflow workflow-full diagram-block">
+<div class="workflow-full diagram-block diagram-minimap">
     <div class="diagram-tools">
-      <button type="button" data-zoom="in" title="Zoom in">+</button>
-      <button type="button" data-zoom="out" title="Zoom out">−</button>
-      <button type="button" data-zoom="reset" title="Fit to width">reset</button>
-      <button type="button" class="diagram-fs" title="Fullscreen">⛶ fullscreen</button>
-      {# Names what a click OPENS, not that it moves the graph: the panel below is
-         the thing a reader has no other way to discover is there. #}
-      <span class="muted diagram-hint">drag to pan · ⌘/Ctrl-scroll to zoom · click a node — or a guide step — for that stage's data, schema and transform below</span>
+      <button type="button" data-zoom="in" title="Zoom in" aria-label="Zoom in">+</button>
+      <button type="button" data-zoom="out" title="Zoom out" aria-label="Zoom out">−</button>
+      <button type="button" data-zoom="reset" title="Back to the minimap's own zoom"
+              aria-label="Back to the minimap's own zoom">↔</button>
+      <button type="button" class="diagram-fs" title="Fullscreen"
+              aria-label="Show the whole workflow fullscreen">⛶</button>
     </div>
-    <div class="diagram-viewport">
+    {# zoom-floor holds the band at a legible scale: fitting 30 stages to this
+       width would render the labels too small to read, which is the whole reason
+       the graph stopped being nav. #}
+    <div class="diagram-viewport" data-zoom-floor="1">
       <pre class="mermaid">
 {{ mermaid }}
       </pre>
@@ -178,14 +187,19 @@
 
   const viewport = document.querySelector('.diagram-viewport');
 
-  // Outline the node and centre it, zooming to at least half size so it is readable.
-  // A re-render can replace the svg mid-click, so a miss retries a few times.
-  // opts.pulse asks for the arrival animation: on for a jump the reader did not aim
-  // (deep link, guide step), off when they clicked the node itself.
+  // Outline the node and centre it in the minimap. A re-render can replace the svg
+  // mid-click, so a miss retries a few times. opts.pulse asks for the arrival
+  // animation: on for a jump the reader did not aim (deep link, guide step), off when
+  // they clicked the node itself. opts.select:false scrolls without outlining.
+  // Retried on a viewport that has not published _focusNode yet, not only on a missing
+  // node: diagram_viewport.js wires the viewport after an awaited mermaid.run(), so on
+  // first paint this runs before there is anything to focus.
   function focusGraphNode(stageId, opts, tries) {
-    if (!viewport || !viewport._focusNode) return;
-    if (!viewport._focusNode(stageId, { minScale: 0.5, pulse: !!(opts && opts.pulse) })
-        && (tries || 0) < 8) {
+    if (!viewport) return;
+    const o = opts || {};
+    const focused = viewport._focusNode
+      && viewport._focusNode(stageId, { pulse: !!o.pulse, select: o.select !== false });
+    if (!focused && (tries || 0) < 8) {
       setTimeout(() => focusGraphNode(stageId, opts, (tries || 0) + 1), 250);
     }
   }
@@ -228,6 +242,13 @@
   }
   window._loadStage = loadStage;
   if (location.hash) loadStage(decodeURIComponent(location.hash.slice(1)));
+  // Nothing chosen yet: park the minimap on the run's first stage. Held at its own
+  // zoom the band would otherwise open on whatever corner of a tall graph sits at
+  // scroll 0, which is usually blank. select:false — this moves the view, it does
+  // not pick a stage, and the panel below still says none is open.
+  else focusGraphNode(
+    {{ (header.strip.squares[0].stage_id if header.strip.squares else none) | tojson }},
+    { select: false });
 
   // ── CTA forms (cancel, re-run, resume): disable + relabel the button on
   //    submit so a second click can't fire a second request while the redirect

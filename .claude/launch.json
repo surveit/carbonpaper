@@ -1,0 +1,14 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "minimap-wt",
+      "runtimeExecutable": "/bin/sh",
+      "runtimeArgs": [
+        "-c",
+        "CARBONPAPER_DB_PATH=/Users/shuhan/carbonpaper/data/app.db CARBONPAPER_PROJECTS_DIR=/Users/shuhan/carbonpaper/examples exec /Users/shuhan/carbonpaper/.venv/bin/python -m uvicorn app.main:app --port 8796"
+      ],
+      "port": 8796
+    }
+  ]
+}
