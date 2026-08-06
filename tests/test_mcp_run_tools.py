@@ -140,7 +140,7 @@ def test_run_workflow_test_delegates_and_reports_verdict(tmp_path, monkeypatch):
     manifest_path = tmp_path / "demo" / "runs" / result["run_id"] / "manifest.json"
     assert manifest_path.exists()
     status = server.get_run_status(project_id="demo", run_id=result["run_id"])
-    assert status["is_test_run"] is True
+    assert status["parameters"]["is_test_run"] is True
 
 
 def test_run_tools_are_registered(tmp_path, monkeypatch):

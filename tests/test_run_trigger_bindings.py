@@ -67,7 +67,7 @@ def test_binding_carries_the_bound_files_own_format(project, tmp_path):
                        data={"binding__load": str(other)}, follow_redirects=False)
     assert resp.status_code == 303
     manifest = _manifest(project)
-    assert manifest["run_bindings"]["load"]["format"] == "parquet"
+    assert manifest["parameters"]["run_bindings"]["load"]["format"] == "parquet"
     assert manifest["stage_records"][0]["status"] == "ok"
 
 

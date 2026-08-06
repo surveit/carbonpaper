@@ -29,6 +29,7 @@ from app.services.versioning import ReviewGuide
 from app.core.persistence import PersistedModel, PersistenceScope
 from app.core.run_status import RunStatus
 from app.services import data_model, node_review, stage_edit, versioning, workspace
+from app.services import run as run_service
 from app.services.loader import (
     load_compiled_dir,
     load_workflow,
@@ -212,7 +213,7 @@ def _runs_summary(pdir: Path) -> RunsSummary:
         try:
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             status = manifest.get("status", "unknown")
-            is_test_run = manifest.get("is_test_run", False)
+            is_test_run = run_service.reads_as_test_run(manifest)
         except json.JSONDecodeError:
             status = "corrupt"
             is_test_run = False

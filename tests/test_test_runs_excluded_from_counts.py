@@ -12,11 +12,15 @@ from app.services import workspace
 from app.web import loading
 
 
-def _write_manifest(run_dir: Path, *, status: str, is_test_run: bool | None) -> None:
+def _write_manifest(
+    run_dir: Path, *, status: str, is_test_run: bool | None, legacy: bool = False
+) -> None:
+    """`legacy` writes the flat pre-nesting key, which runs on disk today still carry."""
     run_dir.mkdir(parents=True)
     manifest: dict[str, object] = {"status": status}
     if is_test_run is not None:
-        manifest["is_test_run"] = is_test_run
+        manifest |= ({"is_test_run": is_test_run} if legacy
+                     else {"parameters": {"is_test_run": is_test_run}})
     (run_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
 
 
@@ -50,5 +54,21 @@ def test_dashboard_card_n_runs_excludes_test_runs(tmp_path, monkeypatch):
     _write_manifest(root / "runs" / "20260101T000000", status="ok", is_test_run=None)
     _write_manifest(root / "runs" / "20260102T000000", status="ok", is_test_run=True)
 
+    card, = loading.list_projects()
+    assert card["n_runs"] == 1
+
+
+def test_a_legacy_manifests_flat_flag_still_excludes_it(tmp_path):
+    """Else every historical workflow test starts counting as a real run."""
+    workspace.set_projects_dir(tmp_path)
+    root = tmp_path / "demo"
+    root.mkdir()
+    (root / "document.md").write_text("methodology", encoding="utf-8")
+    _write_manifest(root / "runs" / "20260101T000000", status="ok",
+                    is_test_run=None, legacy=True)
+    _write_manifest(root / "runs" / "20260102T000000", status="ok",
+                    is_test_run=True, legacy=True)
+
+    assert project_service._runs_summary(root).n == 1
     card, = loading.list_projects()
     assert card["n_runs"] == 1

@@ -12,6 +12,7 @@ from app.runtime.context import (
     RunIdentity,
 )
 from app.runtime.manifest import CONTRIBUTION_ATTR, StageContribution, load_manifest_model
+from app.runtime.run_parameters import RunParameters
 from app.core.stage_cache import ReadOnlyStageCache
 from app.models import Stage
 from app.services.versioning import load_version_stages, resolve_version_id
@@ -104,6 +105,7 @@ def make_run_context(
     limits: dict[str, int] | None = None,
     offsets: dict[str, int] | None = None,
     bust_cache: bool = False,
+    queue_auto_approve: bool = False,
 ) -> RunContext:
     """A RunContext for tests that only care about a few of its fields. Project
     scope is whatever the caller passes: an `identity` with its `stage_cache`, or
@@ -112,8 +114,11 @@ def make_run_context(
     return RunContext(
         repo_root=repo_root, run_dir=run_dir,
         identity=identity, stage_cache=stage_cache,
-        limits=dict(limits or {}), offsets=dict(offsets or {}),
-        bust_cache=bust_cache,
+        params=RunParameters(
+            limits=dict(limits or {}), offsets=dict(offsets or {}),
+            bust_cache=bust_cache, queue_auto_approve=queue_auto_approve,
+            is_test_run=queue_auto_approve,
+        ),
     )
 
 

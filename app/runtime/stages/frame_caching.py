@@ -53,7 +53,7 @@ def open_frame_caching(
     never fail a stage — and the fact is reported as a run note rather than
     swallowed. Checked once here, not per lookup.
 
-    Under `ctx.bust_cache` no reader is kept while the write-capable accessor is,
+    Under `ctx.params.bust_cache` no reader is kept while the write-capable accessor is,
     so a busted run ends with the cache re-pinned, not stale."""
     if not caches_frames or not stage.cache:
         return FrameCaching()
@@ -68,7 +68,7 @@ def open_frame_caching(
         key=StageCacheKey(
             ctx.identity.project, stage.id, stage.compute_definition_fingerprint()
         ),
-        reader=None if ctx.bust_cache else ctx.stage_cache,
+        reader=None if ctx.params.bust_cache else ctx.stage_cache,
         writer=ctx.stage_cache if isinstance(ctx.stage_cache, StageCache) else None,
     )
 

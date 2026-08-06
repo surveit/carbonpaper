@@ -143,7 +143,7 @@ def test_workflow_test_writes_a_real_run_marked_is_test_run(demo):
     assert manifest["project"] == "demo"
     assert manifest["workflow_version"] == "v1"
     assert manifest["status"] == "ok"
-    assert manifest["is_test_run"] is True
+    assert manifest["parameters"]["is_test_run"] is True
 
 
 def test_workflow_test_runs_publish_scoped_to_its_own_run_dir(demo):
