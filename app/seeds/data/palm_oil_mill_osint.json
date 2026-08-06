@@ -1,0 +1,4257 @@
+{
+  "name": "palm_oil_mill_osint",
+  "document": "# Palm-oil mill OSINT — methodology\n\n## Purpose & scope\nFor a given set of Indonesian palm-oil mills, reconstruct an **auditable record of\non-site features and emissions** from public **primary** sources — not by trusting any\noperator's own summary, and never by estimating a value that isn't documented.\n\n## Input — the facility universe (Tier-1)\nThe mills are not hand-listed; they come from the resolved **facility universe**:\n- the **facilities spine** — the entity-resolved global mill asset (PalmWatch-derived,\n  ~2,300 mills, each with the **Universal Mill List / PalmTrace id**, operator (PT),\n  parent group, province, coordinates, and per-field source provenance);\n- **cross-checked against Trase** (the one structured nameplate-capacity source,\n  Indonesia) by joining on the UML id, after de-duplicating Trase to one row per id;\n- with per-country **coverage statistics** (facility count, % with capacity,\n  % multi-source) computed as a health check of the universe itself.\n\n**Selection & cap.** Facilities are ordered most-informative-first (Indonesian,\ncapacity-bearing, corroborated by more than one source) and the run processes the\nfirst *N* — a cap set per run (`--limit select_for_enrichment=N`), so the same\nmethodology scales from a 3-mill spot-check to the full universe without editing it.\n\n## Method\n\nThe pipeline is deterministic plumbing with **three points of genuine judgment** (marked\n⚖); everything else is mechanical and reproducible.\n\n1. **Targeted source discovery.** From each mill's identity, construct targeted queries\n   — keyed on the UML id — against the *known authoritative* hosts: RSPO (`rspo.org`),\n   the certification bodies (Control Union, BSI, Sucofindo, Mutuagung…), the UNFCCC CDM\n   registry, and — secondarily — PROPER and trade press. (We do not open-endedly \"search\n   the web\"; the source hierarchy is known in advance.)\n\n2. ⚖ **Locate the authoritative, most-recent document.** Among the results, select the\n   *full RSPO audit-series Public Summary Report* (Annual Surveillance / recertification)\n   and any CDM Project Design Document — **not** the thin RSPO public *announcement*,\n   which carries almost no operational data. Prefer the newest by audit type and date.\n   This is judgment: documents move, recur per audit year, and the right one is the one\n   that actually carries the operational appendix.\n\n3. **Retrieve & render.** Download each document **presenting as a normal browser** (a\n   bare bot identity is refused by corporate hosts even for public files), with retry on\n   transient failures and an archival (Wayback) fallback. **Cache the raw bytes** and\n   extract text locally — the canonical \"keep the raw alongside the cooked.\" A blocked or\n   missing document is recorded as such, not silently dropped.\n\n4. **Locate the relevant passages.** Within the rendered text, find the defined field\n   anchors — nameplate capacity, the **PalmGHG / \"Summary of Net GHG\" appendix**, the\n   **POME methane-capture split** (electricity vs flaring), OER/KER, certificate number +\n   validity dates, planted & peat area, CPO/PK/FFB production, and biogas capacity. (The\n   GHG appendix sits at the *end* of a 150–400-page report, so the whole document must be\n   in scope, not the first pages.)\n\n5. ⚖ **Extract the defined field set.** From the located passages **only**, extract each\n   field as a value + unit + **the source it came from** + a **provenance grade**. Assert\n   nothing that is not present in the cited passage; where the source is silent, the value\n   is `unknown`. Press sources are graded weaker than certification/registry sources.\n\n6. ⚖ **Reconcile across a mill's documents.** Where sources disagree (e.g. capacity\n   differs across audit years), prefer the **most-recent primary source** and record *why*\n   — never silently average. Distinguish **designed vs operated**: a *registered* CDM\n   biogas project is not evidence it was built or that credits were issued. Reject\n   **same-name, different-entity** collisions (two unrelated \"PT X\").\n\n7. **Publish.** A per-mill dossier of the reconciled fields, each shown with its value,\n   confidence, provenance grade, and a link to the exact cited source.\n\n## Output contract & validation (canonical units + retry)\n\nSource documents report the same quantity in different units — the PalmGHG net-GHG\nfield arrives as `947.86` kg CO2e/t CPO from one mill's audit and `3.95` tCO2e/t\nCPO from another's, the same field name spanning a 1000× unit spread — and a PCF\nconsumer needs **one canonical unit per field plus an honest flag** wherever\nconversion or plausibility cannot be established.\n\n1. **The contract demands canonical units.** The extract prompt fixes ONE\n   canonical unit per numeric field (PalmGHG net → tCO2e/t CPO, capacity →\n   t FFB/hr, …). The model reports `value` already converted to that unit with\n   `unit` set to exactly the canonical string — and *always* reports\n   `value_verbatim`/`unit_verbatim` exactly as the document printed them, the\n   audit trail. A conversion the model cannot be certain of (e.g.\n   `tCO2e/tProduct`, whose denominator is not provably CPO) is returned as\n   value null with the reason in `note`, verbatim originals kept.\n2. **The runtime validates each field and retries once.** Each LLM stage\n   declares per-field checks (the canonical unit + an inclusive sanity range).\n   After a row's result parses, every matching field entry is checked: value\n   must be null or numeric-and-in-range, unit must equal the canonical string.\n   On any violation the model is re-called once with the original prompt plus\n   the violations, instructed to correct the conversion or return null — never\n   to adjust a number to fit the range.\n3. **Still-invalid values are nulled, loudly.** After a failed retry the value\n   is set to null with the violation attached as `validation_error` on the\n   entry; the verbatim fields stay untouched. Nothing is dropped, clamped, or\n   massaged into range. Per-stage retry/null counts land in the run manifest.\n\nThe ranges are deliberately generous screens for order-of-magnitude errors\n(PalmGHG net [0, 15] tCO2e/t CPO; capacity [5, 200] t FFB/hr), not real-world\nvariation policing. Adjudication (step 6) carries the canonical value/unit, the\nverbatim originals, and any `validation_error` through unchanged, and its own\noutput is re-validated by the same field checks.\n\n## Sourcing discipline (applies to every step)\n- **Primary over secondary.** Certification/registry documents outrank press and operator PR.\n- **Every value carries its source** — URL + retrieval + grade — or it is `unknown`.\n- **Never fabricate.** A value the model asserts without a locatable source is *flagged,\n  not published*; absence of evidence is reported as absence, not filled with an estimate.\n- **Reproducible.** The raw bytes behind every value are cached and hashed, so any figure\n  can be re-checked against the exact document it came from.\n\n## Verification\nA held set of **sourced ground-truth values** (per mill, per field) measures extraction\nagreement, so the method's accuracy is *measured*, not asserted.",
+  "model": "sonnet",
+  "source": "mcp",
+  "data_model": {
+    "schemas": [
+      {
+        "columns": [
+          {
+            "name": "uml_id",
+            "type": "str",
+            "nullable": false,
+            "description": "Universal Mill List / PalmTrace identifier — the join key used across all pipeline stages and against Trase."
+          },
+          {
+            "name": "operator_pt",
+            "type": "str",
+            "nullable": true,
+            "description": "Operating company (PT name) as recorded in PalmWatch."
+          },
+          {
+            "name": "parent_group",
+            "type": "str",
+            "nullable": true,
+            "description": "Parent corporate group; null when not resolved."
+          },
+          {
+            "name": "province",
+            "type": "str",
+            "nullable": true,
+            "description": "Indonesian province; null for non-Indonesian mills."
+          },
+          {
+            "name": "latitude",
+            "type": "float",
+            "nullable": true,
+            "range": [
+              -90,
+              90
+            ]
+          },
+          {
+            "name": "longitude",
+            "type": "float",
+            "nullable": true,
+            "range": [
+              -180,
+              180
+            ]
+          },
+          {
+            "name": "trase_nameplate_capacity_t_ffb_hr",
+            "type": "float",
+            "nullable": true,
+            "description": "Nameplate capacity in tonnes FFB per hour, joined from Trase on uml_id after de-duplicating Trase to one row per id. Null when the mill is absent from Trase."
+          },
+          {
+            "name": "source_count",
+            "type": "int",
+            "nullable": true,
+            "description": "Number of independent sources corroborating this mill entry; used as the multi-source corroboration signal for ordering.",
+            "range": [
+              1,
+              "inf"
+            ]
+          },
+          {
+            "name": "is_indonesian",
+            "type": "bool",
+            "nullable": true,
+            "description": "True when the mill is located in Indonesia; used as the primary ordering criterion for run-cap selection."
+          }
+        ],
+        "estimated_rows": 2300,
+        "name": "facility",
+        "kind": "reference",
+        "title": "Facility Universe (Mill Spine)",
+        "primary_key": [
+          "uml_id"
+        ],
+        "description": "The resolved global palm-oil mill asset list, sourced from PalmWatch (~2,300 mills, PalmTrace/UML ids), de-duplicated and joined to Trase on uml_id for nameplate capacity. Rows are ordered most-informative-first (Indonesian, capacity-bearing, highest source_count) for the per-run selection cap. Coverage statistics (facility count, % with capacity, % multi-source) are derived from this table as a universe health check.",
+        "source": {
+          "section": "Input — the facility universe (Tier-1)"
+        }
+      },
+      {
+        "columns": [
+          {
+            "name": "document_id",
+            "type": "str",
+            "nullable": false,
+            "description": "Pipeline-assigned unique identifier for this document."
+          },
+          {
+            "name": "facility_uml_id",
+            "type": "str",
+            "nullable": false,
+            "description": "Mill this document was retrieved for.",
+            "references": "facility.uml_id"
+          },
+          {
+            "name": "document_type",
+            "type": "str",
+            "nullable": false,
+            "description": "rspo_psr = full RSPO audit-series Public Summary Report (the governing document carrying the operational appendix); cdm_pdd = UNFCCC CDM Project Design Document.",
+            "enum": [
+              "rspo_psr",
+              "cdm_pdd",
+              "press",
+              "operator_pr",
+              "other"
+            ]
+          },
+          {
+            "name": "url",
+            "type": "str",
+            "nullable": true,
+            "description": "Canonical URL from which the document was fetched; may be a Wayback Machine URL when the live URL was unavailable."
+          },
+          {
+            "name": "retrieval_timestamp",
+            "type": "datetime",
+            "nullable": true,
+            "description": "UTC timestamp of successful retrieval; null if retrieval failed."
+          },
+          {
+            "name": "retrieval_status",
+            "type": "str",
+            "nullable": false,
+            "description": "Outcome of the fetch attempt. blocked = refused even with browser identity; missing = URL returned 404/gone; wayback_fallback = live fetch failed, served from Internet Archive.",
+            "enum": [
+              "ok",
+              "blocked",
+              "missing",
+              "wayback_fallback"
+            ]
+          },
+          {
+            "name": "raw_bytes_hash",
+            "type": "str",
+            "nullable": true,
+            "description": "SHA-256 of the cached raw bytes — the audit trail linking every extracted value back to the exact document version."
+          },
+          {
+            "name": "audit_year",
+            "type": "int",
+            "nullable": true,
+            "description": "Year of the audit cycle this document covers; null for non-audit document types."
+          },
+          {
+            "name": "audit_type",
+            "type": "str",
+            "nullable": true,
+            "description": "RSPO audit type; used in step-2 judgment to prefer the newest by audit type and date.",
+            "enum": [
+              "annual_surveillance",
+              "recertification",
+              "initial"
+            ]
+          },
+          {
+            "name": "source_grade",
+            "type": "str",
+            "nullable": false,
+            "description": "Source authority tier. certification and registry outrank press and operator in both selection (step 2) and extraction provenance grading (step 5).",
+            "enum": [
+              "certification",
+              "registry",
+              "press",
+              "operator"
+            ]
+          },
+          {
+            "name": "is_authoritative",
+            "type": "bool",
+            "nullable": true,
+            "description": "Step-2 judgment output: true for the one document selected per mill as the governing source for extraction. At most one rspo_psr and one cdm_pdd may be authoritative per mill."
+          }
+        ],
+        "estimated_rows": 8000,
+        "name": "source_document",
+        "kind": "input",
+        "title": "Source Document",
+        "primary_key": [
+          "document_id"
+        ],
+        "description": "Every document located and retrieved for a mill during targeted source discovery (step 1). Covers RSPO Public Summary Reports, CDM Project Design Documents, certification-body outputs, PROPER entries, and press. Blocked or missing documents are recorded here with retrieval_status rather than silently dropped. Raw bytes are cached and hashed so any extracted value can be re-checked against the exact document.",
+        "source": {
+          "doc": "steps 1–3",
+          "section": "Method"
+        }
+      },
+      {
+        "columns": [
+          {
+            "name": "field_name",
+            "type": "str",
+            "nullable": false,
+            "description": "Machine-readable field identifier, e.g. net_ghg_t_co2e_per_t_cpo, nameplate_capacity_t_ffb_hr, pome_methane_capture_electricity_pct, oer, ker, certificate_validity_start, planted_area_ha, peat_area_ha, cpo_production_t, pk_production_t, ffb_production_t, biogas_capacity_kw."
+          },
+          {
+            "name": "canonical_unit",
+            "type": "str",
+            "nullable": true,
+            "description": "The exact unit string the model must populate in extracted_field.unit. Null for dimensionless or date fields."
+          },
+          {
+            "name": "sanity_min",
+            "type": "float",
+            "nullable": true,
+            "description": "Inclusive lower bound of the order-of-magnitude screen. Values outside [sanity_min, sanity_max] trigger a single retry; if still invalid the value is nulled. Deliberately generous, not real-world-variation policing (e.g. net_ghg min = 0)."
+          },
+          {
+            "name": "sanity_max",
+            "type": "float",
+            "nullable": true,
+            "description": "Inclusive upper bound of the sanity screen (e.g. net_ghg max = 15 tCO2e/t CPO; capacity max = 200 t FFB/hr)."
+          },
+          {
+            "name": "description",
+            "type": "str",
+            "nullable": true,
+            "description": "Human-readable description of what this field measures and where in the source document it typically appears (e.g. PalmGHG / Summary of Net GHG appendix at end of report)."
+          }
+        ],
+        "estimated_rows": 15,
+        "name": "field_spec",
+        "kind": "reference",
+        "title": "Field Specification (Canonical Units & Sanity Ranges)",
+        "primary_key": [
+          "field_name"
+        ],
+        "description": "The defined field set declared before the run. Each row fixes one canonical unit and an inclusive order-of-magnitude sanity range for a numeric field. The extract prompt forces the model to convert to the canonical unit; the runtime validates extracted_field and reconciled_record entries against this table and retries once on violation.",
+        "source": {
+          "section": "Output contract & validation"
+        }
+      },
+      {
+        "columns": [
+          {
+            "name": "extraction_id",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "document_id",
+            "type": "str",
+            "nullable": false,
+            "description": "The document this field was extracted from.",
+            "references": "source_document.document_id"
+          },
+          {
+            "name": "facility_uml_id",
+            "type": "str",
+            "nullable": false,
+            "description": "Denormalized for query convenience; must match source_document.facility_uml_id.",
+            "references": "facility.uml_id"
+          },
+          {
+            "name": "field_name",
+            "type": "str",
+            "nullable": false,
+            "description": "Which field was extracted.",
+            "references": "field_spec.field_name"
+          },
+          {
+            "name": "value",
+            "type": "float",
+            "nullable": true,
+            "description": "Numeric value already converted to field_spec.canonical_unit. Null when the source is silent (reported as unknown), when the conversion cannot be established with certainty, or when the value was nulled after a failed retry."
+          },
+          {
+            "name": "unit",
+            "type": "str",
+            "nullable": true,
+            "description": "Must equal field_spec.canonical_unit if non-null. Set to null alongside value when conversion is uncertain."
+          },
+          {
+            "name": "value_verbatim",
+            "type": "str",
+            "nullable": true,
+            "description": "Value exactly as printed in the source document — the audit trail. Never modified by validation or retry."
+          },
+          {
+            "name": "unit_verbatim",
+            "type": "str",
+            "nullable": true,
+            "description": "Unit exactly as printed in the source document. Never modified by validation or retry."
+          },
+          {
+            "name": "provenance_grade",
+            "type": "str",
+            "nullable": true,
+            "description": "Source authority of the passage this value came from; press is graded weaker than certification/registry.",
+            "enum": [
+              "certification",
+              "registry",
+              "press",
+              "operator"
+            ]
+          },
+          {
+            "name": "source_passage",
+            "type": "str",
+            "nullable": true,
+            "description": "The text excerpt from the document from which the value was drawn. Step 5 prohibits asserting anything not present in this passage."
+          },
+          {
+            "name": "validation_error",
+            "type": "str",
+            "nullable": true,
+            "description": "Populated when value was nulled after a failed post-retry validation check; records the specific violation (wrong unit, out-of-range, etc.)."
+          },
+          {
+            "name": "note",
+            "type": "str",
+            "nullable": true,
+            "description": "Reason value is null when a conversion could not be established (e.g. denominator of tCO2e/tProduct is not provably CPO). Distinct from validation_error."
+          }
+        ],
+        "estimated_rows": 75000,
+        "name": "extracted_field",
+        "kind": "computed",
+        "title": "Extracted Field",
+        "primary_key": [
+          "extraction_id"
+        ],
+        "description": "Per-document, per-field LLM extraction result (steps 4–5). The model returns both the value converted to canonical units and the verbatim originals exactly as the document printed them. After parsing, the runtime checks value against field_spec and retries once on violation; still-invalid values are nulled with validation_error populated. Nothing is dropped, clamped, or massaged. One row per (document, field) where the field anchor was located.",
+        "source": {
+          "doc": "steps 4–5; Output contract & validation",
+          "section": "Method"
+        }
+      },
+      {
+        "columns": [
+          {
+            "name": "record_id",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "facility_uml_id",
+            "type": "str",
+            "nullable": false,
+            "references": "facility.uml_id"
+          },
+          {
+            "name": "field_name",
+            "type": "str",
+            "nullable": false,
+            "references": "field_spec.field_name"
+          },
+          {
+            "name": "value",
+            "type": "float",
+            "nullable": true,
+            "description": "Reconciled canonical value. Null when no source carries this field or all extractions were invalid."
+          },
+          {
+            "name": "unit",
+            "type": "str",
+            "nullable": true,
+            "description": "Equals field_spec.canonical_unit when non-null."
+          },
+          {
+            "name": "confidence",
+            "type": "str",
+            "nullable": true,
+            "description": "Qualitative confidence level reflecting provenance grade, recency, and whether sources agreed.",
+            "enum": [
+              "high",
+              "medium",
+              "low",
+              "unknown"
+            ]
+          },
+          {
+            "name": "provenance_grade",
+            "type": "str",
+            "nullable": true,
+            "description": "Source authority of the winning extraction.",
+            "enum": [
+              "certification",
+              "registry",
+              "press",
+              "operator"
+            ]
+          },
+          {
+            "name": "source_document_id",
+            "type": "str",
+            "nullable": true,
+            "description": "The specific document that supplied the winning value; null when value is null.",
+            "references": "source_document.document_id"
+          },
+          {
+            "name": "source_url",
+            "type": "str",
+            "nullable": true,
+            "description": "Direct link to the cited source for publication."
+          },
+          {
+            "name": "value_verbatim",
+            "type": "str",
+            "nullable": true,
+            "description": "Carried through unchanged from extracted_field.value_verbatim."
+          },
+          {
+            "name": "unit_verbatim",
+            "type": "str",
+            "nullable": true,
+            "description": "Carried through unchanged from extracted_field.unit_verbatim."
+          },
+          {
+            "name": "validation_error",
+            "type": "str",
+            "nullable": true,
+            "description": "Carried through unchanged from extracted_field.validation_error; present when the value was nulled by the validator."
+          },
+          {
+            "name": "reconciliation_note",
+            "type": "str",
+            "nullable": true,
+            "description": "Step-6 judgment log: records which source was preferred and why; notes same-name/different-entity rejections; distinguishes registered CDM projects from evidence of construction or credit issuance; records any within-mill source disagreement."
+          }
+        ],
+        "estimated_rows": 34500,
+        "name": "reconciled_record",
+        "kind": "computed",
+        "title": "Reconciled Mill Record",
+        "primary_key": [
+          "record_id"
+        ],
+        "description": "Per-mill, per-field final output after step-6 reconciliation across all a mill's documents. The publishable dossier. Where sources disagree, the most-recent primary source is preferred and the reason is recorded; same-name/different-entity collisions are rejected and recorded. Distinguishes designed vs operated (a registered CDM project is not evidence it was built). Carries canonical value, verbatim originals, and any validation_error unchanged from extraction; the reconciled value itself is re-validated by the same field_spec checks.",
+        "source": {
+          "doc": "steps 6–7; Output contract & validation",
+          "section": "Method"
+        }
+      },
+      {
+        "columns": [
+          {
+            "name": "ground_truth_id",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "facility_uml_id",
+            "type": "str",
+            "nullable": false,
+            "references": "facility.uml_id"
+          },
+          {
+            "name": "field_name",
+            "type": "str",
+            "nullable": false,
+            "references": "field_spec.field_name"
+          },
+          {
+            "name": "value",
+            "type": "float",
+            "nullable": false,
+            "description": "The ground-truth numeric value in field_spec.canonical_unit."
+          },
+          {
+            "name": "unit",
+            "type": "str",
+            "nullable": false,
+            "description": "Must equal field_spec.canonical_unit."
+          },
+          {
+            "name": "source_url",
+            "type": "str",
+            "nullable": true,
+            "description": "URL of the primary source document that establishes this ground-truth value."
+          }
+        ],
+        "estimated_rows": 300,
+        "name": "ground_truth",
+        "kind": "ground_truth",
+        "title": "Ground-Truth Field Values",
+        "primary_key": [
+          "ground_truth_id"
+        ],
+        "description": "A held set of sourced, manually verified field values used to measure extraction agreement (Verification section). Provides the external truth against which reconciled_record is evaluated; accuracy is measured, not asserted.",
+        "source": {
+          "section": "Verification"
+        }
+      }
+    ]
+  },
+  "stages": [
+    {
+      "id": "facility_spine",
+      "type": "input_data",
+      "description": "The run's starting universe of palm-oil mills, loaded from the PalmWatch-derived asset list; every later count is measured against it.",
+      "inputs": [],
+      "cache": true,
+      "compiler_notes": [],
+      "signature": {
+        "form": "replaces",
+        "reads": [],
+        "produces": [
+          {
+            "name": "uml_id",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "operator_pt",
+            "type": "str",
+            "nullable": true
+          },
+          {
+            "name": "parent_group",
+            "type": "str",
+            "nullable": true
+          },
+          {
+            "name": "province",
+            "type": "str",
+            "nullable": true
+          },
+          {
+            "name": "latitude",
+            "type": "float",
+            "nullable": true,
+            "range": [
+              -90,
+              90
+            ]
+          },
+          {
+            "name": "longitude",
+            "type": "float",
+            "nullable": true,
+            "range": [
+              -180,
+              180
+            ]
+          },
+          {
+            "name": "source_count",
+            "type": "int",
+            "nullable": true
+          },
+          {
+            "name": "is_indonesian",
+            "type": "bool",
+            "nullable": true
+          }
+        ]
+      },
+      "source": {
+        "section": "Input — the facility universe (Tier-1)"
+      },
+      "connector": {
+        "kind": "file",
+        "params": {
+          "format": "csv"
+        },
+        "refresh": "ad_hoc",
+        "notes": "PalmWatch-derived global mill asset list (~2,300 mills). Columns: uml_id, operator_pt, parent_group, province, latitude, longitude, source_count, is_indonesian. No path declared; user binds file at run time."
+      }
+    },
+    {
+      "id": "trase_raw",
+      "type": "input_data",
+      "description": "Indonesia's only structured nameplate-capacity source, exactly as published — it may carry several rows for the same mill.",
+      "inputs": [],
+      "cache": true,
+      "compiler_notes": [
+        "Trase is described as the 'one structured nameplate-capacity source' for Indonesia. The raw table may have multiple rows per uml_id; trase_dedup resolves this."
+      ],
+      "signature": {
+        "form": "replaces",
+        "reads": [],
+        "produces": [
+          {
+            "name": "uml_id",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "trase_nameplate_capacity_t_ffb_hr",
+            "type": "float",
+            "nullable": true
+          }
+        ]
+      },
+      "source": {
+        "section": "Input — the facility universe (Tier-1)"
+      },
+      "connector": {
+        "kind": "file",
+        "params": {
+          "format": "csv"
+        },
+        "refresh": "ad_hoc",
+        "notes": "Trase Indonesia mill table; may carry duplicate uml_id rows (deduplication happens in trase_dedup). Only structured nameplate-capacity source."
+      }
+    },
+    {
+      "id": "field_spec_table",
+      "type": "input_data",
+      "description": "The static reference fixing one canonical unit and an inclusive sanity range per numeric field, declared before the run starts.",
+      "inputs": [],
+      "cache": true,
+      "compiler_notes": [
+        "Fields include: net_ghg_t_co2e_per_t_cpo [0,15], nameplate_capacity_t_ffb_hr [5,200], pome_methane_capture_electricity_pct, oer, ker, certificate_validity_start, planted_area_ha, peat_area_ha, cpo_production_t, pk_production_t, ffb_production_t, biogas_capacity_kw."
+      ],
+      "signature": {
+        "form": "replaces",
+        "reads": [],
+        "produces": [
+          {
+            "name": "field_name",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "canonical_unit",
+            "type": "str",
+            "nullable": true
+          },
+          {
+            "name": "sanity_min",
+            "type": "float",
+            "nullable": true
+          },
+          {
+            "name": "sanity_max",
+            "type": "float",
+            "nullable": true
+          },
+          {
+            "name": "description",
+            "type": "str",
+            "nullable": true
+          }
+        ]
+      },
+      "source": {
+        "section": "Output contract & validation"
+      },
+      "connector": {
+        "kind": "file",
+        "params": {
+          "format": "csv"
+        },
+        "refresh": "ad_hoc",
+        "notes": "Static reference table (~15 rows) declaring one canonical unit and inclusive sanity range per numeric field. Declared before each run; should not change between runs on the same methodology version."
+      }
+    },
+    {
+      "id": "ground_truth_table",
+      "type": "input_data",
+      "description": "Manually sourced values held aside from the run and used only to measure how well the extraction agreed with reality.",
+      "inputs": [],
+      "cache": true,
+      "compiler_notes": [],
+      "signature": {
+        "form": "replaces",
+        "reads": [],
+        "produces": [
+          {
+            "name": "ground_truth_id",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "facility_uml_id",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "field_name",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "value",
+            "type": "float",
+            "nullable": false
+          },
+          {
+            "name": "unit",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "source_url",
+            "type": "str",
+            "nullable": true
+          }
+        ]
+      },
+      "source": {
+        "section": "Verification"
+      },
+      "connector": {
+        "kind": "file",
+        "params": {
+          "format": "csv"
+        },
+        "refresh": "ad_hoc",
+        "notes": "Manually sourced ground-truth values used to measure extraction agreement. Held aside from the run; not used as input to extraction or reconciliation."
+      }
+    },
+    {
+      "id": "trase_dedup",
+      "type": "python_frame_function",
+      "description": "Keeps one Trase row per mill, preferring a row that actually carries a capacity figure, so the capacity lookup is unambiguous.",
+      "inputs": [
+        {
+          "id": "trase_raw",
+          "table_schema": {
+            "columns": [
+              {
+                "name": "uml_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "trase_nameplate_capacity_t_ffb_hr",
+                "type": "float",
+                "nullable": true
+              }
+            ]
+          }
+        }
+      ],
+      "cache": true,
+      "compiler_notes": [
+        "When multiple Trase rows share a uml_id, the row with a non-null capacity is kept; ties broken by original order. The methodology says 'de-duplicating Trase to one row per id' without specifying a tie-break rule beyond that."
+      ],
+      "signature": {
+        "form": "replaces",
+        "reads": [
+          {
+            "input": "trase_raw",
+            "columns": [
+              {
+                "name": "uml_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "trase_nameplate_capacity_t_ffb_hr",
+                "type": "float",
+                "nullable": true
+              }
+            ]
+          }
+        ],
+        "produces": [
+          {
+            "name": "uml_id",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "trase_nameplate_capacity_t_ffb_hr",
+            "type": "float",
+            "nullable": true
+          }
+        ]
+      },
+      "source": {
+        "section": "Input — the facility universe (Tier-1)"
+      },
+      "function": {
+        "kind": "inline",
+        "corner_cases": [],
+        "code": "def transform(df):\n    df = df.copy()\n    df['_cap_present'] = df['trase_nameplate_capacity_t_ffb_hr'].notna().astype(int)\n    df = df.sort_values('_cap_present', ascending=False)\n    return df.drop_duplicates(subset=['uml_id'], keep='first').drop(columns=['_cap_present'])",
+        "requirements": []
+      }
+    },
+    {
+      "id": "facility_enriched",
+      "type": "enrich",
+      "description": "Brings each mill's nameplate capacity onto its universe row; a mill absent from Trase keeps its row with a blank capacity.",
+      "inputs": [
+        {
+          "id": "facility_spine",
+          "table_schema": {
+            "columns": [
+              {
+                "name": "uml_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "operator_pt",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "parent_group",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "province",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "latitude",
+                "type": "float",
+                "nullable": true,
+                "range": [
+                  -90,
+                  90
+                ]
+              },
+              {
+                "name": "longitude",
+                "type": "float",
+                "nullable": true,
+                "range": [
+                  -180,
+                  180
+                ]
+              },
+              {
+                "name": "source_count",
+                "type": "int",
+                "nullable": true
+              },
+              {
+                "name": "is_indonesian",
+                "type": "bool",
+                "nullable": true
+              }
+            ]
+          }
+        },
+        {
+          "id": "trase_dedup",
+          "table_schema": {
+            "columns": [
+              {
+                "name": "uml_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "trase_nameplate_capacity_t_ffb_hr",
+                "type": "float",
+                "nullable": true
+              }
+            ]
+          }
+        }
+      ],
+      "cache": true,
+      "compiler_notes": [],
+      "signature": {
+        "form": "extends",
+        "reads": [
+          {
+            "input": "facility_spine",
+            "columns": [
+              {
+                "name": "uml_id",
+                "type": "str",
+                "nullable": false
+              }
+            ]
+          },
+          {
+            "input": "trase_dedup",
+            "columns": [
+              {
+                "name": "uml_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "trase_nameplate_capacity_t_ffb_hr",
+                "type": "float",
+                "nullable": true
+              }
+            ]
+          }
+        ],
+        "adds": [
+          {
+            "name": "trase_nameplate_capacity_t_ffb_hr",
+            "type": "float",
+            "nullable": true,
+            "description": "Null for mills absent from Trase."
+          }
+        ],
+        "rewrites": []
+      },
+      "source": {
+        "section": "Input — the facility universe (Tier-1)"
+      },
+      "join": {
+        "keys": [
+          {
+            "left": "uml_id",
+            "right": "uml_id"
+          }
+        ],
+        "enrich_with": {
+          "trase_nameplate_capacity_t_ffb_hr": "trase_nameplate_capacity_t_ffb_hr"
+        }
+      }
+    },
+    {
+      "id": "universe_coverage_stats",
+      "type": "aggregate",
+      "description": "A health check on the universe itself, split by whether the mill is Indonesian: how many mills there are and how many carry a capacity or more than one source.",
+      "inputs": [
+        {
+          "id": "facility_enriched",
+          "table_schema": {
+            "columns": [
+              {
+                "name": "uml_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "operator_pt",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "parent_group",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "province",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "latitude",
+                "type": "float",
+                "nullable": true,
+                "range": [
+                  -90,
+                  90
+                ]
+              },
+              {
+                "name": "longitude",
+                "type": "float",
+                "nullable": true,
+                "range": [
+                  -180,
+                  180
+                ]
+              },
+              {
+                "name": "source_count",
+                "type": "int",
+                "nullable": true
+              },
+              {
+                "name": "is_indonesian",
+                "type": "bool",
+                "nullable": true
+              },
+              {
+                "name": "trase_nameplate_capacity_t_ffb_hr",
+                "type": "float",
+                "nullable": true,
+                "description": "Null for mills absent from Trase."
+              }
+            ]
+          }
+        }
+      ],
+      "cache": true,
+      "compiler_notes": [
+        "This is a diagnostic side-output — a health check of the universe itself, not consumed by downstream enrichment stages. Percentages (% with capacity, % multi-source) must be derived post-aggregate by dividing with_capacity_count / facility_count; the aggregate formula set does not support division directly."
+      ],
+      "signature": {
+        "form": "replaces",
+        "reads": [
+          {
+            "input": "facility_enriched",
+            "columns": [
+              {
+                "name": "is_indonesian",
+                "type": "bool",
+                "nullable": true
+              },
+              {
+                "name": "source_count",
+                "type": "int",
+                "nullable": true
+              },
+              {
+                "name": "trase_nameplate_capacity_t_ffb_hr",
+                "type": "float",
+                "nullable": true,
+                "description": "Null for mills absent from Trase."
+              }
+            ]
+          }
+        ],
+        "produces": [
+          {
+            "name": "is_indonesian",
+            "type": "bool",
+            "nullable": true
+          },
+          {
+            "name": "facility_count",
+            "type": "int",
+            "nullable": false
+          },
+          {
+            "name": "with_capacity_count",
+            "type": "int",
+            "nullable": false
+          },
+          {
+            "name": "multi_source_count",
+            "type": "int",
+            "nullable": false
+          },
+          {
+            "name": "min_source_count",
+            "type": "int",
+            "nullable": true
+          },
+          {
+            "name": "max_source_count",
+            "type": "int",
+            "nullable": true
+          }
+        ]
+      },
+      "source": {
+        "section": "Input — the facility universe (Tier-1)"
+      },
+      "aggregate": {
+        "group_by": [
+          "is_indonesian"
+        ],
+        "aggregations": [
+          {
+            "output_column": "facility_count",
+            "formula": "count"
+          },
+          {
+            "output_column": "with_capacity_count",
+            "formula": "count",
+            "value_column": "trase_nameplate_capacity_t_ffb_hr",
+            "where": "trase_nameplate_capacity_t_ffb_hr IS NOT NULL"
+          },
+          {
+            "output_column": "multi_source_count",
+            "formula": "count",
+            "value_column": "source_count",
+            "where": "source_count > 1"
+          },
+          {
+            "output_column": "min_source_count",
+            "formula": "min",
+            "value_column": "source_count"
+          },
+          {
+            "output_column": "max_source_count",
+            "formula": "max",
+            "value_column": "source_count"
+          }
+        ]
+      }
+    },
+    {
+      "id": "select_for_enrichment",
+      "type": "python_frame_function",
+      "description": "Orders mills most-informative-first — Indonesian, capacity-bearing, most sources — and cuts the list down to this run's cap.",
+      "inputs": [
+        {
+          "id": "facility_enriched",
+          "table_schema": {
+            "columns": [
+              {
+                "name": "uml_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "operator_pt",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "parent_group",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "province",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "latitude",
+                "type": "float",
+                "nullable": true,
+                "range": [
+                  -90,
+                  90
+                ]
+              },
+              {
+                "name": "longitude",
+                "type": "float",
+                "nullable": true,
+                "range": [
+                  -180,
+                  180
+                ]
+              },
+              {
+                "name": "source_count",
+                "type": "int",
+                "nullable": true
+              },
+              {
+                "name": "is_indonesian",
+                "type": "bool",
+                "nullable": true
+              },
+              {
+                "name": "trase_nameplate_capacity_t_ffb_hr",
+                "type": "float",
+                "nullable": true,
+                "description": "Null for mills absent from Trase."
+              }
+            ]
+          }
+        }
+      ],
+      "cache": true,
+      "compiler_notes": [
+        "Run cap N is read from env var SELECT_FOR_ENRICHMENT_LIMIT; absent = full universe. Ordering: Indonesian first, then capacity-bearing, then highest source_count. The methodology says 'most-informative-first' and lists those three criteria explicitly."
+      ],
+      "signature": {
+        "form": "replaces",
+        "reads": [
+          {
+            "input": "facility_enriched",
+            "columns": [
+              {
+                "name": "uml_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "operator_pt",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "parent_group",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "province",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "latitude",
+                "type": "float",
+                "nullable": true,
+                "range": [
+                  -90,
+                  90
+                ]
+              },
+              {
+                "name": "longitude",
+                "type": "float",
+                "nullable": true,
+                "range": [
+                  -180,
+                  180
+                ]
+              },
+              {
+                "name": "source_count",
+                "type": "int",
+                "nullable": true
+              },
+              {
+                "name": "is_indonesian",
+                "type": "bool",
+                "nullable": true
+              },
+              {
+                "name": "trase_nameplate_capacity_t_ffb_hr",
+                "type": "float",
+                "nullable": true,
+                "description": "Null for mills absent from Trase."
+              }
+            ]
+          }
+        ],
+        "produces": [
+          {
+            "name": "uml_id",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "operator_pt",
+            "type": "str",
+            "nullable": true
+          },
+          {
+            "name": "parent_group",
+            "type": "str",
+            "nullable": true
+          },
+          {
+            "name": "province",
+            "type": "str",
+            "nullable": true
+          },
+          {
+            "name": "latitude",
+            "type": "float",
+            "nullable": true
+          },
+          {
+            "name": "longitude",
+            "type": "float",
+            "nullable": true
+          },
+          {
+            "name": "source_count",
+            "type": "int",
+            "nullable": true
+          },
+          {
+            "name": "is_indonesian",
+            "type": "bool",
+            "nullable": true
+          },
+          {
+            "name": "trase_nameplate_capacity_t_ffb_hr",
+            "type": "float",
+            "nullable": true
+          }
+        ]
+      },
+      "source": {
+        "doc": "Selection & cap",
+        "section": "Input — the facility universe (Tier-1)"
+      },
+      "function": {
+        "kind": "inline",
+        "corner_cases": [],
+        "code": "import os\n\ndef transform(df):\n    n = int(os.environ.get('SELECT_FOR_ENRICHMENT_LIMIT', len(df)))\n    df = df.copy()\n    df['_has_cap'] = df['trase_nameplate_capacity_t_ffb_hr'].notna().astype(int)\n    df['_is_indo'] = df['is_indonesian'].fillna(False).astype(int)\n    df['_src'] = df['source_count'].fillna(0)\n    df = df.sort_values(['_is_indo', '_has_cap', '_src'], ascending=False)\n    return df.drop(columns=['_has_cap', '_is_indo', '_src']).head(n)",
+        "requirements": []
+      }
+    },
+    {
+      "id": "build_discovery_queries",
+      "type": "python_row_function",
+      "description": "Writes one targeted search string per mill for each authoritative host; open-ended web search is deliberately ruled out.",
+      "inputs": [
+        {
+          "id": "select_for_enrichment",
+          "table_schema": {
+            "columns": [
+              {
+                "name": "uml_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "operator_pt",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "parent_group",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "province",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "latitude",
+                "type": "float",
+                "nullable": true
+              },
+              {
+                "name": "longitude",
+                "type": "float",
+                "nullable": true
+              },
+              {
+                "name": "source_count",
+                "type": "int",
+                "nullable": true
+              },
+              {
+                "name": "is_indonesian",
+                "type": "bool",
+                "nullable": true
+              },
+              {
+                "name": "trase_nameplate_capacity_t_ffb_hr",
+                "type": "float",
+                "nullable": true
+              }
+            ]
+          }
+        }
+      ],
+      "cache": true,
+      "compiler_notes": [
+        "The known-host list is fixed at methodology compile time (RSPO, Control Union, BSI, Sucofindo, Mutuagung, UNFCCC CDM, PROPER). The methodology explicitly rules out open-ended web search; only these authoritative hosts are queried. Additional certification bodies may be added to KNOWN_HOSTS without structural change."
+      ],
+      "signature": {
+        "form": "extends",
+        "reads": [
+          {
+            "input": "select_for_enrichment",
+            "columns": [
+              {
+                "name": "uml_id",
+                "type": "str",
+                "nullable": false
+              }
+            ]
+          }
+        ],
+        "adds": [
+          {
+            "name": "discovery_queries",
+            "type": "list[json]",
+            "nullable": false,
+            "fields": [
+              {
+                "name": "host",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "query_string",
+                "type": "str",
+                "nullable": true
+              }
+            ]
+          }
+        ],
+        "rewrites": []
+      },
+      "source": {
+        "doc": "step 1",
+        "section": "Method"
+      },
+      "function": {
+        "kind": "inline",
+        "corner_cases": [],
+        "code": "import json\n\nKNOWN_HOSTS = [\n    {'host': 'rspo.org',              'template': 'site:rspo.org \"{uml_id}\"'},\n    {'host': 'control-union.com',     'template': 'site:control-union.com \"{uml_id}\" audit'},\n    {'host': 'bsigroup.com',          'template': 'site:bsigroup.com \"{uml_id}\" palm'},\n    {'host': 'sucofindo.co.id',       'template': 'site:sucofindo.co.id \"{uml_id}\"'},\n    {'host': 'mutuagung.com',         'template': 'site:mutuagung.com \"{uml_id}\"'},\n    {'host': 'cdm.unfccc.int',        'template': 'site:cdm.unfccc.int \"{uml_id}\" palm'},\n    {'host': 'proper.menlhk.go.id',   'template': 'site:proper.menlhk.go.id \"{uml_id}\"'},\n]\n\ndef transform(row):\n    uid = row['uml_id']\n    queries = [\n        {'host': h['host'], 'query_string': h['template'].format(uml_id=uid)}\n        for h in KNOWN_HOSTS\n    ]\n    row = dict(row)\n    row['discovery_queries'] = json.dumps(queries)\n    return row",
+        "requirements": []
+      }
+    },
+    {
+      "id": "discover_candidate_documents",
+      "type": "python_frame_function",
+      "description": "Turns each mill's searches into candidate source documents, one row per document, before anything is fetched.",
+      "inputs": [
+        {
+          "id": "build_discovery_queries",
+          "table_schema": {
+            "columns": [
+              {
+                "name": "uml_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "operator_pt",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "parent_group",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "province",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "latitude",
+                "type": "float",
+                "nullable": true
+              },
+              {
+                "name": "longitude",
+                "type": "float",
+                "nullable": true
+              },
+              {
+                "name": "source_count",
+                "type": "int",
+                "nullable": true
+              },
+              {
+                "name": "is_indonesian",
+                "type": "bool",
+                "nullable": true
+              },
+              {
+                "name": "trase_nameplate_capacity_t_ffb_hr",
+                "type": "float",
+                "nullable": true
+              },
+              {
+                "name": "discovery_queries",
+                "type": "list[json]",
+                "nullable": false,
+                "fields": [
+                  {
+                    "name": "host",
+                    "type": "str",
+                    "nullable": true
+                  },
+                  {
+                    "name": "query_string",
+                    "type": "str",
+                    "nullable": true
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "cache": true,
+      "compiler_notes": [
+        "URL classification (rspo_psr vs cdm_pdd vs other) is rule-based on host and URL path patterns. The methodology flags this as deterministic — 'the source hierarchy is known in advance'. An LLM is NOT used here; judgment about which document is authoritative is deferred to select_authoritative_document.",
+        "Search is routed through DuckDuckGo HTML endpoint as a stand-in for host-keyed queries; production implementations may use host-specific search APIs or direct crawls of known index pages.",
+        "audit_year and audit_type are populated by retrieve_documents after text extraction, not here.",
+        "DDG search replaced with a verified known-source seed (SOURCE_MAP.md): DuckDuckGo is unreachable in this runtime and mill documents are not indexed by UML id. Only verified-fetchable URLs are seeded; no fabricated URLs."
+      ],
+      "signature": {
+        "form": "replaces",
+        "reads": [
+          {
+            "input": "build_discovery_queries",
+            "columns": [
+              {
+                "name": "uml_id",
+                "type": "str",
+                "nullable": false
+              }
+            ]
+          }
+        ],
+        "produces": [
+          {
+            "name": "document_id",
+            "type": "str",
+            "nullable": false,
+            "description": "SHA-256 prefix of uml_id|url — stable across runs for same URL."
+          },
+          {
+            "name": "facility_uml_id",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "url",
+            "type": "str",
+            "nullable": true
+          },
+          {
+            "name": "document_type",
+            "type": "str",
+            "nullable": false,
+            "enum": [
+              "rspo_psr",
+              "cdm_pdd",
+              "press",
+              "operator_pr",
+              "other"
+            ]
+          },
+          {
+            "name": "source_grade",
+            "type": "str",
+            "nullable": false,
+            "enum": [
+              "certification",
+              "registry",
+              "press",
+              "operator"
+            ]
+          },
+          {
+            "name": "audit_year",
+            "type": "int",
+            "nullable": true
+          },
+          {
+            "name": "audit_type",
+            "type": "str",
+            "nullable": true
+          },
+          {
+            "name": "retrieval_status",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "raw_bytes_hash",
+            "type": "str",
+            "nullable": true
+          },
+          {
+            "name": "is_authoritative",
+            "type": "bool",
+            "nullable": true
+          },
+          {
+            "name": "extracted_text",
+            "type": "str",
+            "nullable": true
+          },
+          {
+            "name": "retrieval_timestamp",
+            "type": "str",
+            "nullable": true
+          }
+        ]
+      },
+      "source": {
+        "doc": "step 1",
+        "section": "Method"
+      },
+      "function": {
+        "kind": "inline",
+        "corner_cases": [],
+        "code": "import hashlib\n\n# Verified authoritative documents (real URLs fetched successfully this session;\n# see SOURCE_MAP.md). DuckDuckGo discovery is unreachable in this environment, so\n# we seed the known-in-advance authoritative sources the methodology specifies.\n# Only mills with a VERIFIED document are seeded; others yield no candidate.\nKNOWN_DOCS = {\n    \"PO1000000021\": [  # Buatan I - PT Inti Indosawit Subur (Asian Agri) - BSI ASA-4, 387pp\n        {\"url\": \"https://www.bsigroup.com/siteassets/pdf/en/about-us/rspo/rspo-public-summary-pt-inti-indosawit-subur-buatan-I-pom-asa2-4-approved.pdf\",\n         \"document_type\": \"rspo_psr\", \"source_grade\": \"certification\"},\n    ],\n    \"PO1000000054\": [  # Batang Kulim - PT Musim Mas - 2023 recert PSR, 169pp\n        {\"url\": \"https://www.musimmas.com/wp-content/uploads/2024/08/2023-RSPO-Audit-Report-PT.-Musim-Mas-Batang-Kulim-POM.pdf\",\n         \"document_type\": \"rspo_psr\", \"source_grade\": \"certification\"},\n    ],\n}\n\ndef transform(df):\n    import pandas as pd\n    rows = []\n    for _, mill in df.iterrows():\n        uid = mill[\"uml_id\"]\n        for doc in KNOWN_DOCS.get(uid, []):\n            doc_id = hashlib.sha256((uid + \"|\" + doc[\"url\"]).encode()).hexdigest()[:16]\n            rows.append({\n                \"document_id\": doc_id,\n                \"facility_uml_id\": uid,\n                \"url\": doc[\"url\"],\n                \"document_type\": doc[\"document_type\"],\n                \"source_grade\": doc[\"source_grade\"],\n                \"audit_year\": None,\n                \"audit_type\": None,\n                \"retrieval_status\": \"pending\",\n                \"raw_bytes_hash\": None,\n                \"is_authoritative\": None,\n                \"extracted_text\": None,\n                \"retrieval_timestamp\": None,\n            })\n    return pd.DataFrame(rows)\n",
+        "requirements": []
+      }
+    },
+    {
+      "id": "retrieve_documents",
+      "type": "python_row_function",
+      "description": "Fetches each candidate document, caches the raw bytes and pulls out its text; a blocked or missing document is recorded, never dropped.",
+      "inputs": [
+        {
+          "id": "discover_candidate_documents",
+          "table_schema": {
+            "columns": [
+              {
+                "name": "document_id",
+                "type": "str",
+                "nullable": false,
+                "description": "SHA-256 prefix of uml_id|url — stable across runs for same URL."
+              },
+              {
+                "name": "facility_uml_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "url",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "document_type",
+                "type": "str",
+                "nullable": false,
+                "enum": [
+                  "rspo_psr",
+                  "cdm_pdd",
+                  "press",
+                  "operator_pr",
+                  "other"
+                ]
+              },
+              {
+                "name": "source_grade",
+                "type": "str",
+                "nullable": false,
+                "enum": [
+                  "certification",
+                  "registry",
+                  "press",
+                  "operator"
+                ]
+              },
+              {
+                "name": "audit_year",
+                "type": "int",
+                "nullable": true
+              },
+              {
+                "name": "audit_type",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "retrieval_status",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "raw_bytes_hash",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "is_authoritative",
+                "type": "bool",
+                "nullable": true
+              },
+              {
+                "name": "extracted_text",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "retrieval_timestamp",
+                "type": "str",
+                "nullable": true
+              }
+            ]
+          }
+        }
+      ],
+      "cache": true,
+      "compiler_notes": [
+        "Raw bytes are cached locally by URL hash so the same document is fetched at most once per run regardless of how many mills reference it.",
+        "Audit year and audit type are heuristically parsed from the first 2000 chars of extracted text; the select_authoritative_document LLM stage may override if the heuristic is wrong.",
+        "Blocked or missing documents are recorded with retrieval_status, not dropped — a core requirement of the sourcing discipline.",
+        "The Wayback Machine fallback is attempted only when the live fetch returns missing (404/gone), not on blocked (403)."
+      ],
+      "signature": {
+        "form": "extends",
+        "reads": [
+          {
+            "input": "discover_candidate_documents",
+            "columns": [
+              {
+                "name": "url",
+                "type": "str",
+                "nullable": true
+              }
+            ]
+          }
+        ],
+        "adds": [],
+        "rewrites": []
+      },
+      "source": {
+        "doc": "step 3",
+        "section": "Method"
+      },
+      "function": {
+        "kind": "inline",
+        "corner_cases": [],
+        "code": "import hashlib, os, time, re\nfrom datetime import datetime, timezone\n\nCACHE_DIR = os.environ.get('PALM_DOC_CACHE', '/tmp/palm_doc_cache')\nHEADERS = {\n    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',\n    'Accept': 'text/html,application/pdf,*/*',\n    'Accept-Language': 'en-US,en;q=0.9',\n}\nWAYBACK = 'https://web.archive.org/web/2/'\n\ndef _get(url, retries=3):\n    import requests\n    for i in range(retries):\n        try:\n            r = requests.get(url, headers=HEADERS, timeout=45, stream=True)\n            if r.status_code == 200:\n                return r.content, 'ok'\n            if r.status_code in (401, 403):\n                return None, 'blocked'\n            if r.status_code == 404:\n                return None, 'missing'\n        except Exception:\n            pass\n        time.sleep(2 ** i)\n    return None, 'missing'\n\ndef _extract_text(raw):\n    if raw[:4] == b'%PDF' or raw[:4] == b'\\x25PDF':\n        import io\n        from pdfminer.high_level import extract_text\n        return extract_text(io.BytesIO(raw))\n    import html2text\n    return html2text.html2text(raw.decode('utf-8', errors='replace'))\n\ndef _parse_year_type(text):\n    year = None\n    audit_type = None\n    m = re.search(r'(20\\d{2})', text[:2000] if text else '')\n    if m:\n        year = int(m.group(1))\n    if 'recertification' in (text or '').lower():\n        audit_type = 'recertification'\n    elif 'annual surveillance' in (text or '').lower():\n        audit_type = 'annual_surveillance'\n    elif 'initial' in (text or '').lower()[:500]:\n        audit_type = 'initial'\n    return year, audit_type\n\ndef transform(row):\n    row = dict(row)\n    url = row.get('url') or ''\n    os.makedirs(CACHE_DIR, exist_ok=True)\n    sha_key = hashlib.sha256(url.encode()).hexdigest()\n    cache_path = os.path.join(CACHE_DIR, sha_key)\n    if os.path.exists(cache_path):\n        with open(cache_path, 'rb') as f:\n            raw = f.read()\n        status = 'ok'\n    else:\n        raw, status = _get(url)\n        if raw is None and status == 'missing':\n            raw, wb_status = _get(WAYBACK + url)\n            if raw is not None:\n                status = 'wayback_fallback'\n        if raw is not None:\n            with open(cache_path, 'wb') as f:\n                f.write(raw)\n    if raw is None:\n        row['retrieval_status'] = status\n        row['retrieval_timestamp'] = None\n        row['raw_bytes_hash'] = None\n        row['extracted_text'] = None\n        row['audit_year'] = None\n        row['audit_type'] = None\n    else:\n        text = _extract_text(raw)\n        year, atype = _parse_year_type(text)\n        row['retrieval_status'] = status\n        row['retrieval_timestamp'] = datetime.now(timezone.utc).isoformat()\n        row['raw_bytes_hash'] = hashlib.sha256(raw).hexdigest()\n        row['extracted_text'] = text\n        row['audit_year'] = year\n        row['audit_type'] = atype\n    return row",
+        "requirements": [
+          "pdfminer.six",
+          "html2text",
+          "requests"
+        ]
+      }
+    },
+    {
+      "id": "group_docs_by_mill",
+      "type": "python_frame_function",
+      "description": "Bundles everything found for one mill into a single row so the next step can weigh the candidates against each other.",
+      "inputs": [
+        {
+          "id": "retrieve_documents",
+          "table_schema": {
+            "columns": [
+              {
+                "name": "document_id",
+                "type": "str",
+                "nullable": false,
+                "description": "SHA-256 prefix of uml_id|url — stable across runs for same URL."
+              },
+              {
+                "name": "facility_uml_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "url",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "document_type",
+                "type": "str",
+                "nullable": false,
+                "enum": [
+                  "rspo_psr",
+                  "cdm_pdd",
+                  "press",
+                  "operator_pr",
+                  "other"
+                ]
+              },
+              {
+                "name": "source_grade",
+                "type": "str",
+                "nullable": false,
+                "enum": [
+                  "certification",
+                  "registry",
+                  "press",
+                  "operator"
+                ]
+              },
+              {
+                "name": "audit_year",
+                "type": "int",
+                "nullable": true
+              },
+              {
+                "name": "audit_type",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "retrieval_status",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "raw_bytes_hash",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "is_authoritative",
+                "type": "bool",
+                "nullable": true
+              },
+              {
+                "name": "extracted_text",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "retrieval_timestamp",
+                "type": "str",
+                "nullable": true
+              }
+            ]
+          }
+        }
+      ],
+      "cache": true,
+      "compiler_notes": [
+        "This stage exists solely to satisfy the llm_transform 1:1 constraint: the LLM must see all of a mill's documents at once to pick the governing one. Only document metadata (not full text) is included here to keep prompt length manageable."
+      ],
+      "signature": {
+        "form": "replaces",
+        "reads": [
+          {
+            "input": "retrieve_documents",
+            "columns": [
+              {
+                "name": "document_id",
+                "type": "str",
+                "nullable": false,
+                "description": "SHA-256 prefix of uml_id|url — stable across runs for same URL."
+              },
+              {
+                "name": "facility_uml_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "url",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "document_type",
+                "type": "str",
+                "nullable": false,
+                "enum": [
+                  "rspo_psr",
+                  "cdm_pdd",
+                  "press",
+                  "operator_pr",
+                  "other"
+                ]
+              },
+              {
+                "name": "source_grade",
+                "type": "str",
+                "nullable": false,
+                "enum": [
+                  "certification",
+                  "registry",
+                  "press",
+                  "operator"
+                ]
+              },
+              {
+                "name": "audit_year",
+                "type": "int",
+                "nullable": true
+              },
+              {
+                "name": "audit_type",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "retrieval_status",
+                "type": "str",
+                "nullable": false
+              }
+            ]
+          }
+        ],
+        "produces": [
+          {
+            "name": "facility_uml_id",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "docs",
+            "type": "str",
+            "nullable": false,
+            "description": "JSON array of document metadata objects for this mill; passed verbatim into the LLM prompt."
+          }
+        ]
+      },
+      "source": {
+        "doc": "step 2",
+        "section": "Method"
+      },
+      "function": {
+        "kind": "inline",
+        "corner_cases": [],
+        "code": "import json\n\ndef transform(df):\n    import pandas as pd\n    rows = []\n    for mill_id, grp in df.groupby('facility_uml_id'):\n        docs = []\n        for _, r in grp.iterrows():\n            docs.append({\n                'document_id': r['document_id'],\n                'document_type': r['document_type'],\n                'url': r.get('url'),\n                'audit_year': r.get('audit_year'),\n                'audit_type': r.get('audit_type'),\n                'source_grade': r['source_grade'],\n                'retrieval_status': r['retrieval_status'],\n            })\n        rows.append({'facility_uml_id': mill_id, 'docs': json.dumps(docs)})\n    return pd.DataFrame(rows)",
+        "requirements": []
+      }
+    },
+    {
+      "id": "select_authoritative_document",
+      "type": "llm_transform",
+      "description": "Judgment: picks the one governing report per mill — the full audit summary carrying the operational appendix, not a thin announcement.",
+      "inputs": [
+        {
+          "id": "group_docs_by_mill",
+          "table_schema": {
+            "columns": [
+              {
+                "name": "facility_uml_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "docs",
+                "type": "str",
+                "nullable": false,
+                "description": "JSON array of document metadata objects for this mill; passed verbatim into the LLM prompt."
+              }
+            ]
+          }
+        }
+      ],
+      "cache": true,
+      "compiler_notes": [
+        "This is the first of three explicit judgment steps (⚖). The methodology notes: 'documents move, recur per audit year, and the right one is the one that actually carries the operational appendix.'",
+        "Opus is specified because document selection requires genuine reasoning about partial metadata; lower-tier models consistently pick thin announcements over full PSRs in tests.",
+        "Mills with no retrievable documents will have both authoritative ids null; mark_authoritative will produce zero rows for them and they will be absent from the published dossier."
+      ],
+      "signature": {
+        "form": "extends",
+        "reads": [
+          {
+            "input": "group_docs_by_mill",
+            "columns": [
+              {
+                "name": "docs",
+                "type": "str",
+                "nullable": false,
+                "description": "JSON array of document metadata objects for this mill; passed verbatim into the LLM prompt."
+              },
+              {
+                "name": "facility_uml_id",
+                "type": "str",
+                "nullable": false
+              }
+            ]
+          }
+        ],
+        "adds": [
+          {
+            "name": "authoritative_rspo_id",
+            "type": "str",
+            "nullable": true
+          },
+          {
+            "name": "authoritative_cdm_id",
+            "type": "str",
+            "nullable": true
+          },
+          {
+            "name": "selection_reasoning",
+            "type": "str",
+            "nullable": true
+          }
+        ],
+        "rewrites": []
+      },
+      "source": {
+        "doc": "step 2",
+        "section": "Method"
+      },
+      "llm": {
+        "prompt_instructions": "",
+        "prompt_data_template": "You are selecting the governing source document for palm-oil mill {facility_uml_id}.\n\nAvailable retrieved documents:\n{docs}\n\nApply these rules in order:\n1. Prefer the full RSPO Public Summary Report (document_type=rspo_psr) that carries the operational appendix (PalmGHG / Summary of Net GHG data) — NOT a thin RSPO public announcement that carries almost no operational data. If you cannot tell whether a PSR is the full report vs a thin announcement from the metadata alone, prefer the one with a higher audit_year.\n2. Among rspo_psr documents with retrieval_status=ok or wayback_fallback, prefer the most recent by audit_year, then by audit_type in order: recertification > annual_surveillance > initial.\n3. A CDM Project Design Document (document_type=cdm_pdd) may also be authoritative for CDM-specific fields. Select at most one.\n4. Skip any document with retrieval_status=blocked or retrieval_status=missing — it cannot be read.\n5. If no usable rspo_psr exists, record authoritative_rspo_id as null.\n\nReturn a JSON object with keys: authoritative_rspo_id (string or null), authoritative_cdm_id (string or null), selection_reasoning (string — which document was chosen and why, or why none).",
+        "model": "claude-opus-5",
+        "temperature": 0.0,
+        "max_retries": 2,
+        "response_format": "json",
+        "batch_size": 1
+      }
+    },
+    {
+      "id": "mark_authoritative",
+      "type": "python_frame_function",
+      "description": "Keeps only the documents chosen as governing, so later steps read a mill's best evidence and nothing else.",
+      "inputs": [
+        {
+          "id": "retrieve_documents",
+          "table_schema": {
+            "columns": [
+              {
+                "name": "document_id",
+                "type": "str",
+                "nullable": false,
+                "description": "SHA-256 prefix of uml_id|url — stable across runs for same URL."
+              },
+              {
+                "name": "facility_uml_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "url",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "document_type",
+                "type": "str",
+                "nullable": false,
+                "enum": [
+                  "rspo_psr",
+                  "cdm_pdd",
+                  "press",
+                  "operator_pr",
+                  "other"
+                ]
+              },
+              {
+                "name": "source_grade",
+                "type": "str",
+                "nullable": false,
+                "enum": [
+                  "certification",
+                  "registry",
+                  "press",
+                  "operator"
+                ]
+              },
+              {
+                "name": "audit_year",
+                "type": "int",
+                "nullable": true
+              },
+              {
+                "name": "audit_type",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "retrieval_status",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "raw_bytes_hash",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "is_authoritative",
+                "type": "bool",
+                "nullable": true
+              },
+              {
+                "name": "extracted_text",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "retrieval_timestamp",
+                "type": "str",
+                "nullable": true
+              }
+            ]
+          }
+        },
+        {
+          "id": "select_authoritative_document",
+          "table_schema": {
+            "columns": [
+              {
+                "name": "facility_uml_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "docs",
+                "type": "str",
+                "nullable": false,
+                "description": "JSON array of document metadata objects for this mill; passed verbatim into the LLM prompt."
+              },
+              {
+                "name": "authoritative_rspo_id",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "authoritative_cdm_id",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "selection_reasoning",
+                "type": "str",
+                "nullable": true
+              }
+            ]
+          }
+        }
+      ],
+      "cache": true,
+      "compiler_notes": [
+        "At most one rspo_psr and one cdm_pdd per mill reach this stage. Mills with no authoritative document selected are silently absent from downstream; per-run manifest should count such mills for quality tracking."
+      ],
+      "signature": {
+        "form": "replaces",
+        "reads": [
+          {
+            "input": "retrieve_documents",
+            "columns": [
+              {
+                "name": "document_id",
+                "type": "str",
+                "nullable": false,
+                "description": "SHA-256 prefix of uml_id|url — stable across runs for same URL."
+              },
+              {
+                "name": "facility_uml_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "url",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "document_type",
+                "type": "str",
+                "nullable": false,
+                "enum": [
+                  "rspo_psr",
+                  "cdm_pdd",
+                  "press",
+                  "operator_pr",
+                  "other"
+                ]
+              },
+              {
+                "name": "source_grade",
+                "type": "str",
+                "nullable": false,
+                "enum": [
+                  "certification",
+                  "registry",
+                  "press",
+                  "operator"
+                ]
+              },
+              {
+                "name": "audit_year",
+                "type": "int",
+                "nullable": true
+              },
+              {
+                "name": "audit_type",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "retrieval_status",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "raw_bytes_hash",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "is_authoritative",
+                "type": "bool",
+                "nullable": true
+              },
+              {
+                "name": "extracted_text",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "retrieval_timestamp",
+                "type": "str",
+                "nullable": true
+              }
+            ]
+          },
+          {
+            "input": "select_authoritative_document",
+            "columns": [
+              {
+                "name": "facility_uml_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "authoritative_rspo_id",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "authoritative_cdm_id",
+                "type": "str",
+                "nullable": true
+              }
+            ]
+          }
+        ],
+        "produces": [
+          {
+            "name": "document_id",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "facility_uml_id",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "url",
+            "type": "str",
+            "nullable": true
+          },
+          {
+            "name": "document_type",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "source_grade",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "audit_year",
+            "type": "int",
+            "nullable": true
+          },
+          {
+            "name": "audit_type",
+            "type": "str",
+            "nullable": true
+          },
+          {
+            "name": "retrieval_status",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "raw_bytes_hash",
+            "type": "str",
+            "nullable": true
+          },
+          {
+            "name": "is_authoritative",
+            "type": "bool",
+            "nullable": false
+          },
+          {
+            "name": "extracted_text",
+            "type": "str",
+            "nullable": true
+          },
+          {
+            "name": "retrieval_timestamp",
+            "type": "str",
+            "nullable": true
+          }
+        ]
+      },
+      "source": {
+        "doc": "step 2",
+        "section": "Method"
+      },
+      "function": {
+        "kind": "inline",
+        "corner_cases": [],
+        "code": "def transform(docs_df, sel_df):\n    import pandas as pd\n    sel = sel_df.set_index('facility_uml_id')[['authoritative_rspo_id', 'authoritative_cdm_id']].to_dict('index')\n    result = []\n    for _, row in docs_df.iterrows():\n        mill_sel = sel.get(row['facility_uml_id'], {})\n        auth_ids = {mill_sel.get('authoritative_rspo_id'), mill_sel.get('authoritative_cdm_id')} - {None}\n        if row['document_id'] in auth_ids:\n            r = dict(row)\n            r['is_authoritative'] = True\n            result.append(r)\n    return pd.DataFrame(result) if result else pd.DataFrame(columns=docs_df.columns)",
+        "requirements": []
+      }
+    },
+    {
+      "id": "extract_fields",
+      "type": "llm_transform",
+      "description": "Judgment: reads the whole document and pulls out every defined field with its verbatim wording and the passage it came from.",
+      "inputs": [
+        {
+          "id": "mark_authoritative",
+          "table_schema": {
+            "columns": [
+              {
+                "name": "document_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "facility_uml_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "document_type",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "source_grade",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "audit_year",
+                "type": "int",
+                "nullable": true
+              },
+              {
+                "name": "extracted_text",
+                "type": "str",
+                "nullable": true
+              }
+            ]
+          }
+        }
+      ],
+      "cache": true,
+      "compiler_notes": [
+        "Second judgment step (⚖). The model must locate field anchors scattered across a very long document — the GHG appendix is at the end and would be missed by a page-limited call.",
+        "The full extracted_text column is passed in the prompt. For documents exceeding the model context window, the runner must implement a chunking strategy (e.g. extract first 10 pages for header fields + last 30 pages for GHG appendix). This chunking logic is not encoded here; it is a runner concern flagged in compiler_notes.",
+        "The model is instructed to carry value_verbatim and unit_verbatim unchanged regardless of conversion; these are the audit trail."
+      ],
+      "signature": {
+        "form": "extends",
+        "reads": [
+          {
+            "input": "mark_authoritative",
+            "columns": [
+              {
+                "name": "audit_year",
+                "type": "int",
+                "nullable": true
+              },
+              {
+                "name": "document_type",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "extracted_text",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "facility_uml_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "source_grade",
+                "type": "str",
+                "nullable": false
+              }
+            ]
+          }
+        ],
+        "adds": [
+          {
+            "name": "raw_extractions",
+            "type": "list[json]",
+            "nullable": false,
+            "fields": [
+              {
+                "name": "field_name",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "value",
+                "type": "float",
+                "nullable": true
+              },
+              {
+                "name": "unit",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "value_verbatim",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "unit_verbatim",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "source_passage",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "provenance_grade",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "note",
+                "type": "str",
+                "nullable": true
+              }
+            ]
+          }
+        ],
+        "rewrites": []
+      },
+      "source": {
+        "doc": "steps 4–5",
+        "section": "Method"
+      },
+      "llm": {
+        "prompt_instructions": "",
+        "prompt_data_template": "You are extracting operational data from a palm-oil mill source document.\n\nMill: {facility_uml_id}\nDocument type: {document_type}\nSource grade: {source_grade}\nAudit year: {audit_year}\n\nFull document text:\n{extracted_text}\n\nExtract EVERY field listed below. Search the ENTIRE document — the PalmGHG / Summary of Net GHG appendix is typically at the END of a 150–400 page report; do not stop at the first pages.\n\nFields to extract (return one object per field, even if absent):\n- net_ghg_t_co2e_per_t_cpo — canonical unit: tCO2e/t CPO\n- nameplate_capacity_t_ffb_hr — canonical unit: t FFB/hr\n- pome_methane_capture_electricity_pct — canonical unit: % (share of captured methane used for electricity)\n- oer — oil extraction rate, canonical unit: %\n- ker — kernel extraction rate, canonical unit: %\n- certificate_number — text field, no unit\n- certificate_validity_start — date field, format YYYY-MM-DD\n- certificate_validity_end — date field, format YYYY-MM-DD\n- planted_area_ha — canonical unit: ha\n- peat_area_ha — canonical unit: ha\n- cpo_production_t — canonical unit: t\n- pk_production_t — canonical unit: t\n- ffb_production_t — canonical unit: t\n- biogas_capacity_kw — canonical unit: kW\n\nFor each field return a JSON object with:\n  field_name, value (number converted to canonical unit, or null), unit (canonical unit string or null), value_verbatim (exactly as in document), unit_verbatim (exactly as in document), source_passage (verbatim excerpt), provenance_grade (\"{source_grade}\"), note (reason value is null, if applicable).\n\nRules:\n- NEVER assert a value not present in source_passage.\n- If conversion to canonical unit is uncertain (e.g. denominator of tCO2e/tProduct is not provably CPO), set value=null and explain in note; keep verbatims.\n- If the field is absent from the document, return value=null, note=\"not present in document\".\n- Do NOT invent values or estimate.\n\nReturn a JSON object: {{\"raw_extractions\": [ ... array of field objects ... ]}}",
+        "model": "claude-opus-5",
+        "temperature": 0.0,
+        "max_retries": 2,
+        "response_format": "json",
+        "batch_size": 1
+      }
+    },
+    {
+      "id": "explode_extracted_fields",
+      "type": "python_frame_function",
+      "description": "Splits each document's field list into one row per field and attaches that field's canonical unit and sanity range.",
+      "inputs": [
+        {
+          "id": "extract_fields",
+          "table_schema": {
+            "columns": [
+              {
+                "name": "document_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "facility_uml_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "document_type",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "source_grade",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "audit_year",
+                "type": "int",
+                "nullable": true
+              },
+              {
+                "name": "extracted_text",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "raw_extractions",
+                "type": "list[json]",
+                "nullable": false,
+                "fields": [
+                  {
+                    "name": "field_name",
+                    "type": "str",
+                    "nullable": true
+                  },
+                  {
+                    "name": "value",
+                    "type": "float",
+                    "nullable": true
+                  },
+                  {
+                    "name": "unit",
+                    "type": "str",
+                    "nullable": true
+                  },
+                  {
+                    "name": "value_verbatim",
+                    "type": "str",
+                    "nullable": true
+                  },
+                  {
+                    "name": "unit_verbatim",
+                    "type": "str",
+                    "nullable": true
+                  },
+                  {
+                    "name": "source_passage",
+                    "type": "str",
+                    "nullable": true
+                  },
+                  {
+                    "name": "provenance_grade",
+                    "type": "str",
+                    "nullable": true
+                  },
+                  {
+                    "name": "note",
+                    "type": "str",
+                    "nullable": true
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "field_spec_table",
+          "table_schema": {
+            "columns": [
+              {
+                "name": "field_name",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "canonical_unit",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "sanity_min",
+                "type": "float",
+                "nullable": true
+              },
+              {
+                "name": "sanity_max",
+                "type": "float",
+                "nullable": true
+              },
+              {
+                "name": "description",
+                "type": "str",
+                "nullable": true
+              }
+            ]
+          }
+        }
+      ],
+      "cache": true,
+      "compiler_notes": [
+        "extraction_id is composite document_id|field_name; stable across retries. canonical_unit, sanity_min, sanity_max are joined from field_spec here so validation stages need no further join."
+      ],
+      "signature": {
+        "form": "replaces",
+        "reads": [
+          {
+            "input": "extract_fields",
+            "columns": [
+              {
+                "name": "document_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "facility_uml_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "raw_extractions",
+                "type": "list[json]",
+                "nullable": false,
+                "fields": [
+                  {
+                    "name": "field_name",
+                    "type": "str",
+                    "nullable": true
+                  },
+                  {
+                    "name": "value",
+                    "type": "float",
+                    "nullable": true
+                  },
+                  {
+                    "name": "unit",
+                    "type": "str",
+                    "nullable": true
+                  },
+                  {
+                    "name": "value_verbatim",
+                    "type": "str",
+                    "nullable": true
+                  },
+                  {
+                    "name": "unit_verbatim",
+                    "type": "str",
+                    "nullable": true
+                  },
+                  {
+                    "name": "source_passage",
+                    "type": "str",
+                    "nullable": true
+                  },
+                  {
+                    "name": "provenance_grade",
+                    "type": "str",
+                    "nullable": true
+                  },
+                  {
+                    "name": "note",
+                    "type": "str",
+                    "nullable": true
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "input": "field_spec_table",
+            "columns": [
+              {
+                "name": "field_name",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "canonical_unit",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "sanity_min",
+                "type": "float",
+                "nullable": true
+              },
+              {
+                "name": "sanity_max",
+                "type": "float",
+                "nullable": true
+              }
+            ]
+          }
+        ],
+        "produces": [
+          {
+            "name": "extraction_id",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "document_id",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "facility_uml_id",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "field_name",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "value",
+            "type": "float",
+            "nullable": true
+          },
+          {
+            "name": "unit",
+            "type": "str",
+            "nullable": true
+          },
+          {
+            "name": "value_verbatim",
+            "type": "str",
+            "nullable": true
+          },
+          {
+            "name": "unit_verbatim",
+            "type": "str",
+            "nullable": true
+          },
+          {
+            "name": "provenance_grade",
+            "type": "str",
+            "nullable": true
+          },
+          {
+            "name": "source_passage",
+            "type": "str",
+            "nullable": true
+          },
+          {
+            "name": "note",
+            "type": "str",
+            "nullable": true
+          },
+          {
+            "name": "validation_error",
+            "type": "str",
+            "nullable": true
+          },
+          {
+            "name": "violation",
+            "type": "str",
+            "nullable": true
+          },
+          {
+            "name": "canonical_unit",
+            "type": "str",
+            "nullable": true
+          },
+          {
+            "name": "sanity_min",
+            "type": "float",
+            "nullable": true
+          },
+          {
+            "name": "sanity_max",
+            "type": "float",
+            "nullable": true
+          }
+        ]
+      },
+      "source": {
+        "doc": "step 5",
+        "section": "Method"
+      },
+      "function": {
+        "kind": "inline",
+        "corner_cases": [],
+        "code": "import json\n\ndef transform(extractions_df, spec_df):\n    import pandas as pd\n    spec = spec_df.set_index('field_name')[['canonical_unit', 'sanity_min', 'sanity_max']].to_dict('index')\n    rows = []\n    for _, doc in extractions_df.iterrows():\n        fields = json.loads(doc['raw_extractions']) if isinstance(doc['raw_extractions'], str) else (doc['raw_extractions'] or [])\n        for f in fields:\n            fname = f.get('field_name', '')\n            sp = spec.get(fname, {})\n            rows.append({\n                'extraction_id': f\"{doc['document_id']}|{fname}\",\n                'document_id': doc['document_id'],\n                'facility_uml_id': doc['facility_uml_id'],\n                'field_name': fname,\n                'value': f.get('value'),\n                'unit': f.get('unit'),\n                'value_verbatim': f.get('value_verbatim'),\n                'unit_verbatim': f.get('unit_verbatim'),\n                'provenance_grade': f.get('provenance_grade'),\n                'source_passage': f.get('source_passage'),\n                'note': f.get('note'),\n                'validation_error': None,\n                'violation': None,\n                'canonical_unit': sp.get('canonical_unit'),\n                'sanity_min': sp.get('sanity_min'),\n                'sanity_max': sp.get('sanity_max'),\n            })\n    return pd.DataFrame(rows)",
+        "requirements": []
+      }
+    },
+    {
+      "id": "validate_extraction",
+      "type": "python_row_function",
+      "description": "Checks each figure against its canonical unit and sanity range, recording what failed instead of altering the number.",
+      "inputs": [
+        {
+          "id": "explode_extracted_fields",
+          "table_schema": {
+            "columns": [
+              {
+                "name": "extraction_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "document_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "facility_uml_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "field_name",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "value",
+                "type": "float",
+                "nullable": true
+              },
+              {
+                "name": "unit",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "value_verbatim",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "unit_verbatim",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "provenance_grade",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "source_passage",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "note",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "validation_error",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "violation",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "canonical_unit",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "sanity_min",
+                "type": "float",
+                "nullable": true
+              },
+              {
+                "name": "sanity_max",
+                "type": "float",
+                "nullable": true
+              }
+            ]
+          }
+        }
+      ],
+      "cache": true,
+      "compiler_notes": [
+        "Sanity ranges are deliberately generous order-of-magnitude screens, not real-world-variation policing. A value that disagrees with domain knowledge but passes the range is not flagged here — that is editorial judgment reserved for reconcile_across_documents."
+      ],
+      "signature": {
+        "form": "extends",
+        "reads": [
+          {
+            "input": "explode_extracted_fields",
+            "columns": [
+              {
+                "name": "value",
+                "type": "float",
+                "nullable": true
+              },
+              {
+                "name": "unit",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "canonical_unit",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "sanity_min",
+                "type": "float",
+                "nullable": true
+              },
+              {
+                "name": "sanity_max",
+                "type": "float",
+                "nullable": true
+              }
+            ]
+          }
+        ],
+        "adds": [],
+        "rewrites": []
+      },
+      "source": {
+        "section": "Output contract & validation"
+      },
+      "function": {
+        "kind": "inline",
+        "corner_cases": [],
+        "code": "def transform(row):\n    row = dict(row)\n    value = row.get('value')\n    unit = row.get('unit')\n    canonical = row.get('canonical_unit')\n    lo = row.get('sanity_min')\n    hi = row.get('sanity_max')\n    violations = []\n    if value is not None:\n        if canonical is not None and unit != canonical:\n            violations.append(f\"unit '{unit}' must be '{canonical}'\")\n        if lo is not None and value < lo:\n            violations.append(f\"value {value} below sanity_min {lo}\")\n        if hi is not None and value > hi:\n            violations.append(f\"value {value} above sanity_max {hi}\")\n    row['violation'] = '; '.join(violations) if violations else None\n    return row",
+        "requirements": []
+      }
+    },
+    {
+      "id": "retry_extraction",
+      "type": "llm_transform",
+      "description": "Gives a failed figure one more chance: re-reads the passage to correct the conversion, or returns nothing rather than guess.",
+      "inputs": [
+        {
+          "id": "validate_extraction",
+          "table_schema": {
+            "columns": [
+              {
+                "name": "extraction_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "document_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "facility_uml_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "field_name",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "value",
+                "type": "float",
+                "nullable": true
+              },
+              {
+                "name": "unit",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "value_verbatim",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "unit_verbatim",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "provenance_grade",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "source_passage",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "note",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "validation_error",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "violation",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "canonical_unit",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "sanity_min",
+                "type": "float",
+                "nullable": true
+              },
+              {
+                "name": "sanity_max",
+                "type": "float",
+                "nullable": true
+              }
+            ]
+          }
+        }
+      ],
+      "cache": true,
+      "compiler_notes": [
+        "This stage runs on ALL rows (including those with no violation) because llm_transform is 1:1. For rows with violation=null, the model is instructed to return null retried_value; null_invalid_after_retry then keeps the original value.",
+        "max_retries=1: the methodology specifies exactly one retry attempt; the LLM infrastructure's own retry (max_retries) is set to 1 here too to reflect that."
+      ],
+      "signature": {
+        "form": "extends",
+        "reads": [
+          {
+            "input": "validate_extraction",
+            "columns": [
+              {
+                "name": "canonical_unit",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "facility_uml_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "field_name",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "source_passage",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "unit",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "unit_verbatim",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "value",
+                "type": "float",
+                "nullable": true
+              },
+              {
+                "name": "value_verbatim",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "violation",
+                "type": "str",
+                "nullable": true
+              }
+            ]
+          }
+        ],
+        "adds": [
+          {
+            "name": "retried_value",
+            "type": "float",
+            "nullable": true
+          },
+          {
+            "name": "retried_unit",
+            "type": "str",
+            "nullable": true
+          },
+          {
+            "name": "retried_note",
+            "type": "str",
+            "nullable": true
+          }
+        ],
+        "rewrites": []
+      },
+      "source": {
+        "section": "Output contract & validation"
+      },
+      "llm": {
+        "prompt_instructions": "",
+        "prompt_data_template": "A palm-oil mill data extraction for mill {facility_uml_id} produced a validation error.\n\nField: {field_name}\nRequired canonical unit: {canonical_unit}\nYour previous value: {value}\nYour previous unit: {unit}\nViolation: {violation}\nOriginal source passage:\n{source_passage}\n\nVerbatim value from document: {value_verbatim}\nVerbatim unit from document: {unit_verbatim}\n\nIf the violation is: correct the value/unit. Do NOT adjust the number to fit a sanity range — if your conversion is correct keep the number even if it seems large or small.\nIf the conversion to {canonical_unit} cannot be established with certainty, return value=null and explain.\nNEVER modify value_verbatim or unit_verbatim.\n\nReturn JSON: {{\"retried_value\": <number or null>, \"retried_unit\": <string or null>, \"retried_note\": <string or null>}}.\nIf there is no violation (violation field is empty or null), return {{\"retried_value\": null, \"retried_unit\": null, \"retried_note\": null}} — the original values will be kept.",
+        "model": "claude-sonnet-5",
+        "temperature": 0.0,
+        "max_retries": 1,
+        "response_format": "json",
+        "batch_size": 1
+      }
+    },
+    {
+      "id": "null_invalid_after_retry",
+      "type": "python_row_function",
+      "description": "Accepts a corrected figure, blanks one that still fails, and never touches the verbatim wording, so any number stays re-checkable.",
+      "inputs": [
+        {
+          "id": "retry_extraction",
+          "table_schema": {
+            "columns": [
+              {
+                "name": "extraction_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "document_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "facility_uml_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "field_name",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "value",
+                "type": "float",
+                "nullable": true
+              },
+              {
+                "name": "unit",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "value_verbatim",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "unit_verbatim",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "provenance_grade",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "source_passage",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "note",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "validation_error",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "violation",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "canonical_unit",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "sanity_min",
+                "type": "float",
+                "nullable": true
+              },
+              {
+                "name": "sanity_max",
+                "type": "float",
+                "nullable": true
+              },
+              {
+                "name": "retried_value",
+                "type": "float",
+                "nullable": true
+              },
+              {
+                "name": "retried_unit",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "retried_note",
+                "type": "str",
+                "nullable": true
+              }
+            ]
+          }
+        }
+      ],
+      "cache": true,
+      "compiler_notes": [
+        "Nothing is dropped, clamped, or massaged into range — the methodology's core data-integrity guarantee. A nulled value retains its verbatim fields so any figure can be re-checked against the exact document passage."
+      ],
+      "signature": {
+        "form": "extends",
+        "reads": [
+          {
+            "input": "retry_extraction",
+            "columns": [
+              {
+                "name": "violation",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "retried_value",
+                "type": "float",
+                "nullable": true
+              },
+              {
+                "name": "retried_unit",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "retried_note",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "note",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "canonical_unit",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "sanity_min",
+                "type": "float",
+                "nullable": true
+              },
+              {
+                "name": "sanity_max",
+                "type": "float",
+                "nullable": true
+              }
+            ]
+          }
+        ],
+        "adds": [],
+        "rewrites": []
+      },
+      "source": {
+        "section": "Output contract & validation"
+      },
+      "function": {
+        "kind": "inline",
+        "corner_cases": [],
+        "code": "def transform(row):\n    row = dict(row)\n    violation = row.get('violation')\n    if not violation:\n        # No violation — keep original value/unit, clear working columns\n        row['validation_error'] = None\n        return row\n    # There was a violation — use retried values if the model returned them\n    retried_val = row.get('retried_value')\n    retried_unit = row.get('retried_unit')\n    canonical = row.get('canonical_unit')\n    lo = row.get('sanity_min')\n    hi = row.get('sanity_max')\n    new_violations = []\n    if retried_val is not None:\n        if canonical and retried_unit != canonical:\n            new_violations.append(f\"unit '{retried_unit}' must be '{canonical}'\")\n        if lo is not None and retried_val < lo:\n            new_violations.append(f\"value {retried_val} below sanity_min {lo}\")\n        if hi is not None and retried_val > hi:\n            new_violations.append(f\"value {retried_val} above sanity_max {hi}\")\n    if new_violations:\n        row['value'] = None\n        row['unit'] = None\n        row['validation_error'] = '; '.join(new_violations)\n    elif retried_val is not None:\n        row['value'] = retried_val\n        row['unit'] = retried_unit\n        row['note'] = row.get('retried_note') or row.get('note')\n        row['validation_error'] = None\n    else:\n        # Model returned null on retry — accept it\n        row['value'] = None\n        row['unit'] = None\n        row['validation_error'] = None\n        row['note'] = row.get('retried_note') or row.get('note')\n    # verbatim fields are never touched\n    return row",
+        "requirements": []
+      }
+    },
+    {
+      "id": "group_extractions_by_mill_field",
+      "type": "python_frame_function",
+      "description": "Bundles every document's figure for the same mill and field into one row so disagreements can be weighed together.",
+      "inputs": [
+        {
+          "id": "null_invalid_after_retry",
+          "table_schema": {
+            "columns": [
+              {
+                "name": "extraction_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "document_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "facility_uml_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "field_name",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "value",
+                "type": "float",
+                "nullable": true
+              },
+              {
+                "name": "unit",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "value_verbatim",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "unit_verbatim",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "provenance_grade",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "source_passage",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "note",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "validation_error",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "violation",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "canonical_unit",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "sanity_min",
+                "type": "float",
+                "nullable": true
+              },
+              {
+                "name": "sanity_max",
+                "type": "float",
+                "nullable": true
+              },
+              {
+                "name": "retried_value",
+                "type": "float",
+                "nullable": true
+              },
+              {
+                "name": "retried_unit",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "retried_note",
+                "type": "str",
+                "nullable": true
+              }
+            ]
+          }
+        },
+        {
+          "id": "field_spec_table",
+          "table_schema": {
+            "columns": [
+              {
+                "name": "field_name",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "canonical_unit",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "sanity_min",
+                "type": "float",
+                "nullable": true
+              },
+              {
+                "name": "sanity_max",
+                "type": "float",
+                "nullable": true
+              },
+              {
+                "name": "description",
+                "type": "str",
+                "nullable": true
+              }
+            ]
+          }
+        }
+      ],
+      "cache": true,
+      "compiler_notes": [
+        "This stage exists to satisfy the llm_transform 1:1 constraint for reconcile_across_documents. sanity_min/max are re-joined from field_spec here so validate_reconciled does not need another join."
+      ],
+      "signature": {
+        "form": "replaces",
+        "reads": [
+          {
+            "input": "null_invalid_after_retry",
+            "columns": [
+              {
+                "name": "facility_uml_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "field_name",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "extraction_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "document_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "value",
+                "type": "float",
+                "nullable": true
+              },
+              {
+                "name": "unit",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "value_verbatim",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "unit_verbatim",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "provenance_grade",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "source_passage",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "validation_error",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "note",
+                "type": "str",
+                "nullable": true
+              }
+            ]
+          },
+          {
+            "input": "field_spec_table",
+            "columns": [
+              {
+                "name": "field_name",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "canonical_unit",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "sanity_min",
+                "type": "float",
+                "nullable": true
+              },
+              {
+                "name": "sanity_max",
+                "type": "float",
+                "nullable": true
+              }
+            ]
+          }
+        ],
+        "produces": [
+          {
+            "name": "facility_uml_id",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "field_name",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "canonical_unit",
+            "type": "str",
+            "nullable": true
+          },
+          {
+            "name": "sanity_min",
+            "type": "float",
+            "nullable": true
+          },
+          {
+            "name": "sanity_max",
+            "type": "float",
+            "nullable": true
+          },
+          {
+            "name": "extractions",
+            "type": "str",
+            "nullable": false,
+            "description": "JSON array of extraction objects for this mill+field across all authoritative documents."
+          }
+        ]
+      },
+      "source": {
+        "doc": "step 6",
+        "section": "Method"
+      },
+      "function": {
+        "kind": "inline",
+        "corner_cases": [],
+        "code": "import json\n\ndef transform(extractions_df, spec_df):\n    import pandas as pd\n    spec = spec_df.set_index('field_name')[['canonical_unit', 'sanity_min', 'sanity_max']].to_dict('index')\n    rows = []\n    for (mill_id, fname), grp in extractions_df.groupby(['facility_uml_id', 'field_name']):\n        sp = spec.get(fname, {})\n        bundle = []\n        for _, r in grp.iterrows():\n            bundle.append({\n                'extraction_id': r['extraction_id'],\n                'document_id': r['document_id'],\n                'value': r.get('value'),\n                'unit': r.get('unit'),\n                'value_verbatim': r.get('value_verbatim'),\n                'unit_verbatim': r.get('unit_verbatim'),\n                'provenance_grade': r.get('provenance_grade'),\n                'source_passage': r.get('source_passage'),\n                'validation_error': r.get('validation_error'),\n                'note': r.get('note'),\n            })\n        rows.append({\n            'facility_uml_id': mill_id,\n            'field_name': fname,\n            'canonical_unit': sp.get('canonical_unit'),\n            'sanity_min': sp.get('sanity_min'),\n            'sanity_max': sp.get('sanity_max'),\n            'extractions': json.dumps(bundle),\n        })\n    return pd.DataFrame(rows)",
+        "requirements": []
+      }
+    },
+    {
+      "id": "reconcile_across_documents",
+      "type": "llm_transform",
+      "description": "Judgment: settles disagreeing sources into one value per mill and field, recording why a source won or why all of them were rejected.",
+      "inputs": [
+        {
+          "id": "group_extractions_by_mill_field",
+          "table_schema": {
+            "columns": [
+              {
+                "name": "facility_uml_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "field_name",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "canonical_unit",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "sanity_min",
+                "type": "float",
+                "nullable": true
+              },
+              {
+                "name": "sanity_max",
+                "type": "float",
+                "nullable": true
+              },
+              {
+                "name": "extractions",
+                "type": "str",
+                "nullable": false,
+                "description": "JSON array of extraction objects for this mill+field across all authoritative documents."
+              }
+            ]
+          }
+        }
+      ],
+      "cache": true,
+      "compiler_notes": [
+        "Third judgment step (⚖). The three key judgment calls are: source preference when values disagree, same-name/different-entity collision detection, and designed-vs-operated CDM distinction.",
+        "The model's reconciliation_note is an auditable record of why a source was preferred or a value was rejected — not decorative.",
+        "source_url (the direct link for publication) is not available at this stage; it must be joined from retrieve_documents using source_document_id before publish."
+      ],
+      "signature": {
+        "form": "extends",
+        "reads": [
+          {
+            "input": "group_extractions_by_mill_field",
+            "columns": [
+              {
+                "name": "canonical_unit",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "extractions",
+                "type": "str",
+                "nullable": false,
+                "description": "JSON array of extraction objects for this mill+field across all authoritative documents."
+              },
+              {
+                "name": "facility_uml_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "field_name",
+                "type": "str",
+                "nullable": false
+              }
+            ]
+          }
+        ],
+        "adds": [
+          {
+            "name": "value",
+            "type": "float",
+            "nullable": true
+          },
+          {
+            "name": "unit",
+            "type": "str",
+            "nullable": true
+          },
+          {
+            "name": "confidence",
+            "type": "str",
+            "nullable": true,
+            "enum": [
+              "high",
+              "medium",
+              "low",
+              "unknown"
+            ]
+          },
+          {
+            "name": "provenance_grade",
+            "type": "str",
+            "nullable": true,
+            "enum": [
+              "certification",
+              "registry",
+              "press",
+              "operator"
+            ]
+          },
+          {
+            "name": "source_document_id",
+            "type": "str",
+            "nullable": true
+          },
+          {
+            "name": "value_verbatim",
+            "type": "str",
+            "nullable": true
+          },
+          {
+            "name": "unit_verbatim",
+            "type": "str",
+            "nullable": true
+          },
+          {
+            "name": "validation_error",
+            "type": "str",
+            "nullable": true
+          },
+          {
+            "name": "reconciliation_note",
+            "type": "str",
+            "nullable": true
+          }
+        ],
+        "rewrites": []
+      },
+      "source": {
+        "doc": "step 6",
+        "section": "Method"
+      },
+      "llm": {
+        "prompt_instructions": "",
+        "prompt_data_template": "You are reconciling extracted values for field '{field_name}' (canonical unit: {canonical_unit}) across all source documents for palm-oil mill {facility_uml_id}.\n\nExtractions from all authoritative documents:\n{extractions}\n\nReconciliation rules (apply in order):\n1. Prefer the most-recent primary source: highest audit_year, then certification/registry grade over press/operator grade.\n2. If sources agree, the reconciled value is straightforward — note it.\n3. If sources disagree, choose the most-recent primary source, record why in reconciliation_note, and do NOT silently average.\n4. Same-name/different-entity: if the documents appear to describe different legal entities that share a PT name, reject all values and set value=null with a reconciliation_note explaining the collision.\n5. Designed vs operated: a registered CDM project is NOT evidence it was built or that credits were issued. Do not conflate registered capacity with operational evidence.\n6. If all extractions have value=null, the reconciled value is null.\n7. Carry value_verbatim, unit_verbatim, and validation_error from the winning extraction unchanged.\n\nReturn a JSON object:\n{{\n  \"value\": <number or null>,\n  \"unit\": <canonical unit string or null>,\n  \"confidence\": <\"high\"|\"medium\"|\"low\"|\"unknown\">,\n  \"provenance_grade\": <\"certification\"|\"registry\"|\"press\"|\"operator\"|null>,\n  \"source_document_id\": <winning document_id or null>,\n  \"value_verbatim\": <from winning extraction or null>,\n  \"unit_verbatim\": <from winning extraction or null>,\n  \"validation_error\": <from winning extraction or null>,\n  \"reconciliation_note\": <string>\n}}",
+        "model": "claude-opus-5",
+        "temperature": 0.0,
+        "max_retries": 2,
+        "response_format": "json",
+        "batch_size": 1
+      }
+    },
+    {
+      "id": "validate_reconciled",
+      "type": "python_row_function",
+      "description": "Re-runs the unit and sanity checks on the settled value, blanking it if it still fails rather than massaging it into range.",
+      "inputs": [
+        {
+          "id": "reconcile_across_documents",
+          "table_schema": {
+            "columns": [
+              {
+                "name": "facility_uml_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "field_name",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "canonical_unit",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "sanity_min",
+                "type": "float",
+                "nullable": true
+              },
+              {
+                "name": "sanity_max",
+                "type": "float",
+                "nullable": true
+              },
+              {
+                "name": "extractions",
+                "type": "str",
+                "nullable": false,
+                "description": "JSON array of extraction objects for this mill+field across all authoritative documents."
+              },
+              {
+                "name": "value",
+                "type": "float",
+                "nullable": true
+              },
+              {
+                "name": "unit",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "confidence",
+                "type": "str",
+                "nullable": true,
+                "enum": [
+                  "high",
+                  "medium",
+                  "low",
+                  "unknown"
+                ]
+              },
+              {
+                "name": "provenance_grade",
+                "type": "str",
+                "nullable": true,
+                "enum": [
+                  "certification",
+                  "registry",
+                  "press",
+                  "operator"
+                ]
+              },
+              {
+                "name": "source_document_id",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "value_verbatim",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "unit_verbatim",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "validation_error",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "reconciliation_note",
+                "type": "str",
+                "nullable": true
+              }
+            ]
+          }
+        }
+      ],
+      "cache": true,
+      "compiler_notes": [
+        "The methodology specifies that reconciled values are re-validated by the same field_spec checks as extracted values. source_url for publication must be resolved by joining retrieve_documents on source_document_id before the publish stage."
+      ],
+      "signature": {
+        "form": "extends",
+        "reads": [
+          {
+            "input": "reconcile_across_documents",
+            "columns": [
+              {
+                "name": "value",
+                "type": "float",
+                "nullable": true
+              },
+              {
+                "name": "unit",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "canonical_unit",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "sanity_min",
+                "type": "float",
+                "nullable": true
+              },
+              {
+                "name": "sanity_max",
+                "type": "float",
+                "nullable": true
+              }
+            ]
+          }
+        ],
+        "adds": [],
+        "rewrites": []
+      },
+      "source": {
+        "section": "Output contract & validation"
+      },
+      "function": {
+        "kind": "inline",
+        "corner_cases": [],
+        "code": "def transform(row):\n    row = dict(row)\n    value = row.get('value')\n    unit = row.get('unit')\n    canonical = row.get('canonical_unit')\n    lo = row.get('sanity_min')\n    hi = row.get('sanity_max')\n    if value is not None:\n        violations = []\n        if canonical and unit != canonical:\n            violations.append(f\"unit '{unit}' must be '{canonical}'\")\n        if lo is not None and value < lo:\n            violations.append(f\"value {value} below sanity_min {lo}\")\n        if hi is not None and value > hi:\n            violations.append(f\"value {value} above sanity_max {hi}\")\n        if violations:\n            row['value'] = None\n            row['unit'] = None\n            row['validation_error'] = '; '.join(violations)\n    return row",
+        "requirements": []
+      }
+    },
+    {
+      "id": "evaluate_accuracy",
+      "type": "python_frame_function",
+      "description": "Scores the run against the held ground-truth set, per field: how many values were found, how many matched, and by how far the rest missed.",
+      "inputs": [
+        {
+          "id": "validate_reconciled",
+          "table_schema": {
+            "columns": [
+              {
+                "name": "facility_uml_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "field_name",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "canonical_unit",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "sanity_min",
+                "type": "float",
+                "nullable": true
+              },
+              {
+                "name": "sanity_max",
+                "type": "float",
+                "nullable": true
+              },
+              {
+                "name": "extractions",
+                "type": "str",
+                "nullable": false,
+                "description": "JSON array of extraction objects for this mill+field across all authoritative documents."
+              },
+              {
+                "name": "value",
+                "type": "float",
+                "nullable": true
+              },
+              {
+                "name": "unit",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "confidence",
+                "type": "str",
+                "nullable": true,
+                "enum": [
+                  "high",
+                  "medium",
+                  "low",
+                  "unknown"
+                ]
+              },
+              {
+                "name": "provenance_grade",
+                "type": "str",
+                "nullable": true,
+                "enum": [
+                  "certification",
+                  "registry",
+                  "press",
+                  "operator"
+                ]
+              },
+              {
+                "name": "source_document_id",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "value_verbatim",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "unit_verbatim",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "validation_error",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "reconciliation_note",
+                "type": "str",
+                "nullable": true
+              }
+            ]
+          }
+        },
+        {
+          "id": "ground_truth_table",
+          "table_schema": {
+            "columns": [
+              {
+                "name": "ground_truth_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "facility_uml_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "field_name",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "value",
+                "type": "float",
+                "nullable": false
+              },
+              {
+                "name": "unit",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "source_url",
+                "type": "str",
+                "nullable": true
+              }
+            ]
+          }
+        }
+      ],
+      "cache": true,
+      "compiler_notes": [
+        "Correctness threshold is 1% relative error — a reasonable tolerance for unit-converted numeric values. The methodology does not specify a threshold; this is an implementation choice to flag in compiler_notes.",
+        "This stage measures accuracy per field, not per mill. A per-mill breakdown can be produced by also grouping on facility_uml_id, but is not the primary output described in the methodology."
+      ],
+      "signature": {
+        "form": "replaces",
+        "reads": [
+          {
+            "input": "validate_reconciled",
+            "columns": [
+              {
+                "name": "facility_uml_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "field_name",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "value",
+                "type": "float",
+                "nullable": true
+              }
+            ]
+          },
+          {
+            "input": "ground_truth_table",
+            "columns": [
+              {
+                "name": "ground_truth_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "facility_uml_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "field_name",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "value",
+                "type": "float",
+                "nullable": false
+              },
+              {
+                "name": "unit",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "source_url",
+                "type": "str",
+                "nullable": true
+              }
+            ]
+          }
+        ],
+        "produces": [
+          {
+            "name": "field_name",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "n_ground_truth",
+            "type": "int",
+            "nullable": false
+          },
+          {
+            "name": "n_extracted",
+            "type": "int",
+            "nullable": false
+          },
+          {
+            "name": "n_correct",
+            "type": "int",
+            "nullable": false
+          },
+          {
+            "name": "mean_abs_error",
+            "type": "float",
+            "nullable": true
+          },
+          {
+            "name": "mean_rel_error",
+            "type": "float",
+            "nullable": true
+          },
+          {
+            "name": "precision",
+            "type": "float",
+            "nullable": false
+          },
+          {
+            "name": "recall",
+            "type": "float",
+            "nullable": false
+          }
+        ]
+      },
+      "source": {
+        "section": "Verification"
+      },
+      "function": {
+        "kind": "inline",
+        "corner_cases": [],
+        "code": "def transform(reconciled_df, truth_df):\n    import pandas as pd\n    merged = reconciled_df.merge(\n        truth_df.rename(columns={'value': 'truth_value', 'unit': 'truth_unit', 'source_url': 'truth_source_url'}),\n        on=['facility_uml_id', 'field_name'],\n        how='inner'\n    )\n    merged['abs_error'] = (merged['value'] - merged['truth_value']).abs()\n    merged['rel_error'] = merged['abs_error'] / merged['truth_value'].abs().clip(lower=1e-9)\n    merged['is_null'] = merged['value'].isna()\n    merged['is_correct'] = (merged['value'].notna()) & (merged['rel_error'] < 0.01)\n    summary = merged.groupby('field_name').agg(\n        n_ground_truth=('ground_truth_id', 'count'),\n        n_extracted=('value', lambda x: x.notna().sum()),\n        n_correct=('is_correct', 'sum'),\n        mean_abs_error=('abs_error', 'mean'),\n        mean_rel_error=('rel_error', 'mean'),\n    ).reset_index()\n    summary['precision'] = summary['n_correct'] / summary['n_extracted'].clip(lower=1)\n    summary['recall'] = summary['n_correct'] / summary['n_ground_truth'].clip(lower=1)\n    return summary",
+        "requirements": []
+      }
+    },
+    {
+      "id": "publish_dossiers",
+      "type": "publish",
+      "description": "Writes one auditable file per mill carrying each value with its confidence, provenance grade and verbatim source wording.",
+      "inputs": [
+        {
+          "id": "validate_reconciled",
+          "table_schema": {
+            "columns": [
+              {
+                "name": "facility_uml_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "field_name",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "canonical_unit",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "sanity_min",
+                "type": "float",
+                "nullable": true
+              },
+              {
+                "name": "sanity_max",
+                "type": "float",
+                "nullable": true
+              },
+              {
+                "name": "extractions",
+                "type": "str",
+                "nullable": false,
+                "description": "JSON array of extraction objects for this mill+field across all authoritative documents."
+              },
+              {
+                "name": "value",
+                "type": "float",
+                "nullable": true
+              },
+              {
+                "name": "unit",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "confidence",
+                "type": "str",
+                "nullable": true,
+                "enum": [
+                  "high",
+                  "medium",
+                  "low",
+                  "unknown"
+                ]
+              },
+              {
+                "name": "provenance_grade",
+                "type": "str",
+                "nullable": true,
+                "enum": [
+                  "certification",
+                  "registry",
+                  "press",
+                  "operator"
+                ]
+              },
+              {
+                "name": "source_document_id",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "value_verbatim",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "unit_verbatim",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "validation_error",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "reconciliation_note",
+                "type": "str",
+                "nullable": true
+              }
+            ]
+          }
+        }
+      ],
+      "cache": true,
+      "compiler_notes": [
+        "source_url (direct link to cited document) should be resolved by joining retrieve_documents on source_document_id before this stage; that join is omitted here as a known gap — the dossier currently carries source_document_id only.",
+        "The methodology specifies each value must show: value, confidence, provenance grade, and link to cited source. The source link gap must be closed before this output is considered publication-ready."
+      ],
+      "signature": {
+        "form": "replaces",
+        "reads": [
+          {
+            "input": "validate_reconciled",
+            "columns": [
+              {
+                "name": "facility_uml_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "field_name",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "value",
+                "type": "float",
+                "nullable": true
+              },
+              {
+                "name": "unit",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "confidence",
+                "type": "str",
+                "nullable": true,
+                "enum": [
+                  "high",
+                  "medium",
+                  "low",
+                  "unknown"
+                ]
+              },
+              {
+                "name": "provenance_grade",
+                "type": "str",
+                "nullable": true,
+                "enum": [
+                  "certification",
+                  "registry",
+                  "press",
+                  "operator"
+                ]
+              },
+              {
+                "name": "value_verbatim",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "unit_verbatim",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "reconciliation_note",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "validation_error",
+                "type": "str",
+                "nullable": true
+              }
+            ]
+          }
+        ],
+        "produces": []
+      },
+      "source": {
+        "doc": "step 7",
+        "section": "Method"
+      },
+      "function": {
+        "kind": "inline",
+        "corner_cases": [],
+        "code": "def transform(df, output_dir):\n    import os, json, pandas as pd\n    os.makedirs(output_dir, exist_ok=True)\n    manifest = []\n    for mill_id, grp in df.groupby('facility_uml_id'):\n        dossier = {\n            'mill_id': mill_id,\n            'fields': [\n                {\n                    'field_name': r['field_name'],\n                    'value': r.get('value'),\n                    'unit': r.get('unit'),\n                    'confidence': r.get('confidence'),\n                    'provenance_grade': r.get('provenance_grade'),\n                    'value_verbatim': r.get('value_verbatim'),\n                    'unit_verbatim': r.get('unit_verbatim'),\n                    'reconciliation_note': r.get('reconciliation_note'),\n                    'validation_error': r.get('validation_error'),\n                }\n                for _, r in grp.iterrows()\n            ]\n        }\n        path = os.path.join(output_dir, f\"{mill_id}.json\")\n        with open(path, 'w') as f:\n            json.dump(dossier, f, indent=2)\n        manifest.append({'facility_uml_id': mill_id, 'output_path': path})\n    return pd.DataFrame(manifest)",
+        "requirements": []
+      },
+      "publish": {
+        "format": "evidence_cards",
+        "destination": "dossiers/",
+        "one_file_per": "facility_uml_id",
+        "cross_link": true
+      }
+    }
+  ]
+}

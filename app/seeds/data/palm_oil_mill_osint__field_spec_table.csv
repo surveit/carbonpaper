@@ -1,0 +1,16 @@
+field_name,canonical_unit,sanity_min,sanity_max,description
+net_ghg_t_co2e_per_t_cpo,tCO2e/t CPO,0,15,PalmGHG net GHG (Summary of Net GHG appendix)
+nameplate_capacity_t_ffb_hr,t FFB/hr,1,200,Mill nameplate throughput capacity
+pome_methane_capture_electricity_pct,%,0,100,"POME methane capture split, electricity fraction"
+pome_methane_capture_flaring_pct,%,0,100,"POME methane capture split, flaring fraction"
+oer,%,0,30,Oil Extraction Rate
+ker,%,0,15,Kernel Extraction Rate
+certificate_number,,,,RSPO certificate number (string)
+certificate_validity_start,,,,Certificate validity start (ISO date)
+certificate_validity_end,,,,Certificate validity end (ISO date)
+planted_area_ha,ha,0,100000,Total planted area
+peat_area_ha,ha,0,100000,Peat area within planted area
+cpo_production_t,t,0,1000000,CPO production during audit period
+pk_production_t,t,0,500000,Palm Kernel production during audit period
+ffb_production_t,t,0,5000000,FFB processed during audit period
+biogas_capacity_kw,kW,0,20000,Installed biogas generation capacity
