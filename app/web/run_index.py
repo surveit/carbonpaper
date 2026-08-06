@@ -8,8 +8,13 @@ from pathlib import Path
 
 from pydantic import BaseModel, ValidationError
 
-from app.models.run_manifest import RunManifest
-from app.web.loading import load_manifest_model, runs_dir
+from app.core.errors import RunManifestNotJson
+from app.models.run_manifest import (
+    RunManifest,
+    find_manifest_backed_run_dirs,
+    read_run_manifest,
+)
+from app.web.loading import runs_dir
 from app.web.run_header import (
     VersionNote,
     describe_run_duration,
@@ -40,17 +45,10 @@ class RunIndexRow(BaseModel):
 
 def build_run_index_rows(project: str) -> list[RunIndexRow]:
     """One row per manifest-backed run of `project`, newest first."""
-    # A manifest this reader cannot parse yields an identity-only row rather
-    # than counts it never read, so one unreadable run never takes the index
-    # down with it.
-    directory = runs_dir(project)
-    if not directory.is_dir():
-        return []
     seen_versions: dict[str, VersionNote] = {}
     return [
         _build_row(project, run, seen_versions)
-        for run in sorted(directory.iterdir(), reverse=True)
-        if run.is_dir() and (run / "manifest.json").exists()
+        for run in reversed(find_manifest_backed_run_dirs(runs_dir(project)))
     ]
 
 
@@ -81,8 +79,11 @@ def _build_row(
     project: str, run: Path, seen_versions: dict[str, VersionNote]
 ) -> RunIndexRow:
     try:
-        manifest = load_manifest_model(run)
-    except ValidationError:  # also how the model reports unparseable JSON
+        manifest = read_run_manifest(run)
+    except (RunManifestNotJson, ValidationError):
+        # An identity-only row rather than counts it never read, so one unreadable
+        # run never takes the index down with it. No test-run filter here on
+        # purpose: the index LISTS test runs (flagged), the dashboard count omits them.
         return RunIndexRow(run_id=run.name, status=_UNREADABLE_STATUS)
     persisted = manifest.to_dict()
     strip = build_stage_strip(persisted)

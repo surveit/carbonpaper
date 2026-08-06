@@ -14,12 +14,8 @@ import pandas as pd
 from app.core.errors import RunNotFoundError, RunVersionUnresolvableError
 from app.core.frames import read_frame_column_names
 from app.models import Stage
-from app.models.run_manifest import read_run_bindings
-from app.runtime.manifest import (
-    load_manifest_model,
-    read_stage_output_frame,
-    resolve_output_path,
-)
+from app.models.run_manifest import read_run_bindings, read_run_manifest
+from app.runtime.manifest import read_stage_output_frame, resolve_output_path
 from app.runtime.runner import apply_run_bindings, prepare_run, resume_run, run_prepared
 from app.services.errors import WorkflowLoadError
 from app.services.versioning import (
@@ -122,7 +118,7 @@ def read_pinned_version(project: str, run_id: str) -> str:
     # A run carrying no workflow_version predates the version model; fail loudly
     # rather than guessing which snapshot it meant.
     run_dir = resolve_run_dir(project, run_id)
-    workflow_version = load_manifest_model(run_dir).workflow_version
+    workflow_version = read_run_manifest(run_dir).workflow_version
     if not workflow_version:
         raise RunVersionUnresolvableError(
             f"Run '{run_id}' of '{project}' records no workflow version in its "
@@ -164,7 +160,7 @@ def read_run_status(project: str, run_id: str) -> dict[str, Any]:
     loudly rather than as an empty or fabricated status."""
     run_dir = resolve_run_dir(project, run_id)
     _validate_run_exists(run_dir, project, run_id)
-    return load_manifest_model(run_dir).to_dict()
+    return read_run_manifest(run_dir).to_dict()
 
 
 def _count_output_columns(run_dir: Path, output_path: str | None) -> int | None:

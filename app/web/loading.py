@@ -12,12 +12,17 @@ from typing import Any
 import pandas as pd
 from fastapi import HTTPException
 
-from app.core.errors import NoVersionToRunError, StageOutputMissing
+from app.core.errors import NoVersionToRunError, RunManifestNotJson, StageOutputMissing
 from app.core.frames import list_rows, read_frame_file, render_frame_as_csv_text
 from app.models import Stage, StageType
 from app.models.stages.llm_transform import LLMTransformStage
-from app.models.run_manifest import records_a_test_run
-from app.runtime.manifest import load_manifest_model, resolve_output_path
+from app.models.run_manifest import (
+    find_manifest_backed_run_dirs,
+    read_run_manifest,
+    read_run_manifest_json,
+    records_a_test_run,
+)
+from app.runtime.manifest import resolve_output_path
 from app.services.run import resolve_version
 from app.services.loader import CompiledStageFile, load_compiled_dir
 from app.services.versioning import list_versions, load_version_stages
@@ -81,28 +86,17 @@ def _build_project_card(p: Path) -> dict[str, Any] | None:
 
 
 def _count_runs_with_manifest(rdir: Path) -> int:
-    """Non-test runs only: a run dir counts iff it carries a manifest.json
-    (mirrors the runs index) AND that manifest is not a test run's, so an
-    in-progress/abandoned run dir, or a workflow test's run, is never counted."""
-    if not rdir.is_dir():
-        return 0
-    return sum(
-        1 for r in rdir.iterdir()
-        if r.is_dir() and _manifest_counts_as_run(r / "manifest.json")
-    )
+    """So an in-progress/abandoned run dir, or a workflow test's run, is never counted."""
+    return sum(1 for run in find_manifest_backed_run_dirs(rdir) if _manifest_counts_as_run(run))
 
 
-def _manifest_counts_as_run(manifest_path: Path) -> bool:
-    """Whether `manifest_path` exists and records a run that is not a test
-    (default: not a test, for a manifest recording no such flag — every run
-    before the field existed). A missing or unparseable manifest is not a run
-    at all here (the caller only calls this after confirming existence, or wants
-    False either way), so a parse failure also reports False."""
-    if not manifest_path.exists():
-        return False
+def _manifest_counts_as_run(run_dir: Path) -> bool:
+    """Not a test — the default for a manifest recording no such flag, i.e. every run before it."""
     try:
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
+        manifest = read_run_manifest_json(run_dir)
+    except RunManifestNotJson:
+        # Dropped, not counted 'corrupt' (as the project's own runs summary does):
+        # a card's headline count must not advertise a run nothing can be read off.
         return False
     return not records_a_test_run(manifest)
 
@@ -219,7 +213,7 @@ def load_manifest(run_dir: Path) -> dict[str, Any]:
     optional fields omitted — the same shape the executor persisted."""
     if not (run_dir / "manifest.json").exists():
         raise HTTPException(status_code=404, detail="Run not found")
-    return load_manifest_model(run_dir).to_dict()
+    return read_run_manifest(run_dir).to_dict()
 
 
 # ─── Tabular output previews ─────────────────────────────────────────────────

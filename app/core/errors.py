@@ -136,6 +136,10 @@ class RunNotFoundError(Exception):
     manifest for a run that never happened."""
 
 
+class RunManifestNotJson(ValueError):
+    """A run's manifest.json is on disk but its bytes are not a JSON object."""
+
+
 class ReviewValidationError(ValueError):
     """A submitted review decision does not match what the queue stage declares."""
 
