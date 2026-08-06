@@ -18,7 +18,7 @@ from app.models.stage import is_grain_and_order_preserving
 from app.runtime.lineage import RowLineage, lineage_sidecar_path
 from app.runtime.manifest import resolve_output_path
 from app.core.frames import read_frame_file
-from app.web.loading import render_frame_as_text
+from app.web.loading import PREVIEW_ROWS_SHOWN, render_frame_as_text
 
 # The one grain-and-order-preserving type with nothing for a positional diff to
 # say: input_data originates its rows, so there is no input frame to compare
@@ -46,12 +46,11 @@ ROW_ALIGNED_TYPES: frozenset[StageType] = frozenset(
     if is_grain_and_order_preserving(stage_type) and stage_type not in _NO_ALIGNED_DIFF
 ) | {StageType.enrich}
 
-# The default row budget: the window the stage panel draws, deep enough to read
-# a stage rather than sample it. Callers with more room (the full-rows page) pass
-# their own. Counts in the header always cover the whole frame; only the rows
-# drawn are capped — aligned windows the OUTPUT frame, filter windows the INPUT
-# frame, so dropped rows appear in place among the kept ones.
-DIFF_ROWS_SHOWN = 100
+# The default row budget is the panel's shared one (app.web.loading), so a diffed
+# stage and an undiffed one draw the same depth. Callers with more room (the
+# full-rows page) pass their own. Counts in the header always cover the whole
+# frame; only the rows drawn are capped — aligned windows the OUTPUT frame,
+# filter windows the INPUT frame, so dropped rows appear in place among the kept.
 
 ROW_ALIGNED_KIND = "row_aligned"
 FILTER_ROWS_KIND = "filter_rows"
@@ -194,7 +193,7 @@ def build_stage_diff(
     run_dir: Path,
     output_path: Optional[str],
     output_by_id: dict[str, Optional[str]],
-    rows_shown: int = DIFF_ROWS_SHOWN,
+    rows_shown: int = PREVIEW_ROWS_SHOWN,
 ) -> Optional[StageDiff]:
     """The diff for one executed stage over `rows_shown` rows — None wherever none is honest."""
     if stage_def is None:

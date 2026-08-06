@@ -266,5 +266,7 @@ async def run_stage_scratch_preview(
         "rows_total": int(len(result.frame)),
         "input_rows": result.input_rows,
         "selected_indices": result.selected_indices,
-        "preview": render_cells_as_text(result.frame),
+        # rows_total above is the whole scratch frame; this is the window drawn.
+        # A fan-out stage can return far more rows than it was handed.
+        "preview": render_cells_as_text(result.frame.head(loading.PREVIEW_ROWS_SHOWN)),
     })

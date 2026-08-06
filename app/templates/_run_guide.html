@@ -90,8 +90,22 @@
                      border: 1px solid var(--border); border-radius: 3px;
                      padding: 3px 6px; }
   a.guide-stage-row:hover { background: var(--hover); border-color: var(--muted); }
-  a.guide-stage-row.active { background: var(--fg); border-color: var(--fg); color: #fff; }
-  a.guide-stage-row.active .guide-stage-name { color: #fff; }
+  /* Selected: the stage NAME is washed, the way a marker pen marks a word — not a
+     filled box drawn round the whole row, which at this size read as the loudest
+     thing in the rail. The row's own border does not move, so nothing reflows.
+     Weight carries the selection with no colour at all, for a reader who cannot
+     see the wash; the rail on the left edge is the second colour-free cue. The
+     tint/ink pair is the palette's, so its contrast is the one CI measures. */
+  a.guide-stage-row.active { box-shadow: inset 3px 0 0 var(--accent); }
+  /* The name is a <code> chip carrying its own grey fill, which would sit on top of
+     the wash and hide it — so the chip takes the wash instead of covering it. */
+  a.guide-stage-row.active .guide-stage-name,
+  a.guide-stage-row.active .guide-stage-name code {
+    background: var(--state-review-bg); color: var(--state-review-ink); }
+  a.guide-stage-row.active .guide-stage-name {
+    /* Spread, not padding: the wash overshoots the word without moving it. */
+    box-shadow: 0 0 0 2px var(--state-review-bg);
+    border-radius: 2px; font-weight: 800; }
   .guide-stage-name { font-weight: 600; }
   .guide-stage-row .type-tag { font-size: 9px; padding: 0 3px; }
   /* Named by the guide but not executed by THIS run: still shown, not linkable. */

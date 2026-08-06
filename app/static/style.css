@@ -2227,6 +2227,14 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
    is actually wired. See static/diagram_nodes.js. */
 .mermaid g.node.clickable { cursor: default; }
 html[data-diagram-clickable] .mermaid g.node.clickable { cursor: pointer; }
+/* A pointer cursor is the only thing that ever said a node opens something, and it
+   says it one node at a time, after the reader has already guessed. Lifting the
+   stroke under the cursor makes a node answer as a control. Not !important, so the
+   open node's outline above still wins while the reader hovers a different one. */
+html[data-diagram-clickable] .mermaid g.node.clickable:hover > rect,
+html[data-diagram-clickable] .mermaid g.node.clickable:hover > polygon,
+html[data-diagram-clickable] .mermaid g.node.clickable:hover > circle,
+html[data-diagram-clickable] .mermaid g.node.clickable:hover > path { stroke-width: 2.5px; }
 
 /* ── Workflow: graph on top, stage detail full-width below (master-detail layout). ── */
 .wf-top .diagram-viewport { max-height: 56vh; }        /* cap so the detail below stays reachable */
