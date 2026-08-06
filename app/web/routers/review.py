@@ -10,8 +10,8 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import ValidationError
 
 from app.core.errors import ReviewValidationError
-from app.models import QueueConfig, Stage, TableSchema
-from app.models.stages.human_review_queue import resolve_queue_config
+from app.models import Stage, TableSchema
+from app.models.stages.human_review_queue import QueueConfig, resolve_queue_config
 from app.services import review
 from app.web.config import templates
 from app.web.loading import (

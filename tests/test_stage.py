@@ -8,7 +8,10 @@ from pydantic import ValidationError
 
 from app import models as m
 from app.core.llm import LLMModel
+from app.models.stages.aggregate import AggregationOp
 from app.models.stages.input_data import Connector
+from app.models.stages.llm_transform import LLMConfig
+from app.models.stages.publish import PublishFormat
 
 
 def S(**kw):
@@ -162,7 +165,7 @@ def test_publish_config_is_typed():
         id="p", type="publish", inputs=[{"id": "a", "schema": _PK_ID_SCHEMA}],
         publish={"format": "json"}, signature={"form": "replaces"},
         function={"kind": "inline", "code": "def transform(row): return row"}))
-    assert s.publish.format == m.PublishFormat.json
+    assert s.publish.format == PublishFormat.json
 
 
 def test_python_function_inline_needs_code():
@@ -372,25 +375,25 @@ def test_aggregate_valid():
 # ── review cuts / enums ──────────────────────────────────────────────────────
 def test_unimplemented_connector_kind_rejected():
     with pytest.raises(ValidationError):
-        m.Connector.model_validate({"kind": "http", "params": {"url": "x"}})
+        Connector.model_validate({"kind": "http", "params": {"url": "x"}})
 
 
 def test_implemented_connectors_ok(tmp_path):
-    m.Connector.model_validate({"kind": "file", "params": {"path": str(tmp_path / "d.csv"), "format": "csv"}})
-    m.Connector.model_validate({"kind": "file", "params": {}})
+    Connector.model_validate({"kind": "file", "params": {"path": str(tmp_path / "d.csv"), "format": "csv"}})
+    Connector.model_validate({"kind": "file", "params": {}})
 
 
 def test_weighted_formula_cut():
     # weighted_* aren't in the contract — no aggregate stage uses them (weighting
     # is done inside python_transform modules).
     with pytest.raises(ValidationError):
-        m.AggregationOp.model_validate({"formula": "weighted_mean", "output_column": "o",
+        AggregationOp.model_validate({"formula": "weighted_mean", "output_column": "o",
                                         "value_column": "v", "weight_column": "w"})
 
 
 def test_unknown_file_format_rejected(tmp_path):
     with pytest.raises(ValidationError):
-        m.Connector.model_validate({"kind": "file", "params": {"path": str(tmp_path / "d.xyz"), "format": "xyz"}})
+        Connector.model_validate({"kind": "file", "params": {"path": str(tmp_path / "d.xyz"), "format": "xyz"}})
 
 
 def test_model_enum_accepts_known():
@@ -498,9 +501,9 @@ def test_enum_fields_are_plain_strings(tmp_path):
 
 
 def test_aggregation_requires_value_column_except_count():
-    m.AggregationOp.model_validate({"output_column": "n", "formula": "count"})
+    AggregationOp.model_validate({"output_column": "n", "formula": "count"})
     with pytest.raises(ValidationError, match="value_column"):
-        m.AggregationOp.model_validate({"output_column": "t", "formula": "sum"})
+        AggregationOp.model_validate({"output_column": "t", "formula": "sum"})
 
 
 def test_stage_eval_block_is_kept(tmp_path):
@@ -574,7 +577,7 @@ def test_llm_transform_accepts_single_brace_input_column():
 
 
 def test_prompt_template_field_names_str_format_map_and_single_brace():
-    desc = m.LLMConfig.model_fields["prompt_data_template"].description or ""
+    desc = LLMConfig.model_fields["prompt_data_template"].description or ""
     assert "str.format_map" in desc
     assert "{column_name}" in desc
 
@@ -582,18 +585,18 @@ def test_prompt_template_field_names_str_format_map_and_single_brace():
 def test_llm_config_accepts_old_prompt_template_key_via_alias():
     """Old stored JSON with the pre-split key `prompt_template` must still load,
     landing in prompt_data_template with prompt_instructions defaulting to ""."""
-    cfg = m.LLMConfig.model_validate({"prompt_template": "do {id}"})
+    cfg = LLMConfig.model_validate({"prompt_template": "do {id}"})
     assert cfg.prompt_data_template == "do {id}"
     assert cfg.prompt_instructions == ""
 
 
 def test_llm_config_accepts_new_prompt_data_template_key():
-    cfg = m.LLMConfig.model_validate({"prompt_data_template": "do {id}"})
+    cfg = LLMConfig.model_validate({"prompt_data_template": "do {id}"})
     assert cfg.prompt_data_template == "do {id}"
 
 
 def test_llm_config_prompt_instructions_optional_and_settable():
-    cfg = m.LLMConfig.model_validate(
+    cfg = LLMConfig.model_validate(
         {"prompt_instructions": "Be terse.", "prompt_data_template": "do {id}"}
     )
     assert cfg.prompt_instructions == "Be terse."
@@ -601,7 +604,7 @@ def test_llm_config_prompt_instructions_optional_and_settable():
 
 
 def test_llm_config_model_dump_emits_field_name_not_alias():
-    cfg = m.LLMConfig.model_validate({"prompt_template": "do {id}"})
+    cfg = LLMConfig.model_validate({"prompt_template": "do {id}"})
     dumped = cfg.model_dump()
     assert "prompt_data_template" in dumped
     assert "prompt_template" not in dumped
@@ -611,7 +614,7 @@ def test_data_template_required():
     """prompt_data_template (or its old alias prompt_template) stayed required
     after the field split — neither key present must raise."""
     with pytest.raises(ValidationError):
-        m.LLMConfig.model_validate({"prompt_instructions": "Be terse."})
+        LLMConfig.model_validate({"prompt_instructions": "Be terse."})
 
 
 def test_double_brace_checks_data_template_not_instructions():
@@ -650,7 +653,7 @@ def test_double_brace_checks_data_template_not_instructions():
 
 
 def test_both_fields_round_trip():
-    cfg = m.LLMConfig.model_validate({
+    cfg = LLMConfig.model_validate({
         "prompt_instructions": "Be terse and cite sources.",
         "prompt_data_template": "Summarize {id}: {content}",
     })
@@ -659,7 +662,7 @@ def test_both_fields_round_trip():
     assert dumped["prompt_data_template"] == "Summarize {id}: {content}"
     assert "prompt_template" not in dumped
 
-    reloaded = m.LLMConfig.model_validate(dumped)
+    reloaded = LLMConfig.model_validate(dumped)
     assert reloaded.prompt_instructions == cfg.prompt_instructions
     assert reloaded.prompt_data_template == cfg.prompt_data_template
 

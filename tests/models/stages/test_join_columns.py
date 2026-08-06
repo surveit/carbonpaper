@@ -6,8 +6,8 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from app.models import parse_stage, StageInput, JoinConfig
-from app.models.stages.join import JoinStage, find_join_column_issues
+from app.models import parse_stage, StageInput
+from app.models.stages.join import JoinConfig, JoinStage, find_join_column_issues
 
 
 def _enrich_stage(*, left_columns, right_columns, key_left, key_right, enrich_with):

@@ -30,7 +30,7 @@ from app.core.errors import (
     RunVersionUnresolvableError,
 )
 from app.core.run_status import RunStatus, StageStatus
-from app.models import resolve_file_format
+from app.models.stages.input_data import resolve_file_format
 from app.services.errors import WorkflowLoadError
 from app.services.loader import resolve_function_code
 from app.services.versioning import list_versions

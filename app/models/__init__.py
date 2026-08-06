@@ -1,13 +1,12 @@
 """The workflow contract, as Pydantic models.
 
-Import from `app.models` (this aggregator) for the stable public surface.
+Per-stage-type config models live in `app.models.stages.<type>`; import them from there.
 """
 from app.models.compiler_warnings import (
     CompilerWarningReport as CompilerWarningReport,
     find_stage_compiler_warnings as find_stage_compiler_warnings,
     find_workflow_compiler_warnings as find_workflow_compiler_warnings,
 )
-from app.models.stages.warnings import CompilerWarning as CompilerWarning
 from app.models.coverage import Coverage as Coverage
 from app.models.errors import StepRefused as StepRefused
 from app.models.schema import (
@@ -34,35 +33,6 @@ from app.models.stage import (
     stage_to_spec_dict as stage_to_spec_dict,
     validate_stage as validate_stage,
 )
-from app.models.stages.aggregate import (
-    AggFormula as AggFormula,
-    AggregateConfig as AggregateConfig,
-    AggregationOp as AggregationOp,
-)
-from app.models.stages.filter_rows import FilterConfig as FilterConfig
-from app.models.stages.human_review_queue import (
-    QueueConfig as QueueConfig,
-    ReviewVerdict as ReviewVerdict,
-)
-from app.models.stages.input_data import (
-    Connector as Connector,
-    ConnectorKind as ConnectorKind,
-    FileFormat as FileFormat,
-    XlsxReadParams as XlsxReadParams,
-    resolve_file_format as resolve_file_format,
-)
-from app.models.stages.join import (
-    JoinConfig as JoinConfig,
-    JoinKey as JoinKey,
-)
-from app.models.stages.llm_transform import LLMConfig as LLMConfig
-from app.models.stages.publish import (
-    PublishConfig as PublishConfig,
-    PublishFormat as PublishFormat,
-)
-from app.models.stages.union import UnionConfig as UnionConfig
-from app.models.stages.code import PythonFunction as PythonFunction
-from app.models.stages.stage_tests import StageTest as StageTest
 from app.models.workflow import (
     Workflow as Workflow,
     detect_cycle as detect_cycle,

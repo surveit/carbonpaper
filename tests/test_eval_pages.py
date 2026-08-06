@@ -17,10 +17,10 @@ from app.models import (
     EvalRun,
     EvalRunSettings,
     ExpectedOutput,
-    FileFormat,
     TableRef,
 )
 from app.models.schema import TableSchema
+from app.models.stages.input_data import FileFormat
 from app.core.persistence import get_store
 from app.evals.store import save_eval_config, save_eval_run
 from app.services.versioning import WorkflowVersion

@@ -10,8 +10,7 @@ import pytest
 from pydantic import BaseModel, ValidationError
 
 from app.core.agent.agent import SUBMIT_ANSWER_TOOL, Agent
-from app.models import LLMConfig
-from app.models.stages.llm_transform import GRANTABLE_TOOLS
+from app.models.stages.llm_transform import GRANTABLE_TOOLS, LLMConfig
 from app.runtime import llm as runtime_llm
 from app.runtime.options import (
     DEFAULT_TIMEOUT_S,
