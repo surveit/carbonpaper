@@ -274,6 +274,14 @@ def records_a_test_run(raw: dict[str, Any]) -> bool:
     return bool(raw.get("is_test_run", False))
 
 
+def read_run_bindings(raw: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Both on-disk shapes, for a caller that must not pay to parse the whole model."""
+    nested = raw.get("parameters")
+    if isinstance(nested, dict) and "run_bindings" in nested:
+        return dict(nested["run_bindings"] or {})
+    return dict(raw.get("run_bindings") or {})
+
+
 def create_run_manifest(
     ordered: list[Stage],
     ctx: RunContext,

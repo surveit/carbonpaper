@@ -15,10 +15,11 @@ from app.core.errors import RunNotFoundError, RunVersionUnresolvableError
 from app.models import Stage
 from app.runtime.manifest import (
     load_manifest_model,
+    read_run_bindings,
     read_stage_output_frame,
     records_a_test_run,
 )
-from app.runtime.runner import prepare_run, resume_run, run_prepared
+from app.runtime.runner import apply_run_bindings, prepare_run, resume_run, run_prepared
 from app.services.errors import WorkflowLoadError
 from app.services.versioning import (
     WorkflowVersion,
@@ -189,8 +190,21 @@ def load_run_version(project: str, manifest: dict[str, Any]) -> WorkflowVersion:
 
 
 def load_run_stages(project: str, manifest: dict[str, Any]) -> list[Stage]:
-    """The stages of the version this run pinned — the definitions it executed."""
-    return load_run_version(project, manifest).stages
+    """The stages this run executed: the pinned version's, bindings applied."""
+    stages = load_run_version(project, manifest).stages
+    # The snapshot alone is not what ran — the manifest carries the binding as a
+    # separate delta, and resume_run replays it. So must every reader, or a panel
+    # shows a file the run never opened.
+    try:
+        bound, _ = apply_run_bindings(stages, read_run_bindings(manifest))
+    except ValueError as exc:
+        # The bindings and the pinned version disagree — the run cannot be
+        # reconstituted, which is what this error already means to every caller.
+        raise RunVersionUnresolvableError(
+            f"run {manifest.get('run_id')} records bindings that do not fit its "
+            f"pinned version {manifest.get('workflow_version')}: {exc}"
+        ) from exc
+    return bound
 
 
 @dataclass(frozen=True)
