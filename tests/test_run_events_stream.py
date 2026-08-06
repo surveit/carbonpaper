@@ -11,6 +11,7 @@ from pathlib import Path
 
 from app.core.run_status import RunStatus
 from app.main import app
+from app.runtime.context import RunContext
 from app.runtime.manifest import create_run_manifest, write_manifest
 from app.runtime.run_log import RUN_DONE
 from fastapi.testclient import TestClient
@@ -24,9 +25,9 @@ def _seed_run(tmp_path: Path, monkeypatch, events: list[dict]) -> str:
     run_dir = tmp_path / PROJECT / "runs" / "r1"
     run_dir.mkdir(parents=True)
     manifest = create_run_manifest(
-        [], run_id="r1", project=PROJECT, workflow_version=None,
-        run_bindings={}, input_bindings={}, limits={}, offsets={}, bust_cache=False,
-        is_test_run=False,
+        [], RunContext(repo_root=None, run_dir=run_dir),
+        run_id="r1", project=PROJECT, workflow_version=None,
+        run_bindings={}, input_bindings={}, is_test_run=False,
     )
     manifest.status = RunStatus.OK
     write_manifest(run_dir, manifest)

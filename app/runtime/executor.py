@@ -128,17 +128,15 @@ def run_subset(
         raise SubsetRunError(f"subset names stage(s) not in the workflow: {missing}")
     ordered = topological_sort([by_id[sid] for sid in stage_ids])
     (run_dir / "outputs").mkdir(parents=True, exist_ok=True)
+    ctx = _subset_ctx(repo_root, run_dir, queue_auto_approve, identity,
+                      limits=limits, offsets=offsets)
     manifest = create_run_manifest(
-        ordered, run_id=run_dir.name, project=project,
+        ordered, ctx, run_id=run_dir.name, project=project,
         workflow_version=workflow_version, run_bindings={}, input_bindings={},
-        limits=dict(limits or {}), offsets=dict(offsets or {}),
-        bust_cache=False, is_test_run=is_test_run)
+        is_test_run=is_test_run)
     write_manifest(run_dir, manifest)
     outputs: dict[str, pd.DataFrame] = dict(injected_outputs)
-    manifest = _execute_stages(
-        ordered, _subset_ctx(repo_root, run_dir, queue_auto_approve, identity,
-                             limits=limits, offsets=offsets),
-        manifest, run_dir, outputs)
+    manifest = _execute_stages(ordered, ctx, manifest, run_dir, outputs)
     _raise_if_run_failed(manifest)
     return outputs
 

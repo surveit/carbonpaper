@@ -21,6 +21,8 @@ from app.core.frames import read_frame_file
 from app.models import Stage, StageType
 from app.core.run_status import RunStatus, StageStatus
 
+from .context import RunContext
+
 
 class QueueStats(TypedDict):
     """One human_review_queue stage's tallies, recorded on the manifest under
@@ -252,21 +254,23 @@ class RunManifest(BaseModel):
 
 def create_run_manifest(
     ordered: list[Stage],
+    ctx: RunContext,
     *,
     run_id: str,
     project: str | None,
     workflow_version: str | None,
     run_bindings: dict[str, dict[str, Any]],
     input_bindings: dict[str, dict[str, Any]],
-    limits: dict[str, int],
-    offsets: dict[str, int],
-    bust_cache: bool,
     is_test_run: bool,
 ) -> RunManifest:
     """The initial run manifest — every stage pending, status running. The single
     source of the run-manifest shape: every caller mints it here and persists it
     with write_manifest rather than hand-building the model, so the shape lives
     with the engine that later updates it.
+
+    The per-run execution settings the manifest RECORDS — the row windows and
+    `bust_cache` — are read off `ctx`, the same object the engine executes against,
+    so a caller cannot set one and record another.
 
     `project`/`workflow_version` are None for a subset run (run_subset) that was
     not told its logical identity — recorded honestly as None rather than a
@@ -281,11 +285,11 @@ def create_run_manifest(
         started_at=datetime.now().isoformat(timespec="seconds"),
         project=project,
         workflow_version=workflow_version,
-        limit_overrides=limits,
-        offset_overrides=offsets,
+        limit_overrides=ctx.limits,
+        offset_overrides=ctx.offsets,
         run_bindings=run_bindings,
         input_bindings=input_bindings,
-        bust_cache=bust_cache,
+        bust_cache=ctx.bust_cache,
         is_test_run=is_test_run,
         human_review_queue_stats={},
         dropped_columns={},
