@@ -29,6 +29,7 @@ from app.core.errors import (
     RunVersionUnresolvableError,
 )
 from app.core.run_status import RunStatus, StageStatus
+from app.models import Stage
 from app.models.stages.input_data import resolve_file_format
 from app.services.errors import WorkflowLoadError
 from app.services.versioning import list_versions
@@ -47,6 +48,7 @@ from app.web.loading import (
 from app.web.project_view import shell_state
 from app.web.run_header import build_live_view, build_run_header
 from app.web.run_index import build_run_index_rows
+from app.web.run_issues import build_run_issues
 from app.web.run_stage_panel import resolve_panel_links
 
 router = APIRouter()
@@ -280,9 +282,11 @@ async def run_status(project: str, run_id: str):
 
 @dataclass(frozen=True)
 class RunGraph:
-    """EITHER mermaid built from the version the run pinned, OR the reason that
-    version could not be read — never both, and never a graph from elsewhere."""
+    """EITHER the stages of the version the run pinned and the mermaid built from
+    them, OR the reason that version could not be read with `stages` None — never
+    both, and never a graph or a stage list from elsewhere."""
 
+    stages: list[Stage] | None
     mermaid: str
     error: str | None
 
@@ -293,8 +297,9 @@ def build_run_graph(
     try:
         stages = run_service.load_run_stages(project, manifest)
     except RunVersionUnresolvableError as exc:
-        return RunGraph(mermaid="", error=str(exc))
+        return RunGraph(stages=None, mermaid="", error=str(exc))
     return RunGraph(
+        stages=stages,
         mermaid=build_mermaid_graph(stages, project, status_by_id=status_by_id),
         error=None,
     )
@@ -426,6 +431,10 @@ async def run_detail(request: Request, project: str, run_id: str):
             # The grounding line, the CTA and the stage strip — everything above
             # the graph (app.web.run_header).
             "header": build_run_header(project, run_id, run_dir, manifest),
+            # What stopped this run, and what else its own records flagged — the
+            # index above the graph (app.web.run_issues). Takes the stages the
+            # graph already loaded, so the page reads the pinned version once.
+            "issues": build_run_issues(manifest, graph.stages),
             # None when the pinned version carries no guide — the panel is then
             # not rendered at all, rather than standing in for one with prose.
             "guide": build_run_guide_view(project, manifest),

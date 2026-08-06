@@ -22,6 +22,7 @@ from app.models import Stage, StageType, Workflow
 from app.models.run_manifest import (
     RowError,
     RunManifest,
+    SCHEMA_REFUSAL_ERROR_TYPE,
     StageContribution,
     StageErrorInfo,
     StageRecord,
@@ -534,7 +535,7 @@ def _finalize_stage_output(
     elif not out_rep.ok:
         record.status = StageStatus.ERROR
         record.error = StageErrorInfo(
-            type="OutputSchemaViolation",
+            type=SCHEMA_REFUSAL_ERROR_TYPE,
             message=_summarize_output_schema_errors(sid, out_rep),
             traceback=None,
         )

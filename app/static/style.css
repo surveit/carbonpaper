@@ -1429,6 +1429,91 @@ table.data-preview.scratch th { background: #f3ecd0; }
 .stage-strip i.status-error, .strip-counts i.status-error { background: var(--state-failed); }
 .stage-strip i.status-cancelled, .strip-counts i.status-cancelled { background: var(--state-idle); }
 
+/* ── The run issue index (_run_issues.html): what stopped the run, then what its
+      records flagged and nobody has read. It sits between the header and the
+      graph, so it is what a reviewer meets after the CTA.
+
+      Every colour here is a run-state variable — an entry is the same failed or
+      warn state the stage strip and the graph nodes already speak in, so nothing
+      new has to be learnt to read it. ── */
+.run-issues { margin: 0 0 1.1rem; display: flex; flex-direction: column; gap: .7rem; }
+.run-issues h2 { margin: 0 0 .45rem; font-size: 12px; text-transform: uppercase;
+    letter-spacing: .06em; color: var(--muted); }
+
+.stop-card { background: var(--state-failed-bg); border: 1px solid var(--state-failed);
+    border-left-width: 4px; border-radius: 0 7px 7px 0; padding: 11px 15px; margin: 0 0 .5rem; }
+.stop-card:last-child { margin-bottom: 0; }
+/* The kicker is how the two stories are told apart at a glance, and they route to
+   different people — so it reads BEFORE the stage id, not as a suffix to it. */
+.stop-kicker { margin: 0 0 2px; font-size: 10.5px; font-weight: 700; letter-spacing: .09em;
+    text-transform: uppercase; color: var(--state-failed-ink); }
+.stop-head { margin: 0; font-size: .95rem; }
+.stop-head > code:first-child { font-weight: 700; }
+.stop-issues { margin: .45rem 0 0; padding-left: 1.15rem; font-size: .85rem; }
+.stop-issues li { margin: 0 0 .15rem; }
+.stop-message { margin: .45rem 0 0; font-size: .82rem;
+    font-family: "SFMono-Regular", "Consolas", monospace; }
+/* A refusal's reason is prose its author wrote for this reader; only an exception
+   string gets the monospace of `.stop-message`. */
+.stop-reason { margin: .45rem 0 0; font-size: .88rem; max-width: 80ch; }
+.stop-traceback { margin-top: .4rem; font-size: .78rem; }
+.stop-traceback pre { max-height: 15em; overflow: auto; margin: .3rem 0 0; }
+.stop-foot { margin: .6rem 0 0; display: flex; flex-wrap: wrap; align-items: baseline;
+    gap: .35rem 1.1rem; font-size: .81rem; }
+.stop-open { font-weight: 600; color: var(--state-failed-ink); text-decoration: none;
+    border-bottom: 1px solid currentColor; }
+.stop-open code { font-weight: 600; background: transparent; padding: 0; }
+.stop-blocked { color: var(--state-failed-ink); }
+.stop-card code { background: #fff; border: 1px solid #f0d6d2; border-radius: 3px;
+    padding: 0 4px; font-size: .92em; }
+
+/* Folded when something stopped the run — the stop is the headline and this is the
+   footnote — and open when nothing did, which is the run whose warnings would
+   otherwise go unread. */
+.issue-flags { background: #fff; border: 1px solid var(--border); border-radius: 7px; }
+.issue-flags > summary { cursor: pointer; padding: 9px 14px; display: flex; flex-wrap: wrap;
+    align-items: baseline; gap: .5rem .8rem; font-size: .8rem; list-style: none; }
+.issue-flags > summary::-webkit-details-marker { display: none; }
+/* A flex summary drops the browser's own marker, and without one the row does not
+   read as something to open. */
+.issue-flags > summary::before { content: "▸"; color: var(--muted); }
+.issue-flags[open] > summary::before { content: "▾"; }
+.issue-flags-title { font-size: 12px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .06em; color: var(--state-warn-ink); }
+.issue-flags-scroll { max-height: 18em; overflow: auto; border-top: 1px solid var(--border); }
+table.issue-table { width: 100%; border-collapse: collapse; font-size: .79rem; }
+.issue-table td { padding: 5px 10px; border-bottom: 1px solid var(--border);
+    vertical-align: top; }
+.issue-table tr:last-child td { border-bottom: 0; }
+/* Severity is a WORD, not a tint: the tint is a second signal on top of it, never
+   the only one carrying the difference. */
+.issue-sev { width: 1%; white-space: nowrap; font-size: 10px; font-weight: 700;
+    letter-spacing: .06em; text-transform: uppercase; }
+.issue-table tr.sev-error .issue-sev { color: var(--state-failed-ink); }
+.issue-table tr.sev-warning .issue-sev { color: var(--state-warn-ink); }
+.issue-table tr.sev-error { background: var(--state-failed-bg); }
+.issue-stage, .issue-column { width: 1%; white-space: nowrap; }
+.issue-stage a { text-decoration: none; font-weight: 600; }
+.issue-phases code { font-size: 10px; color: var(--muted); background: var(--code-bg);
+    border-radius: 3px; padding: 0 4px; margin-left: 3px; white-space: nowrap; }
+/* No width of its own: it takes what the nowrap columns beside it leave. A message
+   quotes column names and sample values, so it must be allowed to break inside one
+   — a long token would otherwise set the table's width and scroll the whole row. */
+.issue-message { color: var(--fg); overflow-wrap: anywhere; }
+
+/* The review packet is an OFFER, not an alert: `.banner` is this page's alert
+   styling and the issue index above is what earns it. */
+.run-packet { margin: 0 0 .9rem; font-size: .81rem; color: var(--muted); }
+.run-packet a { font-weight: 600; }
+
+/* ── The run page's stacked regions. The workflow, the stage detail and the run
+      log are three separate objects about three different scopes, so each is a
+      titled section with the same rule above it rather than a block that starts
+      wherever the one above it stopped. ── */
+.run-section { margin-top: 1.8rem; border-top: 2px solid var(--border); padding-top: 1rem; }
+.run-section > h2 { margin: 0 0 .15rem; font-size: 15px; }
+.run-section > .lede { margin: 0 0 .7rem; font-size: .81rem; }
+
 /* ── Runs index rows (section_runs.html) ── */
 .runs-table td { vertical-align: top; }
 .runs-table .run-sub { display: block; font-size: .74rem; color: var(--muted);
@@ -1436,8 +1521,10 @@ table.data-preview.scratch th { background: #f3ecd0; }
 .runs-table .run-diff { font-size: .82rem; color: var(--muted); }
 .runs-table .unresolved { color: var(--state-warn-ink); cursor: help; }
 
-.workflow-full { width: 100%; margin: 1rem 0 .3rem; }
-.stage-panel-full { margin-top: 1.2rem; border-top: 2px solid var(--border); padding-top: 1rem; min-height: 120px; }
+/* Both sit inside a `.run-section`, which owns the rule above them and the space
+   around it — neither draws its own. */
+.workflow-full { width: 100%; margin: 0 0 .3rem; }
+.stage-panel-full { min-height: 120px; }
 .stage-panel-full.loading { opacity: .5; }
 
 .stage-tabs { display: flex; gap: 1.2rem; align-items: stretch; border-bottom: 1px solid var(--border);

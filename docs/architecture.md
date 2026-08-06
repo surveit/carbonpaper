@@ -83,9 +83,11 @@ approval + editing + version creation + publish — the only writer to `compiled
 `guide.py` (`POST /workflow/version/{id}/guide` — starts review-guide authoring for one
 version, watched through node_review's generation-session status endpoint).
 `web/{config,loading,diagrams}.py` — paths + Jinja · viewer reads over the loader ·
-mermaid/ER builders. `web/{run_header,run_index,stage_strip}.py` build what the run page
-and the runs index show about a run: the header's grounding line and its single
-state-chosen action, the index rows, and the per-stage status strip both pages draw.
+mermaid/ER builders. `web/{run_header,run_index,run_issues,stage_strip}.py` build what the run
+page and the runs index show about a run: the header's grounding line and its single
+state-chosen action, the index rows, the issue index above the graph (what stopped the run,
+then every issue that did not — see `app/AGENTS.md`), and the per-stage status strip both
+pages draw.
 Everything a run page states about the workflow — its graph, each
 stage's source and schemas, the lineage panel, and the scratch re-run's handler — is read
 from the version its manifest pinned to (`run.load_run_stages` /

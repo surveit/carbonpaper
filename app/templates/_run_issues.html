@@ -1,0 +1,124 @@
+{#
+  RUN ISSUE INDEX — the two things a reviewer needs before the graph.
+
+    1. "Why this run stopped" — the stages that ended the run. Each card leads
+       with WHICH of the two stories it is, because they route to different
+       people: the data no longer matches what the stage declares (the data
+       owner's), or the code broke (the engineer's). The data card links the
+       stage panel's Data tab, the crash card its Transform tab.
+    2. "Worth a look" — every issue that did NOT stop the run, across every
+       stage that ran, one line per stage × column × message. Shown on a clean
+       run too: a run that finished with warnings nobody read is the one worth
+       noticing. Open by default only when nothing stopped the run, so a stop
+       keeps the headline.
+
+  An INDEX. Every line is worded by the report that raised it and links the
+  panel where the full validation block lives — there is one copy of the detail.
+
+  Context: issues = app.web.run_issues.RunIssues, links, project, run_id
+#}
+{% if issues.stopped or issues.flagged %}
+<div class="run-issues" id="run-issues">
+
+{% if issues.stopped %}
+<section class="issue-stops">
+  <h2>Why this run stopped</h2>
+  {% for stop in issues.stopped %}
+  <article class="stop-card">
+    <p class="stop-kicker">{% if stop.refused_data %}the data changed{% else %}the code broke{% endif %}</p>
+    <p class="stop-head">
+      <code>{{ stop.stage_id }}</code>
+      {%- if stop.kind == 'schema' %} refused its own output — it does not match the schema this stage declares.
+      {%- elif stop.kind == 'refused' %} refused the data it was given.
+      {%- else %} raised <code>{{ stop.error_type }}</code> while it ran.{% endif %}
+    </p>
+
+    {% if stop.kind == 'schema' %}
+    <ul class="stop-issues">
+      {% for issue in stop.issues %}
+      <li>{% if issue.column %}<code>{{ issue.column }}</code> — {% endif %}{{ issue.message }}</li>
+      {% endfor %}
+    </ul>
+    {% elif stop.kind == 'refused' %}
+    {# The reason is prose its author wrote for this reader, not an exception string. #}
+    <p class="stop-reason">{{ stop.error_message }}</p>
+    {% else %}
+    <p class="stop-message">{{ stop.error_message }}</p>
+    {% endif %}
+    {% if stop.traceback and stop.kind != 'schema' %}
+    <details class="stop-traceback"><summary>traceback</summary><pre>{{ stop.traceback }}</pre></details>
+    {% endif %}
+
+    <p class="stop-foot">
+      <a class="stop-open" href="{{ links.stage_anchor(stop.stage_id) }}"
+         data-issue-stage="{{ stop.stage_id }}"
+         {# Data when the values are the question; Transform when what refused
+            them — the declared schema aside, a rule someone wrote — is. #}
+         data-issue-tab="{% if stop.kind == 'schema' %}data{% else %}transform{% endif %}"
+         >Open <code>{{ stop.stage_id }}</code> → {% if stop.kind == 'schema' %}Data{% else %}Transform{% endif %}</a>
+      {% if stop.never_ran %}
+      {# The named ids stop at _NAMED_BLOCKED_MAX and the remainder is counted out
+         loud — a list this long is unreadable, and a silent cut would read as
+         "that was all of them". #}
+      {% set named = stop.never_ran[:6] %}
+      <span class="stop-blocked">{{ stop.never_ran | length }} stage{{ '' if stop.never_ran | length == 1 else 's' }}
+        downstream did not run: {% for stage_id in named %}<code>{{ stage_id }}</code> {% endfor %}
+        {%- if stop.never_ran | length > named | length %}and {{ stop.never_ran | length - named | length }} more{% endif %}</span>
+      {% endif %}
+    </p>
+  </article>
+  {% endfor %}
+</section>
+{% endif %}
+
+{% if issues.flagged %}
+<details class="issue-flags"{% if not issues.stopped %} open{% endif %}>
+  <summary>
+    <span class="issue-flags-title">Worth a look</span>
+    <span class="muted">{{ issues.flagged_count }} issue{{ '' if issues.flagged_count == 1 else 's' }}
+      across {{ issues.flagged | length }} stage{{ '' if issues.flagged | length == 1 else 's' }} —
+      none of them stopped the run</span>
+  </summary>
+  <div class="issue-flags-scroll">
+    <table class="issue-table">
+      <tbody>
+      {% for stage in issues.flagged %}{% for issue in stage.issues %}
+      <tr class="sev-{{ issue.severity }}">
+        <td class="issue-sev">{{ issue.severity }}</td>
+        <td class="issue-stage">{% if loop.first %}<a href="{{ links.stage_anchor(stage.stage_id) }}"
+              data-issue-stage="{{ stage.stage_id }}" data-issue-tab="data"><code>{{ stage.stage_id }}</code></a>{% endif %}</td>
+        <td class="issue-column">{% if issue.column %}<code>{{ issue.column }}</code>{% endif %}</td>
+        {# The phases ride at the end of the message rather than in a column of
+           their own: a column sized to the longest producer id costs the message
+           the width it needs far more than it earns in alignment. #}
+        <td class="issue-message">{{ issue.message }}
+          <span class="issue-phases">{% for phase in issue.phases %}<code>{{ phase }}</code>{% endfor %}</span></td>
+      </tr>
+      {% endfor %}{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</details>
+{% endif %}
+
+</div>
+
+<script>
+(function () {
+  // Every entry here is a deep link INTO the stage panel further down the page:
+  // load it in place, on the tab that answers the line that was clicked, and
+  // bring it into view — unlike a graph-node click, the panel is off screen.
+  const index = document.getElementById('run-issues');
+  if (!index) return;
+  index.addEventListener('click', function (ev) {
+    const link = ev.target.closest('[data-issue-stage]');
+    if (!link) return;
+    if (!window._loadStage) return;   // no panel to load into — let the href navigate
+    ev.preventDefault();
+    window._loadStage(link.getAttribute('data-issue-stage'), {
+      tab: link.getAttribute('data-issue-tab'), reveal: true,
+    });
+  });
+})();
+</script>
+{% endif %}
