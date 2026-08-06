@@ -1,3 +1,1 @@
-from app.core.llm.options import LLMModel
-
-__all__ = ["LLMModel"]
+from app.core.llm.options import LLMModel as LLMModel

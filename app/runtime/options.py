@@ -11,11 +11,6 @@ from app.core.errors import LLMError
 from app.core.llm import LLMModel
 from app.core.llm_sdk import CLI_PATH
 
-__all__ = [
-    "CLAUDE_BIN", "DEFAULT_MODEL", "DEFAULT_PARALLEL", "DEFAULT_TIMEOUT_S",
-    "RESEARCH_MAX_TURNS", "RESEARCH_TIMEOUT_S",
-    "LLMError", "agent_available", "require_agent_backend",
-]
 
 # ── Config knobs (env-overridable) ───────────────────────────────────────────
 CLAUDE_BIN = shutil.which("claude") or CLI_PATH
