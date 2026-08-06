@@ -2,7 +2,7 @@
 review packet writes it to a folder — so the same template asks for links here."""
 from __future__ import annotations
 
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
 
 class AppPanelLinks:
@@ -14,8 +14,14 @@ class AppPanelLinks:
     def stage_anchor(self, stage_id: str) -> str:
         return f"{self._base}#{stage_id}"
 
-    def stage_rows(self, stage_id: str) -> str:
-        return f"{self._base}/stage/{_segment(stage_id)}/rows"
+    def stage_rows(self, stage_id: str, ordinals: list[int] | None = None) -> str:
+        rows = f"{self._base}/stage/{_segment(stage_id)}/rows"
+        # `ordinals` narrows the table to named rows. The caller bounds how many
+        # it passes: they ride in the query string, and a request line has a
+        # size limit the server enforces before any handler runs.
+        if not ordinals:
+            return rows
+        return f"{rows}?{urlencode({'ordinals': ','.join(str(o) for o in ordinals)})}"
 
     def stage_csv(self, stage_id: str) -> str:
         return f"{self._base}/stage/{_segment(stage_id)}/rows.csv"
@@ -37,7 +43,7 @@ class PacketPanelLinks:
     def stage_anchor(self, stage_id: str) -> str:
         return f"{_segment(stage_id)}.html"
 
-    def stage_rows(self, stage_id: str) -> None:
+    def stage_rows(self, stage_id: str, ordinals: list[int] | None = None) -> None:
         """The stage page IS the full table here, so the link would point at itself."""
         return None
 
