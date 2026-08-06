@@ -33,34 +33,51 @@
 {% macro row_word(n) %}{{ "{:,}".format(n) }} row{% if n != 1 %}s{% endif %}{% endmacro %}
 {% macro column_word(n) %}{{ n }} column{% if n != 1 %}s{% endif %}{% endmacro %}
 
-{# The shape of the frame a stage leaves — `24,797 × 21`, rows by columns — and how its
-   row count moved from its first input's.
+{# The shape of the frame a stage leaves — `24,797 × 21`, rows by columns.
 
    The two halves are read separately — the rows from THIS RUN's manifest record, the
    columns from the frame that run wrote — so each can be missing on its own. The pair
-   form is used only when both are known; with one half the macro states that half in
-   words (`24,797 rows`, `21 columns`) rather than pairing a measured number with a
+   form is used only when both are known; with one half these say that half in words
+   (`24,797 rows`, `21 columns`) rather than pairing a measured number with a
    placeholder. `shape unknown` is worded, not punctuated, so nothing here can be
    misread as a measured 0. #}
-{% macro frame_shape(s) %}
-{%- if s.output_row_count is not none and s.column_count is not none %}
-<span class="guide-rows" title="{{ row_word(s.output_row_count) }} × {{ column_word(s.column_count) }}, measured from the frame this run wrote. The Schema tab shows the version's DECLARED columns, which is a different, usually smaller number">{{ "{:,}".format(s.output_row_count) }} × {{ s.column_count }}</span>
-{%- elif s.column_count is none and s.output_row_count is none %}
-<span class="guide-rows unknown" title="This run recorded no row count for this stage and wrote no frame that could be read, so neither half of its shape is known">shape unknown</span>
-{%- elif s.column_count is none %}
-<span class="guide-rows" title="Rows this run measured. Its output frame could not be read, so the column count is unknown">{{ row_word(s.output_row_count) }}</span>
-{%- else %}
-<span class="guide-rows" title="Columns the frame this run wrote holds. The run recorded no row count for this stage">{{ column_word(s.column_count) }}</span>
-{%- endif %}
-{%- if s.output_row_count is not none %}
-{%- if s.row_delta is not none and s.row_delta != 0 %}
-<span class="guide-delta {{ 'drop' if s.row_delta < 0 else 'gain' }}"
-      title="{{ "{:,}".format(s.row_delta | abs) }} {{ 'fewer' if s.row_delta < 0 else 'more' }} rows than its first input held — this stage changed which rows exist">{{ '−' if s.row_delta < 0 else '+' }}{{ "{:,}".format(s.row_delta | abs) }}</span>
-{%- elif s.row_delta == 0 %}
-<span class="guide-delta same" title="The same number of rows its first input held — this stage added columns to rows that already existed">same</span>
-{%- endif %}
+{% macro shape_words(s) %}
+{%- if s.output_row_count is not none and s.column_count is not none -%}
+{{ "{:,}".format(s.output_row_count) }} × {{ s.column_count }}
+{%- elif s.output_row_count is not none -%}
+{{ row_word(s.output_row_count) }}
+{%- elif s.column_count is not none -%}
+{{ column_word(s.column_count) }}
+{%- else -%}
+shape unknown
 {%- endif %}
 {% endmacro %}
+
+{# What that shape did to its FIRST input's, per half and only where measured: a stage
+   that dropped rows and one that only widened are different things to review, so they
+   are never merged into one word. `same` is said only of a half that was measured on
+   both sides and found equal — a half with nothing to compare says nothing at all. #}
+{% macro change_words(s) %}
+{%- set parts = [] -%}
+{%- if s.row_delta %}{{ parts.append(("−" if s.row_delta < 0 else "+") ~ "{:,}".format(s.row_delta | abs) ~ " rows") or "" }}{% endif -%}
+{%- if s.column_delta %}{{ parts.append(("−" if s.column_delta < 0 else "+") ~ (s.column_delta | abs) ~ " cols") or "" }}{% endif -%}
+{%- if not parts and s.row_delta == 0 and s.column_delta == 0 %}{{ parts.append("same") or "" }}{% endif -%}
+{%- if not parts and s.row_delta == 0 %}{{ parts.append("same rows") or "" }}{% endif -%}
+{%- if not parts and s.column_delta == 0 %}{{ parts.append("same cols") or "" }}{% endif -%}
+{{ parts | join(" · ") }}
+{%- endmacro %}
+
+{# The slab: the shape of what this stage left, set apart at the end of its row by a
+   rule and a background of its own, with the change under it. A stage whose ROW count
+   moved is tinted — that is a different review act from one that only widened. #}
+{% macro shape_slab(s) %}
+{%- set change = change_words(s) | trim %}
+<span class="guide-slab{% if s.row_delta %} row-changing{% endif %}"
+      title="Rows × columns of the frame this stage left, measured from what this run wrote — not the version's DECLARED schema, which the Schema tab shows and which is usually a smaller number">
+  <span class="guide-shape">{{ shape_words(s) | trim }}</span>
+  {%- if change %}<span class="guide-change">{{ change }}</span>{% endif %}
+</span>
+{%- endmacro %}
 
 {% macro guide_stage(s) %}
 <li class="guide-stage">
@@ -77,9 +94,11 @@
   <a class="guide-stage-row{% if not s.executed %} absent{% endif %}"
      href="{{ links.guide_stage(s.stage_id) }}" data-stage-link="{{ s.stage_id }}"
      {% if not s.executed %}title="This run has no record for this stage"{% endif %}>
-    <span class="guide-stage-name"><code>{{ s.stage.id }}</code></span>
-    <span class="type-tag {{ type_class.get(s.stage.type, 'custom') }}">{{ type_glyph.get(s.stage.type, '') }} {{ s.stage.type }}</span>
-    {{ frame_shape(s) }}
+    <span class="guide-stage-head">
+      <span class="guide-stage-name"><code>{{ s.stage.id }}</code></span>
+      <span class="type-tag {{ type_class.get(s.stage.type, 'custom') }}">{{ type_glyph.get(s.stage.type, '') }} {{ s.stage.type }}</span>
+    </span>
+    {{ shape_slab(s) }}
   </a>
   {# A wide stage's column list is longer than the step's own prose, so past
      _FOLD_WRITES it folds behind its exact count — every column is still there,
@@ -129,10 +148,11 @@
 
   .guide-stage-list { list-style: none; margin: 0; padding: 0;
                       display: flex; flex-direction: column; gap: 4px; }
-  .guide-stage-row { display: flex; align-items: baseline; gap: 5px; flex-wrap: wrap;
-                     font-size: 11px; text-decoration: none; color: var(--fg);
-                     border: 1px solid var(--border); border-radius: 3px;
-                     padding: 3px 6px; }
+  .guide-stage-row { display: flex; align-items: stretch; font-size: 11px;
+                     text-decoration: none; color: var(--fg); overflow: hidden;
+                     border: 1px solid var(--border); border-radius: 3px; }
+  .guide-stage-head { display: flex; align-items: baseline; gap: 5px; flex-wrap: wrap;
+                      padding: 3px 6px; min-width: 0; flex: 1 1 auto; }
   a.guide-stage-row:hover { background: var(--hover); border-color: var(--muted); }
   /* Selected: the stage NAME is washed, the way a marker pen marks a word — not a
      filled box drawn round the whole row, which at this size read as the loudest
@@ -154,20 +174,28 @@
   .guide-stage-row .type-tag { font-size: 9px; padding: 0 3px; }
   /* Named by the guide but not executed by THIS run: still shown, not linkable. */
   .guide-stage-row.absent { border-style: dashed; color: var(--muted); }
-  .guide-stage-row.unresolved { border-style: dashed; border-color: var(--warn-border);
+  .guide-stage-row.unresolved { display: block; border-style: dashed;
+                                border-color: var(--warn-border); padding: 3px 6px;
                                 background: var(--warn-bg); color: var(--fg); }
-  /* The measured shape of the data, kept quieter than the prose it sits under: the
-     count in the row's own ink, the delta tinted only where the row set moved. */
-  .guide-rows { margin-left: auto; font-size: 10px; color: var(--muted);
+
+  /* The measured shape, set apart at the end of the row: its own ground, its own rule,
+     the change under it. Tinted only where the ROW count moved — a stage that dropped
+     rows asks a different question of the reviewer than one that only widened. */
+  .guide-slab { flex: 0 0 auto; display: flex; flex-direction: column; gap: 1px;
+                align-items: flex-end; justify-content: center; text-align: right;
+                padding: 3px 6px; border-left: 1px solid var(--border);
+                background: var(--code-bg); color: var(--muted);
                 font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .guide-rows.unknown { font-style: italic; }
-  .guide-delta { font-size: 10px; font-variant-numeric: tabular-nums;
-                 white-space: nowrap; border-radius: 3px; padding: 0 3px; }
-  .guide-delta.drop, .guide-delta.gain { color: var(--state-warn-ink);
-                                         background: var(--state-warn-bg); }
-  .guide-delta.same { color: var(--muted); }
-  a.guide-stage-row.active .guide-rows, a.guide-stage-row.active .guide-delta.same {
-    color: #fff; }
+  .guide-slab .guide-shape { font-size: 10.5px; color: var(--fg); }
+  .guide-slab .guide-change { font-size: 9.5px; }
+  .guide-slab.row-changing { background: var(--state-warn-bg); }
+  .guide-slab.row-changing .guide-shape, .guide-slab.row-changing .guide-change {
+    color: var(--state-warn-ink); }
+  .guide-stage-row.absent .guide-slab { background: transparent; }
+  a.guide-stage-row.active .guide-slab { background: transparent; color: #fff;
+                                         border-left-color: rgba(255, 255, 255, .35); }
+  a.guide-stage-row.active .guide-slab .guide-shape,
+  a.guide-stage-row.active .guide-slab .guide-change { color: #fff; }
 
   .guide-step-rows { font-size: 10.5px; color: var(--muted);
                      font-variant-numeric: tabular-nums; margin: 0 0 5px; }
@@ -184,6 +212,7 @@
   .guide-step-branches a { color: var(--fg); text-decoration: none;
                            border-bottom: 1px dotted var(--border); }
   .guide-step-branches a:hover { border-bottom-color: var(--muted); }
+  .guide-step-branches .guide-shape { margin-left: auto; white-space: nowrap; }
   /* A step that moved the row set is the one asking a different question of the
      reviewer — how many rows, and on what rule — so its number carries the mark. */
   .guide-steps > li.changes-rows .n { background: var(--state-warn); }
@@ -258,7 +287,7 @@
         <ul class="guide-step-branches">
           {% for out in step.outputs %}
           <li><a href="{{ links.guide_stage(out.stage_id) }}" data-stage-link="{{ out.stage_id }}">{{ out.stage.name if out.stage else out.stage_id }}</a>
-            {{ frame_shape(out) }}</li>
+            <span class="guide-shape">{{ shape_words(out) | trim }}</span></li>
           {% endfor %}
         </ul>
         {% elif step.changes_row_set %}

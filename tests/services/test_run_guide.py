@@ -437,6 +437,49 @@ def test_a_stage_the_version_does_not_define_has_neither_half(project_dir):
     assert unresolved.column_count is None
 
 
+def test_a_stage_that_widened_its_frame_measures_the_columns_it_added(project_dir):
+    """add_flag wrote `flag` onto the same 10 rows: no row change, one more column."""
+    version_id = _version_with_guide(project_dir)
+    _write_run_outputs(project_dir)
+
+    view = build_run_guide_view("demo", _manifest(version_id))
+
+    flagged = _stages_by_id(view)["add_flag"]
+    assert flagged.row_delta == 0
+    assert flagged.column_delta == 1
+
+
+def test_a_row_dropping_stage_that_kept_its_columns_measures_only_the_rows(project_dir):
+    version_id = _version_with_guide(project_dir)
+    _write_run_outputs(project_dir)
+
+    view = build_run_guide_view("demo", _manifest(version_id))
+
+    kept = _stages_by_id(view)["keep_flagged"]
+    assert kept.row_delta == -6
+    assert kept.column_delta == 0
+
+
+def test_a_column_delta_against_an_unmeasured_input_is_unknown(project_dir):
+    version_id = _version_with_guide(project_dir)
+    _write_run_outputs(project_dir, columns={"add_flag": ["doc_id", "note", "flag"]})
+
+    view = build_run_guide_view("demo", _manifest(version_id))
+
+    flagged = _stages_by_id(view)["add_flag"]
+    assert flagged.column_count == 3
+    assert flagged.column_delta is None
+
+
+def test_a_stage_with_no_input_has_no_column_delta(project_dir):
+    version_id = _version_with_guide(project_dir)
+    _write_run_outputs(project_dir)
+
+    view = build_run_guide_view("demo", _manifest(version_id))
+
+    assert _stages_by_id(view)["load_rows"].column_delta is None
+
+
 # ── the step's own shape ─────────────────────────────────────────────────────
 
 def _outputs(step) -> list[tuple[str, int | None]]:

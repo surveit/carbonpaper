@@ -34,11 +34,13 @@ class GuideStageView:
     # frame measured and found empty.
     output_row_count: int | None
     column_count: int | None
-    # This stage's own count minus the count of its FIRST declared input's stage: 0 says
-    # it passed every row through and only wrote columns, non-zero is how many rows it
-    # dropped or added. None when there is nothing to subtract — a stage with no input
-    # (`input_data`), or either side's count unknown — and again is not 0.
+    # How each half moved from the same half of its FIRST declared input's stage. 0 says
+    # that half did not change — a row delta of 0 is a stage that passed every row
+    # through — and non-zero is how many rows or columns it dropped or added. Each is
+    # None when there is nothing to subtract: a stage with no input (`input_data`), or
+    # either side's count unknown. Neither is 0 in that case.
     row_delta: int | None
+    column_delta: int | None
 
 
 @dataclass(frozen=True)
@@ -208,14 +210,17 @@ def _view_stage(
         executed=stage_id in measured.executed,
         output_row_count=output_rows,
         column_count=measured.column_counts.get(stage_id),
-        row_delta=_measure_row_delta(stage, output_rows, measured),
+        row_delta=_measure_delta(stage, output_rows, measured.row_counts),
+        column_delta=_measure_delta(
+            stage, measured.column_counts.get(stage_id), measured.column_counts
+        ),
     )
 
 
-def _measure_row_delta(
-    stage: Stage | None, output_rows: int | None, measured: _RunMeasurements
+def _measure_delta(
+    stage: Stage | None, output_count: int | None, counts: dict[str, int]
 ) -> int | None:
-    if stage is None or not stage.inputs or output_rows is None:
+    if stage is None or not stage.inputs or output_count is None:
         return None
-    input_rows = measured.row_counts.get(stage.inputs[0].id)
-    return None if input_rows is None else output_rows - input_rows
+    input_count = counts.get(stage.inputs[0].id)
+    return None if input_count is None else output_count - input_count
