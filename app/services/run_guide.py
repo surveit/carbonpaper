@@ -34,11 +34,6 @@ class GuideStageView:
     # frame measured and found empty.
     output_row_count: int | None
     column_count: int | None
-    # How the row count moved from its FIRST declared input's stage: 0 is a stage that
-    # passed every row through, non-zero is how many it dropped or added. None when
-    # there is nothing to subtract — a stage with no input (`input_data`), or either
-    # side's count unknown — and never 0 in that case.
-    row_delta: int | None
 
 
 @dataclass(frozen=True)
@@ -58,14 +53,6 @@ class GuideStepView:
     # beside the others. They are never summed — a sum would double-count a fan-out and
     # read as a total the run never measured.
     outputs: list[GuideStageView]
-    # True where a stage of this step measurably changed the row set — a different
-    # review task from a step that only added columns to rows that already existed.
-    changes_row_set: bool
-    # True where EVERY stage of the step measured a delta of 0, so the step is known to
-    # have added columns to rows that already existed and dropped none. Both flags are
-    # False where the step measured nothing to say either with — a step of `input_data`
-    # stages, which have no input to compare against, reads as neither.
-    passes_rows_through: bool
 
 
 @dataclass(frozen=True)
@@ -156,8 +143,6 @@ def _view_step(
         data_description=step.data_description,
         stages=stages,
         outputs=_find_step_outputs(stages, by_id),
-        changes_row_set=any(s.row_delta not in (None, 0) for s in stages),
-        passes_rows_through=bool(stages) and all(s.row_delta == 0 for s in stages),
     )
 
 
@@ -207,22 +192,11 @@ def _view_stages(
 def _view_stage(
     stage_id: str, stage: Stage | None, measured: _RunMeasurements
 ) -> GuideStageView:
-    output_rows = measured.row_counts.get(stage_id)
     return GuideStageView(
         stage_id=stage_id,
         stage=stage,
         written_columns=list_written_columns(stage) if stage is not None else [],
         executed=stage_id in measured.executed,
-        output_row_count=output_rows,
+        output_row_count=measured.row_counts.get(stage_id),
         column_count=measured.column_counts.get(stage_id),
-        row_delta=_measure_delta(stage, output_rows, measured.row_counts),
     )
-
-
-def _measure_delta(
-    stage: Stage | None, output_count: int | None, counts: dict[str, int]
-) -> int | None:
-    if stage is None or not stage.inputs or output_count is None:
-        return None
-    input_count = counts.get(stage.inputs[0].id)
-    return None if input_count is None else output_count - input_count
