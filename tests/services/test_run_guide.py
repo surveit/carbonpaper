@@ -85,11 +85,36 @@ def project_dir(tmp_path: Path, monkeypatch) -> Path:
     return project
 
 
-def _manifest(version_id: str, *, executed: list[str] | None = None) -> dict:
+# What a run of _STAGES measured: 10 rows in, one dropped to 4 by the filter, the rest
+# passing their rows through. Keyed by stage id, as the manifest's records are.
+_COUNTS = {
+    "load_rows": 10, "add_flag": 10, "keep_flagged": 4,
+    "load_sources": 3, "attach_source": 4,
+}
+
+
+def _manifest(
+    version_id: str,
+    *,
+    executed: list[str] | None = None,
+    counts: dict[str, int] | None = None,
+) -> dict:
     ran = _STAGES if executed is None else [s for s in _STAGES if s["id"] in executed]
+    measured = _COUNTS if counts is None else counts
     return {
         "workflow_version": version_id,
-        "stage_records": [{"stage_id": s["id"], "status": "ok"} for s in ran],
+        "stage_records": [
+            {"stage_id": s["id"], "status": "ok",
+             "output_row_count": measured.get(s["id"])}
+            for s in ran
+        ],
+    }
+
+
+def _stages_by_id(view) -> dict:
+    return {
+        s.stage_id: s
+        for s in [*view.steps[0].stages, *view.steps[1].stages, *view.unnarrated]
     }
 
 
@@ -173,10 +198,7 @@ def test_each_stage_carries_its_definition_from_the_pinned_version(project_dir):
 def test_written_columns_are_read_off_each_stage(project_dir):
     view = build_run_guide_view("demo", _manifest(_version_with_guide(project_dir)))
 
-    written = {
-        s.stage_id: s.written_columns
-        for s in [*view.steps[0].stages, *view.steps[1].stages, *view.unnarrated]
-    }
+    written = {s.stage_id: s.written_columns for s in _stages_by_id(view).values()}
     assert written == {
         "load_rows": ["doc_id"],
         "load_sources": ["doc_id", "source"],
@@ -198,10 +220,7 @@ def test_a_stage_this_run_did_not_execute_is_flagged_not_dropped(project_dir):
     )
     view = build_run_guide_view("demo", manifest)
 
-    executed = {
-        s.stage_id: s.executed
-        for s in [*view.steps[0].stages, *view.steps[1].stages, *view.unnarrated]
-    }
+    executed = {s.stage_id: s.executed for s in _stages_by_id(view).values()}
     assert executed == {
         "load_rows": True, "add_flag": True,
         "load_sources": False, "keep_flagged": False, "attach_source": False,
@@ -227,6 +246,143 @@ def test_a_stage_id_the_version_does_not_define_is_kept_unresolved(project_dir):
     assert unresolved.stage_id == "renamed_away"
     assert unresolved.stage is None
     assert unresolved.written_columns == []
+
+
+# ── the row counts, measured off the run's own manifest ──────────────────────
+
+def test_each_stage_carries_the_row_count_this_run_measured_for_it(project_dir):
+    view = build_run_guide_view("demo", _manifest(_version_with_guide(project_dir)))
+
+    counts = {s.stage_id: s.output_row_count for s in _stages_by_id(view).values()}
+    assert counts == _COUNTS
+
+
+def test_a_stage_the_run_has_no_record_for_has_an_unknown_count_not_zero(project_dir):
+    manifest = _manifest(_version_with_guide(project_dir), executed=["load_rows"])
+    view = build_run_guide_view("demo", manifest)
+
+    absent = _stages_by_id(view)["add_flag"]
+    assert absent.output_row_count is None
+    assert absent.row_delta is None
+
+
+def test_a_record_carrying_no_count_leaves_the_count_unknown(project_dir):
+    """A stage that failed before it wrote a frame is recorded with no count at all."""
+    manifest = _manifest(_version_with_guide(project_dir))
+    manifest["stage_records"][1]["output_row_count"] = None
+
+    view = build_run_guide_view("demo", manifest)
+
+    assert _stages_by_id(view)["load_sources"].output_row_count is None
+
+
+def test_a_measured_empty_frame_reads_as_zero_not_as_unknown(project_dir):
+    counts = {**_COUNTS, "keep_flagged": 0, "attach_source": 0}
+    manifest = _manifest(_version_with_guide(project_dir), counts=counts)
+
+    view = build_run_guide_view("demo", manifest)
+
+    emptied = _stages_by_id(view)["keep_flagged"]
+    assert emptied.output_row_count == 0
+    assert emptied.row_delta == -10
+
+
+def test_a_pass_through_stage_measures_a_delta_of_zero(project_dir):
+    """add_flag writes a column onto all 10 rows load_rows read, dropping none."""
+    view = build_run_guide_view("demo", _manifest(_version_with_guide(project_dir)))
+
+    assert _stages_by_id(view)["add_flag"].row_delta == 0
+
+
+def test_a_row_dropping_stage_measures_the_rows_it_dropped(project_dir):
+    view = build_run_guide_view("demo", _manifest(_version_with_guide(project_dir)))
+
+    assert _stages_by_id(view)["keep_flagged"].row_delta == -6
+
+
+def test_a_stage_with_no_input_has_no_delta_rather_than_a_zero_one(project_dir):
+    view = build_run_guide_view("demo", _manifest(_version_with_guide(project_dir)))
+
+    assert _stages_by_id(view)["load_rows"].row_delta is None
+
+
+def test_a_delta_against_an_unmeasured_input_is_unknown(project_dir):
+    manifest = _manifest(_version_with_guide(project_dir), executed=["add_flag"])
+    view = build_run_guide_view("demo", manifest)
+
+    flagged = _stages_by_id(view)["add_flag"]
+    assert flagged.output_row_count == 10
+    assert flagged.row_delta is None
+
+
+def test_a_delta_is_taken_against_the_first_input_of_a_join(project_dir):
+    """attach_source joins load_sources INTO keep_flagged, so keep_flagged is the base."""
+    view = build_run_guide_view("demo", _manifest(_version_with_guide(project_dir)))
+
+    assert _stages_by_id(view)["attach_source"].row_delta == 0
+
+
+# ── the step's own shape ─────────────────────────────────────────────────────
+
+def test_a_step_leaves_the_count_its_stages_meet_at(project_dir):
+    """add_flag feeds attach_source through keep_flagged, so the step ends at its 4."""
+    view = build_run_guide_view("demo", _manifest(_version_with_guide(project_dir)))
+
+    assert view.steps[1].output_row_count == 4
+
+
+def test_a_step_whose_stages_do_not_meet_states_no_count(project_dir):
+    steps = [ReviewGuideStep(title="Both roots", prose="Two inputs that never meet.",
+                             stage_ids=["load_rows", "load_sources"])]
+    version_id = _version_with_guide(project_dir, steps=steps, unnarrated=[
+        "add_flag", "keep_flagged", "attach_source",
+    ])
+
+    view = build_run_guide_view("demo", _manifest(version_id))
+
+    assert view.steps[0].output_row_count is None
+
+
+def test_a_step_reaching_a_stage_the_run_did_not_execute_leaves_no_count(project_dir):
+    manifest = _manifest(_version_with_guide(project_dir), executed=["add_flag"])
+    view = build_run_guide_view("demo", manifest)
+
+    assert view.steps[1].output_row_count is None
+
+
+def test_a_step_holding_a_row_dropping_stage_is_marked_as_changing_the_row_set(project_dir):
+    steps = [_STEPS[0], ReviewGuideStep(
+        title="Cut it down", prose="Keeps the flagged rows.",
+        stage_ids=["add_flag", "keep_flagged"])]
+    version_id = _version_with_guide(project_dir, steps=steps,
+                                     unnarrated=["load_sources", "attach_source"])
+
+    view = build_run_guide_view("demo", _manifest(version_id))
+
+    assert view.steps[1].changes_row_set is True
+    assert view.steps[1].passes_rows_through is False
+
+
+def test_a_step_that_only_widened_its_rows_says_so(project_dir):
+    steps = [_STEPS[0], ReviewGuideStep(
+        title="Widen", prose="Writes `flag` onto every row.", stage_ids=["add_flag"])]
+    version_id = _version_with_guide(project_dir, steps=steps, unnarrated=[
+        "load_sources", "keep_flagged", "attach_source",
+    ])
+
+    view = build_run_guide_view("demo", _manifest(version_id))
+
+    assert view.steps[1].passes_rows_through is True
+    assert view.steps[1].changes_row_set is False
+
+
+def test_a_step_of_inputs_alone_claims_neither_shape(project_dir):
+    """An input_data stage has no input to compare against, so nothing is claimed."""
+    view = build_run_guide_view("demo", _manifest(_version_with_guide(project_dir)))
+
+    assert view.steps[0].changes_row_set is False
+    assert view.steps[0].passes_rows_through is False
+    assert view.steps[0].output_row_count == 10
 
 
 # ── list_written_columns on its own ──────────────────────────────────────────

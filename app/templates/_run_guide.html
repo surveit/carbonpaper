@@ -4,7 +4,10 @@
    The prose is the ONLY thing here that was authored. Everything shown around it —
    each stage's name, type, position in the execution order and the columns it writes
    — is read off the same pinned version at render time (services/run_guide.py),
-   so it cannot drift from the workflow the run actually executed.
+   so it cannot drift from the workflow the run actually executed. The row counts come
+   the same way, off this run's own manifest: a count is what the run measured, never
+   an estimate, and a stage the run holds no count for reads `rows unknown` — which is
+   not `0 rows`, a frame measured and found empty.
 
    Context: guide (RunGuideView) · project · type_class / type_glyph — the type-tag maps.
    Included only when `guide` is set; a version with no guide gets no rail at all.
@@ -18,6 +21,23 @@
 {# How many columns a stage may name inline before the list folds. Above this the
    list is taller than the step it belongs to and the prose stops being readable. #}
 {% set _FOLD_WRITES = 6 %}
+
+{# The rows a stage's output holds, as this run measured them, and how that count moved
+   from its first input's. `rows unknown` is a stage the run holds no count for; it is
+   deliberately worded, not punctuated, so it cannot be misread as a measured 0. #}
+{% macro row_count(s) %}
+{%- if s.output_row_count is none %}
+<span class="guide-rows unknown" title="This run recorded no row count for this stage">rows unknown</span>
+{%- else %}
+<span class="guide-rows" title="Rows this stage's output holds, measured by this run">{{ "{:,}".format(s.output_row_count) }} row{% if s.output_row_count != 1 %}s{% endif %}</span>
+{%- if s.row_delta is not none and s.row_delta != 0 %}
+<span class="guide-delta {{ 'drop' if s.row_delta < 0 else 'gain' }}"
+      title="{{ "{:,}".format(s.row_delta | abs) }} {{ 'fewer' if s.row_delta < 0 else 'more' }} rows than its first input held — this stage changed which rows exist">{{ '−' if s.row_delta < 0 else '+' }}{{ "{:,}".format(s.row_delta | abs) }}</span>
+{%- elif s.row_delta == 0 %}
+<span class="guide-delta same" title="The same number of rows its first input held — this stage added columns to rows that already existed">same</span>
+{%- endif %}
+{%- endif %}
+{% endmacro %}
 
 {% macro guide_stage(s) %}
 <li class="guide-stage">
@@ -36,6 +56,7 @@
      {% if not s.executed %}title="This run has no record for this stage"{% endif %}>
     <span class="guide-stage-name"><code>{{ s.stage.id }}</code></span>
     <span class="type-tag {{ type_class.get(s.stage.type, 'custom') }}">{{ type_glyph.get(s.stage.type, '') }} {{ s.stage.type }}</span>
+    {{ row_count(s) }}
   </a>
   {# A wide stage's column list is longer than the step's own prose, so past
      _FOLD_WRITES it folds behind its exact count — every column is still there,
@@ -112,6 +133,28 @@
   .guide-stage-row.absent { border-style: dashed; color: var(--muted); }
   .guide-stage-row.unresolved { border-style: dashed; border-color: var(--warn-border);
                                 background: var(--warn-bg); color: var(--fg); }
+  /* The measured shape of the data, kept quieter than the prose it sits under: the
+     count in the row's own ink, the delta tinted only where the row set moved. */
+  .guide-rows { margin-left: auto; font-size: 10px; color: var(--muted);
+                font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .guide-rows.unknown { font-style: italic; }
+  .guide-delta { font-size: 10px; font-variant-numeric: tabular-nums;
+                 white-space: nowrap; border-radius: 3px; padding: 0 3px; }
+  .guide-delta.drop, .guide-delta.gain { color: var(--state-warn-ink);
+                                         background: var(--state-warn-bg); }
+  .guide-delta.same { color: var(--muted); }
+  a.guide-stage-row.active .guide-rows, a.guide-stage-row.active .guide-delta.same {
+    color: #fff; }
+
+  .guide-step-rows { font-size: 10.5px; color: var(--muted);
+                     font-variant-numeric: tabular-nums; margin: 0 0 5px; }
+  .guide-step-mark { border-radius: 3px; padding: 0 4px; color: var(--state-warn-ink);
+                     background: var(--state-warn-bg); }
+  .guide-step-mark.muted-mark { color: var(--muted); background: var(--code-bg); }
+  /* A step that moved the row set is the one asking a different question of the
+     reviewer — how many rows, and on what rule — so its number carries the mark. */
+  .guide-steps > li.changes-rows .n { background: var(--state-warn); }
+
   .guide-writes { display: block; font-size: 10.5px; color: var(--muted);
                   margin: 2px 0 0 6px; }
   details.guide-writes > summary { cursor: pointer; }
@@ -151,11 +194,25 @@
   <p class="run-guide-lead">AI generated summary of what this run did</p>
   <ol class="guide-steps">
     {% for step in guide.steps %}
-    <li>
+    <li{% if step.changes_row_set %} class="changes-rows"{% endif %}>
       <span class="n">{{ loop.index }}</span>
       <div>
         <h3>{{ step.title }}</h3>
         <p>{{ prose_with_column_chips(step.prose) }}</p>
+        {# The step's own shape, under the prose it belongs to and above the stages it
+           was measured from: the count the step's LAST stage left behind, and only
+           where every other stage of the step feeds that one. A step whose stages do
+           not meet gets no number — the per-stage counts below are then all there is,
+           and nothing invents a step total by assuming the stages form a line. #}
+        {% if step.output_row_count is not none %}
+        <p class="guide-step-rows"
+           title="What this step leaves behind: the rows its last stage produced, measured by this run">
+          leaves {{ "{:,}".format(step.output_row_count) }} row{% if step.output_row_count != 1 %}s{% endif %}
+          {%- if step.changes_row_set %} <span class="guide-step-mark">changes which rows exist</span>
+          {%- elif step.passes_rows_through %} <span class="guide-step-mark muted-mark">adds columns only</span>{% endif %}</p>
+        {% elif step.changes_row_set %}
+        <p class="guide-step-rows"><span class="guide-step-mark">changes which rows exist</span></p>
+        {% endif %}
         <ul class="guide-stage-list">
           {% for s in step.stages %}{{ guide_stage(s) }}{% endfor %}
         </ul>

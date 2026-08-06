@@ -9,6 +9,7 @@ from typing import Any
 
 from app.core.errors import RunVersionUnresolvableError
 from app.models import Stage
+from app.models.review_guide import ReviewGuideStep
 from app.models.workflow import sort_stages_by_dependency
 from app.services.run import load_run_version
 from app.services.versioning import find_latest_review_guide
@@ -22,6 +23,14 @@ class GuideStageView:
     stage: Stage | None
     written_columns: list[str]
     executed: bool
+    # Read off this run's own manifest record for the stage. None is UNKNOWN — the run
+    # holds no count for it — and is not 0, which is a measured empty frame.
+    output_row_count: int | None
+    # This stage's own count minus the count of its FIRST declared input's stage: 0 says
+    # it passed every row through and only wrote columns, non-zero is how many rows it
+    # dropped or added. None when there is nothing to subtract — a stage with no input
+    # (`input_data`), or either side's count unknown — and again is not 0.
+    row_delta: int | None
 
 
 @dataclass(frozen=True)
@@ -29,6 +38,20 @@ class GuideStepView:
     title: str
     prose: str
     stages: list[GuideStageView]
+    # What the step leaves behind, and ONLY where that is one measured frame: the output
+    # count of its last stage in execution order, given every other stage of the step
+    # feeds that stage through the version's graph. A step naming stages that do not
+    # meet in one place has no single count to state, so this is None and the per-stage
+    # counts are all there is to show. Nothing here assumes the stages form a chain.
+    output_row_count: int | None
+    # True where a stage of this step measurably changed the row set — a different
+    # review task from a step that only added columns to rows that already existed.
+    changes_row_set: bool
+    # True where EVERY stage of the step measured a delta of 0, so the step is known to
+    # have added columns to rows that already existed and dropped none. Both flags are
+    # False where the step measured nothing to say either with — a step of `input_data`
+    # stages, which have no input to compare against, reads as neither.
+    passes_rows_through: bool
 
 
 @dataclass(frozen=True)
@@ -49,17 +72,10 @@ def build_run_guide_view(project: str, manifest: dict[str, Any]) -> RunGuideView
     if guide is None:
         return None
     by_id = _index_stages_in_execution_order(version.stages)
-    executed = _collect_executed_stage_ids(manifest)
+    measured = _read_run_measurements(manifest)
     return RunGuideView(
-        steps=[
-            GuideStepView(
-                title=step.title,
-                prose=step.prose,
-                stages=_view_stages(step.stage_ids, by_id, executed),
-            )
-            for step in guide.steps
-        ],
-        unnarrated=_view_stages(guide.unnarrated, by_id, executed),
+        steps=[_view_step(step, by_id, measured) for step in guide.steps],
+        unnarrated=_view_stages(guide.unnarrated, by_id, measured),
     )
 
 
@@ -91,25 +107,96 @@ def _index_stages_in_execution_order(stages: list[Stage]) -> dict[str, Stage]:
     return {draft.id: by_id[draft.id] for draft in sort_stages_by_dependency(stages)}
 
 
-def _collect_executed_stage_ids(manifest: dict[str, Any]) -> set[str]:
-    return {record["stage_id"] for record in manifest.get("stage_records", [])}
+@dataclass(frozen=True)
+class _RunMeasurements:
+    """What THIS run measured, by stage id — an id absent from `row_counts` has none."""
+
+    executed: set[str]
+    row_counts: dict[str, int]
+
+
+def _read_run_measurements(manifest: dict[str, Any]) -> _RunMeasurements:
+    records = manifest.get("stage_records", [])
+    return _RunMeasurements(
+        executed={record["stage_id"] for record in records},
+        # A record carrying no count (a stage that failed before it wrote a frame) is
+        # left OUT rather than counted as 0 — the count is unknown, and stays unknown.
+        row_counts={
+            record["stage_id"]: record["output_row_count"]
+            for record in records
+            if record.get("output_row_count") is not None
+        },
+    )
+
+
+def _view_step(
+    step: ReviewGuideStep, by_id: dict[str, Stage], measured: _RunMeasurements
+) -> GuideStepView:
+    stages = _view_stages(step.stage_ids, by_id, measured)
+    return GuideStepView(
+        title=step.title,
+        prose=step.prose,
+        stages=stages,
+        output_row_count=_find_step_output_count(stages, by_id),
+        changes_row_set=any(s.row_delta not in (None, 0) for s in stages),
+        passes_rows_through=bool(stages) and all(s.row_delta == 0 for s in stages),
+    )
+
+
+def _find_step_output_count(
+    stages: list[GuideStageView], by_id: dict[str, Stage]
+) -> int | None:
+    """The last stage's count, and only where every other stage of the step feeds it."""
+    if not stages:
+        return None
+    last = stages[-1]
+    upstream = _walk_upstream_stage_ids(last.stage_id, by_id)
+    if any(s.stage_id not in upstream for s in stages[:-1]):
+        return None
+    return last.output_row_count
+
+
+def _walk_upstream_stage_ids(stage_id: str, by_id: dict[str, Stage]) -> set[str]:
+    seen: set[str] = set()
+    frontier = [stage_id]
+    while frontier:
+        stage = by_id.get(frontier.pop())
+        for source in stage.inputs if stage is not None else []:
+            if source.id not in seen:
+                seen.add(source.id)
+                frontier.append(source.id)
+    return seen
 
 
 def _view_stages(
-    stage_ids: list[str], by_id: dict[str, Stage], executed: set[str]
+    stage_ids: list[str], by_id: dict[str, Stage], measured: _RunMeasurements
 ) -> list[GuideStageView]:
     named = set(stage_ids)
     ordered = [stage_id for stage_id in by_id if stage_id in named]
     # An id the version defines no stage for is a guide/version mismatch. Keep it,
     # visibly unresolved, rather than dropping a stage the prose is talking about.
     ordered += [stage_id for stage_id in stage_ids if stage_id not in by_id]
-    return [_view_stage(stage_id, by_id.get(stage_id), executed) for stage_id in ordered]
+    return [_view_stage(stage_id, by_id.get(stage_id), measured) for stage_id in ordered]
 
 
-def _view_stage(stage_id: str, stage: Stage | None, executed: set[str]) -> GuideStageView:
+def _view_stage(
+    stage_id: str, stage: Stage | None, measured: _RunMeasurements
+) -> GuideStageView:
+    output_rows = measured.row_counts.get(stage_id)
     return GuideStageView(
         stage_id=stage_id,
         stage=stage,
         written_columns=list_written_columns(stage) if stage is not None else [],
-        executed=stage_id in executed,
+        executed=stage_id in measured.executed,
+        output_row_count=output_rows,
+        row_delta=_measure_row_delta(stage, output_rows, measured),
     )
+
+
+def _measure_row_delta(
+    stage: Stage | None, output_rows: int | None, measured: _RunMeasurements
+) -> int | None:
+    if stage is None or not stage.inputs or output_rows is None:
+        return None
+    input_rows = measured.row_counts.get(stage.inputs[0].id)
+    return None if input_rows is None else output_rows - input_rows
