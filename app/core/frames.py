@@ -32,7 +32,7 @@ PARQUET_SUFFIX = ".parquet"
 # queue, eval results. The read is the exact inverse of the write: no schema, no
 # coercion, no dtype argument reaches these. A frame that needs coercion on the
 # way back in is a frame something already got wrong on the way out — see the
-# `read_foreign_*` readers below for the other, genuinely different operation.
+# `read_source_*` readers below, for formats that hold no types to read.
 
 
 def read_frame_file(path: Path) -> pd.DataFrame:
@@ -76,34 +76,30 @@ def render_frame_as_csv_text(frame: pd.DataFrame) -> str:
     return frame.to_csv(index=False)
 
 
-# ── FOREIGN files ────────────────────────────────────────────────────────────
-# A file a user pointed us at, not one we wrote: an `input_data` source, an eval
-# dataset. This is typed ingest, so a `dtype` pin IS correct here — a csv cell
-# arrives as text and has to be typed. Which columns to pin is domain knowledge
-# that reads a declared schema, and the "app.core does not import the domain
-# models" contract keeps that above this layer: the caller works out the pins
-# and the format and passes plain types down, so these readers hold the pandas
-# call and nothing else.
+# ── SOURCE files in a format that carries no types ───────────────────────────
+# csv, xlsx and json-lines hold characters, not types, so pandas will guess one
+# per column unless told otherwise. That is what the `dtype` pin is for, and why
+# these readers exist apart from `read_frame_file`. Which columns to pin is
+# domain knowledge read off a declared schema, and the "app.core does not import
+# the domain models" contract keeps that above this layer: the caller works out
+# the pins and passes plain types down, so these hold the pandas call and nothing
+# else.
+#
+# There is deliberately no parquet entry. Parquet carries its own types, so who
+# wrote the file changes nothing about how to read it — `read_frame_file`.
 
 
-def read_foreign_csv(path: Path, *, dtype: Mapping[Hashable, Any] | None = None) -> pd.DataFrame:
+def read_source_csv(path: Path, *, dtype: Mapping[Hashable, Any] | None = None) -> pd.DataFrame:
     return pd.read_csv(path, dtype=dtype)
 
 
-# Parquet carries its own types, so who wrote the file changes nothing about how to
-# read it: the same reader as `read_frame_file`. The dtype pins the other foreign
-# readers take exist only because csv/xlsx/json hold no types to read.
-def read_foreign_parquet(path: Path) -> pd.DataFrame:
-    return _read_frame_parquet(path)
-
-
-def read_foreign_json_lines(
+def read_source_json_lines(
     path: Path, *, dtype: Mapping[Hashable, Any] | None = None
 ) -> pd.DataFrame:
     return pd.read_json(path, lines=True, dtype=dtype)
 
 
-def read_foreign_excel(
+def read_source_excel(
     path: Path, *, sheet_name: str | int, header_row: int,
     dtype: Mapping[Hashable, Any] | None = None,
 ) -> pd.DataFrame:

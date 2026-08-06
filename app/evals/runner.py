@@ -14,9 +14,9 @@ import pandas as pd
 
 from app.core.errors import EvalGrainViolationError, EvalNotScorableError, SubsetRunError
 from app.core.frames import (
-    read_foreign_csv,
-    read_foreign_json_lines,
-    read_foreign_parquet,
+    read_frame_file,
+    read_source_csv,
+    read_source_json_lines,
     write_frame_file,
 )
 from app.evals.scoring import score_expected_outputs
@@ -179,11 +179,11 @@ def _read_table_ref(repo_root: Path, table: TableRef) -> pd.DataFrame:
     supported format; geojson is not a tabular eval input."""
     path = repo_root / table.path
     if table.format == FileFormat.csv:
-        return read_foreign_csv(path)
+        return read_source_csv(path)
     if table.format == FileFormat.parquet:
-        return read_foreign_parquet(path)
+        return read_frame_file(path)
     if table.format == FileFormat.json:
-        return read_foreign_json_lines(path)
+        return read_source_json_lines(path)
     raise EvalNotScorableError(f"unsupported eval dataset format: {table.format}")
 
 

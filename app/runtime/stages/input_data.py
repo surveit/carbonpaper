@@ -15,10 +15,10 @@ from typing import Any
 import pandas as pd
 
 from app.core.frames import (
-    read_foreign_csv,
-    read_foreign_excel,
-    read_foreign_json_lines,
-    read_foreign_parquet,
+    read_frame_file,
+    read_source_csv,
+    read_source_excel,
+    read_source_json_lines,
 )
 from app.models import (
     JSON_COLUMN_TYPE,
@@ -89,11 +89,11 @@ def read_input_data(stage: Stage, ctx: RunContext) -> pd.DataFrame:
     fmt = params.get("format", FileFormat.csv)
     schema = input_stage.resolve_output_schema()  # input_data's produces is non-empty by validation
     if fmt == FileFormat.csv:
-        df = read_foreign_csv(path, dtype=_read_dtype(schema, fmt, params))
+        df = read_source_csv(path, dtype=_read_dtype(schema, fmt, params))
     elif fmt == FileFormat.parquet:
-        df = read_foreign_parquet(path)
+        df = read_frame_file(path)
     elif fmt == FileFormat.json:
-        df = read_foreign_json_lines(path, dtype=_read_dtype(schema, fmt, params))
+        df = read_source_json_lines(path, dtype=_read_dtype(schema, fmt, params))
     elif fmt == FileFormat.geojson:
         df = _read_geojson(path)
     elif fmt == FileFormat.xlsx:
@@ -191,7 +191,7 @@ def _read_xlsx(
     # Excel; rows above and columns left of them are discarded before parsing.
     # dtype keys on the header row's names, so first_column's later slicing cannot
     # shift it.
-    frame = read_foreign_excel(
+    frame = read_source_excel(
         path, sheet_name=params.sheet_name, header_row=params.header_row, dtype=dtype
     )
     if params.first_column:

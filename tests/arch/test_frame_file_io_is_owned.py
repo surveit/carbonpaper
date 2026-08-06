@@ -2,7 +2,7 @@
 ``app/core/frames.py``. Two operations live there and must not be confused — the
 exact inverse pair for a frame WE wrote (`read_frame_file` / `write_frame_file`),
 and typed ingest of a FOREIGN file against a caller-supplied dtype pin
-(`read_foreign_*`). A pandas read elsewhere silently picks one of them.
+(`read_source_*`). A pandas read elsewhere silently picks one of them.
 """
 from __future__ import annotations
 
@@ -38,11 +38,11 @@ _ALLOWLIST: frozenset[str] = frozenset(
 # owns it. Keyed on the plain name, so an aliased import (`pd` vs `pandas`) and
 # a bound method (`frame.to_parquet`) are both caught without tracking the alias.
 _OWNED_CALLS = {
-    "read_parquet": "read_frame_file (ours) / read_foreign_parquet (a user's file)",
-    "read_csv": "read_frame_file (ours) / read_foreign_csv (a user's file)",
+    "read_parquet": "read_frame_file",
+    "read_csv": "read_frame_file (ours) / read_source_csv (a user's file)",
     "read_table": "read_frame_file",
-    "read_json": "read_foreign_json_lines",
-    "read_excel": "read_foreign_excel",
+    "read_json": "read_source_json_lines",
+    "read_excel": "read_source_excel",
     "to_parquet": "write_frame_file / write_frame_file_with_csv_fallback",
     "to_csv": "write_frame_file / render_frame_as_csv_text",
     "write_table": "write_frame_file",
