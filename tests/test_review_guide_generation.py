@@ -77,6 +77,7 @@ def _add_stage_to_the_working_copy(project_dir: Path) -> None:
 def _guide_of(stage_ids: list[str]) -> ReviewGuideDraft:
     return ReviewGuideDraft(steps=[ReviewGuideStep(
         title="What this does", prose="Each `amount` is doubled.", stage_ids=stage_ids,
+        data_description="Every filed row, its `amount` doubled.",
     )])
 
 

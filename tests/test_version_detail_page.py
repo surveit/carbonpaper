@@ -80,6 +80,7 @@ def _save_covering_guide(project_dir: Path, version_id: str) -> None:
             title="How this workflow works",
             prose="Every stage, narrated together.",
             stage_ids=[stage.id for stage in stages],
+            data_description="Every row the workflow ends with.",
         )]),
     )
 

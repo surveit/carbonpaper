@@ -26,10 +26,12 @@ class ReviewGuideStep(_Base):
         ),
     )
     stage_ids: list[str]
-    # OPTIONAL, and must stay so: every guide stored before this field existed parses
-    # through PersistedModel.load's extra="forbid" model_validate, and a required field
-    # would orphan all of them. A section without it renders its data link without a
-    # sentence — nothing is synthesised from the stage names to fill the gap.
+    # OPTIONAL HERE, and must stay so: every guide stored before this field existed
+    # parses through PersistedModel.load's extra="forbid" model_validate, and a required
+    # field would orphan all of them. Such a guide renders its data link with the size
+    # alone — nothing is synthesised from the stage names to fill the gap.
+    # WRITING a guide is where it is required: versioning.validate_review_guide refuses
+    # one whose sections lack it, naming them, so no new guide can be stored without it.
     data_description: str | None = Field(
         default=None,
         max_length=DATA_DESCRIPTION_MAX_CHARS,

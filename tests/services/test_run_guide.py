@@ -72,10 +72,12 @@ _STAGES: list[dict[str, Any]] = [
 # attach_source is named first, though the run reaches it last.
 _STEPS = [
     ReviewGuideStep(title="Read the rows", prose="Reads every `doc_id` filed.",
-                    stage_ids=["load_rows"]),
+                    stage_ids=["load_rows"],
+                    data_description="Every row the source filed, as filed."),
     ReviewGuideStep(title="Decide what counts",
                     prose="A row is kept on `flag`, then given its `source`.",
-                    stage_ids=["attach_source", "add_flag"]),
+                    stage_ids=["attach_source", "add_flag"],
+                    data_description="The kept rows, each carrying the source it came from."),
 ]
 _UNNARRATED = ["load_sources", "keep_flagged"]
 
@@ -463,14 +465,22 @@ def test_a_section_carries_the_authored_sentence_about_its_data(project_dir):
     assert view.steps[0].data_description == "Every row the source filed, as filed."
 
 
-def test_a_section_written_before_the_field_existed_still_loads(project_dir):
-    """The case a REQUIRED field would orphan: extra="forbid" still parses the record."""
+def _store_a_guide_written_before_the_field_existed(project_dir: Path) -> str:
     version_id = _version_with_guide(project_dir)
+    # Written past save_version_guide, which now refuses this shape: the record under
+    # test predates that rule and could not be authored today.
     stored = find_latest_review_guide("demo", version_id)
+    assert stored is not None
     payload = stored.model_dump()
     for step in payload["steps"]:
         del step["data_description"]
     ReviewGuide.model_validate(payload).save()
+    return version_id
+
+
+def test_a_section_written_before_the_field_existed_still_loads(project_dir):
+    """The case a REQUIRED field would orphan: extra="forbid" still parses the record."""
+    version_id = _store_a_guide_written_before_the_field_existed(project_dir)
 
     view = build_run_guide_view("demo", _manifest(version_id))
 
@@ -479,9 +489,12 @@ def test_a_section_written_before_the_field_existed_still_loads(project_dir):
 
 def test_nothing_stands_in_for_a_missing_sentence(project_dir):
     """No fallback to the title or a stage name — an absent sentence stays absent."""
-    view = build_run_guide_view("demo", _manifest(_version_with_guide(project_dir)))
+    version_id = _store_a_guide_written_before_the_field_existed(project_dir)
+
+    view = build_run_guide_view("demo", _manifest(version_id))
 
     assert view.steps[0].data_description is None
+    assert view.steps[0].title == "Read the rows"
 
 
 # ── the step's own shape ─────────────────────────────────────────────────────
@@ -499,7 +512,8 @@ def test_a_step_leaves_the_stage_none_of_its_others_reads(project_dir):
 
 def test_a_step_that_forks_leaves_every_branch_counted_on_its_own(project_dir):
     steps = [ReviewGuideStep(title="Both roots", prose="Two inputs that never meet.",
-                             stage_ids=["load_rows", "load_sources"])]
+                             stage_ids=["load_rows", "load_sources"],
+                             data_description="The filed rows, and the source list.")]
     version_id = _version_with_guide(project_dir, steps=steps, unnarrated=[
         "add_flag", "keep_flagged", "attach_source",
     ])
@@ -513,7 +527,8 @@ def test_a_stage_read_only_from_outside_the_step_is_still_a_terminal(project_dir
     """keep_flagged feeds attach_source, but no stage of THIS step reads it."""
     steps = [_STEPS[0], ReviewGuideStep(
         title="Cut it down", prose="Keeps the flagged rows.",
-        stage_ids=["add_flag", "keep_flagged"])]
+        stage_ids=["add_flag", "keep_flagged"],
+        data_description="Only the rows carrying the flag.")]
     version_id = _version_with_guide(project_dir, steps=steps,
                                      unnarrated=["load_sources", "attach_source"])
 
@@ -532,7 +547,8 @@ def test_a_terminal_the_run_did_not_execute_stays_unknown(project_dir):
 def test_a_step_holding_a_row_dropping_stage_is_marked_as_changing_the_row_set(project_dir):
     steps = [_STEPS[0], ReviewGuideStep(
         title="Cut it down", prose="Keeps the flagged rows.",
-        stage_ids=["add_flag", "keep_flagged"])]
+        stage_ids=["add_flag", "keep_flagged"],
+        data_description="Only the rows carrying the flag.")]
     version_id = _version_with_guide(project_dir, steps=steps,
                                      unnarrated=["load_sources", "attach_source"])
 
@@ -544,7 +560,8 @@ def test_a_step_holding_a_row_dropping_stage_is_marked_as_changing_the_row_set(p
 
 def test_a_step_that_only_widened_its_rows_says_so(project_dir):
     steps = [_STEPS[0], ReviewGuideStep(
-        title="Widen", prose="Writes `flag` onto every row.", stage_ids=["add_flag"])]
+        title="Widen", prose="Writes `flag` onto every row.", stage_ids=["add_flag"],
+        data_description="Every filed row, now carrying its flag.")]
     version_id = _version_with_guide(project_dir, steps=steps, unnarrated=[
         "load_sources", "keep_flagged", "attach_source",
     ])

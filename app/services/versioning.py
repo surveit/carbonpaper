@@ -193,12 +193,36 @@ def find_latest_review_guide(project: str, version_id: str) -> ReviewGuide | Non
 
 
 def validate_review_guide(guide: ReviewGuide, stages: list[Stage]) -> None:
-    """Raises ReviewGuideValidationError naming every offending stage id."""
+    """Raises ReviewGuideValidationError naming every offending stage id and section."""
+    refusals = [
+        *_describe_stage_mismatch(guide, stages),
+        *_describe_sections_missing_data_description(guide),
+    ]
+    if refusals:
+        raise ReviewGuideValidationError(" ".join(refusals))
+
+
+def _describe_stage_mismatch(guide: ReviewGuide, stages: list[Stage]) -> list[str]:
     issues = _find_review_guide_issues(guide, stages)
-    if issues:
-        raise ReviewGuideValidationError(
-            "review guide does not match the version's stages: " + "; ".join(issues)
-        )
+    if not issues:
+        return []
+    return ["review guide does not match the version's stages: " + "; ".join(issues)]
+
+
+def _describe_sections_missing_data_description(guide: ReviewGuide) -> list[str]:
+    # Blank counts as absent; nothing is filled in from a title or a stage name.
+    missing = [
+        f"{position} ({step.title!r})"
+        for position, step in enumerate(guide.steps, start=1)
+        if not (step.data_description or "").strip()
+    ]
+    if not missing:
+        return []
+    return [
+        "every Workflow section must carry `data_description`, one short sentence "
+        "saying what the rows leaving it ARE; write one for section(s) "
+        + ", ".join(missing) + "."
+    ]
 
 
 def _validate_guide_describes_the_version(
