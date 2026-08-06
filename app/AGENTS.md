@@ -26,8 +26,10 @@ plus a deep link, and the detail stays in the panel's own validation block.
   message, stages in the run's own order. Folded when something stopped the run; open when
   nothing did, which is the run whose warnings would otherwise go unread.
 
-A deep link loads the panel through `_loadStage(id, {tab, reveal})`, which the panel serves by
-publishing `_selectTab` on its root element.
+A deep link loads the panel through `_loadStage(id, {tab, land})`, which the panel serves by
+publishing `_selectTab` on its root element. `land` names where the scroll ends: `header` (the
+stage's title) or `data` (the output table) — the review guide's output link, clicked to read
+rows, is the one that asks for `data`.
 
 ## The stage panel — three tabs (`run_stage_partial` → `_run_stage_panel.html`)
 **Data │ Schema │ Transform**, one flat strip; it opens on Data:

@@ -116,7 +116,7 @@
     if (!window._loadStage) return;   // no panel to load into — let the href navigate
     ev.preventDefault();
     window._loadStage(link.getAttribute('data-issue-stage'), {
-      tab: link.getAttribute('data-issue-tab'), reveal: true,
+      tab: link.getAttribute('data-issue-tab'), land: 'header',
     });
   });
 })();

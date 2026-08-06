@@ -203,10 +203,19 @@
   }
   window._focusGraphNode = focusGraphNode;
 
+  // Where a click lands in the panel: 'data' is the output table, for a link
+  // clicked to read rows, which the panel's own top leaves below the fold.
+  // behavior:'auto' — 'smooth' moves nothing under automation, so it cannot be measured.
+  const LANDING = { header: '.stage-header',
+                    data: '.pane[data-pane="data"] .table-scroll' };
+  function landIn(where) {
+    (panel.querySelector(LANDING[where]) || panel)
+      .scrollIntoView({ behavior: 'auto', block: 'start', inline: 'nearest' });
+  }
+
   // opts.pulse defaults to true: every caller but the graph-node click is a jump
   // away from where the reader was looking. opts.tab opens the panel on a named
-  // tab; opts.reveal scrolls the panel into view, for a caller whose own link is
-  // far enough up the page that the panel is off screen.
+  // tab; opts.land names the LANDING key to scroll to once it is rendered.
   async function loadStage(stageId, opts) {
     if (!stageId) return;
     panel.classList.add('loading');
@@ -226,10 +235,10 @@
       const card = panel.querySelector('.run-stage-panel');
       if (opts && opts.tab && card && card._selectTab) card._selectTab(opts.tab);
       if (location.hash !== `#${stageId}`) history.replaceState(null, '', `#${stageId}`);
-      // The graph moves to the stage; the page does not. Scrolling down to the panel
-      // took the diagram off screen, which is the thing the click was about.
+      // The graph moves to the stage; a click on the graph itself does not move the
+      // page, which would take the diagram off screen.
       focusGraphNode(stageId, { pulse: !opts || opts.pulse !== false });
-      if (opts && opts.reveal) panel.scrollIntoView({ block: 'start' });
+      if (opts && opts.land) landIn(opts.land);
     } finally { panel.classList.remove('loading'); }
   }
   window._loadStage = loadStage;
