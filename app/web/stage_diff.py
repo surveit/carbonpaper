@@ -20,15 +20,14 @@ from app.runtime.manifest import resolve_output_path
 from app.core.frames import read_frame_file
 from app.web.loading import render_frame_as_text
 
-# Grain-and-order-preserving types that still have nothing for a positional diff
-# to say. input_data originates its rows, so there is no input frame to compare
-# against. A human_review_queue's output is written by the review gate, and
-# whether a reviewer's edit should read as the STAGE changing a cell is an open
-# question, so this pane does not answer it either way.
-_NO_ALIGNED_DIFF: frozenset[StageType] = frozenset({
-    StageType.input_data,
-    StageType.human_review_queue,
-})
+# The one grain-and-order-preserving type with nothing for a positional diff to
+# say: input_data originates its rows, so there is no input frame to compare
+# against. Every other one has an input and gets diffed — including
+# human_review_queue, whose reviewed value lands in a column the stage ADDS
+# (QueueConfig.reviewed_columns maps source -> added column), leaving the source
+# column carried beside it. That reads as `+4 cols · 0 cells changed`, with the
+# human's answer next to what it was answering.
+_NO_ALIGNED_DIFF: frozenset[StageType] = frozenset({StageType.input_data})
 
 # The 1:1-by-position stage types the aligned diff covers: their runtime contract
 # maps output row i to input row i, so a positional comparison states facts.

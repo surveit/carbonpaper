@@ -243,6 +243,40 @@ def test_a_starlark_row_function_is_admitted_to_the_row_aligned_diff(tmp_path: P
     assert diff.added_column_names == ["basis"]
 
 
+def test_a_review_queue_shows_the_human_answer_beside_what_it_answered(tmp_path: Path) -> None:
+    """A reviewed value lands in an ADDED column, so the source it judged stays carried."""
+    stage = parse_stage({
+        "id": "gate", "name": "Gate", "type": "human_review_queue",
+        "inputs": [{"id": LOAD_ID, "schema": {"columns": _IN_COLUMNS}}],
+        "queue": {
+            "reviewed_columns": {"name": "reviewed_name"},
+            "verdict_column": "verdict",
+            "reviewer_column": "reviewer",
+            "reviewed_at_column": "reviewed_at",
+        },
+        "signature": {
+            "form": "extends",
+            "adds": [{"name": "reviewed_name", "type": "str", "nullable": True},
+                     {"name": "verdict", "type": "str", "nullable": True},
+                     {"name": "reviewer", "type": "str", "nullable": True},
+                     {"name": "reviewed_at", "type": "str", "nullable": True}],
+        },
+    })
+    _write_output(tmp_path, LOAD_ID, pd.DataFrame({"name": ["a"], "val": [1]}))
+    out_rel = _write_output(tmp_path, "gate", pd.DataFrame({
+        "name": ["a"], "val": [1], "reviewed_name": ["A, corrected"],
+        "verdict": ["approve"], "reviewer": ["shuhan"], "reviewed_at": ["2026-08-06"]}))
+
+    diff = build_stage_diff(stage, tmp_path, out_rel, {LOAD_ID: _LOAD_PATH})
+
+    assert isinstance(diff, RowAlignedDiff)
+    assert diff.added_column_names == [
+        "reviewed_name", "verdict", "reviewer", "reviewed_at"]
+    assert diff.changed_cells_total == 0
+    judged = next(c for c in diff.columns if c.name == "name")
+    assert judged.state is ColumnDiffState.carried
+
+
 def test_every_grain_preserving_type_gets_a_diff_unless_it_has_nothing_to_compare() -> None:
     """A new preserving type is covered without this pane being edited."""
     for stage_type in StageType:
@@ -254,9 +288,9 @@ def test_every_grain_preserving_type_gets_a_diff_unless_it_has_nothing_to_compar
         )
 
 
-def test_the_excluded_types_are_the_two_with_no_transform_to_show() -> None:
+def test_the_only_excluded_type_is_the_one_with_no_input_to_compare() -> None:
     # Growing this list means a type stopped getting a diff — a decision, not a refactor.
-    assert _NO_ALIGNED_DIFF == {StageType.input_data, StageType.human_review_queue}
+    assert _NO_ALIGNED_DIFF == {StageType.input_data}
 
 
 # ─── enrich: the row-aligned diff against its SUBJECT input ──────────────────
