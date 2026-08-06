@@ -17,6 +17,7 @@ from app.services import versioning, workspace
 from app.services.versioning import ReviewGuide
 from app.web.review_packet import export_review_packet
 from app.web.review_packet.pages import PACKET_MAX_TABLE_ROWS
+from app.web.routers.review_packet import _write_zip
 from app.web.loading import MAX_TABLE_ROWS
 from app.services.review_packet.checksums import compute_sha256
 
@@ -448,3 +449,23 @@ def _client():
     from app.main import app
 
     return TestClient(app)
+
+
+def test_the_packet_zip_trades_bytes_for_speed_on_compression(tmp_path):
+    # Level 1 over the default 6, so a silent revert shows up as a smaller file.
+    root = tmp_path / "packet-root"
+    root.mkdir()
+    payload = ("registrant,client,amount\n" * 8000).encode()
+    (root / "big.csv").write_bytes(payload)
+    archive = tmp_path / "a.zip"
+
+    _write_zip(archive, root)
+
+    default_level = io.BytesIO()
+    with zipfile.ZipFile(default_level, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("big.csv", payload)
+    with zipfile.ZipFile(archive) as zf:
+        entry = zf.infolist()[0]
+    assert entry.filename == "packet-root/big.csv"
+    assert entry.compress_type == zipfile.ZIP_DEFLATED
+    assert entry.compress_size > len(default_level.getvalue())
