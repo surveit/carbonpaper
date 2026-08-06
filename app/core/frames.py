@@ -13,7 +13,9 @@ import math
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pyarrow.lib as pa_lib
+import pyarrow.parquet as pq
 
 from app.core.errors import FrameNotSerializableError
 from app.core.persistence import validate_id
@@ -27,7 +29,33 @@ PARQUET_SUFFIX = ".parquet"
 
 def read_frame_file(path: Path) -> pd.DataFrame:
     """Parquet, or the CSV a writer falls back to for a frame parquet cannot hold — by suffix."""
-    return pd.read_parquet(path) if path.suffix == PARQUET_SUFFIX else pd.read_csv(path)
+    return _read_frame_parquet(path) if path.suffix == PARQUET_SUFFIX else pd.read_csv(path)
+
+
+# The parquet read every frame this module hands back goes through, and the
+# inverse of `frame.to_parquet`. `pd.read_parquet` is not that inverse: it
+# materializes a written list cell as an `np.ndarray`, so a saved
+# `["a", "b"]` returns as `array(["a", "b"])` and hashes through the
+# `default=str` fallback in `compute_frame_fingerprint` /
+# `compute_row_fingerprint` as `"['a' 'b']"` rather than as a JSON array —
+# the same data under a different cache key. `types_mapper` fires only on the
+# arrow LIST types, so every scalar column keeps the numpy-backed dtype and
+# the exact cell type `pd.read_parquet` gives it, and only the list columns
+# move. `use_pandas_metadata` matches what `pd.read_parquet` asks for.
+def _read_frame_parquet(path: Path) -> pd.DataFrame:
+    table = pq.read_table(path, use_pandas_metadata=True)
+    return table.to_pandas(types_mapper=_map_list_type_to_arrow_dtype)
+
+
+def _map_list_type_to_arrow_dtype(arrow_type: pa.DataType) -> pd.ArrowDtype | None:
+    """None leaves the column on pandas' own default for that arrow type."""
+    if (
+        pa.types.is_list(arrow_type)
+        or pa.types.is_large_list(arrow_type)
+        or pa.types.is_fixed_size_list(arrow_type)
+    ):
+        return pd.ArrowDtype(arrow_type)
+    return None
 
 
 def list_rows(frame: pd.DataFrame) -> list[dict[str, Any]]:
@@ -247,7 +275,7 @@ class FrameStore:
         path = self._path(collection, id)
         if not path.exists():
             return None
-        return pd.read_parquet(path)
+        return _read_frame_parquet(path)
 
     def exists(self, collection: str, id: str) -> bool:
         return self._path(collection, id).exists()
