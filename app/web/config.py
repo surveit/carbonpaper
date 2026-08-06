@@ -20,6 +20,7 @@ from starlette.types import Scope
 # never as its return value: binding the path at import time would give every
 # router its own stale copy, which is exactly what set_projects_dir() exists to
 # avoid.
+from app.core.utils import abbreviate_count
 from app.services.workspace import (
     configure_projects_dir_from_env as configure_projects_dir_from_env,
     projects_dir as projects_dir,
@@ -118,3 +119,6 @@ templates.env.filters["relative_time"] = relative_time
 templates.env.filters["friendly_duration"] = friendly_duration
 templates.env.filters["usd"] = usd
 templates.env.filters["plain_value"] = plain_value
+# The review packet renders the same templates through this env, so the rail's
+# sizes abbreviate identically in a written packet and on a live run page.
+templates.env.filters["abbreviate_count"] = abbreviate_count
