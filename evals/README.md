@@ -54,11 +54,11 @@ JSON.
 
 ## Two things a curator has to get right
 
-**The brief must not leak the method.** It states the story and the output schema. Where the
-golden's own column name would reveal the method, the case renames it: in
-`wyoming_refugee_arrivals` the golden's key column is `state`, which comes from the population
-table and so hints at which frame to join from, and the brief and contract call it
-`jurisdiction` instead.
+**The brief must not leak the method.** It states the story and the output schema, in the
+words a journalist would use. `ComparisonContract.output_key_column` exists so a case *can*
+rename the key, but `wyoming_refugee_arrivals` does not use it: declaring a per-state output
+row already tells an author most of what a renamed key would have hidden, so the rename buys
+nothing and a vaguer word changes which rows an author thinks belong in the table.
 
 **Tolerance is capped by the golden's rendered precision.** A golden cell is the text pandas
 printed, so a rate rendered to six decimal places cannot be compared more tightly than that.
