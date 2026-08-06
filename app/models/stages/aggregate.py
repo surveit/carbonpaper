@@ -84,6 +84,7 @@ class AggregateStage(StageBase):
 # dispatch on real data) — named here so the two sites can't drift apart.
 AGG_FORMULA_COUNT = "count"
 AGG_FORMULA_COUNT_DISTINCT = "count_distinct"
+AGG_FORMULA_FIRST = "first"
 AGG_FORMULA_LIST = "list"
 
 
@@ -207,7 +208,13 @@ NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
         notes=(
             "Output columns are exactly group_by plus each aggregation's output_column — every "
             "other input column is DROPPED, so carry anything needed downstream via group_by "
-            "or a `first` aggregation. formula `count` counts ROWS and takes no value_column; "
+            "or a `first` aggregation. An EMPTY group_by reduces the whole frame to exactly ONE "
+            "row whose columns are just the aggregation outputs — reach for it instead of a "
+            "python_frame_function whenever the stage publishes a handful of figures over "
+            "everything, because a frame function stops row-level lineage dead. That one row "
+            "comes out even when the input frame is empty: count and count_distinct 0, sum 0, "
+            "list [], and mean/min/max/first null. "
+            "formula `count` counts ROWS and takes no value_column; "
             "every other formula requires one — `count_distinct` counts the distinct NON-NULL "
             "values of its value_column (nulls are not a value), so use it instead of a frame "
             "function for a unique-count. Declared output types must match "

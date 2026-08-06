@@ -123,14 +123,17 @@ def _row_dict(df: pd.DataFrame, r: int) -> dict[str, Any]:
     return {str(k): _scalar(v) for k, v in df.iloc[r].items()}
 
 
-def _lineage_hops(run_dir: Path, stage_id: str, row_ordinal: int) -> list[RowParent]:
-    """Every recorded parent of `row_ordinal`, spine first; empty where no sidecar applies."""
+def _lineage_hops(run_dir: Path, stage_id: str, row_ordinal: int) -> list[RowParent] | None:
+    """Every recorded parent of `row_ordinal`, spine first; None where no sidecar covers it."""
     path = lineage_sidecar_path(run_dir, stage_id)
+    # None and [] are different answers: [] is a RECORDED fact — this row has no
+    # parents, which a whole-frame aggregate over an empty input emits — while
+    # None means nothing was recorded, so the walk must fall back to position.
     if not path.exists():
-        return []
+        return None
     lineage = RowLineage.from_frame(read_frame_file(path))
     if row_ordinal < 0 or row_ordinal >= len(lineage):
-        return []
+        return None
     return list(lineage.parents[row_ordinal])
 
 
@@ -204,23 +207,30 @@ def _advance_positionally(
     return parent_id, r
 
 
+def _summarizes_message(contributors: int) -> str:
+    # Zero contributors is a recorded fact, not a gap in the recording.
+    if not contributors:
+        return ("this row summarizes its inputs, and the run recorded that no input "
+                "row fed it — an aggregation over an empty group")
+    return ("this row summarizes its inputs rather than being made from one "
+            "of them — open the contributors to go further")
+
+
 def _advance(
     run_dir: Path, by_id: dict[str, dict[str, Any]], sid: str, stage_type: str, r: int,
     df: pd.DataFrame, parents: list[str], spine: RowParent | None,
-    has_hops: bool = False,
+    hops: list[RowParent] | None = None,
 ) -> tuple[str, int] | TraceEnd:
     """The next `(stage_id, row_ordinal)` to visit, or the `TraceEnd` the walk stops on."""
     # A row-preserving type with the wrong parent arity is treated as NOT
-    # preserving — position can't be trusted. `has_hops` with no spine stops by
-    # DESIGN, not failure: those parents are contributors, reported as branches.
+    # preserving — position can't be trusted. Recorded `hops` with no spine stops
+    # by DESIGN, not failure: those parents are contributors, reported as branches.
     if stage_type == StageType.input_data:
         return TraceEnd(True, sid, "input_data stage — the rows originate here")
     if spine is not None:
         return _advance_via_lineage(run_dir, by_id, sid, spine)
-    if has_hops:
-        return TraceEnd(False, sid,
-                        "this row summarizes its inputs rather than being made from one "
-                        "of them — open the contributors to go further")
+    if hops is not None:
+        return TraceEnd(False, sid, _summarizes_message(len(hops)))
     if not parents:
         return TraceEnd(False, sid, "the manifest records no input edge for this stage")
     # Nothing recorded: the only remaining route is the ordinal, and only where
@@ -258,7 +268,7 @@ def trace_row(run_dir: Path, stage_id: str, row_ordinal: int) -> Trace:
 
         parents = _parents(record)
         hops = _lineage_hops(run_dir, sid, r)
-        spine, branches = _split_spine(hops)
+        spine, branches = _split_spine(hops or [])
         columns_parent_id = _columns_parent_id(parents, spine)
         parent_df = (
             _read_output(run_dir, by_id[columns_parent_id])
@@ -276,7 +286,7 @@ def trace_row(run_dir: Path, stage_id: str, row_ordinal: int) -> Trace:
         ))
 
         next_hop = _advance(
-            run_dir, by_id, sid, stage_type, r, df, parents, spine, bool(hops)
+            run_dir, by_id, sid, stage_type, r, df, parents, spine, hops
         )
         if isinstance(next_hop, TraceEnd):
             end = next_hop

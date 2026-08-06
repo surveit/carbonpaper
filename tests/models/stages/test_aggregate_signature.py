@@ -191,3 +191,87 @@ def test_valid_aggregate_passes():
         ],
     ))
     assert stage.id == "totals"
+
+
+# ---- group_by: [] — the whole frame as one group ---------------------------
+# The produced schema is then the aggregation outputs ALONE: there is no group
+# column to carry an edge type through, so a declared one has nothing to match.
+
+def _whole_frame_stage(*, produces, aggregations):
+    stage = _aggregate_stage(produces=produces, aggregations=aggregations)
+    stage["aggregate"]["group_by"] = []
+    # `company` was consumed only as the group key, so dropping group_by drops
+    # it from reads — and a bare `count` then consumes nothing at all, which is
+    # `reads: []`, not an entry with no columns (InputReads needs one).
+    columns = [c for c in stage["signature"]["reads"][0]["columns"]
+               if c["name"] != "company"]
+    stage["signature"]["reads"] = (
+        [{"input": "facilities", "columns": columns}] if columns else []
+    )
+    return stage
+
+
+def test_whole_frame_producing_the_aggregations_alone_accepted():
+    stage = parse_stage(_whole_frame_stage(
+        produces=[{"name": "n", "type": "int", "nullable": True},
+                  {"name": "total", "type": "int", "nullable": True}],
+        aggregations=[{"output_column": "n", "formula": "count"},
+                      {"output_column": "total", "formula": "sum",
+                       "value_column": "revenue"}],
+    ))
+    assert stage.aggregate.group_by == []
+
+
+def test_whole_frame_declaring_a_group_column_rejected():
+    # `company` is no longer emitted — with no group keys nothing carries it out.
+    msg = _issues(_whole_frame_stage(
+        produces=[{"name": "company", "type": "str", "nullable": True},
+                  {"name": "n", "type": "int", "nullable": True}],
+        aggregations=[{"output_column": "n", "formula": "count"}],
+    ))
+    assert "company" in msg
+
+
+def test_whole_frame_output_types_still_follow_the_formula():
+    msg = _issues(_whole_frame_stage(
+        produces=[{"name": "n", "type": "str", "nullable": True}],
+        aggregations=[{"output_column": "n", "formula": "count"}],
+    ))
+    assert "'n'" in msg and "int" in msg
+
+
+def test_whole_frame_reading_a_column_the_config_never_consumes_rejected():
+    stage = _whole_frame_stage(
+        produces=[{"name": "n", "type": "int", "nullable": True}],
+        aggregations=[{"output_column": "n", "formula": "count"}],
+    )
+    stage["signature"]["reads"] = [{
+        "input": "facilities",
+        "columns": [{"name": "region", "type": "str", "nullable": True}],
+    }]
+    assert "region" in _issues(stage)
+
+
+def test_compute_aggregate_output_types_emits_the_aggregations_alone():
+    from app.models.stages.aggregate import compute_aggregate_output_types
+
+    stage = parse_stage(_whole_frame_stage(
+        produces=[{"name": "n", "type": "int", "nullable": True},
+                  {"name": "regions", "type": "list[str]", "nullable": True}],
+        aggregations=[{"output_column": "n", "formula": "count"},
+                      {"output_column": "regions", "formula": "list",
+                       "value_column": "region"}],
+    ))
+    computed = compute_aggregate_output_types(
+        stage.aggregate, stage.inputs[0].table_schema)
+
+    assert computed == {"n": "int", "regions": "list[str]"}
+
+
+def test_whole_frame_counting_rows_consumes_no_column_at_all():
+    # No group key, no value column, no `where` — so nothing is read.
+    stage = parse_stage(_whole_frame_stage(
+        produces=[{"name": "n", "type": "int", "nullable": True}],
+        aggregations=[{"output_column": "n", "formula": "count"}],
+    ))
+    assert stage.signature.reads == []
