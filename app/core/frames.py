@@ -336,30 +336,62 @@ CELL_TYPE_PREDICATES: Mapping[str, Callable[[Any], bool]] = {
 }
 
 
-def dtype_proves_cell_type(series: pd.Series, type_name: str) -> bool:
-    """Whether the dtype alone proves every cell matches `type_name`; object dtype proves
-    nothing."""
-    dtype = series.dtype
-    types = pd.api.types
-    if types.is_object_dtype(dtype):
-        return False  # the interesting case: cells must be inspected
+# None is not an error: a column mixing (say) an int with a str has no single
+# arrow type, and that column is exactly what a caller validating a frame exists
+# to REPORT. So this answers "no proof available" rather than raising, and leaves
+# the caller on whatever per-cell path it had.
+#
+# `Schema.from_pandas` infers types without materializing the data, and runs
+# against a shallow copy with `attrs` dropped: the runtime parks a RowLineage
+# there, which pandas tries to JSON-serialize into arrow metadata and warns
+# about. Types are all this returns, so that metadata is deliberately discarded
+# rather than suppressed after the fact.
+def find_arrow_types(frame: pd.DataFrame) -> dict[str, pa.DataType] | None:
+    """Per-column arrow types, or None for a frame arrow cannot type at all."""
+    untagged = frame.copy(deep=False)
+    untagged.attrs = {}
+    try:
+        schema = pa.Schema.from_pandas(untagged, preserve_index=False)
+    except (pa_lib.ArrowException, ValueError, TypeError):
+        return None
+    return {name: schema.field(name).type for name in schema.names}
+
+
+# Stronger than a pandas dtype, which is the point: pandas parks a list, a dict
+# and mixed junk alike in `object`, proving nothing, so the caller had to inspect
+# every cell of exactly the columns that matter most. Arrow types a list column
+# `list<...>`, so the common case is proved without a cell being read.
+def arrow_type_proves_cell_type(arrow_type: pa.DataType, type_name: str) -> bool:
+    """Whether `arrow_type` alone proves every cell matches `type_name`."""
+    types = pa.types
     if type_name == "bool":
-        return bool(types.is_bool_dtype(dtype))
+        return types.is_boolean(arrow_type)
     if type_name == "int":
-        # A float dtype may be an int column that met a null — not provable
-        # from the dtype, so fall through to the per-cell predicate, which
-        # accepts whole-valued floats (see _is_int_cell).
-        return bool(types.is_integer_dtype(dtype) and not types.is_bool_dtype(dtype))
+        # `double` is NOT proof: pandas upcasts an int column to float on meeting
+        # a null, so a whole-valued float there is a survivor of a lossy round
+        # trip rather than a type error. The per-cell predicate accepts it; this
+        # declines to prove it either way and leaves that judgment there.
+        return types.is_integer(arrow_type) and not types.is_boolean(arrow_type)
     if type_name == "float":
-        return bool(
-            (types.is_float_dtype(dtype) or types.is_integer_dtype(dtype))
-            and not types.is_bool_dtype(dtype)
-        )
+        return (
+            types.is_floating(arrow_type) or types.is_integer(arrow_type)
+        ) and not types.is_boolean(arrow_type)
     if type_name == "str":
-        return isinstance(dtype, pd.StringDtype)
+        return types.is_string(arrow_type) or types.is_large_string(arrow_type)
     if type_name in ("datetime", "date"):
-        return bool(types.is_datetime64_any_dtype(dtype))
+        return types.is_timestamp(arrow_type) or types.is_date(arrow_type)
     return False
+
+
+def find_arrow_list_value_type(arrow_type: pa.DataType) -> pa.DataType | None:
+    """The element type of an arrow list, or None when `arrow_type` is not a list."""
+    if (
+        pa.types.is_list(arrow_type)
+        or pa.types.is_large_list(arrow_type)
+        or pa.types.is_fixed_size_list(arrow_type)
+    ):
+        return arrow_type.value_type
+    return None
 
 
 def convert_cell_to_json_native(value: object) -> object:

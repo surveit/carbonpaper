@@ -13,10 +13,13 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import pandas as pd
+import pyarrow as pa
 
 from app.core.frames import (
     CELL_TYPE_PREDICATES,
-    dtype_proves_cell_type,
+    arrow_type_proves_cell_type,
+    find_arrow_list_value_type,
+    find_arrow_types,
     is_null_form,
     is_sequence_cell,
 )
@@ -100,13 +103,14 @@ def validate_dataframe(
 
     report.issues.extend(_find_missing_declared_columns(df, columns))
 
+    arrow_types = find_arrow_types(df) or {}
     for col in columns:
         name = col.name
         if name not in df.columns:
             continue
         series = df[name]
         report.issues.extend(_find_nullability_issues(series, col))
-        report.issues.extend(_find_type_issues(series, col))
+        report.issues.extend(_find_type_issues(series, col, arrow_types.get(name)))
         report.issues.extend(_find_numeric_range_issues(series, col))
         report.issues.extend(_find_enum_issues(series, col))
 
@@ -156,13 +160,15 @@ def _value_check_for(type_name: str) -> Callable[[Any], bool] | None:
     return None
 
 
-def _find_type_issues(series: pd.Series, col: Column) -> list[Issue]:
+def _find_type_issues(
+    series: pd.Series, col: Column, arrow_type: "pa.DataType | None"
+) -> list[Issue]:
     """Values not matching the column's declared type; nulls are `_find_nullability_issues`'
     job."""
     check = _value_check_for(col.type)
     if check is None:
         return []
-    if dtype_proves_cell_type(series, col.type):
+    if arrow_type is not None and _arrow_proves_declared_type(arrow_type, col.type):
         return []
     non_null = series[~series.map(is_null_form)]
     if not len(non_null):
@@ -179,6 +185,24 @@ def _find_type_issues(series: pd.Series, col: Column) -> list[Issue]:
             f"(e.g. {sample}{ellipsis})",
         )
     ]
+
+
+# The declared-type vocabulary (`list[X]`, `json`, the scalar set) is app.models
+# knowledge that app.core may not import, so frames answers about a plain scalar
+# name and about "is this arrow type a list, and of what" — and the composition
+# for `list[X]`, which needs both vocabularies, is here with `_value_check_for`.
+def _arrow_proves_declared_type(arrow_type: "pa.DataType", type_name: str) -> bool:
+    match = _LIST_TYPE_RE.match(type_name)
+    if not match:
+        return arrow_type_proves_cell_type(arrow_type, type_name)
+    value_type = find_arrow_list_value_type(arrow_type)
+    if value_type is None:
+        return False
+    element_name = match.group(1).strip()
+    # `list[json]` admits any element, so being a list at all is the whole check.
+    if element_name == JSON_COLUMN_TYPE:
+        return True
+    return arrow_type_proves_cell_type(value_type, element_name)
 
 
 def _find_numeric_range_issues(series: pd.Series, col: Column) -> list[Issue]:

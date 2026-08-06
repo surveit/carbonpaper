@@ -300,3 +300,110 @@ def test_empty_dataframe_raises_no_type_issue():
     report, issues = _issues_for("v", pd.DataFrame({"v": []}), schema)
     assert issues == []
     assert report.ok
+
+
+# ── the arrow-schema type prover ─────────────────────────────────────────────
+# Replaces the pandas-dtype one. pandas parks a list, a dict and mixed junk alike
+# in `object`, so the old prover answered "no" for every column that mattered and
+# validation fell through to a per-cell Python loop. Arrow types a list column,
+# so these are proved from the schema without a cell being read.
+
+
+def _one_column(name, values, **column):
+    return _issues_for(name, pd.DataFrame({name: values}),
+                       _schema(columns=[{"name": name, "nullable": True, **column}]))
+
+
+def test_a_list_of_str_column_is_accepted():
+    _, issues = _one_column("tags", [["a", "b"], ["c"]], type="list[str]")
+    assert issues == []
+
+
+def test_a_list_column_holding_the_wrong_element_type_is_still_caught():
+    """The prover must not rubber-stamp any list — arrow types the ELEMENT too."""
+    _, issues = _one_column("tags", [[1, 2], [3]], type="list[str]")
+    assert len(issues) == 1 and "list[str]" in issues[0].message
+
+
+# pandas promotes an int column to float64 on meeting a null, so a whole-valued
+# float there survived a lossy round trip rather than being a type error.
+def test_a_declared_int_column_pandas_upcast_to_float_still_passes():
+    _, issues = _one_column("n", [1, None, 3], type="int")
+    assert issues == []
+
+
+def test_a_genuinely_fractional_value_in_an_int_column_is_still_caught():
+    _, issues = _one_column("n", [1, 1.5], type="int")
+    assert len(issues) == 1 and "'int'" in issues[0].message
+
+
+# A column mixing an int with a str has no single arrow type — and that column is
+# the reason validation exists, so failing to type it must not raise.
+def test_a_column_arrow_cannot_type_is_reported_not_crashed():
+    _, issues = _one_column("m", [1, "a"], type="int")
+    assert len(issues) == 1 and "not of declared type" in issues[0].message
+
+
+def test_finding_arrow_types_leaves_the_callers_frame_alone():
+    """The runtime parks a RowLineage in `attrs`; typing the frame must not eat it."""
+    from app.core.frames import find_arrow_types
+
+    frame = pd.DataFrame({"n": [1]})
+    frame.attrs["lineage"] = object()
+    assert find_arrow_types(frame) is not None
+    assert "lineage" in frame.attrs
+
+
+def test_finding_arrow_types_answers_none_rather_than_raising():
+    from app.core.frames import find_arrow_types
+
+    assert find_arrow_types(pd.DataFrame({"m": [1, "a"]})) is None
+
+
+@pytest.mark.parametrize(
+    "arrow_type, declared, proved",
+    [
+        ("int64", "int", True),
+        ("double", "int", False),      # pandas' null upcast — decline, don't reject
+        ("double", "float", True),
+        ("int64", "float", True),
+        ("bool", "int", False),
+        ("bool", "bool", True),
+        ("large_string", "str", True),
+        ("string", "str", True),
+        ("int64", "str", False),
+        ("timestamp[us]", "datetime", True),
+    ],
+)
+def test_the_prover_only_says_yes_when_the_arrow_type_settles_it(arrow_type, declared, proved):
+    import pyarrow as pa
+    from app.core.frames import arrow_type_proves_cell_type
+
+    assert arrow_type_proves_cell_type(pa.type_for_alias(arrow_type), declared) is proved
+
+
+# A proved column must cost NO per-cell work — that is the whole point of asking
+# arrow instead of a pandas dtype. `is_null_form` is the first per-cell call on
+# the fallback path, so counting it distinguishes "proved" from "scanned".
+def _count_per_cell_calls(monkeypatch, values, declared):
+    import app.runtime.validation as validation
+
+    calls = []
+    real = validation.is_null_form
+    monkeypatch.setattr(
+        validation, "is_null_form", lambda v: (calls.append(1), real(v))[1]
+    )
+    validation.validate_dataframe(
+        pd.DataFrame({"c": values}),
+        _schema(columns=[{"name": "c", "type": declared, "nullable": True}]),
+        stage_id="s", phase="output",
+    )
+    return len(calls)
+
+
+def test_a_list_column_is_proved_from_the_schema_without_reading_a_cell(monkeypatch):
+    assert _count_per_cell_calls(monkeypatch, [["a", "b"]] * 500, "list[str]") == 0
+
+
+def test_a_column_arrow_cannot_type_still_falls_back_to_the_per_cell_scan(monkeypatch):
+    assert _count_per_cell_calls(monkeypatch, [1, "a"] * 250, "int") == 500
