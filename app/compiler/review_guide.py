@@ -98,19 +98,11 @@ def render_guide_task(stages: list[Stage], version_id: str, document: str) -> st
 def _render_stages(stages: list[Stage]) -> str:
     ordered = sort_stages_by_dependency(stages)
     by_id = {stage.id: stage for stage in stages}
-    # Each stage is LABELLED with whether it may be left unnarrated, from the same
-    # find_stages_reaching_publish the validator refuses on — so the model reads the
-    # answer instead of topologically sorting an inputs list in prose, and the label
-    # it is given can never contradict the rule it is judged by.
-    reaching = find_stages_reaching_publish(stages)
+    # From the same find_stages_reaching_publish the validator refuses on, so the flag
+    # can never say false where the guide would be rejected.
+    requires_narration = find_stages_reaching_publish(stages)
     return "\n\n".join(
-        f"Stage `{draft.id}` — {_narration_duty(draft.id in reaching)}:\n"
-        f"{stage_to_json(by_id[draft.id])}"
+        f"Stage `{draft.id}` (requires_narration: "
+        f"{str(draft.id in requires_narration).lower()}):\n{stage_to_json(by_id[draft.id])}"
         for draft in ordered
     )
-
-
-def _narration_duty(reaches_publish: bool) -> str:
-    if reaches_publish:
-        return "MUST BE NARRATED (its output reaches a publish stage)"
-    return "may be left unnarrated (its output reaches no publish stage)"

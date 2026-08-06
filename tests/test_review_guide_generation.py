@@ -218,21 +218,20 @@ def _duty_line(task: str, stage_id: str) -> str:
     return line
 
 
-def test_the_task_labels_each_stage_with_whether_it_may_be_left_unnarrated() -> None:
-    """The model reads the answer instead of topologically sorting an inputs list."""
+def test_each_stage_carries_the_requires_narration_flag() -> None:
     task = compiler_review_guide.render_guide_task(
         _published_stages(), "20260101T000000", "Double the amount."
     )
 
-    assert "MUST BE NARRATED" in _duty_line(task, "load")
-    assert "MUST BE NARRATED" in _duty_line(task, "double")
-    assert "may be left unnarrated" in _duty_line(task, "audit")
-    # The publish stage narrates itself, so it carries the same label as the leaf.
-    assert "may be left unnarrated" in _duty_line(task, "pub")
+    assert "requires_narration: true" in _duty_line(task, "load")
+    assert "requires_narration: true" in _duty_line(task, "double")
+    assert "requires_narration: false" in _duty_line(task, "audit")
+    # The publish stage narrates itself, so it carries the same flag as the leaf.
+    assert "requires_narration: false" in _duty_line(task, "pub")
 
 
-def test_the_labels_come_from_the_walk_the_validator_refuses_on() -> None:
-    """One function, so a label can never say optional where the validator would refuse."""
+def test_the_flag_comes_from_the_walk_the_validator_refuses_on() -> None:
+    """One function, so the flag can never say false where the validator would refuse."""
     stages = _published_stages()
     task = compiler_review_guide.render_guide_task(
         stages, "20260101T000000", "Double the amount."
@@ -240,8 +239,8 @@ def test_the_labels_come_from_the_walk_the_validator_refuses_on() -> None:
     reaching = find_stages_reaching_publish(stages)
 
     for stage in stages:
-        must = "MUST BE NARRATED" in _duty_line(task, stage.id)
-        assert must is (stage.id in reaching)
+        flagged = "requires_narration: true" in _duty_line(task, stage.id)
+        assert flagged is (stage.id in reaching)
 
 
 def test_the_author_holds_no_tool_but_submit_answer(tmp_path: Path) -> None:
