@@ -3,10 +3,12 @@ the pages from the app's own run templates."""
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 from typing import Any
 
 from app.core.errors import RunNotFoundError, RunVersionUnresolvableError
+from app.core.logging_config import log_elapsed
 from app.models import Stage, stage_to_spec_dict
 from app.runtime.manifest import resolve_output_path
 from app.services import run as run_service
@@ -18,6 +20,8 @@ from app.services.run_guide import RunGuideView, build_run_guide_view
 from app.services.workspace import resolve_project_dir
 from app.web.diagrams import build_mermaid_graph
 from app.web.review_packet.pages import write_packet_pages
+
+_log = logging.getLogger(__name__)
 
 
 def export_review_packet(project: str, run_id: str, dest_root: Path) -> ReviewPacket:
@@ -33,16 +37,21 @@ def export_review_packet(project: str, run_id: str, dest_root: Path) -> ReviewPa
     stage_sources = {
         s.stage_id: resolve_output_path(run_dir, s.output_path) for s in view.stages
     }
-    data = write_packet_data(root, run_dir, project_dir, view, workflow, stage_sources)
-    pages = write_packet_pages(
-        root,
-        run_dir,
-        view,
-        data,
-        _load_guide(project, manifest),
-        _build_diagram(stages, project, view),
-    )
-    checksums = write_checksums(root)
+    with log_elapsed(_log, f"{project}/{run_id} data"):
+        data = write_packet_data(
+            root, run_dir, project_dir, view, workflow, stage_sources
+        )
+    with log_elapsed(_log, f"{project}/{run_id} pages"):
+        pages = write_packet_pages(
+            root,
+            run_dir,
+            view,
+            data,
+            _load_guide(project, manifest),
+            _build_diagram(stages, project, view),
+        )
+    with log_elapsed(_log, f"{project}/{run_id} checksums"):
+        checksums = write_checksums(root)
 
     return ReviewPacket(
         project=view.project or project,
