@@ -60,7 +60,10 @@ def compare_case(case: Case, actual: pd.DataFrame) -> Comparison:
 
 
 def compare_case_csv(case: Case, actual_csv: Path) -> Comparison:
-    return compare_case(case, pd.read_csv(actual_csv))
+    """Read as TEXT. pandas' type inference turns a zero-padded key like `06055` into
+    `6055`, which would report every key as disagreeing; `_cells_agree` coerces figures
+    back to numbers anyway."""
+    return compare_case(case, pd.read_csv(actual_csv, dtype=str))
 
 
 def _refuse_missing_columns(case: Case, actual: pd.DataFrame) -> None:
@@ -111,12 +114,13 @@ def _find_figure_disagreements(
 
 def _cells_agree(want: CellValue, got: object, tolerance: float) -> bool:
     """A golden cell is the text a notebook RENDERED, so both sides are coerced before
-    comparing — and the rendered precision is a ceiling on how tight `tolerance` can be."""
+    comparing, and `tolerance` scales with the value: a cell printed as 2.073536e+08 carries
+    seven significant figures, not six decimal places."""
     if _is_absent(want) or _is_absent(got):
         return _is_absent(want) and _is_absent(got)
-    as_numbers = (_as_number(want), _as_number(got))
-    if None not in as_numbers:
-        return abs(as_numbers[0] - as_numbers[1]) <= tolerance  # type: ignore[operator]
+    left, right = _as_number(want), _as_number(got)
+    if left is not None and right is not None:
+        return abs(left - right) <= tolerance * max(1.0, abs(left))
     return str(want).strip() == str(got).strip()
 
 

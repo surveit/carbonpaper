@@ -67,7 +67,14 @@ class ComparisonContract(_Strict):
     compared_columns: dict[str, str] = Field(
         min_length=1, description="Golden column name -> output column name."
     )
-    tolerance: float = Field(ge=0.0, description="Absolute tolerance for numeric cells.")
+    tolerance: float = Field(
+        ge=0.0,
+        description=(
+            "Numeric tolerance, RELATIVE above 1.0 and absolute below it. A golden cell is "
+            "rendered to fixed significant figures, so a column printed as 2.073536e+08 can "
+            "never be compared to an absolute 1e-6."
+        ),
+    )
 
 
 class Case(_Strict):

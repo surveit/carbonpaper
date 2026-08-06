@@ -6,8 +6,12 @@ Cells are kept as rendered text; coercion belongs to the comparison, not the gol
 from __future__ import annotations
 
 import json
+import re
 from html.parser import HTMLParser
 from pathlib import Path
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict, Field
 
 from evals.harness.case import GoldenRow, GoldenTable
 
@@ -16,17 +20,42 @@ from evals.harness.case import GoldenRow, GoldenTable
 # actually published — so it is refused rather than trimmed.
 _ELISION_MARKERS = frozenset({"...", "…"})
 
+# A cell ending in `.head(n)` renders COMPLETELY, so the elision check passes while the
+# answer itself is a prefix the author asked for. Told apart by arity: fewer rows than the
+# cap means the cap never bit, exactly the cap means it almost certainly did.
+_ROW_CAPS = re.compile(r"\.(head|tail|sample)\s*\(\s*(\d+)\s*\)")
+
+# How a missing value ARRIVES in rendered HTML. A genuine string cell holding one of these
+# would be misread as absent, which is the lesser error: reading a rendered NaN as the text
+# "NaN" makes every missing cell disagree with a build that correctly produced nothing.
+_RENDERED_ABSENT = frozenset({"", "NaN", "nan", "NaT", "None", "<NA>"})
+
+
+class _Output(BaseModel):
+    # `data` is mime type -> payload, and a payload's shape varies by mime: the genuine
+    # foreign-JSON boundary. Only text/html is read, and only as str-or-list-of-str.
+    model_config = ConfigDict(extra="ignore")
+    data: dict[str, Any] = Field(default_factory=dict)
+
+
+class _CodeCell(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    source: list[str] = Field(default_factory=list)
+    outputs: list[_Output] = Field(default_factory=list)
+
 
 def extract_golden_table(notebook: Path, code_cell_index: int, key_column: str) -> GoldenTable:
     """Raises unless that cell rendered exactly one complete, un-elided HTML table."""
-    html = _find_rendered_table_html(notebook, code_cell_index)
+    cell = _find_code_cell(notebook, code_cell_index)
+    html = _find_rendered_table_html(cell, notebook, code_cell_index)
     header, body = _read_table(html)
     columns = [key_column, *header[1:]]
     _refuse_elided(columns, body, notebook, code_cell_index)
+    _refuse_capped_by_the_author(cell, len(body), notebook, code_cell_index)
     return GoldenTable(key_column=key_column, columns=columns, rows=_to_rows(columns, body))
 
 
-def _find_rendered_table_html(notebook: Path, code_cell_index: int) -> str:
+def _find_code_cell(notebook: Path, code_cell_index: int) -> _CodeCell:
     cells = [
         cell
         for cell in json.loads(notebook.read_text(encoding="utf-8"))["cells"]
@@ -34,10 +63,27 @@ def _find_rendered_table_html(notebook: Path, code_cell_index: int) -> str:
     ]
     if not 0 <= code_cell_index < len(cells):
         raise ValueError(f"{notebook} has {len(cells)} code cells; no code cell {code_cell_index}")
+    return _CodeCell.model_validate(cells[code_cell_index])
+
+
+def _refuse_capped_by_the_author(
+    cell: _CodeCell, rows: int, notebook: Path, index: int
+) -> None:
+    source = "".join(cell.source)
+    for call, cap in _ROW_CAPS.findall(source):
+        if rows == int(cap):
+            raise ValueError(
+                f"code cell {index} of {notebook} rendered exactly {rows} rows and its source "
+                f"calls .{call}({cap}) — the table is a prefix the author asked for, not the "
+                f"whole answer, so it cannot be a golden"
+            )
+
+
+def _find_rendered_table_html(cell: _CodeCell, notebook: Path, code_cell_index: int) -> str:
     tables = [
-        "".join(output["data"]["text/html"])
-        for output in cells[code_cell_index].get("outputs", [])
-        if "text/html" in output.get("data", {})
+        _join_payload(output.data["text/html"])
+        for output in cell.outputs
+        if "text/html" in output.data
     ]
     if len(tables) != 1:
         raise ValueError(
@@ -45,6 +91,15 @@ def _find_rendered_table_html(notebook: Path, code_cell_index: int) -> str:
             f"outputs, not 1 — a golden must be one unambiguous rendered table"
         )
     return tables[0]
+
+
+def _join_payload(payload: object) -> str:
+    """A notebook stores a text payload as a str or as a list of line strs."""
+    if isinstance(payload, str):
+        return payload
+    if isinstance(payload, list):
+        return "".join(str(line) for line in payload)
+    raise ValueError(f"a text/html output holds {type(payload).__name__}, not text")
 
 
 def _read_table(html: str) -> tuple[list[str], list[list[str]]]:
@@ -97,7 +152,10 @@ def _refuse_elided(
 
 def _to_rows(columns: list[str], body: list[list[str]]) -> list[GoldenRow]:
     return [
-        {name: (text if text != "" else None) for name, text in zip(columns, cells)}
+        {
+            name: (None if text in _RENDERED_ABSENT else text)
+            for name, text in zip(columns, cells)
+        }
         for cells in body
     ]
 

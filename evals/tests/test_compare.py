@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 
 from evals.harness.case import Case
-from evals.harness.compare import compare_case
+from evals.harness.compare import compare_case, compare_case_csv
 
 
 def _case(**overrides: object) -> Case:
@@ -83,3 +83,42 @@ def test_a_missing_compared_column_raises_naming_what_exists():
     actual = pd.DataFrame([{"jurisdiction": "Alpha", "pop": 739482}])
     with pytest.raises(ValueError, match="no column"):
         compare_case(_case(), actual)
+
+
+def test_tolerance_scales_with_the_golden_value():
+    """A golden printed in scientific notation carries significant figures, not decimals."""
+    case = _case(
+        golden={
+            "key_column": "state",
+            "columns": ["state", "pop", "rate"],
+            "rows": [{"state": "Alpha", "pop": "1", "rate": "2.073536e+08"}],
+        },
+        comparison={
+            "output_key_column": "state",
+            "compared_columns": {"state": "state", "pop": "pop", "rate": "rate"},
+            "tolerance": 1e-6,
+        },
+    )
+    close = pd.DataFrame([{"state": "Alpha", "pop": 1, "rate": 207353612.4}])
+    assert compare_case(case, close).figure_disagreements == []
+    far = pd.DataFrame([{"state": "Alpha", "pop": 1, "rate": 207400000.0}])
+    assert len(compare_case(case, far).figure_disagreements) == 1
+
+
+def test_a_zero_padded_key_survives_reading_a_build_csv(tmp_path):
+    """pandas' default inference turns `06055` into `6055` and every key would mismatch."""
+    case = _case(
+        golden={
+            "key_column": "state",
+            "columns": ["state", "pop", "rate"],
+            "rows": [{"state": "06055", "pop": "1", "rate": "2.0"}],
+        },
+        comparison={
+            "output_key_column": "state",
+            "compared_columns": {"state": "state", "pop": "pop", "rate": "rate"},
+            "tolerance": 1e-6,
+        },
+    )
+    csv = tmp_path / "build.csv"
+    csv.write_text("state,pop,rate\n06055,1,2.0\n", encoding="utf-8")
+    assert compare_case_csv(case, csv).agrees()
