@@ -1,8 +1,7 @@
 """Row provenance routes for a run: the show-your-work trace of one output row
 (JSON and the read-only HTML story), and the lineage-trimmed stage panel that
-story loads per stage. Split out of app.web.routers.runs, which sits at both
-the file-size and fan-out ceilings — these three routes share the trace
-machinery no other run route touches."""
+story loads per stage. Split out of app.web.routers.runs — these three routes
+share the trace machinery no other run route touches."""
 
 from __future__ import annotations
 
