@@ -56,6 +56,10 @@ app/chat/  PydanticAI chat · app/core/llm/  model menu · tests/  pytest (offli
   current list and the replacement each word owes you. The test file is the only place a banned
   word may appear, so name the specific property instead: a sorted-key JSON dump, the spec-dict
   form, the on-disk text, `HASH_IGNORED_KEYS`.
+- **No `__all__`.** Nothing here star-imports, so it is only a second registry of public names
+  to keep in sync. A package hub re-exports with the redundant-alias form
+  `from x import y as y`, which Ruff and mypy both read as explicit. Enforced by
+  `tests/arch/test_no_dunder_all.py`, with an empty allowlist.
 - **Never weaken an arch test without human approval.** The import-linter contracts
   (`pyproject.toml`, run as `lint-imports`) and the AST invariant tests (`_arch_tests/`,
   `tests/arch/`) exist to fail on work in progress — that failure is the signal, not an obstacle.

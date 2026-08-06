@@ -365,20 +365,3 @@ def load_version_stages(project_dir: Path, version_id: str) -> list[Stage]:
     except ValidationError as exc:
         raise _invalid_version_document(f"{name}/{version_id}", exc) from exc
     return v.stages
-
-
-__all__ = [
-    "WorkflowVersion",
-    "ReviewGuide",
-    "list_versions",
-    "find_latest_version_id",
-    "resolve_version_id",
-    "validate_version_exists",
-    "load_version",
-    "load_version_stages",
-    "create_version_from_stages",
-    "publish_version",
-    "save_version_guide",
-    "find_latest_review_guide",
-    "validate_review_guide",
-]

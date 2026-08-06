@@ -65,6 +65,3 @@ def seed_demo_data_if_enabled() -> list[str]:
     if os.environ.get("CARBONPAPER_SEED_DEMO") != "1":
         return []
     return seed_all()
-
-
-__all__ = ["discover_workflow_files", "seed_all", "seed_demo_data_if_enabled"]

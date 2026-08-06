@@ -28,5 +28,3 @@ def _path_segment(value: str) -> str:
     """Escapes `/` too, so an id carrying a slash cannot widen the path."""
     return quote(value, safe="")
 
-
-__all__ = ["RowTraceLinker"]

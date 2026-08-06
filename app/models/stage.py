@@ -152,24 +152,3 @@ class StageDraft(StageCommon):
         `StageInput.table_schema` spells itself `schema:` the way a compiled stage
         does."""
         return self.model_dump(exclude_unset=True, by_alias=True)
-
-
-__all__ = [
-    "ExtendsSignature",
-    "InputReads",
-    "ReplacesSignature",
-    "ReviewConfig",
-    "SERVER_OWNED_STAGE_FIELDS",
-    "Stage",
-    "StageBase",
-    "StageCommon",
-    "StageDraft",
-    "StageInput",
-    "StageType",
-    "TransformSignature",
-    "is_grain_and_order_preserving",
-    "parse_stage",
-    "stage_to_json",
-    "stage_to_spec_dict",
-    "validate_stage",
-]

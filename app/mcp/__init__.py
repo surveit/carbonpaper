@@ -3,6 +3,4 @@ external MCP clients. No tool here approves anything — humans approve in the w
 
 Mounted by app.main at /mcp in the same server process: same event loop, which
 the generation live-turns require."""
-from app.mcp.server import mcp
-
-__all__ = ["mcp"]
+from app.mcp.server import mcp as mcp
