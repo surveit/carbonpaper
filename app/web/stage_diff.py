@@ -14,23 +14,37 @@ from typing import ClassVar, Optional, Union
 import pandas as pd
 
 from app.models import Stage, StageType
+from app.models.stage import is_grain_and_order_preserving
 from app.runtime.lineage import RowLineage, lineage_sidecar_path
 from app.runtime.manifest import resolve_output_path
 from app.core.frames import read_frame_file
 from app.web.loading import render_frame_as_text
 
-# The 1:1-by-position stage types the aligned diff covers: their runtime
-# contract maps output row i to input row i, so a positional comparison states
-# facts. enrich qualifies because its left merge runs under pandas'
-# validate="m:1", which VERIFIES the reference holds at most one row per key —
-# so every subject row comes out once, in input order. expand (m:n fan-out) does
-# not. Deliberately NOT is_grain_and_order_preserving(), which also admits
-# input_data (no input to diff against) and human_review_queue (out of scope).
-ROW_ALIGNED_TYPES: frozenset[StageType] = frozenset({
-    StageType.python_row_function,
-    StageType.llm_transform,
-    StageType.enrich,
-})
+# The one grain-and-order-preserving type with nothing for a positional diff to
+# say: input_data originates its rows, so there is no input frame to compare
+# against. Every other one has an input and gets diffed — including
+# human_review_queue, whose reviewed value lands in a column the stage ADDS
+# (QueueConfig.reviewed_columns maps source -> added column), leaving the source
+# column carried beside it. That reads as `+4 cols · 0 cells changed`, with the
+# human's answer next to what it was answering.
+_NO_ALIGNED_DIFF: frozenset[StageType] = frozenset({StageType.input_data})
+
+# The 1:1-by-position stage types the aligned diff covers: their runtime contract
+# maps output row i to input row i, so a positional comparison states facts.
+# Read off the model's own grain-and-order fact rather than listed again here: a
+# hand-kept second list is what left starlark_row_function with no diff for a
+# release, and `validate_registry_matches_model` already holds the runtime
+# handlers to that same fact at import, so what this pane assumes is what the
+# executor enforces.
+#
+# enrich is added on top: it takes two inputs, so it is not grain-preserving as a
+# TYPE, but its left merge runs under pandas' validate="m:1", which VERIFIES the
+# reference holds at most one row per key — every subject row comes out once, in
+# input order. expand (m:n fan-out) has no such guarantee and stays out.
+ROW_ALIGNED_TYPES: frozenset[StageType] = frozenset(
+    stage_type for stage_type in StageType
+    if is_grain_and_order_preserving(stage_type) and stage_type not in _NO_ALIGNED_DIFF
+) | {StageType.enrich}
 
 # The default row budget: the window the stage panel draws, deep enough to read
 # a stage rather than sample it. Callers with more room (the full-rows page) pass
