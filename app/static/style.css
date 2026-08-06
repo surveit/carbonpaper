@@ -1,24 +1,14 @@
-/* workflow · v0.2 */
+/* workflow · v0.2 — the colour tokens this file spends live in palette.css,
+   which every page loads ahead of it. This file must reference no other file
+   and no external resource: the review packet vendors it and has to render with
+   no network, which tests/test_review_packet.py enforces by pattern. */
 
 :root {
-    --bg: #fafaf8;
-    --fg: #1a1a1a;
-    --muted: #6a6a6a;
-    --accent: #2563eb;
-    --warn-bg: #fff4e6;
-    --warn-border: #cc7a00;
-    --eval-bg: #e8f4f8;
-    --eval-border: #3a8ca8;
-    --review-bg: #fce8f4;
-    --review-border: #c0399a;
-    --exec-bg: #f7f7f4;
-    --exec-border: #b8b8a8;
-    --code-bg: #f0f0ed;
-    --border: #d4d4d0;
-    --hover: #ececeb;
-    --code-deep: #1d1f23;
-    --code-fg: #e4e4e2;
-    --code-comment: #888;
+    /* The chrome — sheet, ink, accent, callout tints — lives in palette.css.
+       The two palettes below stay here because
+       tests/arch/test_status_colour_contract.py reads THIS file to hold them to
+       their Python twins in app/web/diagrams.py and to measure each ink against
+       its tint. They are meaning, not theme. */
     /* Run-state palette — the five states every run surface speaks in: the status
        pill, the alert strip, run badges, per-stage borders, the progress bar, and
        the per-node stroke in build_mermaid_graph (app/web/diagrams.py
@@ -193,10 +183,10 @@ a { color: var(--accent); }
 /* Review queue page */
 .queue-progress {
     display: flex; align-items: center; gap: 16px; margin: 16px 0 24px;
-    padding: 14px 18px; background: #f7f7f4; border: 1px solid #ddd; border-radius: 6px;
+    padding: 14px 18px; background: var(--exec-bg); border: 1px solid var(--border); border-radius: 6px;
 }
 .queue-progress .bar {
-    flex: 1; height: 10px; background: #e0e0e0; border-radius: 5px; overflow: hidden;
+    flex: 1; height: 10px; background: var(--border); border-radius: 5px; overflow: hidden;
 }
 .queue-progress .fill { height: 100%; background: var(--state-review); transition: width 0.3s; }
 .queue-progress p { margin: 0; white-space: nowrap; }
@@ -211,7 +201,7 @@ a { color: var(--accent); }
 /* A page-level statement about what the input schema does or does not declare. */
 .queue-note {
     margin: 10px 0; padding: 8px 12px; font-size: 13px;
-    background: #f7f7f4; border-left: 3px solid #c0c0b8; border-radius: 0 4px 4px 0;
+    background: var(--exec-bg); border-left: 3px solid #c0c0b8; border-radius: 0 4px 4px 0;
 }
 
 .queue-items { display: flex; flex-direction: column; gap: 14px; }
@@ -219,7 +209,7 @@ a { color: var(--accent); }
    [hidden] rule and the reviewer-name gate renders the rows anyway. */
 .queue-items[hidden] { display: none; }
 .queue-card {
-    border: 1px solid #ddd; border-left: 4px solid #999; border-radius: 5px;
+    border: 1px solid var(--border); border-left: 4px solid var(--border); border-radius: 5px;
     padding: 14px 18px; background: white;
 }
 .queue-card.decided-approve { border-left-color: #2a8a2a; background: #f7fcf7; }
@@ -227,7 +217,7 @@ a { color: var(--accent); }
 
 .queue-card header {
     display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
-    font-size: 13px; color: #555; margin-bottom: 8px;
+    font-size: 13px; color: var(--muted); margin-bottom: 8px;
 }
 .queue-card header .row-position { font-size: 13px; font-weight: 600; }
 .queue-card header .lineage-link { font-size: 13px; margin-left: auto; }
@@ -239,7 +229,7 @@ a { color: var(--accent); }
 
 .decision-controls {
     display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
-    margin-top: 10px; padding-top: 10px; border-top: 1px dashed #e0e0e0;
+    margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border);
 }
 /* Companion to `.btn { display: inline-block }`: without it that rule beats the
    UA's [hidden] rule and a decided card shows Submit beside Change my review. */
@@ -259,13 +249,13 @@ a { color: var(--accent); }
 }
 .reviewer-gate label { font-weight: 600; font-size: 13px; color: #1a3a72; }
 .reviewer-gate input {
-    padding: 6px 10px; border: 1px solid #ccc; border-radius: 3px;
+    padding: 6px 10px; border: 1px solid var(--border); border-radius: 3px;
     font: inherit; font-size: 14px; min-width: 220px;
 }
 .reviewer-gate .muted { font-size: 12px; }
 
 .review-section-heading {
-    margin: 10px 0 0; padding-top: 10px; border-top: 1px dashed #e0e0e0;
+    margin: 10px 0 0; padding-top: 10px; border-top: 1px dashed var(--border);
     font-size: 12px; font-weight: 600; text-transform: uppercase;
     letter-spacing: .04em; color: var(--muted);
 }
@@ -280,7 +270,7 @@ a { color: var(--accent); }
 .reviewed-field label { font-weight: 600; font-size: 13px; }
 .reviewed-field .upstream-value { font-size: 12px; color: var(--muted); }
 .reviewed-field input, .reviewed-field select {
-    padding: 5px 8px; border: 1px solid #ccc; border-radius: 3px; font: inherit; font-size: 14px;
+    padding: 5px 8px; border: 1px solid var(--border); border-radius: 3px; font: inherit; font-size: 14px;
 }
 .reviewed-field .recorded-value { font-size: 12px; color: #1a3a72; }
 
@@ -292,7 +282,7 @@ a { color: var(--accent); }
 .field-editor { display: inline-flex; align-items: center; gap: 6px; }
 .value-display {
     display: inline-flex; align-items: baseline; gap: 8px; cursor: pointer;
-    padding: 4px 8px; border: 1px dashed #bbb; border-radius: 3px;
+    padding: 4px 8px; border: 1px dashed var(--border); border-radius: 3px;
     background: #fbfbfa; font: inherit; font-size: 14px; color: var(--fg); text-align: left;
 }
 .value-display:not(:disabled):hover, .value-display:not(:disabled):focus {
@@ -302,7 +292,7 @@ a { color: var(--accent); }
 .value-display .edit-hint { font-size: 11px; color: var(--accent); text-transform: uppercase; }
 .value-display:disabled .edit-hint { color: var(--muted); }
 .revert-edit {
-    border: 1px solid #ccc; border-radius: 3px; background: white;
+    border: 1px solid var(--border); border-radius: 3px; background: white;
     font: inherit; font-size: 12px; padding: 3px 7px; cursor: pointer;
 }
 
@@ -329,7 +319,7 @@ table.kv th {
 table.kv td.kv-value {
     padding: 5px 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--fg);
 }
-table.kv tr + tr th, table.kv tr + tr td { border-top: 1px solid #eee; }
+table.kv tr + tr th, table.kv tr + tr td { border-top: 1px solid var(--border); }
 .pk-flag {
     font-size: 10px; text-transform: uppercase; letter-spacing: .04em;
     padding: 1px 5px; border-radius: 3px; background: #e8eefa; color: #1a3a72;
@@ -497,7 +487,7 @@ table.schema tr:last-child td { border-bottom: 0; }
 .range {
     font-family: "SFMono-Regular", "Consolas", monospace;
     font-size: 11px;
-    color: #555;
+    color: var(--muted);
 }
 
 /* An enum vocabulary: one chip per value, so a multi-word value reads as one thing
@@ -515,7 +505,7 @@ table.schema tr:last-child td { border-bottom: 0; }
     border: 1px solid var(--border);
     font-family: "SFMono-Regular", "Consolas", monospace;
     font-size: 11px;
-    color: #555;
+    color: var(--muted);
 }
 /* Folded by default: a long vocabulary left inline wraps to a dozen lines and buries
    every other row of the table. The count is always shown, so nothing is silently cut. */
@@ -1068,7 +1058,7 @@ a.fact-chip:hover { background: var(--hover); color: var(--fg); }
 }
 
 .validation-block {
-    background: #f7f7f4;
+    background: var(--exec-bg);
     padding: 8px 14px;
     border-radius: 4px;
     margin: 8px 0;
@@ -1179,7 +1169,7 @@ table.data-preview th {
     background: #fcfcfb;
     padding: 12px 14px 16px;
 }
-.tier-transform { background: #f7f7f4; }
+.tier-transform { background: var(--exec-bg); }
 .tier-outputs { background: #fbfcfd; }
 
 .tier-head {
@@ -1543,7 +1533,7 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
 .edit-textarea {
     width: 100%; box-sizing: border-box; min-height: 320px; resize: vertical;
     background: var(--code-deep); color: var(--code-fg);
-    border: 1px solid #333; border-radius: 5px;
+    border: 1px solid var(--fg); border-radius: 5px;
     padding: 12px 14px; font-size: 12px; line-height: 1.5;
     font-family: "SFMono-Regular", "Consolas", "Liberation Mono", Menlo, monospace;
     white-space: pre; overflow: auto; tab-size: 2;
@@ -1718,7 +1708,7 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
     gap: 8px; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
 
 .flow-side-title { font-size: 13px; font-weight: 700; text-transform: uppercase;
-    letter-spacing: .5px; color: #555; }
+    letter-spacing: .5px; color: var(--muted); }
 
 .chat-live-dot { color: #e0a800; font-weight: 600; font-size: 12px; }
 
@@ -2066,7 +2056,7 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
 }
 
 /* Chat (reused from compile_flow.html). */
-.chat-log { border: 1px solid #e3e6ea; border-radius: 8px; background: #fbfcfd;
+.chat-log { border: 1px solid var(--border); border-radius: 8px; background: #fbfcfd;
     padding: 12px; flex: 1 1 auto; min-height: 240px; overflow-y: auto;
     display: flex; flex-direction: column; gap: 10px; }
 
@@ -2075,9 +2065,9 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
 
 .chat-msg.user { align-self: flex-end; background: #2a6ac8; color: #fff; }
 
-.chat-msg.assistant { align-self: flex-start; background: #fff; border: 1px solid #e3e6ea; color: #222; }
+.chat-msg.assistant { align-self: flex-start; background: #fff; border: 1px solid var(--border); color: var(--fg); }
 
-.chat-msg.system { align-self: center; background: #f3f4f6; color: #666; font-size: 12px;
+.chat-msg.system { align-self: center; background: var(--code-bg); color: var(--muted); font-size: 12px;
     font-style: italic; border: 1px dashed #d4d7db; }
 
 .chat-msg.error { align-self: center; background: #fdecec; border: 1px solid #f3b6b6; color: #a02020;
@@ -2085,7 +2075,7 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
 
 .emit-card .ec-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 
-.emit-card .ec-kind { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: #888; }
+.emit-card .ec-kind { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); }
 
 .emit-card .ec-name { font-family: ui-monospace, monospace; font-weight: 600; font-size: 13px; }
 
@@ -2107,9 +2097,9 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
 
 .chat-input-row button:disabled { background: #9aa3ad; cursor: default; }
 
-.chat-hint { color: #888; font-size: 12px; margin: 2px 0 10px; }
+.chat-hint { color: var(--muted); font-size: 12px; margin: 2px 0 10px; }
 
-.chat-cards-head { margin: 14px 0 8px; font-size: 13px; color: #555; }
+.chat-cards-head { margin: 14px 0 8px; font-size: 13px; color: var(--muted); }
 
 /* The in-flight "working" indicator (the double-submit guard's visible half). */
 .chat-working { display: none; align-items: center; gap: 8px; margin: 8px 0 0;
@@ -2130,7 +2120,7 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
 
 .validation-report ul { margin: 6px 0 0; padding-left: 20px; }
 
-.schema-desc { font-size: 13px; color: #444; margin: 6px 0; }
+.schema-desc { font-size: 13px; color: var(--muted); margin: 6px 0; }
 
 .dm-er { margin: 14px 0; }
 
@@ -2142,7 +2132,7 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
 .schema-edit-textarea {
     width: 100%; box-sizing: border-box; min-height: 200px; resize: vertical;
     background: var(--code-deep); color: var(--code-fg);
-    border: 1px solid #333; border-radius: 5px; padding: 10px 12px; margin-top: 8px;
+    border: 1px solid var(--fg); border-radius: 5px; padding: 10px 12px; margin-top: 8px;
     font-size: 12px; line-height: 1.5;
     font-family: "SFMono-Regular", "Consolas", "Liberation Mono", Menlo, monospace;
     white-space: pre; overflow: auto; tab-size: 2; }
@@ -2167,7 +2157,7 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
 /* Document (read-only prose) — same look compile_flow.html's step 1 used. */
 .doc-prose { background: #fff; border: 1px solid var(--border); border-radius: 8px;
     padding: 20px 24px; white-space: pre-wrap; word-wrap: break-word; line-height: 1.6;
-    font-size: 14px; color: #222; }
+    font-size: 14px; color: var(--fg); }
 
 @keyframes chat-spin { to { transform: rotate(360deg); } }
 
@@ -2184,8 +2174,8 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
 .diagram-block { margin: 14px 0; }
 .diagram-tools { display: flex; gap: .4rem; align-items: center; margin: .5rem 0; flex-wrap: wrap; }
 .diagram-tools button { font: inherit; font-size: 13px; padding: .25rem .6rem; cursor: pointer;
-    border: 1px solid var(--border); background: #f7f7f8; border-radius: 5px; color: #333; }
-.diagram-tools button:hover { background: #ececec; }
+    border: 1px solid var(--border); background: var(--code-bg); border-radius: 5px; color: var(--fg); }
+.diagram-tools button:hover { background: var(--hover); }
 .diagram-tools .diagram-hint { font-size: 12px; }
 /* The box hugs the diagram: no min-height, so a one-row graph does not sit in a
    tall empty well. resize:vertical still lets a reader open it up by hand. */
@@ -2244,10 +2234,10 @@ html[data-diagram-clickable] .mermaid g.node.clickable { cursor: pointer; }
 .nr-bar-name { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .nr-bar-name h2 { margin: 0; font-size: 18px; }
 .nr-bar-name h2 code { font-size: inherit; color: inherit; }
-.nr-bar-name p { margin: 0; font-size: 13px; color: #555; max-width: 70ch; }
+.nr-bar-name p { margin: 0; font-size: 13px; color: var(--muted); max-width: 70ch; }
 .nr-bar-decide { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.nr-meta { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 10px 2px 0; font-size: 12px; color: #666; }
-.nr-meta .nr-hash { font-size: 11px; color: #999; }
+.nr-meta { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 10px 2px 0; font-size: 12px; color: var(--muted); }
+.nr-meta .nr-hash { font-size: 11px; color: var(--muted); }
 .nr-scope { font-style: italic; }
 .nr-stale-note { margin: 8px 2px 0; }
 .nr-tabs { margin-top: 16px; }

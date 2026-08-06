@@ -24,9 +24,11 @@ PACKET_MAX_TABLE_ROWS = 50_000
 
 ASSETS_DIR = "assets"
 STAGES_DIR = "stages"
+# palette.css declares the colour tokens the other two spend, so it loads first.
+PALETTE_STYLESHEET = "palette.css"
 APP_STYLESHEET = "style.css"
 PACKET_STYLESHEET = "packet.css"
-STYLESHEETS = (APP_STYLESHEET, PACKET_STYLESHEET)
+STYLESHEETS = (PALETTE_STYLESHEET, APP_STYLESHEET, PACKET_STYLESHEET)
 
 _APP_STATIC = Path(__file__).resolve().parents[2] / "static"
 _PACKET_STATIC = Path(__file__).parent / "static"
@@ -177,7 +179,11 @@ def _write_text(dest: Path, text: str, relative: str) -> str:
 
 
 def _write_stylesheets(root: Path) -> list[str]:
-    sources = {APP_STYLESHEET: _APP_STATIC, PACKET_STYLESHEET: _PACKET_STATIC}
+    sources = {
+        PALETTE_STYLESHEET: _APP_STATIC,
+        APP_STYLESHEET: _APP_STATIC,
+        PACKET_STYLESHEET: _PACKET_STATIC,
+    }
     return [_copy_stylesheet(root, name, sources[name]) for name in STYLESHEETS]
 
 
