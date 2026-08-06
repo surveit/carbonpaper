@@ -39,10 +39,9 @@ class ReviewGuideStep(_Base):
             "One short sentence naming what the data LEAVING this section is — the rows "
             "themselves, not what the section did to them. 'Every filing both quarters "
             "reported.' 'The filings that named Venezuela, plus the ones the reporter "
-            "listed by hand.' It is shown on the link into that data, beside its "
-            "measured row and column counts, and is what the reader decides on before "
-            "opening a table of tens of thousands of rows. Omit it rather than "
-            "restating the title."
+            "listed by hand.' It is shown next to a link to the data -- it is what the "
+            "reader uses to decide whether to open the full table and to ground what "
+            "they will see."
         ),
     )
 
