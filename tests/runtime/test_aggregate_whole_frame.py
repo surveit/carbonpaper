@@ -56,7 +56,7 @@ def _reads(aggregations):
 
 def _stage(aggregations, produces):
     return parse_stage({
-        "id": "agg", "type": "aggregate", "name": "agg",
+        "id": "agg", "type": "aggregate", "description": "agg",
         "inputs": [{"id": "filings", "schema": _IN_SCHEMA}],
         "signature": {
             "form": "replaces",
@@ -151,7 +151,7 @@ def test_an_empty_slice_matches_what_the_grouped_path_emits_for_that_group():
     amt = [c for c in _IN_SCHEMA["columns"] if c["name"] == "amt"]
     key = {"name": "k", "type": "str", "nullable": False}
     grouped = parse_stage({
-        "id": "agg", "type": "aggregate", "name": "agg",
+        "id": "agg", "type": "aggregate", "description": "agg",
         "inputs": [{"id": "filings", "schema": {"columns": [*_IN_SCHEMA["columns"], key]}}],
         "signature": {
             "form": "replaces",

@@ -219,7 +219,7 @@ def test_an_llm_transform_is_admitted_to_the_row_aligned_diff(tmp_path: Path) ->
 
 def test_a_starlark_row_function_is_admitted_to_the_row_aligned_diff(tmp_path: Path) -> None:
     stage = parse_stage({
-        "id": "classify", "name": "Classify", "type": "starlark_row_function",
+        "id": "classify", "description": "Classify", "type": "starlark_row_function",
         "inputs": [{"id": LOAD_ID, "schema": {"columns": _IN_COLUMNS}}],
         "starlark": {"code": "def transform(row):\n    return row"},
         "signature": {
@@ -246,7 +246,7 @@ def test_a_starlark_row_function_is_admitted_to_the_row_aligned_diff(tmp_path: P
 def test_a_review_queue_shows_the_human_answer_beside_what_it_answered(tmp_path: Path) -> None:
     """A reviewed value lands in an ADDED column, so the source it judged stays carried."""
     stage = parse_stage({
-        "id": "gate", "name": "Gate", "type": "human_review_queue",
+        "id": "gate", "description": "Gate", "type": "human_review_queue",
         "inputs": [{"id": LOAD_ID, "schema": {"columns": _IN_COLUMNS}}],
         "queue": {
             "reviewed_columns": {"name": "reviewed_name"},

@@ -21,7 +21,7 @@ def project(tmp_path):
     (proj / "compiled").mkdir(parents=True)
     authored = proj / "authored.csv"
     pd.DataFrame({"name": ["x"], "val": [1]}).to_csv(authored, index=False)
-    stage = {"id": "load", "name": "Load", "type": "input_data",
+    stage = {"id": "load", "description": "Load", "type": "input_data",
              "signature": {"form": "replaces", "produces": [
                  {"name": "name", "type": "str", "nullable": False},
                  {"name": "val", "type": "int", "nullable": False}]},
