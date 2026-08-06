@@ -4,9 +4,9 @@ knowledge the stage cache and the schema checks key under - null forms, numpy
 scalars, extension dtypes, what a cell's Python type says about it, frame identity."""
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Hashable, Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple, cast
 import datetime as _dt
 import json
 import math
@@ -27,9 +27,92 @@ from app.core.utils import compute_short_hash
 PARQUET_SUFFIX = ".parquet"
 
 
+# ── Frame files THIS codebase wrote ──────────────────────────────────────────
+# Stage outputs, the frame cache, lineage sidecars, node decisions, the review
+# queue, eval results. The read is the exact inverse of the write: no schema, no
+# coercion, no dtype argument reaches these. A frame that needs coercion on the
+# way back in is a frame something already got wrong on the way out — see the
+# `read_source_*` readers below, for formats that hold no types to read.
+
+
 def read_frame_file(path: Path) -> pd.DataFrame:
     """Parquet, or the CSV a writer falls back to for a frame parquet cannot hold — by suffix."""
     return _read_frame_parquet(path) if path.suffix == PARQUET_SUFFIX else pd.read_csv(path)
+
+
+def write_frame_file(frame: pd.DataFrame, path: Path) -> None:
+    """The inverse of `read_frame_file`, dispatching on the same suffix. The index is never
+    written."""
+    if path.suffix == PARQUET_SUFFIX:
+        frame.to_parquet(path, index=False)
+    else:
+        frame.to_csv(path, index=False)
+
+
+class FrameWrite(NamedTuple):
+    path: Path
+    # None when the parquet write succeeded; otherwise the reason it did not,
+    # for a caller that reports the degradation to a reviewer.
+    parquet_error: str | None
+
+
+def write_frame_file_with_csv_fallback(frame: pd.DataFrame, path: Path) -> FrameWrite:
+    """`path` as parquet, else its `.csv` sibling for a dtype/shape parquet cannot hold."""
+    try:
+        frame.to_parquet(path, index=False)
+    # Mixed-type object columns and nested Python values are what CSV rescues,
+    # by stringifying them. A disk/OS error (ENOSPC, permission) is deliberately
+    # NOT caught: it would fail identically for CSV, so it propagates to the
+    # caller rather than silently degrading the artifact.
+    except (pa_lib.ArrowException, ValueError, TypeError) as exc:
+        csv_path = path.with_suffix(".csv")
+        frame.to_csv(csv_path, index=False)
+        return FrameWrite(csv_path, str(exc))
+    return FrameWrite(path, None)
+
+
+def render_frame_as_csv_text(frame: pd.DataFrame) -> str:
+    """`frame` as CSV text, no index — the same serialization `write_frame_file` puts on disk."""
+    return frame.to_csv(index=False)
+
+
+# ── SOURCE files in a format that carries no types ───────────────────────────
+# csv, xlsx and json-lines hold characters, not types, so pandas will guess one
+# per column unless told otherwise. That is what the `dtype` pin is for, and why
+# these readers exist apart from `read_frame_file`. Which columns to pin is
+# domain knowledge read off a declared schema, and the "app.core does not import
+# the domain models" contract keeps that above this layer: the caller works out
+# the pins and passes plain types down, so these hold the pandas call and nothing
+# else.
+#
+# There is deliberately no parquet entry. Parquet carries its own types, so who
+# wrote the file changes nothing about how to read it — `read_frame_file`.
+
+
+def read_source_csv(path: Path, *, dtype: Mapping[Hashable, Any] | None = None) -> pd.DataFrame:
+    return pd.read_csv(path, dtype=dtype)
+
+
+def read_source_json_lines(
+    path: Path, *, dtype: Mapping[Hashable, Any] | None = None
+) -> pd.DataFrame:
+    return pd.read_json(path, lines=True, dtype=dtype)
+
+
+def read_source_excel(
+    path: Path, *, sheet_name: str | int, header_row: int,
+    dtype: Mapping[Hashable, Any] | None = None,
+) -> pd.DataFrame:
+    """One sheet, so pandas hands back a frame — never the dict a None/list `sheet_name` returns."""
+    frame = pd.read_excel(
+        path, sheet_name=sheet_name, header=header_row, engine="openpyxl",
+        # pandas types read_excel's `dtype` as Mapping[str, ...] and read_csv's
+        # as Mapping[Hashable, ...]; the key is invariant, so one caller-side
+        # mapping cannot satisfy both signatures without this cast.
+        dtype=cast("Mapping[str, Any] | None", dtype),
+    )
+    assert isinstance(frame, pd.DataFrame)
+    return frame
 
 
 # The parquet read every frame this module hands back goes through, and the
@@ -269,13 +352,13 @@ class FrameStore:
         if path.exists() and not overwrite:
             raise FileExistsError(f"frame already exists: {collection}/{id}")
         path.parent.mkdir(parents=True, exist_ok=True)
-        frame.to_parquet(path, index=False)
+        write_frame_file(frame, path)
 
     def load_frame(self, collection: str, id: str) -> pd.DataFrame | None:
         path = self._path(collection, id)
         if not path.exists():
             return None
-        return _read_frame_parquet(path)
+        return read_frame_file(path)
 
     def exists(self, collection: str, id: str) -> bool:
         return self._path(collection, id).exists()

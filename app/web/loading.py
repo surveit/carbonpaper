@@ -13,7 +13,7 @@ import pandas as pd
 from fastapi import HTTPException
 
 from app.core.errors import NoVersionToRunError, StageOutputMissing
-from app.core.frames import list_rows, read_frame_file
+from app.core.frames import list_rows, read_frame_file, render_frame_as_csv_text
 from app.models import Stage, StageType
 from app.models.stages.llm_transform import LLMTransformStage
 from app.runtime.manifest import load_manifest_model, resolve_output_path
@@ -243,7 +243,7 @@ _UTF8_BOM = "\ufeff"
 
 def csv_download_body(df: pd.DataFrame) -> bytes:
     """`df` as CSV download bytes: UTF-8 behind a byte-order mark (see `_UTF8_BOM`)."""
-    return (_UTF8_BOM + df.to_csv(index=False)).encode("utf-8")
+    return (_UTF8_BOM + render_frame_as_csv_text(df)).encode("utf-8")
 
 
 def manifest_stage(run_dir: Path, stage_id: str) -> dict[str, Any]:

@@ -13,6 +13,12 @@ from typing import Any, Literal
 import pandas as pd
 
 from app.core.errors import EvalGrainViolationError, EvalNotScorableError, SubsetRunError
+from app.core.frames import (
+    read_frame_file,
+    read_source_csv,
+    read_source_json_lines,
+    write_frame_file,
+)
 from app.evals.scoring import score_expected_outputs
 from app.models import (
     EvalConfig, EvalRun, EvalRunSettings, FileFormat, Stage, TableRef, Workflow,
@@ -144,7 +150,7 @@ def _build_run(
 def _write_result_table(run_dir: Path, per_row: pd.DataFrame) -> Path:
     run_dir.mkdir(parents=True, exist_ok=True)
     path = run_dir / "result.parquet"
-    per_row.to_parquet(path, index=False)
+    write_frame_file(per_row, path)
     return path
 
 
@@ -173,11 +179,11 @@ def _read_table_ref(repo_root: Path, table: TableRef) -> pd.DataFrame:
     supported format; geojson is not a tabular eval input."""
     path = repo_root / table.path
     if table.format == FileFormat.csv:
-        return pd.read_csv(path)
+        return read_source_csv(path)
     if table.format == FileFormat.parquet:
-        return pd.read_parquet(path)
+        return read_frame_file(path)
     if table.format == FileFormat.json:
-        return pd.read_json(path, lines=True)
+        return read_source_json_lines(path)
     raise EvalNotScorableError(f"unsupported eval dataset format: {table.format}")
 
 

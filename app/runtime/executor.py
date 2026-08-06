@@ -14,10 +14,10 @@ from pathlib import Path
 from typing import Iterable, NamedTuple
 
 import pandas as pd
-import pyarrow.lib as pa_lib
 
 from app.core.errors import SubsetRunError
 from app.core.frame_checks import find_duplicate_row_violations
+from app.core.frames import write_frame_file, write_frame_file_with_csv_fallback
 from app.models import Stage, StageType, Workflow
 from app.core.run_status import RunStatus, StageStatus
 
@@ -428,7 +428,7 @@ def _persist_row_lineage(lineage: RowLineage, sid: str, run_dir: Path) -> None:
     one row per this stage's own output row, in output order) that
     `app.runtime.trace` reads to cross a hop that isn't row-preserving by
     position alone (filter_rows, union)."""
-    lineage.to_frame().to_parquet(lineage_sidecar_path(run_dir, sid), index=False)
+    write_frame_file(lineage.to_frame(), lineage_sidecar_path(run_dir, sid))
 
 
 def _stage_row_lineage(
@@ -467,20 +467,13 @@ def _sliced_input_lineage(
 
 
 def _persist_stage_output(output: pd.DataFrame, sid: str, run_dir: Path, record: StageRecord) -> Path:
-    """Write `output` as the stage's parquet artifact, falling back to CSV
-    (noting the fallback on `record`) for a column whose dtype/shape parquet
-    can't represent — mixed-type object columns, nested Python values. A
-    disk/OS error is NOT caught here: it would fail identically for CSV, so
-    it propagates to the stage's own error handling rather than silently
-    degrading the output."""
-    output_path = run_dir / "outputs" / f"{sid}.parquet"
-    try:
-        output.to_parquet(output_path, index=False)
-    except (pa_lib.ArrowException, ValueError, TypeError) as exc:
-        output_path = run_dir / "outputs" / f"{sid}.csv"
-        output.to_csv(output_path, index=False)
-        record.add_note(f"Wrote CSV instead of parquet: {exc}")
-    return output_path
+    """The stage's artifact path, after writing it — the CSV fallback is NOTED on `record`."""
+    written = write_frame_file_with_csv_fallback(
+        output, run_dir / "outputs" / f"{sid}.parquet"
+    )
+    if written.parquet_error is not None:
+        record.add_note(f"Wrote CSV instead of parquet: {written.parquet_error}")
+    return written.path
 
 
 def _finalize_stage_output(

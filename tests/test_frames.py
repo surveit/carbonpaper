@@ -13,6 +13,10 @@ from app.core.frames import (
     is_null_form,
     is_sequence_cell,
     list_rows,
+    read_frame_file,
+    render_frame_as_csv_text,
+    write_frame_file,
+    write_frame_file_with_csv_fallback,
 )
 from app.core.stage_cache import compute_row_fingerprint
 
@@ -217,3 +221,41 @@ def test_is_sequence_cell_accepts_lists_tuples_and_arrays(cell):
 @pytest.mark.parametrize("cell", ["ab", {"a": 1}, 1, None])
 def test_is_sequence_cell_rejects_scalars_strings_and_dicts(cell):
     assert not is_sequence_cell(cell)
+
+
+def test_write_frame_file_round_trips_a_list_column_through_read_frame_file(tmp_path):
+    frame = pd.DataFrame({"tags": [["a", "b"], []], "n": [1, 2]})
+    path = tmp_path / "f.parquet"
+    write_frame_file(frame, path)
+    back = read_frame_file(path)
+    assert [list(cell) for cell in back["tags"]] == [["a", "b"], []]
+    assert compute_frame_fingerprint(back) == compute_frame_fingerprint(frame)
+
+
+def test_write_frame_file_writes_csv_for_a_csv_suffix(tmp_path):
+    path = tmp_path / "f.csv"
+    write_frame_file(pd.DataFrame({"a": [1]}), path)
+    assert path.read_text(encoding="utf-8").splitlines() == ["a", "1"]
+
+
+def test_write_frame_file_with_csv_fallback_takes_parquet_when_it_can(tmp_path):
+    path = tmp_path / "out.parquet"
+    written = write_frame_file_with_csv_fallback(pd.DataFrame({"a": [1]}), path)
+    assert (written.path, written.parquet_error) == (path, None)
+    assert not (tmp_path / "out.csv").exists()
+
+
+def test_write_frame_file_with_csv_fallback_falls_back_and_names_the_reason(tmp_path):
+    # A column mixing a dict with a list has no single arrow type, so parquet refuses it.
+    frame = pd.DataFrame({"mixed": [{"a": 1}, [1, 2]]})
+    written = write_frame_file_with_csv_fallback(frame, tmp_path / "out.parquet")
+    assert written.path == tmp_path / "out.csv"
+    assert written.parquet_error
+    assert read_frame_file(written.path).shape == (2, 1)
+
+
+def test_render_frame_as_csv_text_matches_what_write_frame_file_puts_on_disk(tmp_path):
+    frame = pd.DataFrame({"a": [1, 2], "b": ["x", "y"]})
+    path = tmp_path / "f.csv"
+    write_frame_file(frame, path)
+    assert render_frame_as_csv_text(frame) == path.read_text(encoding="utf-8")

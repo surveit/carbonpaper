@@ -7,7 +7,7 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
-from app.core.frames import read_frame_file
+from app.core.frames import read_frame_file, write_frame_file
 from app.services.project import find_document_path
 from app.services.review_packet.views import RunView, StageView
 
@@ -123,7 +123,7 @@ def _write_csv(root: Path, source: Path, stage_id: str, report: DataReport) -> N
     relative = f"{DATA_DIR}/{stage_id}.csv"
     dest = root / relative
     dest.parent.mkdir(parents=True, exist_ok=True)
-    read_frame_file(source).to_csv(dest, index=False)
+    write_frame_file(read_frame_file(source), dest)
     report.written.append(relative)
 
 
