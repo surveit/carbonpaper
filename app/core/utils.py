@@ -40,6 +40,27 @@ def compute_short_hash(text: str) -> str:
     return hashlib.sha1(text.encode("utf-8")).hexdigest()[:16]
 
 
+# ── Count abbreviation ───────────────────────────────────────────────────────
+# Largest unit first, so a count is spent on the biggest one it reaches. The unit
+# follows from the count's own magnitude and nothing else — no unit is skipped to
+# make a rounder label — so 999,999 reads as `1000k`, not as `1m`: it is under a
+# million, and the `m` would be the interface rounding a measured number across a
+# unit boundary the reader is using to judge the size.
+_ABBREVIATION_UNITS = ((1_000_000, "m"), (1_000, "k"))
+
+
+def abbreviate_count(n: int) -> str:
+    """`45061` → `45.1k`. LOSSY — the caller must keep the exact count reachable."""
+    if n < 0:
+        raise ValueError(f"Not a count: {n}")
+    for unit, suffix in _ABBREVIATION_UNITS:
+        if n >= unit:
+            # One decimal, and a trailing `.0` is dropped rather than shown: `45k`
+            # says the same as `45.0k` and reads as a number instead of a reading.
+            return f"{round(n / unit, 1):.1f}".removesuffix(".0") + suffix
+    return str(n)
+
+
 # ── Error formatting ─────────────────────────────────────────────────────────
 def format_errors(err: ValidationError) -> list[str]:
     """Pydantic errors → human-readable issue strings."""

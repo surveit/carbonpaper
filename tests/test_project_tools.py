@@ -158,6 +158,7 @@ def _guide(step_ids: list[str], unnarrated: list[str]) -> ReviewGuideDraft:
                 title="Score each row",
                 prose="Every row keeps its `id` and is scored as reported.",
                 stage_ids=step_ids,
+                data_description="Every row as reported, carrying its score.",
             )
         ],
         unnarrated=unnarrated,
@@ -205,8 +206,11 @@ def test_write_review_guide_rejects_a_stage_narrated_by_two_steps(examples_root:
     tools, version_id = _versioned(examples_root, "alpha")
     two_steps = ReviewGuideDraft(
         steps=[
-            ReviewGuideStep(title="Load", prose="Reads the rows.", stage_ids=["load"]),
-            ReviewGuideStep(title="Load again", prose="Reads them again.", stage_ids=["load"]),
+            ReviewGuideStep(title="Load", prose="Reads the rows.", stage_ids=["load"],
+                            data_description="The rows as filed."),
+            ReviewGuideStep(title="Load again", prose="Reads them again.",
+                            stage_ids=["load"],
+                            data_description="The same rows, read a second time."),
         ],
         unnarrated=["score"],
     )

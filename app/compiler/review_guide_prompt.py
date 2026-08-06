@@ -1,7 +1,7 @@
 """The guide-authoring agent's system prompt: its role, and the contract it writes to."""
 from __future__ import annotations
 
-from app.models.review_guide import PROSE_MAX_CHARS
+from app.models.review_guide import DATA_DESCRIPTION_MAX_CHARS, PROSE_MAX_CHARS
 
 REVIEW_GUIDE_SYSTEM_PROMPT = (
     "You author the review guide for ONE frozen version of a non-engineer's workflow.\n\n"
@@ -21,6 +21,30 @@ REVIEW_GUIDE_SYSTEM_PROMPT = (
     "a visual chip cue. No programming vocabulary (function, dict, None, regex).\n\n"
     "COVERAGE. Every stage is accounted for EXACTLY once: in one step's `stage_ids`, or "
     "in `unnarrated`. One step may name several stages when a single piece of reasoning "
-    "covers them. Put a stage in `unnarrated` when it carries no judgement a reviewer "
-    "could act on.\n\n"
+    "covers them.\n"
+    "Every stage marked `requires_narration: true` goes in a step's `stage_ids`, never "
+    "in `unnarrated`; a guide that leaves one out is refused. It is true because that "
+    "stage's output feeds the published workbook.\n\n"
+    "`data_description` — WHAT THE DATA IS. Each step is shown to the reader as a "
+    "Workflow section carrying ONE link into the data leaving it (or one per pathway "
+    "where the section has several). The interface puts the measured size on that link "
+    "itself — the reader already sees `45,061 x 15`, rows by columns, read off the run; "
+    "never state a count yourself, and never guess one. What the interface CANNOT know "
+    "is what those rows ARE, and that is this field: one short sentence naming the rows, "
+    "not the work done to them.\n"
+    "Its reader is about to decide whether to open a table of tens of thousands of rows "
+    "and start checking figures in it. They are deciding 'is this the data I want to "
+    "look at' — so name the population and what it was narrowed to, in the "
+    "methodology's own words.\n"
+    f"HARD LIMIT: {DATA_DESCRIPTION_MAX_CHARS} characters, refused above it. EVERY step "
+    "must carry one: a guide with a step that has none is refused whole, naming the "
+    "steps that lack it. Do not restate the step's title or pad it to fill the field — "
+    "a sentence that says nothing costs the reader a line and teaches them to skip the "
+    "next one. Name the population, and what it was narrowed to.\n"
+    "  step title: Decide which filings are about Venezuela\n"
+    "  data_description: The filings whose issue text names Venezuela, plus the ones "
+    "the reporter listed by hand.\n"
+    "  step title: Read both quarters and tag them\n"
+    "  data_description: Every lobbying filing both quarters reported, each tagged with "
+    "the quarter it came from.\n\n"
 )

@@ -15,7 +15,7 @@ from pydantic import Field, ValidationError
 from app.core.errors import DocumentNotFound, NoVersionToRunError, ReviewGuideValidationError
 from app.models import STAGE_SPEC_SCHEMA_VERSION, Coverage, Stage, stage_to_spec_dict
 from app.models.review_guide import ReviewGuideStep
-from app.models.workflow import parse_workflow
+from app.models.workflow import find_stages_reaching_publish, parse_workflow
 from app.core.persistence import PersistedModel, PersistenceScope, get_store
 from app.core.utils import format_errors
 from app.services import node_review
@@ -193,12 +193,52 @@ def find_latest_review_guide(project: str, version_id: str) -> ReviewGuide | Non
 
 
 def validate_review_guide(guide: ReviewGuide, stages: list[Stage]) -> None:
-    """Raises ReviewGuideValidationError naming every offending stage id."""
+    """Raises ReviewGuideValidationError naming every offending stage id and section."""
+    refusals = [
+        *_describe_stage_mismatch(guide, stages),
+        *_describe_unnarrated_stages_reaching_publish(guide, stages),
+        *_describe_sections_missing_data_description(guide),
+    ]
+    if refusals:
+        raise ReviewGuideValidationError(" ".join(refusals))
+
+
+def _describe_unnarrated_stages_reaching_publish(
+    guide: ReviewGuide, stages: list[Stage]
+) -> list[str]:
+    hidden = sorted(set(guide.unnarrated) & find_stages_reaching_publish(stages))
+    if not hidden:
+        return []
+    return [
+        f"stage(s) listed unnarrated whose output reaches a publish stage: {hidden} — "
+        "each one's work is carried into the published files, so a reader checking a "
+        "published figure may have to check it, and leaving it out of the walkthrough "
+        "hides it. Narrate each in a section. `unnarrated` is only for a stage that "
+        "reaches NO publish stage."
+    ]
+
+
+def _describe_stage_mismatch(guide: ReviewGuide, stages: list[Stage]) -> list[str]:
     issues = _find_review_guide_issues(guide, stages)
-    if issues:
-        raise ReviewGuideValidationError(
-            "review guide does not match the version's stages: " + "; ".join(issues)
-        )
+    if not issues:
+        return []
+    return ["review guide does not match the version's stages: " + "; ".join(issues)]
+
+
+def _describe_sections_missing_data_description(guide: ReviewGuide) -> list[str]:
+    # Blank counts as absent; nothing is filled in from a title or a stage name.
+    missing = [
+        f"{position} ({step.title!r})"
+        for position, step in enumerate(guide.steps, start=1)
+        if not (step.data_description or "").strip()
+    ]
+    if not missing:
+        return []
+    return [
+        "every Workflow section must carry `data_description`, one short sentence "
+        "saying what the rows leaving it ARE; write one for section(s) "
+        + ", ".join(missing) + "."
+    ]
 
 
 def _validate_guide_describes_the_version(

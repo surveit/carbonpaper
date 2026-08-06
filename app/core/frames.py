@@ -141,6 +141,14 @@ def _map_list_type_to_arrow_dtype(arrow_type: pa.DataType) -> pd.ArrowDtype | No
     return None
 
 
+def read_frame_column_names(path: Path) -> list[str]:
+    """The labels `read_frame_file` would return, without reading a row of data."""
+    if path.suffix == PARQUET_SUFFIX:
+        # Every writer here saves with index=False, so there is no index column to subtract.
+        return [str(name) for name in pq.read_schema(path).names]
+    return [str(name) for name in pd.read_csv(path, nrows=0).columns]
+
+
 def list_rows(frame: pd.DataFrame) -> list[dict[str, Any]]:
     """`frame` as one dict per row, column label → cell value. The labels are
     pinned to `str`: pandas types them as `Hashable`, so a caller that keys a row

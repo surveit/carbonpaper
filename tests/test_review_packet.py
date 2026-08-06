@@ -376,6 +376,7 @@ def test_index_carries_the_versions_review_guide(project_dir, tmp_path):
                     title="Check the doubling",
                     prose="Confirm every `val` is exactly twice its input.",
                     stage_ids=["double"],
+                    data_description="Every loaded row, its `val` doubled.",
                 )
             ],
             unnarrated=["load"],
@@ -403,7 +404,8 @@ def test_guide_stage_links_reach_the_packets_own_pages(project_dir, tmp_path):
             project=project_dir.name,
             version_id=version_id,
             steps=[
-                ReviewGuideStep(title="Step", prose="p", stage_ids=["load", "double"])
+                ReviewGuideStep(title="Step", prose="p", stage_ids=["load", "double"],
+                                data_description="Every loaded row, its `val` doubled.")
             ],
         ),
     )

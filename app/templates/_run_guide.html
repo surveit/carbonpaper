@@ -1,13 +1,32 @@
 {# The review guide the run's pinned version carries, as a rail beside the run: the
-   ordered walkthrough its author wrote, each step next to the stages it narrates.
+   ordered walkthrough its author wrote. Each numbered entry is a WORKFLOW SECTION —
+   the term the UI uses for one authored step — and reads in three parts, in order:
 
-   The prose is the ONLY thing here that was authored. Everything shown around it —
-   each stage's name, type, position in the execution order and the columns it writes
-   — is read off the same pinned version at render time (services/run_guide.py),
-   so it cannot drift from the workflow the run actually executed.
+     1. the DESCRIPTION — the authored prose, the only authored thing here;
+     2. the TRANSFORMS — every stage the section narrates, named and linked;
+     3. the OUTPUT — what the section leaves, as a link carrying its size.
 
-   Context: guide (RunGuideView) · project · type_class / type_glyph — the type-tag maps.
-   Included only when `guide` is set; a version with no guide gets no rail at all.
+   Everything shown around the prose — each stage's id and position in the execution
+   order — is read off the same pinned version at render time
+   (services/run_guide.py), so it cannot drift from the workflow the run executed.
+
+   An output's SIZE is measured off what the run WROTE, both halves: the row count
+   from its manifest record, the column count from the footer of the frame file that
+   record names. It is deliberately NOT the version's declared output schema, which
+   states only the columns a stage reads and adds and so runs narrower than the frame
+   — the Schema tab answers that question and will show a smaller number for the same
+   stage. Either half can be missing on its own, and a missing half is said in words
+   (`45.1k rows`, `15 columns`), never rendered as a 0, which means measured and empty.
+   With NEITHER half the link reads `- × -`, and its hover says what happened rather
+   than what the interface knows: `This data was not produced in this run`.
+
+   The size on the link is ABBREVIATED (`45.1k × 15`) because the rail is 360px wide.
+   That is the first place this interface renders a measured number lossily, so the
+   exact count rides on the same link's `title` — `45,061 rows × 15 columns` — and is
+   one hover away rather than gone.
+
+   Context: guide (RunGuideView) · project. Included only when `guide` is set; a
+   version with no guide gets no rail at all.
 
    Steps are [data-stage-link] anchors handed to the loadStage run_detail.html already
    defines, so the stage panel, the hash deep-link and the graph highlight are the run
@@ -15,12 +34,51 @@
 
 {% from "_stage_code.html" import prose_with_column_chips %}
 
-{# How many columns a stage may name inline before the list folds. Above this the
-   list is taller than the step it belongs to and the prose stops being readable. #}
-{% set _FOLD_WRITES = 6 %}
+{% macro row_word(n) %}{{ "{:,}".format(n) }} row{% if n != 1 %}s{% endif %}{% endmacro %}
+{% macro column_word(n) %}{{ n }} column{% if n != 1 %}s{% endif %}{% endmacro %}
+
+{# The size shown ON the link: abbreviated, `45.1k × 15`. The pair form is used only
+   where both halves were measured; with one half it says that half in words, and with
+   neither it says so, so nothing here can be misread as a measured 0. #}
+{% macro output_size(s) %}
+{%- if s.output_row_count is not none and s.column_count is not none -%}
+{{ s.output_row_count | abbreviate_count }}<span class="guide-output-x">×</span>{{ s.column_count }}
+{%- elif s.output_row_count is not none -%}
+{{ s.output_row_count | abbreviate_count }} rows
+{%- elif s.column_count is not none -%}
+{{ column_word(s.column_count) }}
+{%- else -%}
+-<span class="guide-output-x">×</span>-
+{%- endif %}
+{% endmacro %}
+
+{# The same size UNABBREVIATED, for the link's title. The abbreviation above rounds a
+   measured number, so this is where the number the run actually recorded lives; an
+   unmeasured half says it is unknown rather than being left out of the sentence.
+
+   With NEITHER half, `- × -` on the link carries no explanation, so this says what
+   happened rather than what the interface knows: a stage this run has no record for
+   did not produce the data at all, which is what the reader needs, while a stage it
+   DID execute and measured nothing for is a different fact and says so. #}
+{% macro exact_size_words(s) %}
+{%- if s.output_row_count is none and s.column_count is none -%}
+{% if not s.executed %}This data was not produced in this run{% else %}This run produced this data but recorded neither its rows nor its columns{% endif %}
+{%- else -%}
+{% if s.output_row_count is not none %}{{ row_word(s.output_row_count) }}{% else %}row count unknown{% endif %} × {% if s.column_count is not none %}{{ column_word(s.column_count) }}{% else %}column count unknown{% endif %}
+{%- endif %}
+{% endmacro %}
+
+{# A transform row's hover text. The columns the stage DECLARES it adds live here
+   rather than on the rail: they are the version's declaration, not a measurement,
+   and the rail is a walkthrough — the Schema tab is where a reader goes for them. #}
+{% macro stage_row_title(s) %}
+{%- if not s.executed %}This run has no record for this stage — {% endif -%}
+{{ s.stage.type }}
+{%- if s.written_columns %} · declares it adds {{ s.written_columns | join(", ") }}{% endif -%}
+{% endmacro %}
 
 {% macro guide_stage(s) %}
-<li class="guide-stage">
+<li>
   {% if s.stage is none %}
   {# The guide names an id this version defines no stage for. It is written about in
      the prose above, so say it is unresolved rather than quietly dropping it. #}
@@ -30,24 +88,13 @@
   {% else %}
   {# Linked whether or not this run executed it: the stage panel has its own
      not-executed case, showing the pinned definition and saying it did not run.
-     The dashed border is the warning; the panel is the explanation. #}
+     The chip is the stage ID, not its type — that is the name a reader greps for
+     and the one a row's lineage trace reports. #}
   <a class="guide-stage-row{% if not s.executed %} absent{% endif %}"
      href="{{ links.guide_stage(s.stage_id) }}" data-stage-link="{{ s.stage_id }}"
-     {% if not s.executed %}title="This run has no record for this stage"{% endif %}>
-    <span class="guide-stage-name"><code>{{ s.stage.id }}</code></span>
-    <span class="type-tag {{ type_class.get(s.stage.type, 'custom') }}">{{ type_glyph.get(s.stage.type, '') }} {{ s.stage.type }}</span>
+     title="{{ stage_row_title(s) | trim }}">
+    <span class="guide-stage-id">{{ s.stage_id }}</span>
   </a>
-  {# A wide stage's column list is longer than the step's own prose, so past
-     _FOLD_WRITES it folds behind its exact count — every column is still there,
-     one click away, and none is summarised into a number. #}
-  {% if s.written_columns | length > _FOLD_WRITES %}
-  <details class="guide-writes">
-    <summary>writes {{ s.written_columns | length }} columns</summary>
-    {% for c in s.written_columns %}<code>{{ c }}</code> {% endfor %}
-  </details>
-  {% elif s.written_columns %}
-  <span class="guide-writes">writes{% for c in s.written_columns %} <code>{{ c }}</code>{% endfor %}</span>
-  {% endif %}
   {% endif %}
 </li>
 {% endmacro %}
@@ -72,50 +119,80 @@
   .guide-steps { list-style: none; margin: 0; padding: 0; }
   .guide-steps > li { display: flex; gap: 8px; padding: 10px 0;
                       border-top: 1px solid var(--border); }
+  .guide-steps > li > div { min-width: 0; flex: 1; }
   .guide-steps .n { flex: 0 0 18px; height: 18px; margin-top: 2px; border-radius: 50%;
                     background: var(--fg); color: #fff; font-size: 10px;
                     display: flex; align-items: center; justify-content: center; }
   .guide-steps h3 { font-size: 12.5px; margin: 0 0 3px; line-height: 1.35;
                     text-transform: none; letter-spacing: 0; }
-  .guide-steps p { font-size: 11.5px; line-height: 1.5; margin: 0 0 6px; }
-  .guide-steps p code, .guide-writes code, .guide-stage-row code {
+  /* The description is muted and the transform names below it are not, so the
+     three parts separate by ink alone: authored prose, then the workings, then
+     the one accented link out. */
+  .guide-steps p { font-size: 11.5px; line-height: 1.5; margin: 0 0 6px;
+                   color: var(--muted); }
+  .guide-steps p code, .guide-stage-row code {
     font-family: ui-monospace, monospace; font-size: .88em; padding: 1px 4px;
     border-radius: 3px; background: var(--code-bg); color: var(--fg);
     word-break: break-word; }
 
+  /* Names the middle part, so the stage rows read as the section's workings rather
+     than as a second list of links competing with the output below them. */
+  .guide-part-label { font-size: 9.5px; font-weight: 600; letter-spacing: .07em;
+                      text-transform: uppercase; color: var(--muted); margin: 0 0 3px; }
+
+  /* ── 2. THE TRANSFORMS — never folded: what a section DID is the thing the rail
+     is for, and a disclosure would hide it behind a click. */
+  .guide-transforms { margin: 0 0 7px; }
   .guide-stage-list { list-style: none; margin: 0; padding: 0;
-                      display: flex; flex-direction: column; gap: 4px; }
+                      display: flex; flex-direction: column; gap: 3px; }
   .guide-stage-row { display: flex; align-items: baseline; gap: 5px; flex-wrap: wrap;
                      font-size: 11px; text-decoration: none; color: var(--fg);
-                     border: 1px solid var(--border); border-radius: 3px;
-                     padding: 3px 6px; }
-  a.guide-stage-row:hover { background: var(--hover); border-color: var(--muted); }
-  /* Selected: the stage NAME is washed, the way a marker pen marks a word — not a
+                     border-radius: 3px; padding: 1px 4px; margin-left: -4px; }
+  a.guide-stage-row:hover { background: var(--hover); }
+  /* Selected: the stage id is washed, the way a marker pen marks a word — not a
      filled box drawn round the whole row, which at this size read as the loudest
-     thing in the rail. The row's own border does not move, so nothing reflows.
-     Weight carries the selection with no colour at all, for a reader who cannot
-     see the wash; the rail on the left edge is the second colour-free cue. The
-     tint/ink pair is the palette's, so its contrast is the one CI measures. */
+     thing in the rail. Weight carries the selection with no colour at all, for a
+     reader who cannot see the wash; the rail on the left edge is the second
+     colour-free cue. The tint/ink pair is the palette's, so its contrast is the
+     one CI measures. */
   a.guide-stage-row.active { box-shadow: inset 3px 0 0 var(--accent); }
-  /* The name is a <code> chip carrying its own grey fill, which would sit on top of
-     the wash and hide it — so the chip takes the wash instead of covering it. */
-  a.guide-stage-row.active .guide-stage-name,
-  a.guide-stage-row.active .guide-stage-name code {
-    background: var(--state-review-bg); color: var(--state-review-ink); }
-  a.guide-stage-row.active .guide-stage-name {
-    /* Spread, not padding: the wash overshoots the word without moving it. */
+  /* The id chip carries its own grey fill, which would sit on top of the wash and
+     hide it — so the chip takes the wash instead of covering it. Spread, not
+     padding: the wash overshoots the word without moving it. */
+  a.guide-stage-row.active .guide-stage-id {
+    background: var(--state-review-bg); color: var(--state-review-ink);
     box-shadow: 0 0 0 2px var(--state-review-bg);
     border-radius: 2px; font-weight: 800; }
-  .guide-stage-name { font-weight: 600; }
-  .guide-stage-row .type-tag { font-size: 9px; padding: 0 3px; }
-  /* Named by the guide but not executed by THIS run: still shown, not linkable. */
-  .guide-stage-row.absent { border-style: dashed; color: var(--muted); }
-  .guide-stage-row.unresolved { border-style: dashed; border-color: var(--warn-border);
-                                background: var(--warn-bg); color: var(--fg); }
-  .guide-writes { display: block; font-size: 10.5px; color: var(--muted);
-                  margin: 2px 0 0 6px; }
-  details.guide-writes > summary { cursor: pointer; }
-  details.guide-writes[open] > summary { margin-bottom: 2px; }
+  .guide-stage-id { font-family: ui-monospace, monospace; font-size: 10.5px;
+                    color: var(--fg); background: var(--code-bg);
+                    padding: 1px 4px; border-radius: 3px; white-space: nowrap; }
+  /* Named by the guide but not executed by THIS run: still shown, still linked. */
+  .guide-stage-row.absent { color: var(--muted); }
+  .guide-stage-row.absent .guide-stage-id { border-bottom: 1px dashed var(--muted); }
+  .guide-stage-row.unresolved { border: 1px dashed var(--warn-border);
+                                background: var(--warn-bg); color: var(--fg);
+                                padding: 3px 6px; }
+
+  /* ── 3. THE OUTPUT — the one affordance in the rail: leave the walkthrough and
+     look at the rows. ONE hairline for the whole group, not one per output: a
+     section with three pathways out is still one result with three ways out. */
+  .guide-outputs { border-top: 1px solid var(--border); padding-top: 5px;
+                   display: flex; flex-direction: column; gap: 3px; }
+  .guide-output { display: flex; align-items: baseline; gap: 6px;
+                  text-decoration: none; color: inherit; }
+  /* The accent is LINK AFFORDANCE and nothing else. It does not encode what the
+     section did to the row set: the number already says the rows moved, and a
+     colour saying it too would be the interface making a claim of its own. */
+  .guide-output-size { font-family: ui-monospace, monospace; font-size: 12px;
+                       font-weight: 600; font-variant-numeric: tabular-nums;
+                       white-space: nowrap; color: var(--accent); }
+  .guide-output-size.unmeasured { color: var(--muted); font-weight: 400; }
+  .guide-output-x { color: var(--muted); font-weight: 400; margin: 0 .12em; }
+  .guide-output:hover .guide-output-size { border-bottom: 1px solid var(--accent); }
+  .guide-output-what { font-size: 10.5px; color: var(--muted); line-height: 1.4;
+                       min-width: 0; }
+  .guide-outputs-what { font-size: 10.5px; color: var(--muted); line-height: 1.4;
+                        margin: 0 0 2px; }
 
   .guide-unnarrated { margin-top: 14px; border-top: 1px solid var(--border);
                       padding-top: 10px; }
@@ -148,17 +225,61 @@
       </svg>
     </button>
   </div>
-  <p class="run-guide-lead">AI generated summary of what this run did</p>
+  {# The size notation is explained once, here, so `45.1k × 15` needs no legend of
+     its own under every Workflow section. #}
+  <p class="run-guide-lead">AI generated summary of what this run did, one Workflow
+    section at a time. Each section ends in the data it left — the link states its
+    size, rows × columns, rounded to fit; hover it for the exact counts.</p>
   <ol class="guide-steps">
     {% for step in guide.steps %}
     <li>
       <span class="n">{{ loop.index }}</span>
       <div>
         <h3>{{ step.title }}</h3>
+        {# ── 1. THE DESCRIPTION ── #}
         <p>{{ prose_with_column_chips(step.prose) }}</p>
-        <ul class="guide-stage-list">
-          {% for s in step.stages %}{{ guide_stage(s) }}{% endfor %}
-        </ul>
+        {# ── 2. THE TRANSFORMS ── #}
+        <div class="guide-transforms">
+          <div class="guide-part-label">Transforms</div>
+          <ul class="guide-stage-list">
+            {% for s in step.stages %}{{ guide_stage(s) }}{% endfor %}
+          </ul>
+        </div>
+        {# ── 3. THE OUTPUT — the section's terminal stages: the ones that feed no
+           other stage of the same section. One is the ordinary case; several mean
+           the section forked, and each branch is listed on its own rather than
+           summed, because a sum would double-count a fan-out.
+
+           `data_description` is authored PER SECTION, so it sits on the link where
+           there is one output and above the group where there are several — it
+           describes the section's result, and repeating it against each branch
+           would read as three separate claims about three different frames. Where
+           the guide carries none — written before the field existed, or its author
+           left it out — the link goes out with its size alone. Nothing is made up
+           from the stage names to fill it. #}
+        {% if step.outputs %}
+        {% set forked = step.outputs | length > 1 %}
+        {% if forked %}<div class="guide-part-label">Outputs</div>{% endif %}
+        <div class="guide-outputs">
+          {% if forked and step.data_description %}
+          <p class="guide-outputs-what">{{ step.data_description }}</p>
+          {% endif %}
+          {% for out in step.outputs %}
+          <a class="guide-output" href="{{ links.guide_stage(out.stage_id) }}"
+             data-stage-link="{{ out.stage_id }}"
+             title="{{ exact_size_words(out) | trim }} — open this data">
+            {# Muted where neither half was measured: the accent is link affordance,
+               and `- × -` in it would draw the eye to the one link with no number. #}
+            <span class="guide-output-size{% if out.output_row_count is none and out.column_count is none %} unmeasured{% endif %}">{{ output_size(out) | trim }}</span>
+            {%- if forked %}
+            <span class="guide-output-what">{{ out.stage_id }}</span>
+            {%- elif step.data_description %}
+            <span class="guide-output-what">{{ step.data_description }}</span>
+            {%- endif %}
+          </a>
+          {% endfor %}
+        </div>
+        {% endif %}
       </div>
     </li>
     {% endfor %}
@@ -166,7 +287,7 @@
   {% if guide.unnarrated %}
   <div class="guide-unnarrated">
     <h3>Not narrated</h3>
-    <p>The guide's author placed these stages outside the walkthrough, as carrying no
+    <p>The guide's author placed these stages in no Workflow section, as carrying no
       judgement a reviewer could act on.</p>
     <ul class="guide-stage-list">
       {% for s in guide.unnarrated %}{{ guide_stage(s) }}{% endfor %}

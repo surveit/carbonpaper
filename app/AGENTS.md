@@ -30,7 +30,7 @@ A deep link loads the panel through `_loadStage(id, {tab, reveal})`, which the p
 publishing `_selectTab` on its root element.
 
 ## The stage panel — three tabs (`run_stage_partial` → `_run_stage_panel.html`)
-**Data │ Schema │ Transform**, one flat strip; it opens on Transform:
+**Data │ Schema │ Transform**, one flat strip; it opens on Data:
 - **Data** — what this run's stage produced: its output — rendered as a **diff against its
   input** where the stage type permits one (below) — then validation **as part of the
   output** (input + output issues from the manifest), then the upstream input previews with

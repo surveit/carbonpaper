@@ -321,7 +321,8 @@ def _guide(
         project=project_dir.name,
         version_id=version_id,
         steps=[ReviewGuideStep(title="Load the docs", prose="Reads `doc_id`.",
-                               stage_ids=step_ids)],
+                               stage_ids=step_ids,
+                               data_description="Every document the desk filed.")],
         unnarrated=unnarrated,
     )
 
@@ -421,8 +422,10 @@ def test_save_version_guide_rejects_a_stage_narrated_by_two_steps(tmp_path):
         project=tmp_path.name,
         version_id=vid,
         steps=[
-            ReviewGuideStep(title="First", prose="a", stage_ids=["load"]),
-            ReviewGuideStep(title="Second", prose="b", stage_ids=["load", "tally"]),
+            ReviewGuideStep(title="First", prose="a", stage_ids=["load"],
+                            data_description="The documents, as filed."),
+            ReviewGuideStep(title="Second", prose="b", stage_ids=["load", "tally"],
+                            data_description="The documents, tallied."),
         ],
     )
     with pytest.raises(ReviewGuideValidationError, match="more than once"):
@@ -437,6 +440,158 @@ def test_save_version_guide_reports_every_offending_id_at_once(tmp_path):
         save_version_guide(tmp_path, vid, _guide(tmp_path, vid, ["ghost"], []))
     message = str(exc.value)
     assert "ghost" in message and "tally" in message and "load" in message
+
+
+# ── `unnarrated` may not hide a stage the published files carry ──────────────
+# The escape hatch a guide author reaches for when a stage will not fit a section.
+# A stage feeding publish is one a reader may have to check to trust a published
+# figure, so it must be narrated; a stage reaching no publish stage still may not be.
+
+def _published_version(project_dir: Path, publish_reads: str) -> str:
+    """A four-stage version: load -> mid -> {`checked`, publish}, so both cases exist."""
+    stages: list[dict] = [
+        _LOAD_STAGE,
+        {"id": "mid", "description": "Middle", "type": "python_frame_function",
+         "inputs": [{"id": "load", "schema": _ROWS_SCHEMA}],
+         "function": {"kind": "inline", "code": "def transform(df): return df"},
+         "signature": {"form": "replaces", "produces": _ROWS_SCHEMA["columns"]}},
+        {"id": "checked", "description": "Assert something", "type": "python_frame_function",
+         "inputs": [{"id": "mid", "schema": _ROWS_SCHEMA}],
+         "function": {"kind": "inline", "code": "def transform(df): return df"},
+         "signature": {"form": "replaces", "produces": _ROWS_SCHEMA["columns"]}},
+        {"id": "pub", "description": "Publish", "type": "publish",
+         "inputs": [{"id": publish_reads, "schema": _ROWS_SCHEMA}],
+         "publish": {"format": "csv"},
+         "function": {"kind": "inline",
+                      "code": "def transform(df, output_dir, trace_links): return df"},
+         "signature": {"form": "replaces"}},
+    ]
+    return create_version_from_stages(
+        project_dir, stages, message="published", reviewer="ada",
+    ).version_id
+
+
+def test_save_version_guide_refuses_an_unnarrated_stage_that_feeds_publish(tmp_path):
+    vid = _published_version(tmp_path, publish_reads="mid")
+    guide = _guide(tmp_path, vid, ["load", "checked", "pub"], ["mid"])
+
+    with pytest.raises(ReviewGuideValidationError, match="mid"):
+        save_version_guide(tmp_path, vid, guide)
+    assert find_latest_review_guide(tmp_path.name, vid) is None
+
+
+def test_the_refusal_reaches_through_intermediate_stages(tmp_path):
+    """`load` is two hops from publish, and is as load-bearing as the stage feeding it."""
+    vid = _published_version(tmp_path, publish_reads="mid")
+    guide = _guide(tmp_path, vid, ["mid", "checked", "pub"], ["load"])
+
+    with pytest.raises(ReviewGuideValidationError) as exc:
+        save_version_guide(tmp_path, vid, guide)
+    assert "'load'" in str(exc.value)
+
+
+def test_a_publish_stage_may_be_unnarrated_because_it_narrates_itself(tmp_path):
+    """The other half of the rule: `pub` does not carry work INTO the publishing."""
+    vid = _published_version(tmp_path, publish_reads="mid")
+    guide = _guide(tmp_path, vid, ["load", "mid", "checked"], ["pub"])
+
+    saved = save_version_guide(tmp_path, vid, guide)
+
+    assert saved.unnarrated == ["pub"]
+
+
+def test_the_stage_feeding_publish_is_refused_where_publish_itself_is_allowed(tmp_path):
+    """Both halves in one place: the ancestor is the rule, the publish stage is not."""
+    vid = _published_version(tmp_path, publish_reads="mid")
+
+    save_version_guide(
+        tmp_path, vid, _guide(tmp_path, vid, ["load", "mid", "checked"], ["pub"]))
+    with pytest.raises(ReviewGuideValidationError, match="mid"):
+        save_version_guide(
+            tmp_path, vid, _guide(tmp_path, vid, ["load", "checked", "pub"], ["mid"]))
+
+
+def test_a_stage_reaching_no_publish_stage_may_still_be_unnarrated(tmp_path):
+    """The carve-out, kept on purpose: `checked` asserts something and feeds nothing
+    published."""
+    vid = _published_version(tmp_path, publish_reads="mid")
+    guide = _guide(tmp_path, vid, ["load", "mid", "pub"], ["checked"])
+
+    saved = save_version_guide(tmp_path, vid, guide)
+
+    assert find_latest_review_guide(tmp_path.name, vid).id == saved.id
+    assert saved.unnarrated == ["checked"]
+
+
+def test_the_refusal_names_every_hidden_stage_and_says_why(tmp_path):
+    vid = _published_version(tmp_path, publish_reads="mid")
+    guide = _guide(tmp_path, vid, ["checked", "pub"], ["load", "mid"])
+
+    with pytest.raises(ReviewGuideValidationError) as exc:
+        save_version_guide(tmp_path, vid, guide)
+    message = str(exc.value)
+    assert "'load'" in message and "'mid'" in message
+    assert "reaches a publish stage" in message and "Narrate each in a section" in message
+
+
+# ── the data sentence: required to WRITE a guide, optional in the store ──────
+
+def _guide_with_data_descriptions(
+    project_dir: Path, version_id: str, *sentences: str | None
+) -> ReviewGuide:
+    return ReviewGuide(
+        project=project_dir.name,
+        version_id=version_id,
+        steps=[
+            ReviewGuideStep(title=f"Section {n}", prose="p", stage_ids=[stage_id],
+                            data_description=sentence)
+            for n, (stage_id, sentence) in enumerate(zip(["load", "tally"], sentences), 1)
+        ],
+    )
+
+
+def test_save_version_guide_refuses_a_section_with_no_data_sentence(tmp_path):
+    """The rail is janky without it, so a guide cannot be written missing one."""
+    vid = _two_stage_version(tmp_path)
+    guide = _guide_with_data_descriptions(tmp_path, vid, "The documents filed.", None)
+
+    with pytest.raises(ReviewGuideValidationError, match="data_description"):
+        save_version_guide(tmp_path, vid, guide)
+    assert find_latest_review_guide(tmp_path.name, vid) is None
+
+
+def test_the_refusal_names_which_sections_are_missing_the_sentence(tmp_path):
+    """Naming them is the point — the author has to know what to go and write."""
+    vid = _two_stage_version(tmp_path)
+    guide = _guide_with_data_descriptions(tmp_path, vid, None, "   ")
+
+    with pytest.raises(ReviewGuideValidationError) as exc:
+        save_version_guide(tmp_path, vid, guide)
+    message = str(exc.value)
+    assert "1 ('Section 1')" in message and "2 ('Section 2')" in message
+
+
+def test_a_blank_data_sentence_is_refused_as_absent(tmp_path):
+    """Whitespace is not a sentence — accepting it would put an empty line on the link."""
+    vid = _two_stage_version(tmp_path)
+    guide = _guide_with_data_descriptions(tmp_path, vid, "The documents filed.", "  \n ")
+
+    with pytest.raises(ReviewGuideValidationError, match=r"2 \('Section 2'\)"):
+        save_version_guide(tmp_path, vid, guide)
+
+
+def test_a_guide_stored_before_the_data_sentence_existed_still_loads(tmp_path):
+    vid = _two_stage_version(tmp_path)
+    saved = save_version_guide(tmp_path, vid, _guide(tmp_path, vid, ["load"], ["tally"]))
+    payload = get_store().read("review_guide", saved.id)
+    # The record every guide written before the field looks like. It goes back through
+    # PersistedModel.load's extra="forbid" model_validate, which grants no leniency —
+    # this is the whole reason ReviewGuideStep.data_description stays optional.
+    for step in payload["steps"]:
+        del step["data_description"]
+    get_store().write("review_guide", saved.id, payload)
+
+    assert [s.data_description for s in ReviewGuide.load(saved.id).steps] == [None]
 
 
 def test_save_version_guide_unknown_version_raises_file_not_found(tmp_path):

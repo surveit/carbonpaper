@@ -512,7 +512,8 @@ def _saved_version(tmp_path, monkeypatch) -> str:
 _GUIDE = {
     "steps": [
         {"title": "Double each amount", "prose": "Every `amount` is doubled as filed.",
-         "stage_ids": ["double"]},
+         "stage_ids": ["double"],
+         "data_description": "Every filed row, its `amount` doubled."},
     ],
     "unnarrated": ["load", "untested"],
 }
