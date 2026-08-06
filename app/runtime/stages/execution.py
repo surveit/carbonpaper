@@ -442,7 +442,7 @@ def _open_row_caching(stage: Stage, ctx: RunContext) -> _RowCaching | None:
     (intentionally non-deterministic — always re-roll), or the run carries no
     project scope (a subset run, a preview, an authored-test run).
 
-    Under `ctx.bust_cache` nothing already recorded is read, while what this run
+    Under `ctx.params.bust_cache` nothing already recorded is read, while what this run
     computes is still recorded — so a busted run ends with the cache re-pinned,
     not stale."""
     if not stage.cache:
@@ -455,7 +455,7 @@ def _open_row_caching(stage: Stage, ctx: RunContext) -> _RowCaching | None:
         project,
         stage.id,
         stage_fingerprint,
-        {} if ctx.bust_cache else ctx.stage_cache.find_recorded_rows(
+        {} if ctx.params.bust_cache else ctx.stage_cache.find_recorded_rows(
             project, stage.id, stage_fingerprint
         ),
         ctx.stage_cache if isinstance(ctx.stage_cache, StageCache) else None,

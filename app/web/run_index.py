@@ -58,11 +58,11 @@ def describe_run_differences(manifest: RunManifest) -> list[str]:
     """What THIS run did differently — its own settings, not a diff against another run."""
     differences = [
         f"first {cap} rows of {stage_id}"
-        for stage_id, cap in sorted(manifest.limit_overrides.items())
+        for stage_id, cap in sorted(manifest.parameters.limits.items())
     ]
-    if manifest.bust_cache:
+    if manifest.parameters.bust_cache:
         differences.append("cache off")
-    if manifest.is_test_run:
+    if manifest.parameters.is_test_run:
         differences.append("test run")
     return differences
 
@@ -96,7 +96,7 @@ def _build_row(
         strip=strip,
         result_summary=describe_stage_tallies(strip),
         differences=describe_run_differences(manifest),
-        is_test_run=manifest.is_test_run,
+        is_test_run=manifest.parameters.is_test_run,
     )
 
 

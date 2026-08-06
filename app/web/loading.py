@@ -16,7 +16,11 @@ from app.core.errors import NoVersionToRunError, StageOutputMissing
 from app.core.frames import list_rows, read_frame_file, render_frame_as_csv_text
 from app.models import Stage, StageType
 from app.models.stages.llm_transform import LLMTransformStage
-from app.runtime.manifest import load_manifest_model, resolve_output_path
+from app.runtime.manifest import (
+    load_manifest_model,
+    records_a_test_run,
+    resolve_output_path,
+)
 from app.services.run import resolve_version
 from app.services.loader import CompiledStageFile, load_compiled_dir
 from app.services.versioning import list_versions, load_version_stages
@@ -93,8 +97,8 @@ def _count_runs_with_manifest(rdir: Path) -> int:
 
 def _manifest_counts_as_run(manifest_path: Path) -> bool:
     """Whether `manifest_path` exists and records a run that is not a test
-    (default: not a test, for a manifest with no `is_test_run` key — every run
-    before that field existed). A missing or unparseable manifest is not a run
+    (default: not a test, for a manifest recording no such flag — every run
+    before the field existed). A missing or unparseable manifest is not a run
     at all here (the caller only calls this after confirming existence, or wants
     False either way), so a parse failure also reports False."""
     if not manifest_path.exists():
@@ -103,7 +107,7 @@ def _manifest_counts_as_run(manifest_path: Path) -> bool:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     except json.JSONDecodeError:
         return False
-    return not manifest.get("is_test_run", False)
+    return not records_a_test_run(manifest)
 
 
 @dataclass

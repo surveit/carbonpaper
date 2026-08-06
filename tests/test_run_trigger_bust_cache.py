@@ -62,7 +62,7 @@ def test_checked_box_becomes_a_busted_run(project):
         follow_redirects=False,
     )
     assert resp.status_code == 303
-    assert _manifest(project)["bust_cache"] is True
+    assert _manifest(project)["parameters"]["bust_cache"] is True
 
 
 def test_an_unchecked_box_submits_nothing_and_the_run_is_not_busted(project):
@@ -72,7 +72,7 @@ def test_an_unchecked_box_submits_nothing_and_the_run_is_not_busted(project):
         follow_redirects=False,
     )
     assert resp.status_code == 303
-    assert _manifest(project)["bust_cache"] is False
+    assert _manifest(project)["parameters"]["bust_cache"] is False
 
 
 def test_runs_page_offers_the_checkbox(project):

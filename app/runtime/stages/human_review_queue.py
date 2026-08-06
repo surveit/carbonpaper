@@ -52,7 +52,7 @@ def make_human_review_mapper(stage: Stage, ctx: RunContext, src: pd.DataFrame) -
     # so a run carrying none of those can still pass a queue stage through.
     queue = narrow_stage(stage, HumanReviewQueueStage).queue
     validate_reviewed_sources_present(queue, src, stage.id)
-    if ctx.queue_auto_approve:
+    if ctx.params.queue_auto_approve:
         return partial(_approve_row, queue)
     return _QueueRowMapper(stage, queue, ctx, src)
 

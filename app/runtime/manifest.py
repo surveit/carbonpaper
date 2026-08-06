@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, TypedDict
 
 import pandas as pd
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 from app.core.agent.usage import LlmUsage
 from app.core.errors import StageNotInRun, StageOutputMissing
@@ -22,6 +22,7 @@ from app.models import Stage, StageType
 from app.core.run_status import RunStatus, StageStatus
 
 from .context import RunContext
+from .run_parameters import RunParameters
 
 
 class QueueStats(TypedDict):
@@ -43,6 +44,17 @@ class RowError(TypedDict):
 
 # The `.attrs` key a stage's output frame carries its StageContribution under.
 CONTRIBUTION_ATTR = "stage_contribution"
+
+# RunParameters field -> the top-level key a manifest written before the nesting
+# carried it under. Read by `_lift_legacy_parameters`; may only grow.
+_LEGACY_PARAMETER_KEYS = {
+    "limits": "limit_overrides",
+    "offsets": "offset_overrides",
+    "bust_cache": "bust_cache",
+    "queue_auto_approve": "queue_auto_approve",
+    "is_test_run": "is_test_run",
+    "run_bindings": "run_bindings",
+}
 
 
 class StageContribution(BaseModel):
@@ -167,25 +179,14 @@ class RunManifest(BaseModel):
     started_at: str
     project: str | None
     workflow_version: str | None
-    # The per-run override maps. Defaulted so a partial or legacy manifest that
-    # predates one of them still parses on resume (the old dict readers tolerated
-    # the same via `.get(key, {})`); a freshly-minted manifest always sets every
-    # one, so `exclude_unset` still emits them.
-    limit_overrides: dict[str, int] = {}
-    offset_overrides: dict[str, int] = {}
-    run_bindings: dict[str, dict[str, Any]] = {}
+    # What the caller asked of this run, verbatim — the settings a resume replays.
+    # `_lift_legacy_parameters` reads the flat pre-nesting keys off an older
+    # manifest into it, so every run on disk still parses.
+    parameters: RunParameters = RunParameters()
+    # The preflight provenance of each bound input (its absolute path, a sha256 and
+    # a byte count streamed at prepare time). A RESULT, not a parameter: it records
+    # what the run found, not what it was asked for.
     input_bindings: dict[str, dict[str, Any]] = {}
-    # Whether this run skipped every stage-cache read (RunContext.bust_cache).
-    # Recorded so it is part of the run's provenance and so a resume replays the
-    # same choice; defaulted for the same legacy-manifest reason as the maps above.
-    bust_cache: bool = False
-    # True for a workflow test: a run that lives under the same runs/ dir and is
-    # viewable through the same routes as a production run, but is a test — it
-    # wrote no stage-cache entries and its numbers must never be mistaken for the
-    # project's latest real run (see app.services.project.RunsSummary). Defaults
-    # False so a pre-this-field manifest on disk (every run predates the field)
-    # parses as what it always was: not a test.
-    is_test_run: bool = False
     # The live human_review_queue tallies. Required, unlike the override maps
     # above: the key was renamed out of an older on-disk vocabulary, so a default
     # would let a pre-rename manifest parse and then report an empty tally for a
@@ -199,6 +200,19 @@ class RunManifest(BaseModel):
     halted_at: list[str] | None = None
     cancelled_at: str | None = None
     resumed_at: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _lift_legacy_parameters(cls, data: Any) -> Any:
+        """Lifted, never defaulted: a real run's recorded settings are not ours to invent."""
+        if not isinstance(data, dict) or "parameters" in data:
+            return data
+        legacy = {
+            new: data[old]
+            for new, old in _LEGACY_PARAMETER_KEYS.items()
+            if old in data
+        }
+        return {**data, "parameters": legacy} if legacy else data
 
     @field_validator("halted_at", mode="before")
     @classmethod
@@ -252,6 +266,14 @@ class RunManifest(BaseModel):
         return self.model_dump(exclude_unset=True)
 
 
+def records_a_test_run(raw: dict[str, Any]) -> bool:
+    """Both on-disk shapes, for a caller that must not pay to parse the whole model."""
+    nested = raw.get("parameters")
+    if isinstance(nested, dict) and "is_test_run" in nested:
+        return bool(nested["is_test_run"])
+    return bool(raw.get("is_test_run", False))
+
+
 def create_run_manifest(
     ordered: list[Stage],
     ctx: RunContext,
@@ -259,25 +281,22 @@ def create_run_manifest(
     run_id: str,
     project: str | None,
     workflow_version: str | None,
-    run_bindings: dict[str, dict[str, Any]],
     input_bindings: dict[str, dict[str, Any]],
-    is_test_run: bool,
 ) -> RunManifest:
     """The initial run manifest — every stage pending, status running. The single
     source of the run-manifest shape: every caller mints it here and persists it
     with write_manifest rather than hand-building the model, so the shape lives
     with the engine that later updates it.
 
-    The per-run execution settings the manifest RECORDS — the row windows and
-    `bust_cache` — are read off `ctx`, the same object the engine executes against,
-    so a caller cannot set one and record another.
+    Everything the caller DECIDED is `ctx.params`, recorded verbatim — the same
+    object the engine executes against, so a caller cannot set one and record
+    another. What this takes besides is what the run turns out to BE: its identity,
+    and the preflight provenance of its bound inputs.
 
     `project`/`workflow_version` are None for a subset run (run_subset) that was
     not told its logical identity — recorded honestly as None rather than a
-    fabricated placeholder. A production run always supplies both. `is_test_run`
-    is required of every caller (no default) so minting a manifest forces a
-    conscious choice, unlike the field's own legacy-tolerant default on
-    `RunManifest`. `human_review_queue_stats` and `dropped_columns` start empty
+    fabricated placeholder. A production run always supplies both.
+    `human_review_queue_stats` and `dropped_columns` start empty
     and grow live as stages settle (the executor drains each stage's
     StageContribution into them)."""
     return RunManifest(
@@ -285,12 +304,8 @@ def create_run_manifest(
         started_at=datetime.now().isoformat(timespec="seconds"),
         project=project,
         workflow_version=workflow_version,
-        limit_overrides=ctx.limits,
-        offset_overrides=ctx.offsets,
-        run_bindings=run_bindings,
+        parameters=ctx.params,
         input_bindings=input_bindings,
-        bust_cache=ctx.bust_cache,
-        is_test_run=is_test_run,
         human_review_queue_stats={},
         dropped_columns={},
         status=RunStatus.RUNNING,

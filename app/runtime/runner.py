@@ -22,6 +22,7 @@ from app.core.run_status import StageStatus
 
 from .context import RunContext
 from .executor import _execute_stages, topological_sort
+from .run_parameters import RunParameters
 from .manifest import (
     create_run_manifest,
     load_manifest_model,
@@ -198,23 +199,25 @@ def prepare_run(
     # app.runtime.cancellation) — read by _execute_stages, never by name of
     # anything on disk. run_dir above stays I/O-only.
     ctx = RunContext.for_workflow_run(
-        repo_root, run_dir, project_dir.name, run_id, limits=limits, offsets=offsets,
-        bust_cache=bust_cache,
+        repo_root, run_dir, project_dir.name, run_id,
+        RunParameters(
+            limits=dict(limits or {}),
+            offsets=dict(offsets or {}),
+            bust_cache=bust_cache,
+            run_bindings={sid: dict(p) for sid, p in (bindings or {}).items()},
+        ),
     )
     # The manifest's shape and persistence belong to the executor — it mints the
-    # initial record here and rewrites the same file as stages run. prepare only
-    # supplies the run-level metadata: run_bindings is the run's bindings verbatim
-    # (generic bookkeeping a resume replays), alongside the stage-owned preflight
-    # provenance records in input_bindings.
+    # initial record here and rewrites the same file as stages run. What prepare
+    # adds is the stage-owned preflight provenance; everything the caller asked for
+    # is already on the ctx this run will execute against.
     manifest = create_run_manifest(
         ordered,
         ctx,
         run_id=run_id,
         project=project_dir.name,
         workflow_version=workflow_version,
-        run_bindings={sid: dict(params) for sid, params in (bindings or {}).items()},
         input_bindings=input_records,
-        is_test_run=False,
     )
     write_manifest(run_dir, manifest)
     return {"run_id": run_id, "run_dir": run_dir, "ctx": ctx,
@@ -283,7 +286,7 @@ def resume_run(
     # when the run halted would resume on its workflow-authored params (or fail
     # if it authors none) while the manifest still claims `source: "run"` — a
     # false provenance record.
-    stages, _ = apply_run_bindings(stages, manifest.run_bindings)
+    stages, _ = apply_run_bindings(stages, manifest.parameters.run_bindings)
     ordered = topological_sort(stages)
 
     # Reload outputs from disk for stages that completed successfully.
@@ -304,17 +307,11 @@ def resume_run(
     # This run's logical identity for cancellation's checkpoints — see the
     # matching comment in prepare_run. Stamped here too so a resumed run is
     # cancellable, not just a fresh one.
+    # Replayed wholesale: the recorded parameters ARE what a resume must execute
+    # under — the same row windows, the same refusal to read the cache — rather
+    # than quietly reusing what the halted run skipped.
     ctx = RunContext.for_workflow_run(
-        repo_root, run_dir, project_dir.name, run_id,
-        # Re-apply the run's per-stage row slicing so stages that resume after
-        # a halt honor the same limits/offsets the run started with.
-        limits=manifest.limit_overrides,
-        offsets=manifest.offset_overrides,
-        # A resume of a recompute-everything run is still one: replaying the
-        # recorded flag keeps the resumed stages refusing the same cache reads
-        # the halted run refused, rather than quietly reusing what it skipped.
-        bust_cache=manifest.bust_cache,
-    )
+        repo_root, run_dir, project_dir.name, run_id, manifest.parameters)
     # The run's telemetry (human_review_queue_stats/dropped_columns) already lives on the
     # loaded manifest, not the context; a resumed run keeps accumulating onto
     # that same manifest via the executor's per-stage merge.

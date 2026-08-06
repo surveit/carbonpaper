@@ -93,7 +93,7 @@ def test_run_form_limit_field_becomes_a_manifest_limit_override(project):
         follow_redirects=False,
     )
     assert resp.status_code == 303
-    assert _manifest(project)["limit_overrides"] == {"load": 2}
+    assert _manifest(project)["parameters"]["limits"] == {"load": 2}
 
 
 def test_blank_limit_field_records_no_override(project):
@@ -103,7 +103,7 @@ def test_blank_limit_field_records_no_override(project):
         follow_redirects=False,
     )
     assert resp.status_code == 303
-    assert _manifest(project)["limit_overrides"] == {}
+    assert _manifest(project)["parameters"]["limits"] == {}
 
 
 def test_non_integer_limit_returns_400_and_creates_no_run(project):

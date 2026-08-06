@@ -1,7 +1,7 @@
-"""Goldens in tests/goldens/*.json are real pre-typing manifests. Byte-for-byte
-identity only holds for a fully-settled manifest; one containing a never-started
-`pending` record can only be asserted structurally, because the old code wrote
-pending and started records with two different key orders.
+"""Goldens in tests/goldens/*.json are real manifests: the three named for a run
+state are pre-typing and carry their parameters FLAT, `ok_run_nested_parameters`
+is the current nested shape. Byte-for-byte identity only holds for a settled
+manifest already in the current shape — rewriting a legacy one migrates it.
 """
 from __future__ import annotations
 
@@ -31,20 +31,36 @@ def _reserialize(raw: str) -> str:
     return json.dumps(RunManifest.model_validate_json(raw).to_dict(), indent=2, default=str)
 
 
-def test_fully_settled_manifest_round_trips_byte_identical():
-    """A run whose every stage settled (`ok_run`) serializes back to the exact
-    bytes the dict code wrote — same keys, same order, same values."""
-    raw = _golden("ok_run")
+def test_a_current_shape_manifest_round_trips_byte_identical():
+    """Same keys, same order, same values."""
+    raw = _golden("ok_run_nested_parameters")
     assert _reserialize(raw) == raw
 
 
+def test_a_legacy_manifest_keeps_every_recorded_parameter():
+    """The compat guarantee: a pre-nesting run still reports what it ran under."""
+    legacy = json.loads(_golden("ok_run"))
+    legacy |= {"limit_overrides": {"load": 2}, "offset_overrides": {"load": 1},
+               "bust_cache": True, "is_test_run": True}
+    parameters = RunManifest.model_validate_json(json.dumps(legacy)).parameters
+    assert parameters.limits == {"load": 2} and parameters.offsets == {"load": 1}
+    assert parameters.bust_cache is True and parameters.is_test_run is True
+
+
+def test_rewriting_a_legacy_manifest_migrates_it_to_the_nested_shape():
+    """Deliberate: a resumed legacy run rewrites its manifest, and it comes back nested."""
+    rewritten = json.loads(_reserialize(_golden("ok_run")))
+    assert rewritten["parameters"] == {"limits": {}, "offsets": {}, "run_bindings": {}}
+    for gone in ("limit_overrides", "offset_overrides", "run_bindings", "bust_cache"):
+        assert gone not in rewritten
+
+
 @pytest.mark.parametrize("name", ["ok_run", "errored_run", "halted_run"])
-def test_manifest_round_trips_structurally(name: str):
-    """Every representative manifest — clean, errored-with-pending-tail, and
-    halted-with-queue-stats — re-serializes to the same key/value structure and
-    the same set of present-vs-omitted optional fields."""
+def test_a_legacy_manifest_round_trips_structurally(name: str):
+    """Nothing is lost but the parameters' position: read back, the two agree field for field."""
     raw = _golden(name)
-    assert json.loads(_reserialize(raw)) == json.loads(raw)
+    assert RunManifest.model_validate_json(_reserialize(raw)) == (
+        RunManifest.model_validate_json(raw))
 
 
 def test_optional_fields_are_omitted_exactly_where_the_dict_code_omitted_them():
@@ -81,7 +97,7 @@ def test_minted_manifest_omits_the_run_level_optionals():
     manifest = create_run_manifest(
         [stage], RunContext(repo_root=None, run_dir=None),
         run_id="r", project="p", workflow_version="v",
-        run_bindings={}, input_bindings={}, is_test_run=False)
+        input_bindings={})
     dumped = manifest.to_dict()
 
     assert dumped["status"] == RunStatus.RUNNING
@@ -89,7 +105,7 @@ def test_minted_manifest_omits_the_run_level_optionals():
     for absent in ("finished_at", "halted_at", "cancelled_at", "resumed_at", "updated_at"):
         assert absent not in dumped
     # The always-present core fields ARE emitted even when empty.
-    for present in ("human_review_queue_stats", "dropped_columns", "limit_overrides"):
+    for present in ("human_review_queue_stats", "dropped_columns", "parameters"):
         assert present in dumped
 
 

@@ -15,6 +15,7 @@ from app.core.errors import NoWorkflowTestSourceError, NoWorkflowTestVersionErro
 from app.models import Stage, StageType, Workflow
 from app.runtime.context import RunContext, RunIdentity
 from app.runtime.executor import run_subset, topological_sort
+from app.runtime.run_parameters import RunParameters
 from app.runtime.stages.input_data import read_input_data
 from app.services.versioning import list_versions, load_version, load_version_stages
 from app.services.workspace import repo_root, resolve_project_dir, resolve_run_dir
@@ -116,10 +117,11 @@ def _run_frontier(
     try:
         run_subset(
             workflow, injected_outputs=injected, stage_ids=stage_ids,
-            run_dir=run_dir, repo_root=repo_root, queue_auto_approve=True,
+            run_dir=run_dir, repo_root=repo_root,
+            params=RunParameters(limits=limits, offsets=offsets,
+                                 queue_auto_approve=True, is_test_run=True),
             project=project, workflow_version=workflow_version,
-            identity=RunIdentity(project=project, run_id=run_id), is_test_run=True,
-            limits=limits, offsets=offsets)
+            identity=RunIdentity(project=project, run_id=run_id))
     except SubsetRunError as exc:
         return False, str(exc)
     return True, None

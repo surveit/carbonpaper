@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, model_validator
 from app.core.stage_cache import ReadOnlyStageCache, StageCache, StageCacheEntry
 
 from .run_log import RunLog
+from .run_parameters import RunParameters
 
 
 @dataclass(frozen=True)
@@ -53,16 +54,10 @@ class RunContext(BaseModel):
     # write via the writable `StageCache` subclass). None alongside
     # `identity is None` — enforced by the validator.
     stage_cache: ReadOnlyStageCache | None = None
-    limits: dict[str, int] = {}
-    offsets: dict[str, int] = {}
-    # In-memory queue bypass: when set, a human_review_queue stage approves every
-    # row in memory instead of reaching for the stage cache or halting. Never set
-    # alongside a WRITABLE cache (see the validator).
-    queue_auto_approve: bool = False
-    # Recompute everything: this run SKIPS every stage-cache read, while the
-    # write-capable accessor still records what it computes — so the cache ends
-    # the run re-pinned, not stale. Per-run only; nothing about a stage says it.
-    bust_cache: bool = False
+    # What the caller asked of this run (row windows, cache busting, queue bypass,
+    # bindings) — the same object the manifest records, so the settings executed
+    # under and the settings written down cannot drift.
+    params: RunParameters = RunParameters()
     # This run's event log (runs/<id>/events.jsonl), attached by the executor for
     # the duration of the run — see `attach_run_log`. Write-only from here: a
     # handler emits onto it and never reads it back, so it carries no run state
@@ -77,7 +72,7 @@ class RunContext(BaseModel):
         # persist stage results reached that way for a later workflow run to read
         # back as if a human had approved them. Read-only scope (a workflow test)
         # cannot, so it may bypass freely.
-        if isinstance(self.stage_cache, StageCache) and self.queue_auto_approve:
+        if isinstance(self.stage_cache, StageCache) and self.params.queue_auto_approve:
             raise ValueError(
                 "queue_auto_approve is set on a run whose stage cache is "
                 "WRITABLE — its in-memory approvals would be recorded for a "
@@ -87,12 +82,13 @@ class RunContext(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def _busting_requires_a_cache(self) -> RunContext:
-        if self.bust_cache and self.stage_cache is None:
+    def _busting_requires_a_writable_cache(self) -> RunContext:
+        """Skipping reads only makes sense where the run re-pins what it skipped."""
+        if self.params.bust_cache and not isinstance(self.stage_cache, StageCache):
             raise ValueError(
-                "bust_cache is set on a run with no stage cache to bust — a run "
-                "without project scope reads no cache in the first place, so "
-                "asking it to skip those reads describes nothing."
+                "bust_cache is set on a run whose stage cache is not writable — a "
+                "run that cannot record what it recomputes would leave the cache "
+                "exactly as stale as it found it, having paid to skip it."
             )
         return self
 
@@ -134,9 +130,7 @@ class RunContext(BaseModel):
         run_dir: Path,
         project: str,
         run_id: str,
-        limits: dict[str, int] | None = None,
-        offsets: dict[str, int] | None = None,
-        bust_cache: bool = False,
+        params: RunParameters = RunParameters(),
     ) -> RunContext:
         """A workflow run's context (app.runtime.runner): full project scope —
         `identity` (`project`, `run_id`) and a read+WRITE stage-result cache
@@ -144,19 +138,16 @@ class RunContext(BaseModel):
         the manifest, not here, so a resume replays nothing through this
         constructor.
 
-        `bust_cache` makes this run skip every cache READ; the accessor stays
-        write-capable, so the run leaves the cache re-pinned rather than stale.
-        Only a workflow run can be told this — it is the only kind that WRITES
-        the cache, so the only kind whose skipped reads get re-pinned — which is
-        why neither other constructor takes the argument."""
+        `params.bust_cache` makes this run skip every cache READ; the accessor
+        stays write-capable, so the run leaves the cache re-pinned rather than
+        stale. Only a workflow run can be told this — it is the only kind that
+        WRITES the cache, so the only kind whose skipped reads get re-pinned."""
         return cls(
             repo_root=repo_root,
             run_dir=run_dir,
             identity=RunIdentity(project=project, run_id=run_id),
             stage_cache=StageCacheEntry.read_write(),
-            limits=dict(limits or {}),
-            offsets=dict(offsets or {}),
-            bust_cache=bust_cache,
+            params=params,
         )
 
     @classmethod
@@ -166,8 +157,7 @@ class RunContext(BaseModel):
         run_dir: Path,
         project: str,
         run_id: str,
-        limits: dict[str, int] | None = None,
-        offsets: dict[str, int] | None = None,
+        params: RunParameters = RunParameters(),
     ) -> RunContext:
         """A workflow test's run (app.services.workflow_test): the same project
         scope a workflow run gets — `identity` plus a stage-result cache — except
@@ -177,17 +167,18 @@ class RunContext(BaseModel):
         this run structurally cannot write a cache entry, and a test's outputs
         never poison what a workflow run reads back.
 
-        Its human_review_queue auto-approves in memory (`queue_auto_approve`) —
-        safe precisely because the read-only cache cannot persist those in-memory
-        approvals for a later run to mistake for human ones."""
+        The constructor named for a workflow test MAKES the run one: it stamps
+        `is_test_run` and `queue_auto_approve` onto whatever params it is given, so
+        a caller cannot ask for this context and record the run as a production
+        one. The in-memory approvals are safe precisely because the read-only cache
+        cannot persist them for a later run to mistake for human ones."""
         return cls(
             repo_root=repo_root,
             run_dir=run_dir,
             identity=RunIdentity(project=project, run_id=run_id),
             stage_cache=StageCacheEntry.read_only(),
-            limits=dict(limits or {}),
-            offsets=dict(offsets or {}),
-            queue_auto_approve=True,
+            params=params.model_copy(
+                update={"is_test_run": True, "queue_auto_approve": True}),
         )
 
     @classmethod
@@ -195,8 +186,7 @@ class RunContext(BaseModel):
         cls,
         repo_root: Path | None,
         run_dir: Path | None,
-        limits: dict[str, int] | None = None,
-        offsets: dict[str, int] | None = None,
+        params: RunParameters = RunParameters(),
         queue_auto_approve: bool = False,
     ) -> RunContext:
         """Stage handlers executed with no run behind them: a single-stage preview
@@ -208,14 +198,17 @@ class RunContext(BaseModel):
         `repo_root`/`run_dir` are both None when there is no run on disk at all —
         require_run_dir() then fails loudly for any stage that writes run-scoped
         output. `queue_auto_approve` lets a human_review_queue stage pass rows
-        through in memory; there is no cache here to persist those approvals
-        into."""
+        through in memory; there is no cache here to persist those approvals into,
+        and nothing outside a run is a production run, so it carries `is_test_run`
+        with it rather than tripping that invariant."""
+        bypassing = queue_auto_approve or params.queue_auto_approve
         return cls(
             repo_root=repo_root,
             run_dir=run_dir,
             identity=None,
             stage_cache=None,
-            limits=dict(limits or {}),
-            offsets=dict(offsets or {}),
-            queue_auto_approve=queue_auto_approve,
+            params=params.model_copy(update={
+                "queue_auto_approve": bypassing,
+                "is_test_run": params.is_test_run or bypassing,
+            }),
         )

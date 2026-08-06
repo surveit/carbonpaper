@@ -1,19 +1,18 @@
 from __future__ import annotations
 
-import inspect
 from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
 from app.runtime.context import RunContext, RunIdentity
+from app.runtime.run_parameters import RunParameters
 from app.core.stage_cache import StageCacheEntry
 
 
 def _make(**overrides: object) -> RunContext:
     defaults: dict[str, object] = dict(
         repo_root=Path("."), run_dir=Path("."), identity=None, stage_cache=None,
-        limits={}, offsets={},
     )
     defaults.update(overrides)
     return RunContext(**defaults)  # type: ignore[arg-type]
@@ -50,6 +49,11 @@ def test_run_context_rejects_cache_without_identity() -> None:
         _make(identity=None, stage_cache=StageCacheEntry.read_write())
 
 
+def _bypassing() -> RunParameters:
+    """The only legal way to ask for the bypass: a test run."""
+    return RunParameters(queue_auto_approve=True, is_test_run=True)
+
+
 def test_a_writable_cache_rejects_queue_auto_approve(tmp_path: Path) -> None:
     """The bypass approves in memory; a WRITE-capable cache would persist those
     approvals for a later run to read back as human decisions. Loud at construction."""
@@ -59,7 +63,7 @@ def test_a_writable_cache_rejects_queue_auto_approve(tmp_path: Path) -> None:
             run_dir=tmp_path / "run",
             identity=RunIdentity(project="p", run_id="r1"),
             stage_cache=StageCacheEntry.read_write(),
-            queue_auto_approve=True,
+            params=_bypassing(),
         )
 
 
@@ -71,31 +75,31 @@ def test_a_read_only_cache_allows_queue_auto_approve(tmp_path: Path) -> None:
         run_dir=tmp_path / "run",
         identity=RunIdentity(project="p", run_id="r1"),
         stage_cache=StageCacheEntry.read_only(),
-        queue_auto_approve=True,
+        params=_bypassing(),
     )
-    assert ctx.queue_auto_approve is True
+    assert ctx.params.queue_auto_approve is True
 
 
 def test_no_cache_at_all_allows_queue_auto_approve(tmp_path: Path) -> None:
     """Stages outside a run have no cache to persist an approval into."""
     ctx = RunContext(
-        repo_root=tmp_path, run_dir=tmp_path / "run", queue_auto_approve=True)
-    assert ctx.queue_auto_approve is True
+        repo_root=tmp_path, run_dir=tmp_path / "run", params=_bypassing())
+    assert ctx.params.queue_auto_approve is True
 
 
 def test_run_context_without_a_cache_rejects_bust_cache(tmp_path: Path) -> None:
     """Busting the cache is meaningful only for a run that HAS one: a context
     with no stage cache paired with bust_cache fails loudly at construction."""
-    with pytest.raises(ValidationError, match="no stage cache to bust"):
+    with pytest.raises(ValidationError, match="not writable"):
         RunContext(
             repo_root=tmp_path,
             run_dir=tmp_path / "run",
-            bust_cache=True,
+            params=RunParameters(bust_cache=True),
         )
 
 
 def test_bust_cache_defaults_off() -> None:
-    assert _make().bust_cache is False
+    assert _make().params.bust_cache is False
 
 
 def test_run_context_is_frozen(tmp_path: Path) -> None:
@@ -110,24 +114,25 @@ def test_for_workflow_run_grants_read_write_scope(tmp_path: Path) -> None:
     assert hasattr(ctx.stage_cache, "record")  # the only constructor that can write
     assert ctx.identity == RunIdentity(project="proj", run_id="r1")
     assert ctx.stage_cache is not None
-    assert ctx.bust_cache is False
+    assert ctx.params.bust_cache is False
 
 
 def test_for_workflow_run_carries_bust_cache(tmp_path: Path) -> None:
     ctx = RunContext.for_workflow_run(
-        tmp_path, tmp_path / "run", "proj", "r1", bust_cache=True)
-    assert ctx.bust_cache is True
+        tmp_path, tmp_path / "run", "proj", "r1", RunParameters(bust_cache=True))
+    assert ctx.params.bust_cache is True
     assert ctx.stage_cache is not None  # still write-capable: re-pinned, not stale
 
 
-def test_only_a_workflow_run_takes_bust_cache() -> None:
-    """Busting re-pins what it skips, which needs a writable cache — so only the
-    one constructor that grants one offers the argument."""
-    assert "bust_cache" in inspect.signature(RunContext.for_workflow_run).parameters
-    assert "bust_cache" not in inspect.signature(
-        RunContext.for_workflow_test_run).parameters
-    assert "bust_cache" not in inspect.signature(
-        RunContext.for_stages_outside_a_run).parameters
+def test_only_a_run_with_a_writable_cache_may_bust_it(tmp_path: Path) -> None:
+    """A read-only run would pay to skip reads and leave the cache as stale as it found it."""
+    for constructor in (RunContext.for_workflow_test_run,):
+        with pytest.raises(ValidationError, match="not writable"):
+            constructor(tmp_path, tmp_path / "run", "proj", "r1",
+                        RunParameters(bust_cache=True))
+    with pytest.raises(ValidationError, match="not writable"):
+        RunContext.for_stages_outside_a_run(
+            tmp_path, tmp_path / "run", RunParameters(bust_cache=True))
 
 
 def test_for_workflow_test_run_grants_scope_but_read_only(tmp_path: Path) -> None:
@@ -138,7 +143,7 @@ def test_for_workflow_test_run_grants_scope_but_read_only(tmp_path: Path) -> Non
     assert ctx.identity == RunIdentity(project="proj", run_id="r1")
     assert ctx.stage_cache is not None
     assert not hasattr(ctx.stage_cache, "record")
-    assert ctx.queue_auto_approve is True  # safe: the read-only cache can't persist it
+    assert ctx.params.queue_auto_approve is True  # safe: the read-only cache can't persist it
 
 
 def test_for_stages_outside_a_run_allows_none_paths() -> None:

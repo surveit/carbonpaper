@@ -97,8 +97,8 @@ def test_per_run_limit_and_offset_slice_and_are_recorded(tmp_path):
 
     # The slice is part of the run's provenance: recorded on the manifest
     # and noted on the stage record, never silent.
-    assert manifest["limit_overrides"] == {"load": 3}
-    assert manifest["offset_overrides"] == {"load": 1}
+    assert manifest["parameters"]["limits"] == {"load": 3}
+    assert manifest["parameters"]["offsets"] == {"load": 1}
     notes = rec.get("notes", [])
     assert any(n.startswith("offset=1") for n in notes)
     assert any(n.startswith("limit=3") for n in notes)
@@ -106,8 +106,8 @@ def test_per_run_limit_and_offset_slice_and_are_recorded(tmp_path):
     on_disk = json.loads(
         (tmp_path / "runs" / manifest["run_id"] / "manifest.json")
         .read_text(encoding="utf-8"))
-    assert on_disk["limit_overrides"] == {"load": 3}
-    assert on_disk["offset_overrides"] == {"load": 1}
+    assert on_disk["parameters"]["limits"] == {"load": 3}
+    assert on_disk["parameters"]["offsets"] == {"load": 1}
 
 
 def test_bust_cache_is_recorded_on_the_manifest(tmp_path):
@@ -117,18 +117,18 @@ def test_bust_cache_is_recorded_on_the_manifest(tmp_path):
     _seed_version(tmp_path)
     manifest = execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path), bust_cache=True)
 
-    assert manifest["bust_cache"] is True
+    assert manifest["parameters"]["bust_cache"] is True
     on_disk = json.loads(
         (tmp_path / "runs" / manifest["run_id"] / "manifest.json")
         .read_text(encoding="utf-8"))
-    assert on_disk["bust_cache"] is True
+    assert on_disk["parameters"]["bust_cache"] is True
 
 
 def test_an_ordinary_run_records_bust_cache_false(tmp_path):
     _make_project(tmp_path)
     _seed_version(tmp_path)
     manifest = execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path))
-    assert manifest["bust_cache"] is False
+    assert manifest["parameters"]["bust_cache"] is False
 
 
 def test_cli_bust_cache_flag_reaches_the_run(monkeypatch):

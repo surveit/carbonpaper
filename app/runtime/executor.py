@@ -23,6 +23,7 @@ from app.core.run_status import RunStatus, StageStatus
 
 from .cancellation import consume_cancel
 from .context import RunContext, RunIdentity
+from .run_parameters import RunParameters
 from .errors import RunCancelled
 from .manifest import (
     CONTRIBUTION_ATTR,
@@ -75,13 +76,10 @@ def run_subset(
     stage_ids: list[str],
     run_dir: Path,
     repo_root: Path,
-    queue_auto_approve: bool = False,
+    params: RunParameters = RunParameters(),
     project: str | None = None,
     workflow_version: str | None = None,
     identity: RunIdentity | None = None,
-    is_test_run: bool = False,
-    limits: dict[str, int] | None = None,
-    offsets: dict[str, int] | None = None,
 ) -> dict[str, pd.DataFrame]:
     """Run only `stage_ids` of `workflow`, with `injected_outputs` seeded as the
     outputs of stages OUTSIDE the subset (their upstream is cut off — the output is
@@ -128,12 +126,10 @@ def run_subset(
         raise SubsetRunError(f"subset names stage(s) not in the workflow: {missing}")
     ordered = topological_sort([by_id[sid] for sid in stage_ids])
     (run_dir / "outputs").mkdir(parents=True, exist_ok=True)
-    ctx = _subset_ctx(repo_root, run_dir, queue_auto_approve, identity,
-                      limits=limits, offsets=offsets)
+    ctx = _subset_ctx(repo_root, run_dir, identity, params)
     manifest = create_run_manifest(
         ordered, ctx, run_id=run_dir.name, project=project,
-        workflow_version=workflow_version, run_bindings={}, input_bindings={},
-        is_test_run=is_test_run)
+        workflow_version=workflow_version, input_bindings={})
     write_manifest(run_dir, manifest)
     outputs: dict[str, pd.DataFrame] = dict(injected_outputs)
     manifest = _execute_stages(ordered, ctx, manifest, run_dir, outputs)
@@ -142,8 +138,7 @@ def run_subset(
 
 
 def _subset_ctx(
-    repo_root: Path, run_dir: Path, queue_auto_approve: bool, identity: RunIdentity | None,
-    *, limits: dict[str, int] | None = None, offsets: dict[str, int] | None = None,
+    repo_root: Path, run_dir: Path, identity: RunIdentity | None, params: RunParameters,
 ) -> RunContext:
     # `identity` is what makes this a workflow test's run rather than a bare
     # subset: it grants project scope, read-only. Without it a subset run is keyed
@@ -154,11 +149,8 @@ def _subset_ctx(
     # through in memory instead.
     if identity is not None:
         return RunContext.for_workflow_test_run(
-            repo_root, run_dir, identity.project, identity.run_id,
-            limits=limits, offsets=offsets)
-    return RunContext.for_stages_outside_a_run(
-        repo_root, run_dir, queue_auto_approve=queue_auto_approve,
-        limits=limits, offsets=offsets)
+            repo_root, run_dir, identity.project, identity.run_id, params)
+    return RunContext.for_stages_outside_a_run(repo_root, run_dir, params)
 
 
 def _raise_if_run_failed(manifest: RunManifest) -> None:
@@ -399,8 +391,8 @@ class _RowWindow(NamedTuple):
 
 def _resolve_row_window(stage: Stage, ctx: RunContext) -> _RowWindow:
     """The window this run reads: --offset stage=M, then --limit stage=N over the stage's `limit:`."""
-    offset = ctx.offsets.get(stage.id)
-    cap = ctx.limits.get(stage.id, stage.limit)
+    offset = ctx.params.offsets.get(stage.id)
+    cap = ctx.params.limits.get(stage.id, stage.limit)
     return _RowWindow(
         offset if isinstance(offset, int) and offset > 0 else 0,
         cap if isinstance(cap, int) and cap >= 0 else None,

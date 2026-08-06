@@ -81,7 +81,7 @@ def build_run_header(
     return RunHeader(
         run_id=run_id,
         started_at=_read_text(manifest.get("started_at")),
-        is_test_run=bool(manifest.get("is_test_run")),
+        is_test_run=bool(manifest.get("parameters", {}).get("is_test_run")),
         version=read_version_note(project, manifest.get("workflow_version")),
         strip=strip,
         cta=cta,
