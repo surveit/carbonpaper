@@ -1,7 +1,7 @@
-"""A config-only stage panel says there is nothing to check, rather than nothing.
+"""A config-only stage panel carries no certification badge at all.
 
-Silence reads as "the checks were skipped". Grey, never green: no example ran, so a
-tick would claim a check that never happened.
+A union's inputs and a join's keys are the whole step — there is no description for a
+badge to make a claim about, so the panel shows the settings and says nothing.
 """
 import json
 from pathlib import Path
@@ -50,21 +50,12 @@ def client(tmp_path: Path) -> TestClient:
     return TestClient(app)
 
 
-def test_a_union_says_there_is_nothing_to_check(client: TestClient) -> None:
+def test_a_union_gets_no_badge(client: TestClient) -> None:
     html = client.get("/project/alpha/node/both/panel").text
-    assert "Nothing to check" in html
-    assert "stage-cert-na" in html
+    assert "stage-cert" not in html
+    assert "<h2>🧬 Union</h2>" in html
 
 
-def test_that_badge_is_not_a_green_tick(client: TestClient) -> None:
-    """`certified` is the only green state; a union earns none of it."""
-    html = client.get("/project/alpha/node/both/panel").text
-    assert "stage-cert-certified" not in html
-    assert "Tested by independent AI agent" not in html
-
-
-def test_an_llm_stage_gets_no_badge(client: TestClient) -> None:
-    """Its prompt is prose nothing checks either — a different thing to say."""
+def test_an_llm_stage_gets_no_badge_either(client: TestClient) -> None:
     html = client.get("/project/alpha/node/score/panel").text
-    assert "Nothing to check" not in html
     assert "stage-cert" not in html
