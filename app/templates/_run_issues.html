@@ -6,11 +6,11 @@
        people: the data no longer matches what the stage declares (the data
        owner's), or the code broke (the engineer's). The data card links the
        stage panel's Data tab, the crash card its Transform tab.
-    2. "Worth a look" — every issue that did NOT stop the run, across every
-       stage that ran, one line per stage × column × message. Shown on a clean
-       run too: a run that finished with warnings nobody read is the one worth
-       noticing. Open by default only when nothing stopped the run, so a stop
-       keeps the headline.
+    2. The flagged section, titled by its own counts ("17 warnings, 2 errors")
+       — every issue that did NOT stop the run, across every stage that ran, one
+       line per stage × column × message. Shown on a clean run too: a run that
+       finished with warnings nobody read is the one worth noticing. Open by
+       default only when nothing stopped the run, so a stop keeps the headline.
 
   An INDEX. Every line is worded by the report that raised it and links the
   panel where the full validation block lives — there is one copy of the detail.
@@ -74,9 +74,8 @@
 {% if issues.flagged %}
 <details class="issue-flags"{% if not issues.stopped %} open{% endif %}>
   <summary>
-    <span class="issue-flags-title">Worth a look</span>
-    <span class="muted">{{ issues.flagged_count }} issue{{ '' if issues.flagged_count == 1 else 's' }}
-      across {{ issues.flagged | length }} stage{{ '' if issues.flagged | length == 1 else 's' }} —
+    <span class="issue-flags-title">{{ issues.flagged_headline }}</span>
+    <span class="muted">across {{ issues.flagged | length }} stage{{ '' if issues.flagged | length == 1 else 's' }} —
       none of them stopped the run</span>
   </summary>
   <div class="issue-flags-scroll">

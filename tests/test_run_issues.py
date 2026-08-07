@@ -265,6 +265,31 @@ def test_an_authored_refusal_leads_with_its_reason_and_not_its_exception_name():
     assert 'data-issue-tab="transform"' in html
 
 
+def test_the_flagged_section_is_titled_by_its_counts_by_severity():
+    manifest = _manifest(
+        _record("score", "validation_warnings", output_validation_report=_report(
+            "output",
+            ("warning", "spend", "off range"),
+            ("warning", "note", "3 undeclared column(s) present"),
+        )),
+        _record("flag", "validation_warnings", input_validation_report=[_report(
+            "input:score", ("error", "spend", "4 value(s) not of declared type"))]),
+    )
+
+    assert "2 warnings, 1 error" in _render(manifest)
+
+
+def test_a_severity_nothing_raised_is_left_out_of_the_title_not_counted_as_zero():
+    manifest = _manifest(_record(
+        "score", "validation_warnings",
+        output_validation_report=_report("output", ("warning", "spend", "off range")),
+    ))
+    html = _render(manifest)
+
+    assert "1 warning<" in html
+    assert "error" not in html
+
+
 def test_a_run_that_finished_with_warnings_opens_the_index_it_would_otherwise_fold():
     warned = _manifest(_record(
         "score", "validation_warnings",
