@@ -20,8 +20,8 @@ from app.web.config import (
     STATIC_DIR, RevalidatedStaticFiles, configure_projects_dir_from_env,
 )
 from app.web.routers import (
-    admin, editing, evals, guide, project, node_review, review, review_packet,
-    run_lineage, run_stage, runs,
+    admin, editing, evals, export, guide, project, node_review, review,
+    review_packet, run_lineage, run_stage, runs,
 )
 
 from app.web.chat_router import router as chat_router
@@ -66,6 +66,7 @@ app.include_router(runs.router)
 app.include_router(run_stage.router)
 app.include_router(run_lineage.router)
 app.include_router(review_packet.router)
+app.include_router(export.router)
 app.include_router(evals.router)
 app.include_router(review.router)
 app.include_router(node_review.router)

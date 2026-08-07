@@ -1,0 +1,39 @@
+# Fly.io app template for one carbonpaper server per tester.
+# tools/stamp_tester.sh copies this config under the tester's app name
+# (`fly launch --copy-config --name carbonpaper-<tester>`); the name below is a
+# placeholder that the stamp overrides, never deployed as-is.
+#
+# State is EPHEMERAL by default: /data (projects, SQLite KV, parquet frames)
+# sits on the machine's root filesystem, which resets on every deploy and on
+# machine replacement. Testers pull their work out through
+# GET /project/{project}/export.zip before an instance is torn down.
+# Opt in to state that survives restarts by attaching a volume on /data:
+#
+#   fly volumes create carbonpaper_data --size 1 --app carbonpaper-<tester>
+#
+# and adding to this file:
+#
+#   [mounts]
+#     source = "carbonpaper_data"
+#     destination = "/data"
+
+app = "carbonpaper-tester"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # Scale-to-zero: the single machine stops when idle and wakes on the next
+  # request. First request after a stop pays the boot (uvicorn + demo seed).
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  # 1GB: pandas + pyarrow + the claude-agent-sdk subprocess need headroom that
+  # the 256MB default does not give.
+  size = "shared-cpu-1x"
+  memory = "1gb"
