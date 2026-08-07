@@ -81,7 +81,7 @@
     {% else %}
       <span class="ov-tile-v">{{ s.runs.n }} run{% if s.runs.n != 1 %}s{% endif %}</span>
       {% if s.runs.awaiting_review > 0 %}
-        <span class="ov-tile-sub review">👤 {{ s.runs.awaiting_review }} awaiting review</span>
+        <span class="ov-tile-sub review">{{ s.runs.awaiting_review }} awaiting review</span>
       {% else %}
         <span class="ov-tile-sub">latest: <span class="run-status status-{{ s.runs.latest_status }}">{{ s.runs.latest_status or 'unknown' }}</span></span>
       {% endif %}

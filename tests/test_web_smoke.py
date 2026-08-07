@@ -140,19 +140,14 @@ def test_build_nav_groups_workflow_children(demo_project):
     assert all(not item.children for item in nav[:-1])
 
 
-def test_build_nav_status_tokens(demo_project):
-    """Each item carries a semantic status token (the template maps it to a glyph)."""
+def test_the_nav_carries_no_status_marks(demo_project):
+    """The sidebar is a table of contents: labels and hrefs, nothing else to decode."""
     from app.web.project_view import build_nav, shell_state
 
     nav = build_nav(shell_state(demo_project / "demo"))
-    status = {item.key: item.status for item in nav}
-    assert status["overview"] == "home"
-    assert status["document"] == "none"       # the fixture writes no document.md
-    assert status["data_model"] == "present"  # the fixture writes one schema
-    assert status["workflow"] == "present"    # the fixture writes two stages
-    children = {c.key: c.status for c in nav[-1].children}
-    assert children["evals"] == "evals"
-    assert children["versions"] == "none"     # no versions created
+    fields = {name for item in nav for name in item.model_dump()}
+    assert fields == {"key", "label", "href", "children"}
+    assert "app-nav-glyph" not in client.get("/project/demo").text
 
 
 def test_workflow_page_points_to_versions_tab():

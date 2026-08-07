@@ -1,7 +1,7 @@
 """View helpers for the project shell: the left-nav tree and the call-to-action.
 
-Each nav item carries a semantic `status` token; project_shell.html maps that
-token to a glyph + colour, so the visual vocabulary lives next to the markup.
+The nav is navigation only — labels and hrefs, no marks. What a section's state is,
+and what is waiting in it, its own page states in words.
 """
 
 from __future__ import annotations
@@ -10,20 +10,15 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from app.core.run_status import RunStatus
 from app.services import project
 
 
 class NavItem(BaseModel):
-    """One sidebar entry: a stable `key` (matched against the active `section` to
-    highlight it), the visible label, the section href, a semantic `status` token
-    (the template maps it to a glyph + colour), and any child entries rendered
-    indented beneath it. Only the Workflow group carries children."""
+    """`key` matches the active section, to highlight it."""
 
     key: str
     label: str
     href: str
-    status: str
     children: list["NavItem"] = Field(default_factory=list)
 
 
@@ -66,24 +61,18 @@ def build_nav(state: project.ProjectState) -> list[NavItem]:
     Versions, Runs, and Evals nested under Workflow — the three things a workflow
     has: its versioned snapshots, its executions, and the evals that score them.
 
-    Each item's `status` is computed from `state` (the truthful on-disk status); the
-    template turns it into a glyph. An absent thing is "none" (renders ○), never a
-    fabricated done-marker."""
+    The tree is navigation, not a status report: it carries no mark at all. Every
+    section's own page states its status, and its queue, in words."""
     base = f"/project/{state.name}"
     return [
-        _nav_leaf("overview", "Overview", base, "home"),
-        _nav_leaf("document", "Document", f"{base}/document",
-                  _present_status(state.has_document)),
-        _nav_leaf("data_model", "Data model", f"{base}/data_model",
-                  _present_status(state.data_model.present)),
+        _nav_leaf("overview", "Overview", base),
+        _nav_leaf("document", "Document", f"{base}/document"),
+        _nav_leaf("data_model", "Data model", f"{base}/data_model"),
         _nav_leaf("workflow", "Workflow", f"{base}/workflow",
-                  _present_status(state.workflow.present),
                   children=[
-                      _nav_leaf("versions", "Versions", f"{base}/workflow/versions",
-                                _present_status(state.versions > 0)),
-                      _nav_leaf("runs", "Runs", f"{base}/runs",
-                                _runs_status(state.runs)),
-                      _nav_leaf("evals", "Evals", f"{base}/evals", "evals"),
+                      _nav_leaf("versions", "Versions", f"{base}/workflow/versions"),
+                      _nav_leaf("runs", "Runs", f"{base}/runs"),
+                      _nav_leaf("evals", "Evals", f"{base}/evals"),
                   ]),
     ]
 
@@ -144,36 +133,9 @@ def _next_action(state: project.ProjectState) -> NextAction:
     )
 
 
-# ─── Nav structure + status tokens ────────────────────────────────────────────
-# A nav item's status is a semantic token (ok / warn / bad / todo / none / review /
-# present / home / evals); project_shell.html maps it to a glyph + colour. Classifying
-# it here (not in Jinja) keeps the classification testable and the template dumb.
+# ─── Nav structure ────────────────────────────────────────────────────────────
 
 
-def _nav_leaf(key: str, label: str, href: str, status: str,
+def _nav_leaf(key: str, label: str, href: str,
               children: list[NavItem] | None = None) -> NavItem:
-    """Build a NavItem with a status token and optional children."""
-    return NavItem(key=key, label=label, href=href, status=status,
-                   children=children or [])
-
-
-def _present_status(present: bool) -> str:
-    """"present" when the thing exists, "none" when it does not."""
-    return "present" if present else "none"
-
-
-def _runs_status(runs: project.RunsSummary) -> str:
-    """The runs' status token: "review" when a run awaits review (that wins), "none"
-    when there are no runs, then by the latest run's status (ok / bad / todo)."""
-    if runs.awaiting_review > 0:
-        return "review"
-    if runs.n == 0:
-        return "none"
-    if runs.latest_status == RunStatus.OK:
-        return "ok"
-    # "error" (singular) is not a RunStatus member the runner ever writes at the
-    # run level (only RunStatus.ERRORS, plural) — matched here defensively
-    # alongside it in case an older/foreign manifest used the singular form.
-    if runs.latest_status in (RunStatus.ERRORS, "error"):
-        return "bad"
-    return "todo"
+    return NavItem(key=key, label=label, href=href, children=children or [])

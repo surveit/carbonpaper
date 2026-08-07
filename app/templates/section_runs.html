@@ -37,7 +37,7 @@
 
 {% if state.runs.awaiting_review > 0 %}
 <div class="banner banner-review">
-  👤 <strong>{{ state.runs.awaiting_review }}</strong> run{% if state.runs.awaiting_review != 1 %}s{% endif %}
+  <strong>{{ state.runs.awaiting_review }}</strong> run{% if state.runs.awaiting_review != 1 %}s{% endif %}
   awaiting review — halted at a human-review queue. Open the run to clear its queue.
 </div>
 {% endif %}
