@@ -1,6 +1,6 @@
 """The one thing llm_transform adds over a plain LLM call: it compiles the
-computed reply spec — output_schema − input_schema — to the Pydantic model the
-agent backend enforces. The call mechanism itself is unchanged (llm.call_llm
+computed reply spec — the output schema minus the input schema — to the
+Pydantic model the agent backend enforces. The call mechanism itself is unchanged (llm.call_llm
 per row, driven by the runtime's row driver)."""
 from __future__ import annotations
 
@@ -22,9 +22,11 @@ def _stage():
         "id": "score", "name": "score", "type": "llm_transform",
         "inputs": [{"id": "load", "schema": {
             "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}]}}],
-        "output_schema": {
-            "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True},
-                        {"name": "score", "type": "int", "nullable": False}]},
+        "signature": {
+            "form": "extends",
+            "reads": [{"input": "load", "columns": [
+                {"name": "text", "type": "str", "nullable": True}]}],
+            "adds": [{"name": "score", "type": "int", "nullable": False}]},
         "llm": {"prompt_template": "Rate: {text}"},
     })
 
@@ -53,7 +55,7 @@ def test_reply_model_is_the_subtracted_spec(monkeypatch):
 def test_reply_model_enforces_the_spec():
     # the model built for the stage rejects a wrong-shaped reply outright
     stage = _stage()
-    spec = stage.output_schema.subtract(stage.inputs[0].table_schema)
+    spec = stage.resolve_output_schema().subtract(stage.inputs[0].table_schema)
     model = spec.to_pydantic_model("score_reply")
     with pytest.raises(ValidationError):
         model.model_validate({"score": "not-a-number-at-all"})

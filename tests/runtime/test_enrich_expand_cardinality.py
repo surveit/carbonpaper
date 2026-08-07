@@ -123,8 +123,16 @@ def test_a_right_key_sharing_a_subject_columns_name_is_dropped():
                    {"id": "reference",
                     "schema": {"columns": [{"name": "k", "type": "int", "nullable": True},
                                            {"name": "z", "type": "str", "nullable": True}]}}],
-        "output_schema": {"columns": [{"name": "x", "type": "int", "nullable": True},
-                                      {"name": "z", "type": "str", "nullable": True}]},
+        "signature": {
+            "form": "extends",
+            "reads": [
+                {"input": "subject",
+                 "columns": [{"name": "x", "type": "int", "nullable": True}]},
+                {"input": "reference",
+                 "columns": [{"name": "k", "type": "int", "nullable": True}]},
+            ],
+            "adds": [{"name": "z", "type": "str", "nullable": True}],
+        },
         "join": {"keys": [{"left": "x", "right": "k"}], "enrich_with": {"z": "z"}},
     })
     out = handle_enrich(

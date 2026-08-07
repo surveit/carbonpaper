@@ -11,14 +11,14 @@ from pydantic import ValidationError
 from app import models as m
 
 
-def _row_function(output_schema: dict, input_columns: list[dict] | None = None) -> dict:
-    """A minimal python_row_function stage, so a test varies only its schemas."""
+def _row_function(adds: list[dict], input_columns: list[dict] | None = None) -> dict:
+    """A minimal python_row_function stage, so a test varies only its columns."""
     return {
         "id": "t",
         "name": "t",
         "type": "python_row_function",
         "inputs": [{"id": "up", "schema": {"columns": input_columns or [{"name": "id", "type": "str", "nullable": True}]}}],
-        "output_schema": output_schema,
+        "signature": {"form": "extends", "adds": adds},
         "function": {
             "kind": "inline",
             "code": "def transform(row: dict) -> dict:\n    return row\n",
@@ -27,10 +27,10 @@ def _row_function(output_schema: dict, input_columns: list[dict] | None = None) 
 
 
 # ── a stage may not declare a column there ──────────────────────────────────
-def test_output_schema_column_with_a_leading_underscore_is_refused():
+def test_a_signature_add_with_a_leading_underscore_is_refused():
     with pytest.raises(ValidationError) as err:
         m.parse_stage(
-            _row_function({"columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "_error", "type": "str", "nullable": True}]})
+            _row_function([{"name": "_error", "type": "str", "nullable": True}])
         )
     assert "_error" in str(err.value)
     assert "reserved" in str(err.value)
@@ -40,7 +40,7 @@ def test_an_input_edge_column_with_a_leading_underscore_is_refused():
     with pytest.raises(ValidationError) as err:
         m.parse_stage(
             _row_function(
-                {"columns": [{"name": "id", "type": "str", "nullable": True}]},
+                [],
                 input_columns=[{"name": "id", "type": "str", "nullable": True}, {"name": "_usage", "type": "str", "nullable": True}],
             )
         )
@@ -52,15 +52,15 @@ def test_a_column_named_only_with_an_underscore_is_refused():
     """Not just the keys the runtime happens to use today — the whole namespace."""
     with pytest.raises(ValidationError):
         m.parse_stage(
-            _row_function({"columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "_anything", "type": "str", "nullable": True}]})
+            _row_function([{"name": "_anything", "type": "str", "nullable": True}])
         )
 
 
 def test_an_underscore_inside_a_column_name_is_fine():
     stage = m.parse_stage(
-        _row_function({"columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "issue_area", "type": "str", "nullable": True}]})
+        _row_function([{"name": "issue_area", "type": "str", "nullable": True}])
     )
-    assert [c.name for c in stage.output_schema.columns] == ["id", "issue_area"]
+    assert [c.name for c in stage.resolve_output_schema().columns] == ["id", "issue_area"]
 
 
 def test_an_underscore_prefixed_key_nested_in_a_json_column_is_fine():
@@ -68,26 +68,24 @@ def test_an_underscore_prefixed_key_nested_in_a_json_column_is_fine():
     the frame, so it collides with no machinery."""
     stage = m.parse_stage(
         _row_function(
-            {
-                "columns": [
-                    {"name": "id", "type": "str", "nullable": True},
-                    {
-                        "name": "payload",
-                        "type": "json",
-                        "fields": [{"name": "_raw", "type": "str", "nullable": True}],
-                    "nullable": True},
-                ]
-            }
+            [
+                {
+                    "name": "payload",
+                    "type": "json",
+                    "fields": [{"name": "_raw", "type": "str", "nullable": True}],
+                    "nullable": True,
+                },
+            ]
         )
     )
-    assert stage.output_schema.columns[1].fields[0].name == "_raw"
+    assert stage.resolve_output_schema().columns[1].fields[0].name == "_raw"
 
 
 def test_validate_stage_reports_it_as_a_non_fatal_issue():
     """The compiler's own gate: `validate_stage` surfaces it as an issue string
     rather than raising."""
     issues = m.validate_stage(
-        _row_function({"columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "_error", "type": "str", "nullable": True}]})
+        _row_function([{"name": "_error", "type": "str", "nullable": True}])
     )
     assert any("_error" in issue for issue in issues)
 
@@ -101,7 +99,7 @@ def test_a_plain_table_schema_is_indifferent_to_the_prefix():
 
 def test_every_offending_column_is_reported_not_just_the_first():
     issues = m.validate_stage(
-        _row_function({"columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "_b", "type": "str", "nullable": True}, {"name": "_c", "type": "str", "nullable": True}]})
+        _row_function([{"name": "_b", "type": "str", "nullable": True}, {"name": "_c", "type": "str", "nullable": True}])
     )
     joined = " ".join(issues)
     assert "'_b'" in joined and "'_c'" in joined

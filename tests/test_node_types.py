@@ -33,20 +33,18 @@ def test_every_stage_model_names_the_blocks_NODE_TYPES_advertises() -> None:
         stage_type = get_args(cls.model_fields["type"].annotation)[0].value
         required = {
             name for name, field in cls.model_fields.items()
-            if field.is_required() and name not in ("id", "name", "type")
+            if field.is_required() and name not in ("id", "name", "type", "signature")
         }
         assert required == set(node_types.NODE_TYPES[stage_type].blocks), stage_type
 
 
 def test_signature_form_matches_each_models_signature_annotation() -> None:
     """The catalog names the form the class's own `signature` field will validate."""
-    from typing import Optional
-
     from app.models.stages.signature import ExtendsSignature, ReplacesSignature
 
     by_annotation = {
-        Optional[ExtendsSignature]: "extends",
-        Optional[ReplacesSignature]: "replaces",
+        ExtendsSignature: "extends",
+        ReplacesSignature: "replaces",
     }
     for cls in get_args(get_args(Stage)[0]):
         stage_type = get_args(cls.model_fields["type"].annotation)[0].value

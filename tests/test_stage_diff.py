@@ -39,13 +39,15 @@ _IN_COLUMNS = [
 _OUT_COLUMNS = _IN_COLUMNS + [{"name": "label", "type": "str", "nullable": True}]
 
 
-def _row_stage(output_columns: list[dict] | None = None) -> Stage:
+def _row_stage(adds: list[dict] | None = None) -> Stage:
     return parse_stage({
         "id": "classify", "name": "Classify", "type": "python_row_function",
         "inputs": [{"id": LOAD_ID, "schema": {"columns": _IN_COLUMNS}}],
         "function": {"kind": "inline",
                      "code": "def transform(row):\n    return row\n"},
-        "output_schema": {"columns": output_columns or _OUT_COLUMNS},
+        "signature": {"form": "extends",
+                      "adds": adds if adds is not None
+                      else [{"name": "label", "type": "str", "nullable": True}]},
     })
 
 
@@ -58,13 +60,18 @@ REF_ID = "ref"
 _REF_PATH = f"outputs/{REF_ID}.parquet"
 
 
-def _join_stage(stage_type: str, output_columns: list[dict] | None = None) -> Stage:
+def _join_stage(stage_type: str) -> Stage:
     return parse_stage({
         "id": "route", "name": "Route", "type": stage_type,
         "inputs": [{"id": LOAD_ID, "schema": {"columns": _IN_COLUMNS}},
                    {"id": REF_ID, "schema": {"columns": _REF_COLUMNS}}],
         "join": {"keys": [{"left": "name", "right": "name"}], "enrich_with": {"extra": "extra"}},
-        "output_schema": {"columns": output_columns or _ENRICHED_COLUMNS},
+        "signature": {
+            "form": "extends",
+            "reads": [{"input": LOAD_ID, "columns": [{"name": "name", "type": "str", "nullable": True}]},
+                      {"input": REF_ID, "columns": [{"name": "name", "type": "str", "nullable": True}]}],
+            "adds": [{"name": "extra", "type": "str", "nullable": True}],
+        },
     })
 
 
@@ -73,7 +80,7 @@ def _filter_stage() -> Stage:
         "id": "keep", "name": "Keep", "type": "filter_rows",
         "inputs": [{"id": LOAD_ID, "schema": {"columns": _IN_COLUMNS}}],
         "filter": {"code": "def should_include(row):\n    return True\n"},
-        "output_schema": {"columns": _IN_COLUMNS},
+        "signature": {"form": "extends"},
     })
 
 
@@ -122,7 +129,7 @@ def test_changed_cells_are_counted_over_the_whole_frame_and_marked(tmp_path: Pat
     out_rel = _write_output(tmp_path, "classify", pd.DataFrame(
         {"name": ["a", "B", "C"], "val": [1, 2, 3]}))
 
-    diff = _diff(tmp_path, _row_stage(_IN_COLUMNS), out_rel)
+    diff = _diff(tmp_path, _row_stage(adds=[]), out_rel)
 
     assert diff is not None
     name_column = next(c for c in diff.columns if c.name == "name")
@@ -140,7 +147,7 @@ def test_an_unchanged_passthrough_reports_every_value_carried(tmp_path: Path) ->
     _write_output(tmp_path, LOAD_ID, frame)
     out_rel = _write_output(tmp_path, "classify", frame.copy())
 
-    diff = _diff(tmp_path, _row_stage(_IN_COLUMNS), out_rel)
+    diff = _diff(tmp_path, _row_stage(adds=[]), out_rel)
 
     assert diff is not None
     assert diff.changed_cells_total == 0
@@ -158,10 +165,7 @@ def test_the_column_spine_is_the_input_frame_with_the_added_columns_after_it(
     _write_output(tmp_path, LOAD_ID, pd.DataFrame({"name": ["a"], "val": [1]}))
     out_rel = _write_output(tmp_path, "classify", pd.DataFrame(
         {"name": ["a"], "label": ["x"]}))
-    out_columns = [{"name": "name", "type": "str", "nullable": True},
-                   {"name": "label", "type": "str", "nullable": True}]
-
-    diff = _diff(tmp_path, _row_stage(out_columns), out_rel)
+    diff = _diff(tmp_path, _row_stage(), out_rel)
 
     assert diff is not None
     assert [(c.name, c.state) for c in diff.columns] == [
@@ -181,7 +185,10 @@ def test_an_llm_transform_is_admitted_to_the_row_aligned_diff(tmp_path: Path) ->
         "id": "judge", "name": "Judge", "type": "llm_transform",
         "inputs": [{"id": LOAD_ID, "schema": {"columns": _IN_COLUMNS}}],
         "llm": {"prompt_data_template": "{name}"},
-        "output_schema": {"columns": _OUT_COLUMNS},
+        "signature": {"form": "extends",
+                      "reads": [{"input": LOAD_ID, "columns": [
+                          {"name": "name", "type": "str", "nullable": True}]}],
+                      "adds": [{"name": "label", "type": "str", "nullable": True}]},
     })
     _write_output(tmp_path, LOAD_ID, pd.DataFrame({"name": ["a"], "val": [1]}))
     out_rel = _write_output(tmp_path, "judge", pd.DataFrame(
@@ -262,7 +269,7 @@ def test_an_enrich_that_dropped_a_subject_column_shows_it_carrying_the_input_val
     _write_output(tmp_path, REF_ID, pd.DataFrame({"name": ["a", "b"], "extra": ["p", "q"]}))
     out_rel = _write_output(tmp_path, "route", pd.DataFrame(
         {"name": ["a", "b"], "extra": ["p", "q"]}))
-    stage = _join_stage("enrich", _REF_COLUMNS)
+    stage = _join_stage("enrich")
 
     diff = _join_diff(tmp_path, stage, out_rel)
 
@@ -337,10 +344,7 @@ def test_a_row_aligned_tally_names_the_columns_and_the_changed_cells(tmp_path: P
     _write_output(tmp_path, LOAD_ID, pd.DataFrame({"name": ["a", "b"], "val": [1, 2]}))
     out_rel = _write_output(tmp_path, "classify", pd.DataFrame(
         {"name": ["A", "b"], "label": ["x", "y"]}))
-    out_columns = [{"name": "name", "type": "str", "nullable": True},
-                   {"name": "label", "type": "str", "nullable": True}]
-
-    diff = _diff(tmp_path, _row_stage(out_columns), out_rel)
+    diff = _diff(tmp_path, _row_stage(), out_rel)
 
     assert diff is not None
     assert diff.tally == ["+1 col", "−1 col", "1 cell changed"]
@@ -352,7 +356,7 @@ def test_a_row_aligned_tally_states_the_zero_change_it_measured(tmp_path: Path) 
     _write_output(tmp_path, LOAD_ID, frame)
     out_rel = _write_output(tmp_path, "classify", frame.copy())
 
-    diff = _diff(tmp_path, _row_stage(_IN_COLUMNS), out_rel)
+    diff = _diff(tmp_path, _row_stage(adds=[]), out_rel)
 
     assert diff is not None
     # Nothing moved, and the rail still says something true rather than nothing.
@@ -395,7 +399,7 @@ def test_both_shapes_expose_the_output_row_count_under_one_name(tmp_path: Path) 
     kept_rel = _write_output(tmp_path, "keep", pd.DataFrame({"name": ["a"], "val": [1]}))
     _write_lineage(tmp_path, "keep", kept=[0])
 
-    aligned = _diff(tmp_path, _row_stage(_IN_COLUMNS), aligned_rel)
+    aligned = _diff(tmp_path, _row_stage(adds=[]), aligned_rel)
     filtered = _diff(tmp_path, _filter_stage(), kept_rel)
 
     assert isinstance(aligned, RowAlignedDiff) and isinstance(filtered, FilterRowsDiff)
@@ -409,7 +413,7 @@ def test_the_stage_panels_default_window_draws_a_hundred_rows(tmp_path: Path) ->
     _write_output(tmp_path, LOAD_ID, _numbered_frame(120))
     out_rel = _write_output(tmp_path, "classify", _numbered_frame(120))
 
-    diff = _diff(tmp_path, _row_stage(_IN_COLUMNS), out_rel)
+    diff = _diff(tmp_path, _row_stage(adds=[]), out_rel)
 
     assert isinstance(diff, RowAlignedDiff)
     assert len(diff.rows) == 100 and diff.rows_total == 120
@@ -422,7 +426,7 @@ def test_the_row_budget_windows_the_output_frame_of_an_aligned_diff(tmp_path: Pa
     changed = _numbered_frame(total)
     changed["name"] = changed["name"].str.upper()
     out_rel = _write_output(tmp_path, "classify", changed)
-    stage = _row_stage(_IN_COLUMNS)
+    stage = _row_stage(adds=[])
 
     wide = build_stage_diff(stage, tmp_path, out_rel, {LOAD_ID: _LOAD_PATH}, rows_shown=total)
     default = build_stage_diff(stage, tmp_path, out_rel, {LOAD_ID: _LOAD_PATH})
@@ -461,7 +465,7 @@ def test_a_frame_function_gets_no_diff_even_at_matching_row_counts(tmp_path: Pat
         "inputs": [{"id": LOAD_ID, "schema": {"columns": _IN_COLUMNS}}],
         "function": {"kind": "inline",
                      "code": "def transform(df):\n    return df\n"},
-        "output_schema": {"columns": _IN_COLUMNS},
+        "signature": {"form": "replaces", "produces": _IN_COLUMNS},
     })
     frame = pd.DataFrame({"name": ["a", "b"], "val": [1, 2]})
     _write_output(tmp_path, LOAD_ID, frame)
@@ -476,7 +480,7 @@ def test_a_union_gets_no_diff(tmp_path: Path) -> None:
         "inputs": [{"id": LOAD_ID, "schema": {"columns": _IN_COLUMNS}},
                    {"id": "more", "schema": {"columns": _IN_COLUMNS}}],
         "union": {},
-        "output_schema": {"columns": _IN_COLUMNS},
+        "signature": {"form": "replaces", "produces": _IN_COLUMNS},
     })
     _write_output(tmp_path, LOAD_ID, pd.DataFrame({"name": ["a"], "val": [1]}))
     out_rel = _write_output(tmp_path, "both", pd.DataFrame({"name": ["a"], "val": [1]}))

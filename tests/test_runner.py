@@ -495,14 +495,16 @@ def test_run_subset_surfaces_the_real_row_failure_message(tmp_path, monkeypatch)
     load = parse_stage({
         "id": "load", "name": "Load items", "type": "input_data",
         "connector": {"kind": "file"},
-        "output_schema": _ID_TEXT_SCHEMA,
+        "signature": {"form": "replaces", "produces": _ID_TEXT_SCHEMA["columns"]},
     })
     score = parse_stage({
         "id": "score", "name": "Score items", "type": "llm_transform",
         "inputs": [{"id": "load", "schema": _ID_TEXT_SCHEMA}],
-        "output_schema": {
-            "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True},
-                        {"name": "score", "type": "int", "nullable": False}]},
+        "signature": {
+            "form": "extends",
+            "reads": [{"input": "load", "columns": [
+                {"name": "text", "type": "str", "nullable": True}]}],
+            "adds": [{"name": "score", "type": "int", "nullable": False}]},
         "llm": {"prompt_template": "Rate: {text}"},
     })
     workflow = Workflow(stages=[load, score])
@@ -527,22 +529,21 @@ def test_run_subset_preserves_partial_work_in_the_manifest_on_a_mid_frontier_err
     load = parse_stage({
         "id": "load", "name": "Load items", "type": "input_data",
         "connector": {"kind": "file"},
-        "output_schema": _ID_TEXT_SCHEMA,
+        "signature": {"form": "replaces", "produces": _ID_TEXT_SCHEMA["columns"]},
     })
     clean = parse_stage({
         "id": "clean", "name": "Clean rows", "type": "python_row_function",
         "inputs": [{"id": "load", "schema": {
             "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}]}}],
-        "output_schema": {
-            "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}]},
+        "signature": {"form": "extends"},
         "function": {"kind": "inline", "code": "def transform(row): return row"},
     })
     boom = parse_stage({
         "id": "score", "name": "Score rows", "type": "python_row_function",
         "inputs": [{"id": "clean", "schema": {
             "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}]}}],
-        "output_schema": {
-            "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True}]},
+        "signature": {"form": "extends",
+                      "adds": [{"name": "score", "type": "int", "nullable": True}]},
         "function": {"kind": "inline",
                      "code": "def transform(row):\n    raise ValueError('kaboom')"},
     })
