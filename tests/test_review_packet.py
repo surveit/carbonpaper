@@ -16,6 +16,7 @@ from app.models.review_guide import ReviewGuideStep
 from app.services import versioning, workspace
 from app.services.versioning import ReviewGuide
 from app.web.review_packet import export_review_packet
+from app.services.review_packet.notebook import NOTEBOOK_FILE
 from app.web.review_packet.pages import PACKET_MAX_TABLE_ROWS
 from app.web.routers.review_packet import _write_zip
 from app.web.loading import MAX_TABLE_ROWS
@@ -489,3 +490,15 @@ def test_the_packet_zip_trades_bytes_for_speed_on_compression(tmp_path):
     assert entry.filename == "packet-root/big.csv"
     assert entry.compress_type == zipfile.ZIP_DEFLATED
     assert entry.compress_size > len(default_level.getvalue())
+
+
+def test_the_packet_carries_the_notebook_beside_its_data(exported):
+    # The notebook reads `data/…` relative to itself, so it ships with that folder.
+    assert NOTEBOOK_FILE in exported.files
+    notebook = json.loads((exported.root / NOTEBOOK_FILE).read_text(encoding="utf-8"))
+    loads = [
+        "".join(c["source"]) for c in notebook["cells"] if c["cell_type"] == "code"
+    ]
+    assert any("read_csv" in cell for cell in loads)
+    for name in (n for n in exported.files if n.startswith("data/")):
+        assert (exported.root / name).is_file()
