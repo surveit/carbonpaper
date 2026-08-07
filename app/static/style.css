@@ -326,6 +326,9 @@ table.kv tr + tr th, table.kv tr + tr td { border-top: 1px solid var(--border); 
 }
 
 /* workflow */
+/* border-box, because .workflow-full sets `width: 100%`: on the default
+   content-box that width is the padding box's INNER edge, so the card lands
+   50px wider than the column it sits in and scrolls that column sideways. */
 .workflow {
     margin: 24px 0;
     padding: 24px;
@@ -333,6 +336,7 @@ table.kv tr + tr th, table.kv tr + tr td { border-top: 1px solid var(--border); 
     border: 1px solid var(--border);
     border-radius: 6px;
     overflow-x: auto;
+    box-sizing: border-box;
 }
 .mermaid { text-align: center; background: transparent; border: 0; padding: 0; white-space: pre; }
 
