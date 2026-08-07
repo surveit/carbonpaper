@@ -5,6 +5,7 @@ their readers see, so the answer a newsroom stood behind is already in the .ipyn
 Cells are kept as rendered text; coercion belongs to the comparison, not the golden."""
 from __future__ import annotations
 
+import csv
 import json
 import re
 from html.parser import HTMLParser
@@ -200,3 +201,23 @@ class _TableReader(HTMLParser):
     def handle_data(self, data: str) -> None:
         if self._open is not None and self._cells:
             self._cells[-1] += data
+
+
+def read_golden_csv(path: Path) -> GoldenTable:
+    """A golden that is a committed DATA file rather than a notebook's rendered output.
+
+    Cells stay text for the same reason the notebook path keeps them text: coercion is the
+    comparison's job. Any re-sorting a case needs is curation, not extraction."""
+    with path.open(newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        columns = list(reader.fieldnames or [])
+        if not columns:
+            raise ValueError(f"{path} has no header row")
+        rows: list[GoldenRow] = [
+            {name: (None if (row.get(name) or "") in _RENDERED_ABSENT else row[name])
+             for name in columns}
+            for row in reader
+        ]
+    if not rows:
+        raise ValueError(f"{path} has a header but no rows")
+    return GoldenTable(columns=columns, rows=rows)
