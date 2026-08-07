@@ -541,15 +541,20 @@ table.schema tr:last-child td { border-bottom: 0; }
     color: var(--fg);
 }
 
-/* Transform config blocks */
+/* Transform config blocks — consecutive sections of ONE pane, so a rule between
+   them rather than a frame around each. Boxing every section reads as a stack of
+   unrelated cards, which is wrong: description, examples and code are three
+   views of the same step. The rule is drawn between siblings, never above the
+   first, so the pane opens on its content. */
 .exec-block {
-    background: var(--exec-bg);
-    border-left: 4px solid var(--exec-border);
-    padding: 16px 20px;
-    border-radius: 0 4px 4px 0;
-    margin: 16px 0;
+    padding: 4px 0 18px;
+    margin: 0;
 }
-.exec-block h2 { margin-top: 0; }
+.exec-block + .exec-block,
+.exec-block + .eval-block,
+.exec-block + .review-block { border-top: 1px solid var(--border); padding-top: 18px; }
+/* Above its own h3s (12px uppercase muted), below the panel's own title. */
+.exec-block h2 { margin-top: 0; font-size: 15px; }
 
 /* The plain-language summary of an authored-code block — the first thing read
    in the Transform pane, and for a non-engineer the only readable statement of
@@ -1183,15 +1188,6 @@ table.data-preview th {
 .tier-transform .tier-head { border-bottom-color: var(--exec-border); }
 .tier-outputs .tier-head { border-bottom-color: #8fb89a; }
 
-/* In the cramped tier columns, neutralize the exec-block's full-width frame so
-   the raw transform reads cleanly. */
-.tier-transform .exec-block {
-    background: transparent;
-    border-left: 0;
-    padding: 0;
-    margin: 0 0 14px;
-}
-.tier-transform .exec-block h2 { font-size: 15px; }
 .tier .schema-card { margin-bottom: 14px; }
 .tier .schema-card h4,
 .tier .preview-head {
