@@ -42,6 +42,7 @@ from app.models.stages.signature import (  # noqa: F401  (re-exported: the stage
     ReplacesSignature,
     TransformSignature,
 )
+from app.models.stages.sort_rows import SortConfig, SortRowsStage
 from app.models.stages.starlark import StarlarkFunction, StarlarkRowFunctionStage
 from app.models.stages.union import UnionConfig, UnionStage
 from app.core.utils import format_errors
@@ -64,6 +65,7 @@ Stage = Annotated[
         PublishStage,
         UnionStage,
         FilterRowsStage,
+        SortRowsStage,
         StarlarkRowFunctionStage,
     ],
     Field(discriminator="type"),
@@ -126,6 +128,7 @@ class StageDraft(StageCommon):
     publish: Optional[PublishConfig] = None
     union: Optional[UnionConfig] = None
     filter: Optional[FilterConfig] = None
+    sort: Optional[SortConfig] = None
     starlark: Optional[StarlarkFunction] = None
 
     # Which SERVER_OWNED_STAGE_FIELDS the submitted draft carried, for the caller
