@@ -9,22 +9,13 @@ from pathlib import Path
 
 from app.models import parse_schema_library
 from app.models.named_schemas import SchemaLibrary
-from app.services import node_review, workspace
+from app.services import workspace
 
 
-def load_data_model(
-    project_dir: Path, *, approved_only: bool = False
-) -> SchemaLibrary | None:
-    """The project's data model as a validated SchemaLibrary; None when absent.
-    With approved_only=True, also None unless the human has APPROVED the model
-    (the node-review gate) — callers that ground work on the model use this so an
-    unapproved model is never passed as if it were reviewed."""
+def load_data_model(project_dir: Path) -> SchemaLibrary | None:
+    """The project's data model as a validated SchemaLibrary; None when absent."""
     schemas = workspace.load_schemas(project_dir)
     if not schemas:
-        return None
-    if (approved_only
-            and node_review.data_model_state(project_dir, schemas)["state"]
-            != node_review.NodeApprovalState.approved):
         return None
     # Strip the loader's bookkeeping keys (_filename/…) before the model validates.
     return parse_schema_library(

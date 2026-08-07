@@ -214,18 +214,6 @@ def _collect_table_fk_edges(schemas: list[dict[str, Any]], names: set[Any]) -> l
     return edges
 
 
-# Node-review BELIEF → stroke colour. Distinct from run status: this is "do we
-# trust HOW this node is modeled". Identical to the --belief-* palette in
-# style.css so a legend chip equals the workflow stroke — enforced by
-# tests/arch/test_status_colour_contract.py.
-REVIEW_STROKE = {
-    "approved": ("#2a8a2a", "3px"),       # trusted → green
-    "unreviewed": ("#9aa3ad", "1.5px"),   # not yet reviewed → grey
-    "rejected": ("#cc2a2a", "3px"),       # rejected → red
-    "edited_stale": ("#cc8a00", "3px"),   # approved then edited → amber
-}
-
-
 def _node_view(s: Stage | dict[str, Any]) -> dict[str, Any]:
     """Read the label/edge fields a node needs off EITHER a typed Stage or a raw
     draft dict, into a uniform dict. The workflow view passes validated Stages; the
@@ -264,13 +252,12 @@ def build_mermaid_graph(
     stages: list[Stage] | list[dict[str, Any]],
     project: str,
     status_by_id: dict[str, str] | None = None,
-    review_by_id: dict[str, str] | None = None,
 ) -> str:
-    """Mermaid flowchart from typed Stages or draft dicts. Stroke = run status, else belief."""
+    """Mermaid flowchart from typed Stages or draft dicts. Stroke = run status."""
     nodes = [_node_view(s) for s in stages]
     lines = ["flowchart LR"]
     for n in nodes:
-        lines.extend(_render_workflow_node_lines(n, status_by_id or {}, review_by_id or {}))
+        lines.extend(_render_workflow_node_lines(n, status_by_id or {}))
     for n in nodes:
         sid = n["id"]
         for upstream in n["input_ids"]:
@@ -281,7 +268,7 @@ def build_mermaid_graph(
 
 # One neutral surface for every stage type: the node's glyph and its type-name
 # subtitle say which type it is, leaving the stroke as the node's only colour —
-# run status, or node-review belief. Values are style.css's --exec-bg / --border /
+# the run status. Values are style.css's --exec-bg / --border /
 # --fg, so a node sits on the same neutral as the rest of the page.
 _NODE_SURFACE = "fill:#f7f7f4,stroke:#d4d4d0,color:#1a1a1a"
 # What TYPE_CLASS falls back to for a stage type it does not map.
@@ -322,10 +309,10 @@ _STATUS_STROKE: dict[str, tuple[str, str]] = {
 
 
 def _render_workflow_node_lines(
-    n: dict[str, Any], status_by_id: dict[str, str], review_by_id: dict[str, str]
+    n: dict[str, Any], status_by_id: dict[str, str]
 ) -> list[str]:
     """One node's flowchart declaration, click handler (always the one dispatcher,
-    static/diagram_nodes.js), and (if a status/belief applies) a `style` line."""
+    static/diagram_nodes.js), and (if a status applies) a `style` line."""
     sid = n["id"]
     stype = n["type"]
     status = status_by_id.get(sid)
@@ -334,7 +321,7 @@ def _render_workflow_node_lines(
         f"    {sid}[{label}]:::{TYPE_CLASS.get(stype, _FALLBACK_NODE_CLASS)}",
         f'    click {sid} call dvNode("{sid}") "{_build_node_tooltip(n)}"',
     ]
-    stroke_line = _resolve_stroke_line(sid, status, review_by_id.get(sid))
+    stroke_line = _resolve_stroke_line(sid, status)
     if stroke_line is not None:
         lines.append(stroke_line)
     return lines
@@ -365,16 +352,10 @@ def _build_node_tooltip(n: dict[str, Any]) -> str:
     return (n["description"] or "Open stage").replace('"', "'")
 
 
-def _resolve_stroke_line(sid: str, status: str | None, belief: str | None) -> str | None:
+def _resolve_stroke_line(sid: str, status: str | None) -> str | None:
     """The `style {sid} stroke:...` override line, or None for the type
-    class's default stroke. Run status (if it carries a stroke) wins over
-    node-review belief."""
-    stroke_spec: tuple[str, str] | None = None
-    if status and status in _STATUS_STROKE:
-        stroke_spec = _STATUS_STROKE[status]
-    elif belief and belief in REVIEW_STROKE:
-        stroke_spec = REVIEW_STROKE[belief]
-    if stroke_spec is None:
+    class's default stroke."""
+    if not status or status not in _STATUS_STROKE:
         return None
-    stroke, width = stroke_spec
+    stroke, width = _STATUS_STROKE[status]
     return f"    style {sid} stroke:{stroke},stroke-width:{width}"

@@ -1,10 +1,10 @@
 {% extends "project_shell.html" %}
 {#
   WORKFLOW — the typed-stage pipeline. Master-detail layout, TOP-BOTTOM:
-    · the mermaid graph (build_mermaid_graph with review_by_id belief colours),
-      full-width on TOP in a zoomable / pannable / fullscreen diagram viewport
-    · on node-click, the per-node review (_node_review.html) DOCKS full-width BELOW
-      the graph — decision bar on top, then Inputs / Transform / Outputs / Spec tabs
+    · the mermaid graph (build_mermaid_graph), full-width on TOP in a zoomable /
+      pannable / fullscreen diagram viewport
+    · on node-click, the per-node panel (_node_panel.html) DOCKS full-width BELOW
+      the graph — Inputs / Transform / Outputs / Spec tabs
     · Run + Create-version controls (the version LIST lives on the Versions tab)
 
   The workflow is GENERATED automatically right after the data model (see
@@ -19,14 +19,12 @@
   Context the route passes:
     state       = project.project_state(mdir); section = "workflow"
     stages      = the compiled/ stages (list of dicts; [] when none)
-    mermaid     = build_mermaid_graph(stages, state.name, review_by_id=...) | None
-    coverage    = node_review.coverage_for(stages, decisions) | None
+    mermaid     = build_mermaid_graph(stages, state.name) | None
     type_class  = TYPE_CLASS
     type_glyph  = TYPE_GLYPH
 
-  Reused (unchanged) routes: node review /node/{id}/review-partial,/decide,/edit;
-  /review/status; create version POST /version; run POST /run; (re)generate POST
-  /generate.
+  Reused (unchanged) routes: node panel /node/{id}/panel,/edit; /workflow/graph;
+  create version POST /version; run POST /run; (re)generate POST /generate.
 #}
 {# The section key stays 'workflow' (internal); the VISIBLE tab title says Workflow. #}
 {% block title %}{{ state.meta.title or state.name }} · Workflow{% endblock %}
@@ -57,18 +55,10 @@
   <div class="wf-head-title">
     <h1>Workflow</h1>
     <p class="lede">Typed stages wiring your data model into a pipeline. Click any node
-      to <strong>review</strong> how that step is modeled — its inputs, transform, and
-      outputs. Node colour = <em>belief</em> (do we trust it). Run it end-to-end, or
-      create an immutable version.</p>
+      to see how that step is modeled — its inputs, transform, and outputs. Run it
+      end-to-end, or create an immutable version.</p>
   </div>
   <div class="actions wf-actions">
-    {% if coverage %}
-    <span class="coverage-badge" id="coverage-badge"
-          title="Workflow nodes a reviewer has approved (trusted). Edit a node and it drops to amber until re-approved.">
-      <b id="cov-approved">{{ coverage.approved }}</b>/<span id="cov-total">{{ coverage.total }}</span> approved
-      <span class="coverage-bar"><span class="coverage-fill" id="cov-fill" style="width: {{ coverage.approved_pct }}%"></span></span>
-    </span>
-    {% endif %}
     {% if stages %}
     {# Running is configured on the Runs page (pick version + set input paths), so
        version and inputs are never split across two surfaces. #}
@@ -117,20 +107,9 @@
 </div>
 {% endif %}
 
-{# ── Graph full-width on top, node review docked full-width below. ── #}
+{# ── Graph full-width on top, the node panel docked full-width below. ── #}
 <div class="wf-stack">
     <div class="wf-top">
-      {# Belief has no text fallback in the node — the stroke is its only channel,
-         so it is the one axis the graph needs a legend for. A node's type is
-         spelled out in its own label (glyph + type-name subtitle). #}
-      <div class="legend">
-        <span class="legend-label">belief</span>
-        <span class="belief-chip belief-approved">approved</span>
-        <span class="belief-chip belief-unreviewed">unreviewed</span>
-        <span class="belief-chip belief-rejected">rejected</span>
-        <span class="belief-chip belief-stale">edited · stale</span>
-      </div>
-
       {% if stages and mermaid %}
       <div class="diagram-block">
         <div class="diagram-tools">
@@ -160,12 +139,11 @@
     </div>{# /.wf-top #}
 
     {% if stages and mermaid %}
-    {# ── Full-width stage detail — the node-review partial loads here on node-click. ── #}
+    {# ── Full-width stage detail — the node panel loads here on node-click. ── #}
     <div class="wf-detail" id="wf-detail">
       <div id="stage-panel">
         <div class="empty-state wf-detail-empty"><p class="muted">Click a node in the graph above to
-          <strong>review</strong> how that step is modeled — its inputs, transform, and outputs,
-          with <strong>approve / reject</strong> at the top.</p></div>
+          see how that step is modeled — its inputs, transform, and outputs.</p></div>
       </div>
     </div>
     {% endif %}
@@ -180,15 +158,15 @@
 
 <script>
 (function () {
-  // ════ Node-click → review panel. Clicking a graph node (or an upstream-input link in
-  //      the open panel) fetches its review/edit partial (_node_review.html) and swaps
+  // ════ Node-click → node panel. Clicking a graph node (or an upstream-input link in
+  //      the open panel) fetches its detail/edit partial (_node_panel.html) and swaps
   //      it into #stage-panel, docking it full-width below the graph. ════
   const METHODOLOGY = {{ state.name | tojson }};
   const panel = document.getElementById('stage-panel');
   const wfDetail = document.getElementById('wf-detail');
 
   let activeStageId = null;
-  // Outline the reviewed node in the graph so the open panel and the graph agree on
+  // Outline the open node in the graph so the open panel and the graph agree on
   // which stage is selected. Retries briefly if the svg hasn't rendered yet (a deep-link
   // on load races the async mermaid render).
   function highlightGraphNode(stageId, _tries) {
@@ -210,7 +188,7 @@
     if (!stageId || !panel) return;
     if (wfDetail) wfDetail.classList.add('loading');
     try {
-      const r = await fetch(`/project/${encodeURIComponent(METHODOLOGY)}/node/${encodeURIComponent(stageId)}/review-partial`);
+      const r = await fetch(`/project/${encodeURIComponent(METHODOLOGY)}/node/${encodeURIComponent(stageId)}/panel`);
       if (!r.ok) {
         panel.innerHTML = `<div class="empty-state"><h2>Error</h2><p>${r.status} loading stage <code>${stageId}</code></p></div>`;
         return;
@@ -246,12 +224,11 @@
     loadStage(sid);
   }
 
-  // ── Belief recolouring: poll /review/status and swap the server-rendered mermaid
-  //    string in place, then update the coverage badge. Called on demand by the node
-  //    panel after a decision/edit (window._pollReviewStatus). ──
-  const statusUrl = `/project/${encodeURIComponent(METHODOLOGY)}/review/status`;
+  // ── Graph refresh: fetch /workflow/graph and swap the server-rendered mermaid
+  //    string in place. Called on demand by the node panel after a spec edit
+  //    (window._refreshWorkflowGraph), which may have changed a stage's inputs. ──
+  const graphUrl = `/project/${encodeURIComponent(METHODOLOGY)}/workflow/graph`;
   const mermaidEl = document.querySelector('pre.mermaid');
-  const $ = id => document.getElementById(id);
 
   function rerenderGraph(src) {
     if (!mermaidEl || !window.mermaid) return;
@@ -264,24 +241,18 @@
     } catch (e) {}
   }
 
-  async function pollReviewStatus() {
+  async function refreshWorkflowGraph() {
     let d;
     try {
-      const r = await fetch(statusUrl, { cache: 'no-store' });
+      const r = await fetch(graphUrl, { cache: 'no-store' });
       if (!r.ok) return;
       d = await r.json();
     } catch (e) { return; }
     if (d.mermaid) rerenderGraph(d.mermaid);
-    const c = d.coverage;
-    if (c) {
-      if ($('cov-approved')) $('cov-approved').textContent = c.approved;
-      if ($('cov-total')) $('cov-total').textContent = c.total;
-      if ($('cov-fill')) $('cov-fill').style.width = (c.approved_pct || 0) + '%';
-    }
   }
-  window._pollReviewStatus = pollReviewStatus;
+  window._refreshWorkflowGraph = refreshWorkflowGraph;
 
-  // ── Create version: snapshot {compiled,schemas} + freeze coverage. ──
+  // ── Create version: snapshot {compiled,schemas}. ──
   const createBtn = document.getElementById('create-version-btn');
   if (createBtn) {
     createBtn.addEventListener('click', async function () {

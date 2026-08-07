@@ -17,7 +17,6 @@ from pydantic import BaseModel, field_validator
 
 from app.core.errors import ProjectExistsError
 from app.models import (
-    Coverage,
     SchemaLibrary,
     Stage,
     StageDraft,
@@ -29,7 +28,7 @@ from app.models.run_manifest import records_a_test_run
 from app.services.versioning import ReviewGuide
 from app.core.persistence import PersistedModel, PersistenceScope
 from app.core.run_status import RunStatus
-from app.services import data_model, node_review, stage_edit, versioning, workspace
+from app.services import data_model, stage_edit, versioning, workspace
 from app.services.loader import (
     load_compiled_dir,
     load_workflow,
@@ -64,29 +63,24 @@ class Project(PersistedModel):
 
 # ─── Status models ────────────────────────────────────────────────────────────
 # The typed shapes project_meta / project_state return. Every field is read off
-# disk truthfully (see project_state); an unknown fact is None / 0 / a "none" state,
-# never a fabricated placeholder. Coverage itself lives in app.models — the
-# shared shape versioning.WorkflowVersion also embeds.
+# disk truthfully (see project_state); an unknown fact is None / 0, never a
+# fabricated placeholder.
 
 
 class DataModelStatus(BaseModel):
-    """The project's data-model (named-schema) status: whether any schemas exist,
-    how many, and the library's approval state — 'approved' | 'edited_stale' |
-    'unreviewed', or 'none' when there is no data model to gate."""
+    """The project's data-model (named-schema) status: whether any schemas exist
+    and how many."""
 
     present: bool
     n_schemas: int
-    state: str
 
 
 class WorkflowStatus(BaseModel):
-    """The project's compiled-workflow status: whether a workflow exists, how many
-    stages, and its approval coverage — None (not a zero object) when there is no
-    workflow to cover."""
+    """The project's compiled-workflow status: whether a workflow exists and how
+    many stages it has."""
 
     present: bool
     n_stages: int
-    coverage: Coverage | None
 
 
 class RunsSummary(BaseModel):
@@ -156,9 +150,8 @@ def _load_compiled_stages(pdir: Path) -> list[dict[str, Any]]:
     """Load the working copy's compiled/ stages as raw dicts, mirroring
     app.services.loader's on-disk convention (sorted glob of compiled/*.json,
     inject _filename/_order, surface a parse error as an _error stage rather than
-    dropping it). Returns [] when there is no compiled/ workflow yet. Used for
-    counting stages and computing approval coverage — so the count and coverage
-    here match exactly what the workflow page loads."""
+    dropping it). Returns [] when there is no compiled/ workflow yet, so the stage
+    count here matches exactly what the workflow page loads."""
     compiled_dir = pdir / "compiled"
     if not compiled_dir.is_dir():
         return []
@@ -286,19 +279,14 @@ def project_state(pdir: Path) -> ProjectState:
       {
         name, meta,
         has_document, document_path,
-        data_model: {present, n_schemas, state},
-        workflow:   {present, n_stages, coverage|None},
+        data_model: {present, n_schemas},
+        workflow:   {present, n_stages},
         versions:   n,
         runs:       {n, awaiting_review, latest_status},
       }
 
-    Every field is read off disk truthfully:
-      - data_model.state uses node_review.data_model_state over the LIVE schemas
-        (approved | edited_stale | unreviewed); 'none' when there is no data model
-        (we report the absence, we do not run the gate on an empty list).
-      - workflow.coverage is node_review.coverage_for over the COMPILED stages
-        (approved/total/…); None — not a zero object — when there is no workflow.
-      - runs comes from _runs_summary (manifest-backed runs only).
+    Every field is read off disk truthfully; runs comes from _runs_summary
+    (manifest-backed runs only).
 
     The shell's "what to do next" CTA is NOT here: its label + section href are a
     UI/routing concern the web layer adds (app.web.project_view.shell_state).
@@ -313,27 +301,11 @@ def project_state(pdir: Path) -> ProjectState:
 
     # ── Data model (named schemas) ──
     schemas = workspace.load_schemas(pdir)
-    dm_present = bool(schemas)
-    if dm_present:
-        dm_state = node_review.data_model_state(pdir, schemas)["state"]
-    else:
-        # No data model authored yet — report the absence; do NOT run the gate over
-        # an empty schema set (that would manufacture an 'unreviewed' verdict for a
-        # thing that doesn't exist).
-        dm_state = "none"
-    data_model = DataModelStatus(present=dm_present, n_schemas=len(schemas), state=dm_state)
+    data_model = DataModelStatus(present=bool(schemas), n_schemas=len(schemas))
 
     # ── Workflow (compiled stages) ──
     stages = _load_compiled_stages(pdir)
-    wf_present = bool(stages)
-    coverage: Coverage | None
-    if wf_present:
-        decisions = node_review.load_node_decisions(pdir)
-        coverage = Coverage.model_validate(node_review.coverage_for(stages, decisions))
-    else:
-        # No workflow → coverage is None (the absence), not a fabricated 0/0 object.
-        coverage = None
-    workflow = WorkflowStatus(present=wf_present, n_stages=len(stages), coverage=coverage)
+    workflow = WorkflowStatus(present=bool(stages), n_stages=len(stages))
 
     # ── Versions + runs ──
     n_versions = len(versioning.list_versions(pdir))

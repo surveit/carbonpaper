@@ -12,10 +12,9 @@ import pytest
 import pydantic
 
 from app.core.errors import ReviewGuideValidationError
-from app.models import StageBase, parse_stage, stage_to_spec_dict
+from app.models import StageBase
 from app.models.review_guide import ReviewGuideStep
 from app.core.persistence import get_store
-from app.services import node_review
 from app.services.loader import WorkflowLoadError
 from app.services.project import save_working_copy_as_version
 from app.services.versioning import (
@@ -95,24 +94,6 @@ def test_create_version_records_parent(tmp_path, monkeypatch):
                                       parent_version=first.version_id)
     assert second.version_id != first.version_id
     assert second.parent_version == first.version_id
-
-
-def test_create_version_freezes_coverage_from_node_decisions(tmp_path):
-    """Coverage is computed from the SNAPSHOT's stages against the live
-    node_decisions store — approving the working copy's current spec before
-    versioning shows up as 100% approved coverage on the frozen version."""
-    _seed(tmp_path)
-    spec = stage_to_spec_dict(parse_stage(_LOAD_STAGE))
-    content_hash = node_review.node_content_hash(spec)
-    node_review.record_node_decision(
-        tmp_path, stage_id="load", content_hash=content_hash,
-        decision="approve", reviewer="human")
-
-    meta = save_working_copy_as_version(tmp_path, message="x", reviewer="test")
-    assert meta.coverage.model_dump() == {
-        "approved": 1, "rejected": 0, "edited_stale": 0, "unreviewed": 0,
-        "total": 1, "approved_pct": 100.0,
-    }
 
 
 def test_create_version_no_compiled_dir_raises_file_not_found(tmp_path):

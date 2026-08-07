@@ -1,7 +1,7 @@
 {% extends "project_shell.html" %}
 {#
-  VERSIONS — every immutable version of a project, newest-first, with approval
-  coverage frozen at creation time. A child of the Workflow group in the shell.
+  VERSIONS — every immutable version of a project, newest-first. A child of the
+  Workflow group in the shell.
   Published state shows read-only here; publishing is an approval act that
   happens on a version's own detail page, after looking at it — this list never
   carries a publish form.
@@ -15,8 +15,7 @@
   <div class="wf-head-title">
     <h1>Versions</h1>
     <p class="lede">Each version is an immutable snapshot of <code>compiled/</code> +
-      <code>schemas/</code> with approval coverage frozen at creation time. A run pins to
-      a published version and reads its snapshot, so it is reproducible against the exact
+      <code>schemas/</code>. A run pins to a published version and reads its snapshot, so it is reproducible against the exact
       workflow it executed.</p>
   </div>
   <div class="actions wf-actions">
@@ -28,7 +27,7 @@
 {% if versions %}
 <table class="stages">
     <thead>
-        <tr><th>version</th><th>created</th><th>message</th><th>parent</th><th>published</th><th>coverage</th></tr>
+        <tr><th>version</th><th>created</th><th>message</th><th>parent</th><th>published</th></tr>
     </thead>
     <tbody>
         {% for v in versions %}
@@ -42,24 +41,6 @@
                 <span class="muted">✓ {% if v.published_at %}{{ v.published_at | friendly_time }}{% else %}published{% endif %}</span>
                 {% else %}
                 <span class="muted">unpublished</span>
-                {% endif %}
-            </td>
-            <td>
-                {% set cov = v.coverage %}
-                {% if cov %}
-                <div class="coverage-cell">
-                    <span class="coverage-bar"><span class="coverage-fill" style="width: {{ cov.approved_pct }}%"></span></span>
-                    <span class="coverage-counts"><b>{{ cov.approved }}</b>/{{ cov.total }} approved</span>
-                </div>
-                {% if cov.edited_stale or cov.rejected or cov.unreviewed %}
-                <span class="coverage-breakdown muted">
-                    {% if cov.edited_stale %}{{ cov.edited_stale }} stale · {% endif %}
-                    {% if cov.rejected %}{{ cov.rejected }} rejected · {% endif %}
-                    {{ cov.unreviewed }} unreviewed
-                </span>
-                {% endif %}
-                {% else %}
-                <span class="muted">—</span>
                 {% endif %}
             </td>
         </tr>

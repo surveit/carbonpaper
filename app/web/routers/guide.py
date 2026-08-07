@@ -1,6 +1,6 @@
 """The Generate-guide button's route: start review-guide authoring for one saved
 workflow version. The turn is watched through the shared generation-session status
-endpoint in app/web/routers/node_review.py, which every generation button polls."""
+endpoint in app/web/routers/node.py, which every generation button polls."""
 
 from __future__ import annotations
 

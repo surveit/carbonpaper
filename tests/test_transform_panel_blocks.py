@@ -58,7 +58,7 @@ def client(tmp_path: Path, monkeypatch) -> TestClient:
 
 
 def test_filter_rows_panel_shows_the_predicate_source(client: TestClient) -> None:
-    response = client.get("/project/alpha/node/select_incidental_filings/review-partial")
+    response = client.get("/project/alpha/node/select_incidental_filings/panel")
     assert response.status_code == 200
     html = response.text
     assert "Row filter" in html
@@ -67,7 +67,7 @@ def test_filter_rows_panel_shows_the_predicate_source(client: TestClient) -> Non
 
 
 def test_union_panel_names_the_inputs_it_concatenates(client: TestClient) -> None:
-    response = client.get("/project/alpha/node/all_filings/review-partial")
+    response = client.get("/project/alpha/node/all_filings/panel")
     assert response.status_code == 200
     html = response.text
     assert "Union" in html

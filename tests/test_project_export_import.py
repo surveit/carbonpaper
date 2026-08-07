@@ -21,7 +21,7 @@ from app.models import (
 )
 from app.models.stages.input_data import Connector, ConnectorKind, InputDataStage
 from app.models.stages.signature import ReplacesSignature
-from app.services import data_model, node_review, project, versioning, workspace
+from app.services import data_model, project, versioning, workspace
 from app.services.loader import load_compiled_dir, write_stage
 from app.services.project import WorkflowFile, export_project, import_project
 
@@ -58,13 +58,6 @@ def test_round_trip_through_json_reproduces_the_source_and_mints_a_version(tmp_p
     pdir = source_examples / name
 
     data_model.write_data_model(pdir, _TINY_LIBRARY)
-    # Hash the schemas as WRITTEN (workspace.load_schemas), not the in-memory
-    # library: write_data_model dumps with exclude_none=True, so the on-disk
-    # (and therefore re-loaded) form omits unset fields the in-memory dump
-    # would still carry as explicit nulls — hashing the wrong form would
-    # record an approval under a hash data_model_state can never match.
-    dm_hash = node_review.schema_library_content_hash(workspace.load_schemas(pdir))
-    node_review.approve_schema_library(pdir, content_hash=dm_hash, reviewer="test_reviewer")
 
     compiled = pdir / "compiled"
     compiled.mkdir()
@@ -78,17 +71,6 @@ def test_round_trip_through_json_reproduces_the_source_and_mints_a_version(tmp_p
         ]),
     )
     write_stage(compiled / "01_load_entities.json", stage)
-    stage_hash = node_review.node_content_hash(stage_to_spec_dict(stage))
-    node_review.record_node_decision(
-        pdir, stage_id="load_entities", content_hash=stage_hash,
-        decision="approve", reviewer="test_reviewer", reviewed_at="2026-07-01T00:00:00",
-    )
-
-    # Prove the setup worked BEFORE export, so the post-import "unreviewed"
-    # assertions below are a meaningful contrast, not a vacuous truth.
-    assert project.project_state(pdir).data_model.state == "approved"
-    source_decisions = node_review.load_node_decisions(pdir)
-    assert node_review.approval_state_for(stage_to_spec_dict(stage), source_decisions)["state"] == "approved"
 
     exported = export_project(name)
     wf = WorkflowFile.model_validate_json(exported.to_json())
@@ -109,17 +91,8 @@ def test_round_trip_through_json_reproduces_the_source_and_mints_a_version(tmp_p
     assert entry.stage is not None
     assert stage_to_spec_dict(entry.stage) == stage_to_spec_dict(stage)
 
-    # Review state is NOT part of a WorkflowFile: a fresh import starts with a
-    # clean slate regardless of what the source had recorded.
-    assert node_review.load_node_decisions(target_pdir).empty
-    assert project.project_state(target_pdir).data_model.state == "unreviewed"
-
     versions = versioning.list_versions(target_pdir)
     assert len(versions) == 1
-    assert versions[0].coverage.model_dump() == {
-        "approved": 0, "rejected": 0, "edited_stale": 0, "unreviewed": 1,
-        "total": 1, "approved_pct": 0.0,
-    }
 
 
 def test_a_bundle_from_before_per_type_stages_still_imports(tmp_path):

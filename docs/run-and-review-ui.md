@@ -1,9 +1,9 @@
 # Run & review UI
 
 The screens a workflow *operator* (vs. its author) uses: watching a run,
-reviewing flagged rows, and approving/versioning the workflow itself. Code:
-`app/web/routers/{runs,run_lineage,review,node_review}.py` + `app/templates/`
-(`run_detail.html`, `_run_stage_panel.html`, `queue.html`, `_node_review.html`,
+reviewing flagged rows, and versioning the workflow itself. Code:
+`app/web/routers/{runs,run_lineage,review,node}.py` + `app/templates/`
+(`run_detail.html`, `_run_stage_panel.html`, `queue.html`, `_node_panel.html`,
 `versions.html`) + `app/static/style.css`. All routes live under
 `/project/{project}/…`.
 
@@ -134,22 +134,18 @@ row (`app.core.stage_cache`)
 so they survive re-runs and LLM non-determinism. When all items are decided, a
 **Resume run** button appears.
 
-## Node review + workflow versioning (`_node_review.html`, `versions.html`)
+## The node panel + workflow versioning (`_node_panel.html`, `versions.html`)
 
-Reviewing the *workflow itself*, stage by stage — distinct from reviewing a
-run's flagged rows.
+Reading and editing the *workflow itself*, stage by stage — distinct from
+reviewing a run's flagged rows.
 
-- Each stage carries an approval state (`GET /project/{p}/review/status`,
-  `POST …/node/{stage_id}/decide`). A decision is hashed over the stage's
-  **loaded content** (minus loader bookkeeping keys), so editing a node
-  invalidates its approval and approvals survive file reordering. The invariant
-  and its trap live in `app/services/node_review.py`'s docstring — read it
-  before touching the loader.
+- `GET …/node/{stage_id}/panel` renders one stage's Inputs / Transform / Outputs
+  / Spec; `GET /project/{p}/workflow/graph` re-renders the mermaid graph after an
+  edit changes a stage's inputs.
 - `POST …/node/{stage_id}/edit` is the **only** code path that writes to
   `compiled/`.
 - `POST /project/{p}/version` freezes `compiled/` into a `Version` document (in
-  the store) with approval coverage recorded; `GET /project/{p}/versions` lists
-  the frozen versions.
+  the store); `GET /project/{p}/versions` lists the frozen versions.
 
 ## Where to confirm visually
 

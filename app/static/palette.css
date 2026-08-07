@@ -5,8 +5,8 @@
  * --fg / --muted are the first and second copy in charcoal, --accent is the
  * transfer ink.
  *
- * The run-state (--state-*) and belief (--belief-*) palettes are deliberately NOT
- * here. They are pinned to their Python twins in app/web/diagrams.py and their
+ * The run-state (--state-*) and verdict (--verdict-*) palettes are deliberately
+ * NOT here. --state-* is pinned to its Python twin in app/web/diagrams.py and its
  * ink/tint pairs are contrast-measured, both by
  * tests/arch/test_status_colour_contract.py, which reads style.css. They stay
  * there: they carry meaning, not style, and are not a theme to be swapped.

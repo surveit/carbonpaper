@@ -250,7 +250,7 @@ def test_status_unknown_session_is_404(client: TestClient, tmp_path: Path):
 def test_review_partial_shows_generate_tests_button_for_python_stage(client: TestClient, tmp_path: Path):
     _seed_project(tmp_path)
 
-    response = client.get("/project/alpha/node/double/review-partial")
+    response = client.get("/project/alpha/node/double/panel")
 
     assert response.status_code == 200
     assert '<button type="button" class="btn" data-role="generate-tests"' in response.text
@@ -263,7 +263,7 @@ def test_review_partial_hides_generate_tests_button_for_non_python_stage(
 ):
     _seed_project(tmp_path)
 
-    response = client.get(f"/project/alpha/node/{stage_id}/review-partial")
+    response = client.get(f"/project/alpha/node/{stage_id}/panel")
 
     assert response.status_code == 200
     assert '<button type="button" class="btn" data-role="generate-tests"' not in response.text

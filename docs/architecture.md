@@ -63,7 +63,7 @@ type's registered shape disagrees with that core fact, and
 
 ## `app/compiler/` — prose → LLM generation engines
 Three generators, each an `app.core.agent` Agent targeting a model schema: `data_model.py`
-(document → `SchemaLibrary`, the nouns a human then approves), `stage_tests.py` (one
+(document → `SchemaLibrary`, the nouns the workflow is built on), `stage_tests.py` (one
 python-transform stage + the document → its `StageTest` cases, generated code-blind), and
 `review_guide.py` (one saved version's frozen stages + the document → its `ReviewGuide`).
 All three submit through `submit_answer`, so a schema-invalid reply is **re-asked inside
@@ -78,10 +78,10 @@ Thin `app/main.py` (~40 lines); routes under `/project/{project}/…`. Routers: 
 lists every version newest-first, `/workflow/version/{id}` is one immutable version's
 read-only detail with Publish/Run-this-version; the mutable editor stays at `/workflow`),
 `runs.py` (trigger/list/detail/status-poll, rows + CSV, scratch preview, resume, plus
-running one specific pinned version), `review.py` (review queue), `node_review.py` (node
-approval + editing + version creation + publish — the only writer to `compiled/`),
+running one specific pinned version), `review.py` (review queue), `node.py` (the per-node
+panel + spec editing + version creation + publish — the only writer to `compiled/`),
 `guide.py` (`POST /workflow/version/{id}/guide` — starts review-guide authoring for one
-version, watched through node_review's generation-session status endpoint).
+version, watched through node.py's generation-session status endpoint).
 `web/{config,loading,diagrams}.py` — paths + Jinja · viewer reads over the loader ·
 mermaid/ER builders. `web/{run_header,run_index,run_issues,stage_strip}.py` build what the run
 page and the runs index show about a run: the header's grounding line and its single
@@ -100,8 +100,7 @@ working copy while the scratch re-run refuses to execute (409).
 drives `app/runtime/runner.py`: it resolves the version and loads its stages before handing
 them to the runner, plus resolves what a run pinned — `resolve_version`,
 `read_pinned_version`, `load_run_stages`, `load_pinned_stage_def`); `loader.py` (stage loader, above); `compilation.py` (compile persistence for
-`app/compiler`); `node_review.py` (content-hash approval over stage specs — read its
-docstring; the content-hash invariant must not rot); `versioning.py` (`create_version_from_stages`
+`app/compiler`); `versioning.py` (`create_version_from_stages`
 is the ONE write path for a `WorkflowVersion` document, born unpublished; `publish_version`
 is the metadata-only human-approval act a run's `resolve_version_id` requires before it
 will pin to that version); `drafts.py` (disposable, mutable scratch — a `Draft` document

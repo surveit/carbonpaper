@@ -240,8 +240,8 @@ class StageBase(StageCommon):
 
     # Authored input→expected-output cases for python transforms — the stage's
     # reviewable behavior contract, run by app.runtime.stage_tests. None when the
-    # stage has none: the model dump must not carry a `tests` key for
-    # stages without tests, or every pre-existing belief hash would change.
+    # stage has none, so the model dump carries no `tests` key for a stage
+    # without tests.
     tests: Optional[Sequence[StageTest]] = None
 
     # ── the per-type hooks a subclass answers ────────────────────────────────
@@ -317,9 +317,8 @@ class StageBase(StageCommon):
     @field_validator("tests", mode="before")
     @classmethod
     def _empty_tests_means_absent(cls, v: Any) -> Any:
-        """Normalise `tests: []` to absent, so the model dump (and the
-        belief hash computed over it) is identical whether the key was omitted
-        or given empty."""
+        """Normalise `tests: []` to absent: the dumped spec is then identical
+        whether the key was omitted or given empty."""
         return None if v == [] else v
 
     @model_validator(mode="after")

@@ -26,16 +26,13 @@
     --state-failed: #b3261e; --state-failed-bg: #fbeae8; --state-failed-ink: #96201a;
     --state-review: #2a6ac8; --state-review-bg: #e9f0fb; --state-review-ink: #1f4f9c;
     --state-idle: #7b8089;   --state-idle-bg: #f0f0ee;   --state-idle-ink: #565b63;
-    /* Belief (node-review) palette — how a node is modeled, a separate axis from
-       run state. Identical to the per-node stroke in build_mermaid_graph
-       (app/web/diagrams.py REVIEW_STROKE) so a legend chip equals the colour the
-       workflow node shows. approved→green, unreviewed→grey, rejected→red,
-       stale→amber. Both palettes are pinned to their Python twin by
-       tests/arch/test_status_colour_contract.py. */
-    --belief-approved-bg: #e7f6e7;   --belief-approved-bd: #2a8a2a;
-    --belief-unreviewed-bg: #eceff3; --belief-unreviewed-bd: #9aa3ad;
-    --belief-rejected-bg: #fbeaea;   --belief-rejected-bd: #cc2a2a;
-    --belief-stale-bg: #fdf3e0;      --belief-stale-bd: #cc8a00;
+    /* Verdict palette — a judgement about an authored artifact (a workflow's
+       validation issues, a stage's test certification), a separate axis from run
+       state. pass→green, neutral→grey, fail→red, warn→amber. */
+    --verdict-pass-bg: #e7f6e7;    --verdict-pass-bd: #2a8a2a;
+    --verdict-neutral-bg: #eceff3; --verdict-neutral-bd: #9aa3ad;
+    --verdict-fail-bg: #fbeaea;    --verdict-fail-bd: #cc2a2a;
+    --verdict-warn-bg: #fdf3e0;    --verdict-warn-bd: #cc8a00;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
     font-size: 15px;
     line-height: 1.55;
@@ -587,10 +584,10 @@ table.schema tr:last-child td { border-bottom: 0; }
     background: white;
 }
 .wf-issues > summary { cursor: pointer; }
-.wf-issues-error { border-left-color: var(--belief-rejected-bd); background: var(--belief-rejected-bg); }
-.wf-issues-note  { border-left-color: var(--belief-unreviewed-bd); background: var(--belief-unreviewed-bg); }
+.wf-issues-error { border-left-color: var(--verdict-fail-bd); background: var(--verdict-fail-bg); }
+.wf-issues-note  { border-left-color: var(--verdict-neutral-bd); background: var(--verdict-neutral-bg); }
 /* Clean: a plain block, not a <details> — there is no list to disclose. */
-.wf-issues-clean { border-left-color: var(--belief-approved-bd); background: var(--belief-approved-bg); }
+.wf-issues-clean { border-left-color: var(--verdict-pass-bd); background: var(--verdict-pass-bg); }
 .wf-clean-line { margin: 0; font-size: 14px; }
 .wf-clean-why { margin: 6px 0 0; font-size: 13px; line-height: 1.5; }
 .wf-issues ul { margin: 10px 0 2px; padding: 0; list-style: none; }
@@ -603,8 +600,8 @@ table.schema tr:last-child td { border-bottom: 0; }
     font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px;
     padding: 2px 7px; border-radius: 3px; border: 1px solid;
 }
-.wf-issue-error .wf-issue-kind { background: var(--belief-rejected-bg); color: #802020; border-color: var(--belief-rejected-bd); }
-.wf-issue-note  .wf-issue-kind { background: var(--belief-unreviewed-bg); color: #4a5561; border-color: var(--belief-unreviewed-bd); }
+.wf-issue-error .wf-issue-kind { background: var(--verdict-fail-bg); color: #802020; border-color: var(--verdict-fail-bd); }
+.wf-issue-note  .wf-issue-kind { background: var(--verdict-neutral-bg); color: #4a5561; border-color: var(--verdict-neutral-bd); }
 
 /* Certification badge (_stage_certification.html) — sits directly under the
    summary, because the claim it makes is a claim ABOUT that summary. The `why`
@@ -625,26 +622,26 @@ table.schema tr:last-child td { border-bottom: 0; }
     letter-spacing: 0.4px; padding: 3px 10px; border-radius: 3px; margin-right: 8px;
     border: 1px solid;
 }
-.stage-cert-certified { border-left-color: var(--belief-approved-bd); }
+.stage-cert-certified { border-left-color: var(--verdict-pass-bd); }
 .stage-cert-certified .stage-cert-badge {
-    background: var(--belief-approved-bg); color: #1f5a1f; border-color: var(--belief-approved-bd);
+    background: var(--verdict-pass-bg); color: #1f5a1f; border-color: var(--verdict-pass-bd);
 }
-.stage-cert-failing { border-left-color: var(--belief-rejected-bd); }
+.stage-cert-failing { border-left-color: var(--verdict-fail-bd); }
 .stage-cert-failing .stage-cert-badge {
-    background: var(--belief-rejected-bg); color: #802020; border-color: var(--belief-rejected-bd);
+    background: var(--verdict-fail-bg); color: #802020; border-color: var(--verdict-fail-bd);
 }
 .stage-cert-untested,
-.stage-cert-unsummarised { border-left-color: var(--belief-stale-bd); }
+.stage-cert-unsummarised { border-left-color: var(--verdict-warn-bd); }
 .stage-cert-untested .stage-cert-badge,
 .stage-cert-unsummarised .stage-cert-badge {
-    background: var(--belief-stale-bg); color: #7a4a00; border-color: var(--belief-stale-bd);
+    background: var(--verdict-warn-bg); color: #7a4a00; border-color: var(--verdict-warn-bd);
 }
 /* Grey, not green: nothing ran, so nothing is being certified. */
 .stage-cert-untestable,
-.stage-cert-na { border-left-color: var(--belief-unreviewed-bd); }
+.stage-cert-na { border-left-color: var(--verdict-neutral-bd); }
 .stage-cert-untestable .stage-cert-badge,
 .stage-cert-na .stage-cert-badge {
-    background: var(--belief-unreviewed-bg); color: #4a5561; border-color: var(--belief-unreviewed-bd);
+    background: var(--verdict-neutral-bg); color: #4a5561; border-color: var(--verdict-neutral-bd);
 }
 
 /* Code comes LAST, and open: description → examples → code. */
@@ -1546,71 +1543,9 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
    states its own identity in its header instead, so it renders no view-note. */
 .rows-toolbar .view-note { font-size: .88rem; }
 
-/* ═══ Node review / workflow versioning ══════════════════ */
+/* ═══ Node panel / workflow versioning ══════════════════ */
 
-/* Belief chips — the legend row, the node-review state line, and (inline) hints. */
-.belief-chip {
-    display: inline-block;
-    padding: 3px 10px;
-    border-radius: 3px;
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.3px;
-    border: 1px solid var(--border);
-    font-family: "SFMono-Regular", "Consolas", monospace;
-}
-.belief-chip.inline { padding: 0 6px; font-size: 10px; vertical-align: baseline; }
-.belief-approved   { background: var(--belief-approved-bg);   color: #1f5a1f; border-color: var(--belief-approved-bd); }
-.belief-unreviewed { background: var(--belief-unreviewed-bg); color: #4a525c; border-color: var(--belief-unreviewed-bd); }
-.belief-rejected   { background: var(--belief-rejected-bg);   color: #802020; border-color: var(--belief-rejected-bd); }
-.belief-stale      { background: var(--belief-stale-bg);      color: #7a4a00; border-color: var(--belief-stale-bd); }
-
-/* The label naming which axis a legend row explains. */
-.legend-label {
-    font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px;
-    color: var(--muted); font-weight: 700; margin-right: 2px;
-}
-
-/* Coverage badge (header) + shared coverage bar (header + versions table). */
-.coverage-badge {
-    display: inline-flex; align-items: center; gap: 8px;
-    padding: 6px 12px; border: 1px solid var(--border); border-radius: 4px;
-    background: white; font-size: 13px; color: var(--fg);
-}
-.coverage-badge b { color: #1f5a1f; }
-.coverage-bar {
-    display: inline-block; width: 90px; height: 8px;
-    background: #e8e8e4; border-radius: 5px; overflow: hidden; vertical-align: middle;
-}
-.coverage-fill { display: block; height: 100%; background: var(--belief-approved-bd); transition: width .3s; }
-.coverage-cell { display: flex; align-items: center; gap: 8px; }
-.coverage-counts { white-space: nowrap; font-size: 13px; }
-.coverage-counts b { color: #1f5a1f; }
-.coverage-breakdown { display: block; font-size: 11px; margin-top: 3px; }
-
-/* ── Node-review / edit panel (right pane of the project split view) ── */
-.review-scope {
-    font-size: 13px; margin: 0 0 16px; padding: 10px 14px;
-    background: var(--review-bg); border-left: 3px solid var(--review-border);
-    border-radius: 0 5px 5px 0; color: #802660;
-}
-.review-scope a { color: #802660; text-decoration: underline; }
-
-.node-review { margin: 4px 0 8px; }
-.nr-state-line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
-.nr-hash { font-size: 11px; color: var(--muted); }
-.nr-by { font-size: 12px; }
-.nr-stale-note {
-    font-size: 12px; margin: 4px 0 10px; padding: 8px 12px;
-    background: var(--belief-stale-bg); border-radius: 4px;
-}
-
-/* Decision row reuses the shared .decision-controls + .btn.{approve,reject,modify}. */
-.nr-decide { margin-top: 4px; }
-.nr-decide .nr-note {
-    flex: 1; min-width: 140px; margin-left: auto;
-    padding: 6px 8px; border: 1px solid var(--border); border-radius: 3px; font: inherit; font-size: 13px;
-}
+/* ── Per-node detail / edit panel (docked below the workflow graph) ── */
 
 /* Editable stage spec. */
 .nr-edit { margin-top: 18px; }
@@ -1742,9 +1677,9 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
 }
 
 .delete-btn:hover {
-    background: var(--belief-rejected-bg);
+    background: var(--verdict-fail-bg);
     color: #802020;
-    border-color: var(--belief-rejected-bd);
+    border-color: var(--verdict-fail-bd);
 }
 
 .empty-state .new-methodology-btn { margin-top: 16px; }
@@ -1763,19 +1698,6 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
     margin: 0 0 16px;
     padding: 14px;
 }
-
-/* The gate (approval bar) — one approval over the whole schema set. */
-.gate-bar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
-    margin: 18px 0 6px; padding: 14px 16px; border: 1px solid var(--border);
-    border-radius: 8px; background: #f7f9fc; }
-
-.gate-bar .gate-state { display: flex; align-items: center; gap: 10px; }
-
-.gate-by { font-size: 12px; color: var(--muted); }
-
-.gate-stale-note { flex-basis: 100%; font-size: 12px; margin: 0; color: #7a4a00; }
-
-.approve-dm-btn.is-approved { background: #e8f8e8; color: #1f5a1f; border-color: #2a8a2a; }
 
 .stepper-item:hover:not(.locked) { background: var(--hover); color: var(--fg); }
 
@@ -1806,7 +1728,7 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
    ═══════════════════════════════════════════════════════════════════════════
    One project, framed by a fixed left sidebar (project name + 5 nav items, each
    with a truthful status glyph) and a main content area holding the active
-   section. Reuses the shared --vars, .btn, .belief-chip, .coverage-* primitives.
+   section. Reuses the shared --vars and .btn primitives.
    The header's <main> max-width still bounds the whole shell. */
 
 .app-shell {
@@ -1922,7 +1844,7 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
 
 .app-nav-label { min-width: 0; }
 
-/* Glyph status colours — keep aligned with the belief palette where they overlap. */
+/* Glyph status colours — keep aligned with the verdict palette where they overlap. */
 .app-nav-glyph.glyph-home   { color: var(--accent); }
 
 .app-nav-glyph.glyph-ok     { color: #2a8a2a; }
@@ -2109,13 +2031,9 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
 
 .ov-tile-v.none { color: var(--muted); font-weight: 500; }
 
-.ov-chip { align-self: flex-start; }
-
 .ov-tile-sub { font-size: 12px; color: var(--muted); }
 
 .ov-tile-sub.review { color: var(--state-review-ink); font-weight: 600; }
-
-.ov-tile-bar { width: 100%; height: 8px; margin-top: 2px; }
 
 .ov-foot { font-size: 13px; margin-top: 8px; }
 
@@ -2188,8 +2106,8 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
 
 /* The in-flight "working" indicator (the double-submit guard's visible half). */
 .chat-working { display: none; align-items: center; gap: 8px; margin: 8px 0 0;
-    font-size: 12px; color: #7a4a00; background: var(--belief-stale-bg);
-    border: 1px solid var(--belief-stale-bd); border-radius: 6px; padding: 6px 10px; }
+    font-size: 12px; color: #7a4a00; background: var(--verdict-warn-bg);
+    border: 1px solid var(--verdict-warn-bd); border-radius: 6px; padding: 6px 10px; }
 
 .chat-working.on { display: flex; }
 
@@ -2209,7 +2127,7 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
 
 .dm-er { margin: 14px 0; }
 
-/* Schema-edit textareas (mirror _node_review.html's .edit-textarea look). */
+/* Schema-edit textareas (mirror _node_panel.html's .edit-textarea look). */
 .dm-schema-edit { margin-top: 8px; }
 
 .dm-schema-edit summary { cursor: pointer; color: var(--accent); font-size: 12px; }
@@ -2248,9 +2166,9 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Workflow section: full-width DAG in a zoomable viewport on TOP, the per-node
-   review docked full-width BELOW (section_workflow.html + _node_review.html).
-   (Tab bars, panes, schema cards, belief chips, the decision controls and the
-   JSON editor are shared with the runs view and defined above.)
+   panel docked full-width BELOW (section_workflow.html + _node_panel.html).
+   (Tab bars, panes, schema cards and the JSON editor are shared with the runs
+   view and defined above.)
    ═══════════════════════════════════════════════════════════════════════════ */
 
 /* ── Big / expandable diagram viewport: scroll, zoom, drag-to-pan, fullscreen. The
@@ -2277,8 +2195,8 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
 .diagram-viewport .mermaid { margin: 0; padding: .5rem; overflow: visible;
     width: max-content; min-width: 100%; box-sizing: border-box; }
 .diagram-viewport .mermaid svg { max-width: none !important; height: auto; }
-/* The node currently open in the review panel — outline it in the graph so the two
-   agree on the selection (distinct from the belief FILL colour). */
+/* The node currently open in the panel — outline it in the graph so the two agree
+   on the selection (distinct from the run-status stroke). */
 .diagram-viewport svg g.node.wf-node-active > rect,
 .diagram-viewport svg g.node.wf-node-active > polygon,
 .diagram-viewport svg g.node.wf-node-active > circle,
@@ -2328,18 +2246,13 @@ html[data-diagram-clickable] .mermaid g.node.clickable:hover > path { stroke-wid
 .nr-bar-name h2 { margin: 0; font-size: 18px; }
 .nr-bar-name h2 code { font-size: inherit; color: inherit; }
 .nr-bar-name p { margin: 0; font-size: 13px; color: var(--muted); max-width: 70ch; }
-.nr-bar-decide { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.nr-meta { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 10px 2px 0; font-size: 12px; color: var(--muted); }
-.nr-meta .nr-hash { font-size: 11px; color: var(--muted); }
 .nr-scope { font-style: italic; }
-.nr-stale-note { margin: 8px 2px 0; }
 .nr-tabs { margin-top: 16px; }
 .nr-panes { margin-top: 6px; }
 .nr-panes .schema-card { margin: 0 0 16px; }
 .nr-panes .schema-card h4 { margin: 0 0 8px; font-size: 13px; }
 
-/* Stage tests report (_stage_tests.html). Status colours reuse the
-   belief palette so "passed" reads the same green as an approved node. */
+/* Stage tests report (_stage_tests.html). Status colours reuse the verdict palette. */
 .test-case { margin: 0.5rem 0; }
 .test-case summary { cursor: pointer; }
 .test-status {
@@ -2347,10 +2260,10 @@ html[data-diagram-clickable] .mermaid g.node.clickable:hover > path { stroke-wid
     letter-spacing: 0.4px; padding: 3px 10px; border-radius: 3px; margin-right: 8px;
     border: 1px solid;
 }
-.test-status-passed { background: var(--belief-approved-bg); color: #1f5a1f; border-color: var(--belief-approved-bd); }
+.test-status-passed { background: var(--verdict-pass-bg); color: #1f5a1f; border-color: var(--verdict-pass-bd); }
 .test-status-mismatch,
-.test-status-error { background: var(--belief-rejected-bg); color: #802020; border-color: var(--belief-rejected-bd); }
-.test-status-malformed { background: var(--belief-stale-bg); color: #7a4a00; border-color: var(--belief-stale-bd); }
+.test-status-error { background: var(--verdict-fail-bg); color: #802020; border-color: var(--verdict-fail-bd); }
+.test-status-malformed { background: var(--verdict-warn-bg); color: #7a4a00; border-color: var(--verdict-warn-bd); }
 .test-rows { border-collapse: collapse; margin: 0.3rem 0 0.6rem; }
 .test-rows th, .test-rows td { border: 1px solid var(--border); padding: 0.15rem 0.5rem; font-size: 0.85rem; }
 /* A column the step ADDS: in its output schema, in none of its input schemas. One flat
