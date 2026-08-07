@@ -31,7 +31,7 @@ Below them, one **audit drawer** (`.run-audit`) with the review packet, the raw 
 the run log; closed except on a live run, when the log is the only thing moving.
 
 ## The run page's issue index (`app.web.run_issues` → `_run_issues.html`)
-Between the header and the minimap, an INDEX into the stage panels — every entry is one line
+Inside Run overview, under the header: an INDEX into the stage panels — every entry is one line
 plus a deep link, and the detail stays in the panel's own validation block. It stays in the
 work column, not the nav rail: its four-column table needs the width.
 - **"Why this run stopped"** — one card per `error` stage, leading with which story it is,
@@ -57,8 +57,8 @@ wide graph below that scale, so labels stay readable and the band is panned inst
 fit and fullscreen are icon buttons overlaid in its top-right; `.diagram-where` names the
 parked stage and its position in the run's order, which two visible nodes cannot. It opens
 parked on the run's first stage (`_focusNode(..., {select: false})` — scrolls without
-outlining, so the band shows the flow's start while the panel below still says no stage is
-open). Clicking a node loads the stage panel, exactly as a guide step does.
+outlining, so the band shows the flow's start without claiming a stage the reader has not
+picked). Clicking a node loads the stage section, which until then is not on the page.
 
 **⛶ is the SURVEY.** The `.diagram-block` goes fullscreen, not the viewport, so the whole
 graph arrives with `.diagram-survey` under it: how many stages the run has, how many the
