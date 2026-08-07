@@ -1,7 +1,7 @@
 """The run page's issue index (app/web/run_issues.py + _run_issues.html).
-The two stories a stop can be telling ("the data changed" / "the code broke")
-must read apart at a glance: they route to different people. Everything else the
-run flagged is indexed below it, one line per stage x column x message.
+ONE list: the stop that ended the run is a line of it like any other. The two
+stories a stop can be telling ("the data changed" / "the code broke") must still
+read apart at a glance, because they route to different people.
 """
 from __future__ import annotations
 
@@ -290,16 +290,24 @@ def test_a_severity_nothing_raised_is_left_out_of_the_title_not_counted_as_zero(
     assert "error" not in html
 
 
-def test_a_run_that_finished_with_warnings_opens_the_index_it_would_otherwise_fold():
-    warned = _manifest(_record(
-        "score", "validation_warnings",
-        output_validation_report=_report("output", ("warning", "spend", "off range")),
-    ))
-
-    assert '<details class="issue-panel issue-panel-warn" open>' in _render(warned)
-    assert '<details class="issue-panel issue-panel-warn">' in _render(_manifest(
+def test_a_stop_is_a_line_of_the_same_list_as_the_warnings_it_did_not_cause():
+    """One table, and a heading that counts the stop's own line among the errors."""
+    html = _render(_manifest(
         _refusal("classify_issues"),
         _record("score", "validation_warnings",
                 output_validation_report=_report(
                     "output", ("warning", "spend", "off range"))),
     ))
+
+    assert html.count('<table class="issue-table"') == 1
+    assert "1 warning, 1 error" in html
+    assert "<code>stopped</code>" in html
+
+
+def test_what_only_a_stop_carries_is_nested_under_its_own_line():
+    """A crash's message and traceback are its line's small print, not another row."""
+    html = _render(_manifest(_crash("publish_report")))
+
+    assert html.count("<tr ") == 1
+    assert '<div class="issue-more">' in html
+    assert "<summary>traceback</summary>" in html

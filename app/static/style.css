@@ -1389,43 +1389,26 @@ table.data-preview.scratch th { background: var(--hover); }
 .stage-strip i.status-error, .strip-counts i.status-error { background: var(--state-failed); }
 .stage-strip i.status-cancelled, .strip-counts i.status-cancelled { background: var(--state-idle); }
 
-/* ── The run issue index (_run_issues.html): what stopped the run, then what its
-      records flagged and nobody has read. It sits between the header and the
-      graph, so it is what a reviewer meets after the CTA.
-
-      Every colour here is a run-state variable — an entry is the same failed or
-      warn state the stage strip and the graph nodes already speak in, so nothing
-      new has to be learnt to read it. ── */
-.run-issues { margin: 0 0 1.1rem; display: flex; flex-direction: column; gap: .7rem; }
-.run-issues h2 { margin: 0 0 .45rem; font-size: 12px; text-transform: uppercase;
-    letter-spacing: .06em; color: var(--muted); }
-
-.stop-card { background: var(--state-failed-bg); border: 1px solid var(--state-failed);
-    border-left-width: 4px; border-radius: 0 7px 7px 0; padding: 11px 15px; margin: 0 0 .5rem; }
-.stop-card:last-child { margin-bottom: 0; }
-/* The kicker is how the two stories are told apart at a glance, and they route to
-   different people — so it reads BEFORE the stage id, not as a suffix to it. */
-.stop-kicker { margin: 0 0 2px; font-size: 10.5px; font-weight: 700; letter-spacing: .09em;
-    text-transform: uppercase; color: var(--state-failed-ink); }
-.stop-head { margin: 0; font-size: .95rem; }
-.stop-head > code:first-child { font-weight: 700; }
-.stop-issues { margin: .45rem 0 0; padding-left: 1.15rem; font-size: .85rem; }
-.stop-issues li { margin: 0 0 .15rem; }
-.stop-message { margin: .45rem 0 0; font-size: .82rem;
-    font-family: "SFMono-Regular", "Consolas", monospace; }
+/* ── The run issue index (_run_issues.html): ONE list of what this run's records
+      say went wrong, the stop that ended it included. It sits between the header
+      and the graph, so it is what a reviewer meets after the CTA. The list itself
+      is the shared `.issue-panel` table below; what is here is the small print a
+      stop nests under its own line. ── */
+.run-issues { margin: 0 0 1.1rem; }
+/* A stop names things no other line has room for: the columns it refused, the
+   reason its author wrote, its traceback, the stages it left unrun. They read as
+   that line's footnote — smaller than the message they hang off. */
+.issue-more { margin: .3rem 0 .1rem; font-size: .95em; }
+.issue-more > * { margin: .25rem 0 0; }
+.issue-more ul { padding-left: 1.15rem; }
+.issue-more li { margin: 0 0 .15rem; }
 /* A refusal's reason is prose its author wrote for this reader; only an exception
-   string gets the monospace of `.stop-message`. */
-.stop-reason { margin: .45rem 0 0; font-size: .88rem; max-width: 80ch; }
-.stop-traceback { margin-top: .4rem; font-size: .78rem; }
-.stop-traceback pre { max-height: 15em; overflow: auto; margin: .3rem 0 0; }
-.stop-foot { margin: .6rem 0 0; display: flex; flex-wrap: wrap; align-items: baseline;
-    gap: .35rem 1.1rem; font-size: .81rem; }
-.stop-open { font-weight: 600; color: var(--state-failed-ink); text-decoration: none;
-    border-bottom: 1px solid currentColor; }
-.stop-open code { font-weight: 600; background: transparent; padding: 0; }
-.stop-blocked { color: var(--state-failed-ink); }
-.stop-card code { background: var(--raised); border: 1px solid var(--bad-bd); border-radius: 3px;
-    padding: 0 4px; font-size: .92em; }
+   string gets the monospace. */
+.issue-reason { max-width: 80ch; }
+.issue-raised { font-family: "SFMono-Regular", "Consolas", monospace; font-size: .95em; }
+.issue-traceback > summary { cursor: pointer; color: var(--muted); }
+.issue-traceback pre { max-height: 15em; overflow: auto; margin: .3rem 0 0; }
+.issue-blocked { color: var(--state-failed-ink); }
 
 /* The issue panel + table (_issue_table.html), shared by this page's "Worth a look"
    and the Workflow page's compiler warnings — one way to read a list of issues, on
@@ -1444,7 +1427,10 @@ table.data-preview.scratch th { background: var(--hover); }
 /* The panel's own tone, set by the page: a list someone must clear before signing
    off reads in the failed ink its rows already use. */
 .issue-panel-error .issue-panel-title { color: var(--state-failed-ink); }
-.issue-panel-scroll { max-height: 18em; overflow: auto; border-top: 1px solid var(--border); }
+/* Tall enough that a run's stops — the reason anyone opened the page — are read
+   without scrolling inside a box, capped so a long warning list still cannot push
+   the workflow below it off the screen. */
+.issue-panel-scroll { max-height: 30em; overflow: auto; border-top: 1px solid var(--border); }
 table.issue-table { width: 100%; border-collapse: collapse; font-size: .79rem; }
 .issue-table td { padding: 5px 10px; border-bottom: 1px solid var(--border);
     vertical-align: top; }

@@ -76,11 +76,12 @@ class RunIssues(BaseModel):
     # The two counts the panel is headed by; the WORDING is the shared issue
     # table's, so the Workflow page's heading cannot drift from this one.
     @property
-    def flagged_errors(self) -> int:
-        return self._count_flagged(Severity.error)
+    def error_count(self) -> int:
+        """A stop is ONE line — the issues it names are nested under it, not counted twice."""
+        return len(self.stopped) + self._count_flagged(Severity.error)
 
     @property
-    def flagged_warnings(self) -> int:
+    def warning_count(self) -> int:
         return self._count_flagged(Severity.warning)
 
     def _count_flagged(self, severity: Severity) -> int:

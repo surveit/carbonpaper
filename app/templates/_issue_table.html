@@ -36,7 +36,12 @@
 {% endmacro %}
 
 {# `stage_id` empty draws no link: a run repeats one stage across rows and names it
-   on the first only. #}
+   on the first only.
+
+   Called with a {% call %} block, the block renders UNDER the message as that
+   line's own footnote — what a stop names and nothing else has room for (the
+   columns it refused, its traceback, what it blocked). The index is still one
+   line per issue; this is that line's small print. #}
 {% macro issue_row(severity, stage_id, message, subject=none, tab=none, tags=(), href="#") %}
 <tr class="sev-{{ severity }}">
   <td class="issue-sev">{{ severity }}</td>
@@ -44,6 +49,7 @@
         {%- if tab %} data-stage-tab="{{ tab }}"{% endif %}><code>{{ stage_id }}</code></a>{% endif %}</td>
   <td class="issue-subject">{% if subject %}<code>{{ subject }}</code>{% endif %}</td>
   <td class="issue-message">{{ message }}
-    <span class="issue-tags">{% for tag in tags %}<code>{{ tag }}</code>{% endfor %}</span></td>
+    <span class="issue-tags">{% for tag in tags %}<code>{{ tag }}</code>{% endfor %}</span>
+    {%- if caller %}<div class="issue-more">{{ caller() }}</div>{% endif %}</td>
 </tr>
 {% endmacro %}

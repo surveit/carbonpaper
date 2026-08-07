@@ -1,21 +1,18 @@
 {#
-  RUN ISSUE INDEX — the two things a reviewer needs before the graph.
+  RUN ISSUE INDEX — ONE list, headed by its own counts ("2 errors, 17 warnings"),
+  of everything this run's records say went wrong. Every line is worded by the
+  report that raised it and links the stage panel where the full validation block
+  lives; there is one copy of the detail, and it is not here.
 
-    1. "Why this run stopped" — the stages that ended the run. Each card leads
-       with WHICH of the two stories it is, because they route to different
-       people: the data no longer matches what the stage declares (the data
-       owner's), or the code broke (the engineer's). The data card links the
-       stage panel's Data tab, the crash card its Transform tab.
-    2. The flagged section, headed by its own counts and nothing else ("17
-       warnings, 2 errors") — every issue that did NOT stop the run, across every
-       stage that ran, one line per stage × column × message. Shown on a clean run
-       too: a run that finished with warnings nobody read is the one worth
-       noticing. Open by
-       default only when nothing stopped the run, so a stop keeps the headline.
+  A stop — the stage that ENDED the run — is a line of this list like any other,
+  first and marked `stopped`, its message leading with WHICH of the two stories it
+  is, because they route to different people: the data no longer matches what the
+  stage declares (the data owner's) or the code broke (the engineer's). The first
+  links the panel's Data tab, the second its Transform tab. What only a stop has —
+  the columns it refused, the reason its author wrote, the traceback, the stages
+  downstream that never ran — is nested under its own line.
 
-  An INDEX. Every line is worded by the report that raised it and links the
-  panel where the full validation block lives — there is one copy of the detail.
-  The flagged section is drawn with the issue table the Workflow page also uses.
+  Drawn with the issue table the Workflow page's compiler warnings also use.
 
   Context: issues = app.web.run_issues.RunIssues, links, project, run_id
 #}
@@ -23,60 +20,44 @@
 {% if issues.stopped or issues.flagged %}
 <div class="run-issues" id="run-issues">
 
-{% if issues.stopped %}
-<section class="issue-stops">
-  <h2>Why this run stopped</h2>
+{% call issue_panel(issues.error_count, issues.warning_count, open=true) %}
   {% for stop in issues.stopped %}
-  <article class="stop-card">
-    <p class="stop-kicker">{% if stop.refused_data %}the data changed{% else %}the code broke{% endif %}</p>
-    <p class="stop-head">
-      <code>{{ stop.stage_id }}</code>
-      {%- if stop.kind == 'schema' %} refused its own output — it does not match the schema this stage declares.
-      {%- elif stop.kind == 'refused' %} refused the data it was given.
-      {%- else %} raised <code>{{ stop.error_type }}</code> while it ran.{% endif %}
-    </p>
-
+  {# Data when the values are the question; Transform when what refused them — the
+     declared schema aside, a rule someone wrote — is. #}
+  {% call issue_row(
+       severity="error", stage_id=stop.stage_id, subject="stopped",
+       href=links.stage_anchor(stop.stage_id),
+       tab="data" if stop.kind == 'schema' else "transform",
+       message=("the data changed" if stop.refused_data else "the code broke") ~ " — " ~ (
+         "refused its own output; it does not match the schema this stage declares"
+           if stop.kind == 'schema' else
+         "refused the data it was given"
+           if stop.kind == 'refused' else
+         "raised " ~ stop.error_type ~ " while it ran")) %}
     {% if stop.kind == 'schema' %}
-    <ul class="stop-issues">
-      {% for issue in stop.issues %}
+    <ul>{% for issue in stop.issues %}
       <li>{% if issue.column %}<code>{{ issue.column }}</code> — {% endif %}{{ issue.message }}</li>
-      {% endfor %}
-    </ul>
+    {% endfor %}</ul>
     {% elif stop.kind == 'refused' %}
     {# The reason is prose its author wrote for this reader, not an exception string. #}
-    <p class="stop-reason">{{ stop.error_message }}</p>
+    <p class="issue-reason">{{ stop.error_message }}</p>
     {% else %}
-    <p class="stop-message">{{ stop.error_message }}</p>
+    <p class="issue-raised">{{ stop.error_message }}</p>
     {% endif %}
     {% if stop.traceback and stop.kind != 'schema' %}
-    <details class="stop-traceback"><summary>traceback</summary><pre>{{ stop.traceback }}</pre></details>
+    <details class="issue-traceback"><summary>traceback</summary><pre>{{ stop.traceback }}</pre></details>
     {% endif %}
-
-    <p class="stop-foot">
-      <a class="stop-open" href="{{ links.stage_anchor(stop.stage_id) }}"
-         data-stage-link="{{ stop.stage_id }}"
-         {# Data when the values are the question; Transform when what refused
-            them — the declared schema aside, a rule someone wrote — is. #}
-         data-stage-tab="{% if stop.kind == 'schema' %}data{% else %}transform{% endif %}"
-         >Open <code>{{ stop.stage_id }}</code> → {% if stop.kind == 'schema' %}Data{% else %}Transform{% endif %}</a>
-      {% if stop.never_ran %}
-      {# The named ids stop at _NAMED_BLOCKED_MAX and the remainder is counted out
-         loud — a list this long is unreadable, and a silent cut would read as
-         "that was all of them". #}
-      {% set named = stop.never_ran[:6] %}
-      <span class="stop-blocked">{{ stop.never_ran | length }} stage{{ '' if stop.never_ran | length == 1 else 's' }}
-        downstream did not run: {% for stage_id in named %}<code>{{ stage_id }}</code> {% endfor %}
-        {%- if stop.never_ran | length > named | length %}and {{ stop.never_ran | length - named | length }} more{% endif %}</span>
-      {% endif %}
-    </p>
-  </article>
+    {% if stop.never_ran %}
+    {# The named ids stop at six and the remainder is counted out loud — a list this
+       long is unreadable, and a silent cut would read as "that was all of them". #}
+    {% set named = stop.never_ran[:6] %}
+    <p class="issue-blocked">{{ stop.never_ran | length }} stage{{ '' if stop.never_ran | length == 1 else 's' }}
+      downstream did not run: {% for stage_id in named %}<code>{{ stage_id }}</code> {% endfor %}
+      {%- if stop.never_ran | length > named | length %}and {{ stop.never_ran | length - named | length }} more{% endif %}</p>
+    {% endif %}
+  {% endcall %}
   {% endfor %}
-</section>
-{% endif %}
 
-{% if issues.flagged %}
-{% call issue_panel(issues.flagged_errors, issues.flagged_warnings,
-                    open=not issues.stopped) %}
   {% for stage in issues.flagged %}{% for issue in stage.issues %}
   {# The phases ride at the end of the message rather than in a column of their
      own: a column sized to the longest producer id costs the message the width it
@@ -87,7 +68,6 @@
                subject=issue.column, message=issue.message, tags=issue.phases) }}
   {% endfor %}{% endfor %}
 {% endcall %}
-{% endif %}
 
 </div>
 
