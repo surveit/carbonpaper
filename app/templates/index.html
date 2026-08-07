@@ -26,9 +26,9 @@
         <a href="{{ open_url }}" class="project-name">{{ m.name }}</a>
         <div class="project-status">
             {% if m.is_ready %}
-            <span class="badge python">Live</span>
+            <span class="badge ok">Live</span>
             {% else %}
-            <span class="badge llm">Under development</span>
+            <span class="badge warn">Under development</span>
             {% endif %}
             {% if m.n_runs > 0 %}<span class="status-dot">·</span><span class="status-meta">{{ m.n_runs }} run{% if m.n_runs != 1 %}s{% endif %}</span>{% endif %}
         </div>

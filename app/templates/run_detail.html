@@ -81,10 +81,10 @@
      pane parked at the top is not fading its own first line; the JS below keeps
      --ft/--fb in step with scroll position. */
   .fade-scroll { --ft: 0px; --fb: 0px;
-    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 var(--ft),
-      #000 calc(100% - var(--fb)), transparent 100%);
-    mask-image: linear-gradient(to bottom, transparent 0, #000 var(--ft),
-      #000 calc(100% - var(--fb)), transparent 100%); }
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, var(--fg) var(--ft),
+      var(--fg) calc(100% - var(--fb)), transparent 100%);
+    mask-image: linear-gradient(to bottom, transparent 0, var(--fg) var(--ft),
+      var(--fg) calc(100% - var(--fb)), transparent 100%); }
 
   @media (max-width: 1000px) {
     body { height: auto; overflow: visible; }

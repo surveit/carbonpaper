@@ -114,7 +114,7 @@
                       border-top: 1px solid var(--border); }
   .guide-steps > li > div { min-width: 0; flex: 1; }
   .guide-steps .n { flex: 0 0 18px; height: 18px; margin-top: 2px; border-radius: 50%;
-                    background: var(--fg); color: #fff; font-size: 10px;
+                    background: var(--fg); color: var(--on-dark); font-size: 10px;
                     display: flex; align-items: center; justify-content: center; }
   .guide-steps h3 { font-size: 12.5px; margin: 0 0 3px; line-height: 1.35;
                     text-transform: none; letter-spacing: 0; }
@@ -125,7 +125,7 @@
                    color: var(--muted); }
   .guide-steps p code, .guide-stage-row code {
     font-family: ui-monospace, monospace; font-size: .88em; padding: 1px 4px;
-    border-radius: 3px; background: var(--code-bg); color: var(--fg);
+    border-radius: 3px; background: var(--sunk-deep); color: var(--fg);
     word-break: break-word; }
 
   /* Names the middle part, so the stage rows read as the section's workings rather
@@ -157,12 +157,12 @@
     box-shadow: 0 0 0 2px var(--state-review-bg);
     border-radius: 2px; font-weight: 800; }
   .guide-stage-id { font-family: ui-monospace, monospace; font-size: 10.5px;
-                    color: var(--fg); background: var(--code-bg);
+                    color: var(--fg); background: var(--sunk-deep);
                     padding: 1px 4px; border-radius: 3px; white-space: nowrap; }
   /* Named by the guide but not executed by THIS run: still shown, still linked. */
   .guide-stage-row.absent { color: var(--muted); }
   .guide-stage-row.absent .guide-stage-id { border-bottom: 1px dashed var(--muted); }
-  .guide-stage-row.unresolved { border: 1px dashed var(--warn-border);
+  .guide-stage-row.unresolved { border: 1px dashed var(--warn-bd);
                                 background: var(--warn-bg); color: var(--fg);
                                 padding: 3px 6px; }
 

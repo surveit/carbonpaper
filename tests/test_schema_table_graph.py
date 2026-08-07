@@ -70,11 +70,11 @@ def test_schema_with_no_name_draws_no_node():
     src = build_schema_table_graph(schemas)
     assert src == "\n".join([
         "flowchart LR",
-        "    classDef input fill:#e8f4f8,stroke:#3a8ca8,color:#000",
-        "    classDef aggregate fill:#f0f0e6,stroke:#888533,color:#000",
-        "    classDef python fill:#eef2f7,stroke:#4a5e85,color:#000",
-        "    classDef human fill:#fce8f4,stroke:#c0399a,color:#000",
-        "    classDef custom fill:#fde8e8,stroke:#cc3333,color:#000",
+        "    classDef aggregate fill:#fbfbfb,stroke:#e1e1e1,color:#24272b",
+        "    classDef custom fill:#fbfbfb,stroke:#e1e1e1,color:#24272b",
+        "    classDef human fill:#fbfbfb,stroke:#e1e1e1,color:#24272b",
+        "    classDef input fill:#fbfbfb,stroke:#e1e1e1,color:#24272b",
+        "    classDef python fill:#fbfbfb,stroke:#e1e1e1,color:#24272b",
     ])
 
 

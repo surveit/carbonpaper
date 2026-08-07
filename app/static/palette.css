@@ -1,45 +1,129 @@
-/* The carbon-paper palette: every colour the app's chrome is made of.
+/* The carbon-paper palette: every colour the app spends, declared once.
  *
- * Carbon paper is a cream sheet and a blue-black transfer ink, and each copy
- * down the stack comes out fainter. That is the whole scheme: --bg is the sheet,
- * --fg / --muted are the first and second copy in charcoal, --accent is the
- * transfer ink.
+ * A carbon set is a WHITE top sheet and a blue-black transfer ink, and each copy
+ * down the stack comes out fainter. --bg is the sheet, --fg / --muted are the
+ * first and second copy, --accent is the transfer. (The earlier cream sheet was
+ * invented: the carbon tissue is dark, the top ply is white, and the canary and
+ * pink plies below it are tinted to mark them as copies, not originals. Docs:
+ * madehow.com/Volume-1/Carbon-Paper.html.)
  *
- * The run-state (--state-*) and verdict (--verdict-*) palettes are deliberately
- * NOT here. --state-* is pinned to its Python twin in app/web/diagrams.py and its
- * ink/tint pairs are contrast-measured, both by
- * tests/arch/test_status_colour_contract.py, which reads style.css. They stay
- * there: they carry meaning, not style, and are not a theme to be swapped.
+ * No other file may carry a colour literal — tests/arch/test_palette_owns_colour.py
+ * fails on one. The single exception is app/web/diagrams.py: a mermaid `style`
+ * line takes a literal hex and cannot read a custom property, so it repeats
+ * these values in Python and tests/arch/test_status_colour_contract.py pins
+ * every one of them back to the property below that it copies.
  */
 
 :root {
-    /* The sheet */
-    --bg: #f8f6f1;
-    --border: #ddd8ce;
-    --hover: #ede9e0;
+    /* ── The sheet ────────────────────────────────────────────────────────
+       Six surfaces on one axis: --raised sits above the sheet, --hover and the
+       two --sunk levels below it, then the two rule weights. --raised is pure
+       white so a card lifts off the canvas without needing a shadow.
 
-    /* The ink, first copy then second */
+       The ladder steps evenly in lightness (CIE L* 98.6 / 97.0 / 95.4 / 93.6)
+       at chroma ZERO. It has no temperature, and that is the point: the paper
+       is the one surface a hue can only hurt. Two earlier versions proved it.
+       A cream ladder let chroma climb 2.6 -> 7.9 as it darkened, so the lower
+       surfaces went muddy rather than simply lower, and it sat warm under cool
+       blue-black text — two palettes bolted together across the two things you
+       look at most. Swinging it onto the ink's hue instead fixed the clash and
+       bought a sheet that read cold. Neutral is what is left, and it is right:
+       the ink carries the only temperature in the app. Do not give the paper a
+       hue. --border-strong is the second rule weight, for a card that has to
+       hold its edge under the cursor. */
+    --raised: #ffffff;
+    --bg: #fbfbfb;
+    --hover: #ededed;
+    --sunk: #f6f6f6;
+    --sunk-deep: #f2f2f2;
+    --border: #e1e1e1;
+    --border-strong: #c9c9c9;
+
+    /* ── The ink ──────────────────────────────────────────────────────────
+       --on-dark is ink printed on a filled chip or button — a different job
+       from --raised even though both are white today: one is paper and one is
+       ink, and a theme that tinted the cards must not tint the button labels. */
     --fg: #24272b;
     --muted: #5c6169;
+    --on-dark: #ffffff;
 
-    /* The transfer */
-    --accent: #35538d;
-
-    /* Sunk surfaces — inline code, the executable-spec block */
-    --code-bg: #efebe2;
-    --exec-bg: #f3f0e9;
-    --exec-border: #c8c1b3;
-
-    /* Code printed light-on-dark */
+    /* ── Code, printed light-on-dark ──────────────────────────────────────
+       --code-fg is a dimmed white, not --on-dark: a button label is one line
+       and a code block is fifty, and full white glares over that distance. */
     --code-deep: #1e2125;
     --code-fg: #e6e8ea;
     --code-comment: #878c93;
 
-    /* Callout tints, warmed to sit on the sheet */
-    --warn-bg: #fbf2e3;
-    --warn-border: #c07c12;
-    --eval-bg: #e9f1f5;
-    --eval-border: #3d8298;
-    --review-bg: #f6e9f2;
-    --review-border: #a8489a;
+    /* ── The five states ──────────────────────────────────────────────────
+       Colour on every page answers ONE question: what happened, and do we trust
+       it. These five are that answer. A stage's TYPE is not on this axis and
+       takes no colour — its glyph names it. Three roles each, not
+       interchangeable:
+         -bd    the stroke, border or fill — the colour you SEE
+         -bg    the tint it sits on — the colour that GROUPS
+         -ink   text on that tint — the colour you READ, >= 6.5:1 on its -bg
+
+       Every -bd sits at the transfer ink's own chroma (CIE C* 36, the value of
+       --info-bd), so nothing on the page is louder than the accent. Left at the
+       saturation they arrived with, red was 1.9x that, amber 1.6x and green 1.4x,
+       and they read as a traffic light taped to the page. --idle is the one
+       exception, near-neutral by definition. The tints are a matching set at one
+       fixed lightness and chroma, so no state's tint outweighs another's.
+
+       Identity is carried by -bd and -ink; every surface spending a tint also
+       carries a label or a border, so never separate two things by tint alone.
+
+       tests/arch/test_status_colour_contract.py measures every ink against its
+       own tint, so a nudged value fails CI rather than a reader. */
+    --good-bd: #3b6c39;   --good-bg: #e2ede1;   --good-ink: #2b5c2b;
+    --warn-bd: #8a602e;   --warn-bg: #f5e8dd;   --warn-ink: #704918;
+    --bad-bd: #8c4538;    --bad-bg: #fae6e2;    --bad-ink: #833d31;
+    --info-bd: #35538d;   --info-bg: #e7eaf9;   --info-ink: #33518b;
+    --idle-bd: #787d86;   --idle-bg: #e8ebee;   --idle-ink: #4d525a;
+
+    /* ── Two callout tints ────────────────────────────────────────────────
+       The node-review page prints two sections that are neither a state nor a
+       stage type: how a node is EVALUATED, and who REVIEWS it. They are the only
+       colour outside the five states, they name the section rather than a hue,
+       and they earn it by being the page's structure — not by labelling a type. */
+    --eval-bd: #2c7180;   --eval-bg: #d9eef4;   --eval-ink: #095a69;
+    --review-bd: #8f4972; --review-bg: #f7e6ef; --review-ink: #7f3a63;
+
+    /* ── Interaction, not meaning ─────────────────────────────────────────
+       --accent is the transfer ink, and it IS the blue hue: an app with one
+       blue cannot drift into two. --focus is the only colour here naming no
+       meaning — it marks the node or field you are ON, and has to stay legible
+       painted over a node already stroked in --info-bd, so it cannot be
+       --accent. It sits one step round the wheel from the accent at chroma 48 —
+       above the hues' 36 so it reads as an interaction rather than a meaning, but
+       nowhere near the 82 it started at, which was an electric blue-violet on a
+       page where nothing else was above 36. The three color-mix values below keep
+       a shadow tied to the ink that casts it instead of to a black of its own. */
+    --accent: var(--info-bd);
+    --accent-deep: var(--info-ink);
+    --focus: #5b4794;
+    --shadow: color-mix(in srgb, var(--fg) 9%, transparent);
+    --focus-glow: color-mix(in srgb, var(--focus) 55%, transparent);
+    --focus-halo: color-mix(in srgb, var(--focus) 20%, transparent);
+
+    /* ── Run state: what the runner did ───────────────────────────────────
+       Five states every run surface speaks in — the status pill, the alert
+       strip, run badges, per-stage borders, the progress bar, and the per-node
+       stroke in build_mermaid_graph (app/web/diagrams.py _STATUS_STROKE).
+       Seven stage statuses map onto them: running and validation_warnings both
+       take warn, cancelled and pending both take idle; the node glyph is what
+       separates each pair. */
+    --state-done: var(--good-bd);   --state-done-bg: var(--good-bg);   --state-done-ink: var(--good-ink);
+    --state-warn: var(--warn-bd);   --state-warn-bg: var(--warn-bg);   --state-warn-ink: var(--warn-ink);
+    --state-failed: var(--bad-bd);  --state-failed-bg: var(--bad-bg);  --state-failed-ink: var(--bad-ink);
+    --state-review: var(--info-bd); --state-review-bg: var(--info-bg); --state-review-ink: var(--info-ink);
+    --state-idle: var(--idle-bd);   --state-idle-bg: var(--idle-bg);   --state-idle-ink: var(--idle-ink);
+
+    /* ── Verdict: did a check pass ────────────────────────────────────────
+       A separate axis from run state — a workflow issue, a stage certification,
+       a test result — spending the same hues so that green means good on both. */
+    --verdict-pass-bg: var(--good-bg);    --verdict-pass-bd: var(--good-bd);
+    --verdict-neutral-bg: var(--idle-bg); --verdict-neutral-bd: var(--idle-bd);
+    --verdict-fail-bg: var(--bad-bg);     --verdict-fail-bd: var(--bad-bd);
+    --verdict-warn-bg: var(--warn-bg);    --verdict-warn-bd: var(--warn-bd);
 }

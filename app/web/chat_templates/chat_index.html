@@ -4,19 +4,20 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Chat sessions</title>
+  <link rel="stylesheet" href="/static/palette.css">
   <style>
     body { font-family: ui-sans-serif, system-ui, sans-serif; max-width: 720px;
-           margin: 40px auto; padding: 0 16px; color: #1b1b1b; }
+           margin: 40px auto; padding: 0 16px; color: var(--fg); background: var(--bg); }
     h1 { font-size: 20px; }
-    .badge { font-size: 12px; color: #666; border: 1px solid #ddd; border-radius: 10px;
+    .badge { font-size: 12px; color: var(--muted); border: 1px solid var(--border); border-radius: 10px;
              padding: 2px 8px; }
     form { margin: 16px 0 24px; }
-    button { font: inherit; padding: 8px 14px; border-radius: 8px; border: 1px solid #2a6ac8;
-             background: #2a6ac8; color: #fff; cursor: pointer; }
+    button { font: inherit; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--info-bd);
+             background: var(--info-bd); color: var(--on-dark); cursor: pointer; }
     ul { list-style: none; padding: 0; }
-    li { border: 1px solid #eee; border-radius: 8px; padding: 10px 12px; margin: 6px 0; }
-    a { color: #2a6ac8; text-decoration: none; }
-    .muted { color: #888; font-size: 12px; }
+    li { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin: 6px 0; }
+    a { color: var(--info-bd); text-decoration: none; }
+    .muted { color: var(--muted); font-size: 12px; }
   </style>
 </head>
 <body>
