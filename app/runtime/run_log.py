@@ -168,14 +168,6 @@ def read_events_since(path: Path, from_seq: int) -> list[dict[str, Any]]:
     return out
 
 
-def read_events_window(
-    path: Path, from_seq: int, limit: int | None = None
-) -> list[dict[str, Any]]:
-    """The events in `path` with seq >= from_seq, at most `limit` of them."""
-    events = read_events_since(path, from_seq)
-    return events if limit is None else events[:limit]
-
-
 # ── the per-unit detail sink ─────────────────────────────────────────────────
 # A row mapper is called as a bare `map_row(row, index)` and a batched chunk as
 # `_process_chunk(...)` — neither carries a run log, yet the LLM layer several

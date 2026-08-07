@@ -1,0 +1,25 @@
+{# The run log's disclosure: controls, the event viewport, and the caveat under
+   it. Rendered more than once on a run page — once scoped to the stage in the
+   detail panel, once for the whole run at the bottom — so every hook the client
+   binds is a `js-` class. An id would collide between the two instances, and the
+   one the page happened to define first would take both sets of clicks.
+
+   `tail` is how many events the feed opens on; the caller passes the same number
+   it hands initRunLog, so the copy and the stream are sized by one value. #}
+{% macro run_log_panel(summary, tail) %}
+<details class="run-log-panel">
+    <summary>{{ summary }} <span class="js-run-log-count muted"></span></summary>
+    <div class="run-log-toolbar">
+        <label><input type="checkbox" class="js-run-log-errors-only"> errors only</label>
+        <label title="Show each row's prompt, thinking, submitted response, and the verdict on it"><input type="checkbox" class="js-run-log-detail"> LLM detail</label>
+        <button type="button" class="js-run-log-clear btn">clear view</button>
+        <span class="js-run-log-state muted"></span>
+    </div>
+    {# The panel opens on the last {{ tail }} events — a row-per-event log of a
+       large stage runs to hundreds of thousands, which is neither readable nor
+       renderable. This walks back through the rest a page at a time. #}
+    <button type="button" class="js-run-log-older btn run-log-older" hidden>load older</button>
+    <pre class="js-run-log run-log"></pre>
+    <p class="run-log-foot muted">A row marked <code>cached</code> was replayed from the stage-result cache: it ran no code and called no model, so it has no LLM detail.</p>
+</details>
+{% endmacro %}

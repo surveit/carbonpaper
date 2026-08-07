@@ -327,9 +327,8 @@ def test_legacy_scalar_halted_at_manifest_renders_one_queue_link(tmp_path, monke
     page = client.get(f"/project/legacy_halt/runs/{run_id}")
     assert page.status_code == 200
     # One review-queue link for the whole "review" id — not one per character
-    # ("queue/r", "queue/e", ...). Match through the href's closing quote:
-    # the page also embeds the raw manifest JSON, whose POSIX queue-file path
-    # ("queue/review.parquet") would otherwise add a false match.
+    # ("queue/r", "queue/e", ...). The match runs through the href's closing
+    # quote so a queue-file path ("queue/review.parquet") cannot count as one.
     assert page.text.count('queue/review"') == 1
     assert 'queue/r"' not in page.text
 

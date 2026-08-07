@@ -27,6 +27,7 @@
 {% endblock %}
 
 {% block section %}
+{% from "_run_log_panel.html" import run_log_panel %}
 {% set is_running = manifest.status == 'running' %}
 
 {# ── Scroll model. The run view is a working surface, so it fills the viewport and
@@ -130,45 +131,20 @@
 </div>
 </section>
 
-<details class="raw-yaml"><summary>Raw manifest</summary><pre>{{ manifest | tojson(indent=2) }}</pre></details>
+{# ── Run log, every stage of it: live-tailed lifecycle events (stage/row
+      start·done·error), streamed over SSE from runs/<id>/events.jsonl. Opens
+      for a live run AND a finished one — the endpoint drains the file then ends
+      either way, so this is also how you investigate a past run.
 
-{# ── Run log: live-tailed lifecycle events (stage/row start·done·error),
-      streamed over SSE from runs/<id>/events.jsonl. Opens for a live run AND a
-      finished one — the endpoint drains the file then ends either way, so this
-      is also how you investigate a past run.
-
-      It lives at the very bottom, in its own titled section: the events cover
-      the WHOLE run, not the stage loaded in the panel above, and sitting
-      directly under that panel made it read as part of the stage detail. ── #}
-<style>
-  .run-log-panel .run-log-toolbar { display: flex; gap: 1.2em; align-items: center; margin: .4em 0; font-size: .85em; }
-  .run-log { max-height: 22em; overflow: auto; font-size: .82em; line-height: 1.45; }
-  .run-log a.run-log-row { display: block; color: inherit; text-decoration: none; }
-  .run-log a.run-log-row:hover { text-decoration: underline; }
-  .run-log .run-log-cached { opacity: .55; }
-  .run-log .run-log-detail { display: block; opacity: .62; }
-  .run-log .run-log-detail-head { color: #8a5cf6; }
-  .run-log .run-log-detail-body { display: block; white-space: pre-wrap; max-height: 6.5em; overflow: auto; margin: 0 0 .3em 2em; padding-left: .6em; border-left: 2px solid #d7cdf5; }
-</style>
+      Folded, and last on the page. The whole-run feed answers one question —
+      what happened, across stages, in the order it happened — and the reader
+      who has a stage in mind is served by the same log scoped to it inside the
+      panel above. It connects on first open, so a page nobody unfolds costs no
+      stream. ── #}
 <section class="run-section run-log-section" id="run-log-section">
-    <h2>Run log</h2>
-    <p class="lede">Every lifecycle event for this whole run — all stages, in the order they happened. Not scoped to the stage selected above.</p>
-    <details class="run-log-panel" id="run-log-panel" open>
-        <summary>Events <span id="run-log-count" class="muted"></span></summary>
-        <div class="run-log-toolbar">
-            <label><input type="checkbox" id="run-log-errors-only"> errors only</label>
-            <label title="Show each row's prompt, thinking, submitted response, and the verdict on it"><input type="checkbox" id="run-log-detail"> LLM detail</label>
-            <button type="button" id="run-log-clear" class="btn">clear view</button>
-            <span id="run-log-state" class="muted"></span>
-        </div>
-        {# The panel opens on the last {{ event_tail }} events — a row-per-event log
-           of a large stage runs to hundreds of thousands, which is neither readable
-           nor renderable. This walks back through the rest a page at a time. #}
-        <button type="button" id="run-log-older" class="btn" hidden
-                style="font-size:.8em;margin-bottom:.3em">load older</button>
-        <pre id="run-log" class="run-log"></pre>
-        <p class="muted" style="font-size:.8em">A row marked <code>cached</code> was replayed from the stage-result cache: it ran no code and called no model, so it has no LLM detail.</p>
-    </details>
+    <h2>Run log · all stages</h2>
+    <p class="lede">Every lifecycle event for this whole run, in the order it happened. For one stage's events, use the run log inside its panel above.</p>
+    <div id="run-log-all">{{ run_log_panel("Events", event_tail) }}</div>
 </section>
 
 {# The panel's behaviour lives in /static/run_log.js — filtering and reconnect
@@ -176,10 +152,22 @@
    loadable outside a page. #}
 <script src="/static/run_log.js"></script>
 <script>
-  initRunLog({
-    project: {{ project | tojson }}, runId: {{ run_id | tojson }},
-    pageSize: {{ event_tail | tojson }},
-  });
+  // Deferred until the disclosure opens: connecting on load would tail every
+  // run page a reader merely visited, and the feed's own tail read walks the
+  // whole events file to find its starting seq.
+  (function () {
+    const holder = document.getElementById('run-log-all');
+    const panel = holder.querySelector('details');
+    panel.addEventListener('toggle', function start() {
+      if (!panel.open) return;
+      panel.removeEventListener('toggle', start);
+      initRunLog({
+        root: holder,
+        project: {{ project | tojson }}, runId: {{ run_id | tojson }},
+        pageSize: {{ event_tail | tojson }},
+      });
+    });
+  })();
 </script>
 
 <script>

@@ -5,6 +5,7 @@
    static contract: the input schemas, then the output schema. #}
 {% from "_schema_table.html" import schema_table %}
 {% from "_stage_code.html" import stage_code %}
+{% from "_run_log_panel.html" import run_log_panel %}
 
 <div class="run-stage-panel"
      data-project="{{ project }}" data-run="{{ run_id }}" data-stage="{{ stage.stage_id }}">
@@ -187,6 +188,19 @@
   </div>
 
 </div>{# /panes #}
+
+{# ── This stage's own lifecycle events, under the tabs rather than inside one:
+      the feed covers everything the stage did, not the data, schema or
+      transform separately. Folded and lazily connected — most readers never
+      need it, and the whole-run feed at the foot of the page is the same log
+      unscoped. `links.run_log` is None in the review packet, which is a folder
+      with no server to tail. ── #}
+{% set log_scope = links.run_log(stage.stage_id) %}
+{% if log_scope %}
+<div class="stage-run-log" data-tail="{{ event_tail }}">
+  {{ run_log_panel("Run log · this stage's events", event_tail) }}
+</div>
+{% endif %}
 </div>{# /run-stage-panel #}
 
 <script>
@@ -213,6 +227,25 @@
 
   // ── scratch re-run (row picker in the Data pane's input rows, result in Transform) ──
   const meth = root.dataset.project, run = root.dataset.run, stage = root.dataset.stage;
+
+  // ── this stage's run log ──
+  // Connected on first open, not on panel load: clicking through the graph would
+  // otherwise leave one live SSE connection behind per stage visited. The handle
+  // is published so the NEXT panel can hang up on this one — replacing the
+  // panel's innerHTML drops the element but not the EventSource holding it.
+  if (window._stageRunLog) { window._stageRunLog.close(); window._stageRunLog = null; }
+  const logHolder = root.querySelector('.stage-run-log');
+  if (logHolder && window.initRunLog) {
+    const logPanel = logHolder.querySelector('details');
+    logPanel.addEventListener('toggle', function start() {
+      if (!logPanel.open) return;
+      logPanel.removeEventListener('toggle', start);
+      window._stageRunLog = initRunLog({
+        root: logHolder, project: meth, runId: run, stage: stage,
+        pageSize: parseInt(logHolder.dataset.tail, 10),
+      });
+    });
+  }
   const primary = root.querySelector('.input-preview[data-primary] table.selectable');
   const rowPicks = () => primary ? Array.from(primary.querySelectorAll('.row-pick')) : [];
   const resultEl = root.querySelector('.scratch-result');

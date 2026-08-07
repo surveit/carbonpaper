@@ -33,6 +33,12 @@ STATIC_DIR = APP_DIR / "static"
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
+# The run log's page size: how many events a feed opens on, and how many one
+# "load older" fetch brings back. It lives here because two routers size their
+# panel by it — the whole-run log on the run page and the stage-scoped one in
+# the stage panel — and a reader comparing them would be comparing two windows.
+EVENT_TAIL = 500
+
 
 class RevalidatedStaticFiles(StaticFiles):
     # Without a Cache-Control header a browser is free to invent a freshness

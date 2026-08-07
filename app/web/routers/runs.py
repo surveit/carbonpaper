@@ -36,8 +36,8 @@ from app.services.versioning import list_versions
 from app.services import run as run_service
 from app.services.run_guide import build_run_guide_view, find_guideless_version_id
 from app.runtime.cancellation import request_cancel
-from app.runtime.run_log import RUN_DONE, read_events_since, read_events_window
-from app.web.config import projects_dir, templates
+from app.runtime.run_log import RUN_DONE, read_events_since
+from app.web.config import EVENT_TAIL, projects_dir, templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
 from app.web.loading import (
     list_file_inputs,
@@ -59,10 +59,8 @@ router = APIRouter()
 _EVENT_POLL_INTERVAL_S = 0.5
 _IDLE_POLLS_BEFORE_TERMINAL_STOP = 2
 
-# The run log's page size: how many events the SSE feed opens on, and how many
-# one "load older" fetch brings back. The template reads EVENT_TAIL too, so the
-# panel's "showing N of M" is sized by the same number the stream is.
-EVENT_TAIL = 500
+# A ceiling on what one "load older" fetch may ask for; the default page size is
+# EVENT_TAIL, in app.web.config, because the stage panel's log is sized by it too.
 EVENT_PAGE_MAX = 5000
 
 
@@ -312,6 +310,7 @@ async def stream_run_events(
     request: Request,
     from_seq: int | None = None,
     tail: int = EVENT_TAIL,
+    stage: str | None = None,
 ):
     """SSE tail of this run's event log, live or finished.
 
@@ -319,29 +318,46 @@ async def stream_run_events(
     of a 135k-row stage runs to 270k events, and streaming all of them is a feed
     no one can read arriving faster than a browser can render it. Older events
     are a page fetch away (/events/page); `from_seq` still replays from an exact
-    cursor, which is what a reconnect uses.
+    cursor, which is what a reconnect uses. `stage` narrows the feed to one
+    stage's own events, which is what the stage panel's log opens on.
     """
     run_dir = runs_dir(project) / run_id
     load_manifest(run_dir)  # 404s if the run doesn't exist
     start = (
-        _tail_start_seq(run_dir / "events.jsonl", tail)
+        _tail_start_seq(run_dir / "events.jsonl", tail, stage)
         if from_seq is None
         else max(from_seq, 0)
     )
     return StreamingResponse(
-        _tail_run_events(run_dir, request, start),
+        _tail_run_events(run_dir, request, start, stage),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
 
-def _tail_start_seq(events_path: Path, tail: int) -> int:
+def select_stage_events(
+    events: list[dict[str, Any]], stage: str | None
+) -> list[dict[str, Any]]:
+    """`events` narrowed to `stage`'s own, or all of them when stage is None."""
+    if stage is None:
+        return events
+    # RUN_DONE rides through the filter: it is what ends an SSE stream, so a
+    # scoped feed that dropped it would tail a finished run forever.
+    return [
+        event
+        for event in events
+        if event.get("stage") == stage or event.get("kind") == RUN_DONE
+    ]
+
+
+def _tail_start_seq(events_path: Path, tail: int, stage: str | None = None) -> int:
     """The seq to open a stream at so it yields the last `tail` events."""
     # One read of the log, and the answer comes off the parsed events rather than
     # from arithmetic on seq: taking `highest - tail` would assume seq has no
     # gaps, which is true of what the writer emits today but is not a property
-    # the log itself carries.
-    events = read_events_since(events_path, 0)
+    # the log itself carries. Under a stage filter the tail is counted over that
+    # stage's events, so a stage buried in a 270k-event log still opens full.
+    events = select_stage_events(read_events_since(events_path, 0), stage)
     if not events:
         return 0
     if tail <= 0:
@@ -351,7 +367,11 @@ def _tail_start_seq(events_path: Path, tail: int) -> int:
 
 @router.get("/project/{project}/runs/{run_id}/events/page")
 async def run_events_page(
-    project: str, run_id: str, before_seq: int, limit: int = EVENT_TAIL
+    project: str,
+    run_id: str,
+    before_seq: int,
+    limit: int = EVENT_TAIL,
+    stage: str | None = None,
 ):
     """The page of events immediately BEFORE `before_seq` — "load older"."""
     # Backwards paging only. Newer events arrive on the SSE feed, so a forwards
@@ -360,15 +380,32 @@ async def run_events_page(
     run_dir = runs_dir(project) / run_id
     load_manifest(run_dir)  # 404s if the run doesn't exist
     limit = max(1, min(limit, EVENT_PAGE_MAX))
-    start = max(0, before_seq - limit)
-    events = read_events_window(
-        run_dir / "events.jsonl", start, limit=max(0, before_seq - start)
-    )
-    return {"events": events, "first_seq": start, "has_more": start > 0}
+    return _page_before(run_dir / "events.jsonl", before_seq, limit, stage)
+
+
+def _page_before(
+    events_path: Path, before_seq: int, limit: int, stage: str | None
+) -> dict[str, Any]:
+    """The last `limit` events older than `before_seq`, after the stage filter."""
+    older = [
+        event
+        for event in select_stage_events(read_events_since(events_path, 0), stage)
+        if int(event["seq"]) < before_seq
+    ]
+    # The window is cut AFTER filtering, not from `before_seq - limit`: a stage
+    # holding a handful of events inside a 5000-seq span would otherwise hand
+    # back a nearly empty page and report the rest as already loaded.
+    page = older[-limit:]
+    first_seq = int(page[0]["seq"]) if page else 0
+    return {
+        "events": page,
+        "first_seq": first_seq,
+        "has_more": len(older) > len(page),
+    }
 
 
 async def _tail_run_events(
-    run_dir: Path, request: Request, from_seq: int
+    run_dir: Path, request: Request, from_seq: int, stage: str | None = None
 ) -> AsyncIterator[str]:
     """Drain runs/<id>/events.jsonl as it grows, ending on the run_done marker."""
     # The same generator serves a FINISHED run: it drains the file and ends, so
@@ -384,8 +421,12 @@ async def _tail_run_events(
         if await request.is_disconnected():
             return
         new = read_events_since(events_path, cursor)
-        for event in new:
-            cursor = int(event["seq"]) + 1
+        # The cursor clears the whole batch that was READ, not the subset the
+        # stage filter yields: an event the filter drops must not come back on
+        # the next poll.
+        if new:
+            cursor = int(new[-1]["seq"]) + 1
+        for event in select_stage_events(new, stage):
             yield f"data: {json.dumps(event)}\n\n"
             if event.get("kind") == RUN_DONE:
                 return
