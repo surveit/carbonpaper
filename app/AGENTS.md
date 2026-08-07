@@ -29,7 +29,8 @@ plus a deep link, and the detail stays in the panel's own validation block.
 
 A deep link loads the panel through `_loadStage(id, {tab, reveal})`, which the panel serves by
 publishing `_selectTab` on its root element. `reveal` smooth-scrolls the panel's top to the top of the
-run column; the review guide's steps and output links both use it, the graph-node click does not.
+run column; every click the reader aims — the guide's steps and output links, an issue link, a
+graph node — uses it, and a load they did not ask for (deep link, panel self-refresh) does not.
 
 ## The stage panel — three tabs (`run_stage_partial` → `_run_stage_panel.html`)
 **Data │ Schema │ Transform**, one flat strip; it opens on Data:

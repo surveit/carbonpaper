@@ -4,8 +4,11 @@
 {% block section_head %}
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 <script>
-  // pulse:false — the reader clicked this node, so it needs no arrival cue.
-  onDiagramNode(function (stageId) { if (window._loadStage) window._loadStage(stageId, { pulse: false }); });
+  // pulse:false — the reader clicked this node, so it needs no arrival cue; reveal
+  // still scrolls the panel up to meet them, which takes the graph off screen.
+  onDiagramNode(function (stageId) {
+    if (window._loadStage) window._loadStage(stageId, { pulse: false, reveal: true });
+  });
   document.addEventListener("DOMContentLoaded", function () {
     // startOnLoad:false + useMaxWidth:false — diagram_viewport.js renders the graph and
     // sizes the svg itself, so zoom is real and a focused node can be centred.
@@ -205,8 +208,9 @@
 
   // opts.pulse defaults to true: every caller but the graph-node click is a jump
   // away from where the reader was looking. opts.tab opens the panel on a named
-  // tab; opts.reveal scrolls the panel into view, for a caller whose own link is
-  // far enough up the page that the panel is off screen.
+  // tab; opts.reveal lands the panel's header at the top of the run column, for
+  // every caller the reader clicked — the graph, the guide rail, an issue link.
+  // A load the reader did not ask for (deep link, panel self-refresh) leaves it off.
   async function loadStage(stageId, opts) {
     if (!stageId) return;
     panel.classList.add('loading');
@@ -226,8 +230,6 @@
       const card = panel.querySelector('.run-stage-panel');
       if (opts && opts.tab && card && card._selectTab) card._selectTab(opts.tab);
       if (location.hash !== `#${stageId}`) history.replaceState(null, '', `#${stageId}`);
-      // The graph moves to the stage; a click on the graph itself does not move the
-      // page, which would take the diagram off screen.
       focusGraphNode(stageId, { pulse: !opts || opts.pulse !== false });
       // Animated, so the reader sees where the page went rather than being
       // teleported. 'auto' for a reader who asked for less motion, and under
