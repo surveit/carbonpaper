@@ -5,6 +5,7 @@ scalars, extension dtypes, what a cell's Python type says about it, frame identi
 from __future__ import annotations
 
 from collections.abc import Callable, Hashable, Mapping, Sequence
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, NamedTuple, cast
 import datetime as _dt
@@ -264,6 +265,14 @@ def _is_date_cell(value: Any) -> bool:
     return isinstance(value, (_dt.date, np.datetime64))
 
 
+# The declared-type names this module COMPARES (the predicate table below is keyed
+# by them too, but those are looked up, never compared).
+BOOL_COLUMN_TYPE = "bool"
+INT_COLUMN_TYPE = "int"
+FLOAT_COLUMN_TYPE = "float"
+STR_CELL_TYPE = "str"
+TEMPORAL_COLUMN_TYPES = ("date", "datetime")
+
 CELL_TYPE_PREDICATES: Mapping[str, Callable[[Any], bool]] = {
     "str": _is_str_cell,
     "int": _is_int_cell,
@@ -281,21 +290,21 @@ def dtype_proves_cell_type(series: pd.Series, type_name: str) -> bool:
     types = pd.api.types
     if types.is_object_dtype(dtype):
         return False  # the interesting case: cells must be inspected
-    if type_name == "bool":
+    if type_name == BOOL_COLUMN_TYPE:
         return bool(types.is_bool_dtype(dtype))
-    if type_name == "int":
+    if type_name == INT_COLUMN_TYPE:
         # A float dtype may be an int column that met a null — not provable
         # from the dtype, so fall through to the per-cell predicate, which
         # accepts whole-valued floats (see _is_int_cell).
         return bool(types.is_integer_dtype(dtype) and not types.is_bool_dtype(dtype))
-    if type_name == "float":
+    if type_name == FLOAT_COLUMN_TYPE:
         return bool(
             (types.is_float_dtype(dtype) or types.is_integer_dtype(dtype))
             and not types.is_bool_dtype(dtype)
         )
-    if type_name == "str":
+    if type_name == STR_CELL_TYPE:
         return isinstance(dtype, pd.StringDtype)
-    if type_name in ("datetime", "date"):
+    if type_name in TEMPORAL_COLUMN_TYPES:
         return bool(types.is_datetime64_any_dtype(dtype))
     return False
 
@@ -412,3 +421,64 @@ def save_frame_or_reject(
         raise FrameNotSerializableError(
             f"{described_as}: output frame could not be written as parquet ({exc})"
         ) from exc
+
+
+def compute_table_digest(
+    frame: pd.DataFrame, declared_types: Mapping[str, str] | None = None
+) -> str:
+    """A table's identity as VALUES: the same data digests alike however it was stored."""
+    types = declared_types or {}
+    # `declared_types` (column -> declared type) is what makes the digest survive a
+    # change of storage: numbers, booleans and dates go into one text form, so an `int`
+    # column read from xlsx as 1.0 agrees with the same column read from parquet as 1.
+    # Pass the producing stage's output schema whenever there is one — without it only
+    # null forms are normalised. Column and row ORDER are part of the identity.
+    # Deliberately NOT compute_frame_fingerprint: changing that one, which keys the
+    # stage cache, would invalidate every entry in it.
+    payload = {
+        "columns": [str(label) for label in frame.columns],
+        "rows": [
+            [
+                _read_cell_for_digest(cell, types.get(str(label)))
+                for label, cell in zip(frame.columns, row)
+            ]
+            for row in frame.itertuples(index=False, name=None)
+        ],
+    }
+    return compute_short_hash(json.dumps(payload, separators=(",", ":"), default=str))
+
+
+def _read_cell_for_digest(value: object, declared_type: str | None) -> object:
+    """One cell as the digest reads it: null forms collapsed, then its declared type's form."""
+    collapsed = collapse_null_forms(value)
+    # An undeclared or non-scalar column falls through to `json.dumps(default=str)`,
+    # which is where a list or a json cell lands.
+    if collapsed is None:
+        return None
+    if declared_type in (INT_COLUMN_TYPE, FLOAT_COLUMN_TYPE):
+        return _render_number_for_digest(collapsed)
+    if declared_type == BOOL_COLUMN_TYPE:
+        return bool(collapsed)
+    if declared_type in TEMPORAL_COLUMN_TYPES:
+        return _render_timestamp_for_digest(collapsed)
+    return collapsed
+
+
+def _render_number_for_digest(value: object) -> str:
+    """Plain decimal text, no exponent, no trailing zeros — so 1, 1.0 and 1.00 are one."""
+    try:
+        # A cell that is not a number at all is a schema violation the validator
+        # reports separately; here it digests as its own text rather than raising.
+        normalized = Decimal(str(value)).normalize()
+    except InvalidOperation:
+        return str(value)
+    # normalize() renders 10000 as 1E+4; 'f' spells it out again.
+    return format(normalized, "f")
+
+
+def _render_timestamp_for_digest(value: object) -> str:
+    """A date or timestamp as ISO-8601 text."""
+    isoformat = getattr(value, "isoformat", None)
+    # pandas has no date-only dtype, so a `date` arrives as a Timestamp; either way its
+    # own isoformat is the form the digest hashes; anything without one digests as text.
+    return isoformat() if callable(isoformat) else str(value)

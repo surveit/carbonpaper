@@ -388,6 +388,11 @@ class TableSchema(_Base):
                 return c
         return None
 
+    def column_types(self) -> dict[str, str]:
+        """Column name -> declared type."""
+        # app.core may not import these models, so it takes this mapping instead.
+        return {column.name: column.type for column in self.columns}
+
     def extend(self, rewrites: Sequence[Column], adds: Sequence[Column]) -> "TableSchema":
         """This schema with same-named `rewrites` replacing columns in place and `adds` appended."""
         rewrites_by_name = {column.name: column for column in rewrites}
