@@ -72,26 +72,27 @@ def test_naming_the_input_stage_executes_it_over_the_whole_bound_file(demo):
     assert len(read_stage_output("demo", result["run_id"], "load")) == _ROW_COUNT
 
 
-def test_a_test_naming_no_stages_injects_the_slice_and_skips_the_input(demo):
+def test_a_test_naming_no_stages_runs_every_stage_over_the_slice(demo):
     result = run_workflow_test("demo", limit=2)
-    assert result["stages_run"] == ["classify"]
+    assert result["stages_run"] == ["load", "classify"]
     assert len(read_stage_output("demo", result["run_id"], "classify")) == 2
 
 
-def test_naming_a_stage_still_injects_the_slice_its_producer_owes_it(demo):
-    """Scope and slice are independent: `classify` runs alone, over 5 injected rows."""
+def test_naming_a_stage_still_hands_it_the_slice_its_producer_owes_it(demo):
+    """Scope and slice are independent: `classify` runs alone, over 5 handed-in rows."""
     result = run_workflow_test("demo", stage_ids=["classify"], limit=5)
     assert result["ok"] is True
     assert len(read_stage_output("demo", result["run_id"], "classify")) == 5
 
 
-def test_an_omitted_limit_injects_the_whole_source(demo):
+def test_an_omitted_limit_hands_over_the_whole_source(demo):
     result = run_workflow_test("demo", stage_ids=["classify"])
     assert len(read_stage_output("demo", result["run_id"], "classify")) == _ROW_COUNT
 
 
-@pytest.mark.parametrize("stage_ids", [None, ["load", "classify"]], ids=["injected", "executed"])
-def test_the_window_is_the_same_rows_whether_the_source_is_injected_or_executed(
+@pytest.mark.parametrize(
+    "stage_ids", [["classify"], ["load", "classify"]], ids=["overwritten", "executed"])
+def test_the_window_is_the_same_rows_whether_the_source_is_overwritten_or_executed(
     demo, stage_ids
 ):
     """The one thing scope must NOT change: `limit`/`offset` mean the same rows either way."""

@@ -132,7 +132,7 @@ def test_run_workflow_test_delegates_and_reports_verdict(tmp_path, monkeypatch):
 
     result = server.run_workflow_test(project_id="demo", limit=2, offset=1)
     assert result["ok"] is True
-    assert result["stages_run"] == ["classify"]
+    assert result["stages_run"] == ["load", "classify"]
     assert "rows_out" not in result
     assert "run_id" in result
     # A real run under the project's runs/ dir — reachable through the same

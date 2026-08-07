@@ -86,7 +86,7 @@ class StageErrorInfo(BaseModel):
     traceback: str | None
 
 
-class SuppliedFrame(BaseModel):
+class OverwrittenFrame(BaseModel):
     """Where a stage's output came from when the run did not compute it."""
 
     origin: Literal["source_file", "caller"]
@@ -147,7 +147,7 @@ class StageRecord(BaseModel):
     # is what makes a supplied frame and a computed one comparable across runs: equal
     # digests mean the same table, whatever file format or dtype each arrived in.
     content_digest: str | None = None
-    supplied_by: SuppliedFrame | None = None
+    overwritten_by: OverwrittenFrame | None = None
 
     @classmethod
     def record_with_status(cls, stage: Stage, status: StageStatus) -> StageRecord:

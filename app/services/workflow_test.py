@@ -14,7 +14,7 @@ import pandas as pd
 
 from app.core.errors import NoWorkflowTestSourceError, NoWorkflowTestVersionError, SubsetRunError
 from app.models import Stage, StageType, Workflow
-from app.models.run_manifest import SuppliedFrame
+from app.models.run_manifest import OverwrittenFrame
 from app.runtime.context import RunContext, RunIdentity
 from app.runtime.executor import run_subset, topological_sort
 from app.models.run_parameters import RunParameters
@@ -40,12 +40,13 @@ def run_workflow_test(
     axes — the reason this is its own seam rather than a flag on that one:
 
     1. VERSION: any stored version, published or not (_resolve_workflow_test_version).
-    2. SOURCE: `limit` rows from `offset`, injected (_read_source_slices) rather than
-       read whole through the input_data stage. `limit=None` means the whole source.
-    3. SCOPE: `stage_ids` names the stages to execute; None runs every non-input stage
-       (_frontier_stages). A source stage named here EXECUTES rather than taking an
-       injected frame, and reads the SAME window through the runtime's per-stage
-       limit — so `limit` means one thing either way (_source_row_windows).
+    2. SOURCE: every input stage reads its own bound file, cut to `limit` rows from
+       `offset` by the runtime's per-stage window (`limit=None` means the whole file).
+       Only a source `stage_ids` cuts off is handed a frame instead — recorded as an
+       OVERWRITTEN stage, never as a silent hole.
+    3. SCOPE: `stage_ids` names the stages to execute; None runs every stage
+       (_frontier_stages). A source the scope leaves out is read here and handed in
+       (_read_source_slices), over the same window it would have read itself.
     4. EXECUTION: synchronous; start_run launches a background daemon thread.
     5. REVIEW QUEUE: auto-approves in memory (queue_auto_approve) instead of halting.
     6. STAGE CACHE: read-only (RunContext.for_workflow_test_run) instead of read+write.
@@ -72,7 +73,7 @@ def run_workflow_test(
         workflow, injected, executed_ids, run_dir, repo_root(),
         project=project_dir.name, run_id=run_id, workflow_version=version,
         limits=limits, offsets=offsets,
-        supplied_provenance={sid: sliced.supplied_by for sid, sliced in slices.items()})
+        overwritten={sid: sliced.overwritten_by for sid, sliced in slices.items()})
 
     return {
         "ok": ok,
@@ -112,7 +113,7 @@ def _run_frontier(
     workflow_version: str,
     limits: dict[str, int],
     offsets: dict[str, int],
-    supplied_provenance: dict[str, SuppliedFrame],
+    overwritten: dict[str, OverwrittenFrame],
 ) -> tuple[bool, str | None]:
     """Execute the frontier subset: normal return -> (True, None); a SubsetRunError
     (a stage errored) -> (False, its message). run_subset owns the manifest under
@@ -124,7 +125,7 @@ def _run_frontier(
     try:
         run_subset(
             workflow, injected_outputs=injected, stage_ids=stage_ids,
-            supplied_provenance=supplied_provenance,
+            overwritten=overwritten,
             run_dir=run_dir, repo_root=repo_root,
             params=RunParameters(limits=limits, offsets=offsets,
                                  queue_auto_approve=True, is_test_run=True),
@@ -149,10 +150,12 @@ def _stages_to_execute(stages: list[Stage], stage_ids: list[str] | None) -> list
 
 
 def _frontier_stages(stages: list[Stage]) -> list[Stage]:
-    """The stages a workflow test executes: every stage except the source
-    (input_data — its output is injected, not computed). Publish stages run; their
-    artifacts land run-scoped under the run dir, like any production run's."""
-    return [stage for stage in stages if stage.type != StageType.input_data.value]
+    """Every stage, sources included: a workflow test LOADS its own data."""
+    # An input stage reads its bound file here exactly as a production run's does, cut
+    # to the same `limit`/`offset` window by the runtime. Handing it a frame instead
+    # would overwrite the one stage whose whole job is to read that file, and cost the
+    # run the record of having read it.
+    return list(stages)
 
 
 def _source_row_windows(
@@ -171,13 +174,13 @@ class SourceSlice(NamedTuple):
     """One source stage's rows as this run received them, and where they came from."""
 
     frame: pd.DataFrame
-    supplied_by: SuppliedFrame
+    overwritten_by: OverwrittenFrame
 
 
 def _read_source_slices(
     stages: list[Stage], executing: list[Stage], *, limit: int | None, offset: int,
 ) -> dict[str, SourceSlice]:
-    """`iloc[offset:offset+limit]` per source stage that is not itself executing; None = all."""
+    """`iloc[offset:offset+limit]` per source stage the scope cut off; usually none of them."""
     sources = [stage for stage in stages if stage.type == StageType.input_data.value]
     if not sources:
         raise NoWorkflowTestSourceError(
@@ -206,7 +209,7 @@ def _read_source_slice(
     path = narrow_stage(source, InputDataStage).connector.params.get("path")
     return SourceSlice(
         frame=whole.iloc[offset:end],
-        supplied_by=SuppliedFrame(
+        overwritten_by=OverwrittenFrame(
             origin="source_file",
             path=str(path) if path else None,
             sha256=_read_file_sha256(path),

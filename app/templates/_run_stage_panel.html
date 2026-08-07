@@ -16,9 +16,9 @@
     {# The description comes from the pinned definition, so a run whose version
        no longer resolves shows no line rather than a guessed one. #}
     {% if stage_def %}<p class="stage-id">{{ stage_def.description }}</p>{% endif %}
-    {# A supplied stage ran nothing, so it reports no duration and no finish time —
+    {# An overwritten stage ran nothing, so it reports no duration and no finish time —
        only what its rows are and what they digest to. #}
-    <p class="muted">{% if stage.status != 'supplied' %}{{ stage.elapsed_ms | friendly_duration }} · {% endif %}{{ "{:,}".format(stage.output_row_count or 0) }} row{% if (stage.output_row_count or 0) != 1 %}s{% endif %}
+    <p class="muted">{% if stage.status != 'overwritten' %}{{ stage.elapsed_ms | friendly_duration }} · {% endif %}{{ "{:,}".format(stage.output_row_count or 0) }} row{% if (stage.output_row_count or 0) != 1 %}s{% endif %}
         {% if stage.content_digest %} · <span title="This table's identity as values: the same data digests the same whatever file format or column type it arrived in. Two runs whose digests match read the same table.">digest <code>{{ stage.content_digest }}</code></span>{% endif %}
         {% if stage.llm_usage and stage.llm_usage.calls %} · {{ "{:,}".format(stage.llm_usage.calls) }} model call{% if stage.llm_usage.calls != 1 %}s{% endif %}, {{ stage.llm_usage.cost_usd | usd }}{% endif %}
         {% if stage.finished_at %} · finished {{ stage.finished_at | friendly_time }}{% endif %}</p>
@@ -44,15 +44,15 @@
 </section>
 {% elif stage.status == 'pending' %}
 <p class="muted"><em>This stage hasn't run yet.</em></p>
-{% elif stage.status == 'supplied' %}
-<section class="banner" id="stage-supplied">
-    <p>⇥ <strong>Supplied to this run, not computed by it.</strong> The rows below entered the
-    run ready-made; nothing on this page was computed by executing this stage. Everything
-    downstream of it rests on them.</p>
-    {% if stage.supplied_by %}
+{% elif stage.status == 'overwritten' %}
+<section class="banner" id="stage-overwritten">
+    <p>⇥ <strong>Overwritten: this stage's output was given to the run, not computed by
+    it.</strong> The rows below entered the run ready-made, and nothing on this page came from
+    executing this stage. Everything downstream of it rests on them.</p>
+    {% if stage.overwritten_by %}
     <p class="muted">
-        {% if stage.supplied_by.origin == 'source_file' %}
-        Read from <code>{{ stage.supplied_by.path }}</code>{% if stage.supplied_by.sha256 %} (sha256 <code>{{ stage.supplied_by.sha256[:16] }}…</code>){% endif %}{% if stage.supplied_by.rows_available is not none %}, which held {{ "{:,}".format(stage.supplied_by.rows_available) }} row{% if stage.supplied_by.rows_available != 1 %}s{% endif %}{% endif %}{% if stage.supplied_by.limit is not none %}; this run took {{ "{:,}".format(stage.supplied_by.limit) }} from row {{ "{:,}".format(stage.supplied_by.offset or 0) }}{% endif %}.
+        {% if stage.overwritten_by.origin == 'source_file' %}
+        Read from <code>{{ stage.overwritten_by.path }}</code>{% if stage.overwritten_by.sha256 %} (sha256 <code>{{ stage.overwritten_by.sha256[:16] }}…</code>){% endif %}{% if stage.overwritten_by.rows_available is not none %}, which held {{ "{:,}".format(stage.overwritten_by.rows_available) }} row{% if stage.overwritten_by.rows_available != 1 %}s{% endif %}{% endif %}{% if stage.overwritten_by.limit is not none %}; this run took {{ "{:,}".format(stage.overwritten_by.limit) }} from row {{ "{:,}".format(stage.overwritten_by.offset or 0) }}{% endif %}.
         {% else %}
         Handed in by whoever started the run; where it came from is not recorded, so this
         run cannot vouch for its origin.

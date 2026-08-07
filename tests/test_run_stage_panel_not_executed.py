@@ -67,23 +67,24 @@ def _panel(run_id: str, stage_id: str):
         f"/project/{PROJECT}/runs/{run_id}/stage/{stage_id}/partial")
 
 
-def test_a_supplied_input_stage_shows_the_rows_that_entered_the_run(project: Path):
+def test_an_overwritten_input_stage_shows_the_rows_that_entered_the_run(project: Path):
     """Not executed — but the rows handed in are its output of record, so they show."""
-    run_id = run_workflow_test(PROJECT, limit=2, offset=0)["run_id"]
+    run_id = run_workflow_test(
+        PROJECT, limit=2, offset=0, stage_ids=["classify"])["run_id"]
     manifest = json.loads(
         (project / "runs" / run_id / "manifest.json").read_text(encoding="utf-8"))
     load = next(r for r in manifest["stage_records"] if r["stage_id"] == "load")
-    assert load["status"] == "supplied"
+    assert load["status"] == "overwritten"
     assert load["output_row_count"] == 2
     assert (project / "runs" / run_id / load["output_path"]).exists()
-    assert load["supplied_by"]["origin"] == "source_file"
-    assert load["supplied_by"]["path"].endswith("rows.csv")
+    assert load["overwritten_by"]["origin"] == "source_file"
+    assert load["overwritten_by"]["path"].endswith("rows.csv")
 
     response = _panel(run_id, "load")
     assert response.status_code == 200
     body = response.text
-    assert 'id="stage-supplied"' in body
-    assert "Supplied to this run, not computed by it" in body
+    assert 'id="stage-overwritten"' in body
+    assert "this stage's output was given to the run" in body
     assert "rows.csv" in body
     assert "Not executed in this run" not in body
 

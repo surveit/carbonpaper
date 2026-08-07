@@ -16,10 +16,10 @@ class StageStatus(enum.StrEnum):
     PENDING = "pending"
     RUNNING = "running"
     OK = "ok"
-    # Not run here: this stage's output was GIVEN to the run (a workflow test's
-    # injected source, a subset run's seeded upstream). It has data and a record;
-    # what it does not have is a computation this run performed.
-    SUPPLIED = "supplied"
+    # Not run here: this stage's output was OVERWRITTEN — given to the run rather than
+    # computed by it (an eval's dataset, a scoped subset run's cut-off upstream). It has
+    # data and a record; what it does not have is a computation this run performed.
+    OVERWRITTEN = "overwritten"
     VALIDATION_WARNINGS = "validation_warnings"
     ERROR = "error"
     AWAITING_REVIEW = "awaiting_review"

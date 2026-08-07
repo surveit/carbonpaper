@@ -110,7 +110,7 @@ def demo(tmp_path, monkeypatch):
     return demo
 
 
-def test_workflow_test_runs_frontier_over_the_slice(demo):
+def test_workflow_test_runs_every_stage_over_the_slice(demo):
     """The frontier (classify) runs over the injected slice; the result is ok and
     names the executed stage."""
     _seed(demo, [_load_stage(demo), _CLASSIFY])
@@ -118,7 +118,7 @@ def test_workflow_test_runs_frontier_over_the_slice(demo):
     assert result["ok"] is True
     assert result["error"] is None
     assert result["version_id"] == "v1"
-    assert result["stages_run"] == ["classify"]
+    assert result["stages_run"] == ["load", "classify"]
 
 
 def test_workflow_test_limit_and_offset_slice_the_source(demo):
@@ -127,7 +127,7 @@ def test_workflow_test_limit_and_offset_slice_the_source(demo):
     _seed(demo, [_load_stage(demo), _CLASSIFY])
     result = run_workflow_test("demo", limit=2, offset=1)
     assert result["ok"] is True
-    assert result["stages_run"] == ["classify"]
+    assert result["stages_run"] == ["load", "classify"]
 
 
 def test_workflow_test_writes_a_real_run_marked_is_test_run(demo):
@@ -153,7 +153,7 @@ def test_workflow_test_runs_publish_scoped_to_its_own_run_dir(demo):
     _seed(demo, [_load_stage(demo), _CLASSIFY, _PUBLISH])
     result = run_workflow_test("demo")
     assert result["ok"] is True
-    assert result["stages_run"] == ["classify", "publish_report"]
+    assert result["stages_run"] == ["load", "classify", "publish_report"]
     run_dir = demo / "runs" / result["run_id"]
     artifacts = list(run_dir.rglob("report.json"))
     assert len(artifacts) == 1
@@ -181,7 +181,7 @@ def test_workflow_test_auto_approves_a_queue_stage_in_memory(demo):
     result = run_workflow_test("demo")
     assert result["ok"] is True
     assert result["error"] is None
-    assert result["stages_run"] == ["review"]
+    assert result["stages_run"] == ["load", "review"]
     # The auto-approve path never reaches for project-relative queue/decisions
     # state — those dirs must not exist after the run.
     assert not (demo / "decisions").exists()

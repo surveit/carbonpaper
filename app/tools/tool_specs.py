@@ -253,17 +253,15 @@ exactly six axes:
 1. VERSION: any stored version, published or not (run_workflow pins a
    published one). Omit `version_id` for the newest stored. Runs execute a
    STORED version, so save_version first — there is no unsaved-edits mode.
-2. SOURCE: the `limit` rows from `offset` of the workflow's bound source,
-   injected (run_workflow reads the whole source through input_data). `limit`
-   is the run's budget — every LLM stage pays per row, so state it; null is
-   the whole source.
-3. SCOPE: `stage_ids` names the stages to execute. A source stage named there
-   EXECUTES instead of taking an injected frame, over the SAME `limit`/`offset`
-   window — so naming a source with `limit` null is how you see an input
-   column's complete vocabulary without paying for the stages below it. Every
-   producer a named stage reads must be named too, or run over the injected
-   slice, or that stage errors on its absent input. Omit `stage_ids` and every
-   non-input stage runs.
+2. SOURCE: every input stage reads its own bound file, cut to the `limit` rows
+   from `offset` (run_workflow reads the whole file). `limit` is the run's
+   budget — every LLM stage pays per row, so state it; null is the whole file.
+3. SCOPE: `stage_ids` names the stages to execute; omit it and EVERY stage
+   runs, sources included. A source the scope leaves out is read for you and
+   handed to the stages below it, over the same window — recorded as an
+   `overwritten` stage, so the run still says what entered it. Every producer a
+   named stage reads must be named too, or be one of those sources, or that
+   stage errors on its absent input.
 4. EXECUTION: synchronous — this returns when the run is done (run_workflow
    returns a run_id immediately and executes on a background thread).
 5. REVIEW QUEUE: a human_review_queue stage auto-approves every row in

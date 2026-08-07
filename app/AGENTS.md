@@ -73,16 +73,20 @@ once on the terminal transition. Scratch: pick N input rows → `…/stage/<sid>
 (`runtime/preview.py`) runs the handler **in memory**, persists nothing; refused for
 `publish`/`human_review_queue`/`input_data` (side effects).
 
-## Supplied stages
-A stage whose output was GIVEN to the run rather than computed by it — a workflow test's
-sources, a subset run's seeded upstream — carries a `supplied` record like any other: the
-frame written to `outputs/`, validated against that stage's OWN declared output schema, and
-digested (`content_digest`, `app.core.frames.compute_table_digest` — values, not bytes, so
-the same table digests alike from xlsx, csv or parquet). `supplied_by` says where it came
-from, and a file read also lands in the manifest's `input_bindings`. The panel shows the rows
-under an `id="stage-supplied"` banner; `_run_stage_not_executed.html` is left for a stage with
-no record at all. The run log narrates execution only, so a supplied stage is not in
-`run_start`'s `stage_count`.
+## Overwritten stages
+A stage whose output was GIVEN to the run rather than computed by it — an eval's dataset, a
+source a `stage_ids` scope cut off — carries an `overwritten` record. Its frame goes through
+the SAME `record_frame_as_stage_output` a computed one does (`app.runtime.executor`), so it is
+written to `outputs/`, validated against that stage's own declared output schema, digested
+(`content_digest`, `app.core.frames.compute_table_digest` — values, not bytes, so the same
+table digests alike from xlsx, csv or parquet), and BLOCKS its downstream when it does not
+conform. `overwritten_by` says where it came from, and a file read also lands in
+`input_bindings`. The panel shows the rows under an `id="stage-overwritten"` banner;
+`_run_stage_not_executed.html` is left for a stage with no record at all. The run log narrates
+execution only, so an overwritten stage is not in `run_start`'s `stage_count`.
+
+A workflow test does NOT overwrite its sources: every stage runs, input stages included, cut
+to the run's `limit`/`offset` window — only a source the scope leaves out is handed a frame.
 
 Every stage definition a run page shows or executes (panel, lineage panel, scratch re-run)
 comes from the version the run pinned, via `services.run.load_pinned_stage_def` /

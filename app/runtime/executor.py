@@ -11,7 +11,7 @@ import time
 import traceback
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Iterable, Mapping, NamedTuple
+from typing import Any, Iterable, Mapping, NamedTuple, Sequence
 
 import pandas as pd
 
@@ -28,7 +28,7 @@ from app.models.run_manifest import (
     StageContribution,
     StageErrorInfo,
     StageRecord,
-    SuppliedFrame,
+    OverwrittenFrame,
 )
 from app.models.run_parameters import RunParameters
 from app.core.run_status import RunStatus, StageStatus
@@ -76,7 +76,7 @@ def run_subset(
     *,
     injected_outputs: dict[str, pd.DataFrame],
     stage_ids: list[str],
-    supplied_provenance: Mapping[str, SuppliedFrame] | None = None,
+    overwritten: Mapping[str, OverwrittenFrame] | None = None,
     run_dir: Path,
     repo_root: Path,
     params: RunParameters = RunParameters(),
@@ -103,7 +103,7 @@ def run_subset(
     An injected output is not a hole in the record: each one gets a stage record of
     its own (status `supplied`), its frame written to `outputs/` and validated, and a
     content digest, so what entered the run is as inspectable as what it computed.
-    `supplied_provenance` says where each came from; a stage with none is recorded as
+    `overwritten` says where each came from; a stage with none is recorded as
     caller-supplied, never as a file this run cannot vouch for.
 
     Any input of a subset stage that names a stage outside the subset must appear in
@@ -133,63 +133,41 @@ def run_subset(
     missing = [sid for sid in stage_ids if sid not in by_id]
     if missing:
         raise SubsetRunError(f"subset names stage(s) not in the workflow: {missing}")
-    supplied_stages = [by_id[sid] for sid in injected_outputs if sid in by_id]
-    # Supplied stages join the run's own ordering: they get a record, an output on
-    # disk and a place in the graph like any other stage, and the loop skips them
-    # (their status is one _stage_output_already_produced accepts).
-    ordered = topological_sort(supplied_stages + [by_id[sid] for sid in stage_ids])
+    # An overwritten stage joins the run's own ordering: the loop reaches it, records
+    # its frame through the SAME path a computed one takes, and blocks its downstream
+    # if that frame does not conform — none of which a pre-pass outside the loop could
+    # do, which is why there is no pre-pass.
+    overwritten_by = _read_overwrite_provenance(injected_outputs, by_id, overwritten)
+    ordered = topological_sort(
+        [by_id[sid] for sid in overwritten_by] + [by_id[sid] for sid in stage_ids])
     (run_dir / "outputs").mkdir(parents=True, exist_ok=True)
     ctx = _subset_ctx(repo_root, run_dir, identity, params)
     manifest = create_run_manifest(
         ordered, ctx, run_id=run_dir.name, project=project,
         workflow_version=workflow_version,
-        input_bindings=_read_supplied_file_bindings(supplied_provenance))
-    supplied_records = _record_supplied_frames(
-        supplied_stages, injected_outputs, run_dir, supplied_provenance or {})
-    manifest.settle_stage_records([
-        supplied_records.get(stage.id)
-        or StageRecord.record_with_status(stage, StageStatus.PENDING)
-        for stage in ordered
-    ])
+        input_bindings=_read_overwritten_file_bindings(overwritten_by))
     write_manifest(run_dir, manifest)
     outputs: dict[str, pd.DataFrame] = dict(injected_outputs)
-    manifest = _execute_stages(ordered, ctx, manifest, run_dir, outputs)
+    manifest = _execute_stages(ordered, ctx, manifest, run_dir, outputs, overwritten_by)
     _raise_if_run_failed(manifest)
     return outputs
 
 
-def _record_supplied_frames(
-    stages: list[Stage],
-    frames: Mapping[str, pd.DataFrame],
-    run_dir: Path,
-    provenance: Mapping[str, SuppliedFrame],
-) -> dict[str, StageRecord]:
-    """A manifest record per stage whose output was GIVEN rather than computed."""
-    records: dict[str, StageRecord] = {}
-    # Each frame is written to outputs/ like any other stage's, validated against that
-    # stage's OWN declared output schema — the consumer's edge check covers only what
-    # the consumer declared it reads — and digested, so a run that really executes the
-    # stage can be compared against what was supplied here. A frame that violates the
-    # schema is RECORDED, not raised on: the run has not started, and the report is the
-    # honest place to say so.
-    for stage in stages:
-        frame = frames[stage.id]
-        record = StageRecord.record_with_status(stage, StageStatus.SUPPLIED)
-        record.output_validation_report = validate_dataframe(
-            frame, stage.resolve_output_schema(), stage_id=stage.id, phase="output"
-        ).to_dict()
-        record.output_row_count = len(frame)
-        record.output_path = str(
-            _persist_stage_output(frame, stage.id, run_dir, record).relative_to(run_dir)
-        )
-        record.content_digest = _compute_output_digest(stage, frame)
-        record.supplied_by = provenance.get(stage.id) or SuppliedFrame(origin="caller")
-        records[stage.id] = record
-    return records
+def _read_overwrite_provenance(
+    injected_outputs: Mapping[str, pd.DataFrame],
+    by_id: Mapping[str, Stage],
+    provenance: Mapping[str, OverwrittenFrame] | None,
+) -> dict[str, OverwrittenFrame]:
+    """Where each injected frame came from; an origin the run cannot vouch for by default."""
+    return {
+        sid: (provenance or {}).get(sid) or OverwrittenFrame(origin="caller")
+        for sid in injected_outputs
+        if sid in by_id
+    }
 
 
-def _read_supplied_file_bindings(
-    provenance: Mapping[str, SuppliedFrame] | None,
+def _read_overwritten_file_bindings(
+    provenance: Mapping[str, OverwrittenFrame] | None,
 ) -> dict[str, dict[str, Any]]:
     """The file-read supplies as manifest `input_bindings`."""
     return {
@@ -248,25 +226,24 @@ def _execute_stages(
     manifest: RunManifest,
     run_dir: Path,
     outputs_so_far: dict[str, pd.DataFrame],
+    overwritten_by: Mapping[str, OverwrittenFrame] | None = None,
 ) -> RunManifest:
     """Execute ordered stages under this run's own event log."""
     # Opened here, not in the RunContext constructors, so EVERY entry path
     # (run_prepared, execute_run, run_subset, resume_run) is logged regardless of
     # the ctx it built, and the log's lifetime is exactly this call's.
     run_log = RunLog(run_dir / "events.jsonl")
-    supplied = {
-        record.stage_id for record in manifest.stage_records
-        if record.status is StageStatus.SUPPLIED
-    }
+    overwritten_by = overwritten_by or {}
     run_log.emit({
         "kind": RUN_START, "run_id": manifest.run_id,
-        # The spine narrates EXECUTION, and a supplied stage never starts or finishes,
-        # so it is not counted here — its record and output are in the manifest.
-        "stage_count": len([stage for stage in ordered if stage.id not in supplied]),
+        # The spine narrates EXECUTION, and an overwritten stage never starts or
+        # finishes, so it is not counted — its record and output are in the manifest.
+        "stage_count": len([s for s in ordered if s.id not in overwritten_by]),
     })
     try:
         return _run_ordered_stages(
-            ordered, ctx.attach_run_log(run_log), manifest, run_dir, outputs_so_far
+            ordered, ctx.attach_run_log(run_log), manifest, run_dir, outputs_so_far,
+            overwritten_by,
         )
     finally:
         # close() writes the terminal run_done marker the SSE tailer stops on —
@@ -281,6 +258,7 @@ def _run_ordered_stages(
     manifest: RunManifest,
     run_dir: Path,
     outputs_so_far: dict[str, pd.DataFrame],
+    overwritten_by: Mapping[str, OverwrittenFrame],
 ) -> RunManifest:
     """Execute ordered stages, honoring HaltForReview and RunCancelled.
 
@@ -336,6 +314,19 @@ def _run_ordered_stages(
             records_by_id[sid] = StageRecord.record_with_status(stage, StageStatus.PENDING)
             blocked.add(sid)
             outputs_so_far.pop(sid, None)
+            _flush_manifest(manifest, records_by_id, ordered, run_dir, RunStatus.RUNNING)
+            continue
+
+        # A stage this run was HANDED a frame for: it does not execute, but its frame
+        # still becomes its output of record through the same path a computed one takes
+        # — so a frame that violates the stage's schema errors it and blocks its
+        # downstream exactly as a computed one would.
+        if sid in overwritten_by:
+            if _record_overwritten_stage(
+                stage, outputs_so_far[sid], overwritten_by[sid],
+                records_by_id, run_dir,
+            ):
+                blocked.add(sid)
             _flush_manifest(manifest, records_by_id, ordered, run_dir, RunStatus.RUNNING)
             continue
 
@@ -593,42 +584,67 @@ def _finalize_stage_output(
     if lineage is not None:
         _persist_row_lineage(lineage, sid, run_dir)
 
-    out_rep = validate_dataframe(output, stage.resolve_output_schema(), stage_id=sid, phase="output")
-    if row_errors:
-        out_rep.issues[0:0] = [
+    clean_status = StageStatus.OK if all(
+        v["ok"] for v in record.input_validation_report
+    ) else StageStatus.VALIDATION_WARNINGS
+    blocks = record_frame_as_stage_output(
+        stage, output, record, run_dir,
+        clean_status=clean_status,
+        extra_issues=[
             Issue("error", None,
                   f"row {row_error['row']}: generation failed: {row_error['message']}")
             for row_error in row_errors
-        ]
-    record.output_validation_report = out_rep.to_dict()
-
-    output_path = _persist_stage_output(output, sid, run_dir, record)
-    record.content_digest = _compute_output_digest(stage, output)
-    outputs_so_far[sid] = output
-
-    if row_errors:
-        record.status = StageStatus.ERROR
-        record.error = StageErrorInfo(
+        ],
+        extra_error=None if not row_errors else StageErrorInfo(
             type="RowGenerationError",
             message=_summarize_row_errors(row_errors),
             traceback=None,
-        )
-    elif not out_rep.ok:
-        record.status = StageStatus.ERROR
-        record.error = StageErrorInfo(
-            type=SCHEMA_REFUSAL_ERROR_TYPE,
-            message=_summarize_output_schema_errors(sid, out_rep),
-            traceback=None,
-        )
-    else:
-        record.status = StageStatus.OK if all(
-            v["ok"] for v in record.input_validation_report
-        ) else StageStatus.VALIDATION_WARNINGS
-    record.output_row_count = int(len(output))
+        ),
+    )
+    outputs_so_far[sid] = output
+    return blocks
+
+
+def record_frame_as_stage_output(
+    stage: Stage,
+    frame: pd.DataFrame,
+    record: StageRecord,
+    run_dir: Path,
+    *,
+    clean_status: StageStatus,
+    extra_issues: Sequence[Issue] = (),
+    extra_error: StageErrorInfo | None = None,
+) -> bool:
+    """The one way a frame becomes a stage's output of record; True = block downstream."""
+    report = validate_dataframe(
+        frame, stage.resolve_output_schema(), stage_id=stage.id, phase="output")
+    report.issues[0:0] = list(extra_issues)
+    record.output_validation_report = report.to_dict()
+
+    output_path = _persist_stage_output(frame, stage.id, run_dir, record)
+    record.content_digest = _compute_output_digest(stage, frame)
+    record.output_row_count = int(len(frame))
     # Manifest paths are POSIX-style so the persisted JSON is identical on
     # every platform.
     record.output_path = output_path.relative_to(run_dir).as_posix()
-    return record.status == StageStatus.ERROR
+
+    # EVERY frame entering a run settles here — one a handler computed, one an eval
+    # overwrote a stage with, one a scoped run was handed — so a frame that violates the
+    # stage's own declared output schema is an `error` whatever produced it, and its
+    # consumers are blocked rather than run on it. The file stays on disk for
+    # inspection, and the `error` status keeps a resume from reusing it.
+    if extra_error is not None:
+        record.status, record.error = StageStatus.ERROR, extra_error
+    elif not report.ok:
+        record.status = StageStatus.ERROR
+        record.error = StageErrorInfo(
+            type=SCHEMA_REFUSAL_ERROR_TYPE,
+            message=_summarize_output_schema_errors(stage.id, report),
+            traceback=None,
+        )
+    else:
+        record.status = clean_status
+    return record.status is StageStatus.ERROR
 
 
 def _read_stage_contribution(output: pd.DataFrame | None) -> StageContribution:
@@ -731,6 +747,23 @@ def _run_stage(
     return _StageOutcome.RAN, joins_blocked
 
 
+def _record_overwritten_stage(
+    stage: Stage,
+    frame: pd.DataFrame,
+    overwritten_by: OverwrittenFrame,
+    records_by_id: dict[str, StageRecord],
+    run_dir: Path,
+) -> bool:
+    """Record a frame the run was handed as this stage's output. Blocks like a computed one."""
+    record = StageRecord.record_with_status(stage, StageStatus.OVERWRITTEN)
+    record.overwritten_by = overwritten_by
+    records_by_id[stage.id] = record
+    # Its INPUT reports stay empty: nothing was read to make this frame, so the only
+    # contract that applies is the stage's own declared output schema.
+    return record_frame_as_stage_output(
+        stage, frame, record, run_dir, clean_status=StageStatus.OVERWRITTEN)
+
+
 def _emit_stage_start(log: RunLog | None, stage: Stage) -> None:
     if log is not None:
         log.emit({"kind": STAGE_START, "stage": stage.id, "type": stage.type})
@@ -831,23 +864,17 @@ def _find_blocking_upstream(stage: Stage, blocked: set[str]) -> list[str]:
     return [input_id for input_id in stage.input_ids if input_id in blocked]
 
 
-# The statuses whose output the loop trusts and so does not re-run: a completion
-# from a prior partial run (the resume path), or a frame supplied to this one.
-# Anything else on disk is stale — from before a halt, cancel or error.
-_STATUSES_NOT_RERUN = (
-    StageStatus.OK, StageStatus.VALIDATION_WARNINGS, StageStatus.SUPPLIED,
-)
-
-
 def _stage_output_already_produced(
     sid: str, outputs_so_far: dict[str, pd.DataFrame], records_by_id: dict[str, StageRecord]
 ) -> bool:
-    """True when `sid`'s output is already in hand — resumed from a prior partial
-    run, or supplied to this one — under a status the loop can trust."""
+    """True when `sid`'s output was computed in a prior partial run (the
+    resume path) and its last recorded status is a completion the loop can
+    trust to skip re-running it, rather than a stale record from before a
+    halt/cancel/error."""
     if sid not in outputs_so_far:
         return False
     record = records_by_id.get(sid)
-    return record is not None and record.status in _STATUSES_NOT_RERUN
+    return record is not None and record.status in (StageStatus.OK, StageStatus.VALIDATION_WARNINGS)
 
 
 def _final_run_status(stage_statuses: Iterable[str]) -> RunStatus:

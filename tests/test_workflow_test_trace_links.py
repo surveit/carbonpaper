@@ -62,7 +62,7 @@ def demo(tmp_path, monkeypatch):
 def test_publish_stage_trace_links_works_in_a_workflow_test(demo):
     result = run_workflow_test("demo")
     assert result["ok"] is True, result["error"]
-    assert result["stages_run"] == ["publish_report"]
+    assert result["stages_run"] == ["load", "publish_report"]
 
     run_id = result["run_id"]
     urls = json.loads(
