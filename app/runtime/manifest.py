@@ -1,7 +1,8 @@
-"""Minting a run manifest, and its on-disk file IO — the shape itself is
+"""Minting a run manifest, writing it to disk, and reading back the frames its
+stages wrote — the shape, and the manifest read itself, are
 `app.models.run_manifest`. The executor (`app.runtime.executor`) is its single
-writer; every other layer reads it back. Serialization is `exclude_unset`, so an
-optional field appears on disk only once the run reaches the point that sets it.
+writer. Serialization is `exclude_unset`, so an optional field appears on disk
+only once the run reaches the point that sets it.
 """
 
 from __future__ import annotations
@@ -17,7 +18,7 @@ from app.core.errors import StageNotInRun, StageOutputMissing
 from app.core.frames import read_frame_file
 from app.core.run_status import RunStatus, StageStatus
 from app.models import Stage
-from app.models.run_manifest import RunManifest, StageRecord
+from app.models.run_manifest import RunManifest, StageRecord, read_run_manifest
 
 from .context import RunContext
 
@@ -90,7 +91,7 @@ def resolve_output_path(run_dir: Path, output_path: str | None) -> Path | None:
 
 def read_stage_output_frame(run_dir: Path, stage_id: str) -> pd.DataFrame:
     """The frame a stage of this run wrote, read from the path its own record names."""
-    records = load_manifest_model(run_dir).stage_records
+    records = read_run_manifest(run_dir).stage_records
     record = _find_stage_record(records, run_dir, stage_id)
     path = resolve_output_path(run_dir, record.output_path)
     if path is None:
@@ -111,13 +112,3 @@ def _find_stage_record(
     raise StageNotInRun(
         f"run '{run_dir.name}' has no stage '{stage_id}' — the stages it ran: {ran}"
     )
-
-
-def load_manifest_model(run_dir: Path) -> RunManifest:
-    """Parse a run's `manifest.json` off disk into a `RunManifest`, applying the
-    model's normalization (a legacy scalar `halted_at` becomes a one-element
-    list). Raises FileNotFoundError if the run has no manifest."""
-    manifest_path = run_dir / "manifest.json"
-    if not manifest_path.exists():
-        raise FileNotFoundError(f"No manifest at {manifest_path}")
-    return RunManifest.model_validate_json(manifest_path.read_text(encoding="utf-8"))

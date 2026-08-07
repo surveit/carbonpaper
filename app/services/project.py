@@ -15,7 +15,7 @@ from typing import Any, ClassVar, Sequence
 
 from pydantic import BaseModel, field_validator
 
-from app.core.errors import ProjectExistsError
+from app.core.errors import ProjectExistsError, RunManifestNotJson
 from app.models import (
     SchemaLibrary,
     Stage,
@@ -24,7 +24,11 @@ from app.models import (
     stage_to_spec_dict,
 )
 from app.models.review_guide import ReviewGuideDraft
-from app.models.run_manifest import records_a_test_run
+from app.models.run_manifest import (
+    find_manifest_backed_run_dirs,
+    read_run_manifest_json,
+    records_a_test_run,
+)
 from app.services.versioning import ReviewGuide
 from app.core.persistence import PersistedModel, PersistenceScope
 from app.core.run_status import RunStatus
@@ -177,39 +181,20 @@ def _load_compiled_stages(pdir: Path) -> list[dict[str, Any]]:
 
 
 def _runs_summary(pdir: Path) -> RunsSummary:
-    """Summarise the project's runs/ dir into a RunsSummary (n / awaiting_review /
-    latest_status) — NON-TEST runs only, so a workflow test (a real run under the
-    same runs/ dir, but marked `is_test_run: true` — see RunParameters.is_test_run)
-    never counts as, or masquerades as, the project's latest production run.
-
-    A run is a child dir of runs/ WITH a readable manifest.json; dirs lacking one
-    (partial / legacy-output-only) are not counted, so n is the count of real
-    non-test runs, never inflated. `awaiting_review`
-    counts non-test runs whose status is 'awaiting_review' (halted at a
-    human_review_queue) — the driver of the "review the run" rung of the ladder.
-    `latest_status` is the newest non-test run's status (runs are timestamp-id'd,
-    so the max id is newest); None when there are no non-test runs. A corrupt
-    manifest is counted (status 'corrupt') rather than hidden — a manifest this
-    reader cannot parse carries no `is_test_run` to exclude it by, so it is
-    treated as non-test, same as before this field existed."""
-    runs_dir = pdir / "runs"
-    if not runs_dir.is_dir():
-        return RunsSummary(n=0, awaiting_review=0, latest_status=None)
+    """Non-test runs only: a workflow test must never masquerade as the latest production run."""
     statuses: list[tuple[str, str]] = []  # (run_id, status)
     awaiting = 0
-    for run in runs_dir.iterdir():
-        if not run.is_dir():
-            continue
-        manifest_path = run / "manifest.json"
-        if not manifest_path.exists():
-            continue
+    for run in find_manifest_backed_run_dirs(pdir / "runs"):
         try:
-            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest = read_run_manifest_json(run)
+        except RunManifestNotJson:
+            # Counted, not hidden: a manifest this reader cannot parse carries no
+            # `is_test_run` to exclude it by, so it is treated as non-test, same
+            # as every run was before that field existed.
+            status, is_test_run = "corrupt", False
+        else:
             status = manifest.get("status", "unknown")
             is_test_run = records_a_test_run(manifest)
-        except json.JSONDecodeError:
-            status = "corrupt"
-            is_test_run = False
         if is_test_run:
             continue
         statuses.append((run.name, status))

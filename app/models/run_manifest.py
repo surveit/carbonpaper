@@ -1,18 +1,21 @@
-"""What a run RECORDS: the manifest's typed shape and the pure predicates over it.
+"""What a run RECORDS: the manifest's typed shape, the pure predicates over it, and
+the one read of a run's manifest.json off disk.
 
-Minting one, writing it to disk, and reading a stage's output frame back are the
-runtime's job (`app.runtime.manifest`) — a reader that only needs the shape, or
-one raw-dict fact off it, does not have to reach into the runtime for it.
+Minting one, writing it back, and reading a stage's output frame are the runtime's
+job (`app.runtime.manifest`).
 """
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
+from pathlib import Path
 from typing import Any, TypedDict
 
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 from app.core.agent.usage import LlmUsage
+from app.core.errors import RunManifestNotJson
 from app.core.run_status import RunStatus, StageStatus
 from app.models.run_parameters import RunParameters
 from app.models.stage import Stage
@@ -166,7 +169,7 @@ class RunManifest(BaseModel):
 
     This is a run-directory file artifact, not a document-store model: it lives
     as `manifest.json` inside the run dir alongside that run's `outputs/` and
-    `artifacts/`, and is read back by path (`load_manifest_model`). It is not a
+    `artifacts/`, and is read back by path (`read_run_manifest`). It is not a
     `PersistedModel` and has no row in the document store."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -276,3 +279,43 @@ def read_run_bindings(raw: dict[str, Any]) -> dict[str, dict[str, Any]]:
     if isinstance(nested, dict) and "run_bindings" in nested:
         return dict(nested["run_bindings"] or {})
     return dict(raw.get("run_bindings") or {})
+
+
+# ─── Reading a run's manifest off disk ────────────────────────────────────────
+# The only place a run directory's manifest.json is located, read and JSON-parsed.
+# `read_run_manifest_json` hands back the raw object, so a caller needing one fact
+# off a manifest this model would reject (a partial or pre-rename file already on
+# disk) still gets it; `read_run_manifest` adds the typed validation on top.
+# Neither decides what an unreadable manifest MEANS — each caller answers that.
+
+_MANIFEST_FILENAME = "manifest.json"
+
+
+def find_manifest_backed_run_dirs(runs_dir: Path) -> list[Path]:
+    """Name-sorted, so a caller wanting newest-first reverses; [] when there is no such dir."""
+    if not runs_dir.is_dir():
+        return []
+    return sorted(
+        (run for run in runs_dir.iterdir()
+         if run.is_dir() and (run / _MANIFEST_FILENAME).exists()),
+        key=lambda run: run.name,
+    )
+
+
+def read_run_manifest_json(run_dir: Path) -> dict[str, Any]:
+    """Raises FileNotFoundError when the run has no manifest, RunManifestNotJson when it isn't JSON."""
+    path = run_dir / _MANIFEST_FILENAME
+    if not path.exists():
+        raise FileNotFoundError(f"No manifest at {path}")
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise RunManifestNotJson(f"{path} does not parse as JSON: {exc}") from exc
+    if not isinstance(raw, dict):
+        raise RunManifestNotJson(f"{path} holds a JSON {type(raw).__name__}, not an object")
+    return raw
+
+
+def read_run_manifest(run_dir: Path) -> RunManifest:
+    """Raises as `read_run_manifest_json` does, plus ValidationError on a shape this model rejects."""
+    return RunManifest.model_validate(read_run_manifest_json(run_dir))

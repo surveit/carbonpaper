@@ -9,13 +9,13 @@ import pytest
 
 from app.core.stage_cache import ReadOnlyStageCache
 from app.models import Stage
-from app.models.run_manifest import StageContribution
+from app.models.run_manifest import StageContribution, read_run_manifest
 from app.models.run_parameters import RunParameters
 from app.runtime.context import (
     RunContext,
     RunIdentity,
 )
-from app.runtime.manifest import CONTRIBUTION_ATTR, load_manifest_model
+from app.runtime.manifest import CONTRIBUTION_ATTR
 from app.services.versioning import load_version_stages, resolve_version_id
 
 
@@ -31,7 +31,7 @@ def resumed_stages(project_dir: Path, run_id: str) -> tuple[list[Stage], str]:
     """The (stages, version id) a resume must execute: the version THIS run pinned."""
     # Read off the manifest, not the newest published version, so a resume stays on
     # the snapshot the halted run started on even if a newer one was published since.
-    workflow_version = load_manifest_model(project_dir / "runs" / run_id).workflow_version
+    workflow_version = read_run_manifest(project_dir / "runs" / run_id).workflow_version
     assert workflow_version, f"run {run_id} records no workflow_version"
     return load_version_stages(project_dir, workflow_version), workflow_version
 
