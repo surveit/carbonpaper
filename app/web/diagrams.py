@@ -298,11 +298,11 @@ _STATUS_GLYPH: dict[str, str] = {
 # cancelled ✖ vs pending …). Every colour here is one of the five --state-*
 # properties in palette.css, enforced by tests/arch/test_status_colour_contract.py.
 _STATUS_STROKE: dict[str, tuple[str, str]] = {
-    StageStatus.OK: ("#3b6c39", "3px"),                    # done
-    StageStatus.RUNNING: ("#8a602e", "3px"),               # warning
-    StageStatus.VALIDATION_WARNINGS: ("#8a602e", "3px"),   # warning
-    StageStatus.ERROR: ("#8c4538", "3px"),                 # failed
-    StageStatus.AWAITING_REVIEW: ("#00677d", "4px"),       # needs a human
+    StageStatus.OK: ("#2f6d30", "3px"),                    # done
+    StageStatus.RUNNING: ("#8b602c", "3px"),               # warning
+    StageStatus.VALIDATION_WARNINGS: ("#8b602c", "3px"),   # warning
+    StageStatus.ERROR: ("#934133", "3px"),                 # failed
+    StageStatus.AWAITING_REVIEW: ("#007a93", "4px"),       # needs a human
     StageStatus.CANCELLED: ("#787d86", "3px"),             # idle
     StageStatus.PENDING: ("#787d86", "1px"),               # idle
 }

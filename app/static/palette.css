@@ -66,23 +66,26 @@
          -bg    the tint it sits on — the colour that GROUPS
          -ink   text on that tint — the colour you READ, >= 6.5:1 on its -bg
 
-       Every -bd sits at the transfer ink's own chroma (CIE C* 36, the value of
-       --info-bd), so nothing on the page is louder than the accent. Left at the
-       saturation they arrived with, red was 1.9x that, amber 1.6x and green 1.4x,
-       and they read as a traffic light taped to the page. --idle is the one
-       exception, near-neutral by definition. The tints are a matching set at one
-       fixed lightness and chroma, so no state's tint outweighs another's.
+       Chroma is set PER HUE, for equal perceived vividness rather than equal
+       measurement: good 44, bad 42, info 40 (gamut-limited to 29), warn 38,
+       accent 46, idle 6. Yellows and oranges reach their perceived ceiling early
+       while blues, teals and violets carry far more before they shout, so one
+       number cannot serve them all — pinning every hue to a flat 36 fixed the
+       loudness and left the page dead. The accent is the most vivid thing here
+       ON PURPOSE: it is the one element asking to be clicked. The tints follow
+       at C* 12-15 rather than 8, because a chip is 90% tint by area and colour
+       that lives only in a 1px border is colour a reader never sees.
 
        Identity is carried by -bd and -ink; every surface spending a tint also
        carries a label or a border, so never separate two things by tint alone.
 
        tests/arch/test_status_colour_contract.py measures every ink against its
        own tint, so a nudged value fails CI rather than a reader. */
-    --good-bd: #3b6c39;   --good-bg: #e2ede1;   --good-ink: #2b5c2b;
-    --warn-bd: #8a602e;   --warn-bg: #f5e8dd;   --warn-ink: #704918;
-    --bad-bd: #8c4538;    --bad-bg: #fae6e2;    --bad-ink: #833d31;
-    --info-bd: #00677d;   --info-bg: #d9eef5;   --info-ink: #00596f;
-    --idle-bd: #787d86;   --idle-bg: #e8ebee;   --idle-ink: #4d525a;
+    --good-bd: #2f6d30;   --good-bg: #daedd7;   --good-ink: #1c5c20;
+    --warn-bd: #8b602c;   --warn-bg: #fae4cf;   --warn-ink: #6f4714;
+    --bad-bd: #934133;    --bad-bg: #ffe1da;    --bad-ink: #863629;
+    --info-bd: #007a93;   --info-bg: #c7eff7;   --info-ink: #005870;
+    --idle-bd: #787d86;   --idle-bg: #e6e8ec;   --idle-ink: #4c5159;
 
     /* ── Interaction, not meaning ─────────────────────────────────────────
        --accent is the transfer ink — the CTA blue, and its OWN value. It is
@@ -91,15 +94,15 @@
        context. --focus is the only colour here naming no meaning — it marks the
        node or field you are ON, and has to stay legible painted over a node
        already stroked in --info-bd, so it cannot be
-       --accent, and it must not be --info either. It carries chroma 48 — above
-       the hues' 36 so it reads as an interaction rather than a meaning, and
-       nowhere near the 82 it started at. Every pair among the five states, the
-       accent and the focus clears 20 deltaE; the tightest is warn/bad at 22.
+       --accent, and it must not be --info either. It carries chroma 52 — the
+       highest here, because it is transient and has to win against whatever it
+       is painted over. Every pair among the five states, the accent and the
+       focus clears 20 deltaE; the tightest is warn/bad at 25.
        The three color-mix values below keep a shadow tied to the ink that casts
        it instead of to a black of its own. */
-    --accent: #35538d;
-    --accent-deep: #24467e;
-    --focus: #873475;
+    --accent: #1d539c;
+    --accent-deep: #00458c;
+    --focus: #8a2f78;
     --shadow: color-mix(in srgb, var(--fg) 9%, transparent);
     --focus-glow: color-mix(in srgb, var(--focus) 55%, transparent);
     --focus-halo: color-mix(in srgb, var(--focus) 20%, transparent);
