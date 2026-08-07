@@ -5,7 +5,6 @@ stays in the stage panel's own validation block, so there is one copy of it.
 
 from __future__ import annotations
 
-from collections import Counter
 from enum import Enum
 from typing import Any, Mapping, Sequence
 
@@ -74,17 +73,22 @@ class RunIssues(BaseModel):
     stopped: list[StoppedStage]
     flagged: list[FlaggedStage]
 
+    # The two counts the panel is headed by; the WORDING is the shared issue
+    # table's, so the Workflow page's heading cannot drift from this one.
     @property
-    def flagged_headline(self) -> str:
-        """The flagged section's title: its counts by severity, a zero left out entirely."""
-        counts = Counter(
-            issue.severity for stage in self.flagged for issue in stage.issues
-        )
-        return ", ".join(
-            f"{counts[severity.value]} {severity.value}"
-            f"{'' if counts[severity.value] == 1 else 's'}"
-            for severity in (Severity.warning, Severity.error)
-            if counts[severity.value]
+    def flagged_errors(self) -> int:
+        return self._count_flagged(Severity.error)
+
+    @property
+    def flagged_warnings(self) -> int:
+        return self._count_flagged(Severity.warning)
+
+    def _count_flagged(self, severity: Severity) -> int:
+        return sum(
+            1
+            for stage in self.flagged
+            for issue in stage.issues
+            if issue.severity == severity
         )
 
 

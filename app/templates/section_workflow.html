@@ -81,16 +81,12 @@
    Drawn with the issue table the run page indexes ITS issues with: the severity
    word leads, the stage links its panel, the kind rides in the narrow cell a run
    gives the column name. `error` here is the report's own `blocking` — the warning
-   an edit to that stage can clear — which the summary line says in words. #}
+   an edit to that stage can clear — and the panel is titled by the two counts, in
+   the words the clean state below already answers in ("0 errors, 0 warnings"). #}
 {% if compiler_warnings and compiler_warnings.warnings %}
 {% set blocking = compiler_warnings.blocking|length %}
-{% set total = compiler_warnings.warnings|length %}
 <div class="wf-issue-index">
-{% call issue_panel(
-     ("%d to fix before signing off" | format(blocking)) if blocking else "Nothing left to fix",
-     "%d of %d compiler warning%s can be cleared by editing the stage — judged without running anything" | format(
-       blocking, total, '' if total == 1 else 's'),
-     open=true, tone="error" if blocking else "warn") %}
+{% call issue_panel(blocking, compiler_warnings.warnings|length - blocking, open=true) %}
   {% for warning in compiler_warnings.warnings %}
   {{ issue_row(severity="error" if warning.blocking else "warning",
                stage_id=warning.stage_id, subject=warning.kind,

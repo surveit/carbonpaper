@@ -12,12 +12,20 @@
 
   A stage link carries [data-stage-link], the app-wide "open this stage" hook, and
   `tab` names which of the stage panel's tabs to open where the page has tabs.
+
+  The panel is titled by its COUNTS and nothing else — "18 warnings, 3 errors" —
+  so the two pages cannot drift into describing the same list differently. A count
+  of zero is not written: "0 errors" reads as a result, and the result here is the
+  other number.
 #}
-{% macro issue_panel(title, note, open=false, tone="warn") %}
-<details class="issue-panel issue-panel-{{ tone }}"{% if open %} open{% endif %}>
+{% macro issue_panel(errors, warnings, open=false) %}
+<details class="issue-panel issue-panel-{{ 'error' if errors else 'warn' }}"{% if open %} open{% endif %}>
   <summary>
-    <span class="issue-panel-title">{{ title }}</span>
-    <span class="muted">{{ note }}</span>
+    <span class="issue-panel-title">
+      {%- if warnings %}{{ warnings }} warning{{ '' if warnings == 1 else 's' }}{% endif -%}
+      {%- if errors and warnings %}, {% endif -%}
+      {%- if errors %}{{ errors }} error{{ '' if errors == 1 else 's' }}{% endif -%}
+    </span>
   </summary>
   <div class="issue-panel-scroll">
     <table class="issue-table">

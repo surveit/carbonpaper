@@ -6,10 +6,11 @@
        people: the data no longer matches what the stage declares (the data
        owner's), or the code broke (the engineer's). The data card links the
        stage panel's Data tab, the crash card its Transform tab.
-    2. The flagged section, titled by its own counts ("17 warnings, 2 errors")
-       — every issue that did NOT stop the run, across every stage that ran, one
-       line per stage × column × message. Shown on a clean run too: a run that
-       finished with warnings nobody read is the one worth noticing. Open by
+    2. The flagged section, headed by its own counts and nothing else ("17
+       warnings, 2 errors") — every issue that did NOT stop the run, across every
+       stage that ran, one line per stage × column × message. Shown on a clean run
+       too: a run that finished with warnings nobody read is the one worth
+       noticing. Open by
        default only when nothing stopped the run, so a stop keeps the headline.
 
   An INDEX. Every line is worded by the report that raised it and links the
@@ -74,11 +75,8 @@
 {% endif %}
 
 {% if issues.flagged %}
-{% call issue_panel(
-     issues.flagged_headline,
-     "across %d stage%s — none of them stopped the run" | format(
-       issues.flagged | length, '' if issues.flagged | length == 1 else 's'),
-     open=not issues.stopped) %}
+{% call issue_panel(issues.flagged_errors, issues.flagged_warnings,
+                    open=not issues.stopped) %}
   {% for stage in issues.flagged %}{% for issue in stage.issues %}
   {# The phases ride at the end of the message rather than in a column of their
      own: a column sized to the longest producer id costs the message the width it
