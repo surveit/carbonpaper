@@ -200,6 +200,9 @@
   }
   window._focusGraphNode = focusGraphNode;
 
+  const SCROLL_BEHAVIOR =
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+
   // opts.pulse defaults to true: every caller but the graph-node click is a jump
   // away from where the reader was looking. opts.tab opens the panel on a named
   // tab; opts.reveal scrolls the panel into view, for a caller whose own link is
@@ -223,10 +226,13 @@
       const card = panel.querySelector('.run-stage-panel');
       if (opts && opts.tab && card && card._selectTab) card._selectTab(opts.tab);
       if (location.hash !== `#${stageId}`) history.replaceState(null, '', `#${stageId}`);
-      // The graph moves to the stage; the page does not. Scrolling down to the panel
-      // took the diagram off screen, which is the thing the click was about.
+      // The graph moves to the stage; a click on the graph itself does not move the
+      // page, which would take the diagram off screen.
       focusGraphNode(stageId, { pulse: !opts || opts.pulse !== false });
-      if (opts && opts.reveal) panel.scrollIntoView({ block: 'start' });
+      // Animated, so the reader sees where the page went rather than being
+      // teleported. 'auto' for a reader who asked for less motion, and under
+      // automation, where 'smooth' scrolls nothing and so cannot be measured.
+      if (opts && opts.reveal) panel.scrollIntoView({ behavior: SCROLL_BEHAVIOR, block: 'start' });
     } finally { panel.classList.remove('loading'); }
   }
   window._loadStage = loadStage;

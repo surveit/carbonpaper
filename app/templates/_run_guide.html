@@ -311,7 +311,9 @@
       .forEach(el => el.classList.remove('active'));
     document.querySelectorAll(`.guide-stage-row[data-stage-link="${CSS.escape(id)}"]`)
       .forEach(el => el.classList.add('active'));
-    if (window._loadStage) window._loadStage(id);
+    // reveal: the rail sits beside the top of the page, so the panel it loads
+    // into is off screen — a step and its output link both land on the panel.
+    window._loadStage(id, { reveal: true });
   });
 
   // ── Guide drawer, mirroring the sidebar's.
