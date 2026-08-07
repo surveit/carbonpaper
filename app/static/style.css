@@ -1726,9 +1726,9 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
 /* ═══════════════════════════════════════════════════════════════════════════
    LEFT-SIDEBAR PROJECT SHELL (project_shell.html + the 5 section templates)
    ═══════════════════════════════════════════════════════════════════════════
-   One project, framed by a fixed left sidebar (project name + 5 nav items, each
-   with a truthful status glyph) and a main content area holding the active
-   section. Reuses the shared --vars and .btn primitives.
+   One project, framed by a fixed left sidebar (project name + the nav items, which
+   carry no status marks) and a main content area holding the active section.
+   Reuses the shared --vars and .btn primitives.
    The header's <main> max-width still bounds the whole shell. */
 
 .app-shell {
@@ -1811,8 +1811,6 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
     color: #fff;
 }
 
-.app-nav-item.current .app-nav-glyph { color: #fff; }
-
 /* Workflow group: Versions / Runs / Evals render indented beneath the Workflow item,
    joined by a left rail. The parent gets .trail when one of its children is active. */
 .app-nav-children {
@@ -1834,30 +1832,7 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
 
 .app-nav-item.trail:not(.current) .app-nav-label { font-weight: 600; }
 
-.app-nav-glyph {
-    flex: none;
-    width: 18px;
-    text-align: center;
-    font-size: 13px;
-    line-height: 1;
-}
-
 .app-nav-label { min-width: 0; }
-
-/* Glyph status colours — keep aligned with the verdict palette where they overlap. */
-.app-nav-glyph.glyph-home   { color: var(--accent); }
-
-.app-nav-glyph.glyph-ok     { color: #2a8a2a; }
-
-.app-nav-glyph.glyph-warn   { color: #cc8a00; }
-
-.app-nav-glyph.glyph-bad    { color: #cc2a2a; }
-
-.app-nav-glyph.glyph-todo   { color: #9aa3ad; }
-
-.app-nav-glyph.glyph-none   { color: #c4c4c0; }
-
-.app-nav-glyph.glyph-review { color: #2a6ac8; }
 
 /* Compact "do this next" pointer pinned under the nav. */
 .app-side-next {

@@ -8,9 +8,8 @@
   The nav is Overview / Document / Data model / Workflow, with Versions, Runs, and
   Evals nested UNDER Workflow (the three things a workflow has: its versioned
   snapshots, its executions, and the evals that score them). Its structure — labels,
-  hrefs, and a per-item status token — is built in app.web.project_view.build_nav and
-  rendered here from `state.nav`. The glyph vocabulary (status token → glyph + colour)
-  is the GLYPHS map below, so the visual choice sits next to the markup.
+  hrefs, and any waiting-on-you count — is built in app.web.project_view.build_nav and
+  rendered here from `state.nav`.
 
   Context every section route passes:
     state    = project_view.shell_state(mdir)  — status snapshot + nav + next_action
@@ -22,8 +21,8 @@
   is no lock. The workflow section renders whatever exists (an empty state when nothing
   is authored yet).
 
-  CARDINAL RULE: nothing here fabricates. Glyphs (from build_nav) reflect the truthful
-  on-disk state; a "no workflow yet" project shows ○, not a fake ✓.
+  The nav carries NO status marks. It is a table of contents; every section's own
+  page states what is there, what is wrong with it, and what is waiting, in words.
 #}
 {% block title %}{{ state.meta.title or state.name }} · {{ section|replace('_',' ')|capitalize }}{% endblock %}
 
@@ -37,20 +36,6 @@
 {% endblock %}
 
 {% block content %}
-{# Glyph vocabulary: maps a nav item's semantic status token (set in
-   project_view.build_nav) to a (glyph, css-class) pair. The visual choice lives
-   here next to the markup; the classification lives in Python. #}
-{% set GLYPHS = {
-     'home':    ('◆', 'glyph-home'),
-     'evals':   ('◎', 'glyph-home'),
-     'ok':      ('✓', 'glyph-ok'),
-     'present': ('●', 'glyph-ok'),
-     'warn':    ('⚠', 'glyph-warn'),
-     'bad':     ('✗', 'glyph-bad'),
-     'todo':    ('●', 'glyph-todo'),
-     'none':    ('○', 'glyph-none'),
-     'review':  ('👤', 'glyph-review'),
-   } %}
 {# The sidebar collapses to a narrow re-open button, so a wide working view (a run,
    a diagram) can have the width back. Purely additive: nothing else about the shell
    changes, and the state is remembered per project. #}
@@ -107,22 +92,18 @@
        is a link; a Workflow-style item with children renders them indented beneath it. #}
     <nav class="app-side-nav">
       {% for item in state.nav %}
-        {% set g = GLYPHS.get(item.status, GLYPHS['none']) %}
         {% set child_keys = item.children | map(attribute='key') | list %}
         <a class="app-nav-item {% if item.key == section %}current{% elif section in child_keys %}trail{% endif %}"
            href="{{ item.href }}"
            {% if item.key == section %}aria-current="page"{% endif %}>
-          <span class="app-nav-glyph {{ g[1] }}">{{ g[0] }}</span>
           <span class="app-nav-label">{{ item.label }}</span>
         </a>
         {% if item.children %}
         <div class="app-nav-children">
           {% for child in item.children %}
-          {% set cg = GLYPHS.get(child.status, GLYPHS['none']) %}
           <a class="app-nav-item child {% if child.key == section %}current{% endif %}"
              href="{{ child.href }}"
              {% if child.key == section %}aria-current="page"{% endif %}>
-            <span class="app-nav-glyph {{ cg[1] }}">{{ cg[0] }}</span>
             <span class="app-nav-label">{{ child.label }}</span>
           </a>
           {% endfor %}
