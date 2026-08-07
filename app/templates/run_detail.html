@@ -96,11 +96,9 @@
 
 <div class="run-shell" id="run-shell">
 
-{# ── THE NAV SPINE. Both things in this column are indexes into the stage panel —
-      what the run's own records say went wrong, then the authored walkthrough — so
-      they are one column rather than two bands stacked on top of the work surface.
-      Order is deliberate: the exceptions first, because a reader who has one is not
-      going to read the walkthrough until it is dealt with. ── #}
+{# ── THE NAV SPINE: the authored walkthrough, and only that. The issue index is a
+      nav too, but it belongs beside the data it is about — it stays in the work
+      column, where its four-column table has the width to read. ── #}
 <button type="button" class="drawer-btn nav-expand" id="nav-expand" hidden
         title="Show the review guide" aria-label="Show the review guide">
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -118,7 +116,6 @@
       </svg>
     </button>
   </div>
-  {% include "_run_issues.html" %}
   {% if guide %}{% include "_run_guide.html" %}
   {% elif guideless_version %}
   {# The version this run pinned carries no guide. Say so where the guide would be, and
@@ -133,16 +130,40 @@
 {# ── THE WORK SURFACE. ── #}
 <div class="run-main fade-scroll">
 
+{# ── 1. RUN OVERVIEW — what this run is and how it went: the grounding line, the one
+      action its state calls for, the status bar, and what its own records say went
+      wrong. Everything here is ABOUT the run; nothing here is its result. ── #}
+<section class="run-section" id="run-overview-section">
+<h2>Run overview</h2>
 {% include "_run_header.html" %}
+{% include "_run_issues.html" %}
+</section>
 
-{# ── The workflow as a MINIMAP: a short band held at a readable zoom rather than
+{# ── 2. RUN OUTPUTS — the files this run published, listed as links. Never a button:
+      a CTA is an imperative and a finished run has none, and sizing a primary button
+      to a filename is how `venezuela_lobbying_q1q2_2026.xlsx` came to dominate the
+      page. Absent until a publish stage has actually written something. ── #}
+{% if header.artifacts %}
+<section class="run-section" id="run-outputs-section">
+<h2>Run outputs</h2>
+<p class="lede">What this run published{% if header.artifacts | length > 1 %} —
+  {{ header.artifacts | length }} files{% endif %}.</p>
+<ul class="run-outputs">
+  {% for artifact in header.artifacts %}
+  <li><a href="{{ artifact.url }}">{{ artifact.name }}</a></li>
+  {% endfor %}
+</ul>
+</section>
+{% endif %}
+
+{# ── 3. RUN VISUAL SUMMARY — the workflow as a MINIMAP: a short band held at a readable zoom rather than
       the whole graph fitted to width. The reader's continuous act is picking a
       stage — the guide rail and this band both do that — and surveying the whole
       shape is a once-per-run act, which is what ⛶ is for. Built from the version
       this run pinned; with graph_error set NO graph is drawn, because the
       working copy may not be what ran. ── #}
 <section class="run-section" id="run-workflow-section">
-<h2>Workflow</h2>
+<h2>Run visual summary</h2>
 {# Names what a click OPENS, not that it moves the band: the panel below is the
    thing a reader has no other way to discover is there. #}
 <p class="lede">Every stage of the version this run pinned, coloured by how it went.
@@ -160,10 +181,11 @@
       <button type="button" class="diagram-fs" title="Fullscreen"
               aria-label="Show the whole workflow fullscreen">⛶</button>
     </div>
-    {# zoom-floor holds the band at a legible scale: fitting 30 stages to this
-       width would render the labels too small to read, which is the whole reason
-       the graph stopped being nav. #}
-    <div class="diagram-viewport" data-zoom-floor="1">
+    {# zoom-floor holds the band at a legible scale: fitting 30 stages to this width
+       would render the labels too small to read, which is the whole reason the graph
+       stopped being nav. Half size still clears that bar and shows the parked stage
+       with its neighbours either side, which one-to-one did not. #}
+    <div class="diagram-viewport" data-zoom-floor="0.5">
       <pre class="mermaid">
 {{ mermaid }}
       </pre>
@@ -192,9 +214,9 @@
 {% endif %}
 </section>
 
-{# ── Stage detail panel, below the workflow, full width. ── #}
+{# ── 4. STAGE DETAILS — one stage, picked from the band above or the guide rail. ── #}
 <section class="run-section" id="run-stage-section">
-<h2>Stage detail</h2>
+<h2>Stage details</h2>
 <p class="lede">One stage of this run: what it produced, the contract it declares, and the transform it applied.</p>
 <div class="stage-panel-full" id="stage-panel">
     <div class="empty-state"><p>Pick a stage — a node in the workflow above, or any line in the index at the top of this page.</p></div>

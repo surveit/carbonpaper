@@ -13,17 +13,25 @@ routers in `app/web/routers/`, which import the Runner (`app.runtime`) and the s
 - `/project/<m>/runs/<id>/queue/<stage>` — the human-review queue UI (+ `/decide`, `/resume`).
 
 ## The run page's two columns (`run_detail.html`)
-`.run-nav` (360px, collapsible) then `.run-main`. The nav column is the **spine**: the issue
-index, then the review guide — both are indexes into the stage panel, so they share one
-column rather than stacking above the work surface. The work column is the header, the
-workflow minimap, the stage panel, and one **audit drawer** (`.run-audit`) holding the review
-packet, the raw manifest and the run log; it is closed except on a live run, when the log is
-the only thing moving. The issue index restacks inside the nav (`.run-nav .issue-table`) —
-its four columns do not fit 360px — dropping and truncating nothing.
+`.run-nav` (360px, collapsible) then `.run-main`. The nav column is the **spine** and holds
+the review guide alone. The work column is four named sections, in this order:
+
+1. **Run overview** — the header (grounding line, CTA, status bar) and the issue index.
+   Everything about the run; nothing that is its result.
+2. **Run outputs** — the files a publish stage wrote, off `header.artifacts`, as links.
+   Absent when there are none. Never a button: a CTA is an imperative, a run that finished
+   clean has none (`choose_run_cta` returns an empty `RunCta`), and a primary button sized
+   to a filename was the widest thing on the page.
+3. **Run visual summary** — the workflow minimap.
+4. **Stage details** — the stage panel.
+
+Below them, one **audit drawer** (`.run-audit`) with the review packet, the raw manifest and
+the run log; closed except on a live run, when the log is the only thing moving.
 
 ## The run page's issue index (`app.web.run_issues` → `_run_issues.html`)
-At the top of the nav column, an INDEX into the stage panels — every entry is one line
-plus a deep link, and the detail stays in the panel's own validation block.
+Between the header and the minimap, an INDEX into the stage panels — every entry is one line
+plus a deep link, and the detail stays in the panel's own validation block. It stays in the
+work column, not the nav rail: its four-column table needs the width.
 - **"Why this run stopped"** — one card per `error` stage, leading with which story it is,
   because they route to different people: a schema refusal (`OutputSchemaViolation`) and an
   authored `StepRefused` are the data's and link the panel's **Data** / **Transform** tab; any
