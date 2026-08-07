@@ -270,7 +270,7 @@ def build_mermaid_graph(
 # subtitle say which type it is, leaving the stroke as the node's only colour —
 # the run status. Values are palette.css's --bg / --border / --fg, so a node
 # sits on the same sheet as the rest of the page.
-_NODE_SURFACE = "fill:#fbfbfb,stroke:#e1e1e1,color:#24272b"
+_NODE_SURFACE = "fill:#fdfdfe,stroke:#e9e9eb,color:#24272b"
 # What TYPE_CLASS falls back to for a stage type it does not map.
 _FALLBACK_NODE_CLASS = "custom"
 

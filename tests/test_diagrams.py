@@ -26,7 +26,7 @@ def test_plain_stage_with_no_status_renders_the_bare_node() -> None:
     assert 'click s1 call dvNode("s1") "Stage One"' in graph   # description is the tooltip
     assert "]:::input" in graph
     assert "stroke:" not in graph.split("classDef")[0]
-    assert "    classDef input fill:#fbfbfb,stroke:#e1e1e1,color:#24272b" in graph
+    assert "    classDef input fill:#fdfdfe,stroke:#e9e9eb,color:#24272b" in graph
 
 
 def test_every_node_class_gets_the_same_neutral_surface() -> None:
