@@ -60,7 +60,7 @@ async def run_stage_partial(
     if stage_record is None:
         # A stage the graph draws but this run never executed (a workflow test
         # injects its input stages) — see app.web.run_stage_panel.
-        return not_executed_panel(request, project, run_id, manifest, stage_id, pinned)
+        return not_executed_panel(request, project, run_id, stage_id, pinned)
 
     output_preview = load_output_preview(run_dir, stage_record.get("output_path"))
     output_by_id = {

@@ -299,6 +299,7 @@ def _render_node_classdefs() -> list[str]:
 # equals its bare string, so lookups by that plain string still hit.
 _STATUS_GLYPH: dict[str, str] = {
     StageStatus.OK: "✓",
+    StageStatus.SUPPLIED: "⇥",
     StageStatus.RUNNING: "⟳",
     StageStatus.VALIDATION_WARNINGS: "⚠",
     StageStatus.ERROR: "✗",
@@ -306,12 +307,14 @@ _STATUS_GLYPH: dict[str, str] = {
     StageStatus.CANCELLED: "✖",
     StageStatus.PENDING: "…",
 }
-# Run STATUS → stroke colour. Seven statuses, five colours: _STATUS_GLYPH above
+# Run STATUS → stroke colour. Eight statuses, five colours: _STATUS_GLYPH above
 # carries the distinction the shared colour drops (running ⟳ vs warnings ⚠,
-# cancelled ✖ vs pending …). Every colour here is one of the five --state-*
+# cancelled ✖ vs pending … vs supplied ⇥ — all three of the last are stages this
+# run did not compute, which is what the shared grey says). Every colour here is one of the five --state-*
 # properties in style.css, enforced by tests/arch/test_status_colour_contract.py.
 _STATUS_STROKE: dict[str, tuple[str, str]] = {
     StageStatus.OK: ("#2f7d32", "3px"),                    # done
+    StageStatus.SUPPLIED: ("#7b8089", "3px"),              # idle: nothing ran here
     StageStatus.RUNNING: ("#a8690b", "3px"),               # warning
     StageStatus.VALIDATION_WARNINGS: ("#a8690b", "3px"),   # warning
     StageStatus.ERROR: ("#b3261e", "3px"),                 # failed

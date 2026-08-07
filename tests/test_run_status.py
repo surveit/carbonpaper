@@ -21,7 +21,7 @@ from conftest import pinned_stages
 # `manifest["status"]` literal the runner writes (app/runtime/runner.py) and
 # the status_glyph/status_stroke maps that key off them (app/web/diagrams.py).
 STAGE_STATUS_VALUES = {
-    "pending", "running", "ok", "validation_warnings",
+    "pending", "running", "ok", "supplied", "validation_warnings",
     "error", "awaiting_review", "cancelled",
 }
 RUN_STATUS_VALUES = {

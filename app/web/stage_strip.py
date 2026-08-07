@@ -59,6 +59,7 @@ def count_stage_status(manifest: Mapping[str, Any], status: StageStatus) -> int:
 
 _STATUS_LABEL = {
     StageStatus.OK: "done",
+    StageStatus.SUPPLIED: "supplied, not run",
     StageStatus.VALIDATION_WARNINGS: "with warnings",
     StageStatus.RUNNING: "running",
     StageStatus.AWAITING_REVIEW: "waiting on you",
@@ -74,11 +75,13 @@ _PENDING_LABEL = {
     RunStatus.CANCELLED: "never ran",
 }
 _PENDING_LABEL_OTHERWISE = "never ran"
-# Display order for the counts: what finished, then what is in flight, then what
-# needs a human, then what went wrong, then what never ran. Every one of the
-# seven stage statuses appears, so a count can never go missing.
+# Display order for the counts: what finished, what was handed in rather than
+# computed, then what is in flight, then what needs a human, then what went wrong,
+# then what never ran. Every one of the eight stage statuses appears, so a count
+# can never go missing.
 _TALLY_ORDER = (
     StageStatus.OK,
+    StageStatus.SUPPLIED,
     StageStatus.VALIDATION_WARNINGS,
     StageStatus.RUNNING,
     StageStatus.AWAITING_REVIEW,

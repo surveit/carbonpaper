@@ -11,13 +11,15 @@ import time
 import traceback
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable, NamedTuple
+from typing import Any, Iterable, Mapping, NamedTuple
 
 import pandas as pd
 
 from app.core.errors import SubsetRunError
 from app.core.frame_checks import find_duplicate_row_violations
-from app.core.frames import write_frame_file, write_frame_file_with_csv_fallback
+from app.core.frames import (
+    compute_table_digest, write_frame_file, write_frame_file_with_csv_fallback,
+)
 from app.models import Stage, StageType, Workflow
 from app.models.run_manifest import (
     RowError,
@@ -26,6 +28,7 @@ from app.models.run_manifest import (
     StageContribution,
     StageErrorInfo,
     StageRecord,
+    SuppliedFrame,
 )
 from app.models.run_parameters import RunParameters
 from app.core.run_status import RunStatus, StageStatus
@@ -73,6 +76,7 @@ def run_subset(
     *,
     injected_outputs: dict[str, pd.DataFrame],
     stage_ids: list[str],
+    supplied_provenance: Mapping[str, SuppliedFrame] | None = None,
     run_dir: Path,
     repo_root: Path,
     params: RunParameters = RunParameters(),
@@ -95,6 +99,12 @@ def run_subset(
     `project`/`workflow_version` are the run's logical identity, recorded in the
     manifest when a caller knows them and left None otherwise (never fabricated).
     The run_id is `run_dir.name`.
+
+    An injected output is not a hole in the record: each one gets a stage record of
+    its own (status `supplied`), its frame written to `outputs/` and validated, and a
+    content digest, so what entered the run is as inspectable as what it computed.
+    `supplied_provenance` says where each came from; a stage with none is recorded as
+    caller-supplied, never as a file this run cannot vouch for.
 
     Any input of a subset stage that names a stage outside the subset must appear in
     `injected_outputs`, or `_execute_stages` fails on it. Raises SubsetRunError if an
@@ -123,17 +133,80 @@ def run_subset(
     missing = [sid for sid in stage_ids if sid not in by_id]
     if missing:
         raise SubsetRunError(f"subset names stage(s) not in the workflow: {missing}")
-    ordered = topological_sort([by_id[sid] for sid in stage_ids])
+    supplied_stages = [by_id[sid] for sid in injected_outputs if sid in by_id]
+    # Supplied stages join the run's own ordering: they get a record, an output on
+    # disk and a place in the graph like any other stage, and the loop skips them
+    # (their status is one _stage_output_already_produced accepts).
+    ordered = topological_sort(supplied_stages + [by_id[sid] for sid in stage_ids])
     (run_dir / "outputs").mkdir(parents=True, exist_ok=True)
     ctx = _subset_ctx(repo_root, run_dir, identity, params)
     manifest = create_run_manifest(
         ordered, ctx, run_id=run_dir.name, project=project,
-        workflow_version=workflow_version, input_bindings={})
+        workflow_version=workflow_version,
+        input_bindings=_read_supplied_file_bindings(supplied_provenance))
+    supplied_records = _record_supplied_frames(
+        supplied_stages, injected_outputs, run_dir, supplied_provenance or {})
+    manifest.settle_stage_records([
+        supplied_records.get(stage.id)
+        or StageRecord.record_with_status(stage, StageStatus.PENDING)
+        for stage in ordered
+    ])
     write_manifest(run_dir, manifest)
     outputs: dict[str, pd.DataFrame] = dict(injected_outputs)
     manifest = _execute_stages(ordered, ctx, manifest, run_dir, outputs)
     _raise_if_run_failed(manifest)
     return outputs
+
+
+def _record_supplied_frames(
+    stages: list[Stage],
+    frames: Mapping[str, pd.DataFrame],
+    run_dir: Path,
+    provenance: Mapping[str, SuppliedFrame],
+) -> dict[str, StageRecord]:
+    """A manifest record per stage whose output was GIVEN rather than computed."""
+    records: dict[str, StageRecord] = {}
+    # Each frame is written to outputs/ like any other stage's, validated against that
+    # stage's OWN declared output schema — the consumer's edge check covers only what
+    # the consumer declared it reads — and digested, so a run that really executes the
+    # stage can be compared against what was supplied here. A frame that violates the
+    # schema is RECORDED, not raised on: the run has not started, and the report is the
+    # honest place to say so.
+    for stage in stages:
+        frame = frames[stage.id]
+        record = StageRecord.record_with_status(stage, StageStatus.SUPPLIED)
+        record.output_validation_report = validate_dataframe(
+            frame, stage.resolve_output_schema(), stage_id=stage.id, phase="output"
+        ).to_dict()
+        record.output_row_count = len(frame)
+        record.output_path = str(
+            _persist_stage_output(frame, stage.id, run_dir, record).relative_to(run_dir)
+        )
+        record.content_digest = _compute_output_digest(stage, frame)
+        record.supplied_by = provenance.get(stage.id) or SuppliedFrame(origin="caller")
+        records[stage.id] = record
+    return records
+
+
+def _read_supplied_file_bindings(
+    provenance: Mapping[str, SuppliedFrame] | None,
+) -> dict[str, dict[str, Any]]:
+    """The file-read supplies as manifest `input_bindings`."""
+    return {
+        # `input_bindings` is the field a run already records "which file did this
+        # read" in, so a run whose sources were supplied names its files where a
+        # production run does. A caller-supplied frame has no file and no binding.
+        stage_id: {"path": supplied.path, "sha256": supplied.sha256}
+        for stage_id, supplied in (provenance or {}).items()
+        if supplied.origin == "source_file" and supplied.path
+    }
+
+
+def _compute_output_digest(stage: Stage, frame: pd.DataFrame) -> str:
+    """The stage's output digested through its own declared types."""
+    schema = stage.resolve_output_schema()
+    # A stage declaring no output schema (publish) digests on values alone.
+    return compute_table_digest(frame, schema.column_types() if schema else None)
 
 
 def _subset_ctx(
@@ -181,8 +254,15 @@ def _execute_stages(
     # (run_prepared, execute_run, run_subset, resume_run) is logged regardless of
     # the ctx it built, and the log's lifetime is exactly this call's.
     run_log = RunLog(run_dir / "events.jsonl")
+    supplied = {
+        record.stage_id for record in manifest.stage_records
+        if record.status is StageStatus.SUPPLIED
+    }
     run_log.emit({
-        "kind": RUN_START, "run_id": manifest.run_id, "stage_count": len(ordered),
+        "kind": RUN_START, "run_id": manifest.run_id,
+        # The spine narrates EXECUTION, and a supplied stage never starts or finishes,
+        # so it is not counted here — its record and output are in the manifest.
+        "stage_count": len([stage for stage in ordered if stage.id not in supplied]),
     })
     try:
         return _run_ordered_stages(
@@ -523,6 +603,7 @@ def _finalize_stage_output(
     record.output_validation_report = out_rep.to_dict()
 
     output_path = _persist_stage_output(output, sid, run_dir, record)
+    record.content_digest = _compute_output_digest(stage, output)
     outputs_so_far[sid] = output
 
     if row_errors:
@@ -750,17 +831,23 @@ def _find_blocking_upstream(stage: Stage, blocked: set[str]) -> list[str]:
     return [input_id for input_id in stage.input_ids if input_id in blocked]
 
 
+# The statuses whose output the loop trusts and so does not re-run: a completion
+# from a prior partial run (the resume path), or a frame supplied to this one.
+# Anything else on disk is stale — from before a halt, cancel or error.
+_STATUSES_NOT_RERUN = (
+    StageStatus.OK, StageStatus.VALIDATION_WARNINGS, StageStatus.SUPPLIED,
+)
+
+
 def _stage_output_already_produced(
     sid: str, outputs_so_far: dict[str, pd.DataFrame], records_by_id: dict[str, StageRecord]
 ) -> bool:
-    """True when `sid`'s output was computed in a prior partial run (the
-    resume path) and its last recorded status is a completion the loop can
-    trust to skip re-running it, rather than a stale record from before a
-    halt/cancel/error."""
+    """True when `sid`'s output is already in hand — resumed from a prior partial
+    run, or supplied to this one — under a status the loop can trust."""
     if sid not in outputs_so_far:
         return False
     record = records_by_id.get(sid)
-    return record is not None and record.status in (StageStatus.OK, StageStatus.VALIDATION_WARNINGS)
+    return record is not None and record.status in _STATUSES_NOT_RERUN
 
 
 def _final_run_status(stage_statuses: Iterable[str]) -> RunStatus:

@@ -16,6 +16,10 @@ class StageStatus(enum.StrEnum):
     PENDING = "pending"
     RUNNING = "running"
     OK = "ok"
+    # Not run here: this stage's output was GIVEN to the run (a workflow test's
+    # injected source, a subset run's seeded upstream). It has data and a record;
+    # what it does not have is a computation this run performed.
+    SUPPLIED = "supplied"
     VALIDATION_WARNINGS = "validation_warnings"
     ERROR = "error"
     AWAITING_REVIEW = "awaiting_review"

@@ -879,7 +879,6 @@ _GRANDFATHERED: frozenset[str] = frozenset(
         "tests/test_run_service.py::test_resolve_version_defaults_to_latest_published_and_raises_when_none",
         "tests/test_run_service.py::test_start_run_returns_run_id_and_writes_ok_manifest",
         "tests/test_run_stage_panel_not_executed.py::test_a_production_runs_input_stage_still_shows_its_run_detail",
-        "tests/test_run_stage_panel_not_executed.py::test_input_stage_of_a_workflow_test_opens_instead_of_404ing",
         "tests/test_run_stage_views_pinned_version.py::_classify_stage",
         "tests/test_run_stage_views_pinned_version.py::_drift_the_working_copy",
         "tests/test_run_stage_views_pinned_version.py::_unpin_the_run",

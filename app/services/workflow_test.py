@@ -5,17 +5,21 @@ read-only. It reaches the shared engine through app.runtime.executor (run_subset
 never app.runtime.runner."""
 from __future__ import annotations
 
+import hashlib
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 import pandas as pd
 
 from app.core.errors import NoWorkflowTestSourceError, NoWorkflowTestVersionError, SubsetRunError
 from app.models import Stage, StageType, Workflow
+from app.models.run_manifest import SuppliedFrame
 from app.runtime.context import RunContext, RunIdentity
 from app.runtime.executor import run_subset, topological_sort
 from app.models.run_parameters import RunParameters
+from app.models.stages.input_data import InputDataStage
+from app.runtime.stages.execution import narrow_stage
 from app.runtime.stages.input_data import read_input_data
 from app.services.versioning import list_versions, load_version, load_version_stages
 from app.services.workspace import repo_root, resolve_project_dir, resolve_run_dir
@@ -55,7 +59,8 @@ def run_workflow_test(
     executing = topological_sort(_stages_to_execute(stages, stage_ids))
     # Read the source(s) before building the Workflow, so a sourceless workflow
     # fails on the missing source rather than on downstream graph validation.
-    injected = _read_source_slices(stages, executing, limit=limit, offset=offset)
+    slices = _read_source_slices(stages, executing, limit=limit, offset=offset)
+    injected = {sid: sliced.frame for sid, sliced in slices.items()}
     workflow = Workflow(stages=stages)
 
     run_id = _mint_run_id()
@@ -66,7 +71,8 @@ def run_workflow_test(
     ok, error = _run_frontier(
         workflow, injected, executed_ids, run_dir, repo_root(),
         project=project_dir.name, run_id=run_id, workflow_version=version,
-        limits=limits, offsets=offsets)
+        limits=limits, offsets=offsets,
+        supplied_provenance={sid: sliced.supplied_by for sid, sliced in slices.items()})
 
     return {
         "ok": ok,
@@ -106,6 +112,7 @@ def _run_frontier(
     workflow_version: str,
     limits: dict[str, int],
     offsets: dict[str, int],
+    supplied_provenance: dict[str, SuppliedFrame],
 ) -> tuple[bool, str | None]:
     """Execute the frontier subset: normal return -> (True, None); a SubsetRunError
     (a stage errored) -> (False, its message). run_subset owns the manifest under
@@ -117,6 +124,7 @@ def _run_frontier(
     try:
         run_subset(
             workflow, injected_outputs=injected, stage_ids=stage_ids,
+            supplied_provenance=supplied_provenance,
             run_dir=run_dir, repo_root=repo_root,
             params=RunParameters(limits=limits, offsets=offsets,
                                  queue_auto_approve=True, is_test_run=True),
@@ -159,9 +167,16 @@ def _source_row_windows(
     return limits, offsets
 
 
+class SourceSlice(NamedTuple):
+    """One source stage's rows as this run received them, and where they came from."""
+
+    frame: pd.DataFrame
+    supplied_by: SuppliedFrame
+
+
 def _read_source_slices(
     stages: list[Stage], executing: list[Stage], *, limit: int | None, offset: int,
-) -> dict[str, pd.DataFrame]:
+) -> dict[str, SourceSlice]:
     """`iloc[offset:offset+limit]` per source stage that is not itself executing; None = all."""
     sources = [stage for stage in stages if stage.type == StageType.input_data.value]
     if not sources:
@@ -173,12 +188,41 @@ def _read_source_slices(
     # precedes any run-dir creation) rather than a fabricated cwd sentinel.
     ctx = RunContext.for_stages_outside_a_run(repo_root(), None)
     executing_ids = {stage.id for stage in executing}
-    end = None if limit is None else offset + limit
     return {
-        source.id: read_input_data(source, ctx).iloc[offset:end]
+        source.id: _read_source_slice(source, ctx, limit=limit, offset=offset)
         for source in sources
         if source.id not in executing_ids
     }
+
+
+def _read_source_slice(
+    source: Stage, ctx: RunContext, *, limit: int | None, offset: int
+) -> SourceSlice:
+    """One source read, with the provenance the run records for it."""
+    whole = read_input_data(source, ctx)
+    # The file and its hash are the same two facts a production run's preflight
+    # records; the window and the rows available say what was taken from it.
+    end = None if limit is None else offset + limit
+    path = narrow_stage(source, InputDataStage).connector.params.get("path")
+    return SourceSlice(
+        frame=whole.iloc[offset:end],
+        supplied_by=SuppliedFrame(
+            origin="source_file",
+            path=str(path) if path else None,
+            sha256=_read_file_sha256(path),
+            rows_available=len(whole),
+            limit=limit,
+            offset=offset,
+        ),
+    )
+
+
+def _read_file_sha256(path: object) -> str | None:
+    """The bound file's hash, or None where the stage names no path."""
+    if not isinstance(path, str) or not path:
+        return None  # never a placeholder: a wrong hash is worse than a missing one
+    with Path(path).open("rb") as handle:
+        return hashlib.file_digest(handle, "sha256").hexdigest()
 
 
 def _mint_run_id() -> str:

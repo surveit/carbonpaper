@@ -73,6 +73,17 @@ once on the terminal transition. Scratch: pick N input rows → `…/stage/<sid>
 (`runtime/preview.py`) runs the handler **in memory**, persists nothing; refused for
 `publish`/`human_review_queue`/`input_data` (side effects).
 
+## Supplied stages
+A stage whose output was GIVEN to the run rather than computed by it — a workflow test's
+sources, a subset run's seeded upstream — carries a `supplied` record like any other: the
+frame written to `outputs/`, validated against that stage's OWN declared output schema, and
+digested (`content_digest`, `app.core.frames.compute_table_digest` — values, not bytes, so
+the same table digests alike from xlsx, csv or parquet). `supplied_by` says where it came
+from, and a file read also lands in the manifest's `input_bindings`. The panel shows the rows
+under an `id="stage-supplied"` banner; `_run_stage_not_executed.html` is left for a stage with
+no record at all. The run log narrates execution only, so a supplied stage is not in
+`run_start`'s `stage_count`.
+
 Every stage definition a run page shows or executes (panel, lineage panel, scratch re-run)
 comes from the version the run pinned, via `services.run.load_pinned_stage_def` /
 `load_run_stages` — never `compiled/`.

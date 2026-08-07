@@ -5,7 +5,6 @@ resolve their panel links through it."""
 
 from __future__ import annotations
 
-from typing import Any
 
 from fastapi import HTTPException, Request
 from fastapi.responses import HTMLResponse
@@ -26,7 +25,6 @@ def not_executed_panel(
     request: Request,
     project: str,
     run_id: str,
-    manifest: dict[str, Any],
     stage_id: str,
     pinned: RunStageDef,
 ) -> HTMLResponse:
@@ -48,7 +46,6 @@ def not_executed_panel(
             "project": project,
             "run_id": run_id,
             "stage": pinned.stage,
-            "is_test_run": bool(manifest.get("parameters", {}).get("is_test_run")),
             "function_code": resolve_function_code(pinned.stage),
             "type_glyph": TYPE_GLYPH,
             "type_class": TYPE_CLASS,

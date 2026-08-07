@@ -8,7 +8,7 @@
    reading — is the whole panel.
 
    Context: project / run_id — str · stage — the pinned version's Stage ·
-            is_test_run — bool · function_code (may be None) · type_class / type_glyph #}
+            function_code (may be None) · type_class / type_glyph #}
 {% from "_schema_table.html" import schema_table %}
 
 <div class="run-stage-panel">
@@ -21,13 +21,9 @@
 </div>
 
 <p class="banner" id="stage-not-executed">
-    ⏭ <strong>Not executed in this run</strong> — so there is no output, no timing, and no
-    validation to show for it.
-    {% if is_test_run and stage.type == 'input_data' %}
-    A workflow test injects each input stage's rows directly — a limit/offset slice read
-    straight off the bound source — and runs only the stages downstream of them, so this
-    stage never ran and its rows were never written to the run.
-    {% endif %}
+    ⏭ <strong>Not executed in this run</strong> — and nothing was supplied in its place, so
+    there is no output, no timing and no validation to show for it. A stage whose rows were
+    handed to the run instead of computed reads <code>supplied</code> and shows them.
     Its output as a real run would produce it is on
     <a href="/project/{{ project }}/runs">any production run</a> of this workflow.
 </p>

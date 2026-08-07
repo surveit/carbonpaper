@@ -8,7 +8,7 @@ one raw-dict fact off it, does not have to reach into the runtime for it.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, TypedDict
+from typing import Any, Literal, TypedDict
 
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
@@ -86,6 +86,23 @@ class StageErrorInfo(BaseModel):
     traceback: str | None
 
 
+class SuppliedFrame(BaseModel):
+    """Where a stage's output came from when the run did not compute it."""
+
+    origin: Literal["source_file", "caller"]
+    # `source_file`: a file read outside the run — a workflow test reads each source
+    # stage's own bound file through that stage's own reader, then hands the frame in.
+    # `caller`: a frame passed in by whoever started the subset run, whose origin this
+    # run cannot know and so does not guess at.
+    path: str | None = None
+    sha256: str | None = None
+    # What the origin held BEFORE limit/offset cut it, so a window reads as a window
+    # rather than as a short table.
+    rows_available: int | None = None
+    limit: int | None = None
+    offset: int | None = None
+
+
 class StageRecord(BaseModel):
     """One stage's manifest record, written into `manifest["stage_records"]` and
     read back by the web layer.
@@ -126,6 +143,11 @@ class StageRecord(BaseModel):
     output_path: str | None = None
     queue_path: str | None = None
     finished_at: str | None = None
+    # The output's identity as VALUES (app.core.frames.compute_table_digest), which
+    # is what makes a supplied frame and a computed one comparable across runs: equal
+    # digests mean the same table, whatever file format or dtype each arrived in.
+    content_digest: str | None = None
+    supplied_by: SuppliedFrame | None = None
 
     @classmethod
     def record_with_status(cls, stage: Stage, status: StageStatus) -> StageRecord:

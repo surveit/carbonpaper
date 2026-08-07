@@ -1,8 +1,6 @@
-"""A workflow test runs the frontier and injects each input_data stage's rows, so
-those stages have no manifest record — while the run's graph, drawn from the whole
-pinned version, still shows them. Clicking one must open its frozen definition and
-say it never ran, not the bare 404 the panel used to render; a stage absent from the
-pinned version too is still a 404."""
+"""Which panel a run's stage opens: `supplied` shows the rows handed to the run, a
+stage with no record at all shows the frozen definition and says it never ran, and a
+stage absent from the pinned version is still a 404."""
 from __future__ import annotations
 
 import json
@@ -69,22 +67,41 @@ def _panel(run_id: str, stage_id: str):
         f"/project/{PROJECT}/runs/{run_id}/stage/{stage_id}/partial")
 
 
-def test_input_stage_of_a_workflow_test_opens_instead_of_404ing(project: Path):
-    """The run the workflow test wrote has a record for `classify` only — but its
-    graph still draws `load`, so `load`'s panel must open."""
+def test_a_supplied_input_stage_shows_the_rows_that_entered_the_run(project: Path):
+    """Not executed — but the rows handed in are its output of record, so they show."""
     run_id = run_workflow_test(PROJECT, limit=2, offset=0)["run_id"]
     manifest = json.loads(
         (project / "runs" / run_id / "manifest.json").read_text(encoding="utf-8"))
-    assert [r["stage_id"] for r in manifest["stage_records"]] == ["classify"]
+    load = next(r for r in manifest["stage_records"] if r["stage_id"] == "load")
+    assert load["status"] == "supplied"
+    assert load["output_row_count"] == 2
+    assert (project / "runs" / run_id / load["output_path"]).exists()
+    assert load["supplied_by"]["origin"] == "source_file"
+    assert load["supplied_by"]["path"].endswith("rows.csv")
 
     response = _panel(run_id, "load")
     assert response.status_code == 200
     body = response.text
-    assert "Not executed in this run" in body
-    # The frozen definition is what the panel has to offer in place of output:
-    # the stage's identity, its connector, and its declared output schema.
-    assert "Load rows" in body
+    assert 'id="stage-supplied"' in body
+    assert "Supplied to this run, not computed by it" in body
     assert "rows.csv" in body
+    assert "Not executed in this run" not in body
+
+
+def test_a_stage_neither_executed_nor_supplied_says_it_never_ran(project: Path):
+    """Scoped to `load` alone, `classify` has no record — what that panel exists for."""
+    run_id = run_workflow_test(
+        PROJECT, limit=2, offset=0, stage_ids=["load"])["run_id"]
+    manifest = json.loads(
+        (project / "runs" / run_id / "manifest.json").read_text(encoding="utf-8"))
+    assert [r["stage_id"] for r in manifest["stage_records"]] == ["load"]
+
+    response = _panel(run_id, "classify")
+    assert response.status_code == 200
+    body = response.text
+    assert "Not executed in this run" in body
+    # The frozen definition is what the panel has to offer in place of output.
+    assert "Classify" in body
     assert 'id="stage-not-executed"' in body
 
 
