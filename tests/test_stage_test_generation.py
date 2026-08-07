@@ -20,8 +20,7 @@ def _python_stage(*, summary=_SUMMARY, corner_cases=None) -> Stage:
             {"name": "amount", "type": "float", "nullable": False},
         ]}}],
         "function": function,
-        "output_schema": {"columns": [
-            {"name": "amount", "type": "float", "nullable": False},
+        "signature": {"form": "extends", "adds": [
             {"name": "doubled", "type": "float", "nullable": False},
         ]},
     })
@@ -98,6 +97,7 @@ def test_generator_rejects_non_python_stages():
         ]}}],
         "function": {"kind": "inline", "code": "def transform(df, output_dir):\n    return df\n"},
         "publish": {},
+        "signature": {"form": "replaces"},
     })
     with pytest.raises(ValueError, match="can run them"):
         build_stage_test_generator(_DOC, bad)

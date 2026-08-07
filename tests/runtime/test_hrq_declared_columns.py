@@ -40,7 +40,7 @@ def _stage(queue: dict[str, object], flt: str | None = None) -> Stage:
     return parse_stage({
         "id": "review", "name": "Review", "type": "human_review_queue",
         "inputs": [{"id": "scored", "schema": {"columns": input_columns}}],
-        "output_schema": {"columns": input_columns + added},
+        "signature": {"form": "extends", "adds": added},
         "queue": queue,
     })
 

@@ -11,8 +11,8 @@ def _stage(data: dict) -> Stage:
 
 
 # The columns the traced rows carry: seeds emits facility_id, enrich adds score.
-# Every input declares the schema it expects and every non-publish stage declares
-# its output_schema (app/models/stage.py: Stage._schemas_declared).
+# Every input declares the schema it expects and every stage declares its
+# signature (app/models/stage.py: Stage._schemas_declared).
 _SEEDS_SCHEMA = {"columns": [{"name": "facility_id", "type": "str", "nullable": True}]}
 _ENRICH_SCHEMA = {"columns": [{"name": "facility_id", "type": "str", "nullable": True},
                               {"name": "score", "type": "int", "nullable": True}]}
@@ -22,11 +22,13 @@ def _stages() -> dict[str, Stage]:
     return {
         "seeds": _stage({"id": "seeds", "type": "input_data", "name": "Load seeds",
                          "connector": {"kind": "file"},
-                         "output_schema": _SEEDS_SCHEMA}),
+                         "signature": {"form": "replaces",
+                                       "produces": _SEEDS_SCHEMA["columns"]}}),
         "enrich": _stage({
             "id": "enrich", "type": "python_row_function", "name": "Enrich",
             "inputs": [{"id": "seeds", "schema": _SEEDS_SCHEMA}],
-            "output_schema": _ENRICH_SCHEMA,
+            "signature": {"form": "extends",
+                          "adds": [{"name": "score", "type": "int", "nullable": True}]},
             "function": {"kind": "inline", "code": "def transform(row):\n    return row"},
         }),
     }
@@ -87,9 +89,11 @@ def test_trace_shows_instructions_and_data():
         "id": "score", "type": "llm_transform", "name": "Score",
         "inputs": [{"id": "enrich", "schema": {
             "columns": [{"name": "facility_id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True}]}}],
-        "output_schema": {
-            "columns": [{"name": "facility_id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True},
-                        {"name": "rating", "type": "int", "nullable": False}]},
+        "signature": {
+            "form": "extends",
+            "reads": [{"input": "enrich", "columns": [
+                {"name": "score", "type": "int", "nullable": True}]}],
+            "adds": [{"name": "rating", "type": "int", "nullable": False}]},
         "llm": {"prompt_instructions": "Rate for relevance.",
                 "prompt_data_template": "Score: {score}"},
     })

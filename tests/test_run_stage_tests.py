@@ -16,7 +16,8 @@ def _row_stage(stage_id: str, tests: list[dict]) -> Stage:
     return parse_stage({
         "id": stage_id, "name": stage_id, "type": "python_row_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
-        "output_schema": _OUT_SCHEMA,
+        "signature": {"form": "extends",
+                      "adds": [{"name": "doubled", "type": "float", "nullable": True}]},
         "function": {"kind": "inline", "code": _DOUBLE},
         "tests": tests,
     })
@@ -26,7 +27,7 @@ def _frame_stage(stage_id: str, tests: list[dict]) -> Stage:
     return parse_stage({
         "id": stage_id, "name": stage_id, "type": "python_frame_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
-        "output_schema": _IN_SCHEMA,
+        "signature": {"form": "replaces", "produces": _IN_SCHEMA["columns"]},
         "function": {"kind": "inline", "code": "def transform(df):\n    return df\n"},
         "tests": tests,
     })
@@ -50,7 +51,7 @@ def _non_python_stage() -> Stage:
     return parse_stage({
         "id": "load", "name": "Load", "type": "input_data",
         "connector": {"kind": "file"},
-        "output_schema": _IN_SCHEMA,
+        "signature": {"form": "replaces", "produces": _IN_SCHEMA["columns"]},
     })
 
 
