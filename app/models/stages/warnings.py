@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Literal
 
-from app.core.severity import Severity
+from app.models.severity import UserFacingErrorSeverity
 from app.models.schema import _Base
 
 if TYPE_CHECKING:
@@ -32,13 +32,13 @@ WarningKind = Literal[
 #
 # The last two are deliberate authoring choices, wrong to refuse and still worth
 # telling a reviewer about: a `warning` is not thereby unimportant.
-SEVERITY: dict[str, Severity] = {
-    "undescribed": Severity.error,
-    "unexemplified": Severity.error,
-    "examples_failing": Severity.error,
-    "unreviewable_code": Severity.error,
-    "nondeterministic": Severity.warning,
-    "row_limit": Severity.warning,
+SEVERITY: dict[str, UserFacingErrorSeverity] = {
+    "undescribed": UserFacingErrorSeverity.error,
+    "unexemplified": UserFacingErrorSeverity.error,
+    "examples_failing": UserFacingErrorSeverity.error,
+    "unreviewable_code": UserFacingErrorSeverity.error,
+    "nondeterministic": UserFacingErrorSeverity.warning,
+    "row_limit": UserFacingErrorSeverity.warning,
 }
 
 
@@ -50,7 +50,7 @@ class CompilerWarning(_Base):
     detail: str
 
     @property
-    def severity(self) -> Severity:
+    def severity(self) -> UserFacingErrorSeverity:
         return SEVERITY[self.kind]
 
 

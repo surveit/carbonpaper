@@ -44,7 +44,8 @@ from .lineage import (
     lineage_sidecar_path,
     read_row_lineage,
 )
-from .validation import Issue, Severity, ValidationReport, validate_dataframe
+from app.models.severity import UserFacingErrorSeverity
+from .validation import Issue, ValidationReport, validate_dataframe
 
 
 def topological_sort(stages: list[Stage]) -> list[Stage]:
@@ -716,7 +717,7 @@ def _summarize_output_schema_errors(sid: str, report: ValidationReport) -> str:
     """One-line summary of the error-severity output issues for the stage's
     error record, naming the columns at fault — the full issue list stays in the
     output validation report."""
-    errors = [issue for issue in report.issues if issue.severity == Severity.error]
+    errors = [issue for issue in report.issues if issue.severity == UserFacingErrorSeverity.error]
     named = sorted({issue.column for issue in errors if issue.column})
     columns = f" (column(s): {', '.join(named)})" if named else ""
     return (

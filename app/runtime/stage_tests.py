@@ -21,7 +21,8 @@ from app.models.stage import StageType
 from app.models.stages.stage_tests import StageTest
 from app.runtime.context import RunContext
 from app.runtime.stages import HANDLERS
-from app.runtime.validation import Severity, validate_dataframe
+from app.models.severity import UserFacingErrorSeverity
+from app.runtime.validation import validate_dataframe
 
 Status = Literal["passed", "mismatch", "error", "malformed"]
 
@@ -240,7 +241,7 @@ def _validate_test_against_schemas(
         )
         problems += [
             f"input {ref.id}: {issue.message}"
-            for issue in report.issues if issue.severity == Severity.error
+            for issue in report.issues if issue.severity == UserFacingErrorSeverity.error
         ]
     if test.expected is None:
         # A failure case states no output rows, so there is no output shape to
@@ -252,7 +253,7 @@ def _validate_test_against_schemas(
     )
     problems += [
         f"expected rows: {issue.message}"
-        for issue in report.issues if issue.severity == Severity.error
+        for issue in report.issues if issue.severity == UserFacingErrorSeverity.error
     ]
     return "; ".join(problems) if problems else None
 

@@ -20,8 +20,6 @@ from app.core.frames import (
     is_null_form,
     is_sequence_cell,
 )
-# `error` is what fails `ValidationReport.ok`; `warning` is informational only.
-from app.core.severity import Severity as Severity
 from app.models import (
     Column,
     JSON_COLUMN_TYPE,
@@ -30,6 +28,7 @@ from app.models import (
     STR_COLUMN_TYPE,
     TableSchema,
 )
+from app.models.severity import UserFacingErrorSeverity
 
 
 # ── Type checking ────────────────────────────────────────────────────────────
@@ -55,7 +54,7 @@ _OFFENDER_SAMPLE_N = 10
 
 @dataclass
 class Issue:
-    severity: str    # Severity.error | Severity.warning
+    severity: str    # UserFacingErrorSeverity.error | UserFacingErrorSeverity.warning
     column: str | None
     message: str
 
@@ -69,7 +68,7 @@ class ValidationReport:
 
     @property
     def ok(self) -> bool:
-        return not any(i.severity == Severity.error for i in self.issues)
+        return not any(i.severity == UserFacingErrorSeverity.error for i in self.issues)
 
     def to_dict(self) -> dict[str, Any]:
         return {

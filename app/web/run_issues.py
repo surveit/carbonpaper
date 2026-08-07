@@ -13,7 +13,7 @@ from pydantic import BaseModel
 from app.core.run_status import StageStatus
 from app.models import Stage, StepRefused
 from app.models.run_manifest import SCHEMA_REFUSAL_ERROR_TYPE
-from app.core.severity import Severity
+from app.models.severity import UserFacingErrorSeverity
 from app.web.stage_strip import read_stage_records
 
 
@@ -78,13 +78,13 @@ class RunIssues(BaseModel):
     @property
     def error_count(self) -> int:
         """A stop is ONE line — the issues it names are nested under it, not counted twice."""
-        return len(self.stopped) + self._count_flagged(Severity.error)
+        return len(self.stopped) + self._count_flagged(UserFacingErrorSeverity.error)
 
     @property
     def warning_count(self) -> int:
-        return self._count_flagged(Severity.warning)
+        return self._count_flagged(UserFacingErrorSeverity.warning)
 
-    def _count_flagged(self, severity: Severity) -> int:
+    def _count_flagged(self, severity: UserFacingErrorSeverity) -> int:
         return sum(
             1
             for stage in self.flagged
@@ -135,7 +135,7 @@ def _view_stopped_stage(
         issues=[
             issue
             for issue in _read_stage_issues(record)
-            if issue.severity == Severity.error
+            if issue.severity == UserFacingErrorSeverity.error
         ],
         never_ran=_find_stages_it_blocked(stage_id, consumers, never_ran, order),
     )
@@ -151,7 +151,7 @@ def _view_flagged_stages(
         issues = [
             issue
             for issue in _read_stage_issues(record)
-            if not (stopped and issue.severity == Severity.error)
+            if not (stopped and issue.severity == UserFacingErrorSeverity.error)
         ]
         if issues:
             flagged.append(
@@ -180,7 +180,7 @@ def _read_stage_issues(record: Mapping[str, Any]) -> list[ValidationIssue]:
         ValidationIssue(severity=severity, column=column, message=message, phases=phases)
         for (severity, column, message), phases in phases_by_issue.items()
     ]
-    return sorted(lines, key=lambda issue: issue.severity != Severity.error)
+    return sorted(lines, key=lambda issue: issue.severity != UserFacingErrorSeverity.error)
 
 
 def _read_reports(record: Mapping[str, Any]) -> list[Mapping[str, Any]]:

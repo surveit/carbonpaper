@@ -9,7 +9,7 @@ from typing import Mapping
 
 from pydantic import BaseModel
 
-from app.core.severity import Severity
+from app.models.severity import UserFacingErrorSeverity
 from app.models.stage import Stage
 from app.models.stages.warnings import SEVERITY, CompilerWarning, warn
 
@@ -21,7 +21,7 @@ class CompilerWarningReport(BaseModel):
 
     @property
     def errors(self) -> list[CompilerWarning]:
-        return [w for w in self.warnings if w.severity is Severity.error]
+        return [w for w in self.warnings if w.severity is UserFacingErrorSeverity.error]
 
     @property
     def is_clean(self) -> bool:
@@ -42,7 +42,7 @@ def find_workflow_compiler_warnings(
     order = list(SEVERITY)
     return CompilerWarningReport(
         warnings=sorted(warnings,
-                        key=lambda w: (w.severity is not Severity.error, order.index(w.kind)))
+                        key=lambda w: (w.severity is not UserFacingErrorSeverity.error, order.index(w.kind)))
     )
 
 
