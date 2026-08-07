@@ -56,6 +56,7 @@
              border-right: 1px solid var(--border); }
   /* Same trap as .app-side: an author `display` rule would beat [hidden]. */
   .run-nav[hidden] { display: none; }
+  .run-section[hidden] { display: none; }
   .run-nav-head { display: flex; align-items: center; margin-bottom: 6px; }
   .run-nav-head .drawer-btn { margin-left: auto; }
   .nav-expand { position: sticky; top: 0; align-self: start; }
@@ -163,12 +164,12 @@
       this run pinned; with graph_error set NO graph is drawn, because the
       working copy may not be what ran. ── #}
 <section class="run-section" id="run-workflow-section">
-<h2>Run visual summary</h2>
-{# Names what a click OPENS, not that it moves the band: the panel below is the
-   thing a reader has no other way to discover is there. #}
-<p class="lede">Every stage of the version this run pinned, coloured by how it went.
-  Click a node — or a guide step — for that stage's data, schema and transform below.
-  <span class="muted">Drag to pan · ⌘/Ctrl-scroll to zoom · ⛶ for the whole graph.</span></p>
+<h2>Workflow</h2>
+{# Names what a click OPENS, not that it moves the band: the stage section below is
+   the thing a reader has no other way to discover is there — it is not on the page
+   at all until this sentence is acted on. #}
+<p class="lede">Click on a node for that stage's data, schema and transform below.
+  <span class="muted">Drag to pan · ⌘/Ctrl-scroll to zoom</span></p>
 {% if graph_error %}
 <p class="banner banner-warn" id="graph-error">⚠ Workflow graph unavailable — {{ graph_error }}</p>
 {% else %}
@@ -214,13 +215,14 @@
 {% endif %}
 </section>
 
-{# ── 4. STAGE DETAILS — one stage, picked from the band above or the guide rail. ── #}
-<section class="run-section" id="run-stage-section">
+{# ── 4. STAGE DETAILS — one stage, picked from the band above or the guide rail.
+      Not on the page until one is: an empty panel with a "pick a stage" placeholder
+      is a heading, a lede and a box of nothing, all claiming space on a page whose
+      whole point is having less on it. loadStage() unhides it. ── #}
+<section class="run-section" id="run-stage-section" hidden>
 <h2>Stage details</h2>
 <p class="lede">One stage of this run: what it produced, the contract it declares, and the transform it applied.</p>
-<div class="stage-panel-full" id="stage-panel">
-    <div class="empty-state"><p>Pick a stage — a node in the workflow above, or any line in the index at the top of this page.</p></div>
-</div>
+<div class="stage-panel-full" id="stage-panel"></div>
 </section>
 
 {# ── THE AUDIT DRAWER. The packet, the manifest and the whole-run log share one
@@ -333,6 +335,9 @@
   // A load the reader did not ask for (deep link, panel self-refresh) leaves it off.
   async function loadStage(stageId, opts) {
     if (!stageId) return;
+    // Reveal BEFORE the fetch, so a stage that fails to load shows its error rather
+    // than looking like the click did nothing.
+    document.getElementById('run-stage-section').hidden = false;
     panel.classList.add('loading');
     try {
       const r = await fetch(`/project/${encodeURIComponent(PROJECT)}/runs/${encodeURIComponent(RUN_ID)}/stage/${encodeURIComponent(stageId)}/partial`);

@@ -22,8 +22,10 @@ the review guide alone. The work column is four named sections, in this order:
    Absent when there are none. Never a button: a CTA is an imperative, a run that finished
    clean has none (`choose_run_cta` returns an empty `RunCta`), and a primary button sized
    to a filename was the widest thing on the page.
-3. **Run visual summary** — the workflow minimap.
-4. **Stage details** — the stage panel.
+3. **Workflow** — the minimap.
+4. **Stage details** — the stage panel. `hidden` until `loadStage()` unhides it: before a
+   stage is picked there is nothing to show, and a heading over an empty box is exactly the
+   kind of always-on furniture this page was cut down to remove.
 
 Below them, one **audit drawer** (`.run-audit`) with the review packet, the raw manifest and
 the run log; closed except on a live run, when the log is the only thing moving.
