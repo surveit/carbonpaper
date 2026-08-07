@@ -55,10 +55,13 @@
     --code-comment: #878c93;
 
     /* ── The five states ──────────────────────────────────────────────────
-       Colour on every page answers ONE question: what happened, and do we trust
-       it. These five are that answer. A stage's TYPE is not on this axis and
-       takes no colour — its glyph names it. Three roles each, not
-       interchangeable:
+       Colour on every page answers ONE question: what happened, and did a check
+       pass. These five are that answer, and they are the ONLY hues here. A
+       stage's TYPE is not on this axis and takes no colour — its glyph names it.
+       Neither is a page section: the node-review page's "how is this evaluated"
+       and "who reviews this" blocks had a teal and a magenta of their own, and
+       giving them up is what freed a hue for --info, which must not be the CTA
+       blue. Three roles each, not interchangeable:
          -bd    the stroke, border or fill — the colour you SEE
          -bg    the tint it sits on — the colour that GROUPS
          -ink   text on that tint — the colour you READ, >= 6.5:1 on its -bg
@@ -78,30 +81,25 @@
     --good-bd: #3b6c39;   --good-bg: #e2ede1;   --good-ink: #2b5c2b;
     --warn-bd: #8a602e;   --warn-bg: #f5e8dd;   --warn-ink: #704918;
     --bad-bd: #8c4538;    --bad-bg: #fae6e2;    --bad-ink: #833d31;
-    --info-bd: #35538d;   --info-bg: #e7eaf9;   --info-ink: #33518b;
+    --info-bd: #00677d;   --info-bg: #d9eef5;   --info-ink: #00596f;
     --idle-bd: #787d86;   --idle-bg: #e8ebee;   --idle-ink: #4d525a;
 
-    /* ── Two callout tints ────────────────────────────────────────────────
-       The node-review page prints two sections that are neither a state nor a
-       stage type: how a node is EVALUATED, and who REVIEWS it. They are the only
-       colour outside the five states, they name the section rather than a hue,
-       and they earn it by being the page's structure — not by labelling a type. */
-    --eval-bd: #2c7180;   --eval-bg: #d9eef4;   --eval-ink: #095a69;
-    --review-bd: #8f4972; --review-bg: #f7e6ef; --review-ink: #7f3a63;
-
     /* ── Interaction, not meaning ─────────────────────────────────────────
-       --accent is the transfer ink, and it IS the blue hue: an app with one
-       blue cannot drift into two. --focus is the only colour here naming no
-       meaning — it marks the node or field you are ON, and has to stay legible
-       painted over a node already stroked in --info-bd, so it cannot be
-       --accent. It sits one step round the wheel from the accent at chroma 48 —
-       above the hues' 36 so it reads as an interaction rather than a meaning, but
-       nowhere near the 82 it started at, which was an electric blue-violet on a
-       page where nothing else was above 36. The three color-mix values below keep
-       a shadow tied to the ink that casts it instead of to a black of its own. */
-    --accent: var(--info-bd);
-    --accent-deep: var(--info-ink);
-    --focus: #5b4794;
+       --accent is the transfer ink — the CTA blue, and its OWN value. It is
+       deliberately not --info: "do this next" and "a human is needed here" are
+       different messages and a reader must not have to tell them apart by
+       context. --focus is the only colour here naming no meaning — it marks the
+       node or field you are ON, and has to stay legible painted over a node
+       already stroked in --info-bd, so it cannot be
+       --accent, and it must not be --info either. It carries chroma 48 — above
+       the hues' 36 so it reads as an interaction rather than a meaning, and
+       nowhere near the 82 it started at. Every pair among the five states, the
+       accent and the focus clears 20 deltaE; the tightest is warn/bad at 22.
+       The three color-mix values below keep a shadow tied to the ink that casts
+       it instead of to a black of its own. */
+    --accent: #35538d;
+    --accent-deep: #24467e;
+    --focus: #873475;
     --shadow: color-mix(in srgb, var(--fg) 9%, transparent);
     --focus-glow: color-mix(in srgb, var(--focus) 55%, transparent);
     --focus-halo: color-mix(in srgb, var(--focus) 20%, transparent);

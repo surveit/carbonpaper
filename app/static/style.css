@@ -348,8 +348,8 @@ table.stages a { text-decoration: none; }
     margin-right: 4px;
 }
 .signal.warn { background: var(--warn-bg); border: 1px solid var(--warn-bd); color: var(--warn-ink); }
-.signal.eval { background: var(--eval-bg); border: 1px solid var(--eval-bd); }
-.signal.review { background: var(--review-bg); border: 1px solid var(--review-bd); }
+.signal.eval { background: var(--sunk); border: 1px solid var(--border-strong); }
+.signal.review { background: var(--sunk); border: 1px solid var(--border-strong); }
 
 /* Stage detail */
 .stage-header {
@@ -509,7 +509,7 @@ table.schema tr:last-child td { border-bottom: 0; }
     padding: 12px 16px;
     background: var(--raised);
     border: 1px solid var(--border);
-    border-left: 3px solid var(--eval-bd);
+    border-left: 3px solid var(--border-strong);
     border-radius: 4px;
 }
 .input-block h3 {
@@ -639,22 +639,22 @@ table.schema tr:last-child td { border-bottom: 0; }
 .code-block > details[open] > summary { margin-bottom: 12px; }
 
 .eval-block {
-    background: var(--eval-bg);
-    border-left: 4px solid var(--eval-bd);
+    background: var(--sunk);
+    border-left: 4px solid var(--border-strong);
     padding: 16px 20px;
     border-radius: 0 4px 4px 0;
     margin: 16px 0;
 }
-.eval-block h2 { margin-top: 0; color: var(--eval-ink); }
+.eval-block h2 { margin-top: 0; color: var(--fg); }
 
 .review-block {
-    background: var(--review-bg);
-    border-left: 4px solid var(--review-bd);
+    background: var(--sunk);
+    border-left: 4px solid var(--border-strong);
     padding: 16px 20px;
     border-radius: 0 4px 4px 0;
     margin: 16px 0;
 }
-.review-block h2 { margin-top: 0; color: var(--review-ink); }
+.review-block h2 { margin-top: 0; color: var(--fg); }
 
 /* Code-shaped pre blocks (function source, prompts, instructions) */
 pre.code, pre.prompt, pre.instructions {
@@ -1495,8 +1495,8 @@ table.issue-table { width: 100%; border-collapse: collapse; font-size: .79rem; }
 .run-log a.run-log-row:hover { text-decoration: underline; }
 .run-log .run-log-cached { opacity: .55; }
 .run-log .run-log-detail { display: block; opacity: .62; }
-.run-log .run-log-detail-head { color: #8a5cf6; }
-.run-log .run-log-detail-body { display: block; white-space: pre-wrap; max-height: 6.5em; overflow: auto; margin: 0 0 .3em 2em; padding-left: .6em; border-left: 2px solid #d7cdf5; }
+.run-log .run-log-detail-head { color: var(--muted); }
+.run-log .run-log-detail-body { display: block; white-space: pre-wrap; max-height: 6.5em; overflow: auto; margin: 0 0 .3em 2em; padding-left: .6em; border-left: 2px solid var(--border-strong); }
 /* The stage panel's copy sits below the tab strip, so it takes its own rule to
    separate it from whichever pane is open above it. */
 .stage-run-log { margin-top: 1rem; border-top: 1px solid var(--border); padding-top: .6rem; }

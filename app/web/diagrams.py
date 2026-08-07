@@ -302,7 +302,7 @@ _STATUS_STROKE: dict[str, tuple[str, str]] = {
     StageStatus.RUNNING: ("#8a602e", "3px"),               # warning
     StageStatus.VALIDATION_WARNINGS: ("#8a602e", "3px"),   # warning
     StageStatus.ERROR: ("#8c4538", "3px"),                 # failed
-    StageStatus.AWAITING_REVIEW: ("#35538d", "4px"),       # needs a human
+    StageStatus.AWAITING_REVIEW: ("#00677d", "4px"),       # needs a human
     StageStatus.CANCELLED: ("#787d86", "3px"),             # idle
     StageStatus.PENDING: ("#787d86", "1px"),               # idle
 }
