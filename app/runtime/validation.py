@@ -10,7 +10,6 @@ import math
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from enum import Enum
 from typing import Any
 
 import pandas as pd
@@ -21,6 +20,8 @@ from app.core.frames import (
     is_null_form,
     is_sequence_cell,
 )
+# `error` is what fails `ValidationReport.ok`; `warning` is informational only.
+from app.core.severity import Severity as Severity
 from app.models import (
     Column,
     JSON_COLUMN_TYPE,
@@ -50,13 +51,6 @@ assert set(CELL_TYPE_PREDICATES) == SCALAR_COLUMN_TYPES, (
 
 # How many offending values to name in an Issue message.
 _OFFENDER_SAMPLE_N = 10
-
-
-class Severity(str, Enum):
-    """An `Issue`'s severity — `error` fails `ValidationReport.ok`, `warning`
-    is informational only."""
-    error = "error"
-    warning = "warning"
 
 
 @dataclass

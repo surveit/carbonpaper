@@ -9,24 +9,24 @@ from typing import Mapping
 
 from pydantic import BaseModel
 
+from app.core.severity import Severity
 from app.models.stage import Stage
-from app.models.stages.warnings import FIXABLE, CompilerWarning, warn
+from app.models.stages.warnings import SEVERITY, CompilerWarning, warn
 
 
 class CompilerWarningReport(BaseModel):
-    """Every compiler warning for one workflow, fixable first."""
+    """Every compiler warning for one workflow, errors first."""
 
     warnings: list[CompilerWarning]
 
     @property
-    def blocking(self) -> list[CompilerWarning]:
-        return [w for w in self.warnings if w.blocking]
+    def errors(self) -> list[CompilerWarning]:
+        return [w for w in self.warnings if w.severity is Severity.error]
 
     @property
     def is_clean(self) -> bool:
-        """True when nothing fixable remains; a non-blocking warning still owes the reviewer a
-        sentence."""
-        return not self.blocking
+        """True when no error remains; a warning still owes the reviewer a sentence."""
+        return not self.errors
 
 
 def find_workflow_compiler_warnings(
@@ -35,13 +35,14 @@ def find_workflow_compiler_warnings(
     # `failing_examples` is {stage id: how many of its examples do not pass}. The
     # CALLER runs them: answering it means executing code, and app.runtime imports
     # this module, so running them here would be a cycle.
-    """Every compiler warning across `stages`, fixable first then by kind."""
+    """Every compiler warning across `stages`, errors first then by kind."""
     failing = failing_examples or {}
     warnings = [w for stage in stages
                 for w in find_stage_compiler_warnings(stage, failing.get(stage.id))]
-    order = list(FIXABLE)
+    order = list(SEVERITY)
     return CompilerWarningReport(
-        warnings=sorted(warnings, key=lambda w: (not w.blocking, order.index(w.kind)))
+        warnings=sorted(warnings,
+                        key=lambda w: (w.severity is not Severity.error, order.index(w.kind)))
     )
 
 

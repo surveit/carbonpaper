@@ -72,17 +72,17 @@ def test_a_config_only_stage_warns_about_nothing():
     assert _kinds(enrich) == []
 
 
-# ── the blocking kinds ───────────────────────────────────────────────────────
-def test_no_description_is_blocking():
+# ── the error kinds ───────────────────────────────────────────────────────
+def test_no_description_is_an_error():
     assert _kinds(_stage(summary=None)) == ["undescribed"]
-    assert find_stage_compiler_warnings(_stage(summary=None))[0].blocking
+    assert find_stage_compiler_warnings(_stage(summary=None))[0].severity == "error"
 
 
-def test_a_description_with_no_examples_is_blocking():
+def test_a_description_with_no_examples_is_an_error():
     """Nothing checks the description against the code, so it is unverified prose."""
     warnings = find_stage_compiler_warnings(_stage())
     assert [w.kind for w in warnings] == ["unexemplified"]
-    assert warnings[0].blocking
+    assert warnings[0].severity == "error"
 
 
 def test_missing_description_outranks_missing_examples():
@@ -90,11 +90,11 @@ def test_missing_description_outranks_missing_examples():
     assert _kinds(_stage(summary=None)) == ["undescribed"]
 
 
-def test_module_code_is_blocking_because_the_panel_cannot_show_it():
+def test_module_code_is_an_error_because_the_panel_cannot_show_it():
     warnings = find_stage_compiler_warnings(
         _stage(kind="module", module="pkg.mod", tests=[_PASSING_EXAMPLE]))
     assert [w.kind for w in warnings] == ["unreviewable_code"]
-    assert warnings[0].blocking
+    assert warnings[0].severity == "error"
 
 
 def _publish_stage(stage_id="pub"):
@@ -109,7 +109,7 @@ def _publish_stage(stage_id="pub"):
     })
 
 
-# ── the non-blocking kinds ───────────────────────────────────────────────────
+# ── the warning kinds ───────────────────────────────────────────────────
 def test_a_type_that_cannot_run_examples_warns_about_nothing():
     """A publish stage can never carry examples, so there is nothing to ask it for."""
     assert _kinds(_publish_stage()) == []
@@ -133,18 +133,18 @@ def test_cache_off_and_a_row_limit_are_notes_not_blockers():
     warnings = find_stage_compiler_warnings(
         _stage(cache=False, limit=100, tests=[_PASSING_EXAMPLE]))
     assert sorted(w.kind for w in warnings) == ["nondeterministic", "row_limit"]
-    assert not any(w.blocking for w in warnings)
+    assert all(w.severity == "warning" for w in warnings)
 
 
 # ── the workflow-level gate ──────────────────────────────────────────────────
-def test_a_workflow_is_clean_when_nothing_blocking_remains():
+def test_a_workflow_is_clean_when_no_error_remains():
     """`is_clean` is the agent's gate, so a note must not hold it shut."""
     report = find_workflow_compiler_warnings([
         _stage(stage_id="ok", tests=[_PASSING_EXAMPLE]),
         _stage(stage_id="note", cache=False, tests=[_PASSING_EXAMPLE]),
     ])
     assert report.warnings and report.is_clean
-    assert report.blocking == []
+    assert report.errors == []
 
 
 def test_a_workflow_with_one_undescribed_stage_is_not_clean():
@@ -153,10 +153,10 @@ def test_a_workflow_with_one_undescribed_stage_is_not_clean():
         _stage(stage_id="silent", summary=None),
     ])
     assert not report.is_clean
-    assert [w.stage_id for w in report.blocking] == ["silent"]
+    assert [w.stage_id for w in report.errors] == ["silent"]
 
 
-def test_blocking_warnings_sort_before_notes():
+def test_errors_sort_before_warnings():
     """The page reads top-down and takes its colour from the first entry."""
     report = find_workflow_compiler_warnings([
         _stage(stage_id="note", cache=False, tests=[_PASSING_EXAMPLE]),
@@ -166,11 +166,11 @@ def test_blocking_warnings_sort_before_notes():
 
 
 # ── examples that do not pass ────────────────────────────────────────────────
-def test_failing_examples_are_blocking():
+def test_failing_examples_are_an_error():
     """Examples disagreeing with the code is not signed-off-able."""
     warnings = find_stage_compiler_warnings(_stage(tests=[_PASSING_EXAMPLE]), failing_examples=1)
     assert [w.kind for w in warnings] == ["examples_failing"]
-    assert warnings[0].blocking
+    assert warnings[0].severity == "error"
     assert "1 of its 1 examples" in warnings[0].detail
 
 
@@ -191,4 +191,4 @@ def test_a_workflow_with_a_failing_example_is_not_clean():
         {"broken": 2},
     )
     assert not report.is_clean
-    assert [(w.stage_id, w.kind) for w in report.blocking] == [("broken", "examples_failing")]
+    assert [(w.stage_id, w.kind) for w in report.errors] == [("broken", "examples_failing")]

@@ -13,7 +13,7 @@ from pydantic import BaseModel
 from app.core.run_status import StageStatus
 from app.models import Stage, StepRefused
 from app.models.run_manifest import SCHEMA_REFUSAL_ERROR_TYPE
-from app.runtime.validation import Severity
+from app.core.severity import Severity
 from app.web.stage_strip import read_stage_records
 
 

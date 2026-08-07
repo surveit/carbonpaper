@@ -1,4 +1,4 @@
-"""The CompilerWarning type, and which kinds a stage edit can actually clear.
+"""The CompilerWarning type, and the severity each kind carries.
 
 Sits below the per-handle modules that RAISE warnings (code.py, filter_rows.py) so
 they can import it without depending on the collector that gathers them.
@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Literal
 
+from app.core.severity import Severity
 from app.models.schema import _Base
 
 if TYPE_CHECKING:
@@ -21,23 +22,23 @@ WarningKind = Literal[
     "row_limit",
 ]
 
-# Whether editing the stage can clear a kind, and the order the list is read in
-# (fixable first).
+# Each kind's severity, and the order the list is read in (errors first).
 #
-# `examples_failing` is the one kind that cannot be judged from the stage alone —
-# running the examples is what answers it — so the caller runs them and hands the
-# result in. It is fixable: either the code or the description is wrong, and both
-# are edits to this stage.
+# `error` = an edit to this stage clears it, so it is owed one before anyone signs
+# the workflow off. `examples_failing` is the one error that cannot be judged from
+# the stage alone — running the examples is what answers it — so the caller runs
+# them and hands the result in; either the code or the description is wrong, and
+# both are edits to this stage.
 #
-# The last two are deliberate authoring choices: wrong to refuse, still worth
-# telling a reviewer about.
-FIXABLE: dict[str, bool] = {
-    "undescribed": True,
-    "unexemplified": True,
-    "examples_failing": True,
-    "unreviewable_code": True,
-    "nondeterministic": False,
-    "row_limit": False,
+# The last two are deliberate authoring choices, wrong to refuse and still worth
+# telling a reviewer about: a `warning` is not thereby unimportant.
+SEVERITY: dict[str, Severity] = {
+    "undescribed": Severity.error,
+    "unexemplified": Severity.error,
+    "examples_failing": Severity.error,
+    "unreviewable_code": Severity.error,
+    "nondeterministic": Severity.warning,
+    "row_limit": Severity.warning,
 }
 
 
@@ -49,10 +50,8 @@ class CompilerWarning(_Base):
     detail: str
 
     @property
-    def blocking(self) -> bool:
-        """Can editing the stage clear this? A non-blocking warning is not thereby
-        unimportant."""
-        return FIXABLE[self.kind]
+    def severity(self) -> Severity:
+        return SEVERITY[self.kind]
 
 
 def warn(stage: "StageBase", kind: WarningKind, detail: str) -> CompilerWarning:
