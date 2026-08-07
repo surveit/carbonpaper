@@ -12,9 +12,28 @@ routers in `app/web/routers/`, which import the Runner (`app.runtime`) and the s
 - `/project/<m>/runs`, `/runs/<id>` — run history + detail.
 - `/project/<m>/runs/<id>/queue/<stage>` — the human-review queue UI (+ `/decide`, `/resume`).
 
+## The run page's two columns (`run_detail.html`)
+`.run-nav` (360px, collapsible) then `.run-main`. The nav column is the **spine** and holds
+the review guide alone. The work column is four named sections, in this order:
+
+1. **Run overview** — the header (grounding line, CTA, status bar) and the issue index.
+   Everything about the run; nothing that is its result.
+2. **Run outputs** — the files a publish stage wrote, off `header.artifacts`, as links.
+   Absent when there are none. Never a button: a CTA is an imperative, a run that finished
+   clean has none (`choose_run_cta` returns an empty `RunCta`), and a primary button sized
+   to a filename was the widest thing on the page.
+3. **Workflow** — the minimap.
+4. **Stage details** — the stage panel. `hidden` until `loadStage()` unhides it: before a
+   stage is picked there is nothing to show, and a heading over an empty box is exactly the
+   kind of always-on furniture this page was cut down to remove.
+
+Below them, one **audit drawer** (`.run-audit`) with the review packet, the raw manifest and
+the run log; closed except on a live run, when the log is the only thing moving.
+
 ## The run page's issue index (`app.web.run_issues` → `_run_issues.html`)
-Between the header and the graph, an INDEX into the stage panels — every entry is one line
-plus a deep link, and the detail stays in the panel's own validation block.
+Inside Run overview, under the header: an INDEX into the stage panels — every entry is one line
+plus a deep link, and the detail stays in the panel's own validation block. It stays in the
+work column, not the nav rail: its four-column table needs the width.
 - **"Why this run stopped"** — one card per `error` stage, leading with which story it is,
   because they route to different people: a schema refusal (`OutputSchemaViolation`) and an
   authored `StepRefused` are the data's and link the panel's **Data** / **Transform** tab; any
@@ -31,6 +50,20 @@ A deep link loads the panel through `_loadStage(id, {tab, reveal})`, which the p
 publishing `_selectTab` on its root element. `reveal` smooth-scrolls the panel's top to the top of the
 run column; every click the reader aims — the guide's steps and output links, an issue link, a
 graph node — uses it, and a load they did not ask for (deep link, panel self-refresh) does not.
+
+## The run page's workflow minimap (`.diagram-minimap` in `run_detail.html`)
+The graph is a 200px band held at `data-zoom-floor` — `diagram_viewport.js` will not fit a
+wide graph below that scale, so labels stay readable and the band is panned instead. Zoom,
+fit and fullscreen are icon buttons overlaid in its top-right; `.diagram-where` names the
+parked stage and its position in the run's order, which two visible nodes cannot. It opens
+parked on the run's first stage (`_focusNode(..., {select: false})` — scrolls without
+outlining, so the band shows the flow's start without claiming a stage the reader has not
+picked). Clicking a node loads the stage section, which until then is not on the page.
+
+**⛶ is the SURVEY.** The `.diagram-block` goes fullscreen, not the viewport, so the whole
+graph arrives with `.diagram-survey` under it: how many stages the run has, how many the
+guide narrates, and how many it narrates nobody — every figure COUNTED off this run's stage
+list and this version's guide. With no guide the narration lines are absent, not zeroed.
 
 ## The stage panel — three tabs (`run_stage_partial` → `_run_stage_panel.html`)
 **Data │ Schema │ Transform**, one flat strip; it opens on Data:

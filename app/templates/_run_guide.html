@@ -1,4 +1,5 @@
-{# The review guide the run's pinned version carries, as a rail beside the run: the
+{# The review guide the run's pinned version carries, rendered into the run page's
+   nav column beneath the issue index: the
    ordered walkthrough its author wrote. Each numbered entry is a WORKFLOW SECTION —
    the term the UI uses for one authored step — and reads in three parts, in order:
 
@@ -100,18 +101,10 @@
 {% endmacro %}
 
 <style>
-  /* The guide sits on the RIGHT of the run, and scrolls independently of it. */
-  .run-shell.with-guide { display: grid; grid-template-columns: minmax(0, 1fr) 360px;
-                          gap: 18px; align-items: stretch; }
-  .run-shell.with-guide.guide-collapsed { grid-template-columns: minmax(0, 1fr) auto; }
-  /* Same trap as .app-side: an author `display` rule would beat [hidden]. The guide
-     has none, but pin it so a later style rule cannot silently break the collapse. */
-  .run-guide[hidden] { display: none; }
-  .guide-expand { position: sticky; top: 0; }
-  .run-guide-head { display: flex; align-items: center; gap: 8px; }
-  .run-guide-head .drawer-btn { margin-left: auto; }
-  .run-guide { min-width: 0; height: 100%; overflow-y: auto;
-               border-left: 1px solid var(--border); padding-left: 18px; }
+  /* The guide is CONTENT inside the run page's nav column, not a column of its own:
+     run_detail.html owns `.run-nav` — its width, its scrolling and its collapse —
+     because the issue index shares it. */
+  .run-guide { min-width: 0; }
   .run-guide-head h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em;
                        color: var(--muted); margin: 0 0 4px; }
   .run-guide-lead { font-size: 11.5px; color: var(--muted); margin: 0 0 8px; }
@@ -200,30 +193,11 @@
                          letter-spacing: 0; }
   .guide-unnarrated p { font-size: 11px; color: var(--muted); margin: 0 0 6px; }
 
-  @media (max-width: 1000px) {
-    .run-shell.with-guide { grid-template-columns: 1fr; }
-    .run-guide { height: auto; overflow: visible; border-left: 0; padding-left: 0; }
-  }
 </style>
 
-<button type="button" class="drawer-btn guide-expand" id="guide-expand" hidden
-        title="Show the review guide" aria-label="Show the review guide">
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-       stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-    <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M15 3v18"/><path d="m10 15-3-3 3-3"/>
-  </svg>
-</button>
-<aside class="run-guide fade-scroll" id="run-guide">
+<section class="run-guide" id="run-guide">
   <div class="run-guide-head">
     <h2>Review guide</h2>
-    {# panel-right-close: mirror of the sidebar's toggle. #}
-    <button type="button" class="drawer-btn" id="guide-collapse"
-            title="Hide the review guide" aria-label="Hide the review guide">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M15 3v18"/><path d="m8 9 3 3-3 3"/>
-      </svg>
-    </button>
   </div>
   {# The size notation is explained once, here, so `45.1k × 15` needs no legend of
      its own under every Workflow section. #}
@@ -294,7 +268,7 @@
     </ul>
   </div>
   {% endif %}
-</aside>
+</section>
 
 <script>
 (function () {
@@ -316,24 +290,5 @@
     window._loadStage(id, { reveal: true });
   });
 
-  // ── Guide drawer, mirroring the sidebar's.
-  const shell = document.getElementById('run-shell');
-  const guide = document.getElementById('run-guide');
-  const gExpand = document.getElementById('guide-expand');
-  const gCollapse = document.getElementById('guide-collapse');
-  if (!shell || !guide || !gExpand || !gCollapse) return;
-  const GKEY = 'run-guide-collapsed:' + {{ project | tojson }};
-
-  function setGuideCollapsed(on) {
-    shell.classList.toggle('guide-collapsed', on);
-    guide.hidden = on;
-    gExpand.hidden = !on;
-    try { localStorage.setItem(GKEY, on ? '1' : '0'); } catch (e) { /* private mode */ }
-    // The fade lives in its own IIFE in run_detail.html; repaint through its hook.
-    if (window._paintFades) window._paintFades();
-  }
-  gCollapse.addEventListener('click', () => setGuideCollapsed(true));
-  gExpand.addEventListener('click', () => setGuideCollapsed(false));
-  try { if (localStorage.getItem(GKEY) === '1') setGuideCollapsed(true); } catch (e) { /* ignore */ }
 })();
 </script>

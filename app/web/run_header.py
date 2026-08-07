@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Literal, Mapping, Sequence
+from typing import Any, Literal, Mapping
 
 from pydantic import BaseModel
 
@@ -33,7 +33,7 @@ class RunAction(BaseModel):
 
 
 class RunCta(BaseModel):
-    """`primary` is None only for a finished run that published nothing."""
+    """`primary` is None for a run that finished clean — it asks nothing."""
 
     primary: RunAction | None = None
     secondary: list[RunAction] = []
@@ -69,6 +69,7 @@ class RunHeader(BaseModel):
     version: VersionNote
     strip: StageStrip
     cta: RunCta
+    artifacts: list[ArtifactLink]
     live: RunLiveView
 
 
@@ -76,8 +77,7 @@ def build_run_header(
     project: str, run_id: str, run_dir: Path, manifest: Mapping[str, Any]
 ) -> RunHeader:
     strip = build_stage_strip(manifest)
-    artifacts = list_artifact_links(project, run_id, run_dir, manifest)
-    cta = choose_run_cta(project, run_id, manifest, artifacts)
+    cta = choose_run_cta(project, run_id, manifest)
     return RunHeader(
         run_id=run_id,
         started_at=_read_text(manifest.get("started_at")),
@@ -85,6 +85,7 @@ def build_run_header(
         version=read_version_note(project, manifest.get("workflow_version")),
         strip=strip,
         cta=cta,
+        artifacts=list_artifact_links(project, run_id, run_dir, manifest),
         live=_build_live_view(manifest, strip, cta),
     )
 
@@ -93,12 +94,10 @@ def build_live_view(
     project: str, run_id: str, manifest: Mapping[str, Any]
 ) -> RunLiveView:
     """What the poller refreshes."""
-    # Artifacts are left out: a run publishes them only once it has finished, at
-    # which point the page reloads anyway.
     return _build_live_view(
         manifest,
         build_stage_strip(manifest),
-        choose_run_cta(project, run_id, manifest, []),
+        choose_run_cta(project, run_id, manifest),
     )
 
 
@@ -106,9 +105,8 @@ def choose_run_cta(
     project: str,
     run_id: str,
     manifest: Mapping[str, Any],
-    artifacts: Sequence[ArtifactLink],
 ) -> RunCta:
-    """The single action this run's state calls for."""
+    """The single action this run's state calls for, or none when it asks nothing."""
     # The page states no status headline, so this button is how the state is read.
     base = f"/project/{project}/runs/{run_id}"
     if manifest.get("status") == RunStatus.RUNNING:
@@ -120,7 +118,9 @@ def choose_run_cta(
         return _build_rerun_cta(base, manifest)
     if manifest.get("status") == RunStatus.CANCELLED:
         return _build_resume_cta(base, manifest)
-    return _build_artifacts_cta(artifacts)
+    # Finished clean: nothing is asked of the reader. Its outputs are not an action
+    # and are not rendered as one — they are their own section on the run page.
+    return RunCta()
 
 
 def find_halted_stage_ids(manifest: Mapping[str, Any]) -> list[str]:
@@ -290,17 +290,6 @@ def _build_resume_cta(base: str, manifest: Mapping[str, Any]) -> RunCta:
         primary=_build_resume_action("↻ Resume cancelled run →", kind="primary",
                                      base=base),
         aside=_describe_cache_reuse(manifest),
-    )
-
-
-def _build_artifacts_cta(artifacts: Sequence[ArtifactLink]) -> RunCta:
-    """A finished run has no imperative button — its outputs are the only ones."""
-    if not artifacts:
-        return RunCta()
-    first, *rest = artifacts
-    return RunCta(
-        primary=RunAction(label=f"📤 {first.name}", url=first.url),
-        secondary=[RunAction(label=a.name, url=a.url, kind="ghost") for a in rest],
     )
 
 

@@ -12,7 +12,6 @@ import pytest
 
 from app.web.config import templates
 from app.web.run_header import (
-    ArtifactLink,
     VersionNote,
     build_run_header,
     choose_run_cta,
@@ -39,8 +38,8 @@ def _manifest(status: str, stages: list[tuple[str, str]], **extra: object) -> di
     }
 
 
-def _cta(manifest: dict, artifacts: list[ArtifactLink] | None = None):
-    return choose_run_cta(PROJECT, RUN, manifest, artifacts or [])
+def _cta(manifest: dict):
+    return choose_run_cta(PROJECT, RUN, manifest)
 
 
 # ─── One state, one primary action ──────────────────────────────────────────
@@ -95,17 +94,13 @@ def test_a_cancelled_run_offers_resume_not_a_re_run_of_failures():
     assert cta.aside == "keeps the 1 completed stage — no new LLM calls"
 
 
-def test_a_completed_run_offers_its_outputs_and_no_imperative_button():
-    # A run that finished clean has nothing to ask of the reader, so the
-    # artifacts ARE the CTA — their being the only button is how it reads as done.
-    artifacts = [ArtifactLink(name="report.xlsx", url="/a/report.xlsx"),
-                 ArtifactLink(name="summary.html", url="/a/summary.html")]
-    cta = _cta(_manifest("ok", [("load", "ok"), ("publish", "ok")]), artifacts)
+def test_a_completed_run_asks_for_nothing():
+    cta = _cta(_manifest("ok", [("load", "ok"), ("publish", "ok")]))
 
-    assert cta.primary is not None
-    assert cta.primary.label == "📤 report.xlsx"
-    assert cta.primary.method == "get"
-    assert [a.label for a in cta.secondary] == ["summary.html"]
+    # Its outputs are not an action: the run page lists them off header.artifacts, so
+    # a long filename can no longer size a primary button.
+    assert cta.primary is None
+    assert cta.secondary == []
     assert cta.aside is None
 
 
