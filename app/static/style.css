@@ -1390,10 +1390,10 @@ table.data-preview.scratch th { background: var(--hover); }
 .stage-strip i.status-cancelled, .strip-counts i.status-cancelled { background: var(--state-idle); }
 
 /* ── The run issue index (_run_issues.html): ONE list of what this run's records
-      say went wrong, the stop that ended it included. It sits between the header
-      and the graph, so it is what a reviewer meets after the CTA. The list itself
-      is the shared `.issue-panel` table below; what is here is the small print a
-      stop nests under its own line. ── */
+      say went wrong, the stop that ended it included. It sits in Run overview,
+      under the header, so it is what a reviewer meets after the CTA. The list
+      itself is the shared `.issue-panel` table below; what is here is the small
+      print a stop nests under its own line. ── */
 .run-issues { margin: 0 0 1.1rem; }
 /* A stop names things no other line has room for: the columns it refused, the
    reason its author wrote, its traceback, the stages it left unrun. They read as
