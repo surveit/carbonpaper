@@ -232,8 +232,9 @@
       if (location.hash !== `#${stageId}`) history.replaceState(null, '', `#${stageId}`);
       focusGraphNode(stageId, { pulse: !opts || opts.pulse !== false });
       // Animated, so the reader sees where the page went rather than being
-      // teleported. 'auto' for a reader who asked for less motion, and under
-      // automation, where 'smooth' scrolls nothing and so cannot be measured.
+      // teleported; 'auto' only for a reader who asked for less motion. A smooth
+      // scroll needs requestAnimationFrame, which a hidden tab never fires, so it
+      // moves nothing there — measure this landing with 'auto' forced.
       if (opts && opts.reveal) panel.scrollIntoView({ behavior: SCROLL_BEHAVIOR, block: 'start' });
     } finally { panel.classList.remove('loading'); }
   }
