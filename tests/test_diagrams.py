@@ -17,10 +17,8 @@ def test_cancelled_stage_gets_glyph_and_grey_stroke() -> None:
     assert "stroke:#7b8089" in graph
 
 
-def test_plain_stage_with_no_status_or_review_renders_the_bare_node() -> None:
-    """No status_by_id and no review_by_id: no status prefix, no stroke
-    override line at all, and the type-class/glyph/classDef scaffold is the
-    same regardless."""
+def test_plain_stage_with_no_status_renders_the_bare_node() -> None:
+    """No status_by_id: no status prefix and no stroke override line at all."""
     stages = [{"id": "s1", "description": "Stage One", "type": "input_data"}]
     graph = build_mermaid_graph(stages, "demo")
     assert graph.startswith("flowchart LR")
@@ -53,33 +51,11 @@ def test_notes_eval_and_review_indicators_all_appear() -> None:
     assert "👤" in graph           # has_review flag glyph
 
 
-def test_review_belief_colours_the_stroke_when_no_status_given() -> None:
+def test_an_unrecognized_status_draws_no_stroke_override() -> None:
+    """An unmapped status leaves the type class's default stroke, not an invented one."""
     stages = [{"id": "s1", "description": "Stage One", "type": "input_data"}]
-    graph = build_mermaid_graph(stages, "demo", review_by_id={"s1": "rejected"})
-    assert "stroke:#cc2a2a,stroke-width:3px" in graph
-
-
-def test_run_status_stroke_wins_over_review_belief_when_both_given() -> None:
-    stages = [{"id": "s1", "description": "Stage One", "type": "input_data"}]
-    graph = build_mermaid_graph(
-        stages, "demo",
-        status_by_id={"s1": "error"}, review_by_id={"s1": "approved"},
-    )
-    assert "stroke:#b3261e,stroke-width:3px" in graph   # ERROR red, not approved green
-    assert "#2a8a2a" not in graph
-
-
-def test_unrecognized_status_falls_back_to_review_belief_stroke() -> None:
-    """A status string outside status_stroke's keys does not itself draw a
-    stroke, but does not suppress the belief fallback either — the `else`
-    branch runs whenever `status` isn't a stroke-carrying status, whether or
-    not it was given at all."""
-    stages = [{"id": "s1", "description": "Stage One", "type": "input_data"}]
-    graph = build_mermaid_graph(
-        stages, "demo",
-        status_by_id={"s1": "some_unmapped_status"}, review_by_id={"s1": "approved"},
-    )
-    assert "stroke:#2a8a2a,stroke-width:3px" in graph
+    graph = build_mermaid_graph(stages, "demo", status_by_id={"s1": "some_unmapped_status"})
+    assert "style s1 stroke:" not in graph
 
 
 def test_unknown_stage_type_gets_the_custom_class_and_no_glyph() -> None:

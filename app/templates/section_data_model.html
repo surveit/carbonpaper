@@ -1,13 +1,11 @@
 {% extends "project_shell.html" %}
 {% from "_schema_table.html" import constraint_cell %}
 {#
-  DATA MODEL — two tiers over the named schemas + the approval GATE.
+  DATA MODEL — two tiers over the named schemas.
 
   Tier 1 (the review surface, always visible): the table-level graph (one node per
   schema, FK edges only — build_schema_table_graph, deterministic) and one summary
   card per schema (name · title · the compiler's description · facts read off it).
-  Everything tier 1 renders is inside the library content hash, so what the
-  reviewer reads IS what the approval pins to.
 
   Tier 2 (reference, collapsed): the full ER diagram and the per-schema column
   tables + JSON edit. Opened on demand — from a graph node or a card's chips.
@@ -23,14 +21,13 @@
     er_diagram  = _build_schema_er_diagram(schemas) | None
     table_graph = build_schema_table_graph(schemas) | None    (tier-1 FK graph)
     issues      = validate_schema_library(schemas)            (list[str], may be empty)
-    approval    = {state, current_hash, matched_decision} | None   (the gate; None iff no schemas)
     schema_json = {schema_name: json_text}                    (per-schema edit seed)
     kind_order  = SCHEMA_KIND_ORDER
     kind_class  = SCHEMA_KIND_CLASS
     kind_glyph  = SCHEMA_KIND_GLYPH
 
-  Endpoints: (re)generate POST /project/{name}/generate; approve POST
-  .../data-model/approve; per-schema edit POST .../schema/{name}/edit.
+  Endpoints: (re)generate POST /project/{name}/generate; per-schema edit POST
+  .../schema/{name}/edit.
 #}
 {% block section_head %}
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
@@ -47,47 +44,12 @@
 {% endblock %}
 
 {% block section %}
-{% set dm_state = approval.state if approval else 'none' %}
-{% set is_approved = (dm_state == "approved") %}
-{% set belief_label = {
-     'approved': 'approved', 'unreviewed': 'unreviewed', 'edited_stale': 'edited · stale',
-     'rejected': 'rejected', 'none': 'none',
-   } %}
 <div class="sec-head">
   <h1>Data model</h1>
   <p class="lede">The tables the methodology operates on — generated from your
     document. Start with the map and the table summaries; the full column schemas
-    live under <a href="#dm-reference">Reference</a> below. Approving the model
-    gates running the workflow.</p>
+    live under <a href="#dm-reference">Reference</a> below.</p>
 </div>
-
-{# ── The gate: approval bar over the whole schema set. Only rendered when a data
-      model EXISTS — there is nothing to approve in the 0-state. ───────────────── #}
-{% if schemas %}
-<div class="gate-bar">
-  <div class="gate-state">
-    <span class="belief-chip belief-{{ 'stale' if dm_state == 'edited_stale' else dm_state }}"
-          id="dm-state-chip">{{ belief_label.get(dm_state, dm_state) }}</span>
-    {% if approval and approval.matched_decision %}
-    <span class="gate-by" id="dm-state-by">
-      {% if dm_state == 'edited_stale' %}was approved by{% else %}approved by{% endif %}
-      {{ approval.matched_decision.reviewer }}
-      {% if approval.matched_decision.reviewed_at %}at {{ approval.matched_decision.reviewed_at | friendly_time }}{% endif %}
-    </span>
-    {% else %}
-    <span class="gate-by" id="dm-state-by"></span>
-    {% endif %}
-  </div>
-  <code class="nr-hash" id="dm-lib-hash">{{ (approval.current_hash if approval else '') or '' }}</code>
-  <button type="button" class="btn approve approve-dm-btn {% if is_approved %}is-approved selected{% endif %}"
-          id="approve-dm-btn">{% if is_approved %}✓ Data model approved{% else %}✓ Approve data model{% endif %}</button>
-  {% if dm_state == 'edited_stale' %}
-  <p class="gate-stale-note" id="dm-stale-note">A schema changed after approval (the
-    library content hash no longer matches). Re-approve to restore the data model's
-    approved state.</p>
-  {% endif %}
-</div>
-{% endif %}
 
 <div class="dm-render" id="dm-render">
   {% if schemas %}
@@ -165,8 +127,7 @@
       <h2>Reference — full schemas</h2>
       <p class="muted">Every column with its type, whether it is required, references, and
         constraints, plus the entity-relationship view. Open a table when you need
-        the exact field; edits here change the library hash and drop any approval
-        to edited&nbsp;·&nbsp;stale.</p>
+        the exact field.</p>
     </div>
 
     {% if er_diagram %}
@@ -208,7 +169,7 @@
         </table>
         {% if sch.primary_key %}<p class="schema-meta"><span><b>primary key:</b> {{ sch.primary_key | join(', ') }}</span></p>{% endif %}
 
-        {# ── Edit this schema (mirror _node_review.html save) ─────────── #}
+        {# ── Edit this schema (mirror _node_panel.html save) ─────────── #}
         <details class="dm-schema-edit">
           <summary>Edit <code>{{ sch.name }}</code> (JSON)</summary>
           <textarea class="schema-edit-textarea" data-role="schema-json"
@@ -272,40 +233,11 @@ window.focusSchema = function (name) {
     });
   }
 
-  // ════ The data-model gate: approve + per-schema edit (rehomed onto /project) ══
-  // Approve = record the schema-library content hash (one decision over the whole set).
-  // Editing a schema changes the library hash, so an approved data model drops to
-  // "edited · stale" and re-locks the workflow — the page reloads to reflect that.
+  // ════ Per-schema edit (rehomed onto /project) ══
   const METHODOLOGY = {{ state.name | tojson }};
-  const APPROVE_URL = '/project/' + encodeURIComponent(METHODOLOGY) + '/data-model/approve';
-  const hashEl = document.getElementById('dm-lib-hash');
-  const approveBtn = document.getElementById('approve-dm-btn');
-
-  // ── Approve the whole data model (the gate) ──
-  if (approveBtn) {
-    approveBtn.addEventListener('click', async function () {
-      approveBtn.disabled = true;
-      const original = approveBtn.textContent;
-      approveBtn.textContent = 'Approving…';
-      try {
-        const fd = new FormData();
-        fd.append('content_hash', hashEl ? hashEl.textContent.trim() : '');
-        const r = await fetch(APPROVE_URL, { method: 'POST', body: fd });
-        if (!r.ok) { alert('Approve failed: ' + r.status + ' ' + await r.text()); return; }
-        // Reload so the gate chip reflects the new approved state (server re-evaluates
-        // data_model_state).
-        window.location.reload();
-        return;
-      } finally {
-        approveBtn.disabled = false;
-        approveBtn.textContent = original;
-      }
-    });
-  }
 
   // ── Save an edited schema — POST json_text; on 400 render validate_named_schema
-  //    issues (file untouched); on ok the library hash changed so approval drops.
-  //    Reload to recompute the gate state + re-render the data model. ──
+  //    issues (file untouched); on ok reload to re-render the data model. ──
   function bySchema(role, name) {
     return document.querySelector('[data-role="' + role + '"][data-schema-name="' + (window.CSS && CSS.escape ? CSS.escape(name) : name) + '"]');
   }
@@ -338,9 +270,7 @@ window.focusSchema = function (name) {
         if (msg) { msg.textContent = ('✗ ' + r.status + ' ' + (d && d.detail ? d.detail : '')).trim(); msg.className = 'se-msg err'; }
         return;
       }
-      // Saved. The library hash changed → approval (if any) is now stale. Reload so
-      // the gate chip reflects it (mirrors node edit-clears-approval).
-      if (msg) { msg.textContent = '✓ Saved — data-model approval dropped (re-approve to restore it)'; msg.className = 'se-msg ok'; }
+      if (msg) { msg.textContent = '✓ Saved'; msg.className = 'se-msg ok'; }
       setTimeout(() => window.location.reload(), 700);
     } finally {
       btn.disabled = false;

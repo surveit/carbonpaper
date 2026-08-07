@@ -12,7 +12,6 @@ from fastapi.testclient import TestClient
 import app.web.loading as loading
 import app.services.run as run_service
 from app.main import app
-from app.services import node_review
 from app.services import workspace
 
 client = TestClient(app)
@@ -52,8 +51,7 @@ _SCHEMA = {
 @pytest.fixture(autouse=True)
 def demo_project(tmp_path, monkeypatch):
     """A demo project on disk (a compiled two-stage workflow + a one-schema data
-    model whose library is APPROVED, so the workflow section is unlocked), with
-    the projects root pointed at it via set_projects_dir."""
+    model), with the projects root pointed at it via set_projects_dir."""
     demo = tmp_path / "demo"
     compiled = demo / "compiled"
     compiled.mkdir(parents=True)
@@ -65,12 +63,6 @@ def demo_project(tmp_path, monkeypatch):
         json.dumps(_SCHEMA, indent=2), encoding="utf-8"
     )
     workspace.set_projects_dir(tmp_path)
-    # Approve the data model so the workflow section unlocks — keyed to the live
-    # library hash, exactly as the approve route does.
-    live = loading.load_schemas(demo)
-    node_review.approve_schema_library(
-        demo, content_hash=node_review.schema_library_content_hash(live)
-    )
     return tmp_path
 
 
@@ -149,17 +141,15 @@ def test_build_nav_groups_workflow_children(demo_project):
 
 
 def test_build_nav_status_tokens(demo_project):
-    """Each item carries a semantic status token (the template maps it to a glyph).
-    For the demo — no document, an approved data model, a workflow with unreviewed
-    stages, no versions — the classification is truthful, not a fabricated done-mark."""
+    """Each item carries a semantic status token (the template maps it to a glyph)."""
     from app.web.project_view import build_nav, shell_state
 
     nav = build_nav(shell_state(demo_project / "demo"))
     status = {item.key: item.status for item in nav}
     assert status["overview"] == "home"
     assert status["document"] == "none"       # the fixture writes no document.md
-    assert status["data_model"] == "ok"       # the library is approved in the fixture
-    assert status["workflow"] == "warn"       # stages present, none approved
+    assert status["data_model"] == "present"  # the fixture writes one schema
+    assert status["workflow"] == "present"    # the fixture writes two stages
     children = {c.key: c.status for c in nav[-1].children}
     assert children["evals"] == "evals"
     assert children["versions"] == "none"     # no versions created

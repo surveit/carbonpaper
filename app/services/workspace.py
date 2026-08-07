@@ -1,8 +1,8 @@
 """workspace.py — the projects workspace: the projects storage root, name→directory
 resolution, the named-schema data-model reader, and project enumeration + workflow
 summaries. These back the editing agent's read tools and the status model. Uses the
-tolerant loader (a malformed compiled file becomes an issue, not an exception) and
-the node-review store; imports nothing from the web layer."""
+tolerant loader (a malformed compiled file becomes an issue, not an exception);
+imports nothing from the web layer."""
 
 from __future__ import annotations
 
@@ -12,8 +12,6 @@ from pathlib import Path
 from typing import Any
 
 from app.core.paths import REPO_ROOT, repo_root as repo_root
-from app.models import stage_to_spec_dict
-from app.services import node_review
 from app.services.loader import load_compiled_dir
 # The projects storage root: <root>/<name>/ working copies live here. There is
 # exactly ONE in a running process — the app does not serve multiple
@@ -114,11 +112,10 @@ def list_project_names() -> list[str]:
 
 
 def project_workflow_summary(project_dir: Path) -> dict[str, Any]:
-    """A compact summary of one project's workflow: each stage's id, type, name,
-    upstream input ids, and review state. Never returns full stage specs — that is
-    `read_stage`'s job. A single malformed compiled file surfaces in `issues`."""
+    """A compact summary of one project's workflow: each stage's id, type, name and
+    upstream input ids. Never returns full stage specs — that is `read_stage`'s job.
+    A single malformed compiled file surfaces in `issues`."""
     compiled = load_compiled_dir(project_dir / "compiled")
-    decisions = node_review.load_node_decisions(project_dir)
 
     stages: list[dict[str, Any]] = []
     issues: list[str] = []
@@ -127,13 +124,10 @@ def project_workflow_summary(project_dir: Path) -> dict[str, Any]:
             issues.append(f"{compiled_file.filename}: {'; '.join(compiled_file.issues)}")
             continue
         stage = compiled_file.stage
-        spec = stage_to_spec_dict(stage)
-        state = node_review.approval_state_for(spec, decisions)["state"]
         stages.append({
             "id": stage.id,
             "type": stage.type,
             "description": stage.description,
             "inputs": [ref.id for ref in stage.inputs],
-            "review_state": state,
         })
     return {"name": project_dir.name, "stages": stages, "issues": issues}

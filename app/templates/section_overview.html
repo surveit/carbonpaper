@@ -57,27 +57,18 @@
       <span class="ov-tile-v none">none</span>
       <span class="ov-tile-sub">no schemas authored yet</span>
     {% else %}
-      <span class="belief-chip belief-{{ 'stale' if dm.state == 'edited_stale' else dm.state }} ov-chip">{{ dm.state|replace('_',' ') }}</span>
-      <span class="ov-tile-sub">{{ dm.n_schemas }} schema{% if dm.n_schemas != 1 %}s{% endif %}</span>
+      <span class="ov-tile-v">{{ dm.n_schemas }} schema{% if dm.n_schemas != 1 %}s{% endif %}</span>
     {% endif %}
   </a>
 
-  {# Workflow (the typed-stage pipeline). The data model is optional input, so there
-     is no locked state. #}
+  {# Workflow (the typed-stage pipeline). #}
   <a class="ov-tile" href="/project/{{ s.name }}/workflow">
     <span class="ov-tile-k">Workflow</span>
     {% if not s.workflow.present %}
       <span class="ov-tile-v none">not built</span>
       <span class="ov-tile-sub">no stages yet</span>
     {% else %}
-      {% set cov = s.workflow.coverage %}
-      {% if cov and cov.total > 0 %}
-        <span class="ov-tile-v {% if cov.approved == cov.total %}ok{% else %}warn{% endif %}">{{ cov.approved }}/{{ cov.total }} approved</span>
-        <span class="coverage-bar ov-tile-bar"><span class="coverage-fill" style="width: {{ cov.approved_pct }}%"></span></span>
-      {% else %}
-        <span class="ov-tile-v">{{ s.workflow.n_stages }} stage{% if s.workflow.n_stages != 1 %}s{% endif %}</span>
-        <span class="ov-tile-sub">no review coverage</span>
-      {% endif %}
+      <span class="ov-tile-v">{{ s.workflow.n_stages }} stage{% if s.workflow.n_stages != 1 %}s{% endif %}</span>
     {% endif %}
   </a>
 

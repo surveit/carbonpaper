@@ -51,20 +51,20 @@ def client(tmp_path: Path) -> TestClient:
 
 
 def test_a_union_says_there_is_nothing_to_check(client: TestClient) -> None:
-    html = client.get("/project/alpha/node/both/review-partial").text
+    html = client.get("/project/alpha/node/both/panel").text
     assert "Nothing to check" in html
     assert "stage-cert-na" in html
 
 
 def test_that_badge_is_not_a_green_tick(client: TestClient) -> None:
     """`certified` is the only green state; a union earns none of it."""
-    html = client.get("/project/alpha/node/both/review-partial").text
+    html = client.get("/project/alpha/node/both/panel").text
     assert "stage-cert-certified" not in html
     assert "Tested by independent AI agent" not in html
 
 
 def test_an_llm_stage_gets_no_badge(client: TestClient) -> None:
     """Its prompt is prose nothing checks either — a different thing to say."""
-    html = client.get("/project/alpha/node/score/review-partial").text
+    html = client.get("/project/alpha/node/score/panel").text
     assert "Nothing to check" not in html
     assert "stage-cert" not in html

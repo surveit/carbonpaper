@@ -51,7 +51,7 @@ def client(tmp_path: Path, monkeypatch) -> TestClient:
 
 def test_panel_shows_each_test_with_status(client: TestClient, tmp_path: Path) -> None:
     _seed_project(tmp_path)
-    response = client.get("/project/alpha/node/double/review-partial")
+    response = client.get("/project/alpha/node/double/panel")
     assert response.status_code == 200
     html = response.text
     assert "Tests" in html
@@ -64,7 +64,7 @@ def test_expected_output_marks_the_columns_the_step_adds(
     client: TestClient, tmp_path: Path
 ) -> None:
     _seed_project(tmp_path)
-    html = client.get("/project/alpha/node/double/review-partial").text
+    html = client.get("/project/alpha/node/double/panel").text
     # `doubled` is in the output schema and in no input's; `amount` is carried in.
     assert '<th class="test-col-new">doubled</th>' in html
     assert "<th>amount</th>" in html
@@ -74,6 +74,6 @@ def test_expected_output_marks_the_columns_the_step_adds(
 
 def test_panel_without_tests_has_no_tests_section(client: TestClient, tmp_path: Path) -> None:
     _seed_project(tmp_path)
-    response = client.get("/project/alpha/node/load/review-partial")
+    response = client.get("/project/alpha/node/load/panel")
     assert response.status_code == 200
     assert "test-report" not in response.text

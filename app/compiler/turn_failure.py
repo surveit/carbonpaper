@@ -6,7 +6,7 @@ from __future__ import annotations
 from app.core.agent.store import SessionStore
 
 # The marker the status route matches on to report a failed generation turn
-# (app/web/routers/node_review.py, generation_session_status).
+# (app/web/routers/node.py, generation_session_status).
 GENERATION_FAILURE_PREFIX = "generation failed: "
 
 

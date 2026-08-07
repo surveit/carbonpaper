@@ -1,9 +1,8 @@
 {% extends "project_shell.html" %}
 {#
   VERSION DETAIL — one immutable workflow version, read-only. Its frozen stage
-  graph plus metadata (message, coverage, published state) and the actions that
-  target this version: publish, run this version. Belief review is not here — a
-  version is frozen; review happens on the working-copy editor.
+  graph plus metadata (message, published state) and the actions that target this
+  version: publish, run this version.
 
   Context: state; section="versions"; version (the versioning.load_version
            WorkflowVersion, `published` among its own attributes); mermaid
@@ -46,12 +45,6 @@
     {% endif %}
   </div>
 </div>
-
-{# coverage (frozen at creation) #}
-{% set cov = version.coverage %}
-{% if cov %}
-<p class="muted"><b>{{ cov.approved }}</b>/{{ cov.total }} nodes approved when this version was cut.</p>
-{% endif %}
 
 {# Offered only where a version has no guide: the reader who wants the walkthrough
    is the one who needs the way to get it written. #}

@@ -1,4 +1,4 @@
-"""Architecture: style.css owns the palettes, and each run-state ink stays readable.
+"""Architecture: style.css owns the run-state palette, and each ink stays readable.
 
 A mermaid `style` line carries a literal hex, so the graph cannot reference a custom
 property; these rules read the properties back out of style.css and compare. They also
@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from app.web.diagrams import REVIEW_STROKE, _STATUS_STROKE
+from app.web.diagrams import _STATUS_STROKE
 
 _STYLESHEET = Path(__file__).resolve().parents[2] / "app" / "static" / "style.css"
 _DECLARATION = re.compile(r"--([a-z0-9-]+)\s*:\s*(#[0-9a-fA-F]{3,8})\s*;")
@@ -21,15 +21,6 @@ _TINT_SUFFIX = "-bg"
 _INK_SUFFIX = "-ink"
 # WCAG 2.1 AA for body text. Run-state chips are 11px, so this is the floor, not a goal.
 _MIN_CONTRAST = 4.5
-
-# REVIEW_STROKE belief → the style.css property carrying that belief's stroke.
-_BELIEF_PROPERTY = {
-    "approved": "belief-approved-bd",
-    "unreviewed": "belief-unreviewed-bd",
-    "rejected": "belief-rejected-bd",
-    "edited_stale": "belief-stale-bd",
-}
-
 
 def read_declared_colours() -> dict[str, str]:
     """Every `--name: #hex;` custom property in style.css, keyed without the dashes."""
@@ -101,20 +92,6 @@ def test_every_run_status_stroke_is_a_declared_state_colour() -> None:
     )
 
 
-def test_every_review_stroke_matches_its_belief_property() -> None:
-    declared = read_declared_colours()
-    mismatched = {
-        belief: (colour, _BELIEF_PROPERTY[belief], declared.get(_BELIEF_PROPERTY[belief]))
-        for belief, (colour, _width) in REVIEW_STROKE.items()
-        if colour.lower() != declared.get(_BELIEF_PROPERTY[belief])
-    }
-    assert not mismatched, (
-        "REVIEW_STROKE (app/web/diagrams.py) has drifted from the --belief-* palette in "
-        f"style.css — belief: (python, property, css) {mismatched}. The legend chip and "
-        "the workflow node would show different colours for the same belief."
-    )
-
-
 def test_every_state_ink_is_readable_on_its_tint() -> None:
     pairs = find_state_ink_and_tint(read_declared_colours())
     assert pairs, "style.css declares no --state-*-ink properties"
@@ -138,12 +115,4 @@ def test_every_state_ink_has_a_tint_to_be_read_on() -> None:
     assert not orphaned, (
         f"{orphaned} declare a --state-<name>-ink with no --state-<name>-bg, so the rule "
         "above silently measures nothing for them. Declare the tint or drop the ink."
-    )
-
-
-def test_every_belief_in_review_stroke_is_named_in_the_property_map() -> None:
-    unnamed = sorted(set(REVIEW_STROKE) - set(_BELIEF_PROPERTY))
-    assert not unnamed, (
-        f"{unnamed} are in REVIEW_STROKE but not in _BELIEF_PROPERTY, so this file "
-        "checks nothing for them — add the style.css property each one owes."
     )

@@ -72,7 +72,7 @@ def client(tmp_path: Path, monkeypatch) -> TestClient:
 
 
 def test_the_panel_reads_summary_then_examples_then_code(client: TestClient) -> None:
-    html = client.get("/project/alpha/node/flag_withdrawn/review-partial").text
+    html = client.get("/project/alpha/node/flag_withdrawn/panel").text
     summary_at = html.index(_SUMMARY)
     tests_at = html.index("withdrawn_status_sets_the_flag")
     code_at = html.index("def transform(row)")
@@ -80,7 +80,7 @@ def test_the_panel_reads_summary_then_examples_then_code(client: TestClient) -> 
 
 
 def test_a_stage_without_a_summary_says_so(client: TestClient) -> None:
-    html = client.get("/project/alpha/node/no_summary/review-partial").text
+    html = client.get("/project/alpha/node/no_summary/panel").text
     assert "No plain-language summary" in html
 
 

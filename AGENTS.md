@@ -22,7 +22,7 @@ app/models/    stage-type schemas (Pydantic) — source of truth; loader rejects
 app/runtime/   the Runner (executor, stages/, LLM backends)   → app/runtime/AGENTS.md
 app/compiler/  prose → LLM generation engines (data model, stage tests)
 app/web/       FastAPI routers + diagrams (thin app/main.py)  → app/AGENTS.md
-app/services/  web-independent logic (loader, generation, node review, versioning, drafts)
+app/services/  web-independent logic (loader, generation, versioning, drafts)
 app/chat/  PydanticAI chat · app/core/llm/  model menu · tests/  pytest (offline)
 ```
 
@@ -30,7 +30,7 @@ app/chat/  PydanticAI chat · app/core/llm/  model menu · tests/  pytest (offli
 - **Never fabricate.** An unsourceable value is `null`/`unknown`; the pipeline fails loudly
   rather than inventing a number, URL, or citation. A requested LLM backend that isn't
   available raises rather than silently substituting another.
-- **`app/services` never imports `app/web`; `{project,node_review,versioning,drafts}` never import
+- **`app/services` never imports `app/web`; `{project,versioning,drafts}` never import
   `app.main`/`app.runtime`/`app.compiler`.** Services sit below the routes and the agent tools —
   never the reverse (the generation step that runs a compiler agent lives in
   `app.services.generation`, which wraps the compiler). Both enforced by import-linter.
@@ -55,7 +55,7 @@ app/chat/  PydanticAI chat · app/core/llm/  model menu · tests/  pytest (offli
   word in its `BANNED_WORDS` set across `.py`/`.md`/`.html`/`.js`/`.css` — read that set for the
   current list and the replacement each word owes you. The test file is the only place a banned
   word may appear, so name the specific property instead: a sorted-key JSON dump, the spec-dict
-  form, the on-disk text, `HASH_IGNORED_KEYS`.
+  form, the on-disk text, `LOADER_BOOKKEEPING_KEYS`.
 - **No `__all__`.** Nothing here star-imports, so it is only a second registry of public names
   to keep in sync. A package hub re-exports with the redundant-alias form
   `from x import y as y`, which Ruff and mypy both read as explicit. Enforced by

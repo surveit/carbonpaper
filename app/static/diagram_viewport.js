@@ -16,7 +16,7 @@
  *
  * The page must call mermaid.initialize({ startOnLoad: false, ... }) BEFORE loading this
  * file; boot() renders the diagrams then wires each viewport. A caller that re-renders a
- * diagram in place (e.g. the workflow belief-recolor) should call viewport._refit() after
+ * diagram in place (e.g. the workflow graph after a spec edit) should call viewport._refit() after
  * mermaid.run() so the new svg is re-measured + re-fit.
  */
 (function () {

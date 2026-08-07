@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from app.services import node_review, project, versioning
+from app.services import project, versioning
 from app.services.loader import load_workflow
 from app.services.project import WorkflowFile, import_project
 
@@ -40,16 +40,7 @@ def test_committed_lobbying_fixture_imports_and_validates_cleanly(tmp_path):
     versions = versioning.list_versions(project_dir)
     assert len(versions) == 1
 
-    # A WorkflowFile carries no review state (see its docstring): a fresh
-    # import is always fully unreviewed, whatever the source had recorded.
-    imported_coverage = project.project_state(project_dir).workflow.coverage
-    assert imported_coverage is not None
-    assert imported_coverage.model_dump() == {
-        "approved": 0, "rejected": 0, "edited_stale": 0, "unreviewed": len(wf.stages),
-        "total": len(wf.stages), "approved_pct": 0.0,
-    }
-    assert project.project_state(project_dir).data_model.state == "unreviewed"
-    assert node_review.load_node_decisions(project_dir).empty
+    assert project.project_state(project_dir).workflow.n_stages == len(wf.stages)
 
     # The sample input CSV ships as a SIBLING fixture, not inside the
     # WorkflowFile and not auto-copied into the project (binding a file is a

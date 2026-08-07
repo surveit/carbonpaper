@@ -7,7 +7,6 @@ from app.models.compiler_warnings import (
     find_stage_compiler_warnings as find_stage_compiler_warnings,
     find_workflow_compiler_warnings as find_workflow_compiler_warnings,
 )
-from app.models.coverage import Coverage as Coverage
 from app.models.errors import StepRefused as StepRefused
 from app.models.schema import (
     Column as Column,

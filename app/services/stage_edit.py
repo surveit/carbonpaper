@@ -21,8 +21,8 @@ from app.models.workflow import (
     validate_unique_ids,
     validate_workflow_draft,
 )
-from app.services import node_review
 from app.services.loader import (
+    LOADER_BOOKKEEPING_KEYS,
     find_stage_file,
     list_stage_files,
     load_workflow_object,
@@ -153,18 +153,14 @@ def _find_description_issues(candidate: dict) -> list[str]:
 def _strip_bookkeeping_keys(spec: dict) -> dict:
     """A submitted spec reduced to the keys the workflow stores — the form that
     goes into the in-memory `specs` map and onto disk."""
-    return {k: v for k, v in spec.items() if k not in node_review.HASH_IGNORED_KEYS}
+    return {k: v for k, v in spec.items() if k not in LOADER_BOOKKEEPING_KEYS}
 
 
 def _apply(project_dir: Path, specs: dict[str, dict], stage_id: str, candidate: dict) -> EditStageResult:
     """Apply ``candidate`` as stage ``stage_id`` to the in-memory workflow ``specs``,
     validate the whole resulting workflow (per-stage AND graph, via the same
     `validate_workflow_draft` the loader enforces), and only if clean persist the
-    one stage through the loader. Returns issues and writes nothing otherwise.
-
-    The writer reports only whether the write succeeded; it does not compute the
-    node's review colour (content hash / approval state). A caller that needs the
-    new colour recomputes it from the freshly-written stage."""
+    one stage through the loader. Returns issues and writes nothing otherwise."""
     candidate = _strip_bookkeeping_keys(candidate)
     if candidate.get("id") != stage_id:
         return EditStageResult(

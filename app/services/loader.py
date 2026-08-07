@@ -20,6 +20,11 @@ from app.core.utils import format_errors
 
 from .errors import WorkflowLoadError
 
+# Keys the loaders inject onto a loaded stage/schema dict for their own
+# bookkeeping — never part of the spec, so a writer must strip them before
+# validating or persisting (both spec models are `extra="forbid"`).
+LOADER_BOOKKEEPING_KEYS: set[str] = {"_filename", "_order", "_error"}
+
 
 @dataclass
 class CompiledStageFile:

@@ -18,12 +18,11 @@ from app.core.errors import ProjectExistsError
 from app.models import (
     find_workflow_compiler_warnings,
     stage_to_json,
-    stage_to_spec_dict,
     validate_named_schema,
     validate_schema_library,
 )
-from app.services import generation, node_review, project, versioning
-from app.services.loader import resolve_function_code
+from app.services import generation, project, versioning
+from app.services.loader import LOADER_BOOKKEEPING_KEYS, resolve_function_code
 from app.web.config import projects_dir, templates
 from app.runtime.stage_tests import run_stage_tests
 from app.web.stage_test_views import build_certification, shape_test_views
@@ -60,46 +59,13 @@ def _project_dir(project_name: str) -> Path:
     return projects_dir() / project_name
 
 
-# ─── Gated-flow render helpers (the data-model gate + per-schema edit seed) ────
-
-def _schema_library_approval(
-    project_dir: Path, schemas: list[dict[str, Any]]
-) -> dict[str, Any]:
-    """Build the data-model section's `approval` dict for the WHOLE schema library:
-    {state, current_hash, matched_decision}.
-
-    current_hash is the schema_library_content_hash (POSTed back on approve and the
-    exact value approve_schema_library records), NOT a hash recomputed from a synthetic
-    node — so the displayed hash, the approve POST, and the stored decision agree.
-    matched_decision is the latest row that determined the state, so the template can
-    attribute "(was) approved by <reviewer> at <ts>" — pulled from the SAME
-    SCHEMA_LIBRARY_STAGE_ID rows data_model_state reads."""
-    current_hash = node_review.schema_library_content_hash(schemas)
-    df = node_review.load_node_decisions(project_dir)
-    matched: dict[str, Any] | None = None
-    if df is not None and not df.empty:
-        lib_rows = df[df["stage_id"] == node_review.SCHEMA_LIBRARY_STAGE_ID]
-        current_rows = lib_rows[lib_rows["content_hash"] == current_hash]
-        if not current_rows.empty:
-            matched = node_review._latest_decision_row(current_rows)
-        else:
-            # No decision on the CURRENT hash — surface a PRIOR approved row so the
-            # page can show "was approved by …" (edited_stale).
-            prior_approved = lib_rows[lib_rows["decision"] == node_review.DECISION_APPROVE]
-            if not prior_approved.empty:
-                matched = node_review._latest_decision_row(prior_approved)
-    return {
-        "state": node_review.data_model_state(project_dir, schemas)["state"],
-        "current_hash": current_hash,
-        "matched_decision": matched,
-    }
-
+# ─── Per-schema edit seed ─────────────────────────────────────────────────────
 
 def _schema_spec(schema: dict[str, Any]) -> dict[str, Any]:
     """One schema with loader bookkeeping (_filename/_order/_error) removed — the
     spec only. The schema model is `extra="forbid"`, so validation and the edit
     textarea must both see the spec, never the bookkeeping keys the loader injects."""
-    return {k: v for k, v in schema.items() if k not in node_review.HASH_IGNORED_KEYS}
+    return {k: v for k, v in schema.items() if k not in LOADER_BOOKKEEPING_KEYS}
 
 
 def _schema_json_map(schemas: list[dict[str, Any]]) -> dict[str, str]:
@@ -220,8 +186,7 @@ async def generate_project(project_name: str):
 # with five sections — Overview / Document / Data model / Workflow / Runs. Each
 # section route passes the SAME status snapshot (project_view.shell_state) plus its
 # section name and the section-specific extras the matching section_*.html needs. The
-# shell reads ONLY from `state`; the workflow lock is the single source of truth
-# state.data_model.state == "approved" (the SAME gate the SSE stream uses).
+# shell reads ONLY from `state`.
 
 
 @router.get("/project/{project_name}", response_class=HTMLResponse)
@@ -262,13 +227,11 @@ async def project_document(request: Request, project_name: str):
 
 @router.get("/project/{project_name}/data_model", response_class=HTMLResponse)
 async def project_data_model(request: Request, project_name: str):
-    """DATA MODEL — named-schema cards by kind + ER diagram + the approval GATE + the
-    per-schema edit + the authoring chat. Reuses the gated-flow render machinery
-    (_schema_library_approval / _schema_json_map). The chat/approve/edit actions POST
-    to the /project/{name}/data-model/... routes below."""
+    """DATA MODEL — named-schema cards by kind + ER diagram + the per-schema edit +
+    the authoring chat. The chat/edit actions POST to the
+    /project/{name}/data-model/... routes below."""
     pdir = _project_dir(project_name)
     schemas = load_schemas(pdir)
-    approval = _schema_library_approval(pdir, schemas) if schemas else None
     return templates.TemplateResponse(
         request,
         "section_data_model.html",
@@ -279,7 +242,6 @@ async def project_data_model(request: Request, project_name: str):
             "er_diagram": build_schema_er_diagram(schemas) if schemas else None,
             "table_graph": build_schema_table_graph(schemas) if schemas else None,
             "issues": validate_schema_library([_schema_spec(s) for s in schemas]) if schemas else [],
-            "approval": approval,
             "schema_json": _schema_json_map(schemas),
             "kind_order": SCHEMA_KIND_ORDER,
             "kind_class": SCHEMA_KIND_CLASS,
@@ -290,48 +252,22 @@ async def project_data_model(request: Request, project_name: str):
 
 @router.get("/project/{project_name}/workflow", response_class=HTMLResponse)
 async def project_workflow(request: Request, project_name: str):
-    """WORKFLOW — the typed-stage pipeline: the mermaid graph coloured by belief, the
-    per-node review split-view, and the Build / Run / Create-version controls. The
-    version list lives on its own /workflow/versions tab, linked from here. Always
-    navigable (the data-model→workflow nav lock is disabled pending a rethink);
-    renders an empty state when no workflow is authored yet.
+    """WORKFLOW — the typed-stage pipeline: the mermaid graph, the per-node panel, and
+    the Build / Run / Create-version controls. The version list lives on its own
+    /workflow/versions tab, linked from here. Always navigable; renders an empty state
+    when no workflow is authored yet.
 
-    Belief colouring uses the SAME spec dict (stage_to_spec_dict) the node-review
-    decide route and the /review/status poller use, so the FIRST paint agrees with the
-    live recolour. When the workflow validates we colour off typed Stages; a workflow
-    with a broken stage still renders (as a draft graph off raw dicts) so the reviewer
-    sees the holes — those draft nodes read as unreviewed (an invalid node can't carry
-    a meaningful approval). Empty (not a 404) when there is no workflow yet, so the
-    locked/empty page renders."""
+    A workflow with a broken stage still renders — as a draft graph off raw dicts — so
+    the reviewer sees the holes. Empty (not a 404) when there is no workflow yet, so
+    the empty page renders."""
     pdir = _project_dir(project_name)
     listing = load_stages_or_empty(project_name)
-    decisions = node_review.load_node_decisions(pdir)
-    coverage: dict[str, Any] | None
-    stages: list[Any]
-    if listing.stages:
-        # Valid workflow: colour by the typed-stage spec dict (matches node_review
-        # + /review/status), so an approved node paints green on first load.
-        specs = [stage_to_spec_dict(s) for s in listing.stages]
-        review_by_id = {
-            s.id: node_review.approval_state_for(spec, decisions)["state"]
-            for s, spec in zip(listing.stages, specs)
-        }
-        coverage = node_review.coverage_for(specs, decisions)
-        stages = list(listing.stages)
-    else:
-        # No valid workflow. Fall back to raw draft dicts so a broken/partial workflow
-        # still renders its graph with the holes visible; drafts read as unreviewed.
-        draft = project._load_compiled_stages(pdir)
-        review_by_id = {
-            s["id"]: node_review.approval_state_for(s, decisions)["state"]
-            for s in draft if s.get("id")
-        }
-        coverage = node_review.coverage_for(draft, decisions) if draft else None
-        stages = draft
-    mermaid = (
-        build_mermaid_graph(stages, project_name, review_by_id=review_by_id)
-        if stages else None
+    # A valid workflow draws off typed Stages; a broken/partial one falls back to the
+    # raw draft dicts so its graph still renders with the holes visible.
+    stages: list[Any] = (
+        list(listing.stages) if listing.stages else project._load_compiled_stages(pdir)
     )
+    mermaid = build_mermaid_graph(stages, project_name) if stages else None
     return templates.TemplateResponse(
         request,
         "section_workflow.html",
@@ -340,7 +276,6 @@ async def project_workflow(request: Request, project_name: str):
             "section": "workflow",
             "stages": stages,
             "mermaid": mermaid,
-            "coverage": coverage,
             # From the TYPED stages only: warnings judge a valid workflow's quality,
             # and a workflow that does not load has its load issues shown instead.
             # The examples are RUN here — the whole suite is sub-second — so a stage
@@ -451,43 +386,12 @@ async def version_stage_partial(
 # key off the project dir under examples/<name>/.
 
 
-@router.post("/project/{project_name}/data-model/approve")
-async def approve_data_model(project_name: str, content_hash: str = Form(...)):
-    """The DATA-MODEL GATE. Record human approval of the whole schema library, keyed to
-    the content_hash the page computed from the live schemas (so editing any schema
-    later changes the hash and drops the approval to edited_stale, re-locking Phase 2).
-    Guard: the POSTed hash must match the CURRENT library hash, else the approval would
-    pin to a stale set — refuse loudly rather than approve the wrong thing."""
-    pdir = _project_dir(project_name)
-
-    schemas = load_schemas(pdir)
-    if not schemas:
-        raise HTTPException(
-            status_code=400,
-            detail="No data model to approve — author schemas in Phase 1 first.",
-        )
-    current_hash = node_review.schema_library_content_hash(schemas)
-    if content_hash != current_hash:
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                "Stale approval: the data model changed since the page loaded "
-                f"(posted {content_hash[:12]}…, current {current_hash[:12]}…). "
-                "Reload and approve the current data model."
-            ),
-        )
-    node_review.approve_schema_library(pdir, content_hash=current_hash, reviewer="local")
-    state = node_review.data_model_state(pdir, schemas)["state"]
-    return JSONResponse({"ok": True, "state": state, "content_hash": current_hash})
-
-
 @router.post("/project/{project_name}/schema/{schema_name}/edit")
 async def edit_schema(project_name: str, schema_name: str, json_text: str = Form(...)):
     """The ONLY writer into examples/<name>/schemas/. Parse the posted JSON, validate
     it with validate_named_schema, and — only if clean — write it back to the schema's
     file. On validation issues return 400 with the issue list and write NOTHING (fail
-    loudly, never a silent partial write). Editing changes the library hash, so a prior
-    data-model approval auto-drops to edited_stale (re-locking Phase 2)."""
+    loudly, never a silent partial write)."""
     pdir = _project_dir(project_name)
 
     # Parse — a parse error is the reviewer's, surfaced as a 400 issue, file untouched.
@@ -502,7 +406,7 @@ async def edit_schema(project_name: str, schema_name: str, json_text: str = Form
         )
 
     # Strip loader bookkeeping keys before validating/writing.
-    schema = {k: v for k, v in parsed.items() if k not in node_review.HASH_IGNORED_KEYS}
+    schema = {k: v for k, v in parsed.items() if k not in LOADER_BOOKKEEPING_KEYS}
 
     # Guard: no renaming a schema via edit (no writing one file's content under
     # another's name). The path name is authoritative.
@@ -538,8 +442,4 @@ async def edit_schema(project_name: str, schema_name: str, json_text: str = Form
         )
 
     target.write_text(json.dumps(schema, indent=2, ensure_ascii=False), encoding="utf-8")
-
-    schemas = load_schemas(pdir)
-    new_hash = node_review.schema_library_content_hash(schemas)
-    state = node_review.data_model_state(pdir, schemas)["state"]
-    return JSONResponse({"ok": True, "content_hash": new_hash, "state": state})
+    return JSONResponse({"ok": True})

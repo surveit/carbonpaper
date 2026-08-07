@@ -21,16 +21,6 @@ _ALLOWLIST: frozenset[str] = frozenset(
     {
         # The chokepoint itself — where every pandas frame-IO call ends up.
         "app/core/frames.py",
-        # NOT a waived violation: node_decisions.parquet genuinely should read
-        # and write through the chokepoint, and cannot. `test_node_review_is_a_leaf`
-        # (app/services/_arch_tests/) is a default-deny on node_review.py's
-        # first-party imports allowing only `app.core.utils`, so importing
-        # `app.core.frames` fails it — and node_review.py calls its own
-        # load/record helpers internally, so the IO cannot move to its ten-odd
-        # callers either. Extending that leaf allowlist is a human decision.
-        # Harmless today: every node-decision column is a scalar, so the list-cell
-        # read this rule protects has nothing to act on in that file.
-        "app/services/node_review.py",
     }
 )
 

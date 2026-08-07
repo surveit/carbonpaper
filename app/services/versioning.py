@@ -13,30 +13,20 @@ from typing import Any, ClassVar
 from pydantic import Field, ValidationError
 
 from app.core.errors import DocumentNotFound, NoVersionToRunError, ReviewGuideValidationError
-from app.models import STAGE_SPEC_SCHEMA_VERSION, Coverage, Stage, stage_to_spec_dict
+from app.models import STAGE_SPEC_SCHEMA_VERSION, Stage
 from app.models.review_guide import ReviewGuideStep
 from app.models.workflow import find_stages_reaching_publish, parse_workflow
 from app.core.persistence import PersistedModel, PersistenceScope, get_store
 from app.core.utils import format_errors
-from app.services import node_review
 from app.services.errors import WorkflowLoadError
 from app.services.workspace import load_schemas
-
-
-def _no_coverage() -> Coverage:
-    # The zero-stage shape coverage_for itself returns for an empty stage list —
-    # a WorkflowVersion constructed without an explicit `coverage=` (every
-    # in-repo case is a test seeding a version directly) is born carrying it.
-    return Coverage(approved=0, rejected=0, edited_stale=0, unreviewed=0,
-                     total=0, approved_pct=0.0)
 
 
 class WorkflowVersion(PersistedModel):
     """One frozen snapshot, stored in the "workflow_version" collection. `id` (inherited
     from PersistedModel) is the composite `f"{project}/{version_id}"`; `version_id`
     is the plain local id every caller of this module's public functions
-    works with. `stages` and `schemas` are the frozen artifacts; `coverage` is
-    approval coverage computed against `stages` at creation time. `published`
+    works with. `stages` and `schemas` are the frozen artifacts. `published`
     (plus `published_at`/`published_by`) records the approval act that makes a
     version runnable — see the module docstring."""
 
@@ -52,7 +42,6 @@ class WorkflowVersion(PersistedModel):
     parent_version: str | None = None
     message: str
     reviewer: str
-    coverage: Coverage = Field(default_factory=_no_coverage)
     stages: list[Stage] = Field(default_factory=list)
     schemas: list[dict[str, Any]] = Field(default_factory=list)
     published: bool = False
@@ -93,21 +82,17 @@ def create_version_from_stages(
     parent_version: str | None = None,
 ) -> WorkflowVersion:
     """The single write chokepoint for a WorkflowVersion: strict-parse `stages`
-    (raw spec dicts) as a whole Workflow, embed the project's CURRENT schemas,
-    freeze approval coverage against the live node_decisions store, and save —
-    born unpublished. Returns the saved WorkflowVersion.
+    (raw spec dicts) as a whole Workflow, embed the project's CURRENT schemas, and
+    save — born unpublished. Returns the saved WorkflowVersion.
 
     `stages` is parsed via app.models.workflow.parse_workflow, which raises
     pydantic.ValidationError (per-stage schema errors AND cross-stage graph
     issues alike) on anything invalid; nothing is written in that case. Every
     version is therefore a loadable workflow, from this seam or any other.
 
-    Coverage is computed from the SNAPSHOT's stages against the live
-    node_decisions store, so the recorded coverage is exactly what was believed
-    about these specs at this instant. schemas/ is read via
-    workspace.load_schemas, which returns [] when the project has no schema
-    library yet — a project with no data model still versions cleanly (the
-    absence is truthful, not an error).
+    schemas/ is read via workspace.load_schemas, which returns [] when the project
+    has no schema library yet — a project with no data model still versions
+    cleanly (the absence is truthful, not an error).
 
     version_id has 1-second resolution; two versions minted within the same
     wall-clock second for the same project collide on doc id, and the second
@@ -121,19 +106,12 @@ def create_version_from_stages(
     project = project_dir.name
     doc_id = f"{project}/{version_id}"
 
-    # Freeze coverage from the just-snapshotted stages against the live
-    # node_decisions store.
-    spec_dicts = [stage_to_spec_dict(s) for s in workflow.stages]
-    decisions = node_review.load_node_decisions(project_dir)
-    coverage = Coverage.model_validate(node_review.coverage_for(spec_dicts, decisions))
-
     v = WorkflowVersion(
         id=doc_id,
         version_id=version_id,
         parent_version=parent_version,
         message=message,
         reviewer=reviewer,
-        coverage=coverage,
         stages=workflow.stages,
         schemas=schemas,
         published=False,

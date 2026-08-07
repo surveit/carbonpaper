@@ -11,7 +11,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 from app.core.run_status import RunStatus
-from app.services import node_review, project
+from app.services import project
 
 
 class NavItem(BaseModel):
@@ -75,9 +75,9 @@ def build_nav(state: project.ProjectState) -> list[NavItem]:
         _nav_leaf("document", "Document", f"{base}/document",
                   _present_status(state.has_document)),
         _nav_leaf("data_model", "Data model", f"{base}/data_model",
-                  _data_model_status(state.data_model)),
+                  _present_status(state.data_model.present)),
         _nav_leaf("workflow", "Workflow", f"{base}/workflow",
-                  _workflow_status(state.workflow),
+                  _present_status(state.workflow.present),
                   children=[
                       _nav_leaf("versions", "Versions", f"{base}/workflow/versions",
                                 _present_status(state.versions > 0)),
@@ -96,12 +96,10 @@ def _next_action(state: project.ProjectState) -> NextAction:
 
     Ladder (top-down):
       1. no data model             → author it            (/data_model)
-      2. data model not approved   → approve it           (/data_model)
-      3. no workflow               → build the workflow   (/workflow)
-      4. workflow approved<total   → review the workflow  (/workflow)
-      5. workflow approved, 0 runs → run it               (/workflow/versions)
-      6. runs awaiting_review>0    → review the run       (/runs)
-      7. otherwise                 → view runs            (/runs)
+      2. no workflow               → build the workflow   (/workflow)
+      3. workflow, 0 runs          → run it               (/workflow/versions)
+      4. runs awaiting_review>0    → review the run       (/runs)
+      5. otherwise                 → view runs            (/runs)
     """
     name = state.name
     data_model = state.data_model
@@ -116,30 +114,15 @@ def _next_action(state: project.ProjectState) -> NextAction:
             label="Author the data model",
             href=f"{base}/data_model",
         )
-    # 2. Data model present but not approved → approve it.
-    if data_model.state != node_review.NodeApprovalState.approved:
-        return NextAction(
-            key="approve_data_model",
-            label="Approve the data model",
-            href=f"{base}/data_model",
-        )
-    # 3. Data model approved, no workflow → build the workflow.
+    # 2. No workflow → build it.
     if not workflow.present:
         return NextAction(
             key="build_workflow",
             label="Build the workflow",
             href=f"{base}/workflow",
         )
-    # 4. Workflow present but not fully approved → review the workflow.
-    cov = workflow.coverage
-    if cov is not None and cov.approved < cov.total:
-        return NextAction(
-            key="review_workflow",
-            label="Review the workflow",
-            href=f"{base}/workflow",
-        )
-    # 5. Workflow fully approved but never run → run it (picked from the version
-    #    list, since a run pins to a published version).
+    # 3. Workflow present but never run → run it (picked from the version list,
+    #    since a run pins to a published version).
     if runs.n == 0:
         return NextAction(
             key="run_workflow",
@@ -175,33 +158,8 @@ def _nav_leaf(key: str, label: str, href: str, status: str,
 
 
 def _present_status(present: bool) -> str:
-    """Present/absent items (Document, Versions): "present" when the thing exists,
-    "none" when it does not."""
+    """"present" when the thing exists, "none" when it does not."""
     return "present" if present else "none"
-
-
-def _data_model_status(data_model: project.DataModelStatus) -> str:
-    """The data model's status token by approval state."""
-    by_state = {
-        "approved": "ok",
-        "edited_stale": "warn",
-        "rejected": "bad",
-        "unreviewed": "todo",
-        "none": "none",
-    }
-    return by_state.get(data_model.state, "none")
-
-
-def _workflow_status(workflow: project.WorkflowStatus) -> str:
-    """The workflow's status token by coverage: "none" when there is no workflow,
-    "ok" when every stage is approved, "warn" otherwise. (The data model is optional
-    input to the workflow, so there is no locked state.)"""
-    coverage = workflow.coverage
-    if not workflow.present:
-        return "none"
-    if coverage is not None and coverage.total > 0 and coverage.approved == coverage.total:
-        return "ok"
-    return "warn"
 
 
 def _runs_status(runs: project.RunsSummary) -> str:
