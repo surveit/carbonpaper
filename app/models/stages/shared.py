@@ -23,7 +23,7 @@ def resolve_input_columns(stage: "StageBase", index: int) -> set[str]:
     """The column names declared on `stage`'s input edge at `index` —
     `inputs[index].table_schema` (aliased `schema:` on a compiled stage).
     Deliberately EDGE-ONLY: a per-stage check must not reach for the
-    upstream producer's own output_schema — this runs on one `Stage` in
+    upstream producer's own output schema — this runs on one `Stage` in
     isolation, at construction time, so the producer may not even be present
     in whatever list of stages the caller happens to hold."""
     return {c.name for c in stage.inputs[index].table_schema.columns}
@@ -47,11 +47,6 @@ def find_internal_namespace_column_issues(stage: "StageBase") -> list[str]:
         for ref in stage.inputs
         for name in _internal_namespace_columns(ref.table_schema)
     ]
-    if stage.output_schema is not None:
-        issues.extend(
-            f"output_schema declares column {name!r}"
-            for name in _internal_namespace_columns(stage.output_schema)
-        )
     issues.extend(
         f"signature declares column {name!r}"
         for name in _signature_column_names(stage)
@@ -99,19 +94,19 @@ def find_predicate_column_issues(
 
 
 OUTPUT_UNPRODUCIBLE_ISSUE = (
-    "stage '{sid}': output_schema declares column '{col}' that the {block} config "
+    "stage '{sid}': {block} declares column '{col}' that the config "
     "cannot produce (producible columns: {cols})"
 )
 OUTPUT_TYPE_ISSUE = (
-    "stage '{sid}': output_schema declares column '{col}' as {declared!r} but the "
-    "{block} config produces {produced!r}"
+    "stage '{sid}': {block} declares column '{col}' as {declared!r} but the "
+    "config produces {produced!r}"
 )
 
 
 def find_declared_vs_computed_issues(
     stage_id: str, block_name: str, declared: "TableSchema", computed: Mapping[str, str | None]
 ) -> list[str]:
-    """Issues for a declared output schema against the columns a config block can
+    """Issues for a declared column set against the columns a config block can
     actually produce: `computed` maps each producible column name to its computed
     type, or None where the type is unknowable (e.g. a sum over a value column
     the edge schema does not name). Every declared column must be producible by

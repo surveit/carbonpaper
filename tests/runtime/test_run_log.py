@@ -45,8 +45,8 @@ def _row_stage(code: str = _DOUBLING_CODE) -> Stage:
         "id": "double", "name": "Double", "type": "python_row_function",
         "inputs": [{"id": "src", "schema": {"columns": [{"name": "x", "type": "int", "nullable": True}]}}],
         "cache": True,
-        "output_schema": {
-            "columns": [{"name": "x", "type": "int", "nullable": True}, {"name": "y", "type": "int", "nullable": True}]},
+        "signature": {"form": "extends",
+                      "adds": [{"name": "y", "type": "int", "nullable": True}]},
         "function": {"kind": "inline", "code": code},
     })
 
@@ -56,8 +56,10 @@ def _llm_stage(batch_size: int) -> Stage:
         "id": "score", "name": "Score", "type": "llm_transform",
         "inputs": [{"id": "src", "schema": {
             "columns": [{"name": "x", "type": "int", "nullable": True}]}}],
-        "output_schema": {
-            "columns": [{"name": "x", "type": "int", "nullable": True}, {"name": "verdict", "type": "str", "nullable": True}]},
+        "signature": {
+            "form": "extends",
+            "reads": [{"input": "src", "columns": [{"name": "x", "type": "int", "nullable": True}]}],
+            "adds": [{"name": "verdict", "type": "str", "nullable": True}]},
         "llm": {"prompt_instructions": "score it", "prompt_data_template": "{x}",
                 "batch_size": batch_size},
     })
@@ -189,7 +191,8 @@ def test_a_run_writes_its_lifecycle_spine_to_the_run_dir(tmp_path):
     source = parse_stage({
         "id": "src", "name": "Source", "type": "input_data",
         "connector": {"kind": "file"},
-        "output_schema": {"columns": [{"name": "x", "type": "int", "nullable": True}]},
+        "signature": {"form": "replaces", "produces": [
+            {"name": "x", "type": "int", "nullable": True}]},
     })
     run_dir = tmp_path / "runs" / "subset1"
     run_subset(

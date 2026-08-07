@@ -30,15 +30,17 @@ from conftest import contribution_of, make_run_context
 # The single `x` column of the frames these tests hand the driver. The declared
 # schemas only have to be present and honest: these handlers are constructed
 # directly, so a schema is read at all only where the handler is asked to
-# project (`project_output_to_declared=True`), and those tests pass their own.
+# project (`project_output_to_declared=True`), and those tests declare the
+# columns their signature adds.
 _X_COLUMN = [{"name": "x", "type": "int", "nullable": True}]
 
 
-def _row_stage(output_schema=None, input_columns=_X_COLUMN):
+def _row_stage(adds=None, input_columns=_X_COLUMN):
+    signature = {"form": "extends", "adds": adds} if adds else {"form": "extends"}
     return parse_stage({
         "id": "t", "name": "t", "type": "python_row_function",
         "inputs": [{"id": "src", "schema": {"columns": input_columns}}],
-        "output_schema": output_schema or {"columns": input_columns},
+        "signature": signature,
         "function": {"kind": "inline", "code": "def transform(row):\n    return row\n"},
     })
 
@@ -48,7 +50,7 @@ def _two_input_stage():
         "id": "t2", "name": "t2", "type": "python_frame_function",
         "inputs": [{"id": "a", "schema": {"columns": _X_COLUMN}},
                    {"id": "b", "schema": {"columns": _X_COLUMN}}],
-        "output_schema": {"columns": _X_COLUMN},
+        "signature": {"form": "replaces", "produces": _X_COLUMN},
         "function": {"kind": "inline", "code": "def transform(a, b):\n    return a\n"},
     })
 
@@ -180,14 +182,13 @@ def test_row_driver_empty_input():
 def test_row_driver_empty_input_reports_no_dropped_columns_when_projecting():
     # Projection sees a frame with no columns at all, so it drops nothing —
     # an empty input must not be reported as having discarded `id`.
-    schema = {"columns": [{"name": "x", "type": "int", "nullable": True}]}
     handler = RowMapHandler(
         make_mapper=lambda stage, ctx, src: lambda row, index: dict(row),
         project_output_to_declared=True,
     )
     ctx = make_run_context()
     out = handler.execute(
-        _row_stage(output_schema=schema, input_columns=_EMPTY_SOURCE_COLUMNS),
+        _row_stage(input_columns=_EMPTY_SOURCE_COLUMNS),
         {"src": _empty_source()}, ctx)
     assert len(out) == 0
     assert list(out.columns) == ["x", "id"]
@@ -229,13 +230,13 @@ def test_row_driver_collects_multiple_row_errors_in_ascending_row_order():
 
 
 def test_row_driver_projects_to_declared_columns():
-    schema = {"columns": [{"name": "x", "type": "int", "nullable": True}, {"name": "score", "type": "int", "nullable": True}]}
+    adds = [{"name": "score", "type": "int", "nullable": True}]
     handler = RowMapHandler(
         make_mapper=lambda stage, ctx, src: lambda row, index: {"x": row["x"], "score": 1, "extra": "drop me"},
         project_output_to_declared=True,
     )
     ctx = make_run_context()
-    out = handler.execute(_row_stage(output_schema=schema),
+    out = handler.execute(_row_stage(adds=adds),
                           {"src": pd.DataFrame({"x": [1]})}, ctx)
     assert list(out.columns) == ["x", "score"]
     assert contribution_of(out).dropped_columns == ["extra"]
@@ -300,9 +301,9 @@ def test_a_plain_closure_mapper_needs_no_post_map_step():
     assert list(out["x"]) == [1, 2]
 
 
-def test_internal_marker_columns_never_reach_output_even_without_an_output_schema():
-    # No output_schema and no projection: the strip is the ONLY thing keeping
-    # machinery columns out of stage output.
+def test_internal_marker_columns_never_reach_output_even_without_projection():
+    # No projection: the strip is the ONLY thing keeping machinery columns out
+    # of stage output.
     handler = RowMapHandler(make_mapper=_marks_every_row_with_every_marker)
     out = handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1, 2]})}, make_run_context())
     assert list(out.columns) == ["x"]  # user column survives, every marker is gone
@@ -314,10 +315,9 @@ def test_marker_columns_are_not_reported_as_dropped_user_columns():
             return {**_mark_row_with_every_marker(row, index), "extra": "drop me"}
         return map_row
 
-    schema = {"columns": [{"name": "x", "type": "int", "nullable": True}]}
     handler = RowMapHandler(make_mapper=make_mapper, project_output_to_declared=True)
     ctx = make_run_context()
-    out = handler.execute(_row_stage(output_schema=schema), {"src": pd.DataFrame({"x": [1]})}, ctx)
+    out = handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1]})}, ctx)
     assert list(out.columns) == ["x"]
     # the undeclared USER column only
     assert contribution_of(out).dropped_columns == ["extra"]

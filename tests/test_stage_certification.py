@@ -11,10 +11,14 @@ _SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True}]}
 
 
 def _stage(*, summary=None, type_="python_row_function", handle="function"):
+    # The anchored types pass everything through; the frame function reshapes,
+    # so it promises the (identical) columns explicitly.
+    signature = ({"form": "replaces", "produces": _SCHEMA["columns"]}
+                 if type_ == "python_frame_function" else {"form": "extends"})
     spec = {
         "id": "s", "name": "S", "type": type_,
         "inputs": [{"id": "up", "schema": _SCHEMA}],
-        "output_schema": _SCHEMA,
+        "signature": signature,
     }
     if handle == "function":
         spec["function"] = {
@@ -70,7 +74,12 @@ def test_a_stage_whose_behaviour_is_not_code_is_not_applicable():
         "inputs": [{"id": "a", "schema": _SCHEMA},
                    {"id": "b", "schema": {"columns": [{"name": "id", "type": "str", "nullable": True},
                                                       {"name": "v", "type": "str", "nullable": True}]}}],
-        "output_schema": _SCHEMA,
+        "signature": {
+            "form": "extends",
+            "reads": [{"input": "a", "columns": [{"name": "id", "type": "str", "nullable": True}]},
+                      {"input": "b", "columns": [{"name": "id", "type": "str", "nullable": True}]}],
+            "adds": [{"name": "v", "type": "str", "nullable": True}],
+        },
         "join": {"keys": [{"left": "id", "right": "id"}], "enrich_with": {"v": "v"}},
     })
     assert build_certification(stage, []).status == "n/a"
@@ -88,6 +97,7 @@ def test_a_code_carrying_type_that_cannot_run_examples_is_untestable():
     stage = m.parse_stage({
         "id": "pub", "name": "Pub", "type": "publish",
         "inputs": [{"id": "up", "schema": _SCHEMA}],
+        "signature": {"form": "replaces"},
         "publish": {"format": "csv"},
         "function": {"kind": "inline", "summary": "Writes one file per row.",
                      "code": "def transform(df, output_dir, trace_links):\n    return df"},
@@ -119,6 +129,7 @@ def test_publish_carries_a_function_so_it_is_not_n_a():
     stage = m.parse_stage({
         "id": "pub", "name": "Pub", "type": "publish",
         "inputs": [{"id": "up", "schema": _SCHEMA}],
+        "signature": {"form": "replaces"},
         "publish": {"format": "csv"},
         "function": {"kind": "inline",
                      "code": "def transform(df, output_dir, trace_links):\n    return df"},

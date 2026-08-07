@@ -1,9 +1,9 @@
 """union stage: the config block, plus column validation — every declared input
-must share an identical schema (prose aside), and a declared output_schema
-must equal that shared schema."""
+must share an identical schema (prose aside), and the signature's `produces`
+must be satisfied by each of them."""
 from __future__ import annotations
 
-from typing import ClassVar, Literal, Optional
+from typing import ClassVar, Literal
 
 from pydantic import Field
 
@@ -24,16 +24,13 @@ class UnionStage(StageBase):
     type: Literal[StageType.union]
     union: UnionConfig
     inputs: list[StageInput] = Field(default_factory=list, min_length=2)
-    signature: Optional[ReplacesSignature] = None
+    signature: ReplacesSignature
 
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
         return {"union": self.union}
 
     def find_config_column_issues(self) -> list[str]:
         return find_union_column_issues(self)
-
-    def find_output_schema_issues(self) -> list[str]:
-        return find_union_output_issues(self)
 
     def find_signature_config_issues(self) -> list[str]:
         return find_union_signature_issues(self)
@@ -55,24 +52,9 @@ def find_union_column_issues(stage: "UnionStage") -> list[str]:
     return issues
 
 
-def find_union_output_issues(stage: "UnionStage") -> list[str]:
-    """Issue naming any column where the declared output_schema disagrees with
-    the union's (already schema-identical) inputs."""
-    assert stage.output_schema is not None  # StageBase._schemas_declared guarantees this
-    reference = stage.inputs[0].table_schema
-    differing = sorted(stage.output_schema.differing_column_names(reference))
-    if not differing:
-        return []
-    return [
-        f"stage '{stage.id}': output_schema disagrees with the union's shared "
-        f"input schema on column(s) {differing}"
-    ]
-
-
 def find_union_signature_issues(stage: "UnionStage") -> list[str]:
     """A union reads no columns, and every input must supply `produces`."""
     signature = stage.signature
-    assert signature is not None  # find_signature_config_issues runs only with one
     issues = [
         f"stage '{stage.id}': a union concatenates without consuming any column; "
         f"signature reads must be empty"
@@ -99,7 +81,7 @@ NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
             "No configuration — pass `union: {}`. Every input must declare an IDENTICAL "
             "schema (same columns, same types); a mismatch is refused when the stage is "
             "saved, naming the differing columns. Concatenates the inputs in declared "
-            "order; output_schema must equal that shared schema."
+            "order; the signature's `produces` restates that shared schema, reads nothing."
         ),
     ),
 }

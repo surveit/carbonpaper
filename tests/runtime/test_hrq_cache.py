@@ -35,8 +35,8 @@ _SCORED_COLUMNS = [{"name": "id", "type": "str", "nullable": True}, {"name": "sc
 _FLAGGED_COLUMNS = [*_SCORED_COLUMNS, {"name": "flag", "type": "str", "nullable": True}]
 
 # The columns `QUEUE_COLUMNS` declares this stage adds to every row it emits.
-# The stage's output is projected onto its declared columns, so output_schema has
-# to name these as well as the upstream ones it carries through.
+# The signature `adds` exactly these; the upstream columns are the anchor input's
+# and flow through without being declared again.
 _REVIEW_COLUMNS = queue_added_columns()
 
 
@@ -54,7 +54,7 @@ def _stage(
     return parse_stage({
         "id": "review", "name": "Review", "type": "human_review_queue",
         "inputs": [{"id": "scored", "schema": {"columns": input_columns}}],
-        "output_schema": {"columns": [*input_columns, *_REVIEW_COLUMNS]},
+        "signature": {"form": "extends", "adds": _REVIEW_COLUMNS},
         "queue": queue,
     })
 
@@ -433,14 +433,12 @@ def test_every_output_row_carries_a_verdict_covering_every_outcome(tmp_path):
 
 def test_every_decided_row_is_emitted_with_only_the_declared_columns(tmp_path):
     # Deciding EVERY queued row still emits every row, projected onto the columns
-    # output_schema declares. A queue stage can no longer hand a non-empty input on as a
-    # zero-row frame at all, whatever the reviewer decided.
+    # its signature resolves to. A queue stage can no longer hand a non-empty input on
+    # as a zero-row frame at all, whatever the reviewer decided.
     stage = parse_stage({
         "id": "review", "name": "Review", "type": "human_review_queue",
         "inputs": [{"id": "scored", "schema": {"columns": _SCORED_COLUMNS}}],
-        "output_schema": {"columns": [{"name": "id", "type": "str", "nullable": True},
-                                      {"name": "score", "type": "int", "nullable": True}]
-                          + queue_added_columns()},
+        "signature": {"form": "extends", "adds": queue_added_columns()},
         "queue": dict(QUEUE_COLUMNS),
     })
     src = _src(2)
@@ -698,7 +696,7 @@ def _load_stage(root):
     csv_path = root / "data" / "items.csv"
     pd.DataFrame({"id": ["a", "b"], "score": [1, 2]}).to_csv(csv_path, index=False)
     return {"id": "load", "name": "Load", "type": "input_data",
-            "output_schema": {"columns": _SCORED_COLUMNS},
+            "signature": {"form": "replaces", "produces": _SCORED_COLUMNS},
             "connector": {"kind": "file", "params": {"path": str(csv_path), "format": "csv"}}}
 
 
@@ -706,7 +704,7 @@ def _review_stage_full():
     return {"id": "review", "name": "Review", "type": "human_review_queue",
             "inputs": [{"id": "load", "schema": {
                 "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True}]}}],
-            "output_schema": {"columns": [*_SCORED_COLUMNS, *_REVIEW_COLUMNS]},
+            "signature": {"form": "extends", "adds": _REVIEW_COLUMNS},
             "queue": dict(QUEUE_COLUMNS)}
 
 

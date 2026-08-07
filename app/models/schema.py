@@ -361,8 +361,8 @@ def _render_column(col: Column, indent: str) -> list[str]:
 
 
 class TableSchema(_Base):
-    """An anonymous schema — columns plus an optional primary key — that can be
-    declared inline (e.g. a stage's `output_schema`). `NamedSchema` promotes it to
+    """An anonymous schema — a list of typed columns — declared inline (e.g. on a
+    stage's input edge). `NamedSchema` promotes it to
     a first-class, named artifact."""
     # Sequence (covariant), not list: subclasses narrow the element type
     # (NamedSchema.columns is list[NamedColumn]), which an invariant list

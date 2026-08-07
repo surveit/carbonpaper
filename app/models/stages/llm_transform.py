@@ -109,7 +109,7 @@ class LLMTransformStage(StageBase):
     type: Literal[StageType.llm_transform]
     llm: LLMConfig
     inputs: list[StageInput] = Field(default_factory=list, min_length=1)
-    signature: Optional[ExtendsSignature] = None
+    signature: ExtendsSignature
 
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
         return {"llm": self.llm}
@@ -121,15 +121,15 @@ class LLMTransformStage(StageBase):
         return find_llm_signature_issues(self)
 
     def llm_reply_schema(self) -> Optional[TableSchema]:
-        """What the model's reply itself must carry: `output_schema` minus the
+        """What the model's reply itself must carry: the output schema minus the
         input schema — the columns this stage ADDS, since an llm_transform
         passes its input columns through untouched and the runtime rejoins them
         itself. This is the single definition of that spec: the runtime compiles
         the reply model from it (app.runtime.stages.llm_transform) and the stage
         panel displays it, so neither can drift from the other.
 
-        None unless both schemas are declared. When they are,
-        `_llm_transform_one_to_one` has already guaranteed the difference is
+        None unless both schemas resolve. When they do,
+        `_one_to_one` has already guaranteed the difference is
         well defined, so `subtract` cannot throw."""
         if not self.inputs:
             return None
@@ -142,7 +142,7 @@ class LLMTransformStage(StageBase):
     @model_validator(mode="after")
     def _one_to_one(self) -> "LLMTransformStage":
         """Enforced here — a stage carries its own contract — so the reply spec
-        the runtime computes (`output_schema.subtract(input_schema)`) is exactly
+        the runtime computes (output schema minus input schema) is exactly
         the added columns and can never throw mid-run. This is about schema
         SHAPE, not config columns, so it is not part of
         find_config_column_issues."""
@@ -155,7 +155,6 @@ class LLMTransformStage(StageBase):
 def find_llm_signature_issues(stage: "LLMTransformStage") -> list[str]:
     """Reads must match the template's placeholders exactly; an llm_transform never rewrites."""
     signature = stage.signature
-    assert signature is not None  # find_signature_config_issues runs only with one
     anchor_id = stage.inputs[0].id
     declared = {
         column.name
@@ -231,14 +230,13 @@ def find_llm_one_to_one_issues(stage: "LLMTransformStage") -> list[str]:
     column unchanged (a transform never rewrites an existing column's
     schema); and add at least one new column.
 
-    Checked so the reply spec the runtime computes
-    (`output_schema.subtract(input_schema)`) is exactly the added columns and
-    can never throw mid-run."""
+    Checked so the reply spec the runtime computes (output minus input) is
+    exactly the added columns and can never throw mid-run."""
     if len(stage.inputs) != 1:
         return [f"llm_transform must have exactly one input, has {len(stage.inputs)}"]
     input_schema = stage.inputs[0].table_schema
     output_schema = stage.resolve_output_schema()
-    assert output_schema is not None  # _schemas_declared: an outer is stored or resolves
+    assert output_schema is not None  # an extends signature over an input always resolves
     return _find_additive_shape_issues(input_schema, output_schema)
 
 
@@ -257,7 +255,7 @@ def _find_additive_shape_issues(input_schema: TableSchema, output_schema: TableS
         )
     input_names = {c.name for c in input_schema.columns}
     if not any(c.name not in input_names for c in output_schema.columns):
-        issues.append("output_schema adds no columns beyond the input")
+        issues.append("the output schema adds no columns beyond the input")
     return issues
 
 # Authoring copy for this module's stage type(s); assembled into NODE_TYPES.
@@ -279,8 +277,8 @@ NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
             "prefix, cutting latency (and cost on a per-token backend). "
             "prompt_data_template is the minimal per-row input framing, rendered with "
             "Python's str.format_map: inject a column as {column_name}. "
-            "Its output_schema must be strictly ADDITIVE and 1:1: every input column "
-            "unchanged, plus at least one new column (one input row -> one output row)."
+            "Strictly ADDITIVE and 1:1: every input column flows through unchanged, and "
+            "the signature adds at least one column (one input row -> one output row)."
         ),
     ),
 }

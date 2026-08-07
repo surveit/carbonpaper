@@ -24,7 +24,7 @@ def _stage(stage_id="s", type_="python_row_function", handle="function", **kw):
     spec = {
         "id": stage_id, "name": stage_id.replace("_", " ").title(), "type": type_,
         "inputs": [{"id": "up", "schema": _SCHEMA}],
-        "output_schema": _SCHEMA,
+        "signature": {"form": "extends"},
         handle: block,
         **kw,
     }
@@ -47,7 +47,12 @@ def test_a_config_only_stage_warns_about_nothing():
         "inputs": [{"id": "a", "schema": _SCHEMA},
                    {"id": "b", "schema": {"columns": [{"name": "id", "type": "str", "nullable": True},
                                                       {"name": "v", "type": "str", "nullable": True}]}}],
-        "output_schema": _SCHEMA,
+        "signature": {
+            "form": "extends",
+            "reads": [{"input": "a", "columns": [{"name": "id", "type": "str", "nullable": True}]},
+                      {"input": "b", "columns": [{"name": "id", "type": "str", "nullable": True}]}],
+            "adds": [{"name": "v", "type": "str", "nullable": True}],
+        },
         "join": {"keys": [{"left": "id", "right": "id"}], "enrich_with": {"v": "v"}},
     })
     assert _kinds(enrich) == []
@@ -83,6 +88,7 @@ def _publish_stage(stage_id="pub"):
     return m.parse_stage({
         "id": stage_id, "name": "Pub", "type": "publish",
         "inputs": [{"id": "up", "schema": _SCHEMA}],
+        "signature": {"form": "replaces"},
         "publish": {"format": "csv"},
         "function": {"kind": "inline", "summary": "Writes one file per row.",
                      "code": "def transform(df, output_dir, trace_links):\n    return df"},

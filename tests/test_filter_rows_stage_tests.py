@@ -12,7 +12,8 @@ from app.runtime.stage_tests import (
     run_tests_for_stage,
 )
 
-# A filter passes rows through unchanged, so its output schema equals its input's.
+# A filter passes rows through unchanged, so its signature is the bare extends
+# form — no adds, no rewrites — and its output schema resolves to its input's.
 _SCHEMA = {"columns": [{"name": "status", "type": "str", "nullable": False}]}
 
 _KEEP_ACTIVE = "def should_include(row):\n    return row['status'] == 'active'\n"
@@ -22,7 +23,7 @@ def _filter_stage(code: str, tests: list[dict], stage_id: str = "keep_active") -
     return parse_stage({
         "id": stage_id, "name": "Keep active", "type": "filter_rows",
         "inputs": [{"id": "load", "schema": _SCHEMA}],
-        "output_schema": _SCHEMA,
+        "signature": {"form": "extends"},
         "filter": {"summary": "Keeps the rows marked active.", "code": code},
         "tests": tests,
     })

@@ -92,12 +92,12 @@ def sort_stages_by_dependency(stages: Sequence[_StageT]) -> list[_StageT]:
 def validate_edge_schemas(stages: list[Stage]) -> list[str]:
     """One issue per workflow edge whose declared input schema the upstream stage
     does not supply. `inputs[i].schema` is a REQUIREMENT — possibly a projection
-    naming only the columns the stage consumes — that the upstream's
-    `output_schema` must subsume (matching spec, compatible nullability, not
+    naming only the columns the stage consumes — that the upstream's resolved
+    output schema must subsume (matching spec, compatible nullability, not
     identity; see `TableSchema.find_unsatisfied_columns`). Reports every offending
     column across every edge, so one pass surfaces them all.
 
-    Raises if an input dangles or its upstream declares no output_schema:
+    Raises if an input dangles or its upstream resolves no output schema:
     `validate_inputs_resolve` and `validate_publish_is_terminal` must run, and
     pass, before this check (as `graph_issues` does)."""
     by_id = {s.id: s for s in stages}
@@ -114,7 +114,7 @@ def validate_edge_schemas(stages: list[Stage]) -> list[str]:
             upstream_output = upstream.resolve_output_schema()
             if upstream_output is None:
                 raise ValueError(
-                    f"`{stage.id}`: input `{ref.id}` declares no output_schema — "
+                    f"`{stage.id}`: input `{ref.id}` resolves no output schema — "
                     "publish is the only type exempt, and "
                     "validate_publish_is_terminal must run, and pass, before this check"
                 )
@@ -140,11 +140,11 @@ def validate_publish_is_terminal(stages: list[Stage]) -> list[str]:
 def graph_issues(stages: list[Stage]) -> list[str]:
     """Every cross-stage problem in the workflow graph: duplicate ids, dangling
     inputs, a cycle, an edge reading a publish stage, and any edge whose declared
-    input schema the upstream stage's output_schema does not supply. The single
+    input schema the upstream stage's resolved output does not supply. The single
     source of truth both the strict
     model validator and the non-fatal `validate_workflow` build on."""
     # validate_edge_schemas raises rather than reports on an edge it cannot check:
-    # an input naming no stage, or an upstream with no output_schema (only publish
+    # an input naming no stage, or an upstream resolving no output (only publish
     # is exempt). Both are reportable findings of the two checks below, so it runs
     # only once they pass.
     edge_check_prerequisites = (
@@ -186,7 +186,7 @@ def validate_workflow(stages: list[Stage]) -> list[str]:
     """Cross-stage checks on already-parsed stages, as human-readable issue
     strings — every problem, not just the first: unique ids, inputs resolve,
     acyclic, no stage reading a publish stage, and every edge's declared input
-    schema supplied by its upstream output_schema. Per-stage invariants (e.g. llm_transform being strictly 1:1) are
+    schema supplied by its upstream's resolved output. Per-stage invariants (e.g. llm_transform being strictly 1:1) are
     already enforced by `Stage` construction, so any `list[Stage]` reaching here
     is stage-valid; this is the remaining, whole-graph seam `load_workflow` (and
     hence `save_working_copy_as_version`) enforces, so an invalid workflow is never versioned

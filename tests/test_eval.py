@@ -18,22 +18,25 @@ _K = {"columns": [{"name": "k", "type": "str", "nullable": True}]}
 _KV = {"columns": [{"name": "k", "type": "str", "nullable": True},
                     {"name": "v", "type": "str", "nullable": True}]}
 _QUEUE_IN = {"columns": _K["columns"] + [{"name": "score", "type": "int", "nullable": True}]}
-_QUEUE_OUT = {"columns": _QUEUE_IN["columns"] + queue_added_columns()}
 
 
-def _file_input(id_, tmp_path, output_schema=_K):
-    return S(id=id_, type="input_data", output_schema=output_schema,
+def _file_input(id_, tmp_path, schema=_K):
+    return S(id=id_, type="input_data",
+             signature={"form": "replaces", "produces": schema["columns"]},
              connector={"kind": "file", "params": {"path": str(tmp_path / f"{id_}.csv")}})
 
 
 def _py(id_, inputs, granularity="frame", schema=_K, **kw):
     """granularity 'row' -> python_row_function, else python_frame_function.
-    `schema` is both the schema declared on every input edge and the
-    output_schema — the inline transform is the identity."""
+    `schema` is both the schema declared on every input edge and the resolved
+    output — the inline transform is the identity, so the row form's signature
+    is a bare extends and the frame form's produces the same columns back."""
     type_ = "python_row_function" if granularity == "row" else "python_frame_function"
+    signature = ({"form": "extends"} if granularity == "row"
+                 else {"form": "replaces", "produces": schema["columns"]})
     return S(id=id_, type=type_, inputs=[{"id": i, "schema": schema} for i in inputs],
              function={"kind": "inline", "code": "def transform(row): return row"},
-             output_schema=schema, **kw)
+             signature=signature, **kw)
 
 
 def _ref(path="x.csv", cols=("k",)):

@@ -17,14 +17,15 @@ def S(**kw):
     return kw
 
 
-# Every stage must declare a schema on each input and (bar publish) an
-# output_schema, so tests aimed at some OTHER part of the contract still have to
-# carry both. These are the smallest ones that satisfy it.
+# Every stage must declare a schema on each input and a signature, so tests
+# aimed at some OTHER part of the contract still have to carry both. These are
+# the smallest ones that satisfy it.
 _PK_ID_SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True}]}
+_PRODUCES_ID = {"form": "replaces", "produces": _PK_ID_SCHEMA["columns"]}
 _QUEUE_IN_COLUMNS = [{"name": "id", "type": "str", "nullable": True},
                      {"name": "score", "type": "int", "nullable": True}]
 _QUEUE_IN_SCHEMA = {"columns": _QUEUE_IN_COLUMNS}
-_QUEUE_OUT_SCHEMA = {"columns": _QUEUE_IN_COLUMNS + queue_added_columns()}
+_QUEUE_SIGNATURE = {"form": "extends", "adds": queue_added_columns()}
 _K_SCHEMA = {"columns": [{"name": "k", "type": "str", "nullable": True}]}
 # A reference edge for the enrich fixtures: the key plus `v`, the one column a
 # `enrich_with` can name (the key itself would collide with the subject's).
@@ -37,7 +38,15 @@ def _build_enrich_on_k(*, join):
     the `join` block."""
     return S(id="j", type="enrich",
              inputs=[{"id": "a", "schema": _K_SCHEMA}, {"id": "b", "schema": _KV_SCHEMA}],
-             output_schema=_K_SCHEMA, join=join)
+             signature={
+                 "form": "extends",
+                 "reads": [
+                     {"input": "a", "columns": _K_SCHEMA["columns"]},
+                     {"input": "b", "columns": _K_SCHEMA["columns"]},
+                 ],
+                 "adds": [{"name": "v", "type": "str", "nullable": True}],
+             },
+             join=join)
 
 
 # ── column types ─────────────────────────────────────────────────────────────
@@ -73,7 +82,7 @@ def test_valid_input_data(tmp_path):
     s = m.parse_stage(S(
         id="load", type="input_data",
         connector={"kind": "file", "params": {"path": str(tmp_path / "d.csv"), "format": "csv"}},
-        output_schema={"columns": [{"name": "id", "type": "str", "nullable": True}]}))
+        signature=_PRODUCES_ID))
     assert s.type == m.StageType.input_data
 
 
@@ -81,7 +90,9 @@ def test_valid_llm_transform():
     s = m.parse_stage(S(
         id="extract", type="llm_transform",
         inputs=[{"id": "load", "schema": {"columns": [{"name": "id", "type": "str", "nullable": True}]}}],
-        output_schema={"columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "out", "type": "str", "nullable": True}]},
+        signature={"form": "extends",
+                   "reads": [{"input": "load", "columns": _PK_ID_SCHEMA["columns"]}],
+                   "adds": [{"name": "out", "type": "str", "nullable": True}]},
         llm={"prompt_template": "do {id}", "tools": ["WebSearch"]}))
     assert s.llm.prompt_data_template == "do {id}"
 
@@ -103,7 +114,7 @@ def test_llm_transform_rejects_more_than_one_input():
         m.parse_stage(S(
             id="extract", type="llm_transform",
             inputs=[{"id": "a", "schema": _PK_ID_SCHEMA}, {"id": "b", "schema": _PK_ID_SCHEMA}],
-            output_schema={"columns": [{"name": "id", "type": "str", "nullable": True}]},
+            signature={"form": "extends"},
             llm={"prompt_template": "do it"}))
 
 
@@ -114,34 +125,25 @@ def test_llm_transform_rejects_input_with_no_declared_schema():
         m.parse_stage(S(
             id="extract", type="llm_transform",
             inputs=[{"id": "a"}],
-            output_schema={"columns": [{"name": "id", "type": "str", "nullable": True}]},
+            signature={"form": "extends"},
             llm={"prompt_template": "do it"}))
 
 
-def test_llm_transform_rejects_missing_output_schema():
-    with pytest.raises(ValidationError, match="declares no output_schema"):
+def test_llm_transform_rejects_missing_signature():
+    with pytest.raises(ValidationError, match="signature"):
         m.parse_stage(S(
             id="extract", type="llm_transform",
             inputs=[{"id": "a", "schema": {"columns": [{"name": "id", "type": "str", "nullable": True}]}}],
             llm={"prompt_template": "do it"}))
 
 
-def test_llm_transform_rejects_output_that_drops_an_input_column():
-    with pytest.raises(ValidationError, match="output must keep every input column unchanged"):
-        m.parse_stage(S(
-            id="extract", type="llm_transform",
-            inputs=[{"id": "a", "schema": {
-                "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}]}}],
-            output_schema={"columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True}]},
-            llm={"prompt_template": "do {id}"}))
-
-
-def test_llm_transform_rejects_output_that_adds_no_columns():
+def test_llm_transform_rejects_a_signature_that_adds_no_columns():
     with pytest.raises(ValidationError, match="adds no columns beyond the input"):
         m.parse_stage(S(
             id="extract", type="llm_transform",
             inputs=[{"id": "a", "schema": {"columns": [{"name": "id", "type": "str", "nullable": True}]}}],
-            output_schema={"columns": [{"name": "id", "type": "str", "nullable": True}]},
+            signature={"form": "extends",
+                       "reads": [{"input": "a", "columns": _PK_ID_SCHEMA["columns"]}]},
             llm={"prompt_template": "do {id}"}))
 
 
@@ -159,6 +161,7 @@ def test_publish_requires_the_function_block_it_actually_runs():
 def test_publish_config_is_typed():
     s = m.parse_stage(S(
         id="p", type="publish", inputs=[{"id": "a", "schema": _PK_ID_SCHEMA}],
+        signature={"form": "replaces"},
         publish={"format": "json"}, function={"kind": "inline", "code": "def transform(row): return row"}))
     assert s.publish.format == m.PublishFormat.json
 
@@ -186,7 +189,7 @@ def test_python_function_inline_code_must_define_transform():
 def test_python_function_inline_valid_transform_ok():
     m.parse_stage(S(id="t", type="python_row_function",
                              inputs=[{"id": "a", "schema": _PK_ID_SCHEMA}],
-                             output_schema=_PK_ID_SCHEMA,
+                             signature={"form": "extends"},
                              function={"kind": "inline", "code": "def transform(row): return row"}))
 
 
@@ -219,7 +222,8 @@ def test_join_rejects_a_third_input(t):
             id="j", type=t,
             inputs=[{"id": "a", "schema": _K_SCHEMA}, {"id": "b", "schema": _KV_SCHEMA},
                     {"id": "c", "schema": _K_SCHEMA}],
-            output_schema=_K_SCHEMA,
+            signature={"form": "extends",
+                       "adds": [{"name": "v", "type": "str", "nullable": True}]},
             join={"keys": [{"left": "k", "right": "k"}], "enrich_with": {"v": "v"}},
         ))
     assert [(e["loc"], e["type"]) for e in err.value.errors()] == [((t, "inputs"), "too_long")]
@@ -233,8 +237,9 @@ def test_aggregate_rejects_a_second_input():
             inputs=[{"id": "a", "schema": _K_SCHEMA}, {"id": "b", "schema": _K_SCHEMA}],
             aggregate={"group_by": ["k"],
                        "aggregations": [{"output_column": "n", "formula": "count"}]},
-            output_schema={"columns": [{"name": "k", "type": "str", "nullable": True},
-                                       {"name": "n", "type": "int", "nullable": True}]},
+            signature={"form": "replaces",
+                       "produces": [{"name": "k", "type": "str", "nullable": True},
+                                    {"name": "n", "type": "int", "nullable": True}]},
         ))
     assert [(e["loc"], e["type"]) for e in err.value.errors()] == [(("aggregate", "inputs"), "too_long")]
 
@@ -247,7 +252,7 @@ def test_human_review_queue_rejects_a_second_input():
             inputs=[{"id": "a", "schema": _QUEUE_IN_SCHEMA}, {"id": "b", "schema": _QUEUE_IN_SCHEMA}],
             queue={"reviewed_columns": {"score": "reviewed_score"}, "verdict_column": "v",
                    "reviewer_column": "r", "reviewed_at_column": "at"},
-            output_schema=_QUEUE_OUT_SCHEMA,
+            signature={"form": "extends"},
         ))
     assert (("human_review_queue", "inputs"), "too_long") in [
         (e["loc"], e["type"]) for e in err.value.errors()]
@@ -268,7 +273,7 @@ def test_input_ids_property():
 def test_source_parses_as_sourceref(tmp_path):
     s = m.parse_stage(S(id="load", type="input_data",
                                  connector={"kind": "file", "params": {"path": str(tmp_path / "d.csv")}},
-                                 output_schema=_PK_ID_SCHEMA,
+                                 signature=_PRODUCES_ID,
                                  source={"doc": "x.md", "section": "S1", "lines": [1, 2]}))
     assert s.source.doc == "x.md" and s.source.lines == [1, 2]
 
@@ -279,7 +284,7 @@ def test_queue_needs_no_hash_source_declared():
     # explicit column list is required to build the stage.
     s = m.parse_stage(S(
         id="rev", type="human_review_queue", inputs=[{"id": "a", "schema": _QUEUE_IN_SCHEMA}],
-        output_schema=_QUEUE_OUT_SCHEMA, queue=queue_columns(),
+        signature=_QUEUE_SIGNATURE, queue=queue_columns(),
     ))
     assert s.queue is not None
 
@@ -318,7 +323,12 @@ def test_aggregate_valid():
         id="agg", type="aggregate",
         inputs=[{"id": "a", "schema": {"columns": [{"name": "g", "type": "str", "nullable": True},
                                                    {"name": "x", "type": "int", "nullable": True}]}}],
-        output_schema={"columns": [{"name": "g", "type": "str", "nullable": True}, {"name": "total", "type": "int", "nullable": True}]},
+        signature={"form": "replaces",
+                   "reads": [{"input": "a", "columns": [
+                       {"name": "g", "type": "str", "nullable": True},
+                       {"name": "x", "type": "int", "nullable": True}]}],
+                   "produces": [{"name": "g", "type": "str", "nullable": True},
+                                {"name": "total", "type": "int", "nullable": True}]},
         aggregate={"group_by": ["g"],
                    "aggregations": [{"formula": "sum", "output_column": "total",
                                      "value_column": "x"}]}))
@@ -352,7 +362,8 @@ def test_model_enum_accepts_known():
     s = m.parse_stage(S(
         id="e", type="llm_transform",
         inputs=[{"id": "a", "schema": {"columns": [{"name": "id", "type": "str", "nullable": True}]}}],
-        output_schema={"columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "out", "type": "str", "nullable": True}]},
+        signature={"form": "extends",
+                   "adds": [{"name": "out", "type": "str", "nullable": True}]},
         llm={"prompt_template": "p", "model": "claude-haiku-4-5"}))
     assert s.llm.model == LLMModel.claude_haiku_4_5
 
@@ -375,7 +386,7 @@ def test_model_enum_rejects_unversioned_alias():
 def test_validate_stage_helper(tmp_path):
     assert m.validate_stage(S(id="load", type="input_data",
                               connector={"kind": "file", "params": {"path": str(tmp_path / "d.csv")}},
-                              output_schema=_PK_ID_SCHEMA)) == []
+                              signature=_PRODUCES_ID)) == []
     assert m.validate_stage({"id": "BadId", "type": "input_data", "name": "x", "connector": {"kind": "file"}})
 
 
@@ -384,7 +395,7 @@ def test_inputs_are_refs_with_schema():
     s = m.parse_stage(S(
         id="x", type="python_frame_function",
         inputs=[{"id": "a", "schema": {"columns": [{"name": "k", "type": "str", "nullable": True}]}}],
-        output_schema={"columns": [{"name": "k", "type": "str", "nullable": True}]},
+        signature={"form": "replaces", "produces": _K_SCHEMA["columns"]},
         function={"kind": "inline", "code": "def transform(row): return row"},
     ))
     assert s.input_ids == ["a"]
@@ -396,7 +407,7 @@ def test_inputs_bare_id_shorthand_normalises_then_fails_on_the_missing_schema():
     the required `schema` rather than on the string's shape."""
     issues = m.validate_stage(S(
         id="x", type="python_frame_function", inputs=["a"],
-        output_schema=_K_SCHEMA,
+        signature={"form": "replaces", "produces": _K_SCHEMA["columns"]},
         function={"kind": "inline", "code": "def transform(row): return row"},
     ))
     assert any("inputs.0.schema" in issue for issue in issues)
@@ -440,7 +451,7 @@ def test_unknown_keys_rejected():
 def test_enum_fields_are_plain_strings(tmp_path):
     s = m.parse_stage(S(id="load", type="input_data",
                                  connector={"kind": "file", "params": {"path": str(tmp_path / "d.csv")}},
-                                 output_schema=_PK_ID_SCHEMA))
+                                 signature=_PRODUCES_ID))
     assert s.type == "input_data" and isinstance(s.type, str)
     assert s.connector is not None and isinstance(s.connector.kind, str)
 
@@ -454,9 +465,13 @@ def test_aggregation_requires_value_column_except_count():
 def test_stage_eval_block_is_kept(tmp_path):
     s = m.parse_stage(S(id="load", type="input_data",
                                  connector={"kind": "file", "params": {"path": str(tmp_path / "d.csv")}},
-                                 output_schema=_PK_ID_SCHEMA,
+                                 signature=_PRODUCES_ID,
                                  eval={"metrics": ["recall"]}))
     assert s.eval == {"metrics": ["recall"]}
+
+
+_CONTENT_COLUMN = [{"name": "content", "type": "str", "nullable": True}]
+_ADDS_OUT = [{"name": "out", "type": "str", "nullable": True}]
 
 
 def test_llm_transform_rejects_double_braced_input_column():
@@ -464,10 +479,8 @@ def test_llm_transform_rejects_double_braced_input_column():
     with pytest.raises(ValidationError, match="double-brace"):
         m.parse_stage(S(
             id="extract", type="llm_transform",
-            inputs=[{"id": "load", "schema": {
-                "columns": [{"name": "content", "type": "str", "nullable": True}]}}],
-            output_schema={"columns": [{"name": "content", "type": "str", "nullable": True},
-                                       {"name": "out", "type": "str", "nullable": True}]},
+            inputs=[{"id": "load", "schema": {"columns": _CONTENT_COLUMN}}],
+            signature={"form": "extends", "adds": _ADDS_OUT},
             llm={"prompt_template": "Analyze {{content}} now"}))
 
 
@@ -477,10 +490,8 @@ def test_llm_transform_rejects_spaced_double_braced_input_column():
     with pytest.raises(ValidationError, match="double-brace"):
         m.parse_stage(S(
             id="extract", type="llm_transform",
-            inputs=[{"id": "load", "schema": {
-                "columns": [{"name": "content", "type": "str", "nullable": True}]}}],
-            output_schema={"columns": [{"name": "content", "type": "str", "nullable": True},
-                                       {"name": "out", "type": "str", "nullable": True}]},
+            inputs=[{"id": "load", "schema": {"columns": _CONTENT_COLUMN}}],
+            signature={"form": "extends", "adds": _ADDS_OUT},
             llm={"prompt_template": "Analyze {{ content }} now"}))
 
 
@@ -488,10 +499,8 @@ def test_llm_transform_allows_prompt_that_injects_nothing():
     # Unusual but not strictly wrong — must NOT be rejected by the double-brace check.
     s = m.parse_stage(S(
         id="extract", type="llm_transform",
-        inputs=[{"id": "load", "schema": {
-            "columns": [{"name": "content", "type": "str", "nullable": True}]}}],
-        output_schema={"columns": [{"name": "content", "type": "str", "nullable": True},
-                                   {"name": "out", "type": "str", "nullable": True}]},
+        inputs=[{"id": "load", "schema": {"columns": _CONTENT_COLUMN}}],
+        signature={"form": "extends", "adds": _ADDS_OUT},
         llm={"prompt_template": "score the row"}))
     assert s.llm is not None
 
@@ -499,10 +508,10 @@ def test_llm_transform_allows_prompt_that_injects_nothing():
 def test_llm_transform_accepts_single_brace_input_column():
     s = m.parse_stage(S(
         id="extract", type="llm_transform",
-        inputs=[{"id": "load", "schema": {
-            "columns": [{"name": "content", "type": "str", "nullable": True}]}}],
-        output_schema={"columns": [{"name": "content", "type": "str", "nullable": True},
-                                   {"name": "out", "type": "str", "nullable": True}]},
+        inputs=[{"id": "load", "schema": {"columns": _CONTENT_COLUMN}}],
+        signature={"form": "extends",
+                   "reads": [{"input": "load", "columns": _CONTENT_COLUMN}],
+                   "adds": _ADDS_OUT},
         llm={"prompt_template": "Analyze {content} now"}))
     assert s.llm.prompt_data_template == "Analyze {content} now"
 
@@ -550,13 +559,12 @@ def test_data_template_required():
 
 def test_double_brace_checks_data_template_not_instructions():
     # {{text}} in prompt_data_template is the mistake the validator exists to catch.
+    _TEXT_COLUMN = [{"name": "text", "type": "str", "nullable": True}]
     with pytest.raises(ValidationError, match="double-brace"):
         m.parse_stage(S(
             id="extract", type="llm_transform",
-            inputs=[{"id": "load", "schema": {
-                "columns": [{"name": "text", "type": "str", "nullable": True}]}}],
-            output_schema={"columns": [{"name": "text", "type": "str", "nullable": True},
-                                       {"name": "out", "type": "str", "nullable": True}]},
+            inputs=[{"id": "load", "schema": {"columns": _TEXT_COLUMN}}],
+            signature={"form": "extends", "adds": _ADDS_OUT},
             llm={"prompt_template": "Analyze {{text}} now"}))
 
     # The SAME {{text}} placed only in prompt_instructions, with a valid
@@ -564,10 +572,10 @@ def test_double_brace_checks_data_template_not_instructions():
     # inspects the per-row template, never the instructions.
     s = m.parse_stage(S(
         id="extract", type="llm_transform",
-        inputs=[{"id": "load", "schema": {
-            "columns": [{"name": "text", "type": "str", "nullable": True}]}}],
-        output_schema={"columns": [{"name": "text", "type": "str", "nullable": True},
-                                   {"name": "out", "type": "str", "nullable": True}]},
+        inputs=[{"id": "load", "schema": {"columns": _TEXT_COLUMN}}],
+        signature={"form": "extends",
+                   "reads": [{"input": "load", "columns": _TEXT_COLUMN}],
+                   "adds": _ADDS_OUT},
         llm={"prompt_instructions": "Never echo {{text}} verbatim.",
              "prompt_template": "Analyze {text} now"}))
     assert s.llm is not None

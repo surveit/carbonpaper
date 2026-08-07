@@ -30,14 +30,16 @@ from app.services.versioning import (
     save_version_guide,
 )
 
-# Every input declares the schema it expects and every non-publish stage declares
-# its output_schema (app/models/stage.py: Stage._schemas_declared).
-_ROWS_SCHEMA = {"columns": [{"name": "doc_id", "type": "str", "nullable": False}]}
+# Every input declares the schema it expects and every stage declares its
+# signature, which its output schema resolves from
+# (app/models/stage_base.py: StageBase._schemas_declared).
+_ROWS_COLUMNS = [{"name": "doc_id", "type": "str", "nullable": False}]
+_ROWS_SCHEMA = {"columns": _ROWS_COLUMNS}
 
 _LOAD_STAGE = {
     "id": "load", "name": "Load", "type": "input_data",
     "connector": {"kind": "file"},
-    "output_schema": _ROWS_SCHEMA,
+    "signature": {"form": "replaces", "produces": _ROWS_COLUMNS},
 }
 
 
@@ -130,7 +132,7 @@ def test_create_version_invalid_workflow_raises_and_writes_nothing(tmp_path):
     workflow can be immortalised as a version."""
     (tmp_path / "compiled").mkdir()
     bad = {"id": "load", "name": "Load", "type": "input_data",
-           "output_schema": _ROWS_SCHEMA,
+           "signature": {"form": "replaces", "produces": _ROWS_COLUMNS},
            "connector": {"kind": "file",
                          "params": {"path": "data/items.csv", "format": "csv"}}}  # relative path
     (tmp_path / "compiled" / "01_load.json").write_text(json.dumps(bad), encoding="utf-8")
@@ -283,7 +285,7 @@ def test_create_version_from_stages_invalid_raises_and_writes_nothing(tmp_path):
     dangling_input = {
         "id": "consume", "name": "Consume", "type": "python_frame_function",
         "inputs": [{"id": "no-such-stage", "schema": _ROWS_SCHEMA}],
-        "output_schema": _ROWS_SCHEMA,
+        "signature": {"form": "replaces", "produces": _ROWS_COLUMNS},
         "function": {"kind": "inline", "code": "def transform(df):\n    return df\n"},
     }
     with pytest.raises(pydantic.ValidationError):
@@ -298,7 +300,7 @@ def test_create_version_from_stages_invalid_raises_and_writes_nothing(tmp_path):
 _TALLY_STAGE = {
     "id": "tally", "name": "Tally", "type": "input_data",
     "connector": {"kind": "file"},
-    "output_schema": _ROWS_SCHEMA,
+    "signature": {"form": "replaces", "produces": _ROWS_COLUMNS},
 }
 
 

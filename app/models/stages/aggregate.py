@@ -1,8 +1,7 @@
-"""aggregate stage: the config block, plus column validation on both the
-input and output side — `group_by`, each aggregation's `value_column`, and
-every column an aggregation's `where` references must resolve against the
-stage's input edge; and a declared output_schema must be deliverable by the
-columns group_by + the aggregations actually produce."""
+"""aggregate stage: the config block, plus column validation — `group_by`,
+each aggregation's `value_column`, and every column an aggregation's `where`
+references must resolve against the stage's input edge; and the signature's
+`produces` must be exactly what group_by + the aggregations compute."""
 from __future__ import annotations
 
 from enum import Enum
@@ -65,16 +64,13 @@ class AggregateStage(StageBase):
     type: Literal[StageType.aggregate]
     aggregate: AggregateConfig
     inputs: list[StageInput] = Field(default_factory=list, min_length=1, max_length=1)
-    signature: Optional[ReplacesSignature] = None
+    signature: ReplacesSignature
 
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
         return {"aggregate": self.aggregate}
 
     def find_config_column_issues(self) -> list[str]:
         return find_aggregate_column_issues(self)
-
-    def find_output_schema_issues(self) -> list[str]:
-        return find_aggregate_output_issues(self)
 
     def find_signature_config_issues(self) -> list[str]:
         return find_aggregate_signature_issues(self)
@@ -118,22 +114,9 @@ def find_aggregate_column_issues(stage: "AggregateStage") -> list[str]:
     return issues
 
 
-def find_aggregate_output_issues(stage: "AggregateStage") -> list[str]:
-    """Every declared output_schema column the aggregate config cannot deliver:
-    a name outside group_by + aggregation output columns, or a type that
-    contradicts what the config computes. Type checks apply only where that
-    computed type can be known."""
-    aggregate = stage.aggregate
-    assert stage.output_schema is not None  # StageBase._schemas_declared guarantees this
-    edge = stage.inputs[0].table_schema
-    computed = compute_aggregate_output_types(aggregate, edge)
-    return find_declared_vs_computed_issues(stage.id, "aggregate", stage.output_schema, computed)
-
-
 def find_aggregate_signature_issues(stage: "AggregateStage") -> list[str]:
     """Reads must be exactly what the config consumes; produces exactly what the formulas compute."""
     signature = stage.signature
-    assert signature is not None  # find_signature_config_issues runs only with one
     aggregate = stage.aggregate
     input_id = stage.inputs[0].id
 
@@ -223,7 +206,7 @@ NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
             "Output columns are exactly group_by plus each aggregation's output_column — every "
             "other input column is DROPPED, so carry anything needed downstream via group_by "
             "or a `first` aggregation. formula `count` takes no value_column; every other "
-            "formula requires one. Declared output types must match "
+            "formula requires one. The signature's `produces` types must match "
             "what the formula computes: count->int, mean->float, min/max/first->the value "
             "column's type, list->list[<that type>]."
         ),

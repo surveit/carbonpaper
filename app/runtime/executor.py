@@ -605,7 +605,7 @@ def _run_stage(
     flushing the manifest once the stage starts and again once it settles, so
     the run page shows it live. Returns `(outcome, joins_blocked)`:
     `joins_blocked` is True for a halt, a general exception, a row-generation
-    error, and an output frame that violates the declared output_schema alike —
+    error, and an output frame that violates the stage's output schema alike —
     every outcome except a clean ok/warnings or a cancel — so the caller can add this stage to its own `blocked` set
     itself, keeping that decision visible at the loop."""
     sid = stage.id
@@ -728,7 +728,7 @@ def _summarize_output_schema_errors(sid: str, report: ValidationReport) -> str:
     named = sorted({issue.column for issue in errors if issue.column})
     columns = f" (column(s): {', '.join(named)})" if named else ""
     return (
-        f"stage '{sid}' output violates its declared output_schema{columns}: "
+        f"stage '{sid}' output violates its output schema{columns}: "
         + "; ".join(issue.message for issue in errors)
     )
 

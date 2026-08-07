@@ -3,8 +3,8 @@ from app.models import parse_stage, Stage
 from app.runtime.stage_tests import find_failing_stage_tests, run_tests_for_stage
 
 _IN_SCHEMA = {"columns": [{"name": "amount", "type": "float", "nullable": False}]}
-_OUT_SCHEMA = {"columns": [
-    {"name": "amount", "type": "float", "nullable": False},
+# extends: output = the input's `amount` flowing through + the added `doubled`.
+_ADDS_DOUBLED = {"form": "extends", "adds": [
     {"name": "doubled", "type": "float", "nullable": True},
 ]}
 
@@ -13,7 +13,7 @@ def _row_stage(code: str, tests: list[dict]) -> Stage:
     return parse_stage({
         "id": "double", "name": "Double", "type": "python_row_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
-        "output_schema": _OUT_SCHEMA,
+        "signature": _ADDS_DOUBLED,
         "function": {"kind": "inline", "code": code},
         "tests": tests,
     })
@@ -236,7 +236,7 @@ def _frame_stage(code: str, tests: list[dict]) -> Stage:
     return parse_stage({
         "id": "reshape", "name": "Reshape", "type": "python_frame_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
-        "output_schema": _IN_SCHEMA,
+        "signature": {"form": "replaces", "produces": _IN_SCHEMA["columns"]},
         "function": {"kind": "inline", "code": code},
         "tests": tests,
     })
@@ -266,7 +266,7 @@ def test_omitted_column_in_expected_row_claims_none():
     stage = parse_stage({
         "id": "labelled", "name": "Labelled", "type": "python_frame_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
-        "output_schema": labelled_schema,
+        "signature": {"form": "replaces", "produces": labelled_schema["columns"]},
         "function": {"kind": "inline", "code": (
             # dtype=object keeps the returned None a real None; pandas' default
             # str dtype would store it as NaN, which is a different value here.
@@ -357,7 +357,7 @@ def _multi_input_frame_stage(code: str, tests: list[dict]) -> Stage:
             {"id": "left", "schema": _LEFT_SCHEMA},
             {"id": "right", "schema": _RIGHT_SCHEMA},
         ],
-        "output_schema": _MERGED_SCHEMA,
+        "signature": {"form": "replaces", "produces": _MERGED_SCHEMA["columns"]},
         "function": {"kind": "inline", "code": code},
         "tests": tests,
     })
@@ -391,7 +391,7 @@ def test_multi_input_frame_positional_order_is_declared_order():
             {"id": "left", "schema": id_schema},
             {"id": "right", "schema": id_schema},
         ],
-        "output_schema": id_schema,
+        "signature": {"form": "replaces", "produces": id_schema["columns"]},
         "function": {"kind": "inline", "code": "def transform(a, b):\n    return a\n"},
         "tests": [{
             "name": "returns_first_declared_input",
@@ -424,6 +424,6 @@ def test_stage_without_tests_contributes_no_failures():
     plain = parse_stage({
         "id": "load", "name": "Load", "type": "input_data",
         "connector": {"kind": "file"},
-        "output_schema": _IN_SCHEMA,
+        "signature": {"form": "replaces", "produces": _IN_SCHEMA["columns"]},
     })
     assert find_failing_stage_tests([plain]) == []

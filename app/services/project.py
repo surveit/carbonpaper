@@ -29,6 +29,7 @@ from app.services.loader import (
     stage_to_spec_dict,
     write_stage,
 )
+from app.services.spec_migrations import upgrade_stage_spec
 from app.services.errors import WorkflowLoadError
 from app.services.stage_edit import AddStagesResult, EditStageResult
 
@@ -575,11 +576,14 @@ class WorkflowFile(BaseModel):
         input_data stage). Those keys are now unknown on the stage they land in, so
         drop them here rather than fail an import of a file already on disk. Only
         nulls: a NON-null block belonging to another type is a real error and still
-        raises."""
+        raises. A bundle is a STORED artifact, so each stage then takes the
+        read-side spec upgrades (app.services.spec_migrations) too."""
         if not isinstance(v, list):
             return v
         return [
-            {key: value for key, value in stage.items() if value is not None}
+            upgrade_stage_spec(
+                {key: value for key, value in stage.items() if value is not None}
+            )
             if isinstance(stage, dict) else stage
             for stage in v
         ]

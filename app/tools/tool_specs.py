@@ -15,10 +15,10 @@ you are ready to author in ONE call; a list of one is the single-stage case.
 Each is a FULL stage: id (new and unique — use edit_stage to change an
 existing one), name, type, the config block(s) its type requires — connector
 / llm / function / join / aggregate / queue / union / filter, and `publish`
-needs BOTH its `publish` block and a `function` block — output_schema, inputs,
-and `signature` (REQUIRED for every NEW stage: what the transform reads and
-writes; only stages stored before signatures existed may lack one).
-read_stage on a similar existing stage shows the shape.
+needs BOTH its `publish` block and a `function` block — inputs each with a
+MANDATORY `schema`, and `signature` (REQUIRED: what the transform reads and
+writes; the stage's output schema resolves from it — there is no separate
+outer to author). read_stage on a similar existing stage shows the shape.
 
 Order does not matter: the batch is sorted by the `inputs` each stage
 declares, so a stage may name another stage in the SAME call as an input, or
@@ -27,7 +27,7 @@ one already in the workflow.
 Each stage is validated against the whole workflow-so-far before it is
 written: its own shape, unique ids, inputs resolving, no cycles, and edge
 conformance — a column a stage declares on an input that the upstream's
-output_schema does not supply is refused. The result reports every stage:
+resolved output does not supply is refused. The result reports every stage:
 
   added   — ids now in the workflow
   failed  — [{id, issues}]; that stage was NOT written, the rest still were

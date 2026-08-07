@@ -1,6 +1,5 @@
-"""filter_rows stage: the config block, plus the output-side check — it keeps a
-subset of its single input's rows unchanged, so a declared output_schema must
-equal the input schema."""
+"""filter_rows stage: the config block. It keeps a subset of its single input's
+rows unchanged, so its signature declares reads only — never adds or rewrites."""
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -80,43 +79,24 @@ class FilterRowsStage(StageBase):
     # join or a python_frame_function.
     inputs: list[StageInput] = Field(default_factory=list, min_length=1, max_length=1)
     tests: Optional[Sequence[FilterRowsStageTest]] = None
-    signature: Optional[ExtendsSignature] = None
+    signature: ExtendsSignature
 
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
         return {"filter": self.filter}
 
     def find_signature_config_issues(self) -> list[str]:
-        signature = self.signature
-        assert signature is not None  # find_signature_config_issues runs only with one
-        if signature.adds or signature.rewrites:
+        if self.signature.adds or self.signature.rewrites:
             return [
                 f"stage '{self.id}': filter_rows keeps every kept row's columns "
                 f"unchanged — its signature declares reads only, never adds or rewrites"
             ]
         return []
 
-    def find_output_schema_issues(self) -> list[str]:
-        return find_filter_output_issues(self)
-
     def find_authored_code_block(self) -> FilterConfig:
         return self.filter
 
     def find_handle_compiler_warnings(self) -> list[CompilerWarning]:
         return find_filter_warnings(self)
-
-
-def find_filter_output_issues(stage: "FilterRowsStage") -> list[str]:
-    """Issue naming any column where the declared output_schema disagrees with
-    the single input's schema."""
-    assert stage.output_schema is not None  # StageBase._schemas_declared guarantees this
-    input_schema = stage.inputs[0].table_schema
-    differing = sorted(stage.output_schema.differing_column_names(input_schema))
-    if not differing:
-        return []
-    return [
-        f"stage '{stage.id}': output_schema must equal its input schema; differs "
-        f"on column(s) {differing}"
-    ]
 
 
 def find_filter_warnings(stage: "FilterRowsStage") -> list[CompilerWarning]:
@@ -142,7 +122,7 @@ NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
             "than deciding. `should_include(row)` is handed a plain dict and "
             "must return a bool — True keeps the row, False drops it; any other return "
             "type is a run-time error. Kept rows preserve their original relative order "
-            "and every column unchanged, so output_schema must equal the input schema."
+            "and every column unchanged, so the signature never adds or rewrites."
             f" {CODE_SUMMARY_CONTRACT_NOTE} {CODE_CORNER_CASES_CONTRACT_NOTE}"
         ),
     ),

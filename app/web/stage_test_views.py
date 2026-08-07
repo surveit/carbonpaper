@@ -98,7 +98,8 @@ def _find_new_output_columns(stage: Stage) -> list[str]:
         for stage_input in stage.inputs
         for column in stage_input.table_schema.columns
     }
-    declared = stage.output_schema.columns if stage.output_schema else []
+    output_schema = stage.resolve_output_schema()
+    declared = output_schema.columns if output_schema else []
     return [column.name for column in declared if column.name not in upstream]
 
 

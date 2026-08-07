@@ -15,20 +15,18 @@ from conftest import make_run_context
 DOUBLE = "def transform(row):\n    return {'n': row['n'], 'doubled': row['n'] * 2}\n"
 
 _N_COLUMN = [{"name": "n", "type": "int", "nullable": False}]
-_N_DOUBLED_SCHEMA = {"columns": [
-    {"name": "n", "type": "int", "nullable": False},
-    {"name": "doubled", "type": "int", "nullable": False},
-]}
+_DOUBLED_ADDS = [{"name": "doubled", "type": "int", "nullable": False}]
 
 
-def _stage(code, function=None, output_schema=None, input_columns=_N_COLUMN):
+def _stage(code, function=None, adds=None, input_columns=_N_COLUMN):
     starlark = {"code": code}
     if function is not None:
         starlark["function"] = function
+    signature = {"form": "extends", "adds": adds} if adds else {"form": "extends"}
     return parse_stage({
         "id": "t", "name": "t", "type": "starlark_row_function",
         "inputs": [{"id": "src", "schema": {"columns": input_columns}}],
-        "output_schema": output_schema or {"columns": input_columns},
+        "signature": signature,
         "starlark": starlark,
     })
 
@@ -40,7 +38,7 @@ def _handler() -> RowMapHandler:
 
 
 def test_maps_the_function_over_every_row():
-    stage = _stage(DOUBLE, output_schema=_N_DOUBLED_SCHEMA)
+    stage = _stage(DOUBLE, adds=_DOUBLED_ADDS)
     out = _handler().execute(stage, {"src": pd.DataFrame({"n": [1, 2, 3]})}, make_run_context())
     assert list(out["doubled"]) == [2, 4, 6]
 
@@ -74,7 +72,7 @@ def test_an_oversized_int_in_the_input_stops_the_stage():
 def test_a_row_with_a_datetime_is_marshalled_before_starlark_sees_it():
     stage = _stage(
         "def transform(row):\n    return {'iso': row['ts']}\n",
-        output_schema={"columns": [{"name": "iso", "type": "str", "nullable": False}]},
+        adds=[{"name": "iso", "type": "str", "nullable": False}],
         input_columns=[{"name": "ts", "type": "datetime", "nullable": False}],
     )
     out = _handler().execute(
@@ -85,7 +83,7 @@ def test_a_row_with_a_datetime_is_marshalled_before_starlark_sees_it():
 
 
 def test_an_empty_function_name_falls_back_to_transform():
-    stage = _stage(DOUBLE, function="", output_schema=_N_DOUBLED_SCHEMA)
+    stage = _stage(DOUBLE, function="", adds=_DOUBLED_ADDS)
     out = _handler().execute(stage, {"src": pd.DataFrame({"n": [5]})}, make_run_context())
     assert out["doubled"].tolist() == [10]
 

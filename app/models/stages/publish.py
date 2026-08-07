@@ -54,7 +54,7 @@ class PublishStage(CarriesPythonFunctionStage):
     type: Literal[StageType.publish]
     publish: PublishConfig
     inputs: list[StageInput] = Field(default_factory=list, min_length=1)
-    signature: Optional[ReplacesSignature] = None
+    signature: ReplacesSignature
 
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
         return {"publish": self.publish, **super().fingerprint_blocks()}
@@ -63,9 +63,7 @@ class PublishStage(CarriesPythonFunctionStage):
         return find_publish_column_issues(self)
 
     def find_signature_config_issues(self) -> list[str]:
-        signature = self.signature
-        assert signature is not None  # find_signature_config_issues runs only with one
-        if signature.produces:
+        if self.signature.produces:
             return [
                 f"stage '{self.id}': publish emits files, not a table — "
                 f"signature produces must be empty"
@@ -109,7 +107,7 @@ NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
             "AS RECEIVED. Iterate the frame in order (enumerate it) and do not sort, "
             "filter, or dedup before reading the ordinal — position is the only key the "
             "trace has. Omit the keyword for a format that cannot carry a link (csv, json). "
-            "The one type exempt from declaring an output_schema: it emits files, not a table."
+            "The one type whose signature produces nothing: it emits files, not a table."
             f" {CODE_SUMMARY_CONTRACT_NOTE} {CODE_CORNER_CASES_CONTRACT_NOTE}"
         ),
     ),

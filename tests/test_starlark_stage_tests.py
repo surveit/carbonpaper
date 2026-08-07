@@ -20,9 +20,8 @@ _IN_SCHEMA = {"columns": [
     {"name": "filing_id", "type": "str", "nullable": False},
     {"name": "reported_amount", "type": "str", "nullable": True},
 ]}
-_OUT_SCHEMA = {"columns": [
-    {"name": "filing_id", "type": "str", "nullable": False},
-    {"name": "reported_amount", "type": "str", "nullable": True},
+# extends: the input's columns flow through and `amount_usd` is added.
+_SIGNATURE = {"form": "extends", "adds": [
     {"name": "amount_usd", "type": "float", "nullable": True},
 ]}
 
@@ -53,7 +52,7 @@ def _starlark_stage(
     return parse_stage({
         "id": stage_id, "name": "Normalize spend", "type": "starlark_row_function",
         "inputs": [{"id": "filings", "schema": _IN_SCHEMA}],
-        "output_schema": _OUT_SCHEMA,
+        "signature": _SIGNATURE,
         "starlark": block,
         "tests": tests,
     })

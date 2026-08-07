@@ -19,8 +19,16 @@ def _join_stage(stage_type: str) -> Stage:
         "id": "m", "name": "Join", "type": stage_type,
         "inputs": [{"id": "subject", "schema": _SUBJECT},
                    {"id": "reference", "schema": _REFERENCE}],
-        "output_schema": {"columns": [{"name": "x", "type": "int", "nullable": True},
-                                      {"name": "z", "type": "str", "nullable": True}]},
+        "signature": {
+            "form": "extends",
+            "reads": [
+                {"input": "subject",
+                 "columns": [{"name": "x", "type": "int", "nullable": True}]},
+                {"input": "reference",
+                 "columns": [{"name": "x", "type": "int", "nullable": True}]},
+            ],
+            "adds": [{"name": "z", "type": "str", "nullable": True}],
+        },
         "join": {"keys": [{"left": "x", "right": "x"}], "enrich_with": {"z": "z"}},
     })
 
@@ -85,8 +93,16 @@ def test_a_brought_column_lands_under_its_authored_name():
         "id": "m", "name": "Join", "type": "enrich",
         "inputs": [{"id": "subject", "schema": _SUBJECT},
                    {"id": "reference", "schema": _REFERENCE}],
-        "output_schema": {"columns": [{"name": "x", "type": "int", "nullable": True},
-                                      {"name": "z2", "type": "str", "nullable": True}]},
+        "signature": {
+            "form": "extends",
+            "reads": [
+                {"input": "subject",
+                 "columns": [{"name": "x", "type": "int", "nullable": True}]},
+                {"input": "reference",
+                 "columns": [{"name": "x", "type": "int", "nullable": True}]},
+            ],
+            "adds": [{"name": "z2", "type": "str", "nullable": True}],
+        },
         "join": {"keys": [{"left": "x", "right": "x"}], "enrich_with": {"z": "z2"}},
     })
     out = handle_enrich(

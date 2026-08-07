@@ -28,19 +28,24 @@ _CODE = (
 )
 _SUMMARY = "Marks a bill as withdrawn when its status text says so."
 
+# The flag stage extends its input with the one computed column.
+_FLAG_SIGNATURE = {"form": "extends",
+                   "adds": [{"name": "withdrawn", "type": "bool", "nullable": False}]}
+
 
 def _seed_project(root: Path) -> None:
     compiled = root / "alpha" / "compiled"
     compiled.mkdir(parents=True)
     (compiled / "01_load.json").write_text(json.dumps({
         "id": "load", "name": "Load", "type": "input_data",
-        "connector": {"kind": "file"}, "output_schema": _IN_SCHEMA,
+        "connector": {"kind": "file"},
+        "signature": {"form": "replaces", "produces": _IN_SCHEMA["columns"]},
     }), encoding="utf-8")
     (compiled / "02_flag.json").write_text(json.dumps({
         "id": "flag_withdrawn", "name": "Flag withdrawn bills",
         "type": "python_row_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
-        "output_schema": _OUT_SCHEMA,
+        "signature": _FLAG_SIGNATURE,
         "function": {"kind": "inline", "summary": _SUMMARY, "code": _CODE},
         "tests": [{
             "name": "withdrawn_status_sets_the_flag",
@@ -52,7 +57,7 @@ def _seed_project(root: Path) -> None:
         "id": "no_summary", "name": "Unsummarized step",
         "type": "python_row_function",
         "inputs": [{"id": "flag_withdrawn", "schema": _OUT_SCHEMA}],
-        "output_schema": _OUT_SCHEMA,
+        "signature": {"form": "extends"},
         "function": {"kind": "inline", "code": "def transform(row):\n    return row\n"},
     }), encoding="utf-8")
 
@@ -86,7 +91,7 @@ def test_a_summary_does_not_change_what_the_stage_computes() -> None:
     spec = {
         "id": "flag", "name": "Flag", "type": "python_row_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
-        "output_schema": _OUT_SCHEMA,
+        "signature": _FLAG_SIGNATURE,
         "function": function,
     }
     with_summary = parse_stage(spec)

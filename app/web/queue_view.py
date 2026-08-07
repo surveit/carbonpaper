@@ -150,7 +150,7 @@ def find_definition_drift(stage_def: Stage, halted_fingerprint: str) -> str | No
 def require_reviewed_column(stage_def: Stage, target: str) -> Column:
     """The `output_schema` column a reviewed value must satisfy."""
     output_schema = stage_def.resolve_output_schema()
-    assert output_schema is not None  # _schemas_declared: an outer is stored or resolves
+    assert output_schema is not None  # an hrq signature over an input always resolves
     declared = output_schema.column_for_name(target)
     assert declared is not None  # find_queue_column_issues: every target is declared
     return declared
@@ -220,7 +220,7 @@ def resolve_notes_label(stage_def: Stage, column: str) -> str:
     # The notes column is written by this stage, so only its `output_schema` can describe
     # it; with no description the column name is spelled out.
     output_schema = stage_def.resolve_output_schema()
-    assert output_schema is not None  # _schemas_declared: an outer is stored or resolves
+    assert output_schema is not None  # an hrq signature over an input always resolves
     declared = output_schema.column_for_name(column)
     if declared is not None and declared.description:
         return declared.description

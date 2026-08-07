@@ -1,5 +1,5 @@
-"""read_input_data honours the output_schema an input stage is required to
-declare, instead of letting pandas guess (app/runtime/stages/input_data.py).
+"""read_input_data honours the schema an input stage's signature is required to
+produce, instead of letting pandas guess (app/runtime/stages/input_data.py).
 The cases that matter are where inference is silently WRONG: a zero-padded
 identifier declared `str` read as int64 (`002` → `2`, no error), and a declared
 date column arriving as text."""
@@ -12,6 +12,7 @@ import pytest
 
 from app.models import Stage
 from app.models.stage import parse_stage
+from app.models.stages.signature import ReplacesSignature
 from app.runtime.stages.input_data import read_input_data
 from conftest import make_run_context
 
@@ -20,7 +21,7 @@ def _stage(path: Path, columns: list[dict], **params: object) -> Stage:
     return parse_stage({
         "id": "load", "name": "load", "type": "input_data",
         "connector": {"kind": "file", "params": {"path": str(path), **params}},
-        "output_schema": {"columns": columns},
+        "signature": {"form": "replaces", "produces": columns},
     })
 
 
@@ -178,12 +179,13 @@ def test_a_declared_column_absent_from_the_file_is_not_an_error(tmp_path):
     assert list(df["id"]) == ["002"]
 
 
-def test_missing_output_schema_falls_back_to_plain_inference(tmp_path):
-    # Stage validation requires output_schema on input_data, so this shape can
-    # only arrive off-model; the reader must degrade, not raise.
+def test_unresolvable_schema_falls_back_to_plain_inference(tmp_path):
+    # Stage validation requires a non-empty `produces` on input_data, so a
+    # signature resolving to no schema can only arrive off-model; the reader
+    # must degrade, not raise.
     path = _csv(tmp_path, "id\n002\n")
     stage = _stage(path, [{"name": "id", "type": "str", "nullable": True}])
-    stage = stage.model_copy(update={"output_schema": None})
+    stage = stage.model_copy(update={"signature": ReplacesSignature()})
     df = read_input_data(stage, ctx=make_run_context())
     assert list(df["id"]) == [2]
 
