@@ -13,15 +13,16 @@ from app.evals.runner import run_eval
 from app.evals.store import load_eval_run, save_eval_config
 from app.services.versioning import WorkflowVersion
 from app.services import workspace
-from conftest import QUEUE_COLUMNS
+from conftest import QUEUE_COLUMNS, queue_added_columns
 
 def _load(tmp_path):
     return {
         "id": "load", "type": "input_data", "name": "Load rows",
         "connector": {"kind": "file",
                       "params": {"path": str(tmp_path / "data" / "rows.csv"), "format": "csv"}},
-        "output_schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": True},
-                                      {"name": "score", "type": "int", "nullable": True}]},
+        "signature": {"form": "replaces",
+                      "produces": [{"name": "doc_id", "type": "str", "nullable": True},
+                                   {"name": "score", "type": "int", "nullable": True}]},
     }
 # label = "pos" iff score >= 0 — a deterministic classifier we can predict.
 _CLASSIFY = {
@@ -32,9 +33,8 @@ _CLASSIFY = {
                  "def transform(row):\n"
                  "    return {'doc_id': row['doc_id'], 'score': row['score'],\n"
                  "            'label': 'pos' if row['score'] >= 0 else 'neg'}"},
-    "output_schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": True},
-                                  {"name": "score", "type": "int", "nullable": True},
-                                  {"name": "label", "type": "str", "nullable": True}]},
+    "signature": {"form": "extends",
+                  "adds": [{"name": "label", "type": "str", "nullable": True}]},
 }
 
 
@@ -101,14 +101,7 @@ _QUEUE_REVIEW = {
     "inputs": [{"id": "load", "schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": True},
                                                      {"name": "score", "type": "int", "nullable": True}]}}],
     "queue": dict(QUEUE_COLUMNS),
-    "output_schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": True},
-                                  {"name": "score", "type": "int", "nullable": True},
-                                  {"name": "human_score", "type": "int", "nullable": True},
-                                  {"name": "decision", "type": "str", "nullable": True},
-                                  {"name": "reviewer_id", "type": "str", "nullable": True},
-                                  {"name": "reviewed_at", "type": "str", "nullable": True},
-                                  {"name": "review_notes", "type": "str", "nullable": True},
-                                  {"name": "final_score", "type": "int", "nullable": True}]},
+    "signature": {"form": "extends", "adds": queue_added_columns()},
 }
 
 
@@ -132,7 +125,7 @@ def test_run_eval_through_a_queue_stage_records_an_error_never_a_score(project):
         message="queue pathway", reviewer="test",
         stages=[parse_stage(_load(repo_root)), parse_stage(_QUEUE_REVIEW)],
     ).save()
-    pd.DataFrame({"doc_id": ["a", "b"], "score": [1, 2], "final_score": [1, 2]}).to_csv(
+    pd.DataFrame({"doc_id": ["a", "b"], "score": [1, 2], "human_score": [1, 2]}).to_csv(
         demo / "eval_data" / "queue_cases.csv", index=False)
     config = EvalConfig(
         id="queue_check", project="demo", name="Queue check",
@@ -140,8 +133,8 @@ def test_run_eval_through_a_queue_stage_records_an_error_never_a_score(project):
         table=TableRef(path="demo/eval_data/queue_cases.csv", format=FileFormat.csv,
                        table_schema=TableSchema(columns=[
                            {"name": "doc_id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True},
-                           {"name": "final_score", "type": "int", "nullable": True}])),
-        expected_outputs=[ExpectedOutput(output_column="final_score", metric="exact")])
+                           {"name": "human_score", "type": "int", "nullable": True}])),
+        expected_outputs=[ExpectedOutput(output_column="human_score", metric="exact")])
 
     run = run_eval(demo, config, repo_root, version_id="v-queue")
 

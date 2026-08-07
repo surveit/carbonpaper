@@ -59,14 +59,15 @@ def test_python_row_function_rejects_multiple_inputs():
         m.parse_stage(S(id="t", type="python_row_function",
                                  inputs=[{"id": "a", "schema": _K}, {"id": "b", "schema": _K}],
                                  function={"kind": "inline", "code": "def transform(row): return row"},
-                                 output_schema=_K))
+                                 signature={"form": "extends"}))
 
 
 def test_llm_is_grain_and_order_preserving():
     s = m.parse_stage(S(
         id="e", type="llm_transform",
         inputs=[{"id": "a", "schema": {"columns": [{"name": "id", "type": "str", "nullable": True}]}}],
-        output_schema={"columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "out", "type": "str", "nullable": True}]},
+        signature={"form": "extends",
+                   "adds": [{"name": "out", "type": "str", "nullable": True}]},
         llm={"prompt_template": "p"}))
     assert s.is_grain_and_order_preserving is True
 
@@ -81,7 +82,8 @@ def test_human_review_queue_is_grain_and_order_preserving():
     # pathway through a queue stage is row-alignable.
     s = m.parse_stage(S(id="rev", type="human_review_queue",
                         inputs=[{"id": "a", "schema": _QUEUE_IN}],
-                        queue=queue_columns(), output_schema=_QUEUE_OUT))
+                        queue=queue_columns(),
+                        signature={"form": "extends", "adds": queue_added_columns()}))
     assert s.is_grain_and_order_preserving is True
 
 
@@ -90,6 +92,7 @@ def test_publish_not_grain_and_order_preserving():
     # artifact paths — different rows from its input, never row-alignable.
     s = m.parse_stage(S(id="pub", type="publish",
                                  inputs=[{"id": "a", "schema": _K}], publish={},
+                                 signature={"form": "replaces"},
                                  function={"kind": "inline", "code": "def transform(row): return row"}))
     assert s.is_grain_and_order_preserving is False
 
@@ -98,14 +101,18 @@ def test_joins_and_aggregate_change_grain():
     # enrich is registered as a frame handler, so even its m:1 shape is NOT
     # grain-preserving: preservation is earned by the runtime driving the stage
     # row by row, never asserted about an operation.
+    _JOIN_SIGNATURE = {"form": "extends",
+                       "reads": [{"input": "a", "columns": _K["columns"]},
+                                 {"input": "b", "columns": _K["columns"]}],
+                       "adds": [{"name": "v", "type": "str", "nullable": True}]}
     j = m.parse_stage(S(id="j", type="enrich",
                                  inputs=[{"id": "a", "schema": _K}, {"id": "b", "schema": _KV}],
                                  join={"keys": [{"left": "k", "right": "k"}], "enrich_with": {"v": "v"}},
-                                 output_schema=_K))
+                                 signature=_JOIN_SIGNATURE))
     x = m.parse_stage(S(id="x", type="expand",
                                  inputs=[{"id": "a", "schema": _K}, {"id": "b", "schema": _KV}],
                                  join={"keys": [{"left": "k", "right": "k"}], "enrich_with": {"v": "v"}},
-                                 output_schema=_K))
+                                 signature=_JOIN_SIGNATURE))
     assert x.is_grain_and_order_preserving is False
     agg_in = {"columns": [{"name": "g", "type": "str", "nullable": True}, {"name": "x", "type": "int", "nullable": True}]}
     agg = m.parse_stage(S(id="agg", type="aggregate",
@@ -113,8 +120,10 @@ def test_joins_and_aggregate_change_grain():
                                    aggregate={"group_by": ["g"],
                                               "aggregations": [{"formula": "sum", "output_column": "t",
                                                                 "value_column": "x"}]},
-                                   output_schema={"columns": [{"name": "g", "type": "str", "nullable": True},
-                                                              {"name": "t", "type": "int", "nullable": True}]}))
+                                   signature={"form": "replaces",
+                                              "reads": [{"input": "a", "columns": agg_in["columns"]}],
+                                              "produces": [{"name": "g", "type": "str", "nullable": True},
+                                                           {"name": "t", "type": "int", "nullable": True}]}))
     assert j.is_grain_and_order_preserving is False    # fan-out
     assert agg.is_grain_and_order_preserving is False  # fan-in
 
@@ -286,9 +295,13 @@ def test_scorable_when_tapping_before_the_frame_stage(tmp_path):
 
 def test_expand_changes_grain_so_not_scorable(tmp_path):
     meth = m.parse_workflow([
-        _file_input("j1", tmp_path), _file_input("j2", tmp_path, output_schema=_KV),
+        _file_input("j1", tmp_path), _file_input("j2", tmp_path, schema=_KV),
         S(id="jn", type="expand", inputs=[{"id": "j1", "schema": _K}, {"id": "j2", "schema": _KV}],
-          join={"keys": [{"left": "k", "right": "k"}], "enrich_with": {"v": "v"}}, output_schema=_K),
+          join={"keys": [{"left": "k", "right": "k"}], "enrich_with": {"v": "v"}},
+          signature={"form": "extends",
+                     "reads": [{"input": "j1", "columns": _K["columns"]},
+                               {"input": "j2", "columns": _K["columns"]}],
+                     "adds": [{"name": "v", "type": "str", "nullable": True}]}),
     ])
     v = resolve_eval_run_settings(meth, overrides=[], target="jn")
     assert v.can_score_declaratively is False

@@ -18,29 +18,43 @@ def _file_input(id_, tmp_path, cols=("k",)):
     return m.parse_stage(S(
         id=id_, type="input_data",
         connector={"kind": "file", "params": {"path": str(tmp_path / f"{id_}.csv")}},
-        output_schema={"columns": [{"name": c, "type": "str", "nullable": True} for c in cols]}))
+        signature={"form": "replaces",
+                   "produces": [{"name": c, "type": "str", "nullable": True} for c in cols]}))
 
 
 def _input_refs(inputs):
     """Input refs for the builders below. An upstream `Stage` contributes its own
-    declared output_schema as the edge's expected schema; a plain id (an upstream
+    resolved output schema as the edge's expected schema; a plain id (an upstream
     that does not exist as a Stage) must be paired with the schema to declare."""
     refs = []
     for upstream in inputs:
         if isinstance(upstream, m.StageBase):
-            refs.append({"id": upstream.id, "schema": upstream.output_schema})
+            refs.append({"id": upstream.id, "schema": upstream.resolve_output_schema()
+                         .model_dump(mode="json", exclude_none=True)})
         else:
             id_, cols = upstream
             refs.append({"id": id_, "schema": {"columns": [{"name": c, "type": "str", "nullable": True} for c in cols]}})
     return refs
 
 
+def _extends_signature(refs, output_schema):
+    """The extends signature whose promise over refs[0] is `output_schema`."""
+    anchor = {c["name"]: c for c in (refs[0]["schema"]["columns"] if refs else [])}
+    columns = (output_schema or {"columns": []})["columns"]
+    adds = [c for c in columns if c["name"] not in anchor]
+    rewrites = [c for c in columns if c["name"] in anchor and c != anchor[c["name"]]]
+    reads = ([{"input": refs[0]["id"], "columns": [anchor[c["name"]] for c in rewrites]}]
+             if rewrites else [])
+    return {"form": "extends", "reads": reads, "adds": adds, "rewrites": rewrites}
+
+
 def _row(id_, inputs, output_schema=None, **kw):
+    refs = _input_refs(inputs)
     return m.parse_stage(S(
         id=id_, type="python_row_function",
-        inputs=_input_refs(inputs),
+        inputs=refs,
         function={"kind": "inline", "code": "def transform(row): return row"},
-        output_schema=output_schema, **kw))
+        signature=_extends_signature(refs, output_schema), **kw))
 
 
 def _frame(id_, inputs, output_schema=None, **kw):
@@ -48,16 +62,21 @@ def _frame(id_, inputs, output_schema=None, **kw):
         id=id_, type="python_frame_function",
         inputs=_input_refs(inputs),
         function={"kind": "inline", "code": "def transform(row): return row"},
-        output_schema=output_schema, **kw))
+        signature={"form": "replaces", "produces": (output_schema or {"columns": []})["columns"]},
+        **kw))
 
 
 def _agg(id_, inputs, output_schema=None):
+    refs = _input_refs(inputs)
+    consumed = [c for c in refs[0]["schema"]["columns"] if c["name"] in ("k", "v")]
     return m.parse_stage(S(
-        id=id_, type="aggregate", inputs=_input_refs(inputs),
+        id=id_, type="aggregate", inputs=refs,
         aggregate={"group_by": ["k"],
                    "aggregations": [{"formula": "sum", "output_column": "t",
                                      "value_column": "v"}]},
-        output_schema=output_schema))
+        signature={"form": "replaces",
+                   "reads": [{"input": refs[0]["id"], "columns": consumed}],
+                   "produces": (output_schema or {"columns": []})["columns"]}))
 
 
 def _ref(path="x.csv", cols=("k",)):
@@ -118,13 +137,14 @@ def test_unknown_reference_override_stage(tmp_path):
 
 
 def test_override_stage_has_no_output_schema(tmp_path):
-    # publish is the only type that declares no output_schema, so it is the only
+    # publish is the only type that resolves no output schema, so it is the only
     # override stage this precondition can fire on. get_output_columns_from_stage
     # would raise on it -- the precondition must report it, not let
     # validate_eval_compatibility crash.
     src = _file_input("src", tmp_path, cols=["k", "v", "quote"])
     pub = m.parse_stage(S(
         id="pub", type="publish", inputs=_input_refs([src]),
+        signature={"form": "replaces"},
         publish={"format": "json"},
         function={"kind": "inline", "code": "def transform(df, output_dir): return df"}))
     tgt = _row("tgt", [src], output_schema={
@@ -150,7 +170,7 @@ def test_dataset_schema_types_shared_column_differently(tmp_path):
     src = m.parse_stage(S(
         id="src", type="input_data",
         connector={"kind": "file", "params": {"path": str(tmp_path / "src.csv")}},
-        output_schema={"columns": [
+        signature={"form": "replaces", "produces": [
             {"name": "k", "type": "str", "nullable": True}, {"name": "v", "type": "int", "nullable": True}, {"name": "quote", "type": "str", "nullable": True}]}))
     tgt = _row("tgt", [src], output_schema={
         "columns": [{"name": "k", "type": "str", "nullable": True}, {"name": "score", "type": "float", "nullable": True}]})
@@ -348,7 +368,11 @@ def test_get_injected_columns_is_the_override_side_of_the_column_rule(tmp_path):
 
 # ── fail loud: no silent degradation on a missing schema or checked column ───
 def test_get_output_columns_from_stage_raises_when_stage_has_no_output_schema(tmp_path):
-    stage = _file_input("src", tmp_path, cols=["k"]).model_copy(update={"output_schema": None})
+    from app.models.stages.signature import ReplacesSignature
+
+    # An empty-produces signature is refused at parse, so build it off-model.
+    stage = _file_input("src", tmp_path, cols=["k"]).model_copy(
+        update={"signature": ReplacesSignature()})
     with pytest.raises(ValueError, match="declares no output schema"):
         get_output_columns_from_stage(stage)
 
