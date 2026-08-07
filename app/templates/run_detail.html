@@ -46,12 +46,13 @@
   /* app-main does NOT scroll — its child does, so there is one scrollbar per pane. */
   .app-main { height: 100%; min-height: 0; overflow: hidden; }
 
-  /* ── TWO columns, always: the NAV spine and the WORK surface. The nav is 360px
-        whether or not the pinned version carries a guide, so writing one does not
-        reflow the page around it. ── */
+  /* ── The NAV spine and the WORK surface. The spine is the review guide, so a
+        version that carries none leaves the work surface the whole width rather
+        than a titled empty column beside it. ── */
   .run-shell { height: 100%; min-height: 0; display: grid; gap: 18px;
                grid-template-columns: 360px minmax(0, 1fr); align-items: stretch; }
   .run-shell.nav-collapsed { grid-template-columns: auto minmax(0, 1fr); }
+  .run-shell.no-nav { grid-template-columns: minmax(0, 1fr); }
   .run-nav { min-width: 0; height: 100%; overflow-y: auto; padding-right: 16px;
              border-right: 1px solid var(--border); }
   /* Same trap as .app-side: an author `display` rule would beat [hidden]. */
@@ -61,21 +62,27 @@
   .run-nav-head .drawer-btn { margin-left: auto; }
   .nav-expand { position: sticky; top: 0; align-self: start; }
   .run-main { min-width: 0; height: 100%; overflow-y: auto; padding-right: 6px; }
-  /* The offer to write a guide stands where the guide will, in the same column. */
-  .run-guide-missing h2 { font-size: 12px; text-transform: uppercase;
-                          letter-spacing: .06em; color: var(--muted); margin: 0 0 4px; }
-  .run-guide-missing .guide-cta p { font-size: 11.5px; line-height: 1.5; }
 
-  /* ── The audit drawer: the packet, the manifest and the run log in one row at the
-        bottom. None of the three is part of judging the run — they are what you open
-        when you are challenged, or when a run failed and you are debugging it. ── */
-  .run-audit { margin-top: 1.8rem; border-top: 2px solid var(--border); padding-top: .6rem; }
-  .run-audit > summary { font-size: 13px; color: var(--muted); cursor: pointer; }
-  .run-audit > summary::marker { color: var(--border); }
-  .run-audit-body { padding: .7rem 0 0; }
-  .run-audit-body > h3 { font-size: 12px; margin: 1.1rem 0 .15rem; }
-  .run-audit-body > h3:first-child { margin-top: 0; }
-  .run-audit-body > p.lede { font-size: .78rem; margin: 0 0 .5rem; }
+  /* ── The toolbar, top right of the work surface: the export, then the menu. The
+        two things behind the menu — the manifest and the whole-run log — are what
+        you open when you are challenged or debugging, so they are not on the page
+        until asked for. The export is not one of those: it is what a reader hands
+        to someone outside, so it stays a visible link beside the menu. ── */
+  .run-toolbar { position: relative; z-index: 20; display: flex; justify-content: flex-end;
+                 align-items: center; gap: .5rem; margin: 0 0 .5rem; }
+  .run-toolbar .run-export { font-size: .8rem; padding: 5px 11px; }
+  .run-audit-menu { position: absolute; top: calc(100% + 6px); right: 0;
+                    width: min(640px, 92vw); max-height: 70vh; overflow-y: auto;
+                    background: var(--raised); border: 1px solid var(--border);
+                    border-radius: 8px; box-shadow: 0 6px 22px var(--shadow);
+                    padding: .85rem 1rem 1rem; }
+  .run-audit-menu[hidden] { display: none; }
+  .run-audit-menu > h3 { font-size: 12px; margin: 1.1rem 0 .15rem; }
+  .run-audit-menu > h3:first-child { margin-top: 0; }
+  .run-audit-menu > p.lede { font-size: .78rem; margin: 0 0 .5rem; }
+  /* The first section carries no rule: a divider at the top of the column
+     separates the page from nothing. */
+  #run-overview-section { margin-top: 0; border-top: 0; padding-top: 0; }
 
   /* Scroll-edge fade. The mask insets only on the side that still has content, so a
      pane parked at the top is not fading its own first line; the JS below keeps
@@ -95,11 +102,16 @@
   }
 </style>
 
-<div class="run-shell" id="run-shell">
+<div class="run-shell{% if not guide %} no-nav{% endif %}" id="run-shell">
 
 {# ── THE NAV SPINE: the authored walkthrough, and only that. The issue index is a
       nav too, but it belongs beside the data it is about — it stays in the work
-      column, where its four-column table has the width to read. ── #}
+      column, where its four-column table has the width to read.
+
+      Rendered only where the pinned version carries a guide: with no guide there is
+      no walkthrough to read, and the column would be a heading over nothing. Writing
+      one is offered on the version page, which is where a guide is stored. ── #}
+{% if guide %}
 <button type="button" class="drawer-btn nav-expand" id="nav-expand" hidden
         title="Show the review guide" aria-label="Show the review guide">
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -117,19 +129,40 @@
       </svg>
     </button>
   </div>
-  {% if guide %}{% include "_run_guide.html" %}
-  {% elif guideless_version %}
-  {# The version this run pinned carries no guide. Say so where the guide would be, and
-     offer to write one against THAT version — not the working copy the run never saw. #}
-  <section class="run-guide-missing">
-    <h2>Review guide</h2>
-    {% with guide_version_id = guideless_version %}{% include "_generate_guide.html" %}{% endwith %}
-  </section>
-  {% endif %}
+  {% include "_run_guide.html" %}
 </div>
+{% endif %}
 
 {# ── THE WORK SURFACE. ── #}
 <div class="run-main fade-scroll">
+
+{# ── 0. THE TOOLBAR — the export beside a menu holding the manifest and the whole-run
+      log. Neither of those two is part of judging the run, so neither is on the page
+      until the menu is opened; the export is, because handing the packet to someone
+      outside is a thing a reader comes here to do. ── #}
+<div class="run-toolbar">
+  {% if not is_running %}
+  <a class="btn ghost run-export" href="/project/{{ project }}/runs/{{ run_id }}/packet.zip"
+     title="This run's data, records, workflow and methodology as an offline folder someone outside can fact-check without this app.">📦 Export review packet</a>
+  {% endif %}
+  <button type="button" class="drawer-btn" id="audit-menu-btn" aria-expanded="false"
+          aria-controls="audit-menu" title="Raw manifest and run log"
+          aria-label="Raw manifest and run log">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="2" stroke-linecap="round" aria-hidden="true">
+      <path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h16"/>
+    </svg>
+  </button>
+
+  <div class="run-audit-menu" id="audit-menu" hidden>
+    <h3>Raw manifest</h3>
+    <details class="raw-yaml"><summary>Show</summary><pre>{{ manifest | tojson(indent=2) }}</pre></details>
+
+    <h3>Run log · all stages</h3>
+    <p class="lede">Every lifecycle event for this whole run, in the order it happened. For one stage's events, use the run log inside its panel.</p>
+    <div id="run-log-all">{{ run_log_panel("Events", event_tail, open=is_running) }}</div>
+  </div>
+</div>
 
 {# ── 1. RUN OVERVIEW — what this run is and how it went: the grounding line, the one
       action its state calls for, the status bar, and what its own records say went
@@ -147,8 +180,6 @@
 {% if header.artifacts %}
 <section class="run-section" id="run-outputs-section">
 <h2>Run outputs</h2>
-<p class="lede">What this run published{% if header.artifacts | length > 1 %} —
-  {{ header.artifacts | length }} files{% endif %}.</p>
 <ul class="run-outputs">
   {% for artifact in header.artifacts %}
   <li><a href="{{ artifact.url }}">{{ artifact.name }}</a></li>
@@ -225,65 +256,53 @@
 <div class="stage-panel-full" id="stage-panel"></div>
 </section>
 
-{# ── THE AUDIT DRAWER. The packet, the manifest and the whole-run log share one
-      row, because none of the three is part of judging the run: they are what you
-      open when someone challenges the result, or when a run failed and you are
-      debugging it. Open on a LIVE run — the log is the only thing moving then.
-
-      The log itself is unchanged in kind: the whole-run feed answers what happened
-      across stages in the order it happened, and the reader who has a stage in mind
-      is served by the same log scoped to it inside the panel above. ── #}
-<details class="run-audit" id="run-audit"{% if is_running %} open{% endif %}>
-<summary>Audit — {% if not is_running %}review packet · {% endif %}raw manifest · run log</summary>
-<div class="run-audit-body">
-
-{% if not is_running %}
-<h3>Review packet</h3>
-<p class="lede">📦 <a href="/project/{{ project }}/runs/{{ run_id }}/packet.zip">Download</a>
-    — this run's data, records, workflow and methodology as an offline folder someone
-    outside can fact-check without this app.</p>
-{% endif %}
-
-<h3>Raw manifest</h3>
-<details class="raw-yaml"><summary>Show</summary><pre>{{ manifest | tojson(indent=2) }}</pre></details>
-
-<section class="run-log-section" id="run-log-section">
-    <h3>Run log · all stages</h3>
-    <p class="lede">Every lifecycle event for this whole run, in the order it happened. For one stage's events, use the run log inside its panel above.</p>
-    <div id="run-log-all">{{ run_log_panel("Events", event_tail, open=is_running) }}</div>
-</section>
-
-</div>{# /.run-audit-body #}
-</details>
-
 {# The panel's behaviour lives in /static/run_log.js — filtering and reconnect
    are the parts with tests (tests/test_run_log_client.py), which needs them
    loadable outside a page. #}
 <script src="/static/run_log.js"></script>
 <script>
-  // Deferred until the log is actually on screen: connecting on load would tail every
-  // run page a reader merely visited, and the feed's own tail read walks the whole
-  // events file to find its starting seq. TWO disclosures now stand between the reader
-  // and the feed — the audit drawer and the log's own panel — so this watches both and
-  // starts on the first moment the log is visible through both of them.
-  (function () {
-    const holder = document.getElementById('run-log-all');
-    const panel = holder.querySelector('details');
-    const drawer = document.getElementById('run-audit');
-    let started = false;
-    function start() {
-      if (started || !panel.open || (drawer && !drawer.open)) return;
-      started = true;
-      initRunLog({
-        root: holder,
-        project: {{ project | tojson }}, runId: {{ run_id | tojson }},
-        pageSize: {{ event_tail | tojson }},
-      });
-    }
-    panel.addEventListener('toggle', start);
-    if (drawer) drawer.addEventListener('toggle', start);
-    start();   // a live run renders both open, and its feed should not wait for a click
-  })();
+(function () {
+  // ── The toolbar menu, and the whole-run log inside it. The log's feed is deferred
+  //    until it is actually on screen: connecting on load would tail every run page a
+  //    reader merely visited, and the feed's own tail read walks the whole events file
+  //    to find its starting seq. TWO things stand between the reader and it — this
+  //    menu and the log's own disclosure — so the feed starts on the first moment it
+  //    is visible through both.
+  const btn = document.getElementById('audit-menu-btn');
+  const menu = document.getElementById('audit-menu');
+  const holder = document.getElementById('run-log-all');
+  const logPanel = holder.querySelector('details');
+  let started = false;
+
+  function startLog() {
+    if (started || menu.hidden || !logPanel.open) return;
+    started = true;
+    initRunLog({
+      root: holder,
+      project: {{ project | tojson }}, runId: {{ run_id | tojson }},
+      pageSize: {{ event_tail | tojson }},
+    });
+  }
+  logPanel.addEventListener('toggle', startLog);
+
+  function setOpen(on) {
+    menu.hidden = !on;
+    btn.setAttribute('aria-expanded', on ? 'true' : 'false');
+    if (on) startLog();
+  }
+  btn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    setOpen(menu.hidden);
+  });
+  // A click anywhere else closes it, but not one INSIDE it — the manifest and the log
+  // are both things the reader clicks around in while it is open.
+  document.addEventListener('click', function (e) {
+    if (!menu.hidden && !menu.contains(e.target)) setOpen(false);
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && !menu.hidden) { setOpen(false); btn.focus(); }
+  });
+})();
 </script>
 
 <script>

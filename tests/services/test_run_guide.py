@@ -13,11 +13,7 @@ from app.models import parse_stage
 from app.models.review_guide import ReviewGuideStep
 from app.services.versioning import ReviewGuide
 from app.services import workspace
-from app.services.run_guide import (
-    build_run_guide_view,
-    find_guideless_version_id,
-    list_written_columns,
-)
+from app.services.run_guide import build_run_guide_view, list_written_columns
 from app.services.versioning import (
     create_version_from_stages,
     find_latest_review_guide,
@@ -177,27 +173,6 @@ def test_no_view_when_the_manifest_records_no_version(project_dir):
 def test_no_view_when_the_pinned_version_cannot_be_read(project_dir):
     _version_with_guide(project_dir)
     assert build_run_guide_view("demo", _manifest("20200101T000000")) is None
-
-
-# ── the offer to write one ───────────────────────────────────────────────────
-
-def test_a_guideless_pinned_version_is_named_so_a_guide_can_be_written_for_it(project_dir):
-    version = create_version_from_stages(
-        project_dir, _STAGES, message="v1", reviewer="ada"
-    )
-    assert find_guideless_version_id("demo", _manifest(version.version_id)) == version.version_id
-
-
-def test_a_version_that_already_has_a_guide_is_not_offered_one(project_dir):
-    version_id = _version_with_guide(project_dir)
-    assert find_guideless_version_id("demo", _manifest(version_id)) is None
-
-
-@pytest.mark.parametrize("manifest", [{"stage_records": []}, _manifest("20200101T000000")])
-def test_an_unresolvable_version_is_not_offered_a_guide(project_dir, manifest):
-    """A guide is stored ON a version, so no readable version means nothing to offer."""
-    _version_with_guide(project_dir)
-    assert find_guideless_version_id("demo", manifest) is None
 
 
 # ── the facts read off the stages ────────────────────────────────────────────
