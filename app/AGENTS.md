@@ -12,8 +12,17 @@ routers in `app/web/routers/`, which import the Runner (`app.runtime`) and the s
 - `/project/<m>/runs`, `/runs/<id>` — run history + detail.
 - `/project/<m>/runs/<id>/queue/<stage>` — the human-review queue UI (+ `/decide`, `/resume`).
 
+## The run page's two columns (`run_detail.html`)
+`.run-nav` (360px, collapsible) then `.run-main`. The nav column is the **spine**: the issue
+index, then the review guide — both are indexes into the stage panel, so they share one
+column rather than stacking above the work surface. The work column is the header, the
+workflow minimap, the stage panel, and one **audit drawer** (`.run-audit`) holding the review
+packet, the raw manifest and the run log; it is closed except on a live run, when the log is
+the only thing moving. The issue index restacks inside the nav (`.run-nav .issue-table`) —
+its four columns do not fit 360px — dropping and truncating nothing.
+
 ## The run page's issue index (`app.web.run_issues` → `_run_issues.html`)
-Between the header and the graph, an INDEX into the stage panels — every entry is one line
+At the top of the nav column, an INDEX into the stage panels — every entry is one line
 plus a deep link, and the detail stays in the panel's own validation block.
 - **"Why this run stopped"** — one card per `error` stage, leading with which story it is,
   because they route to different people: a schema refusal (`OutputSchemaViolation`) and an
@@ -35,10 +44,16 @@ graph node — uses it, and a load they did not ask for (deep link, panel self-r
 ## The run page's workflow minimap (`.diagram-minimap` in `run_detail.html`)
 The graph is a 200px band held at `data-zoom-floor` — `diagram_viewport.js` will not fit a
 wide graph below that scale, so labels stay readable and the band is panned instead. Zoom,
-fit and fullscreen are icon buttons overlaid in its top-right. It opens parked on the run's
-first stage (`_focusNode(..., {select: false})` — scrolls without outlining, so the band
-shows the flow's start while the panel below still says no stage is open). Clicking a node
-loads the stage panel, exactly as a guide step does; ⛶ is where the whole graph is read.
+fit and fullscreen are icon buttons overlaid in its top-right; `.diagram-where` names the
+parked stage and its position in the run's order, which two visible nodes cannot. It opens
+parked on the run's first stage (`_focusNode(..., {select: false})` — scrolls without
+outlining, so the band shows the flow's start while the panel below still says no stage is
+open). Clicking a node loads the stage panel, exactly as a guide step does.
+
+**⛶ is the SURVEY.** The `.diagram-block` goes fullscreen, not the viewport, so the whole
+graph arrives with `.diagram-survey` under it: how many stages the run has, how many the
+guide narrates, and how many it narrates nobody — every figure COUNTED off this run's stage
+list and this version's guide. With no guide the narration lines are absent, not zeroed.
 
 ## The stage panel — three tabs (`run_stage_partial` → `_run_stage_panel.html`)
 **Data │ Schema │ Transform**, one flat strip; it opens on Data:

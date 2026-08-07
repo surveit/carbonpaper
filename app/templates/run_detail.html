@@ -45,19 +45,36 @@
   .app-side { height: 100%; overflow-y: auto; position: static; padding-right: 6px; }
   /* app-main does NOT scroll — its child does, so there is one scrollbar per pane. */
   .app-main { height: 100%; min-height: 0; overflow: hidden; }
-  /* The shell is the run and (when the pinned version carries one) the review
-     guide beside it; the guide's own columns rule lives in _run_guide.html. */
-  .run-shell { height: 100%; min-height: 0; }
+
+  /* ── TWO columns, always: the NAV spine and the WORK surface. The nav is 360px
+        whether or not the pinned version carries a guide, so writing one does not
+        reflow the page around it. ── */
+  .run-shell { height: 100%; min-height: 0; display: grid; gap: 18px;
+               grid-template-columns: 360px minmax(0, 1fr); align-items: stretch; }
+  .run-shell.nav-collapsed { grid-template-columns: auto minmax(0, 1fr); }
+  .run-nav { min-width: 0; height: 100%; overflow-y: auto; padding-right: 16px;
+             border-right: 1px solid var(--border); }
+  /* Same trap as .app-side: an author `display` rule would beat [hidden]. */
+  .run-nav[hidden] { display: none; }
+  .run-nav-head { display: flex; align-items: center; margin-bottom: 6px; }
+  .run-nav-head .drawer-btn { margin-left: auto; }
+  .nav-expand { position: sticky; top: 0; align-self: start; }
   .run-main { min-width: 0; height: 100%; overflow-y: auto; padding-right: 6px; }
-  /* The same column, for a pinned version that carries no guide: the offer to write
-     one stands where the guide will, so the run does not reflow once it exists. */
-  .run-shell.needs-guide { display: grid; grid-template-columns: minmax(0, 1fr) 360px;
-                           gap: 18px; align-items: stretch; }
-  .run-guide-missing { min-width: 0; height: 100%; overflow-y: auto;
-                       border-left: 1px solid var(--border); padding-left: 18px; }
+  /* The offer to write a guide stands where the guide will, in the same column. */
   .run-guide-missing h2 { font-size: 12px; text-transform: uppercase;
                           letter-spacing: .06em; color: var(--muted); margin: 0 0 4px; }
   .run-guide-missing .guide-cta p { font-size: 11.5px; line-height: 1.5; }
+
+  /* ── The audit drawer: the packet, the manifest and the run log in one row at the
+        bottom. None of the three is part of judging the run — they are what you open
+        when you are challenged, or when a run failed and you are debugging it. ── */
+  .run-audit { margin-top: 1.8rem; border-top: 2px solid var(--border); padding-top: .6rem; }
+  .run-audit > summary { font-size: 13px; color: var(--muted); cursor: pointer; }
+  .run-audit > summary::marker { color: var(--border); }
+  .run-audit-body { padding: .7rem 0 0; }
+  .run-audit-body > h3 { font-size: 12px; margin: 1.1rem 0 .15rem; }
+  .run-audit-body > h3:first-child { margin-top: 0; }
+  .run-audit-body > p.lede { font-size: .78rem; margin: 0 0 .5rem; }
 
   /* Scroll-edge fade. The mask insets only on the side that still has content, so a
      pane parked at the top is not fading its own first line; the JS below keeps
@@ -71,28 +88,52 @@
   @media (max-width: 1000px) {
     body { height: auto; overflow: visible; }
     main { padding-bottom: 48px; }
-    .app-shell, .app-side, .app-main, .run-shell, .run-main { height: auto; overflow: visible; }
-    .run-shell.needs-guide { grid-template-columns: 1fr; }
-    .run-guide-missing { height: auto; overflow: visible; border-left: 0; padding-left: 0; }
+    .app-shell, .app-side, .app-main, .run-shell, .run-main, .run-nav { height: auto; overflow: visible; }
+    .run-shell, .run-shell.nav-collapsed { grid-template-columns: 1fr; }
+    .run-nav { border-right: 0; padding-right: 0; }
   }
 </style>
 
-<div class="run-shell{% if guide %} with-guide{% elif guideless_version %} needs-guide{% endif %}" id="run-shell">
+<div class="run-shell" id="run-shell">
+
+{# ── THE NAV SPINE. Both things in this column are indexes into the stage panel —
+      what the run's own records say went wrong, then the authored walkthrough — so
+      they are one column rather than two bands stacked on top of the work surface.
+      Order is deliberate: the exceptions first, because a reader who has one is not
+      going to read the walkthrough until it is dealt with. ── #}
+<button type="button" class="drawer-btn nav-expand" id="nav-expand" hidden
+        title="Show the review guide" aria-label="Show the review guide">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+       stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="m14 9 3 3-3 3"/>
+  </svg>
+</button>
+<div class="run-nav fade-scroll" id="run-nav">
+  <div class="run-nav-head">
+    <button type="button" class="drawer-btn" id="nav-collapse"
+            title="Hide the review guide" aria-label="Hide the review guide">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="m16 15-3-3 3-3"/>
+      </svg>
+    </button>
+  </div>
+  {% include "_run_issues.html" %}
+  {% if guide %}{% include "_run_guide.html" %}
+  {% elif guideless_version %}
+  {# The version this run pinned carries no guide. Say so where the guide would be, and
+     offer to write one against THAT version — not the working copy the run never saw. #}
+  <section class="run-guide-missing">
+    <h2>Review guide</h2>
+    {% with guide_version_id = guideless_version %}{% include "_generate_guide.html" %}{% endwith %}
+  </section>
+  {% endif %}
+</div>
+
+{# ── THE WORK SURFACE. ── #}
 <div class="run-main fade-scroll">
 
 {% include "_run_header.html" %}
-
-{# What this run's own records say went wrong, above everything else it shows. #}
-{% include "_run_issues.html" %}
-
-{% if not is_running %}
-{# An offer, not an alert: `.banner` is the page's alert styling and the issue
-   index above is what earns it here. #}
-<p class="run-packet">📦 <a href="/project/{{ project }}/runs/{{ run_id }}/packet.zip">Download review packet</a>
-    <span class="muted">— this run's data, records, workflow and methodology as an offline
-    folder someone outside can fact-check without this app.</span>
-</p>
-{% endif %}
 
 {# ── The workflow as a MINIMAP: a short band held at a readable zoom rather than
       the whole graph fitted to width. The reader's continuous act is picking a
@@ -127,6 +168,26 @@
 {{ mermaid }}
       </pre>
     </div>
+    {# Where the band is parked. A 200px window onto a wide graph shows no landmarks,
+       so the band says its own position in the run's order rather than leaving the
+       reader to infer it from two visible nodes. #}
+    <p class="diagram-where" id="diagram-where"></p>
+    {# ── The SURVEY, shown only in fullscreen: the coverage question the picture is
+          good at and the band is not. Every number here is COUNTED off this run's
+          own stage list and this version's guide — there is no estimate in it, and
+          with no guide the narration lines are absent rather than zeroed. ── #}
+    <div class="diagram-survey">
+      <span><b>{{ header.strip.squares | length }}</b> stages</span>
+      {% if guide %}
+      {% set narrated = guide.steps | map(attribute='stages') | sum(start=[])
+                        | map(attribute='stage_id') | unique | list | length %}
+      <span><b>{{ narrated }}</b> narrated by the guide</span>
+      {% if guide.unnarrated %}
+      <span class="survey-gap"><b>{{ guide.unnarrated | length }}</b> narrated by nobody —
+        the guide's author placed them outside the walkthrough</span>
+      {% endif %}
+      {% endif %}
+    </div>
 </div>
 {% endif %}
 </section>
@@ -140,42 +201,64 @@
 </div>
 </section>
 
-{# ── Run log, every stage of it: live-tailed lifecycle events (stage/row
-      start·done·error), streamed over SSE from runs/<id>/events.jsonl. Opens
-      for a live run AND a finished one — the endpoint drains the file then ends
-      either way, so this is also how you investigate a past run.
+{# ── THE AUDIT DRAWER. The packet, the manifest and the whole-run log share one
+      row, because none of the three is part of judging the run: they are what you
+      open when someone challenges the result, or when a run failed and you are
+      debugging it. Open on a LIVE run — the log is the only thing moving then.
 
-      Folded, and last on the page. The whole-run feed answers one question —
-      what happened, across stages, in the order it happened — and the reader
-      who has a stage in mind is served by the same log scoped to it inside the
-      panel above. It connects on first open, so a page nobody unfolds costs no
-      stream. ── #}
-<section class="run-section run-log-section" id="run-log-section">
-    <h2>Run log · all stages</h2>
+      The log itself is unchanged in kind: the whole-run feed answers what happened
+      across stages in the order it happened, and the reader who has a stage in mind
+      is served by the same log scoped to it inside the panel above. ── #}
+<details class="run-audit" id="run-audit"{% if is_running %} open{% endif %}>
+<summary>Audit — {% if not is_running %}review packet · {% endif %}raw manifest · run log</summary>
+<div class="run-audit-body">
+
+{% if not is_running %}
+<h3>Review packet</h3>
+<p class="lede">📦 <a href="/project/{{ project }}/runs/{{ run_id }}/packet.zip">Download</a>
+    — this run's data, records, workflow and methodology as an offline folder someone
+    outside can fact-check without this app.</p>
+{% endif %}
+
+<h3>Raw manifest</h3>
+<details class="raw-yaml"><summary>Show</summary><pre>{{ manifest | tojson(indent=2) }}</pre></details>
+
+<section class="run-log-section" id="run-log-section">
+    <h3>Run log · all stages</h3>
     <p class="lede">Every lifecycle event for this whole run, in the order it happened. For one stage's events, use the run log inside its panel above.</p>
-    <div id="run-log-all">{{ run_log_panel("Events", event_tail) }}</div>
+    <div id="run-log-all">{{ run_log_panel("Events", event_tail, open=is_running) }}</div>
 </section>
+
+</div>{# /.run-audit-body #}
+</details>
 
 {# The panel's behaviour lives in /static/run_log.js — filtering and reconnect
    are the parts with tests (tests/test_run_log_client.py), which needs them
    loadable outside a page. #}
 <script src="/static/run_log.js"></script>
 <script>
-  // Deferred until the disclosure opens: connecting on load would tail every
-  // run page a reader merely visited, and the feed's own tail read walks the
-  // whole events file to find its starting seq.
+  // Deferred until the log is actually on screen: connecting on load would tail every
+  // run page a reader merely visited, and the feed's own tail read walks the whole
+  // events file to find its starting seq. TWO disclosures now stand between the reader
+  // and the feed — the audit drawer and the log's own panel — so this watches both and
+  // starts on the first moment the log is visible through both of them.
   (function () {
     const holder = document.getElementById('run-log-all');
     const panel = holder.querySelector('details');
-    panel.addEventListener('toggle', function start() {
-      if (!panel.open) return;
-      panel.removeEventListener('toggle', start);
+    const drawer = document.getElementById('run-audit');
+    let started = false;
+    function start() {
+      if (started || !panel.open || (drawer && !drawer.open)) return;
+      started = true;
       initRunLog({
         root: holder,
         project: {{ project | tojson }}, runId: {{ run_id | tojson }},
         pageSize: {{ event_tail | tojson }},
       });
-    });
+    }
+    panel.addEventListener('toggle', start);
+    if (drawer) drawer.addEventListener('toggle', start);
+    start();   // a live run renders both open, and its feed should not wait for a click
   })();
 </script>
 
@@ -186,6 +269,18 @@
   const panel = document.getElementById('stage-panel');
 
   const viewport = document.querySelector('.diagram-viewport');
+
+  // The run's stages in the order the strip shows them, so the band can say where in
+  // that order it is parked. Position only — the graph already carries the shape.
+  const STAGE_ORDER = {{ (header.strip.squares | map(attribute='stage_id') | list) | tojson }};
+  function paintWhere(stageId) {
+    const el = document.getElementById('diagram-where');
+    if (!el) return;
+    const at = STAGE_ORDER.indexOf(stageId);
+    el.textContent = at < 0
+      ? `${STAGE_ORDER.length} stages`
+      : `${stageId} — stage ${at + 1} of ${STAGE_ORDER.length}`;
+  }
 
   // Outline the node and centre it in the minimap. A re-render can replace the svg
   // mid-click, so a miss retries a few times. opts.pulse asks for the arrival
@@ -198,7 +293,8 @@
     if (!viewport) return;
     const o = opts || {};
     const focused = viewport._focusNode
-      && viewport._focusNode(stageId, { pulse: !!o.pulse, select: o.select !== false });
+      && viewport._focusNode(stageId, { pulse: !!o.pulse, select: o.select !== false,
+                                        animate: o.animate !== false });
     if (!focused && (tries || 0) < 8) {
       setTimeout(() => focusGraphNode(stageId, opts, (tries || 0) + 1), 250);
     }
@@ -232,7 +328,9 @@
       const card = panel.querySelector('.run-stage-panel');
       if (opts && opts.tab && card && card._selectTab) card._selectTab(opts.tab);
       if (location.hash !== `#${stageId}`) history.replaceState(null, '', `#${stageId}`);
-      focusGraphNode(stageId, { pulse: !opts || opts.pulse !== false });
+      focusGraphNode(stageId, { pulse: !opts || opts.pulse !== false,
+                                animate: !opts || opts.animate !== false });
+      paintWhere(stageId);
       // Animated, so the reader sees where the page went rather than being
       // teleported; 'auto' only for a reader who asked for less motion. A smooth
       // scroll needs requestAnimationFrame, which a hidden tab never fires, so it
@@ -241,14 +339,17 @@
     } finally { panel.classList.remove('loading'); }
   }
   window._loadStage = loadStage;
-  if (location.hash) loadStage(decodeURIComponent(location.hash.slice(1)));
+  // animate:false on both arrival paths — the reader has just landed, so there is no
+  // position they were looking at for a scroll to carry them away from.
+  if (location.hash) loadStage(decodeURIComponent(location.hash.slice(1)), { animate: false });
   // Nothing chosen yet: park the minimap on the run's first stage. Held at its own
   // zoom the band would otherwise open on whatever corner of a tall graph sits at
   // scroll 0, which is usually blank. select:false — this moves the view, it does
   // not pick a stage, and the panel below still says none is open.
-  else focusGraphNode(
-    {{ (header.strip.squares[0].stage_id if header.strip.squares else none) | tojson }},
-    { select: false });
+  else {
+    focusGraphNode(STAGE_ORDER[0] || null, { select: false, animate: false });
+    paintWhere(null);
+  }
 
   // ── CTA forms (cancel, re-run, resume): disable + relabel the button on
   //    submit so a second click can't fire a second request while the redirect
@@ -324,18 +425,32 @@
 </script>
 
 </div>{# /.run-main #}
-
-{% if guide %}{% include "_run_guide.html" %}
-{% elif guideless_version %}
-{# The version this run pinned carries no guide. Say so where the guide would be, and
-   offer to write one against THAT version — not the working copy the run never saw. #}
-<aside class="run-guide-missing fade-scroll">
-  <h2>Review guide</h2>
-  {% with guide_version_id = guideless_version %}{% include "_generate_guide.html" %}{% endwith %}
-</aside>
-{% endif %}
-
 </div>{# /.run-shell #}
+
+<script>
+(function () {
+  // ── Nav-column drawer, mirroring the project sidebar's. It hides the WHOLE spine —
+  //    issue index and guide together — because they are one column, not two panels.
+  const shell = document.getElementById('run-shell');
+  const nav = document.getElementById('run-nav');
+  const expand = document.getElementById('nav-expand');
+  const collapse = document.getElementById('nav-collapse');
+  if (!shell || !nav || !expand || !collapse) return;
+  const KEY = 'run-nav-collapsed:' + {{ project | tojson }};
+
+  function setCollapsed(on) {
+    shell.classList.toggle('nav-collapsed', on);
+    nav.hidden = on;
+    expand.hidden = !on;
+    try { localStorage.setItem(KEY, on ? '1' : '0'); } catch (e) { /* private mode */ }
+    // The fade lives in its own IIFE below; repaint through its hook.
+    if (window._paintFades) window._paintFades();
+  }
+  collapse.addEventListener('click', () => setCollapsed(true));
+  expand.addEventListener('click', () => setCollapsed(false));
+  try { if (localStorage.getItem(KEY) === '1') setCollapsed(true); } catch (e) { /* ignore */ }
+})();
+</script>
 
 <script>
 (function () {
@@ -357,7 +472,7 @@
     const ro = new ResizeObserver(() => faders.forEach(paintFade));
     faders.forEach(el => ro.observe(el));
   }
-  // Collapsing the review-guide rail changes a pane's height without scrolling it.
+  // Collapsing the nav column changes a pane's height without scrolling it.
   window._paintFades = () => faders.forEach(paintFade);
 })();
 </script>

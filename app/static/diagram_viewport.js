@@ -68,8 +68,8 @@
     // aim (a deep link, a step in the guide rail) — clicking the node needs no cue,
     // the pointer is already on it. opts.select:false scrolls to the node WITHOUT
     // outlining it, for a caller parking the view somewhere the reader has not
-    // chosen. Returns false when the id names no node — the caller may be racing a
-    // re-render and want to retry.
+    // chosen; opts.animate:false jumps instead of scrolling. Returns false when the
+    // id names no node — the caller may be racing a re-render and want to retry.
     vp._focusNode = function (stageId, opts) {
       var o = opts || {};
       if (!svg && !grabSvg()) return false;
@@ -87,8 +87,9 @@
         left: vp.scrollLeft + (box.left + box.width / 2) - (port.left + vp.clientWidth / 2),
         top: vp.scrollTop + (box.top + box.height / 2) - (port.top + vp.clientHeight / 2),
         // Smooth only when the reader is being MOVED from somewhere they were looking.
-        // Parking the view has no from, so animating it plays a scroll nobody asked for.
-        behavior: o.select === false ? "auto" : "smooth",
+        // Arriving at the page — parked, or on a deep link — has no from, and animating
+        // it plays a scroll nobody asked for from a position nobody saw.
+        behavior: o.animate === false ? "auto" : "smooth",
       });
       if (o.pulse) pulse(node);
       return true;
@@ -124,13 +125,16 @@
         if (k === "reset") fit(); else zoom(k === "in" ? 1.25 : 0.8);
       });
     });
+    // The BLOCK goes fullscreen, not the viewport, so whatever the block wraps around
+    // the graph — its controls, and on the run page a coverage line — comes with it.
+    var fsEl = block instanceof Element ? block : vp;
     var fsBtn = block.querySelector(".diagram-fs");
     if (fsBtn) fsBtn.addEventListener("click", function () {
       if (document.fullscreenElement) document.exitFullscreen();
-      else if (vp.requestFullscreen) vp.requestFullscreen();
+      else if (fsEl.requestFullscreen) fsEl.requestFullscreen();
     });
     document.addEventListener("fullscreenchange", function () {
-      if (document.fullscreenElement === vp) fit();   // fullscreen changed clientWidth
+      if (document.fullscreenElement === fsEl) fit();   // fullscreen changed clientWidth
     });
 
     // ⌘/Ctrl + wheel = zoom; plain wheel = native scroll.

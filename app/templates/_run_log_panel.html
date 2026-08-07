@@ -5,9 +5,10 @@
    one the page happened to define first would take both sets of clicks.
 
    `tail` is how many events the feed opens on; the caller passes the same number
-   it hands initRunLog, so the copy and the stream are sized by one value. #}
-{% macro run_log_panel(summary, tail) %}
-<details class="run-log-panel">
+   it hands initRunLog, so the copy and the stream are sized by one value. `open`
+   renders it unfolded, for a caller whose reader is already looking at a live run. #}
+{% macro run_log_panel(summary, tail, open=false) %}
+<details class="run-log-panel"{% if open %} open{% endif %}>
     <summary>{{ summary }} <span class="js-run-log-count muted"></span></summary>
     <div class="run-log-toolbar">
         <label><input type="checkbox" class="js-run-log-errors-only"> errors only</label>

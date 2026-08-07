@@ -1486,6 +1486,20 @@ table.issue-table { width: 100%; border-collapse: collapse; font-size: .79rem; }
    quotes column names and sample values, so it must be allowed to break inside one
    — a long token would otherwise set the table's width and scroll the whole row. */
 .issue-message { color: var(--fg); overflow-wrap: anywhere; }
+/* ── The same index in the run page's 360px nav column. Four columns do not fit, and
+      `white-space: nowrap` on three of them made the table wider than the rail rather
+      than wrapping, so each row stacks: severity + stage + column on one line, the
+      message under it. No row is dropped and nothing is truncated. ── */
+.run-nav .issue-table, .run-nav .issue-table tbody, .run-nav .issue-table tr,
+.run-nav .issue-table td { display: block; width: auto; }
+.run-nav .issue-table tr { padding: 5px 10px; border-bottom: 1px solid var(--border); }
+.run-nav .issue-table tr:last-child { border-bottom: 0; }
+.run-nav .issue-table td { padding: 0; border-bottom: 0; }
+.run-nav .issue-table .issue-sev,
+.run-nav .issue-table .issue-stage,
+.run-nav .issue-table .issue-column { display: inline; margin-right: 6px;
+    white-space: normal; }
+.run-nav .issue-table .issue-message { margin-top: 2px; }
 
 /* The review packet is an OFFER, not an alert: `.banner` is this page's alert
    styling and the issue index above is what earns it. */
@@ -2168,6 +2182,9 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
 .diagram-viewport { overflow: auto; max-height: 72vh; border: 1px solid var(--border);
     border-radius: 8px; background: #fbfbfc; resize: vertical; cursor: grab; }
 .diagram-viewport.grabbing { cursor: grabbing; }
+/* The FULLSCREENED element is the .diagram-block (see diagram_viewport.js), so the
+   viewport is sized by the `.diagram-block:fullscreen` rules further down. This one
+   remains for a viewport fullscreened on its own. */
 .diagram-viewport:fullscreen { max-height: none; height: 100vh; width: 100vw; background: #fbfbfc; }
 /* THE VIEWPORT OWNS THE SCROLL. `pre` carries overflow-x:auto from the base rule,
    which made this block its own scroll container: the svg's overflow ended here
@@ -2207,7 +2224,6 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
 /* ~2 rows of stage nodes at the floor zoom: enough to read the node you are on and
    see what it feeds, without the band becoming a second panel. */
 .diagram-minimap .diagram-viewport { height: 200px; }
-.diagram-minimap .diagram-viewport:fullscreen { height: 100vh; max-height: none; }
 .diagram-minimap .diagram-tools { position: absolute; top: 7px; right: 7px; z-index: 2;
     margin: 0; gap: .2rem; }
 /* Square, so the four read as one control cluster rather than four words; and they
@@ -2215,6 +2231,25 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
 .diagram-minimap .diagram-tools button { width: 26px; height: 26px; padding: 0;
     display: flex; align-items: center; justify-content: center; line-height: 1;
     background: var(--bg); box-shadow: 0 1px 2px rgba(0, 0, 0, .12); }
+/* Where the band is parked, in the corner it is least likely to cover a node. */
+.diagram-minimap .diagram-where { position: absolute; left: 7px; bottom: 7px; z-index: 2;
+    margin: 0; font-size: 10.5px; color: var(--muted); background: var(--bg);
+    border: 1px solid var(--border); border-radius: 3px; padding: 1px 6px;
+    max-width: calc(100% - 130px); overflow: hidden; text-overflow: ellipsis;
+    white-space: nowrap; }
+.diagram-minimap .diagram-where:empty { display: none; }
+
+/* ── Fullscreen is the SURVEY: the whole graph plus the coverage line, which is the
+      question a picture answers and a 200px band cannot. The block goes fullscreen,
+      not the viewport, so the controls and the survey line come with it. ── */
+.diagram-survey { display: none; }
+.diagram-block:fullscreen { background: var(--bg); padding: 10px 14px; }
+.diagram-block:fullscreen .diagram-viewport { height: calc(100vh - 96px); max-height: none; }
+.diagram-block:fullscreen .diagram-where { display: none; }
+.diagram-block:fullscreen .diagram-survey { display: flex; gap: 20px; flex-wrap: wrap;
+    align-items: baseline; font-size: 12.5px; padding-top: 9px; margin-top: 9px;
+    border-top: 1px solid var(--border); }
+.diagram-survey .survey-gap { color: var(--state-warn-ink); }
 
 /* Stage nodes carry mermaid's .clickable (and its pointer cursor) because the graph
    DECLARES a click handler — whether or not this page listens for one. onDiagramNode()
