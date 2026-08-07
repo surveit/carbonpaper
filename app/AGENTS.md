@@ -40,11 +40,13 @@ work column, not the nav rail: its four-column table needs the width.
   other exception is the code's and keeps its type, message and traceback. Each card names the
   stages downstream of it that never ran, read off the pinned version's edges — with no readable
   version it names none rather than blaming the pending stages it can see.
-- **The flagged section**, titled by its own counts (`17 warnings, 2 errors`; a severity with
-  none of them is left out) — every issue the cards do not carry (warnings anywhere, plus an
+- **The flagged section** — every issue the cards do not carry (warnings anywhere, plus an
   error-severity INPUT issue, which only warns its stage), one line per stage × column ×
   message, stages in the run's own order. Folded when something stopped the run; open when
-  nothing did, which is the run whose warnings would otherwise go unread.
+  nothing did, which is the run whose warnings would otherwise go unread. Drawn with
+  `_issue_table.html`, the panel + row macros the **Workflow** page's compiler warnings also
+  use; the macros own the heading (`17 warnings, 2 errors`, a severity with none of them left
+  out), so neither page can word its counts differently.
 
 A deep link loads the panel through `_loadStage(id, {tab, reveal})`, which the panel serves by
 publishing `_selectTab` on its root element. `reveal` smooth-scrolls the panel's top to the top of the
