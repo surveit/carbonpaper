@@ -265,9 +265,8 @@
           <p class="guide-outputs-what">{{ step.data_description }}</p>
           {% endif %}
           {% for out in step.outputs %}
-          {# data-stage-land: clicked to read rows, so it lands on the table. #}
           <a class="guide-output" href="{{ links.guide_stage(out.stage_id) }}"
-             data-stage-link="{{ out.stage_id }}" data-stage-land="data"
+             data-stage-link="{{ out.stage_id }}"
              title="{{ exact_size_words(out) | trim }} — open this data">
             {# Muted where neither half was measured: the accent is link affordance,
                and `- × -` in it would draw the eye to the one link with no number. #}
@@ -312,7 +311,9 @@
       .forEach(el => el.classList.remove('active'));
     document.querySelectorAll(`.guide-stage-row[data-stage-link="${CSS.escape(id)}"]`)
       .forEach(el => el.classList.add('active'));
-    window._loadStage(id, { land: a.getAttribute('data-stage-land') || 'header' });
+    // reveal: the rail sits beside the top of the page, so the panel it loads
+    // into is off screen — a step and its output link both land on the panel.
+    window._loadStage(id, { reveal: true });
   });
 
   // ── Guide drawer, mirroring the sidebar's.
