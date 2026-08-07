@@ -13,7 +13,7 @@ from app.models.stages.stage_tests import StageTest
 from app.runtime.stage_tests import STATUS_PASSED, StageTestResult, run_tests_for_stage
 
 CertificationStatus = Literal[
-    "certified", "failing", "untested", "unsummarised", "untestable", "n/a"
+    "certified", "failing", "untested", "unsummarised", "untestable"
 ]
 
 
@@ -37,17 +37,10 @@ class StageCertification(BaseModel):
 
 def build_certification(
     stage: Stage, test_views: list[dict[str, Any]]
-) -> StageCertification:
-    """The certification state of `stage` given its already-run `test_views`.
-
-    Ordered so that MISSING A DESCRIPTION outranks being untestable: a stage whose
-    behaviour is authored code is unreviewable without a description whether or not
-    an example could ever certify one, and answering `n/a` there would drop it from
-    every surface. `n/a` is only for a stage carrying no authored code at all — its
-    behaviour is config a reviewer reads directly (a join's keys, a union's inputs),
-    with no prose standing between them and it."""
+) -> Optional[StageCertification]:
+    """None for a config-only stage; missing a description outranks being untestable."""
     if not _carries_authored_code(stage):
-        return StageCertification(status="n/a")
+        return None
     if not _summary_of(stage):
         return StageCertification(status="unsummarised", total=len(test_views))
     if not stage.CARRIES_RUNNABLE_TESTS:

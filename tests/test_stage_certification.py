@@ -74,9 +74,8 @@ def test_no_summary_is_unsummarised():
     assert build_certification(_stage(summary=None), []).status == "unsummarised"
 
 
-def test_a_stage_whose_behaviour_is_not_code_is_not_applicable():
-    """An enrich's keys are config a reviewer reads directly — there is no authored
-    description standing between them and the behaviour, so nothing to certify."""
+def test_a_stage_whose_behaviour_is_not_code_gets_no_badge():
+    """An enrich's keys are config a reviewer reads directly — nothing to certify."""
     stage = m.parse_stage({
         "id": "j", "description": "J", "type": "enrich",
         "inputs": [{"id": "a", "schema": _SCHEMA},
@@ -92,7 +91,7 @@ def test_a_stage_whose_behaviour_is_not_code_is_not_applicable():
         },
         "join": {"keys": [{"left": "id", "right": "id"}], "enrich_with": {"v": "v"}},
     })
-    assert build_certification(stage, []).status == "n/a"
+    assert build_certification(stage, []) is None
 
 
 def test_a_frame_function_is_certifiable_too():
@@ -103,7 +102,7 @@ def test_a_frame_function_is_certifiable_too():
 
 
 def test_a_code_carrying_type_that_cannot_run_examples_is_untestable():
-    """publish has a description no example can ever check, so `untestable`, not `n/a`."""
+    """publish has a description no example can ever check, so `untestable`, not no badge."""
     stage = m.parse_stage({
         "id": "pub", "description": "Pub", "type": "publish",
         "signature": {"form": "replaces"},
@@ -133,9 +132,8 @@ def test_filter_rows_with_no_description_is_undescribed_not_untestable():
     assert build_certification(stage, []).status == "unsummarised"
 
 
-def test_publish_carries_a_function_so_it_is_not_n_a():
-    """A publish stage's behaviour is authored code too, so a missing description
-    there is a real gap rather than nothing to say."""
+def test_publish_carries_a_function_so_it_still_gets_a_badge():
+    """Its behaviour is authored code too, so a missing description is a real gap."""
     stage = m.parse_stage({
         "id": "pub", "description": "Pub", "type": "publish",
         "signature": {"form": "replaces"},

@@ -646,10 +646,8 @@ table.schema tr:last-child td { border-bottom: 0; }
     background: var(--verdict-warn-bg); color: #7a4a00; border-color: var(--verdict-warn-bd);
 }
 /* Grey, not green: nothing ran, so nothing is being certified. */
-.stage-cert-untestable,
-.stage-cert-na { border-left-color: var(--verdict-neutral-bd); }
-.stage-cert-untestable .stage-cert-badge,
-.stage-cert-na .stage-cert-badge {
+.stage-cert-untestable { border-left-color: var(--verdict-neutral-bd); }
+.stage-cert-untestable .stage-cert-badge {
     background: var(--verdict-neutral-bg); color: #4a5561; border-color: var(--verdict-neutral-bd);
 }
 
