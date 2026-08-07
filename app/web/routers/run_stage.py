@@ -17,7 +17,7 @@ from app.services import run as run_service
 from app.runtime.errors import PreviewError
 from app.runtime.preview import PREVIEWABLE_TYPES, run_stage_preview
 from app.web import loading
-from app.web.config import REPO_ROOT, templates
+from app.web.config import EVENT_TAIL, REPO_ROOT, templates
 from app.web.stage_test_views import build_certification, shape_test_views
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH
 from app.web.loading import (
@@ -102,6 +102,7 @@ async def run_stage_partial(
             "certification": build_certification(stage_def, views) if stage_def else None,
             "previewable": stage_def is not None and stage_def.type in PREVIEWABLE_TYPES,
             "links": resolve_panel_links(project, run_id),
+            "event_tail": EVENT_TAIL,
             "type_glyph": TYPE_GLYPH,
             "type_class": TYPE_CLASS,
         },

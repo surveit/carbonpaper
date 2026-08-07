@@ -66,6 +66,20 @@ graph node — uses it, and a load they did not ask for (deep link, panel self-r
   `MAX_TABLE_ROWS` rows, keeping its row numbers and click-to-expand cells; `?raw=1` forces the
   plain table, and each view names itself and links the other.
 
+## The run log (`_run_log_panel.html` → `app/static/run_log.js`)
+One macro, rendered twice per run page: **scoped to the open stage** under the panel's tab
+strip, and **unscoped** in its own section at the foot of the page. Both are folded and
+connect their SSE feed on first open, so a page nobody unfolds costs no stream and clicking
+through the graph leaves no connection behind (the panel's script closes the previous
+stage's log through the handle `initRunLog` returns). Every hook the client binds is a `js-`
+class, not an id — the two instances share a document.
+
+`GET …/events?stage=<id>` and `…/events/page?stage=<id>` filter server-side
+(`select_stage_events`): the stage's own events plus `run_done`, which is what ends a
+stream. Both the opening tail and "load older" count over the FILTERED events, so a stage
+holding a handful of them inside a 270k-event log still opens full. `links.run_log` is None
+in the review packet — a folder has no server to tail — and the panel then renders no log.
+
 ## Live progress + scratch re-run
 `POST /project/<m>/run` → `prepare_run` (initial `running` manifest) → background thread →
 redirect; `run_detail.html` polls `…/status` every 2s and updates the graph in place, reloading

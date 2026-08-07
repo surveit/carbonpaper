@@ -32,6 +32,10 @@ class AppPanelLinks:
     def review_queue(self, stage_id: str) -> str:
         return f"{self._base}/queue/{_segment(stage_id)}"
 
+    def run_log(self, stage_id: str) -> str:
+        """The SSE feed of this stage's own lifecycle events."""
+        return f"{self._base}/events?stage={_segment(stage_id)}"
+
     def guide_stage(self, stage_id: str) -> str:
         """A fragment — the guide rail's JS loads the panel in place."""
         return f"#{stage_id}"
@@ -56,6 +60,10 @@ class PacketPanelLinks:
 
     def review_queue(self, stage_id: str) -> None:
         """A queue is a decision surface on a live run; a sealed record has none."""
+        return None
+
+    def run_log(self, stage_id: str) -> None:
+        """The log is a live tail off a running server; a folder cannot serve one."""
         return None
 
     def guide_stage(self, stage_id: str) -> str:

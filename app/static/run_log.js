@@ -89,9 +89,15 @@
       + "</span></span>";
   }
 
-  // options: {url, openStream, schedule, onEvent, onState}. `url` carries no
-  // query — this owns from_seq, because the cursor is what makes a reconnect
-  // resume rather than replay.
+  // Append one query parameter, whichever separator the url already needs.
+  function withParam(url, key, value) {
+    return url + (url.indexOf("?") < 0 ? "?" : "&")
+      + key + "=" + encodeURIComponent(value);
+  }
+
+  // options: {url, openStream, schedule, onEvent, onState}. `url` may carry a
+  // scope (?stage=…) but never a cursor — this owns from_seq, because the
+  // cursor is what makes a reconnect resume rather than replay.
   function openRunLogStream(options) {
     var lastSeq = -1;
     var stream = null;
@@ -123,7 +129,7 @@
       // Every RECONNECT carries one: resuming is what the cursor is for, and a
       // reconnect that fell back to the tail would silently skip the middle.
       stream = options.openStream(
-        lastSeq < 0 ? options.url : options.url + "?from_seq=" + (lastSeq + 1)
+        lastSeq < 0 ? options.url : withParam(options.url, "from_seq", lastSeq + 1)
       );
       stream.onmessage = receive;
       stream.addEventListener("done", finish);
@@ -136,7 +142,12 @@
     }
 
     connect();
-    return { highestSeq: function () { return lastSeq; } };
+    return {
+      highestSeq: function () { return lastSeq; },
+      // Abandon the feed for good — a scoped panel that was replaced calls this,
+      // and without it every stage the reader clicked would keep a connection.
+      close: function () { done = true; if (stream) stream.close(); },
+    };
   }
 
   // A ceiling on what the panel keeps in the DOM. "Load older" is the way to
@@ -147,13 +158,20 @@
   // How long arriving events are pooled before one batched append.
   var FLUSH_INTERVAL_MS = 32;
 
+  // config: {root, project, runId, pageSize, stage}. `root` is the panel element
+  // holding this log's controls — the page carries more than one (the whole run
+  // at the bottom, the selected stage inside its own panel), so nothing here may
+  // reach for a document-wide id. `stage` scopes the feed server-side.
   function initRunLog(config) {
-    var pre = document.getElementById("run-log");
-    var countEl = document.getElementById("run-log-count");
-    var stateEl = document.getElementById("run-log-state");
-    var errorsOnly = document.getElementById("run-log-errors-only");
-    var detail = document.getElementById("run-log-detail");
-    var olderBtn = document.getElementById("run-log-older");
+    var root = config.root;
+    var find = function (cls) { return root.querySelector("." + cls); };
+    var pre = find("js-run-log");
+    var countEl = find("js-run-log-count");
+    var stateEl = find("js-run-log-state");
+    var errorsOnly = find("js-run-log-errors-only");
+    var detail = find("js-run-log-detail");
+    var olderBtn = find("js-run-log-older");
+    var clearBtn = find("js-run-log-clear");
     var events = [];
     var pending = [];              // arrived since the last flush
     var timer = null;
@@ -162,6 +180,12 @@
     var pageSize = config.pageSize || 500;
     var base = "/project/" + encodeURIComponent(config.project)
       + "/runs/" + encodeURIComponent(config.runId);
+
+    // Both feeds carry the same scope: the SSE tail and the "load older" page
+    // must agree on which events exist, or paging back would widen the view.
+    function scoped(url) {
+      return config.stage ? withParam(url, "stage", config.stage) : url;
+    }
 
     function traceUrl(stage, row) {
       return base + "/stage/" + encodeURIComponent(stage) + "/row/" + row
@@ -238,7 +262,7 @@
       if (loadingOlder || before <= 0) return;
       loadingOlder = true;
       updateChrome();
-      fetch(base + "/events/page?before_seq=" + before + "&limit=" + pageSize)
+      fetch(scoped(base + "/events/page?before_seq=" + before + "&limit=" + pageSize))
         .then(function (r) { return r.json(); })
         .then(function (page) {
           events = (page.events || []).concat(events);
@@ -258,14 +282,14 @@
     errorsOnly.addEventListener("change", render);
     detail.addEventListener("change", render);
     if (olderBtn) olderBtn.addEventListener("click", loadOlder);
-    document.getElementById("run-log-clear").addEventListener("click", function () {
+    if (clearBtn) clearBtn.addEventListener("click", function () {
       pre.textContent = "";
     });
 
     stateEl.textContent = "connecting…";
     updateChrome();
-    openRunLogStream({
-      url: base + "/events",
+    return openRunLogStream({
+      url: scoped(base + "/events"),
       openStream: function (url) { return new EventSource(url); },
       schedule: function (fn) { setTimeout(fn, 2000); },
       onEvent: function (ev) { events.push(ev); pending.push(ev); schedule(); },

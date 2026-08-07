@@ -148,6 +148,77 @@ def test_the_last_page_back_reports_that_nothing_older_remains(tmp_path, monkeyp
     assert page["has_more"] is False
 
 
+def _two_stage_events() -> list[dict]:
+    return [
+        {"seq": 0, "kind": "run_start", "level": 0},
+        {"seq": 1, "kind": "row_ok", "stage": "load", "row": 0, "level": 0},
+        {"seq": 2, "kind": "row_ok", "stage": "classify", "row": 0, "level": 0},
+        {"seq": 3, "kind": "row_error", "stage": "load", "row": 1, "level": 0},
+        {"seq": 4, "kind": RUN_DONE, "level": 0},
+    ]
+
+
+def test_a_stage_scoped_feed_carries_only_that_stage_and_the_end_marker(
+    tmp_path, monkeypatch
+):
+    """run_done rides through the filter: it is what ends the stream."""
+    url = _seed_run(tmp_path, monkeypatch, _two_stage_events())
+
+    response = TestClient(app).get(url, params={"stage": "load"})
+
+    streamed = [
+        json.loads(line[len("data: "):])
+        for line in response.text.splitlines()
+        if line.startswith("data: ") and line != "data: {}"
+    ]
+    assert [e["seq"] for e in streamed] == [1, 3, 4]
+
+
+def test_the_stage_tail_is_counted_over_that_stage_s_own_events(tmp_path, monkeypatch):
+    """Counting the tail over the whole file would open a quiet stage empty."""
+    events = [
+        {"seq": i, "kind": "row_ok", "stage": "noisy", "row": i, "level": 0}
+        for i in range(1000)
+    ]
+    events += [
+        {"seq": 1000, "kind": "row_ok", "stage": "quiet", "row": 0, "level": 0},
+        {"seq": 1001, "kind": "row_ok", "stage": "noisy", "row": 1000, "level": 0},
+        {"seq": 1002, "kind": RUN_DONE, "level": 0},
+    ]
+    url = _seed_run(tmp_path, monkeypatch, events)
+
+    response = TestClient(app).get(url, params={"stage": "quiet", "tail": 10})
+
+    streamed = [
+        json.loads(line[len("data: "):])
+        for line in response.text.splitlines()
+        if line.startswith("data: ") and line != "data: {}"
+    ]
+    assert [e["seq"] for e in streamed] == [1000, 1002]
+
+
+def test_load_older_pages_over_the_filtered_events_not_a_seq_window(
+    tmp_path, monkeypatch
+):
+    """A seq window would page back a nearly empty page for a sparse stage."""
+    events = [
+        {"seq": i, "kind": "row_ok", "stage": "quiet" if i % 100 == 0 else "noisy",
+         "row": i, "level": 0}
+        for i in range(1000)
+    ]
+    _seed_run(tmp_path, monkeypatch, events)
+
+    page = TestClient(app).get(
+        f"/project/{PROJECT}/runs/r1/events/page",
+        params={"before_seq": 900, "limit": 5, "stage": "quiet"},
+    ).json()
+
+    # The last 5 "quiet" events older than seq 900 — not the none of them that
+    # fall inside the seq 895..899 window a subtraction would have taken.
+    assert [e["seq"] for e in page["events"]] == [400, 500, 600, 700, 800]
+    assert page["has_more"] is True
+
+
 def test_an_unknown_run_is_a_404(tmp_path, monkeypatch):
     _seed_run(tmp_path, monkeypatch, [])
 

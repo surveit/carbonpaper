@@ -129,6 +129,29 @@ def test_a_drop_before_any_event_reconnects_to_the_tail_again(tmp_path):
     assert out["opened"] == ["/events", "/events"]
 
 
+def test_a_scoped_feed_keeps_its_scope_across_a_reconnect(tmp_path):
+    """A reconnect that dropped ?stage= would widen a stage's log to the run's."""
+    out = _run_in_node("""
+      const opened = [];
+      let current = null;
+      client.openRunLogStream({
+        url: '/events?stage=load',
+        openStream: (url) => {
+          opened.push(url);
+          current = {onmessage: null, onerror: null, addEventListener() {}, close() {}};
+          return current;
+        },
+        schedule: (fn) => fn(),
+        onEvent: () => {}, onState: () => {},
+      });
+      current.onmessage({data: JSON.stringify({seq: 7, kind: 'row_ok', level: 0})});
+      current.onerror();
+      console.log(JSON.stringify({opened: opened}));
+    """, tmp_path)
+
+    assert out["opened"] == ["/events?stage=load", "/events?stage=load&from_seq=8"]
+
+
 def test_run_done_is_rendered_and_then_ends_the_stream(tmp_path):
     out = _run_in_node(_STREAM_JS + """
       send(0); send(1, 'run_done');
