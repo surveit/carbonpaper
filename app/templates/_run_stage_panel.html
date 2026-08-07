@@ -17,21 +17,8 @@
        no longer resolves shows no line rather than a guessed one. #}
     {% if stage_def %}<p class="stage-id">{{ stage_def.description }}</p>{% endif %}
     <p class="muted">{{ stage.elapsed_ms | friendly_duration }} · {{ "{:,}".format(stage.output_row_count or 0) }} row{% if (stage.output_row_count or 0) != 1 %}s{% endif %}
+        {% if stage.llm_usage and stage.llm_usage.calls %} · {{ "{:,}".format(stage.llm_usage.calls) }} model call{% if stage.llm_usage.calls != 1 %}s{% endif %}, {{ stage.llm_usage.cost_usd | usd }}{% endif %}
         {% if stage.finished_at %} · finished {{ stage.finished_at | friendly_time }}{% endif %}</p>
-
-{# What the model cost this run. `calls` and `cost_usd` are the fields that hold up:
-   calls equals ceil(rows / batch_size) and cost tracks it. LlmUsage's token counts
-   do not agree with either and are not shown. #}
-{% if stage.llm_usage and stage.llm_usage.calls %}
-{% set u = stage.llm_usage %}
-<dl class="llm-stats">
-    {% if stage_def and stage_def.llm %}
-    <div><dt>model</dt><dd><code>{{ stage_def.llm.model }}</code></dd></div>
-    {% endif %}
-    <div><dt>calls</dt><dd>{{ "{:,}".format(u.calls) }}</dd></div>
-    <div><dt>cost</dt><dd>{{ u.cost_usd | usd }}</dd></div>
-</dl>
-{% endif %}
 </div>
 
 {# The stage definition comes from the version this run pinned; with
@@ -99,6 +86,28 @@
 
   {# ─────────── DATA (diff-aware output, then the input rows) ─────────── #}
   <div class="pane" data-pane="data">
+    {# What the model cost to produce the rows below. It sits in Data, not Transform,
+       because it comes from this run's manifest — Transform describes what the version
+       authored. `calls` and `cost_usd` are the fields that hold up: calls equals
+       ceil(rows / batch_size) and cost tracks it. LlmUsage's token counts agree with
+       neither and are not shown. #}
+    {% if stage.llm_usage and stage.llm_usage.calls %}
+    {% set u = stage.llm_usage %}
+    {% set batch = stage_def.llm.batch_size if stage_def and stage_def.llm else None %}
+    <dl class="llm-stats">
+        {% if stage_def and stage_def.llm %}
+        <div><dt>model</dt><dd><code>{{ stage_def.llm.model }}</code></dd></div>
+        {% endif %}
+        <div><dt>calls</dt><dd>{{ "{:,}".format(u.calls) }}</dd></div>
+        {% if batch and batch > 1 %}<div><dt>rows per call</dt><dd>{{ batch }}</dd></div>{% endif %}
+        <div><dt>cost</dt><dd>{{ u.cost_usd | usd }}</dd></div>
+    </dl>
+    {% if batch and batch > 1 %}
+    <p class="banner banner-warn">Rows were judged <b>{{ batch }} at a time</b>, not one by one —
+        each call was shown {{ batch }} rows together and answered for all of them. A row's answer
+        could have been swayed by the {{ batch - 1 }} beside it.</p>
+    {% endif %}
+    {% endif %}
     {# Stage-aware diff (app.web.stage_diff): a row_aligned diff or a
        filter_rows merged table REPLACES the plain preview below — same rows,
        annotated. diff is None for out-of-scope stage types and whenever
