@@ -14,9 +14,11 @@
 
   An INDEX. Every line is worded by the report that raised it and links the
   panel where the full validation block lives — there is one copy of the detail.
+  The flagged section is drawn with the issue table the Workflow page also uses.
 
   Context: issues = app.web.run_issues.RunIssues, links, project, run_id
 #}
+{% from "_issue_table.html" import issue_panel, issue_row %}
 {% if issues.stopped or issues.flagged %}
 <div class="run-issues" id="run-issues">
 
@@ -51,10 +53,10 @@
 
     <p class="stop-foot">
       <a class="stop-open" href="{{ links.stage_anchor(stop.stage_id) }}"
-         data-issue-stage="{{ stop.stage_id }}"
+         data-stage-link="{{ stop.stage_id }}"
          {# Data when the values are the question; Transform when what refused
             them — the declared schema aside, a rule someone wrote — is. #}
-         data-issue-tab="{% if stop.kind == 'schema' %}data{% else %}transform{% endif %}"
+         data-stage-tab="{% if stop.kind == 'schema' %}data{% else %}transform{% endif %}"
          >Open <code>{{ stop.stage_id }}</code> → {% if stop.kind == 'schema' %}Data{% else %}Transform{% endif %}</a>
       {% if stop.never_ran %}
       {# The named ids stop at _NAMED_BLOCKED_MAX and the remainder is counted out
@@ -72,32 +74,21 @@
 {% endif %}
 
 {% if issues.flagged %}
-<details class="issue-flags"{% if not issues.stopped %} open{% endif %}>
-  <summary>
-    <span class="issue-flags-title">{{ issues.flagged_headline }}</span>
-    <span class="muted">across {{ issues.flagged | length }} stage{{ '' if issues.flagged | length == 1 else 's' }} —
-      none of them stopped the run</span>
-  </summary>
-  <div class="issue-flags-scroll">
-    <table class="issue-table">
-      <tbody>
-      {% for stage in issues.flagged %}{% for issue in stage.issues %}
-      <tr class="sev-{{ issue.severity }}">
-        <td class="issue-sev">{{ issue.severity }}</td>
-        <td class="issue-stage">{% if loop.first %}<a href="{{ links.stage_anchor(stage.stage_id) }}"
-              data-issue-stage="{{ stage.stage_id }}" data-issue-tab="data"><code>{{ stage.stage_id }}</code></a>{% endif %}</td>
-        <td class="issue-column">{% if issue.column %}<code>{{ issue.column }}</code>{% endif %}</td>
-        {# The phases ride at the end of the message rather than in a column of
-           their own: a column sized to the longest producer id costs the message
-           the width it needs far more than it earns in alignment. #}
-        <td class="issue-message">{{ issue.message }}
-          <span class="issue-phases">{% for phase in issue.phases %}<code>{{ phase }}</code>{% endfor %}</span></td>
-      </tr>
-      {% endfor %}{% endfor %}
-      </tbody>
-    </table>
-  </div>
-</details>
+{% call issue_panel(
+     issues.flagged_headline,
+     "across %d stage%s — none of them stopped the run" | format(
+       issues.flagged | length, '' if issues.flagged | length == 1 else 's'),
+     open=not issues.stopped) %}
+  {% for stage in issues.flagged %}{% for issue in stage.issues %}
+  {# The phases ride at the end of the message rather than in a column of their
+     own: a column sized to the longest producer id costs the message the width it
+     needs far more than it earns in alignment. #}
+  {{ issue_row(severity=issue.severity,
+               stage_id=stage.stage_id if loop.first else "",
+               href=links.stage_anchor(stage.stage_id), tab="data",
+               subject=issue.column, message=issue.message, tags=issue.phases) }}
+  {% endfor %}{% endfor %}
+{% endcall %}
 {% endif %}
 
 </div>
@@ -110,12 +101,15 @@
   const index = document.getElementById('run-issues');
   if (!index) return;
   index.addEventListener('click', function (ev) {
-    const link = ev.target.closest('[data-issue-stage]');
+    const link = ev.target.closest('[data-stage-link]');
     if (!link) return;
     if (!window._loadStage) return;   // no panel to load into — let the href navigate
     ev.preventDefault();
-    window._loadStage(link.getAttribute('data-issue-stage'), {
-      tab: link.getAttribute('data-issue-tab'), reveal: true,
+    // The guide rail listens for [data-stage-link] on the document and loads with
+    // no tab; letting this click reach it would land on the wrong tab.
+    ev.stopPropagation();
+    window._loadStage(link.getAttribute('data-stage-link'), {
+      tab: link.getAttribute('data-stage-tab'), reveal: true,
     });
   });
 })();

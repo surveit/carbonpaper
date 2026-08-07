@@ -58,7 +58,7 @@ def test_a_workflow_with_a_warning_lists_it_instead(tmp_path):
     load = _make_load_stage(str(tmp_path / "things.csv"))
     page = _workflow_page(tmp_path, "dirty", [load, _UNDESCRIBED])
     assert _CLEAN_LINE not in page
-    assert "to fix before signing this workflow off" in page
+    assert "to fix before signing off" in page
 
 
 def test_a_workflow_that_does_not_load_claims_nothing(tmp_path):

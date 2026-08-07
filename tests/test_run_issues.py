@@ -248,12 +248,12 @@ def test_the_two_stop_stories_are_labelled_apart_in_the_markup():
 def test_a_data_refusal_deep_links_the_panels_data_tab():
     html = _render(_manifest(_refusal("classify_issues")))
 
-    assert 'data-issue-stage="classify_issues"' in html
-    assert 'data-issue-tab="data"' in html
+    assert 'data-stage-link="classify_issues"' in html
+    assert 'data-stage-tab="data"' in html
 
 
 def test_a_crash_deep_links_the_panels_transform_tab_instead():
-    assert 'data-issue-tab="transform"' in _render(_manifest(_crash("publish_report")))
+    assert 'data-stage-tab="transform"' in _render(_manifest(_crash("publish_report")))
 
 
 def test_an_authored_refusal_leads_with_its_reason_and_not_its_exception_name():
@@ -262,7 +262,7 @@ def test_an_authored_refusal_leads_with_its_reason_and_not_its_exception_name():
     assert "the data changed" in html
     assert "which this workbook has no wording for" in html
     assert StepRefused.__name__ not in html
-    assert 'data-issue-tab="transform"' in html
+    assert 'data-stage-tab="transform"' in html
 
 
 def test_the_flagged_section_is_titled_by_its_counts_by_severity():
@@ -296,8 +296,8 @@ def test_a_run_that_finished_with_warnings_opens_the_index_it_would_otherwise_fo
         output_validation_report=_report("output", ("warning", "spend", "off range")),
     ))
 
-    assert "<details class=\"issue-flags\" open>" in _render(warned)
-    assert "<details class=\"issue-flags\">" in _render(_manifest(
+    assert '<details class="issue-panel issue-panel-warn" open>' in _render(warned)
+    assert '<details class="issue-panel issue-panel-warn">' in _render(_manifest(
         _refusal("classify_issues"),
         _record("score", "validation_warnings",
                 output_validation_report=_report(
