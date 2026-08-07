@@ -150,7 +150,13 @@ def test_handler_lineage_reaches_the_executor_channel():
                 {"name": "client", "type": "str", "nullable": False},
                 {"name": "agency", "type": "str", "nullable": False}]}},
         ],
-        "output_schema": {"columns": [{"name": "client", "type": "str", "nullable": False}]},
+        "signature": {
+            "form": "extends",
+            "reads": [{"input": "filings", "columns": [
+                          {"name": "client", "type": "str", "nullable": False}]},
+                      {"input": "contracts", "columns": [
+                          {"name": "client", "type": "str", "nullable": False}]}],
+            "adds": [{"name": "agency", "type": "str", "nullable": True}]},
         "join": {"keys": [{"left": "client", "right": "client"}],
                   "enrich_with": {"agency": "agency"}},
     })
@@ -179,9 +185,13 @@ def test_expand_records_the_subject_row_each_fanned_out_row_came_from():
                 {"name": "client", "type": "str", "nullable": False},
                 {"name": "agency", "type": "str", "nullable": False}]}},
         ],
-        "output_schema": {"columns": [
-            {"name": "client", "type": "str", "nullable": False},
-            {"name": "agency", "type": "str", "nullable": True}]},
+        "signature": {
+            "form": "extends",
+            "reads": [{"input": "filings", "columns": [
+                          {"name": "client", "type": "str", "nullable": False}]},
+                      {"input": "contracts", "columns": [
+                          {"name": "client", "type": "str", "nullable": False}]}],
+            "adds": [{"name": "agency", "type": "str", "nullable": True}]},
         "join": {"keys": [{"left": "client", "right": "client"}],
                  "enrich_with": {"agency": "agency"}},
     })

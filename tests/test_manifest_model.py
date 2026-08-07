@@ -72,7 +72,8 @@ def test_minted_manifest_omits_the_run_level_optionals():
     stage = parse_stage(
         {"id": "s", "name": "S", "type": "input_data",
          "connector": {"kind": "file", "params": {"path": abs_path, "format": "csv"}},
-         "output_schema": {"columns": [{"name": "k", "type": "str", "nullable": True}]}}
+         "signature": {"form": "replaces",
+                       "produces": [{"name": "k", "type": "str", "nullable": True}]}}
     )
     manifest = create_run_manifest(
         [stage], run_id="r", project="p", workflow_version="v",

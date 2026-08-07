@@ -20,7 +20,7 @@ _LOAD_SCHEMA = {"columns": [{"name": "doc_id", "type": "str", "nullable": True}]
 
 _LOAD = {
     "id": "load", "type": "input_data", "name": "Load rows",
-    "output_schema": _LOAD_SCHEMA,
+    "signature": {"form": "replaces", "produces": _LOAD_SCHEMA["columns"]},
 }
 
 # The publish function's own `def transform(df, output_dir, trace_links=None)`
@@ -38,6 +38,7 @@ _PUBLISH = {
                  "        json.dump(urls, f)\n"
                  "    return df"},
     "publish": {"format": "json"},
+    "signature": {"form": "replaces"},
 }
 
 

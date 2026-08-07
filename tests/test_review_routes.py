@@ -34,10 +34,10 @@ def _seed_version(root):
 
 
 def _with_queue_signature(stage):
-    # `stage` plus the signature its input edge and `queue` block imply: each reviewed
-    # source repeated under its target name and spec, then the review-record columns.
-    # For the fixtures whose subject is something other than the declared columns.
+    # `stage` plus the signature its input edge and `queue` block imply.
     input_schema = stage["inputs"][0]["schema"]
+    # Each reviewed source lands under its target name and spec, then the
+    # review-record columns — for fixtures whose subject is something else.
     by_name = {column["name"]: column for column in input_schema["columns"]}
     queue = stage["queue"]
     added = [{**by_name[source], "name": target}

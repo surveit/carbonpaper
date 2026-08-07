@@ -8,6 +8,7 @@ from typing import Any
 
 from app.core.predicate import PredicateError, parse_predicate
 from app.core.prompt_template import find_template_fields
+from app.models.stage_base import StageType
 
 # v2: primary_key left the stage vocabulary (the data model keeps its own).
 # v3: the stored outer left too — a spec carries a `signature`, synthesized
@@ -15,9 +16,11 @@ from app.core.prompt_template import find_template_fields
 # the output schema resolves from it (app.models.stages.signature).
 STAGE_SPEC_SCHEMA_VERSION = 3
 
-_EXTENDS_TYPES = {"llm_transform", "python_row_function", "starlark_row_function",
-                  "filter_rows", "human_review_queue", "enrich", "expand"}
-_REPLACES_TYPES = {"python_frame_function", "aggregate", "union", "input_data", "publish"}
+_EXTENDS_TYPES = {StageType.llm_transform, StageType.python_row_function,
+                  StageType.starlark_row_function, StageType.filter_rows,
+                  StageType.human_review_queue, StageType.enrich, StageType.expand}
+_REPLACES_TYPES = {StageType.python_frame_function, StageType.aggregate,
+                   StageType.union, StageType.input_data, StageType.publish}
 
 
 def upgrade_stage_spec(spec: dict[str, Any]) -> dict[str, Any]:
@@ -45,6 +48,11 @@ def _drop_primary_key(schema: Any) -> None:
 
 def _synthesize_signature(spec: dict[str, Any]) -> dict[str, Any] | None:
     stage_type = spec.get("type")
+    if "output_schema" not in spec and stage_type != StageType.publish:
+        # A pre-v3 spec always stored an outer (publish excepted); one missing
+        # both was never valid, and synthesizing a contract for it would
+        # fabricate one — leave it to be refused at parse.
+        return None
     outer = _columns(spec.get("output_schema"))
     if stage_type in _EXTENDS_TYPES:
         return _synthesize_extends(spec, stage_type, outer)
@@ -54,7 +62,7 @@ def _synthesize_signature(spec: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def _synthesize_extends(
-    spec: dict[str, Any], stage_type: str, outer: list[dict[str, Any]]
+    spec: dict[str, Any], stage_type: Any, outer: list[dict[str, Any]]
 ) -> dict[str, Any] | None:
     edges = _edges(spec)
     if not edges:
@@ -66,17 +74,17 @@ def _synthesize_extends(
         c for c in outer
         if c.get("name") in anchor_by_name and c != anchor_by_name[c.get("name")]
     ]
-    if stage_type == "filter_rows":
+    if stage_type == StageType.filter_rows:
         # A filter keeps every kept row's columns unchanged: reads only.
         return {"form": "extends", "reads": [], "adds": [], "rewrites": []}
-    if stage_type == "human_review_queue":
+    if stage_type == StageType.human_review_queue:
         return {"form": "extends", "reads": [], "adds": adds, "rewrites": []}
-    if stage_type == "llm_transform":
+    if stage_type == StageType.llm_transform:
         injected = _template_fields(spec)
         reads = [c for c in anchor_columns if c.get("name") in injected]
         return {"form": "extends",
                 "reads": _reads_entry(anchor_id, reads), "adds": adds, "rewrites": []}
-    if stage_type in ("enrich", "expand"):
+    if stage_type in (StageType.enrich, StageType.expand):
         return _synthesize_join(spec, edges)
     # Opaque code (python/starlark row functions) may consume anything: the
     # whole anchor edge is the honest read set.
@@ -86,7 +94,7 @@ def _synthesize_extends(
 
 
 def _synthesize_join(
-    spec: dict[str, Any], edges: list[tuple[str, list[dict[str, Any]]]]
+    spec: dict[str, Any], edges: list[tuple[Any, list[dict[str, Any]]]]
 ) -> dict[str, Any] | None:
     join = spec.get("join") or {}
     if len(edges) < 2:
@@ -112,16 +120,16 @@ def _synthesize_join(
 
 
 def _synthesize_replaces(
-    spec: dict[str, Any], stage_type: str, outer: list[dict[str, Any]]
+    spec: dict[str, Any], stage_type: Any, outer: list[dict[str, Any]]
 ) -> dict[str, Any] | None:
     edges = _edges(spec)
-    if stage_type == "publish":
+    if stage_type == StageType.publish:
         return {"form": "replaces", "reads": _all_edge_reads(edges), "produces": []}
-    if stage_type == "union":
+    if stage_type == StageType.union:
         return {"form": "replaces", "reads": [], "produces": outer}
-    if stage_type == "input_data":
+    if stage_type == StageType.input_data:
         return {"form": "replaces", "reads": [], "produces": outer}
-    if stage_type == "aggregate":
+    if stage_type == StageType.aggregate:
         if not edges:
             return None
         anchor_id, anchor_columns = edges[0]
@@ -152,8 +160,8 @@ def _template_fields(spec: dict[str, Any]) -> set[str]:
     return set(find_template_fields(template))
 
 
-def _edges(spec: dict[str, Any]) -> list[tuple[str, list[dict[str, Any]]]]:
-    edges = []
+def _edges(spec: dict[str, Any]) -> list[tuple[Any, list[dict[str, Any]]]]:
+    edges: list[tuple[Any, list[dict[str, Any]]]] = []
     for ref in spec.get("inputs") or []:
         if not isinstance(ref, dict):
             continue
@@ -174,7 +182,7 @@ def _reads_entry(input_id: Any, columns: list[dict[str, Any]]) -> list[dict[str,
     return [{"input": input_id, "columns": columns}]
 
 
-def _all_edge_reads(edges: list[tuple[str, list[dict[str, Any]]]]) -> list[dict[str, Any]]:
+def _all_edge_reads(edges: list[tuple[Any, list[dict[str, Any]]]]) -> list[dict[str, Any]]:
     reads: list[dict[str, Any]] = []
     for input_id, columns in edges:
         reads.extend(_reads_entry(input_id, columns))

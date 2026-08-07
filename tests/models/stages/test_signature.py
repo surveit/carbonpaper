@@ -131,8 +131,7 @@ def test_add_colliding_with_an_anchor_column_rejected():
 
 
 def test_the_promise_is_the_output_schema():
-    """The anchor edge extended by the signature IS the stage's output — there is
-    no second account to disagree with it."""
+    """The anchor edge extended by the signature IS the stage's output."""
     stage = parse_stage(_row_function_stage(
         signature={
             "form": "extends",

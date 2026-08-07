@@ -10,7 +10,7 @@ from pydantic import BaseModel
 
 from app.models.stages.node_types import NODE_TYPES
 from app.models.schema import Column
-from app.models.stage import PythonFunction, StageBase
+from app.models.stage import PythonFunction
 from app.models.stages.input_data import Connector
 
 
@@ -39,9 +39,9 @@ def test_llm_transform_notes_document_the_additive_rule():
     assert "additive" in notes
 
 
-def test_output_schema_documents_the_signature_fallback():
-    d = _desc(StageBase, "output_schema")
-    assert "signature" in d and "resolves" in d
+def test_the_signature_contract_note_states_the_requirement():
+    from app.models.stages.signature import SIGNATURE_CONTRACT_NOTE
+    assert "MUST declare `signature`" in SIGNATURE_CONTRACT_NOTE
 
 
 def test_function_code_documents_the_three_signatures():

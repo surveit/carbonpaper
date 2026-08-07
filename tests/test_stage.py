@@ -598,8 +598,7 @@ def test_both_fields_round_trip():
 
 # ── schema-driven output deliverability ─────────────────────────────────────
 def test_unproducible_signature_produces_raise_at_stage_construction():
-    """The signature-vs-config check is a Stage model validator: a produce the
-    config cannot compute fails construction, naming the column."""
+    """A produce the config cannot compute fails construction, naming the column."""
     spec = {
         "id": "totals",
         "name": "Totals",
@@ -724,9 +723,7 @@ def test_fully_declared_stage_accepted(t):
 
 
 def test_input_data_rejects_missing_signature(tmp_path):
-    """input_data's exemption is input-side only: it takes no inputs, but its
-    produces still declare what it emits — otherwise the first edge of every
-    workflow goes unchecked."""
+    """Input-side exemption only: `produces` still declares what it emits."""
     msg = _rejection_message(_input_data_spec(tmp_path, declare_signature=False))
     assert "signature" in msg and "Field required" in msg
 
@@ -773,8 +770,7 @@ def test_stage_rejects_a_replaces_signature_that_produces_no_columns():
 
 
 def test_stored_output_schema_is_refused():
-    """The field is gone from the model, so a spec still carrying it fails
-    loudly rather than silently carrying a second account of the output."""
+    """The field is gone, so a spec still carrying it fails loudly."""
     spec = _schema_spec("python_row_function")
     spec["output_schema"] = _LEFT_SCHEMA
     msg = _rejection_message(spec)
@@ -782,8 +778,7 @@ def test_stored_output_schema_is_refused():
 
 
 def test_signature_issues_surface_in_draft_validation():
-    """The compiler's non-fatal channel reports the same issue as a string
-    instead of raising — the submit/re-fire loop feeds it back to the model."""
+    """The non-fatal channel reports the same issue as a string, not a raise."""
     from app.models.workflow import validate_workflow_draft
 
     issues = validate_workflow_draft([{

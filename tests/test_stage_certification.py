@@ -11,8 +11,6 @@ _SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True}]}
 
 
 def _stage(*, summary=None, type_="python_row_function", handle="function"):
-    # The anchored types pass everything through; the frame function reshapes,
-    # so it promises the (identical) columns explicitly.
     signature = ({"form": "replaces", "produces": _SCHEMA["columns"]}
                  if type_ == "python_frame_function" else {"form": "extends"})
     spec = {

@@ -180,9 +180,7 @@ def test_a_declared_column_absent_from_the_file_is_not_an_error(tmp_path):
 
 
 def test_unresolvable_schema_falls_back_to_plain_inference(tmp_path):
-    # Stage validation requires a non-empty `produces` on input_data, so a
-    # signature resolving to no schema can only arrive off-model; the reader
-    # must degrade, not raise.
+    # A no-schema signature only arrives off-model; the reader degrades, not raises.
     path = _csv(tmp_path, "id\n002\n")
     stage = _stage(path, [{"name": "id", "type": "str", "nullable": True}])
     stage = stage.model_copy(update={"signature": ReplacesSignature()})

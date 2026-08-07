@@ -23,8 +23,9 @@ def _make_run_project(root):
         "connector": {"kind": "file",
                       "params": {"path": str(root / "data" / "items.csv"),
                                  "format": "csv"}},
-        "output_schema": {"columns": [{"name": "name", "type": "str", "nullable": True},
-                                      {"name": "val", "type": "int", "nullable": True}]},
+        "signature": {"form": "replaces",
+                      "produces": [{"name": "name", "type": "str", "nullable": True},
+                                   {"name": "val", "type": "int", "nullable": True}]},
     }
     (root / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
     vid = save_working_copy_as_version(root, message="seed", reviewer="test").version_id
@@ -36,7 +37,7 @@ _LOAD_SCHEMA = {"columns": [{"name": "doc_id", "type": "str", "nullable": True},
                             {"name": "score", "type": "int", "nullable": True}]}
 _LOAD_STAGE_TMPL = {
     "id": "load", "type": "input_data", "name": "Load rows",
-    "output_schema": _LOAD_SCHEMA,
+    "signature": {"form": "replaces", "produces": _LOAD_SCHEMA["columns"]},
 }
 _CLASSIFY = {
     "id": "classify", "type": "python_row_function", "name": "Label by sign",
@@ -45,9 +46,8 @@ _CLASSIFY = {
                  "def transform(row):\n"
                  "    return {'doc_id': row['doc_id'], 'score': row['score'],\n"
                  "            'label': 'pos' if row['score'] >= 0 else 'neg'}"},
-    "output_schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": True},
-                                  {"name": "score", "type": "int", "nullable": True},
-                                  {"name": "label", "type": "str", "nullable": True}]},
+    "signature": {"form": "extends",
+                  "adds": [{"name": "label", "type": "str", "nullable": True}]},
 }
 
 

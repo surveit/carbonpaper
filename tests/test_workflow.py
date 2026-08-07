@@ -25,8 +25,7 @@ def _in(id_, schema=_K):
 
 
 def _enrich_signature(subject_id, reference_id):
-    """The signature of the x⋈y enrich fixtures: reads each side's join key,
-    adds the landed `y` (nullable — an unmatched row lands null)."""
+    """The x⋈y enrich fixtures' signature: reads the keys, adds the landed `y`."""
     return {
         "form": "extends",
         "reads": [{"input": subject_id, "columns": _X["columns"]},
@@ -306,9 +305,7 @@ def _publish_upstream_stages():
 
 
 def test_check_edge_schemas_raises_on_an_upstream_resolving_no_output_schema():
-    """Every type but publish resolves an output schema from its signature, and
-    a publish stage may not be an upstream — so an upstream resolving none means
-    validation was bypassed, not a finding to report."""
+    """An upstream resolving no output means validation was bypassed — a raise."""
     with pytest.raises(ValueError, match="resolves no output schema"):
         m.validate_edge_schemas(_publish_upstream_stages())
 
