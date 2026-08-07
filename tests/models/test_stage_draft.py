@@ -66,7 +66,7 @@ def test_an_input_schema_round_trips_under_the_key_a_compiled_stage_spells():
             "columns": [{"name": "filing_id", "type": "str", "nullable": True}],
         }}],
         "function": {"kind": "inline", "code": "def transform(row):\n    return row\n"},
-        "output_schema": {"columns": [{"name": "filing_id", "type": "str", "nullable": True}]},
+        "signature": {"form": "extends"},
     })
 
     spec = draft.to_stage_spec()
@@ -85,11 +85,9 @@ def test_a_stage_that_breaks_a_cross_field_rule_parses_as_a_draft_and_is_refused
         "id": "score_rows",
         "type": "llm_transform",
         "name": "Score rows",
-        # the output drops the input's `text` -> the additive 1:1 rule fails
+        # the signature adds nothing -> the additive 1:1 rule fails
         "inputs": [{"id": "raw", "schema": {"columns": [{"name": "text", "type": "str", "nullable": True}]}}],
-        "output_schema": {"columns": [
-            {"name": "score", "type": "float", "nullable": True},
-        ]},
+        "signature": {"form": "extends"},
         "llm": {"prompt_data_template": "score this"},
     }
 
@@ -153,7 +151,8 @@ def test_stage_keeps_the_server_owned_fields_the_draft_drops():
     stage = parse_stage({
         "id": "load", "type": "input_data", "name": "Load",
         "connector": {"kind": "file"}, "source": {"section": "para 3"},
-        "output_schema": {"columns": [{"name": "filing_id", "type": "str", "nullable": True}]},
+        "signature": {"form": "replaces",
+                      "produces": [{"name": "filing_id", "type": "str", "nullable": True}]},
     })
 
     assert stage.source is not None

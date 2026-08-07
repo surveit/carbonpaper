@@ -13,20 +13,24 @@ def _aggregate_stage(*, group_by, edge_columns, value_column=None, where=None, f
         aggregation["value_column"] = value_column
     if where is not None:
         aggregation["where"] = where
-    # output_schema's first column is named after group_by[0] (never a
-    # generic placeholder): the aggregate handle emits each group_by column
-    # under its own name, so a declared column must match it to be
-    # deliverable — see test_aggregate_output_schema.py.
+    # The signature's reads mirror what the config consumes; its produces name
+    # each group_by column under its own name plus the aggregated column. The
+    # aggregated column's type must match the formula's computed type: count
+    # gives int; sum over these all-str edge columns gives str (concatenation)
+    # — see compute_aggregate_output_types and test_aggregate_output_schema.py.
+    consumed = list(dict.fromkeys(group_by + ([value_column] if value_column else [])))
     return {
         "id": "agg", "type": "aggregate", "name": "agg",
         "inputs": [{"id": "src", "schema": {
             "columns": [{"name": c, "type": "str", "nullable": False} for c in edge_columns],
         }}],
-        # The aggregated column's declared type must match the formula's
-        # computed type: count gives int; sum over these all-str edge columns
-        # gives str (concatenation) — see compute_aggregate_output_types.
-        "output_schema": {"columns": [{"name": group_by[0], "type": "str", "nullable": False},
-                                      {"name": "n", "type": output_n_type, "nullable": False}]},
+        "signature": {
+            "form": "replaces",
+            "reads": [{"input": "src", "columns": [
+                {"name": c, "type": "str", "nullable": False} for c in consumed]}],
+            "produces": [{"name": group_by[0], "type": "str", "nullable": False},
+                         {"name": "n", "type": output_n_type, "nullable": False}],
+        },
         "aggregate": {"group_by": group_by, "aggregations": [aggregation]},
     }
 

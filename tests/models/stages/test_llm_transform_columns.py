@@ -16,9 +16,12 @@ def _llm_stage(prompt_template):
         "inputs": [{"id": "src", "schema": {
             "columns": [{"name": "a", "type": "str", "nullable": False}],
         }}],
-        "output_schema": {
-            "columns": [{"name": "a", "type": "str", "nullable": False},
-                        {"name": "verdict", "type": "str", "nullable": False}],
+        "signature": {
+            "form": "extends",
+            "reads": ([{"input": "src", "columns": [
+                {"name": "a", "type": "str", "nullable": False}]}]
+                      if "{a}" in prompt_template else []),
+            "adds": [{"name": "verdict", "type": "str", "nullable": False}],
         },
         "llm": {"prompt_template": prompt_template},
     }

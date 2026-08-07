@@ -8,13 +8,14 @@ from app.models import parse_stage
 _AB_SCHEMA = {"columns": [{"name": "a", "type": "str", "nullable": True}, {"name": "b", "type": "int", "nullable": True}]}
 
 
-def _union_stage(*, input_schemas, output_schema=None):
+def _union_stage(*, input_schemas, produces=None):
     return {
         "id": "u", "type": "union", "name": "u",
         "inputs": [
             {"id": f"in{i}", "schema": schema} for i, schema in enumerate(input_schemas)
         ],
-        "output_schema": output_schema or input_schemas[0],
+        "signature": {"form": "replaces",
+                      "produces": (produces or input_schemas[0])["columns"]},
         "union": {},
     }
 
@@ -30,26 +31,27 @@ def test_three_matching_schemas_ok():
 def test_mismatched_column_set_rejected_naming_the_column():
     other = {"columns": [{"name": "a", "type": "str", "nullable": True}]}  # missing 'b'
     with pytest.raises(ValidationError, match=r"'b'"):
-        parse_stage(_union_stage(input_schemas=[_AB_SCHEMA, other], output_schema=_AB_SCHEMA))
+        parse_stage(_union_stage(input_schemas=[_AB_SCHEMA, other], produces=_AB_SCHEMA))
 
 
 def test_mismatched_column_type_rejected_naming_the_column():
     other = {"columns": [{"name": "a", "type": "str", "nullable": True}, {"name": "b", "type": "str", "nullable": True}]}  # b: str not int
     with pytest.raises(ValidationError, match=r"'b'"):
-        parse_stage(_union_stage(input_schemas=[_AB_SCHEMA, other], output_schema=_AB_SCHEMA))
+        parse_stage(_union_stage(input_schemas=[_AB_SCHEMA, other], produces=_AB_SCHEMA))
 
 
 def test_mismatch_names_the_disagreeing_input():
     other = {"columns": [{"name": "a", "type": "str", "nullable": True}]}
     with pytest.raises(ValidationError, match="in1"):
-        parse_stage(_union_stage(input_schemas=[_AB_SCHEMA, other], output_schema=_AB_SCHEMA))
+        parse_stage(_union_stage(input_schemas=[_AB_SCHEMA, other], produces=_AB_SCHEMA))
 
 
-def test_output_schema_must_match_shared_input_schema():
-    wrong_output = {"columns": [{"name": "a", "type": "str", "nullable": True}]}
-    with pytest.raises(ValidationError, match="output_schema"):
+def test_a_produce_no_input_can_satisfy_is_rejected():
+    wrong = {"columns": [{"name": "a", "type": "str", "nullable": True},
+                         {"name": "b", "type": "str", "nullable": True}]}  # b: str not int
+    with pytest.raises(ValidationError, match="produces"):
         parse_stage(
-            _union_stage(input_schemas=[_AB_SCHEMA, _AB_SCHEMA], output_schema=wrong_output)
+            _union_stage(input_schemas=[_AB_SCHEMA, _AB_SCHEMA], produces=wrong)
         )
 
 

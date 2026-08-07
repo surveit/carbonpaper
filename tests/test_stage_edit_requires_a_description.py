@@ -21,7 +21,7 @@ def _spec(stage_id="tag", **function_extra):
     return {
         "id": stage_id, "name": "Tag", "type": "python_row_function",
         "inputs": [{"id": "src", "schema": _SCHEMA}],
-        "output_schema": _SCHEMA,
+        "signature": {"form": "extends"},
         "function": {"kind": "inline", "code": _CODE,
                      "corner_cases": [], **function_extra},
     }
@@ -31,7 +31,7 @@ def _source_spec():
     return {
         "id": "src", "name": "Source", "type": "input_data",
         "connector": {"kind": "file", "params": {"format": "csv"}},
-        "output_schema": _SCHEMA,
+        "signature": {"form": "replaces", "produces": _SCHEMA["columns"]},
     }
 
 
@@ -77,7 +77,10 @@ def test_a_config_only_stage_needs_no_summary(project):
         "inputs": [{"id": "src", "schema": _SCHEMA},
                    {"id": "src2", "schema": {"columns": [{"name": "id", "type": "str", "nullable": True},
                                                          {"name": "v", "type": "str", "nullable": True}]}}],
-        "output_schema": _SCHEMA,
+        "signature": {"form": "extends",
+                      "reads": [{"input": "src", "columns": _SCHEMA["columns"]},
+                                {"input": "src2", "columns": _SCHEMA["columns"]}],
+                      "adds": [{"name": "v", "type": "str", "nullable": True}]},
         "join": {"keys": [{"left": "id", "right": "id"}], "enrich_with": {"v": "v"}},
     }))
     # Refused for the missing `src2` edge, never for a missing summary.

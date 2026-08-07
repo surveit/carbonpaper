@@ -597,30 +597,33 @@ def test_both_fields_round_trip():
 
 
 # ── schema-driven output deliverability ─────────────────────────────────────
-def test_output_schema_issues_raise_at_stage_construction():
-    """The deliverability check is a Stage model validator: an undeliverable
-    declared column fails construction, naming the column."""
+def test_unproducible_signature_produces_raise_at_stage_construction():
+    """The signature-vs-config check is a Stage model validator: a produce the
+    config cannot compute fails construction, naming the column."""
     spec = {
         "id": "totals",
         "name": "Totals",
         "type": "aggregate",
-        # `rows` carries a schema so the mandate is satisfied and the
-        # deliverability issue below is the one that surfaces.
         "inputs": [{"id": "rows", "schema": {"columns": [{"name": "company", "type": "str", "nullable": True}]}}],
         "aggregate": {
             "group_by": ["company"],
             "aggregations": [{"output_column": "n", "formula": "count"}],
         },
-        "output_schema": {"columns": [{"name": "undeclared_extra", "type": "str", "nullable": True}]},
+        "signature": {
+            "form": "replaces",
+            "reads": [{"input": "rows", "columns": [{"name": "company", "type": "str", "nullable": True}]}],
+            "produces": [{"name": "undeclared_extra", "type": "str", "nullable": True}],
+        },
     }
     with pytest.raises(ValidationError, match="undeclared_extra"):
         m.parse_stage(spec)
 
 
-# ── mandatory input/output schemas ───────────────────────────────────────────
-# Every stage must declare a schema on every input and an output_schema, with
-# two one-sided exemptions: input_data takes no inputs (but still declares its
-# output), publish emits files not a table (but still declares its inputs).
+# ── mandatory input schemas and signatures ───────────────────────────────────
+# Every stage must declare a schema on every input and a signature, with two
+# one-sided exemptions: input_data takes no inputs (but its produces still
+# declare its output), publish's signature produces nothing (but it still
+# declares its inputs).
 
 _INLINE_ROW_FN = {"kind": "inline", "code": "def transform(row): return row"}
 _LEFT_SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "name", "type": "str", "nullable": True}]}
@@ -637,22 +640,31 @@ _HANDLE_BLOCK = {
     "publish": {"publish": {"format": "json"}, "function": _INLINE_ROW_FN},
 }
 _INPUT_IDS = {"enrich": ["facilities", "filings"], "expand": ["facilities", "filings"]}
-_OUTPUT_SCHEMA = {
-    "enrich": {"columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "name", "type": "str", "nullable": True},
-                           {"name": "amount", "type": "int", "nullable": True}]},
-    "expand": {"columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "name", "type": "str", "nullable": True},
-                           {"name": "amount", "type": "int", "nullable": True}]},
-    "aggregate": {"columns": [{"name": "name", "type": "str", "nullable": True}, {"name": "n", "type": "int", "nullable": True}]},
-    "human_review_queue": {
-        "columns": [{"name": "id", "type": "str", "nullable": True},
-                    {"name": "name", "type": "str", "nullable": True}]
-                   + queue_added_columns("human_name", "str")},
+_JOIN_SIGNATURE = {
+    "form": "extends",
+    "reads": [{"input": "facilities", "columns": [{"name": "id", "type": "str", "nullable": True}]},
+              {"input": "filings", "columns": [{"name": "id", "type": "str", "nullable": True}]}],
+    "adds": [{"name": "amount", "type": "int", "nullable": True}],
+}
+_SIGNATURE = {
+    "python_row_function": {"form": "extends"},
+    "python_frame_function": {"form": "replaces", "produces": _LEFT_SCHEMA["columns"]},
+    "enrich": _JOIN_SIGNATURE,
+    "expand": _JOIN_SIGNATURE,
+    "aggregate": {"form": "replaces",
+                  "reads": [{"input": "facilities",
+                             "columns": [{"name": "name", "type": "str", "nullable": True}]}],
+                  "produces": [{"name": "name", "type": "str", "nullable": True},
+                               {"name": "n", "type": "int", "nullable": True}]},
+    "human_review_queue": {"form": "extends",
+                           "adds": queue_added_columns("human_name", "str")},
+    "publish": {"form": "replaces"},
 }
 NON_EXEMPT_TYPES = ["python_row_function", "python_frame_function", "enrich", "expand",
                     "aggregate", "human_review_queue"]
 
 
-def _schema_spec(stage_type, *, inputs_declared=True, declare_output=True):
+def _schema_spec(stage_type, *, inputs_declared=True, declare_signature=True):
     """A minimal, otherwise-valid stage of `stage_type`. `inputs_declared` is
     True/False for all inputs or a per-input list of flags; a False input carries
     only its id, no `schema`."""
@@ -665,17 +677,17 @@ def _schema_spec(stage_type, *, inputs_declared=True, declare_output=True):
                 for i, s, f in zip(ids, schemas, flags)],
         **_HANDLE_BLOCK[stage_type],
     )
-    if declare_output:
-        kw["output_schema"] = _OUTPUT_SCHEMA.get(stage_type, _LEFT_SCHEMA)
+    if declare_signature:
+        kw["signature"] = _SIGNATURE[stage_type]
     return S(**kw)
 
 
-def _input_data_spec(tmp_path, *, declare_output=True):
+def _input_data_spec(tmp_path, *, declare_signature=True):
     kw = dict(id="load", type="input_data",
               connector={"kind": "file", "params": {"path": str(tmp_path / "d.csv"),
                                                     "format": "csv"}})
-    if declare_output:
-        kw["output_schema"] = _LEFT_SCHEMA
+    if declare_signature:
+        kw["signature"] = {"form": "replaces", "produces": _LEFT_SCHEMA["columns"]}
     return S(**kw)
 
 
@@ -695,9 +707,9 @@ def test_stage_rejects_input_that_declares_no_schema(t):
 
 
 @pytest.mark.parametrize("t", NON_EXEMPT_TYPES)
-def test_stage_rejects_missing_output_schema(t):
-    msg = _rejection_message(_schema_spec(t, declare_output=False))
-    assert "declares no output_schema" in msg
+def test_stage_rejects_missing_signature(t):
+    msg = _rejection_message(_schema_spec(t, declare_signature=False))
+    assert "signature" in msg and "Field required" in msg
 
 
 def test_stage_locates_only_the_input_that_declares_no_schema():
@@ -708,30 +720,30 @@ def test_stage_locates_only_the_input_that_declares_no_schema():
 
 @pytest.mark.parametrize("t", NON_EXEMPT_TYPES)
 def test_fully_declared_stage_accepted(t):
-    assert m.parse_stage(_schema_spec(t)).output_schema is not None
+    assert m.parse_stage(_schema_spec(t)).resolve_output_schema() is not None
 
 
-def test_input_data_rejects_missing_output_schema(tmp_path):
-    """input_data's exemption is input-side only: it takes no inputs, but it
-    still declares what it emits — otherwise the first edge of every workflow
-    goes unchecked."""
-    msg = _rejection_message(_input_data_spec(tmp_path, declare_output=False))
-    assert "declares no output_schema" in msg
+def test_input_data_rejects_missing_signature(tmp_path):
+    """input_data's exemption is input-side only: it takes no inputs, but its
+    produces still declare what it emits — otherwise the first edge of every
+    workflow goes unchecked."""
+    msg = _rejection_message(_input_data_spec(tmp_path, declare_signature=False))
+    assert "signature" in msg and "Field required" in msg
 
 
-def test_input_data_with_output_schema_accepted(tmp_path):
-    assert m.parse_stage(_input_data_spec(tmp_path)).output_schema is not None
+def test_input_data_with_signature_accepted(tmp_path):
+    assert m.parse_stage(_input_data_spec(tmp_path)).resolve_output_schema() is not None
 
 
-def test_publish_without_output_schema_accepted():
-    """publish emits files, not a table — its output side is exempt."""
-    s = m.parse_stage(_schema_spec("publish", declare_output=False))
-    assert s.output_schema is None
+def test_publish_resolves_no_output_schema():
+    """publish emits files, not a table — its signature produces nothing."""
+    s = m.parse_stage(_schema_spec("publish"))
+    assert s.resolve_output_schema() is None
 
 
 def test_publish_rejects_input_that_declares_no_schema():
     """publish's exemption is output-side only: its inputs must still be declared."""
-    msg = _rejection_message(_schema_spec("publish", inputs_declared=False, declare_output=False))
+    msg = _rejection_message(_schema_spec("publish", inputs_declared=False))
     assert "inputs.0.schema" in msg
     assert "Field required" in msg
 
@@ -754,13 +766,22 @@ def test_stage_rejects_input_whose_schema_declares_no_columns():
     assert "facilities" in msg
 
 
-def test_stage_rejects_output_schema_that_declares_no_columns():
+def test_stage_rejects_a_replaces_signature_that_produces_no_columns():
+    spec = _schema_spec("python_frame_function")
+    spec["signature"] = {"form": "replaces"}
+    assert "produces no columns" in _rejection_message(spec)
+
+
+def test_stored_output_schema_is_refused():
+    """The field is gone from the model, so a spec still carrying it fails
+    loudly rather than silently carrying a second account of the output."""
     spec = _schema_spec("python_row_function")
-    spec["output_schema"] = _EMPTY_SCHEMA
-    assert "declares no output_schema" in _rejection_message(spec)
+    spec["output_schema"] = _LEFT_SCHEMA
+    msg = _rejection_message(spec)
+    assert "output_schema" in msg
 
 
-def test_output_schema_issues_surface_in_draft_validation():
+def test_signature_issues_surface_in_draft_validation():
     """The compiler's non-fatal channel reports the same issue as a string
     instead of raising — the submit/re-fire loop feeds it back to the model."""
     from app.models.workflow import validate_workflow_draft
@@ -770,12 +791,16 @@ def test_output_schema_issues_surface_in_draft_validation():
         "name": "Totals",
         "type": "aggregate",
         # `rows` carries a schema so the mandate is satisfied and the
-        # deliverability issue below is the one that surfaces.
+        # signature-vs-config issue below is the one that surfaces.
         "inputs": [{"id": "rows", "schema": {"columns": [{"name": "company", "type": "str", "nullable": True}]}}],
         "aggregate": {
             "group_by": ["company"],
             "aggregations": [{"output_column": "n", "formula": "count"}],
         },
-        "output_schema": {"columns": [{"name": "undeclared_extra", "type": "str", "nullable": True}]},
+        "signature": {
+            "form": "replaces",
+            "reads": [{"input": "rows", "columns": [{"name": "company", "type": "str", "nullable": True}]}],
+            "produces": [{"name": "undeclared_extra", "type": "str", "nullable": True}],
+        },
     }])
     assert any("undeclared_extra" in issue for issue in issues)
