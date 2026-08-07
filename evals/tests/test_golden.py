@@ -40,10 +40,18 @@ _TWO_ROWS = """
 def test_a_rendered_nan_is_read_as_absent(tmp_path):
     """pandas renders a missing value as the text NaN; a build correctly produces nothing."""
     golden = extract_golden_table(_notebook(tmp_path, "frame", _TWO_ROWS), 0, "state")
+    assert golden.columns == ["state", "pay"]
     assert golden.rows == [
         {"state": "Napa", "pay": "41940.45"},
         {"state": "Colusa", "pay": None},
     ]
+
+
+def test_a_meaningless_index_can_be_dropped(tmp_path):
+    """pandas' own positional index is not part of the answer."""
+    golden = extract_golden_table(_notebook(tmp_path, "frame", _TWO_ROWS), 0, None)
+    assert golden.columns == ["pay"]
+    assert golden.rows == [{"pay": "41940.45"}, {"pay": None}]
 
 
 def test_an_elided_table_is_refused(tmp_path):

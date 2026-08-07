@@ -3,7 +3,7 @@
   "source": {
     "repo": "https://github.com/datadesk/california-crop-production-wages-analysis",
     "commit": "9c3d76c47ca5497d874f139eaed03ab798cb5b19",
-    "notebook_path": "03-analysis.ipynb",
+    "path": "03-analysis.ipynb",
     "cell_index": 23
   },
   "inputs": [
@@ -12,9 +12,8 @@
       "sha256": "3240c2f6821521649a2d2efbd4ae7f1d5dc9f1b844beb15836bbfe779fe61953"
     }
   ],
-  "brief": "# California crop-worker pay by county, 2015\n\n## The story I want to tell\n\nWhich county in California pays its crop workers the most? I have 26 years of Bureau of\nLabor Statistics employment-and-wage data covering every US county, and I want the 2015\npicture for crop production across California, ranked from best-paid to worst-paid.\n\n## The output I need\n\nOne row per California county, for crop production in 2015, ranked by average annual pay,\nhighest first.\n\n| column | type | meaning |\n|---|---|---|\n| `year` | int | the data year |\n| `area_fips` | str | the county's FIPS area code |\n| `area_title` | str | the county's name |\n| `industry_group` | str | the industry group these figures cover |\n| `annual_avg_emplvl` | int | average employment level over the year |\n| `total_annual_wages_2015` | float | total annual wages, in 2015 dollars |\n| `avg_annual_pay_2015` | float | average annual pay, in 2015 dollars |\n\n## Files\n\n- `transformed_county.csv` - one row per year / county / industry group, already adjusted\n  for inflation to 2015 dollars. Columns as above. It covers every US county and two\n  industry groups.\n\nSource: Bureau of Labor Statistics, Quarterly Census of Employment and Wages (QCEW).",
+  "brief": "# California crop-worker pay by county, 2015\n\n## The story I want to tell\n\nWhich county in California pays its crop workers the most? I have 26 years of Bureau of\nLabor Statistics employment-and-wage data covering every US county, and I want the 2015\npicture for crop production across California, ranked from best-paid to worst-paid.\n\n## The output I need\n\nOne row per California county, for crop production in 2015, ranked by average annual pay,\nhighest first.\n\n| column | type | meaning |\n|---|---|---|\n| `year` | int | the data year |\n| `area_fips` | str | the county's FIPS area code |\n| `area_title` | str | the county's name |\n| `industry_group` | str | the industry group these figures cover |\n| `annual_avg_emplvl` | int | average employment level over the year |\n| `total_annual_wages_2015` | float | total annual wages, in 2015 dollars |\n| `avg_annual_pay_2015` | float | average annual pay, in 2015 dollars |\n\n## Files\n\n- `transformed_county.csv` - one row per year / county / industry group, already adjusted\n  for inflation to 2015 dollars. Columns as above. It covers every US county and two\n  industry groups.\n\nSource: Bureau of Labor Statistics, Quarterly Census of Employment and Wages (QCEW).\n\n## Sort order\n\nRanked by `avg_annual_pay_2015`, highest first, with counties that have no pay figure last.\nWhere two counties tie, `area_fips` ascending.\n",
   "golden": {
-    "key_column": "area_fips",
     "columns": [
       "year",
       "area_fips",
@@ -549,25 +548,14 @@
       }
     ]
   },
-  "comparison": {
-    "output_key_column": "area_fips",
-    "compared_columns": {
-      "year": "year",
-      "area_fips": "area_fips",
-      "area_title": "area_title",
-      "industry_group": "industry_group",
-      "annual_avg_emplvl": "annual_avg_emplvl",
-      "total_annual_wages_2015": "total_annual_wages_2015",
-      "avg_annual_pay_2015": "avg_annual_pay_2015"
-    },
-    "tolerance": 1e-6
-  },
+  "tolerance": 1e-6,
   "curation_notes": [
-    "The notebook's rendered index is pandas' own positional integer, which carries no meaning; curation drops it and keys the golden on `area_fips` instead.",
     "The golden cell calls `.head(60)` and rendered 58 rows. Fewer rows than the cap means the cap never bit, so this is the whole answer — the extractor enforces that distinction rather than trusting the call.",
     "`total_annual_wages_2015` is rendered in scientific notation (2.073536e+08), which is seven significant figures. This case is why `tolerance` is relative above 1.0; an absolute 1e-6 on a 2e8 figure is unsatisfiable.",
     "The trap this case carries: `area_fips` is a zero-padded 5-digit code and the California filter is a `06` prefix. A build that lets the reader coerce the column to int loses the leading zero and the filter silently matches nothing. The brief declares the OUTPUT type as str but says nothing about how to read the input.",
     "Verified independently with pandas: filtering the source to industry_group=='crops', year==2015 and an area_fips '06' prefix yields exactly 58 rows, matching the golden.",
-    "5 of the 58 counties carry no average annual pay in the golden — the source leaves those cells empty, and the notebook rendered them as NaN. A build must produce the row with an empty pay figure, not drop it and not fill a zero."
+    "5 of the 58 counties carry no average annual pay in the golden — the source leaves those cells empty, and the notebook rendered them as NaN. A build must produce the row with an empty pay figure, not drop it and not fill a zero.",
+    "Comparison is POSITIONAL, so the golden's row order is part of the answer and the brief states the sort including its tie-break. No key column is declared.",
+    "The notebook's rendered index is pandas' own positional integer and carries no meaning, so extraction drops it."
   ]
 }

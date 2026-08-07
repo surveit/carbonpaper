@@ -30,6 +30,9 @@ _ROW_CAPS = re.compile(r"\.(head|tail|sample)\s*\(\s*(\d+)\s*\)")
 # "NaN" makes every missing cell disagree with a build that correctly produced nothing.
 _RENDERED_ABSENT = frozenset({"", "NaN", "nan", "NaT", "None", "<NA>"})
 
+# Placeholder for the rendered index while the table is being read, before it is dropped.
+_DROPPED_INDEX = "__index__"
+
 
 class _Output(BaseModel):
     # `data` is mime type -> payload, and a payload's shape varies by mime: the genuine
@@ -44,15 +47,24 @@ class _CodeCell(BaseModel):
     outputs: list[_Output] = Field(default_factory=list)
 
 
-def extract_golden_table(notebook: Path, code_cell_index: int, key_column: str) -> GoldenTable:
-    """Raises unless that cell rendered exactly one complete, un-elided HTML table."""
+def extract_golden_table(
+    notebook: Path, code_cell_index: int, index_column: str | None
+) -> GoldenTable:
+    """Raises unless that cell rendered exactly one complete, un-elided HTML table.
+
+    `index_column` names the rendered pandas index; None DROPS it, which is right when the
+    index is pandas' own positional integer and carries no meaning."""
     cell = _find_code_cell(notebook, code_cell_index)
     html = _find_rendered_table_html(cell, notebook, code_cell_index)
     header, body = _read_table(html)
-    columns = [key_column, *header[1:]]
+    columns = [index_column or _DROPPED_INDEX, *header[1:]]
     _refuse_elided(columns, body, notebook, code_cell_index)
     _refuse_capped_by_the_author(cell, len(body), notebook, code_cell_index)
-    return GoldenTable(key_column=key_column, columns=columns, rows=_to_rows(columns, body))
+    rows = _to_rows(columns, body)
+    if index_column is None:
+        columns = columns[1:]
+        rows = [{k: v for k, v in row.items() if k != _DROPPED_INDEX} for row in rows]
+    return GoldenTable(columns=columns, rows=rows)
 
 
 def _find_code_cell(notebook: Path, code_cell_index: int) -> _CodeCell:

@@ -52,13 +52,36 @@ python -m evals.harness.cli compare evals/cases/<id>/case.json <build_output.csv
 Exit status is 0 when everything agrees, 1 otherwise. `--full` prints the whole comparison as
 JSON.
 
+## Comparison is positional
+
+There is no key column. The two tables are lined up as **sequences**, because the row order is
+part of the answer — every golden in this corpus is a ranked or sorted table, and a build that
+produces the right rows in the wrong order has not reproduced it.
+
+Alignment is a sequence diff over rows, so one missing row reads as one missing row instead of
+shifting every row after it into a disagreement. Its representation rounds numbers to four
+significant figures, deliberately coarser than any tolerance: pairing only has to be good
+enough, and **every paired row is then checked at the case's real tolerance**, so coarseness
+can mis-pair a row but cannot pass a difference.
+
+Three kinds of difference come out:
+
+| | |
+|---|---|
+| `missing` row | in the golden, no counterpart in the build |
+| `extra` row | in the build, no counterpart in the golden |
+| cell difference | the two tables share a position, and a column disagrees there |
+
 ## Two things a curator has to get right
 
-**The brief must not leak the method.** It states the story and the output schema, in the
-words a journalist would use. `ComparisonContract.output_key_column` exists so a case *can*
-rename the key, but `wyoming_refugee_arrivals` does not use it: declaring a per-state output
-row already tells an author most of what a renamed key would have hidden, so the rename buys
-nothing and a vaguer word changes which rows an author thinks belong in the table.
+**The brief must state the sort, including tie-breaks.** Comparison is positional, so an
+under-specified sort makes a build disagree for no reason — and if the sort really is
+under-specified, the source's own output was not determined either.
+
+**The brief must not leak the method.** It states the story, the output schema, and the sort,
+in the words a journalist would use. Renaming a column to hide where it came from does not
+work: declaring a per-state output row already tells an author most of what a renamed column
+would have hidden.
 
 **Tolerance is capped by the golden's rendered precision.** A golden cell is the text pandas
 printed, so a rate rendered to six decimal places cannot be compared more tightly than that.
