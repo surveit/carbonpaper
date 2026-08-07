@@ -37,5 +37,5 @@ body.packet .run-guide {
 .packet-num { text-align: right; font-variant-numeric: tabular-nums; }
 .packet-hash { font-size: 11px; word-break: break-all; }
 
-.packet-good { background: #e8f8e8; color: #1f5a1f; }
-.packet-bad { background: #fde8e8; color: #802020; }
+.packet-good { background: var(--good-bg); color: var(--good-ink); }
+.packet-bad { background: var(--bad-bg); color: var(--bad-ink); }

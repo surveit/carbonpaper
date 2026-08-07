@@ -3,11 +3,11 @@
 
 {% block head_extra %}
 <style>
-  .meta-line { color:#666; font-size:13px; margin:4px 0 16px; }
+  .meta-line { color:var(--muted); font-size:13px; margin:4px 0 16px; }
   .compile-form { max-width: 760px; }
   .doc-textarea {
     width: 100%; box-sizing: border-box; min-height: 360px; resize: vertical;
-    padding: 12px 14px; border: 1px solid #cfd4da; border-radius: 6px;
+    padding: 12px 14px; border: 1px solid var(--border); border-radius: 6px;
     font-family: "SFMono-Regular", "Consolas", "Liberation Mono", Menlo, monospace;
     font-size: 13px; line-height: 1.5; white-space: pre-wrap;
   }
@@ -15,8 +15,8 @@
   .field { margin: 14px 0; }
   .field label { display:block; font-weight:600; font-size:13px; margin-bottom:6px; }
   .field input[type="text"] { width: 360px; max-width:100%; padding:7px 9px;
-    border:1px solid #cfd4da; border-radius:6px; font:inherit; }
-  .field select { padding:7px 9px; border:1px solid #cfd4da; border-radius:6px; font:inherit; }
+    border:1px solid var(--border); border-radius:6px; font:inherit; }
+  .field select { padding:7px 9px; border:1px solid var(--border); border-radius:6px; font:inherit; }
 </style>
 {% endblock %}
 
@@ -71,7 +71,7 @@
   </form>
 </div>
 
-<hr style="margin:28px 0; border:0; border-top:1px solid #e3e6ea;">
+<hr style="margin:28px 0; border:0; border-top:1px solid var(--border);">
 <div class="compile-form">
   <h2>Author from your own AI</h2>
   <p class="meta-line">The workflow is authored from an MCP client. Connect Claude Code (or any

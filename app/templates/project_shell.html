@@ -48,10 +48,10 @@
   /* Drawer toggles: square icon buttons, the conventional panel-left pair. The
      chevron points the way the panel is about to move. */
   .drawer-btn { display: inline-flex; align-items: center; justify-content: center;
-    width: 26px; height: 26px; padding: 0; border: 1px solid var(--rule, #ccc);
-    background: #fff; border-radius: 4px; cursor: pointer; color: var(--muted, #777); }
-  .drawer-btn:hover { background: var(--code-bg, #f0f0f0); border-color: var(--ink, #888);
-    color: var(--body, #333); }
+    width: 26px; height: 26px; padding: 0; border: 1px solid var(--border);
+    background: var(--raised); border-radius: 4px; cursor: pointer; color: var(--muted); }
+  .drawer-btn:hover { background: var(--sunk-deep); border-color: var(--border-strong);
+    color: var(--fg); }
   .drawer-btn svg { display: block; }
   /* Required, not tidy-up: the `display` above beats the UA's `[hidden] { display:
      none }`, so without this the hidden toggle stays a grid item and shoves the

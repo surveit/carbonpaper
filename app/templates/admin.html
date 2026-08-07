@@ -21,7 +21,7 @@
     <tbody>
         {% for b in bundles %}
         <tr>
-            <td><code>{{ b }}</code>{% if b in projects %} <span class="badge python">loaded</span>{% endif %}</td>
+            <td><code>{{ b }}</code>{% if b in projects %} <span class="badge ok">loaded</span>{% endif %}</td>
             <td>
                 <form method="post" action="/admin/load/{{ b }}" style="display:inline;">
                     <button type="submit" class="btn">Load</button>

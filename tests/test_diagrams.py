@@ -14,7 +14,7 @@ def test_cancelled_stage_gets_glyph_and_grey_stroke() -> None:
     stages = [{"id": "s1", "description": "Stage One", "type": "input_data"}]
     graph = build_mermaid_graph(stages, "demo", status_by_id={"s1": "cancelled"})
     assert "✖" in graph
-    assert "stroke:#7b8089" in graph
+    assert "stroke:#787d86" in graph
 
 
 def test_plain_stage_with_no_status_renders_the_bare_node() -> None:
@@ -26,7 +26,7 @@ def test_plain_stage_with_no_status_renders_the_bare_node() -> None:
     assert 'click s1 call dvNode("s1") "Stage One"' in graph   # description is the tooltip
     assert "]:::input" in graph
     assert "stroke:" not in graph.split("classDef")[0]
-    assert "    classDef input fill:#f7f7f4,stroke:#d4d4d0,color:#1a1a1a" in graph
+    assert "    classDef input fill:#fbfbfb,stroke:#e1e1e1,color:#24272b" in graph
 
 
 def test_every_node_class_gets_the_same_neutral_surface() -> None:

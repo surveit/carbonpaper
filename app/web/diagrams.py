@@ -161,14 +161,14 @@ def build_schema_table_graph(schemas: list[dict[str, Any]]) -> str:
         lines.extend(_render_table_node_block(s))
     lines.extend(_collect_table_fk_edges(schemas, names))
 
-    # One fill per schema kind, keyed through SCHEMA_KIND_CLASS so a node here
-    # matches the kind's .type-tag chip.
+    # One neutral surface for every schema kind, matching the .type-tag chip
+    # beside it: a kind is not a state, so it takes no colour, and
+    # SCHEMA_KIND_GLYPH is what says which kind a node is. _NODE_SURFACE is the
+    # same decision on the workflow graph; both are palette.css's --bg / --border
+    # / --fg, pinned by tests/arch/test_status_colour_contract.py.
     lines += [
-        "    classDef input fill:#e8f4f8,stroke:#3a8ca8,color:#000",
-        "    classDef aggregate fill:#f0f0e6,stroke:#888533,color:#000",
-        "    classDef python fill:#eef2f7,stroke:#4a5e85,color:#000",
-        "    classDef human fill:#fce8f4,stroke:#c0399a,color:#000",
-        "    classDef custom fill:#fde8e8,stroke:#cc3333,color:#000",
+        f"    classDef {kind} {_NODE_SURFACE}"
+        for kind in sorted(set(SCHEMA_KIND_CLASS.values()) | {"custom"})
     ]
     return "\n".join(lines)
 
@@ -184,7 +184,7 @@ def _render_table_node_block(s: dict[str, Any]) -> list[str]:
     title = (s.get("title") or "").strip().replace('"', "'")[:48]
     label = f'"<b>{sid}</b>'
     if title and title != sid:
-        label += f"<br/><span style='font-size:10px;color:#888'>{title}</span>"
+        label += f"<br/><span style='font-size:10px;color:#5c6169'>{title}</span>"
     label += '"'
     return [
         f"    {sid}[{label}]:::{klass}",
@@ -268,9 +268,9 @@ def build_mermaid_graph(
 
 # One neutral surface for every stage type: the node's glyph and its type-name
 # subtitle say which type it is, leaving the stroke as the node's only colour —
-# the run status. Values are style.css's --exec-bg / --border /
-# --fg, so a node sits on the same neutral as the rest of the page.
-_NODE_SURFACE = "fill:#f7f7f4,stroke:#d4d4d0,color:#1a1a1a"
+# the run status. Values are palette.css's --bg / --border / --fg, so a node
+# sits on the same sheet as the rest of the page.
+_NODE_SURFACE = "fill:#fbfbfb,stroke:#e1e1e1,color:#24272b"
 # What TYPE_CLASS falls back to for a stage type it does not map.
 _FALLBACK_NODE_CLASS = "custom"
 
@@ -296,15 +296,15 @@ _STATUS_GLYPH: dict[str, str] = {
 # Run STATUS → stroke colour. Seven statuses, five colours: _STATUS_GLYPH above
 # carries the distinction the shared colour drops (running ⟳ vs warnings ⚠,
 # cancelled ✖ vs pending …). Every colour here is one of the five --state-*
-# properties in style.css, enforced by tests/arch/test_status_colour_contract.py.
+# properties in palette.css, enforced by tests/arch/test_status_colour_contract.py.
 _STATUS_STROKE: dict[str, tuple[str, str]] = {
-    StageStatus.OK: ("#2f7d32", "3px"),                    # done
-    StageStatus.RUNNING: ("#a8690b", "3px"),               # warning
-    StageStatus.VALIDATION_WARNINGS: ("#a8690b", "3px"),   # warning
-    StageStatus.ERROR: ("#b3261e", "3px"),                 # failed
-    StageStatus.AWAITING_REVIEW: ("#2a6ac8", "4px"),       # needs a human
-    StageStatus.CANCELLED: ("#7b8089", "3px"),             # idle
-    StageStatus.PENDING: ("#7b8089", "1px"),               # idle
+    StageStatus.OK: ("#2f6d30", "3px"),                    # done
+    StageStatus.RUNNING: ("#8b602c", "3px"),               # warning
+    StageStatus.VALIDATION_WARNINGS: ("#8b602c", "3px"),   # warning
+    StageStatus.ERROR: ("#934133", "3px"),                 # failed
+    StageStatus.AWAITING_REVIEW: ("#007a93", "4px"),       # needs a human
+    StageStatus.CANCELLED: ("#787d86", "3px"),             # idle
+    StageStatus.PENDING: ("#787d86", "1px"),               # idle
 }
 
 
@@ -340,7 +340,7 @@ def _build_workflow_node_label(n: dict[str, Any], status: str | None) -> str:
     status_prefix = f"{_STATUS_GLYPH.get(status, '')} " if status else ""
     return (
         f'"<b>{status_prefix}{notes_indicator}{glyph} {sid}</b>'
-        f'<br/><span style=\'font-size:10px;color:#888\'>{small_line}</span>'
+        f'<br/><span style=\'font-size:10px;color:#5c6169\'>{small_line}</span>'
         + (f"<br/><span style='font-size:11px'>{flags}</span>" if flags else "")
         + '"'
     )
