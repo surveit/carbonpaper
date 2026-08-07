@@ -27,7 +27,7 @@ plus a deep link, and the detail stays in the panel's own validation block.
   nothing did, which is the run whose warnings would otherwise go unread.
 
 A deep link loads the panel through `_loadStage(id, {tab, reveal})`, which the panel serves by
-publishing `_selectTab` on its root element. `reveal` scrolls the panel's top to the top of the
+publishing `_selectTab` on its root element. `reveal` smooth-scrolls the panel's top to the top of the
 run column; the review guide's steps and output links both use it, the graph-node click does not.
 
 ## The stage panel — three tabs (`run_stage_partial` → `_run_stage_panel.html`)
