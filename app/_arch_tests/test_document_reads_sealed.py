@@ -15,10 +15,6 @@ def test_json_documents_are_read_only_by_the_chokepoint() -> None:
         allow={
             # The chokepoint itself: this is the one sanctioned inline read.
             "app/core/json_document.py",
-            # Artifact: reads a run's manifest.json for provenance tracing, not
-            # as the run's authoritative record — see concerns in the task-5
-            # report re: this duplicating app.models.run_manifest's reader.
-            "app/runtime/trace.py",
             # Bulk data: a user-uploaded geojson input file, not a record.
             "app/runtime/stages/input_data.py",
         },

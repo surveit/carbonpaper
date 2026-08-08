@@ -5,7 +5,6 @@ DAG, so later methodology edits don't affect it. Stays a single CHAIN even
 where a row has several parents, stopping where it cannot cross (`_split_spine`)."""
 from __future__ import annotations
 
-import json
 import math
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -15,6 +14,7 @@ import pandas as pd
 
 from app.core.errors import RowOutOfRange, StageNotInRun
 from app.core.frames import read_frame_file
+from app.models.run_manifest import read_run_manifest_json
 from app.models.stage import StageType, is_grain_and_order_preserving
 from app.runtime.lineage import (
     EdgeKind,
@@ -71,10 +71,7 @@ class Trace:
 
 
 def _load_manifest(run_dir: Path) -> dict[str, Any]:
-    path = Path(run_dir) / "manifest.json"
-    if not path.exists():
-        raise FileNotFoundError(f"no manifest.json in {run_dir}")
-    return json.loads(path.read_text(encoding="utf-8"))
+    return read_run_manifest_json(Path(run_dir))
 
 
 def _stages_by_id(manifest: dict[str, Any]) -> dict[str, dict[str, Any]]:
