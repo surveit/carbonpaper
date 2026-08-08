@@ -38,17 +38,13 @@ def test_an_unparseable_compiled_file_produces_a_row_with_no_type(tmp_path):
 
 
 def test_the_rendered_graph_never_shows_an_invented_type_for_the_error_row(tmp_path):
-    """Regression guard: _load_compiled_stages once filled the row's missing
-    type with the invented "python_transform", which _build_workflow_node_label
-    renders with underscores turned to spaces ("python transform"). Neither
-    form may appear once the type is honestly absent."""
     pdir = _write_unparseable_compiled_file(tmp_path, "bad_json_graph")
 
     stages = project_service._load_compiled_stages(pdir)
     graph = build_mermaid_graph(stages, "bad_json_graph")
 
-    assert "python_transform" not in graph
-    assert "python transform" not in graph
+    assert "python_transform" not in graph  # never fabricated
+    assert "python transform" not in graph  # underscore-to-space rendering of the same lie
 
 
 def test_a_workflow_page_with_an_unparseable_compiled_file_renders_without_crashing(tmp_path):
