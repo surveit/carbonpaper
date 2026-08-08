@@ -192,8 +192,41 @@ def test_one_refused_project_does_not_stop_the_others_being_planned(tmp_path, co
     assert _stored(connection, "sound") is not None
 
 
+def test_a_file_in_a_legacy_codepage_is_refused_by_name(tmp_path, connection):
+    (tmp_path / "accented").mkdir()
+    (tmp_path / "accented" / "project.json").write_bytes(
+        json.dumps({"name": "accented", "title": "Sociétés"}, ensure_ascii=False).encode("cp1252"))
+
+    [refusal] = _load_revision().backfill_project_records(connection, tmp_path)
+
+    assert refusal.startswith("accented: project.json is not UTF-8 text")
+    assert _record_count(connection) == 0
+
+
 def test_an_absent_projects_root_is_not_an_error(tmp_path, connection):
     assert _load_revision().backfill_project_records(connection, tmp_path / "nope") == []
+
+
+def test_the_run_names_the_root_it_resolved_and_what_it_saw(tmp_path, connection, capsys):
+    _write_project_file(tmp_path, "sound", json.dumps({"name": "sound", "model": "sonnet"}))
+    _load_revision().backfill_project_records(connection, tmp_path)
+
+    printed = capsys.readouterr().out
+
+    # An operator whose CARBONPAPER_PROJECTS_DIR never reached the alembic shell has no
+    # other signal: a silent no-op and a real one look identical, and 0010 cannot be
+    # re-run to find out which happened.
+    assert str(tmp_path) in printed
+    assert "1 record(s) created ['sound']" in printed
+    assert "0 already agreed, 0 refused" in printed
+
+
+def test_a_root_that_does_not_exist_says_so_rather_than_reading_as_empty(tmp_path, connection):
+    absent = tmp_path / "nope"
+    line = _load_revision().summarize_backfill(absent, [], [], [])
+
+    assert str(absent) in line
+    assert "NO SUCH DIRECTORY" in line
 
 
 def test_the_revision_declares_itself_irreversible(tmp_path, connection):

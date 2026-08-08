@@ -67,30 +67,54 @@ def downgrade() -> None:
 
 
 def backfill_project_records(connection: Connection, root: Path) -> list[str]:
-    """Insert a `project` record for every readable project.json under `root` that has
-    none. Returns one line per REFUSED project; those are written nowhere."""
-    if not root.is_dir():
-        return []
+    """Returns one line per REFUSED project; those are written nowhere."""
     refused: list[str] = []
-    for project_dir in sorted(path for path in root.iterdir() if path.is_dir()):
-        name = project_dir.name
-        path = project_dir / _FILENAME
-        # A project with no project.json at all is a legacy project: nothing on disk
-        # states its identity, so there is nothing to carry into a record.
-        if not path.is_file():
-            continue
+    created: list[str] = []
+    agreed: list[str] = []
+    for name, path in _find_project_files(root):
         try:
             record = _plan_record(name, _read_document(path), _stored_record(connection, name))
         except UnbackfillableProject as exc:
             refused.append(f"{name}: {exc}")
             continue
         if record is None:
+            agreed.append(name)
             continue
         connection.exec_driver_sql(
             "INSERT INTO documents (collection, id, data, schema_version) VALUES (?, ?, ?, 1)",
             (_COLLECTION, record["id"], json.dumps(record)),
         )
+        created.append(name)
+    # Nothing runs this revision automatically, so the operator supplies the projects
+    # root by environment and gets no other feedback that it was the right one. Naming
+    # it beside the counts is what separates "a fresh install with nothing to carry"
+    # from "pointed at the wrong directory" — the two look identical otherwise, and
+    # this revision cannot be re-run to find out.
+    print(summarize_backfill(root, created, agreed, refused))
     return refused
+
+
+def summarize_backfill(
+    root: Path, created: list[str], agreed: list[str], refused: list[str]
+) -> str:
+    missing = "" if root.is_dir() else " — NO SUCH DIRECTORY"
+    return (
+        f"0010: projects root {root}{missing}\n"
+        f"0010: {len(created)} record(s) created {sorted(created)}, "
+        f"{len(agreed)} already agreed, {len(refused)} refused"
+    )
+
+
+def _find_project_files(root: Path) -> list[tuple[str, Path]]:
+    if not root.is_dir():
+        return []
+    # A project with no project.json at all is a legacy project: nothing on disk
+    # states its identity, so there is nothing to carry into a record.
+    return [
+        (project_dir.name, project_dir / _FILENAME)
+        for project_dir in sorted(path for path in root.iterdir() if path.is_dir())
+        if (project_dir / _FILENAME).is_file()
+    ]
 
 
 def resolve_projects_root() -> Path:
@@ -151,6 +175,10 @@ def _read_document(path: Path) -> dict[str, Any]:
         document = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         raise UnbackfillableProject(f"{_FILENAME} does not parse as JSON: {exc}") from exc
+    except UnicodeDecodeError as exc:
+        # A file hand-edited in a legacy Windows codepage. Named here like every other
+        # refusal, rather than escaping as a bare decode error with no project in it.
+        raise UnbackfillableProject(f"{_FILENAME} is not UTF-8 text: {exc}") from exc
     except OSError as exc:
         raise UnbackfillableProject(f"{_FILENAME} cannot be read: {exc}") from exc
     if not isinstance(document, dict):
