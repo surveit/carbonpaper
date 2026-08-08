@@ -108,6 +108,19 @@ that may be invalid mid-edit, edited only through the editing agent's tools; `sa
 is its only exit, strict-validating before freezing it into a version via
 `create_version_from_stages`).
 
+## `app/core/` — three storage media, one owner each
+Infrastructure the other packages sit on. Each medium the app stores something in has
+exactly one module that speaks it, and an executable check that keeps it that way:
+
+| Medium | Owner | Sealed by |
+|---|---|---|
+| Database | `core/persistence.py` — `PersistedModel` over a SQLite key-value table | `app/_arch_tests/test_storage_engine_sealed.py`: no module but this one imports `sqlite3` |
+| Frames | `core/frames.py` — one parquet file per `(collection, id)`, plus typed ingest of a foreign file | `tests/arch/test_frame_file_io_is_owned.py`: no pandas frame IO under `app/` outside it |
+| Files | `core/json_document.py` — `read_json_document`, which decides missing vs. corrupt, UTF-8, and "not a JSON object" | `app/_arch_tests/test_document_reads_sealed.py`: an AST tripwire on two literal call forms, `json.loads(<path>.read_text())` and `json.load(open(<path>))`. It does not see a read staged through a variable, `Model.model_validate_json(path.read_text())`, or an aliased `import json as j` — read its docstring before treating it as coverage |
+
+The record-shaped readers go through `read_json_document`; streams (`runtime/run_log.py`),
+bulk uploads, published artifacts and committed fixtures stay ordinary file reads.
+
 ## `app/chat/`, `app/core/llm/`, tests
 `chat/` — a reusable PydanticAI chat engine (streaming, tools, file persistence), separate
 from the row-mapped `llm_transform` path; one demo tool, not yet wired in.

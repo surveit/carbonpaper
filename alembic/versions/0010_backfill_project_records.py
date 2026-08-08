@@ -88,8 +88,19 @@ def backfill_project_records(connection: Connection, root: Path) -> list[str]:
     # Nothing runs this revision automatically, so the operator supplies the projects
     # root by environment and gets no other feedback that it was the right one. Naming
     # it beside the counts is what separates "a fresh install with nothing to carry"
-    # from "pointed at the wrong directory" — the two look identical otherwise, and
-    # this revision cannot be re-run to find out.
+    # from "pointed at the wrong directory" — the two look identical otherwise.
+    #
+    # A wrong root is a SUCCESS to alembic: it stamps 0010 and `alembic upgrade head`
+    # will not run this again, so the printed counts are the only warning the operator
+    # gets. Recovery, once CARBONPAPER_PROJECTS_DIR points at the real root — move the
+    # marker back by hand, then upgrade again:
+    #
+    #     alembic stamp 0009
+    #     alembic upgrade head
+    #
+    # Safe to repeat: a project whose stored record already agrees with its file is
+    # skipped, not rewritten. `alembic downgrade` is NOT the route — downgrade() refuses
+    # on purpose, and stamping does not run it.
     print(summarize_backfill(root, created, agreed, refused))
     return refused
 
