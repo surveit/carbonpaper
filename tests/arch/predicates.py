@@ -67,6 +67,37 @@ def check_no_import(paths: list[Path], module: str, *, allow: set[str]) -> list[
     return offenders
 
 
+def find_inline_json_disk_reads(paths: list[Path], *, allow: set[str]) -> list[str]:
+    """Files parsing JSON from an inline disk read, bypassing read_json_document."""
+    allowed = {suffix.replace("\\", "/") for suffix in allow}
+    offenders: list[str] = []
+    for path in paths:
+        posix = path.as_posix()
+        if any(posix.endswith(suffix) for suffix in allowed):
+            continue
+        for node in ast.walk(parse_module(path)):
+            if isinstance(node, ast.Call) and _is_inline_json_disk_read(node):
+                offenders.append(f"{posix}:{node.lineno}")
+    return offenders
+
+
+def _is_inline_json_disk_read(call: ast.Call) -> bool:
+    if not (isinstance(call.func, ast.Attribute) and isinstance(call.func.value, ast.Name)):
+        return False
+    if call.func.value.id != "json" or not call.args:
+        return False
+    arg = call.args[0]
+    if not (isinstance(arg, ast.Call) and isinstance(arg.func, (ast.Name, ast.Attribute))):
+        return False
+    if call.func.attr == "loads":
+        return isinstance(arg.func, ast.Attribute) and arg.func.attr in {"read_text", "read_bytes"}
+    if call.func.attr == "load":
+        return (isinstance(arg.func, ast.Name) and arg.func.id == "open") or (
+            isinstance(arg.func, ast.Attribute) and arg.func.attr == "open"
+        )
+    return False
+
+
 def check_imports_are_stdlib_only(paths: list[Path]) -> list[str]:
     """Files that import anything outside the standard library: any relative
     import (level > 0 — always an in-project import) or any absolute import

@@ -12,6 +12,7 @@ from arch.predicates import (
     check_no_raw_disk as check_no_raw_disk,
     find_banned_words as find_banned_words,
     find_check_prefixed_functions as find_check_prefixed_functions,
+    find_inline_json_disk_reads as find_inline_json_disk_reads,
     find_production_run_imports as find_production_run_imports,
 )
 from arch.scope import (
