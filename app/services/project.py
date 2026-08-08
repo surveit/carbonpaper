@@ -167,7 +167,6 @@ def _load_compiled_stages(pdir: Path) -> list[dict[str, Any]]:
             data = {
                 "id": json_file.stem,
                 "name": f"[JSON ERROR] {json_file.name}",
-                "type": "python_transform",
                 "compiler_notes": [f"JSON parse error: {exc}"],
                 "_error": True,
             }
