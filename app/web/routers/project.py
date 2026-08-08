@@ -14,7 +14,8 @@ from fastapi.responses import (
     RedirectResponse,
 )
 
-from app.core.errors import ProjectExistsError
+from app.core.errors import InvalidJsonDocument, ProjectExistsError
+from app.core.json_document import read_json_document
 from app.models import (
     find_workflow_compiler_warnings,
     stage_to_json,
@@ -429,10 +430,10 @@ async def edit_schema(project_name: str, schema_name: str, json_text: str = Form
     target: Path | None = None
     for schema_file in sorted(schemas_dir.glob("*.json")):
         try:
-            doc = json.loads(schema_file.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
+            doc = read_json_document(schema_file)
+        except InvalidJsonDocument:
             continue
-        if isinstance(doc, dict) and doc.get("name") == schema_name:
+        if doc.get("name") == schema_name:
             target = schema_file
             break
     if target is None:

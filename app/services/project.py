@@ -16,6 +16,7 @@ from typing import Any, ClassVar, Sequence
 from pydantic import BaseModel, field_validator
 
 from app.core.errors import InvalidJsonDocument, ProjectExistsError
+from app.core.json_document import read_json_document
 from app.models import (
     SchemaLibrary,
     Stage,
@@ -162,8 +163,8 @@ def _load_compiled_stages(pdir: Path) -> list[dict[str, Any]]:
     stages: list[dict[str, Any]] = []
     for json_file in sorted(compiled_dir.glob("*.json")):
         try:
-            data = json.loads(json_file.read_text(encoding="utf-8")) or {}
-        except json.JSONDecodeError as exc:
+            data = read_json_document(json_file)
+        except InvalidJsonDocument as exc:
             data = {
                 "id": json_file.stem,
                 "name": f"[JSON ERROR] {json_file.name}",
@@ -242,10 +243,8 @@ def write_project_meta(pdir: Path, **fields: Any) -> dict[str, Any]:
     record: dict[str, Any] = {}
     if pj.is_file():
         try:
-            loaded = json.loads(pj.read_text(encoding="utf-8"))
-            if isinstance(loaded, dict):
-                record = loaded
-        except (json.JSONDecodeError, OSError):
+            record = read_json_document(pj)
+        except (InvalidJsonDocument, OSError):
             record = {}
     record.update(fields)
     pj.write_text(json.dumps(record, indent=2, ensure_ascii=False), encoding="utf-8")

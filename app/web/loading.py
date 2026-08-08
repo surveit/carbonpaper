@@ -2,7 +2,6 @@
 # cache (app.core.stage_cache).
 from __future__ import annotations
 
-import json
 import shutil
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -14,6 +13,7 @@ from fastapi import HTTPException
 
 from app.core.errors import InvalidJsonDocument, NoVersionToRunError, StageOutputMissing
 from app.core.frames import list_rows, read_frame_file, render_frame_as_csv_text
+from app.core.json_document import read_json_document
 from app.models import Stage, StageType
 from app.models.stages.llm_transform import LLMTransformStage
 from app.models.run_manifest import (
@@ -421,7 +421,7 @@ def load_queue_fingerprints(project: str, run_id: str, stage_id: str) -> QueueFi
     path = run_dir / "queue" / f"{stage_id}.fingerprints.json"
     if not path.exists():
         return None
-    data = json.loads(path.read_text(encoding="utf-8"))
+    data = read_json_document(path)
     ordinals = data.get("row_ordinals")
     fingerprints = QueueFingerprints(
         stage_fingerprint=data["stage_fingerprint"],

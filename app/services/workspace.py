@@ -6,11 +6,12 @@ imports nothing from the web layer."""
 
 from __future__ import annotations
 
-import json
 import os
 from pathlib import Path
 from typing import Any
 
+from app.core.errors import InvalidJsonDocument
+from app.core.json_document import read_json_document
 from app.core.paths import REPO_ROOT, repo_root as repo_root
 from app.services.loader import load_compiled_dir
 # The projects storage root: <root>/<name>/ working copies live here. There is
@@ -79,8 +80,8 @@ def load_schemas(project_dir: Path) -> list[dict[str, Any]]:
     schemas: list[dict[str, Any]] = []
     for schema_file in sorted(schemas_dir.glob("*.json")):
         try:
-            doc = json.loads(schema_file.read_text(encoding="utf-8"))
-        except json.JSONDecodeError as exc:
+            doc = read_json_document(schema_file)
+        except InvalidJsonDocument as exc:
             schemas.append({
                 "name": schema_file.stem,
                 "title": f"[JSON ERROR] {schema_file.name}",

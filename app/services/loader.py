@@ -5,12 +5,13 @@ that reaches the disk for them: nothing else globs `compiled/*.json`.
 """
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from pydantic import ValidationError
 
+from app.core.errors import InvalidJsonDocument
+from app.core.json_document import read_json_document
 from app.core.paths import repo_root
 from app.models.workflow import Workflow, validate_workflow
 from app.models.stage import Stage, parse_stage, stage_to_json
@@ -48,8 +49,8 @@ def load_compiled_dir(compiled_dir: Path) -> list[CompiledStageFile]:
         entry = CompiledStageFile(filename=f.name)
         entries.append(entry)
         try:
-            data = json.loads(f.read_text(encoding="utf-8"))
-        except json.JSONDecodeError as exc:
+            data = read_json_document(f)
+        except InvalidJsonDocument as exc:
             entry.issues.append(f"JSON parse error: {exc}")
             continue
         if not data:
@@ -94,10 +95,10 @@ def find_stage_file(compiled_dir: Path, stage_id: str) -> Path | None:
     only far enough to match the id (one stage per file, by convention)."""
     for f in list_stage_files(compiled_dir):
         try:
-            data = json.loads(f.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
+            data = read_json_document(f)
+        except InvalidJsonDocument:
             continue
-        if isinstance(data, dict) and data.get("id") == stage_id:
+        if data.get("id") == stage_id:
             return f
     return None
 
