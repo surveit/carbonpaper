@@ -43,9 +43,9 @@ def list_projects() -> list[dict[str, Any]]:
 
     Every flag and count is read off disk — a card never advertises a
     stage/schema/run/version that isn't there. A directory counts as a project
-    from the moment creation writes its document.md (or project.json) — a
-    just-created project whose data model is still being generated must show up,
-    not appear only once generation finishes. A dir with none of those markers is
+    from the moment creation writes its document.md — a just-created project
+    whose data model is still being generated must show up, not appear only
+    once generation finishes. A dir with none of those markers is
     not a project and is omitted. A run counts only if it has a manifest.json
     (mirrors the runs index), so the count is real runs, never inflated."""
     if not projects_dir().exists():
@@ -70,7 +70,7 @@ def _build_project_card(p: Path) -> dict[str, Any] | None:
     has_schemas = schemas_dir.is_dir() and any(schemas_dir.glob("*.json"))
     n_schemas = len(load_schemas(p)) if has_schemas else 0
     n_runs = _count_runs_with_manifest(p / "runs")
-    has_document = (p / "document.md").is_file() or (p / "project.json").is_file()
+    has_document = (p / "document.md").is_file()
     if not (has_workflow or has_schemas or has_document):
         return None
     return {

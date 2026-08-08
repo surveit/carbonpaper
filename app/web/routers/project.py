@@ -139,15 +139,15 @@ async def new_project_submit(
     doc_text: str = Form(...),
     model: str = Form("sonnet"),
 ):
-    """Create the examples/<name>/ working copy + its project.json, persist the pasted
-    document at document.md, then redirect to the project's data-model section where
-    authoring starts. The directory IS the session — the data-model stream keys off the
-    project name and reads document.md / writes chat.jsonl in here.
+    """Create the examples/<name>/ working copy + its identity record, persist the
+    pasted document at document.md, then redirect to the project's data-model section
+    where authoring starts. The directory IS the session — the data-model stream keys
+    off the project name and reads document.md / writes chat.jsonl in here.
 
-    Truthfulness: we write project.json (via project.write_project_meta) so a NEW
-    project carries a real model + created_at (non-legacy); we never fabricate those
-    for legacy dirs. A name clash fails LOUDLY (400) rather than clobbering existing
-    data — the rename is the human's decision."""
+    Truthfulness: create_project records a real model + authored_at on the Project
+    (non-legacy); we never fabricate those for a legacy project that has none. A name
+    clash fails LOUDLY (400) rather than clobbering existing data — the rename is the
+    human's decision."""
     try:
         safe_name = project.create_project(name, doc_text, model=model, source="pasted document")
     except (ValueError, ProjectExistsError) as exc:

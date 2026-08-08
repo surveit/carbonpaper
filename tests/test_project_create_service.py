@@ -1,23 +1,27 @@
 """create_project service: sanitization, on-disk artifacts, loud failure on clash."""
 from __future__ import annotations
 
-import json
-
 import pytest
 
 from app.core.errors import ProjectExistsError
-from app.services.project import create_project
+from app.services.project import Project, create_project
 
 
-def test_create_project_writes_document_and_meta(projects_root):
+def test_create_project_writes_document_and_identity_record(projects_root):
     name = create_project("My Probe!", "Find the money.", source="test")
     assert name == "my_probe_"
     pdir = projects_root / name
     assert (pdir / "document.md").read_text(encoding="utf-8") == "Find the money."
-    meta = json.loads((pdir / "project.json").read_text(encoding="utf-8"))
-    assert meta["model"] == "sonnet"
-    assert meta["source"] == "test"
-    assert meta["created_at"]  # real timestamp recorded, never fabricated later
+    record = Project.load(name)
+    assert record.model == "sonnet"
+    assert record.source == "test"
+    assert record.authored_at  # real timestamp recorded, never fabricated later
+
+
+def test_create_project_leaves_the_identity_only_in_the_store(projects_root):
+    # The record is the one source of truth: no second copy on disk to drift from it.
+    create_project("solo", "doc", source="test")
+    assert sorted(p.name for p in (projects_root / "solo").iterdir()) == ["document.md"]
 
 
 def test_create_project_rejects_empty_document(projects_root):

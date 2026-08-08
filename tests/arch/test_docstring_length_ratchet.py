@@ -430,7 +430,6 @@ _GRANDFATHERED: frozenset[str] = frozenset(
         "app/services/project.py::read_stage",
         "app/services/project.py::remove_stage",
         "app/services/project.py::sanitize_project_name",
-        "app/services/project.py::write_project_meta",
         "app/services/run.py::RunStageDef",
         "app/services/run.py::_run_in_background",
         "app/services/run.py::read_run_status",

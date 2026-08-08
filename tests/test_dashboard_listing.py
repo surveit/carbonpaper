@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from app.core.persistence import get_store
 from app.main import app
+from app.services.project import Project
 from app.services.versioning import WorkflowVersion
 from app.web.loading import list_projects
 from app.services import workspace
@@ -23,13 +24,11 @@ def examples_root(tmp_path, monkeypatch):
 
 def _make_document_only_project(root, name="fresh"):
     """A project exactly as POST /project/new leaves it before any generation:
-    document.md + project.json, no schemas/, no compiled/."""
+    an identity record + document.md, no schemas/, no compiled/."""
     proj = root / name
     proj.mkdir()
     (proj / "document.md").write_text("methodology prose", encoding="utf-8")
-    (proj / "project.json").write_text(
-        json.dumps({"name": name, "model": "sonnet"}), encoding="utf-8"
-    )
+    Project(id=name, model="sonnet", source="test", authored_at="2026-01-01T00:00:00").save()
     return proj
 
 

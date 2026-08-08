@@ -7,7 +7,6 @@ import-if-absent: a name clash raises rather than replacing.
 
 from __future__ import annotations
 
-import json
 import re
 from datetime import datetime
 from pathlib import Path
@@ -54,8 +53,8 @@ class Project(PersistedModel):
     distinct from PersistedModel's `created_at`/`updated_at`, which stamp
     when this RECORD was written (e.g. by a migration backfill, possibly long
     after the project itself was made). `authored_at` is None when that date
-    is genuinely unknown (a legacy project with no project.json to read it
-    from) — never inferred from the record's own `created_at`."""
+    is genuinely unknown (a legacy project whose record carries no authored
+    date) — never inferred from the record's own `created_at`."""
 
     collection: ClassVar[str] = "project"
     SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
@@ -98,7 +97,7 @@ class RunsSummary(BaseModel):
 
 
 class ProjectMeta(BaseModel):
-    """A project's identity card. Legacy projects (no project.json) degrade
+    """A project's identity card. Legacy projects (no identity record) degrade
     truthfully: title / created_at / model / source are None ("unknown") rather than
     fabricated. name is always the directory name."""
 
@@ -131,7 +130,7 @@ class ProjectState(BaseModel):
 # report the first that exists (a truthful path, never a fabricated one).
 #
 # LEGACY: probing a fixed candidate list is a migration accommodation. The intended
-# direction is for project.json to record the document's path explicitly, so a
+# direction is for the Project record to carry the document's path explicitly, so a
 # project references a real file rather than inferring it by filename — at which
 # point this probe (and _DOCUMENT_CANDIDATES) can be retired.
 _DOCUMENT_CANDIDATES = ("document.md", "methodology_raw.md", "methodology_raw.txt")
@@ -231,26 +230,6 @@ def project_meta(pdir: Path) -> ProjectMeta:
     )
 
 
-def write_project_meta(pdir: Path, **fields: Any) -> dict[str, Any]:
-    """Merge `fields` into examples/<name>/project.json and persist it, returning the
-    written record. Reads any existing file first so a partial update doesn't drop
-    other keys; only the keys passed are overwritten. None values ARE written when
-    passed explicitly (so a caller can clear a field), but callers should omit a key
-    rather than pass a placeholder — this module never invents a model/date itself."""
-    pdir = Path(pdir)
-    pdir.mkdir(parents=True, exist_ok=True)
-    pj = pdir / "project.json"
-    record: dict[str, Any] = {}
-    if pj.is_file():
-        try:
-            record = read_json_document(pj)
-        except (InvalidJsonDocument, OSError):
-            record = {}
-    record.update(fields)
-    pj.write_text(json.dumps(record, indent=2, ensure_ascii=False), encoding="utf-8")
-    return record
-
-
 # ─── The status snapshot ──────────────────────────────────────────────────────
 
 
@@ -332,9 +311,9 @@ def create_project(
     source: str,
 ) -> str:
     """Create the examples/<name>/ working copy for a NEW project: sanitize the
-    name, write document.md (the source of record) and project.json (real model +
-    created_at + source — never fabricated), and record the project's identity
-    (a Project) in the store. Returns the sanitized name.
+    name, write document.md (the source of record), and record the project's
+    identity — real model + source + authored_at, never fabricated — as the one
+    Project record in the store. Returns the sanitized name.
 
     Raises ValueError on an empty document. Raises ProjectExistsError on a
     name clash — but a name clash means a Project record already exists for
@@ -358,11 +337,8 @@ def create_project(
         )
     project_dir.mkdir(parents=True, exist_ok=True)
     (project_dir / "document.md").write_text(doc, encoding="utf-8")
-    created_at = datetime.now().isoformat(timespec="seconds")
-    write_project_meta(
-        project_dir, name=safe_name, title=None, created_at=created_at, model=model, source=source,
-    )
-    Project(id=safe_name, title=None, model=model, source=source, authored_at=created_at).save()
+    authored_at = datetime.now().isoformat(timespec="seconds")
+    Project(id=safe_name, title=None, model=model, source=source, authored_at=authored_at).save()
     return safe_name
 
 
@@ -560,7 +536,7 @@ def export_project(name: str) -> WorkflowFile:
     meta = project_meta(pdir)
     if meta.model is None or meta.source is None:
         raise ValueError(
-            f"project '{name}' has no recorded model/source in project.json — cannot export"
+            f"project '{name}' has no recorded model/source — cannot export"
         )
     document_path = project_state(pdir).document_path
     if document_path is None:
