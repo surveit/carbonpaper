@@ -12,7 +12,7 @@ from typing import Any
 import pandas as pd
 from fastapi import HTTPException
 
-from app.core.errors import NoVersionToRunError, RunManifestNotJson, StageOutputMissing
+from app.core.errors import InvalidJsonDocument, NoVersionToRunError, StageOutputMissing
 from app.core.frames import list_rows, read_frame_file, render_frame_as_csv_text
 from app.models import Stage, StageType
 from app.models.stages.llm_transform import LLMTransformStage
@@ -94,7 +94,7 @@ def _manifest_counts_as_run(run_dir: Path) -> bool:
     """Not a test — the default for a manifest recording no such flag, i.e. every run before it."""
     try:
         manifest = read_run_manifest_json(run_dir)
-    except RunManifestNotJson:
+    except InvalidJsonDocument:
         # Dropped, not counted 'corrupt' (as the project's own runs summary does):
         # a card's headline count must not advertise a run nothing can be read off.
         return False

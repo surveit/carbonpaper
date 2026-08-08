@@ -7,7 +7,6 @@ job (`app.runtime.manifest`).
 
 from __future__ import annotations
 
-import json
 from datetime import datetime
 from pathlib import Path
 from typing import Any, TypedDict
@@ -15,7 +14,7 @@ from typing import Any, TypedDict
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 from app.core.agent.usage import LlmUsage
-from app.core.errors import RunManifestNotJson
+from app.core.json_document import read_json_document
 from app.core.run_status import RunStatus, StageStatus
 from app.models.run_parameters import RunParameters
 from app.models.stage import Stage
@@ -282,11 +281,13 @@ def read_run_bindings(raw: dict[str, Any]) -> dict[str, dict[str, Any]]:
 
 
 # ─── Reading a run's manifest off disk ────────────────────────────────────────
-# The only place a run directory's manifest.json is located, read and JSON-parsed.
-# `read_run_manifest_json` hands back the raw object, so a caller needing one fact
-# off a manifest this model would reject (a partial or pre-rename file already on
-# disk) still gets it; `read_run_manifest` adds the typed validation on top.
-# Neither decides what an unreadable manifest MEANS — each caller answers that.
+# The only place a run directory's manifest.json is located and typed. The
+# actual read and JSON parse is `app.core.json_document.read_json_document`;
+# `read_run_manifest_json` hands back its raw object, so a caller needing one
+# fact off a manifest this model would reject (a partial or pre-rename file
+# already on disk) still gets it, and `read_run_manifest` adds the typed
+# validation on top. Neither decides what an unreadable manifest MEANS — each
+# caller answers that.
 
 _MANIFEST_FILENAME = "manifest.json"
 
@@ -303,17 +304,8 @@ def find_manifest_backed_run_dirs(runs_dir: Path) -> list[Path]:
 
 
 def read_run_manifest_json(run_dir: Path) -> dict[str, Any]:
-    """Raises FileNotFoundError when the run has no manifest, RunManifestNotJson when it isn't JSON."""
-    path = run_dir / _MANIFEST_FILENAME
-    if not path.exists():
-        raise FileNotFoundError(f"No manifest at {path}")
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        raise RunManifestNotJson(f"{path} does not parse as JSON: {exc}") from exc
-    if not isinstance(raw, dict):
-        raise RunManifestNotJson(f"{path} holds a JSON {type(raw).__name__}, not an object")
-    return raw
+    """Raises FileNotFoundError when the run has no manifest, InvalidJsonDocument when it isn't JSON."""
+    return read_json_document(run_dir / _MANIFEST_FILENAME)
 
 
 def read_run_manifest(run_dir: Path) -> RunManifest:

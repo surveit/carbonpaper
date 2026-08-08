@@ -8,7 +8,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, ValidationError
 
-from app.core.errors import RunManifestNotJson
+from app.core.errors import InvalidJsonDocument
 from app.models.run_manifest import (
     RunManifest,
     find_manifest_backed_run_dirs,
@@ -80,7 +80,7 @@ def _build_row(
 ) -> RunIndexRow:
     try:
         manifest = read_run_manifest(run)
-    except (RunManifestNotJson, ValidationError):
+    except (InvalidJsonDocument, ValidationError):
         # An identity-only row rather than counts it never read, so one unreadable
         # run never takes the index down with it. No test-run filter here on
         # purpose: the index LISTS test runs (flagged), the dashboard count omits them.

@@ -136,8 +136,8 @@ class RunNotFoundError(Exception):
     manifest for a run that never happened."""
 
 
-class RunManifestNotJson(ValueError):
-    """A run's manifest.json is on disk but its bytes are not a JSON object."""
+class InvalidJsonDocument(ValueError):
+    """A document on disk parses as something other than a JSON object, or not as JSON at all."""
 
 
 class ReviewValidationError(ValueError):

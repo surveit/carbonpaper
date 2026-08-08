@@ -15,7 +15,7 @@ from typing import Any, ClassVar, Sequence
 
 from pydantic import BaseModel, field_validator
 
-from app.core.errors import ProjectExistsError, RunManifestNotJson
+from app.core.errors import InvalidJsonDocument, ProjectExistsError
 from app.models import (
     SchemaLibrary,
     Stage,
@@ -186,7 +186,7 @@ def _runs_summary(pdir: Path) -> RunsSummary:
     for run in find_manifest_backed_run_dirs(pdir / "runs"):
         try:
             manifest = read_run_manifest_json(run)
-        except RunManifestNotJson:
+        except InvalidJsonDocument:
             # Counted, not hidden: a manifest this reader cannot parse carries no
             # `is_test_run` to exclude it by, so it is treated as non-test, same
             # as every run was before that field existed.
