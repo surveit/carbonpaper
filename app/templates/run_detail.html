@@ -63,16 +63,26 @@
   .nav-expand { position: sticky; top: 0; align-self: start; }
   .run-main { min-width: 0; height: 100%; overflow-y: auto; padding-right: 6px; }
 
-  /* ── The toolbar, top right of the work surface: the export, then the menu. The
-        two things behind the menu — the manifest and the whole-run log — are what
-        you open when you are challenged or debugging, so they are not on the page
-        until asked for. The export is not one of those: it is what a reader hands
-        to someone outside, so it stays a visible link beside the menu. ── */
-  .run-toolbar { position: relative; z-index: 20; display: flex; justify-content: flex-end;
-                 align-items: center; gap: .5rem; margin: 0 0 .5rem; }
+  /* ── The toolbar shares the first section's heading line, actions to the right:
+        the run's title and what you can do to the run are one band, and neither
+        spends a row of its own. Behind the menu are the manifest and the whole-run
+        log — what you open when you are challenged or debugging, so they are not
+        on the page until asked for. The export is not one of those: it is what a
+        reader hands to someone outside, so it stays a visible link beside it. ── */
+  /* The heading line is the menu's positioning context, not the toolbar: anchored to
+     the toolbar the menu is wider than its own anchor and opens leftwards out of the
+     column, which `.run-main`'s scroll box then clips. Off the heading line it can be
+     bounded by the column's width. */
+  .run-overview-head { position: relative; z-index: 20; display: flex; align-items: center;
+                       justify-content: space-between; gap: 1.2rem; margin: 0 0 .15rem; }
+  .run-overview-head > h2 { margin: 0; }
+  .run-toolbar { display: flex; align-items: center; gap: .5rem; }
   .run-toolbar .run-export { font-size: .8rem; padding: 5px 11px; }
-  .run-audit-menu { position: absolute; top: calc(100% + 6px); right: 0;
-                    width: min(640px, 92vw); max-height: 70vh; overflow-y: auto;
+  /* box-sizing: there is no global reset, so the padding below would otherwise put
+     the menu 32px wider than the column and hang it off the left edge, where the
+     work column's own scroll box clips it. */
+  .run-audit-menu { position: absolute; top: calc(100% + 6px); right: 0; box-sizing: border-box;
+                    width: min(640px, 100%); max-height: 70vh; overflow-y: auto;
                     background: var(--raised); border: 1px solid var(--border);
                     border-radius: 8px; box-shadow: 0 6px 22px var(--shadow);
                     padding: .85rem 1rem 1rem; }
@@ -136,10 +146,17 @@
 {# ── THE WORK SURFACE. ── #}
 <div class="run-main fade-scroll">
 
-{# ── 0. THE TOOLBAR — the export beside a menu holding the manifest and the whole-run
-      log. Neither of those two is part of judging the run, so neither is on the page
-      until the menu is opened; the export is, because handing the packet to someone
-      outside is a thing a reader comes here to do. ── #}
+{# ── 1. RUN OVERVIEW — what this run is and how it went: the grounding line, the one
+      action its state calls for, the status bar, and what its own records say went
+      wrong. Everything here is ABOUT the run; nothing here is its result.
+
+      Its heading shares a line with the TOOLBAR: the export, beside a menu holding
+      the manifest and the whole-run log. Neither of those two is part of judging the
+      run, so neither is on the page until the menu is opened; the export is, because
+      handing the packet to someone outside is a thing a reader comes here to do. ── #}
+<section class="run-section" id="run-overview-section">
+<div class="run-overview-head">
+<h2>Run overview</h2>
 <div class="run-toolbar">
   {% if not is_running %}
   <a class="btn ghost run-export" href="/project/{{ project }}/runs/{{ run_id }}/packet.zip"
@@ -162,13 +179,8 @@
     <p class="lede">Every lifecycle event for this whole run, in the order it happened. For one stage's events, use the run log inside its panel.</p>
     <div id="run-log-all">{{ run_log_panel("Events", event_tail, open=is_running) }}</div>
   </div>
-</div>
-
-{# ── 1. RUN OVERVIEW — what this run is and how it went: the grounding line, the one
-      action its state calls for, the status bar, and what its own records say went
-      wrong. Everything here is ABOUT the run; nothing here is its result. ── #}
-<section class="run-section" id="run-overview-section">
-<h2>Run overview</h2>
+</div>{# /.run-toolbar #}
+</div>{# /.run-overview-head #}
 {% include "_run_header.html" %}
 {% include "_run_issues.html" %}
 </section>

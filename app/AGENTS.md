@@ -16,8 +16,8 @@ routers in `app/web/routers/`, which import the Runner (`app.runtime`) and the s
 `.run-nav` (360px, collapsible) then `.run-main`. The nav column is the **spine** and holds
 the review guide alone — so it is rendered **only** where the pinned version carries a guide,
 and the work column takes the whole width otherwise (`.run-shell.no-nav`). Writing a guide is
-offered on the version page, which is where one is stored. The work column opens with the
-toolbar below, then four named sections, in this order:
+offered on the version page, which is where one is stored. The work column is four named
+sections, in this order:
 
 1. **Run overview** — the header (grounding line, CTA, status bar) and the issue index.
    Everything about the run; nothing that is its result.
@@ -30,9 +30,12 @@ toolbar below, then four named sections, in this order:
    stage is picked there is nothing to show, and a heading over an empty box is exactly the
    kind of always-on furniture this page was cut down to remove.
 
-Above them, the **toolbar** (`.run-toolbar`), right-aligned: the review-packet export as a
+The **toolbar** (`.run-toolbar`) shares Run overview's heading line (`.run-overview-head`,
+heading left, actions right — neither spends a row of its own): the review-packet export as a
 link, and beside it a menu button holding the raw manifest and the whole-run log
-(`.run-audit-menu`, closed on load, and closed again by Escape or a click outside it).
+(`.run-audit-menu`, closed on load, and closed again by Escape or a click outside it). The
+heading line, not the toolbar, is the menu's positioning context, so the menu can be bounded
+by the column's width instead of hanging off its left edge into `.run-main`'s clip.
 Neither of those two is part of judging the run, so neither is on the page until the menu is
 opened — which is also when the log's SSE feed connects, on a live run as on a finished one.
 The export stays outside the menu: handing the packet to someone outside is a thing a reader
