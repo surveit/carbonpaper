@@ -4,8 +4,11 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+import pandas as pd
+
 from evals.harness.case import load_case
-from evals.harness.compare import Comparison, compare_case_csv
+from evals.harness.compare import Comparison, align_case, compare_case
+from evals.harness.report import write_comparison_html
 from evals.harness.golden import extract_golden_table
 
 
@@ -15,7 +18,12 @@ def main(argv: list[str] | None = None) -> int:
         golden = extract_golden_table(args.notebook, args.cell_index, args.index_column)
         print(golden.model_dump_json(indent=2))
         return 0
-    comparison = compare_case_csv(load_case(args.case), args.actual)
+    case = load_case(args.case)
+    frame = pd.read_csv(args.actual, dtype=str)
+    comparison = compare_case(case, frame)
+    if args.html:
+        write_comparison_html(args.html, case, comparison, align_case(case, frame))
+        print(f"wrote {args.html}")
     print(comparison.model_dump_json(indent=2) if args.full else _summarize(comparison))
     return 0 if comparison.agrees() else 1
 
@@ -61,6 +69,7 @@ def _build_parser() -> argparse.ArgumentParser:
     compare.add_argument("case", type=Path)
     compare.add_argument("actual", type=Path)
     compare.add_argument("--full", action="store_true", help="print the whole comparison as JSON")
+    compare.add_argument("--html", type=Path, help="also write a side-by-side HTML report here")
     return parser
 
 

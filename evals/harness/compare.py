@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from difflib import SequenceMatcher
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Optional
 
 import pandas as pd
 from pydantic import BaseModel, ConfigDict, Field
@@ -37,6 +37,17 @@ class CellDifference(BaseModel):
     actual: CellValue
 
 
+class AlignedPair(BaseModel):
+    """One line of the two tables laid side by side, as the sequence diff paired them."""
+
+    model_config = ConfigDict(extra="forbid")
+    golden_position: Optional[int] = None
+    output_position: Optional[int] = None
+    golden: Optional[GoldenRow] = None
+    actual: Optional[GoldenRow] = None
+    differing_columns: list[str] = Field(default_factory=list)
+
+
 class Comparison(BaseModel):
     """A finding, not a score. A difference resolves three ways — a carbonpaper defect, an
     undiscovered defect in the published analysis, or undecidable from the data."""
@@ -56,18 +67,39 @@ class Comparison(BaseModel):
 
 def compare_case(case: Case, actual: pd.DataFrame) -> Comparison:
     """Raises if the build's output does not carry exactly the golden's columns."""
-    _refuse_wrong_columns(case, actual)
-    golden = case.golden.rows
-    built = _to_rows(case, actual)
-    aligned, row_differences, cell_differences = _align(case, golden, built)
+    pairs = align_case(case, actual)
     return Comparison(
         case_id=case.case_id,
-        golden_rows=len(golden),
-        output_rows=len(built),
-        aligned_rows=aligned,
-        row_differences=row_differences,
-        cell_differences=cell_differences,
+        golden_rows=len(case.golden.rows),
+        output_rows=sum(1 for pair in pairs if pair.actual is not None),
+        aligned_rows=sum(1 for pair in pairs if pair.golden is not None and pair.actual is not None),
+        row_differences=[
+            RowDifference(
+                kind="missing" if pair.actual is None else "extra",
+                position=(pair.golden_position if pair.actual is None else pair.output_position) or 0,
+                row=(pair.golden if pair.actual is None else pair.actual) or {},
+            )
+            for pair in pairs
+            if pair.golden is None or pair.actual is None
+        ],
+        cell_differences=[
+            CellDifference(
+                position=pair.golden_position or 0,
+                column=column,
+                golden=(pair.golden or {}).get(column),
+                actual=(pair.actual or {}).get(column),
+            )
+            for pair in pairs
+            for column in pair.differing_columns
+        ],
     )
+
+
+def align_case(case: Case, actual: pd.DataFrame) -> list[AlignedPair]:
+    """The two tables laid side by side. Shared by the comparison and the HTML report,
+    so a reader sees exactly the pairing the verdict was computed from."""
+    _refuse_wrong_columns(case, actual)
+    return _align(case, case.golden.rows, _to_rows(case, actual))
 
 
 def compare_case_csv(case: Case, actual_csv: Path) -> Comparison:
@@ -81,59 +113,39 @@ def compare_case_csv(case: Case, actual_csv: Path) -> Comparison:
 
 def _align(
     case: Case, golden: list[GoldenRow], built: list[GoldenRow]
-) -> tuple[int, list[RowDifference], list[CellDifference]]:
+) -> list[AlignedPair]:
     """A sequence diff over rows, rounded so within-tolerance cells pair up."""
     left = [_alignment_key(case, row) for row in golden]
     right = [_alignment_key(case, row) for row in built]
-    aligned = 0
-    rows: list[RowDifference] = []
-    cells: list[CellDifference] = []
+    pairs: list[AlignedPair] = []
     for tag, i1, i2, j1, j2 in SequenceMatcher(a=left, b=right, autojunk=False).get_opcodes():
-        if tag == "equal":
-            aligned += i2 - i1
-            cells.extend(_paired_cells(case, golden, built, i1, i2, j1, j2))
-            continue
+        shared = min(i2 - i1, j2 - j1) if tag in ("equal", "replace") else 0
+        for offset in range(shared):
+            pairs.append(_pair(case, golden[i1 + offset], built[j1 + offset], i1 + offset,
+                               j1 + offset))
         if tag in ("delete", "replace"):
-            rows.extend(_row_differences("missing", golden, i1, i2, j2 - j1))
+            pairs.extend(AlignedPair(golden_position=at, golden=golden[at])
+                         for at in range(i1 + shared, i2))
         if tag in ("insert", "replace"):
-            rows.extend(_row_differences("extra", built, j1, j2, i2 - i1))
-        if tag == "replace":
-            aligned += min(i2 - i1, j2 - j1)
-            cells.extend(_paired_cells(case, golden, built, i1, i2, j1, j2))
-    return aligned, rows, cells
+            pairs.extend(AlignedPair(output_position=at, actual=built[at])
+                         for at in range(j1 + shared, j2))
+    return pairs
 
 
-def _row_differences(
-    kind: Literal["missing", "extra"], rows: list[GoldenRow], start: int, stop: int, paired: int
-) -> list[RowDifference]:
-    """Only the rows a `replace` could not pair off are reported as missing/extra."""
-    unpaired = range(start + min(paired, stop - start), stop)
-    return [RowDifference(kind=kind, position=at, row=rows[at]) for at in unpaired]
-
-
-def _paired_cells(
-    case: Case,
-    golden: list[GoldenRow],
-    built: list[GoldenRow],
-    i1: int,
-    i2: int,
-    j1: int,
-    j2: int,
-) -> list[CellDifference]:
-    found: list[CellDifference] = []
-    for offset in range(min(i2 - i1, j2 - j1)):
-        want, got = golden[i1 + offset], built[j1 + offset]
-        for column in case.golden.columns:
-            if not _cells_agree(want[column], got.get(column), case.tolerance):
-                found.append(
-                    CellDifference(
-                        position=i1 + offset,
-                        column=column,
-                        golden=want[column],
-                        actual=got.get(column),
-                    )
-                )
-    return found
+def _pair(
+    case: Case, want: GoldenRow, got: GoldenRow, at_golden: int, at_output: int
+) -> AlignedPair:
+    return AlignedPair(
+        golden_position=at_golden,
+        output_position=at_output,
+        golden=want,
+        actual=got,
+        differing_columns=[
+            column
+            for column in case.golden.columns
+            if not _cells_agree(want[column], got.get(column), case.tolerance)
+        ],
+    )
 
 
 # Significant figures the alignment representation keeps. Deliberately COARSER than any
