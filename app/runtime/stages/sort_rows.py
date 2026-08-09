@@ -11,12 +11,15 @@ from typing import Any, NamedTuple
 
 import pandas as pd
 
+from app.core.frames import list_rows
 from app.models import Stage
-from app.models.stages.sort_rows import SortConfig, SortRowsStage
+from app.models.stages.sort_rows import SORT_KEY_FUNCTION_NAME, SortConfig, SortRowsStage
 
 from ..context import RunContext
 from ..lineage import attach_row_lineage, single_parent_lineage
+from ..starlark_code import compile_starlark_function
 from .execution import narrow_stage
+from .starlark_marshal import marshal_row_for_starlark
 
 
 class _SortVector(NamedTuple):
@@ -109,6 +112,8 @@ def _sorted_positions(
 def _build_sort_vectors(
     cfg: SortConfig, src: pd.DataFrame, stage_id: str
 ) -> list[_SortVector]:
+    if cfg.code is not None:
+        return _compute_key_vectors(cfg, src, stage_id)
     return [
         _SortVector(_read_sort_column(src, key.column, stage_id), key.direction, key.nulls)
         for key in cfg.keys
@@ -122,3 +127,55 @@ def _read_sort_column(src: pd.DataFrame, column: str, stage_id: str) -> pd.Serie
             f"input carries {sorted(str(c) for c in src.columns)}"
         )
     return src[column]
+
+
+def _compute_key_vectors(
+    cfg: SortConfig, src: pd.DataFrame, stage_id: str
+) -> list[_SortVector]:
+    """The Starlark key run down the frame, then transposed into one vector per position."""
+    handle = compile_starlark_function(
+        cfg.code or "", cfg.function or SORT_KEY_FUNCTION_NAME, SORT_KEY_FUNCTION_NAME
+    )
+    if handle is None:
+        raise ValueError(
+            f"sort_rows stage {stage_id}: code does not define "
+            f"`{cfg.function or SORT_KEY_FUNCTION_NAME}`"
+        )
+    keys = [
+        _read_computed_key(handle(marshal_row_for_starlark(row)), index, stage_id)
+        for index, row in enumerate(list_rows(src))
+    ]
+    return [
+        _SortVector(
+            pd.Series([key[position] for key in keys], dtype=object),
+            cfg.direction,
+            cfg.nulls,
+        )
+        for position in range(_find_key_width(keys, stage_id))
+    ]
+
+
+def _read_computed_key(result: Any, index: int, stage_id: str) -> list[Any]:
+    if not isinstance(result, (list, tuple)):
+        raise ValueError(
+            f"sort_rows stage {stage_id}: {SORT_KEY_FUNCTION_NAME} must return a list "
+            f"of values to order by, got {type(result).__name__} for row {index}"
+        )
+    return list(result)
+
+
+def _find_key_width(keys: list[list[Any]], stage_id: str) -> int:
+    """How many values every row's key holds; a key that is not one width is refused."""
+    widths = {len(key) for key in keys}
+    if len(widths) > 1:
+        raise ValueError(
+            f"sort_rows stage {stage_id}: {SORT_KEY_FUNCTION_NAME} returned keys of "
+            f"{sorted(widths)} values — a ragged key orders rows on different things"
+        )
+    width = widths.pop()
+    if width == 0:
+        raise ValueError(
+            f"sort_rows stage {stage_id}: {SORT_KEY_FUNCTION_NAME} returned an empty "
+            "list — there is nothing to order the rows by"
+        )
+    return width

@@ -7,6 +7,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
+from app.core.errors import SubsetRunError
 from app.models import parse_stage, Stage, Workflow
 from app.models.run_parameters import RunParameters
 from app.runtime.executor import run_subset
@@ -119,6 +120,68 @@ def test_per_key_nulls_differ_within_one_sort(tmp_path):
     assert out["a"].tolist() == ["x", "y", "w", "z"]
 
 
+# ── the Starlark key form ─────────────────────────────────────────────────────
+
+
+def test_a_starlark_key_orders_rows_by_something_no_column_holds(tmp_path):
+    src = pd.DataFrame({"a": ["xxx", "y", "zz"], "b": [1, 2, 3], "g": ["m", "n", "o"]})
+    load = _load_stage("src", src, tmp_path)
+    srt = _sort_stage("s", "src", {
+        "code": "def sort_key(row):\n    return [len(row['a'])]\n",
+        "summary": "shortest `a` first",
+    })
+
+    out = _run([load, srt], ["src", "s"], tmp_path / "runs" / "starlark")["s"]
+
+    assert out["a"].tolist() == ["y", "zz", "xxx"]
+
+
+def test_a_starlark_key_of_several_values_breaks_its_own_ties(tmp_path):
+    src = pd.DataFrame({"a": ["xx", "yy", "z"], "b": [2, 1, 3], "g": ["m", "n", "o"]})
+    load = _load_stage("src", src, tmp_path)
+    srt = _sort_stage("s", "src", {
+        "code": "def sort_key(row):\n    return [len(row['a']), row['b']]\n",
+        "summary": "shortest `a` first, then smallest `b`",
+    })
+
+    out = _run([load, srt], ["src", "s"], tmp_path / "runs" / "starlark_multi")["s"]
+
+    assert out["a"].tolist() == ["z", "yy", "xx"]
+
+
+def test_a_ragged_starlark_key_stops_the_stage(tmp_path):
+    src = pd.DataFrame({"a": ["x", "y"], "b": [1, 2], "g": ["m", "n"]})
+    load = _load_stage("src", src, tmp_path)
+    srt = _sort_stage("s", "src", {
+        "code": (
+            "def sort_key(row):\n"
+            "    if row['b'] == 1:\n"
+            "        return [row['b']]\n"
+            "    return [row['b'], row['a']]\n"
+        ),
+        "summary": "a key whose width depends on the row",
+    })
+
+    with pytest.raises(SubsetRunError) as exc_info:
+        _run([load, srt], ["src", "s"], tmp_path / "runs" / "ragged")
+
+    assert "ragged" in str(exc_info.value)
+
+
+def test_a_starlark_key_that_is_not_a_list_stops_the_stage(tmp_path):
+    src = pd.DataFrame({"a": ["x", "y"], "b": [1, 2], "g": ["m", "n"]})
+    load = _load_stage("src", src, tmp_path)
+    srt = _sort_stage("s", "src", {
+        "code": "def sort_key(row):\n    return row['b']\n",
+        "summary": "a bare value, not a key",
+    })
+
+    with pytest.raises(SubsetRunError) as exc_info:
+        _run([load, srt], ["src", "s"], tmp_path / "runs" / "scalar_key")
+
+    assert "must return a list" in str(exc_info.value)
+
+
 # ── loud failures ─────────────────────────────────────────────────────────────
 
 
@@ -201,3 +264,19 @@ def test_a_window_sorts_what_the_stage_read_and_lineage_names_true_ordinals(tmp_
     trace = trace_row(run_dir, "s", 0)
     assert trace.steps[1].row_ordinal == 2
     assert trace.steps[1].row["a"] == "z"
+
+
+def test_trace_crosses_a_sort_driven_by_a_starlark_key(tmp_path):
+    src = pd.DataFrame({"a": ["xxx", "y", "zz"], "b": [1, 2, 3], "g": ["m", "n", "o"]})
+    load = _load_stage("src", src, tmp_path)
+    srt = _sort_stage("s", "src", {
+        "code": "def sort_key(row):\n    return [len(row['a'])]\n",
+        "summary": "shortest `a` first",
+    })
+    run_dir = tmp_path / "runs" / "trace_starlark_sort"
+
+    _run([load, srt], ["src", "s"], run_dir)
+
+    trace = trace_row(run_dir, "s", 0)
+    assert trace.steps[1].row_ordinal == 1
+    assert trace.steps[1].row["a"] == "y"
