@@ -20,24 +20,27 @@
        two --sunk levels below it, then the two rule weights. --raised is pure
        white so a card lifts off the canvas without needing a shadow.
 
-       The ladder steps evenly in lightness (CIE L* 98.6 / 97.0 / 95.4 / 93.6)
-       at chroma ZERO. It has no temperature, and that is the point: the paper
-       is the one surface a hue can only hurt. Two earlier versions proved it.
-       A cream ladder let chroma climb 2.6 -> 7.9 as it darkened, so the lower
-       surfaces went muddy rather than simply lower, and it sat warm under cool
-       blue-black text — two palettes bolted together across the two things you
-       look at most. Swinging it onto the ink's hue instead fixed the clash and
-       bought a sheet that read cold. Neutral is what is left, and it is right:
-       the ink carries the only temperature in the app. Do not give the paper a
-       hue. --border-strong is the second rule weight, for a card that has to
-       hold its edge under the cursor. */
+       The ladder runs CIE L* 99.4 / 98.0 / 96.6 / 95.0 / 92.4 / 85.0, at a
+       chroma of 0.4 rising to 1.1, on the accent's hue.
+
+       --border does the most work by far — it is drawn 89 times, more than any
+       other value in the stylesheet, by every card, table, chip, panel and
+       input. When it sat at L* 89.5 on a page otherwise 95-100, that grid of
+       lines WAS the page's weight, and lifting the canvas alone would not have
+       touched it; it lifts most here, by 2.9.
+
+       The chroma is a whisper, not a temperature. A cream ladder read warm
+       under blue-black text and clashed; swinging it to the ink's hue at 1.8
+       read cold. At 0.4-1.1 there is no temperature to feel, but the greys stop
+       reading as dead flat, which is what a true zero costs. --border-strong is
+       the second rule weight, for a card holding its edge under the cursor. */
     --raised: #ffffff;
-    --bg: #fbfbfb;
-    --hover: #ededed;
-    --sunk: #f6f6f6;
-    --sunk-deep: #f2f2f2;
-    --border: #e1e1e1;
-    --border-strong: #c9c9c9;
+    --bg: #fdfdfe;
+    --hover: #f0f1f2;
+    --sunk: #f9f9fa;
+    --sunk-deep: #f5f5f6;
+    --border: #e9e9eb;
+    --border-strong: #d4d4d6;
 
     /* ── The ink ──────────────────────────────────────────────────────────
        --on-dark is ink printed on a filled chip or button — a different job
@@ -81,10 +84,10 @@
 
        tests/arch/test_status_colour_contract.py measures every ink against its
        own tint, so a nudged value fails CI rather than a reader. */
-    --good-bd: #2f6d30;   --good-bg: #daedd7;   --good-ink: #1c5c20;
+    --good-bd: #2f6d30;   --good-bg: #dbedd8;   --good-ink: #1c5c20;
     --warn-bd: #8b602c;   --warn-bg: #fae4cf;   --warn-ink: #6f4714;
     --bad-bd: #934133;    --bad-bg: #ffe1da;    --bad-ink: #863629;
-    --info-bd: #007a93;   --info-bg: #c7eff7;   --info-ink: #005870;
+    --info-bd: #007a93;   --info-bg: #c9eefb;   --info-ink: #005870;
     --idle-bd: #787d86;   --idle-bg: #e6e8ec;   --idle-ink: #4c5159;
 
     /* ── Interaction, not meaning ─────────────────────────────────────────

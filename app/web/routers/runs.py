@@ -34,7 +34,7 @@ from app.models.stages.input_data import resolve_file_format
 from app.services.errors import WorkflowLoadError
 from app.services.versioning import list_versions
 from app.services import run as run_service
-from app.services.run_guide import build_run_guide_view, find_guideless_version_id
+from app.services.run_guide import build_run_guide_view
 from app.runtime.cancellation import request_cancel
 from app.runtime.run_log import RUN_DONE, read_events_since
 from app.web.config import EVENT_TAIL, projects_dir, templates
@@ -476,12 +476,9 @@ async def run_detail(request: Request, project: str, run_id: str):
             # index above the graph (app.web.run_issues). Takes the stages the
             # graph already loaded, so the page reads the pinned version once.
             "issues": build_run_issues(manifest, graph.stages),
-            # None when the pinned version carries no guide — the panel is then
+            # None when the pinned version carries no guide — the nav column is then
             # not rendered at all, rather than standing in for one with prose.
             "guide": build_run_guide_view(project, manifest),
-            # Set only when a guide could still be written for this run's version:
-            # the version id the Generate-guide offer targets in the panel's place.
-            "guideless_version": find_guideless_version_id(project, manifest),
             # The guide rail's stage chips resolve through the same links object
             # the stage panel uses, so the packet can point them at its own pages.
             "links": resolve_panel_links(project, run_id),
