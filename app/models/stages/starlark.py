@@ -61,12 +61,14 @@ def _refuse_stub(reason: str) -> None:
     return None
 
 
-def validate_starlark_function_code(code: str, function: str | None) -> None:
+def validate_starlark_function_code(
+    code: str, function: str | None, default_name: str = DEFAULT_FUNCTION_NAME
+) -> None:
     """Raise ValueError unless executing `code` binds `function` to a function."""
-    wanted = function or DEFAULT_FUNCTION_NAME
+    wanted = function or default_name
     candidates = (
-        (wanted,) if wanted == DEFAULT_FUNCTION_NAME
-        else (wanted, DEFAULT_FUNCTION_NAME)
+        (wanted,) if wanted == default_name
+        else (wanted, default_name)
     )
     try:
         module = compile_starlark_module(code, {REFUSE_BUILTIN: _refuse_stub})
