@@ -10,7 +10,6 @@ import math
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from enum import Enum
 from typing import Any
 
 import pandas as pd
@@ -29,6 +28,7 @@ from app.models import (
     STR_COLUMN_TYPE,
     TableSchema,
 )
+from app.models.severity import UserFacingErrorSeverity
 
 
 # ── Type checking ────────────────────────────────────────────────────────────
@@ -52,16 +52,9 @@ assert set(CELL_TYPE_PREDICATES) == SCALAR_COLUMN_TYPES, (
 _OFFENDER_SAMPLE_N = 10
 
 
-class Severity(str, Enum):
-    """An `Issue`'s severity — `error` fails `ValidationReport.ok`, `warning`
-    is informational only."""
-    error = "error"
-    warning = "warning"
-
-
 @dataclass
 class Issue:
-    severity: str    # Severity.error | Severity.warning
+    severity: str    # UserFacingErrorSeverity.error | UserFacingErrorSeverity.warning
     column: str | None
     message: str
 
@@ -75,7 +68,7 @@ class ValidationReport:
 
     @property
     def ok(self) -> bool:
-        return not any(i.severity == Severity.error for i in self.issues)
+        return not any(i.severity == UserFacingErrorSeverity.error for i in self.issues)
 
     def to_dict(self) -> dict[str, Any]:
         return {

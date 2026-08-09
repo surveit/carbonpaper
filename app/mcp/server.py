@@ -277,7 +277,7 @@ def report_compiler_warnings(project_id: str) -> dict[str, Any]:
     report = find_workflow_compiler_warnings(stages, failing)
     return {
         "is_clean": report.is_clean,
-        "blocking": [w.model_dump(mode="json") for w in report.blocking],
+        "errors": [w.model_dump(mode="json") for w in report.errors],
         "warnings": [w.model_dump(mode="json") for w in report.warnings],
     }
 

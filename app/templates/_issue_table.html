@@ -1,0 +1,55 @@
+{#
+  THE ISSUE TABLE — one line per issue, each one a link into the stage panel on
+  the page that renders it. Two pages index issues this way, and they are read by
+  the same person minutes apart: the run page (what this run's records say went
+  wrong) and the Workflow page (what is wrong with the workflow as written). One
+  table, so reading the second costs nothing once the first has been read.
+
+  A row is: the severity WORD · the stage · a narrow qualifier · the message. The
+  qualifier is whatever that page has that is narrower than a sentence — a column
+  name on a run, the warning kind on the workflow — and `tags` trail the message
+  as small codes (on a run, the reports that raised the same line).
+
+  A stage link carries [data-stage-link], the app-wide "open this stage" hook, and
+  `tab` names which of the stage panel's tabs to open where the page has tabs.
+
+  The panel is titled by its COUNTS and nothing else — "18 warnings, 3 errors" —
+  so the two pages cannot drift into describing the same list differently. A count
+  of zero is not written: "0 errors" reads as a result, and the result here is the
+  other number.
+#}
+{% macro issue_panel(errors, warnings, open=false) %}
+<details class="issue-panel issue-panel-{{ 'error' if errors else 'warn' }}"{% if open %} open{% endif %}>
+  <summary>
+    <span class="issue-panel-title">
+      {%- if warnings %}{{ warnings }} warning{{ '' if warnings == 1 else 's' }}{% endif -%}
+      {%- if errors and warnings %}, {% endif -%}
+      {%- if errors %}{{ errors }} error{{ '' if errors == 1 else 's' }}{% endif -%}
+    </span>
+  </summary>
+  <div class="issue-panel-scroll">
+    <table class="issue-table">
+      <tbody>{{ caller() }}</tbody>
+    </table>
+  </div>
+</details>
+{% endmacro %}
+
+{# `stage_id` empty draws no link: a run repeats one stage across rows and names it
+   on the first only.
+
+   Called with a {% call %} block, the block renders UNDER the message as that
+   line's own footnote — what a stop names and nothing else has room for (the
+   columns it refused, its traceback, what it blocked). The index is still one
+   line per issue; this is that line's small print. #}
+{% macro issue_row(severity, stage_id, message, subject=none, tab=none, tags=(), href="#") %}
+<tr class="sev-{{ severity }}">
+  <td class="issue-sev">{{ severity }}</td>
+  <td class="issue-stage">{% if stage_id %}<a href="{{ href }}" data-stage-link="{{ stage_id }}"
+        {%- if tab %} data-stage-tab="{{ tab }}"{% endif %}><code>{{ stage_id }}</code></a>{% endif %}</td>
+  <td class="issue-subject">{% if subject %}<code>{{ subject }}</code>{% endif %}</td>
+  <td class="issue-message">{{ message }}
+    <span class="issue-tags">{% for tag in tags %}<code>{{ tag }}</code>{% endfor %}</span>
+    {%- if caller %}<div class="issue-more">{{ caller() }}</div>{% endif %}</td>
+</tr>
+{% endmacro %}

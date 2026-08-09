@@ -31,20 +31,23 @@ Below them, one **audit drawer** (`.run-audit`) with the review packet, the raw 
 the run log; closed except on a live run, when the log is the only thing moving.
 
 ## The run page's issue index (`app.web.run_issues` → `_run_issues.html`)
-Inside Run overview, under the header: an INDEX into the stage panels — every entry is one line
-plus a deep link, and the detail stays in the panel's own validation block. It stays in the
-work column, not the nav rail: its four-column table needs the width.
-- **"Why this run stopped"** — one card per `error` stage, leading with which story it is,
-  because they route to different people: a schema refusal (`OutputSchemaViolation`) and an
-  authored `StepRefused` are the data's and link the panel's **Data** / **Transform** tab; any
-  other exception is the code's and keeps its type, message and traceback. Each card names the
-  stages downstream of it that never ran, read off the pinned version's edges — with no readable
-  version it names none rather than blaming the pending stages it can see.
-- **The flagged section**, titled by its own counts (`17 warnings, 2 errors`; a severity with
-  none of them is left out) — every issue the cards do not carry (warnings anywhere, plus an
-  error-severity INPUT issue, which only warns its stage), one line per stage × column ×
-  message, stages in the run's own order. Folded when something stopped the run; open when
-  nothing did, which is the run whose warnings would otherwise go unread.
+Inside Run overview, under the header: ONE list indexing the stage panels — every entry is one
+line plus a deep link, and the detail stays in the panel's own validation block. It stays in the
+work column, not the nav rail: its four-column table needs the width. Drawn with
+`_issue_table.html`, the panel + row macros the **Workflow** page's compiler warnings also use;
+the macros own the heading (`17 warnings, 2 errors`, a severity with none of them left out), so
+neither page can word its counts differently.
+- **A stop** — an `error` stage, the run's own end — is the FIRST line, marked `stopped`, its
+  message leading with which story it is, because they route to different people: a schema
+  refusal (`OutputSchemaViolation`) and an authored `StepRefused` are the data's and link the
+  panel's **Data** / **Transform** tab; any other exception is the code's and keeps its type.
+  What only a stop carries nests under its own line through the row macro's call block — the
+  columns it refused, the reason its author wrote, its traceback, and the stages downstream
+  that never ran, read off the pinned version's edges (with no readable version it names none
+  rather than blaming the pending stages it can see).
+- **Then every issue that did not stop it** (warnings anywhere, plus an error-severity INPUT
+  issue, which only warns its stage), one line per stage × column × message, stages in the
+  run's own order.
 
 A deep link loads the panel through `_loadStage(id, {tab, reveal})`, which the panel serves by
 publishing `_selectTab` on its root element. `reveal` smooth-scrolls the panel's top to the top of the

@@ -26,6 +26,7 @@
   Reused (unchanged) routes: node panel /node/{id}/panel,/edit; /workflow/graph;
   create version POST /version; run POST /run; (re)generate POST /generate.
 #}
+{% from "_issue_table.html" import issue_panel, issue_row %}
 {# The section key stays 'workflow' (internal); the VISIBLE tab title says Workflow. #}
 {% block title %}{{ state.meta.title or state.name }} · Workflow{% endblock %}
 
@@ -75,25 +76,23 @@
    agent look at one thing. Blocking entries first: those are the ones someone can
    fix. A warning does not stop anyone reviewing the workflow — it means their
    attention is about to be spent on something already known. Whether a step's
-   examples PASS is a different question, answered by running them, and is not here. #}
+   examples PASS is a different question, answered by running them, and is not here.
+
+   Drawn with the issue table the run page indexes ITS issues with: the severity
+   word leads, the stage links its panel, the kind rides in the narrow cell a run
+   gives the column name. An `error` is a warning an edit to that stage clears; the
+   panel is titled by the two counts, in the words the clean state below already
+   answers in ("0 errors, 0 warnings"). #}
 {% if compiler_warnings and compiler_warnings.warnings %}
-{% set blocking = compiler_warnings.blocking|length %}
-<details class="wf-issues wf-issues-{{ 'error' if blocking else 'note' }}" open>
-  <summary>
-    {% if blocking %}<strong>⚠ {{ blocking }} to fix before signing this workflow off</strong>
-    {% else %}<strong>Nothing left to fix</strong>{% endif %}
-    <span class="muted">— {{ compiler_warnings.warnings|length }} compiler
-      warning{% if compiler_warnings.warnings|length != 1 %}s{% endif %}</span></summary>
-  <ul>
-    {% for warning in compiler_warnings.warnings %}
-    <li class="wf-issue wf-issue-{{ 'error' if warning.blocking else 'note' }}">
-      <span class="wf-issue-kind">{{ warning.kind.replace('_', ' ') }}</span>
-      <a href="#" data-stage-link="{{ warning.stage_id }}"><code>{{ warning.stage_id }}</code></a>
-      <span class="muted">— {{ warning.detail }}</span>
-    </li>
-    {% endfor %}
-  </ul>
-</details>
+{% set errors = compiler_warnings.errors|length %}
+<div class="wf-issue-index">
+{% call issue_panel(errors, compiler_warnings.warnings|length - errors, open=true) %}
+  {% for warning in compiler_warnings.warnings %}
+  {{ issue_row(severity=warning.severity, stage_id=warning.stage_id,
+               subject=warning.kind, message=warning.detail) }}
+  {% endfor %}
+{% endcall %}
+</div>
 {% elif compiler_warnings %}
 {# Nothing wrong, said out loud. Silence here is what a reviewer sees when nobody has
    looked, so a clean workflow has to be distinguishable from an unexamined one. The

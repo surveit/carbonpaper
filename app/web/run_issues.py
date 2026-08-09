@@ -5,7 +5,6 @@ stays in the stage panel's own validation block, so there is one copy of it.
 
 from __future__ import annotations
 
-from collections import Counter
 from enum import Enum
 from typing import Any, Mapping, Sequence
 
@@ -14,7 +13,7 @@ from pydantic import BaseModel
 from app.core.run_status import StageStatus
 from app.models import Stage, StepRefused
 from app.models.run_manifest import SCHEMA_REFUSAL_ERROR_TYPE
-from app.runtime.validation import Severity
+from app.models.severity import UserFacingErrorSeverity
 from app.web.stage_strip import read_stage_records
 
 
@@ -74,17 +73,23 @@ class RunIssues(BaseModel):
     stopped: list[StoppedStage]
     flagged: list[FlaggedStage]
 
+    # The two counts the panel is headed by; the WORDING is the shared issue
+    # table's, so the Workflow page's heading cannot drift from this one.
     @property
-    def flagged_headline(self) -> str:
-        """The flagged section's title: its counts by severity, a zero left out entirely."""
-        counts = Counter(
-            issue.severity for stage in self.flagged for issue in stage.issues
-        )
-        return ", ".join(
-            f"{counts[severity.value]} {severity.value}"
-            f"{'' if counts[severity.value] == 1 else 's'}"
-            for severity in (Severity.warning, Severity.error)
-            if counts[severity.value]
+    def error_count(self) -> int:
+        """A stop is ONE line — the issues it names are nested under it, not counted twice."""
+        return len(self.stopped) + self._count_flagged(UserFacingErrorSeverity.error)
+
+    @property
+    def warning_count(self) -> int:
+        return self._count_flagged(UserFacingErrorSeverity.warning)
+
+    def _count_flagged(self, severity: UserFacingErrorSeverity) -> int:
+        return sum(
+            1
+            for stage in self.flagged
+            for issue in stage.issues
+            if issue.severity == severity
         )
 
 
@@ -130,7 +135,7 @@ def _view_stopped_stage(
         issues=[
             issue
             for issue in _read_stage_issues(record)
-            if issue.severity == Severity.error
+            if issue.severity == UserFacingErrorSeverity.error
         ],
         never_ran=_find_stages_it_blocked(stage_id, consumers, never_ran, order),
     )
@@ -146,7 +151,7 @@ def _view_flagged_stages(
         issues = [
             issue
             for issue in _read_stage_issues(record)
-            if not (stopped and issue.severity == Severity.error)
+            if not (stopped and issue.severity == UserFacingErrorSeverity.error)
         ]
         if issues:
             flagged.append(
@@ -175,7 +180,7 @@ def _read_stage_issues(record: Mapping[str, Any]) -> list[ValidationIssue]:
         ValidationIssue(severity=severity, column=column, message=message, phases=phases)
         for (severity, column, message), phases in phases_by_issue.items()
     ]
-    return sorted(lines, key=lambda issue: issue.severity != Severity.error)
+    return sorted(lines, key=lambda issue: issue.severity != UserFacingErrorSeverity.error)
 
 
 def _read_reports(record: Mapping[str, Any]) -> list[Mapping[str, Any]]:
