@@ -2,18 +2,19 @@
 
 Every input row yields exactly one output row in its own input position; a row with
 no cached decision is marked deferred, never defaulted. On any deferral the mapper
-writes a fingerprints sidecar POSITIONALLY aligned to the snapshot's rows, and halts."""
+stores fingerprints POSITIONALLY aligned to the snapshot's rows, and halts."""
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
+from typing import ClassVar
 
 import pandas as pd
 
 from app.core.frames import write_frame_file_with_csv_fallback
+from app.core.persistence import PersistedModel, PersistenceScope
 from app.core.predicate import parse_predicate
 from app.models import Stage
 from app.models.run_manifest import QueueStats, StageContribution
@@ -26,7 +27,29 @@ from app.core.stage_cache import compute_row_fingerprint
 
 from ..context import RunContext
 from ..errors import HaltForReview
+from ..context import RunIdentity
 from .execution import ROW_DEFERRED_KEY, Row, RowMapper, narrow_stage
+
+
+class QueueFingerprints(PersistedModel):
+    """A halted queue stage's bookkeeping, stored as
+    `queue_fingerprints/<project>/<run_id>/<stage_id>`."""
+
+    collection: ClassVar[str] = "queue_fingerprints"
+    SCOPE: ClassVar[PersistenceScope] = PersistenceScope.RUN
+
+    # Never snapshot COLUMNS: `stage_fingerprint` is shared by every pending row
+    # of that halt; `input_fingerprints` and `row_ordinals` hold one entry per
+    # row each, POSITIONALLY aligned to the snapshot's row order. `row_ordinals`
+    # is None on a record stored before the runtime recorded them — an
+    # unknowable position, never a guessed one.
+    stage_fingerprint: str
+    input_fingerprints: list[str]
+    row_ordinals: list[int] | None = None
+
+    @staticmethod
+    def compose_id(project: str, run_id: str, stage_id: str) -> str:
+        return f"{project}/{run_id}/{stage_id}"
 
 
 @dataclass(frozen=True)
@@ -118,7 +141,8 @@ class _QueueRowMapper:
         pending = _find_pending_reviews(df)
         if not pending:
             return
-        queue_path = _write_queue_files(ctx.require_run_dir() / "queue", stage, pending)
+        queue_path = _write_queue_files(
+            ctx.require_run_dir() / "queue", ctx.require_identity(), stage, pending)
         raise HaltForReview(
             stage_id=stage.id,
             pending_count=len(pending),
@@ -255,15 +279,12 @@ def _find_pending_reviews(df: pd.DataFrame) -> list[PendingReview]:
 
 
 def _write_queue_files(
-    queue_dir: Path, stage: Stage, pending: list[PendingReview]
+    queue_dir: Path, identity: RunIdentity, stage: Stage, pending: list[PendingReview]
 ) -> Path:
-    """Write the snapshot and its fingerprint sidecar into `queue_dir`,
-    creating the directory, and return the snapshot's path."""
+    """Write the snapshot frame and store its fingerprints; return the frame's path."""
     queue_dir.mkdir(parents=True, exist_ok=True)
     queue_path = _write_pending_snapshot(queue_dir, stage.id, pending)
-    _write_fingerprint_sidecar(
-        queue_dir, stage.id, stage.compute_definition_fingerprint(), pending
-    )
+    _store_fingerprints(identity, stage, pending)
     return queue_path
 
 
@@ -276,19 +297,17 @@ def _write_pending_snapshot(queue_dir: Path, sid: str, pending: list[PendingRevi
     return write_frame_file_with_csv_fallback(frame, queue_dir / f"{sid}.parquet").path
 
 
-def _write_fingerprint_sidecar(
-    queue_dir: Path, sid: str, stage_fingerprint: str, pending: list[PendingReview]
+def _store_fingerprints(
+    identity: RunIdentity, stage: Stage, pending: list[PendingReview]
 ) -> None:
     """`input_fingerprints` and `row_ordinals` are POSITIONALLY aligned to the snapshot."""
-    # Both are in the pending rows' own order; `stage_fingerprint` is the one every
-    # pending row of this halt shares. `row_ordinals` are positions in this stage's
-    # INPUT frame, so they are NOT 0..n-1 whenever a queue filter passed some rows
-    # through unreviewed.
-    (queue_dir / f"{sid}.fingerprints.json").write_text(
-        json.dumps({
-            "stage_fingerprint": stage_fingerprint,
-            "input_fingerprints": [item.input_fingerprint for item in pending],
-            "row_ordinals": [item.row_ordinal for item in pending],
-        }),
-        encoding="utf-8",
-    )
+    QueueFingerprints(
+        # Both lists are in the pending rows' own order; `stage_fingerprint` is
+        # the one every pending row of this halt shares. `row_ordinals` are
+        # positions in this stage's INPUT frame, so they are NOT 0..n-1 whenever
+        # a queue filter passed some rows through unreviewed.
+        id=QueueFingerprints.compose_id(identity.project, identity.run_id, stage.id),
+        stage_fingerprint=stage.compute_definition_fingerprint(),
+        input_fingerprints=[item.input_fingerprint for item in pending],
+        row_ordinals=[item.row_ordinal for item in pending],
+    ).save()

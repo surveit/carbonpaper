@@ -1,10 +1,11 @@
 """Architecture: `app.core.stage_cache` is the only channel a stage handler may
 use to persist something outliving its own run. No `"project_dir"` dict key under
-`app/runtime/stages`, and no `.save()`/`.delete()` under `app/runtime` outside the
-two modules owning the run's OWN (run-scoped) records.
+`app/runtime/stages`, and no `.save()`/`.delete()` under `app/runtime` except in a
+module that DEFINES a PersistenceScope.RUN record (the run's OWN state).
 """
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 
 from arch import check_no_dict_keys
@@ -16,12 +17,24 @@ _RUNTIME_DIR = Path(__file__).resolve().parents[1]
 
 _BANNED_PERSISTENCE_METHODS = frozenset({"save", "delete"})
 
-# The modules allowed to write a record, because each owns a PersistenceScope.RUN
-# one keyed by `<project>/<run_id>`: the run's manifest and its event log. That is
-# the run's OWN state — the same thing `run_dir` writes were, before those two
-# moved off disk — not the cross-run project scope this rule exists to protect.
-# Any OTHER runtime module writing a record is still the bug this catches.
-_RUN_SCOPED_RECORD_OWNERS = frozenset({"manifest.py", "run_log.py"})
+# A module may write a record only if it DEFINES one whose SCOPE is RUN — the
+# run's own state, keyed `<project>/<run_id>/…`, which is the same thing
+# `run_dir` writes were before those records moved off disk. Written as a
+# property of the module rather than a list of filenames, so it stays the rule
+# it means: project-scope writes from the runtime are still the bug this catches.
+_RUN_SCOPE = "PersistenceScope.RUN"
+
+
+def defines_a_run_scoped_record(tree: ast.Module) -> bool:
+    """Whether `tree` declares a class with `SCOPE: ... = PersistenceScope.RUN`."""
+    return any(
+        isinstance(node, ast.AnnAssign)
+        and isinstance(node.target, ast.Name)
+        and node.target.id == "SCOPE"
+        and node.value is not None
+        and ast.unparse(node.value) == _RUN_SCOPE
+        for node in ast.walk(tree)
+    )
 
 
 def find_persisted_write_call_offenders(paths: list[Path]) -> list[str]:
@@ -29,9 +42,10 @@ def find_persisted_write_call_offenders(paths: list[Path]) -> list[str]:
     or `.delete()` on anything — the two `PersistedModel` writes — directly."""
     offenders: list[str] = []
     for path in paths:
-        if path.name in _RUN_SCOPED_RECORD_OWNERS:
+        tree = parse_module(path)
+        if defines_a_run_scoped_record(tree):
             continue
-        hits = collect_called_methods(parse_module(path)) & _BANNED_PERSISTENCE_METHODS
+        hits = collect_called_methods(tree) & _BANNED_PERSISTENCE_METHODS
         if hits:
             offenders.append(f"{path.name}: {sorted(hits)}")
     return offenders
@@ -51,8 +65,9 @@ def test_runtime_never_calls_save_or_delete_directly() -> None:
     assert not offenders, (
         "app/runtime must reach a cross-run write only through the cache seam's "
         "own StageCache.put — never PersistedModel.save()/delete() directly, "
-        "even when it holds a legitimately-read entry instance. The exceptions "
-        f"are {sorted(_RUN_SCOPED_RECORD_OWNERS)}, which own RUN-scoped records:\n  "
+        "even when it holds a legitimately-read entry instance. A module that "
+        "DEFINES a PersistenceScope.RUN record may write that one — the run's "
+        "own state — and nothing else may write at all:\n  "
         + "\n  ".join(offenders)
     )
 

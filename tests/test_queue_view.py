@@ -52,7 +52,8 @@ def test_lineage_links_the_single_upstream_stage_at_the_sidecar_ordinal():
     # the UPSTREAM stage and the row's ordinal from the sidecar — never the queue stage
     # itself, and never a guessed position.
     stage = _queue_stage(_LABEL_COLUMNS, input_ids=["label"])
-    fingerprints = QueueFingerprints("sf", ["fp0", "fp1"], [3, 7])
+    fingerprints = QueueFingerprints(stage_fingerprint="sf", input_fingerprints=["fp0", "fp1"],
+                                      row_ordinals=[3, 7])
 
     lineage = queue_view.resolve_lineage(stage, fingerprints)
 
@@ -66,7 +67,8 @@ def test_lineage_links_the_single_upstream_stage_at_the_sidecar_ordinal():
 def test_lineage_states_why_no_link_can_be_built():
     # Halted before ordinals were recorded; a 2-input queue stage no longer parses.
     stage = _queue_stage(_LABEL_COLUMNS, input_ids=["label"])
-    fingerprints = QueueFingerprints("sf", ["fp0", "fp1"], None)
+    fingerprints = QueueFingerprints(stage_fingerprint="sf", input_fingerprints=["fp0", "fp1"],
+                                      row_ordinals=None)
     expected_in_note = "ordinal"
 
     lineage = queue_view.resolve_lineage(stage, fingerprints)

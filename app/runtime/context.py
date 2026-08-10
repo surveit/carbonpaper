@@ -110,6 +110,16 @@ class RunContext(BaseModel):
         # prepared run is never executed.
         return self.model_copy(update={"run_log": log})
 
+    def require_identity(self) -> RunIdentity:
+        """This run's (project, run id), for a handler storing a run-scoped record."""
+        if self.identity is None:
+            raise ValueError(
+                "this run context has no identity — it is an in-memory harness "
+                "context, so a stage that stores a run-scoped record cannot "
+                "execute under it."
+            )
+        return self.identity
+
     def require_run_dir(self) -> Path:
         """This run's on-disk dir, for a handler that writes run-scoped output
         (publish artifacts, the queue snapshot). Fails loudly on the harness

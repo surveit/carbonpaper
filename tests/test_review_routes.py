@@ -26,6 +26,7 @@ from conftest import (
     QUEUE_COLUMNS, pinned_stages, queue_added_columns, queue_columns, resumed_stages,
 )
 from stage_seed import add_stage
+from app.runtime.stages.human_review_queue import QueueFingerprints
 
 PROJECT = "queue_route_journey"
 
@@ -117,11 +118,11 @@ def _review_stage():
 
 
 def _read_fingerprints(run_dir, stage_id: str = "review") -> dict:
-    """The sidecar `<stage_id>.fingerprints.json` a halted queue stage writes
-    beside its snapshot."""
-    path = run_dir / "queue" / f"{stage_id}.fingerprints.json"
-    parsed: dict = json.loads(path.read_text(encoding="utf-8"))
-    return parsed
+    """What a halted queue stage stored beside its snapshot."""
+    stored = QueueFingerprints.load(
+        QueueFingerprints.compose_id(run_dir.parent.parent.name, run_dir.name, stage_id))
+    return stored.model_dump(include={"stage_fingerprint", "input_fingerprints",
+                                      "row_ordinals"})
 
 
 def _find_stage_def(project: str, stage_id: str) -> Stage:

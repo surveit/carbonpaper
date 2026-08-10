@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 
 import pandas as pd
 import pytest
@@ -23,6 +22,7 @@ from conftest import (
 )
 from stage_seed import add_stage
 from run_seed import read_manifest
+from app.runtime.stages.human_review_queue import QueueFingerprints
 
 PROJECT = "hrq-cache-tests"
 
@@ -83,12 +83,12 @@ def _src(rows: int = 2) -> pd.DataFrame:
     return pd.DataFrame({"id": [f"r{i}" for i in range(rows)], "score": list(range(rows))})
 
 
-def _read_fingerprints(queue_path) -> dict:
-    """The sidecar `<stage>.fingerprints.json` beside a halted queue's own
-    snapshot file — same stem, whichever extension the snapshot landed on."""
-    sidecar = queue_path.parent / f"{queue_path.stem}.fingerprints.json"
-    parsed: dict = json.loads(sidecar.read_text(encoding="utf-8"))
-    return parsed
+def _read_fingerprints(run_id: str, stage_id: str, project: str = PROJECT) -> dict:
+    """What the halted queue stage stored for this run."""
+    stored = QueueFingerprints.load(
+        QueueFingerprints.compose_id(project, run_id, stage_id))
+    return stored.model_dump(include={"stage_fingerprint", "input_fingerprints",
+                                      "row_ordinals"})
 
 
 def _halt_and_read_snapshot(
@@ -97,7 +97,8 @@ def _halt_and_read_snapshot(
     with pytest.raises(HaltForReview) as exc_info:
         _run_queue_stage(stage, inputs, ctx)
     queue_path = exc_info.value.queue_path
-    return pd.read_parquet(queue_path), _read_fingerprints(queue_path)
+    return (pd.read_parquet(queue_path),
+            _read_fingerprints(ctx.identity.run_id, queue_path.stem))
 
 
 def _put_approval(
@@ -494,7 +495,8 @@ def test_queue_stats_count_every_row_the_reviewer_answered(tmp_path):
         "items_pending": 2, "items_decided": 0,
     }
     queue_path = exc_info.value.queue_path
-    snapshot, fingerprints = pd.read_parquet(queue_path), _read_fingerprints(queue_path)
+    snapshot = pd.read_parquet(queue_path)
+    fingerprints = _read_fingerprints("run1", queue_path.stem)
 
     decided = [(ReviewVerdict.approve, None), (ReviewVerdict.modify, 8.0)]
     for (_, row), fp, (verdict, score) in zip(
@@ -731,7 +733,7 @@ def test_resume_reattaches_cached_decisions_written_via_the_seam(tmp_path):
     run_dir = project_dir / "runs" / run_id
     snapshot = pd.read_parquet(run_dir / "queue" / "review.parquet")
     assert len(snapshot) == 2
-    fingerprints = _read_fingerprints(run_dir / "queue" / "review.parquet")
+    fingerprints = _read_fingerprints(run_id, "review", project_dir.name)
 
     _approve_every_row(snapshot, fingerprints, project=project_dir.name)
 
@@ -762,7 +764,7 @@ def test_resume_replays_the_runs_bust_cache(tmp_path):
     assert read_manifest(run_dir.parent.parent, run_dir.name)["parameters"]["bust_cache"]
 
     snapshot = pd.read_parquet(run_dir / "queue" / "review.parquet")
-    fingerprints = _read_fingerprints(run_dir / "queue" / "review.parquet")
+    fingerprints = _read_fingerprints(run_id, "review", project_dir.name)
     _approve_every_row(snapshot, fingerprints, project=project_dir.name)
 
     resumed = runner.resume_run(project_dir, run_id, project_dir,
