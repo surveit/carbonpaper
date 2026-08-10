@@ -5,6 +5,23 @@
 <div class="ac-head">
   <h1>Chats</h1>
   <span class="ac-backend" title="which model backend answers">backend: {{ backend }}</span>
+  {% if projects %}
+  {# The project is the route's own path segment, so submitting aims the form at the
+     chosen one: POST /project/<name>/edit-agent opens the editing-agent session. #}
+  <form class="ac-new" method="post"
+        onsubmit="this.action = '/project/' + encodeURIComponent(this.elements.project.value) + '/edit-agent';">
+    <label class="ac-new-label" for="ac-new-project">New chat about</label>
+    <select id="ac-new-project" name="project">
+      {% for p in projects %}<option value="{{ p }}">{{ p }}</option>{% endfor %}
+    </select>
+    <button type="submit" class="btn primary sm">＋ Start</button>
+  </form>
+  {% else %}
+  <div class="ac-new-none">
+    No projects yet — a chat is always about one.
+    <a href="/project/new" class="btn primary sm">＋ New project</a>
+  </div>
+  {% endif %}
 </div>
 <ul class="ac-sessions">
   {% for s in sessions %}
