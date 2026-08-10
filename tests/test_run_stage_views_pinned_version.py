@@ -232,3 +232,13 @@ def test_stage_panel_hides_the_scratch_button_when_the_definition_is_unavailable
 
     panel = _stage_panel(run_id)
     assert "Run transform on selected" not in panel.text
+
+
+def test_stage_panel_leaves_the_validation_lines_to_the_run_page_index(
+    project: Path,
+) -> None:
+    """One copy per page: the index above words the same lines, from the same report."""
+    run_id = _run_once(project)
+
+    panel = _stage_panel(run_id)
+    assert 'class="validation-block"' not in panel.text

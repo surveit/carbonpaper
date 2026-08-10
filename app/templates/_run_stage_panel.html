@@ -136,6 +136,12 @@
     {% elif stage.output_path %}<p class="muted"><em>output file missing on disk: <code>{{ stage.output_path }}</code></em></p>
     {% else %}<p class="muted"><em>No output yet.</em></p>{% endif %}
 
+    {# Only where nothing else on the surface lists them. The run page's issue index
+       already carries every line here, worded by the same report, one click from
+       this panel — so on that page this block is a second copy of what the reader
+       has already read. The review packet's index page lists no issues, and there
+       this is the only place a stage's are named. #}
+    {% if not issues_indexed %}
     <div class="validation-block">
       <h4>validation</h4>
       {% if in_issues or out_issues %}
@@ -147,6 +153,7 @@
         </ul>{% endif %}
       {% else %}<p class="muted"><em>No validation issues.</em></p>{% endif %}
     </div>
+    {% endif %}
 
     {# The input rows + scratch row picker that lived under the Inputs tab —
        one disclosure away, never gone: the picker still drives the Transform

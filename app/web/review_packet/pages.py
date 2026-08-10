@@ -152,6 +152,9 @@ def _build_panel_context(run_dir: Path, view: RunView, stage: StageView) -> dict
         "can_generate_tests": False,
         "certification": None,
         "previewable": False,
+        # The packet index lists no issues, so the panel's validation block is
+        # the only place this stage's are named.
+        "issues_indexed": False,
         "links": PacketPanelLinks(),
         "type_glyph": TYPE_GLYPH,
         "type_class": TYPE_CLASS,
