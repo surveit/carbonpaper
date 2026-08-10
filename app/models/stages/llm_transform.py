@@ -121,31 +121,14 @@ class LLMTransformStage(StageBase):
         return find_llm_signature_issues(self)
 
     def llm_reply_schema(self) -> Optional[TableSchema]:
-        """What the model's reply itself must carry: the output schema minus the
-        input schema — the columns this stage ADDS, since an llm_transform
-        passes its input columns through untouched and the runtime rejoins them
-        itself. This is the single definition of that spec: the runtime compiles
-        the reply model from it (app.runtime.stages.llm_transform) and the stage
-        panel displays it, so neither can drift from the other.
-
-        None unless both schemas resolve. When they do, `_one_to_one` has
-        already guaranteed the difference is well defined, so `subtract` cannot
-        throw."""
-        if not self.inputs:
-            return None
-        input_schema = self.inputs[0].table_schema
-        output_schema = self.resolve_output_schema()
-        if output_schema is None or input_schema is None:
-            return None
-        return output_schema.subtract(input_schema)
+        """The columns the signature adds — the model is asked for nothing else."""
+        return TableSchema(columns=self.signature.adds)
 
     @model_validator(mode="after")
     def _one_to_one(self) -> "LLMTransformStage":
-        """Enforced here — a stage carries its own contract — so the reply spec
-        the runtime computes (the output schema minus the input) is exactly
-        the added columns and can never throw mid-run. This is about schema
-        SHAPE, not config columns, so it is not part of
-        find_config_column_issues."""
+        """A stage carries its own contract, so the shape rules are enforced here."""
+        # About schema SHAPE, not config columns, so not part of
+        # find_config_column_issues.
         issues = find_llm_one_to_one_issues(self)
         if issues:
             raise ValueError("llm_transform not strictly 1:1: " + "; ".join(issues))
@@ -226,39 +209,16 @@ def find_double_braced_input_issues(
 
 
 def find_llm_one_to_one_issues(stage: "LLMTransformStage") -> list[str]:
-    """An llm_transform maps one input row to one output row, so on its
-    DECLARED schemas alone it must: take exactly one input; keep every input
-    column unchanged (a transform never rewrites an existing column's
-    schema); and add at least one new column.
-
-    Checked so the reply spec the runtime computes
-    (the output schema minus the input) is exactly the added columns and can
-    never throw mid-run."""
+    """One input, and something asked of the model."""
     if len(stage.inputs) != 1:
         return [f"llm_transform must have exactly one input, has {len(stage.inputs)}"]
-    input_schema = stage.inputs[0].table_schema
-    output_schema = stage.resolve_output_schema()
-    assert output_schema is not None  # an extends signature over an input always resolves
-    return _find_additive_shape_issues(input_schema, output_schema)
-
-
-# Helper for find_llm_one_to_one_issues: it has already confirmed
-# `input_schema`/`output_schema` are both resolved before calling it.
-
-
-def _find_additive_shape_issues(input_schema: TableSchema, output_schema: TableSchema) -> list[str]:
-    issues: list[str] = []
-    if not input_schema.is_subset_of(output_schema):
-        issues.append(
-            "output must keep every input column unchanged (a transform is "
-            f"additive: output ⊇ input); input columns "
-            f"{[c.name for c in input_schema.columns]} vs output columns "
-            f"{[c.name for c in output_schema.columns]}"
-        )
-    input_names = {c.name for c in input_schema.columns}
-    if not any(c.name not in input_names for c in output_schema.columns):
-        issues.append("the signature adds no columns beyond the input")
-    return issues
+    # `output ⊇ input` used to be checked here too. An extends signature IS its
+    # anchor input extended, and find_llm_signature_issues refuses a rewrite, so
+    # no shape can violate it now — the form guarantees what the check defended.
+    # `min_length=1` still permits a SECOND input, so arity stays the model's job.
+    if not stage.signature.adds:
+        return ["the signature adds no columns beyond the input"]
+    return []
 
 # Authoring copy for this module's stage type(s); assembled into NODE_TYPES.
 NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
