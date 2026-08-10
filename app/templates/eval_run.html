@@ -1,9 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Run {{ run.id }} · {{ config.name }}{% endblock %}
 
-{% block header_extra %}
-<a href="/project/{{ project }}/evals/{{ config.id }}" class="back-link">← {{ config.name }}</a>
-{% endblock %}
+{% block breadcrumbs %}{% include "_breadcrumbs.html" %}{% endblock %}
 
 {% set status_badge = {"scored": "ok", "error": "err", "vetoed": "err"} %}
 

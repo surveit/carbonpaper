@@ -132,7 +132,7 @@ def test_build_nav_groups_workflow_children(demo_project):
     is the sidebar's contract — the template renders exactly this tree."""
     from app.web.project_view import build_nav, shell_state
 
-    nav = build_nav(shell_state(demo_project / "demo"))
+    nav = build_nav(shell_state(demo_project / "demo", "overview"))
     assert [item.key for item in nav] == ["overview", "document", "data_model", "workflow"]
     workflow = nav[-1]
     assert [child.key for child in workflow.children] == ["versions", "runs", "evals"]
@@ -144,7 +144,7 @@ def test_the_nav_carries_no_status_marks(demo_project):
     """The sidebar is a table of contents: labels and hrefs, nothing else to decode."""
     from app.web.project_view import build_nav, shell_state
 
-    nav = build_nav(shell_state(demo_project / "demo"))
+    nav = build_nav(shell_state(demo_project / "demo", "overview"))
     fields = {name for item in nav for name in item.model_dump()}
     assert fields == {"key", "label", "href", "children"}
     assert "app-nav-glyph" not in client.get("/project/demo").text

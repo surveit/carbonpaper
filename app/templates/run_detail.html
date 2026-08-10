@@ -22,9 +22,8 @@
 <script src="/static/diagram_viewport.js"></script>
 {% endblock %}
 
-{% block header_extra %}
-<a href="/project/{{ project }}" class="back-link">← {{ project }}</a>
-{% endblock %}
+{# Its own trail, not the shell's: the last rung is THIS run, not the Runs section. #}
+{% block breadcrumbs %}{% include "_breadcrumbs.html" %}{% endblock %}
 
 {% block section %}
 {% from "_run_log_panel.html" import run_log_panel %}
@@ -111,16 +110,20 @@
   }
 </style>
 
-<div class="run-shell{% if not guide %} no-nav{% endif %}" id="run-shell">
+{# The rail is present whenever there is a walkthrough to read OR one that could be
+   written for the version this run pinned. It collapses to nothing only where the run
+   recorded no version at all, which the header states in its own words. #}
+{% set can_write_guide = not guide and header.version.version_id %}
+<div class="run-shell{% if not guide and not can_write_guide %} no-nav{% endif %}" id="run-shell">
 
 {# ── THE NAV SPINE: the authored walkthrough, and only that. The issue index is a
       nav too, but it belongs beside the data it is about — it stays in the work
       column, where its four-column table has the width to read.
 
-      Rendered only where the pinned version carries a guide: with no guide there is
-      no walkthrough to read, and the column would be a heading over nothing. Writing
-      one is offered on the version page, which is where a guide is stored. ── #}
-{% if guide %}
+      With no guide the column holds the offer to write one instead of a heading over
+      nothing. The guide is stored against the VERSION this run pinned, not against
+      the run — the run is only where a reader meets it, and so where it is asked for. ── #}
+{% if guide or can_write_guide %}
 <button type="button" class="drawer-btn nav-expand" id="nav-expand" hidden
         title="Show the review guide" aria-label="Show the review guide">
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -138,7 +141,13 @@
       </svg>
     </button>
   </div>
+  {% if guide %}
   {% include "_run_guide.html" %}
+  {% else %}
+  {% with guide_version_id = header.version.version_id %}
+  {% include "_generate_guide.html" %}
+  {% endwith %}
+  {% endif %}
 </div>
 {% endif %}
 

@@ -31,8 +31,8 @@
   {% block section_head %}{% endblock %}
 {% endblock %}
 
-{% block header_extra %}
-<a href="/" class="back-link">← projects</a>
+{% block breadcrumbs %}
+{% with crumbs = state.crumbs %}{% include "_breadcrumbs.html" %}{% endwith %}
 {% endblock %}
 
 {% block content %}

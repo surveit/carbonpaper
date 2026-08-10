@@ -1,9 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ config.name }} · evals{% endblock %}
 
-{% block header_extra %}
-<a href="/project/{{ project }}/evals" class="back-link">← evals</a>
-{% endblock %}
+{% block breadcrumbs %}{% include "_breadcrumbs.html" %}{% endblock %}
 
 {% set badge_class = {
      "run succeeded": "ok", "stale": "warn", "never run": "pending",

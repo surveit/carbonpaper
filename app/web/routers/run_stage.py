@@ -17,6 +17,7 @@ from app.services import run as run_service
 from app.runtime.errors import PreviewError
 from app.runtime.preview import PREVIEWABLE_TYPES, run_stage_preview
 from app.web import loading
+from app.web.breadcrumbs import build_run_child_crumbs
 from app.web.config import EVENT_TAIL, REPO_ROOT, templates
 from app.web.stage_test_views import build_certification, shape_test_views
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH
@@ -133,6 +134,7 @@ async def run_stage_rows(
         "run_stage_rows.html",
         {
             "project": project,
+            "crumbs": build_run_child_crumbs(project, run_id, label=f"{stage_id} rows"),
             "run_id": run_id,
             "stage_id": stage_id,
             "stage": stage_record,

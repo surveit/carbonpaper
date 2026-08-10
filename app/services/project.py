@@ -368,6 +368,14 @@ def create_project(
     return safe_name
 
 
+def project_exists(project_id: str) -> bool:
+    """False for an id that escapes the workspace, not only for one with no directory."""
+    try:
+        return workspace.resolve_project_dir(project_id).is_dir()
+    except ValueError:
+        return False
+
+
 def list_projects() -> list[str]:
     """The names of every project in the workspace. The source of truth is the
     Project store — never directory existence, and never a filesystem scan."""

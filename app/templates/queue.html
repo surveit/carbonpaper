@@ -2,9 +2,7 @@
 {% from "_kv_table.html" import kv_table %}
 {% block title %}Review queue · {{ stage_id }} · {{ run_id }}{% endblock %}
 
-{% block header_extra %}
-<a href="/project/{{ project }}/runs/{{ run_id }}" class="back-link">← Run {{ run_id }}</a>
-{% endblock %}
+{% block breadcrumbs %}{% include "_breadcrumbs.html" %}{% endblock %}
 
 {% block content %}
 <div class="stage-header">

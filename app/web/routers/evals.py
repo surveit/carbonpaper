@@ -23,6 +23,7 @@ from app.evals.store import (
     load_eval_run,
 )
 from app.services.versioning import list_versions
+from app.web.breadcrumbs import build_eval_crumbs, build_eval_run_crumbs
 from app.web.config import projects_dir, REPO_ROOT, templates
 from app.core.frames import read_frame_file
 from app.web.loading import load_stages_or_empty, render_frame_as_text
@@ -48,7 +49,7 @@ async def evals_index(request: Request, project: str):
         request,
         "section_evals.html",
         {
-            "state": shell_state(project_dir),
+            "state": shell_state(project_dir, "evals"),
             "section": "evals",
             "evals": _build_eval_index_rows(project_dir, listing.stages),
             "load_issues": listing.issues,
@@ -104,6 +105,7 @@ def _render_eval_detail(
         "eval_detail.html",
         {
             "project": project,
+            "crumbs": build_eval_crumbs(project, config_name=config.name),
             "config": config,
             "report": report,
             "status": status,
@@ -159,7 +161,14 @@ async def eval_run_detail(request: Request, project: str, eval_id: str, run_id: 
     return templates.TemplateResponse(
         request,
         "eval_run.html",
-        {"project": project, "config": config, "run": run},
+        {
+            "project": project,
+            "crumbs": build_eval_run_crumbs(
+                project, config_name=config.name, config_id=config.id, run_id=run_id
+            ),
+            "config": config,
+            "run": run,
+        },
     )
 
 

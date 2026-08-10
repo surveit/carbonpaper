@@ -37,6 +37,7 @@ from app.services import run as run_service
 from app.services.run_guide import build_run_guide_view
 from app.runtime.cancellation import request_cancel
 from app.runtime.run_log import RUN_DONE, read_events_since
+from app.web.breadcrumbs import build_run_crumbs, build_runs_child_crumbs
 from app.web.config import EVENT_TAIL, projects_dir, templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
 from app.web.loading import (
@@ -232,7 +233,7 @@ async def runs_index(request: Request, project: str):
         request,
         "section_runs.html",
         {
-            "state": shell_state(pdir),
+            "state": shell_state(pdir, "runs"),
             "section": "runs",
             "runs": build_run_index_rows(project),
         },
@@ -253,8 +254,9 @@ async def run_new(request: Request, project: str):
         request,
         "section_run_new.html",
         {
-            "state": shell_state(pdir),
+            "state": shell_state(pdir, "runs"),
             "section": "runs",
+            "crumbs": build_runs_child_crumbs(project, label="New run"),
             "versions": versions,
             "file_inputs": list_file_inputs(project),
         },
@@ -477,8 +479,9 @@ async def run_detail(request: Request, project: str, run_id: str):
             # The run view renders inside the project shell, so it carries the nav
             # state like every other section. `section: runs` keeps the Runs entry
             # highlighted while looking at one run.
-            "state": shell_state(projects_dir() / project),
+            "state": shell_state(projects_dir() / project, "runs"),
             "section": "runs",
+            "crumbs": build_run_crumbs(project, run_id),
             "project": project,
             "run_id": run_id,
             "manifest": manifest,

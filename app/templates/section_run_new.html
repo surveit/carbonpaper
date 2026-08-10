@@ -1,4 +1,6 @@
 {% extends "project_shell.html" %}
+{# Its own trail, not the shell's: the last rung is this form, not the Runs list. #}
+{% block breadcrumbs %}{% include "_breadcrumbs.html" %}{% endblock %}
 {#
   NEW RUN — the run-launch form on its own page.
 
