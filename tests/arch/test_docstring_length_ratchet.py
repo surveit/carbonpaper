@@ -1252,7 +1252,6 @@ _GRANDFATHERED_ENTRANCE_PROSE: frozenset[str] = frozenset(
         "tests/test_run_stage_diff_panel.py::test_a_second_input_lengthens_the_input_stack_without_moving_the_output",
         "tests/test_run_stage_diff_panel.py::test_every_frame_unit_links_the_raw_view_not_another_diff",
         "tests/test_run_stage_diff_panel.py::test_raw_1_forces_the_plain_table_and_says_which_view_it_is",
-        "tests/test_run_stage_diff_panel.py::test_the_data_pane_keeps_the_input_row_picker",
         "tests/test_run_stage_diff_panel.py::test_the_diff_page_leaves_the_view_toggle_and_the_csv_to_the_header",
         "tests/test_run_stage_diff_panel.py::test_the_full_rows_diff_keeps_the_row_numbers_and_expandable_cells",
         "tests/test_run_stage_diff_panel.py::test_the_header_gives_every_frame_its_own_labelled_unit",

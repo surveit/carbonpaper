@@ -1,4 +1,5 @@
-/* The node panel's 3-tier Inputs/Transform/Outputs layout, scratch re-run and diff. */
+/* The node panel's 3-tier Inputs/Transform/Outputs layout and diff, plus the
+   stage simulate page's picker, controls and result (run_stage_simulate.html). */
 /* ─── Node-detail 3-tier layout: Inputs │ Transform │ Outputs ───────────────
    The run-detail right pane renders a stage as three left-to-right columns.
    Give the run-detail split a wider right pane so the tiers have room; stack
@@ -65,7 +66,16 @@
 table.data-preview .pick-col { width: 28px; text-align: center; white-space: nowrap; }
 table.data-preview.selectable tbody tr:hover { background: var(--hover); }
 
-/* Scratch re-run controls (Inputs tier). */
+/* The simulate page: the folded transform above the picker, then the controls
+   under the rows, then the result. Its only entrance is `.sim-link`, in the
+   run panel's Transform pane. */
+.sim-transform { margin: 0 0 1.2rem; }
+.sim-transform > summary { color: var(--accent); font-size: 12px; cursor: pointer; }
+.sim-link { margin: 1rem 0 0; display: flex; flex-wrap: wrap; gap: .5rem; align-items: baseline; }
+.sim-link a { font-weight: 600; }
+.sim-link .muted { font-size: .82rem; }
+
+/* Run controls, under the rows they act on. */
 .scratch-controls {
     margin-top: 14px;
     padding-top: 12px;
@@ -85,7 +95,7 @@ table.data-preview.selectable tbody tr:hover { background: var(--hover); }
 .btn.scratch-run:disabled { opacity: 0.6; cursor: default; }
 .scratch-hint { font-size: 11px; margin: 8px 0 0; }
 
-/* Scratch re-run results (Outputs tier). */
+/* What the run returned — in memory, saved nowhere. */
 .scratch-result {
     margin: 12px 0;
     border: 1px solid var(--fold-bd);
@@ -204,9 +214,8 @@ table.data-preview.scratch th { background: var(--hover); }
 .stage-diff .diff-was { display: block; color: var(--muted); text-decoration: line-through; }
 .stage-diff tr.diff-row-dropped td { background: var(--state-failed-bg); color: var(--state-failed-ink); }
 
-/* The Data pane's input-rows disclosure: the upstream previews and the scratch
-   row picker, folded below the (diff-aware) output so the pane leads with what
-   the stage produced while the picker stays one click away. */
+/* The Data pane's input-rows disclosure: the upstream previews, folded below the
+   (diff-aware) output so the pane leads with what the stage produced. */
 .data-inputs { margin: 14px 0 4px; }
 .data-inputs > summary { color: var(--accent); font-size: 12px; cursor: pointer; }
 
