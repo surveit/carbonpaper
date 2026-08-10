@@ -57,7 +57,6 @@
      none }`, so without this the hidden toggle stays a grid item and shoves the
      real columns onto a second row. Same trap as .app-side below. */
   .drawer-btn[hidden] { display: none; }
-  .app-side-collapse { margin-left: auto; }
   .app-side-expand { position: sticky; top: 16px; }
   @media (max-width: 860px) {
     .app-shell.side-collapsed { grid-template-columns: 1fr; }
@@ -75,18 +74,20 @@
     </svg>
   </button>
   <aside class="app-side" id="app-side">
-    <button type="button" class="drawer-btn app-side-collapse" id="app-side-collapse"
-            title="Hide the project sidebar" aria-label="Hide the project sidebar">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="m16 15-3-3 3-3"/>
-      </svg>
-    </button>
-    <a class="app-side-brand" href="/project/{{ state.name }}" title="{{ state.meta.title or state.name }}">
-      <span class="app-side-kicker">project</span>
-      <span class="app-side-name">{{ state.meta.title or state.name }}</span>
-      {% if state.meta.title %}<span class="app-side-slug"><code>{{ state.name }}</code></span>{% endif %}
-    </a>
+    <div class="app-side-head">
+      <a class="app-side-brand" href="/project/{{ state.name }}" title="{{ state.meta.title or state.name }}">
+        <span class="app-side-kicker">project</span>
+        <span class="app-side-name">{{ state.meta.title or state.name }}</span>
+        {% if state.meta.title %}<span class="app-side-slug"><code>{{ state.name }}</code></span>{% endif %}
+      </a>
+      <button type="button" class="drawer-btn app-side-collapse" id="app-side-collapse"
+              title="Hide the project sidebar" aria-label="Hide the project sidebar">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="m16 15-3-3 3-3"/>
+        </svg>
+      </button>
+    </div>
 
     {# The nav tree comes entirely from `state.nav` (project_view.build_nav). Each item
        is a link; a Workflow-style item with children renders them indented beneath it. #}

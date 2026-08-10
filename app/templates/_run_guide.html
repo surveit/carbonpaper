@@ -196,9 +196,14 @@
 </style>
 
 <section class="run-guide" id="run-guide">
+  {# A host that already has a heading line for the rail titles it there and sets
+     `titled_by_host` — the run page does, so its collapse control can share the
+     line. The offline packet has no such line, so the title is written here. #}
+  {% if not titled_by_host %}
   <div class="run-guide-head">
     <h2>Review guide</h2>
   </div>
+  {% endif %}
   {# The size notation is explained once, here, so `45.1k × 15` needs no legend of
      its own under every Workflow section. #}
   <p class="run-guide-lead">AI generated summary of what this run did, one Workflow
