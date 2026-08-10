@@ -34,7 +34,8 @@
 {% else %}
 <div class="empty-state">
   <h2>No workflow to run</h2>
-  <p class="muted">Build the workflow first, then run it.</p>
+  <p>A run executes a workflow, and this project does not have one yet.</p>
+  <a href="/project/{{ state.name }}/workflow" class="btn primary">Build the workflow</a>
 </div>
 {% endif %}
 {% endblock %}

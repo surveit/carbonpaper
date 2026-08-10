@@ -18,6 +18,14 @@ routers in `app/web/routers/`, which import the Runner (`app.runtime`) and the s
   either way, so the default run reuses cached rows without the reader deciding.
 - `/project/<m>/runs/<id>/queue/<stage>` — the human-review queue UI (+ `/decide`, `/resume`).
 
+## Zero states (`.empty-state`, styled in `app/static/split-view.css`)
+A list, panel or section with nothing in it reads as a heading naming what is absent,
+ONE line saying what would fill it, and a `.btn.primary` that does the filling — never a
+link buried in the sentence, because the whole point of the screen is that there is one
+thing to do next. Where the app offers no action for it (a workflow authored from an MCP
+client, an eval form that does not exist yet), the heading and line stand alone; the
+button is not invented to complete the shape.
+
 ## The run page's two columns (`run_detail.html`)
 `.run-nav` (360px, collapsible) then `.run-main`. The nav column is the **spine** and holds
 the review guide alone — so it is rendered **only** where the pinned version carries a guide,

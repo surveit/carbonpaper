@@ -135,6 +135,14 @@ def test_runs_index_carries_no_awaiting_review_banner(project):
     assert "banner-review" not in client.get("/project/demo/runs").text
 
 
+def test_the_zero_state_offers_a_button_not_a_link_in_a_sentence(project):
+    """A screen with nothing on it has exactly one thing to do; it gets a button."""
+    body = client.get("/project/demo/runs").text
+    zero = body.split('class="empty-state"')[1].split("</div>")[0]
+    assert "No runs yet" in zero
+    assert '<a href="/project/demo/runs/new" class="btn primary">Start new run</a>' in zero
+
+
 def test_new_is_the_run_form_not_a_run_id(project):
     resp = client.get("/project/demo/runs/new")
     assert resp.status_code == 200

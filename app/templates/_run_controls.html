@@ -95,6 +95,10 @@
 </form>
 <script src="/static/run_controls.js"></script>
 {% else %}
-<p class="muted">No published version to run yet —
-  <a href="/project/{{ state.name }}/workflow/versions">publish a version</a> first.</p>
+<div class="empty-state">
+  <h2>No published version to run</h2>
+  <p>A run pins to a published version and reads its snapshot, so there is nothing
+    for it to execute until one is published.</p>
+  <a href="/project/{{ state.name }}/workflow/versions" class="btn primary">Publish a version</a>
+</div>
 {% endif %}

@@ -129,7 +129,9 @@ def test_run_form_hidden_when_no_published_version(tmp_path, monkeypatch):
     resp = client.get("/project/demo/runs/new")
     assert resp.status_code == 200
     assert 'name="version_id"' not in resp.text   # no run form
-    assert "publish a version" in resp.text
+    # The zero state names what is missing and offers the one action that fixes it.
+    assert "No published version to run" in resp.text
+    assert 'href="/project/demo/workflow/versions" class="btn primary"' in resp.text
 
 
 @pytest.fixture
