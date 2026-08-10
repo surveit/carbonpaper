@@ -88,10 +88,15 @@ def _synthesize_extends(
         return _synthesize_join(spec, edges)
     anchor_id, anchor_columns = edges[0]
     adds, rewrites = _split_outer_against_anchor(spec, anchor_columns, allow_drops)
+    # Both of these run an authored expression over the row — filter_rows its
+    # predicate, a queue its `filter` — so like the opaque code below, the whole
+    # anchor edge is the only honest read set.
     if stage_type == StageType.filter_rows:
-        return {"form": "extends"}  # keeps every kept row's columns unchanged
+        # No adds: it keeps every kept row's columns unchanged.
+        return {"form": "extends", "reads": _reads(anchor_id, anchor_columns)}
     if stage_type == StageType.human_review_queue:
-        return {"form": "extends", "adds": _queue_adds(spec)}
+        return {"form": "extends", "reads": _reads(anchor_id, anchor_columns),
+                "adds": _queue_adds(spec)}
     if stage_type == StageType.llm_transform:
         injected = _template_fields(spec)
         reads = [c for c in anchor_columns if c.get("name") in injected]

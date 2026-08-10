@@ -28,7 +28,8 @@ def _filter_stage(sid: str, input_id: str, predicate_code: str) -> Stage:
     return parse_stage({
         "id": sid, "description": sid, "type": "filter_rows",
         "inputs": [{"id": input_id, "schema": _AB_SCHEMA}],
-        "signature": {"form": "extends"},
+        "signature": {"form": "extends",
+                      "reads": [{"input": input_id, "columns": _AB_SCHEMA["columns"]}]},
         "filter": {"code": predicate_code},
     })
 

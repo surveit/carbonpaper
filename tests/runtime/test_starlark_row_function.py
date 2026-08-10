@@ -10,7 +10,7 @@ from app.models import parse_stage
 from app.models.errors import StepRefused
 from app.models.stage import StageType
 from app.runtime.stages import HANDLERS, RowMapHandler
-from conftest import make_run_context
+from conftest import make_run_context, reads_of
 
 DOUBLE = "def transform(row):\n    return {'n': row['n'], 'doubled': row['n'] * 2}\n"
 
@@ -28,9 +28,9 @@ def _stage(code, function=None, output_schema=None, input_columns=_N_COLUMN):
     return parse_stage({
         "id": "t", "description": "t", "type": "starlark_row_function",
         "inputs": [{"id": "src", "schema": {"columns": input_columns}}],
-        "signature": {"form": "extends", "adds": [
-            c for c in (output_schema or {"columns": []})["columns"]
-            if c["name"] not in {i["name"] for i in input_columns}]},
+        "signature": {"form": "extends", "reads": reads_of("src", input_columns),
+                      "adds": [c for c in (output_schema or {"columns": []})["columns"]
+                               if c["name"] not in {i["name"] for i in input_columns}]},
         "starlark": starlark,
     })
 

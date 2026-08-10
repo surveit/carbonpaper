@@ -19,7 +19,7 @@ from app.core.stage_cache import StageCache, compute_row_fingerprint
 from app.services.project import save_working_copy_as_version
 from conftest import (
     QUEUE_COLUMNS, contribution_of, make_run_context, pinned_stages,
-    queue_added_columns, resumed_stages,
+    queue_added_columns, reads_of, resumed_stages,
 )
 
 PROJECT = "hrq-cache-tests"
@@ -55,7 +55,8 @@ def _stage(
     return parse_stage({
         "id": "review", "description": "Review", "type": "human_review_queue",
         "inputs": [{"id": "scored", "schema": {"columns": input_columns}}],
-        "signature": {"form": "extends", "adds": _REVIEW_COLUMNS},
+        "signature": {"form": "extends", "reads": reads_of("scored", input_columns),
+                      "adds": _REVIEW_COLUMNS},
         "queue": queue,
     })
 
@@ -439,7 +440,8 @@ def test_every_decided_row_is_emitted_with_only_the_declared_columns(tmp_path):
     stage = parse_stage({
         "id": "review", "description": "Review", "type": "human_review_queue",
         "inputs": [{"id": "scored", "schema": {"columns": _SCORED_COLUMNS}}],
-        "signature": {"form": "extends", "adds": _REVIEW_COLUMNS},
+        "signature": {"form": "extends", "reads": reads_of("scored", _SCORED_COLUMNS),
+                      "adds": _REVIEW_COLUMNS},
         "queue": dict(QUEUE_COLUMNS),
     })
     src = _src(2)
@@ -705,7 +707,11 @@ def _review_stage_full():
     return {"id": "review", "description": "Review", "type": "human_review_queue",
             "inputs": [{"id": "load", "schema": {
                 "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True}]}}],
-            "signature": {"form": "extends", "adds": _REVIEW_COLUMNS},
+            "signature": {"form": "extends",
+                          "reads": reads_of("load", [
+                              {"name": "id", "type": "str", "nullable": True},
+                              {"name": "score", "type": "int", "nullable": True}]),
+                          "adds": _REVIEW_COLUMNS},
             "queue": dict(QUEUE_COLUMNS)}
 
 

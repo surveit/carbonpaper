@@ -11,6 +11,7 @@ from app.runtime.stage_tests import (
     run_stage_tests,
     run_tests_for_stage,
 )
+from conftest import reads_of
 
 # A filter passes rows through unchanged, so its output schema equals its input's.
 _SCHEMA = {"columns": [{"name": "status", "type": "str", "nullable": False}]}
@@ -18,11 +19,12 @@ _SCHEMA = {"columns": [{"name": "status", "type": "str", "nullable": False}]}
 _KEEP_ACTIVE = "def should_include(row):\n    return row['status'] == 'active'\n"
 
 
+
 def _filter_stage(code: str, tests: list[dict], stage_id: str = "keep_active") -> Stage:
     return parse_stage({
         "id": stage_id, "description": "Keep active", "type": "filter_rows",
         "inputs": [{"id": "load", "schema": _SCHEMA}],
-        "signature": {"form": "extends"},
+        "signature": {"form": "extends", "reads": reads_of("load", _SCHEMA["columns"])},
         "filter": {"summary": "Keeps the rows marked active.", "code": code},
         "tests": tests,
     })

@@ -19,7 +19,7 @@ from app.runtime.lineage import lineage_sidecar_path
 from app.runtime.runner import execute_run
 from app.services import versioning
 from app.services import project as project_service
-from conftest import pinned_stages
+from conftest import pinned_stages, reads_of
 
 client = TestClient(app)
 
@@ -78,13 +78,15 @@ def _seed_compiled(pdir: Path, data_path: Path, routes_path: Path) -> None:
             "inputs": [{"id": LOAD_ID, "schema": _LOAD_SCHEMA}],
             "function": {"kind": "inline", "code": _CLASSIFY_CODE},
             "signature": {"form": "extends",
+                          "reads": reads_of(LOAD_ID, _LOAD_SCHEMA["columns"]),
                           "adds": [{"name": "label", "type": "str", "nullable": True}]},
         }),
         ("03_keep.json", {
             "id": KEEP_ID, "description": "Keep the small ones", "type": "filter_rows",
             "inputs": [{"id": CLASSIFY_ID, "schema": _CLASSIFY_SCHEMA}],
             "filter": {"code": _KEEP_CODE},
-            "signature": {"form": "extends"},
+            "signature": {"form": "extends",
+                          "reads": reads_of(CLASSIFY_ID, _CLASSIFY_SCHEMA["columns"])},
         }),
         ("04_routes.json", {
             "id": ROUTES_ID, "description": "Route reference", "type": "input_data",

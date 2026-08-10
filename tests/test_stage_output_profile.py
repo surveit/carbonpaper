@@ -37,6 +37,7 @@ _CLASSIFY = {
                  "    return {**row,\n"
                  "            'label': 'pos' if row['score'] >= 0 else 'neg'}"},
     "signature": {"form": "extends",
+                  "reads": [{"input": "load", "columns": _LOAD_SCHEMA["columns"]}],
                   "adds": [{"name": "label", "type": "str", "nullable": True}]},
 }
 

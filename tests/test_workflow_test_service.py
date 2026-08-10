@@ -75,6 +75,7 @@ _QUEUE = {
     "inputs": [{"id": "load", "schema": _LOAD_PK_SCHEMA}],
     "signature": {
         "form": "extends",
+        "reads": [{"input": "load", "columns": _LOAD_PK_COLUMNS}],
         "adds": [
             {"name": "human_score", "type": "int", "nullable": True},
             {"name": "decision", "type": "str", "nullable": True},

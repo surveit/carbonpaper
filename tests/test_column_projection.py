@@ -8,7 +8,7 @@ from app.runtime.context import RunContext, RunIdentity
 from app.runtime.stages import HANDLERS
 from app.runtime.stages import llm_transform as lt
 from app.core.stage_cache import StageCacheEntry
-from conftest import contribution_of, make_run_context, queue_columns
+from conftest import contribution_of, make_run_context, queue_columns, reads_of
 
 
 def _llm_stage(input_columns, output_columns, pk=("id",)):
@@ -96,6 +96,7 @@ def _queue_stage(output_schema, flt=None):
         "id": "review", "description": "Human review", "type": "human_review_queue",
         "inputs": [{"id": "scored", "schema": {"columns": _SCORED_COLUMNS}}],
         "signature": {"form": "extends",
+                      "reads": reads_of("scored", _SCORED_COLUMNS),
                       "adds": [c for c in outputs if c["name"] not in flowing]},
         "queue": queue,
     })

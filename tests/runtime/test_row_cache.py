@@ -628,28 +628,16 @@ def test_a_column_the_stage_never_reads_stops_invalidating_its_cache():
     assert len(calls) == 2
 
 
-def test_a_signature_declaring_no_reads_is_handed_whole_rows():
-    """Empty `reads` means undeclared, not declared-to-read-nothing."""
+def test_a_signature_declaring_no_anchor_reads_is_handed_empty_rows():
+    """Nothing is exempt: declare no reads and the mapper is handed nothing."""
     seen: list[Row] = []
-    # The field defaults to empty and nothing obliges an author to fill it, so
-    # there is no contract to enforce — the mapper gets the whole row, as before.
-    _seen_rows_handler(seen).execute(
-        _two_column_stage(reads=[]), {"src": _noisy_src(["a", "b"])}, _ctx())
-
-    assert seen == [{"x": 1, "noise": "a"}, {"x": 2, "noise": "b"}]
-
-
-def test_undeclared_reads_leave_that_same_column_invalidating():
-    """The control: undeclared, the whole row keys."""
-    stage = _two_column_stage(reads=[])
-    # So the cache hit in the test above is narrowing's doing, not the fixture's.
-    calls: list[Row] = []
-    handler = _seen_rows_handler(calls)
-
-    handler.execute(stage, {"src": _noisy_src(["a", "b"])}, _ctx(run_id="run1"))
-    handler.execute(stage, {"src": _noisy_src(["CHANGED", "ALSO"])}, _ctx(run_id="run2"))
-
-    assert len(calls) == 4  # both rows recomputed
+    with pytest.raises(KeyError, match="x"):
+        _seen_rows_handler(seen).execute(
+            _two_column_stage(reads=[]), {"src": _noisy_src(["a", "b"])}, _ctx())
+    # So a row-mapped stage that reads its input must say so. The synthesis in
+    # tools/stage_signatures.py and migration 0010 leave no stored stage without
+    # reads; this is what an under-declared one now gets.
+    assert seen == [{}]
 
 
 def test_a_registered_row_function_may_not_read_past_its_declared_reads():

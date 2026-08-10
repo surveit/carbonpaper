@@ -137,6 +137,11 @@ def queue_columns(source: str = "score", target: str = "human_score") -> dict[st
     }
 
 
+def reads_of(input_id: str, columns: list[dict[str, object]]) -> list[dict[str, object]]:
+    # Every column of `input_id` — what a stage running authored code consumes.
+    return [{"input": input_id, "columns": list(columns)}]
+
+
 def queue_added_columns(
     target: str = "human_score", target_type: str = "int"
 ) -> list[dict[str, object]]:
