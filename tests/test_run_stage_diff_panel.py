@@ -361,14 +361,13 @@ def test_the_tab_strip_replaces_inputs_and_outputs(run_ctx) -> None:
         assert "schema-inputs" not in html and "schema-outputs" not in html
 
 
-def test_the_data_pane_keeps_the_input_row_picker(run_ctx) -> None:
-    """The scratch row picker that lived under Inputs moved into Data, not away."""
-    # It still drives the Transform pane's scratch preview.
+def test_the_data_pane_keeps_the_input_rows_without_the_picker(run_ctx) -> None:
+    """Reading the rows stays here; picking them to run on is the simulate page."""
     _pdir, run_id = run_ctx
     html = _panel(run_id, CLASSIFY_ID)
     assert "data-inputs" in html
-    assert 'class="row-pick"' in html and "scratch-run" in html
-    assert "Run transform on selected" in html
+    assert 'class="row-pick"' not in html and "scratch-run" not in html
+    assert f"/stage/{CLASSIFY_ID}/simulate" in html
 
 
 def test_an_input_stage_keeps_the_plain_output_view_in_data(run_ctx) -> None:

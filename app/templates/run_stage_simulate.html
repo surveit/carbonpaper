@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% from "_stage_code.html" import stage_code %}
+{% block title %}Simulate {{ stage_id }} · {{ run_id }} · {{ project }}{% endblock %}
+
+{% block breadcrumbs %}{% include "_breadcrumbs.html" %}{% endblock %}
+
+{% block content %}
+{# The in-memory re-run, on its own page. It was a row picker folded inside the
+   run panel's Data pane whose result printed in the Transform pane — so running
+   it moved the reader to a tab that was not showing the rows they picked, and
+   the run they were reading lost its place. Here the picking, the running and
+   the result are one column, and the run page is a link away rather than
+   underneath. Nothing on this page writes: the POST it calls persists no
+   manifest change, no output file, no artifact.
+
+   Context: project / run_id / stage_id — str · stage — the pinned Stage ·
+            input_previews · function_code · type_glyph / type_class #}
+<div class="run-topbar">
+    <h1>Run <code>{{ stage_id }}</code> on rows you pick</h1>
+    <p class="stage-id">
+        <span class="type-tag {{ type_class.get(stage.type, 'custom') }}">{{ type_glyph.get(stage.type, '') }} {{ stage.type | plain_value }}</span>
+        run <code>{{ run_id }}</code>{% if stage.description %} · {{ stage.description }}{% endif %}</p>
+</div>
+
+<p class="banner" id="simulate-what-this-is">⚡ <strong>Nothing here is saved.</strong>
+    The transform below is the one this run pinned, run in memory over rows read
+    from its own input. No manifest changes, no output file, no artifact — the run
+    you came from is untouched.
+    {% if stage.type == 'llm_transform' %}
+    <strong>This makes real model calls</strong>, which cost money — keep the
+    selection small.{% endif %}</p>
+
+{# The code first, folded: what you are about to execute is worth a look before
+   you execute it, and it is not what most readers came for. #}
+<details class="sim-transform">
+    <summary class="disclosure">The transform this will run</summary>
+    {% include "_stage_executable.html" %}
+    {{ stage_code(stage, function_code) }}
+</details>
+
+<h2>Pick rows</h2>
+{% if input_previews %}
+{% for ip in input_previews %}
+<div class="preview-block input-preview" {% if loop.first %}data-primary="1"{% endif %}>
+    <div class="preview-head">
+        <a href="/project/{{ project }}/runs/{{ run_id }}#{{ ip.id }}"><code>{{ ip.id }}</code></a>
+        {% if not loop.first %}<span class="muted">· read in full by the transform; only the first input's rows are picked</span>{% endif %}
+        {% if ip.preview and ip.preview.preview %}{% set shown = ip.preview.preview | length %}<span class="muted">· {% if ip.preview.rows_total > shown %}first {{ shown }} of {% endif %}{{ "{:,}".format(ip.preview.rows_total) }} row{% if ip.preview.rows_total != 1 %}s{% endif %}</span>{% endif %}
+    </div>
+    {% if ip.preview and ip.preview.preview %}
+    {% set selectable = loop.first %}
+    <div class="table-scroll"><table class="data-preview {% if selectable %}selectable{% endif %}">
+        <thead><tr>
+            {% if selectable %}<th class="pick-col"><input type="checkbox" class="pick-all" title="select all shown"></th>{% endif %}
+            {% for c in ip.preview.columns %}<th>{{ c }}</th>{% endfor %}
+        </tr></thead>
+        <tbody>
+        {% for row in ip.preview.preview %}
+        <tr>{% if selectable %}<td class="pick-col"><input type="checkbox" class="row-pick" value="{{ loop.index0 }}"></td>{% endif %}
+            {% for c in ip.preview.columns %}{% set v = row[c] | string %}{% if v[:4] == 'http' %}<td class="cell-url"><a href="{{ v }}" target="_blank" rel="noopener">{{ v }}</a></td>{% else %}<td>{{ v | truncate(240) }}</td>{% endif %}{% endfor %}
+        </tr>{% endfor %}
+        </tbody>
+    </table></div>
+    {% elif ip.preview and ip.preview.error %}<p class="muted"><em>preview unavailable: {{ ip.preview.error }}</em></p>
+    {% else %}<p class="muted"><em>no upstream output found in this run</em></p>{% endif %}
+</div>
+{% endfor %}
+{% else %}<p class="muted"><em>This stage has no inputs, so there are no rows to pick.</em></p>{% endif %}
+
+<div class="scratch-controls">
+    <label class="scratch-firstn">with nothing ticked, run the first
+        <input type="number" class="firstn-input" min="1" max="5" value="1"> row(s)</label>
+    <button type="button" class="btn scratch-run">▶ Run transform on selected</button>
+</div>
+
+<div class="scratch-result" hidden></div>
+
+<script>
+(function () {
+  const PROJECT = {{ project | tojson }}, RUN = {{ run_id | tojson }}, STAGE = {{ stage_id | tojson }};
+  const primary = document.querySelector('.input-preview[data-primary] table.selectable');
+  const resultEl = document.querySelector('.scratch-result');
+  const btn = document.querySelector('.scratch-run');
+  const firstN = document.querySelector('.firstn-input');
+  const pickAll = primary ? primary.querySelector('.pick-all') : null;
+  const rowPicks = () => primary ? Array.from(primary.querySelectorAll('.row-pick')) : [];
+  if (pickAll) pickAll.addEventListener('change', () => rowPicks().forEach(cb => { cb.checked = pickAll.checked; }));
+
+  // Ticked rows win; with none ticked the first N stand in, so the button works
+  // on arrival without asking the reader to choose a row first.
+  function selectedIndices() {
+    const checked = rowPicks().filter(cb => cb.checked).map(cb => parseInt(cb.value, 10));
+    if (checked.length) return checked;
+    const n = Math.max(1, parseInt(firstN ? firstN.value : 1, 10) || 1);
+    return rowPicks().slice(0, n).map(cb => parseInt(cb.value, 10));
+  }
+
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  function renderResult(d) {
+    resultEl.hidden = false;
+    if (!d.ok) { resultEl.innerHTML = `<div class="scratch-head err">run failed</div><p class="muted">${esc(d.error || 'unknown')}</p>` + (d.traceback ? `<details><summary>traceback</summary><pre>${esc(d.traceback)}</pre></details>` : ''); return; }
+    const shown = (d.preview || []).length;
+    const capped = d.rows_total > shown ? ` — showing the first ${shown}` : '';
+    let h = `<div class="scratch-head">⚡ result — not saved</div><p class="muted">${d.input_rows} input row(s) → ${d.rows_total} output row(s)${capped}</p>`;
+    if (d.rows_total === 0) h += `<p class="muted"><em>transform returned no rows</em></p>`;
+    else {
+      h += '<div class="table-scroll"><table class="data-preview scratch"><thead><tr>' + d.columns.map(c => `<th>${esc(c)}</th>`).join('') + '</tr></thead><tbody>';
+      d.preview.forEach(row => { h += '<tr>' + d.columns.map(c => { const v = String(row[c] ?? ''); return v.slice(0, 4) === 'http' ? `<td class="cell-url"><a href="${esc(v)}" target="_blank" rel="noopener">${esc(v)}</a></td>` : `<td>${esc(v.length > 240 ? v.slice(0, 240) + '…' : v)}</td>`; }).join('') + '</tr>'; });
+      h += '</tbody></table></div>';
+    }
+    resultEl.innerHTML = h;
+  }
+
+  if (btn) btn.addEventListener('click', async () => {
+    const indices = selectedIndices();
+    if (!indices.length) { resultEl.hidden = false; resultEl.innerHTML = `<div class="scratch-head err">no rows selected</div>`; return; }
+    btn.disabled = true; const orig = btn.textContent; btn.textContent = '… running';
+    resultEl.hidden = false; resultEl.innerHTML = `<div class="scratch-head">running on ${indices.length} row(s)…</div>`;
+    try {
+      const r = await fetch(`/project/${encodeURIComponent(PROJECT)}/runs/${encodeURIComponent(RUN)}/stage/${encodeURIComponent(STAGE)}/preview`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ indices }) });
+      renderResult(await r.json());
+    } catch (e) { resultEl.innerHTML = `<div class="scratch-head err">request failed</div><p class="muted">${esc(e)}</p>`; }
+    finally { btn.disabled = false; btn.textContent = orig; }
+  });
+})();
+</script>
+{% endblock %}

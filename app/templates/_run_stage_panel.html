@@ -84,9 +84,11 @@
     {% include "_stage_tests.html" %}
     {{ stage_code(stage_def, function_code) }}
     {% else %}<p class="muted"><em>No static stage definition.</em></p>{% endif %}
-    {# Scratch re-run result — filled in by the Inputs row picker below. #}
-    <div class="scratch-result" hidden></div>
-    {% if previewable %}<p class="muted"><em>Pick rows under <b>Data</b> › input rows and run the transform to preview it here.</em></p>{% endif %}
+    {% set simulate_href = links.stage_simulate(stage.stage_id) %}
+    {% if previewable and simulate_href %}
+    <p class="sim-link"><a href="{{ simulate_href }}">▶ Run this transform on rows you pick →</a>
+      <span class="muted">in memory, on its own page; nothing is saved</span></p>
+    {% endif %}
   </div>
 
   {# ─────────── DATA (diff-aware output, then the input rows) ─────────── #}
@@ -153,14 +155,14 @@
     {% elif stage.output_path %}<p class="muted"><em>output file missing on disk: <code>{{ stage.output_path }}</code></em></p>
     {% else %}<p class="muted"><em>No output yet.</em></p>{% endif %}
 
-    {# The input rows + scratch row picker that lived under the Inputs tab —
-       one disclosure away, never gone: the picker still drives the Transform
-       pane's scratch preview. #}
+    {# The rows this stage was given, folded below what it produced. Reading them
+       is all that happens here; running the transform over a few of them is its
+       own page, linked from Transform. #}
     <details class="data-inputs">
-      <summary>input rows{% if previewable %} — pick rows to re-run the transform on{% endif %}</summary>
+      <summary>input rows</summary>
     {% if input_previews %}
       {% for ip in input_previews %}
-      <div class="preview-block input-preview" {% if loop.first %}data-primary="1"{% endif %}>
+      <div class="preview-block input-preview">
         <div class="preview-head">
           <a href="{{ links.stage_anchor(ip.id) }}"><code>{{ ip.id }}</code></a>
           {% if ip.preview and ip.preview.preview %}{% set shown = ip.preview.preview | length %}<span class="muted">· {% if ip.preview.rows_total > shown %}first {{ shown }} of {% endif %}{{ "{:,}".format(ip.preview.rows_total) }} row{% if ip.preview.rows_total != 1 %}s{% endif %}</span>
@@ -170,15 +172,13 @@
           · <a href="{{ links.stage_csv(ip.id) }}">⬇ CSV</a></span>{% endif %}
         </div>
         {% if ip.preview and ip.preview.preview %}
-        {% set selectable = loop.first and previewable %}
-        <div class="table-scroll"><table class="data-preview {% if selectable %}selectable{% endif %}">
+        <div class="table-scroll"><table class="data-preview">
           <thead><tr>
-            {% if selectable %}<th class="pick-col"><input type="checkbox" class="pick-all" title="select all shown"></th>{% endif %}
             {% for c in ip.preview.columns %}<th>{{ c }}</th>{% endfor %}
           </tr></thead>
           <tbody>
           {% for row in ip.preview.preview %}
-          <tr>{% if selectable %}<td class="pick-col"><input type="checkbox" class="row-pick" value="{{ loop.index0 }}"></td>{% endif %}
+          <tr>
             {% for c in ip.preview.columns %}{% set v = row[c] | string %}{% if v[:4] == 'http' %}<td class="cell-url"><a href="{{ v }}" target="_blank" rel="noopener">{{ v }}</a></td>{% else %}<td>{{ v | truncate(240) }}</td>{% endif %}{% endfor %}
           </tr>{% endfor %}
           </tbody>
@@ -189,14 +189,6 @@
       {% endfor %}
     {% else %}<p class="muted"><em>This stage has no inputs.</em></p>{% endif %}
 
-    {% if previewable %}
-    <div class="scratch-controls">
-      <label class="scratch-firstn">run first <input type="number" class="firstn-input" min="1" max="5" value="1"> row(s)</label>
-      <button type="button" class="btn scratch-run">▶ Run transform on selected</button>
-      <p class="scratch-hint muted">In-memory only; nothing saved. Result shows under <b>Transform</b>.
-      {% if stage.type == 'llm_transform' %}<strong>Makes real LLM calls</strong> — keep the selection small.{% endif %}</p>
-    </div>
-    {% endif %}
     </details>
   </div>
 
@@ -238,7 +230,6 @@
   root._selectTab = function (name) { tab = name; apply(); };
   apply();
 
-  // ── scratch re-run (row picker in the Data pane's input rows, result in Transform) ──
   const meth = root.dataset.project, run = root.dataset.run, stage = root.dataset.stage;
 
   // ── this stage's run log ──
@@ -259,45 +250,5 @@
       });
     });
   }
-  const primary = root.querySelector('.input-preview[data-primary] table.selectable');
-  const rowPicks = () => primary ? Array.from(primary.querySelectorAll('.row-pick')) : [];
-  const resultEl = root.querySelector('.scratch-result');
-  const btn = root.querySelector('.scratch-run');
-  const pickAll = primary ? primary.querySelector('.pick-all') : null;
-  const firstN = root.querySelector('.firstn-input');
-  if (pickAll) pickAll.addEventListener('change', () => rowPicks().forEach(cb => { cb.checked = pickAll.checked; }));
-  function selectedIndices() {
-    const checked = rowPicks().filter(cb => cb.checked).map(cb => parseInt(cb.value, 10));
-    if (checked.length) return checked;
-    const n = Math.max(1, parseInt(firstN ? firstN.value : 1, 10) || 1);
-    return rowPicks().slice(0, n).map(cb => parseInt(cb.value, 10));
-  }
-  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  function gotoResult() { tab = 'transform'; apply(); }
-  function renderResult(d) {
-    resultEl.hidden = false;
-    if (!d.ok) { resultEl.innerHTML = `<div class="scratch-head err">scratch preview failed</div><p class="muted">${esc(d.error || 'unknown')}</p>` + (d.traceback ? `<details><summary>traceback</summary><pre>${esc(d.traceback)}</pre></details>` : ''); return; }
-    const shown = (d.preview || []).length;
-    const capped = d.rows_total > shown ? ` — showing the first ${shown}` : '';
-    let h = `<div class="scratch-head">⚡ scratch preview — not saved</div><p class="muted">${d.input_rows} input row(s) → ${d.rows_total} output row(s)${capped}</p>`;
-    if (d.rows_total === 0) h += `<p class="muted"><em>transform returned no rows</em></p>`;
-    else {
-      h += '<div class="table-scroll"><table class="data-preview scratch"><thead><tr>' + d.columns.map(c => `<th>${esc(c)}</th>`).join('') + '</tr></thead><tbody>';
-      d.preview.forEach(row => { h += '<tr>' + d.columns.map(c => { const v = String(row[c] ?? ''); return v.slice(0, 4) === 'http' ? `<td class="cell-url"><a href="${esc(v)}" target="_blank" rel="noopener">${esc(v)}</a></td>` : `<td>${esc(v.length > 240 ? v.slice(0, 240) + '…' : v)}</td>`; }).join('') + '</tr>'; });
-      h += '</tbody></table></div>';
-    }
-    resultEl.innerHTML = h;
-  }
-  if (btn) btn.addEventListener('click', async () => {
-    const indices = selectedIndices();
-    if (!indices.length) { gotoResult(); resultEl.hidden = false; resultEl.innerHTML = `<div class="scratch-head err">no rows selected</div>`; return; }
-    btn.disabled = true; const orig = btn.textContent; btn.textContent = '… running';
-    gotoResult(); resultEl.hidden = false; resultEl.innerHTML = `<div class="scratch-head">running on ${indices.length} row(s)…</div>`;
-    try {
-      const r = await fetch(`/project/${encodeURIComponent(meth)}/runs/${encodeURIComponent(run)}/stage/${encodeURIComponent(stage)}/preview`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ indices }) });
-      renderResult(await r.json());
-    } catch (e) { resultEl.innerHTML = `<div class="scratch-head err">request failed</div><p class="muted">${esc(e)}</p>`; }
-    finally { btn.disabled = false; btn.textContent = orig; }
-  });
 })();
 </script>

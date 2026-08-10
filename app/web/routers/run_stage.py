@@ -1,7 +1,7 @@
 """One stage inside one run: the per-stage detail panel, its full-rows table and
-CSV download, and the scratch in-memory re-run. Split out of
-app.web.routers.runs, which holds the run-level lifecycle routes and sat at the
-import-graph fan-out ceiling."""
+CSV download, and the simulate page plus the in-memory re-run it posts to. Split
+out of app.web.routers.runs, which holds the run-level lifecycle routes and sat
+at the import-graph fan-out ceiling."""
 
 from __future__ import annotations
 
@@ -202,6 +202,60 @@ async def run_stage_rows_csv(project: str, run_id: str, stage_id: str):
     )
 
 
+@router.get(
+    "/project/{project}/runs/{run_id}/stage/{stage_id}/simulate",
+    response_class=HTMLResponse,
+)
+async def run_stage_simulate(
+    request: Request, project: str, run_id: str, stage_id: str
+):
+    """The page that drives the in-memory re-run below: pick rows, run, read."""
+    run_dir = runs_dir(project) / run_id
+    manifest = load_manifest(run_dir)
+    # The page executes a stage under this run's name, so it offers only what the
+    # run pinned. No resolvable version, or a type the runner cannot preview, and
+    # there is nothing here to simulate — the panel links no page in either case.
+    pinned = run_service.load_pinned_stage_def(project, manifest, stage_id)
+    stage_def = pinned.stage
+    if stage_def is None:
+        raise HTTPException(
+            status_code=404, detail=pinned.error or f"No stage '{stage_id}' in run"
+        )
+    if stage_def.type not in PREVIEWABLE_TYPES:
+        raise HTTPException(
+            status_code=404,
+            detail=f"'{stage_def.type}' stages cannot be run one row at a time",
+        )
+
+    output_by_id = {
+        s.get("stage_id"): s.get("output_path") for s in manifest.get("stage_records", [])
+    }
+    return templates.TemplateResponse(
+        request,
+        "run_stage_simulate.html",
+        {
+            "project": project,
+            "run_id": run_id,
+            "stage_id": stage_id,
+            "crumbs": build_run_child_crumbs(
+                project, run_id, label=f"simulate {stage_id}"
+            ),
+            "stage": stage_def,
+            "input_previews": [
+                {"id": input_id, "preview": load_output_preview(run_dir, output_by_id.get(input_id))}
+                for input_id in stage_def.input_ids
+            ],
+            "function_code": resolve_function_code(stage_def),
+            # _stage_executable.html reads both; this page shows the transform to
+            # say what is about to run, not to certify or illustrate it.
+            "llm_example": None,
+            "certification": None,
+            "type_glyph": TYPE_GLYPH,
+            "type_class": TYPE_CLASS,
+        },
+    )
+
+
 @router.post("/project/{project}/runs/{run_id}/stage/{stage_id}/preview")
 async def run_stage_scratch_preview(
     request: Request, project: str, run_id: str, stage_id: str
@@ -210,8 +264,8 @@ async def run_stage_scratch_preview(
 
     Reads the chosen rows from this run's upstream outputs, runs the stage's
     handler in memory, and returns the output rows as JSON. Nothing is
-    persisted: no manifest change, no output file, no artifact. Used by the
-    node-detail panel's "Run transform on selected" button.
+    persisted: no manifest change, no output file, no artifact. Posted to by the
+    simulate page's "Run transform on selected" button.
 
     Body (JSON): {"indices": [int, ...]}  — positional row indices into the
     stage's first upstream input.

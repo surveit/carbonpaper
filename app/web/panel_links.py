@@ -32,6 +32,10 @@ class AppPanelLinks:
     def review_queue(self, stage_id: str) -> str:
         return f"{self._base}/queue/{_segment(stage_id)}"
 
+    def stage_simulate(self, stage_id: str) -> str:
+        """Where a reader re-runs this stage's transform over rows they pick."""
+        return f"{self._base}/stage/{_segment(stage_id)}/simulate"
+
     def run_log(self, stage_id: str) -> str:
         """The SSE feed of this stage's own lifecycle events."""
         return f"{self._base}/events?stage={_segment(stage_id)}"
@@ -63,6 +67,10 @@ class PacketPanelLinks:
 
     def review_queue(self, stage_id: str) -> None:
         """A queue is a decision surface on a live run; a sealed record has none."""
+        return None
+
+    def stage_simulate(self, stage_id: str) -> None:
+        """Executing a transform needs the runner; a folder of files has none."""
         return None
 
     def run_log(self, stage_id: str) -> None:

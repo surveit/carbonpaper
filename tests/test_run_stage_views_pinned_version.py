@@ -118,6 +118,10 @@ def _lineage_panel(run_id: str):
         f"/project/{PROJECT}/runs/{run_id}/stage/{CLASSIFY_ID}/lineage_panel?row=0")
 
 
+def _simulate_page(run_id: str):
+    return client.get(f"/project/{PROJECT}/runs/{run_id}/stage/{CLASSIFY_ID}/simulate")
+
+
 def _scratch_preview(run_id: str):
     return client.post(
         f"/project/{PROJECT}/runs/{run_id}/stage/{CLASSIFY_ID}/preview",
@@ -164,7 +168,7 @@ def test_scratch_preview_executes_the_stage_that_ran_not_the_working_copy(
 
 # ─── One Transform pane, holding the pinned definition ──────────────────────
 
-def test_the_transform_pane_holds_the_pinned_definition_and_the_scratch_result(
+def test_the_transform_pane_holds_the_pinned_definition_and_links_the_simulator(
     project: Path,
 ) -> None:
     run_id = _run_once(project)
@@ -174,7 +178,7 @@ def test_the_transform_pane_holds_the_pinned_definition_and_the_scratch_result(
     pane = html.split('data-pane="transform"', 1)[1]
     pane = pane.split("data-pane=", 1)[0]
     assert PINNED_MARKER in pane
-    assert 'class="scratch-result"' in pane
+    assert f"/stage/{CLASSIFY_ID}/simulate" in pane
 
 
 # ─── Unresolvable pinned version: loud and visible, never a substitute ───────
@@ -223,7 +227,7 @@ def test_scratch_preview_refuses_to_execute_an_unresolvable_version(
     assert "preview" not in body
 
 
-def test_stage_panel_hides_the_scratch_button_when_the_definition_is_unavailable(
+def test_stage_panel_hides_the_simulate_link_when_the_definition_is_unavailable(
     project: Path,
 ) -> None:
     """The panel must not offer a re-run it would refuse."""
@@ -231,7 +235,7 @@ def test_stage_panel_hides_the_scratch_button_when_the_definition_is_unavailable
     _unpin_the_run(project, run_id)
 
     panel = _stage_panel(run_id)
-    assert "Run transform on selected" not in panel.text
+    assert "/simulate" not in panel.text
 
 
 def test_stage_panel_leaves_the_validation_lines_to_the_run_page_index(
@@ -242,3 +246,26 @@ def test_stage_panel_leaves_the_validation_lines_to_the_run_page_index(
 
     panel = _stage_panel(run_id)
     assert 'class="validation-block"' not in panel.text
+
+
+def test_the_simulate_page_refuses_a_run_whose_version_cannot_be_read(
+    project: Path,
+) -> None:
+    """No pinned definition, no page — the same refusal the POST gives."""
+    run_id = _run_once(project)
+    _unpin_the_run(project, run_id)
+
+    assert _simulate_page(run_id).status_code == 404
+
+
+def test_the_simulate_page_offers_the_rows_and_says_nothing_is_saved(
+    project: Path,
+) -> None:
+    """The picker, the button and the promise the POST actually keeps."""
+    run_id = _run_once(project)
+
+    page = _simulate_page(run_id)
+    assert page.status_code == 200
+    assert 'class="row-pick"' in page.text
+    assert "Run transform on selected" in page.text
+    assert "Nothing here is saved" in page.text

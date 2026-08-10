@@ -97,13 +97,13 @@ list and this version's guide. With no guide the narration lines are absent, not
 **Data │ Schema │ Transform**, one flat strip; it opens on Data:
 - **Data** — what this run's stage produced: its output — rendered as a **diff against its
   input** where the stage type permits one (below) — then validation **as part of the
-  output** (input + output issues from the manifest), then the upstream input previews with
-  the per-row checkboxes for the scratch re-run, folded in an `input rows` disclosure. URL
-  cells are full clickable links. Compiler notes live on `/compile`, not here.
+  output** (input + output issues from the manifest), then the upstream input previews,
+  folded in an `input rows` disclosure — read-only, since picking rows to run on is its own
+  page. URL cells are full clickable links. Compiler notes live on `/compile`, not here.
 - **Schema** — the static contract: the input schemas, then the output schema.
 - **Transform** — the *raw* transform config block (`_stage_executable.html`): llm prompt+model+tools,
-  join keys, aggregate ops, connector/queue/publish spec — plus the scratch re-run
-  result. An authored-code block (`function` / `filter`) reads **description → examples → code**:
+  join keys, aggregate ops, connector/queue/publish spec — plus the only link to the
+  simulate page below. An authored-code block (`function` / `filter`) reads **description → examples → code**:
   the block's plain-language `summary` leads, the test cases follow, and the source is rendered
   last and folded (`_stage_code.html`), because the reviewer is a journalist, not an engineer.
 - **The diff** (`app.web.stage_diff` → `_stage_diff.html`): a 1:1 stage
@@ -141,15 +141,21 @@ stream. Both the opening tail and "load older" count over the FILTERED events, s
 holding a handful of them inside a 270k-event log still opens full. `links.run_log` is None
 in the review packet — a folder has no server to tail — and the panel then renders no log.
 
-## Live progress + scratch re-run
+## Live progress + the stage simulator
 `POST /project/<m>/run` → `prepare_run` (initial `running` manifest) → background thread →
 redirect; `run_detail.html` polls `…/status` every 2s and updates the graph in place, reloading
-once on the terminal transition. Scratch: pick N input rows → `…/stage/<sid>/preview`
-(`runtime/preview.py`) runs the handler **in memory**, persists nothing; refused for
-`publish`/`human_review_queue`/`input_data` (side effects).
+once on the terminal transition.
 
-Every stage definition a run page shows or executes (panel, lineage panel, scratch re-run)
+**The simulator** is its own page — `…/stage/<sid>/simulate` (`run_stage_simulate.html`): the
+folded transform, the input rows with per-row checkboxes, the controls, then the result, one
+column. Picking and reading the answer used to straddle two tabs of the run panel, which moved
+the reader off the rows they had just picked. The panel now links it from **Transform** and
+holds no picker. Running it posts `…/stage/<sid>/preview` (`runtime/preview.py`), which runs the
+handler **in memory** and persists nothing; refused for `publish`/`human_review_queue`/
+`input_data` (side effects), and the page 404s for those types and for an unreadable version.
+
+Every stage definition a run page shows or executes (panel, lineage panel, simulator)
 comes from the version the run pinned, via `services.run.load_pinned_stage_def` /
 `load_run_stages` — never `compiled/`.
 Unresolvable version → the panels show a stated reason in place of the definition and the
-scratch re-run returns 409 rather than executing the working copy.
+in-memory re-run returns 409 rather than executing the working copy.
