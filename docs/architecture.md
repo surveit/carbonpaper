@@ -21,6 +21,13 @@ runtime or web — keep it pure.** Checks the *spec*, distinct from RUNTIME data
 - `stages/stage_base.py` — the stage types, and `StageBase`: the fields and rules every
   stored stage satisfies whatever its type, plus `is_grain_and_order_preserving` (1:1 row
   correspondence in order — the eval gate depends on it).
+- `stages/signature.py` — `TransformSignature`, the contract every stored stage declares
+  about what it reads and writes. Form `extends`: output is the first input's rows plus
+  `rewrites` (revised in place) and `adds` (new columns), every other anchor column
+  flowing through untouched. Form `replaces`: nothing flows, output is exactly
+  `produces`. `reads` names what the transform consumes per input — a column that merely
+  passes through is not a read. `StageBase.resolve_output_schema()` computes the output
+  from the signature; nothing stores one.
 - `stages/` — one module per stage type alongside `stage_base.py`, holding that type's
   config class, its `StageBase` subclass (which declares the blocks that type REQUIRES and
   its input arity), and its own validation helpers. `PythonFunction` and both

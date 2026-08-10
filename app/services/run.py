@@ -141,10 +141,11 @@ def read_output_column_counts(project: str, manifest: Mapping[str, Any]) -> dict
     if not run_id:
         return {}
     run_dir = resolve_run_dir(project, str(run_id))
-    # Off the frames the run wrote, never off the version's declared output schema: a
-    # stage declares the columns it reads and adds, while every other upstream column
-    # flows through it undeclared, so the declaration runs narrower than the frame by
-    # an unbounded margin. A frame that cannot be read has no count here at all.
+    # Off the frames the run wrote, never off what the version's signatures promise: an
+    # input edge only has to be SATISFIABLE by its upstream, so it may name fewer columns
+    # than that upstream really produces, and an extends output is that edge plus its
+    # adds. The promise therefore runs narrower than the frame by an unbounded margin.
+    # A frame that cannot be read has no count here at all.
     counted = {
         str(record["stage_id"]): _count_output_columns(run_dir, record.get("output_path"))
         for record in manifest.get("stage_records", [])

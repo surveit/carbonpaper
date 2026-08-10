@@ -1,6 +1,6 @@
 """llm_transform stage: the config block, the prompt-wiring checks (every
 `{placeholder}` resolves against the input edge, and no input column is
-double-braced), and the 1:1 additive contract its declared schemas must meet."""
+double-braced), and the 1:1 additive contract its signature must meet."""
 from __future__ import annotations
 
 import re

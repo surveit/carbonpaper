@@ -13,9 +13,10 @@
 
    An output's SIZE is measured off what the run WROTE, both halves: the row count
    from its manifest record, the column count from the footer of the frame file that
-   record names. It is deliberately NOT the version's declared output schema, which
-   states only the columns a stage reads and adds and so runs narrower than the frame
-   — the Schema tab answers that question and will show a smaller number for the same
+   record names. It is deliberately NOT the output schema the version's signatures
+   resolve to: an input edge only has to be SATISFIABLE by its upstream, so that
+   schema runs narrower than the frame — the Schema tab answers that question and
+   will show a smaller number for the same
    stage. Either half can be missing on its own, and a missing half is said in words
    (`45.1k rows`, `15 columns`), never rendered as a 0, which means measured and empty.
    With NEITHER half the link reads `- × -`, and its hover says what happened rather

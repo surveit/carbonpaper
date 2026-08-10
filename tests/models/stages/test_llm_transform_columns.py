@@ -1,6 +1,5 @@
-"""No "edge declares no schema" case exists to test: Stage's own
-_llm_transform_one_to_one validator already requires additive schemas on both
-schemas, so a validly-constructed llm_transform's input edge always
+"""No "edge declares no schema" case exists to test: `schema` is a required field
+on StageInput, so a validly-constructed llm_transform's input edge always
 declares one."""
 from __future__ import annotations
 

@@ -214,7 +214,8 @@ def validate_workflow(stages: list[Stage]) -> list[str]:
     """Cross-stage checks on already-parsed stages, as human-readable issue
     strings — every problem, not just the first: unique ids, inputs resolve,
     acyclic, no stage reading a publish stage, and every edge's declared input
-    schema supplied by its upstream output_schema. Per-stage invariants (e.g. llm_transform being strictly 1:1) are
+    schema satisfied by what its upstream resolves as output. Per-stage
+    invariants (e.g. llm_transform being strictly 1:1) are
     already enforced by `Stage` construction, so any `list[Stage]` reaching here
     is stage-valid; this is the remaining, whole-graph seam `load_workflow` (and
     hence `save_working_copy_as_version`) enforces, so an invalid workflow is never versioned

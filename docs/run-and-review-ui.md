@@ -34,17 +34,19 @@ All routes live under `/project/{project}/…`.
 
 Loaded into the page via `innerHTML`. **Gotcha that bit us:** `innerHTML` does
 NOT execute injected `<script>` tags, so `loadStage` re-creates script nodes
-after injection — without that, the panel's JS (tabs + scratch tool) is dead.
+after injection — without that, the panel's JS (the tab strip, the run log) is dead.
 
-- **Data** | **Schema** | **Transform**, opening on Transform. Data folds the
-  old Inputs/Outputs tabs into one pane, because the output now reads as a diff
-  *against* its input.
+- **Data** | **Schema** | **Transform**, opening on Data. Output and input sit
+  in one pane, because the output reads as a diff *against* its input.
 - **Data**: the stage's output (the stage-aware diff below, or the plain
   preview), validation, then the upstream input previews in an `input rows`
-  disclosure. **Schema**: input schemas, then the output schema.
-- The **scratch tool** (in-memory re-run on picked rows; real LLM calls for
-  `llm_transform`) lives in Data's input-rows disclosure (row picker) and
-  shows its result in Transform. Nothing is persisted.
+  disclosure, read-only. **Schema**: the schema each input edge declares, then
+  the output schema `resolve_output_schema()` reads off the stage's signature.
+- The **simulator** is its own page, `…/stage/{sid}/simulate`, linked from
+  Transform: the folded transform, the input rows with per-row checkboxes, the
+  controls, then the result. Running it POSTs `…/stage/{sid}/preview`, which
+  executes the handler in memory (real LLM calls for `llm_transform`) and
+  persists nothing.
 - **Full-table view + CSV**: `…/stage/{sid}/rows` renders the entire stage
   output (not just the first-5 preview) — as the same diff where one exists,
   over `MAX_TABLE_ROWS` rows instead of the panel's five, keeping the page's row
