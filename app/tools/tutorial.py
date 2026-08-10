@@ -29,8 +29,11 @@ _FIXTURE_STEM = "tutorial_lobbying_triage"
 _DATA_DIR = Path(__file__).resolve().parents[1] / "seeds" / "data"
 # Not under data/*.json, which app.seeds.seed globs as WorkflowFile fixtures.
 _GUIDE_PATH = _DATA_DIR / "review_guides" / f"{_FIXTURE_STEM}.json"
-# The fixture's connector records no path, so the CSV committed beside it is bound here.
+# The fixture records neither path, so the two files committed beside it are bound here.
 _INPUT_STAGE_ID = "raw_filings"
+_PUBLISH_STAGE_ID = "publish_report"
+_TEMPLATE_PATH = _DATA_DIR / "tutorial_triage_report.html"
+_TEMPLATE_TOKEN = "[[TEMPLATE_PATH]]"
 
 
 class TutorialContext(BaseModel):
@@ -57,7 +60,7 @@ class TutorialProject(BaseModel):
 def make_tutorial_tools(ctx: TutorialContext) -> list[BoundToolSpec]:
     def create_tutorial_project() -> TutorialProject:
         csv_path = _DATA_DIR / f"{_FIXTURE_STEM}.csv"
-        workflow_file = _read_fixture_bound_to(csv_path)
+        workflow_file = _read_fixture_bound_to(csv_path, _TEMPLATE_PATH)
         name = import_project(
             workflow_file, name=find_unused_project_name(workflow_file.name)
         )
@@ -124,25 +127,48 @@ def _write_bundled_review_guide(project_name: str) -> str:
     return version_id
 
 
-def _read_fixture_bound_to(csv_path: Path) -> WorkflowFile:
-    if not csv_path.is_file():
-        raise FileNotFoundError(f"the tutorial's bundled CSV is missing: {csv_path}")
+def _read_fixture_bound_to(csv_path: Path, template_path: Path) -> WorkflowFile:
+    for path in (csv_path, template_path):
+        if not path.is_file():
+            raise FileNotFoundError(f"a file the tutorial fixture needs is missing: {path}")
     raw: dict[str, Any] = json.loads(
         (_DATA_DIR / f"{_FIXTURE_STEM}.json").read_text(encoding="utf-8")
     )
-    bound = [
-        _with_csv_path(stage, csv_path) if stage.get("id") == _INPUT_STAGE_ID else stage
-        for stage in raw["stages"]
-    ]
+    bound = [_bind_stage(stage, csv_path, template_path) for stage in raw["stages"]]
     # Validated, not patched in place: Connector refuses a relative params.path, so a
     # path a run could not resolve fails here rather than at the first stage.
     return WorkflowFile.model_validate({**raw, "stages": bound})
+
+
+def _bind_stage(
+    stage: dict[str, Any], csv_path: Path, template_path: Path
+) -> dict[str, Any]:
+    if stage.get("id") == _INPUT_STAGE_ID:
+        return _with_csv_path(stage, csv_path)
+    if stage.get("id") == _PUBLISH_STAGE_ID:
+        return _with_template_path(stage, template_path)
+    return stage
 
 
 def _with_csv_path(stage: dict[str, Any], csv_path: Path) -> dict[str, Any]:
     connector = stage["connector"]
     params = {**connector.get("params", {}), "path": str(csv_path)}
     return {**stage, "connector": {**connector, "params": params}}
+
+
+def _with_template_path(stage: dict[str, Any], template_path: Path) -> dict[str, Any]:
+    # Posix: this lands in a Python string literal, where a backslash is an escape.
+    function = stage["function"]
+    code: str = function["code"]
+    if _TEMPLATE_TOKEN not in code:
+        raise ValueError(
+            f"stage {stage.get('id')} no longer carries {_TEMPLATE_TOKEN}, so the report "
+            f"template at {template_path} would never be read"
+        )
+    return {
+        **stage,
+        "function": {**function, "code": code.replace(_TEMPLATE_TOKEN, template_path.as_posix())},
+    }
 
 
 # ── tool input schemas + display labels ──────────────────────────────────────

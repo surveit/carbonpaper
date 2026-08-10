@@ -1,16 +1,22 @@
 from __future__ import annotations
 
+import ast
+import json
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 from app.models import Stage, StageType
+from app.models.errors import StepRefused
 from app.models.review_guide import ReviewGuideDraft
 from app.runtime.context import RunContext
 from app.runtime.stages import HANDLERS
 from app.services import project, versioning
 from app.services.loader import load_workflow
 from app.services.project import WorkflowFile, import_project
+from app.tools.tutorial import _read_fixture_bound_to
+from arch.test_no_html_in_python import find_html_tag_string_literals
 
 _FIXTURE_PATH = (
     Path(__file__).resolve().parents[1]
@@ -18,6 +24,10 @@ _FIXTURE_PATH = (
 )
 _CSV_PATH = _FIXTURE_PATH.with_suffix(".csv")
 _GUIDE_PATH = _FIXTURE_PATH.parent / "review_guides" / _FIXTURE_PATH.name
+_TEMPLATE_PATH = _FIXTURE_PATH.parent / "tutorial_triage_report.html"
+_TEMPLATE_TOKEN = "[[TEMPLATE_PATH]]"
+# Long enough to say what to check, short enough that the check is what is read.
+_GUIDE_PROSE_CEILING = 210
 
 _EXPECTED_STAGE_IDS = [
     "raw_filings",
@@ -172,7 +182,7 @@ def test_the_methodology_document_states_the_batch_size_the_stage_uses():
 
 
 def test_the_first_six_filings_are_one_model_call():
-    # What the tour's small run costs: beat 3 caps raw_filings at 6 rows.
+    # What the tour's small run costs: beat 2 caps raw_filings at 6 rows.
     df = pd.read_csv(_CSV_PATH).head(_TOUR_LIMIT)
 
     assert int((df["amount_usd"] >= 50000).sum()) <= _BATCH_SIZE
@@ -188,3 +198,158 @@ def test_the_committed_review_guide_accounts_for_every_stage():
     assert guide.unnarrated == []
     for step in guide.steps:
         assert step.data_description and step.data_description.strip()
+
+
+def test_the_review_guide_keeps_every_check_without_the_padding():
+    """Each step is capped, and each capped step still names what a reviewer must check."""
+    guide = ReviewGuideDraft.model_validate_json(
+        _GUIDE_PATH.read_text(encoding="utf-8")
+    )
+
+    over = [step.title for step in guide.steps if len(step.prose) > _GUIDE_PROSE_CEILING]
+    assert not over, over
+    prose = " ".join(step.prose for step in guide.steps)
+    for check in (
+        "Synthetic",
+        "editorial choice",
+        "the line you would draw",
+        "the weakest link",
+        "a wrong flag traces to a wrong classification",
+        "Check that reason against the text",
+    ):
+        assert check in prose, check
+
+
+# ── the published report ─────────────────────────────────────────────────────
+
+
+def _publish_a_report(tmp_path, df: pd.DataFrame) -> str:
+    stage = _stage(_bound_fixture(), "publish_report")
+    ctx = RunContext.for_stages_outside_a_run(tmp_path, tmp_path)
+    out = HANDLERS[StageType(stage.type)].execute(stage, {"flag_followup": df}, ctx)
+    assert out is not None
+    return Path(out.iloc[0]["report_path"]).read_text(encoding="utf-8")
+
+
+def _bound_fixture() -> WorkflowFile:
+    return _read_fixture_bound_to(_CSV_PATH, _TEMPLATE_PATH)
+
+
+def _two_filings() -> pd.DataFrame:
+    return pd.DataFrame(
+        [
+            {
+                "filing_id": "F-1", "client": "Vague Client", "registrant": "Firm A",
+                "amount_usd": 250000, "filing_period": "2024 Q1",
+                "specific_issues": "General discussions regarding federal policy.",
+                "policy_area": "Other", "targets_specific_bill": False,
+                "primary_ask": "Wants favourable treatment, unspecified.",
+                "needs_followup": True,
+            },
+            {
+                "filing_id": "F-2", "client": "Specific Client", "registrant": "Firm B",
+                "amount_usd": 60000, "filing_period": "2024 Q1",
+                "specific_issues": "Support for H.R. 3684 highway provisions.",
+                "policy_area": "Transportation", "targets_specific_bill": True,
+                "primary_ask": "Wants the highway provisions kept.",
+                "needs_followup": False,
+            },
+        ]
+    )
+
+
+def test_the_report_says_why_a_flagged_filing_needs_a_second_look(tmp_path):
+    """A bare flag is not an argument: show the money, the stated ask, and what is missing."""
+    page = _publish_a_report(tmp_path, _two_filings())
+
+    assert "No specific bill named" in page
+    assert "Catch-all Other policy area" in page
+    assert "$250,000" in page
+    assert "Wants favourable treatment, unspecified." in page
+    assert "General discussions regarding federal policy." in page
+
+
+def test_the_report_invents_no_reason_for_a_filing_that_was_not_flagged(tmp_path):
+    page = _publish_a_report(tmp_path, _two_filings().tail(1))
+
+    assert "No specific bill named" not in page
+    assert "Catch-all Other policy area" not in page
+    assert "1 filings cleared the spend filter; 0 are flagged" in page
+
+
+def test_the_report_scores_nothing_and_recommends_nothing(tmp_path):
+    page = _publish_a_report(tmp_path, _two_filings())
+
+    assert "reading aid, not a verdict" in page
+    for verdict_word in ("score", "rank", "recommend", "priority"):
+        assert verdict_word not in page.lower(), verdict_word
+
+
+def test_the_report_step_refuses_a_flag_it_cannot_account_for(tmp_path):
+    """Flagged yet naming a bill and outside the catch-all: flag and data disagree."""
+    df = _two_filings().tail(1).assign(needs_followup=True)
+
+    with pytest.raises(StepRefused, match="cannot say why it was flagged"):
+        _publish_a_report(tmp_path, df)
+
+
+# ── the template is a file, not a string in the code ─────────────────────────
+
+
+def test_the_publish_stage_carries_no_markup_of_its_own():
+    """tests/arch/test_no_html_in_python.py's rule, applied to the stage's own code."""
+    code = _stage(_load_fixture(), "publish_report").function.code
+    assert code is not None
+
+    assert find_html_tag_string_literals(ast.parse(code)) == []
+    assert _TEMPLATE_TOKEN in code, "the code no longer names a template to read"
+
+
+def test_seeding_binds_the_committed_template_into_the_publish_stage():
+    bound = _stage(_bound_fixture(), "publish_report").function.code
+    assert bound is not None
+
+    assert _TEMPLATE_TOKEN not in bound
+    assert _TEMPLATE_PATH.as_posix() in bound
+    # A Windows path would land inside a Python string literal as escape sequences.
+    assert "\\" not in _TEMPLATE_PATH.as_posix()
+
+
+def test_a_missing_template_stops_the_seeding_rather_than_shipping_a_broken_stage(tmp_path):
+    with pytest.raises(FileNotFoundError, match="tutorial fixture needs is missing"):
+        _read_fixture_bound_to(_CSV_PATH, tmp_path / "gone.html")
+
+
+def test_the_report_step_stops_when_the_template_loses_a_section(tmp_path):
+    truncated = tmp_path / "truncated.html"
+    kept = _TEMPLATE_PATH.read_text(encoding="utf-8").split("<!--@ reason -->")[0]
+    truncated.write_text(kept, encoding="utf-8")
+    stage = _stage(_read_fixture_bound_to(_CSV_PATH, truncated), "publish_report")
+    ctx = RunContext.for_stages_outside_a_run(tmp_path, tmp_path)
+
+    with pytest.raises(ValueError, match="has no"):
+        HANDLERS[StageType(stage.type)].execute(
+            stage, {"flag_followup": _two_filings()}, ctx
+        )
+
+
+def test_the_template_declares_every_section_the_step_reads():
+    template = _TEMPLATE_PATH.read_text(encoding="utf-8")
+    code = _stage(_load_fixture(), "publish_report").function.code
+    assert code is not None
+    wanted = next(
+        node.value
+        for node in ast.walk(ast.parse(code))
+        if isinstance(node, ast.Assign)
+        and any(getattr(t, "id", "") == "SECTIONS" for t in node.targets)
+    )
+
+    for section in ast.literal_eval(wanted):
+        assert f"<!--@ {section} -->" in template, section
+
+
+def test_the_fixture_is_committed_as_json_and_the_template_beside_it():
+    assert _TEMPLATE_PATH.is_file()
+    # The seed glob reads data/*.json as workflows; the template must not be one.
+    assert json.loads(_FIXTURE_PATH.read_text(encoding="utf-8"))["name"]
+    assert _TEMPLATE_PATH.suffix == ".html"

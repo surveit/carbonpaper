@@ -1,0 +1,69 @@
+<!--@ document -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Tutorial Lobbying Triage</title>
+<style>
+  body { font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+         margin: 2rem auto; max-width: 1100px; padding: 0 1rem; line-height: 1.45; }
+  h1 { font-size: 1.45rem; margin-bottom: .2rem; }
+  p { margin: .5rem 0; }
+  .sub, .note, .muted, .issue { font-size: .85rem;
+        color: color-mix(in srgb, currentColor 60%, transparent); }
+  .note, .why { border-left: 3px solid color-mix(in srgb, currentColor 30%, transparent);
+        padding: .1rem 0 .1rem .8rem; margin: 1rem 0; }
+  .why { font-size: .9rem; max-width: 62ch; }
+  table { border-collapse: collapse; width: 100%; font-size: .88rem; margin-top: 1.4rem; }
+  th, td { text-align: left; padding: .5rem .6rem; vertical-align: top;
+           border-bottom: 1px solid color-mix(in srgb, currentColor 15%, transparent); }
+  th { font-size: .7rem; text-transform: uppercase; letter-spacing: .05em;
+       border-bottom-width: 2px; }
+  td.num { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+  tr.flagged td:first-child { border-left: 3px solid currentColor; }
+  .pill { border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+          border-radius: 999px; padding: .05rem .5rem; font-size: .78rem;
+          white-space: nowrap; }
+  .reason { display: block; font-weight: 600; font-size: .82rem; }
+  .reason + .reason { margin-top: .25rem; }
+  .none { color: color-mix(in srgb, currentColor 40%, transparent); }
+  details { margin-top: .35rem; }
+  summary { font-size: .78rem; cursor: pointer;
+            color: color-mix(in srgb, currentColor 60%, transparent); }
+  .issue { margin: .3rem 0 0; max-width: 60ch; }
+</style>
+</head>
+<body>
+<h1>Tutorial Lobbying Triage Report</h1>
+<p class="sub">[[filing_count]] filings cleared the spend filter; [[flagged_count]] are flagged for follow-up.</p>
+<p class="note">Synthetic sample data bundled with this tutorial &mdash; not live Senate LDA filings. No row describes a real filing, client or firm.</p>
+<p class="why">Every filing below reported enough lobbying spend to clear this workflow&rsquo;s filter. It is
+flagged when its own issue text never says what that money was asking for: no specific bill named, or
+the catch-all <em>Other</em> policy area. Money present, ask vague &mdash; that gap is the reason to go
+read the filing. It is a reading aid, not a verdict, and not a finding about the filer.</p>
+<table>
+<thead><tr>
+<th>Filing</th><th>Client</th><th>Registrant</th><th>Period</th>
+<th>Reported spend</th><th>Policy area</th><th>What they said they wanted</th><th>Why follow up</th>
+</tr></thead>
+<tbody>
+[[rows]]</tbody>
+</table>
+</body>
+</html>
+<!--@ row -->
+<tr class="[[row_class]]">
+<td>[[filing_id]]</td>
+<td>[[client]]</td>
+<td class="muted">[[registrant]]</td>
+<td>[[filing_period]]</td>
+<td class="num">[[amount]]</td>
+<td><span class="pill">[[policy_area]]</span></td>
+<td>[[primary_ask]]
+<details><summary>Issue text as filed</summary><p class="issue">[[specific_issues]]</p></details></td>
+<td>[[followup]]</td>
+</tr>
+<!--@ reason -->
+<span class="reason">[[reason]]</span>
+<!--@ no_followup -->
+<span class="none">&mdash;</span>

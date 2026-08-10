@@ -2,33 +2,33 @@
   "steps": [
     {
       "title": "Load the quarter's filings",
-      "prose": "Reads the bundled CSV: one row per filing, carrying the client, the registrant, the reported spend and the filer's own free-text description of what they lobbied on. The data is synthetic — shaped like a Senate LDA export, describing no real filing.",
+      "prose": "One row per filing from the bundled CSV: client, registrant, reported spend, and the filer's free-text account of what they lobbied on. Synthetic data shaped like a Senate LDA export; no real filing.",
       "stage_ids": ["raw_filings"],
-      "data_description": "Every filing in the synthetic sample, exactly as the CSV records it."
+      "data_description": "Every filing in the sample, as the CSV records it."
     },
     {
       "title": "Keep the filings above $50,000",
-      "prose": "Drops every filing reporting less than $50,000 of spend for the period; exactly $50,000 is kept. The threshold is an editorial choice, not a fact about the data — check it is the line you would draw, because everything under it leaves here.",
+      "prose": "Drops filings under $50,000; exactly $50,000 is kept. The threshold is an editorial choice — check it is the line you would draw, because everything under it leaves here.",
       "stage_ids": ["significant_filings"],
-      "data_description": "The filings reporting at least $50,000; each drop is recorded, not silent."
+      "data_description": "Filings reporting at least $50,000; each drop is recorded."
     },
     {
       "title": "Read each filing's issue text",
-      "prose": "A model reads each surviving filing's `specific_issues` text and adds `policy_area`, `targets_specific_bill` and a one-sentence `primary_ask`. Check these against the issue text itself: the model's reading is the weakest link in the chain.",
+      "prose": "A model reads `specific_issues` and adds `policy_area`, `targets_specific_bill` and a one-sentence `primary_ask`. Check each against the issue text; it is the weakest link.",
       "stage_ids": ["classify_issues"],
-      "data_description": "The same filings, each carrying the model's three added judgments."
+      "data_description": "The same filings, plus the model's three judgments."
     },
     {
       "title": "Flag what needs a second look",
-      "prose": "Marks a filing for follow-up when it named no specific bill, or landed in the catch-all Other area — both mean the text did not pin down the ask. Plain code over the step above, so a wrong flag traces back to a wrong classification.",
+      "prose": "Flags a filing that named no bill or landed in catch-all Other — either way the text did not pin down the ask. Plain code, so a wrong flag traces to a wrong classification.",
       "stage_ids": ["flag_followup"],
-      "data_description": "Every surviving filing, plus the `needs_followup` flag."
+      "data_description": "Every surviving filing, plus `needs_followup`."
     },
     {
       "title": "Publish the triage report",
-      "prose": "Writes the surviving filings out as one HTML page — client, registrant, spend, policy area and the follow-up flag. This is the artifact a reader sees, so every figure on it should be one you have followed back through the steps above.",
+      "prose": "One HTML page: spend, primary ask, issue text as filed, and for a flagged filing which condition flagged it. Check that reason against the text.",
       "stage_ids": ["publish_report"],
-      "data_description": "The published triage table: one row per surviving filing."
+      "data_description": "One row per surviving filing, as published."
     }
   ],
   "unnarrated": []
