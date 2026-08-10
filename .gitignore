@@ -32,3 +32,6 @@ scripts/
 
 # agent chat session scratch (dev-only, never committed)
 app/agent/_sessions/
+
+# Agent worktrees: transient scratch, never part of the repo.
+.claude/worktrees/
