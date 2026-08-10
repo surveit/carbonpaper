@@ -2,7 +2,7 @@
 
 **Workflows of typed, schema-validated stages** with human-review gates and persisted
 runs. Vocabulary (locked): **project** = the container
-directory · **methodology** = the authored prose (`methodology_raw.md`) ·
+directory · **methodology** = the authored prose (the `methodology` document) ·
 **workflow** = the stage graph it compiles to. What/why + features → `docs/overview.md`;
 code map → `docs/architecture.md`; quickstart → `README.md`.
 

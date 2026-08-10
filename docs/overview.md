@@ -12,7 +12,7 @@ number or unsourced claim defeats the purpose. Two rules recur in the code:
 
 ## Vocabulary (locked 2026-07-04)
 - **project** — the container directory holding everything below.
-- **methodology** — the authored prose method (`methodology_raw.md`).
+- **methodology** — the authored prose method (the project's `methodology` document).
 - **workflow** — the executable stage graph it compiles into (the project's
   `working_copy` document, an ordered list of validated `Stage`s; a DAG of typed
   stages, every edge schema-validated).

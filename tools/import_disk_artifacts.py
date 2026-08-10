@@ -1,9 +1,10 @@
 """Bring a project working copy's on-disk artifacts into the document store.
 
 Alembic reaches the store's JSON payloads; the artifacts still under
-`<project>/schemas/` and `<project>/compiled/` were never in it. This is their
-one-way path in: read each project directory, validate what it holds, and save
-it as the document today's code reads.
+`<project>/schemas/`, `<project>/compiled/` and the project's own
+`document.md` were never in it. This is their one-way path in: read each project
+directory, validate what it holds, and save it as the document today's code
+reads.
 
 Refuses a project it cannot determine rather than storing a guess — a refusal
 names the project and why, and never holds back the projects that did import.
@@ -29,6 +30,7 @@ from app.models.named_schemas import NamedSchema
 from app.models.stage import parse_stage
 from app.services.data_model import DataModel
 from app.services.loader import WorkingCopy
+from app.services.methodology import Methodology
 
 
 @dataclass
@@ -61,7 +63,25 @@ def plan_import(projects_dir: Path) -> ImportPlan:
     for project_dir in sorted(p for p in projects_dir.iterdir() if p.is_dir()):
         _plan_data_model(project_dir, plan)
         _plan_working_copy(project_dir, plan)
+        _plan_methodology(project_dir, plan)
     return plan
+
+
+# A project's prose was written under whichever of these its era used; the first
+# that exists is its methodology.
+_DOCUMENT_NAMES = ("document.md", "methodology_raw.md", "methodology_raw.txt")
+
+
+def _plan_methodology(project_dir: Path, plan: ImportPlan) -> None:
+    """The project's prose file as one Methodology record."""
+    for name in _DOCUMENT_NAMES:
+        path = project_dir / name
+        if not path.is_file():
+            continue
+        text = path.read_text(encoding="utf-8")
+        if text.strip():
+            plan.records.append(Methodology(id=project_dir.name, text=text))
+        return
 
 
 def _plan_working_copy(project_dir: Path, plan: ImportPlan) -> None:
@@ -131,6 +151,8 @@ def _size_of(record: PersistedModel) -> str:
         return f"{len(record.schemas)} schema(s)"
     if isinstance(record, WorkingCopy):
         return f"{len(record.stages)} stage(s)"
+    if isinstance(record, Methodology):
+        return f"{len(record.text)} chars"
     raise TypeError(f"no size known for {type(record).__name__}")
 
 

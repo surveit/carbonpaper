@@ -24,6 +24,8 @@ from app.models.review_guide import ReviewGuideDraft, ReviewGuideStep
 from app.services import versioning, workspace
 from app.services import project as project_service
 from stage_seed import add_stage
+from app.services.methodology import write_methodology
+from app.services.methodology import Methodology
 
 _ROWS = {"columns": [{"name": "amount", "type": "float", "nullable": False}]}
 _DOUBLED = {"columns": [
@@ -63,7 +65,7 @@ def _seed_project(root: Path) -> Path:
     project_dir = root / "alpha"
     pdir = project_dir
     pdir.mkdir(parents=True, exist_ok=True)
-    (project_dir / "document.md").write_text("Double the amount.", encoding="utf-8")
+    write_methodology(project_dir.name, "Double the amount.")
     add_stage(pdir, _LOAD)
     add_stage(pdir, _DOUBLE)
     return project_dir
@@ -300,7 +302,7 @@ def test_start_refuses_a_project_with_no_document(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
     project_dir = _seed_project(tmp_path)
-    (project_dir / "document.md").unlink()
+    Methodology.delete(project_dir.name)
     version = project_service.save_working_copy_as_version(
         project_dir, message="v1", reviewer="local"
     )

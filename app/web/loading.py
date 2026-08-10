@@ -32,6 +32,7 @@ from app.services.loader import (
 )
 from app.services.versioning import list_versions, load_version_stages
 from app.services.data_model import load_schemas
+from app.services.methodology import exists as methodology_exists
 from app.services.workspace import resolve_project_dir
 from app.web.config import projects_dir
 
@@ -49,7 +50,7 @@ def list_projects() -> list[dict[str, Any]]:
 
     Every flag and count is read off disk — a card never advertises a
     stage/schema/run/version that isn't there. A directory counts as a project
-    from the moment creation writes its document.md (or project.json) — a
+    from the moment creation stores its methodology — a
     just-created project whose data model is still being generated must show up,
     not appear only once generation finishes. A dir with none of those markers is
     not a project and is omitted. A run counts only if it has a manifest.json
@@ -74,7 +75,7 @@ def _build_project_card(p: Path) -> dict[str, Any] | None:
     n_schemas = len(load_schemas(p.name))
     has_schemas = n_schemas > 0
     n_runs = _count_runs_with_manifest(p / "runs")
-    has_document = (p / "document.md").is_file() or (p / "project.json").is_file()
+    has_document = methodology_exists(p.name)
     if not (has_workflow or has_schemas or has_document):
         return None
     return {

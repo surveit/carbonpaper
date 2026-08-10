@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 
 import pytest
 from fastapi.testclient import TestClient
@@ -9,10 +8,12 @@ from app.core.persistence import get_store
 from app.main import app
 from app.models.named_schemas import NamedSchema, SchemaKind
 from app.services.data_model import DataModel
+from app.services.project import Project
 from app.services.versioning import WorkflowVersion
 from app.web.loading import list_projects
 from app.services import workspace
 from stage_seed import set_stages
+from app.services.methodology import write_methodology
 
 client = TestClient(app)
 
@@ -29,9 +30,8 @@ def _make_document_only_project(root, name="fresh"):
     document.md + project.json, no data model, no workflow."""
     proj = root / name
     proj.mkdir(parents=True, exist_ok=True)
-    (proj / "document.md").write_text("methodology prose", encoding="utf-8")
-    (proj / "project.json").write_text(
-        json.dumps({"name": name, "model": "sonnet"}), encoding="utf-8")
+    write_methodology(name, "methodology prose")
+    Project(id=name, model="sonnet").save()
     return proj
 
 

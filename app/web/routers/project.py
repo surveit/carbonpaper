@@ -22,7 +22,7 @@ from app.models import (
     validate_schema_library,
 )
 from app.models.named_schemas import NamedSchema
-from app.services import data_model, generation, project, versioning
+from app.services import data_model, generation, methodology, project, versioning
 from app.services.loader import resolve_function_code
 from app.web.config import projects_dir, templates
 from app.runtime.stage_tests import run_stage_tests
@@ -101,10 +101,8 @@ async def delete_project(project_name: str):
 
 
 # ─── New project (paste doc → project) ───────────────────────────────────────
-# Create a project working copy directly under examples/<name>/. The DIRECTORY is the
-# authoring session (no separate compilation id): the pasted document lands at
-# examples/<name>/document.md and the chat transcript at chat.jsonl, so the gated
-# authoring streams below key off the project NAME, not a comp id.
+# There is no separate compilation id: the pasted document is stored under the
+# project NAME, which is what the gated authoring streams below key off.
 #
 # DECLARED HERE, before the /project/{project} section routes below, so the literal
 # /project/new is matched first (FastAPI matches in declaration order) — otherwise the
@@ -129,25 +127,23 @@ async def new_project_submit(
     doc_text: str = Form(...),
     model: str = Form("sonnet"),
 ):
-    """Create the examples/<name>/ working copy + its project.json, persist the pasted
-    document at document.md, then redirect to the project's data-model section where
-    authoring starts. The directory IS the session — the data-model stream keys off the
-    project name and reads document.md / writes chat.jsonl in here.
+    """Store the pasted methodology and the project's identity, then redirect to
+    the data-model section where authoring starts.
 
-    Truthfulness: we write project.json (via project.write_project_meta) so a NEW
-    project carries a real model + created_at (non-legacy); we never fabricate those
-    for legacy dirs. A name clash fails LOUDLY (400) rather than clobbering existing
-    data — the rename is the human's decision."""
+    A name clash fails LOUDLY (400) rather than clobbering existing data — the
+    rename is the human's decision."""
     try:
         safe_name = project.create_project(name, doc_text, model=model, source="pasted document")
     except (ValueError, ProjectExistsError) as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    project_dir = projects_dir() / safe_name
-    doc = (project_dir / "document.md").read_text(encoding="utf-8")
     # Kick off data-model generation. It runs as a LIVE chat turn; land the user on it
     # so they watch the model being authored (it streams while it runs, then persists
     # as the session's transcript).
-    session_id = generation.start_generation(project_dir, document=doc, model=model)
+    session_id = generation.start_generation(
+        projects_dir() / safe_name,
+        document=methodology.read_methodology(safe_name) or doc_text,
+        model=model,
+    )
     return RedirectResponse(url=f"/chat/{session_id}", status_code=303)
 
 
@@ -155,20 +151,18 @@ async def new_project_submit(
 async def generate_project(project_name: str):
     """(Re)kick data-model generation for an EXISTING project — the manual counterpart
     to the auto-kick on create (for a legacy project that has a document but no data
-    model, or to regenerate from scratch). Reads document.md + the project's model,
-    starts the data-model phase as a LIVE chat turn, and redirects to that session so
-    the run is watchable. 400 if there is no document to generate from."""
+    model, or to regenerate from scratch). Reads the stored methodology + the
+    project's model, starts the data-model phase as a LIVE chat turn, and redirects
+    to that session so the run is watchable. 400 if there is no document."""
     pdir = _project_dir(project_name)
-    document_path = pdir / "document.md"
-    if not document_path.is_file():
+    document = methodology.read_methodology(project_name)
+    if document is None:
         raise HTTPException(
             status_code=400,
-            detail=f"examples/{project_name}/ has no document.md to generate from.",
+            detail=f"project '{project_name}' has no methodology to generate from.",
         )
     model = project.project_meta(pdir).model or "sonnet"
-    session_id = generation.start_generation(
-        pdir, document=document_path.read_text(encoding="utf-8"), model=model
-    )
+    session_id = generation.start_generation(pdir, document=document, model=model)
     return RedirectResponse(url=f"/chat/{session_id}", status_code=303)
 
 
@@ -195,20 +189,11 @@ async def project_overview(request: Request, project_name: str):
 
 @router.get("/project/{project_name}/document", response_class=HTMLResponse)
 async def project_document(request: Request, project_name: str):
-    """DOCUMENT — the source methodology document, read-only. The route reads the file
-    server-side (the template never touches the filesystem); `document` is '' / None
-    when the project has no document, and the template shows an empty state. The path
-    line is state.document_path (absolute, truthful)."""
+    """DOCUMENT — the source methodology, read-only. `document` is '' when the
+    project has none, and the template shows an empty state."""
     pdir = _project_dir(project_name)
     state = shell_state(pdir)
-    document = ""
-    if state.document_path:
-        try:
-            document = Path(state.document_path).read_text(encoding="utf-8")
-        except OSError:
-            # The path came from project_state probing the disk; if it vanished
-            # between snapshot and read, show the empty state rather than 500.
-            document = ""
+    document = methodology.read_methodology(project_name) or ""
     return templates.TemplateResponse(
         request,
         "section_document.html",

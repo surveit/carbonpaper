@@ -8,7 +8,7 @@ from pathlib import Path
 from pydantic import BaseModel
 
 from app.core.frames import read_frame_file, write_frame_file
-from app.services.project import find_document_path
+from app.services.methodology import read_methodology
 from app.services.review_packet.views import RunView, StageView
 
 DATA_DIR = "data"
@@ -81,13 +81,13 @@ def _write_workflow(
 
 def _copy_document(root: Path, project_dir: Path, report: DataReport) -> None:
     """The authored methodology the workflow was compiled from."""
-    source = find_document_path(project_dir)
-    if source is None:
+    document = read_methodology(project_dir.name)
+    if document is None:
         report.omitted.append(
-            OmittedFile(path=DOCUMENT_FILE, reason="this project has no source document on disk")
+            OmittedFile(path=DOCUMENT_FILE, reason="this project has no source document")
         )
         return
-    _copy_file(source, root / DOCUMENT_FILE, DOCUMENT_FILE, report)
+    _write_text(root / DOCUMENT_FILE, document, DOCUMENT_FILE, report)
 
 
 def _write_stage_output(

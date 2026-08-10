@@ -22,6 +22,7 @@ from app.models.stages.stage_tests import (
 from app.main import app
 from app.services import workspace
 from stage_seed import add_stage, read_stage, set_stages
+from app.services.methodology import write_methodology
 
 _IN_SCHEMA = {"columns": [{"name": "amount", "type": "float", "nullable": False}]}
 _OUT_SCHEMA = {"columns": [
@@ -37,7 +38,7 @@ def _seed_project(root: Path) -> Path:
     button/template assertions."""
     project_dir = root / "alpha"
     project_dir.mkdir(parents=True, exist_ok=True)
-    (project_dir / "document.md").write_text("Double the amount.", encoding="utf-8")
+    write_methodology(project_dir.name, "Double the amount.")
     pdir = project_dir
     pdir.mkdir(parents=True, exist_ok=True)
     add_stage(pdir, {

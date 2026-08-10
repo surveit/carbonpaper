@@ -10,6 +10,7 @@ from pathlib import Path
 from app.services import project as project_service
 from app.services import workspace
 from app.web import loading
+from app.services.methodology import write_methodology
 
 
 def _write_manifest(
@@ -50,7 +51,7 @@ def test_dashboard_card_n_runs_excludes_test_runs(tmp_path, monkeypatch):
     workspace.set_projects_dir(tmp_path)
     root = tmp_path / "demo"
     root.mkdir()
-    (root / "document.md").write_text("methodology", encoding="utf-8")
+    write_methodology(root.name, "methodology")
     _write_manifest(root / "runs" / "20260101T000000", status="ok", is_test_run=None)
     _write_manifest(root / "runs" / "20260102T000000", status="ok", is_test_run=True)
 
@@ -63,7 +64,7 @@ def test_a_legacy_manifests_flat_flag_still_excludes_it(tmp_path):
     workspace.set_projects_dir(tmp_path)
     root = tmp_path / "demo"
     root.mkdir()
-    (root / "document.md").write_text("methodology", encoding="utf-8")
+    write_methodology(root.name, "methodology")
     _write_manifest(root / "runs" / "20260101T000000", status="ok",
                     is_test_run=None, legacy=True)
     _write_manifest(root / "runs" / "20260102T000000", status="ok",

@@ -6,6 +6,7 @@ import pytest
 
 from app.core.errors import ProjectExistsError
 from app.services.project import Project, create_project
+from app.services.methodology import read_methodology, write_methodology
 
 
 def test_create_project_rejects_a_name_with_an_existing_record(tmp_path):
@@ -25,24 +26,22 @@ def test_bare_directory_does_not_block_creation(projects_root):
     name = create_project("staged", "Find the money.", source="test")
 
     assert name == "staged"
-    assert (project_dir / "document.md").read_text(encoding="utf-8") == "Find the money."
+    assert read_methodology("staged") == "Find the money."
     assert (project_dir / "input.csv").is_file()
     assert Project.exists("staged")
 
 
-def test_existing_document_still_refuses_with_a_distinguishable_message(projects_root):
-    project_dir = projects_root / "content"
-    project_dir.mkdir()
-    (project_dir / "document.md").write_text("Pre-existing content.", encoding="utf-8")
+def test_a_stored_methodology_refuses_with_a_distinguishable_message(projects_root):
+    write_methodology("content", "Pre-existing content.")
 
     with pytest.raises(ProjectExistsError) as excinfo:
         create_project("content", "New doc.", source="test")
 
-    assert "document.md" in str(excinfo.value)
+    assert "methodology" in str(excinfo.value)
 
     # And the two refusal messages differ, so a caller can tell them apart.
     create_project("dupe2", "doc", source="test")
     with pytest.raises(ProjectExistsError) as record_clash:
         create_project("dupe2", "other", source="test")
-    assert "document.md" not in str(record_clash.value)
+    assert "methodology" not in str(record_clash.value)
 

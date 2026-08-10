@@ -7,7 +7,6 @@ import-if-absent: a name clash raises rather than replacing.
 
 from __future__ import annotations
 
-import json
 import re
 from datetime import datetime
 from pathlib import Path
@@ -32,7 +31,7 @@ from app.models.run_manifest import (
 from app.services.versioning import ReviewGuide
 from app.core.persistence import PersistedModel, PersistenceScope
 from app.core.run_status import RunStatus
-from app.services import data_model, stage_edit, versioning, workspace
+from app.services import data_model, methodology, stage_edit, versioning, workspace
 from app.services import loader
 from app.services.errors import WorkflowLoadError
 from app.services.stage_edit import AddStagesResult, EditStageResult
@@ -49,8 +48,8 @@ class Project(PersistedModel):
     distinct from PersistedModel's `created_at`/`updated_at`, which stamp
     when this RECORD was written (e.g. by a migration backfill, possibly long
     after the project itself was made). `authored_at` is None when that date
-    is genuinely unknown (a legacy project with no project.json to read it
-    from) — never inferred from the record's own `created_at`."""
+    is genuinely unknown (a legacy project whose date was never recorded) —
+    never inferred from the record's own `created_at`."""
 
     collection: ClassVar[str] = "project"
     SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
@@ -93,7 +92,7 @@ class RunsSummary(BaseModel):
 
 
 class ProjectMeta(BaseModel):
-    """A project's identity card. Legacy projects (no project.json) degrade
+    """A project's identity card. Legacy projects (no stored record) degrade
     truthfully: title / created_at / model / source are None ("unknown") rather than
     fabricated. name is always the directory name."""
 
@@ -112,35 +111,10 @@ class ProjectState(BaseModel):
     name: str
     meta: ProjectMeta
     has_document: bool
-    document_path: str | None
     data_model: DataModelStatus
     workflow: WorkflowStatus
     versions: int
     runs: RunsSummary
-
-
-# ─── Document discovery ───────────────────────────────────────────────────────
-# A project's source document is the pasted methodology it was authored from. The
-# create flow writes document.md; legacy/imported projects may carry
-# methodology_raw.md or the older methodology_raw.txt. Probe in that order and
-# report the first that exists (a truthful path, never a fabricated one).
-#
-# LEGACY: probing a fixed candidate list is a migration accommodation. The intended
-# direction is for project.json to record the document's path explicitly, so a
-# project references a real file rather than inferring it by filename — at which
-# point this probe (and _DOCUMENT_CANDIDATES) can be retired.
-_DOCUMENT_CANDIDATES = ("document.md", "methodology_raw.md", "methodology_raw.txt")
-
-
-def find_document_path(pdir: Path) -> Path | None:
-    """First existing source-document file in <pdir> (see _DOCUMENT_CANDIDATES),
-    or None when the project has no document on disk. Returns the absolute Path so
-    callers can read or link it; None is a truthful 'no document', not an error."""
-    for name in _DOCUMENT_CANDIDATES:
-        p = pdir / name
-        if p.is_file():
-            return p
-    return None
 
 
 # ─── Stage loading (counts / coverage) ────────────────────────────────────────
@@ -205,28 +179,6 @@ def project_meta(pdir: Path) -> ProjectMeta:
     )
 
 
-def write_project_meta(pdir: Path, **fields: Any) -> dict[str, Any]:
-    """Merge `fields` into examples/<name>/project.json and persist it, returning the
-    written record. Reads any existing file first so a partial update doesn't drop
-    other keys; only the keys passed are overwritten. None values ARE written when
-    passed explicitly (so a caller can clear a field), but callers should omit a key
-    rather than pass a placeholder — this module never invents a model/date itself."""
-    pdir = Path(pdir)
-    pdir.mkdir(parents=True, exist_ok=True)
-    pj = pdir / "project.json"
-    record: dict[str, Any] = {}
-    if pj.is_file():
-        try:
-            loaded = json.loads(pj.read_text(encoding="utf-8"))
-            if isinstance(loaded, dict):
-                record = loaded
-        except (json.JSONDecodeError, OSError):
-            record = {}
-    record.update(fields)
-    pj.write_text(json.dumps(record, indent=2, ensure_ascii=False), encoding="utf-8")
-    return record
-
-
 # ─── The status snapshot ──────────────────────────────────────────────────────
 
 
@@ -237,7 +189,7 @@ def project_state(pdir: Path) -> ProjectState:
     Fields:
       {
         name, meta,
-        has_document, document_path,
+        has_document,
         data_model: {present, n_schemas},
         workflow:   {present, n_stages},
         versions:   n,
@@ -254,10 +206,6 @@ def project_state(pdir: Path) -> ProjectState:
     name = pdir.name
     meta = project_meta(pdir)
 
-    # ── Document ──
-    doc_path = find_document_path(pdir)
-    has_document = doc_path is not None
-
     # ── Data model (named schemas) ──
     schemas = data_model.load_schemas(name)
     data_model_status = DataModelStatus(present=bool(schemas), n_schemas=len(schemas))
@@ -273,9 +221,7 @@ def project_state(pdir: Path) -> ProjectState:
     return ProjectState(
         name=name,
         meta=meta,
-        has_document=has_document,
-        # Absolute path string (or None) — a link target, never fabricated.
-        document_path=str(doc_path) if doc_path else None,
+        has_document=methodology.exists(name),
         data_model=data_model_status,
         workflow=workflow,
         versions=n_versions,
@@ -307,18 +253,14 @@ def create_project(
     model: str = "sonnet",
     source: str,
 ) -> str:
-    """Create the examples/<name>/ working copy for a NEW project: sanitize the
-    name, write document.md (the source of record) and project.json (real model +
-    created_at + source — never fabricated), and record the project's identity
-    (a Project) in the store. Returns the sanitized name.
+    """Store a NEW project's methodology and identity, and make its working-copy
+    directory (which holds input data, not source). Returns the sanitized name.
 
-    Raises ValueError on an empty document. Raises ProjectExistsError on a
-    name clash — but a name clash means a Project record already exists for
-    `safe_name`, NOT that examples/<name>/ happens to exist as a directory: an
-    unrelated or empty directory (e.g. input files a user staged there by
-    hand) is not a clash and is written into. examples/<name>/document.md
-    existing IS a clash (it's a project's actual content) and is refused with
-    a distinguishable message, so a caller can tell the two refusals apart."""
+    Raises ValueError on an empty document. Raises ProjectExistsError on a name
+    clash — a stored Project record, or a stored methodology, under `safe_name`.
+    An unrelated or empty directory of that name (e.g. input files a user staged
+    there by hand) is NOT a clash and is written into. The two refusals carry
+    distinguishable messages so a caller can tell them apart."""
     safe_name = sanitize_project_name(name)
     doc = document.strip()
     if not doc:
@@ -328,16 +270,13 @@ def create_project(
             f"project '{safe_name}' already exists — choose a different name."
         )
     project_dir = workspace.projects_dir() / safe_name
-    if (project_dir / "document.md").is_file():
+    if methodology.exists(safe_name):
         raise ProjectExistsError(
-            f"{safe_name}/document.md already exists — choose a different name."
+            f"project '{safe_name}' already has a methodology — choose a different name."
         )
     project_dir.mkdir(parents=True, exist_ok=True)
-    (project_dir / "document.md").write_text(doc, encoding="utf-8")
+    methodology.write_methodology(safe_name, doc)
     created_at = datetime.now().isoformat(timespec="seconds")
-    write_project_meta(
-        project_dir, name=safe_name, title=None, created_at=created_at, model=model, source=source,
-    )
     Project(id=safe_name, title=None, model=model, source=source, authored_at=created_at).save()
     return safe_name
 
@@ -531,16 +470,16 @@ def export_project(name: str) -> WorkflowFile:
     meta = project_meta(pdir)
     if meta.model is None or meta.source is None:
         raise ValueError(
-            f"project '{name}' has no recorded model/source in project.json — cannot export"
+            f"project '{name}' has no recorded model/source — cannot export"
         )
-    document_path = project_state(pdir).document_path
-    if document_path is None:
+    document = methodology.read_methodology(name)
+    if document is None:
         raise ValueError(f"project '{name}' has no document — cannot export")
     library = data_model.load_data_model(name) or SchemaLibrary(schemas=[])
     stages = [e.stage for e in loader.load_stage_entries(name) if e.stage is not None]
     return WorkflowFile(
         name=name,
-        document=Path(document_path).read_text(encoding="utf-8"),
+        document=document,
         model=meta.model,
         source=meta.source,
         data_model=library,
@@ -554,7 +493,7 @@ def import_project(
     """Write `wf` into the workspace under `name` (default: `wf.name`) through the
     existing service writers, then mint one version when it carries stages.
     Import-if-absent only: create_project's own clash check (a Project record
-    already exists, or examples/<name>/document.md already exists) raises
+    already exists, or a methodology is already stored) raises
     ProjectExistsError — this function adds no clash check of its own, so a
     bare/incidental directory of the target name does not block import.
     Returns the sanitized name."""

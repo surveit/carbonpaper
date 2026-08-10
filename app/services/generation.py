@@ -22,7 +22,7 @@ from app.models.review_guide import ReviewGuideDraft
 from app.models.named_schemas import SchemaLibrary
 from app.services import data_model, versioning
 from app.services.loader import load_workflow
-from app.services.project import find_document_path
+from app.services.methodology import read_methodology
 from app.services.stage_edit import patch_stage_spec
 
 _log = logging.getLogger(__name__)
@@ -44,7 +44,7 @@ def start_generation(project_dir: Path, *, document: str, model: str) -> str:
 
 def start_stage_test_generation(project_dir: Path, *, stage_id: str, model: str) -> str:
     """Kick off STAGE-TEST generation for one stage and return the id of
-    the (hidden, view-only) chat session streaming the turn. Loads document.md and the
+    the (hidden, view-only) chat session streaming the turn. Loads the methodology and the
     stage's current compiled spec — raising ValueError if the project has no document,
     `stage_id` names no stage in the compiled workflow, the stage's type carries no
     runnable tests, or the stage resolves no output schema (tests need one to state
@@ -56,8 +56,8 @@ def start_stage_test_generation(project_dir: Path, *, stage_id: str, model: str)
     REPLACES the stage's tests wholesale with whatever suite the agent submitted — no
     human-touched marker exists yet, so this is a destructive regenerate (documented on the
     generate-tests button/route). Must be called from the server event loop."""
-    doc_path = find_document_path(project_dir)
-    if doc_path is None:
+    document = read_methodology(project_dir.name)
+    if document is None:
         raise ValueError(f"{project_dir.name} has no document to generate tests from")
     stages = {stage.id: stage for stage in load_workflow(project_dir.name)}
     stage = stages.get(stage_id)
@@ -73,7 +73,7 @@ def start_stage_test_generation(project_dir: Path, *, stage_id: str, model: str)
             f"stage `{stage_id}` has no output schema — tests need one to state expected rows"
         )
     return start_stage_test_generation_agent(
-        document=doc_path.read_text(encoding="utf-8"),
+        document=document,
         stage=stage,
         project_id=project_dir.name,
         model=model,
@@ -95,14 +95,14 @@ def start_review_guide_generation(
             f"version '{version_id}' already has a review guide — edit it with the "
             "authoring agent rather than regenerating over it"
         )
-    doc_path = find_document_path(project_dir)
-    if doc_path is None:
+    document = read_methodology(project_dir.name)
+    if document is None:
         raise ValueError(f"{project_dir.name} has no document to write a guide from")
     return start_review_guide_generation_agent(
         stages=version.stages,
         version_id=version.version_id,
         project_id=project_dir.name,
-        document=doc_path.read_text(encoding="utf-8"),
+        document=document,
         model=model,
         on_answer=lambda draft: _finish_review_guide(project_dir, version_id, draft),
     )

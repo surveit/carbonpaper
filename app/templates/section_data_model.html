@@ -190,9 +190,9 @@
        on upload; without live status (see issue #95) the page just reflects disk. #}
     <div class="empty-state dm-empty-state" id="dm-empty">
       <h2>No data model yet</h2>
-      <p class="muted">The data model is generated from
-        <code>examples/{{ state.name }}/document.md</code>. If you just created this
-        project it may still be generating — reload in a moment — or (re)generate it now.</p>
+      <p class="muted">The data model is generated from this project's methodology.
+        If you just created this project it may still be generating — reload in a
+        moment — or (re)generate it now.</p>
       <form method="post" action="/project/{{ state.name }}/generate">
         <button type="submit" class="btn primary">Generate data model</button>
       </form>

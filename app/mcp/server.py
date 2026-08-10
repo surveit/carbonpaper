@@ -32,6 +32,7 @@ from app.services.versioning import ReviewGuide
 from app.models.stages.node_types import NODE_TYPES
 from app.runtime import stage_tests
 from app.services import data_model
+from app.services import methodology
 from app.services import generation
 from app.services import loader
 from app.services import frame_profile
@@ -243,7 +244,7 @@ def get_project_status(project_id: str) -> dict[str, Any]:
 @mcp.tool(description=TOOL_SPECS["generate_data_model"].description)
 async def generate_data_model(project_id: str) -> dict[str, Any]:
     pdir = _resolve_existing_project(project_id)
-    document = _read_document(pdir, project_id)
+    document = _read_document(project_id)
     model = project_service.project_meta(pdir).model or "sonnet"
     session_id = generation.start_generation(pdir, document=document, model=model)
     return {"status": "started", "watch": f"/chat/{session_id}", "poll": "get_project_status"}
@@ -422,10 +423,9 @@ def _resolve_existing_project(project_id: str) -> Path:
     return pdir
 
 
-def _read_document(pdir: Path, project_id: str) -> str:
-    """The project's methodology document — the input every generation grounds on.
-    A missing document is a raised error, never an empty-string fallback."""
-    doc_path = pdir / "document.md"
-    if not doc_path.is_file():
-        raise ValueError(f"project '{project_id}' has no document.md to generate from")
-    return doc_path.read_text(encoding="utf-8")
+def _read_document(project_id: str) -> str:
+    """A missing document is a raised error, never an empty-string fallback."""
+    document = methodology.read_methodology(project_id)
+    if document is None:
+        raise ValueError(f"project '{project_id}' has no methodology to generate from")
+    return document
