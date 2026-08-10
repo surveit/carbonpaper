@@ -23,10 +23,15 @@
    fixed to the viewport, so the log's own bottom padding is what keeps the last
    turn clear of it. */
 .ac-log { max-width: 1080px; margin: 0 auto; padding: 8px 0 128px;
-    display: flex; flex-direction: column; gap: 14px; }
+    display: flex; flex-direction: column; gap: 20px; }
 
-.ac-role { font-size: 11px; text-transform: uppercase; letter-spacing: .04em;
-    color: var(--muted); margin-bottom: 4px; }
+/* Who spoke, for a screen reader only. On the page the grey bubble hard right and
+   the unboxed prose under it already say it, so the label was a third row of
+   chrome per turn; read aloud in order, with neither position nor shape to go on,
+   it is the only attribution there is. The gap above carries the separation the
+   label used to. */
+.ac-role { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+    overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 .ac-body { white-space: pre-wrap; word-wrap: break-word; }
 
 /* A typed turn is one or two lines, so it reads as a compact bubble against the
@@ -37,7 +42,6 @@
    and the earlier --info tint made the reader's own sentence look like a
    status. Grey also keeps it from competing with the Send button. */
 .ac-msg.user { align-self: flex-end; max-width: 72%; }
-.ac-msg.user .ac-role { text-align: right; }
 .ac-msg.user .ac-body { background: var(--hover); color: var(--fg);
     border-radius: 10px; padding: 8px 12px; }
 .ac-msg.assistant { align-self: stretch; }
