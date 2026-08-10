@@ -133,11 +133,9 @@ def save_dataset_upload(project_dir: Path, filename: str, content: bytes) -> Pat
 
 def latest_version_id(project_dir: Path) -> str | None:
     """The id of the newest version overall (any published state), or None if
-    the project has no version at all. Eval-scoped: used only by the eval
-    runner's default-to-newest resolution and eval status display. Production
-    runs use app.services.versioning.resolve_version_id instead, which pins
-    published versions only -- this function does not gate on publication, so
-    it is not a substitute for that check."""
+    the project has no version at all. Eval-scoped alias for
+    app.services.versioning.find_latest_version_id: used by the eval runner's
+    default-to-newest resolution and by the eval status display."""
     return find_latest_version_id(project_dir)
 
 

@@ -11,7 +11,7 @@ import pytest
 
 import pydantic
 
-from app.core.errors import ReviewGuideValidationError
+from app.core.errors import NoVersionToRunError, ReviewGuideValidationError
 from app.models import StageBase
 from app.models.review_guide import ReviewGuideStep
 from app.core.persistence import get_store
@@ -24,8 +24,10 @@ from app.services.versioning import (
     list_versions,
     load_version,
     find_latest_review_guide,
+    find_latest_version_id,
     load_version_stages,
     publish_version,
+    resolve_version_id,
     save_version_guide,
 )
 
@@ -239,6 +241,57 @@ def test_publish_version_stamps_and_is_idempotent(tmp_path):
 def test_publish_version_unknown_id_raises_file_not_found(tmp_path):
     with pytest.raises(FileNotFoundError):
         publish_version(tmp_path, "nope", reviewer="human")
+
+
+# ── find_latest_version_id / resolve_version_id ──────────────────────────────
+#
+# Publication is a human review signal, not a runtime precondition: neither
+# resolver reads `published`. Only an empty store stops a run.
+
+def _store_version(project_dir: Path, vid: str, *, published: bool = False) -> str:
+    WorkflowVersion(id=f"{project_dir.name}/{vid}", version_id=vid, created_at=vid,
+                    message="m", reviewer="r", published=published).save()
+    return vid
+
+
+def test_find_latest_version_id_is_none_when_the_project_stores_none(tmp_path):
+    assert find_latest_version_id(tmp_path) is None
+
+
+def test_find_latest_version_id_returns_the_newest_whatever_its_published_state(tmp_path):
+    _store_version(tmp_path, "20260101T000000", published=True)
+    newest = _store_version(tmp_path, "20260201T000000", published=False)
+    assert find_latest_version_id(tmp_path) == newest
+
+
+def test_resolve_version_id_defaults_to_the_newest_stored_version(tmp_path):
+    """An unpublished version that is newer than the published one is what a run pins."""
+    _store_version(tmp_path, "20260101T000000", published=True)
+    newest = _store_version(tmp_path, "20260201T000000", published=False)
+    assert resolve_version_id(tmp_path, None) == newest
+
+
+def test_resolve_version_id_returns_a_named_unpublished_version(tmp_path):
+    vid = _store_version(tmp_path, "20260101T000000", published=False)
+    assert resolve_version_id(tmp_path, vid) == vid
+
+
+def test_resolve_version_id_returns_a_named_published_version(tmp_path):
+    vid = _store_version(tmp_path, "20260101T000000", published=True)
+    assert resolve_version_id(tmp_path, vid) == vid
+
+
+def test_resolve_version_id_raises_file_not_found_for_an_unknown_id(tmp_path):
+    """A named id nothing backs is not silently redirected to some other snapshot."""
+    _store_version(tmp_path, "20260101T000000")
+    with pytest.raises(FileNotFoundError):
+        resolve_version_id(tmp_path, "nope")
+
+
+def test_resolve_version_id_raises_when_the_project_stores_no_version_at_all(tmp_path):
+    """The one remaining refusal: nothing to pin, and a run never creates a version."""
+    with pytest.raises(NoVersionToRunError, match=tmp_path.name):
+        resolve_version_id(tmp_path, None)
 
 
 # ── create_version_from_stages: the single write chokepoint ─────────────────

@@ -1,6 +1,6 @@
 """python -m app.cli <project> — run a project's workflow once, end to end.
 Drives the run through app.services.run, the single named door into production runs:
-that seam resolves the published version and loads its frozen stages, and the runner
+that seam resolves the stored version and loads its frozen stages, and the runner
 executes what it is handed. Bootstraps its own stores, having no app.main lifespan.
 """
 from __future__ import annotations
@@ -39,7 +39,7 @@ def main(argv: list[str] | None = None) -> int:
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="python -m app.cli",
-        description="Run a project's newest published workflow version once.",
+        description="Run a project's newest stored workflow version once.",
     )
     parser.add_argument("project", help="project name, under the projects root")
     parser.add_argument("--limit", action="append", metavar="STAGE_ID=N", default=[],

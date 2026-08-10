@@ -1,4 +1,4 @@
-"""Run lifecycle: trigger a run (against the latest published version, or a
+"""Run lifecycle: trigger a run (against the latest stored version, or a
 specific pinned version), list runs, poll live status, render a run's detail,
 serve its artifacts, resume and cancel. The per-stage panel, its row views and
 the scratch re-run are app.web.routers.run_stage."""
@@ -99,12 +99,11 @@ async def trigger_run(request: Request, project: str):
 
 @router.post("/project/{project}/workflow/version/{version_id}/run")
 async def trigger_run_of_version(project: str, version_id: str):
-    """Run one specific version. Pins the run to `version_id`: prepare_run raises
-    FileNotFoundError for a version_id with no version document on disk (404),
-    NoVersionToRunError for a version_id that exists but is not published
-    (400), and MissingInputBindingError/ValueError for a version whose stages
-    aren't run-ready (e.g. an unbound file input) (400). Same
-    background-and-redirect flow as trigger_run."""
+    """Run one specific version, published or not. Pins the run to `version_id`:
+    prepare_run raises FileNotFoundError for a version_id with no version
+    document on disk (404), and MissingInputBindingError/ValueError for a
+    version whose stages aren't run-ready (e.g. an unbound file input) (400).
+    Same background-and-redirect flow as trigger_run."""
     project_dir = projects_dir() / project
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
@@ -112,8 +111,6 @@ async def trigger_run_of_version(project: str, version_id: str):
         run_id = run_service.start_run(project, version_id=version_id)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except NoVersionToRunError as exc:
-        return JSONResponse({"detail": str(exc)}, status_code=400)
     except (MissingInputBindingError, ValueError) as exc:
         # ValueError here is binding/limit/offset validation failures raised by
         # apply_run_bindings / prepare_run — not a catch-all for other bugs.
@@ -246,10 +243,10 @@ async def run_new(request: Request, project: str):
     pdir = projects_dir() / project
     if not pdir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
-    # Only PUBLISHED versions are runnable (resolve_version_id gates on it), so the
-    # picker offers only those — never one the run would then reject. Registered
-    # ahead of /runs/{run_id}, which would otherwise match "new" as a run id.
-    versions = [v for v in list_versions(pdir) if v.published]
+    # Every stored version is runnable (resolve_version_id reads no publication
+    # state), so the picker offers all of them newest-first. Registered ahead of
+    # /runs/{run_id}, which would otherwise match "new" as a run id.
+    versions = list_versions(pdir)
     return templates.TemplateResponse(
         request,
         "section_run_new.html",

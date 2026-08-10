@@ -32,23 +32,23 @@ def run_workflow_test(
     """Run the resolved version, as a real run (marked `is_test_run`) under
     `<project_dir>/runs/<run_id>/`. Returns `{ok, run_id, version_id, stages_run, error}`.
 
-    The same run app.services.run.start_run produces, differing on exactly six
+    The same run app.services.run.start_run produces, differing on exactly five
     axes — the reason this is its own seam rather than a flag on that one:
 
-    1. VERSION: any stored version, published or not (_resolve_workflow_test_version).
-    2. SOURCE: `limit` rows from `offset`, injected (_read_source_slices) rather than
+    1. SOURCE: `limit` rows from `offset`, injected (_read_source_slices) rather than
        read whole through the input_data stage. `limit=None` means the whole source.
-    3. SCOPE: `stage_ids` names the stages to execute; None runs every non-input stage
+    2. SCOPE: `stage_ids` names the stages to execute; None runs every non-input stage
        (_frontier_stages). A source stage named here EXECUTES rather than taking an
        injected frame, and reads the SAME window through the runtime's per-stage
        limit — so `limit` means one thing either way (_source_row_windows).
-    4. EXECUTION: synchronous; start_run launches a background daemon thread.
-    5. REVIEW QUEUE: auto-approves in memory (queue_auto_approve) instead of halting.
-    6. STAGE CACHE: read-only (RunContext.for_workflow_test_run) instead of read+write.
+    3. EXECUTION: synchronous; start_run launches a background daemon thread.
+    4. REVIEW QUEUE: auto-approves in memory (queue_auto_approve) instead of halting.
+    5. STAGE CACHE: read-only (RunContext.for_workflow_test_run) instead of read+write.
 
-    Collapsing these into start_run would mean six flags with two valid
-    combinations, so they stay two functions; only version resolution is shared
-    vocabulary (cf. app.services.run.resolve_version, which gates on published)."""
+    Collapsing these into start_run would mean five flags with two valid
+    combinations, so they stay two functions. Version resolution is the same rule
+    in both (_resolve_workflow_test_version, cf. app.services.run.resolve_version):
+    any stored version, newest by default; only the error raised differs."""
     project_dir = resolve_project_dir(project)
     version = _resolve_workflow_test_version(project_dir, version_id)
     stages = load_version_stages(project_dir, version)
@@ -79,11 +79,12 @@ def run_workflow_test(
 
 def _resolve_workflow_test_version(project_dir: Path, version_id: str | None) -> str:
     """The stored immutable version a workflow test runs — any version, published
-    or not, unlike a production run (which pins a published version). A workflow
-    test is the tool the author uses to evaluate a candidate BEFORE deciding to
-    publish, so gating it on publication would be circular. None resolves to the
-    newest stored version; raises NoWorkflowTestVersionError, naming the project,
-    when None is given and no version is stored."""
+    or not. A workflow test is the tool the author uses to evaluate a candidate
+    BEFORE deciding to publish. None resolves to the newest stored version;
+    raises NoWorkflowTestVersionError, naming the project, when None is given
+    and no version is stored. Same rule as app.services.run.resolve_version,
+    which raises NoVersionToRunError instead — that error type is the only
+    difference, so this stays its own function."""
     if version_id is not None:
         load_version(project_dir, version_id)  # loud FileNotFoundError if missing
         return version_id

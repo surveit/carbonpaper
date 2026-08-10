@@ -51,8 +51,8 @@ def test_offline_journey_reaches_a_published_artifact(journey_project, tmp_path)
     assert resp.status_code == 200, resp.text
     assert resp.json()["ok"] is True, resp.text
 
-    # Publish it — a run pins a PUBLISHED version, so the human-approval step is
-    # part of the journey: author -> version -> publish -> run -> artifact.
+    # Publish it — the human-approval signal. A run no longer requires it, but it
+    # stays in the journey: author -> version -> publish -> run -> artifact.
     version_id = list_versions(journey_project)[0].version_id
     resp = client.post(f"/project/{PROJECT}/versions/{version_id}/publish",
                        follow_redirects=False)

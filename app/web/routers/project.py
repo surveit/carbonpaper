@@ -327,8 +327,8 @@ async def versions_redirect(project_name: str):
             response_class=HTMLResponse)
 async def project_workflow_version(request: Request, project_name: str, version_id: str):
     """A single workflow VERSION, read-only: its frozen stage graph plus the
-    version's metadata, publish state, and the actions that target it (publish,
-    run this version). A version is immutable, so nothing here edits — belief
+    version's metadata, publish state, and the actions that target it (run this
+    version, and publish while it is unpublished). A version is immutable, so nothing here edits — belief
     review lives on the working-copy editor. 404 if the version does not exist."""
     pdir = _project_dir(project_name)
     try:

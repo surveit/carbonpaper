@@ -55,6 +55,7 @@ def test_version_detail_renders_frozen_graph_and_publish(project: Path) -> None:
     assert meta.version_id in page.text
     assert "mermaid" in page.text          # the graph rendered
     assert "/publish" in page.text          # unpublished → Publish control present
+    assert "Run this version" in page.text  # ...and runnable all the same
     # The way back is the Versions rung of the header trail, not a button of this
     # page's own — no page carries a back link of its own any more.
     assert 'href="/project/demo/workflow/versions" class="crumb-link"' in page.text
@@ -127,14 +128,15 @@ def test_run_this_version_404_for_nonexistent_version(project: Path) -> None:
     assert resp.status_code == 404
 
 
-def test_run_this_version_gated_on_published(project: Path) -> None:
+def test_run_this_version_runs_whether_or_not_it_is_published(project: Path) -> None:
+    """The same version runs before and after a human publishes it."""
     meta = project_service.save_working_copy_as_version(project, message="v1", reviewer="local")
     vid = meta.version_id
-    # Unpublished → 400 explaining the publish gate.
+
     unpub = client.post(f"/project/demo/workflow/version/{vid}/run", follow_redirects=False)
-    assert unpub.status_code == 400
-    assert "publish" in unpub.json()["detail"]
-    # Published → 303 to the run page.
+    assert unpub.status_code == 303
+    assert "/runs/" in unpub.headers["location"]
+
     versioning.publish_version(project, vid, reviewer="local")
     pub = client.post(f"/project/demo/workflow/version/{vid}/run", follow_redirects=False)
     assert pub.status_code == 303
@@ -144,7 +146,7 @@ def test_run_this_version_gated_on_published(project: Path) -> None:
 def test_run_this_version_400s_not_500s_on_unbound_input(
     project: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A published version whose input stage authors no path (the workflow
+    """A version whose input stage authors no path (the workflow
     leaves it for a run binding, per Connector's own docstring) is not
     run-ready — prepare_run raises MissingInputBindingError. The route must
     report this as a 400, the same way trigger_run does, not let it fall
@@ -157,7 +159,6 @@ def test_run_this_version_400s_not_500s_on_unbound_input(
     meta = versioning.create_version_from_stages(
         project, [unbound_stage], message="v-unbound", reviewer="local")
     vid = meta.version_id
-    versioning.publish_version(project, vid, reviewer="local")
 
     resp = client.post(f"/project/demo/workflow/version/{vid}/run", follow_redirects=False)
     assert resp.status_code == 400

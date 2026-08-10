@@ -1,7 +1,7 @@
 """Route tests for the versions LIST page: unpublished versions show a read-only
 status (Publish lives only on the version-detail page), publishing stamps the meta
-and redirects to that detail page, and the run trigger explains the published
-gate."""
+and redirects to that detail page, and the run trigger refuses only a project with
+no stored version."""
 from __future__ import annotations
 
 import json
@@ -72,11 +72,21 @@ def test_publish_route_stamps_and_redirects_to_detail(project: Path) -> None:
     assert "unpublished" not in page.text
 
 
-def test_run_of_unpublished_project_explains_publish_gate(project: Path) -> None:
+def test_run_of_a_project_with_no_version_says_there_is_none(project: Path) -> None:
+    """The only remaining refusal: nothing stored for the run to pin to."""
+    resp = client.post("/project/demo/run", follow_redirects=False)
+    assert resp.status_code == 400
+    assert "No version to run" in resp.json()["detail"]
+
+
+def test_run_of_unpublished_project_is_not_refused_for_being_unpublished(project: Path) -> None:
+    """This fixture's input authors no path, so the run stops there — never on publish."""
     project_service.save_working_copy_as_version(project, message="v1", reviewer="local")
     resp = client.post("/project/demo/run", follow_redirects=False)
     assert resp.status_code == 400
-    assert "publish" in resp.json()["detail"]
+    detail = resp.json()["detail"]
+    assert "publish" not in detail.lower()
+    assert "no file bound" in detail
 
 
 def test_publish_route_rejects_non_timestamp_version_id(project: Path) -> None:

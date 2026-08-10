@@ -40,8 +40,7 @@ def run_eval(
     """Run `config` against the SELECTED workflow version (the newest version
     overall if `version_id` is None; see `_resolve_version`) and return the
     saved EvalRun. An eval may score an unpublished version -- that is how a
-    proposal is validated before publishing, unlike a production run, which
-    pins published versions only. Raises EvalNotScorableError if the eval
+    proposal is validated before publishing. Raises EvalNotScorableError if the eval
     can't be run at all (incompatible, no dataset attached, or the project has
     no workflow version at all)."""
     version = _resolve_version(project_dir, version_id)
@@ -160,10 +159,9 @@ def _write_result_table(run_dir: Path, per_row: pd.DataFrame) -> Path:
 def _resolve_version(project_dir: Path, version_id: str | None) -> str:
     """Resolve the workflow version an eval run will score: the version the
     user SELECTED, published or not. An eval is a validation tool -- you eval
-    a version to decide whether to publish it -- so unlike a production run it
-    is never gated on publication. An explicit `version_id` must name an
-    existing version (a missing version id raises FileNotFoundError, from
-    load_version) and is returned as-is; None resolves to the newest
+    a version to decide whether to publish it. An explicit `version_id` must
+    name an existing version (a missing version id raises FileNotFoundError,
+    from load_version) and is returned as-is; None resolves to the newest
     version overall, or raises if the project has no version at all."""
     if version_id is not None:
         load_version(project_dir, version_id)  # raises FileNotFoundError if missing

@@ -7,7 +7,7 @@ Python across six packages. Vocabulary: **project**/**methodology**/**workflow**
 
 Two entrypoints sit above the packages, importing them and imported by nothing:
 `app/main.py` (the ASGI app — `python -m uvicorn app.main:app`) and `app/cli.py`
-(`python -m app.cli <project>` — one run of a project's newest published version,
+(`python -m app.cli <project>` — one run of a project's newest stored version,
 driven through `app/services/run.py`).
 
 ## `app/models/` — the schema layer (Pydantic)
@@ -38,8 +38,8 @@ per-file issues. Typed `Stage` objects flow end-to-end.
 ## `app/runtime/` — the Runner  → `app/runtime/AGENTS.md`
 `runner.py` — `execute_run`/`prepare_run`/`run_prepared`/`resume_run`, each taking the
 stages of the version the run pins. The runner reads no versions: the caller resolves one
-(`app/services/versioning.py: resolve_version_id`, defaulting to the newest PUBLISHED — never
-the working copy, never a draft, never an unpublished version), loads its frozen stages and
+(`app/services/versioning.py: resolve_version_id`, defaulting to the newest STORED version,
+published or not — never the working copy, never a draft), loads its frozen stages and
 hands them in. `app/services/run.py` is the one place that composes this, and an
 import-linter contract keeps `runner.py` free of `app.services` so the arrow between the two
 points one way; `app/cli.py` drives that same seam. Per stage: validate
@@ -102,8 +102,8 @@ them to the runner, plus resolves what a run pinned — `resolve_version`,
 `read_pinned_version`, `load_run_stages`, `load_pinned_stage_def`); `loader.py` (stage loader, above); `compilation.py` (compile persistence for
 `app/compiler`); `versioning.py` (`create_version_from_stages`
 is the ONE write path for a `WorkflowVersion` document, born unpublished; `publish_version`
-is the metadata-only human-approval act a run's `resolve_version_id` requires before it
-will pin to that version); `drafts.py` (disposable, mutable scratch — a `Draft` document
+is the metadata-only record that a human reviewed a version — a signal about it, which
+`resolve_version_id` does not read); `drafts.py` (disposable, mutable scratch — a `Draft` document
 that may be invalid mid-edit, edited only through the editing agent's tools; `save_version`
 is its only exit, strict-validating before freezing it into a version via
 `create_version_from_stages`).

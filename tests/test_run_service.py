@@ -7,7 +7,6 @@ import pytest
 
 import app.services.run as run_service
 from app.core.errors import NoVersionToRunError, RunNotFoundError
-from app.services import versioning
 from app.services import workspace
 from app.services.project import save_working_copy_as_version
 from app.services.versioning import list_versions
@@ -55,9 +54,7 @@ def _make_project(root):
 
 
 def _seed_version(root):
-    vid = save_working_copy_as_version(root, message="seed", reviewer="test").version_id
-    versioning.publish_version(root, vid, reviewer="human")
-    return vid
+    return save_working_copy_as_version(root, message="seed", reviewer="test").version_id
 
 
 def test_start_run_returns_run_id_and_writes_ok_manifest(project_dir):
@@ -97,12 +94,11 @@ def test_read_run_status_missing_run_raises(project_dir):
         run_service.read_run_status(_PROJECT, "20990101T000000")
 
 
-def test_resolve_version_defaults_to_latest_published_and_raises_when_none(project_dir):
-    """resolve_version(None) returns the newest published version; a project with
-    no published version raises NoVersionToRunError."""
+def test_resolve_version_defaults_to_latest_stored_and_raises_when_none(project_dir):
+    """None -> newest stored version, published or not; only a versionless project raises."""
     _make_project(project_dir)
     with pytest.raises(NoVersionToRunError):
         run_service.resolve_version(_PROJECT, None)
-    vid = _seed_version(project_dir)
+    vid = _seed_version(project_dir)  # never published
     assert run_service.resolve_version(_PROJECT, None) == vid
     assert list_versions(project_dir)[0].version_id == vid

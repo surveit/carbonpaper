@@ -68,10 +68,8 @@ def test_versioned_project_is_ready_to_run(examples_root):
     assert 'href="/project/versioned"' in r.text
 
 
-def test_unpublished_only_project_is_not_ready(examples_root):
-    """A project whose only version is an unpublished agent-minted draft is not
-    ready to run — a run pins a published version (resolve_version_id), so
-    "ready" must mean a published version exists, not merely a version."""
+def test_unpublished_only_project_is_ready(examples_root):
+    """A run pins any stored version, so a project whose only one is a draft is ready."""
     proj = _make_document_only_project(examples_root, name="drafted")
     WorkflowVersion(
         id=f"{proj.name}/20260101T000000", version_id="20260101T000000",
@@ -79,9 +77,9 @@ def test_unpublished_only_project_is_not_ready(examples_root):
         published=False,
     ).save()
     [card] = list_projects()
-    assert card.is_ready is False
+    assert card.is_ready is True
     r = client.get("/")
-    assert 'href="/project/drafted/data_model"' in r.text
+    assert 'href="/project/drafted"' in r.text
 
 
 def test_half_written_version_snapshot_fails_the_listing_loudly(examples_root):

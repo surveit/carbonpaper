@@ -37,14 +37,11 @@ def project_two_versions(tmp_path, monkeypatch):
              "connector": {"kind": "file",
                            "params": {"path": str(data), "format": "csv"}}}
     (proj / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
-    v1 = save_working_copy_as_version(proj, message="v1", reviewer="test")
+    save_working_copy_as_version(proj, message="v1", reviewer="test")
     # version ids are second-resolution timestamps; without this the two versions
     # can land in the same wall-clock second and collide.
     time.sleep(1.1)
-    v2 = save_working_copy_as_version(proj, message="v2", reviewer="test")
-    # runs pin PUBLISHED versions, so publish both to isolate version SELECTION.
-    publish_version(proj, v1.version_id, reviewer="test")
-    publish_version(proj, v2.version_id, reviewer="test")
+    save_working_copy_as_version(proj, message="v2", reviewer="test")
     workspace.set_projects_dir(tmp_path)
     monkeypatch.setattr(run_service, "_run_in_background",
                         lambda target, *args: target(*args))
@@ -100,9 +97,8 @@ def _seed_load_stage(proj):
     (proj / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
 
 
-def test_run_picker_offers_only_published_versions(tmp_path, monkeypatch):
-    """A run pins a PUBLISHED version, so the picker lists only published ones —
-    an unpublished (agent-minted or not-yet-approved) version is never offered."""
+def test_run_picker_offers_unpublished_versions_too(tmp_path, monkeypatch):
+    """Every stored version is offered, and the newest — published or not — is preselected."""
     proj = tmp_path / "demo"
     _seed_load_stage(proj)
     published = save_working_copy_as_version(proj, message="approved", reviewer="test").version_id
@@ -113,25 +109,38 @@ def test_run_picker_offers_only_published_versions(tmp_path, monkeypatch):
 
     resp = client.get("/project/demo/runs/new")
     assert resp.status_code == 200
-    assert published in resp.text          # the published version IS offered
-    assert unpublished not in resp.text    # the unpublished one is NOT
+    assert published in resp.text
+    assert unpublished in resp.text
+    assert f'value="{unpublished}" selected' in resp.text  # newest, published or not
     assert 'name="version_id"' in resp.text
 
 
-def test_run_form_hidden_when_no_published_version(tmp_path, monkeypatch):
-    """A project whose only version is unpublished shows 'publish a version first'
-    instead of a run form — nothing is runnable."""
+def test_run_form_shown_when_the_only_version_is_unpublished(tmp_path, monkeypatch):
+    """An unpublished version is runnable, so the picker offers it, not a publish CTA."""
     proj = tmp_path / "demo"
     _seed_load_stage(proj)
-    save_working_copy_as_version(proj, message="unpublished", reviewer="test")  # never published
+    vid = save_working_copy_as_version(proj, message="unpublished", reviewer="test").version_id
+    workspace.set_projects_dir(tmp_path)
+
+    resp = client.get("/project/demo/runs/new")
+    assert resp.status_code == 200
+    assert 'name="version_id"' in resp.text
+    assert vid in resp.text
+    assert "No version to run" not in resp.text
+
+
+def test_run_form_hidden_when_the_project_has_no_version(tmp_path, monkeypatch):
+    """No stored version at all is the one case with nothing to run."""
+    proj = tmp_path / "demo"
+    _seed_load_stage(proj)
     workspace.set_projects_dir(tmp_path)
 
     resp = client.get("/project/demo/runs/new")
     assert resp.status_code == 200
     assert 'name="version_id"' not in resp.text   # no run form
     # The zero state names what is missing and offers the one action that fixes it.
-    assert "No published version to run" in resp.text
-    assert 'href="/project/demo/workflow/versions" class="btn primary"' in resp.text
+    assert "No version to run" in resp.text
+    assert 'href="/project/demo/workflow" class="btn primary"' in resp.text
 
 
 @pytest.fixture
@@ -155,13 +164,10 @@ def project_versions_diff_paths(tmp_path, monkeypatch):
             encoding="utf-8")
 
     _author(a)
-    v1 = save_working_copy_as_version(proj, message="v1 reads a.csv", reviewer="test")
+    save_working_copy_as_version(proj, message="v1 reads a.csv", reviewer="test")
     time.sleep(1.1)
     _author(b)
-    v2 = save_working_copy_as_version(proj, message="v2 reads b.csv", reviewer="test")
-    # runs pin PUBLISHED versions.
-    publish_version(proj, v1.version_id, reviewer="test")
-    publish_version(proj, v2.version_id, reviewer="test")
+    save_working_copy_as_version(proj, message="v2 reads b.csv", reviewer="test")
     workspace.set_projects_dir(tmp_path)
     monkeypatch.setattr(run_service, "_run_in_background",
                         lambda target, *args: target(*args))
