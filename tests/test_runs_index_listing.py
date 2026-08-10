@@ -55,7 +55,7 @@ def test_valid_and_legacy_manifests_listed_side_by_side(runs_root: Path):
     assert good.strip is not None
     assert [(s.stage_id, s.status) for s in good.strip.squares] == [("load", "ok")]
     assert good.result_summary == "1 done"
-    assert good.outcome == "complete"
+    assert good.outcome == "Complete"
 
     # A manifest this reader cannot parse yields an identity-only row rather than
     # counts it never read — no strip, no version, no timestamp.
@@ -101,12 +101,12 @@ def test_a_manifest_predating_the_field_reads_as_not_a_test(runs_root: Path):
 @pytest.mark.parametrize(
     ("status", "outcome"),
     [
-        (RunStatus.OK, "complete"),
-        (RunStatus.WARNINGS, "complete, with warnings"),
-        (RunStatus.ERRORS, "error"),
-        (RunStatus.AWAITING_REVIEW, "pending review"),
-        (RunStatus.CANCELLED, "cancelled"),
-        (RunStatus.RUNNING, "running"),
+        (RunStatus.OK, "Complete"),
+        (RunStatus.WARNINGS, "Complete, with warnings"),
+        (RunStatus.ERRORS, "Error"),
+        (RunStatus.AWAITING_REVIEW, "Awaiting review"),
+        (RunStatus.CANCELLED, "Cancelled"),
+        (RunStatus.RUNNING, "In progress"),
     ],
 )
 def test_every_run_status_has_a_word_under_the_strip(

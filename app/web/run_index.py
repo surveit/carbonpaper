@@ -54,12 +54,12 @@ def describe_run_outcome(status: str) -> str:
 # Keyed by the stored string, which is what a manifest carries and what the row
 # holds — an enum-keyed lookup would miss every one of them.
 _OUTCOME_WORDS = {
-    RunStatus.RUNNING.value: "running",
-    RunStatus.OK.value: "complete",
-    RunStatus.WARNINGS.value: "complete, with warnings",
-    RunStatus.ERRORS.value: "error",
-    RunStatus.AWAITING_REVIEW.value: "pending review",
-    RunStatus.CANCELLED.value: "cancelled",
+    RunStatus.RUNNING.value: "In progress",
+    RunStatus.OK.value: "Complete",
+    RunStatus.WARNINGS.value: "Complete, with warnings",
+    RunStatus.ERRORS.value: "Error",
+    RunStatus.AWAITING_REVIEW.value: "Awaiting review",
+    RunStatus.CANCELLED.value: "Cancelled",
 }
 
 

@@ -42,7 +42,7 @@
   </thead>
   <tbody>
     {% for r in runs %}
-    <tr>
+    <tr class="js-run-row" data-href="/project/{{ state.name }}/runs/{{ r.run_id }}">
       <td class="run-date">
         <a href="/project/{{ state.name }}/runs/{{ r.run_id }}" title="run {{ r.run_id }}">
           {%- if r.started_at %}{{ r.started_at | friendly_time }}{% else %}<code>{{ r.run_id }}</code>{% endif -%}
@@ -55,11 +55,12 @@
         {%- if r.version is none %}<span class="muted">(manifest unreadable)</span>
         {%- elif r.version.error %}<span class="unresolved" title="{{ r.version.error }}">version
           {% if r.version.version_id %}<code>{{ r.version.version_id }}</code>{% endif %} could not be read</span>
-        {%- elif r.version.version_id %}<a href="/project/{{ state.name }}/workflow/version/{{ r.version.version_id }}"
-            title="version {{ r.version.version_id }}">
+        {%- elif r.version.version_id %}
           {%- if r.version.message %}“{{ r.version.message }}”
-          {%- else %}<code>{{ r.version.version_id }}</code>{% endif -%}
-        </a>{% if not r.version.message %} <span class="muted">(no message)</span>{% endif %}
+          {%- else %}<code>{{ r.version.version_id }}</code> <span class="muted">(no message)</span>{% endif %}
+          <a class="open-away" target="_blank" rel="noopener"
+             href="/project/{{ state.name }}/workflow/version/{{ r.version.version_id }}"
+             title="open version {{ r.version.version_id }} in a new tab">↗</a>
         {%- else %}<span class="unresolved">no workflow version recorded</span>
         {%- endif %}
       </td>
@@ -74,6 +75,18 @@
     {% endfor %}
   </tbody>
 </table>
+<script>
+  // The whole row opens the run, so no one cell has to look like the handle.
+  // A click that landed on a link (the version's ↗, the date) is that link's.
+  document.querySelectorAll('.js-run-row').forEach(function (row) {
+    row.addEventListener('click', function (event) {
+      if (event.target.closest('a')) return;
+      var href = row.dataset.href;
+      if (event.metaKey || event.ctrlKey) window.open(href, '_blank', 'noopener');
+      else location.href = href;
+    });
+  });
+</script>
 {% else %}
 <div class="empty-state">
   <h2>No runs yet</h2>
