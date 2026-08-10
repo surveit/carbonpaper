@@ -58,15 +58,14 @@ def test_lifecycle_states_the_steps_and_their_gates() -> None:
 
 def test_stage_tests_are_built_before_the_run_not_after() -> None:
     # BUILD owns the example tests; after the run is too late.
-    assert "example tests belong to this" in AUTHORING_LIFECYCLE_GUIDANCE
-    assert "not after the run" in AUTHORING_LIFECYCLE_GUIDANCE
+    assert "example tests pass here, not after the run" in AUTHORING_LIFECYCLE_GUIDANCE
 
 
 def test_the_guide_is_written_after_the_smoke_run() -> None:
     # Why TEST_RUN_REVIEW is its own phase: the run rewrites what the guide covers.
-    assert "Write the review guide" in AUTHORING_LIFECYCLE_GUIDANCE
-    assert "LAST" in AUTHORING_LIFECYCLE_GUIDANCE
+    assert "WRITE THE GUIDE LAST" in AUTHORING_LIFECYCLE_GUIDANCE
     assert "the run has since changed" in AUTHORING_LIFECYCLE_GUIDANCE
+    assert "warnings you did not clear" in AUTHORING_LIFECYCLE_GUIDANCE
 
 
 def test_editing_prompt_tells_the_agent_when_to_write_the_guide() -> None:
@@ -74,8 +73,7 @@ def test_editing_prompt_tells_the_agent_when_to_write_the_guide() -> None:
     from app.agents.compiler.prompt import EDITING_SYSTEM_PROMPT
 
     assert "write_review_guide" in EDITING_SYSTEM_PROMPT
-    assert "after the smoke run" in EDITING_SYSTEM_PROMPT
-    assert "never straight off save_version" in EDITING_SYSTEM_PROMPT
+    assert "after the smoke run, never straight off save_version" in EDITING_SYSTEM_PROMPT
 
 
 def test_research_may_build_a_prototype_without_skipping_the_gates() -> None:

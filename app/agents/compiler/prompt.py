@@ -33,10 +33,8 @@ _SYSTEM_PROMPT = (
     "A workflow does not explain itself, so a version the human has to understand "
     "before acting on it needs write_review_guide: an ordered walkthrough, in the "
     "methodology's own terms, saying what each part does and what a reviewer should "
-    "check. Write it in TEST_RUN_REVIEW, after the smoke run and before you hand "
-    "anything back — never straight off save_version. The smoke run is what tells you "
-    "the workflow is wrong, and every fix it forces makes a guide written earlier "
-    "describe stages that are no longer there."
+    "check. Write it in TEST_RUN_REVIEW — after the smoke run, never straight off "
+    "save_version."
 )
 
 

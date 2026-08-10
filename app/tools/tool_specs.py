@@ -297,9 +297,8 @@ stage — and shows up in the returned `issues`.""",
 Store the walkthrough a human reads to understand what this version of the
 workflow does. Replaces any guide already on that version, whole.
 
-Written in TEST_RUN_REVIEW — after the smoke run of this version, not off the
-back of save_version. A guide written before the run describes stages the run's
-own findings then change.""",
+Written in TEST_RUN_REVIEW — after this version's smoke run, not off the back
+of save_version.""",
     ),
 }
 

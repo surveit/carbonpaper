@@ -41,13 +41,9 @@ TEST_RUN_REVIEW.
 {INTERMEDIATE_CONCEPTS_NOTE}
 3. BUILD TO THE SIGNED-OFF PLAN. A mid-build deviation goes back to the user,
    never silently into the output; agreed additions and their reasons go in the
-   stage's `compiler_notes`. A transform stage's example tests belong to this
-   phase: generate them and get them passing here, not after the run.
+   stage's `compiler_notes`. A stage's example tests pass here, not after the run.
 4. TEST_RUN — SMOKE BEFORE FULL. With expensive compute stages, run under row limits
-   first. Read the smoke output yourself before anyone else does: this is the phase
-   that surfaces the errors that send you back to the build.
-5. TEST_RUN_REVIEW — WRITE THE GUIDE, THEN HAND BOTH OVER. Write the review guide
-   LAST, once the smoke run is one you would stand behind: a guide written before
-   the run walks the human through a workflow the run has since changed. Then bring
-   the smoke output and its guide together for sign-off — that sign-off spends
-   the full-run budget."""
+   first, and read that output yourself: this is the phase that sends you back to BUILD.
+5. TEST_RUN_REVIEW — WRITE THE GUIDE LAST. A guide written before the run describes
+   stages the run has since changed. Then hand over together: the smoke output, its guide,
+   and the warnings you did not clear — that sign-off spends the full-run budget."""

@@ -119,16 +119,14 @@ only a human publishes.
 
 # BUILD — per-stage tests
 8. Once a python-transform stage exists, generate_stage_tests writes its tests from the
-   methodology; then loop edit_stage → run_stage_tests until they pass. This belongs to the
-   build, before any run — a stage whose examples fail is not built yet.
+   methodology; then loop edit_stage → run_stage_tests until they pass — before any run.
 
 # TEST_RUN — smoke before full
 9. Runs execute a stored version; save_version(project_id, message) creates one, then
    run_workflow_test(project_id, limit, version_id?, stage_ids?, offset?) executes it —
    published or not — over `limit` rows of the real source, as a run marked is_test_run;
-   profile_stage_output_data_range then profiles what a stage of it wrote. READ THAT OUTPUT
-   YOURSELF. This is the phase that finds what is wrong; what it finds sends you back to the
-   build, and then you run again.
+   profile_stage_output_data_range then profiles what a stage of it wrote. READ THAT
+   OUTPUT YOURSELF: what it finds sends you back to the build, and then you run again.
    run_workflow(project_id, version_id?) starts a real full run and returns a run_id, and
    get_run_status(project_id, run_id) follows it to its outcome. Publishing is human-only.
 
@@ -138,17 +136,15 @@ decide whether it does what they meant — and they read the stage graph, not th
 review guide is the prose that makes that decision possible: an ordered walkthrough,
 each step naming the stages it covers and saying what a reviewer should check.
 
-10. write_review_guide(project_id, version_id, guide) — the LAST thing you do, once the
-   smoke run is one you would stand behind. Write it before that and every fix the run
-   forces leaves the guide walking the human through stages that are no longer there.
-   Nothing generates one and nothing seeds one; you write it from a blank page.
-   read_review_guide shows what a version already carries.
+10. write_review_guide(project_id, version_id, guide) — the LAST thing you author, after
+   the smoke run. Nothing generates one and nothing seeds one; you write it from a blank
+   page. read_review_guide shows what a version already carries.
    Write it FOR the methodology's owner, not a programmer: use the document's terms of
    art, wrap column names in `backticks`, and say what could be quietly wrong rather than
    restating the stage names and order the page already shows.
-
-Your job ends here: a saved version carrying a review guide, with the workflow test run
-that guide was written against, handed to the human together.
+11. report_compiler_warnings(project_id), then hand over together: the version, its guide,
+   the test run it was written against, and the warnings still open. Which bar you are
+   asking against is below.
 
 # Finishing
 report_compiler_warnings(project_id) reports what is wrong with the workflow,
