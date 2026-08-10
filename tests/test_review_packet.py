@@ -489,3 +489,13 @@ def test_the_packet_zip_trades_bytes_for_speed_on_compression(tmp_path):
     assert entry.filename == "packet-root/big.csv"
     assert entry.compress_type == zipfile.ZIP_DEFLATED
     assert entry.compress_size > len(default_level.getvalue())
+
+
+def test_stage_page_names_its_own_validation_because_no_index_here_does(exported):
+    """No index here lists issues, so the stage page holds the only copy."""
+    index = (exported.root / "index.html").read_text(encoding="utf-8")
+    # The run page's own index is what lets the served panel drop this block.
+    assert 'id="run-issues"' not in index
+
+    page = (exported.root / "stages" / "double.html").read_text(encoding="utf-8")
+    assert 'class="validation-block"' in page

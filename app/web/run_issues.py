@@ -1,6 +1,6 @@
 """The run page's issue index: the stage that stopped the run, and the advisory
-issues on the stages that ran. Every entry is one line and a link — the detail
-stays in the stage panel's own validation block, so there is one copy of it.
+issues on the stages that ran. One line each, worded by the report that raised it
+and linking the stage panel — on this page it is the only copy.
 """
 
 from __future__ import annotations
