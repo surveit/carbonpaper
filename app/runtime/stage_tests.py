@@ -18,7 +18,7 @@ from app.core.frames import list_rows
 from app.models import Stage, TableSchema
 from app.models.errors import StepRefused
 from app.models.stage import StageType
-from app.models.stages.signature import input_read_schemas, output_schema_over_reads
+from app.models.stages.signature import transform_input_schemas, transform_output_schema
 from app.models.stages.stage_tests import StageTest
 from app.runtime.context import RunContext
 from app.runtime.stages import HANDLERS
@@ -169,12 +169,12 @@ def _summarize(runs: list[StageTestRun]) -> TestRunSummary:
 
 
 def _run_one_test(stage: Stage, test: StageTest) -> StageTestResult:
-    read_schemas = input_read_schemas(stage)
+    input_schemas = transform_input_schemas(stage)
     input_frames = {
-        ref.id: _build_frame(test.inputs[ref.id], read_schemas[ref.id])
+        ref.id: _build_frame(test.inputs[ref.id], input_schemas[ref.id])
         for ref in stage.inputs
     }
-    malformed = _validate_test_against_schemas(stage, test, input_frames, read_schemas)
+    malformed = _validate_test_against_schemas(stage, test, input_frames, input_schemas)
     if malformed:
         return StageTestResult(test.name, "malformed", message=malformed)
     # Ephemeral context: every type declaring CARRIES_RUNNABLE_TESTS runs
@@ -233,7 +233,7 @@ def _validate_test_against_schemas(
     stage: Stage,
     test: StageTest,
     input_frames: dict[str, pd.DataFrame],
-    read_schemas: dict[str, TableSchema],
+    input_schemas: dict[str, TableSchema],
 ) -> str | None:
     """Schema-lint the test itself (error-severity issues only): its input
     rows against what the signature reads from each input, its expected rows
@@ -242,7 +242,7 @@ def _validate_test_against_schemas(
     problems: list[str] = []
     for ref in stage.inputs:
         report = validate_dataframe(
-            input_frames[ref.id], read_schemas[ref.id], stage_id=stage.id, phase="input"
+            input_frames[ref.id], input_schemas[ref.id], stage_id=stage.id, phase="input"
         )
         problems += [
             f"input {ref.id}: {issue.message}"
@@ -252,10 +252,10 @@ def _validate_test_against_schemas(
         # A failure case states no output rows, so there is no output shape to
         # lint — only its inputs, which a real run would still have to accept.
         return "; ".join(problems) if problems else None
-    expected_schema = output_schema_over_reads(stage)
-    expected_frame = _build_frame(test.expected, expected_schema)
+    output_schema = transform_output_schema(stage)
+    expected_frame = _build_frame(test.expected, output_schema)
     report = validate_dataframe(
-        expected_frame, expected_schema, stage_id=stage.id, phase="output"
+        expected_frame, output_schema, stage_id=stage.id, phase="output"
     )
     problems += [
         f"expected rows: {issue.message}"
@@ -270,10 +270,10 @@ def _compare(stage: Stage, test: StageTest, actual: pd.DataFrame) -> StageTestRe
     # asking after them would fail every test. Python transforms always declare a
     # signature; publish (the schema-less terminal stage) cannot carry tests. And a
     # failure case (expected is None) has already been judged by now.
-    expected_schema = output_schema_over_reads(stage)
-    assert expected_schema is not None
+    output_schema = transform_output_schema(stage)
+    assert output_schema is not None
     assert test.expected is not None
-    columns = [column.name for column in expected_schema.columns]
+    columns = [column.name for column in output_schema.columns]
     expected_rows = [_select_cells(row, columns) for row in test.expected]
     actual_rows = [_select_cells(row, columns) for row in list_rows(actual)]
     if len(expected_rows) != len(actual_rows):

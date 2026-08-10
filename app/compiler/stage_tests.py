@@ -16,7 +16,7 @@ from app.core.agent.store import open_session_store
 from app.core.agent.turns import default_turn_manager
 from app.models import Stage
 from app.models.authoring_lifecycle_note import CompilerPhase
-from app.models.stages.signature import input_read_schemas, output_schema_over_reads
+from app.models.stages.signature import transform_input_schemas, transform_output_schema
 from app.models.stages.stage_base import find_stage_test_class
 from app.models.stages.stage_tests import build_stage_tests_model
 
@@ -83,14 +83,14 @@ def build_stage_test_generator(
             f"not `{stage.type}`"
         )
     task = render_generation_task(document, stage)  # raises if there is no output schema
-    expected_schema = output_schema_over_reads(stage)
-    assert expected_schema is not None
+    output_schema = transform_output_schema(stage)
+    assert output_schema is not None
     return Agent(
         system_prompt=STAGE_TESTS_SYSTEM_PROMPT,
         target_schema=build_stage_tests_model(
             find_stage_test_class(type(stage)),
-            input_read_schemas(stage),
-            expected_schema,
+            transform_input_schemas(stage),
+            output_schema,
         ),
         task=task,
         model=model,
@@ -126,12 +126,12 @@ def render_generation_task(document: str, stage: Stage) -> str:
             f"stage `{stage.id}` has no summary — examples are written from a step's "
             f"description, so write one first (there is nothing to check the code against)"
         )
-    expected_schema = output_schema_over_reads(stage)
-    if expected_schema is None:
+    output_schema = transform_output_schema(stage)
+    if output_schema is None:
         raise ValueError(
             f"stage `{stage.id}` has no output schema — tests need one to state expected rows"
         )
-    read_schemas = input_read_schemas(stage)
+    read_schemas = transform_input_schemas(stage)
     inputs = "\n\n".join(
         f"Input `{ref.id}` — what this step reads from it:\n"
         f"{read_schemas[ref.id].to_prompt()}"
@@ -143,7 +143,7 @@ def render_generation_task(document: str, stage: Stage) -> str:
         f"----- END DESCRIPTION -----\n\n"
         f"Write examples for stage `{stage.id}` ({stage.type}): {stage.description}\n\n"
         f"{inputs}\n\n"
-        f"Expected rows carry:\n{expected_schema.to_prompt()}"
+        f"Expected rows carry:\n{output_schema.to_prompt()}"
     )
 
 

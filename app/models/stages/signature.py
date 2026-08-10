@@ -200,7 +200,7 @@ def anchor_read_columns(stage: "StageBase") -> list[Column]:
     ]
 
 
-def input_read_schemas(stage: "StageBase") -> dict[StageId, TableSchema]:
+def transform_input_schemas(stage: "StageBase") -> dict[StageId, TableSchema]:
     """Per declared input, what the transform consumes from it — empty where it reads none."""
     signature = stage.signature
     reads = {} if signature is None else {
@@ -211,16 +211,15 @@ def input_read_schemas(stage: "StageBase") -> dict[StageId, TableSchema]:
     }
 
 
-def output_schema_over_reads(stage: "StageBase") -> "TableSchema | None":
-    """What comes out when the input carries ONLY the reads; None when that is no columns."""
+def transform_output_schema(stage: "StageBase") -> "TableSchema | None":
+    """What the transform writes: `produces`, or its input extended by rewrites and adds."""
     signature = stage.signature
     if signature is None:
         return None
-    # Nothing flows under `replaces`, so narrowing the input cannot narrow the output.
     if isinstance(signature, ReplacesSignature):
         return TableSchema(columns=signature.produces) if signature.produces else None
-    read = TableSchema(columns=anchor_read_columns(stage))
-    extended = read.extend(signature.rewrites, signature.adds)
+    base = TableSchema(columns=anchor_read_columns(stage))
+    extended = base.extend(signature.rewrites, signature.adds)
     return extended if extended.columns else None
 
 

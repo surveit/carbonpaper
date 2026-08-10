@@ -9,8 +9,8 @@ from pydantic import ValidationError
 
 from app.models.stage import parse_stage
 from app.models.stages.signature import (
-    input_read_schemas,
-    output_schema_over_reads,
+    transform_input_schemas,
+    transform_output_schema,
 )
 
 
@@ -441,7 +441,7 @@ def test_read_schemas_narrow_each_input_to_what_the_transform_consumes():
             {"name": "price", "type": "str", "nullable": True}]}],
         "adds": [{"name": "note", "type": "str", "nullable": True}],
     }))
-    assert [c.name for c in input_read_schemas(stage)["bills"].columns] == ["price"]
+    assert [c.name for c in transform_input_schemas(stage)["bills"].columns] == ["price"]
 
 
 def test_the_output_over_the_reads_drops_what_only_flows_through():
@@ -455,7 +455,7 @@ def test_the_output_over_the_reads_drops_what_only_flows_through():
     # only the reads there is no `title` to flow, so a case never states one.
     assert [c.name for c in stage.resolve_output_schema().columns] == [
         "price", "title", "note"]
-    assert [c.name for c in output_schema_over_reads(stage).columns] == ["price", "note"]
+    assert [c.name for c in transform_output_schema(stage).columns] == ["price", "note"]
 
 
 def test_a_rewrite_lands_on_the_read_column_over_the_reads_too():
@@ -465,7 +465,7 @@ def test_a_rewrite_lands_on_the_read_column_over_the_reads_too():
             {"name": "price", "type": "str", "nullable": True}]}],
         "rewrites": [{"name": "price", "type": "float", "nullable": True}],
     }))
-    assert [(c.name, c.type) for c in output_schema_over_reads(stage).columns] == [
+    assert [(c.name, c.type) for c in transform_output_schema(stage).columns] == [
         ("price", "float")]
 
 
@@ -484,5 +484,5 @@ def test_a_replaces_form_states_its_whole_output_however_narrow_its_reads():
         },
     })
     # Nothing flows under `replaces`, so narrowing the input narrows no output.
-    assert [c.name for c in output_schema_over_reads(stage).columns] == ["total"]
-    assert [c.name for c in input_read_schemas(stage)["bills"].columns] == ["price"]
+    assert [c.name for c in transform_output_schema(stage).columns] == ["total"]
+    assert [c.name for c in transform_input_schemas(stage)["bills"].columns] == ["price"]
