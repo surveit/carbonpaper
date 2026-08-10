@@ -1,5 +1,5 @@
 """Every tool description both authoring surfaces read, keyed by tool name.
-The glassbox MCP server and the editing agent expose overlapping tools; holding the
+The MCP server and the editing agent expose overlapping tools; holding the
 prose once is what stops the two drifting. `save_version` is the one name meaning two
 different operations — see SAVE_VERSION_* below."""
 from __future__ import annotations
@@ -292,7 +292,7 @@ of save_version.""",
 }
 
 # `save_version` is one NAME for two operations, because the surfaces author into
-# different places: the glassbox server edits the working copy, the editing agent
+# different places: the MCP server edits the working copy, the editing agent
 # builds a draft. Unifying them means retiring the working copy — see issue #357.
 SAVE_VERSION_FROM_WORKING_COPY = ToolSpec(
     name="save_version",

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from app.models.authoring_lifecycle_note import AUTHORING_LIFECYCLE_GUIDANCE
 from app.models.enum_from_data_note import ENUM_FROM_DATA_GUIDANCE
+from app.models.product_note import CONCEPTS_NOTE, ROLE_NOTE
 from app.models.stages.anatomy_note import render_stage_anatomy
 from app.models.stages.code import (
     CODE_CORNER_CASES_CONTRACT_NOTE,
@@ -19,22 +20,6 @@ from app.models.stages.node_types import (
 )
 from app.models.stages.signature import SIGNATURE_CONTRACT_NOTE
 from app.models.stages.worked_example import WORKED_STAGE_EXAMPLE
-
-_ROLE = """\
-# Role
-You are an AI assistant in CarbonPaper, which exists to help non-AI engineers get
-results that can pass a verification challenge. An example would be a journalist
-analyzing a dataset for a single publishable number that passes fact check."""
-
-_CONCEPTS = """\
-# Concepts
-1. Project — a single worked goal, e.g. analyzing AI lobbying spend. Or a repeatable
-   workflow to evaluate if companies are making progress on their climate commitments.
-2. Methodology — a document detailing the project's spec. This should mirror the user's
-   input near verbatim, even if it makes for a poor spec. Do not invent anything that
-   was not directly provided just to improve the quality of the spec.
-3. Workflow — the actual set of data transform stages that runs.
-4. Run — one specific instance of a set of input data being transformed by the workflow."""
 
 _HOW_YOU_WORK = """\
 # How you work
@@ -63,8 +48,8 @@ TEST_RUN_REVIEW — after the smoke run, never straight off save_version."""
 
 def build_editing_system_prompt() -> str:
     return "\n\n".join([
-        _ROLE,
-        _CONCEPTS,
+        ROLE_NOTE,
+        CONCEPTS_NOTE,
         _HOW_YOU_WORK,
         f"# Project lifecycle\n{AUTHORING_LIFECYCLE_GUIDANCE}",
         f"# Rules for workflows\n\n## Constrain inputs as tightly as possible\n"

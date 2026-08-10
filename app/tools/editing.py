@@ -212,7 +212,7 @@ TOOL_SCHEMAS: dict[str, ToolInputSchema] = {
 
 
 # This agent's own view of the shared registry: every tool as described there,
-# except save_version — the agent freezes a DRAFT, the glassbox server snapshots the
+# except save_version — the agent freezes a DRAFT, the MCP server snapshots the
 # working copy, so the two carry different prose under one name (see issue #357).
 _DESCRIPTIONS = TOOL_SPECS | {"save_version": SAVE_VERSION_FROM_DRAFT}
 

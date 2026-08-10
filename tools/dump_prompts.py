@@ -51,7 +51,7 @@ def main(argv: list[str] | None = None) -> int:
 def render_prompt_dump() -> str:
     surfaces = [
         render_editing_agent(),
-        render_glassbox_server(),
+        render_carbonpaper_server(),
         render_data_model_agent(),
         render_review_guide_agent(),
         render_stage_tests_agent(),
@@ -74,13 +74,13 @@ def render_editing_agent() -> str:
     )
 
 
-def render_glassbox_server() -> str:
+def render_carbonpaper_server() -> str:
     from app.mcp.server import INSTRUCTIONS, mcp
 
     return render_surface(
-        title="Glassbox MCP server",
+        title="CarbonPaper MCP server",
         source="app/mcp/server.py",
-        model="(the connecting client's — glassbox does not choose it)",
+        model="(the connecting client's — the server does not choose it)",
         note=(
             "A server, not an agent: INSTRUCTIONS reaches the model as the server's "
             "instructions, beside whatever else that client is running."

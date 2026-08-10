@@ -27,7 +27,7 @@ the reason it is needed; the user reads that plan against the mental model
 of THEIR OWN data."""
 
 # The full lifecycle, for the surfaces that author the workflow end to end (the
-# editing agent's prompt and the glassbox instructions). Each numbered step is
+# editing agent's prompt and the MCP instructions). Each numbered step is
 # headed by its CompilerPhase name, which test_authoring_lifecycle_prompt.py pins.
 AUTHORING_LIFECYCLE_GUIDANCE = f"""\
 A project runs in five phases: RESEARCH, PLANNING, BUILD, TEST_RUN,
