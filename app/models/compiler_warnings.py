@@ -62,8 +62,8 @@ def _find_stale_input_schema_warnings(stages: list[Stage]) -> list[CompilerWarni
             produced = upstream.resolve_output_schema() if upstream else None
             if produced is None:
                 continue  # a dangling input or a publish upstream: not this check's story
-            declared = {column.name for column in ref.table_schema.columns}
-            missing = [c.name for c in produced.columns if c.name not in declared]
+            missing = [c.name for c in produced.subtract(ref.table_schema,
+                                                          strict=False).columns]
             if missing:
                 warnings.append(warn(
                     stage, "stale_input_schema",

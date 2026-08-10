@@ -20,13 +20,20 @@
 {%- endmacro %}
 
 {% macro schema_table(schema) %}
-{% if schema and schema.columns %}
+{{ columns_table(schema.columns if schema else []) }}
+{% if schema and schema.columns and schema.estimated_rows %}
+<p class="schema-meta"><span><b>est rows:</b> {{ "{:,}".format(schema.estimated_rows) }}</span></p>
+{% endif %}
+{% endmacro %}
+
+{% macro columns_table(columns) %}
+{% if columns %}
 <table class="schema">
     <thead>
         <tr><th>column</th><th>type</th><th>required?</th><th>range / enum</th><th>description</th></tr>
     </thead>
     <tbody>
-        {% for c in schema.columns %}
+        {% for c in columns %}
         <tr>
             <td><code>{{ c.name }}</code></td>
             <td><span class="type-pill">{{ c.type }}</span></td>
@@ -37,9 +44,6 @@
         {% endfor %}
     </tbody>
 </table>
-<p class="schema-meta">
-    {% if schema.estimated_rows %}<span><b>est rows:</b> {{ "{:,}".format(schema.estimated_rows) }}</span>{% endif %}
-</p>
 {% else %}
 <p class="muted"><em>(no schema declared)</em></p>
 {% endif %}

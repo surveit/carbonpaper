@@ -11,6 +11,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.models import parse_stage
+from app.models.schema import TableSchema
 from app.models.stage import StageType
 from app.runtime.stages import HANDLERS
 from app.runtime.stages import llm_transform as lt
@@ -60,11 +61,7 @@ def test_reply_model_is_the_subtracted_spec(monkeypatch):
 def test_reply_model_enforces_the_spec():
     # the model built for the stage rejects a wrong-shaped reply outright
     stage = _stage()
-    spec = stage.llm_reply_schema()
-    # Read off the signature's `adds`, not recomputed here by subtracting the
-    # input from the output — that arithmetic is what the stage stopped doing.
-    assert [c.name for c in spec.columns] == [c.name for c in stage.signature.adds]
-    model = spec.to_pydantic_model("score_reply")
+    model = TableSchema(columns=stage.signature.adds).to_pydantic_model("score_reply")
     with pytest.raises(ValidationError):
         model.model_validate({"score": "not-a-number-at-all"})
 

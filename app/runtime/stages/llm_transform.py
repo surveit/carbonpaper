@@ -37,11 +37,9 @@ def make_llm_row_mapper(stage: Stage, ctx: RunContext, src: pd.DataFrame) -> Row
     row, so neither the input frame nor a row's position in it is read."""
     llm = narrow_stage(stage, LLMTransformStage).llm
 
-    # The reply spec (output_schema − input_schema), compiled to the model the
-    # agent must satisfy. Stage validation guarantees an llm_transform is 1:1
-    # (both schemas present, output ⊇ input), so the stage always defines one.
-    reply_spec = stage.llm_reply_schema()
-    assert reply_spec is not None
+    # What the model is asked for: the columns the signature adds, compiled to the
+    # model the agent must satisfy. Its input columns are rejoined by the driver.
+    reply_spec = TableSchema(columns=narrow_stage(stage, LLMTransformStage).signature.adds)
     reply_model = reply_spec.to_pydantic_model(f"{stage.id}_reply")
 
     def map_row(row: Row, index: int) -> Row:
@@ -168,11 +166,10 @@ def _run_chunks(
 
 def _build_batch_reply_schema(stage: Stage) -> type:
     """The schema one chunk's reply must match: `{"results": [<item>, ...]}` where
-    each item is the batch row number (the rejoin handle) plus the reply spec
-    (output − input). The input primary key is NOT part of it — the row number is
+    each item is the batch row number (the rejoin handle) plus the columns the
+    signature adds. The input primary key is NOT part of it — the row number is
     the only handle."""
-    reply_spec = stage.llm_reply_schema()
-    assert reply_spec is not None
+    reply_spec = TableSchema(columns=narrow_stage(stage, LLMTransformStage).signature.adds)
     number_column = Column(
         name=_ROW_NUMBER_FIELD, type="int", nullable=False,
         description=(

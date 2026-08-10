@@ -120,25 +120,15 @@ class LLMTransformStage(StageBase):
     def find_signature_config_issues(self) -> list[str]:
         return find_llm_signature_issues(self)
 
-    def llm_reply_schema(self) -> Optional[TableSchema]:
-        """The columns the signature adds — the model is asked for nothing else."""
-        return TableSchema(columns=self.signature.adds)
-
-    @model_validator(mode="after")
-    def _one_to_one(self) -> "LLMTransformStage":
-        """A stage carries its own contract, so the shape rules are enforced here."""
-        # About schema SHAPE, not config columns, so not part of
-        # find_config_column_issues.
-        issues = find_llm_one_to_one_issues(self)
-        if issues:
-            raise ValueError("llm_transform not strictly 1:1: " + "; ".join(issues))
-        return self
 
 
 def find_llm_signature_issues(stage: "LLMTransformStage") -> list[str]:
-    """Reads must match the template's placeholders exactly; an llm_transform never rewrites."""
+    """Reads match the placeholders, one input, and something asked of the model."""
     signature = stage.signature
     assert signature is not None  # find_signature_config_issues runs only with one
+    if len(stage.inputs) != 1:
+        return [f"stage '{stage.id}': llm_transform takes exactly one input, "
+                f"has {len(stage.inputs)}"]
     anchor_id = stage.inputs[0].id
     declared = {
         column.name
@@ -162,6 +152,9 @@ def find_llm_signature_issues(stage: "LLMTransformStage") -> list[str]:
             f"stage '{stage.id}': llm_transform passes its input through untouched "
             f"and only adds columns; rewrites are not supported"
         )
+    if not signature.adds:
+        issues.append(f"stage '{stage.id}': the signature adds no columns beyond the "
+                      f"input, so the model is asked for nothing")
     return issues
 
 
@@ -208,17 +201,6 @@ def find_double_braced_input_issues(
     ]
 
 
-def find_llm_one_to_one_issues(stage: "LLMTransformStage") -> list[str]:
-    """One input, and something asked of the model."""
-    if len(stage.inputs) != 1:
-        return [f"llm_transform must have exactly one input, has {len(stage.inputs)}"]
-    # `output ⊇ input` used to be checked here too. An extends signature IS its
-    # anchor input extended, and find_llm_signature_issues refuses a rewrite, so
-    # no shape can violate it now — the form guarantees what the check defended.
-    # `min_length=1` still permits a SECOND input, so arity stays the model's job.
-    if not stage.signature.adds:
-        return ["the signature adds no columns beyond the input"]
-    return []
 
 # Authoring copy for this module's stage type(s); assembled into NODE_TYPES.
 NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {

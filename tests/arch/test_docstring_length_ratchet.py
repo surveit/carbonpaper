@@ -219,7 +219,6 @@ _GRANDFATHERED: frozenset[str] = frozenset(
         "app/models/stages/code.py::validate_inline_function_code",
         "app/models/stages/filter_rows.py::FilterConfig",
         "app/models/stages/join.py::JoinStage",
-        "app/models/stages/llm_transform.py::LLMTransformStage._one_to_one",
         "app/models/stages/llm_transform.py::find_double_braced_input_issues",
         "app/models/stages/llm_transform.py::find_llm_prompt_column_issues",
         "app/models/stages/publish.py::PublishStage",
