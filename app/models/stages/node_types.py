@@ -14,6 +14,7 @@ from app.models.stages.join import NODE_TYPE_SPECS as _JOIN
 from app.models.stages.llm_transform import NODE_TYPE_SPECS as _LLM_TRANSFORM
 from app.models.stages.node_spec import NodeTypeSpec
 from app.models.stages.publish import NODE_TYPE_SPECS as _PUBLISH
+from app.models.stages.sort_rows import NODE_TYPE_SPECS as _SORT_ROWS
 from app.models.stages.starlark import NODE_TYPE_SPECS as _STARLARK
 from app.models.stages.union import NODE_TYPE_SPECS as _UNION
 
@@ -29,6 +30,7 @@ NODE_TYPES: dict[str, NodeTypeSpec] = {
     **_PUBLISH,
     **_UNION,
     **_FILTER_ROWS,
+    **_SORT_ROWS,
     **_STARLARK,
 }
 

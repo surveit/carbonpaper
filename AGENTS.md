@@ -6,15 +6,18 @@ directory · **methodology** = the authored prose (`methodology_raw.md`) ·
 **workflow** = the stage graph it compiles to. What/why + features → `docs/overview.md`;
 code map → `docs/architecture.md`; quickstart → `README.md`.
 
-## The 12 stage types
+## The 13 stage types
 `input_data` · `llm_transform` · `python_row_function` · `python_frame_function` ·
 `starlark_row_function` · `enrich` · `expand` · `aggregate` · `human_review_queue` ·
-`publish` · `union` · `filter_rows`. Prefer `python_row_function` (runtime-enforced 1:1)
-unless the logic needs the whole frame; prefer `starlark_row_function` over
-`python_row_function` when the code should be sandboxed (no import, file, or network
-access). `enrich` and `expand` are both LEFT joins of a reference input into a subject
-input, differing only in permitted cardinality (m:1, verified; vs m:n fan-out); neither
-drops a subject row — that is `filter_rows`' job.
+`publish` · `union` · `filter_rows` · `sort_rows`. Prefer `python_row_function`
+(runtime-enforced 1:1) unless the logic needs the whole frame; prefer
+`starlark_row_function` over `python_row_function` when the code should be sandboxed
+(no import, file, or network access). `enrich` and `expand` are both LEFT joins of a
+reference input into a subject input, differing only in permitted cardinality (m:1,
+verified; vs m:n fan-out); neither drops a subject row — that is `filter_rows`' job.
+`sort_rows` reorders by one or more columns (each with its own direction and nulls
+placement) and reports the permutation as lineage, so a trace still crosses it — which
+a `python_frame_function` calling `sort_values` does not.
 
 ## Repo layout
 ```

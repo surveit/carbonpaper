@@ -14,6 +14,7 @@ from app.models.stages.code import PythonFrameFunctionStage, PythonRowFunctionSt
 from app.models.stages.input_data import InputDataStage
 from app.models.stages.join import EnrichStage, ExpandStage
 from app.models.stages.llm_transform import LLMTransformStage
+from app.models.stages.sort_rows import SortRowsStage
 from app.models.stages.starlark import StarlarkRowFunctionStage
 from app.runtime.lineage import EdgeKind
 from app.services.loader import resolve_function_code
@@ -71,6 +72,8 @@ def _transform_of(stage: Stage | None) -> dict[str, Any]:
             "instructions": stage.llm.prompt_instructions,
             "data_template": stage.llm.prompt_data_template,
         }}
+    if isinstance(stage, SortRowsStage):
+        return {"kind": str(stage.type), "detail": stage.describe_sort_order()}
     if isinstance(stage, (EnrichStage, ExpandStage)):
         pairs = stage.join.keys
         detail = ", ".join(f"{k.left}={k.right}" for k in pairs) if pairs else None

@@ -69,13 +69,15 @@ class StageType(str, Enum):
     aggregate = "aggregate"
     human_review_queue = "human_review_queue"
     publish = "publish"
-    # Both preserve exact per-row PROVENANCE (each output row traces to one
-    # specific input row) but neither is grain-and-order preserving BY
-    # POSITION: filter_rows drops rows, union interleaves rows from several
-    # inputs. The runtime records their per-row provenance explicitly (see
-    # app.runtime.lineage) so app.runtime.trace can still cross them.
+    # All three preserve exact per-row PROVENANCE (each output row traces to one
+    # specific input row) but none is grain-and-order preserving BY POSITION:
+    # filter_rows drops rows, union interleaves rows from several inputs, and
+    # sort_rows keeps every row and every column but permutes them. The runtime
+    # records their per-row provenance explicitly (see app.runtime.lineage) so
+    # app.runtime.trace can still cross them.
     union = "union"
     filter_rows = "filter_rows"
+    sort_rows = "sort_rows"
     starlark_row_function = "starlark_row_function"
 
 

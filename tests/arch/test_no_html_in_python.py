@@ -35,9 +35,9 @@ _HTML_TAG_PATTERN = re.compile(
 #   an edit above one of them re-anchors the entry rather than adding one.
 _ALLOWLIST: frozenset[tuple[str, int]] = frozenset(
     {
-        ("app/web/diagrams.py", 187),
-        ("app/web/diagrams.py", 342),
-        ("app/web/diagrams.py", 344),
+        ("app/web/diagrams.py", 190),
+        ("app/web/diagrams.py", 345),
+        ("app/web/diagrams.py", 347),
     }
 )
 

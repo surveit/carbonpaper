@@ -30,6 +30,7 @@ from .join import handle_enrich, handle_expand
 from .llm_transform import make_llm_row_mapper, run_llm_batches
 from .publish import handle_publish
 from .python_functions import handle_python_frame_function, make_python_row_mapper
+from .sort_rows import handle_sort_rows
 from .starlark_functions import make_starlark_row_mapper
 from .union import handle_union
 
@@ -77,6 +78,13 @@ HANDLERS: dict[StageType, StageHandler] = {
     StageType.filter_rows: RowMapHandler(
         make_filter_mapper, drops_rows=True, caches_rows=False
     ),
+    # A frame handler because reordering is the one thing a row mapper cannot do
+    # — the driver writes each result back at its input's position.
+    # caches_frames=False: a sort of an already-materialised frame costs less
+    # than hashing that frame, same reasoning as the joins above. It also keeps
+    # the lineage honest — a replayed frame comes back through the frame store,
+    # and `.attrs`, which the permutation rides on, does not survive parquet.
+    StageType.sort_rows: FrameHandler(handle_sort_rows, caches_frames=False),
     # parallelism stays 1: matching python_row_function's calling convention. The
     # interpreter handle is this execution's, and Starlark freezes module globals,
     # so nothing crosses rows either way.

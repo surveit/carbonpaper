@@ -30,7 +30,9 @@ the type's handler, validate the output, write `outputs/<stage>.parquet`, append
   frames: its window is taken on the frame it just loaded, so `limit` is never a
   silent no-op on a source. Recorded in the manifest, re-applied on resume, unknown
   ids fail loudly. A sliced stage's rows are recorded in its lineage sidecar under
-  their TRUE upstream ordinals, so `trace` still lands on the right source row.
+  their TRUE upstream ordinals, so `trace` still lands on the right source row. A
+  windowed `sort_rows` orders the rows it READ, which is not the head of the whole
+  upstream order — the cut is noted on the stage record, never silent.
 - **Recompute everything:** `--bust-cache` (a run-form checkbox too) sets
   `RunContext.bust_cache`: the run skips every stage-cache READ while still recording
   what it computes, so the cache ends re-pinned, not stale. Recorded in the manifest

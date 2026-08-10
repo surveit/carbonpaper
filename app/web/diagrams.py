@@ -25,9 +25,11 @@ TYPE_CLASS = {
     "aggregate": "aggregate",
     "human_review_queue": "human",
     "publish": "publish",
-    # Row-set operations: union stacks frames, filter_rows drops subject rows.
+    # Row-set operations: union stacks frames, filter_rows drops subject rows,
+    # sort_rows reorders them.
     "union": "rowset",
     "filter_rows": "rowset",
+    "sort_rows": "rowset",
 }
 
 TYPE_GLYPH = {
@@ -43,6 +45,7 @@ TYPE_GLYPH = {
     "publish": "📤",
     "union": "➕",
     "filter_rows": "🔽",
+    "sort_rows": "↕️",
 }
 
 
