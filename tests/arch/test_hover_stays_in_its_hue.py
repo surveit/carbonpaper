@@ -7,9 +7,9 @@ out rather than as the button responding. A variant with a tint owes its own hov
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
-_STYLESHEET = Path(__file__).resolve().parents[2] / "app" / "static" / "style.css"
+from arch._helpers import read_stylesheets
+
 _COMMENT = re.compile(r"/\*.*?\*/", re.S)
 _RULE = re.compile(r"([^{}]+)\{([^{}]*)\}", re.S)
 # `background: var(--<hue>-bg)` is what makes a control coloured rather than paper.
@@ -17,14 +17,14 @@ _TINTED = re.compile(r"background(?:-color)?\s*:\s*var\(--([a-z]+)-bg\)")
 
 
 def read_rules() -> list[tuple[str, str]]:
-    """(selector list, declaration block) for every rule in style.css."""
+    """(selector list, declaration block) for every rule in app/static/*.css."""
     rules = [
         (sel.strip(), body)
-        for sel, body in _RULE.findall(_COMMENT.sub("", _STYLESHEET.read_text(encoding="utf-8")))
+        for sel, body in _RULE.findall(_COMMENT.sub("", read_stylesheets()))
         if not sel.strip().startswith("@")
     ]
     if not rules:
-        raise ValueError(f"no rules parsed out of {_STYLESHEET} — this file checks nothing")
+        raise ValueError("no rules parsed out of app/static/*.css — this file checks nothing")
     return rules
 
 

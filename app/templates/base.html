@@ -4,8 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}Workflow{% endblock %}</title>
-    <link rel="stylesheet" href="/static/palette.css">
-    <link rel="stylesheet" href="/static/style.css">
+    {% include "_stylesheets.html" %}
     {# Defines window.dvNode — the callback build_mermaid_graph writes into every
        stage node. Loaded for EVERY page (not per-diagram-page) so a page that
        renders the graph can never miss it; see static/diagram_nodes.js. #}

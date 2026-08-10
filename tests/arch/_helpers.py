@@ -9,6 +9,16 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+_STATIC_DIR = Path(__file__).resolve().parents[2] / "app" / "static"
+
+
+def read_stylesheets() -> str:
+    """Every app/static/*.css joined — a rule about the stylesheet must span the split."""
+    sheets = sorted(_STATIC_DIR.glob("*.css"))
+    if not sheets:
+        raise ValueError(f"no .css files under {_STATIC_DIR} — these rules would be vacuous")
+    return "\n".join(sheet.read_text(encoding="utf-8") for sheet in sheets)
+
 
 def parse_module(path: Path) -> ast.Module:
     return ast.parse(path.read_text(encoding="utf-8"), filename=str(path))

@@ -244,7 +244,7 @@ def test_a_second_input_lengthens_the_input_stack_without_moving_the_output(run_
     # The layout is one horizontal axis: every input frame lives inside the
     # stacked input list, and the output sits outside it — so a second input
     # grows the list downward rather than pushing the output along or onto
-    # another line. app/static/style.css holds that row to one line, top-aligned.
+    # another line. app/static/node-detail.css holds that row to one line, top-aligned.
     _pdir, run_id = run_ctx
     for stage_id, input_ids in ((CLASSIFY_ID, [LOAD_ID]),
                                 (ROUTE_ID, [CLASSIFY_ID, ROUTES_ID])):

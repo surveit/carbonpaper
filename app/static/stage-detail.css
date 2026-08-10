@@ -1,0 +1,362 @@
+/* Stage detail pane: header, schema tables, input/exec blocks, certification, code. */
+/* Stage detail */
+.stage-header {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 16px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 18px;
+    margin-bottom: 8px;
+}
+.stage-header h1 { margin: 0; }
+.stage-id { color: var(--muted); margin: 0; flex-basis: 100%; }
+
+/* What a stage's model calls cost, at the head of the run panel's Data pane. */
+dl.llm-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0;
+    margin: 0 0 14px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    overflow: hidden;
+}
+dl.llm-stats > div {
+    flex: 1 1 auto;
+    min-width: 104px;
+    padding: 8px 12px;
+    border-right: 1px solid var(--border);
+}
+dl.llm-stats > div:last-child { border-right: 0; }
+dl.llm-stats dt {
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 3px;
+}
+dl.llm-stats dd {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+dl.llm-stats dd code { font-size: 13px; font-weight: 500; }
+
+.notes-block {
+    background: var(--warn-bg);
+    border-left: 4px solid var(--warn-bd);
+    padding: 16px 20px;
+    border-radius: 0 4px 4px 0;
+    margin: 24px 0;
+}
+.notes-block h2 { margin-top: 0; color: var(--warn-ink); }
+.notes-explainer { margin: 0 0 12px; color: var(--warn-ink); font-size: 13px; }
+.notes-block ol { margin: 0; padding-left: 20px; }
+.notes-block li { margin-bottom: 8px; }
+
+/* Generic dt/dd "kv" lists */
+dl.kv, dl.source-meta {
+    margin: 0 0 8px;
+    display: grid;
+    grid-template-columns: 160px 1fr;
+    gap: 4px 12px;
+}
+dl.kv dt, dl.source-meta dt {
+    color: var(--muted);
+    font-size: 13px;
+    font-family: "SFMono-Regular", "Consolas", monospace;
+}
+dl.kv dd, dl.source-meta dd { margin: 0; }
+
+/* Schema tables */
+table.schema {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--raised);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+    font-size: 13px;
+    margin-top: 6px;
+}
+table.schema th, table.schema td {
+    padding: 6px 10px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+}
+table.schema th {
+    background: var(--sunk-deep);
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--muted);
+}
+table.schema tr:last-child td { border-bottom: 0; }
+.type-pill {
+    display: inline-block;
+    padding: 1px 7px;
+    border-radius: 3px;
+    background: var(--sunk-deep);
+    border: 1px solid var(--border);
+    font-family: "SFMono-Regular", "Consolas", monospace;
+    font-size: 11px;
+    color: var(--info-ink);
+}
+.range {
+    font-family: "SFMono-Regular", "Consolas", monospace;
+    font-size: 11px;
+    color: var(--muted);
+}
+
+/* An enum vocabulary: one chip per value, so a multi-word value reads as one thing
+   even when the constraint column is only ~110px wide and the chip has to wrap. */
+.enum-set, .enum-fold > summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px 4px;
+    align-items: baseline;
+}
+.enum-val {
+    padding: 0 5px;
+    border-radius: 3px;
+    background: var(--sunk-deep);
+    border: 1px solid var(--border);
+    font-family: "SFMono-Regular", "Consolas", monospace;
+    font-size: 11px;
+    color: var(--muted);
+}
+/* Folded by default: a long vocabulary left inline wraps to a dozen lines and buries
+   every other row of the table. The count is always shown, so nothing is silently cut. */
+.enum-fold > summary { cursor: pointer; list-style: none; }
+.enum-fold > summary::-webkit-details-marker { display: none; }
+.enum-preview { display: contents; }
+.enum-fold[open] > summary .enum-preview { display: none; }
+.enum-count {
+    font-size: 10px;
+    color: var(--muted);
+    white-space: nowrap;
+    text-decoration: underline dotted;
+}
+.enum-fold[open] > .enum-set { margin-top: 4px; }
+
+.schema-meta {
+    color: var(--muted);
+    font-size: 12px;
+    margin: 6px 0 0;
+    display: flex;
+    gap: 24px;
+}
+
+/* Input blocks */
+.input-block {
+    margin: 12px 0 18px;
+    padding: 12px 16px;
+    background: var(--raised);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--border-strong);
+    border-radius: 4px;
+}
+.input-block h3 {
+    margin-top: 0;
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: 14px;
+    color: var(--fg);
+}
+
+/* Transform config blocks — consecutive sections of ONE pane, so a rule between
+   them rather than a frame around each. Boxing every section reads as a stack of
+   unrelated cards, which is wrong: description, examples and code are three
+   views of the same step. The rule is drawn between siblings, never above the
+   first, so the pane opens on its content. */
+.exec-block {
+    padding: 4px 0 18px;
+    margin: 0;
+}
+.exec-block + .exec-block,
+.exec-block + .eval-block,
+.exec-block + .review-block { border-top: 1px solid var(--border); padding-top: 18px; }
+/* Above its own h3s (12px uppercase muted), below the panel's own title. */
+.exec-block h2 { margin-top: 0; font-size: 15px; }
+
+/* The plain-language summary of an authored-code block — the first thing read
+   in the Transform pane, and for a non-engineer the only readable statement of
+   what the step does, so it is set larger than the metadata under it. */
+.stage-summary {
+    font-size: 16px;
+    line-height: 1.55;
+    margin: 0 0 12px;
+    max-width: 70ch;
+}
+.stage-summary.missing { font-size: 14px; }
+
+/* Stated corner cases, folded under the summary (_stage_code.html). Sits between
+   the description and the badge because it is part of the description — the
+   examples check these too. */
+.stage-corners { max-width: 70ch; margin: 0 0 12px; font-size: 14px; }
+.stage-corners > summary { cursor: pointer; color: var(--muted); }
+.stage-corner-list { margin: 8px 0 0; }
+.stage-corner-list dt { font-weight: 500; margin-top: 8px; }
+.stage-corner-list dd { margin: 2px 0 0 18px; color: var(--muted); }
+
+/* Compiler warnings (section_workflow.html) — what is wrong with the workflow as
+   written, above the graph. The list itself is the shared `.issue-panel` table
+   (further down); what is left here is the CLEAN state, which the run page has no
+   equivalent of: a plain block, not a <details>, since there is no list to
+   disclose. */
+.wf-issues {
+    border: 1px solid var(--border);
+    border-left-width: 3px;
+    border-radius: 4px;
+    padding: 10px 16px;
+    margin: 0 0 16px;
+    max-width: 100ch;
+    background: var(--raised);
+}
+.wf-issues-clean { border-left-color: var(--verdict-pass-bd); background: var(--verdict-pass-bg); }
+/* The shared panel carries no margin of its own — the run page spaces it with the
+   gap of the column it sits in, and this page has no such column. */
+.wf-issue-index { margin: 0 0 16px; max-width: 120ch; }
+.wf-clean-line { margin: 0; font-size: 14px; }
+.wf-clean-why { margin: 6px 0 0; font-size: 13px; line-height: 1.5; }
+
+/* Certification badge (_stage_certification.html) — sits directly under the
+   summary, because the claim it makes is a claim ABOUT that summary. The `why`
+   line is deliberately not hidden behind a disclosure: a green badge with no
+   stated scope reads as "this step is correct", which it does not mean. */
+.stage-cert {
+    max-width: 70ch;
+    margin: 0 0 14px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-left-width: 3px;
+    border-radius: 3px;
+}
+.stage-cert-line { margin: 0; font-size: 14px; }
+.stage-cert-why { margin: 6px 0 0; font-size: 13px; line-height: 1.5; }
+.stage-cert-badge {
+    display: inline-block; font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.4px; padding: 3px 10px; border-radius: 3px; margin-right: 8px;
+    border: 1px solid;
+}
+.stage-cert-certified { border-left-color: var(--verdict-pass-bd); }
+.stage-cert-certified .stage-cert-badge {
+    background: var(--verdict-pass-bg); color: var(--good-ink); border-color: var(--verdict-pass-bd);
+}
+.stage-cert-failing { border-left-color: var(--verdict-fail-bd); }
+.stage-cert-failing .stage-cert-badge {
+    background: var(--verdict-fail-bg); color: var(--bad-ink); border-color: var(--verdict-fail-bd);
+}
+.stage-cert-untested,
+.stage-cert-unsummarised { border-left-color: var(--verdict-warn-bd); }
+.stage-cert-untested .stage-cert-badge,
+.stage-cert-unsummarised .stage-cert-badge {
+    background: var(--verdict-warn-bg); color: var(--warn-ink); border-color: var(--verdict-warn-bd);
+}
+/* Grey, not green: nothing ran, so nothing is being certified. */
+.stage-cert-untestable { border-left-color: var(--verdict-neutral-bd); }
+.stage-cert-untestable .stage-cert-badge {
+    background: var(--verdict-neutral-bg); color: var(--idle-ink); border-color: var(--verdict-neutral-bd);
+}
+
+/* Code comes LAST, and open: description → examples → code. */
+.code-block > details > summary {
+    cursor: pointer;
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+}
+/* A heading, not a link: the generic `details summary` accent colour reads as
+   one, and this disclosure sits at the same level as Python function / Tests. */
+.code-block > details > summary h2 { display: inline; color: var(--fg); }
+.code-block > details[open] > summary { margin-bottom: 12px; }
+
+.eval-block {
+    background: var(--sunk);
+    border-left: 4px solid var(--border-strong);
+    padding: 16px 20px;
+    border-radius: 0 4px 4px 0;
+    margin: 16px 0;
+}
+.eval-block h2 { margin-top: 0; color: var(--fg); }
+
+.review-block {
+    background: var(--sunk);
+    border-left: 4px solid var(--border-strong);
+    padding: 16px 20px;
+    border-radius: 0 4px 4px 0;
+    margin: 16px 0;
+}
+.review-block h2 { margin-top: 0; color: var(--fg); }
+
+/* Code-shaped pre blocks (function source, prompts, instructions) */
+pre.code, pre.prompt, pre.instructions {
+    background: var(--code-deep);
+    color: var(--code-fg);
+    padding: 14px 16px;
+    border-radius: 5px;
+    line-height: 1.5;
+    font-size: 13px;
+    max-height: 600px;
+    overflow: auto;
+}
+pre.prompt { background: var(--code-deep); }
+pre.instructions { background: var(--code-deep); }
+
+.yaml-block {
+    background: var(--sunk-deep);
+    max-height: 320px;
+    overflow: auto;
+    font-size: 12px;
+}
+
+/* Join keys */
+table.join-keys, table.aggs {
+    border-collapse: collapse;
+    background: var(--raised);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    margin-top: 6px;
+    font-size: 13px;
+    width: 100%;
+}
+table.join-keys th, table.join-keys td,
+table.aggs th, table.aggs td {
+    padding: 6px 10px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+}
+table.join-keys th, table.aggs th {
+    background: var(--sunk-deep);
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--muted);
+}
+table.join-keys tr:last-child td, table.aggs tr:last-child td { border-bottom: 0; }
+
+details { margin: 12px 0; }
+details summary {
+    cursor: pointer;
+    color: var(--accent);
+    font-size: 13px;
+    user-select: none;
+}
+details[open] summary { margin-bottom: 8px; }
+details pre { margin-top: 6px; max-height: 480px; overflow: auto; }
+
+.prose {
+    background: var(--raised);
+    border: 1px solid var(--border);
+    max-height: 480px;
+    overflow: auto;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 14px;
+    line-height: 1.55;
+}
+

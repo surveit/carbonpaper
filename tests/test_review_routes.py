@@ -543,8 +543,9 @@ def test_queue_page_gates_the_items_behind_the_reviewer_name(tmp_path, monkeypat
     container = re.search(r"<div[^>]*id=\"queue-items\"[^>]*>", html)
     assert container is not None and re.search(r"\bhidden\b", container.group(0))
 
-    stylesheet = (Path(app_package.__file__).parent / "static" / "style.css").read_text(
-        encoding="utf-8"
+    stylesheet = "\n".join(
+        sheet.read_text(encoding="utf-8")
+        for sheet in sorted((Path(app_package.__file__).parent / "static").glob("*.css"))
     )
     assert re.search(r"\.queue-items\[hidden\]\s*\{[^}]*display:\s*none", stylesheet)
 
@@ -1033,8 +1034,9 @@ def test_a_reviewed_value_is_read_only_until_its_edit_button_is_pressed(tmp_path
     assert opener is not None and "data-edit-for=" in opener.group(0)
     assert 'class="revert-edit"' in html
 
-    stylesheet = (Path(app_package.__file__).parent / "static" / "style.css").read_text(
-        encoding="utf-8"
+    stylesheet = "\n".join(
+        sheet.read_text(encoding="utf-8")
+        for sheet in sorted((Path(app_package.__file__).parent / "static").glob("*.css"))
     )
     assert re.search(r"\.field-control \[hidden\]\s*\{[^}]*display:\s*none", stylesheet)
 
@@ -1195,8 +1197,9 @@ def test_a_decided_card_disables_its_openers_and_offers_a_secondary_cta(tmp_path
     assert submit is not None and re.search(r"\bhidden\b", submit.group(0))
     assert "Recorded: <strong>approve</strong>" in " ".join(decided.split())
 
-    stylesheet = (Path(app_package.__file__).parent / "static" / "style.css").read_text(
-        encoding="utf-8"
+    stylesheet = "\n".join(
+        sheet.read_text(encoding="utf-8")
+        for sheet in sorted((Path(app_package.__file__).parent / "static").glob("*.css"))
     )
     assert re.search(r"\.decision-controls \[hidden\]\s*\{[^}]*display:\s*none", stylesheet)
 

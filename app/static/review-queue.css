@@ -1,0 +1,145 @@
+/* Review queue page: the reviewer gate, one card per flagged row, its fields. */
+/* Review queue page */
+.queue-progress {
+    display: flex; align-items: center; gap: 16px; margin: 16px 0 24px;
+    padding: 14px 18px; background: var(--sunk); border: 1px solid var(--border); border-radius: 6px;
+}
+.queue-progress .bar {
+    flex: 1; height: 10px; background: var(--border); border-radius: 5px; overflow: hidden;
+}
+.queue-progress .fill { height: 100%; background: var(--state-review); transition: width 0.3s; }
+.queue-progress p { margin: 0; white-space: nowrap; }
+
+.reviewer-instructions { margin: 12px 0 20px; }
+.reviewer-instructions .instructions-text {
+    background: var(--fold-bg); border: 1px solid var(--fold-bd); padding: 12px 14px;
+    border-radius: 4px; white-space: pre-wrap; margin: 0;
+    font: inherit; color: var(--fg);
+}
+
+/* A page-level statement about what the input schema does or does not declare. */
+.queue-note {
+    margin: 10px 0; padding: 8px 12px; font-size: 13px;
+    background: var(--sunk); border-left: 3px solid var(--border-strong); border-radius: 0 4px 4px 0;
+}
+
+.queue-items { display: flex; flex-direction: column; gap: 14px; }
+/* Companion to the display rule above: without it, `display: flex` beats the UA's
+   [hidden] rule and the reviewer-name gate renders the rows anyway. */
+.queue-items[hidden] { display: none; }
+.queue-card {
+    border: 1px solid var(--border); border-left: 4px solid var(--border); border-radius: 5px;
+    padding: 14px 18px; background: var(--raised);
+}
+.queue-card.decided-approve { border-left-color: var(--good-bd); background: var(--good-bg); }
+.queue-card.decided-modify  { border-left-color: var(--warn-bd); background: var(--warn-bg); }
+
+.queue-card header {
+    display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+    font-size: 13px; color: var(--muted); margin-bottom: 8px;
+}
+.queue-card header .row-position { font-size: 13px; font-weight: 600; }
+.queue-card header .lineage-link { font-size: 13px; margin-left: auto; }
+
+.queue-card .prior-decision {
+    font-size: 13px; margin: 8px 0; padding: 8px 12px;
+    background: var(--info-bg); border-radius: 3px; color: var(--info-ink);
+}
+
+.decision-controls {
+    display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+    margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border);
+}
+/* Companion to `.btn { display: inline-block }`: without it that rule beats the
+   UA's [hidden] rule and a decided card shows Submit beside Change my review. */
+.decision-controls [hidden] { display: none; }
+/* Secondary by omission of .primary: a decided card is not asking for input. */
+.btn.unlock-review { border-style: dashed; }
+.btn.approve { background: var(--good-bg); color: var(--good-ink); border-color: var(--good-bd); }
+.btn.reject  { background: var(--bad-bg); color: var(--bad-ink); border-color: var(--bad-bd); }
+.btn.modify  { background: var(--warn-bg); color: var(--warn-ink); border-color: var(--warn-bd); }
+.btn.selected { box-shadow: inset 0 0 0 2px currentColor; }
+
+/* Reviewer-name gate: nothing in .queue-items renders until this carries a name. */
+.reviewer-gate {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    margin: 16px 0 0; padding: 12px 18px;
+    background: var(--info-bg); border: 1px solid var(--info-bd); border-radius: 6px;
+}
+.reviewer-gate label { font-weight: 600; font-size: 13px; color: var(--info-ink); }
+.reviewer-gate input {
+    padding: 6px 10px; border: 1px solid var(--border); border-radius: 3px;
+    font: inherit; font-size: 14px; min-width: 220px;
+}
+.reviewer-gate .muted { font-size: 12px; }
+
+.review-section-heading {
+    margin: 10px 0 0; padding-top: 10px; border-top: 1px dashed var(--border);
+    font-size: 12px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: .04em; color: var(--muted);
+}
+
+/* One row per reviewed column: name, the value the stage received, the field. */
+.reviewed-fields {
+    display: grid; grid-template-columns: max-content 1fr minmax(140px, 18rem);
+    gap: 8px 14px; align-items: center;
+    margin-top: 8px;
+}
+.reviewed-field { display: contents; }
+.reviewed-field label { font-weight: 600; font-size: 13px; }
+.reviewed-field .upstream-value { font-size: 12px; color: var(--muted); }
+.reviewed-field input, .reviewed-field select {
+    padding: 5px 8px; border: 1px solid var(--border); border-radius: 3px; font: inherit; font-size: 14px;
+}
+.reviewed-field .recorded-value { font-size: 12px; color: var(--info-ink); }
+
+/* A reviewed value is read-only until its `change` button swaps in the control. */
+.field-control { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+/* Companion to the display rules in this block: without it they beat the UA's
+   [hidden] rule and both the closed value and its control render at once. */
+.field-control [hidden] { display: none; }
+.field-editor { display: inline-flex; align-items: center; gap: 6px; }
+.value-display {
+    display: inline-flex; align-items: baseline; gap: 8px; cursor: pointer;
+    padding: 4px 8px; border: 1px dashed var(--border); border-radius: 3px;
+    background: var(--raised); font: inherit; font-size: 14px; color: var(--fg); text-align: left;
+}
+.value-display:not(:disabled):hover, .value-display:not(:disabled):focus {
+    border-color: var(--accent); background: var(--hover);
+}
+.value-display:disabled { cursor: default; opacity: 0.7; border-style: solid; }
+.value-display .edit-hint { font-size: 11px; color: var(--accent); text-transform: uppercase; }
+.value-display:disabled .edit-hint { color: var(--muted); }
+.revert-edit {
+    border: 1px solid var(--border); border-radius: 3px; background: var(--raised);
+    font: inherit; font-size: 12px; padding: 3px 7px; cursor: pointer;
+}
+
+.definition-drift {
+    margin: 16px 0; padding: 12px 16px; border-radius: 5px;
+    background: var(--warn-bg); border-left: 4px solid var(--warn-bd); font-size: 14px;
+}
+
+.review-notes { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; font-size: 13px; }
+.review-notes textarea {
+    padding: 6px 8px; border: 1px solid var(--border); border-radius: 3px;
+    font: inherit; font-size: 13px; resize: vertical;
+}
+
+.queue-card .queued-row { margin: 8px 0; }
+
+/* One row as label/value pairs (_kv_table.html). A long text value is the common
+   case, so the value cell wraps rather than truncating or scrolling. */
+table.kv { border-collapse: collapse; width: 100%; font-size: 13px; }
+table.kv th {
+    text-align: left; vertical-align: top; font-weight: 600; white-space: nowrap;
+    width: 1%; padding: 5px 14px 5px 0;
+}
+table.kv td.kv-value {
+    padding: 5px 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--fg);
+}
+table.kv tr + tr th, table.kv tr + tr td { border-top: 1px solid var(--border); }
+.pk-flag {
+    font-size: 10px; text-transform: uppercase; letter-spacing: .04em;
+    padding: 1px 5px; border-radius: 3px; background: var(--info-bg); color: var(--info-ink);
+}

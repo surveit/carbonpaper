@@ -1,0 +1,120 @@
+/* Diagram viewport: scroll, zoom, drag-to-pan, fullscreen, minimap, node cursors. */
+/* ═══════════════════════════════════════════════════════════════════════════
+   Workflow section: full-width DAG in a zoomable viewport on TOP, the per-node
+   panel docked full-width BELOW (section_workflow.html + _node_panel.html).
+   (Tab bars, panes, schema cards and the JSON editor are shared with the runs
+   view and defined above.)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Big / expandable diagram viewport: scroll, zoom, drag-to-pan, fullscreen. The
+   inner svg is sized in diagram_viewport.js; max-width:none defeats mermaid's
+   useMaxWidth shrink so the graph is legible instead of tiny in the column. ── */
+.diagram-block { margin: 14px 0; }
+.diagram-tools { display: flex; gap: .4rem; align-items: center; margin: .5rem 0; flex-wrap: wrap; }
+.diagram-tools button { font: inherit; font-size: 13px; padding: .25rem .6rem; cursor: pointer;
+    border: 1px solid var(--border); background: var(--sunk-deep); border-radius: 5px; color: var(--fg); }
+.diagram-tools button:hover { background: var(--hover); }
+.diagram-tools .diagram-hint { font-size: 12px; }
+/* The box hugs the diagram: no min-height, so a one-row graph does not sit in a
+   tall empty well. resize:vertical still lets a reader open it up by hand. */
+.diagram-viewport { overflow: auto; max-height: 72vh; border: 1px solid var(--border);
+    border-radius: 8px; background: var(--raised); resize: vertical; cursor: grab; }
+.diagram-viewport.grabbing { cursor: grabbing; }
+/* The FULLSCREENED element is the .diagram-block (see diagram_viewport.js), so the
+   viewport is sized by the `.diagram-block:fullscreen` rules further down. This one
+   remains for a viewport fullscreened on its own. */
+.diagram-viewport:fullscreen { max-height: none; height: 100vh; width: 100vw; background: var(--raised); }
+/* THE VIEWPORT OWNS THE SCROLL. `pre` carries overflow-x:auto from the base rule,
+   which made this block its own scroll container: the svg's overflow ended here
+   instead of at .diagram-viewport, whose scrollLeft then had no range to move in
+   and silently discarded every write (zoom-to-node scrolled nowhere).
+   max-content lets a wide graph overflow the viewport so it can scroll; min-width
+   keeps a narrow one filling the box, still centred by .mermaid's text-align. */
+.diagram-viewport .mermaid { margin: 0; padding: .5rem; overflow: visible;
+    width: max-content; min-width: 100%; box-sizing: border-box; }
+.diagram-viewport .mermaid svg { max-width: none !important; height: auto; }
+/* The node currently open in the panel — outline it in the graph so the two agree
+   on the selection (distinct from the run-status stroke). */
+.diagram-viewport svg g.node.wf-node-active > rect,
+.diagram-viewport svg g.node.wf-node-active > polygon,
+.diagram-viewport svg g.node.wf-node-active > circle,
+.diagram-viewport svg g.node.wf-node-active > path { stroke: var(--focus) !important; stroke-width: 3px !important; }
+.diagram-viewport svg g.node.wf-node-active { filter: drop-shadow(0 0 4px var(--focus-glow)); }
+/* Pulse on arrival: the graph scrolls under the reader, so without a moving cue the
+   newly-outlined node is easy to miss. diagram_viewport.js re-applies the class on
+   every focus, which is what replays the animation; it stays on until the next one. */
+@keyframes wf-node-arrive {
+    0%, 100% { filter: drop-shadow(0 0 4px var(--focus-glow)); }
+    50%      { filter: drop-shadow(0 0 14px color-mix(in srgb, var(--focus) 95%, transparent)); }
+}
+.diagram-viewport svg g.node.wf-node-arriving { animation: wf-node-arrive .5s ease-in-out 2; }
+@media (prefers-reduced-motion: reduce) {
+    .diagram-viewport svg g.node.wf-node-arriving { animation: none; }
+}
+
+/* ── Minimap variant: the same viewport as a short band, held at its own zoom
+   (data-zoom-floor) rather than fitted to width, so the labels stay readable and a
+   wide graph is panned. The controls move INTO the band's top-right corner as icons,
+   because a toolbar row above a 170px band is a third of its height. resize:vertical
+   is inherited on purpose — a reader who wants more of the graph can drag it taller
+   without leaving for fullscreen. ── */
+/* A run's published files, as links. Deliberately NOT buttons: a button is an
+   imperative, a finished run has none, and a primary button sized to a filename is
+   the widest thing on the page for no reason. */
+.run-outputs { list-style: none; margin: 0; padding: 0; display: flex;
+    flex-direction: column; gap: 3px; }
+.run-outputs a { font-family: ui-monospace, monospace; font-size: 13px; }
+
+.diagram-minimap { position: relative; }
+/* ~2 rows of stage nodes at the floor zoom: enough to read the node you are on and
+   see what it feeds, without the band becoming a second panel. */
+.diagram-minimap .diagram-viewport { height: 200px; }
+.diagram-minimap .diagram-tools { position: absolute; top: 7px; right: 7px; z-index: 2;
+    margin: 0; gap: .2rem; }
+/* Square, so the four read as one control cluster rather than four words; and they
+   sit ON the graph, so they need a resting edge the flat toolbar did not. */
+.diagram-minimap .diagram-tools button { width: 26px; height: 26px; padding: 0;
+    display: flex; align-items: center; justify-content: center; line-height: 1;
+    background: var(--bg); box-shadow: 0 1px 2px var(--shadow); }
+/* Where the band is parked, in the corner it is least likely to cover a node. */
+.diagram-minimap .diagram-where { position: absolute; left: 7px; bottom: 7px; z-index: 2;
+    margin: 0; font-size: 10.5px; color: var(--muted); background: var(--bg);
+    border: 1px solid var(--border); border-radius: 3px; padding: 1px 6px;
+    max-width: calc(100% - 130px); overflow: hidden; text-overflow: ellipsis;
+    white-space: nowrap; }
+.diagram-minimap .diagram-where:empty { display: none; }
+
+/* ── Fullscreen is the SURVEY: the whole graph plus the coverage line, which is the
+      question a picture answers and a 200px band cannot. The block goes fullscreen,
+      not the viewport, so the controls and the survey line come with it. ── */
+.diagram-survey { display: none; }
+.diagram-block:fullscreen { background: var(--bg); padding: 10px 14px; }
+.diagram-block:fullscreen .diagram-viewport { height: calc(100vh - 96px); max-height: none; }
+.diagram-block:fullscreen .diagram-where { display: none; }
+.diagram-block:fullscreen .diagram-survey { display: flex; gap: 20px; flex-wrap: wrap;
+    align-items: baseline; font-size: 12.5px; padding-top: 9px; margin-top: 9px;
+    border-top: 1px solid var(--border); }
+.diagram-survey .survey-gap { color: var(--state-warn-ink); }
+
+/* Stage nodes carry mermaid's .clickable (and its pointer cursor) because the graph
+   DECLARES a click handler — whether or not this page listens for one. onDiagramNode()
+   sets data-diagram-clickable on <html>, so the cursor promises a click only where one
+   is actually wired. See static/diagram_nodes.js. */
+.mermaid g.node.clickable { cursor: default; }
+html[data-diagram-clickable] .mermaid g.node.clickable { cursor: pointer; }
+/* A pointer cursor is the only thing that ever said a node opens something, and it
+   says it one node at a time, after the reader has already guessed. Lifting the
+   stroke under the cursor makes a node answer as a control. Not !important, so the
+   open node's outline above still wins while the reader hovers a different one. */
+html[data-diagram-clickable] .mermaid g.node.clickable:hover > rect,
+html[data-diagram-clickable] .mermaid g.node.clickable:hover > polygon,
+html[data-diagram-clickable] .mermaid g.node.clickable:hover > circle,
+html[data-diagram-clickable] .mermaid g.node.clickable:hover > path { stroke-width: 2.5px; }
+
+/* ── Workflow: graph on top, stage detail full-width below (master-detail layout). ── */
+.wf-top .diagram-viewport { max-height: 56vh; }        /* cap so the detail below stays reachable */
+.wf-detail { margin-top: 20px; border-top: 2px solid var(--border); padding-top: 18px; min-height: 120px; }
+.wf-detail.loading { opacity: .5; }
+.wf-detail-empty { text-align: center; padding: 24px 0; }
+.wf-versions-link { margin-top: 22px; font-size: 13px; }
+

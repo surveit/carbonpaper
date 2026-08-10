@@ -1,0 +1,223 @@
+/* The node panel's 3-tier Inputs/Transform/Outputs layout, scratch re-run and diff. */
+/* ─── Node-detail 3-tier layout: Inputs │ Transform │ Outputs ───────────────
+   The run-detail right pane renders a stage as three left-to-right columns.
+   Give the run-detail split a wider right pane so the tiers have room; stack
+   the tiers on narrow panels. */
+.run-detail-split.split-view {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 9fr);
+}
+@media (max-width: 1024px) {
+    .run-detail-split.split-view { grid-template-columns: 1fr; }
+}
+
+.tier-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+    margin-top: 14px;
+    align-items: start;
+}
+/* Stack the tiers when the panel itself gets narrow. */
+@media (max-width: 1200px) {
+    .tier-grid { grid-template-columns: 1fr; }
+}
+
+.tier {
+    min-width: 0;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--raised);
+    padding: 12px 14px 16px;
+}
+.tier-transform { background: var(--sunk); }
+.tier-outputs { background: var(--raised); }
+
+.tier-head {
+    border-bottom: 2px solid var(--border);
+    margin: -2px 0 12px;
+    padding-bottom: 6px;
+}
+.tier-head h3 {
+    margin: 0;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--fg);
+}
+.tier-inputs .tier-head { border-bottom-color: var(--info-bd); }
+.tier-transform .tier-head { border-bottom-color: var(--border-strong); }
+.tier-outputs .tier-head { border-bottom-color: var(--good-bd); }
+
+.tier .schema-card { margin-bottom: 14px; }
+.tier .schema-card h4,
+.tier .preview-head {
+    margin: 10px 0 4px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--muted);
+    font-weight: 600;
+}
+.tier table.schema { font-size: 11px; }
+.tier table.schema th, .tier table.schema td { padding: 3px 6px; }
+
+/* Row-pick column on the (primary) input preview. */
+table.data-preview .pick-col { width: 28px; text-align: center; white-space: nowrap; }
+table.data-preview.selectable tbody tr:hover { background: var(--hover); }
+
+/* Scratch re-run controls (Inputs tier). */
+.scratch-controls {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px dashed var(--border);
+}
+.scratch-firstn { font-size: 12px; color: var(--muted); display: block; margin-bottom: 8px; }
+.scratch-firstn .firstn-input { width: 48px; padding: 2px 4px; }
+.btn.scratch-run {
+    background: var(--accent);
+    color: var(--on-dark);
+    border: 0;
+    border-radius: 5px;
+    padding: 7px 12px;
+    font-size: 13px;
+    cursor: pointer;
+}
+.btn.scratch-run:disabled { opacity: 0.6; cursor: default; }
+.scratch-hint { font-size: 11px; margin: 8px 0 0; }
+
+/* Scratch re-run results (Outputs tier). */
+.scratch-result {
+    margin: 12px 0;
+    border: 1px solid var(--fold-bd);
+    background: var(--fold-bg);
+    border-radius: 6px;
+    padding: 10px 12px;
+}
+.scratch-result .scratch-head {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--fold-ink);
+    margin-bottom: 6px;
+}
+.scratch-result .scratch-head.err { color: var(--bad-ink); }
+table.data-preview.scratch th { background: var(--hover); }
+
+/* The diff header (app/templates/_stage_diff.html): ONE horizontal axis — the
+   input frames stacked vertically, a bracket gathering them where there is more
+   than one, a rail carrying the tally of what the stage did, then the output
+   frame. The row never wraps and every item starts at the top, so a second input
+   lengthens the input stack downward and leaves the output where it was. The
+   base input takes a solid left rule and a reference input a dashed one, but the
+   role label inside each chip is what carries the distinction; the rules only
+   echo it, so the header survives greyscale. It sits above a data table, so it
+   borrows no state tint: border and muted text only. */
+.diff-head { margin-bottom: 6px; max-width: 100%; overflow-x: auto; }
+.diff-flow { display: flex; flex-wrap: nowrap; align-items: flex-start; gap: 8px; }
+.diff-inputs { display: flex; flex-direction: column; align-items: stretch; gap: 4px; }
+.diff-outputs { display: flex; }
+/* Spans the whole input stack and closes on the rail, so two inputs read as one
+   set feeding one transform rather than as two loose chips. */
+.diff-brace {
+    align-self: stretch;
+    width: 8px;
+    border: 1px solid var(--border);
+    border-left: 0;
+    border-radius: 0 8px 8px 0;
+}
+.diff-frame {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 3px 8px;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--border);
+    border-radius: 4px;
+    font-weight: 400;
+    letter-spacing: normal;
+    text-transform: none;
+    white-space: nowrap;
+}
+.diff-frame-base, .diff-frame-out { border-left-color: var(--muted); }
+.diff-frame-ref { border-left-style: dashed; }
+.diff-frame-head { display: flex; align-items: baseline; gap: 5px; }
+.diff-frame-role {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    font-weight: 600;
+    color: var(--muted);
+}
+.diff-frame-id { font-size: 11.5px; }
+.diff-frame-meta { font-size: 11px; font-weight: 400; color: var(--muted); }
+/* The rail: the tally rides above a line that runs left-to-right into the
+   arrowhead. Its top padding drops it to the height of the first frame's text. */
+.diff-rail {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    min-width: 130px;
+    padding-top: 4px;
+    font-weight: 400;
+    letter-spacing: normal;
+    text-transform: none;
+    color: var(--muted);
+}
+.diff-tally {
+    font-size: 11px;
+    font-weight: 600;
+    text-align: center;
+    white-space: nowrap;
+    padding: 0 6px 2px;
+}
+.diff-arrow {
+    display: block;
+    border-top: 1px solid var(--border);
+    text-align: right;
+    line-height: 0;
+    font-size: 15px;
+}
+
+/* Outputs-pane stage diff (app/templates/_stage_diff.html). A column the stage
+   ADDS takes the same palette tint the stage-tests table uses for its added
+   columns (--state-review-bg); a column the stage DROPPED carries the failed
+   tint; a changed cell carries the warn tint plus the input value it replaced
+   struck through, so the change reads without colour; a dropped row carries the
+   failed tint. Unchanged cells go muted, so the eye lands on what the stage
+   touched. Every tint has a colour-free twin: the + and − marks on the column
+   headers, and the strike through a dropped column's cells. */
+.stage-diff th.diff-col-new,
+.stage-diff td.diff-col-new { background: var(--state-review-bg); }
+.stage-diff th.diff-col-dropped,
+.stage-diff td.diff-col-dropped {
+    background: var(--state-failed-bg);
+    color: var(--state-failed-ink);
+}
+/* The strike takes the dropped column's cells and its header NAME — never the
+   − itself, which has to stay readable for the mark to do its job. */
+.stage-diff td.diff-col-dropped { text-decoration: line-through; }
+.stage-diff th.diff-col-dropped .diff-col-name { text-decoration: line-through; }
+.stage-diff .diff-mark { font-weight: 700; margin-right: 3px; }
+.stage-diff td.diff-cell-changed { background: var(--state-warn-bg); }
+.stage-diff td.diff-cell-same { color: var(--muted); }
+.stage-diff .diff-was { display: block; color: var(--muted); text-decoration: line-through; }
+.stage-diff tr.diff-row-dropped td { background: var(--state-failed-bg); color: var(--state-failed-ink); }
+
+/* The Data pane's input-rows disclosure: the upstream previews and the scratch
+   row picker, folded below the (diff-aware) output so the pane leads with what
+   the stage produced while the picker stays one click away. */
+.data-inputs { margin: 14px 0 4px; }
+.data-inputs > summary { color: var(--accent); font-size: 12px; cursor: pointer; }
+
+/* Validation block inside the Outputs tier. */
+.tier-outputs .validation-block { background: var(--raised); border: 1px solid var(--border); margin-top: 12px; }
+.validation-block .val-phase {
+    margin: 8px 0 2px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--muted);
+    font-weight: 600;
+}
+

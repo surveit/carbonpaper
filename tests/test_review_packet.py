@@ -214,12 +214,12 @@ def test_pages_reference_no_root_relative_url(exported):
 
 
 def test_vendored_app_stylesheet_pulls_nothing_off_the_network(exported):
-    """A packet vendors style.css, so an @import there breaks offline rendering."""
+    """A packet concatenates app/static/*.css, so an @import in one breaks it offline."""
     css = (exported.root / "assets" / "style.css").read_text(encoding="utf-8")
     for pattern in (r"@import", r"url\(", r"@font-face"):
         assert not re.search(pattern, css), (
-            f"app/static/style.css now contains {pattern!r}; the review packet "
-            "vendors it and needs it to resolve with no network"
+            f"a sheet in app/static now contains {pattern!r}; the review packet "
+            "concatenates them all and needs the result to resolve with no network"
         )
 
 
