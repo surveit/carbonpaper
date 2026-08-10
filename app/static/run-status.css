@@ -113,28 +113,6 @@
     max-height: 280px;
 }
 
-.validation-block {
-    background: var(--sunk);
-    padding: 8px 14px;
-    border-radius: 4px;
-    margin: 8px 0;
-    font-size: 13px;
-}
-.validation-block h4 {
-    margin: 6px 0 4px;
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.4px;
-    color: var(--muted);
-}
-.validation-list {
-    margin: 0;
-    padding-left: 20px;
-    list-style: disc;
-    font-size: 12px;
-}
-.validation-list li.sev-error { color: var(--bad-ink); }
-.validation-list li.sev-warning { color: var(--warn-ink); }
 
 .preview-block {
     margin: 8px 0;

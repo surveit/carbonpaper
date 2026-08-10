@@ -231,14 +231,17 @@ def test_packet_uses_the_apps_own_visual_vocabulary(exported):
     assert 'class="stages"' in index
 
 
-def test_every_referenced_asset_exists_in_the_packet(exported):
-    """Each stylesheet and page link resolves to a file that is actually here."""
-    for page in exported.root.rglob("*.html"):
+def _assert_every_href_resolves(root):
+    for page in root.rglob("*.html"):
         for href in re.findall(r'(?:href|src)="([^"#?]+)"', _markup_of(page)):
             if href.startswith(("http://", "https://", "//")):
                 continue  # covered by the two external-URL tests above
-            target = (page.parent / href).resolve()
-            assert target.exists(), f"{page.name} -> {href}"
+            assert (page.parent / href).resolve().exists(), f"{page.name} -> {href}"
+
+
+def test_every_referenced_asset_exists_in_the_packet(exported):
+    """Each stylesheet and page link resolves to a file that is actually here."""
+    _assert_every_href_resolves(exported.root)
 
 
 def test_checksums_cover_every_file_and_match(exported):
@@ -491,11 +494,30 @@ def test_the_packet_zip_trades_bytes_for_speed_on_compression(tmp_path):
     assert entry.compress_size > len(default_level.getvalue())
 
 
-def test_stage_page_names_its_own_validation_because_no_index_here_does(exported):
-    """No index here lists issues, so the stage page holds the only copy."""
-    index = (exported.root / "index.html").read_text(encoding="utf-8")
-    # The run page's own index is what lets the served panel drop this block.
-    assert 'id="run-issues"' not in index
+def test_the_index_names_what_the_run_flagged_and_the_stage_page_does_not(
+    project_dir, tmp_path
+):
+    """One copy per packet, on the index — the same place the run page keeps it."""
+    _make_project(project_dir)
+    # An undeclared column the load stage's schema does not name: the run finishes
+    # and its record carries a warning, which is what the index is here to show.
+    pd.DataFrame({"name": ["a"], "val": [1], "extra": ["x"]}).to_csv(
+        project_dir / "data" / "items.csv", index=False
+    )
+    _seed_version(project_dir)
+    run_id = run_service.start_run(_PROJECT)
 
-    page = (exported.root / "stages" / "double.html").read_text(encoding="utf-8")
-    assert 'class="validation-block"' in page
+    packet = export_review_packet(_PROJECT, run_id, tmp_path / "packets")
+
+    index = (packet.root / "index.html").read_text(encoding="utf-8")
+    assert 'class="issue-table"' in index
+    assert "undeclared column" in index
+    assert 'href="stages/load.html"' in index
+
+    page = (packet.root / "stages" / "load.html").read_text(encoding="utf-8")
+    assert 'class="validation-block"' not in page
+    assert "undeclared column" not in page
+
+    # The clean-run packet never renders this index, so its link check never sees
+    # these rows — they resolve from index.html, one directory above the pages.
+    _assert_every_href_resolves(packet.root)
