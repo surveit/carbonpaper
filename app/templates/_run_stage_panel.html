@@ -52,10 +52,6 @@
 <p class="muted"><em>This stage hasn't run yet.</em></p>
 {% endif %}
 
-{% set in_issues = [] %}
-{% for v in stage.input_validation_report %}{% for i in v.issues %}{% set _ = in_issues.append(i) %}{% endfor %}{% endfor %}
-{% set out_issues = (stage.output_validation_report.issues if stage.output_validation_report else []) %}
-
 {# ── Tab bar ── #}
 <div class="stage-tabs">
     <div class="tabs">
@@ -135,25 +131,6 @@
     {% elif preview and preview.error %}<p class="muted"><em>output preview unavailable: {{ preview.error }}</em></p>
     {% elif stage.output_path %}<p class="muted"><em>output file missing on disk: <code>{{ stage.output_path }}</code></em></p>
     {% else %}<p class="muted"><em>No output yet.</em></p>{% endif %}
-
-    {# Only where nothing else on the surface lists them. The run page's issue index
-       already carries every line here, worded by the same report, one click from
-       this panel — so on that page this block is a second copy of what the reader
-       has already read. The review packet's index page lists no issues, and there
-       this is the only place a stage's are named. #}
-    {% if not issues_indexed %}
-    <div class="validation-block">
-      <h4>validation</h4>
-      {% if in_issues or out_issues %}
-        {% if in_issues %}<p class="val-phase">input</p><ul class="validation-list">
-          {% for i in in_issues %}<li class="sev-{{ i.severity }}"><strong>{{ i.severity }}</strong>{% if i.column %} · <code>{{ i.column }}</code>{% endif %} — {{ i.message }}</li>{% endfor %}
-        </ul>{% endif %}
-        {% if out_issues %}<p class="val-phase">output</p><ul class="validation-list">
-          {% for i in out_issues %}<li class="sev-{{ i.severity }}"><strong>{{ i.severity }}</strong>{% if i.column %} · <code>{{ i.column }}</code>{% endif %} — {{ i.message }}</li>{% endfor %}
-        </ul>{% endif %}
-      {% else %}<p class="muted"><em>No validation issues.</em></p>{% endif %}
-    </div>
-    {% endif %}
 
     {# The input rows + scratch row picker that lived under the Inputs tab —
        one disclosure away, never gone: the picker still drives the Transform

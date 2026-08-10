@@ -42,17 +42,20 @@ class AppPanelLinks:
 
 
 class PacketPanelLinks:
-    # Relative to a stage page. `None` = the template omits it, not a dead link.
+    """Built from the packet root. `None` = the template omits it, not a dead link."""
+
+    def __init__(self, to_root: str = "../") -> None:
+        self._root = to_root  # "" from index.html, "../" from a page in stages/
 
     def stage_anchor(self, stage_id: str) -> str:
-        return f"{_segment(stage_id)}.html"
+        return f"{self._root}stages/{_segment(stage_id)}.html"
 
     def stage_rows(self, stage_id: str, ordinals: list[int] | None = None) -> None:
         """The stage page IS the full table here, so the link would point at itself."""
         return None
 
     def stage_csv(self, stage_id: str) -> str:
-        return f"../data/{_segment(stage_id)}.csv"
+        return f"{self._root}data/{_segment(stage_id)}.csv"
 
     def row_trace(self, stage_id: str, row: int) -> None:
         """No row lineage in the packet yet — see the packet index's caveats."""
@@ -67,8 +70,7 @@ class PacketPanelLinks:
         return None
 
     def guide_stage(self, stage_id: str) -> str:
-        """From the packet index, where the guide is rendered."""
-        return f"stages/{_segment(stage_id)}.html"
+        return self.stage_anchor(stage_id)
 
 
 def _segment(value: str) -> str:

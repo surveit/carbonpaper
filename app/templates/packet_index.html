@@ -24,6 +24,11 @@
   {% if guide %}the review guide beside this for what they say is worth scrutinising,{% endif %}
   then each step for what actually ran.</p>
 
+{# What this run's own records say went wrong — the same index the run page carries
+   above its graph, and here the packet's only statement of it: a step page shows
+   its rows and its transform, not a verdict on them. #}
+{% include "_run_issues.html" %}
+
 {% if run.stages %}
 <section>
   <h2>The workflow this run executed</h2>
