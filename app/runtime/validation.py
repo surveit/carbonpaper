@@ -90,9 +90,9 @@ def validate_dataframe(
     stage_id: str,
     phase: str,
 ) -> ValidationReport:
+    # A stage declaring no schema emits files rather than a table: nothing to check.
     report = ValidationReport(stage_id=stage_id, phase=phase, rows=len(df))
     if schema is None:
-        report.issues.append(Issue("warning", None, "No schema declared; skipping checks."))
         return report
 
     columns: list[Column] = list(schema.columns)

@@ -100,6 +100,28 @@ def test_offline_journey_reaches_a_published_artifact(journey_project, tmp_path)
     assert totals[True] == 7
 
 
+def test_publish_stage_records_no_output_validation_issue(journey_project):
+    """publish declares no output schema, so its record carries no issue about one."""
+    client.post(f"/project/{PROJECT}/version", data={"message": "first version"})
+    version_id = list_versions(journey_project)[0].version_id
+    resp = client.post(f"/project/{PROJECT}/versions/{version_id}/publish",
+                       follow_redirects=False)
+    assert resp.status_code == 303, resp.text
+
+    resp = client.post(f"/project/{PROJECT}/run", follow_redirects=False)
+    assert resp.status_code == 303, resp.text
+    run_id = resp.headers["location"].rstrip("/").rsplit("/", 1)[-1]
+    status = client.get(f"/project/{PROJECT}/runs/{run_id}/status").json()
+    assert_run_ok(status, journey_project, run_id)
+
+    manifest = json.loads(
+        (journey_project / "runs" / run_id / "manifest.json").read_text(encoding="utf-8")
+    )
+    record = {r["stage_id"]: r for r in manifest["stage_records"]}["report"]
+    assert record["status"] == "ok"
+    assert record["output_validation_report"]["issues"] == []
+
+
 # ── Fixture: a real project directory with a python-only workflow ────────────
 
 @pytest.fixture
