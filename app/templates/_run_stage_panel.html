@@ -10,16 +10,24 @@
 <div class="run-stage-panel"
      data-project="{{ project }}" data-run="{{ run_id }}" data-stage="{{ stage.stage_id }}">
 
-<div class="stage-header">
-    <span class="type-tag {{ type_class.get(stage.type, 'custom') }}">{{ type_glyph.get(stage.type, '') }} {{ stage.type | plain_value }}</span>
-    <span class="run-status status-{{ stage.status }}">{{ stage.status }}</span>
-    <h2><code>{{ stage.stage_id }}</code></h2>
+{# The name is the heading of the whole region — the section around this panel
+   carries no title of its own — so it leads, and the type sits out at the right
+   margin. Status belongs with what the run did, not with what the stage is, so it
+   rides the facts line below. #}
+<div class="stage-panel-head">
+    <div class="head-line">
+        <h2><code>{{ stage.stage_id }}</code></h2>
+        <span class="type-tag {{ type_class.get(stage.type, 'custom') }}">{{ type_glyph.get(stage.type, '') }} {{ stage.type | plain_value }}</span>
+    </div>
     {# The description comes from the pinned definition, so a run whose version
        no longer resolves shows no line rather than a guessed one. #}
-    {% if stage_def %}<p class="stage-id">{{ stage_def.description }}</p>{% endif %}
-    <p class="muted">{{ stage.elapsed_ms | friendly_duration }} · {{ "{:,}".format(stage.output_row_count or 0) }} row{% if (stage.output_row_count or 0) != 1 %}s{% endif %}
-        {% if stage.llm_usage and stage.llm_usage.calls %} · {{ "{:,}".format(stage.llm_usage.calls) }} model call{% if stage.llm_usage.calls != 1 %}s{% endif %}, {{ stage.llm_usage.cost_usd | usd }}{% endif %}
-        {% if stage.finished_at %} · finished {{ stage.finished_at | friendly_time }}{% endif %}</p>
+    {% if stage_def %}<p class="stage-blurb">{{ stage_def.description }}</p>{% endif %}
+    <p class="stage-facts">
+        <span class="run-status status-{{ stage.status }}">{{ stage.status }}</span>
+        <span>{{ stage.elapsed_ms | friendly_duration }} · {{ "{:,}".format(stage.output_row_count or 0) }} row{% if (stage.output_row_count or 0) != 1 %}s{% endif %}
+        {%- if stage.llm_usage and stage.llm_usage.calls %} · {{ "{:,}".format(stage.llm_usage.calls) }} model call{% if stage.llm_usage.calls != 1 %}s{% endif %}, {{ stage.llm_usage.cost_usd | usd }}{% endif %}
+        {%- if stage.finished_at %} · finished {{ stage.finished_at | friendly_time }}{% endif %}</span>
+    </p>
 </div>
 
 {# The stage definition comes from the version this run pinned; with

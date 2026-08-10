@@ -242,10 +242,6 @@
 {{ mermaid }}
       </pre>
     </div>
-    {# Where the band is parked. A 200px window onto a wide graph shows no landmarks,
-       so the band says its own position in the run's order rather than leaving the
-       reader to infer it from two visible nodes. #}
-    <p class="diagram-where" id="diagram-where"></p>
     {# ── The SURVEY, shown only in fullscreen: the coverage question the picture is
           good at and the band is not. Every number here is COUNTED off this run's
           own stage list and this version's guide — there is no estimate in it, and
@@ -267,12 +263,13 @@
 </section>
 
 {# ── 4. STAGE DETAILS — one stage, picked from the band above or the guide rail.
-      Not on the page until one is: an empty panel with a "pick a stage" placeholder
-      is a heading, a lede and a box of nothing, all claiming space on a page whose
-      whole point is having less on it. loadStage() unhides it. ── #}
-<section class="run-section" id="run-stage-section" hidden>
-<h2>Stage details</h2>
-<p class="lede">One stage of this run: what it produced, the contract it declares, and the transform it applied.</p>
+      Not on the page until one is: a placeholder box claims space on a page whose
+      whole point is having less on it. loadStage() unhides it.
+
+      Untitled, and with no rule above it: it is not a peer of the sections around
+      it but the RESULT of clicking one of them, and the panel opens with the
+      stage's own name, which says what it is better than a title could. ── #}
+<section class="run-section run-section-untitled" id="run-stage-section" hidden>
 <div class="stage-panel-full" id="stage-panel"></div>
 </section>
 
@@ -333,17 +330,9 @@
 
   const viewport = document.querySelector('.diagram-viewport');
 
-  // The run's stages in the order the strip shows them, so the band can say where in
-  // that order it is parked. Position only — the graph already carries the shape.
+  // The run's stages in the order the strip shows them; the first is where the band
+  // opens parked.
   const STAGE_ORDER = {{ (header.strip.squares | map(attribute='stage_id') | list) | tojson }};
-  function paintWhere(stageId) {
-    const el = document.getElementById('diagram-where');
-    if (!el) return;
-    const at = STAGE_ORDER.indexOf(stageId);
-    el.textContent = at < 0
-      ? `${STAGE_ORDER.length} stages`
-      : `${stageId} — stage ${at + 1} of ${STAGE_ORDER.length}`;
-  }
 
   // Outline the node and centre it in the minimap. A re-render can replace the svg
   // mid-click, so a miss retries a few times. opts.pulse asks for the arrival
@@ -396,7 +385,6 @@
       if (location.hash !== `#${stageId}`) history.replaceState(null, '', `#${stageId}`);
       focusGraphNode(stageId, { pulse: !opts || opts.pulse !== false,
                                 animate: !opts || opts.animate !== false });
-      paintWhere(stageId);
       // Animated, so the reader sees where the page went rather than being
       // teleported; 'auto' only for a reader who asked for less motion. A smooth
       // scroll needs requestAnimationFrame, which a hidden tab never fires, so it
@@ -412,10 +400,7 @@
   // zoom the band would otherwise open on whatever corner of a tall graph sits at
   // scroll 0, which is usually blank. select:false — this moves the view, it does
   // not pick a stage, and the panel below still says none is open.
-  else {
-    focusGraphNode(STAGE_ORDER[0] || null, { select: false, animate: false });
-    paintWhere(null);
-  }
+  else focusGraphNode(STAGE_ORDER[0] || null, { select: false, animate: false });
 
   // ── CTA forms (cancel, re-run, resume): disable + relabel the button on
   //    submit so a second click can't fire a second request while the redirect
