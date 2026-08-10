@@ -16,6 +16,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 # at the time the rule was written. A NEW offender must be migrated, not listed here;
 # an entry may only be deleted. Migrating one means giving the service it calls an
 # id-taking entry point (see services.versioning.list_project_versions) and calling that.
+# The burn-down, with the per-module breakdown and the order: issue #505.
 _NOT_YET_MIGRATED: dict[str, int] = {
     "app/web/routers/runs.py": 15,
     "app/web/routers/project.py": 13,
