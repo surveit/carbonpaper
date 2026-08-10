@@ -37,12 +37,28 @@
 .right-pane h2 { font-size: 16px; margin-top: 22px; }
 .right-pane .stage-header { padding-bottom: 14px; margin-bottom: 4px; }
 
+/* ─── Zero state ──────────────────────────────────────────────────────────────
+   One shape wherever a list, panel or section has nothing in it yet: a heading
+   naming what is absent, ONE line saying what would fill it, and a primary button
+   that does the filling. The button, not a link buried in the sentence — the whole
+   point of the screen is that there is one thing to do next, and the reader should
+   not have to read prose to find it. Where the app genuinely offers no action (a
+   workflow authored from an MCP client, an eval form that does not exist yet), the
+   heading and line stand alone rather than growing an invented button.
+
+   80px of top padding used to push the heading most of a screen down from the
+   section header it belongs to. */
 .empty-state {
     text-align: center;
-    padding: 80px 20px;
+    padding: 44px 20px;
     color: var(--muted);
 }
-.empty-state h2 { color: var(--muted); font-weight: 500; }
+.empty-state h2 { color: var(--muted); font-weight: 500; margin-bottom: 6px; }
+.empty-state p { margin: 0 auto; max-width: 56ch; }
+/* The gap under the line belongs to the button, so a zero state with no action
+   does not carry a trailing hole where one would have been. */
+.empty-state .btn,
+.empty-state form { margin-top: 18px; }
 
 /* Compact stage list in left pane */
 table.stages.compact td, table.stages.compact th {

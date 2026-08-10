@@ -75,7 +75,17 @@ def test_an_unchecked_box_submits_nothing_and_the_run_is_not_busted(project):
     assert _manifest(project)["parameters"]["bust_cache"] is False
 
 
-def test_runs_page_offers_the_checkbox(project):
-    resp = client.get("/project/demo/runs")
+def test_new_run_page_offers_the_checkbox(project):
+    resp = client.get("/project/demo/runs/new")
     assert resp.status_code == 200
     assert 'name="bust_cache"' in resp.text
+
+
+def test_the_checkbox_sits_inside_the_advanced_fold(project):
+    """Folded, not removed: a <details> submits its content whether open or shut."""
+    body = client.get("/project/demo/runs/new").text
+    # The fold is closed on load (no `open`), and the checkbox is inside it — so the
+    # default run reuses cached rows without the reader deciding anything.
+    fold = body.split('<details class="run-advanced">')[1].split("</details>")[0]
+    assert 'name="bust_cache"' in fold
+    assert '<details class="run-advanced" open>' not in body

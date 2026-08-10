@@ -2,32 +2,71 @@
   RUN CONTROLS — one form that configures AND launches a run:
     · a version_id <select>: every published version newest-first, the latest pre-selected
       (so a run defaults to latest, any version is one click away)
-    · one read-only path field per file-kind input (binding__<stage_id>), showing
-      the SELECTED version's workflow-authored path — each with a Browse… button
-      that (via run_controls.js) opens the browser's native file dialog and uploads
-      the chosen file to POST /project/<name>/upload-input, which saves it and puts
-      the saved copy's absolute path in the field. The field is display-only; Browse
-      is the only way to change it (a workflow-authored path is still read in place).
-    · alongside each path field, an optional row-cap field (limit__<stage_id>):
-      blank runs the full file, a number N caps that input stage at the first N
-      rows it READS for this run only (see prepare_run's `limits` in
-      app/runtime/runner.py — this form is just its web-form surface)
-    · a recompute-everything checkbox (bust_cache): submitted only when checked, so
-      its presence is the value. The run skips every stage-cache read and records
-      what it computes, so a human review queue re-asks the humans (see prepare_run's
-      `bust_cache` in app/runtime/runner.py)
+    · one row per file-kind input, built by the `input_row` macro below: a read-only
+      path field (binding__<stage_id>) showing the SELECTED version's workflow-authored
+      path, its Browse… button, and the row cap beside them
+    · an Advanced fold holding the row-level cache checkbox (bust_cache): submitted
+      only when checked, so its presence is the value. The run skips every stage-cache
+      read and records what it computes, so a human review queue re-asks the humans
+      (see prepare_run's `bust_cache` in app/runtime/runner.py). Folded because the
+      default — reuse what has already been computed and already been approved — is
+      what nearly every run wants, and the alternative spends LLM calls and a
+      reviewer's time on rows that have both.
     · ▶ Run workflow
 
   Version and inputs belong together: different versions can author different input
   stages/paths, so the fields describe whichever version is picked. When the version
   changes, run_controls.js refetches that version's inputs
-  (GET /project/<name>/run-inputs?version_id=) and re-renders the path + row-cap fields.
+  (GET /project/<name>/run-inputs?version_id=) and rebuilds the rows — by cloning the
+  <template> at the foot of this form, which the SAME macro renders. One markup source
+  for both, so a row the script builds cannot drift from a row the server rendered.
 
   Context (inherited from the including template):
     state       = shell_state(pdir)         — state.name for the form action
     versions    = the project's PUBLISHED versions, newest-first (may be empty)
     file_inputs = loading.list_file_inputs(pdir)   — [{stage_id, path}]
 #}
+
+{#
+  One file input. `stage_id` is the identity the form submits under, so it names
+  three attributes at once (binding__, limit__, and the label's `for`); the template
+  clone passes an empty one and run_controls.js sets all three.
+
+  The path field is display-only — Browse… is the only way to change it, because a
+  browser hands over bytes and never a path: run_controls.js uploads the pick to
+  POST /project/<name>/upload-input and puts the saved copy's absolute path here. A
+  workflow-authored path is still read in place, so a row that has one is not required.
+
+  The row cap (limit__<stage_id>) is blank for the whole file, or a number N that caps
+  this input stage at the first N rows it READS for this run only (prepare_run's
+  `limits` in app/runtime/runner.py — this is just its web-form surface). It carries its
+  own <label>: inside the row's label it made "first"/"rows" focus the path field. Only
+  the number is bordered — "first" and "rows" sit outside the field, because a word
+  inside a field's frame reads as something the reader may type over.
+#}
+{% macro input_row(stage_id, path) %}
+<div class="run-input-row">
+  <label class="run-input-name" for="binding__{{ stage_id }}">
+    <code>{{ stage_id }}</code> — data file
+  </label>
+  <div class="run-input-controls">
+    <span class="path-field">
+      <input type="text" id="binding__{{ stage_id }}" name="binding__{{ stage_id }}"
+             value="{{ path }}" placeholder="no file chosen — click Browse…"
+             readonly {% if not path %}required{% endif %}>
+      <input type="file" class="file-input" hidden>
+      <button type="button" class="btn browse-btn">Browse…</button>
+    </span>
+    <label class="run-limit" title="read only the first N rows of this file, for this run">
+      <span>first</span>
+      <input type="number" name="limit__{{ stage_id }}" min="0" step="1"
+             inputmode="numeric" placeholder="all">
+      <span>rows</span>
+    </label>
+  </div>
+</div>
+{% endmacro %}
+
 {% if versions %}
 <form action="/project/{{ state.name }}/run" method="post" class="run-controls"
       data-project="{{ state.name }}">
@@ -39,29 +78,27 @@
     </select>
   </label>
   <div class="run-inputs">
-    {% for fi in file_inputs %}
-    <label class="run-input-row">
-      <code>{{ fi.stage_id }}</code> — data file
-      <span class="path-field">
-        <input type="text" name="binding__{{ fi.stage_id }}" value="{{ fi.path }}"
-               placeholder="no file chosen — click Browse…" readonly
-               size="70" {% if not fi.path %}required{% endif %}>
-        <input type="file" class="file-input" hidden>
-        <button type="button" class="btn browse-btn">Browse…</button>
-      </span>
-      · first <input type="number" name="limit__{{ fi.stage_id }}" min="0"
-                      placeholder="all" size="6"> rows
-    </label>
-    {% endfor %}
+    {% for fi in file_inputs %}{{ input_row(fi.stage_id, fi.path) }}{% endfor %}
   </div>
-  <label class="run-bust-cache">
-    <input type="checkbox" name="bust_cache" value="on">
-    recompute everything (ignore cached results; a review queue re-asks the humans)
-  </label>
+  <details class="run-advanced">
+    <summary>Advanced</summary>
+    <label class="run-bust-cache">
+      <input type="checkbox" name="bust_cache" value="on">
+      <span>Do not use row-level cache (e.g. recompute rows that LLM has already
+        processed, or require human review on the same data they already approved)</span>
+    </label>
+  </details>
   <button type="submit" class="btn primary">▶ Run workflow</button>
+  {# Inert until run_controls.js clones it; a <template>'s fields are not part of
+     the form, so the empty stage_id below is never submitted. #}
+  <template class="run-input-template">{{ input_row("", "") }}</template>
 </form>
 <script src="/static/run_controls.js"></script>
 {% else %}
-<p class="muted">No published version to run yet —
-  <a href="/project/{{ state.name }}/workflow/versions">publish a version</a> first.</p>
+<div class="empty-state">
+  <h2>No published version to run</h2>
+  <p>A run pins to a published version and reads its snapshot, so there is nothing
+    for it to execute until one is published.</p>
+  <a href="/project/{{ state.name }}/workflow/versions" class="btn primary">Publish a version</a>
+</div>
 {% endif %}

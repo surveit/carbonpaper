@@ -6,10 +6,9 @@
 //
 //  1. Version sync — a workflow version can author different input stages / paths
 //     than another, so when the version <select> changes we refetch that version's
-//     inputs (GET /project/<name>/run-inputs?version_id=) and rebuild the path
-//     fields, each paired with its row-cap field (limit__<stage_id>). That is what
-//     makes the run form "one page": the version you pick and the input paths/caps
-//     you set always describe the same version.
+//     inputs (GET /project/<name>/run-inputs?version_id=) and rebuild the rows.
+//     That is what makes the run form "one page": the version you pick and the
+//     input paths/caps you set always describe the same version.
 //
 //  2. File picker — a run reads its input files off the server's disk by absolute
 //     path, but a browser <input type=file> hands over only bytes, never a path
@@ -18,39 +17,30 @@
 //     returns the saved copy's absolute path — that goes into the (read-only)
 //     field. Browse is the only way to set it; the field itself isn't typeable.
 (function () {
-  function escapeHtml(value) {
-    return String(value).replace(/[&<>"']/g, function (c) {
-      return { "&": "&amp;", "<": "&lt;", ">": "&gt;",
-               '"': "&quot;", "'": "&#39;" }[c];
-    });
-  }
-
-  // Must mirror _run_controls.html's field markup exactly, so a field rebuilt
-  // here on version change behaves identically to a server-rendered one.
-  function fieldHtml(fileInput) {
-    var required = fileInput.path ? "" : " required";
-    var stageId = escapeHtml(fileInput.stage_id);
-    return (
-      '<label class="run-input-row">' +
-      "<code>" + stageId + "</code> — data file " +
-      '<span class="path-field">' +
-      '<input type="text" name="binding__' + stageId +
-      '" value="' + escapeHtml(fileInput.path || "") + '" readonly ' +
-      'placeholder="no file chosen — click Browse…" size="70"' + required + ">" +
-      '<input type="file" class="file-input" hidden>' +
-      '<button type="button" class="btn browse-btn">Browse…</button>' +
-      "</span>" +
-      ' · first <input type="number" name="limit__' + stageId +
-      '" min="0" placeholder="all" size="6"> rows' +
-      "</label>"
-    );
+  // A rebuilt row is a clone of the form's <template>, which _run_controls.html
+  // renders from the same macro as the server-rendered rows — so there is no
+  // second copy of the markup here to drift. Only the three attributes that carry
+  // the stage's identity, and the path's value, are set.
+  function buildRow(template, fileInput) {
+    var row = template.content.firstElementChild.cloneNode(true);
+    var stageId = fileInput.stage_id;
+    var path = row.querySelector('input[type="text"]');
+    path.id = "binding__" + stageId;
+    path.name = path.id;
+    path.value = fileInput.path || "";
+    path.required = !fileInput.path;
+    row.querySelector(".run-input-name").htmlFor = path.id;
+    row.querySelector(".run-input-name code").textContent = stageId;
+    row.querySelector('input[type="number"]').name = "limit__" + stageId;
+    return row;
   }
 
   async function refreshInputs(form) {
     var project = form.getAttribute("data-project");
     var select = form.querySelector('select[name="version_id"]');
     var box = form.querySelector(".run-inputs");
-    if (!project || !select || !box) return;
+    var template = form.querySelector("template.run-input-template");
+    if (!project || !select || !box || !template) return;
     try {
       var resp = await fetch(
         "/project/" + encodeURIComponent(project) +
@@ -59,7 +49,11 @@
       );
       if (!resp.ok) return; // leave the current fields in place on error
       var inputs = await resp.json();
-      box.innerHTML = inputs.map(fieldHtml).join("");
+      var rows = document.createDocumentFragment();
+      inputs.forEach(function (fileInput) {
+        rows.appendChild(buildRow(template, fileInput));
+      });
+      box.replaceChildren(rows);
     } catch (e) {
       /* network/parse error: keep whatever fields are shown */
     }

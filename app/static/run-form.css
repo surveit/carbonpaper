@@ -1,30 +1,7 @@
-/* Run form: input path fields, the file browser and the Runs page launch section. */
-/* ─── Run form: input path fields + browser file upload ───────────────────────
-   The run form (_run_controls.html) collects one absolute path per file input.
-   Each path field pairs a text input with a Browse… button; run_controls.js has
-   it open the browser's native file dialog and upload the pick to
-   POST /project/<name>/upload-input, which returns the saved copy's path. */
-.run-input-row { display: block; margin: 0.35rem 0; }
-.path-field {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    margin-top: 4px;
-    max-width: 100%;
-}
-.path-field input { flex: 1 1 auto; min-width: 0; }  /* shrink, don't overflow */
-/* Read-only display: set only via Browse…, so it reads as a field, not an input. */
-.path-field input[readonly] { background: var(--sunk-deep); cursor: default; }
-.browse-btn { padding: 6px 12px; white-space: nowrap; flex: 0 0 auto; }
-.browse-btn:disabled { opacity: 0.6; cursor: default; }  /* while uploading */
+/* Run form (_run_controls.html, on the New run page): the version picker, one row
+   per file input, and the launch button, as one bordered panel rather than raw
+   browser controls stacked on a page. */
 
-/* ─── Run launch (Runs page): the run form gets its own "Run the workflow" section
-   below the header, styled to the app tokens as one bordered panel rather than raw
-   browser controls crammed into the header's button row. The input-path rows keep
-   their own .path-field / .browse-btn rules above; this styles the panel around them
-   plus the version select. */
-.run-launch { margin: 8px 0 28px; }
-.run-launch h2 { font-size: 15px; margin: 0 0 10px; }
 .run-controls {
     display: flex;
     flex-direction: column;
@@ -35,38 +12,143 @@
     border-radius: 6px;
     background: var(--raised);
 }
-.run-controls .run-inputs { display: flex; flex-direction: column; gap: 12px; }
-.run-controls .run-version,
-.run-controls .run-input-row {
+.run-controls > .btn.primary { align-self: flex-start; margin-top: 2px; }
+
+/* The two field labels — the version picker's and each input row's name line. */
+.run-version,
+.run-input-name {
     display: block;
     margin: 0;
     font-size: 13px;
     font-weight: 600;
     color: var(--muted);
 }
-.run-controls .run-version { display: flex; flex-direction: column; gap: 5px; }
+.run-version { display: flex; flex-direction: column; gap: 5px; }
+
+/* Full width, not a fixed cap: the option text is a version id AND its message,
+   and a truncated message is the one thing this picker exists to read. */
 .run-controls select {
     padding: 7px 9px;
     font-family: inherit;
     font-size: 14px;
     color: var(--fg);
     background: var(--raised);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    max-width: 440px;
+    max-width: 100%;
 }
-/* The path input keeps its .path-field flex sizing + readonly code-bg (above); add
-   only the shared border/radius so it matches the select. */
+
+/* ─── One file input: its name, then its two controls side by side ────────────
+   The path field takes the width that's left; the row cap keeps its own. They
+   wrap onto separate lines rather than squeezing the path down to a stub. */
+.run-inputs { display: flex; flex-direction: column; gap: 14px; }
+.run-input-row { display: block; }
+.run-input-name { margin-bottom: 5px; }
+.run-input-controls {
+    display: flex;
+    align-items: stretch;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+/* The path field pairs a read-only text input with Browse…, which run_controls.js
+   has open the browser's native file dialog and upload the pick to
+   POST /project/<name>/upload-input, which returns the saved copy's path. */
+/* stretch, not center: the field, its button and the row cap beside them are one
+   line of controls, so all three take the row's height rather than three near-misses. */
+.path-field {
+    display: flex;
+    align-items: stretch;
+    gap: 6px;
+    flex: 1 1 320px;
+    min-width: 0;
+}
+.path-field input { flex: 1 1 auto; min-width: 0; }  /* shrink, don't overflow */
+/* Read-only display: set only via Browse…, so it reads as a field, not an input. */
+.path-field input[readonly] { background: var(--sunk-deep); cursor: default; }
+.browse-btn { padding: 6px 12px; white-space: nowrap; flex: 0 0 auto; }
+.browse-btn:disabled { opacity: 0.6; cursor: default; }  /* while uploading */
+
+/* ─── The row cap ─────────────────────────────────────────────────────────────
+   `first [ N ] rows` — ONLY the number is bordered. The words are the field's units
+   and sit OUTSIDE its frame: a word inside the frame reads as content the reader may
+   type over, which is a promise the field does not keep. The number is sized to a row
+   count, not stretched to the line; blank is the whole file, which `all` says. */
+.run-limit {
+    display: inline-flex;
+    align-items: stretch;
+    gap: 7px;
+    flex: 0 0 auto;
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--muted);
+    white-space: nowrap;
+}
+/* The words are flex items, so they centre their own text against a field whose
+   height comes from the row rather than from them. */
+.run-limit > span { display: flex; align-items: center; }
+/* Centred, not right-aligned: the field is empty most of the time, and `all` pushed
+   to the right edge left a hole after `first`. */
+.run-limit input {
+    width: 7ch;  /* a row count, not a stub: six digits fit without scrolling */
+    padding: 7px 9px;
+    background: var(--raised);
+    font-family: inherit;
+    font-size: 14px;
+    color: var(--fg);
+    text-align: center;
+}
+/* No spinners: a row count is typed once, not nudged up and down — and the arrows
+   ate the width the digits need. */
+.run-limit input { appearance: textfield; -moz-appearance: textfield; }
+.run-limit input::-webkit-outer-spin-button,
+.run-limit input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+/* ─── The shared field frame ──────────────────────────────────────────────────
+   Select, path field and row cap carry one border, one radius and one focus ring,
+   so the three read as the same kind of control — and the border is what marks a
+   thing as typeable, so it goes around the number and nothing else. */
+.run-controls select,
 .run-controls .path-field input,
-.run-controls select {
+.run-controls .run-limit input {
     border: 1px solid var(--border);
     border-radius: 4px;
 }
 .run-controls .path-field input { padding: 7px 9px; font-size: 14px; }
 .run-controls select:focus,
-.run-controls .path-field input:focus {
+.run-controls .path-field input:focus,
+.run-controls .run-limit input:focus {
     outline: none;
     border-color: var(--focus);
     box-shadow: 0 0 0 2px var(--focus-halo);
 }
-.run-controls > .btn.primary { align-self: flex-start; margin-top: 2px; }
+
+/* ─── Advanced ────────────────────────────────────────────────────────────────
+   Folded: reusing what has already been computed and already been approved is what
+   nearly every run wants, and the alternative spends LLM calls and a reviewer's time
+   on rows that have both. It is the one control that changes what the run RECOMPUTES
+   rather than what it reads, so it does not sit among the input fields. */
+.run-advanced { border-top: 1px solid var(--border); padding-top: 12px; }
+.run-advanced > summary {
+    cursor: pointer;
+    user-select: none;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+}
+.run-advanced > summary::-webkit-details-marker { display: none; }
+.run-advanced > summary::before { content: "▾"; font-size: 11px; }
+.run-advanced:not([open]) > summary::before { content: "▸"; }
+.run-bust-cache {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin-top: 10px;
+    max-width: 62ch;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--fg);
+}
+.run-bust-cache input { flex: 0 0 auto; margin-top: 3px; }

@@ -133,8 +133,6 @@
     border-color: var(--verdict-fail-bd);
 }
 
-.empty-state .new-methodology-btn { margin-top: 16px; }
-
 /* DAG */
 .dag {
     margin: 24px 0;

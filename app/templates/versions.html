@@ -50,8 +50,9 @@
 {% else %}
 <div class="empty-state">
   <h2>No versions yet</h2>
-  <p class="muted">Click <strong>Create version</strong> on the Workflow page to snapshot
-    the current workflow. A run targets an existing version, so create one before running.</p>
+  <p>A version is an immutable snapshot of the current workflow, and a run pins to one —
+    so there is nothing to run until you cut the first.</p>
+  <a href="/project/{{ state.name }}/workflow" class="btn primary">Create version</a>
 </div>
 {% endif %}
 {% endblock %}

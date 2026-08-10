@@ -74,13 +74,13 @@ def test_omitted_version_id_defaults_to_latest(project_two_versions):
     assert _manifest(project_two_versions)["workflow_version"] == latest
 
 
-def test_runs_page_renders_version_picker_latest_selected(project_two_versions):
-    """The run form carries a version_id <select> listing every version, with the
-    latest pre-selected — so a run defaults to latest but any version is one click
-    away, in the same form that collects the input paths."""
+def test_new_run_page_renders_version_picker_latest_selected(project_two_versions):
+    """Latest is pre-selected, so a run defaults to it and any version is one click away."""
     versions = list_versions(project_two_versions)  # newest-first
+    # The picker sits in the same form that collects the input paths, because a
+    # different version can author different input stages.
     latest, older = versions[0].version_id, versions[-1].version_id
-    resp = client.get("/project/demo/runs")
+    resp = client.get("/project/demo/runs/new")
     assert resp.status_code == 200
     assert 'name="version_id"' in resp.text
     assert latest in resp.text and older in resp.text
@@ -111,7 +111,7 @@ def test_run_picker_offers_only_published_versions(tmp_path, monkeypatch):
     publish_version(proj, published, reviewer="test")  # only the older one
     workspace.set_projects_dir(tmp_path)
 
-    resp = client.get("/project/demo/runs")
+    resp = client.get("/project/demo/runs/new")
     assert resp.status_code == 200
     assert published in resp.text          # the published version IS offered
     assert unpublished not in resp.text    # the unpublished one is NOT
@@ -126,10 +126,12 @@ def test_run_form_hidden_when_no_published_version(tmp_path, monkeypatch):
     save_working_copy_as_version(proj, message="unpublished", reviewer="test")  # never published
     workspace.set_projects_dir(tmp_path)
 
-    resp = client.get("/project/demo/runs")
+    resp = client.get("/project/demo/runs/new")
     assert resp.status_code == 200
     assert 'name="version_id"' not in resp.text   # no run form
-    assert "publish a version" in resp.text
+    # The zero state names what is missing and offers the one action that fixes it.
+    assert "No published version to run" in resp.text
+    assert 'href="/project/demo/workflow/versions" class="btn primary"' in resp.text
 
 
 @pytest.fixture

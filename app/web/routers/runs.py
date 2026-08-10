@@ -220,9 +220,8 @@ async def upload_input(
 
 @router.get("/project/{project}/runs", response_class=HTMLResponse)
 async def runs_index(request: Request, project: str):
-    """RUNS section of the project shell: the runs list, framed by the sidebar. Passes
-    the SAME project_state the other sections do (so the sidebar / next-action agree)
-    plus the manifest-backed run rows. 404 if the project dir doesn't exist."""
+    """RUNS section of the project shell: the runs list, framed by the sidebar. The
+    run-launch form is its own page (run_new). 404 if the project dir doesn't exist."""
     pdir = projects_dir() / project
     if not pdir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
@@ -236,10 +235,27 @@ async def runs_index(request: Request, project: str):
             "state": shell_state(pdir),
             "section": "runs",
             "runs": build_run_index_rows(project),
-            # Only PUBLISHED versions are runnable (resolve_version_id gates on it),
-            # so the run form's version picker offers only those — never an
-            # unpublished version the run would then reject.
-            "versions": [v for v in list_versions(pdir) if v.published],
+        },
+    )
+
+
+@router.get("/project/{project}/runs/new", response_class=HTMLResponse)
+async def run_new(request: Request, project: str):
+    """The run-launch form on its own page: pick a version, bind inputs, cap rows."""
+    pdir = projects_dir() / project
+    if not pdir.is_dir():
+        raise HTTPException(status_code=404, detail=f"No project '{project}'")
+    # Only PUBLISHED versions are runnable (resolve_version_id gates on it), so the
+    # picker offers only those — never one the run would then reject. Registered
+    # ahead of /runs/{run_id}, which would otherwise match "new" as a run id.
+    versions = [v for v in list_versions(pdir) if v.published]
+    return templates.TemplateResponse(
+        request,
+        "section_run_new.html",
+        {
+            "state": shell_state(pdir),
+            "section": "runs",
+            "versions": versions,
             "file_inputs": list_file_inputs(project),
         },
     )

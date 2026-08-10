@@ -1,0 +1,41 @@
+{% extends "project_shell.html" %}
+{#
+  NEW RUN — the run-launch form on its own page.
+
+  Configuring a run is a task with its own fields (which version, which file per
+  input, how many rows each reads, whether to ignore the cache); reading the run
+  history is a different task. They shared the Runs page, and the form sat above
+  the table it had nothing to do with. Here the form IS the page.
+
+  Reached from the Runs page's "▶ New run", the Workflow page's run affordance, and
+  the sidebar's next-action when a workflow has never been run.
+
+  Context the route passes:
+    state = shell_state(pdir); section = "runs"  (Runs stays the active nav item —
+            this is a sub-page of it, not a fifth thing in the tree)
+    versions    = the project's PUBLISHED versions, newest-first (may be empty)
+    file_inputs = loading.list_file_inputs(pdir) — [{stage_id, path}]
+#}
+{% block section %}
+<div class="sec-head wf-head">
+  <div class="wf-head-title">
+    <h1>Run the workflow</h1>
+    <p class="lede">Pick the <strong>version</strong> to pin the run to, bind a file to
+      each input, and cap how many rows it reads. The run reads that version's snapshot,
+      so it is reproducible against the exact workflow it executed.</p>
+  </div>
+  <div class="actions wf-actions">
+    <a href="/project/{{ state.name }}/runs" class="btn">All runs</a>
+  </div>
+</div>
+
+{% if state.workflow.present %}
+{% include "_run_controls.html" %}
+{% else %}
+<div class="empty-state">
+  <h2>No workflow to run</h2>
+  <p>A run executes a workflow, and this project does not have one yet.</p>
+  <a href="/project/{{ state.name }}/workflow" class="btn primary">Build the workflow</a>
+</div>
+{% endif %}
+{% endblock %}

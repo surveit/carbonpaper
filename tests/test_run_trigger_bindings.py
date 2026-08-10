@@ -110,11 +110,52 @@ def test_unbound_input_returns_400(project):
     assert not (project / "runs").exists()
 
 
-def test_runs_page_shows_one_field_per_file_input(project):
-    resp = client.get("/project/demo/runs")
+def test_new_run_page_shows_one_field_per_file_input(project):
+    resp = client.get("/project/demo/runs/new")
     assert resp.status_code == 200
     assert 'name="binding__load"' in resp.text
     assert str(project / "a.csv") in resp.text
+
+
+# ─── The run form is its own page, not a block on the run history ────────────
+# Configuring a run and reading the history are different tasks with different
+# fields; "new" also has to reach run_new rather than being read as a run id by
+# /runs/{run_id}, which is registered after it.
+
+def test_runs_index_carries_no_run_form(project):
+    resp = client.get("/project/demo/runs")
+    assert resp.status_code == 200
+    assert 'class="run-controls"' not in resp.text
+    assert 'name="binding__load"' not in resp.text
+    assert '/project/demo/runs/new' in resp.text  # the action that reaches it
+
+
+def test_runs_index_carries_no_awaiting_review_banner(project):
+    """The result column marks each halted run on the row the reader has to open."""
+    assert "banner-review" not in client.get("/project/demo/runs").text
+
+
+def test_the_zero_state_offers_a_button_not_a_link_in_a_sentence(project):
+    """A screen with nothing on it has exactly one thing to do; it gets a button."""
+    body = client.get("/project/demo/runs").text
+    zero = body.split('class="empty-state"')[1].split("</div>")[0]
+    assert "No runs yet" in zero
+    assert '<a href="/project/demo/runs/new" class="btn primary">Start new run</a>' in zero
+
+
+def test_new_is_the_run_form_not_a_run_id(project):
+    resp = client.get("/project/demo/runs/new")
+    assert resp.status_code == 200
+    assert 'action="/project/demo/run"' in resp.text
+
+
+def test_new_run_page_labels_the_row_cap_separately(project):
+    """The row cap gets its OWN label, so its words focus it and not the path field."""
+    resp = client.get("/project/demo/runs/new")
+    # It used to sit inside the row's label, where clicking "first"/"rows" focused
+    # the read-only path field — the label's first control.
+    assert 'class="run-limit"' in resp.text
+    assert 'for="binding__load"' in resp.text  # the name line labels the path field
 
 
 def _corrupt_version_document_with_relative_path(project):
