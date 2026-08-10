@@ -430,7 +430,7 @@ def _run_row_mapper(
         out_rows.append(result if reads is None else {**records[index], **result})
         kept_indices.append(index)
     mapped = _finish_mapped_frame(pd.DataFrame(out_rows), handler, map_row, stage, ctx)
-    out = _restore_input_columns_when_nothing_named_them(mapped, src)
+    out = _name_the_columns_of_an_empty_result(mapped, src, stage)
     if handler.drops_rows:
         # The driver, not the stage, knows which input ordinals survived.
         attach_row_lineage(out, kept_rows_lineage(stage.inputs[0].id, kept_indices))
@@ -617,8 +617,8 @@ def _run_batched(
     emit_batched_row_outcomes(
         ctx.run_log, stage.id, misses, [row.get(ROW_ERROR_KEY) for row in computed]
     )
-    return _restore_input_columns_when_nothing_named_them(
-        _finish_batched_frame(rows, handler, stage), src
+    return _name_the_columns_of_an_empty_result(
+        _finish_batched_frame(rows, handler, stage), src, stage
     )
 
 
@@ -682,26 +682,29 @@ def _finish_batched_frame(
     return _strip_and_project(df, _collect_internal_columns(df), handler, stage)
 
 
-def _restore_input_columns_when_nothing_named_them(
-    mapped: pd.DataFrame, src: pd.DataFrame
+def _name_the_columns_of_an_empty_result(
+    mapped: pd.DataFrame, src: pd.DataFrame, stage: Stage
 ) -> pd.DataFrame:
-    """The mapped frame, or — when it has neither rows nor columns — an empty
-    slice of the stage's input, carrying the mapped frame's `.attrs`.
-
-    A frame assembled from no results at all is 0 rows BY 0 COLUMNS: the input
-    was empty, so no mapper result named a single column. A downstream stage
-    keyed on an upstream column would then raise `KeyError` instead of producing
-    an empty result, and the input's own columns are the one honest shape
-    available. A frame that still carries a row or a column is returned
-    untouched.
-
-    The substituted frame takes the mapped one's `.attrs` verbatim, because the
-    stage's StageContribution rides there: an empty-input stage still reported
-    whatever it reported onto that contribution, and swapping the frame must not
-    swallow it."""
+    """A result that named no column at all, given the ones the stage promised."""
     if len(mapped.columns) > 0 or len(mapped) > 0:
         return mapped
+    # A frame assembled from no results is 0 rows BY 0 COLUMNS — no mapper ran,
+    # so nothing named a column. What downstream is entitled to read does not
+    # depend on whether a row survived: an `extends` stage promises its `adds`
+    # too, so handing back the input's columns alone emits a frame that violates
+    # this stage's OWN output schema (and an empty result is not an error). The
+    # input slice is the base, so every column that flows keeps its real dtype; a
+    # promised column the input does not supply arrives empty. A stage promising
+    # nothing (`publish`) keeps the input's shape — then the one honest thing
+    # available.
+    #
+    # `.attrs` is copied verbatim because the stage's StageContribution rides
+    # there: an empty-input stage still reported whatever it reported onto that
+    # contribution, and swapping the frame must not swallow it.
     empty = src.iloc[0:0].copy()
+    promised = stage.resolve_output_schema()
+    if promised is not None:
+        empty = empty.reindex(columns=[column.name for column in promised.columns])
     empty.attrs = dict(mapped.attrs)
     return empty
 
@@ -825,10 +828,9 @@ def _project_onto_declared_columns(
     if not declared:
         return df
     if not len(df.columns) and not len(df):
-        # Not a violation: with an empty input no mapper result named a single
-        # column, so no row failed to produce a declared one. The driver hands
-        # this frame the input's own columns
-        # (_restore_input_columns_when_nothing_named_them).
+        # Not a violation: no mapper result named a single column, so no row
+        # failed to produce a declared one. The driver gives this frame the
+        # promised columns (_name_the_columns_of_an_empty_result).
         return df
     missing = [name for name in declared if name not in df.columns]
     if missing and not contribution.row_errors:

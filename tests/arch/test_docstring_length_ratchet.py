@@ -343,7 +343,6 @@ _GRANDFATHERED: frozenset[str] = frozenset(
         "app/runtime/stages/execution.py::_order_by_input_position",
         "app/runtime/stages/execution.py::_project_onto_declared_columns",
         "app/runtime/stages/execution.py::_record_row_output",
-        "app/runtime/stages/execution.py::_restore_input_columns_when_nothing_named_them",
         "app/runtime/stages/execution.py::_run_batched",
         "app/runtime/stages/execution.py::_run_row_mapper",
         "app/runtime/stages/execution.py::_strip_and_project",
