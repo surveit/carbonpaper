@@ -7,17 +7,7 @@ from app.models.run_manifest import StageContribution
 
 
 class HaltForReview(Exception):
-    """Raised by the queue row mapper's post-map step
-    (app/runtime/stages/human_review_queue.py) when a queue stage's rows include
-    ones no human has decided yet. Carries `stage_id`, the stage that has pending
-    items; `pending_count`, how many; and `queue_path`, the snapshot file those
-    rows were written to. An internal control signal, not a user-facing error —
-    nothing failed.
-
-    Carries the stage's `contribution` (its queue stats) because the halt fires
-    before the handler returns a frame — so this exception is the return path
-    the executor merges into the manifest, exactly as it merges a returned
-    frame's `.attrs` on the non-halt path."""
+    """Control signal, not a failure — and the return path for `contribution`, no frame being returned."""
 
     def __init__(
         self,
@@ -36,12 +26,8 @@ class HaltForReview(Exception):
 
 
 class PreviewError(Exception):
-    """Raised when a scratch preview can't be run (bad type, missing upstream
-    output, missing handler). The route turns this into a 4xx with the message."""
+    pass
 
 
 class RunCancelled(Exception):
-    """Raised on the run thread when it consumes a cancel message for its
-    (project, run_id); caught by the runner to stop the run. An internal
-    control signal — sibling in spirit to HaltForReview
-    (app/runtime/errors.py) — never surfaced to a user as an error."""
+    pass

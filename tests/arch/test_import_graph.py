@@ -28,19 +28,12 @@ _FAN_OUT_CEILING = 21
 
 @dataclass(frozen=True)
 class ImportEdge:
-    """One direct, app-internal import: `importer` imports `imported`."""
-
     importer: str
     imported: str
 
 
 @dataclass(frozen=True)
 class ModuleDegree:
-    """One module's measured degree (fan-in or fan-out): how many edges touch
-    it, and which modules are on the other end of each — so a violation
-    message can show the actual coupling driving the count, not just a
-    number."""
-
     module: str
     degree: int
     neighbors: tuple[str, ...]
@@ -48,8 +41,6 @@ class ModuleDegree:
 
 @dataclass(frozen=True)
 class PackageCycle:
-    """One cyclic package group at one rollup depth, plus a cycle path through it."""
-
     depth: int
     members: tuple[str, ...]
     path: tuple[str, ...]
@@ -65,8 +56,6 @@ def app_internal_edges() -> list[ImportEdge]:
 
 
 def find_app_internal_edges(graph: "grimp.ImportGraph", package: str) -> list[ImportEdge]:
-    """Every direct import edge with both ends inside `package` (e.g. "app"),
-    as a plain dataclass decoupled from grimp's own dict-shaped `Import` type."""
     matches = graph.find_matching_direct_imports(f"{package}.** -> {package}.**")
     return [ImportEdge(importer=match["importer"], imported=match["imported"]) for match in matches]
 
@@ -100,19 +89,14 @@ def is_core_module(module: str) -> bool:
 
 
 def describe_core_package_prefixes() -> tuple[str, ...]:
-    """The prefixes `is_core_module` matches, so the CI report can name them without re-typing."""
     return _CORE_PACKAGE_PREFIXES
 
 
 def compute_fan_in(edges: list[ImportEdge]) -> dict[str, ModuleDegree]:
-    """Fan-in per module: how many distinct app modules import it directly,
-    and which ones."""
     return _compute_degree(edges, node_of=lambda edge: edge.imported, neighbor_of=lambda edge: edge.importer)
 
 
 def compute_fan_out(edges: list[ImportEdge]) -> dict[str, ModuleDegree]:
-    """Fan-out per module: how many distinct app modules it imports directly,
-    and which ones."""
     return _compute_degree(edges, node_of=lambda edge: edge.importer, neighbor_of=lambda edge: edge.imported)
 
 
@@ -131,8 +115,6 @@ def _compute_degree(
 
 
 def find_fan_out_violations(fan_out: dict[str, ModuleDegree], ceiling: int) -> list[str]:
-    """Modules whose fan-out exceeds `ceiling`, as offender lines naming the
-    module, its measured/ceiling degree, and what it imports."""
     return [
         _describe_fan_out_violation(degree, ceiling)
         for degree in fan_out.values()
@@ -141,11 +123,6 @@ def find_fan_out_violations(fan_out: dict[str, ModuleDegree], ceiling: int) -> l
 
 
 def find_import_cycles(edges: list[ImportEdge]) -> list[tuple[str, ...]]:
-    """One concrete cycle path per strongly connected component of size > 1
-    among `edges` (plus any direct self-loop) — every import cycle anywhere
-    under `app/`, not just between the layers a contract names. Each returned
-    tuple is module names in import order, with the starting module repeated
-    at the end to show the loop closes."""
     adjacency = _build_adjacency(edges)
     return [
         _trace_cycle_within(component, adjacency) for component in find_cyclic_components(edges)
@@ -153,7 +130,6 @@ def find_import_cycles(edges: list[ImportEdge]) -> list[tuple[str, ...]]:
 
 
 def find_cyclic_components(edges: list[ImportEdge]) -> list[frozenset[str]]:
-    """Full membership of every cyclic strongly connected component (size > 1, or a self-loop)."""
     adjacency = _build_adjacency(edges)
     return [
         component
@@ -180,7 +156,6 @@ def find_package_cycles_at_depth(edges: list[ImportEdge], depth: int) -> list[Pa
 
 
 def roll_up_edges_to_depth(edges: list[ImportEdge], depth: int) -> list[ImportEdge]:
-    """Edges between packages at `depth`, deduplicated; an edge inside one package collapses away."""
     rolled: set[ImportEdge] = set()
     for edge in edges:
         importer = roll_up_module_to_depth(edge.importer, depth)
@@ -191,12 +166,10 @@ def roll_up_edges_to_depth(edges: list[ImportEdge], depth: int) -> list[ImportEd
 
 
 def roll_up_module_to_depth(module: str, depth: int) -> str:
-    """`app.a.b.c` at depth 2 is `app.a.b`; a module shallower than `depth` is unchanged."""
     return ".".join(module.split(".")[: depth + 1])
 
 
 def find_deepest_package_depth(edges: list[ImportEdge]) -> int:
-    """Depth of the deepest module, counting `app` as 0 and `app.services.loader` as 2."""
     modules = {edge.importer for edge in edges} | {edge.imported for edge in edges}
     return max((module.count(".") for module in modules), default=0)
 
@@ -227,9 +200,6 @@ def _describe_ceiling_failure(kind: str, violations: list[str]) -> str:
 
 
 def _build_adjacency(edges: list[ImportEdge]) -> dict[str, frozenset[str]]:
-    """Directed adjacency (importer -> the modules it imports), deduplicated —
-    grimp reports one edge per import statement, but two statements between
-    the same pair of modules are one graph edge for cycle purposes."""
     neighbors_by_module: dict[str, set[str]] = {}
     for edge in edges:
         neighbors_by_module.setdefault(edge.importer, set()).add(edge.imported)
@@ -242,9 +212,7 @@ def _has_self_loop(component: frozenset[str], adjacency: dict[str, frozenset[str
 
 
 def _find_strongly_connected_components(adjacency: dict[str, frozenset[str]]) -> list[frozenset[str]]:
-    """Every strongly connected component of `adjacency` (Tarjan's algorithm),
-    including singletons — the caller filters for size > 1 or a self-loop to
-    find genuine cycles."""
+    """Includes singletons: the caller filters for size > 1 or a self-loop."""
     nodes = set(adjacency) | {neighbor for neighbors in adjacency.values() for neighbor in neighbors}
     finder = _TarjanState(adjacency)
     for node in sorted(nodes):
@@ -255,10 +223,6 @@ def _find_strongly_connected_components(adjacency: dict[str, frozenset[str]]) ->
 
 @dataclass
 class _TarjanState:
-    """Mutable working state for one run of Tarjan's SCC algorithm — shared
-    across the recursive `connect` calls rather than threaded through as
-    explicit parameters, since every field mutates on nearly every call."""
-
     adjacency: dict[str, frozenset[str]]
     index: dict[str, int] = field(default_factory=dict)
     lowlink: dict[str, int] = field(default_factory=dict)
@@ -268,9 +232,6 @@ class _TarjanState:
     _next_index: int = 0
 
     def connect(self, node: str) -> None:
-        # Recurses one frame per edge on the current DFS path, so depth is
-        # bounded by the longest simple import chain in app/ — nowhere near
-        # Python's default recursion limit for a 124-module graph.
         self.index[node] = self._next_index
         self.lowlink[node] = self._next_index
         self._next_index += 1
@@ -297,9 +258,7 @@ class _TarjanState:
 
 
 def _trace_cycle_within(component: frozenset[str], adjacency: dict[str, frozenset[str]]) -> tuple[str, ...]:
-    """A concrete cycle reachable inside `component` — already known to be a
-    single strongly connected component (or a self-loop), so a depth-first
-    walk that stops at the first repeated node always finds one."""
+    """Precondition: `component` is one strongly connected component, or a self-loop."""
     start = min(component)
     if start in adjacency.get(start, frozenset()):
         return (start, start)
@@ -316,10 +275,6 @@ def _walk_for_cycle(
     on_path: set[str],
     visited: set[str],
 ) -> list[str] | None:
-    """Depth-first search for a cycle reachable from `node`, restricted to
-    `component`. Returns the closed cycle path (the first repeated module
-    last) the moment a back-edge to an ancestor still on the current path is
-    found, or None if this subtree holds none."""
     path.append(node)
     on_path.add(node)
     visited.add(node)
@@ -355,7 +310,6 @@ def _describe_package_cycles_failure(cycles: list[PackageCycle]) -> str:
 
 
 def _describe_package_cycle(cycle: PackageCycle) -> str:
-    # The path closes one loop, so it understates a tangle of three or more.
     return (
         f"depth {cycle.depth}: {len(cycle.members)} packages tangled "
         f"{{{', '.join(cycle.members)}}} — e.g. {' -> '.join(cycle.path)}"
@@ -388,8 +342,6 @@ def test_find_import_cycles_passes_a_dag() -> None:
 
 
 def test_find_import_cycles_reports_one_path_per_disjoint_cycle() -> None:
-    # Two unrelated cycles, each its own strongly connected component — both
-    # must be reported, one path each, neither swallowing the other.
     edges = [
         ImportEdge("app.a", "app.b"),
         ImportEdge("app.b", "app.a"),
@@ -403,11 +355,6 @@ def test_find_import_cycles_reports_one_path_per_disjoint_cycle() -> None:
 
 
 def test_find_import_cycles_reports_a_self_loop_within_a_larger_scc() -> None:
-    # app.a self-imports AND forms a 2-cycle with app.b, so both belong to
-    # one strongly connected component. _trace_cycle_within's self-loop check
-    # on the component's starting node (app.a, alphabetically first) fires
-    # before the DFS walk runs — this exercises that early-return branch
-    # rather than the general walk exercised by the tests above.
     edges = [
         ImportEdge("app.a", "app.a"),
         ImportEdge("app.a", "app.b"),
@@ -457,7 +404,6 @@ def test_find_package_cycles_passes_a_graph_acyclic_at_every_depth() -> None:
 
 
 def test_find_package_cycles_flags_a_tangle_that_only_appears_below_the_first_level() -> None:
-    # At depth 1 both ends roll up to app.m, so the edges vanish as self-edges.
     edges = [ImportEdge("app.m.a.one", "app.m.b.one"), ImportEdge("app.m.b.two", "app.m.a.two")]
     assert find_package_cycles_at_depth(edges, 1) == []
     assert find_package_cycles_at_every_depth(edges) == [

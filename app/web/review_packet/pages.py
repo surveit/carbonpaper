@@ -63,7 +63,6 @@ def write_packet_pages(
     diagram: str,
     issues: RunIssues,
 ) -> list[str]:
-    """index.html, one page per stage, the stylesheets and the diagram source."""
     written = _write_stylesheets(root)
     written.append(_write_node_script(root))
     written.append(_write_diagram_source(root, diagram))
@@ -74,7 +73,6 @@ def write_packet_pages(
 
 
 def read_app_cascade_order() -> list[str]:
-    """The app's sheets, in the order _stylesheets.html links them — palette.css first."""
     partial = _APP_TEMPLATES / "_stylesheets.html"
     linked = _STATIC_HREF.findall(partial.read_text(encoding="utf-8"))
     if not linked or linked[0] != PALETTE_STYLESHEET:
@@ -115,7 +113,7 @@ def _write_index(
 
 
 def _write_diagram_source(root: Path, diagram: str) -> str:
-    """The flowchart as text, so the diagram outlives the CDN link rotting."""
+    """The flowchart as text, so it outlives the CDN link rotting."""
     return _write_text(root / WORKFLOW_DIAGRAM_FILE, diagram, WORKFLOW_DIAGRAM_FILE)
 
 
@@ -127,7 +125,6 @@ def _write_node_script(root: Path) -> str:
 
 
 def _write_stage_page(root: Path, run_dir: Path, view: RunView, stage: StageView) -> str:
-    """Wraps the app's real `_run_stage_panel.html`, the panel the author reviewed in."""
     relative = f"{STAGES_DIR}/{stage.stage_id}.html"
     html = _render(
         "packet_stage.html",
@@ -189,7 +186,6 @@ def _build_input_previews(
 
 
 def _render(template: str, **context: Any) -> str:
-    """Through the app's own Jinja environment, so filters and templates match."""
     return templates.env.get_template(template).render(**context)
 
 

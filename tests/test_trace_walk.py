@@ -11,8 +11,6 @@ from test_trace_helpers import write_run
 
 
 def _chain(tmp_path, second_type: str):
-    """A two-stage run: input_data 'seeds' -> `second_type` 'enrich', 3 rows,
-    positional. 'enrich' adds a 'score' column."""
     seeds = pd.DataFrame({"facility_id": ["a", "b", "c"], "name": ["A", "B", "C"]})
     enrich = seeds.assign(score=[10, 20, 30])
     return write_run(tmp_path, [
@@ -34,8 +32,6 @@ def test_row_preserving_chain_traces_to_origin(tmp_path):
 
 
 def test_llm_transform_traces_positionally(tmp_path):
-    # llm_transform is strictly 1:1 and order-preserving (PR #29), so the walk
-    # crosses it on ordinal alone, like python_row_function (closes #61).
     run_dir = _chain(tmp_path, "llm_transform")
     trace = trace_row(run_dir, "enrich", 1)
     assert [s.stage_id for s in trace.steps] == ["enrich", "seeds"]
@@ -47,9 +43,6 @@ def test_llm_transform_traces_positionally(tmp_path):
 
 
 def test_human_review_queue_traces_positionally(tmp_path):
-    # The queue handler is driven per row and emits every input row — a rejected
-    # row stays, carrying its rejection — so output row i is input row i and the
-    # walk crosses it on ordinal alone.
     run_dir = _chain(tmp_path, "human_review_queue")
     trace = trace_row(run_dir, "enrich", 1)
     assert [s.stage_id for s in trace.steps] == ["enrich", "seeds"]
@@ -67,10 +60,6 @@ def test_stop_at_reshaping_stage_points_at_issue_58(tmp_path):
 
 
 def test_rowcount_mismatch_on_preserving_stage_stops_defensively(tmp_path):
-    # The point-5 scenario: a row-preserving stage whose PERSISTED output has
-    # fewer rows than its input (a row errored out, say), so
-    # output row i no longer positionally equals input row i. The walk must
-    # refuse to guess — stop at this step, don't map to the wrong parent row.
     seeds = pd.DataFrame({"facility_id": ["a", "b", "c"]})          # N = 3
     enrich = pd.DataFrame({"facility_id": ["a", "b"], "score": [1, 2]})  # M = 2 < N
     run_dir = write_run(tmp_path, [
@@ -84,8 +73,6 @@ def test_rowcount_mismatch_on_preserving_stage_stops_defensively(tmp_path):
 
 
 def test_mismatch_deeper_in_chain_stops_at_the_right_step(tmp_path):
-    # A(3) -> B(2, dropped) -> C(2): C<-B is fine (2==2) but B<-A breaks (2!=3),
-    # proving the guard fires exactly at the step where counts diverge.
     a = pd.DataFrame({"k": ["a", "b", "c"]})                        # 3
     b = pd.DataFrame({"k": ["a", "b"], "x": [1, 2]})               # 2  (dropped one)
     c = pd.DataFrame({"k": ["a", "b"], "x": [1, 2], "y": [9, 8]})  # 2

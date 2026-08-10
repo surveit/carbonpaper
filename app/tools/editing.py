@@ -20,8 +20,6 @@ from app.services.drafts import DraftDetail, DraftEdit, DraftView, SaveResult
 
 
 class EditingContext(BaseModel):
-    """What one editing session binds its tools to: the project it edits, if one is bound."""
-
     project_id: str | None = None
 
 

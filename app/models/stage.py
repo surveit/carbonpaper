@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Annotated, Any, Optional, Union
 
 from pydantic import (
+    ConfigDict,
     Field,
     TypeAdapter,
     ValidationError,
@@ -45,6 +46,7 @@ from app.models.stages.signature import (  # noqa: F401  (re-exported: the stage
 from app.models.stages.starlark import StarlarkFunction, StarlarkRowFunctionStage
 from app.models.stages.union import UnionConfig, UnionStage
 from app.core.utils import format_errors
+from app.models.tool_schema_prompts import STAGE_DRAFT_DESCRIPTION
 
 
 # ── Stage ────────────────────────────────────────────────────────────────────
@@ -73,13 +75,10 @@ _STAGE_ADAPTER: TypeAdapter[Stage] = TypeAdapter(Stage)
 
 
 def parse_stage(spec: Any) -> Stage:
-    """One stage dict as the per-type model its `type` selects. Raises
-    ValidationError — this is where a stored stage's rules are enforced."""
     return _STAGE_ADAPTER.validate_python(spec)
 
 
 def validate_stage(spec: Any) -> list[str]:
-    """Non-fatal structural validation of one stage dict ([] means valid)."""
     try:
         parse_stage(spec)
         return []
@@ -95,7 +94,6 @@ STAGE_SPEC_SCHEMA_VERSION = 3
 
 
 def stage_to_spec_dict(stage: Stage) -> dict[str, Any]:
-    """Aliases restored (`schema`, not `table_schema`); None-valued keys dropped."""
     return stage.model_dump(mode="json", by_alias=True, exclude_none=True)
 
 
@@ -111,12 +109,9 @@ SERVER_OWNED_STAGE_FIELDS = ("tests", "eval", "review", "source")
 
 
 class StageDraft(StageCommon):
-    """One stage as an authoring client submits it: every config block optional
-    and no cross-field validator. A stage that breaks a rule must parse here and
-    be refused by `parse_stage` in the handler, where the refusal reaches the
-    client on the handler's own channel rather than as a parameter-binding
-    error. Shares `StageCommon` with the stored models, so the fields both carry
-    are declared once."""
+    """Add no cross-field validator: an invalid stage must parse here and be refused later."""
+    model_config = ConfigDict(json_schema_extra={"description": STAGE_DRAFT_DESCRIPTION})
+
     connector: Optional[Connector] = None
     llm: Optional[LLMConfig] = None
     function: Optional[PythonFunction] = None
@@ -138,9 +133,6 @@ class StageDraft(StageCommon):
     @model_validator(mode="before")
     @classmethod
     def _drop_server_owned_fields(cls, data: Any) -> Any:
-        """Accept and discard the fields only the server writes, so a client can
-        echo back a stage it read without tripping `extra="forbid"`. Cannot
-        raise."""
         if not isinstance(data, dict):
             return data
         present = [name for name in SERVER_OWNED_STAGE_FIELDS if name in data]
@@ -149,7 +141,4 @@ class StageDraft(StageCommon):
         return remaining
 
     def to_stage_spec(self) -> dict[str, Any]:
-        """This draft as a dict `parse_stage` accepts — by alias, so
-        `StageInput.table_schema` spells itself `schema:` the way a compiled stage
-        does."""
         return self.model_dump(exclude_unset=True, by_alias=True)

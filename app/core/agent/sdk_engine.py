@@ -37,12 +37,6 @@ MCP_SERVER_NAME = "tools"
 
 
 def _usage_from_result(msg: Any) -> LlmUsage:
-    """Token/cost usage for one completed CLI turn, read from its ResultMessage.
-
-    `msg.usage` is the provider usage block (a raw dict) and `msg.total_cost_usd`
-    is the CLI's cost estimate (present on subscription auth too). Both are read
-    defensively — a missing field becomes 0, never a fabricated number — and
-    `calls` counts this as one model call so callers can sum across attempts."""
     usage = getattr(msg, "usage", None) or {}
     cost = getattr(msg, "total_cost_usd", None)
     return LlmUsage(
@@ -56,11 +50,6 @@ def _usage_from_result(msg: Any) -> LlmUsage:
 
 
 def _stringify(content: Any) -> str:
-    """Flatten a tool-result payload to a string for the FE `tool_result` event.
-
-    The SDK may deliver tool-result content as a str or a list of content blocks
-    (dicts or str). We never fabricate — an empty/absent payload becomes "".
-    """
     if isinstance(content, str):
         return content
     if isinstance(content, (list, tuple)):
@@ -69,11 +58,6 @@ def _stringify(content: Any) -> str:
 
 
 class ClaudeAgentSdkEngine:
-    """Drives claude_agent_sdk.query() and maps its block stream onto the
-    normalized `stream_turn(prompt, *, message_history, emit, resume)` contract the
-    turn manager drives, so the subscription CLI can run its own tool loop over the
-    caller-supplied in-process MCP server."""
-
     def __init__(
         self,
         *,
@@ -109,10 +93,6 @@ class ClaudeAgentSdkEngine:
         self.last_usage: LlmUsage | None = None
 
     def _options(self, resume: str | None) -> ClaudeAgentOptions:
-        # max_turns caps assistant turns when the caller set one (a bounded headless
-        # run); left unset the agent works until done. `resume` continues a prior CLI
-        # session so the model sees the whole conversation (the first turn passes None
-        # and starts a fresh session).
         kw: dict[str, Any] = dict(
             model=self._model,
             system_prompt=self._system_prompt,
@@ -141,10 +121,6 @@ class ClaudeAgentSdkEngine:
         emit: Callable[[dict[str, Any]], None],
         resume: str | None = None,
     ) -> tuple[list[dict[str, Any]], str | None]:
-        # message_history is unused: cross-turn memory comes from resuming the CLI
-        # session (the `resume` id), not from replaying messages. The tools read
-        # durable on-disk state. Returns (transcript, session_id) — the session_id
-        # is persisted so the next turn resumes this conversation.
         del message_history
         assistant_parts: list[dict[str, Any]] = []
         session_id: str | None = None

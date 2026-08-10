@@ -30,13 +30,6 @@ def test_note_reaches_the_editing_agent_prompt():
 
 
 def test_hrq_note_names_the_decision_values_the_runtime_actually_emits():
-    # The note tells an author how to filter on the verdict column. That guidance is only
-    # correct while the quoted strings it names are exactly the ones a queue stage's
-    # verdict column can hold — including `skipped`, which the handler writes for a row
-    # the filter passed through unreviewed and which is what makes a downstream filter
-    # safe without reasoning about a missing value. Pinned in BOTH directions against the
-    # enum: a member added or renamed there and not taught here fails, and so does a
-    # verdict the note still names after the enum stopped emitting it.
     from app.models.stages.human_review_queue import ReviewVerdict
 
     quoted = set(re.findall(r'"([a-z_]+)"', NODE_TYPES["human_review_queue"].notes))
@@ -44,13 +37,7 @@ def test_hrq_note_names_the_decision_values_the_runtime_actually_emits():
 
 
 def test_hrq_note_names_every_queue_field_that_adds_a_column():
-    # The note's job is to tell an author which columns to declare on output_schema, and
-    # `_list_added_columns` is the code that decides that set — read here rather than
-    # inferred from a name pattern, so a column-adding field that breaks the `*_column`
-    # convention still counts. Pinned in BOTH directions: a field added there and not
-    # taught here leaves the note describing a smaller output than the runtime produces
-    # (the class of falsehood this note has already carried once), and a `queue.<field>`
-    # the note names after `QueueConfig` dropped it no longer resolves.
+    # Read off `find_added_columns`, so a column-adding field breaking the `*_column` name counts.
     from app.models.stages.human_review_queue import QueueConfig, find_added_columns
 
     queue = QueueConfig(
@@ -68,8 +55,6 @@ def test_hrq_note_names_every_queue_field_that_adds_a_column():
 
 
 def test_summary_budget_note_states_the_limit_the_write_path_refuses_on():
-    # the note tells an author to fit the behaviour in `summary` plus `corner_cases`;
-    # naming a number stage_edit does not refuse above would send them to a wrong budget
     from app.models.stages.code import SUMMARY_MAX_CHARS
 
     assert str(SUMMARY_MAX_CHARS) in CODE_SUMMARY_CONTRACT_NOTE

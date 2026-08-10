@@ -65,7 +65,6 @@ def test_a_workflow_with_a_warning_lists_it_instead(tmp_path):
 
 
 def test_a_workflow_that_does_not_load_claims_nothing(tmp_path):
-    """Zero typed stages produce zero warnings, which is not a clean bill of health."""
     # A relative connector path is rejected by input_data, so nothing types.
     page = _workflow_page(tmp_path, "broken", [_make_load_stage("data/things.csv")])
     assert _CLEAN_LINE not in page

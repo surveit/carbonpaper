@@ -87,9 +87,6 @@ def test_set_stage_rejects_non_object_json(examples: Path) -> None:
 
 
 def test_set_stage_rejects_malformed_stage_missing_field(examples: Path) -> None:
-    """A stage missing required fields (here: `name` and the `connector`
-    config block a type=input_data stage needs) is the agent's error — reject
-    it back to the agent, don't store it."""
     draft = drafts.create_draft("demo")
     malformed = {"id": "load", "type": "input_data", "signature": {"form": "replaces", "produces": _ROWS_SCHEMA["columns"]}}
     with pytest.raises(ValueError):
@@ -99,9 +96,6 @@ def test_set_stage_rejects_malformed_stage_missing_field(examples: Path) -> None
 
 
 def test_set_stage_rejects_unknown_connector_kind(examples: Path) -> None:
-    """`ConnectorKind` only enumerates "file" — an unrecognised kind (e.g. a
-    dropped `computed_static`) fails Stage validation and is rejected, not
-    stored with issues."""
     draft = drafts.create_draft("demo")
     malformed = dict(_STAGE, connector={"kind": "computed_static"})
     with pytest.raises(ValueError):
@@ -147,10 +141,7 @@ def test_save_version_freezes_valid_draft_and_chains_parent(examples: Path) -> N
     assert len(versioning.list_versions(pdir)) == 2
 
 
-def test_save_version_refuses_incomplete_workflow(examples: Path) -> None:
-    """A dangling input is a valid Stage (per-stage validation doesn't check
-    cross-stage input resolution) so it stores fine, but save_version still
-    refuses to freeze a workflow-level problem into a version."""
+def test_save_version_refuses_a_dangling_input_that_per_stage_validation_accepts(examples: Path) -> None:
     pdir = examples / "demo"
     draft = drafts.create_draft("demo")
     drafts.set_draft_stage("demo", draft.id, json.dumps(_DANGLING_INPUT_STAGE))

@@ -11,8 +11,6 @@ client = TestClient(app)
 
 
 def test_chat_index_excludes_hidden_sessions() -> None:
-    """GET /chat index lists normal sessions but excludes those with hidden=True."""
-    # Create one normal session and one hidden session.
     normal_sid = _store.create(title="Normal Session", agent_id=None, context={})
     hidden_sid = _store.create(title="Hidden Session", agent_id=None, context={"hidden": True})
 
@@ -31,7 +29,6 @@ def test_chat_index_excludes_hidden_sessions() -> None:
 
 
 def test_direct_access_to_hidden_session_works() -> None:
-    """GET /chat/{hidden_sid} should still serve hidden sessions."""
     hidden_sid = _store.create(title="Hidden Session", agent_id=None, context={"hidden": True})
 
     response = client.get(f"/chat/{hidden_sid}")

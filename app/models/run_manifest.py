@@ -23,9 +23,6 @@ from app.models.stages.stage_base import StageType
 
 
 class QueueStats(TypedDict):
-    """One human_review_queue stage's tallies, recorded on the manifest under
-    `human_review_queue_stats[stage_id]`."""
-
     items_queued_total: int
     items_passed_through: int
     items_pending: int
@@ -33,7 +30,7 @@ class QueueStats(TypedDict):
 
 
 class RowError(TypedDict):
-    """One row's generation failure: its 0-based position and the message."""
+    """`row` is a 0-based position in the frame."""
 
     row: int
     message: str
@@ -52,15 +49,6 @@ _LEGACY_PARAMETER_KEYS = {
 
 
 class StageContribution(BaseModel):
-    """What one stage's handler contributes back to the run manifest: token
-    usage (folded onto the stage's `StageRecord.llm_usage`), per-row generation
-    errors (returned for the executor to fold into the stage's validation report
-    and terminal status), dropped-column notes and human-review-queue tallies
-    (folded onto the manifest's per-stage `dropped_columns`/
-    `human_review_queue_stats` maps), and free-text run notes (appended to the
-    stage record's `notes`). Empty for a stage that contributes none.
-    Not stage data — the manifest fields a handler owns."""
-
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     llm_usage: LlmUsage | None = None
@@ -84,45 +72,23 @@ SCHEMA_REFUSAL_ERROR_TYPE = "OutputSchemaViolation"
 
 
 class StageErrorInfo(BaseModel):
-    """A stage's `error` field once it has failed: the exception's type name, a
-    human-readable message, and its traceback — `None` for a row-generation
-    error, which has no single exception to format."""
-
     type: str
     message: str
     traceback: str | None
 
 
 class StageRecord(BaseModel):
-    """One stage's manifest record, written into `manifest["stage_records"]` and
-    read back by the web layer.
-
-    Field order is the on-disk field order of a stage that RAN;
-    `output_path`, `queue_path`, `notes`, and `llm_usage` are set only at the
-    lifecycle points that produce them (`_finalize_stage_output` adds
-    `output_path`/`llm_usage`, `_record_halt` adds `queue_path`, row slicing and
-    the CSV fallback add `notes`) and are omitted from the JSON until then.
-    `finished_at` is set to `None` up front for a pending record and to a
-    timestamp once a running stage settles; it is omitted from a mid-run flush of
-    a stage that has started but not yet settled.
-
-    `input_validation_report`/`output_validation_report` each hold the dict form
-    of a `ValidationReport` (app.runtime.validation) — errors AND warnings, not
-    errors alone — whose own fields are untyped in that module. The input side is
-    a list: one report per upstream input that declares a schema.
-
-    The three fields the run's own bookkeeping always writes
-    (`input_validation_report`, `output_validation_report`, `output_row_count`)
-    carry no default: they were renamed out of an older on-disk vocabulary, and a
-    default would let a pre-rename `manifest.json` parse and then report a
-    fabricated zero/empty value. Required, such a file fails loudly at parse."""
-
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     stage_id: str
     type: StageType
     started_at: str | None = None
     status: StageStatus
+    # No default here or on `output_row_count`: these were renamed out of an older on-disk
+    # vocabulary, and a default would let a pre-rename manifest.json parse and then report a
+    # fabricated zero/empty value. Required, such a file fails loudly at parse.
+    # One `ValidationReport` dict (app.runtime.validation) per side; the input side is one
+    # per upstream input that declares a schema.
     input_validation_report: list[dict[str, object]]
     output_validation_report: dict[str, object] | None
     elapsed_ms: int = 0
@@ -139,12 +105,6 @@ class StageRecord(BaseModel):
 
     @classmethod
     def record_with_status(cls, stage: Stage, status: StageStatus) -> StageRecord:
-        """A fresh record for `stage` in `status`: no output, no validation, no
-        elapsed time yet. A RUNNING record is stamped with `started_at` (the
-        stage is starting now); any other status — PENDING, for a stage the run
-        has not reached or has marked blocked — leaves `started_at` None, and
-        also pins `finished_at` to None so the never-started record carries the
-        key explicitly."""
         running = status is StageStatus.RUNNING
         record = cls(
             stage_id=stage.id, type=stage.type,
@@ -158,27 +118,12 @@ class StageRecord(BaseModel):
         return record
 
     def add_note(self, note: str) -> None:
-        """Append a run note (a row-slicing trim, a CSV fallback), materializing
-        the `notes` list on first use so a stage that produced none omits the
-        field entirely."""
         if self.notes is None:
             self.notes = []
         self.notes.append(note)
 
 
 class RunManifest(BaseModel):
-    """The run's living record. Minted by `create_run_manifest` (all stages
-    pending, status running), mutated per stage by the executor, and flushed to
-    disk by `write_manifest`. The optional run-level fields (`updated_at` on a
-    mid-run flush, `finished_at`/`halted_at`/`cancelled_at` at finalization,
-    `resumed_at` on a resume) are set only when they apply and omitted from the
-    JSON otherwise.
-
-    This is a run-directory file artifact, not a document-store model: it lives
-    as `manifest.json` inside the run dir alongside that run's `outputs/` and
-    `artifacts/`, and is read back by path (`read_run_manifest`). It is not a
-    `PersistedModel` and has no row in the document store."""
-
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     run_id: str
@@ -210,7 +155,6 @@ class RunManifest(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _lift_legacy_parameters(cls, data: Any) -> Any:
-        """Lifted, never defaulted: a real run's recorded settings are not ours to invent."""
         if not isinstance(data, dict) or "parameters" in data:
             return data
         legacy = {
@@ -223,57 +167,35 @@ class RunManifest(BaseModel):
     @field_validator("halted_at", mode="before")
     @classmethod
     def _halted_at_to_list(cls, value: object) -> object:
-        """Normalize a legacy scalar `halted_at` (a bare stage-id string a
-        pre-fork-aware run persisted) into a one-element list, so every consumer
-        sees one shape."""
         if isinstance(value, str):
             return [value]
         return value
 
     def settle_stage_records(self, records: list[StageRecord]) -> None:
-        """Replace the manifest's per-stage records with `records` — the executor
-        hands back the final set in topological order once the run loop stops,
-        overwriting the pending records minted at the start."""
         self.stage_records = records
 
     def record_dropped_columns(self, stage_id: str, columns: list[str]) -> None:
-        """Record `stage_id`'s dropped output columns under `dropped_columns`,
-        keeping the field marked set so serialization emits it even on a resumed
-        legacy manifest that reached this run without the key."""
         self.dropped_columns[stage_id] = columns
+        # Marked set so `exclude_unset` still emits it on a legacy manifest that lacked the key.
         self.__pydantic_fields_set__.add("dropped_columns")
 
     def record_human_review_queue_stats(self, stage_id: str, stats: QueueStats) -> None:
-        """Record `stage_id`'s human-review-queue tallies under
-        `human_review_queue_stats`."""
         self.human_review_queue_stats[stage_id] = stats
 
     def clear_halt(self) -> None:
-        """Drop the halt marker: this run is no longer awaiting review. Clears
-        `halted_at` from the model's set-fields (and resets it to None), so
-        `exclude_unset` writes no such key — a resume that is re-running the
-        halted stage, or a cancel that supersedes an earlier halt, must not leave
-        the run page showing a review banner for a halt that no longer holds."""
         self.halted_at = None
+        # Unmarked so `exclude_unset` writes no key: a resumed or cancelled run must not
+        # show a review banner for a halt that no longer holds.
         self.__pydantic_fields_set__.discard("halted_at")
 
     def find_stage_record(self, stage_id: str) -> StageRecord | None:
-        """This run's record for `stage_id`, or None if the run has no such
-        stage."""
         return next((r for r in self.stage_records if r.stage_id == stage_id), None)
 
     def to_dict(self) -> dict[str, Any]:
-        """This manifest as a plain dict, with unset optional fields omitted — the
-        boundary shape the web and service readers consume, and the shape
-        `write_manifest` serializes. Uses Python mode, so a status stays the
-        `RunStatus`/`StageStatus` enum member the in-memory run carried (each is a
-        `str` enum, so `json.dumps` still writes it as its bare string value on
-        disk); nested models (a stage's `llm_usage`) become plain dicts."""
         return self.model_dump(exclude_unset=True)
 
 
 def records_a_test_run(raw: dict[str, Any]) -> bool:
-    """Both on-disk shapes, for a caller that must not pay to parse the whole model."""
     nested = raw.get("parameters")
     if isinstance(nested, dict) and "is_test_run" in nested:
         return bool(nested["is_test_run"])
@@ -281,7 +203,6 @@ def records_a_test_run(raw: dict[str, Any]) -> bool:
 
 
 def read_run_bindings(raw: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    """Both on-disk shapes, for a caller that must not pay to parse the whole model."""
     nested = raw.get("parameters")
     if isinstance(nested, dict) and "run_bindings" in nested:
         return dict(nested["run_bindings"] or {})
@@ -299,7 +220,6 @@ _MANIFEST_FILENAME = "manifest.json"
 
 
 def find_manifest_backed_run_dirs(runs_dir: Path) -> list[Path]:
-    """Name-sorted, so a caller wanting newest-first reverses; [] when there is no such dir."""
     if not runs_dir.is_dir():
         return []
     return sorted(
@@ -310,7 +230,6 @@ def find_manifest_backed_run_dirs(runs_dir: Path) -> list[Path]:
 
 
 def read_run_manifest_json(run_dir: Path) -> dict[str, Any]:
-    """Raises FileNotFoundError when the run has no manifest, RunManifestNotJson when it isn't JSON."""
     path = run_dir / _MANIFEST_FILENAME
     if not path.exists():
         raise FileNotFoundError(f"No manifest at {path}")
@@ -324,5 +243,4 @@ def read_run_manifest_json(run_dir: Path) -> dict[str, Any]:
 
 
 def read_run_manifest(run_dir: Path) -> RunManifest:
-    """Raises as `read_run_manifest_json` does, plus ValidationError on a shape this model rejects."""
     return RunManifest.model_validate(read_run_manifest_json(run_dir))

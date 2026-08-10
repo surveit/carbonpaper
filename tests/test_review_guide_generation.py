@@ -95,8 +95,6 @@ def _save_guide(project_dir: Path, version_id: str, stage_ids: list[str]) -> Non
 
 
 class _FakeAuthor:
-    """Faked guide-authoring Agent; `answer=None` is a turn that submits nothing."""
-
     task = "make a guide for this version"
 
     def __init__(self, answer: ReviewGuideDraft | None) -> None:
@@ -144,8 +142,6 @@ def _poll_until_inactive(client: TestClient, sid: str, *, timeout: float = 5.0) 
 def test_the_author_is_given_the_versions_stages_not_the_working_copy(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
-    """The discriminating test: the working copy gains a stage AFTER the version is
-    cut."""
     project_dir = _seed_project(tmp_path)
     version = project_service.save_working_copy_as_version(
         project_dir, message="v1", reviewer="local"
@@ -201,7 +197,7 @@ def test_render_guide_task_carries_the_request_the_document_and_the_stages(
 
 
 def _published_stages() -> list:
-    """load -> double -> publish, plus `audit` off `load` reaching no publish stage."""
+    """`audit` hangs off `load` and is the one stage reaching no publish stage."""
     audit = {**_TRIPLE, "id": "audit", "description": "Audit"}
     publish = {
         "id": "pub", "description": "Publish", "type": "publish",
@@ -231,7 +227,6 @@ def test_each_stage_carries_the_requires_narration_flag() -> None:
 
 
 def test_the_flag_comes_from_the_walk_the_validator_refuses_on() -> None:
-    """One function, so the flag can never say false where the validator would refuse."""
     stages = _published_stages()
     task = compiler_review_guide.render_guide_task(
         stages, "20260101T000000", "Double the amount."
@@ -244,8 +239,6 @@ def test_the_flag_comes_from_the_walk_the_validator_refuses_on() -> None:
 
 
 def test_the_author_holds_no_tool_but_submit_answer(tmp_path: Path) -> None:
-    """Structural, not prompt discipline: one tool and no built-ins, so no path exists at
-    all."""
     project_dir = _seed_project(tmp_path)
     version = project_service.save_working_copy_as_version(
         project_dir, message="v1", reviewer="local"
@@ -349,7 +342,6 @@ def test_finish_with_no_guide_raises_and_writes_nothing(tmp_path: Path) -> None:
 
 
 def test_finish_refuses_a_guide_that_misses_a_stage(tmp_path: Path) -> None:
-    """A guide accounting for only some stages leaves the version with none at all."""
     project_dir = _seed_project(tmp_path)
     version = project_service.save_working_copy_as_version(
         project_dir, message="v1", reviewer="local"

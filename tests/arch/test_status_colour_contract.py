@@ -34,7 +34,6 @@ _ONE_SCHEMA_PER_KIND = [
 
 
 def read_declared_colours() -> dict[str, str]:
-    """Every custom property in palette.css resolved to a hex, keyed without the dashes."""
     declared = {
         name: value.lower()
         for name, value in _DECLARATION.findall(read_palette_rules())
@@ -53,7 +52,6 @@ def read_palette_rules() -> str:
 
 
 def resolve_indirection(name: str, declared: dict[str, str]) -> str:
-    """Follow a `--a: var(--b)` alias chain to the hex at the end of it."""
     seen: list[str] = []
     while (target := _INDIRECTION.fullmatch(declared[name])) is not None:
         seen.append(name)
@@ -64,7 +62,6 @@ def resolve_indirection(name: str, declared: dict[str, str]) -> str:
 
 
 def find_ink_and_tint(declared: dict[str, str], prefix: str) -> dict[str, tuple[str, str | None]]:
-    """Name → (its ink, the tint that ink prints on, or None when undeclared)."""
     return {
         name[len(prefix):-len(_INK_SUFFIX)]: (
             value, declared.get(name[: -len(_INK_SUFFIX)] + _TINT_SUFFIX)
@@ -75,7 +72,6 @@ def find_ink_and_tint(declared: dict[str, str], prefix: str) -> dict[str, tuple[
 
 
 def find_state_accent_colours() -> dict[str, str]:
-    """The `--state-*` accents: every state property that is neither a tint nor an ink."""
     return {
         name: value
         for name, value in read_declared_colours().items()
@@ -85,7 +81,7 @@ def find_state_accent_colours() -> dict[str, str]:
 
 
 def measure_contrast_ratio(foreground: str, background: str) -> float:
-    """WCAG 2.1 relative-luminance contrast of two `#rgb`/`#rrggbb` colours, 1.0–21.0."""
+    """Contrast of two `#rgb`/`#rrggbb` colours, on WCAG 2.1's 1.0–21.0 scale."""
     lighter, darker = sorted(
         (read_relative_luminance(foreground), read_relative_luminance(background)),
         reverse=True,
@@ -146,7 +142,6 @@ def test_every_state_ink_has_a_tint_to_be_read_on() -> None:
 
 
 def test_every_hue_ink_is_readable_on_its_tint() -> None:
-    """Not just the five run states: all nine hues, whatever axis spends them."""
     pairs = find_ink_and_tint(read_declared_colours(), "")
     assert pairs, "palette.css declares no --*-ink properties"
     illegible = {
@@ -162,7 +157,6 @@ def test_every_hue_ink_is_readable_on_its_tint() -> None:
 
 
 def test_no_schema_kind_classdef_carries_a_colour() -> None:
-    """A kind is not a state, so its node takes the sheet; the glyph names it."""
     emitted = dict(_CLASSDEF.findall(build_schema_table_graph(_ONE_SCHEMA_PER_KIND)))
     assert emitted, "build_schema_table_graph emitted no classDefs — this rule is vacuous"
     coloured = {k: v for k, v in emitted.items() if v != _NODE_SURFACE}

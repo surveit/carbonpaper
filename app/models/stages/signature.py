@@ -7,9 +7,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Annotated, Literal, Union
 
-from pydantic import Field, model_validator
+from pydantic import ConfigDict, Field, model_validator
 
 from app.models.schema import Column, StageId, TableSchema, _Base
+from app.models.tool_schema_prompts import (
+    EXTENDS_SIGNATURE_DESCRIPTION,
+    INPUT_READS_DESCRIPTION,
+    REPLACES_SIGNATURE_DESCRIPTION,
+)
 
 if TYPE_CHECKING:
     # Only under TYPE_CHECKING, mirroring app.models.stages.shared:
@@ -18,7 +23,7 @@ if TYPE_CHECKING:
 
 
 class InputReads(_Base):
-    """The columns a stage's transform consumes from ONE of its inputs."""
+    model_config = ConfigDict(json_schema_extra={"description": INPUT_READS_DESCRIPTION})
 
     input: StageId = Field(
         description="The upstream stage id, as declared in this stage's `inputs`."
@@ -39,7 +44,7 @@ class InputReads(_Base):
 
 
 class ExtendsSignature(_Base):
-    """An anchored stage's contract: the first input's rows, rewritten and extended."""
+    model_config = ConfigDict(json_schema_extra={"description": EXTENDS_SIGNATURE_DESCRIPTION})
 
     form: Literal["extends"] = "extends"
     reads: list[InputReads] = Field(
@@ -72,8 +77,7 @@ class ExtendsSignature(_Base):
 
 
 class ReplacesSignature(_Base):
-    """The contract of a reshaping stage: nothing flows through, the output is
-    exactly `produces`."""
+    model_config = ConfigDict(json_schema_extra={"description": REPLACES_SIGNATURE_DESCRIPTION})
 
     form: Literal["replaces"] = "replaces"
     reads: list[InputReads] = Field(
@@ -112,7 +116,6 @@ SIGNATURE_ISSUE = "stage '{sid}': signature {problem}"
 
 
 def find_signature_issues(stage: "StageBase") -> list[str]:
-    """Signature-vs-stage disagreements; edge-only, per stage, [] without a signature."""
     signature = stage.signature
     if signature is None:
         return []
@@ -123,8 +126,7 @@ def find_signature_issues(stage: "StageBase") -> list[str]:
 
 
 def _find_read_issues(stage: "StageBase", reads: list[InputReads]) -> list[str]:
-    """Reads must name declared inputs, once each, and be satisfied by their edges."""
-    edges = {ref.id: ref.table_schema for ref in stage.inputs}
+    edges ={ref.id: ref.table_schema for ref in stage.inputs}
     issues: list[str] = []
     seen: set[str] = set()
     for entry in reads:
@@ -178,7 +180,6 @@ def _find_extends_issues(stage: "StageBase", signature: ExtendsSignature) -> lis
 
 
 def promised_output_schema(stage: "StageBase") -> "TableSchema | None":
-    """The output the signature promises; None without one (or empty produces)."""
     signature = stage.signature
     if signature is None:
         return None

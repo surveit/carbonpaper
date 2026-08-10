@@ -16,8 +16,6 @@ from app.models.run_manifest import (
 
 
 class ProjectStatus(enum.StrEnum):
-    """A project's headline state, read off its most recent non-test run."""
-
     IN_PROGRESS = "in_progress"
     AWAITING_REVIEW = "awaiting_review"
     COMPLETED = "completed"
@@ -49,8 +47,6 @@ _RUN_STATUS_HEADLINES = {
 
 @dataclass(frozen=True)
 class ProjectCard:
-    """One card on the home page."""
-
     name: str
     has_document: bool
     has_workflow: bool
@@ -71,8 +67,6 @@ class ProjectCard:
 
 @dataclass(frozen=True)
 class RunTally:
-    """A project's runs counted apart, plus the state of its newest real one."""
-
     real: int
     tests: int
     # IN_PROGRESS for a project that has yet to produce a real run: it is still
@@ -81,7 +75,6 @@ class RunTally:
 
 
 def tally_runs(runs_dir: Path) -> RunTally:
-    """Reads every manifest under `runs_dir` once, newest first."""
     real = tests = 0
     headline: ProjectStatus | None = None
     for run_dir in reversed(find_manifest_backed_run_dirs(runs_dir)):

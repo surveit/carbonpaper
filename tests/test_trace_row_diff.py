@@ -47,7 +47,6 @@ def test_an_origin_rows_fields_are_all_new():
 
 
 def test_an_untraced_upstream_claims_nothing_about_what_the_step_added():
-    """The walk stopped short, so which fields are new is simply unknown."""
     diff = build_row_diff({"a": 1, "b": 2}, None, is_origin=False)
     assert set(_states(diff).values()) == {CellDiffState.carried}
     assert (diff.added, diff.changed, diff.dropped) == (0, 0, 0)

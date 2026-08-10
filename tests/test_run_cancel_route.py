@@ -75,8 +75,6 @@ def _write_one_stage_project(examples_dir: Path) -> None:
 
 
 def _write_status_manifest(examples_dir: Path, stage_statuses: list[tuple[str, str]]) -> Path:
-    """Write a manifest whose stages carry the given (stage_id, status) pairs,
-    for exercising run_status's per-status counts."""
     run_dir = examples_dir / PROJ / "runs" / RUN
     run_dir.mkdir(parents=True, exist_ok=True)
     stages: list[dict[str, object]] = [
@@ -94,10 +92,6 @@ def _write_status_manifest(examples_dir: Path, stage_statuses: list[tuple[str, s
 
 
 def test_run_status_counts_include_a_cancelled_stage(examples_dir, client):
-    """A stage cancelled mid-fan-out (runner's `except RunCancelled` branch,
-    app/runtime/runner.py) must be counted, not silently dropped from every
-    bucket — the run page's stage strip counts the same seven statuses this
-    `counts` map does."""
     _write_one_stage_project(examples_dir)
     _write_status_manifest(examples_dir, [
         ("load", "ok"),
@@ -115,10 +109,6 @@ def test_run_status_counts_include_a_cancelled_stage(examples_dir, client):
 
 
 def test_run_detail_page_offers_resume_for_a_cancelled_run(examples_dir, client):
-    """POST /resume works on a cancelled run (it re-runs every not-complete
-    stage and reuses completed outputs), so the run page must offer it —
-    the resume bar is gated on errored stages OR a cancelled run, and a
-    cancelled run has no errored stages."""
     _write_one_stage_project(examples_dir)
     _write_status_manifest(examples_dir, [
         ("load", "ok"),

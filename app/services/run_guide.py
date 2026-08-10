@@ -38,8 +38,6 @@ class GuideStageView:
 
 @dataclass(frozen=True)
 class GuideStepView:
-    """A Workflow section, as the rail names it: the authored step and what it left."""
-
     title: str
     prose: str
     # The authored sentence saying what the data leaving this section IS, or None where
@@ -62,7 +60,6 @@ class RunGuideView:
 
 
 def build_run_guide_view(project: str, manifest: dict[str, Any]) -> RunGuideView | None:
-    """None when the pinned version cannot be read or carries no guide — no panel then."""
     try:
         version = load_run_version(project, manifest)
     except RunVersionUnresolvableError:
@@ -81,7 +78,7 @@ def build_run_guide_view(project: str, manifest: dict[str, Any]) -> RunGuideView
 
 
 def list_written_columns(stage: Stage) -> list[str]:
-    """Columns the output adds to the stage's first input — the subject side of a join."""
+    """The columns the output adds to `inputs[0]` — the subject side of a join."""
     output_schema = stage.resolve_output_schema()
     if output_schema is None:
         return []
@@ -92,16 +89,13 @@ def list_written_columns(stage: Stage) -> list[str]:
 
 
 def _index_stages_in_execution_order(stages: list[Stage]) -> dict[str, Stage]:
-    # Insertion order carries the dependency order, so a step's stages can be put in
-    # the order the run reached them by walking this mapping rather than the guide.
+    """The returned mapping's insertion order is load-bearing: it IS the execution order."""
     by_id = {stage.id: stage for stage in stages}
     return {draft.id: by_id[draft.id] for draft in sort_stages_by_dependency(stages)}
 
 
 @dataclass(frozen=True)
 class _RunMeasurements:
-    """What THIS run measured, by stage id — an id absent from `row_counts` has none."""
-
     executed: set[str]
     row_counts: dict[str, int]
     column_counts: dict[str, int]
@@ -139,7 +133,6 @@ def _view_step(
 def _find_step_outputs(
     stages: list[GuideStageView], by_id: dict[str, Stage]
 ) -> list[GuideStageView]:
-    """The step's terminals: the stages no OTHER stage of the same step feeds."""
     feeding = {
         upstream_id
         for view in stages

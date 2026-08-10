@@ -22,8 +22,6 @@ def _desc(model: type[BaseModel], field: str) -> str:
 
 
 def test_connector_params_documents_optional_absolute_path_and_bans_invention():
-    # validator: path optional; absolute when present (stage.py). The description is
-    # the only channel that reaches the compiling agent (submit_answer tool schema).
     d = _desc(Connector, "params")
     assert "absolute" in d
     assert "omit" in d
@@ -32,9 +30,6 @@ def test_connector_params_documents_optional_absolute_path_and_bans_invention():
 
 
 def test_llm_transform_notes_document_the_additive_rule():
-    # validator: `llm_transform not strictly 1:1 ... additive` (stage.py) — #2.
-    # Type-specific, so it rides in that type's catalogue notes rather than on a
-    # field shared by every type.
     notes = NODE_TYPES["llm_transform"].notes.lower()
     assert "additive" in notes
 

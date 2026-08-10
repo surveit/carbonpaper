@@ -16,8 +16,6 @@ def test_create_project_rejects_a_name_with_an_existing_record(tmp_path):
 
 
 def test_bare_directory_does_not_block_creation(projects_root):
-    """A directory that merely exists (e.g. input files a user staged there by
-    hand) is not a name clash — create_project writes the project into it."""
     project_dir = projects_root / "staged"
     project_dir.mkdir()
     (project_dir / "input.csv").write_text("a,b\n1,2\n", encoding="utf-8")

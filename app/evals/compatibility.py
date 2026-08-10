@@ -25,23 +25,7 @@ class CompatibilityReport:
 
 def validate_eval_compatibility(config: EvalConfig,
                              stages: Sequence[Stage]) -> CompatibilityReport:
-    """Does `config` still fit `stages` as they are NOW? Binds by stage id
-    and by declared output schema; the answer is computed fresh from the
-    stages every time, never stored, so it can't drift from what they
-    actually declare.
-
-    Two phases. First, the preconditions the coverage checks and
-    `_resolve_grain_settings` need to be answerable at all: every referenced
-    stage exists, the target is reachable, the target emits every checked
-    column, the override declares an output schema, no reference override
-    targets the target stage itself, and the workflow is structurally
-    valid. Any failure here short-circuits with `settings=None` -- in
-    particular, `_validate_eval_dataset_covers_override` calls into
-    `app.evals.dataset_columns`, which raises rather than silently
-    degrading on a missing output schema or an unresolvable checked column,
-    so those preconditions must hold before it's reached. Second, once
-    preconditions hold, the coverage checks and grain resolution run and
-    are reported together."""
+    """The precondition phases MUST short-circuit: the coverage checks raise, not degrade."""
     by_id = {s.id: s for s in stages}
 
     missing = _validate_stages_exist(config, by_id)
@@ -69,9 +53,6 @@ def validate_eval_compatibility(config: EvalConfig,
 
 # ── Condition 1: every referenced stage exists ────────────────────────────────
 def _validate_stages_exist(config: EvalConfig, by_id: dict[str, Stage]) -> list[str]:
-    """Every stage id the config references (override, target, each reference
-    override) must exist — checked first since nothing else here is
-    answerable against a stage that isn't there."""
     referenced = [config.override_stage, config.target_stage,
                  *(ov.stage_id for ov in config.reference_overrides)]
     return [f"stage `{sid}` does not exist in the workflow"
@@ -80,9 +61,6 @@ def _validate_stages_exist(config: EvalConfig, by_id: dict[str, Stage]) -> list[
 
 # ── Condition 1b: the override must actually reach the target ────────────────
 def _validate_target_reachable(config: EvalConfig, stages: Sequence[Stage]) -> list[str]:
-    """The target must be reachable from the override, else the override
-    injects into a branch that never feeds the target and the eval is inert.
-    Reference overrides are exempt (they inject side data)."""
     if config.target_stage in _find_descendants(config.override_stage, stages):
         return []
     return [f"target `{config.target_stage}` is not reachable from override "
@@ -90,10 +68,7 @@ def _validate_target_reachable(config: EvalConfig, stages: Sequence[Stage]) -> l
 
 
 def _find_descendants(stage_id: str, stages: Sequence[Stage]) -> set[str]:
-    """Every stage reachable downstream of `stage_id`. Bounded regardless of
-    a cycle in `stages`: `descendants` is a visited set checked BEFORE a node
-    is pushed, so each stage id is pushed at most once and the walk always
-    terminates."""
+    """Terminates on a cyclic `stages`: the visited check happens BEFORE a node is pushed."""
     descendants: set[str] = set()
     stack = [stage_id]
     while stack:
@@ -108,11 +83,6 @@ def _find_descendants(stage_id: str, stages: Sequence[Stage]) -> set[str]:
 # ── Precondition: the override must declare an output schema ─────────────────
 def _validate_override_declares_output_schema(config: EvalConfig,
                                            by_id: dict[str, Stage]) -> list[str]:
-    """The eval-dataset table, if attached, stands in for the override
-    stage's declared output, so the override must actually declare one
-    before `_validate_eval_dataset_covers_override` can resolve required
-    columns against it. A dataless config has no file to stand in for, so
-    it's exempt."""
     if config.table is None:
         return []
     override = by_id[config.override_stage]
@@ -123,13 +93,6 @@ def _validate_override_declares_output_schema(config: EvalConfig,
 
 # ── Condition 2: every injected table is a valid stand-in ────────────────────
 def _validate_eval_dataset_covers_override(config: EvalConfig, by_id: dict[str, Stage]) -> list[str]:
-    """The eval-dataset table, if attached, must be a valid stand-in for the
-    override stage's output: every column `get_injected_columns` says the
-    file must carry (deconflicted) has to spec-match a column already in it.
-    A dataless config skips this — its file is validated when attached.
-    Preconditions (override declares an output schema; every checked column
-    resolves against the target) are verified by the caller before this
-    runs."""
     if config.table is None:
         return []
     override = by_id[config.override_stage]
@@ -142,9 +105,6 @@ def _validate_eval_dataset_covers_override(config: EvalConfig, by_id: dict[str, 
 
 def _validate_reference_overrides_cover_stages(config: EvalConfig,
                                             by_id: dict[str, Stage]) -> list[str]:
-    """Each reference override's injected table must be a valid stand-in for
-    the stage it overrides — same coverage requirement as the eval-dataset
-    table, applied per reference override."""
     problems: list[str] = []
     for ov in config.reference_overrides:
         stage = by_id[ov.stage_id]
@@ -161,9 +121,6 @@ def _validate_reference_overrides_cover_stages(config: EvalConfig,
 
 def _validate_columns_covered(required: TableSchema, provided: TableSchema,
                            stage_id: str, label: str) -> list[str]:
-    """Every column `required` has that `provided` doesn't spec-match, via
-    `TableSchema.subtract(strict=False)` — absent by name or differing on
-    type, nullability, or another spec field (prose aside)."""
     return [f"{label}: injected table lacks (or mismatches) column `{col.name}` "
            f"required by stage `{stage_id}`"
            for col in required.subtract(provided, strict=False).columns]
@@ -172,8 +129,6 @@ def _validate_columns_covered(required: TableSchema, provided: TableSchema,
 # ── Conditions 3 + 3b: the target's declared output covers the checks ────────
 def _validate_target_emits_checked_columns(config: EvalConfig,
                                         by_id: dict[str, Stage]) -> list[str]:
-    """Every check's `output_column` must exist on the target's declared
-    output, and an abs_tol check needs that column to be numeric."""
     target = by_id[config.target_stage]
     target_output = target.resolve_output_schema()
     if target_output is None:
@@ -192,17 +147,12 @@ def _validate_target_emits_checked_columns(config: EvalConfig,
 
 # ── Condition 4: a reference override cannot also be the target ──────────────
 def _validate_no_reference_override_on_target(config: EvalConfig) -> list[str]:
-    """A reference override on the target stage would make the target its
-    own override, which has no coherent path to resolve — reported here
-    rather than letting it reach `resolve_eval_run_settings`."""
     return [f"reference override `{ov.stage_id}` cannot be the target stage"
            for ov in config.reference_overrides if ov.stage_id == config.target_stage]
 
 
 # ── Structural: the stage list itself must be a valid workflow ───────────────
 def _validate_workflow_structure(stages: Sequence[Stage]) -> list[str]:
-    """Cross-stage problems (dangling input, duplicate id, cycle) a per-file
-    validator wouldn't catch."""
     issues = validate_workflow(list(stages))
     if not issues:
         return []
@@ -213,8 +163,6 @@ def _validate_workflow_structure(stages: Sequence[Stage]) -> list[str]:
 # ── Condition 5: the path must preserve grain (or fall back to a code scorer) ─
 def _resolve_grain_settings(config: EvalConfig,
                             stages: Sequence[Stage]) -> tuple[EvalRunSettings, list[str]]:
-    """The path must preserve grain row-by-row, unless a code scorer takes
-    over — the same decision `resolve_eval_run_settings` makes for a run."""
     workflow = Workflow.model_validate({"stages": [s.model_dump(mode="json") for s in stages]})
     overrides = [config.override_stage,
                 *(ov.stage_id for ov in config.reference_overrides)]

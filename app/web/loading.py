@@ -29,18 +29,6 @@ from app.web.project_cards import ProjectCard, tally_runs
 # ─── Projects & stages ──────────────────────────────────────────────────
 
 def list_projects() -> list[ProjectCard]:
-    """One project card per dir under examples/, in the shape the home dashboard
-    renders. `is_ready` is True iff the project stores at least one version, because
-    a run pins a stored version (app.services.run.resolve_version) and a project with
-    none has nothing to run. Sorted by name.
-
-    Every flag and count is read off disk — a card never advertises a
-    stage/schema/run/version that isn't there. A directory counts as a project
-    from the moment creation writes its document.md (or project.json) — a
-    just-created project whose data model is still being generated must show up,
-    not appear only once generation finishes. A dir with none of those markers is
-    not a project and is omitted. A run counts only if it has a manifest.json
-    (mirrors the runs index), so the count is real runs, never inflated."""
     if not projects_dir().exists():
         return []
     cards: list[ProjectCard] = []
@@ -54,8 +42,6 @@ def list_projects() -> list[ProjectCard]:
 
 
 def _build_project_card(p: Path) -> ProjectCard | None:
-    """One project dir's dashboard card, or None if `p` carries none of the
-    creation markers (document/workflow/schemas) and so is not a project."""
     compiled_dir = p / "compiled"
     schemas_dir = p / "schemas"
     n_stages = len(list(compiled_dir.glob("*.json"))) if compiled_dir.is_dir() else 0
@@ -82,10 +68,7 @@ def _build_project_card(p: Path) -> ProjectCard | None:
 
 @dataclass
 class StageListing:
-    """Compiled stages for the viewer. All-or-nothing: if every file is valid,
-    `stages` holds them and `issues` is empty; if ANY file is invalid, `stages`
-    is empty and `issues` names the broken files. `order` maps stage id →
-    filename order prefix (empty when there are issues)."""
+    """All-or-nothing: one invalid file empties `stages`, and `issues` names the broken ones."""
     stages: list[Stage]
     issues: list[CompiledStageFile]
     order: dict[str, str]
@@ -110,9 +93,6 @@ def load_stages(project: str) -> StageListing:
 
 
 def load_stages_or_empty(project: str) -> StageListing:
-    """Like load_stages, but returns an EMPTY listing instead of 404 when the project
-    has no compiled/ workflow yet. For the shell's workflow section, which renders the
-    locked/empty page (not an error) for a project that has no workflow authored."""
     compiled_dir = projects_dir() / project / "compiled"
     if not compiled_dir.is_dir():
         return StageListing(stages=[], issues=[], order={})
@@ -124,12 +104,6 @@ def find_stage(stages: list[Stage], stage_id: str) -> Stage | None:
 
 
 def list_file_inputs(project: str, version_id: str | None = None) -> list[dict[str, Any]]:
-    """File-kind input stages of the version a triggered run will execute, each
-    with its workflow-authored absolute path ('' when the stage authors none —
-    the run form must collect one). `version_id` selects which version to read;
-    None resolves to the latest (resolve_version's default), so the run form's
-    prefill and the run's binding provenance both speak about the SAME version.
-    [] when the project has no versions yet."""
     try:
         version_id = resolve_version(project, version_id)
     except NoVersionToRunError:
@@ -146,26 +120,12 @@ def list_file_inputs(project: str, version_id: str | None = None) -> list[dict[s
 # ─── Uploaded run-input files ────────────────────────────────────────────────
 
 def _safe_component(raw: str, fallback: str) -> str:
-    """A single, traversal-safe path component from untrusted input: the basename
-    with any directory parts stripped, rejecting the specials that would still
-    escape ('', '.', '..' — note Path('../..').name is '..', not '')."""
+    """Path('../..').name is '..', not '' — hence the explicit specials check."""
     name = Path(raw).name
     return fallback if name in ("", ".", "..") else name
 
 
 def save_uploaded_input(project_dir: Path, stage_id: str, filename: str, src) -> Path:
-    """Save a browser-uploaded run-input file under the project's
-    uploads/<stage_id>/ dir and return its absolute path.
-
-    A run reads its inputs off the SERVER's disk by absolute path, but a browser
-    `<input type=file>` hands over only bytes, never a path (every OS hides it) —
-    so the cross-platform Browse uploads the file and the run then reads THIS
-    saved copy by path, exactly like any other input. `src` is a readable binary
-    stream (the UploadFile's file); it's streamed to disk, so large files don't
-    have to sit in memory. Both the stage id and filename are reduced to a single
-    safe component (no directory traversal); the per-stage subdir keeps two
-    stages' same-named files from colliding, and re-uploading the same stage/name
-    overwrites in place (a fresh pick replaces the old copy)."""
     safe_stage = _safe_component(stage_id, "input")
     safe_name = _safe_component(filename, "upload.dat")
     dest_dir = project_dir / "uploads" / safe_stage
@@ -183,13 +143,6 @@ def runs_dir(project: str) -> Path:
 
 
 def load_manifest(run_dir: Path) -> dict[str, Any]:
-    """A run's manifest.json as a dict, or 404 if the run doesn't exist.
-
-    Parses through the typed `RunManifest`, so every consumer sees one shape:
-    the model normalizes a legacy (pre-fork-aware) scalar `halted_at` stage-id
-    string into a one-element list (a template `{% for %}` would otherwise
-    iterate a bare string character-by-character), and re-serializes with unset
-    optional fields omitted — the same shape the executor persisted."""
     if not (run_dir / "manifest.json").exists():
         raise HTTPException(status_code=404, detail="Run not found")
     return read_run_manifest(run_dir).to_dict()
@@ -224,12 +177,10 @@ _UTF8_BOM = "\ufeff"
 
 
 def csv_download_body(df: pd.DataFrame) -> bytes:
-    """`df` as CSV download bytes: UTF-8 behind a byte-order mark (see `_UTF8_BOM`)."""
     return (_UTF8_BOM + render_frame_as_csv_text(df)).encode("utf-8")
 
 
 def manifest_stage(run_dir: Path, stage_id: str) -> dict[str, Any]:
-    """The manifest record for one stage of a run; 404 if run or stage missing."""
     manifest = load_manifest(run_dir)
     stage_record = next(
         (s for s in manifest.get("stage_records", []) if s.get("stage_id") == stage_id),
@@ -241,8 +192,6 @@ def manifest_stage(run_dir: Path, stage_id: str) -> dict[str, Any]:
 
 
 def read_output_df(run_dir: Path, rel_path: str | None) -> pd.DataFrame:
-    """A stage output file as a DataFrame. 404 if the stage has no output, the
-    path escapes the run directory, or the file is missing on disk."""
     try:
         path = resolve_output_path(run_dir, rel_path)
     except StageOutputMissing as exc:
@@ -262,13 +211,11 @@ def read_output_df(run_dir: Path, rel_path: str | None) -> pd.DataFrame:
 
 
 def render_frame_as_text(frame: pd.DataFrame) -> pd.DataFrame:
-    """Every cell a display string, every null "" ."""
     # fillna("") would raise on Int64/Float64/boolean.
     return frame.astype(str).where(frame.notna(), "")  # astype first: dtypes self-format
 
 
 def render_cells_as_text(frame: pd.DataFrame) -> list[dict[str, Any]]:
-    """Every cell as a display string, with nulls as ""."""
     return list_rows(render_frame_as_text(frame))
 
 
@@ -278,11 +225,7 @@ SELECTED_ORDINAL_KEY = "_row_ordinal"
 def load_output_table(
     run_dir: Path, rel_path: str | None, max_rows: int | None = None
 ) -> dict[str, Any]:
-    """Full (capped) table of a stage output: columns, total row count, up to
-    `max_rows` rows as strings, and whether the render was capped."""
-    # `None`, not MAX_TABLE_ROWS, as the default: a default argument binds once at
-    # import, which would freeze the value past any later rebinding of the module
-    # global — including the test suite's monkeypatch of it.
+    # Not a default arg: that binds MAX_TABLE_ROWS at import, past any later rebinding.
     df = read_output_df(run_dir, rel_path)
     rows = render_cells_as_text(df.head(MAX_TABLE_ROWS if max_rows is None else max_rows))
     return {
@@ -296,7 +239,6 @@ def load_output_table(
 def load_selected_output_rows(
     run_dir: Path, rel_path: str | None, ordinals: list[int]
 ) -> dict[str, Any]:
-    """`load_output_table`'s shape narrowed to `ordinals`, each row keeping its own index."""
     df = read_output_df(run_dir, rel_path)
     kept = [o for o in ordinals if 0 <= o < len(df)][:MAX_TABLE_ROWS]
     rows = render_cells_as_text(df.iloc[kept])
@@ -314,10 +256,6 @@ def load_selected_output_rows(
 
 
 def load_output_row(run_dir: Path, rel_path: str | None, row: int) -> dict[str, Any] | None:
-    """Preview shape (columns, rows_total, preview) holding just row `row` of a
-    stage output — the row-scoped variant of `load_output_preview`, used by the
-    lineage-trimmed stage panel. None if no path; {"error": ...} if unreadable;
-    an empty `preview` with `out_of_range` when the ordinal is past the end."""
     if not rel_path:
         return None
     try:
@@ -342,8 +280,6 @@ def load_output_row(run_dir: Path, rel_path: str | None, row: int) -> dict[str, 
 
 
 def load_output_preview(run_dir: Path, rel_path: str | None) -> dict[str, Any] | None:
-    """Preview of a stage output, capped at `PREVIEW_ROWS_SHOWN` rows. None if no
-    path; {"error": ...} if the file is missing on disk or can't be read."""
     if not rel_path:
         return None
     try:
@@ -376,26 +312,13 @@ def queue_snapshot(project: str, run_id: str, stage_id: str) -> pd.DataFrame | N
 
 @dataclass
 class QueueFingerprints:
-    """The bookkeeping a halted queue stage's snapshot carries off to the
-    side, never as snapshot columns: `stage_fingerprint` (shared by every
-    pending row of that halt), `input_fingerprints` and `row_ordinals` (one per
-    row each, POSITIONALLY aligned to the snapshot's row order).
-    `row_ordinals` is None for a sidecar written before the runtime recorded
-    them — an unknowable position, never a guessed one."""
+    """`input_fingerprints` and `row_ordinals` are POSITIONALLY aligned to the snapshot's rows."""
     stage_fingerprint: str
     input_fingerprints: list[str]
     row_ordinals: list[int] | None
 
 
 def load_queue_fingerprints(project: str, run_id: str, stage_id: str) -> QueueFingerprints | None:
-    """The sidecar `<stage_id>.fingerprints.json` a halted human_review_queue
-    stage writes beside its snapshot (app.runtime.stages.human_review_queue).
-    None if no run has halted at this stage yet (no such sidecar).
-
-    Raises ValueError if the snapshot exists but its row count doesn't match
-    `input_fingerprints`' length, or if `row_ordinals` is present with a
-    different length: positional alignment between these lists is not
-    something to guess at silently when it can't be verified."""
     run_dir = runs_dir(project) / run_id
     path = run_dir / "queue" / f"{stage_id}.fingerprints.json"
     if not path.exists():
@@ -433,9 +356,7 @@ def _validate_sidecar_alignment(
 
 
 def display_cell(v: Any) -> Any:
-    """Scalar-safe cell formatting for the reviewer UI. pd.isna() raises on
-    list/array-valued cells (e.g. an evidence_urls JSON column), so handle
-    array-likes explicitly before the null check."""
+    """pd.isna() raises on a list/array cell, so array-likes are handled before the null check."""
     if isinstance(v, (list, tuple)):
         return ", ".join(str(x) for x in v) if len(v) else ""
     if isinstance(v, (pd.Timestamp, datetime, date)):  # not JSON-serializable for the UI's tojson
@@ -454,11 +375,6 @@ def display_cell(v: Any) -> Any:
 def build_llm_example(
     stage_def: Stage | None, input_previews: list[dict[str, Any]]
 ) -> dict[str, Any] | None:
-    """Render the prompt_data_template with the first row of the first usable input.
-
-    Returns {rendered, source_id} on success, {error} if no input or render
-    fails, or None if the stage isn't an LLM stage.
-    """
     template = (
         stage_def.llm.prompt_data_template
         if isinstance(stage_def, LLMTransformStage) else None

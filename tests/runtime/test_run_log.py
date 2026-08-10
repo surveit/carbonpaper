@@ -140,8 +140,7 @@ def test_a_raising_mapper_is_logged_before_it_propagates(tmp_path):
 
 
 def test_a_batched_chunk_binds_the_input_rows_it_actually_covers(tmp_path, monkeypatch):
-    """The chunk's detail is attributed to the rows the chunk really is — the
-    input positions the shape handed down, not offsets within the chunk."""
+    """Attributed to the input positions the shape handed down, not offsets within the chunk."""
     def fake_call_llm_batch(stage_id, llm_config, *, instructions, task,
                             reply_schema, model=None, usage_out=None):
         emit_llm_detail(LLM_PROMPT, text=task)
@@ -165,9 +164,6 @@ def test_a_batched_chunk_binds_the_input_rows_it_actually_covers(tmp_path, monke
 
 
 def test_the_batched_path_logs_replayed_and_computed_rows_apart(tmp_path, monkeypatch):
-    """A batched stage whose cache answers some rows: the hits settle as cached,
-    and only the misses are opened, computed, and handed to the batch driver —
-    under their own input positions, not their offsets within the batch."""
     handler = HANDLERS[StageType.llm_transform]
     handed: list[list[int]] = []
 
@@ -194,9 +190,6 @@ def test_the_batched_path_logs_replayed_and_computed_rows_apart(tmp_path, monkey
 
 
 def test_a_run_writes_its_lifecycle_spine_to_the_run_dir(tmp_path):
-    """The executor opens the log for EVERY entry path — here the subset
-    executor — so a run always leaves runs/<id>/events.jsonl behind, terminated
-    by the run_done marker the SSE tail stops on."""
     source = parse_stage({
         "id": "src", "description": "Source", "type": "input_data",
         "connector": {"kind": "file"},
@@ -224,15 +217,13 @@ def test_a_run_writes_its_lifecycle_spine_to_the_run_dir(tmp_path):
 
 
 def _resumable_log(path: Path, stage: str) -> None:
-    """Write one stage_start + the run_done marker to `path`, appending."""
+    """`close()` writes the run_done marker; a second RunLog on the path appends to it."""
     log = RunLog(path)
     log.emit({"kind": "stage_start", "stage": stage})
     log.close()
 
 
 def test_a_resumed_log_keeps_seq_equal_to_the_line_index(tmp_path):
-    """resume_run opens a second RunLog on the same path; seq is the file's line
-    index, so it stays strictly monotonic across any number of resumes."""
     path = tmp_path / "events.jsonl"
     _resumable_log(path, "first")
     _resumable_log(path, "second")
@@ -244,9 +235,7 @@ def test_a_resumed_log_keeps_seq_equal_to_the_line_index(tmp_path):
 
 
 def test_a_tailer_resuming_at_the_pre_resume_cursor_sees_the_resumed_events(tmp_path):
-    """The consequence of a restarted seq: an SSE client filtering seq >= cursor
-    would drop every event the resumed run wrote. Duplicate-free seqs alone do
-    not prove this — the resumed events must actually arrive."""
+    """A restarted seq would make an SSE client filtering seq >= cursor drop the resumed run's events."""
     path = tmp_path / "events.jsonl"
     _resumable_log(path, "first")
     cursor = max(e["seq"] for e in read_events_since(path, 0)) + 1

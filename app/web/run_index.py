@@ -20,8 +20,6 @@ _UNREADABLE_STATUS = "corrupt"
 
 
 class RunIndexRow(BaseModel):
-    """`strip` is None for a run whose manifest could not be parsed."""
-
     run_id: str
     status: str
     started_at: str | None = None
@@ -38,7 +36,6 @@ class RunIndexRow(BaseModel):
 
 
 def build_run_index_rows(project: str) -> list[RunIndexRow]:
-    """One row per manifest-backed run of `project`, newest first."""
     seen_versions: dict[str, VersionNote] = {}
     return [
         _build_row(project, run, seen_versions)
@@ -47,7 +44,6 @@ def build_run_index_rows(project: str) -> list[RunIndexRow]:
 
 
 def describe_run_outcome(status: str) -> str:
-    """A run's status in the reader's words, or the raw status this reader has no word for."""
     return _OUTCOME_WORDS.get(status, status)
 
 
@@ -91,7 +87,6 @@ def _build_row(
 def _read_version(
     project: str, version_id: str | None, seen: dict[str, VersionNote]
 ) -> VersionNote:
-    """Resolved once per distinct version id, not once per run listed."""
     key = version_id or ""
     if key not in seen:
         seen[key] = read_version_note(project, version_id)

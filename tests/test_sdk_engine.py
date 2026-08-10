@@ -84,8 +84,6 @@ def test_stream_turn_maps_blocks_to_normalized_events(monkeypatch: Any) -> None:
 
 
 def test_stream_turn_surfaces_in_band_result_error(monkeypatch: Any) -> None:
-    """A ResultMessage with is_error=True (permission denial, max_turns) must
-    emit an error event, not end on a silent 'done'."""
 
     class _ErrResult:
         is_error = True
@@ -115,8 +113,6 @@ def test_stream_turn_surfaces_in_band_result_error(monkeypatch: Any) -> None:
 
 
 def test_stream_turn_passes_resume_into_options(monkeypatch: Any) -> None:
-    """A resume token flows into ClaudeAgentOptions so the CLI continues the
-    prior conversation."""
     captured: dict[str, Any] = {}
 
     async def fake_query(*, prompt: str, options: Any) -> Any:
@@ -144,8 +140,6 @@ def test_stream_turn_passes_resume_into_options(monkeypatch: Any) -> None:
 def test_stream_turn_emits_the_cli_init_as_a_system_event_carrying_json(
     monkeypatch: Any,
 ) -> None:
-    """The shape app.core.agent.diagnostics reads the tool inventory out of: kind
-    "system", subtype "init", and the inventory as the JSON body of `text`."""
 
     class _System:
         subtype = "init"
@@ -175,8 +169,7 @@ def test_stream_turn_emits_the_cli_init_as_a_system_event_carrying_json(
 
 
 def test_options_disable_every_builtin_tool_by_default() -> None:
-    """`allowed_tools` only pre-approves permission; `tools` is what decides which
-    built-ins the turn can see at all. A structured-output run must see none."""
+    """`allowed_tools` only pre-approves permission; `tools` decides what the turn can see."""
     engine = se.ClaudeAgentSdkEngine(
         system_prompt="sp",
         mcp_server=object(),
@@ -198,8 +191,7 @@ def test_options_forward_the_builtin_tools_a_caller_asked_for() -> None:
 
 
 def test_options_load_no_mcp_servers_but_the_one_passed_in() -> None:
-    """Without this the CLI merges any project/user/plugin .mcp.json server into the
-    run, putting tools in the model's context that this engine never offered."""
+    """Otherwise the CLI merges every project/user/plugin .mcp.json server into the run."""
     engine = se.ClaudeAgentSdkEngine(
         system_prompt="sp", mcp_server=object(), allowed_tools=[]
     )

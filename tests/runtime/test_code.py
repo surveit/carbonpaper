@@ -19,7 +19,6 @@ def test_the_named_function_is_returned():
 
 
 def test_the_default_name_is_the_fallback():
-    """`function` may name a function the code does not bind; the default still wins over None."""
     fn = load_function("def should_include(row):\n    return True\n",
                        "keep", "should_include")
     assert fn is not None and fn({}) is True

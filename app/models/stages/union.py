@@ -5,17 +5,18 @@ from __future__ import annotations
 
 from typing import ClassVar, Literal
 
-from pydantic import Field
+from pydantic import ConfigDict, Field
 
 from app.models.schema import StageConfig, TableSchema
 from app.models.stages.stage_base import StageBase, StageInput, StageType
 from app.models.stages.node_spec import NodeTypeSpec
 from app.models.stages.signature import ReplacesSignature
+from app.models.tool_schema_prompts import UNION_CONFIG_DESCRIPTION
 
 
 class UnionConfig(StageConfig):
-    """union config block. No fields: a union's behavior is fixed entirely by its
-    (schema-identical) declared inputs, concatenated in declared order."""
+    model_config = ConfigDict(json_schema_extra={"description": UNION_CONFIG_DESCRIPTION})
+
     FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset()
     INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset()
 
@@ -37,9 +38,7 @@ class UnionStage(StageBase):
 
 
 def find_union_column_issues(stage: "UnionStage") -> list[str]:
-    """One issue per input (after the first) whose declared schema disagrees
-    with the first input's, naming the differing columns."""
-    schemas = [(ref.id, ref.table_schema) for ref in stage.inputs]
+    schemas =[(ref.id, ref.table_schema) for ref in stage.inputs]
     reference_id, reference = schemas[0]
     issues: list[str] = []
     for input_id, schema in schemas[1:]:
@@ -53,7 +52,6 @@ def find_union_column_issues(stage: "UnionStage") -> list[str]:
 
 
 def find_union_signature_issues(stage: "UnionStage") -> list[str]:
-    """A union reads no columns, and every input must supply `produces`."""
     signature = stage.signature
     assert signature is not None  # find_signature_config_issues runs only with one
     issues = [

@@ -24,19 +24,12 @@ _SLUG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 
 @dataclass
 class EvalConfigEntry:
-    """One stored eval config: its parsed EvalConfig (None if invalid), the local
-    eval `id` (the doc id with the project prefix stripped), and any issues
-    encountered while validating it."""
     config: EvalConfig | None
     id: str
     issues: list[str] = field(default_factory=list)
 
 
 def list_eval_configs(project_dir: Path) -> list[EvalConfigEntry]:
-    """All eval configs stored for this project, tolerant of per-document
-    problems: a document that fails the EvalConfig contract becomes an entry
-    with `issues` set and `config=None` rather than being dropped or aborting
-    the whole listing. No configs stored yet -> empty list."""
     entries: list[EvalConfigEntry] = []
     for doc_id, data in get_store().read_all("eval", f"{project_dir.name}/"):
         local_id = doc_id.split("/", 1)[1]
@@ -48,9 +41,6 @@ def list_eval_configs(project_dir: Path) -> list[EvalConfigEntry]:
 
 
 def load_eval_config(project_dir: Path, eval_id: str) -> EvalConfig:
-    """Load one eval config by id. Raises `FileNotFoundError` if no such config is
-    stored, `ValueError` if the stored document fails the EvalConfig contract --
-    never returns a partial or best-guess config."""
     try:
         data = get_store().read("eval", f"{project_dir.name}/{eval_id}")
     except DocumentNotFound as exc:
@@ -66,26 +56,16 @@ def load_eval_config(project_dir: Path, eval_id: str) -> EvalConfig:
 
 
 def save_eval_config(project_dir: Path, config: EvalConfig) -> None:
-    """Save `config` as the eval document `{project_dir.name}/{config.id}`.
-    Overwrite allowed -- configs are mutable authored objects, unlike dataset
-    uploads."""
     get_store().write(
         "eval", f"{project_dir.name}/{config.id}",
         config.model_dump(mode="json", exclude_none=True))
 
 
 def save_eval_run(project_dir: Path, run: EvalRun) -> None:
-    """Save `run` as the eval_run document `{project_dir.name}/{run.id}`. Runs
-    are immutable results -- a run id is minted per execution, so this never
-    overwrites a real prior run."""
     get_store().write("eval_run", f"{project_dir.name}/{run.id}", run.model_dump(mode="json"))
 
 
 def load_eval_run(project_dir: Path, run_id: str) -> EvalRun:
-    """Load one run by id. Raises `FileNotFoundError` if no such run is stored,
-    `ValueError` if `run_id` isn't a valid slug (same format rule as dataset
-    upload filenames -- bare, no path separators) or the stored document fails
-    the EvalRun contract."""
     if not _SLUG_RE.match(run_id):
         raise ValueError(f"not a valid run id: {run_id!r}")
     try:
@@ -103,10 +83,6 @@ def load_eval_run(project_dir: Path, run_id: str) -> EvalRun:
 
 
 def list_eval_runs(project_dir: Path, config_id: str) -> list[EvalRun]:
-    """All runs of `config_id`, newest-first by `(started_at or "", id)`. No runs
-    stored yet -> empty list. Runs are written by `save_eval_run`. This reads and
-    validates every run stored for the project, so one malformed run raises
-    `ValidationError` rather than being silently dropped from the list."""
     runs = [EvalRun.model_validate(data)
             for _, data in get_store().read_all("eval_run", f"{project_dir.name}/")]
     runs = [r for r in runs if r.config == config_id]
@@ -115,11 +91,6 @@ def list_eval_runs(project_dir: Path, config_id: str) -> list[EvalRun]:
 
 
 def save_dataset_upload(project_dir: Path, filename: str, content: bytes) -> Path:
-    """Write an uploaded dataset file to `eval_data/{filename}`. `filename`
-    must be a bare slugish name (starts alnum, then letters/digits/`_`/`-`/`.`;
-    no path separators, so it is safe to use directly as a path component).
-    Raises `FileExistsError` if the target already exists: uploaded data files
-    are immutable once written."""
     if not _SLUG_RE.match(filename):
         raise ValueError(f"not a valid upload filename: {filename!r}")
     data_dir = _resolve_eval_data_dir(project_dir)
@@ -132,20 +103,12 @@ def save_dataset_upload(project_dir: Path, filename: str, content: bytes) -> Pat
 
 
 def latest_version_id(project_dir: Path) -> str | None:
-    """The id of the newest version overall (any published state), or None if
-    the project has no version at all. Eval-scoped alias for
-    app.services.versioning.find_latest_version_id: used by the eval runner's
-    default-to-newest resolution and by the eval status display."""
     return find_latest_version_id(project_dir)
 
 
 def eval_status(report: CompatibilityReport, runs: list[EvalRun],
                 latest_version: str | None, *, has_eval_dataset: bool) -> str:
-    """One word for "what do we currently know about this eval". Ordered by
-    alarm: incompatible beats everything; a config with no eval-dataset file
-    can't run yet; a result only counts as current when its run pinned the
-    version the project is at now. "run succeeded" means the run produced a
-    result — the metrics say whether the result is good."""
+    """A "run succeeded" says a result came back, NOT that it is good — read the metrics."""
     if not report.ok:
         return "broken"
     if not has_eval_dataset:

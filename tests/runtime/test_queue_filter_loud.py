@@ -39,10 +39,6 @@ def test_bad_filter_raises_instead_of_skipping_review(tmp_path):
 
 
 def test_a_cell_the_filter_cannot_answer_names_the_stage_and_the_filter(tmp_path):
-    """A cell holding an array makes the comparison ambiguous rather than
-    false. What the operator sees must still be this stage's own message —
-    naming the stage id and the filter text — not the bare numpy error the
-    comparison raises underneath."""
     columns = [
         {"name": "claim_id", "type": "str", "nullable": False},
         {"name": "score", "type": "int", "nullable": True},

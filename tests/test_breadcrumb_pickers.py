@@ -70,7 +70,6 @@ def test_the_version_rung_lists_versions_with_their_publish_state(project: Path)
 
 
 def test_a_version_with_no_message_is_said_to_have_none(project: Path) -> None:
-    """The picker never writes a description the stored version does not carry."""
     meta = project_service.save_working_copy_as_version(project, message="", reviewer="local")
     trail = breadcrumbs.build_version_crumbs("demo", meta.version_id)
 
@@ -80,7 +79,6 @@ def test_a_version_with_no_message_is_said_to_have_none(project: Path) -> None:
 
 
 def test_only_the_project_and_the_leaf_rung_switch(project: Path) -> None:
-    """A section rung names one place, so there is nothing to switch between."""
     trail = breadcrumbs.build_run_crumbs("demo", "20260805T144252")
 
     switchers = [crumb.label for crumb in trail if crumb.picker]
@@ -89,7 +87,6 @@ def test_only_the_project_and_the_leaf_rung_switch(project: Path) -> None:
 
 
 def test_a_run_child_page_does_not_switch_the_run_it_hangs_off(project: Path) -> None:
-    """On a queue or rows page the run is context, not the thing being read."""
     trail = breadcrumbs.build_run_child_crumbs("demo", "20260805T144252", label="Review queue")
 
     assert [crumb.label for crumb in trail if crumb.picker] == ["demo"]

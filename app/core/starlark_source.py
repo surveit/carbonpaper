@@ -23,7 +23,6 @@ REFUSE_BUILTIN = "refuse"
 def compile_starlark_module(
     source: str, builtins: Mapping[str, Callable[..., object]]
 ) -> starlark.Module:
-    """Evaluate `source` with `builtins` injected as callables. Raises StarlarkError."""
     module = starlark.Module()
     for name, builtin in builtins.items():
         module.add_callable(name, builtin)
@@ -32,7 +31,6 @@ def compile_starlark_module(
 
 
 def find_bound_function(module: starlark.Module, names: Sequence[str]) -> str | None:
-    """The first of `names` bound to a function, or None."""
     return next((name for name in names if _is_bound_function(module, name)), None)
 
 
@@ -47,7 +45,6 @@ def _is_bound_function(module: starlark.Module, name: str) -> bool:
 
 
 def _module_binds(module: starlark.Module, name: str) -> bool:
-    # Reads only what THIS module's own top-level statements bound.
     try:
         # Unlike evaluating `name` as an expression, `module[name]` never falls
         # back to a standard-library name (`len`, `fail`, ...) the code never

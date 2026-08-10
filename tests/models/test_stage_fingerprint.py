@@ -124,9 +124,6 @@ def test_compute_definition_fingerprint_for_queue_reacts_to_reviewer_instruction
 
 
 def test_compute_definition_fingerprint_for_publish_reacts_to_function_code():
-    # The code a publish stage runs lives in its `function` block, not in the
-    # `publish` block — PublishStage fingerprints both, so editing the code must
-    # invalidate the cache.
     base = _publish_stage()
     changed = _publish_stage(
         code="def transform(df, output_dir, trace_links):\n    return df.head(1)\n"
@@ -141,13 +138,8 @@ def test_compute_definition_fingerprint_for_publish_reacts_to_publish_block():
 
 
 def test_compute_definition_fingerprint_survives_a_stored_round_trip():
-    # A version-embedded stage is dumped/reloaded through
-    # model_dump(mode="json", by_alias=True, exclude_none=True) —
-    # app.models.stage_to_spec_dict's exact dump options, the shape
-    # a WorkflowVersion stores. Round-tripping a queue stage through that dump
-    # (a rich config block, QueueConfig, plus the signature's nested Column
-    # list) must reproduce the same fingerprint.
     stage = _queue_stage()
+    # app.models.stage_to_spec_dict's exact dump options — the shape a WorkflowVersion stores.
     dumped = stage.model_dump(mode="json", by_alias=True, exclude_none=True)
     reloaded = parse_stage(dumped)
     assert stage.compute_definition_fingerprint() == reloaded.compute_definition_fingerprint()

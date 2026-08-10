@@ -34,8 +34,6 @@ def _stage(queue: dict[str, object] | None = None) -> Stage:
 
 
 def _added_columns(queue: Mapping[str, object]) -> list[dict[str, object]]:
-    # The signature must add every column the queue block names, so the fixture reads
-    # them off the block rather than restating them.
     reviewed = queue["reviewed_columns"]
     assert isinstance(reviewed, dict)
     columns: list[dict[str, object]] = [

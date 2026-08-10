@@ -64,8 +64,6 @@ async def new_chat():
 
 @router.post("/chat/agent/{agent_id}/sessions")
 async def new_agent_session(agent_id: str, request: Request):
-    """Open a chat session bound to `agent_id`. The body carries the opaque
-    `context` (and optional `title`) as JSON. Redirects to the chat page."""
     body = await request.json()
     context = (body or {}).get("context") or {}
     title = (body or {}).get("title")
@@ -95,8 +93,6 @@ async def chat_page(request: Request, sid: str):
 
 @router.post("/chat/{sid}/message")
 async def post_message(sid: str, request: Request):
-    """Send a message: the turn runs on the session's bound agent (its agent_id +
-    context, looked up and handed to the registry to build the engine)."""
     if not _store.exists(sid):
         raise HTTPException(status_code=404, detail="Session not found")
     body = await request.json()
@@ -133,7 +129,6 @@ async def stream_turn(sid: str, turn_id: str, request: Request):
 
 @router.get("/chat/{sid}/messages")
 async def get_messages(sid: str):
-    """Raw history JSON (debug / re-slicing)."""
     if not _store.exists(sid):
         raise HTTPException(status_code=404, detail="Session not found")
     return JSONResponse(_store.load(sid))

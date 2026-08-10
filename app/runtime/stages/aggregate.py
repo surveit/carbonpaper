@@ -67,7 +67,6 @@ def _aggregate_by_group(
 def _reduce_whole_frame(
     rows: pd.DataFrame, aggregations: list[AggregationOp]
 ) -> tuple[pd.DataFrame, list[dict[int, tuple[str, ...]]]]:
-    """`group_by: []` — the frame is ONE group, so exactly one row comes out, empty input or not."""
     columns: dict[str, Any] = {}
     contributors: dict[int, list[str]] = {}
     for op in aggregations:
@@ -80,7 +79,6 @@ def _reduce_whole_frame(
 
 
 def _rows_admitted_by(rows: pd.DataFrame, op: AggregationOp) -> pd.DataFrame:
-    """The rows this aggregation's `where` admits; every row where it declares none."""
     if not op.where:
         return rows
     return rows.query(parse_predicate(op.where).pandas_expr)
@@ -107,7 +105,6 @@ def _grouped_value(slice_df: pd.DataFrame, group_by: list[str], op: AggregationO
 
 
 def _whole_frame_value(slice_df: pd.DataFrame, op: AggregationOp) -> Any:
-    """Each formula over the slice; an EMPTY slice is null, whatever the formula."""
     if slice_df.empty:
         # 0 is an outcome — it claims something was measured and found to be
         # none. Nothing was measured here, so the honest answer is absence.
@@ -131,7 +128,7 @@ def _whole_frame_value(slice_df: pd.DataFrame, op: AggregationOp) -> Any:
 
 
 def _first_present(values: pd.Series) -> Any:
-    """Matches groupby.first(): the first NON-null value, null where the slice holds none."""
+    """Matches groupby.first(): the first NON-null value, not the first value."""
     present = values.dropna()
     return present.iloc[0] if len(present) else np.nan
 
@@ -146,7 +143,6 @@ def _value_column(op: AggregationOp) -> str:
 def _contributors_per_group(
     results: pd.DataFrame, group_by: list[str], ordinals_by_op: list[pd.DataFrame]
 ) -> list[dict[int, tuple[str, ...]]]:
-    """Per output row, each contributing input ordinal mapped to the columns it fed."""
     contributors: list[dict[int, list[str]]] = [{} for _ in range(len(results))]
     # Merged LEFT onto the finished output, so the keys and their order — the NaN
     # group included — are the ones actually emitted. Per op, because each `where`

@@ -44,7 +44,6 @@ def test_a_symlink_out_of_the_run_dir_is_refused(run_dir):
 
 
 def test_a_sibling_run_whose_name_starts_with_this_one_is_refused(run_dir):
-    """Containment, not a string prefix: `.../20260101T0000009` is a DIFFERENT run."""
     sibling = run_dir.parent / f"{run_dir.name}9"
     sibling.mkdir()
     (sibling / "load.csv").write_text("a\n1\n", encoding="utf-8")
@@ -53,13 +52,11 @@ def test_a_sibling_run_whose_name_starts_with_this_one_is_refused(run_dir):
 
 
 def test_the_web_reader_turns_a_refused_path_into_a_404(run_dir):
-    """A corrupt manifest is a bad request for that stage's rows, not a 500."""
     with pytest.raises(HTTPException) as caught:
         read_output_df(run_dir, "../../../../etc/passwd")
     assert caught.value.status_code == 404
 
 
 def test_a_csv_output_is_read_as_csv(run_dir):
-    """The executor writes CSV where parquet cannot hold a frame, so the suffix decides."""
     pd.DataFrame({"a": [1, 2]}).to_csv(run_dir / "outputs" / "load.csv", index=False)
     assert len(read_output_df(run_dir, "outputs/load.csv")) == 2

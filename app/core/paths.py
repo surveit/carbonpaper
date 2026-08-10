@@ -9,7 +9,4 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def repo_root() -> Path:
-    """The repository root the run seams resolve connector/table-ref relative
-    paths against — computed once in REPO_ROOT rather than by each caller
-    off its own `__file__`."""
     return REPO_ROOT

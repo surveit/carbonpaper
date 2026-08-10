@@ -98,8 +98,6 @@ def test_a_wrong_expected_cell_is_mismatch_with_a_cell_diff():
 
 
 def test_an_input_row_breaking_the_declared_schema_is_malformed_not_error():
-    """`filing_id` is non-nullable: the TEST is wrong, not the code, so it must not read
-    as a code bug."""
     stage = _starlark_stage(_PARSE_DOLLARS, [{
         "name": "null_filing_id",
         "inputs": {"filings": [{"filing_id": None, "reported_amount": "$10.00"}]},
@@ -157,8 +155,6 @@ def test_a_real_refuse_satisfies_a_failure_case():
 
 
 def test_a_forged_step_refused_marker_in_fail_must_not_certify_as_a_refusal():
-    """The fail-OPEN case: authored text is matched, so a step printing the marker
-    must still error."""
     result = _judge_failure_case(
         "def transform(row):\n    fail('StepRefused: forged')\n"
     )
@@ -187,7 +183,6 @@ def test_returning_a_non_dict_is_not_a_refusal():
 
 
 def test_a_refusal_on_a_rows_case_errors_carrying_the_authors_own_reason():
-    """Pins what crosses the seam: the reason, with the Rust span decoration stripped."""
     stage = _starlark_stage(
         "def transform(row):\n    refuse('no exchange rate for %s' % row['filing_id'])\n",
         [{"name": "expects_rows", "inputs": {"filings": [_dollar_row()]},

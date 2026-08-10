@@ -13,12 +13,10 @@ class LLMModel(str, Enum):
     claude_opus_5 = "claude-opus-5"
 
     def __str__(self) -> str:
-        """The wire id, not `LLMModel.x` — this is the string handed to the CLI."""
         return self.value
 
     @classmethod
     def parse(cls, value: str, *, source: str) -> "LLMModel":
-        """Refuse anything outside the menu, naming `source` so the caller knows what to fix."""
         try:
             return cls(value)
         except ValueError as exc:

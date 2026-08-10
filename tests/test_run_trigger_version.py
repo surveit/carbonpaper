@@ -25,9 +25,6 @@ _ROWS_SCHEMA = {"columns": [{"name": "name", "type": "str", "nullable": False},
 
 @pytest.fixture
 def project_two_versions(tmp_path, monkeypatch):
-    """A project with an input_data stage snapshotted into TWO versions. Both
-    authored the same (existing) data file, so a run against either version is
-    ready without any binding — the tests can isolate version selection."""
     proj = tmp_path / "demo"
     (proj / "compiled").mkdir(parents=True)
     data = proj / "a.csv"
@@ -53,9 +50,7 @@ def _manifest(proj):
     return json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
 
 
-def test_posted_version_id_pins_the_run(project_two_versions):
-    """version_id from the form is the version the run executes — even when it is
-    not the latest one."""
+def test_posted_version_id_pins_the_run_even_when_it_is_not_the_latest(project_two_versions):
     older = list_versions(project_two_versions)[-1].version_id  # list is newest-first
     resp = client.post("/project/demo/run",
                        data={"version_id": older}, follow_redirects=False)
@@ -64,7 +59,6 @@ def test_posted_version_id_pins_the_run(project_two_versions):
 
 
 def test_omitted_version_id_defaults_to_latest(project_two_versions):
-    """No version_id in the form → the run pins to the latest version."""
     latest = list_versions(project_two_versions)[0].version_id
     resp = client.post("/project/demo/run", data={}, follow_redirects=False)
     assert resp.status_code == 303
@@ -72,7 +66,6 @@ def test_omitted_version_id_defaults_to_latest(project_two_versions):
 
 
 def test_new_run_page_renders_version_picker_latest_selected(project_two_versions):
-    """Latest is pre-selected, so a run defaults to it and any version is one click away."""
     versions = list_versions(project_two_versions)  # newest-first
     # The picker sits in the same form that collects the input paths, because a
     # different version can author different input stages.
@@ -98,7 +91,6 @@ def _seed_load_stage(proj):
 
 
 def test_run_picker_offers_unpublished_versions_too(tmp_path, monkeypatch):
-    """Every stored version is offered, and the newest — published or not — is preselected."""
     proj = tmp_path / "demo"
     _seed_load_stage(proj)
     published = save_working_copy_as_version(proj, message="approved", reviewer="test").version_id
@@ -116,7 +108,6 @@ def test_run_picker_offers_unpublished_versions_too(tmp_path, monkeypatch):
 
 
 def test_run_form_shown_when_the_only_version_is_unpublished(tmp_path, monkeypatch):
-    """An unpublished version is runnable, so the picker offers it, not a publish CTA."""
     proj = tmp_path / "demo"
     _seed_load_stage(proj)
     vid = save_working_copy_as_version(proj, message="unpublished", reviewer="test").version_id
@@ -130,7 +121,6 @@ def test_run_form_shown_when_the_only_version_is_unpublished(tmp_path, monkeypat
 
 
 def test_run_form_hidden_when_the_project_has_no_version(tmp_path, monkeypatch):
-    """No stored version at all is the one case with nothing to run."""
     proj = tmp_path / "demo"
     _seed_load_stage(proj)
     workspace.set_projects_dir(tmp_path)
@@ -145,9 +135,6 @@ def test_run_form_hidden_when_the_project_has_no_version(tmp_path, monkeypatch):
 
 @pytest.fixture
 def project_versions_diff_paths(tmp_path, monkeypatch):
-    """Two versions whose input stage authors DIFFERENT data files (a.csv in v1,
-    b.csv in v2/latest). Lets a test check that binding provenance is judged
-    against the SELECTED version's authored path, not always the latest's."""
     proj = tmp_path / "demo"
     (proj / "compiled").mkdir(parents=True)
     a, b = proj / "a.csv", proj / "b.csv"
@@ -174,12 +161,9 @@ def project_versions_diff_paths(tmp_path, monkeypatch):
     return proj
 
 
-def test_binding_provenance_uses_the_selected_versions_authored_path(
+def test_posting_the_selected_versions_own_authored_path_is_not_a_binding(
     project_versions_diff_paths,
 ):
-    """Posting the SELECTED (older) version's OWN authored path is not a run
-    binding — provenance is 'workflow'. It must be judged against that version's
-    authored path, not the latest version's (which authors a different file)."""
     proj = project_versions_diff_paths
     older = list_versions(proj)[-1].version_id  # v1, authored a.csv
     resp = client.post("/project/demo/run",
@@ -192,9 +176,6 @@ def test_binding_provenance_uses_the_selected_versions_authored_path(
 def test_run_inputs_endpoint_returns_the_selected_versions_inputs(
     project_versions_diff_paths,
 ):
-    """GET /run-inputs?version_id= returns that version's file inputs, so the run
-    form can refresh its path fields when the version dropdown changes — each
-    version reports its own authored path."""
     proj = project_versions_diff_paths
     versions = list_versions(proj)  # newest-first: v2 (b.csv), v1 (a.csv)
     latest, older = versions[0].version_id, versions[-1].version_id

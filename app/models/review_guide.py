@@ -3,9 +3,13 @@ becomes is `app.services.versioning.ReviewGuide`, which adds the address.
 """
 from __future__ import annotations
 
-from pydantic import Field
+from pydantic import ConfigDict, Field
 
 from app.models.schema import _Base
+from app.models.tool_schema_prompts import (
+    REVIEW_GUIDE_DRAFT_DESCRIPTION,
+    REVIEW_GUIDE_STEP_DESCRIPTION,
+)
 
 # A step a journalist will actually skim is short.
 PROSE_MAX_CHARS = 255
@@ -14,7 +18,8 @@ DATA_DESCRIPTION_MAX_CHARS = 120
 
 
 class ReviewGuideStep(_Base):
-    """One step — a Workflow section in the UI. `prose` may carry `backticked` columns."""
+    model_config = ConfigDict(json_schema_extra={"description": REVIEW_GUIDE_STEP_DESCRIPTION})
+
 
     title: str
     prose: str = Field(
@@ -47,7 +52,8 @@ class ReviewGuideStep(_Base):
 
 
 class ReviewGuideDraft(_Base):
-    """A guide as written, before it is addressed to a version and stored."""
+    model_config = ConfigDict(json_schema_extra={"description": REVIEW_GUIDE_DRAFT_DESCRIPTION})
+
 
     steps: list[ReviewGuideStep]
     unnarrated: list[str] = Field(default_factory=list)

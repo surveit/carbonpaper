@@ -26,7 +26,6 @@ def test_the_partial_links_the_palette_first() -> None:
 
 
 def test_no_page_links_a_stylesheet_around_the_partial() -> None:
-    """A page spelling out its own <link> order is how a sheet gets loaded before the palette."""
     strays = {
         path.name: sorted(set(_STATIC_HREF.findall(path.read_text(encoding="utf-8"))))
         for path in sorted(TEMPLATES.glob("*.html"))
@@ -40,8 +39,7 @@ def test_no_page_links_a_stylesheet_around_the_partial() -> None:
     )
 
 
-def test_some_page_actually_includes_the_partial() -> None:
-    """Without this the two rules above pass on a partial no page loads."""
+def test_some_page_includes_the_partial_so_the_order_rules_are_not_vacuous() -> None:
     including = [
         path.name
         for path in sorted(TEMPLATES.glob("*.html"))

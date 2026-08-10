@@ -47,9 +47,6 @@ _SIGNATURE_BY_TYPE: dict[str, dict] = {
 
 @pytest.fixture(autouse=True)
 def examples_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Point the name-based service surface at a tmp examples root, so the tools —
-    which resolve names against the projects root internally — read and
-    write there rather than the real workspace."""
     workspace.set_projects_dir(tmp_path)
     return tmp_path
 
@@ -69,8 +66,6 @@ def _stage(sid: str, name: str, stype: str, inputs: list[str] | None = None) -> 
 
 
 def _seed(examples: Path, name: str) -> Path:
-    """A project on disk AND in the store. Identity is the Project record, so a
-    staged directory alone is not a project — list_projects() reads the store."""
     compiled = examples / name / "compiled"
     compiled.mkdir(parents=True, exist_ok=True)
     (compiled / "01_load.json").write_text(
@@ -136,8 +131,6 @@ def test_project_id_cannot_escape_the_workspace(examples_root: Path) -> None:
 # ── the review-guide tools ───────────────────────────────────────────────────
 
 def _versioned(examples: Path, name: str) -> tuple[list[BoundToolSpec], str]:
-    """A saved version drafted then saved the way the agent does — two stages, so one can be
-    left out."""
     _seed(examples, name)
     tools = _tools(name)
     draft = _tool(tools, "create_draft")(name)
@@ -166,8 +159,6 @@ def _guide(step_ids: list[str], unnarrated: list[str]) -> ReviewGuideDraft:
 
 
 def test_read_review_guide_is_null_until_one_is_written(examples_root: Path) -> None:
-    """Nothing seeds a guide: null, not an empty guide that would read as an authored
-    decision."""
     tools, version_id = _versioned(examples_root, "alpha")
     assert _tool(tools, "read_review_guide")("alpha", version_id) is None
 
@@ -194,8 +185,6 @@ def test_write_review_guide_round_trips_through_read(examples_root: Path) -> Non
 def test_write_review_guide_rejects_a_mismatch_naming_the_stage(
     examples_root: Path, step_ids: list[str], unnarrated: list[str], named: str
 ) -> None:
-    """Refused with the offending id named, so the agent can fix it without reading the
-    version."""
     tools, version_id = _versioned(examples_root, "alpha")
     with pytest.raises(ReviewGuideValidationError, match=named):
         _tool(tools, "write_review_guide")("alpha", version_id, _guide(step_ids, unnarrated))
@@ -220,10 +209,7 @@ def test_write_review_guide_rejects_a_stage_narrated_by_two_steps(examples_root:
 
 
 def test_write_review_guide_rejects_an_invented_field() -> None:
-    """Extras are forbidden: a guide that silently loses what was written is worse than
-    none."""
-    # The tool takes a ReviewGuide, so a field the agent invents is refused when the
-    # tool boundary binds its JSON — before any tool code runs.
+    """The tool binds its JSON to ReviewGuide, so the model refuses before any tool code runs."""
     with pytest.raises(ValidationError, match="confidence"):
         ReviewGuide.model_validate(
             {
@@ -235,7 +221,6 @@ def test_write_review_guide_rejects_an_invented_field() -> None:
 
 
 def test_a_rejected_write_leaves_the_stored_guide_untouched(examples_root: Path) -> None:
-    """The refusal is not a delete: the version keeps the guide it already had."""
     tools, version_id = _versioned(examples_root, "alpha")
     kept = _tool(tools, "write_review_guide")("alpha", version_id, _guide(["load"], ["score"]))
 

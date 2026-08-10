@@ -13,6 +13,7 @@ from app.models.schema import StageConfig, _Base
 from app.models.stages.stage_base import StageBase, StageType
 from app.models.stages.node_spec import NodeTypeSpec
 from app.models.stages.signature import ReplacesSignature
+from app.models.tool_schema_prompts import CONNECTOR_DESCRIPTION
 
 
 class ConnectorKind(str, Enum):
@@ -40,8 +41,7 @@ _FORMAT_BY_SUFFIX: dict[str, FileFormat] = {
 
 
 def resolve_file_format(path: str) -> FileFormat:
-    """The format a path's extension designates; raises rather than guess one a run would misread."""
-    suffix = Path(path).suffix.lower()
+    suffix =Path(path).suffix.lower()
     fmt = _FORMAT_BY_SUFFIX.get(suffix)
     if fmt is None:
         raise ValueError(
@@ -52,9 +52,8 @@ def resolve_file_format(path: str) -> FileFormat:
 
 
 class Connector(StageConfig):
-    """input_data config block."""
-    # Every field changes what this stage computes (which file, what params) —
-    # see StageBase.compute_definition_fingerprint.
+    model_config = ConfigDict(json_schema_extra={"description": CONNECTOR_DESCRIPTION})
+
     FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({"kind", "params", "refresh", "notes"})
     INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset()
 

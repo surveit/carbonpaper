@@ -27,7 +27,6 @@ CodeCarryingStage = PythonRowFunctionStage | PythonFrameFunctionStage | PublishS
 
 
 def _load_python_function(stage: CodeCarryingStage) -> Callable[..., Any]:
-    """Resolve the callable for a stage carrying a function: block."""
     fn_spec = stage.function
     fn_name = fn_spec.function or "transform"
     if fn_spec.kind == FunctionKind.module:
@@ -44,8 +43,6 @@ def _load_python_function(stage: CodeCarryingStage) -> Callable[..., Any]:
 
 
 def handle_python_frame_function(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext) -> pd.DataFrame:
-    """Whole-frame transform: the function sees the full input frame(s) and may
-    reshape them (group-by, pivot, dedup, multi-input merge)."""
     fn = _load_python_function(narrow_stage(stage, PythonFrameFunctionStage))
     # Pass dataframes positionally in declared input order.
     args = [inputs[ref.id] for ref in stage.inputs]
@@ -53,10 +50,6 @@ def handle_python_frame_function(stage: Stage, inputs: dict[str, pd.DataFrame], 
 
 
 def make_python_row_mapper(stage: Stage, ctx: RunContext, src: pd.DataFrame) -> RowMapper:
-    """Resolve the stage's function once; the runtime maps it over the single
-    input's rows — one dict in, one dict out. The function is shown
-    neither the frame nor a row's position in it, so it cannot fan out, fan in,
-    or reorder."""
     fn = _load_python_function(narrow_stage(stage, PythonRowFunctionStage))
 
     def map_row(row: Row, index: int) -> Row:

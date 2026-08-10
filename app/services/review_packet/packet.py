@@ -10,8 +10,6 @@ from app.services.review_packet.data import OmittedFile
 
 
 class ReviewPacket(BaseModel):
-    """`omitted` is what the packet could not include; the index renders it."""
-
     project: str
     run_id: str
     root: Path

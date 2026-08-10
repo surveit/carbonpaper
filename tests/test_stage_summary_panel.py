@@ -85,10 +85,7 @@ def test_a_stage_without_a_summary_says_so(client: TestClient) -> None:
 
 
 def test_a_summary_does_not_change_what_the_stage_computes() -> None:
-    """`summary` is INCIDENTAL: rewording it must not stale an approved belief."""
-
-    # The handle is its own name so the reworded copy can unpack it: mypy infers a
-    # heterogeneous dict literal's values as a union, which `**` cannot spread.
+    # `function` is its own name because mypy cannot `**`-spread a heterogeneous dict literal.
     function = {"kind": "inline", "summary": _SUMMARY, "code": _CODE}
     spec = {
         "id": "flag", "description": "Flag", "type": "python_row_function",

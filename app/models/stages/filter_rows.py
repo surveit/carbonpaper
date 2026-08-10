@@ -6,7 +6,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import ClassVar, Literal, Optional
 
-from pydantic import Field, model_validator
+from pydantic import ConfigDict, Field, model_validator
 
 from app.models.errors import StepRefused
 from app.models.schema import StageConfig
@@ -21,19 +21,12 @@ from app.models.stages.code import (
 from app.models.stages.node_spec import NodeTypeSpec
 from app.models.stages.signature import ExtendsSignature
 from app.models.stages.stage_tests import FilterRowsStageTest
+from app.models.tool_schema_prompts import FILTER_CONFIG_DESCRIPTION
 
 
 class FilterConfig(StageConfig):
-    """filter_rows config block: an authored row predicate, `def should_include(row:
-    dict) -> bool`. True keeps the row, False drops it; every kept row's
-    columns pass through unchanged and its relative order is preserved.
+    model_config = ConfigDict(json_schema_extra={"description": FILTER_CONFIG_DESCRIPTION})
 
-    Inline code is the only source for that predicate: a filter decides, and a
-    decision that needs an importable module is doing more than deciding. There
-    is deliberately no `kind`/`module` here, unlike PythonFunction."""
-    # Every field changes what this stage computes (the predicate it runs)
-    # except `summary`, which describes that predicate to a reader — see
-    # StageBase.compute_definition_fingerprint.
     FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({"code", "function"})
     INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset({"summary", "corner_cases"})
 
@@ -108,7 +101,6 @@ class FilterRowsStage(StageBase):
 
 
 def find_filter_warnings(stage: "FilterRowsStage") -> list[CompilerWarning]:
-    """Warnings about `stage.filter` — raised here and only here, since this module owns it."""
     if not (stage.filter.summary or "").strip():
         return [warn(stage, "undescribed",
                      "no plain-language description — reviewable only by reading its code")]

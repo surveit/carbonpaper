@@ -43,9 +43,6 @@ def test_both_keys_present_ok():
 
 
 def test_key_on_the_wrong_side_rejected():
-    """`a` is declared on the LEFT edge and `b` on the RIGHT — a key that
-    names them backwards (.left="b", .right="a") must be rejected on both
-    sides, not silently matched by name across sides."""
     with pytest.raises(ValidationError):
         parse_stage(_enrich_stage(left_columns=["a"], right_columns=["b"], key_left="b", key_right="a", enrich_with={"b": "b"}))
 
@@ -69,7 +66,6 @@ def test_enrich_with_source_absent_from_the_reference_rejected():
 
 
 def test_landing_on_a_subject_column_rejected_as_a_rewrite():
-    """Landing on a name the subject carries would rewrite it — a join only adds."""
     with pytest.raises(ValidationError) as err:
         parse_stage(_enrich_stage(
             left_columns=["a", "dup"], right_columns=["b", "dup"], key_left="a", key_right="b",
@@ -95,7 +91,6 @@ def test_two_sources_landing_as_one_name_rejected():
 
 
 def test_landing_onto_a_right_key_name_rejected():
-    """Landing onto the reference-side key would corrupt the key the merge reads."""
     with pytest.raises(ValidationError) as err:
         parse_stage(_enrich_stage(
             left_columns=["a"], right_columns=["b", "z"], key_left="a", key_right="b",
@@ -114,7 +109,6 @@ def test_landing_inside_the_internal_namespace_rejected():
 
 
 def test_find_join_column_issues_reports_enrich_with():
-    """Observed from the check directly (model_construct bypasses Stage's validators)."""
     stage = JoinStage.model_construct(
         id="j",
         name="j",

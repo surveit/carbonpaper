@@ -38,9 +38,8 @@ def test_trace_endpoint_returns_serialized_trace(tmp_path, monkeypatch):
 
 
 def test_trace_endpoint_encodes_nan_and_infinity_as_null(tmp_path, monkeypatch):
-    # A nullable numeric column (income/expenses on a lobbying-disclosure
-    # dataset, legitimately absent on most rows) arrives as pandas NaN; a 500
-    # here means any dataset with a nullable numeric column is unreachable.
+    # A nullable numeric column arrives as pandas NaN; a 500 here makes any
+    # dataset with one unreachable.
     project_runs = tmp_path / "proj" / "runs"
     project_runs.mkdir(parents=True)
     seeds = pd.DataFrame({"facility_id": ["a", "b", "c"]})
@@ -88,7 +87,6 @@ def test_trace_view_renders_the_story_and_the_row_panel(tmp_path, monkeypatch):
 
 
 def test_the_graph_is_folded_away_and_the_row_is_not(tmp_path, monkeypatch):
-    """The graph draws the workflow, not this row's path, so it opens closed."""
     client = _project_run(tmp_path, monkeypatch)
     body = client.get("/project/proj/runs/R1/stage/enrich/row/0/trace/view").text
     graph = body.split('class="lin-graph"')[1][:40]
@@ -102,7 +100,6 @@ def test_trace_view_404_for_unknown_stage(tmp_path, monkeypatch):
 
 
 def test_lineage_panel_is_the_transform_not_the_row(tmp_path, monkeypatch):
-    """The page renders the row itself, so the fetched panel is the transform alone."""
     client = _project_run(tmp_path, monkeypatch)  # enrich rows: a/A, b/B (+score)
     resp = client.get("/project/proj/runs/R1/stage/enrich/lineage_panel?row=1")
     assert resp.status_code == 200
@@ -113,8 +110,6 @@ def test_lineage_panel_is_the_transform_not_the_row(tmp_path, monkeypatch):
 
 
 def test_trace_view_says_reshaping_not_traceable(tmp_path, monkeypatch):
-    """Starting a trace at a row-reshaping stage returns 200 with the reshaping
-    stop message (points at #58) — never a 500, never a wrong lineage."""
     project_runs = tmp_path / "proj" / "runs"
     project_runs.mkdir(parents=True)
     seeds = pd.DataFrame({"facility_id": ["a", "b"]})

@@ -69,8 +69,6 @@ def test_a_list_column_comes_back_as_python_lists(round_tripped):
 
 @pytest.mark.parametrize("column", ["count", "score", "flag", "name", "seen_at"])
 def test_a_scalar_columns_cell_types_survive_the_round_trip(round_tripped, column):
-    """int/float/bool/str/datetime keep their numpy-backed dtype and their exact cell
-    type."""
     saved, loaded = round_tripped
     assert [type(cell) for cell in loaded[column]] == [type(cell) for cell in saved[column]]
     assert loaded[column].dtype == saved[column].dtype
@@ -83,13 +81,11 @@ def test_a_null_bearing_column_comes_back_with_its_null_in_place(round_tripped):
 
 
 def test_a_round_tripped_frame_keeps_its_frame_fingerprint(round_tripped):
-    """The frame-grain cache hit must not re-key the frame it answers with."""
     saved, loaded = round_tripped
     assert compute_frame_fingerprint(loaded) == compute_frame_fingerprint(saved)
 
 
 def test_a_round_tripped_frames_rows_keep_their_row_fingerprints(round_tripped):
-    """A frame-grain hit feeds the next stage's row cache — same rows, same keys."""
     saved, loaded = round_tripped
     assert [compute_row_fingerprint(row) for row in list_rows(loaded)] == [
         compute_row_fingerprint(row) for row in list_rows(saved)
@@ -129,8 +125,6 @@ def test_unsafe_collection_rejected(frames, bad_collection):
 
 
 def test_list_rows_gives_one_str_keyed_dict_per_row():
-    """The str pinning is the point: a frame whose column labels are integers
-    still yields keys a caller can look up by name."""
     frame = pd.DataFrame({"a": [1, 2], 3: ["x", "y"]})
     assert list_rows(frame) == [{"a": 1, "3": "x"}, {"a": 2, "3": "y"}]
 
@@ -151,8 +145,7 @@ def test_is_null_form_rejects_non_nulls_including_falsy_ones(value):
 
 @pytest.mark.parametrize("cell", [[1, 2], (1, 2), np.array([1, 2]), {"a": 1}, {1, 2}])
 def test_is_null_form_survives_an_array_valued_cell(cell):
-    """pd.isna on an array cell returns an elementwise array; each of these must answer
-    False."""
+    """pd.isna on an array cell returns an elementwise array, not a scalar answer."""
     assert not is_null_form(cell)
 
 
@@ -166,7 +159,6 @@ def test_is_null_form_agrees_with_collapse_null_forms():
     [None, float("nan"), pd.NA, pd.NaT, np.float32("nan"), np.datetime64("NaT", "ns")],
 )
 def test_is_missing_cell_accepts_every_form_including_the_two_is_null_form_misses(value):
-    """Includes the two forms `is_null_form` deliberately does not catch."""
     assert is_missing_cell(value)
 
 

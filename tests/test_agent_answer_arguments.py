@@ -44,7 +44,6 @@ def test_an_answer_that_already_has_two_fields_is_left_alone():
 
 
 def test_the_companion_argument_is_discarded_rather_than_validated():
-    """It exists to shape the tool call; no answer model declares it."""
     agent: Agent[OneField] = Agent(
         system_prompt="", target_schema=OneField, task="")
     agent.submit_answer(tests=[{"name": "a"}], **{COMPANION_FIELD: True})
@@ -60,7 +59,6 @@ def test_a_genuinely_invalid_answer_is_still_rejected():
 
 
 def test_every_agent_tool_advertises_more_than_one_argument():
-    """The invariant, over the answer models the app actually ships."""
     from app.compiler.data_model import SchemaLibrary
     from app.models.review_guide import ReviewGuideDraft as ReviewGuide
 

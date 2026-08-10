@@ -51,14 +51,6 @@ _INFERRING_FORMATS = frozenset({FileFormat.csv, FileFormat.json, FileFormat.xlsx
 
 
 def preflight_input_data(stage: Stage) -> tuple[list[str], dict[str, Any] | None]:
-    """Run-readiness + provenance for one input stage, checked at prepare time
-    (before the run dir is created): the effective connector params must
-    designate an existing file. Returns (issues, record) — issues name what is
-    missing ([] means ready); record is the manifest provenance for the
-    designated file (absolute path, sha256, byte count, both streamed now), or
-    None when the stage is not ready. The hash is a strong integrity signal for
-    "which file was designated", not a read-time proof — the handler opens the
-    file moments later."""
     connector = narrow_stage(stage, InputDataStage).connector
     path_param = connector.params.get("path")
     if not path_param:
@@ -119,9 +111,7 @@ def read_input_data(stage: Stage, ctx: RunContext) -> pd.DataFrame:
 def _read_dtype(
     schema: TableSchema | None, fmt: str, params: dict[str, Any]
 ) -> dict[Hashable, Any] | None:
-    """The `dtype=` map for a guessing format, or None when there is nothing to pin."""
-    # Keyed Hashable, not str: pandas types `dtype=` as Mapping[Hashable, ...], whose
-    # key is invariant, so a dict[str, ...] is not assignable to it.
+    """Keyed `Hashable`, not `str`: pandas' `dtype=` Mapping key is invariant, so dict[str, …] fails."""
     pinned: dict[Hashable, Any] = {name: str for name in _text_on_disk_columns(schema, fmt)}
     # An explicit `dtype` param wins per column name: the author's declaration of how
     # to READ the file beats what we infer from the declaration of what it CONTAINS.
@@ -130,7 +120,6 @@ def _read_dtype(
 
 
 def _text_on_disk_columns(schema: TableSchema | None, fmt: str) -> list[str]:
-    """Declared columns this format must not be allowed to type-infer."""
     if schema is None:
         return []
     # csv holds nothing but text, so every text-on-disk type — and `list[X]`, whose
@@ -152,7 +141,6 @@ def _text_on_disk_columns(schema: TableSchema | None, fmt: str) -> list[str]:
 
 
 def _date_columns(schema: TableSchema | None, fmt: str, params: dict[str, Any]) -> list[str]:
-    """Columns to run through pd.to_datetime: the authored `parse_dates`, then declared dates."""
     columns = list(params.get("parse_dates", []))
     # Only formats pandas type-infers contribute declared columns — parquet and
     # geojson carry real types already.
@@ -165,10 +153,6 @@ def _date_columns(schema: TableSchema | None, fmt: str, params: dict[str, Any]) 
 
 
 def _read_geojson(path: Path) -> pd.DataFrame:
-    """Flatten a GeoJSON FeatureCollection into a DataFrame: one row per
-    feature, columns = feature properties plus `lon`/`lat` read off the geometry
-    (point centroid). Keeps input_data honest for vector sources like the
-    Trase Indonesia mills file, which the `csv`/`json` paths can't parse."""
     geo = json.loads(path.read_text(encoding="utf-8"))
     rows: list[dict[str, Any]] = []
     for feat in geo.get("features", []):
@@ -185,10 +169,7 @@ def _read_geojson(path: Path) -> pd.DataFrame:
 def _read_xlsx(
     path: Path, params: XlsxReadParams, *, dtype: dict[Hashable, Any] | None = None
 ) -> pd.DataFrame:
-    # header_row/first_column are 0-based indices into the sheet as it appears in
-    # Excel; rows above and columns left of them are discarded before parsing.
-    # dtype keys on the header row's names, so first_column's later slicing cannot
-    # shift it.
+    # header_row/first_column are 0-based indices into the sheet as Excel shows it.
     frame = read_source_excel(
         path, sheet_name=params.sheet_name, header_row=params.header_row, dtype=dtype
     )
@@ -201,9 +182,7 @@ def _read_xlsx(
 
 
 def _add_source_row_column(frame: pd.DataFrame, column: str, header_row: int) -> None:
-    # frame.index is the default 0-based RangeIndex pd.read_excel assigns to data
-    # rows in sheet order; the sheet's own 1-based row N is header_row + 2 + index,
-    # since header_row is the header's 0-based sheet row and data starts the row after it.
+    # Sheet rows are 1-based and the data starts one row after the header, hence + 2.
     if column in frame.columns:
         raise ValueError(f"source_row_column '{column}' collides with an existing column")
     frame[column] = frame.index + header_row + 2

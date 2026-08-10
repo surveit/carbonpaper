@@ -26,12 +26,7 @@ from app.services import versioning, workspace
 
 
 class Draft(PersistedModel):
-    """One scratch document in the "draft" collection. `id` (inherited from
-    PersistedModel) is the composite `f"{project}/{draft_id}"`; `draft_id` is
-    the plain local id every caller of this module's public functions works
-    with. `stages` are validated `Stage` objects — each one individually
-    valid — but the WORKFLOW they form may still be incomplete mid-edit (a
-    dangling input, a duplicate id, a cycle) until save_version."""
+    """`id` is the composite `f"{project}/{draft_id}"`; `draft_id` is the local id callers use."""
 
     collection: ClassVar[str] = "draft"
     SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
@@ -47,11 +42,6 @@ class Draft(PersistedModel):
 
 
 class DraftView(BaseModel):
-    """The agent-facing shape every caller of this module reads: `id` is the
-    LOCAL draft_id, never the composite store id. `stages` are validated
-    `Stage` objects — see `Draft`'s docstring for what "valid" does and
-    doesn't cover mid-edit."""
-
     id: str
     parent_version: str | None
     stages: list[Stage]
@@ -60,15 +50,10 @@ class DraftView(BaseModel):
 
 
 class DraftDetail(DraftView):
-    """A draft's view plus its current validation problems."""
-
     issues: list[str]
 
 
 class DraftEdit(BaseModel):
-    """The summary every draft edit (set/remove stage) returns: what's in the
-    draft now, and whether it would save cleanly."""
-
     ok: bool
     draft_id: str
     stage_ids: list[str]
@@ -76,17 +61,12 @@ class DraftEdit(BaseModel):
 
 
 class SaveResult(BaseModel):
-    """The outcome of freezing a draft into a version: either refused with the
-    blocking `issues` (nothing written, `version_id` stays None), or the new
-    version's id."""
-
     ok: bool
     issues: list[str] = Field(default_factory=list)
     version_id: str | None = None
 
 
 def _view(d: Draft) -> DraftView:
-    """Project a Draft down to its public view."""
     return DraftView(
         id=d.draft_id,
         parent_version=d.parent_version,
@@ -101,9 +81,6 @@ def create_draft(
     *,
     from_version: str | None = None,
 ) -> DraftView:
-    """Start a new draft for project `name` and return its view (its `id` names
-    it in every later call). Seeded with the stages of `from_version` when
-    given (and recording it as the draft's parent), empty otherwise."""
     project_dir = workspace.resolve_project_dir(name)
     stages = (
         versioning.load_version_stages(project_dir, from_version)
@@ -123,10 +100,6 @@ def create_draft(
 
 def read_draft(
     name: str, draft_id: str) -> DraftDetail:
-    """The draft's view plus a non-fatal `issues` list (the cross-stage graph
-    problems in its current stages — dangling inputs, duplicate ids, a cycle;
-    [] means it would save cleanly). Every stored stage is already individually
-    valid, so nothing here re-checks a single stage's own shape."""
     project_dir = workspace.resolve_project_dir(name)
     d = _load(project_dir, draft_id)
     return DraftDetail(**_view(d).model_dump(), issues=validate_workflow(d.stages))
@@ -134,14 +107,6 @@ def read_draft(
 
 def set_draft_stage(
     name: str, draft_id: str, stage_json: str) -> DraftEdit:
-    """Add or replace one stage (matched by its `id`) in the draft. A MALFORMED
-    stage — invalid JSON, not a JSON object, or failing `Stage` validation
-    (unknown type, missing required field, wrong shape, ...) — is rejected
-    outright: nothing is written, and `ValueError` carries the readable
-    per-field errors so the caller fixes and retries. A VALID stage whose
-    `inputs` reference a stage id not yet in the draft IS stored — that's the
-    workflow still being incomplete mid-build, not a bad stage — and shows up
-    in the returned `issues`."""
     stage = _parse_stage(stage_json)
     project_dir = workspace.resolve_project_dir(name)
     d = _load(project_dir, draft_id)
@@ -153,9 +118,6 @@ def set_draft_stage(
 
 def remove_draft_stage(
     name: str, draft_id: str, stage_id: str) -> DraftEdit:
-    """Delete one stage from the draft by id. Raises ValueError if no stage in
-    the draft carries that id (deleting nothing is a caller mistake, not a
-    success)."""
     project_dir = workspace.resolve_project_dir(name)
     d = _load(project_dir, draft_id)
     kept = [s for s in d.stages if s.id != stage_id]
@@ -169,13 +131,6 @@ def remove_draft_stage(
 def save_version(
     name: str, draft_id: str, *, message: str
 ) -> SaveResult:
-    """Freeze the draft's stages into a new immutable version — the draft's only
-    exit, and the single validation cliff: a workflow still incomplete (a
-    dangling input, a duplicate id, a cycle) is refused with the full issue
-    list and nothing is written. On success the draft's parent advances to the
-    new version, so successive saves chain (v2 -> v3 -> v4) rather than
-    fanning out; the version is born unpublished (publishing is the human's
-    act)."""
     project_dir = workspace.resolve_project_dir(name)
     d = _load(project_dir, draft_id)
     issues = validate_workflow(d.stages)
@@ -203,16 +158,11 @@ def _doc_id(project_dir: Path, draft_id: str) -> str:
 
 
 def _taken(project_dir: Path) -> set[str]:
-    """The local draft ids already live for this project — the space
-    generate_word_triplet_id must avoid."""
     return {d.draft_id for d in Draft.list(f"{Path(project_dir).name}/")}
 
 
 def _load(project_dir: Path, draft_id: str) -> Draft:
-    """The draft, with the id checked against the triplet shape FIRST so a
-    caller-supplied id can never be used as a store key it wasn't minted from
-    (e.g. a path-traversal attempt), then loaded from the store. A missing
-    document reads the same as a malformed id — both mean "no such draft"."""
+    """Shape-checks the id FIRST, so a caller-supplied id can never reach the store as a key."""
     if not _DRAFT_ID.match(draft_id):
         raise DraftNotFoundError(f"'{draft_id}' is not a draft id")
     try:
@@ -225,12 +175,6 @@ def _load(project_dir: Path, draft_id: str) -> Draft:
 
 
 def _parse_stage(stage_json: str) -> Stage:
-    """Parse `stage_json` as one `Stage`, raising `ValueError` (with readable
-    per-field errors) for anything MALFORMED: invalid JSON, not a JSON object,
-    or failing `parse_stage`. `Stage` validation is per-stage only —
-    it does not check whether `inputs` reference a stage id that exists
-    elsewhere in the draft, which is a cross-stage graph concern (see
-    app.models.workflow.check_inputs_resolve) and stays allowed here."""
     obj = json.loads(stage_json)
     if not isinstance(obj, dict):
         raise ValueError("stage_json must be a JSON object")
@@ -241,8 +185,6 @@ def _parse_stage(stage_json: str) -> Stage:
 
 
 def _describe(d: Draft) -> DraftEdit:
-    """The summary every edit returns: what's in the draft now, and whether it
-    would save cleanly."""
     return DraftEdit(
         ok=True,
         draft_id=d.draft_id,

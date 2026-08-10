@@ -24,12 +24,9 @@ def test_every_model_id_names_a_version() -> None:
 
 
 def test_str_is_the_wire_id() -> None:
-    # app.runtime.llm builds the CLI's model argument with str(); the enum default would
-    # make that "LLMModel.claude_opus_5" and send a name no model answers to.
+    # The enum's default str() would send "LLMModel.claude_opus_5", a name no model answers to.
     assert [str(member) for member in LLMModel] == [member.value for member in LLMModel]
 
 
 def test_the_runtime_default_is_a_pinned_model() -> None:
-    # A stage omitting llm.model records nothing about which model answered, so this
-    # default is the only remaining statement of what such a run's rows came from.
     assert isinstance(DEFAULT_MODEL, LLMModel)

@@ -20,7 +20,6 @@ GOLDENS = Path(__file__).parent / "goldens"
 
 @pytest.fixture()
 def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """A `demo` project with one real, manifest-backed run."""
     pdir = tmp_path / "demo"
     pdir.mkdir(parents=True)
     workspace.set_projects_dir(tmp_path)

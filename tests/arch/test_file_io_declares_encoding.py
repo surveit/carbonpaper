@@ -17,8 +17,6 @@ _TEXT_IO_METHODS = frozenset({"read_text", "write_text"})
 
 
 def find_encodingless_text_io(tree: ast.Module) -> list[tuple[int, str]]:
-    """(lineno, callee) for each read_text/write_text/open call that is text mode
-    and passes no `encoding=`."""
     offenders: list[tuple[int, str]] = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
@@ -57,11 +55,8 @@ def _passes_keyword(node: ast.Call, name: str) -> bool:
 
 
 def _opens_binary(node: ast.Call) -> bool:
-    """True only if the mode is a string literal containing "b". An unprovable
-    mode counts as text: fail loud rather than assume binary."""
-    # Positional mode sits after the file argument for builtin open(file, mode),
-    # but first for the bound Path.open(mode).
-    index = 1 if isinstance(node.func, ast.Name) else 0
+    """An unprovable mode counts as text: fail loud rather than assume binary."""
+    index = 1 if isinstance(node.func, ast.Name) else 0  # builtin open(file, mode); bound Path.open(mode)
     mode: ast.expr | None = node.args[index] if len(node.args) > index else None
     for keyword in node.keywords:
         if keyword.arg == "mode":
@@ -102,8 +97,6 @@ def test_find_encodingless_text_io_flags_path_open_method() -> None:
 
 
 def test_find_encodingless_text_io_allows_binary_path_open_method() -> None:
-    """`p.open("rb")` takes the mode first — reading it at the builtin open()'s
-    positional index would misread the file argument as the mode."""
     tree = ast.parse('p.open("rb")\n')
     assert find_encodingless_text_io(tree) == []
 
@@ -125,8 +118,6 @@ def test_find_encodingless_text_io_allows_binary_open_via_mode_keyword() -> None
 
 
 def test_find_encodingless_text_io_flags_open_whose_mode_is_not_a_literal() -> None:
-    """An unprovable mode is flagged, not waved through — the rule may not assume
-    binary from a name it cannot read."""
     tree = ast.parse('open("f", mode)\n')
     assert find_encodingless_text_io(tree) == [(1, "open")]
 

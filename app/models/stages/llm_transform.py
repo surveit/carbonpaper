@@ -6,7 +6,7 @@ from __future__ import annotations
 import re
 from typing import Any, ClassVar, Literal, Optional
 
-from pydantic import AliasChoices, Field, model_validator
+from pydantic import AliasChoices, ConfigDict, Field, model_validator
 
 from app.core.llm.options import LLMModel
 from app.core.prompt_template import find_template_fields
@@ -15,6 +15,7 @@ from app.models.stages.stage_base import StageBase, StageInput, StageType
 from app.models.stages.shared import COLUMN_ISSUE, resolve_input_columns
 from app.models.stages.node_spec import NodeTypeSpec
 from app.models.stages.signature import ExtendsSignature
+from app.models.tool_schema_prompts import LLM_CONFIG_DESCRIPTION
 
 
 # Tool names an `llm_transform` stage may be granted, so a stage can RESEARCH — look
@@ -39,9 +40,8 @@ GRANTABLE_TOOLS: frozenset[str] = frozenset({
 
 
 class LLMConfig(StageConfig):
-    """llm_transform config block."""
-    # Every field changes what this stage computes (the prompt, the model, the
-    # sampling/response knobs) — see StageBase.compute_definition_fingerprint.
+    model_config = ConfigDict(json_schema_extra={"description": LLM_CONFIG_DESCRIPTION})
+
     FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({
         "prompt_instructions", "prompt_data_template", "model", "temperature",
         "max_retries", "response_format", "rubric", "tools", "batch_size",
@@ -123,7 +123,6 @@ class LLMTransformStage(StageBase):
 
 
 def find_llm_signature_issues(stage: "LLMTransformStage") -> list[str]:
-    """Reads match the placeholders, one input, and something asked of the model."""
     signature = stage.signature
     assert signature is not None  # find_signature_config_issues runs only with one
     if len(stage.inputs) != 1:
@@ -159,9 +158,6 @@ def find_llm_signature_issues(stage: "LLMTransformStage") -> list[str]:
 
 
 def find_llm_prompt_column_issues(stage: "LLMTransformStage") -> list[str]:
-    """Every way the prompt template's column references are wrong: a
-    `{placeholder}` absent from the resolved input, or an input column that is
-    double-braced and so never injected."""
     llm = stage.llm
     cols = resolve_input_columns(stage, 0)
     injected = find_template_fields(llm.prompt_data_template)
@@ -179,13 +175,6 @@ def find_llm_prompt_column_issues(stage: "LLMTransformStage") -> list[str]:
 def find_double_braced_input_issues(
     template: str, injected: set[str], input_schema: TableSchema
 ) -> list[str]:
-    """`{{col}}` is an escaped literal under str.format_map — it renders as the
-    text `{col}` and the row's value never reaches the model. Double-bracing a
-    REAL input column is therefore always a mistake: the author meant to inject
-    it. Reject exactly that. A prompt that injects nothing is unusual but
-    allowed, so this requires no injection — only that a named input column is
-    not escaped. Independent of the 1:1 grain contract: this is prompt wiring,
-    not schema shape."""
     double_braced = [
         column.name for column in input_schema.columns
         if column.name not in injected

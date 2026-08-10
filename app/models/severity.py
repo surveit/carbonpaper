@@ -10,7 +10,5 @@ import enum
 
 
 class UserFacingErrorSeverity(enum.StrEnum):
-    """One vocabulary: a run's issues and a workflow's compiler warnings share a table."""
-
     error = "error"
     warning = "warning"

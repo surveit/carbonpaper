@@ -11,9 +11,7 @@ from app.models.errors import StepRefused
 def load_function(
     code: str, function_name: str, default_name: str
 ) -> Callable[..., Any] | None:
-    """None when neither name is bound — the caller names the function it wanted."""
-    # StepRefused is seeded so the code can `raise StepRefused(...)` with no
-    # import line — the refusal is meant to be the cheapest thing to write.
+    # Seeded so stage code can `raise StepRefused(...)` with no import line.
     namespace: dict[str, Any] = {StepRefused.__name__: StepRefused}
     exec(code, namespace)
     return namespace.get(function_name) or namespace.get(default_name)

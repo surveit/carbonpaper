@@ -19,7 +19,6 @@ _EDGE = {
 
 
 def _row_function_stage(*, signature=None):
-    """One python_row_function stage dict over a price/title input edge."""
     spec = {
         "id": "clean",
         "description": "Clean prices",
@@ -39,7 +38,6 @@ def _issues(stage_dict) -> str:
 
 
 def _starlark_row_function_stage(*, signature=None):
-    """One starlark_row_function stage dict over a price/title input edge."""
     spec = {
         "id": "clean",
         "description": "Clean prices",
@@ -132,7 +130,6 @@ def test_add_colliding_with_an_anchor_column_rejected():
 
 
 def test_the_signature_is_the_output_schema():
-    """The anchor extended by the signature IS the output; no second account can disagree."""
     stage = parse_stage(_row_function_stage(
         signature={
             "form": "extends",

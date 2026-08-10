@@ -16,7 +16,6 @@ _EXEMPT_TEXT_PARTS = {"__pycache__", "_vendor", "node_modules", "venv"}
 
 
 def find_governed_files(test_file: str) -> list[Path]:
-    """Source ``.py`` files in the folder this arch test lives in, and below."""
     feature_dir = _resolve_feature_dir(test_file)
     files = list(_iter_source_under(feature_dir))
     if not files:
@@ -29,7 +28,6 @@ def find_governed_files(test_file: str) -> list[Path]:
 
 
 def scan_all_source() -> list[Path]:
-    """Every source ``.py`` in the repo — whole repo minus the exemptions."""
     files = list(_iter_source_under(_REPO_ROOT))
     if not files:
         raise ValueError(
@@ -40,8 +38,6 @@ def scan_all_source() -> list[Path]:
 
 
 def scan_all_text(suffixes: tuple[str, ...]) -> list[Path]:
-    """Every first-party file with one of `suffixes` — tests and docs included,
-    unlike `scan_all_source`."""
     files = sorted(
         path
         for suffix in suffixes
@@ -60,15 +56,6 @@ def scan_all_text(suffixes: tuple[str, ...]) -> list[Path]:
 
 
 def find_source_files_under(target: Path) -> list[Path]:
-    """The ``.py`` files a rule's `target` governs: `target` itself if it is
-    a single file, or every non-exempt ``.py`` file in its subtree if it is a
-    directory (see the module docstring for the exempt parts).
-
-    Raises ``FileNotFoundError`` if `target` does not exist at all, or
-    ``ValueError`` if a directory target yields zero files — a rule pointed
-    at the wrong path, or every match got exempted, is a silent-pass hole,
-    not an empty rule.
-    """
     if target.is_file():
         return [target]
     files = list(_iter_source_under(target))
@@ -81,7 +68,6 @@ def find_source_files_under(target: Path) -> list[Path]:
 
 
 def _resolve_feature_dir(test_file: str) -> Path:
-    """The directory an ``_arch_tests/`` folder sits in, walking up from the test."""
     for parent in Path(test_file).resolve().parents:
         if parent.name == _MARKER:
             return parent.parent
@@ -97,7 +83,6 @@ def _iter_source_under(base: Path) -> Iterator[Path]:
 
 
 def _is_source(relative_path: Path) -> bool:
-    """True if a base-relative path is first-party source subject to arch rules."""
     return not any(
         part.startswith(".") or part in _EXEMPT_PARTS for part in relative_path.parts
     )

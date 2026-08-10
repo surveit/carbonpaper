@@ -22,14 +22,7 @@ def start_data_model_generation_agent(
     model: str,
     on_answer: Callable[[SchemaLibrary | None], None],
 ) -> str:
-    """Start the data-model-generation agent as a LIVE chat turn and return the session id.
-
-    Creates a view-only session (the framing prompt shown as the user's message) and
-    streams the agent on the shared TurnManager, so the run is watchable at /chat/<sid>
-    while it happens and persists when it ends. When the turn finishes, `on_answer` is
-    called with the submitted SchemaLibrary — or None if none was submitted — so the
-    caller persists the result or handles the failure. Must be called from the server
-    event loop (it starts a turn there)."""
+    """Must be called from the server event loop — it starts a turn there."""
     store = open_session_store()
     session_id = store.create(
         title=f"Generation · data model · {project_name}",
@@ -54,11 +47,6 @@ def start_data_model_generation_agent(
 
 
 def build_data_model_agent(document: str, *, model: str = "sonnet") -> Agent[SchemaLibrary]:
-    """Configure the data-model agent for `document`: it authors the named-schema data
-    model and SUBMITS it as a SchemaLibrary via submit_answer. Read `.answer` after the
-    run/turn for the validated library (None if nothing valid was submitted). `.run()`
-    drives it headlessly; driving `.build_engine()` through the TurnManager runs it as a
-    live turn (see start_data_model_generation_agent)."""
     return Agent(
         system_prompt=DATA_MODEL_SYSTEM_PROMPT,
         target_schema=SchemaLibrary,
@@ -68,8 +56,7 @@ def build_data_model_agent(document: str, *, model: str = "sonnet") -> Agent[Sch
 
 
 def _frame(document: str) -> str:
-    """Frame the methodology document as the material to model, delimited so the agent
-    treats it as source, not instructions."""
+    """Delimited so the agent treats the document as source, not as instructions."""
     return (
         "Here is the methodology document. Author its data model — the named schemas — "
         "and submit it with submit_answer.\n\n"

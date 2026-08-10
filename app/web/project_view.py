@@ -15,8 +15,6 @@ from app.web.breadcrumbs import Crumb, build_section_crumbs
 
 
 class NavItem(BaseModel):
-    """`key` matches the active section, to highlight it."""
-
     key: str
     label: str
     href: str
@@ -27,26 +25,18 @@ NavItem.model_rebuild()
 
 
 class NextAction(BaseModel):
-    """The sidebar's "what to do next" call-to-action: a stable key, the button
-    label, and the section href it links to (a path under /project/<name>)."""
-
     key: str
     label: str
     href: str
 
 
 class ShellState(project.ProjectState):
-    """A ProjectState plus what the web layer draws around it: nav tree, header
-    trail, next_action CTA."""
-
     nav: list[NavItem]
     crumbs: list[Crumb]
     next_action: NextAction
 
 
 def shell_state(pdir: Path, section: str) -> ShellState:
-    """`section` is the active nav key; it both highlights the sidebar and names
-    the trail's last rung."""
     state = project.project_state(pdir)
     nav = build_nav(state)
     return ShellState(
@@ -58,7 +48,6 @@ def shell_state(pdir: Path, section: str) -> ShellState:
 
 
 def build_shell_crumbs(nav: list[NavItem], section: str, project_name: str) -> list[Crumb]:
-    """Labelled off the same nav tree the sidebar draws, so the two can never disagree."""
     for item in nav:
         if item.key == section:
             return build_section_crumbs(project_name, label=item.label)
@@ -71,12 +60,6 @@ def build_shell_crumbs(nav: list[NavItem], section: str, project_name: str) -> l
 
 
 def build_nav(state: project.ProjectState) -> list[NavItem]:
-    """The shell's left-nav tree: Overview / Document / Data model / Workflow, with
-    Versions, Runs, and Evals nested under Workflow — the three things a workflow
-    has: its versioned snapshots, its executions, and the evals that score them.
-
-    The tree is navigation, not a status report: it carries no mark at all. Every
-    section's own page states its status, and its queue, in words."""
     base = f"/project/{state.name}"
     return [
         _nav_leaf("overview", "Overview", base),
@@ -92,18 +75,6 @@ def build_nav(state: project.ProjectState) -> list[NavItem]:
 
 
 def _next_action(state: project.ProjectState) -> NextAction:
-    """The 'what to do next' rung for a project — first match wins. Returns a
-    NextAction {key, label, href}; href is a section path under /project/<name>. Reads
-    only the domain snapshot's data_model / workflow / runs; the decision is UI-facing
-    (it picks the button a reviewer sees next), so it lives in the web layer.
-
-    Ladder (top-down):
-      1. no data model             → author it            (/data_model)
-      2. no workflow               → build the workflow   (/workflow)
-      3. workflow, 0 runs          → run it               (/runs/new)
-      4. runs awaiting_review>0    → review the run       (/runs)
-      5. otherwise                 → view runs            (/runs)
-    """
     name = state.name
     data_model = state.data_model
     workflow = state.workflow

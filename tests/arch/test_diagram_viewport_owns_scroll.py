@@ -16,7 +16,6 @@ _NON_SCROLLING = {"visible", "clip"}
 
 
 def _find_rules_under_the_viewport(css: str) -> list[tuple[str, str]]:
-    """(selector, body) for every rule whose selector targets a .diagram-viewport DESCENDANT."""
     found = []
     # A comment sits between the previous `}` and this rule's `{`, so it lands inside the
     # selector capture unless it is removed first.
@@ -62,7 +61,6 @@ def test_no_descendant_of_the_diagram_viewport_scrolls() -> None:
 
 
 def test_the_mermaid_block_cancels_the_base_pre_overflow() -> None:
-    """`pre { overflow-x: auto }` applies to <pre class="mermaid"> unless cancelled."""
     css = read_stylesheets()
     rules = dict(_find_rules_under_the_viewport(css))
     body = rules.get(".diagram-viewport .mermaid")

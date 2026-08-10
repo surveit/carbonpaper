@@ -66,9 +66,6 @@ SYSTEM_PROMPT = (
 
 
 def render_prompt(template: str, row: dict[str, Any]) -> str:
-    """Render the prompt by injecting row columns as {column}. A placeholder
-    naming a column not in the row, or a malformed template, is a loud error —
-    the model must never be called with a half-rendered prompt."""
     try:
         return template.format_map(row)
     except (KeyError, ValueError, IndexError) as exc:
@@ -87,17 +84,7 @@ def call_llm(
     model: str | None = None,
     usage_out: list[LlmUsage] | None = None,
 ) -> dict[str, Any]:
-    """Single-row LLM call; returns the reply as a plain dict.
-
-    A structured-output Agent must submit a valid `reply_model` instance
-    (validated by construction, retried in-loop on rejection). When no agent
-    backend is available this raises — there is no fallback, so a fabricated
-    answer can never masquerade as a real model reply.
-
-    If `usage_out` is given, each attempt's token/cost usage is appended to it —
-    including a failed attempt's, since those tokens were still spent. Kept as an
-    out-param rather than the return value so the reply-dict contract (and the
-    tests that mock it) are unchanged."""
+    """`usage_out` collects EVERY attempt's usage, failed ones included — those tokens were spent."""
     if not llm_config.prompt_data_template:
         raise LLMError(f"stage {stage_id}: llm_transform has no prompt_data_template")
     task = render_prompt(llm_config.prompt_data_template, input_row)
@@ -118,15 +105,8 @@ def call_llm_batch(
     model: str | None = None,
     usage_out: list[LlmUsage] | None = None,
 ) -> dict[str, Any]:
-    """Invoke the agent on a whole chunk at once — the SAME agent backend, retries,
-    and usage recording as the per-row `call_llm` (both go through `_run_agent`);
-    it is not a separate invocation mechanism. The caller (the batch driver)
-    pre-builds `task` (the numbered chunk rows + the copy-the-number contract) and
-    `instructions`, and passes a list-of-items `reply_schema`. Returns the
-    validated `{"results": [...]}` as a plain dict."""
     model_name = str(model or llm_config.model or DEFAULT_MODEL)
-    # No tools here by construction: LLMConfig refuses tools with batch_size > 1,
-    # so a research stage never reaches the batch driver.
+    # No tools by construction: LLMConfig refuses tools with batch_size > 1.
     return _run_agent(
         _compose_system(instructions), task, reply_schema, model_name,
         llm_config.max_retries, usage_out,
@@ -134,8 +114,6 @@ def call_llm_batch(
 
 
 def _compose_system(instructions: str) -> str:
-    """The agent's base system prompt plus the stage's row-invariant
-    `prompt_instructions`, if any — the stable prefix shared across rows/chunks."""
     return SYSTEM_PROMPT if not instructions else SYSTEM_PROMPT + "\n\n" + instructions
 
 
@@ -148,21 +126,10 @@ def _run_agent(
     usage_out: list[LlmUsage] | None,
     tools: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Run the structured-output Agent to a validated `target_schema`, dumped to a
-    dict. `max_retries` handles TRANSIENT backend failures (a dropped CLI
-    connection, a timeout) — a fresh Agent per attempt, every attempt's usage
-    (success or failure) recorded, and the LAST failure re-raised so the caller
-    records a real error rather than a fabricated reply.
-
-    `tools` grants the agent research tools alongside submit_answer. Granting any
-    switches the row onto the research budget — a much longer timeout and a much
-    higher turn cap — because searching and reading documents is the work, not
-    overhead on top of it."""
     require_agent_backend()
-    # The run log's detail tier for whatever row/chunk is bound (nothing, outside
-    # a logged run). The sink is captured HERE, on the caller's own thread, so it
-    # survives the thread hop inside run_sync; RunLog.emit is itself thread-safe.
     emit_llm_detail(LLM_PROMPT, text=task)
+    # Captured HERE, on the caller's own thread, so it survives the thread hop
+    # inside run_sync; RunLog.emit is itself thread-safe.
     forward = _forward_agent_events(current_detail_sink())
     attempts = max(1, (max_retries or 0) + 1)
     researching = bool(tools)
@@ -196,7 +163,6 @@ def _run_agent(
 def _forward_agent_events(
     sink: DetailSink | None,
 ) -> Callable[[dict[str, Any]], None] | None:
-    """Translate the agent's stream events into this row/chunk's detail events."""
     if sink is None:
         return None
 
@@ -225,8 +191,5 @@ def _forward_agent_events(
 
 
 def _record_usage(usage_out: list[LlmUsage] | None, agent: Agent[BaseModel]) -> None:
-    """Append this attempt's usage to the sink, if both are present. A turn that
-    produced no ResultMessage (e.g. a timeout) leaves agent.last_usage None —
-    nothing is recorded rather than a fabricated zero."""
     if usage_out is not None and agent.last_usage is not None:
         usage_out.append(agent.last_usage)

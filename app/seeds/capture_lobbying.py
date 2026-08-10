@@ -19,9 +19,6 @@ _FIXTURE_PATH = Path(__file__).resolve().parent / "data" / f"{_SOURCE_PROJECT_NA
 
 
 def capture_lobbying_bundle() -> Path:
-    """Export the source project as a committed WorkflowFile json at
-    _FIXTURE_PATH (replacing it if already present); returns that path.
-    Read-only on the source."""
     ensure_store_configured()
     # This script is the ONE caller that reads a workspace other than its own:
     # it exports out of a separate local checkout. It repoints the process for

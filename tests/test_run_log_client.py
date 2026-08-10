@@ -46,8 +46,7 @@ const events = [
 
 
 def test_errors_only_surfaces_an_llm_error_while_llm_detail_is_off(tmp_path):
-    """An llm_error is logged at the detail level, so filtering by detail first
-    hides every one of them behind the default-off "LLM detail" checkbox."""
+    """An llm_error is a detail-level event, so filtering by detail first would hide every one."""
     out = _run_in_node(_EVENTS_JS + """
       console.log(JSON.stringify({
         html: client.renderEvents(events, {errorsOnly: true, detail: false}),
@@ -100,8 +99,7 @@ client.openRunLogStream({
 
 
 def test_a_reconnect_resumes_at_the_cursor_and_never_duplicates(tmp_path):
-    """Measured in headless Chrome: an EventSource retries the URL it was built
-    with, so a fixed from_seq=0 replays the whole log on every blip."""
+    """An EventSource retries the URL it was built with, so a fixed from_seq=0 replays the log."""
     out = _run_in_node(_STREAM_JS + """
       send(0); send(1);
       current.onerror();          // the connection drops
@@ -118,8 +116,6 @@ def test_a_reconnect_resumes_at_the_cursor_and_never_duplicates(tmp_path):
 
 
 def test_a_drop_before_any_event_reconnects_to_the_tail_again(tmp_path):
-    """Nothing has been rendered yet, so there is no cursor to resume from and
-    asking for from_seq=0 would pull the whole log the tail default avoids."""
     out = _run_in_node(_STREAM_JS + """
       current.onerror();
       scheduled.shift()();
@@ -130,7 +126,6 @@ def test_a_drop_before_any_event_reconnects_to_the_tail_again(tmp_path):
 
 
 def test_a_scoped_feed_keeps_its_scope_across_a_reconnect(tmp_path):
-    """A reconnect that dropped ?stage= would widen a stage's log to the run's."""
     out = _run_in_node("""
       const opened = [];
       let current = null;

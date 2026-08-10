@@ -8,7 +8,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Optional
 
-from pydantic import Field, ValidationError, field_validator, model_validator
+from pydantic import ConfigDict, Field, ValidationError, field_validator, model_validator
 
 from app.models.schema import (
     Column,
@@ -18,6 +18,11 @@ from app.models.schema import (
     _SNAKE_RE,
 )
 from app.core.utils import format_errors
+from app.models.tool_schema_prompts import (
+    NAMED_COLUMN_DESCRIPTION,
+    NAMED_SCHEMA_DESCRIPTION,
+    SCHEMA_LIBRARY_DESCRIPTION,
+)
 
 
 class SchemaKind(str, Enum):
@@ -28,13 +33,12 @@ class SchemaKind(str, Enum):
 
 
 class NamedColumn(Column):
-    """A Column that may carry a foreign key (`references`) to another named
-    schema, by name or `schema.column`."""
+    model_config = ConfigDict(json_schema_extra={"description": NAMED_COLUMN_DESCRIPTION})
+
     references: Optional[str] = None
 
 
 def parse_reference(ref: str) -> tuple[str, Optional[str]]:
-    """`"company"` -> (company, None); `"company.company_id"` -> (company, company_id)."""
     if "." in ref:
         schema_name, col = ref.split(".", 1)
         return schema_name.strip(), col.strip()
@@ -42,9 +46,8 @@ def parse_reference(ref: str) -> tuple[str, Optional[str]]:
 
 
 class NamedSchema(TableSchema):
-    """One named table in the data model — a TableSchema with a `name`, a `kind`,
-    a `primary_key`, and foreign-key-carrying columns. Column uniqueness is
-    validated by TableSchema."""
+    model_config = ConfigDict(json_schema_extra={"description": NAMED_SCHEMA_DESCRIPTION})
+
     name: str
     kind: SchemaKind
     title: str
@@ -96,7 +99,8 @@ def validate_references_resolve(schemas: list[NamedSchema]) -> None:
 
 
 class SchemaLibrary(_Base):
-    """The whole data model: named schemas with unique names and resolvable FKs."""
+    model_config = ConfigDict(json_schema_extra={"description": SCHEMA_LIBRARY_DESCRIPTION})
+
     schemas: list[NamedSchema]
 
     @model_validator(mode="after")
@@ -107,10 +111,7 @@ class SchemaLibrary(_Base):
 
 
 def validate_named_schema(schema: dict[str, Any]) -> list[str]:
-    """Non-fatal: validate ONE named schema dict ([] means valid). Checks the
-    single-schema shape (snake_case name, known kind, column/primary-key
-    consistency); cross-schema `references` resolution is a library-wide concern
-    checked by validate_schema_library."""
+    """Does NOT check that `references` resolve — that is validate_schema_library's, not this."""
     try:
         NamedSchema.model_validate(schema)
         return []
@@ -119,12 +120,10 @@ def validate_named_schema(schema: dict[str, Any]) -> list[str]:
 
 
 def parse_schema_library(schemas: list[dict[str, Any]]) -> SchemaLibrary:
-    """Parse + validate the data model. Raises ValidationError if invalid."""
     return SchemaLibrary.model_validate({"schemas": list(schemas)})
 
 
 def validate_schema_library(schemas: list[dict[str, Any]]) -> list[str]:
-    """Non-fatal: validate the data model, return issues ([] means valid)."""
     try:
         SchemaLibrary.model_validate({"schemas": list(schemas)})
         return []

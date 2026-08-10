@@ -100,7 +100,6 @@ def test_the_replayed_run_says_so_where_the_cost_would_be(project: Path) -> None
 
 
 def test_the_replayed_run_names_the_model_it_did_not_call(project: Path) -> None:
-    """The model is what a reader checks the cost against, spend or no spend."""
     _run(project)
     replayed = _panel(_run(project))
     assert "<dt>model</dt>" in replayed

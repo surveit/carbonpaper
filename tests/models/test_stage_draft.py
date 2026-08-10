@@ -48,16 +48,12 @@ def test_every_committed_example_stage_round_trips_through_a_draft():
 
 
 def test_round_trip_covers_more_than_one_stage_type():
-    """Guards the round-trip above against going vacuous: it only proves
-    anything about the config block the fixtures actually populate."""
     types = {raw["type"] for raw in _read_committed_example_stages()}
     assert len(types) > 1, types
 
 
 def test_an_input_schema_round_trips_under_the_key_a_compiled_stage_spells():
-    """StageInput's field is `table_schema` in python and `schema:` on the wire
-    (pydantic reserves `schema` on BaseModel), so to_stage_spec must dump by
-    alias — a spec keyed `table_schema` would be a shape no compiled stage has."""
+    """`schema:` on the wire is `table_schema` in python (pydantic reserves `schema`): dump by alias."""
     draft = StageDraft.model_validate({
         "id": "flag_rows",
         "type": "python_row_function",
@@ -86,9 +82,6 @@ def test_an_input_schema_round_trips_under_the_key_a_compiled_stage_spells():
 
 
 def test_a_stage_that_breaks_a_cross_field_rule_parses_as_a_draft_and_is_refused_by_stage():
-    """The reason the draft carries no cross-field validators: the refusal has to
-    come from `Stage` inside the handler, where it can be reported on the
-    handler's own channel, not from parameter binding."""
     broken = {
         "id": "score_rows",
         "type": "llm_transform",
@@ -119,27 +112,18 @@ def test_schema_omits_the_fields_no_authoring_client_writes():
 
 @pytest.mark.parametrize("stage_cls", _STAGE_CLASSES, ids=lambda c: c.__name__)
 def test_every_stage_class_shares_the_drafts_field_list(stage_cls):
-    """The draft and the stored models held together by a common base, not by
-    field lists kept in step by hand: a field added to StageCommon is on both,
-    and a stage class adds only its own config blocks plus what the server
-    itself writes."""
     assert issubclass(stage_cls, StageCommon) and issubclass(StageDraft, StageCommon)
     extra = set(stage_cls.model_fields) - set(StageDraft.model_fields)
     assert extra == set(DROPPED_FIELDS), stage_cls.__name__
 
 
 def test_the_draft_carries_no_cross_field_validator_of_its_own():
-    """Load-bearing: FastMCP binds the parameter before the handler runs, so a
-    rule that fired here would surface as isError=true instead of the documented
-    {ok, issues} refusal. The one model validator the draft does declare drops
-    server-owned keys and cannot raise."""
+    """FastMCP binds before the handler runs, so a rule firing here surfaces as isError, not {ok, issues}."""
     after_validators = StageDraft.__pydantic_decorators__.model_validators
     assert {name for name, dec in after_validators.items() if dec.info.mode == "after"} == set()
 
 
 def test_a_draft_that_echoes_back_server_owned_fields_parses_and_records_them():
-    """A client copying a stage out of read_stage sends fields only the server
-    writes. They are dropped, not refused — and named, so the drop is not silent."""
     draft = StageDraft.model_validate({
         "id": "load", "type": "input_data", "description": "Load",
         "connector": {"kind": "file"},
@@ -159,9 +143,6 @@ def test_an_unknown_field_is_still_refused():
 
 
 def test_stage_keeps_the_server_owned_fields_the_draft_drops():
-    """The drop is the draft's behavior alone — a stored stage has to hold the
-    tests and provenance it drops, and does not declare the bookkeeping field
-    that records the drop."""
     stage = parse_stage({
         "id": "load", "type": "input_data", "description": "Load",
         "connector": {"kind": "file"}, "source": {"section": "para 3"},

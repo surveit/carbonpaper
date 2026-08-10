@@ -38,7 +38,6 @@ _DATA_DEFAULT_OK = "# data-default-ok"
 
 
 def check_no_raw_disk(paths: list[Path]) -> list[str]:
-    """Files that call filesystem builtins/methods directly (open, write_text, …)."""
     offenders: list[str] = []
     for path in paths:
         tree = parse_module(path)
@@ -51,10 +50,6 @@ def check_no_raw_disk(paths: list[Path]) -> list[str]:
 
 
 def check_no_import(paths: list[Path], module: str, *, allow: set[str]) -> list[str]:
-    """Files that import `module` (or a submodule of it), except those whose path
-    ends with an entry in `allow`. Seals a backend behind its one owner — e.g.
-    `sqlite3` may be imported only by app/core/persistence.py, so no subsystem
-    talks to the database directly."""
     allowed = {suffix.replace("\\", "/") for suffix in allow}
     offenders: list[str] = []
     for path in paths:
@@ -68,15 +63,6 @@ def check_no_import(paths: list[Path], module: str, *, allow: set[str]) -> list[
 
 
 def check_imports_are_stdlib_only(paths: list[Path]) -> list[str]:
-    """Files that import anything outside the standard library: any relative
-    import (level > 0 — always an in-project import) or any absolute import
-    whose top-level module is not in ``sys.stdlib_module_names``. Pins a module
-    as a stdlib-only leaf that depends on nothing else in the project (or any
-    third party), so it stays independent of every other layer. Unlike a
-    ``forbidden`` import-linter contract (which must enumerate the modules to
-    deny), this is an allowlist: self-maintaining — nothing to extend when a new
-    sibling module appears — and it catches relative and absolute in-project
-    imports alike."""
     offenders: list[str] = []
     for path in paths:
         for node in ast.walk(parse_module(path)):
@@ -93,10 +79,6 @@ def check_imports_are_stdlib_only(paths: list[Path]) -> list[str]:
 
 
 def check_no_dict_keys(paths: list[Path], keys: set[str]) -> list[str]:
-    """Files that read or write any of `keys` as a dict key (subscript, .get,
-    or dict literal). Keeps domain vocabulary out of a module that must stay
-    generic — e.g. the runner must not touch connector params like "path"; only
-    the owning stage module may."""
     offenders: list[str] = []
     for path in paths:
         for lineno, key in find_dict_key_uses(parse_module(path), keys):
@@ -105,7 +87,6 @@ def check_no_dict_keys(paths: list[Path], keys: set[str]) -> list[str]:
 
 
 def check_no_fabricated_numbers(paths: list[Path]) -> list[str]:
-    """Files with a silent numeric ``.get(k, <int/float>)`` fallback (unless opted out)."""
     offenders: list[str] = []
     for path in paths:
         lines = path.read_text(encoding="utf-8").splitlines()
@@ -116,14 +97,6 @@ def check_no_fabricated_numbers(paths: list[Path]) -> list[str]:
 
 
 def find_production_run_imports(paths: list[Path]) -> list[str]:
-    """Files that import ``app.runtime.runner`` — the production run-lifecycle
-    entry points (prepare_run / run_prepared / resume_run / resolve_version_id)
-    that mint a run record under ``runs/``. Only ``app.runtime.runner`` itself is
-    flagged: ``app.runtime.executor`` (the shared execution engine, including its
-    manifest helpers) is the sanctioned surface a non-production run — an eval or
-    a test run — reaches instead, so importing it is fine and never flagged.
-    Matches both ``import app.runtime.runner`` and ``from app.runtime.runner
-    import ...``."""
     offenders: list[str] = []
     for path in paths:
         imported = find_imported_modules(parse_module(path))
@@ -141,7 +114,6 @@ _PROJECTS_ROOT_FUNC = "projects_dir"
 
 
 def find_project_directory_names(paths: list[Path], *, root: Path) -> list[str]:
-    """Every place a file names a project DIRECTORY rather than a project id."""
     offenders: list[str] = []
     for path in paths:
         rel = path.relative_to(root).as_posix()
@@ -173,9 +145,6 @@ def _is_projects_root_join(node: ast.AST) -> bool:
 
 
 def find_check_prefixed_functions(paths: list[Path]) -> list[str]:
-    """Function definitions named ``check_*`` / ``_check_*`` — the vocabulary
-    for a function that enforces or reports on an invariant is ``validate_*``
-    (or ``find_*`` when it returns the offending items)."""
     offenders: list[str] = []
     for path in paths:
         for name, lineno in find_function_defs(parse_module(path)):
@@ -185,9 +154,6 @@ def find_check_prefixed_functions(paths: list[Path]) -> list[str]:
 
 
 def find_banned_words(paths: list[Path], banned: set[str], exempt: set[Path]) -> list[str]:
-    """Lines containing any of `banned` (case-insensitive substring, so a word's
-    inflections are caught too). `exempt` holds the rule file that must name the
-    words to ban them."""
     resolved_exempt = {path.resolve() for path in exempt}
     offenders: list[str] = []
     for path in paths:

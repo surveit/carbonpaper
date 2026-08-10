@@ -30,7 +30,6 @@ class StageStrip(BaseModel):
 
 
 def build_stage_strip(manifest: Mapping[str, Any]) -> StageStrip:
-    """One square per stage in the manifest's own (topological) order."""
     squares = [
         StageSquare(
             stage_id=str(record.get("stage_id", "")),
@@ -45,7 +44,6 @@ def build_stage_strip(manifest: Mapping[str, Any]) -> StageStrip:
 
 
 def describe_stage_tallies(strip: StageStrip) -> str:
-    """The strip's counts as one line, e.g. "11 done · 1 failed"."""
     return " · ".join(f"{tally.count} {tally.label}" for tally in strip.tallies)
 
 
@@ -104,7 +102,6 @@ def _build_tallies(
 
 
 def _read_tally_label(status: StageStatus, run_status: object) -> str:
-    """A pending stage's label says why it has not run; every other status labels itself."""
     if status is not StageStatus.PENDING:
         return _STATUS_LABEL[status]
     stopped_by = next((s for s in _PENDING_LABEL if s == run_status), None)

@@ -102,10 +102,7 @@ def test_self_referencing_column_draws_no_edge():
     assert "||--o{" not in diagram
 
 
-def test_duplicate_fk_edges_are_deduped():
-    """Two columns that resolve to the identical edge line (same referencing
-    schema, same target, same column name) collapse to one edge — the
-    columns list is not deduped, so a literal repeat is the way to hit it."""
+def test_duplicate_fk_edges_are_deduped_though_the_columns_list_is_not():
     schemas = [
         {"name": "orgs", "columns": [{"name": "id", "type": "str", "nullable": True}]},
         {"name": "filings", "columns": [

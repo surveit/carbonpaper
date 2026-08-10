@@ -81,45 +81,7 @@ def run_subset(
     workflow_version: str | None = None,
     identity: RunIdentity | None = None,
 ) -> dict[str, pd.DataFrame]:
-    """Run only `stage_ids` of `workflow`, with `injected_outputs` seeded as the
-    outputs of stages OUTSIDE the subset (their upstream is cut off — the output is
-    given, not computed). Returns the outputs of every executed stage.
-
-    Owns its run manifest as a first-class, live-updated artifact: it mints the
-    manifest here (create_run_manifest, the single source of the manifest shape)
-    and drives it through the same `_execute_stages` engine a production run uses,
-    which flushes the manifest to disk per stage. So if a mid-frontier stage
-    errors, the manifest on disk already records the completed stages as ok and the
-    failing stage's error before this raises — partial work is preserved for a
-    caller to read back, not lost to a save-at-the-end.
-
-    `project`/`workflow_version` are the run's logical identity, recorded in the
-    manifest when a caller knows them and left None otherwise (never fabricated).
-    The run_id is `run_dir.name`.
-
-    Any input of a subset stage that names a stage outside the subset must appear in
-    `injected_outputs`, or `_execute_stages` fails on it. Raises SubsetRunError if an
-    executed stage errors or the run halts for review, so a caller gets a clean output
-    set or a loud failure — never a half-populated dict.
-
-    `queue_auto_approve` seeds the ctx flag of the same name: when set, a
-    human_review_queue stage passes every row through in memory (approving all,
-    no disk) instead of reaching for the decisions store. Off by default, so an
-    ordinary subset run's queue stage behaves exactly as before.
-
-    `identity` makes this a workflow test's run — project scope plus a read-only
-    stage-result cache (`RunContext.for_workflow_test_run`); a workflow test is
-    the only current source of one. None (the default) is the plain subset run
-    (`RunContext.for_stages_outside_a_run`): no identity, no cache access,
-    `trace_links` unavailable to a publish stage.
-    `is_test_run` is recorded on the manifest (`RunManifest.is_test_run`);
-    default False, so an ordinary subset run's manifest reads as a real run.
-
-    `limits`/`offsets` are the per-stage row window a production run takes them as
-    (prepare_run) — for a stage with no inputs, the window is taken on the frame it
-    loads, so a source stage inside the subset reads the same rows an injected
-    slice would have given it. Recorded on the manifest, and every cut taken is
-    noted on the stage record."""
+    """Raises SubsetRunError on any stage error or halt — callers get a full output set or none."""
     by_id = workflow.index_stages_by_id()
     missing = [sid for sid in stage_ids if sid not in by_id]
     if missing:
@@ -140,13 +102,6 @@ def run_subset(
 def _subset_ctx(
     repo_root: Path, run_dir: Path, identity: RunIdentity | None, params: RunParameters,
 ) -> RunContext:
-    # `identity` is what makes this a workflow test's run rather than a bare
-    # subset: it grants project scope, read-only. Without it a subset run is keyed
-    # on the Workflow + run_dir, not a project tree, and has no cache access — a
-    # handler that needs project scope (human_review_queue, or a publish stage's
-    # trace_links) then fails loudly rather than reading a fabricated wrong
-    # directory, unless `queue_auto_approve` tells human_review_queue to pass rows
-    # through in memory instead.
     if identity is not None:
         return RunContext.for_workflow_test_run(
             repo_root, run_dir, identity.project, identity.run_id, params)
@@ -154,9 +109,6 @@ def _subset_ctx(
 
 
 def _raise_if_run_failed(manifest: RunManifest) -> None:
-    """Turn a non-clean manifest into a SubsetRunError naming the cause. Reads the
-    same status/stage records `_execute_stages` writes — the manifest is the run's
-    result of record, so failure detection lives with it, not in each caller."""
     status = manifest.status
     if status in (RunStatus.OK, RunStatus.WARNINGS):
         return
@@ -177,10 +129,6 @@ def _execute_stages(
     run_dir: Path,
     outputs_so_far: dict[str, pd.DataFrame],
 ) -> RunManifest:
-    """Execute ordered stages under this run's own event log."""
-    # Opened here, not in the RunContext constructors, so EVERY entry path
-    # (run_prepared, execute_run, run_subset, resume_run) is logged regardless of
-    # the ctx it built, and the log's lifetime is exactly this call's.
     run_log = RunLog(run_dir / "events.jsonl")
     run_log.emit({
         "kind": RUN_START, "run_id": manifest.run_id, "stage_count": len(ordered),
@@ -203,27 +151,6 @@ def _run_ordered_stages(
     run_dir: Path,
     outputs_so_far: dict[str, pd.DataFrame],
 ) -> RunManifest:
-    """Execute ordered stages, honoring HaltForReview and RunCancelled.
-
-    Stages whose ids are already in `outputs_so_far` are skipped (their
-    output was computed in a prior partial run and loaded from disk by
-    the resume path).
-
-    A stage's `ok` status asserts every upstream stage succeeded, so error and
-    halt are fork-blocking, not loop-ending. An errored stage and a
-    HaltForReview stage both go into a `blocked` set; a stage whose any
-    input-producer is blocked is skipped (`pending`, no output written) and
-    joins the set, so the block propagates to the whole transitive downstream
-    while independent forks run to completion. The run status is `errors` if
-    any stage errored, else `awaiting_review` if any halted, else the usual
-    ok/warnings; `halted_at` lists every halted stage.
-
-    On a cancel request (polled via `ctx.identity` — see
-    app.runtime.cancellation) the loop stops dead and manifest status is
-    `cancelled`: between stages, before the next one starts (it stays
-    `pending`); or mid-stage, via RunCancelled unwinding out of
-    handler.execute (that stage's own record is marked `cancelled`).
-    Stages already completed keep their `ok` record and on-disk output."""
     halted_stage_ids: list[str] = []
     blocked: set[str] = set()
     cancelled = False
@@ -283,11 +210,7 @@ def _run_ordered_stages(
 
 
 class _StageOutcome(enum.Enum):
-    """What `_run_stage` learned about the stage it just ran, for the loop to
-    act on. `RAN` covers `ok`, `validation_warnings`, and `error` alike —
-    none of those need anything beyond letting the loop move to the next
-    stage. `HALTED` additionally needs the loop to remember this stage id for
-    `halted_at`. `CANCELLED` needs the loop to stop."""
+    """RAN covers `ok`, `validation_warnings` and `error` alike — the loop treats all three the same."""
 
     RAN = "ran"
     HALTED = "halted"
@@ -301,15 +224,6 @@ def _flush_manifest(
     run_dir: Path,
     status: RunStatus,
 ) -> None:
-    """Write the manifest mid-run so the run page can show live progress (stages
-    light up as they start/finish) instead of the whole pipeline running silently
-    and updating only at the very end. Persists a copy stamped with `updated_at`
-    and the given `status` (and the current per-stage records) WITHOUT mutating
-    the live manifest — so the final finalize-time write is not left carrying a
-    mid-run `updated_at` or a `running` status. The accumulated
-    human_review_queue_stats/dropped_columns already live on `manifest` (merged
-    per stage by
-    _merge_stage_contribution)."""
     snapshot = manifest.model_copy(update={
         "stage_records": [
             records_by_id.get(s.id)
@@ -329,11 +243,7 @@ def _gather_stage_inputs(
     stage: Stage, outputs_so_far: dict[str, pd.DataFrame], ctx: RunContext,
     record: StageRecord,
 ) -> tuple[dict[str, pd.DataFrame], _RowWindow]:
-    """The rows this stage's handler will be given, keyed by producer id, cut to
-    this run's row window BEFORE the duplicate-row and input-schema checks run —
-    so a `limit: 3` dry run is never failed by row 4,000, which it never reads.
-    Raises if an upstream output is missing — the caller's exception handling
-    turns that into this stage's own error."""
+    """Cuts the row window BEFORE the duplicate/schema checks, so `limit: 3` isn't failed by row 4,000."""
     sid = stage.id
     window = _resolve_row_window(stage, ctx)
     inputs_for_stage: dict[str, pd.DataFrame] = {}
@@ -360,8 +270,6 @@ def _resolve_handler(stage_type: StageType) -> StageHandler:
 
 
 def _record_halt(record: StageRecord, halt: HaltForReview, run_dir: Path) -> None:
-    """Fork-blocking, not loop-ending: this stage awaits review and blocks
-    its downstream, while independent forks keep running."""
     record.status = StageStatus.AWAITING_REVIEW
     record.output_row_count = halt.pending_count
     # Manifest paths are POSIX-style so the persisted JSON is identical on
@@ -370,10 +278,6 @@ def _record_halt(record: StageRecord, halt: HaltForReview, run_dir: Path) -> Non
 
 
 def _record_stage_error(record: StageRecord, exc: Exception) -> None:
-    """Record any stage failure (a handler can raise ValueError, RuntimeError,
-    a pandas/pyarrow error, etc.) in the manifest. This outcome always joins
-    the caller's `blocked` set, so its transitive downstream is skipped and
-    never marked `ok` on this stage's absent output."""
     record.status = StageStatus.ERROR
     record.error = StageErrorInfo(
         type=type(exc).__name__,
@@ -390,7 +294,6 @@ class _RowWindow(NamedTuple):
 
 
 def _resolve_row_window(stage: Stage, ctx: RunContext) -> _RowWindow:
-    """The window this run reads: --offset stage=M, then --limit stage=N over the stage's `limit:`."""
     offset = ctx.params.offsets.get(stage.id)
     cap = ctx.params.limits.get(stage.id, stage.limit)
     return _RowWindow(
@@ -402,7 +305,6 @@ def _resolve_row_window(stage: Stage, ctx: RunContext) -> _RowWindow:
 def _take_row_window(
     df: pd.DataFrame, window: _RowWindow, source: str, record: StageRecord
 ) -> pd.DataFrame:
-    """`window` of `df`'s rows; every cut actually taken is noted on `record`, never silent."""
     if window.start > 0 and len(df) > 0:
         record.add_note(
             f"offset={window.start}: skipped the first "
@@ -416,10 +318,6 @@ def _take_row_window(
 
 
 def _persist_row_lineage(lineage: RowLineage, sid: str, run_dir: Path) -> None:
-    """Write `sid`'s per-row provenance sidecar (source stage id + row ordinal,
-    one row per this stage's own output row, in output order) that
-    `app.runtime.trace` reads to cross a hop that isn't row-preserving by
-    position alone (filter_rows, union)."""
     write_frame_file(lineage.to_frame(), lineage_sidecar_path(run_dir, sid))
 
 
@@ -427,16 +325,7 @@ def _stage_row_lineage(
     stage: Stage, output: pd.DataFrame | None, inputs: dict[str, pd.DataFrame],
     window: _RowWindow,
 ) -> RowLineage | None:
-    """This stage's per-row provenance, or None where output row i is input row
-    i and the trace needs no help crossing it.
-
-    Every source is the runtime's own knowledge, never the stage's report of
-    itself: the row driver's record of which input ordinals it emitted, riding
-    the frame's `.attrs`; for a union, the row counts of the inputs the runtime
-    handed over, since concatenation is in declared order; and, for a stage the
-    runtime sliced, the window it cut. The first two count from the start of the
-    SLICED input frames the handler was given, so both are shifted back onto the
-    upstream stage's own ordinals."""
+    """None means output row i is input row i, so the trace needs no help crossing this stage."""
     driven = read_row_lineage(output)
     if driven is not None:
         return driven.shifted(window.start)
@@ -448,7 +337,6 @@ def _stage_row_lineage(
 def _sliced_input_lineage(
     stage: Stage, output: pd.DataFrame | None, window: _RowWindow
 ) -> RowLineage | None:
-    """A sliced stage's rows named by their true upstream ordinals, for the trace to cross."""
     if window.start == 0 and window.cap is None:
         return None
     if not stage.is_grain_and_order_preserving or len(stage.inputs) != 1:
@@ -459,7 +347,6 @@ def _sliced_input_lineage(
 
 
 def _persist_stage_output(output: pd.DataFrame, sid: str, run_dir: Path, record: StageRecord) -> Path:
-    """The stage's artifact path, after writing it — the CSV fallback is NOTED on `record`."""
     written = write_frame_file_with_csv_fallback(
         output, run_dir / "outputs" / f"{sid}.parquet"
     )
@@ -478,22 +365,8 @@ def _finalize_stage_output(
     run_dir: Path,
     manifest: RunManifest,
 ) -> bool:
-    """Validate and persist a stage's raw handler output, then decide
-    its terminal status. Two things make it a stage error, both recorded
-    exactly like a raised exception: a per-row generation failure, and an
-    error-severity issue in the OUTPUT validation report (a missing declared
-    column, a failed coercion, a value outside a declared enum, a null in a
-    non-nullable column, a duplicated primary key) — a frame that violates the
-    declared schema must not be consumed downstream. The output file stays on
-    disk for inspection, and the stage's own `error` status keeps a resume from
-    reusing it. Otherwise the status is `ok`, or `validation_warnings` when an
-    INPUT report carries an error. Returns True if the caller must join this
-    stage to `blocked`, so every transitive consumer is skipped rather than run
-    on this stage's non-conforming frame and marked `ok`; False otherwise."""
     sid = stage.id
-    # Read the stage's contribution off the handler's frame BEFORE any frame is
-    # rebuilt (which drops `.attrs`), then merge usage into this record and
-    # human_review_queue_stats/dropped_columns into the manifest.
+    # Read the contribution off `.attrs` BEFORE any frame is rebuilt — that drops `.attrs`.
     contribution = _read_stage_contribution(output)
     row_errors = _merge_stage_contribution(contribution, sid, manifest, record)
 
@@ -552,9 +425,6 @@ def _finalize_stage_output(
 
 
 def _read_stage_contribution(output: pd.DataFrame | None) -> StageContribution:
-    """The StageContribution a handler attached to its output frame's `.attrs`,
-    or an empty one when there is no frame (a stage that produced nothing) or no
-    contribution (a handler that reported none)."""
     if output is None:
         return StageContribution()
     attached = output.attrs.get(CONTRIBUTION_ATTR)
@@ -569,11 +439,6 @@ def _merge_stage_contribution(
     manifest: RunManifest,
     record: StageRecord,
 ) -> list[RowError]:
-    """Merge one stage's contribution into the run's living record: its token
-    usage and run notes onto the stage record, its dropped-column and
-    human-review-queue tallies onto the
-    manifest's per-stage maps. Returns the row-generation errors for the caller
-    to fold into the output validation report and terminal status."""
     for note in contribution.notes:
         record.add_note(note)
     if contribution.llm_usage is not None:
@@ -597,15 +462,6 @@ def _run_stage(
     ordered: list[Stage],
     run_dir: Path,
 ) -> tuple[_StageOutcome, bool]:
-    """Run one stage end to end: gather its inputs, invoke its handler,
-    process and persist its output, and record the outcome (ok, warnings,
-    error, halt, or a mid-stage cancel) into `records_by_id[stage.id]` —
-    flushing the manifest once the stage starts and again once it settles, so
-    the run page shows it live. Returns `(outcome, joins_blocked)`:
-    `joins_blocked` is True for a halt, a general exception, a row-generation
-    error, and an output frame that violates the stage's output schema alike —
-    every outcome except a clean ok/warnings or a cancel — so the caller can add this stage to its own `blocked` set
-    itself, keeping that decision visible at the loop."""
     sid = stage.id
     record = StageRecord.record_with_status(stage, StageStatus.RUNNING)
     t0 = time.perf_counter()
@@ -676,13 +532,6 @@ def _finalize_run_manifest(
     cancel_at_index: int,
     halted_stage_ids: list[str],
 ) -> RunManifest:
-    """Assemble and persist the run's final manifest once the loop has
-    stopped, in topological order (blocked downstream stages were already
-    marked `pending` inline, so no post-loop fill is needed). A cancel is a
-    hard stop: it keeps the cancelled outcome regardless of any error/halt a
-    stage recorded before the cancel arrived, and carries no `halted_at`, so
-    a cancelled run never shows the review banner for a halt that happened
-    earlier in the same run."""
     manifest.settle_stage_records(
         [records_by_id[s.id] for s in ordered if s.id in records_by_id])
     manifest.finished_at = datetime.now().isoformat(timespec="seconds")
@@ -708,17 +557,12 @@ def _finalize_run_manifest(
 
 
 def _summarize_row_errors(row_errors: list[RowError]) -> str:
-    """One-line summary of per-row generation failures for the stage's error
-    record — the per-row detail lives in the output validation report's issues."""
     head = "; ".join(f"row {e['row']}: {e['message']}" for e in row_errors[:3])
     more = f" (+{len(row_errors) - 3} more)" if len(row_errors) > 3 else ""
     return f"{len(row_errors)} row(s) failed generation: {head}{more}"
 
 
 def _summarize_output_schema_errors(sid: str, report: ValidationReport) -> str:
-    """One-line summary of the error-severity output issues for the stage's
-    error record, naming the columns at fault — the full issue list stays in the
-    output validation report."""
     errors = [issue for issue in report.issues if issue.severity == UserFacingErrorSeverity.error]
     named = sorted({issue.column for issue in errors if issue.column})
     columns = f" (column(s): {', '.join(named)})" if named else ""
@@ -729,37 +573,22 @@ def _summarize_output_schema_errors(sid: str, report: ValidationReport) -> str:
 
 
 def _read_run_identity(ctx: RunContext) -> RunIdentity | None:
-    """This run's logical identity, carried on `ctx.identity` by
-    prepare_run/resume_run for cancellation's checkpoints. None for a
-    subset/eval run's ctx (built by _subset_ctx), which carries no identity —
-    those runs are simply not cancellable."""
     return ctx.identity
 
 
 def _consume_cancel(ctx: RunContext) -> bool:
-    """Consume this run's cancel message if one is pending — read-once, so a
-    True means one was pending and is now gone (see _read_run_identity for when
-    a run is cancellable at all)."""
     identity = _read_run_identity(ctx)
     return identity is not None and consume_cancel(identity.project, identity.run_id)
 
 
 def _find_blocking_upstream(stage: Stage, blocked: set[str]) -> list[str]:
-    """Input-producer stage ids in `blocked` — producers that errored, halted,
-    or are themselves downstream of one. Non-empty means this stage cannot run
-    on real inputs and must be skipped; empty means every producer succeeded.
-    Topological order guarantees every producer has been processed before its
-    consumer, so membership in `blocked` is decided by the time it is read."""
+    """Only correct in topological order: every producer must already have been processed."""
     return [input_id for input_id in stage.input_ids if input_id in blocked]
 
 
 def _stage_output_already_produced(
     sid: str, outputs_so_far: dict[str, pd.DataFrame], records_by_id: dict[str, StageRecord]
 ) -> bool:
-    """True when `sid`'s output was computed in a prior partial run (the
-    resume path) and its last recorded status is a completion the loop can
-    trust to skip re-running it, rather than a stale record from before a
-    halt/cancel/error."""
     if sid not in outputs_so_far:
         return False
     record = records_by_id.get(sid)
@@ -767,10 +596,7 @@ def _stage_output_already_produced(
 
 
 def _final_run_status(stage_statuses: Iterable[str]) -> RunStatus:
-    """A non-cancelled run's overall status from its stages' statuses, error-first:
-    any errored stage -> errors; else any halted stage -> awaiting_review; else
-    any warnings -> warnings; else ok. A `pending` (blocked) stage only exists
-    downstream of an errored/halted one, so it never needs a branch of its own."""
+    """A `pending` stage only exists downstream of an errored/halted one, so it needs no branch."""
     statuses = set(stage_statuses)
     if StageStatus.ERROR in statuses:
         return RunStatus.ERRORS
@@ -785,7 +611,6 @@ def _final_run_status(stage_statuses: Iterable[str]) -> RunStatus:
 
 
 def _reject_duplicate_input_rows(df: pd.DataFrame, input_id: str, stage_id: str) -> None:
-    """Fail the stage if an input frame carries exact duplicate rows."""
     violations = find_duplicate_row_violations(df)
     if not violations:
         return
