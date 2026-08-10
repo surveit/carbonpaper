@@ -1,10 +1,12 @@
 name: Auto-rebase open pull requests
 
-# When master moves, every open pull request based on it gains drift, and drift
-# is what causes merge conflicts here (see .github/scripts/pr-drift.sh for the
-# measured rates). This job replays the cheap half of that fix: any pull request
-# that still rebases cleanly onto the new master is rebased and force-pushed, so
-# it re-enters the 0-drift band before the conflicting change has time to age.
+# When master moves, every open pull request based on it falls further behind,
+# and that distance is what causes merge conflicts here: replaying 212 merged
+# pull requests in this repository, a base that had gained 0-2 commits since the
+# fork point conflicted 24% of the time, 3-7 commits 41%, and 8 or more 72%.
+# This job replays the cheap half of the fix: any pull request that still rebases
+# cleanly onto the new master is rebased and force-pushed, so it returns to zero
+# commits behind before the conflicting change has time to age.
 #
 # It never resolves a conflict. A rebase that stops for any reason is aborted,
 # the branch is left exactly as it was, and the pull request is labelled
