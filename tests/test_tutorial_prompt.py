@@ -42,6 +42,35 @@ def test_beat_one_is_conversation_and_calls_no_tool() -> None:
     assert "Beat 1 calls no tool." in TUTORIAL_SYSTEM_PROMPT
 
 
+def test_the_greeting_asks_only_whether_they_are_ready() -> None:
+    """They clicked into the tutorial; offering somewhere else is a stall, not a choice."""
+    beat = _flat(_beat(1))
+
+    assert "asking whether they are ready to get started" in beat
+    assert "Offering them somewhere else to go" in beat
+    assert "a choice with one real option is a stall" in beat
+
+
+def test_the_greeting_says_the_agent_writes_the_stages_not_the_reader() -> None:
+    """The reader authors prose; the stage graph is compiled from it by an agent."""
+    beat = _flat(_beat(1))
+
+    assert "they write the methodology as prose, an AI agent turns it into the stages" in beat
+    assert (
+        "The reader writes their methodology as prose and an AI agent turns it into "
+        "a workflow of named, typed stages — they do not write the stages themselves."
+    ) in _flat(TUTORIAL_SYSTEM_PROMPT)
+
+
+def test_the_greeting_carries_no_closing_gloss_on_why_traceability_matters() -> None:
+    """The run about to happen is the argument; making it in advance is chat behaviour."""
+    beat = _flat(_beat(1))
+
+    assert "A closing gloss on why traceability matters" in beat
+    assert "so you can look at real rows, not a description of them" in beat
+    assert 'name it appositively instead: "carbonpaper, a tool for' in beat
+
+
 def test_the_workflow_is_introduced_by_why_it_exists_not_by_its_stage_list() -> None:
     beat = _flat(_beat(2))
 
