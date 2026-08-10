@@ -170,7 +170,7 @@ def test_publish_config_is_typed():
 
 def test_python_function_inline_needs_code():
     with pytest.raises(ValidationError):
-        m.parse_stage(S(id="t", type="python_frame_function", inputs=[{"id": "a"}],
+        m.parse_stage(S(id="t", type="pandas_frame_function", inputs=[{"id": "a"}],
                                  function={"kind": "inline"}))
 
 
@@ -430,7 +430,7 @@ def test_validate_stage_helper(tmp_path):
 # ── PR: typed stage contract ─────────────────────────────────────────────────
 def test_inputs_are_refs_with_schema():
     s = m.parse_stage(S(
-        id="x", type="python_frame_function",
+        id="x", type="pandas_frame_function",
         inputs=[{"id": "a", "schema": {"columns": [{"name": "k", "type": "str", "nullable": True}]}}],
         signature={
             "form": "replaces",
@@ -447,7 +447,7 @@ def test_inputs_bare_id_shorthand_normalises_then_fails_on_the_missing_schema():
     """`inputs: ["a"]` still normalises to `[{"id": "a"}]`, which then fails on
     the required `schema` rather than on the string's shape."""
     issues = m.validate_stage(S(
-        id="x", type="python_frame_function", inputs=["a"],
+        id="x", type="pandas_frame_function", inputs=["a"],
         signature={"form": "replaces", "produces": _K_SCHEMA["columns"]},
         function={"kind": "inline", "code": "def transform(row): return row"},
     ))
@@ -709,7 +709,7 @@ _RIGHT_SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True}, {"
 
 _HANDLE_BLOCK = {
     "python_row_function": {"function": _INLINE_ROW_FN},
-    "python_frame_function": {"function": _INLINE_ROW_FN},
+    "pandas_frame_function": {"function": _INLINE_ROW_FN},
     "enrich": {"join": {"keys": [{"left": "id", "right": "id"}], "enrich_with": {"amount": "amount"}}},
     "expand": {"join": {"keys": [{"left": "id", "right": "id"}], "enrich_with": {"amount": "amount"}}},
     "aggregate": {"aggregate": {"group_by": ["name"],
@@ -737,9 +737,9 @@ _SIGNATURE = {
     },
     "human_review_queue": {"form": "extends",
                            "adds": queue_added_columns("human_name", "str")},
-    "python_frame_function": {"form": "replaces", "produces": _LEFT_SCHEMA["columns"]},
+    "pandas_frame_function": {"form": "replaces", "produces": _LEFT_SCHEMA["columns"]},
 }
-NON_EXEMPT_TYPES = ["python_row_function", "python_frame_function", "enrich", "expand",
+NON_EXEMPT_TYPES = ["python_row_function", "pandas_frame_function", "enrich", "expand",
                     "aggregate", "human_review_queue"]
 
 
@@ -844,7 +844,7 @@ def test_stage_rejects_input_whose_schema_declares_no_columns():
 
 
 def test_stage_rejects_a_signature_that_produces_no_columns():
-    spec = _schema_spec("python_frame_function")
+    spec = _schema_spec("pandas_frame_function")
     spec["signature"] = {"form": "replaces", "produces": []}
     assert "produces no columns" in _rejection_message(spec)
 
@@ -877,3 +877,34 @@ def test_output_schema_issues_surface_in_draft_validation():
         },
     }])
     assert any("undeclared_extra" in issue for issue in issues)
+
+
+# ── the python_frame_function -> pandas_frame_function rename (alembic 0011) ──
+
+
+def test_a_run_manifest_still_parses_the_legacy_stage_type_name():
+    """A manifest records what ran, so it keeps the name the type had at the time."""
+    from app.runtime.manifest import StageRecord
+
+    record = StageRecord.model_validate({
+        "stage_id": "s", "type": "python_frame_function", "description": "S",
+        "status": "ok", "input_validation_report": [],
+        "output_validation_report": None, "output_row_count": 0,
+    })
+    assert record.type is m.StageType.pandas_frame_function
+
+
+# Why 0011 exists: pydantic resolves a discriminated union's tag BEFORE any enum
+# coercion, so StageType._missing_ cannot rescue a stored SPEC the way it rescues
+# a manifest. Every stored spec has to actually carry the new string.
+def test_the_legacy_name_does_not_parse_as_a_stage_spec():
+    assert m.validate_stage(S(
+        id="x", type="python_frame_function",
+        inputs=[{"id": "a", "schema": _K_SCHEMA}],
+        signature={
+            "form": "replaces",
+            "reads": [{"input": "a", "columns": _K_SCHEMA["columns"]}],
+            "produces": _K_SCHEMA["columns"],
+        },
+        function={"kind": "inline", "code": "def transform(df):\n    return df\n"},
+    )) != []

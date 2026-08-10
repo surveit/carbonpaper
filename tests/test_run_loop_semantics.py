@@ -58,10 +58,10 @@ def _load_items_stage(root, *, stage_id="load"):
 
 
 def _raising_stage(stage_id, input_id, name="Boom", schema=_ID_VAL_SCHEMA):
-    """A python_frame_function whose transform raises — the stage errors. It
+    """A pandas_frame_function whose transform raises — the stage errors. It
     emits nothing, so `schema` (its input's shape) stands as what it produces
     too: the identity shape it would have emitted had it not raised."""
-    return {"id": stage_id, "description": name, "type": "python_frame_function",
+    return {"id": stage_id, "description": name, "type": "pandas_frame_function",
             "inputs": [{"id": input_id, "schema": schema}],
             "signature": {"form": "replaces", "produces": schema["columns"]},
             "function": {"kind": "inline",
@@ -69,9 +69,9 @@ def _raising_stage(stage_id, input_id, name="Boom", schema=_ID_VAL_SCHEMA):
 
 
 def _passthrough_stage(stage_id, input_id, name="Passthrough", schema=_ID_VAL_SCHEMA):
-    """An identity python_frame_function: `schema` is both the shape it expects
+    """An identity pandas_frame_function: `schema` is both the shape it expects
     from `input_id` and the shape it emits."""
-    return {"id": stage_id, "description": name, "type": "python_frame_function",
+    return {"id": stage_id, "description": name, "type": "pandas_frame_function",
             "inputs": [{"id": input_id, "schema": schema}],
             "signature": {"form": "replaces", "produces": schema["columns"]},
             "function": {"kind": "inline",

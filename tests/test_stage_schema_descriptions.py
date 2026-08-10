@@ -48,7 +48,7 @@ def test_function_code_documents_the_three_signatures():
     # the runtime calls fn(row) / fn(*frames) / fn(*frames, output_dir=...) — #3, #6
     d = _desc(PythonFunction, "code")
     assert "def transform(row" in d.replace("`", "")   # python_row_function
-    assert "frame" in d                                 # python_frame_function
+    assert "frame" in d                                 # pandas_frame_function
     assert "output_dir" in d                            # publish
 
 

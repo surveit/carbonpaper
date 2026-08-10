@@ -28,7 +28,7 @@ def _row_stage(stage_id: str, tests: list[dict]) -> Stage:
 
 def _frame_stage(stage_id: str, tests: list[dict]) -> Stage:
     return parse_stage({
-        "id": stage_id, "description": stage_id, "type": "python_frame_function",
+        "id": stage_id, "description": stage_id, "type": "pandas_frame_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
         "signature": {
             "form": "replaces",

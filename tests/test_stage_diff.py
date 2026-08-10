@@ -572,7 +572,7 @@ def test_a_frame_function_gets_no_diff_even_at_matching_row_counts(tmp_path: Pat
     # Same row count is not the contract — a frame function may reorder rows,
     # so a positional diff would be a fabricated alignment.
     stage = parse_stage({
-        "id": "reshape", "description": "Reshape", "type": "python_frame_function",
+        "id": "reshape", "description": "Reshape", "type": "pandas_frame_function",
         "inputs": [{"id": LOAD_ID, "schema": {"columns": _IN_COLUMNS}}],
         "function": {"kind": "inline",
                      "code": "def transform(df):\n    return df\n"},

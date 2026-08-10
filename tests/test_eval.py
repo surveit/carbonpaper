@@ -28,10 +28,10 @@ def _file_input(id_, tmp_path, output_schema=_K):
 
 
 def _py(id_, inputs, granularity="frame", schema=_K, **kw):
-    """granularity 'row' -> python_row_function, else python_frame_function.
+    """granularity 'row' -> python_row_function, else pandas_frame_function.
     `schema` is both the schema declared on every input edge and what the stage
     outputs — the inline transform is the identity."""
-    type_ = "python_row_function" if granularity == "row" else "python_frame_function"
+    type_ = "python_row_function" if granularity == "row" else "pandas_frame_function"
     signature = ({"form": "extends"} if granularity == "row"
                  else {"form": "replaces", "produces": schema["columns"]})
     return S(id=id_, type=type_, inputs=[{"id": i, "schema": schema} for i in inputs],
@@ -45,7 +45,7 @@ def _ref(path="x.csv", cols=("k",)):
 
 
 # ── is_grain_and_order_preserving (fixed by stage type) ────────────────────────────────
-def test_python_frame_function_not_grain_preserving():
+def test_pandas_frame_function_not_grain_preserving():
     assert m.parse_stage(_py("t", ["a"])).is_grain_and_order_preserving is False
 
 

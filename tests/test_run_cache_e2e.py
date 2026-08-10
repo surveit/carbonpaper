@@ -106,7 +106,7 @@ def _write_project(
         "function": {"kind": "inline", "code": _flag_code(probe)},
     })
     _write_stage(root, "04_totals", {
-        "id": "totals", "description": "Totals", "type": "python_frame_function",
+        "id": "totals", "description": "Totals", "type": "pandas_frame_function",
         "inputs": [{"id": "flag", "schema": {"columns": _FLAGGED}}],
         "signature": {
             "form": "replaces",

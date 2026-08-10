@@ -47,7 +47,7 @@ def _one_stage_project(root):
 
 def _two_stage_project(root):
     _one_stage_project(root)
-    consume = {"id": "consume", "description": "Consume items", "type": "python_frame_function",
+    consume = {"id": "consume", "description": "Consume items", "type": "pandas_frame_function",
                "inputs": [{"id": "load", "schema": _NAME_VAL_SCHEMA}],
                "signature": {
                    "form": "replaces",
@@ -116,7 +116,7 @@ def test_mid_run_cancel_preserves_the_completed_stages_output(tmp_path, monkeypa
 
 def _three_stage_llm_project(root):
     """input_data 'load' (5 rows) -> llm_transform 'score' (row-mapped, fans
-    out under parallelism > 1) -> a python_frame_function 'downstream' stage.
+    out under parallelism > 1) -> a pandas_frame_function 'downstream' stage.
     Unlike _two_stage_project's FrameHandler-only 'consume' (which never
     enters the row driver), 'score' is driven by execution.py's row mapper —
     the mid-fan-out cancellation checkpoint under test lives there."""
@@ -146,7 +146,7 @@ def _three_stage_llm_project(root):
         "llm": {"prompt_template": "Rate: {text}"},
     }
     downstream = {
-        "id": "downstream", "description": "Downstream", "type": "python_frame_function",
+        "id": "downstream", "description": "Downstream", "type": "pandas_frame_function",
         "inputs": [{"id": "score", "schema": _SCORED_SCHEMA}],
         "signature": {
             "form": "replaces",

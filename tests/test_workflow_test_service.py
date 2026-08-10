@@ -193,11 +193,11 @@ def test_workflow_test_auto_approves_a_queue_stage_in_memory(demo):
 def test_workflow_test_raises_when_no_source_stage(demo):
     """A workflow with no input_data stage has no source to slice — raise loudly
     rather than run over an empty injection."""
-    # A lone python_frame_function with no upstream input_data source: it
+    # A lone pandas_frame_function with no upstream input_data source: it
     # validates as a Stage on its own, and is enough to exercise the guard, which
     # runs before workflow graph validation.
     standalone = {
-        "id": "standalone", "type": "python_frame_function", "description": "No source",
+        "id": "standalone", "type": "pandas_frame_function", "description": "No source",
         "inputs": [{"id": "upstream", "schema": _LOAD_SCHEMA}],
         "signature": {
             "form": "replaces",

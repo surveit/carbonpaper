@@ -37,7 +37,7 @@ def test_an_extends_signature_resolves_the_outer():
 
 def test_a_replaces_signature_resolves_to_exactly_produces():
     stage = parse_stage({
-        "id": "shape", "description": "Shape", "type": "python_frame_function",
+        "id": "shape", "description": "Shape", "type": "pandas_frame_function",
         "inputs": [{"id": "bills", "schema": {"columns": [
             {"name": "price", "type": "str", "nullable": True}]}}],
         "function": {"kind": "inline", "code": "def transform(df):\n    return df"},

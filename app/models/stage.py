@@ -26,7 +26,7 @@ from app.models.stages.stage_base import (  # noqa: F401  (re-exported: the stag
 )
 from app.models.stages.aggregate import AggregateConfig, AggregateStage
 from app.models.stages.code import (
-    PythonFrameFunctionStage,
+    PandasFrameFunctionStage,
     PythonFunction,
     PythonRowFunctionStage,
 )
@@ -56,7 +56,7 @@ Stage = Annotated[
         InputDataStage,
         LLMTransformStage,
         PythonRowFunctionStage,
-        PythonFrameFunctionStage,
+        PandasFrameFunctionStage,
         EnrichStage,
         ExpandStage,
         AggregateStage,

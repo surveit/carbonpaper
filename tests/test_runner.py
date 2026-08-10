@@ -221,7 +221,7 @@ def test_a_limited_stage_is_not_failed_by_a_duplicate_row_it_never_reads(tmp_pat
 
 def _two_stage_project(root, rows: list[dict]):
     """input_data loading `rows` from CSV, feeding an identity
-    python_frame_function. Exercises the runner's per-stage input checks."""
+    pandas_frame_function. Exercises the runner's per-stage input checks."""
     (root / "compiled").mkdir(parents=True)
     (root / "data").mkdir(parents=True)
     pd.DataFrame(rows).to_csv(root / "data" / "items.csv", index=False)
@@ -232,7 +232,7 @@ def _two_stage_project(root, rows: list[dict]):
         "signature": {"form": "replaces", "produces": _NAME_VAL_SCHEMA["columns"]},
     }
     consume = {
-        "id": "consume", "description": "Consume items", "type": "python_frame_function",
+        "id": "consume", "description": "Consume items", "type": "pandas_frame_function",
         "inputs": [{"id": "load", "schema": _NAME_VAL_SCHEMA}],
         "signature": {
             "form": "replaces",
@@ -300,7 +300,7 @@ def _output_schema_violation_project(root, transform_code: str):
         "signature": {"form": "replaces", "produces": _NAME_VAL_SCHEMA["columns"]},
     }
     shape = {
-        "id": "shape", "description": "Shape items", "type": "python_frame_function",
+        "id": "shape", "description": "Shape items", "type": "pandas_frame_function",
         "inputs": [{"id": "load", "schema": _NAME_VAL_SCHEMA}],
         "signature": {
             "form": "replaces",
@@ -310,7 +310,7 @@ def _output_schema_violation_project(root, transform_code: str):
         "function": {"kind": "inline", "code": transform_code},
     }
     tail = {
-        "id": "tail", "description": "Tail", "type": "python_frame_function",
+        "id": "tail", "description": "Tail", "type": "pandas_frame_function",
         "inputs": [{"id": "shape", "schema": _NAME_VAL_SCHEMA}],
         "signature": {
             "form": "replaces",
@@ -377,7 +377,7 @@ def test_output_validation_error_other_than_a_missing_column_also_errors_the_sta
         "signature": {"form": "replaces", "produces": _NAME_VAL_SCHEMA["columns"]},
     }
     blank = {
-        "id": "blank", "description": "Blank the value", "type": "python_frame_function",
+        "id": "blank", "description": "Blank the value", "type": "pandas_frame_function",
         "inputs": [{"id": "load", "schema": _NAME_VAL_SCHEMA}],
         "signature": {
             "form": "replaces",
@@ -418,7 +418,7 @@ def test_value_outside_a_declared_enum_errors_the_stage_and_blocks_downstream(tm
         "signature": {"form": "replaces", "produces": _NAME_VAL_SCHEMA["columns"]},
     }
     label = {
-        "id": "label", "description": "Label items", "type": "python_frame_function",
+        "id": "label", "description": "Label items", "type": "pandas_frame_function",
         "inputs": [{"id": "load", "schema": _NAME_VAL_SCHEMA}],
         "signature": {"form": "replaces", "produces": labelled_schema["columns"]},
         "function": {"kind": "inline",
@@ -426,7 +426,7 @@ def test_value_outside_a_declared_enum_errors_the_stage_and_blocks_downstream(tm
                              "    return df.assign(status='pending')[['name', 'status']]\n"},
     }
     tail = {
-        "id": "tail", "description": "Tail", "type": "python_frame_function",
+        "id": "tail", "description": "Tail", "type": "pandas_frame_function",
         "inputs": [{"id": "label", "schema": labelled_schema}],
         "signature": {"form": "replaces", "produces": labelled_schema["columns"]},
         "function": {"kind": "inline", "code": "def transform(df):\n    return df\n"},
@@ -817,10 +817,10 @@ _FRAME_STAGE_CODE = "def transform(df):\n    return df.assign(double=df['val'] *
 
 
 def _add_frame_stage(root):
-    """A python_frame_function downstream of `load` — the shape the frame cache
+    """A pandas_frame_function downstream of `load` — the shape the frame cache
     intercepts, so a run of this project exercises the frame store."""
     (root / "compiled" / "02_totals.json").write_text(json.dumps({
-        "id": "totals", "description": "Totals", "type": "python_frame_function",
+        "id": "totals", "description": "Totals", "type": "pandas_frame_function",
         "inputs": [{"id": "load", "schema": _NAME_VAL_SCHEMA}],
         "signature": {
             "form": "replaces",

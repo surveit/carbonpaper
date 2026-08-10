@@ -315,7 +315,7 @@ def test_create_version_from_stages_invalid_raises_and_writes_nothing(tmp_path):
     validation as a pydantic.ValidationError, straight from the raw dicts —
     create_version_from_stages never writes a version for an invalid graph."""
     dangling_input = {
-        "id": "consume", "description": "Consume", "type": "python_frame_function",
+        "id": "consume", "description": "Consume", "type": "pandas_frame_function",
         "inputs": [{"id": "no-such-stage", "schema": _ROWS_SCHEMA}],
         "signature": {
             "form": "replaces",
@@ -485,11 +485,11 @@ def _published_version(project_dir: Path, publish_reads: str) -> str:
     """A four-stage version: load -> mid -> {`checked`, publish}, so both cases exist."""
     stages: list[dict] = [
         _LOAD_STAGE,
-        {"id": "mid", "description": "Middle", "type": "python_frame_function",
+        {"id": "mid", "description": "Middle", "type": "pandas_frame_function",
          "inputs": [{"id": "load", "schema": _ROWS_SCHEMA}],
          "function": {"kind": "inline", "code": "def transform(df): return df"},
          "signature": {"form": "replaces", "produces": _ROWS_SCHEMA["columns"]}},
-        {"id": "checked", "description": "Assert something", "type": "python_frame_function",
+        {"id": "checked", "description": "Assert something", "type": "pandas_frame_function",
          "inputs": [{"id": "mid", "schema": _ROWS_SCHEMA}],
          "function": {"kind": "inline", "code": "def transform(df): return df"},
          "signature": {"form": "replaces", "produces": _ROWS_SCHEMA["columns"]}},

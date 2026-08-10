@@ -79,9 +79,28 @@ def _report_refusals(refused: list[tuple[Path, str]], projects_dir: Path) -> Non
         print(f"  {path.relative_to(projects_dir)}: {reason}")
 
 
+def _rename_stage_types(node: Any) -> bool:
+    """Only a `type` key is rewritten — a stage's own prose may name the old type."""
+    found = False
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if key == "type" and value in _RENAMED_TYPES:
+                node[key] = _RENAMED_TYPES[value]
+                found = True
+            else:
+                found |= _rename_stage_types(value)
+    elif isinstance(node, list):
+        for item in node:
+            found |= _rename_stage_types(item)
+    return found
+
+
+_RENAMED_TYPES = {"python_frame_function": "pandas_frame_function"}
+
+
 def _migrate(spec: Any) -> bool:
     """Bring one stage spec to today's shape; True if anything changed."""
-    changed = _drop_primary_keys(spec)
+    changed = _drop_primary_keys(spec) | _rename_stage_types(spec)
     if not isinstance(spec, dict):
         return changed
     return rename_name_to_description(spec) | add_signature(spec) | changed

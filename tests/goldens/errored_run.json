@@ -45,7 +45,7 @@
     },
     {
       "stage_id": "boom",
-      "type": "python_frame_function",
+      "type": "pandas_frame_function",
       "started_at": "2026-07-24T16:42:39",
       "status": "error",
       "input_validation_report": [],
@@ -55,13 +55,13 @@
       "error": {
         "type": "ValueError",
         "message": "boom",
-        "traceback": "Traceback (most recent call last):\n  File \"C:\\journalism_sprint\\prototype_one_runctx_wt\\app\\runtime\\executor.py\", line 612, in _run_stage\n    output = handler.execute(stage, inputs_for_stage, ctx)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\journalism_sprint\\prototype_one_runctx_wt\\app\\runtime\\stages\\execution.py\", line 165, in execute\n    return self.apply(stage, inputs, ctx)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\journalism_sprint\\prototype_one_runctx_wt\\app\\runtime\\stages\\python_functions.py\", line 48, in handle_python_frame_function\n    return fn(*args)\n           ^^^^^^^^^\n  File \"<string>\", line 2, in transform\nValueError: boom\n"
+        "traceback": "Traceback (most recent call last):\n  File \"C:\\journalism_sprint\\prototype_one_runctx_wt\\app\\runtime\\executor.py\", line 612, in _run_stage\n    output = handler.execute(stage, inputs_for_stage, ctx)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\journalism_sprint\\prototype_one_runctx_wt\\app\\runtime\\stages\\execution.py\", line 165, in execute\n    return self.apply(stage, inputs, ctx)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\journalism_sprint\\prototype_one_runctx_wt\\app\\runtime\\stages\\python_functions.py\", line 48, in handle_pandas_frame_function\n    return fn(*args)\n           ^^^^^^^^^\n  File \"<string>\", line 2, in transform\nValueError: boom\n"
       },
       "finished_at": "2026-07-24T16:42:39"
     },
     {
       "stage_id": "tail",
-      "type": "python_frame_function",
+      "type": "pandas_frame_function",
       "status": "pending",
       "input_validation_report": [],
       "output_validation_report": null,

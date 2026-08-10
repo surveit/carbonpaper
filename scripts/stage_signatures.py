@@ -24,7 +24,7 @@ _EXTENDS_TYPES = frozenset({
     "filter_rows", "human_review_queue", "enrich", "expand",
 })
 _REPLACES_TYPES = frozenset({
-    "python_frame_function", "aggregate", "union", "input_data", "publish",
+    "pandas_frame_function", "aggregate", "union", "input_data", "publish",
 })
 
 
@@ -208,7 +208,7 @@ def _synthesize_replaces(spec: dict[str, Any], stage_type: str) -> dict[str, Any
         consumed = _aggregate_consumed(spec.get("aggregate") or {})
         reads = [c for c in anchor_columns if c.get("name") in consumed]
         return {"form": "replaces", "reads": _reads(anchor_id, reads), "produces": produces}
-    # python_frame_function: opaque code over every input frame.
+    # pandas_frame_function: opaque code over every input frame.
     return {"form": "replaces", "reads": _all_edge_reads(edges), "produces": produces}
 
 

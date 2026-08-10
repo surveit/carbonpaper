@@ -19,7 +19,7 @@
 .stage-panel-head { margin: 0 0 .2rem; }
 /* The chip sits beside the name, not out at the right margin: pinned right it is
    the width of the reader's window away from the word it qualifies, and a long
-   type name (`python_frame_function`) makes that distance obvious. */
+   type name (`pandas_frame_function`) makes that distance obvious. */
 .stage-panel-head .head-line {
     display: flex;
     align-items: baseline;

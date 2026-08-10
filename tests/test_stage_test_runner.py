@@ -238,7 +238,7 @@ def test_find_failing_stage_tests_reports_a_failed_failure_case():
 
 def _frame_stage(code: str, tests: list[dict]) -> Stage:
     return parse_stage({
-        "id": "reshape", "description": "Reshape", "type": "python_frame_function",
+        "id": "reshape", "description": "Reshape", "type": "pandas_frame_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
         "signature": {
             "form": "replaces",
@@ -272,7 +272,7 @@ def test_omitted_column_in_expected_row_claims_none():
         {"name": "label", "type": "str", "nullable": True},
     ]}
     stage = parse_stage({
-        "id": "labelled", "description": "Labelled", "type": "python_frame_function",
+        "id": "labelled", "description": "Labelled", "type": "pandas_frame_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
         "signature": {"form": "replaces", "produces": labelled_schema["columns"]},
         "function": {"kind": "inline", "code": (
@@ -360,7 +360,7 @@ _MERGED_SCHEMA = {"columns": [
 
 def _multi_input_frame_stage(code: str, tests: list[dict]) -> Stage:
     return parse_stage({
-        "id": "merge", "description": "Merge", "type": "python_frame_function",
+        "id": "merge", "description": "Merge", "type": "pandas_frame_function",
         "inputs": [
             {"id": "left", "schema": _LEFT_SCHEMA},
             {"id": "right", "schema": _RIGHT_SCHEMA},
@@ -401,7 +401,7 @@ def test_multi_input_frame_positional_order_is_declared_order():
     # the `right` input's row instead of `left`'s.
     id_schema = {"columns": [{"name": "id", "type": "str", "nullable": False}]}
     stage = parse_stage({
-        "id": "first", "description": "First", "type": "python_frame_function",
+        "id": "first", "description": "First", "type": "pandas_frame_function",
         "inputs": [
             {"id": "left", "schema": id_schema},
             {"id": "right", "schema": id_schema},

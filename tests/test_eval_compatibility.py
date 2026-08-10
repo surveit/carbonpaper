@@ -59,7 +59,7 @@ def _row(id_, inputs, output_schema=None, **kw):
 
 def _frame(id_, inputs, output_schema=None, **kw):
     return m.parse_stage(S(
-        id=id_, type="python_frame_function",
+        id=id_, type="pandas_frame_function",
         inputs=_input_refs(inputs),
         function={"kind": "inline", "code": "def transform(row): return row"},
         signature={"form": "replaces",

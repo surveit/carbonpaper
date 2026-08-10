@@ -59,7 +59,7 @@ def test_human_review_queue_traces_positionally(tmp_path):
 
 
 def test_stop_at_reshaping_stage_points_at_issue_58(tmp_path):
-    run_dir = _chain(tmp_path, "python_frame_function")
+    run_dir = _chain(tmp_path, "pandas_frame_function")
     trace = trace_row(run_dir, "enrich", 0)
     assert [s.stage_id for s in trace.steps] == ["enrich"]
     assert trace.end.reached_origin is False
