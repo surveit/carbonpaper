@@ -1,0 +1,57 @@
+/* The legend, stage-type tags and run-state badges every surface reuses. */
+/* Legend */
+.legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 14px;
+    align-items: center;
+    margin: 12px 0 24px;
+    font-size: 13px;
+    color: var(--muted);
+}
+
+/* Type badges */
+.badge, .type-tag {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    border: 1px solid transparent;
+    font-family: "SFMono-Regular", "Consolas", monospace;
+}
+.type-tag {
+    font-size: 12px;
+    background: var(--sunk-deep);
+    border-color: var(--border);
+    color: var(--muted);
+    font-weight: 500;
+}
+.type-tag.big { font-size: 14px; padding: 5px 12px; }
+
+/* A stage's TYPE takes no colour of its own. Colour on this page answers "what
+   happened" and "did a check pass"; a type answers neither, and nine type hues beside
+   a status chip put the two axes in one vocabulary — an llm badge in the warning
+   amber, a custom badge in the error red. The glyph (TYPE_GLYPH, app/web/diagrams.py)
+   names the type, and the badge stays quiet next to the thing that does mean something.
+   The nine selectors are spelled out so tests/arch/test_stage_type_presentation.py
+   still finds a rule for every class TYPE_CLASS can emit. */
+.badge.input,     .badge.llm,       .badge.python,
+.badge.join,      .badge.aggregate, .badge.human,
+.badge.publish,   .badge.rowset,    .badge.custom {
+    background: var(--sunk-deep); color: var(--muted); border-color: var(--border);
+}
+
+/* Run-state badges — one state each, so a badge, its pill, its stage border and
+   its graph node all carry the same colour for the same state: tint behind, base
+   on the border, ink on the label. */
+.badge.ok       { background: var(--state-done-bg);   color: var(--state-done-ink);   border-color: var(--state-done); }
+.badge.warn     { background: var(--state-warn-bg);   color: var(--state-warn-ink);   border-color: var(--state-warn); }
+.badge.err      { background: var(--state-failed-bg); color: var(--state-failed-ink); border-color: var(--state-failed); }
+.badge.awaiting { background: var(--state-review-bg); color: var(--state-review-ink); border-color: var(--state-review); }
+.badge.pending  { background: var(--state-idle-bg);   color: var(--state-idle-ink);   border-color: var(--state-idle); }
+
+.run-status.status-awaiting_review { background: var(--state-review-bg); color: var(--state-review-ink); border-color: var(--state-review); }
+.run-status.status-pending         { background: var(--state-idle-bg);   color: var(--state-idle-ink);   border-color: var(--state-idle); }
+

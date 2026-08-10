@@ -35,7 +35,7 @@
   };
 
   // Subscribe to stage-node clicks. Also marks the document node-clickable, which
-  // is what turns on the pointer cursor (see .mermaid .clickable in style.css).
+  // is what turns on the pointer cursor (see .mermaid .clickable in diagram.css).
   window.onDiagramNode = function (handler) {
     subscribed = true;
     document.documentElement.setAttribute("data-diagram-clickable", "1");

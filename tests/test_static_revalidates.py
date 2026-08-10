@@ -10,7 +10,7 @@ from app.main import app
 
 def test_static_assets_are_revalidated_before_reuse():
     with TestClient(app) as client:
-        response = client.get("/static/style.css")
+        response = client.get("/static/base.css")
 
     assert response.status_code == 200
     assert response.headers["cache-control"] == "no-cache"
@@ -21,8 +21,8 @@ def test_static_assets_are_revalidated_before_reuse():
 
 def test_revalidation_answers_a_matching_etag_without_a_body():
     with TestClient(app) as client:
-        etag = client.get("/static/style.css").headers["etag"]
-        response = client.get("/static/style.css", headers={"If-None-Match": etag})
+        etag = client.get("/static/base.css").headers["etag"]
+        response = client.get("/static/base.css", headers={"If-None-Match": etag})
 
     assert response.status_code == 304
     assert not response.content

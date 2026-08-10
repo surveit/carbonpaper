@@ -8,9 +8,8 @@ auto }` broke zoom-to-node: the mermaid block is a `pre`.
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
-STYLESHEET = Path(__file__).resolve().parents[2] / "app" / "static" / "style.css"
+from arch._helpers import read_stylesheets
 
 # A declaration is fine only if it turns scrolling OFF.
 _NON_SCROLLING = {"visible", "clip"}
@@ -48,7 +47,7 @@ def _find_scrolling_declarations(body: str) -> list[str]:
 
 
 def test_no_descendant_of_the_diagram_viewport_scrolls() -> None:
-    css = STYLESHEET.read_text(encoding="utf-8")
+    css = read_stylesheets()
     offenders = [
         f"{selector} {{ {'; '.join(scrolling)} }}"
         for selector, body in _find_rules_under_the_viewport(css)
@@ -64,7 +63,7 @@ def test_no_descendant_of_the_diagram_viewport_scrolls() -> None:
 
 def test_the_mermaid_block_cancels_the_base_pre_overflow() -> None:
     """`pre { overflow-x: auto }` applies to <pre class="mermaid"> unless cancelled."""
-    css = STYLESHEET.read_text(encoding="utf-8")
+    css = read_stylesheets()
     rules = dict(_find_rules_under_the_viewport(css))
     body = rules.get(".diagram-viewport .mermaid")
     assert body is not None, "expected a .diagram-viewport .mermaid rule to exist"

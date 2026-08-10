@@ -1,0 +1,99 @@
+/* Data model view: the table-level FK graph, its cards and fact chips. */
+/* Data model view */
+.dm-group-heading {
+    margin-top: 28px;
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: 14px;
+    color: var(--fg);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.dm-table {
+    background: var(--raised);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    margin: 10px 0;
+    padding: 8px 14px;
+}
+.dm-table summary {
+    cursor: pointer;
+    color: var(--fg);
+    user-select: none;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.dm-table summary::-webkit-details-marker { display: none; }
+.dm-table summary::before {
+    content: "▾";
+    color: var(--muted);
+    font-size: 11px;
+    transition: transform 0.1s;
+}
+.dm-table:not([open]) summary::before { content: "▸"; }
+.dm-table[open] summary { margin-bottom: 8px; }
+.dm-rows {
+    margin-left: auto;
+    font-size: 12px;
+    color: var(--muted);
+}
+
+/* Data model tier 1 — the table-level FK graph + summary cards.
+   (Tier 2 — the ER + column tables — reuses .dm-table above.) */
+.dm-graph { margin: 14px 0 4px; padding: 14px; }
+.dm-graph-caption {
+    font-size: 12px;
+    color: var(--muted);
+    margin: 4px 0 8px;
+    max-width: 72ch;
+}
+.dm-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 12px;
+    margin: 12px 0 4px;
+}
+.dm-card {
+    background: var(--raised);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 12px 14px 13px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.dm-card-head { display: flex; align-items: baseline; gap: 10px; }
+.dm-card-name { font-weight: 600; font-size: 13px; }
+.dm-card-title { color: var(--muted); font-size: 13px; margin: 0; }
+.dm-card-desc { font-size: 13px; margin: 0; line-height: 1.5; }
+.dm-facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: auto;
+    padding-top: 9px;
+    border-top: 1px dashed var(--border);
+}
+.fact-chip {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 11px;
+    color: var(--muted);
+    background: var(--sunk);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 1px 7px;
+    text-decoration: none;
+    white-space: nowrap;
+}
+a.fact-chip:hover { background: var(--hover); color: var(--fg); }
+.dm-ref-heading {
+    margin-top: 36px;
+    padding-top: 16px;
+    border-top: 2px solid var(--border);
+}
+.dm-ref-heading h2 { margin: 0 0 2px; font-size: 17px; }
+.dm-ref-heading p { margin: 0 0 8px; font-size: 13px; max-width: 80ch; }
+

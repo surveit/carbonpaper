@@ -2,6 +2,8 @@
 relative links. Lives under app/web because that is where those templates are."""
 from __future__ import annotations
 
+import re
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
@@ -36,7 +38,9 @@ PACKET_STYLESHEET = "packet.css"
 STYLESHEETS = (PALETTE_STYLESHEET, APP_STYLESHEET, PACKET_STYLESHEET)
 
 _APP_STATIC = Path(__file__).resolve().parents[2] / "static"
+_APP_TEMPLATES = Path(__file__).resolve().parents[2] / "templates"
 _PACKET_STATIC = Path(__file__).parent / "static"
+_STATIC_HREF = re.compile(r'rel="stylesheet" href="/static/([^"]+)"')
 
 # The node-click dispatcher, vendored so the packet's graph nodes are live.
 NODE_SCRIPT = "diagram_nodes.js"
@@ -65,6 +69,18 @@ def write_packet_pages(
     for stage in view.stages:
         written.append(_write_stage_page(root, run_dir, view, stage))
     return written
+
+
+def read_app_cascade_order() -> list[str]:
+    """The app's sheets, in the order _stylesheets.html links them — palette.css first."""
+    partial = _APP_TEMPLATES / "_stylesheets.html"
+    linked = _STATIC_HREF.findall(partial.read_text(encoding="utf-8"))
+    if not linked or linked[0] != PALETTE_STYLESHEET:
+        raise ValueError(
+            f"{partial} does not link palette.css first — the packet copies that order, "
+            "and every sheet after it spends tokens palette.css declares"
+        )
+    return linked
 
 
 def _write_index(
@@ -184,17 +200,16 @@ def _write_text(dest: Path, text: str, relative: str) -> str:
 
 
 def _write_stylesheets(root: Path) -> list[str]:
-    sources = {
-        PALETTE_STYLESHEET: _APP_STATIC,
-        APP_STYLESHEET: _APP_STATIC,
-        PACKET_STYLESHEET: _PACKET_STATIC,
+    # Concatenated, not @import-ed: the packet must render with no network.
+    order = read_app_cascade_order()
+    text = {
+        PALETTE_STYLESHEET: (_APP_STATIC / PALETTE_STYLESHEET).read_text(encoding="utf-8"),
+        APP_STYLESHEET: _join_sheets(name for name in order if name != PALETTE_STYLESHEET),
+        PACKET_STYLESHEET: (_PACKET_STATIC / PACKET_STYLESHEET).read_text(encoding="utf-8"),
     }
-    return [_copy_stylesheet(root, name, sources[name]) for name in STYLESHEETS]
+    return [_write_text(root / f"{ASSETS_DIR}/{name}", text[name], f"{ASSETS_DIR}/{name}")
+            for name in STYLESHEETS]
 
 
-def _copy_stylesheet(root: Path, name: str, source_dir: Path) -> str:
-    relative = f"{ASSETS_DIR}/{name}"
-    dest = root / relative
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_text((source_dir / name).read_text(encoding="utf-8"), encoding="utf-8")
-    return relative
+def _join_sheets(names: Iterable[str]) -> str:
+    return "\n".join((_APP_STATIC / name).read_text(encoding="utf-8") for name in names)

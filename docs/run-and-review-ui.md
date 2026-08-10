@@ -4,8 +4,8 @@ The screens a workflow *operator* (vs. its author) uses: watching a run,
 reviewing flagged rows, and versioning the workflow itself. Code:
 `app/web/routers/{runs,run_lineage,review,node}.py` + `app/templates/`
 (`run_detail.html`, `_run_stage_panel.html`, `queue.html`, `_node_panel.html`,
-`versions.html`) + `app/static/style.css`. All routes live under
-`/project/{project}/…`.
+`versions.html`) + `app/static/{run-status,run-page,node-review,review-queue}.css`.
+All routes live under `/project/{project}/…`.
 
 ## Run detail page (`run_detail.html`)
 

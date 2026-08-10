@@ -1,0 +1,197 @@
+/* Run chrome: status pills, summary cards, banners, per-stage blocks, previews. */
+/* Run status badges */
+.run-status {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    border: 1px solid;
+}
+.run-status.status-ok { background: var(--state-done-bg); color: var(--state-done-ink); border-color: var(--state-done); }
+.run-status.status-warnings,
+.run-status.status-validation_warnings,
+.run-status.status-running { background: var(--state-warn-bg); color: var(--state-warn-ink); border-color: var(--state-warn); }
+.run-status.status-errors,
+.run-status.status-error { background: var(--state-failed-bg); color: var(--state-failed-ink); border-color: var(--state-failed); }
+.run-status.status-cancelled { background: var(--state-idle-bg); color: var(--state-idle-ink); border-color: var(--state-idle); }
+.run-status.status-corrupt,
+.run-status.status-unknown { background: var(--sunk-deep); color: var(--muted); border-color: var(--border); }
+
+/* Run summary cards */
+.run-summary {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin: 16px 0 24px;
+}
+.run-summary .card {
+    background: var(--raised);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 14px 16px;
+    text-align: center;
+}
+.run-summary .card .num {
+    font-size: 28px;
+    font-weight: 600;
+    line-height: 1.1;
+}
+.run-summary .card .num.ok { color: var(--state-done-ink); }
+.run-summary .card .num.warn { color: var(--state-warn-ink); }
+.run-summary .card .num.err { color: var(--state-failed-ink); }
+.run-summary .card .lbl {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--muted);
+    margin-top: 2px;
+}
+
+/* Banners. `.banner` is the box and the neutral default; a modifier gives it the
+   colour of what it says. The modifiers are declared after `.banner` and match its
+   specificity, so an element carrying both paints in the modifier's state. */
+.banner {
+    padding: 12px 16px;
+    background: var(--state-idle-bg);
+    border-left: 4px solid var(--state-idle);
+    border-radius: 0 4px 4px 0;
+    margin: 16px 0;
+}
+.banner-done   { background: var(--state-done-bg);   border-left-color: var(--state-done); }
+.banner-warn   { background: var(--state-warn-bg);   border-left-color: var(--state-warn); }
+.banner-review { background: var(--state-review-bg); border-left-color: var(--state-review); }
+.banner-review .btn { margin-left: 12px; }
+
+/* Per-stage run blocks */
+.run-stage {
+    background: var(--raised);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 14px 18px;
+    margin: 12px 0;
+}
+.run-stage.status-error { border-left: 4px solid var(--state-failed); }
+.run-stage.status-validation_warnings { border-left: 4px solid var(--state-warn); }
+.run-stage.status-ok { border-left: 4px solid var(--state-done); }
+.run-stage header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    border: 0;
+    padding: 0;
+    background: transparent;
+    margin-bottom: 8px;
+}
+.run-stage h3 {
+    margin: 0;
+    font-size: 15px;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--fg);
+    font-weight: 500;
+}
+.run-stage h3 a { color: var(--fg); text-decoration: none; }
+.run-stage h3 a:hover { color: var(--accent); }
+
+.run-error {
+    background: var(--state-failed-bg);
+    padding: 10px 14px;
+    border-radius: 4px;
+    color: var(--state-failed-ink);
+    margin: 8px 0;
+    font-size: 13px;
+}
+.run-error pre {
+    background: var(--sunk-deep);
+    color: var(--state-failed-ink);
+    margin-top: 6px;
+    font-size: 11px;
+    max-height: 280px;
+}
+
+.validation-block {
+    background: var(--sunk);
+    padding: 8px 14px;
+    border-radius: 4px;
+    margin: 8px 0;
+    font-size: 13px;
+}
+.validation-block h4 {
+    margin: 6px 0 4px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--muted);
+}
+.validation-list {
+    margin: 0;
+    padding-left: 20px;
+    list-style: disc;
+    font-size: 12px;
+}
+.validation-list li.sev-error { color: var(--bad-ink); }
+.validation-list li.sev-warning { color: var(--warn-ink); }
+
+.preview-block {
+    margin: 8px 0;
+}
+.preview-block summary {
+    color: var(--accent);
+    font-size: 12px;
+    cursor: pointer;
+}
+.table-scroll { overflow-x: auto; max-height: 400px; }
+table.data-preview {
+    border-collapse: collapse;
+    background: var(--raised);
+    font-size: 12px;
+    min-width: 100%;
+    margin-top: 6px;
+}
+table.data-preview th, table.data-preview td {
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+    vertical-align: top;
+    white-space: nowrap;
+    max-width: 320px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+/* URL cells: never clip — show the full link, wrapping if needed. */
+table.data-preview td.cell-url {
+    white-space: normal;
+    max-width: 560px;
+    overflow: visible;
+    text-overflow: clip;
+    word-break: break-all;
+}
+table.data-preview td.cell-url a { color: var(--accent); }
+/* Clipped text cells: hover shows the full value (title attr), click expands
+   the cell in place so long text wraps instead of being cut off. */
+table.data-preview td.cell-clip { cursor: zoom-in; }
+table.data-preview td.cell-clip.expanded {
+    white-space: pre-wrap;
+    max-width: 640px;
+    min-width: 320px;
+    overflow: visible;
+    text-overflow: clip;
+    overflow-wrap: anywhere;
+    background: var(--fold-bg);
+    cursor: zoom-out;
+}
+table.data-preview th {
+    background: var(--sunk-deep);
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--muted);
+    position: sticky;
+    top: 0;
+}
+

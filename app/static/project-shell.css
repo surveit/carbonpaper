@@ -1,0 +1,297 @@
+/* The app shell: sidebar, nav tree, main column, section headers, overview tiles. */
+/* ═══════════════════════════════════════════════════════════════════════════
+   LEFT-SIDEBAR PROJECT SHELL (project_shell.html + the 5 section templates)
+   ═══════════════════════════════════════════════════════════════════════════
+   One project, framed by a fixed left sidebar (project name + the nav items, which
+   carry no status marks) and a main content area holding the active section.
+   Reuses the shared --vars and .btn primitives.
+   The header's <main> max-width still bounds the whole shell. */
+
+.app-shell {
+    display: grid;
+    grid-template-columns: 230px minmax(0, 1fr);
+    gap: 28px;
+    align-items: start;
+}
+
+@media (max-width: 860px) {
+  .app-shell { grid-template-columns: 1fr; }
+}
+
+/* ── The sidebar ── */
+.app-side {
+    position: sticky;
+    top: 16px;
+    align-self: start;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+@media (max-width: 860px) {
+  .app-side { position: static; }
+}
+
+.app-side-brand {
+    display: block;
+    text-decoration: none;
+    color: var(--fg);
+    padding: 4px 10px 12px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 4px;
+}
+
+.app-side-kicker {
+    display: block;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--muted);
+    font-weight: 700;
+}
+
+.app-side-name {
+    display: block;
+    font-size: 17px;
+    font-weight: 600;
+    letter-spacing: -0.2px;
+    line-height: 1.25;
+    word-break: break-word;
+}
+
+.app-side-brand:hover .app-side-name { color: var(--accent); }
+
+.app-side-slug { display: block; font-size: 11px; margin-top: 3px; }
+
+.app-side-slug code { background: var(--sunk-deep); }
+
+.app-side-nav { display: flex; flex-direction: column; gap: 2px; }
+
+.app-nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    text-decoration: none;
+    color: var(--fg);
+    font-size: 14px;
+    font-weight: 500;
+    transition: background 0.12s, color 0.12s;
+}
+
+.app-nav-item:hover:not(.current) { background: var(--hover); }
+
+.app-nav-item.current {
+    background: var(--accent);
+    color: var(--on-dark);
+}
+
+/* Workflow group: Versions / Runs / Evals render indented beneath the Workflow item,
+   joined by a left rail. The parent gets .trail when one of its children is active. */
+.app-nav-children {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 2px 0 2px 15px;
+    padding-left: 9px;
+    border-left: 1px solid var(--border);
+}
+
+.app-nav-item.child {
+    padding-top: 6px;
+    padding-bottom: 6px;
+    font-size: 13px;
+}
+
+.app-nav-item.trail:not(.current) { color: var(--accent); }
+
+.app-nav-item.trail:not(.current) .app-nav-label { font-weight: 600; }
+
+.app-nav-label { min-width: 0; }
+
+/* Compact "do this next" pointer pinned under the nav. */
+.app-side-next {
+    display: block;
+    margin-top: 10px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    background: var(--sunk);
+    text-decoration: none;
+}
+
+.app-side-next:hover { background: var(--hover); }
+
+.app-side-next-kicker {
+    display: block;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--muted);
+    font-weight: 700;
+}
+
+.app-side-next-label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--accent);
+    line-height: 1.3;
+    margin-top: 2px;
+}
+
+.app-side-agent { margin-top: 10px; }
+
+.app-side-agent-btn {
+    display: block;
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    background: var(--sunk);
+    color: var(--accent);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+}
+
+.app-side-agent-btn:hover { background: var(--hover); }
+
+/* ── Main content area + section headers ── */
+.app-main { min-width: 0; }
+
+.sec-head { margin-bottom: 8px; }
+
+.sec-head h1 { margin-bottom: 6px; }
+
+.sec-meta { font-size: 12px; margin: -4px 0 12px; }
+
+.sec-meta code { word-break: break-all; }
+
+/* Section headers that carry an action row on the right (workflow, runs). */
+.wf-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+.wf-head-title { min-width: 0; flex: 1 1 360px; }
+
+.wf-actions { flex: none; align-items: center; flex-wrap: wrap; }
+
+/* ═══ OVERVIEW section ═══ */
+.ov-head { margin-bottom: 18px; }
+
+.ov-title h1 { margin-bottom: 6px; }
+
+.ov-meta {
+    color: var(--muted);
+    font-size: 13px;
+    margin: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 8px;
+    align-items: center;
+}
+
+.ov-meta b { color: var(--fg); font-weight: 600; }
+
+.ov-dot { color: var(--border); }
+
+/* The prominent "do this next" CTA. */
+.ov-cta {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin: 4px 0 28px;
+    padding: 16px 22px;
+    background: var(--accent);
+    color: var(--on-dark);
+    border-radius: 10px;
+    text-decoration: none;
+    box-shadow: 0 1px 6px color-mix(in srgb, var(--accent) 25%, transparent);
+    transition: background 0.12s, transform 0.05s;
+}
+
+.ov-cta:hover { background: var(--accent-deep); }
+
+.ov-cta:active { transform: translateY(1px); }
+
+.ov-cta-kicker {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    font-weight: 700;
+    opacity: 0.85;
+    background: color-mix(in srgb, var(--on-dark) 18%, transparent);
+    padding: 3px 9px;
+    border-radius: 5px;
+    flex: none;
+}
+
+.ov-cta-label { font-size: 17px; font-weight: 600; flex: 1 1 auto; }
+
+.ov-cta-arrow { font-size: 20px; flex: none; }
+
+.ov-status-h { margin-top: 8px; }
+
+.ov-tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 14px;
+    margin: 8px 0 20px;
+}
+
+.ov-tile {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 14px 16px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--raised);
+    text-decoration: none;
+    color: var(--fg);
+    transition: box-shadow 0.12s, border-color 0.12s;
+}
+
+.ov-tile:hover { border-color: var(--border-strong); box-shadow: 0 1px 6px var(--shadow); }
+
+.ov-tile-k {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--muted);
+    font-weight: 700;
+}
+
+.ov-tile-v { font-size: 18px; font-weight: 600; letter-spacing: -0.2px; }
+
+.ov-tile-v.ok { color: var(--good-ink); }
+
+.ov-tile-v.warn { color: var(--warn-ink); }
+
+.ov-tile-v.locked { color: var(--warn-ink); font-size: 15px; }
+
+.ov-tile-v.none { color: var(--muted); font-weight: 500; }
+
+.ov-tile-sub { font-size: 12px; color: var(--muted); }
+
+.ov-tile-sub.review { color: var(--state-review-ink); font-weight: 600; }
+
+.ov-foot { font-size: 13px; margin-top: 8px; }
+
+/* ═══ WORKFLOW section: empty-graph hint ═══ */
+.wf-empty-graph { margin: 14px 0; }
+
+.wf-right { display: block; }
+
+.wf-right.loading { opacity: 0.5; }
+

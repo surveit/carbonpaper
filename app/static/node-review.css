@@ -1,0 +1,42 @@
+/* Node review, full width: the decision bar, the stage-tests report, new-column tags. */
+/* Node-review, full-width: decision bar pinned on top, then Input/Transform/Output/Spec tabs. */
+.nr-bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+    background: var(--sunk); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; }
+.nr-bar-id { display: flex; align-items: center; gap: 12px; min-width: 0; }
+/* The stage id IS the heading — it is the stage's one name. The description is
+   the line under it, never a heading, so the two never read as rival names. */
+.nr-bar-name { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.nr-bar-name h2 { margin: 0; font-size: 18px; }
+.nr-bar-name h2 code { font-size: inherit; color: inherit; }
+.nr-bar-name p { margin: 0; font-size: 13px; color: var(--muted); max-width: 70ch; }
+.nr-scope { font-style: italic; }
+.nr-tabs { margin-top: 16px; }
+.nr-panes { margin-top: 6px; }
+.nr-panes .schema-card { margin: 0 0 16px; }
+.nr-panes .schema-card h4 { margin: 0 0 8px; font-size: 13px; }
+
+/* Stage tests report (_stage_tests.html). Status colours reuse the verdict palette. */
+.test-case { margin: 0.5rem 0; }
+.test-case summary { cursor: pointer; }
+.test-status {
+    display: inline-block; font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.4px; padding: 3px 10px; border-radius: 3px; margin-right: 8px;
+    border: 1px solid;
+}
+.test-status-passed { background: var(--verdict-pass-bg); color: var(--good-ink); border-color: var(--verdict-pass-bd); }
+.test-status-mismatch,
+.test-status-error { background: var(--verdict-fail-bg); color: var(--bad-ink); border-color: var(--verdict-fail-bd); }
+.test-status-malformed { background: var(--verdict-warn-bg); color: var(--warn-ink); border-color: var(--verdict-warn-bd); }
+.test-rows { border-collapse: collapse; margin: 0.3rem 0 0.6rem; }
+.test-rows th, .test-rows td { border: 1px solid var(--border); padding: 0.15rem 0.5rem; font-size: 0.85rem; }
+/* A column the step ADDS: in its output schema, in none of its input schemas. One flat
+   tint the full height of the column, so the eye separates produced values from
+   carried-through ones in a pass; the caption names the same columns in words, so the
+   mark does not rest on colour. --state-review-bg is the palette's blue tint — the only
+   one that stays legible on --exec-bg, which the surrounding block fills. */
+.test-rows th.test-col-new,
+.test-rows td.test-col-new { background: var(--state-review-bg); }
+.test-rows caption { caption-side: top; text-align: left; font-size: 0.78rem; color: var(--muted); padding-bottom: 2px; }
+.test-message { color: var(--bad-ink); }
+.node-review-full .nr-edit-hint { margin: 0 0 10px; }
+

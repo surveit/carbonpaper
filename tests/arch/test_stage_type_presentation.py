@@ -7,12 +7,11 @@ workflow paints broken nodes. `union` and `filter_rows` shipped that way.
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
 from app.models import StageType
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
+from arch._helpers import read_stylesheets
 
-_STYLESHEET = Path(__file__).resolve().parents[2] / "app" / "static" / "style.css"
 # The class `TYPE_CLASS.get(stype, ...)` falls back to, so it must be styled too.
 _FALLBACK_CLASS = "custom"
 
@@ -52,10 +51,10 @@ def test_every_node_class_has_a_mermaid_classdef() -> None:
 
 
 def test_every_node_class_has_a_badge_rule() -> None:
-    styled = set(re.findall(r"\.badge\.(\w+)", _STYLESHEET.read_text(encoding="utf-8")))
-    assert styled, f"no `.badge.<class>` rules found in {_STYLESHEET} — this rule is vacuous"
+    styled = set(re.findall(r"\.badge\.(\w+)", read_stylesheets()))
+    assert styled, "no `.badge.<class>` rules found in app/static/*.css — this rule is vacuous"
     missing = sorted(collect_emittable_classes() - styled)
     assert not missing, (
-        f"{missing} are node classes TYPE_CLASS can emit, but style.css has no "
+        f"{missing} are node classes TYPE_CLASS can emit, but no app/static/*.css has a "
         "`.badge.<class>` rule, so the type tag beside the node is unstyled."
     )

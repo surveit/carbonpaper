@@ -1,0 +1,121 @@
+/* Compile chat: the transcript, emit cards, the input row and schema-edit fields. */
+/* ═══════════════════════════════════════════════════════════════════════════
+   SHARED AI-CHAT + DATA-MODEL RENDER (used by section_data_model.html and
+   section_workflow.html). Ported out of compile_flow.html's inline <style> so
+   both sections share one definition. The two-column body wrapper (.dm-flow-*)
+   mirrors .flow-body's main|sidebar split. */
+
+.dm-flow-body { display: flex; gap: 24px; align-items: flex-start; }
+
+.dm-flow-main { flex: 1 1 0; min-width: 0; }
+
+@media (max-width: 980px) {
+  .dm-flow-body { flex-direction: column; }
+}
+
+/* Chat (reused from compile_flow.html). */
+.chat-log { border: 1px solid var(--border); border-radius: 8px; background: var(--raised);
+    padding: 12px; flex: 1 1 auto; min-height: 240px; overflow-y: auto;
+    display: flex; flex-direction: column; gap: 10px; }
+
+.chat-msg { max-width: 96%; padding: 8px 12px; border-radius: 10px; font-size: 13px;
+    line-height: 1.45; white-space: pre-wrap; word-wrap: break-word; }
+
+.chat-msg.user { align-self: flex-end; background: var(--info-bd); color: var(--on-dark); }
+
+.chat-msg.assistant { align-self: flex-start; background: var(--raised); border: 1px solid var(--border); color: var(--fg); }
+
+.chat-msg.system { align-self: center; background: var(--sunk-deep); color: var(--muted); font-size: 12px;
+    font-style: italic; border: 1px dashed var(--border); }
+
+.chat-msg.error { align-self: center; background: var(--bad-bg); border: 1px solid var(--bad-bd); color: var(--bad-ink);
+    font-style: normal; }
+
+.emit-card .ec-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+
+.emit-card .ec-kind { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); }
+
+.emit-card .ec-name { font-family: ui-monospace, monospace; font-weight: 600; font-size: 13px; }
+
+.emit-card .ec-ok { color: var(--good-bd); font-size: 11px; }
+
+.emit-card .ec-drop { color: var(--warn-ink); font-size: 11px; }
+
+.emit-card .ec-issues { margin: 6px 0 0; padding-left: 18px; }
+
+.emit-card .ec-issues li { color: var(--bad-bd); font-family: ui-monospace, monospace; font-size: 11px; }
+
+.chat-input-row { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+
+.chat-input-row textarea { resize: vertical; min-height: 46px; padding: 8px;
+    border: 1px solid var(--border); border-radius: 6px; font-family: inherit; font-size: 13px; box-sizing: border-box; }
+
+.chat-input-row button { padding: 9px 18px; border: none; border-radius: 6px; background: var(--info-bd);
+    color: var(--on-dark); font-weight: 600; cursor: pointer; }
+
+.chat-input-row button:disabled { background: var(--idle-bd); cursor: default; }
+
+.chat-hint { color: var(--muted); font-size: 12px; margin: 2px 0 10px; }
+
+.chat-cards-head { margin: 14px 0 8px; font-size: 13px; color: var(--muted); }
+
+/* The in-flight "working" indicator (the double-submit guard's visible half). */
+.chat-working { display: none; align-items: center; gap: 8px; margin: 8px 0 0;
+    font-size: 12px; color: var(--warn-ink); background: var(--verdict-warn-bg);
+    border: 1px solid var(--verdict-warn-bd); border-radius: 6px; padding: 6px 10px; }
+
+.chat-working.on { display: flex; }
+
+.chat-working .spin { width: 11px; height: 11px; border-radius: 50%;
+    border: 2px solid var(--warn-bd); border-top-color: transparent; animation: chat-spin .7s linear infinite; }
+
+/* Data-model render (the schema_library look). */
+.validation-report { padding: 10px 14px; border-radius: 6px; margin: 10px 0 16px; font-size: 13px; }
+
+.validation-report.ok { background: var(--good-bg); border: 1px solid var(--good-bd); color: var(--good-ink); }
+
+.validation-report.error { background: var(--bad-bg); border: 1px solid var(--bad-bd); color: var(--bad-ink); }
+
+.validation-report ul { margin: 6px 0 0; padding-left: 20px; }
+
+.schema-desc { font-size: 13px; color: var(--muted); margin: 6px 0; }
+
+.dm-er { margin: 14px 0; }
+
+/* Schema-edit textareas (mirror _node_panel.html's .edit-textarea look). */
+.dm-schema-edit { margin-top: 8px; }
+
+.dm-schema-edit summary { cursor: pointer; color: var(--accent); font-size: 12px; }
+
+.schema-edit-textarea {
+    width: 100%; box-sizing: border-box; min-height: 200px; resize: vertical;
+    background: var(--code-deep); color: var(--code-fg);
+    border: 1px solid var(--fg); border-radius: 5px; padding: 10px 12px; margin-top: 8px;
+    font-size: 12px; line-height: 1.5;
+    font-family: "SFMono-Regular", "Consolas", "Liberation Mono", Menlo, monospace;
+    white-space: pre; overflow: auto; tab-size: 2; }
+
+.schema-edit-textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+.se-actions { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
+
+.se-msg { font-size: 13px; }
+
+.se-msg.ok { color: var(--good-ink); font-weight: 600; }
+
+.se-msg.err { color: var(--bad-ink); font-weight: 600; }
+
+.se-issues { margin: 8px 0 0; padding: 10px 14px 10px 30px; list-style: disc;
+    background: var(--bad-bg); border: 1px solid var(--bad-bd); border-radius: 5px; }
+
+.se-issues[hidden] { display: none; }
+
+.se-issues li { color: var(--bad-ink); font-family: "SFMono-Regular", "Consolas", monospace; font-size: 12px; margin: 2px 0; }
+
+/* Document (read-only prose) — same look compile_flow.html's step 1 used. */
+.doc-prose { background: var(--raised); border: 1px solid var(--border); border-radius: 8px;
+    padding: 20px 24px; white-space: pre-wrap; word-wrap: break-word; line-height: 1.6;
+    font-size: 14px; color: var(--fg); }
+
+@keyframes chat-spin { to { transform: rotate(360deg); } }
+

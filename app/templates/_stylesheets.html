@@ -1,0 +1,24 @@
+{# The app's stylesheets, and THE cascade order — a sheet later in this list wins a
+   tie with one above it. palette.css is first because the rest spend its tokens and
+   declare none of them; an undefined var() drops its whole declaration.
+   The review packet reads its concatenation order back out of this file, so the two
+   cannot disagree; tests/arch/test_every_stylesheet_is_linked.py fails a sheet in
+   app/static that this list forgets, which would otherwise just stop being served. #}
+<link rel="stylesheet" href="/static/palette.css">
+<link rel="stylesheet" href="/static/base.css">
+<link rel="stylesheet" href="/static/badges.css">
+<link rel="stylesheet" href="/static/review-queue.css">
+<link rel="stylesheet" href="/static/workflow-section.css">
+<link rel="stylesheet" href="/static/stage-detail.css">
+<link rel="stylesheet" href="/static/split-view.css">
+<link rel="stylesheet" href="/static/data-model.css">
+<link rel="stylesheet" href="/static/controls.css">
+<link rel="stylesheet" href="/static/run-status.css">
+<link rel="stylesheet" href="/static/node-detail.css">
+<link rel="stylesheet" href="/static/run-page.css">
+<link rel="stylesheet" href="/static/dashboard.css">
+<link rel="stylesheet" href="/static/project-shell.css">
+<link rel="stylesheet" href="/static/chat.css">
+<link rel="stylesheet" href="/static/diagram.css">
+<link rel="stylesheet" href="/static/node-review.css">
+<link rel="stylesheet" href="/static/run-form.css">

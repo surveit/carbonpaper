@@ -1,0 +1,56 @@
+/* The workflow graph block, the stage list table and the signal strip above it. */
+
+/* workflow */
+/* border-box, because .workflow-full sets `width: 100%`: on the default
+   content-box that width is the padding box's INNER edge, so the card lands
+   50px wider than the column it sits in and scrolls that column sideways. */
+.workflow {
+    margin: 24px 0;
+    padding: 24px;
+    background: var(--raised);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow-x: auto;
+    box-sizing: border-box;
+}
+.mermaid { text-align: center; background: transparent; border: 0; padding: 0; white-space: pre; }
+
+/* Stage list table */
+table.stages {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    background: var(--raised);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    overflow: hidden;
+    font-size: 14px;
+}
+table.stages th, table.stages td {
+    padding: 10px 14px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+}
+table.stages th {
+    background: var(--sunk-deep);
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--muted);
+}
+table.stages tr:last-child td { border-bottom: 0; }
+table.stages a { text-decoration: none; }
+
+.signal {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 12px;
+    margin-right: 4px;
+}
+.signal.warn { background: var(--warn-bg); border: 1px solid var(--warn-bd); color: var(--warn-ink); }
+.signal.eval { background: var(--sunk); border: 1px solid var(--border-strong); }
+.signal.review { background: var(--sunk); border: 1px solid var(--border-strong); }
+

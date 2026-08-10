@@ -68,8 +68,10 @@ def test_no_file_but_the_palette_writes_a_colour() -> None:
 
 def test_the_scan_reaches_the_stylesheet_it_is_meant_to_guard() -> None:
     """A broken suffix filter or a moved app/ would make the rule above vacuous."""
-    stylesheet = _APP / "static" / "style.css"
-    assert _read_scannable(stylesheet), f"{stylesheet} is not being read — the rule is vacuous"
+    sheets = sorted((_APP / "static").glob("*.css"))
+    assert sheets, "no stylesheet under app/static is being read — the rule is vacuous"
+    for sheet in sheets:
+        assert _read_scannable(sheet), f"{sheet} is not being read — the rule is vacuous"
     assert _LITERAL.search("border: 1px solid #ddd8ce;"), "the literal pattern matches no hex"
     assert _KEYWORD.search("background: white;"), "the keyword pattern matches no colour name"
     assert _PYTHON_LITERAL.search('"fill:#f8f6f1"'), "the python pattern matches no mermaid fill"
