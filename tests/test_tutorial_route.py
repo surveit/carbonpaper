@@ -47,16 +47,38 @@ def _start_the_tour() -> str:
     return location.rsplit("/", 1)[-1]
 
 
-def test_the_zero_state_offers_the_tour_as_a_primary_action() -> None:
+def test_the_zero_state_offers_the_tour_and_nothing_else() -> None:
+    """One door. A reader with no projects has nothing to judge a blank form against."""
     page = client.get("/")
     assert page.status_code == 200
-    assert "No projects yet" in page.text
+    assert "New here? Take the guided tour" in page.text
     assert _CTA in page.text
     assert 'action="/tutorial"' in page.text
-    # Both doors are primary (#476), and the tour's is not styled as a lesser one.
-    assert 'class="btn primary new-methodology-btn"' in page.text
-    assert 'class="btn primary"' in page.text
-    assert "btn secondary" not in page.text
+    assert 'class="btn primary" id="tour-cta"' in page.text
+
+    zero_state = page.text.split('id="zero-state"')[1].split("</div>")[0]
+    assert "New project" not in zero_state, "the zero state grew a second door again"
+
+
+def test_new_project_stays_reachable_from_the_header() -> None:
+    """Removing it from the zero state must not strand the path to a blank project."""
+    page = client.get("/")
+
+    header = page.text.split('class="dash-header"')[1].split('id="zero-state"')[0]
+    assert 'href="/project/new"' in header
+    assert "＋ New project" in header
+
+
+def test_the_zero_state_records_only_that_this_browser_started_the_tour() -> None:
+    """No server-side tour state exists, so the page must not imply the person toured."""
+    page = client.get("/")
+
+    assert 'localStorage.setItem(KEY, "1")' in page.text
+    assert '"carbonpaper.tour.started"' in page.text
+    # A returning browser gets a quieter button — never a claim about what was finished.
+    assert "Take the guided tour again" in page.text
+    for claim in ("you have taken", "you've taken", "tour complete", "already toured"):
+        assert claim not in page.text.lower(), claim
 
 
 def test_the_zero_state_sketches_the_lifecycle_in_the_authoring_prompts_words() -> None:
