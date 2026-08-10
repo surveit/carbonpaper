@@ -1,13 +1,13 @@
-"""A model an agent is handed a JSON schema of must not describe itself in a docstring.
-`model_json_schema()` copies a class docstring into the schema's `description`, so a
-docstring edit is a prompt edit no reviewer reads as one — the reason
-tests/arch/test_tool_descriptions_are_explicit.py already gives for tool descriptions.
-The carrier here is `model_config`'s `json_schema_extra["description"]`.
+"""A model an agent is handed a JSON schema of carries NO docstring — not one, ever.
+`model_json_schema()` copies a class docstring into the schema's `description`, so prose
+written for a maintainer silently becomes prompt. Model-facing wording goes in
+`json_schema_extra["description"]`; a note for the reader goes in a comment ABOVE the
+class, which no schema can reach. Sibling of test_tool_descriptions_are_explicit.py.
 """
 from __future__ import annotations
 
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from app.models import StageDraft
 from app.models.named_schemas import SchemaLibrary
@@ -35,7 +35,7 @@ def find_docstringed_schema_models() -> list[str]:
     offenders = []
     for root in _SCHEMA_ROOTS:
         for model in find_models_reachable_from(root):
-            if model.__doc__ and not _declares_its_description(model):
+            if model.__doc__:
                 offenders.append(f"{model.__module__}::{model.__qualname__}")
     return sorted(set(offenders))
 
@@ -45,10 +45,12 @@ def test_no_model_in_a_tool_schema_describes_itself_in_a_docstring() -> None:
     assert not offenders, (
         "these classes are handed to a model as JSON schema, and pydantic copies a class "
         "docstring into the schema's `description` — so the docstring IS prompt text, and "
-        "editing it edits a prompt silently. Move the model-facing wording to an explicit "
-        "`model_config = ConfigDict(json_schema_extra={'description': ...})` (the strings "
-        "live in app/models/tool_schema_prompts.py), and delete the docstring — or keep a "
-        "reader-facing docstring only alongside that explicit description, which wins:\n  "
+        "editing it edits a prompt silently. A docstring here is refused even when an "
+        "explicit description would override it: the rule is that prose a maintainer writes "
+        "must not be ABLE to reach a model. Model-facing wording goes in `model_config = "
+        "ConfigDict(json_schema_extra={'description': ...})`, with the string in "
+        "app/models/tool_schema_prompts.py. A note for the next reader goes in a comment "
+        "ABOVE the class, where no schema can reach it:\n  "
         + "\n  ".join(offenders)
     )
 
@@ -61,18 +63,22 @@ def test_the_rule_governs_a_non_empty_set_of_models() -> None:
     )
 
 
-def test_a_model_declaring_its_description_explicitly_is_accepted() -> None:
+def test_a_model_carrying_only_an_explicit_description_is_accepted() -> None:
     from app.models.stages.union import UnionConfig
 
-    assert _declares_its_description(UnionConfig)
+    assert UnionConfig.__doc__ is None
     assert "app.models.stages.union::UnionConfig" not in find_docstringed_schema_models()
 
 
-def test_a_bare_docstringed_model_is_reported() -> None:
-    class Described(BaseModel):
-        """Prose that would reach the model."""
+def test_an_explicit_description_does_not_buy_back_a_docstring() -> None:
+    class Both(BaseModel):
+        """Prose a maintainer wrote, which pydantic would ship."""
 
-    assert not _declares_its_description(Described)
+        model_config = ConfigDict(json_schema_extra={"description": "what the model reads"})
+
+    extra = Both.model_config.get("json_schema_extra")
+    assert isinstance(extra, dict) and "description" in extra
+    assert Both.__doc__ is not None
 
 
 def _collect(model: type[BaseModel], found: set[type[BaseModel]]) -> None:
@@ -89,7 +95,3 @@ def _collect(model: type[BaseModel], found: set[type[BaseModel]]) -> None:
     for subclass in model.__subclasses__():
         _collect(subclass, found)
 
-
-def _declares_its_description(model: type[BaseModel]) -> bool:
-    extra = model.model_config.get("json_schema_extra")
-    return isinstance(extra, dict) and "description" in extra
