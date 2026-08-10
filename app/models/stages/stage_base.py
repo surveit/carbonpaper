@@ -229,7 +229,8 @@ class StageBase(StageCommon):
         description=(
             "Upstream dependencies: each is an upstream stage id plus the REQUIRED schema "
             "this stage expects that input to satisfy — which is just the upstream stage's "
-            "output schema."
+            "output schema. It CACHES that schema: saving a version rewrites every one of "
+            "these from the upstream, so a narrower projection is widened rather than kept."
         ),
     )
     source: Optional[SourceRef] = None

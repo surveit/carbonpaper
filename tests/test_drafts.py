@@ -147,6 +147,38 @@ def test_save_version_freezes_valid_draft_and_chains_parent(examples: Path) -> N
     assert len(versioning.list_versions(pdir)) == 2
 
 
+_WIDE_LOAD_STAGE = dict(
+    _STAGE,
+    signature={"form": "replaces", "produces": [
+        *_ROWS_SCHEMA["columns"], {"name": "title", "type": "str", "nullable": True},
+    ]},
+)
+
+_NARROW_EDGE_STAGE = dict(
+    _STAGE, id="summarize", type="python_row_function",
+    inputs=[{"id": "load", "schema": _ROWS_SCHEMA}],
+    function={"kind": "inline", "code": "def transform(row): return row"},
+    signature={
+        "form": "extends",
+        "reads": [{"input": "load", "columns": _ROWS_SCHEMA["columns"]}],
+        "adds": [{"name": "summary", "type": "str", "nullable": True}],
+    },
+)
+del _NARROW_EDGE_STAGE["connector"]
+
+
+def test_save_version_rewrites_a_stale_input_schema(examples: Path) -> None:
+    """The draft save path reaches the same rewrite: `summarize` cached `load` before `title`."""
+    pdir = examples / "demo"
+    draft = drafts.create_draft("demo")
+    drafts.set_draft_stage("demo", draft.id, json.dumps(_WIDE_LOAD_STAGE))
+    drafts.set_draft_stage("demo", draft.id, json.dumps(_NARROW_EDGE_STAGE))
+    saved = drafts.save_version("demo", draft.id, message="stale edge")
+    assert saved.version_id is not None
+    _, summarize = versioning.load_version_stages(pdir, saved.version_id)
+    assert [c.name for c in summarize.inputs[0].table_schema.columns] == ["doc_id", "title"]
+
+
 def test_save_version_refuses_incomplete_workflow(examples: Path) -> None:
     """A dangling input is a valid Stage (per-stage validation doesn't check
     cross-stage input resolution) so it stores fine, but save_version still

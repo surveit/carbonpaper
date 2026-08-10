@@ -364,6 +364,33 @@ def test_graph_issues_reports_a_dangling_input_instead_of_raising():
     assert issues == ["`down`: input `up` references no stage"]
 
 
+# ── The edge cache, rewritten (rewrite_input_schemas_from_upstream) ──────────
+# `inputs[i].schema` caches what the upstream produces at that position, so the save
+# seam rewrites it from the upstream rather than trusting what was authored. Two
+# upstreams answer for nothing and are the exceptions: one outside the given set, and
+# a publish stage, which emits files rather than a table.
+def test_rewrite_input_schemas_leaves_a_publish_upstream_alone():
+    """publish emits files, not a table, so its reader's edge has nothing to be rewritten from."""
+    before = _publish_upstream_stages()
+    after = m.workflow.rewrite_input_schemas_from_upstream(before)
+    assert after[2] is before[2], "the reader of `pub` is handed back untouched"
+    assert [c.name for c in after[2].inputs[0].table_schema.columns] == ["anything"]
+
+
+def test_rewrite_input_schemas_leaves_an_upstream_outside_the_given_set_alone():
+    """No stage here answers for the edge, so the cache stays as authored rather than guessed."""
+    stage = parse_stage(_consumer({"columns": [{"name": "id", "type": "str", "nullable": True}]}))
+    [rewritten] = m.workflow.rewrite_input_schemas_from_upstream([stage])
+    assert rewritten is stage
+
+
+def test_rewrite_input_schemas_hands_back_the_order_it_was_given():
+    """Dependency order governs the rewrite, never the order the stages come back in."""
+    given = [parse_stage(_consumer({"columns": [{"name": "score", "type": "int", "nullable": True}]})),
+             parse_stage(_producer())]
+    assert [s.id for s in m.workflow.rewrite_input_schemas_from_upstream(given)] == ["down", "up"]
+
+
 # ── A publish stage may not be another stage's input (validate_publish_is_terminal) ─
 # A publish stage writes files instead of producing a table, so nothing downstream
 # can read from it. It is also the one type whose signature produces nothing,

@@ -10,8 +10,14 @@ from typing import Any, Sequence, TypeVar
 
 from pydantic import ValidationError, model_validator
 
-from app.models.schema import _Base
-from app.models.stage import Stage, StageCommon, StageType
+from app.models.schema import TableSchema, _Base
+from app.models.stage import (
+    Stage,
+    StageCommon,
+    StageType,
+    parse_stage,
+    stage_to_spec_dict,
+)
 from app.core.utils import format_errors
 
 # Ordering and cycle detection read only the shared fields, so they hold a
@@ -97,6 +103,11 @@ def validate_edge_schemas(stages: list[Stage]) -> list[str]:
     identity; see `TableSchema.find_unsatisfied_columns`). Reports every offending
     column across every edge, so one pass surfaces them all.
 
+    A narrower edge therefore passes. It does not survive into a version —
+    `rewrite_input_schemas_from_upstream` rewrites every edge at save — but a
+    working copy or a mid-edit draft carries whatever was authored, which is
+    what this check governs.
+
     Raises if an input dangles or its upstream resolves no output schema:
     `validate_inputs_resolve` and `validate_publish_is_terminal` must run, and
     pass, before this check (as `graph_issues` does)."""
@@ -121,6 +132,69 @@ def validate_edge_schemas(stages: list[Stage]) -> list[str]:
             for reason in input_table_schema.find_unsatisfied_columns(upstream_output):
                 issues.append(f"`{stage.id}`: input from `{ref.id}` — {reason}")
     return issues
+
+
+def rewrite_input_schemas_from_upstream(stages: Sequence[Stage]) -> list[Stage]:
+    """`stages` in the order given, every `inputs[].schema` rewritten from its upstream."""
+    rewritten: dict[str, Stage] = {}
+    # Dependency order, because a stage's own output can BE its first input
+    # extended (form `extends`): the upstream must already carry a fresh schema
+    # when the stage reading it is asked what IT produces, or one stale edge
+    # walks the whole chain. Unique ids and an acyclic graph are
+    # sort_stages_by_dependency's preconditions — validate_unique_ids and
+    # detect_cycle report a breach of either far better than this can.
+    for stage in sort_stages_by_dependency(stages):
+        rewritten[stage.id] = _rewrite_one_stage(stage, rewritten)
+    result = [rewritten[stage.id] for stage in stages]
+    # An edge left stale here is OUR bug, not the author's: the loop above just
+    # wrote every one it could resolve, so a mismatch means the rewrite missed.
+    unrewritten = _find_unrewritten_input_schemas(result)
+    assert not unrewritten, "; ".join(unrewritten)
+    return result
+
+
+def _rewrite_one_stage(stage: Stage, upstream_by_id: dict[str, Stage]) -> Stage:
+    """This stage carrying its upstreams' current output schemas; itself when none moved."""
+    spec = stage_to_spec_dict(stage)
+    changed = False
+    for entry, ref in zip(spec["inputs"], stage.inputs):
+        produced = _resolve_output_schema_spec(upstream_by_id.get(ref.id))
+        # Left exactly as authored where no upstream in this set answers for the
+        # edge, or where the upstream emits files rather than a table (publish):
+        # there is nothing to copy, and inventing a schema would be fabrication.
+        if produced is None or entry["schema"] == produced:
+            continue
+        entry["schema"] = produced
+        changed = True
+    # Re-parsed rather than model_copy'd: a rewritten edge must face every stage
+    # validator (_signature_consistent, _config_columns_resolve, _schemas_declared)
+    # exactly as an authored one does, so a rewrite the stage cannot survive raises.
+    return parse_stage(spec) if changed else stage
+
+
+def _find_unrewritten_input_schemas(stages: Sequence[Stage]) -> list[str]:
+    """One entry per edge still caching something other than what its upstream resolves."""
+    by_id = {stage.id: stage for stage in stages}
+    return [
+        f"`{stage.id}`: input from `{ref.id}` caches a schema its upstream does not produce"
+        for stage in stages
+        for ref in stage.inputs
+        if (produced := _resolve_output_schema_spec(by_id.get(ref.id))) is not None
+        and _dump_schema_spec(ref.table_schema) != produced
+    ]
+
+
+def _resolve_output_schema_spec(upstream: Stage | None) -> dict[str, Any] | None:
+    """What `upstream` promises, in spec-dict form; None when it is absent or emits no table."""
+    if upstream is None:
+        return None
+    produced = upstream.resolve_output_schema()
+    return None if produced is None else _dump_schema_spec(produced)
+
+
+def _dump_schema_spec(table_schema: TableSchema) -> dict[str, Any]:
+    # The shape stage_to_spec_dict nests, so the two compare as written and stored.
+    return table_schema.model_dump(mode="json", by_alias=True, exclude_none=True)
 
 
 def validate_publish_is_terminal(stages: list[Stage]) -> list[str]:

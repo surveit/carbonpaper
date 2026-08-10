@@ -278,6 +278,104 @@ def test_create_version_from_stages_invalid_raises_and_writes_nothing(tmp_path):
     assert list_versions(tmp_path) == []
 
 
+# ── the edge cache, rewritten at save ────────────────────────────────────────
+# `inputs[i].schema` caches what the upstream produces at that position. Both save
+# paths reach create_version_from_stages, which rewrites every one of them from the
+# upstream's resolved output, so a version can never carry a stale cache — however
+# long the working copy has been drifting.
+_DOC_ID = {"name": "doc_id", "type": "str", "nullable": False}
+_TITLE = {"name": "title", "type": "str", "nullable": True}
+_AUTHOR = {"name": "author", "type": "str", "nullable": True}
+_SUMMARY = {"name": "summary", "type": "str", "nullable": True}
+_SCORE = {"name": "score", "type": "int", "nullable": True}
+
+
+def _loading(*produces: dict) -> dict:
+    return {
+        "id": "load", "description": "Load", "type": "input_data",
+        "connector": {"kind": "file"},
+        "signature": {"form": "replaces", "produces": list(produces)},
+    }
+
+
+def _extending(stage_id: str, upstream: str, cached: list[dict], adds: list[dict]) -> dict:
+    """A row function over `upstream` whose edge caches `cached` — which may be out of date."""
+    return {
+        "id": stage_id, "description": stage_id, "type": "python_row_function",
+        "inputs": [{"id": upstream, "schema": {"columns": cached}}],
+        "function": {"kind": "inline", "code": "def transform(row): return row"},
+        "signature": {
+            "form": "extends",
+            "reads": [{"input": upstream, "columns": cached}],
+            "adds": adds,
+        },
+    }
+
+
+def _column_names(stage, index: int = 0) -> list[str]:
+    return [c.name for c in stage.inputs[index].table_schema.columns]
+
+
+def test_saving_a_version_refreshes_a_stale_edge_from_its_upstream(tmp_path):
+    """`load` grew `title` after `summarize` cached its edge; the save rewrites the cache."""
+    version = create_version_from_stages(
+        tmp_path,
+        [_loading(_DOC_ID, _TITLE), _extending("summarize", "load", [_DOC_ID], [_SUMMARY])],
+        message="grown", reviewer="ada",
+    )
+    _, summarize = load_version_stages(tmp_path, version.version_id)
+    assert _column_names(summarize) == ["doc_id", "title"]
+
+
+def test_saving_a_version_widens_an_authored_narrower_edge(tmp_path):
+    """A projection is a stale cache, not a request — and the widening reaches the stage's output."""
+    version = create_version_from_stages(
+        tmp_path,
+        [
+            _loading(_DOC_ID, _TITLE, _AUTHOR),
+            _extending("summarize", "load", [_DOC_ID], [_SUMMARY]),
+        ],
+        message="narrow", reviewer="ada",
+    )
+    _, summarize = load_version_stages(tmp_path, version.version_id)
+    assert _column_names(summarize) == ["doc_id", "title", "author"]
+    produced = summarize.resolve_output_schema()
+    assert [c.name for c in produced.columns] == ["doc_id", "title", "author", "summary"]
+
+
+def test_saving_a_version_rewrites_a_chain_of_three_in_dependency_order(tmp_path):
+    """Submitted downstream-first, so walking submission order would leave `score`'s edge stale."""
+    version = create_version_from_stages(
+        tmp_path,
+        [
+            _extending("score", "summarize", [_DOC_ID], [_SCORE]),
+            _extending("summarize", "load", [_DOC_ID], [_SUMMARY]),
+            _loading(_DOC_ID, _TITLE),
+        ],
+        message="chain", reviewer="ada",
+    )
+    score, summarize, load = load_version_stages(tmp_path, version.version_id)
+    assert [s.id for s in (score, summarize, load)] == ["score", "summarize", "load"]
+    assert _column_names(summarize) == ["doc_id", "title"]
+    assert _column_names(score) == ["doc_id", "title", "summary"]
+    assert [c.name for c in score.resolve_output_schema().columns] == [
+        "doc_id", "title", "summary", "score",
+    ]
+
+
+def test_saving_the_working_copy_as_a_version_refreshes_its_edges(tmp_path):
+    """The project save path reaches the same rewrite — a version from compiled/ is fresh too."""
+    compiled = tmp_path / "compiled"
+    compiled.mkdir(parents=True)
+    (compiled / "01_load.json").write_text(json.dumps(_loading(_DOC_ID, _TITLE)), encoding="utf-8")
+    (compiled / "02_summarize.json").write_text(
+        json.dumps(_extending("summarize", "load", [_DOC_ID], [_SUMMARY])), encoding="utf-8"
+    )
+    meta = save_working_copy_as_version(tmp_path, message="from compiled", reviewer="ada")
+    _, summarize = load_version_stages(tmp_path, meta.version_id)
+    assert _column_names(summarize) == ["doc_id", "title"]
+
+
 # ── the version's review guide ───────────────────────────────────────────────
 
 _TALLY_STAGE = {

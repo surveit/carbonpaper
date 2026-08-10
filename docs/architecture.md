@@ -101,7 +101,10 @@ drives `app/runtime/runner.py`: it resolves the version and loads its stages bef
 them to the runner, plus resolves what a run pinned — `resolve_version`,
 `read_pinned_version`, `load_run_stages`, `load_pinned_stage_def`); `loader.py` (stage loader, above); `compilation.py` (compile persistence for
 `app/compiler`); `versioning.py` (`create_version_from_stages`
-is the ONE write path for a `WorkflowVersion` document, born unpublished; `publish_version`
+is the ONE write path for a `WorkflowVersion` document, born unpublished, and where every
+`inputs[].schema` is REWRITTEN from its upstream's resolved output — that field caches what
+the upstream produces at that position, so a version can never freeze a stale copy of it
+(`app/models/workflow.py::rewrite_input_schemas_from_upstream`); `publish_version`
 is the metadata-only human-approval act a run's `resolve_version_id` requires before it
 will pin to that version); `drafts.py` (disposable, mutable scratch — a `Draft` document
 that may be invalid mid-edit, edited only through the editing agent's tools; `save_version`

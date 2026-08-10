@@ -15,7 +15,11 @@ from pydantic import Field, ValidationError
 from app.core.errors import DocumentNotFound, NoVersionToRunError, ReviewGuideValidationError
 from app.models import STAGE_SPEC_SCHEMA_VERSION, Stage
 from app.models.review_guide import ReviewGuideStep
-from app.models.workflow import find_stages_reaching_publish, parse_workflow
+from app.models.workflow import (
+    find_stages_reaching_publish,
+    parse_workflow,
+    rewrite_input_schemas_from_upstream,
+)
 from app.core.persistence import PersistedModel, PersistenceScope, get_store
 from app.core.utils import format_errors
 from app.services.errors import WorkflowLoadError
@@ -82,13 +86,20 @@ def create_version_from_stages(
     parent_version: str | None = None,
 ) -> WorkflowVersion:
     """The single write chokepoint for a WorkflowVersion: strict-parse `stages`
-    (raw spec dicts) as a whole Workflow, embed the project's CURRENT schemas, and
-    save — born unpublished. Returns the saved WorkflowVersion.
+    (raw spec dicts) as a whole Workflow, REWRITE every input schema from its
+    upstream, embed the project's CURRENT schemas, and save — born unpublished.
+    Returns the saved WorkflowVersion.
 
     `stages` is parsed via app.models.workflow.parse_workflow, which raises
     pydantic.ValidationError (per-stage schema errors AND cross-stage graph
     issues alike) on anything invalid; nothing is written in that case. Every
     version is therefore a loadable workflow, from this seam or any other.
+
+    `inputs[].schema` is a CACHE of what the upstream produces at that position,
+    so it is rewritten here rather than trusted: both save paths
+    (project.save_working_copy_as_version and drafts.save_version) come through
+    this function, and neither can skip it. A rewritten stage is re-parsed, so a
+    stage its refreshed edge invalidates raises here instead of being stored.
 
     schemas/ is read via workspace.load_schemas, which returns [] when the project
     has no schema library yet — a project with no data model still versions
@@ -100,6 +111,7 @@ def create_version_from_stages(
     guarded against."""
     project_dir = Path(project_dir)
     workflow = parse_workflow(stages)
+    refreshed = rewrite_input_schemas_from_upstream(workflow.stages)
     schemas = load_schemas(project_dir)
 
     version_id = datetime.now().strftime("%Y%m%dT%H%M%S")
@@ -112,7 +124,7 @@ def create_version_from_stages(
         parent_version=parent_version,
         message=message,
         reviewer=reviewer,
-        stages=workflow.stages,
+        stages=refreshed,
         schemas=schemas,
         published=False,
     )
