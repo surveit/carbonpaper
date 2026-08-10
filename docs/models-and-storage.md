@@ -42,9 +42,26 @@ the typed `Stage` objects this loader returns.
 
 ## Storage
 
-Every record is a JSON document in the SQLite key-value store
-(`app/core/persistence.py`), keyed by `(collection, id)`. Frames are parquet.
-`app/services/loader.py` owns `working_copy`, `app/services/data_model.py` owns
-`data_model`, `app/services/versioning.py` owns `workflow_version` and
-`review_guide`, `app/services/drafts.py` owns `draft`, `app/services/project.py`
-owns `project`, and `app/core/stage_cache.py` owns the stage-result cache.
+**Two kinds of persistence, and no third.** Every record is a JSON document in
+the SQLite key-value store (`app/core/persistence.py`), keyed by
+`(collection, id)`; every dataframe is parquet under the frame store
+(`app/core/frames.py`). `tests/arch/test_persistence_is_frames_and_the_store.py`
+fails on any other write under `app/` — the exemptions are an export the user
+downloads, a file the user uploaded, and a publish stage's own artifact.
+
+| Collection | Id | Owner |
+|---|---|---|
+| `project` | project name | `app/services/project.py` |
+| `methodology` | project name | `app/services/methodology.py` |
+| `data_model` | project name | `app/services/data_model.py` |
+| `working_copy` | project name | `app/services/loader.py` |
+| `workflow_version`, `review_guide` | `<project>/<version_id>` | `app/services/versioning.py` |
+| `draft` | draft id | `app/services/drafts.py` |
+| `run` | `<project>/<run_id>` | `app/runtime/manifest.py` |
+| `run_events` | `<project>/<run_id>/<chunk>` | `app/runtime/run_log.py` |
+| `queue_fingerprints` | `<project>/<run_id>/<stage_id>` | `app/runtime/stages/human_review_queue.py` |
+| stage-result cache | see the module | `app/core/stage_cache.py` |
+
+A project's directory survives for what is genuinely file-shaped: input data the
+user uploaded, `code/` modules a stage imports, and `runs/<id>/` holding stage
+output frames, lineage sidecars and published artifacts.
