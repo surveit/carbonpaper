@@ -87,9 +87,7 @@ class ReviewItem:
 class QueuePage:
     reviewed_fields: list[ReviewedField]
     review_notes_label: str | None
-    # What the stage declared it reads leads the card; everything else folds away.
-    read_columns: list[QueuedColumn]
-    other_columns: list[QueuedColumn]
+    context_columns: list[QueuedColumn]
     schema_note: str | None
     lineage_note: str | None
     items: list[ReviewItem]
@@ -108,8 +106,6 @@ def build_queue_page(
     described = describe_queued_columns(stage_def, snapshot)
     lineage = resolve_lineage(stage_def, fingerprints)
     fields = [] if drift else build_reviewed_fields(stage_def, queue)
-    read_columns, other_columns = _split_by_declared_reads(
-        _subtract_reviewed_columns(described.columns, queue), stage_def)
     items: list[ReviewItem] = []
     if snapshot is not None and fingerprints is not None and drift is None:
         entries = _load_decided_entries(project, stage_def.id, fingerprints.stage_fingerprint)
@@ -124,8 +120,7 @@ def build_queue_page(
             None if queue.review_notes_column is None
             else resolve_notes_label(stage_def, queue.review_notes_column)
         ),
-        read_columns=read_columns,
-        other_columns=other_columns,
+        context_columns=_subtract_reviewed_columns(described.columns, queue),
         schema_note=described.schema_note,
         lineage_note=lineage.note,
         items=items,
@@ -281,20 +276,6 @@ def _subtract_reviewed_columns(
     # beside its own control. Empty when every queued column is under review.
     under_review = set(queue.reviewed_columns)
     return [column for column in columns if column.name not in under_review]
-
-
-def _split_by_declared_reads(
-    columns: list[QueuedColumn], stage_def: Stage
-) -> tuple[list[QueuedColumn], list[QueuedColumn]]:
-    # Declared reads lead the card; the rest fold.
-    reads = stage_def.anchor_reads()
-    if not reads:
-        # Nothing said about which columns matter: keep one undivided block.
-        return columns, []
-    return (
-        [column for column in columns if column.name in reads],
-        [column for column in columns if column.name not in reads],
-    )
 
 
 def _find_schema_discrepancy(declared: list[str], present: list[str]) -> str | None:

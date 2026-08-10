@@ -118,19 +118,7 @@ def test_the_context_table_omits_the_columns_under_review():
 
     page = queue_view.build_queue_page("p", "r", stage, stage.queue, snapshot, None, None)
 
-    assert [column.name for column in page.read_columns] == ["id", "score"]
-    assert page.other_columns == []
-
-
-def test_the_columns_the_stage_declares_it_reads_lead_and_the_rest_fold():
-    # Declared reads lead; the rest fold.
-    stage = _queue_stage(_LABEL_COLUMNS, reads=["score"])
-    snapshot = pd.DataFrame({"id": ["a"], "score": [2], "label": ["high"]})
-
-    page = queue_view.build_queue_page("p", "r", stage, stage.queue, snapshot, None, None)
-
-    assert [column.name for column in page.read_columns] == ["score"]
-    assert [column.name for column in page.other_columns] == ["id"]
+    assert [column.name for column in page.context_columns] == ["id", "score"]
 
 
 # ── The reviewed fields ──────────────────────────────────────────────────────
