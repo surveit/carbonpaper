@@ -74,7 +74,7 @@ def test_a_determinable_stage_is_not_reported_as_widened():
 
 
 def test_the_synthesis_still_refuses_a_drop_by_default():
-    from tools.stage_signatures import SignatureUndeterminable, add_signature
+    from scripts.stage_signatures import SignatureUndeterminable, add_signature
     import pytest
     with pytest.raises(SignatureUndeterminable):
         add_signature(_dropping_stage())
@@ -83,7 +83,7 @@ def test_the_synthesis_still_refuses_a_drop_by_default():
 def test_0007_finishes_a_document_left_half_migrated():
     # The exact state 0006's short-circuit left in the store: stage 0 done, rest stale.
     document = _document()
-    from tools.stage_signatures import add_signature
+    from scripts.stage_signatures import add_signature
     add_signature(document["stages"][0])
     assert _stale_stage_ids(document) == ["b", "c"]
 
@@ -108,7 +108,7 @@ def _queueless_queue_stage() -> dict[str, Any]:
 
 
 def test_an_unreadable_queue_block_is_refused_not_guessed():
-    from tools.stage_signatures import SignatureUndeterminable, add_signature
+    from scripts.stage_signatures import SignatureUndeterminable, add_signature
     import pytest
     with pytest.raises(SignatureUndeterminable, match="queue block does not read"):
         add_signature(_queueless_queue_stage(), allow_drops=True)

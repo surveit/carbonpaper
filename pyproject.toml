@@ -59,7 +59,7 @@ select = ["E4", "E7", "E9", "F", "BLE"]
 
 [tool.mypy]
 python_version = "3.12"
-files = ["app", "tools", "tests"]
+files = ["app", "scripts", "tests"]
 # `tests` is checked directly (in `files`), which also puts its root on mypy's
 # module search path: the colocated arch tests under app/ (in _arch_tests/
 # folders) can `from arch import ...` because tests/arch/ is a package, and the
