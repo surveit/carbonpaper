@@ -159,6 +159,7 @@ def _workflow_stages(authored_path: str) -> list[dict]:
                 "    return row\n"
             )},
             "signature": {"form": "extends",
+                          "reads": [{"input": "load", "columns": load_schema["columns"]}],
                           "adds": [{"name": "flagged", "type": "bool", "nullable": True}]},
         },
         {

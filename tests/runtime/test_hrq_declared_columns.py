@@ -10,7 +10,7 @@ from app.models.stage import StageType
 from app.runtime.context import RunContext, RunIdentity
 from app.runtime.stages import HANDLERS
 from app.core.stage_cache import StageCache
-from conftest import make_run_context, queue_columns
+from conftest import make_run_context, queue_columns, reads_of
 
 PROJECT = "hrq-declared-columns"
 
@@ -40,7 +40,8 @@ def _stage(queue: dict[str, object], flt: str | None = None) -> Stage:
     return parse_stage({
         "id": "review", "description": "Review", "type": "human_review_queue",
         "inputs": [{"id": "scored", "schema": {"columns": input_columns}}],
-        "signature": {"form": "extends", "adds": added},
+        "signature": {"form": "extends", "reads": reads_of("scored", input_columns),
+                      "adds": added},
         "queue": queue,
     })
 

@@ -23,7 +23,8 @@ from app.services.project import save_working_copy_as_version
 from app.models import Stage, parse_stage
 from app.models.stages.human_review_queue import ReviewVerdict
 from conftest import (
-    QUEUE_COLUMNS, pinned_stages, queue_added_columns, queue_columns, resumed_stages,
+    QUEUE_COLUMNS, pinned_stages, queue_added_columns, queue_columns, reads_of,
+    resumed_stages,
 )
 
 PROJECT = "queue_route_journey"
@@ -47,7 +48,11 @@ def _with_queue_signature(stage):
               for field in ("verdict_column", "reviewer_column",
                             "reviewed_at_column", "review_notes_column")
               if queue.get(field) is not None]
-    return {**stage, "signature": {"form": "extends", "adds": added}}
+    return {**stage, "signature": {
+        "form": "extends",
+        "reads": reads_of(stage["inputs"][0]["id"], input_schema["columns"]),
+        "adds": added,
+    }}
 
 
 def _write_stage(root, filename, stage):
@@ -111,7 +116,13 @@ def _review_stage():
             "inputs": [{"id": "score", "schema": {
                 "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "quote", "type": "str", "nullable": True},
                             {"name": "score", "type": "int", "nullable": True}]}}],
-            "signature": {"form": "extends", "adds": _REVIEW_COLUMNS},
+            "signature": {
+                "form": "extends",
+                "reads": reads_of("score", [
+                    {"name": "id", "type": "str", "nullable": True},
+                    {"name": "quote", "type": "str", "nullable": True},
+                    {"name": "score", "type": "int", "nullable": True}]),
+                "adds": _REVIEW_COLUMNS},
             "queue": dict(QUEUE_COLUMNS)}
 
 
@@ -354,7 +365,12 @@ def _e2e_review_stage():
     return {"id": "review", "description": "Review items", "type": "human_review_queue",
             "inputs": [{"id": "load", "schema": {
                 "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True}]}}],
-            "signature": {"form": "extends", "adds": _REVIEW_COLUMNS},
+            "signature": {
+                "form": "extends",
+                "reads": reads_of("load", [
+                    {"name": "id", "type": "str", "nullable": True},
+                    {"name": "score", "type": "int", "nullable": True}]),
+                "adds": _REVIEW_COLUMNS},
             "queue": dict(QUEUE_COLUMNS)}
 
 
@@ -762,6 +778,9 @@ def _declared_range_review_stage():
                              "range": [0, 5]}]}}],
             "signature": {
                 "form": "extends",
+                "reads": reads_of("load", [
+                    {"name": "id", "type": "str", "nullable": True},
+                    {"name": "score", "type": "int", "nullable": False, "range": [0, 5]}]),
                 "adds": [
                     {
                         "name": "human_score",
@@ -945,6 +964,12 @@ def _described_review_stage():
                      "description": "high when the score exceeds one", "nullable": True}]}}],
             "signature": {
                 "form": "extends",
+                "reads": reads_of("label", [
+                    {"name": "id", "type": "str", "nullable": True},
+                    {"name": "score", "type": "int",
+                     "description": "the score this row was labelled from", "nullable": True},
+                    {"name": "label", "type": "str",
+                     "description": "high when the score exceeds one", "nullable": True}]),
                 "adds": [
                     {
                         "name": "human_label",

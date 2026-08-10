@@ -371,8 +371,7 @@ def _run_row_mapper(
             f"got {len(stage.inputs)}"
         )
     src = inputs[stage.inputs[0].id]
-    # Empty reads is UNDECLARED, not declared-empty — see #498.
-    reads = stage.anchor_reads() or None
+    reads = stage.anchor_reads()
     map_row = handler.make_mapper(stage, ctx, src)
     # The ONE line of per-row compute, optionally routed through the row cache
     # and the run log. Log outside cache, so a row the cache answers never
@@ -384,7 +383,7 @@ def _run_row_mapper(
     if caching is not None:
         compute_row = _map_row_through_cache(caching, compute_row, ctx.run_log, stage.id)
     records = list_rows(src)
-    seen = records if reads is None else [_narrow_row(row, reads) for row in records]
+    seen = [_narrow_row(row, reads) for row in records]
 
     results: list[Row | None] = [None] * len(records)
     if handler.parallelism > 1 and len(records) > 1:
@@ -421,7 +420,7 @@ def _run_row_mapper(
         # Rejoin: under narrowing the mapper only ever saw its declared reads, so
         # the columns that merely FLOW come back from the input row here. The
         # mapper's own keys win — that is what a rewrite or an add is.
-        out_rows.append(result if reads is None else {**records[index], **result})
+        out_rows.append({**records[index], **result})
         kept_indices.append(index)
     mapped = _finish_mapped_frame(pd.DataFrame(out_rows), handler, map_row, stage, ctx)
     out = _finish_empty_result(mapped, src, stage)

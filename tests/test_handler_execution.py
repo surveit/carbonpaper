@@ -24,7 +24,7 @@ from app.runtime.stages.execution import (
     validate_registry_matches_model,
 )
 from app.core.stage_cache import StageCacheEntry
-from conftest import contribution_of, make_run_context
+from conftest import contribution_of, make_run_context, reads_of
 
 
 # The single `x` column of the frames these tests hand the driver. The declared
@@ -42,7 +42,8 @@ def _row_stage(output_schema=None, input_columns=_X_COLUMN):
     return parse_stage({
         "id": "t", "description": "t", "type": "python_row_function",
         "inputs": [{"id": "src", "schema": {"columns": input_columns}}],
-        "signature": {"form": "extends", "adds": added},
+        "signature": {"form": "extends", "reads": reads_of("src", input_columns),
+                      "adds": added},
         "function": {"kind": "inline", "code": "def transform(row):\n    return row\n"},
     })
 
