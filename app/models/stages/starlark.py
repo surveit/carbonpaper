@@ -19,10 +19,6 @@ from app.core.starlark_source import (
 from app.models.schema import StageConfig
 from app.models.stages.stage_base import StageBase, StageInput, StageType
 from app.models.stages.code import CORNER_CASES_DESCRIPTION, SUMMARY_DESCRIPTION, CornerCase
-from app.models.stages.code import (
-    CODE_CORNER_CASES_CONTRACT_NOTE,
-    CODE_SUMMARY_CONTRACT_NOTE,
-)
 from app.models.stages.node_spec import NodeTypeSpec
 from app.models.stages.signature import ExtendsSignature
 from app.models.stages.stage_tests import StarlarkRowFunctionStageTest
@@ -163,7 +159,6 @@ NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
             "decline a row you cannot honestly process. Module-level variables freeze after "
             "load — keep state in locals. Use python_row_function only when the step "
             "genuinely needs a Python library."
-            f" {CODE_SUMMARY_CONTRACT_NOTE} {CODE_CORNER_CASES_CONTRACT_NOTE}"
         ),
     ),
 }

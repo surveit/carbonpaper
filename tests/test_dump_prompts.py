@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import ast
 import re
+from importlib import import_module
 from pathlib import Path
 from typing import Iterator
 
@@ -54,32 +55,27 @@ def find_prompt_constants() -> list[tuple[Path, str, str]]:
     """Read off the tree, so the checked set is never a hand-kept list."""
     found = []
     for path in sorted(repo_root().glob("app/**/*.py")):
-        for name, node in _module_level_assignments(path):
+        for name in _module_level_names(path):
             if not name.endswith(_PROMPT_NAME_SUFFIXES):
                 continue
-            text = _static_text(node)
-            if text is not None:
-                found.append((path, name, text))
+            value = getattr(import_module(_module_name(path)), name, None)
+            if isinstance(value, str) and value.strip():
+                found.append((path, name, _one_line(value)))
     return found
 
 
-def _module_level_assignments(path: Path) -> Iterator[tuple[str, ast.expr]]:
+def _module_level_names(path: Path) -> Iterator[str]:
+    # Discovery is static; the value is read at runtime, so a built prompt counts.
     tree = ast.parse(path.read_text(encoding="utf-8"))
     for node in tree.body:
         if isinstance(node, ast.Assign) and len(node.targets) == 1:
             target = node.targets[0]
             if isinstance(target, ast.Name):
-                yield target.id, node.value
+                yield target.id
 
 
-def _static_text(node: ast.expr) -> str | None:
-    # For an f-string, the longest literal run — the dump must still contain it.
-    literals = [
-        n.value for n in ast.walk(node)
-        if isinstance(n, ast.Constant) and isinstance(n.value, str)
-    ]
-    longest = max(literals, key=len, default=None)
-    return _one_line(longest) if longest else None
+def _module_name(path: Path) -> str:
+    return ".".join(path.relative_to(repo_root()).with_suffix("").parts)
 
 
 def _one_line(text: str) -> str:

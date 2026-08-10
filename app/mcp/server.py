@@ -29,7 +29,11 @@ from app.models.enum_from_data_note import ENUM_FROM_DATA_GUIDANCE
 from app.tools.tool_specs import SAVE_VERSION_FROM_WORKING_COPY, TOOL_SPECS
 from app.models.review_guide import ReviewGuideDraft
 from app.services.versioning import ReviewGuide
-from app.models.stages.node_types import NODE_TYPES
+from app.models.stages.code import (
+    CODE_CORNER_CASES_CONTRACT_NOTE,
+    CODE_SUMMARY_CONTRACT_NOTE,
+)
+from app.models.stages.node_types import CODE_CARRYING_TYPES, NODE_TYPES
 from app.runtime import stage_tests
 from app.services import generation
 from app.services import loader
@@ -64,11 +68,16 @@ _STAGE_TOOL_ERRORS = (WorkflowLoadError, FileNotFoundError)
 
 
 def _render_node_type_constraints() -> str:
-    """Every node type's notes as bullets, from NODE_TYPES so the two prompts cannot drift."""
-    return "\n".join(
-        textwrap.fill(f"- {stage_type} — {spec.notes}", width=88, subsequent_indent="  ")
-        for stage_type, spec in NODE_TYPES.items()
-    )
+    """From NODE_TYPES, so the two authoring prompts cannot drift apart."""
+    governed = ", ".join(f"`{name}`" for name in CODE_CARRYING_TYPES)
+    return "\n".join([
+        f"Describing authored code (applies to: {governed}):",
+        textwrap.fill(CODE_SUMMARY_CONTRACT_NOTE, width=88),
+        textwrap.fill(CODE_CORNER_CASES_CONTRACT_NOTE, width=88),
+        "",
+        *(textwrap.fill(f"- {stage_type} — {spec.notes}", width=88, subsequent_indent="  ")
+          for stage_type, spec in NODE_TYPES.items()),
+    ])
 
 
 _NODE_TYPE_CONSTRAINTS = _render_node_type_constraints()

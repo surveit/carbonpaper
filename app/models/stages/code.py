@@ -294,7 +294,6 @@ NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
             "dict IS the output row: a key you do not return is absent from the output, so "
             "carry columns through explicitly (`return {**row, ...}`). The function is shown "
             "neither the frame nor the row's position, so it cannot fan out, drop or reorder."
-            f" {CODE_SUMMARY_CONTRACT_NOTE} {CODE_CORNER_CASES_CONTRACT_NOTE}"
         ),
     ),
     "python_frame_function": NodeTypeSpec(
@@ -311,7 +310,6 @@ NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
             "output_dir and no trace_links; writing files is publish's job. Return the output "
             "DataFrame. Rows may be added, dropped or reordered here, so this stage breaks the "
             "row-position provenance trail an upstream row-mapped stage preserves."
-            f" {CODE_SUMMARY_CONTRACT_NOTE} {CODE_CORNER_CASES_CONTRACT_NOTE}"
         ),
     ),
 }

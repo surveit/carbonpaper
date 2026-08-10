@@ -1193,7 +1193,6 @@ _GRANDFATHERED_ENTRANCE_PROSE: frozenset[str] = frozenset(
         "tests/test_llm_transform_spec.py::test_timeout_with_empty_message_is_captured_and_labeled",
         "tests/test_llm_usage.py::test_failed_row_still_records_the_tokens_it_spent",
         "tests/test_llm_usage.py::test_run_manifest_records_stage_llm_usage",
-        "tests/test_node_type_notes.py::test_corner_cases_note_reaches_every_code_carrying_type",
         "tests/test_node_type_notes.py::test_hrq_note_names_every_queue_field_that_adds_a_column",
         "tests/test_node_type_notes.py::test_hrq_note_names_the_decision_values_the_runtime_actually_emits",
         "tests/test_node_type_notes.py::test_summary_budget_note_states_the_limit_the_write_path_refuses_on",

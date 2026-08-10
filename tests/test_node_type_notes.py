@@ -72,22 +72,36 @@ def test_summary_budget_note_states_the_limit_the_write_path_refuses_on():
     assert "corner_cases" in CODE_SUMMARY_CONTRACT_NOTE
 
 
-def test_summary_budget_note_reaches_every_code_carrying_type():
+def test_the_shared_code_notes_reach_each_surface_exactly_once():
+    # Once per prompt: a copy per type is what made the catalog unreadable.
+    for prompt in _authoring_prompts():
+        for note in (CODE_SUMMARY_CONTRACT_NOTE, CODE_CORNER_CASES_CONTRACT_NOTE):
+            assert _flat(prompt).count(_flat(note)) == 1
+
+
+def test_each_governed_type_is_marked_where_the_shared_note_is_stated():
+    # Nothing else now connects the hoisted rule to the types it binds.
+    for prompt in _authoring_prompts():
+        for stage_type in CODE_CARRYING_TYPES:
+            assert f"`{stage_type}`" in prompt, stage_type
+
+
+def test_no_type_note_still_carries_the_shared_text():
+    # Guards the hoist: a note that re-absorbs the paragraph duplicates it again.
+    for stage_type, spec in NODE_TYPES.items():
+        assert CODE_SUMMARY_CONTRACT_NOTE not in spec.notes, stage_type
+        assert CODE_CORNER_CASES_CONTRACT_NOTE not in spec.notes, stage_type
+
+
+def _authoring_prompts():
     from app.agents.compiler.prompt import EDITING_SYSTEM_PROMPT
+    from app.mcp.server import INSTRUCTIONS
 
-    for stage_type in CODE_CARRYING_TYPES:
-        assert CODE_SUMMARY_CONTRACT_NOTE in NODE_TYPES[stage_type].notes, stage_type
-    assert CODE_SUMMARY_CONTRACT_NOTE in EDITING_SYSTEM_PROMPT
+    return (EDITING_SYSTEM_PROMPT, INSTRUCTIONS)
 
 
-def test_corner_cases_note_reaches_every_code_carrying_type():
-    # stage_edit refuses a write that omits `corner_cases`; this is the note that tells
-    # an author the key is mandatory and `[]` is the way to say "none"
-    from app.agents.compiler.prompt import EDITING_SYSTEM_PROMPT
-
-    for stage_type in CODE_CARRYING_TYPES:
-        assert CODE_CORNER_CASES_CONTRACT_NOTE in NODE_TYPES[stage_type].notes, stage_type
-    assert CODE_CORNER_CASES_CONTRACT_NOTE in EDITING_SYSTEM_PROMPT
+def _flat(text: str) -> str:
+    return re.sub(r"\s+", " ", text).strip()
 
 
 def test_publish_note_names_the_trace_link_helper():
