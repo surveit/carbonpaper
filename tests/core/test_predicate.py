@@ -56,3 +56,45 @@ def test_is_comparison_rejected():
 def test_method_call_with_keyword_argument_rejected():
     with pytest.raises(PredicateError):
         parse_predicate("claim_id.str.contains('x', regex=True)")
+
+
+# ── the attribute allowlist ──────────────────────────────────────────────────
+# pandas resolves an attribute chain with a real getattr and calls the result
+# inside its expression PARSER, before any engine runs, so the validator is the
+# only thing standing between an authored predicate and arbitrary execution.
+_ESCAPES = [
+    "n.__class__.__init__.__globals__.get('warnings').warn('PWNED')",
+    "name.__class__",
+    "name.__init__",
+    "name.__class__.__globals__",
+    "name.__class__.__init__.__globals__",
+    "name.__class__.mro()",
+    "name.__reduce__()",
+]
+
+
+@pytest.mark.parametrize("expr", _ESCAPES)
+def test_dunder_attribute_walk_rejected(expr):
+    with pytest.raises(PredicateError, match="attribute"):
+        parse_predicate(expr)
+
+
+def test_unknown_attribute_rejected():
+    with pytest.raises(PredicateError, match="attribute"):
+        parse_predicate("score.values")
+
+
+def test_str_accessor_method_not_in_dialect_rejected():
+    """`.str` is admitted, but only for the methods the dialect names."""
+    with pytest.raises(PredicateError, match="attribute"):
+        parse_predicate("claim_id.str.zfill(3)")
+
+
+@pytest.mark.parametrize("expr", [
+    "a IS NULL",
+    "a IS NOT NULL",
+    "claim_id.str.startswith('x')",
+    "claim_id.str.contains('x')",
+])
+def test_dialect_attributes_still_accepted(expr):
+    assert parse_predicate(expr).columns
