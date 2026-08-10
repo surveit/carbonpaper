@@ -16,7 +16,8 @@ from app.core.agent.agent import Agent
 from app.core.agent.usage import LlmUsage
 from app.core.errors import LLMError
 from app.core.llm_sdk import run_sync
-from app.models.stages.llm_transform import LLMConfig
+from app.core.agent.sdk_engine import ThinkingConfig
+from app.models.stages.llm_transform import LLMConfig, ThinkingMode
 
 from .options import (
     DEFAULT_MODEL,
@@ -92,6 +93,7 @@ def call_llm(
     return _run_agent(
         _compose_system(llm_config.prompt_instructions), task, reply_model, model_name,
         llm_config.max_retries, usage_out, tools=llm_config.tools,
+        thinking=llm_config.thinking,
     )
 
 
@@ -109,8 +111,14 @@ def call_llm_batch(
     # No tools by construction: LLMConfig refuses tools with batch_size > 1.
     return _run_agent(
         _compose_system(instructions), task, reply_schema, model_name,
-        llm_config.max_retries, usage_out,
+        llm_config.max_retries, usage_out, thinking=llm_config.thinking,
     )
+
+
+def _thinking_config(mode: "ThinkingMode | None") -> ThinkingConfig | None:
+    if mode is None:
+        return None
+    return {"type": "disabled"} if mode == "disabled" else {"type": "adaptive"}
 
 
 def _compose_system(instructions: str) -> str:
@@ -125,6 +133,7 @@ def _run_agent(
     max_retries: int,
     usage_out: list[LlmUsage] | None,
     tools: list[str] | None = None,
+    thinking: ThinkingMode | None = None,
 ) -> dict[str, Any]:
     require_agent_backend()
     emit_llm_detail(LLM_PROMPT, text=task)
@@ -143,6 +152,7 @@ def _run_agent(
             model=model_name,
             extra_tools=list(tools or []),
             max_turns=RESEARCH_MAX_TURNS if researching else None,
+            thinking=_thinking_config(thinking),
         )
         try:
             answer = run_sync(

@@ -23,6 +23,7 @@ DEFAULT_MODEL = LLMModel.parse(
     source="CARBONPAPER_LLM_MODEL",
 )
 DEFAULT_PARALLEL = int(os.environ.get("CARBONPAPER_LLM_PARALLEL", "4"))
+
 DEFAULT_TIMEOUT_S = int(os.environ.get("CARBONPAPER_LLM_TIMEOUT_S", "180"))
 
 # A stage granted research tools works on a completely different clock: it searches,
