@@ -30,7 +30,7 @@ from conftest import contribution_of, make_run_context, reads_of
 # The single `x` column of the frames these tests hand the driver. The declared
 # schemas only have to be present and honest: these handlers are constructed
 # directly, so a schema is read at all only where the handler is asked to
-# project (`project_output_to_declared=True`), and those tests pass their own.
+# project (`trims_output_to_declared=True`), and those tests pass their own.
 _X_COLUMN = [{"name": "x", "type": "int", "nullable": True}]
 
 
@@ -210,7 +210,7 @@ def test_row_driver_empty_input_reports_no_dropped_columns_when_projecting():
     schema = {"columns": [{"name": "x", "type": "int", "nullable": True}]}
     handler = RowMapHandler(
         make_mapper=lambda stage, ctx, src: lambda row, index: dict(row),
-        project_output_to_declared=True,
+        trims_output_to_declared=True,
     )
     ctx = make_run_context()
     out = handler.execute(
@@ -259,7 +259,7 @@ def test_row_driver_projects_to_declared_columns():
     schema = {"columns": [{"name": "x", "type": "int", "nullable": True}, {"name": "score", "type": "int", "nullable": True}]}
     handler = RowMapHandler(
         make_mapper=lambda stage, ctx, src: lambda row, index: {"x": row["x"], "score": 1, "extra": "drop me"},
-        project_output_to_declared=True,
+        trims_output_to_declared=True,
     )
     ctx = make_run_context()
     out = handler.execute(_row_stage(output_schema=schema),
@@ -342,7 +342,7 @@ def test_marker_columns_are_not_reported_as_dropped_user_columns():
         return map_row
 
     schema = {"columns": [{"name": "x", "type": "int", "nullable": True}]}
-    handler = RowMapHandler(make_mapper=make_mapper, project_output_to_declared=True)
+    handler = RowMapHandler(make_mapper=make_mapper, trims_output_to_declared=True)
     ctx = make_run_context()
     out = handler.execute(_row_stage(output_schema=schema), {"src": pd.DataFrame({"x": [1]})}, ctx)
     assert list(out.columns) == ["x"]

@@ -57,11 +57,11 @@ HANDLERS: dict[StageType, StageHandler] = {
         make_llm_row_mapper,
         run_llm_batches,
         parallelism=DEFAULT_PARALLEL,
-        project_output_to_declared=True,
+        trims_output_to_declared=True,
     ),
     StageType.human_review_queue: RowMapHandler(
         make_human_review_mapper,
-        project_output_to_declared=True,
+        trims_output_to_declared=True,
     ),
     # caches_frames=False: publish is terminal and side-effecting — it writes
     # artifacts the world reads, not an output a later run consumes. Replaying a

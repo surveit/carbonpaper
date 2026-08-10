@@ -77,7 +77,7 @@ MakeRowMapper = Callable[[Stage, RunContext, pd.DataFrame], RowMapper]
 # run, the driver's parallelism, and the INPUT POSITION of each row it is handed
 # (in the order handed), which is what lets it attribute a chunk's log detail to
 # the rows it actually covers. It computes one raw row per input row it is
-# given — internal columns still attached, nothing stripped or projected — and knows
+# given — internal columns still attached, nothing stripped or trimmed — and knows
 # nothing about caching: which rows it is asked about is the shape's decision
 # (see `_run_batched`).
 RunBatches = Callable[
@@ -202,8 +202,8 @@ class RowMapHandler(StageHandler):
     `PostMapRowMapper`, which the driver also hands the assembled frame once the
     map is over. `parallelism` > 1 lets the driver run the mapper over rows
     concurrently — results are written back by input index, so output order is
-    input order regardless of completion order. `project_output_to_declared`
-    asks the driver to project the assembled frame onto exactly the columns
+    input order regardless of completion order. `trims_output_to_declared`
+    asks the driver to cut the assembled frame down to exactly the columns
     output_schema declares — a column-only operation that cannot change row
     count or order. A row-mapped stage resolves each row against the
     stage-result cache before calling the mapper (see `_open_row_caching`)
@@ -219,13 +219,13 @@ class RowMapHandler(StageHandler):
         self,
         make_mapper: MakeRowMapper,
         parallelism: int = 1,
-        project_output_to_declared: bool = False,
+        trims_output_to_declared: bool = False,
         drops_rows: bool = False,
         caches_rows: bool = True,
     ) -> None:
         self.make_mapper = make_mapper
         self.parallelism = parallelism
-        self.project_output_to_declared = project_output_to_declared
+        self.trims_output_to_declared = trims_output_to_declared
         self.drops_rows = drops_rows
         self.caches_rows = caches_rows
 
@@ -265,9 +265,9 @@ class LLMTransformHandler(RowMapHandler):
         make_mapper: MakeRowMapper,
         run_batches: RunBatches,
         parallelism: int = 1,
-        project_output_to_declared: bool = False,
+        trims_output_to_declared: bool = False,
     ) -> None:
-        super().__init__(make_mapper, parallelism, project_output_to_declared)
+        super().__init__(make_mapper, parallelism, trims_output_to_declared)
         self.run_batches = run_batches
 
     def execute(
@@ -656,9 +656,9 @@ def _finish_batched_frame(
 ) -> pd.DataFrame:
     """The batched path's counterpart of `_finish_mapped_frame`: no mapper, so
     no post-map step — the internal columns are collected off the assembled
-    frame, then stripped and the frame projected."""
+    frame, then stripped and the frame trimmed."""
     df = pd.DataFrame(rows)
-    return _strip_and_project(df, _collect_internal_columns(df), handler, stage)
+    return _strip_and_trim(df, _collect_internal_columns(df), handler, stage)
 
 
 def _finish_empty_result(
@@ -685,7 +685,7 @@ def _finish_mapped_frame(
     """Turn the assembled per-row results into the stage's output frame: collect
     the driver's own internal columns onto this stage's `StageContribution`, hand
     the frame back to the mapper where the mapper is a `PostMapRowMapper`, then
-    strip every internal column and — where the handler asks for it — project
+    strip every internal column and — where the handler asks for it — trim
     onto the declared columns.
 
     The mapper's window is exact: `finish_mapped_rows` runs before the strip, so
@@ -696,7 +696,7 @@ def _finish_mapped_frame(
     contribution = _collect_internal_columns(df)
     if isinstance(map_row, PostMapRowMapper):
         map_row.finish_mapped_rows(stage, df, ctx, contribution)
-    return _strip_and_project(df, contribution, handler, stage)
+    return _strip_and_trim(df, contribution, handler, stage)
 
 
 def _collect_internal_columns(df: pd.DataFrame) -> StageContribution:
@@ -709,22 +709,22 @@ def _collect_internal_columns(df: pd.DataFrame) -> StageContribution:
     return contribution
 
 
-def _strip_and_project(
+def _strip_and_trim(
     df: pd.DataFrame,
     contribution: StageContribution,
     handler: RowMapHandler,
     stage: Stage,
 ) -> pd.DataFrame:
     """`df` with every internal column dropped and — where the handler asks for
-    it — projected onto the declared columns, carrying `contribution` out on its
+    it — cut down to the declared columns, carrying `contribution` out on its
     `.attrs` for the executor to merge into the manifest.
 
     Strip before project, in that order: the projection reports every column it
     drops as a user column the stage produced and discarded, and an internal
     column is driver machinery, not that."""
     df = _strip_internal_columns(df)
-    if handler.project_output_to_declared:
-        df = _project_onto_declared_columns(df, stage, contribution)
+    if handler.trims_output_to_declared:
+        df = _trim_to_declared_columns(df, stage, contribution)
     df.attrs[CONTRIBUTION_ATTR] = contribution
     return df
 
@@ -787,17 +787,17 @@ def _collect_cached_rows(df: pd.DataFrame, contribution: StageContribution) -> N
     contribution.cached_rows = int(sum(value is True for value in df[ROW_CACHED_KEY]))
 
 
-def _project_onto_declared_columns(
+def _trim_to_declared_columns(
     df: pd.DataFrame, stage: Stage, contribution: StageContribution
 ) -> pd.DataFrame:
-    """Project onto exactly the columns output_schema declares, in declared
-    order. Column selection only — row count and order are untouched. Every
-    column it drops is recorded on `contribution`, never silently discarded —
-    and each is a user column, since the internal columns were already stripped
-    off before this runs. Raises when a declared column is absent, except on a
-    frame whose rows already reported generation failures — a failed row
-    produces no generated value, and its row errors fail the stage anyway."""
+    """Exactly the columns output_schema declares, in declared order."""
     output_schema = stage.resolve_output_schema()
+    # Column selection only — row count and order are untouched. Every column it
+    # drops is recorded on `contribution`, never silently discarded, and each is
+    # a user column: the internal ones were stripped before this runs. A missing
+    # declared column raises, except on a frame whose rows already reported
+    # generation failures — a failed row produces no value, and its row errors
+    # fail the stage anyway.
     declared = [c.name for c in output_schema.columns] if output_schema else []
     if not declared:
         return df
