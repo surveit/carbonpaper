@@ -89,8 +89,7 @@ def test_stream_turn_maps_blocks_to_normalized_events(monkeypatch: Any) -> None:
 
 
 def test_stream_turn_drops_a_thinking_block_carrying_no_text(monkeypatch: Any) -> None:
-    """A redacted or signature-only block arrives with empty `thinking`; passing it
-    on opens an empty disclosure in the transcript, which reads as a load failure."""
+    """Forwarded, it opens an empty disclosure — indistinguishable from a load failure."""
 
     async def fake_query(*, prompt: str, options: Any) -> Any:
         yield _Asst([_Think("   \n "), _Think("weighing it"), _Text("Done.")])

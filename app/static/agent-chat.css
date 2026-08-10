@@ -31,12 +31,14 @@
 
 /* A typed turn is one or two lines, so it reads as a compact bubble against the
    right edge; the reply under it is unboxed prose, which a bubble would only
-   narrow. The bubble takes the quiet --info tint, not the saturated fill: its
-   position and shape already say who spoke, and a filled chip on this page
-   competes with the one element asking to be clicked, the Send button. */
+   narrow. The bubble is a NEUTRAL grey off the surface ladder, not a hue: its
+   position and shape already say who spoke, so the tint is only there to bound
+   the shape, and every hue here is spoken for — --info means a human is needed,
+   and the earlier --info tint made the reader's own sentence look like a
+   status. Grey also keeps it from competing with the Send button. */
 .ac-msg.user { align-self: flex-end; max-width: 72%; }
 .ac-msg.user .ac-role { text-align: right; }
-.ac-msg.user .ac-body { background: var(--info-bg); color: var(--info-ink);
+.ac-msg.user .ac-body { background: var(--hover); color: var(--fg);
     border-radius: 10px; padding: 8px 12px; }
 .ac-msg.assistant { align-self: stretch; }
 
@@ -52,7 +54,9 @@
    no tint and no border. It also takes no state colour, because it answers
    neither of the two questions colour is spent on here: it is not a run state
    and it is not a verdict. The tinted chip it replaces read as a passed check.
-   The folded body is the only part that gets a surface, and only once opened. */
+   The folded body is the only part that gets a surface, and only once opened.
+   Every line opens on the same three words, so a run of them reads as one block
+   of furniture the eye can skip rather than as several separate announcements. */
 .ac-tool { margin: 1px 0; }
 .ac-tool > summary { cursor: pointer; list-style: none; color: var(--muted); font-size: 12px;
     padding: 1px 0; display: inline-block; user-select: none; }
@@ -60,6 +64,9 @@
 .ac-tool > summary::-webkit-details-marker { display: none; }
 .ac-tool > summary::before { content: "▸ "; color: var(--border-strong); }
 .ac-tool[open] > summary::before { content: "▾ "; }
+/* The reply is a different kind of thing from the calls above it, and now that
+   neither one is tinted, the gap is the only thing left saying so. */
+.ac-tool + .ac-body { margin-top: 12px; }
 .ac-tool-json { font-family: ui-monospace, monospace; font-size: 11px; color: var(--muted);
     background: var(--sunk); border: 1px solid var(--border); border-radius: 6px;
     padding: 6px 9px; margin: 4px 0 6px; white-space: pre-wrap; overflow-x: auto; }
