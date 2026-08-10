@@ -36,20 +36,20 @@ def _make_document_only_project(root, name="fresh"):
 def test_document_only_project_is_listed(examples_root):
     _make_document_only_project(examples_root)
     [card] = list_projects()
-    assert card["name"] == "fresh"
-    assert card["has_document"] is True
-    assert card["has_workflow"] is False
-    assert card["has_schemas"] is False
-    assert card["is_ready"] is False
+    assert card.name == "fresh"
+    assert card.has_document is True
+    assert card.has_workflow is False
+    assert card.has_schemas is False
+    assert card.is_ready is False
 
 
-def test_document_only_project_renders_as_under_development(examples_root):
+def test_document_only_project_renders_as_in_progress(examples_root):
     _make_document_only_project(examples_root)
     r = client.get("/")
     assert r.status_code == 200
     assert "fresh" in r.text
-    assert "Under development" in r.text
-    assert ">Live<" not in r.text
+    assert "In progress" in r.text
+    assert "No runs yet" in r.text
     assert "No projects yet" not in r.text
 
 
@@ -63,9 +63,9 @@ def test_versioned_project_is_ready_to_run(examples_root):
         published=True,
     ).save()
     [card] = list_projects()
-    assert card["is_ready"] is True
+    assert card.is_ready is True
     r = client.get("/")
-    assert ">Live<" in r.text
+    assert 'href="/project/versioned"' in r.text
 
 
 def test_unpublished_only_project_is_not_ready(examples_root):
@@ -79,9 +79,9 @@ def test_unpublished_only_project_is_not_ready(examples_root):
         published=False,
     ).save()
     [card] = list_projects()
-    assert card["is_ready"] is False
+    assert card.is_ready is False
     r = client.get("/")
-    assert ">Live<" not in r.text
+    assert 'href="/project/drafted/data_model"' in r.text
 
 
 def test_half_written_version_snapshot_fails_the_listing_loudly(examples_root):
@@ -121,16 +121,16 @@ def test_card_counts_compiled_stages_schemas_and_runs_with_a_manifest(examples_r
     unfinished_run.mkdir()  # no manifest.json — not yet a real run
 
     [card] = list_projects()
-    assert card["n_stages"] == 2
-    assert card["has_workflow"] is True
-    assert card["n_schemas"] == 1
-    assert card["has_schemas"] is True
-    assert card["n_runs"] == 1
+    assert card.n_stages == 2
+    assert card.has_workflow is True
+    assert card.n_schemas == 1
+    assert card.has_schemas is True
+    assert card.n_runs == 1
 
 
 def test_card_counts_zero_stages_schemas_and_runs_when_none_exist(examples_root):
     _make_document_only_project(examples_root, name="empty")
     [card] = list_projects()
-    assert card["n_stages"] == 0
-    assert card["n_schemas"] == 0
-    assert card["n_runs"] == 0
+    assert card.n_stages == 0
+    assert card.n_schemas == 0
+    assert card.n_runs == 0

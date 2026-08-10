@@ -52,7 +52,7 @@ def test_the_dashboard_card_drops_an_unparseable_manifest_from_its_run_count(pro
     _write_run(project_dir, "20260101T000000", "{ not json")
 
     card, = loading.list_projects()
-    assert card["n_runs"] == 0
+    assert card.n_runs == 0
 
 
 def test_the_runs_index_lists_an_unparseable_manifest_as_an_identity_only_row(project_dir: Path):
@@ -77,7 +77,7 @@ def test_the_two_counting_readers_still_read_a_pre_rename_manifests_real_status(
     summary = project_service._runs_summary(project_dir)
     assert (summary.n, summary.latest_status) == (1, "ok")
     card, = loading.list_projects()
-    assert card["n_runs"] == 1
+    assert card.n_runs == 1
 
 
 def test_the_runs_index_calls_a_pre_rename_manifest_corrupt(project_dir: Path):
@@ -101,4 +101,4 @@ def test_the_runs_index_lists_a_test_run_the_two_counting_readers_exclude(projec
     assert (row.status, row.is_test_run) == ("ok", True)
     assert project_service._runs_summary(project_dir).n == 0
     card, = loading.list_projects()
-    assert card["n_runs"] == 0
+    assert card.n_runs == 0

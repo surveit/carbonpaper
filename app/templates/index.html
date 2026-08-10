@@ -21,16 +21,30 @@
     <div class="project-card">
         <form class="project-delete" method="post" action="/project/{{ m.name }}/delete"
               onsubmit="return confirm('Delete project &#39;{{ m.name }}&#39; and all its runs? This cannot be undone.');">
-            <button type="submit" class="delete-btn" title="Delete project &quot;{{ m.name }}&quot;" aria-label="Delete project {{ m.name }}">✕</button>
+            <button type="submit" class="delete-btn" title="Delete project &quot;{{ m.name }}&quot;" aria-label="Delete project {{ m.name }}">
+                {# trash-2: the lid and its handle, the can, two tines. #}
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/>
+                    <path d="M19 6v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6"/>
+                    <path d="M10 11v6"/><path d="M14 11v6"/>
+                </svg>
+            </button>
         </form>
         <a href="{{ open_url }}" class="project-name">{{ m.name }}</a>
         <div class="project-status">
-            {% if m.is_ready %}
-            <span class="badge ok">Live</span>
+            <span class="project-state state-{{ m.status }}">{{ m.status_label }}</span>
+            <span class="status-dot">·</span>
+            {# Never a bare "No runs yet" over a project that HAS been exercised —
+               a workflow test is a run, and three of the projects on this page
+               have only ever had those. #}
+            {% if m.n_runs > 0 %}
+            <span class="status-meta">{{ m.n_runs }} run{% if m.n_runs != 1 %}s{% endif %}</span>
+            {% elif m.n_test_runs > 0 %}
+            <span class="status-meta">No runs yet</span><span class="status-dot">·</span><span class="status-meta">{{ m.n_test_runs }} test{% if m.n_test_runs != 1 %}s{% endif %}</span>
             {% else %}
-            <span class="badge warn">Under development</span>
+            <span class="status-meta">No runs yet</span>
             {% endif %}
-            {% if m.n_runs > 0 %}<span class="status-dot">·</span><span class="status-meta">{{ m.n_runs }} run{% if m.n_runs != 1 %}s{% endif %}</span>{% endif %}
         </div>
     </div>
     {% endfor %}
