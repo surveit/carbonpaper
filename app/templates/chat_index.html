@@ -1,37 +1,19 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Chat sessions</title>
-  <link rel="stylesheet" href="/static/palette.css">
-  <style>
-    body { font-family: ui-sans-serif, system-ui, sans-serif; max-width: 720px;
-           margin: 40px auto; padding: 0 16px; color: var(--fg); background: var(--bg); }
-    h1 { font-size: 20px; }
-    .badge { font-size: 12px; color: var(--muted); border: 1px solid var(--border); border-radius: 10px;
-             padding: 2px 8px; }
-    form { margin: 16px 0 24px; }
-    button { font: inherit; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--info-bd);
-             background: var(--info-bd); color: var(--on-dark); cursor: pointer; }
-    ul { list-style: none; padding: 0; }
-    li { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin: 6px 0; }
-    a { color: var(--info-bd); text-decoration: none; }
-    .muted { color: var(--muted); font-size: 12px; }
-  </style>
-</head>
-<body>
-  <h1>Chat sessions &nbsp; <span class="badge">backend: {{ backend }}</span></h1>
-  <ul>
-    {% for s in sessions %}
-      <li>
-        <a href="/chat/{{ s.session_id }}">{{ s.title }}</a>
-        <div class="muted">{{ s.session_id }} · {{ s.created_at | friendly_time }}</div>
-      </li>
-    {% else %}
-      <li class="muted">No sessions yet.</li>
-    {% endfor %}
-  </ul>
-<script src="/static/friendly-time.js"></script>
-</body>
-</html>
+{% extends "base.html" %}
+{% block title %}Chats{% endblock %}
+{% block breadcrumbs %}{% include "_breadcrumbs.html" %}{% endblock %}
+{% block content %}
+<div class="ac-head">
+  <h1>Chats</h1>
+  <span class="ac-backend" title="which model backend answers">backend: {{ backend }}</span>
+</div>
+<ul class="ac-sessions">
+  {% for s in sessions %}
+    <li class="ac-session">
+      <a href="/chat/{{ s.session_id }}">{{ s.title }}</a>
+      <div class="ac-session-meta">{{ s.session_id }} · {{ s.created_at | friendly_time }}</div>
+    </li>
+  {% else %}
+    <li class="ac-session ac-session-meta">No sessions yet.</li>
+  {% endfor %}
+</ul>
+{% endblock %}

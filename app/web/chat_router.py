@@ -16,6 +16,7 @@ from app.core.agent.sdk_engine import CLI_MODEL
 from app.core.agent.session import create_agent_session
 from app.core.agent.store import open_session_store
 from app.core.agent.turns import default_turn_manager
+from app.web.breadcrumbs import build_chat_crumbs, build_home_crumbs
 from app.web.config import templates
 
 router = APIRouter()
@@ -50,6 +51,7 @@ async def chat_index(request: Request):
     return templates.TemplateResponse(request, "chat_index.html", {
         "sessions": visible_sessions,
         "backend": _backend_label(),
+        "crumbs": build_home_crumbs("Chats"),
     })
 
 
@@ -80,6 +82,7 @@ async def chat_page(request: Request, sid: str):
         "view_only": data.get("agent_id") is None,
         "backend": _backend_label(),
         "backend_error": _backend_error(),
+        "crumbs": build_chat_crumbs(data.get("title")),
     })
 
 
