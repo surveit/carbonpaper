@@ -17,6 +17,7 @@ from app.services.run_guide import RunGuideView
 from app.web.config import templates
 from app.web.loading import load_output_preview, load_output_table
 from app.web.panel_links import PacketPanelLinks
+from app.web.run_issues import RunIssues
 
 # The packet has no route to a further page, so a stage's table has to carry the
 # rows outright. Still capped: a browser opening a static file has no pagination
@@ -60,12 +61,13 @@ def write_packet_pages(
     data: DataReport,
     guide: RunGuideView | None,
     diagram: str,
+    issues: RunIssues,
 ) -> list[str]:
     """index.html, one page per stage, the stylesheets and the diagram source."""
     written = _write_stylesheets(root)
     written.append(_write_node_script(root))
     written.append(_write_diagram_source(root, diagram))
-    written.append(_write_index(root, view, data, guide, diagram))
+    written.append(_write_index(root, view, data, guide, diagram, issues))
     for stage in view.stages:
         written.append(_write_stage_page(root, run_dir, view, stage))
     return written
@@ -89,6 +91,7 @@ def _write_index(
     data: DataReport,
     guide: RunGuideView | None,
     diagram: str,
+    issues: RunIssues,
 ) -> str:
     html = _render(
         "packet_index.html",
@@ -99,7 +102,8 @@ def _write_index(
         stages_dir=STAGES_DIR,
         checksums_href=CHECKSUMS_FILE,
         project=view.project,
-        links=PacketPanelLinks(),
+        issues=issues,
+        links=PacketPanelLinks(to_root=""),
         mermaid=diagram,
         mermaid_url=MERMAID_URL,
         mermaid_sri=MERMAID_SRI,
@@ -152,9 +156,6 @@ def _build_panel_context(run_dir: Path, view: RunView, stage: StageView) -> dict
         "can_generate_tests": False,
         "certification": None,
         "previewable": False,
-        # The packet index lists no issues, so the panel's validation block is
-        # the only place this stage's are named.
-        "issues_indexed": False,
         "links": PacketPanelLinks(),
         "type_glyph": TYPE_GLYPH,
         "type_class": TYPE_CLASS,

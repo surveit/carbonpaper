@@ -1,6 +1,7 @@
-"""The run page's issue index: the stage that stopped the run, and the advisory
-issues on the stages that ran. One line each, worded by the report that raised it
-and linking the stage panel — on this page it is the only copy.
+"""The issue index: the stage that stopped the run, and the advisory issues on the
+stages that ran. One line each, worded by the report that raised it and linking the
+stage it came from. Rendered by the run page and by the review packet's index; the
+stage panel repeats none of it, so each surface holds one copy.
 """
 
 from __future__ import annotations

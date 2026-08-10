@@ -1,8 +1,13 @@
 {#
   RUN ISSUE INDEX — ONE list, headed by its own counts ("2 errors, 17 warnings"),
   of everything this run's records say went wrong. Every line is worded by the
-  report that raised it and links the stage panel it came from; the panel names none
-  of them itself, so this is the page's only copy.
+  report that raised it and links the stage it came from; the stage panel names none
+  of them itself, so this is its surface's only copy.
+
+  TWO surfaces render it: the run page, where the link loads the panel in place, and
+  the review packet's index, where it opens that stage's own page. The script below
+  is the run page's — with no `_loadStage` on the page it stands aside and lets the
+  href navigate, which is exactly what the packet needs.
 
   A stop — the stage that ENDED the run — is a line of this list like any other,
   first and marked `stopped`, its message leading with WHICH of the two stories it

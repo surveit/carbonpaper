@@ -101,9 +101,6 @@ async def run_stage_partial(
             "test_views": (views := shape_test_views(stage_def)),
             "certification": build_certification(stage_def, views) if stage_def else None,
             "previewable": stage_def is not None and stage_def.type in PREVIEWABLE_TYPES,
-            # The run page around this panel lists every validation issue in its
-            # own index, worded by the same report — so the panel does not repeat it.
-            "issues_indexed": True,
             "links": resolve_panel_links(project, run_id),
             "event_tail": EVENT_TAIL,
             "type_glyph": TYPE_GLYPH,

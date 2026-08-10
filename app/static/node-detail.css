@@ -210,14 +210,4 @@ table.data-preview.scratch th { background: var(--hover); }
 .data-inputs { margin: 14px 0 4px; }
 .data-inputs > summary { color: var(--accent); font-size: 12px; cursor: pointer; }
 
-/* Validation block inside the Outputs tier. */
-.tier-outputs .validation-block { background: var(--raised); border: 1px solid var(--border); margin-top: 12px; }
-.validation-block .val-phase {
-    margin: 8px 0 2px;
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.4px;
-    color: var(--muted);
-    font-weight: 600;
-}
 
