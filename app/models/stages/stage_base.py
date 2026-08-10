@@ -26,6 +26,7 @@ from app.models.schema import (
 )
 from app.models.stages.shared import find_internal_namespace_column_issues
 from app.models.stages.signature import (
+    ExtendsSignature,
     ReplacesSignature,
     TransformSignature,
     find_signature_issues,
@@ -274,6 +275,18 @@ class StageBase(StageCommon):
     def resolve_output_schema(self) -> Optional[TableSchema]:
         """What the signature promises; None only for a stage that emits no table."""
         return promised_output_schema(self)
+
+    def anchor_reads(self) -> frozenset[str]:
+        """Columns read from the anchor input; empty unless the form flows the rest."""
+        if not self.inputs or not isinstance(self.signature, ExtendsSignature):
+            return frozenset()
+        anchor = self.inputs[0].id
+        return frozenset(
+            column.name
+            for entry in self.signature.reads
+            if entry.input == anchor
+            for column in entry.columns
+        )
 
     def find_signature_config_issues(self) -> list[str]:
         """Signature-vs-config disagreements; [] when nothing cross-checks. Runs only with one."""

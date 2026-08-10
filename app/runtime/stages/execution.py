@@ -15,7 +15,6 @@ from app.models import Stage
 from app.models.run_manifest import RowError, StageContribution
 from app.models.stage import StageBase, StageType, is_grain_and_order_preserving
 from app.models.stages.llm_transform import LLMTransformStage
-from app.models.stages.signature import ExtendsSignature
 
 from app.core.agent.usage import LlmUsage
 from app.core.frames import list_rows
@@ -365,7 +364,8 @@ def _run_row_mapper(
             f"got {len(stage.inputs)}"
         )
     src = inputs[stage.inputs[0].id]
-    reads = _narrowed_reads(stage)
+    # Empty reads is UNDECLARED, not declared-empty — see #498.
+    reads = stage.anchor_reads() or None
     map_row = handler.make_mapper(stage, ctx, src)
     # The ONE line of per-row compute, optionally routed through the row cache
     # and the run log. Log outside cache, so a row the cache answers never
@@ -422,27 +422,6 @@ def _run_row_mapper(
         # The driver, not the stage, knows which input ordinals survived.
         attach_row_lineage(out, kept_rows_lineage(stage.inputs[0].id, kept_indices))
     return out
-
-
-def _narrowed_reads(stage: Stage) -> frozenset[str] | None:
-    """The anchor columns the signature reads, or None to hand over whole rows."""
-    signature = stage.signature
-    # None twice over. A form that promises no flow-through has no rejoin to
-    # make, so there is nothing narrowing could give back. And `reads` defaults
-    # to empty with nothing obliging an author to fill it, so empty means
-    # UNDECLARED, not declared-to-read-nothing — a contract nobody wrote cannot
-    # be enforced, and handing such a mapper `{}` would break it on a
-    # declaration it never made. Declaring reads is what opts a stage in.
-    if not stage.inputs or not isinstance(signature, ExtendsSignature):
-        return None
-    anchor = stage.inputs[0].id
-    reads = frozenset(
-        column.name
-        for entry in signature.reads
-        if entry.input == anchor
-        for column in entry.columns
-    )
-    return reads or None
 
 
 def _narrow_row(row: Row, keep: frozenset[str]) -> Row:
@@ -678,27 +657,14 @@ def _finish_batched_frame(
 def _finish_empty_result(
     mapped: pd.DataFrame, src: pd.DataFrame, stage: Stage
 ) -> pd.DataFrame:
-    """A result that named no column at all, given the ones the stage promised."""
+    """A 0x0 frame extended nothing, so its promised columns are named here."""
     if len(mapped.columns) > 0 or len(mapped) > 0:
         return mapped
-    # A frame assembled from no results is 0 rows BY 0 COLUMNS — no mapper ran,
-    # so nothing named a column. What downstream is entitled to read does not
-    # depend on whether a row survived: an `extends` stage promises its `adds`
-    # too, so handing back the input's columns alone emits a frame that violates
-    # this stage's OWN output schema (and an empty result is not an error). The
-    # input slice is the base, so every column that flows keeps its real dtype; a
-    # promised column the input does not supply arrives empty. A stage promising
-    # nothing (`publish`) keeps the input's shape — then the one honest thing
-    # available.
-    #
-    # `.attrs` is copied verbatim because the stage's StageContribution rides
-    # there: an empty-input stage still reported whatever it reported onto that
-    # contribution, and swapping the frame must not swallow it.
     empty = src.iloc[0:0].copy()
     promised = stage.resolve_output_schema()
     if promised is not None:
         empty = empty.reindex(columns=[column.name for column in promised.columns])
-    empty.attrs = dict(mapped.attrs)
+    empty.attrs = dict(mapped.attrs)  # the StageContribution rides here
     return empty
 
 

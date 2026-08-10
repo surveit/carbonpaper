@@ -53,15 +53,7 @@ non-unique reference, `expand` allows m:n fan-out); `aggregate`;
 `human_review_queue` (row fingerprint → cached decision or halt);
 `publish` (a `function` module that writes artifacts).
 
-**A row-mapped stage sees only what its signature `reads`.** The driver narrows each
-anchor row to the declared reads before the mapper is called and rejoins the flowing
-columns after, so code touching an undeclared column fails loudly instead of reading a
-value the signature never promised — and the row cache keys on the NARROWED row, so a
-column the stage never reads stops invalidating its answers. No handler registration
-opts in or out: what a transform may read is the author's contract, not a property of
-the shape running it. `reads` defaults to empty and nothing obliges an author to fill
-it, so an empty `reads` means UNDECLARED — there is no contract to enforce and the
-mapper gets the whole row.
+**A row-mapped stage sees only what its signature `reads`.**
 
 **Row caching is a property of the handler SHAPE, not of a stage type.** `RowMapHandler`
 wraps the one line of per-row compute (`execution._open_row_caching`), so `python_row_function`
