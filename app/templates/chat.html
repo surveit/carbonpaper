@@ -46,6 +46,7 @@
 <script>
 const SID = {{ session_id | tojson }};
 const ACTIVE_TURN = {{ active_turn | tojson }};
+const OPENS_ITSELF = {{ opens_itself | default(false) | tojson }};
 const MESSAGE_URL = `/chat/${SID}/message`;
 const log = document.getElementById("log");
 const input = document.getElementById("input");
@@ -179,8 +180,18 @@ if (input && sendBtn) {
   input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } });
 }
 
+// An agent that opens the conversation speaks on load, with nothing typed. The route
+// 409s if the session already opened, so a reload replays rather than greeting twice.
+async function openConversation() {
+  const r = await fetch(`/chat/${SID}/open`, {method: "POST"});
+  if (!r.ok) return;
+  const data = await r.json();
+  connect(data.turn_id, 0);
+}
+
 // Reattach to an in-flight turn after navigating away and back.
 if (ACTIVE_TURN) connect(ACTIVE_TURN, 0);
+else if (OPENS_ITSELF) openConversation();
 if (input) input.focus();
 </script>
 {% endblock %}

@@ -21,6 +21,10 @@ class AgentConfig(BaseModel):
     # Labels for tools this agent does not own — e.g. the CLI's own ToolSearch
     # built-in, which has no BoundToolSpec here but still renders in the chat.
     extra_tool_labels: dict[str, str] = {}
+    # Set to make the agent speak first: an empty session runs one turn on this
+    # prompt with no reader message. It is never shown or stored as one, so the
+    # reader is not credited with words they did not type. None = wait to be spoken to.
+    opening_prompt: str | None = None
 
 
 # Given a validated context, return the bound tools for one agent.
@@ -31,6 +35,12 @@ _registry: dict[str, tuple[AgentConfig, BuildTools]] = {}
 
 def register(agent_id: str, config: AgentConfig, build_tools: BuildTools) -> None:
     _registry[agent_id] = (config, build_tools)
+
+
+def opening_prompt(agent_id: str) -> str | None:
+    """None when this agent waits to be spoken to. See AgentConfig.opening_prompt."""
+    config, _build_tools = _registry[agent_id]
+    return config.opening_prompt
 
 
 def build_engine(agent_id: str, context: dict[str, Any]) -> ClaudeAgentSdkEngine:
