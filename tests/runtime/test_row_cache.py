@@ -644,8 +644,6 @@ def test_a_registered_row_function_may_not_read_past_its_declared_reads():
     """No stage type gets a vote — the REGISTERED python_row_function narrows too."""
     stage = _two_column_stage(
         code="def transform(row):\n    return {**row, 'y': row['noise']}\n")
-    # Authored code reaching past its declared reads fails loudly rather than
-    # reading a value the signature never promised it.
 
     with pytest.raises(KeyError, match="noise"):
         _run(stage, _noisy_src(["a", "b"]), _ctx())

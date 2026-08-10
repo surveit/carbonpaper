@@ -792,12 +792,6 @@ def _trim_to_declared_columns(
 ) -> pd.DataFrame:
     """Exactly the columns output_schema declares, in declared order."""
     output_schema = stage.resolve_output_schema()
-    # Column selection only — row count and order are untouched. Every column it
-    # drops is recorded on `contribution`, never silently discarded, and each is
-    # a user column: the internal ones were stripped before this runs. A missing
-    # declared column raises, except on a frame whose rows already reported
-    # generation failures — a failed row produces no value, and its row errors
-    # fail the stage anyway.
     declared = [c.name for c in output_schema.columns] if output_schema else []
     if not declared:
         return df

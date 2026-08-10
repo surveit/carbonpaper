@@ -189,10 +189,6 @@ def test_row_driver_empty_input():
 
 def test_row_driver_empty_input_still_emits_the_columns_the_signature_adds():
     added = {"columns": [*_EMPTY_SOURCE_COLUMNS, {"name": "y", "type": "str", "nullable": True}]}
-    # The empty result is a RESULT, not an error: what downstream may read does
-    # not depend on whether a row survived. An `extends` promises its `adds`, so
-    # they are on the frame even though no mapper ran to produce them — without
-    # this the stage fails its own output schema on a legitimately empty input.
     handler = RowMapHandler(make_mapper=lambda stage, ctx, src: lambda row, index: dict(row))
     out = handler.execute(
         _row_stage(output_schema=added, input_columns=_EMPTY_SOURCE_COLUMNS),
