@@ -1,7 +1,6 @@
 """Route tests for the read-only version-detail page and run-this-version."""
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pandas as pd
@@ -15,6 +14,7 @@ from app.services import project as project_service
 from app.models.review_guide import ReviewGuideStep
 from app.services.versioning import ReviewGuide
 from app.services import workspace
+from stage_seed import add_stage
 
 client = TestClient(app)
 
@@ -37,11 +37,11 @@ def _stage(data_path: Path) -> dict:
 @pytest.fixture()
 def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     pdir = tmp_path / "demo"
-    compiled = pdir / "compiled"
-    compiled.mkdir(parents=True)
+    compiled = pdir
+    compiled.mkdir(parents=True, exist_ok=True)
     data = pdir / "a.csv"
     pd.DataFrame({"name": ["x", "y"], "val": [1, 2]}).to_csv(data, index=False)
-    (compiled / "01_load.json").write_text(json.dumps(_stage(data)), encoding="utf-8")
+    add_stage(compiled, _stage(data))
     workspace.set_projects_dir(tmp_path)
     monkeypatch.setattr(run_service, "_run_in_background",
                         lambda target, *args: target(*args))

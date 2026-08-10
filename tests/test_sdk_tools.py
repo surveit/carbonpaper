@@ -16,6 +16,7 @@ from app.tools.editing import EditingContext, make_editing_tools
 from app.core.agent.registry import build_mcp_server
 from app.core.agent.bound_tool import as_tool_content
 from app.services import workspace
+from stage_seed import add_stage
 
 
 @pytest.fixture(autouse=True)
@@ -40,8 +41,8 @@ def _call(tool: SdkMcpTool[Any], args: dict[str, Any]) -> dict[str, Any]:
 def _seed(examples: Path, name: str) -> Path:
     """Write one minimal, valid stage so read_stage/describe_workflow have real
     on-disk state (mirrors tests/test_project_tools.py::_seed)."""
-    compiled = examples / name / "compiled"
-    compiled.mkdir(parents=True, exist_ok=True)
+    pdir = examples / name
+    pdir.mkdir(parents=True, exist_ok=True)
     stage = {
         "id": "load",
         "description": "Load rows",
@@ -52,7 +53,7 @@ def _seed(examples: Path, name: str) -> Path:
             "produces": [{"name": "id", "type": "str", "nullable": False}],
         },
     }
-    (compiled / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
+    add_stage(pdir, stage)
     return examples / name
 
 
@@ -71,7 +72,7 @@ def test_read_stage_handler_returns_text_content(examples_root: Path) -> None:
 
     from app.services.workspace import project_workflow_summary
 
-    stage_id = project_workflow_summary(pdir)["stages"][0]["id"]
+    stage_id = project_workflow_summary(pdir.name)["stages"][0]["id"]
     out = _call(tool, {"project_id": "congresswatch", "stage_id": stage_id})
     assert out["content"][0]["type"] == "text"
     assert stage_id in out["content"][0]["text"]

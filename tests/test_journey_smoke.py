@@ -15,6 +15,7 @@ from app.main import app
 from app.services.project import create_project
 from app.services.versioning import list_versions
 from app.services import workspace
+from stage_seed import add_stage
 
 client = TestClient(app)
 
@@ -115,10 +116,9 @@ def journey_project(tmp_path, monkeypatch):
     create_project(PROJECT, "Flag rows over the threshold and publish totals.",
                    source="smoke test")
     project_dir = tmp_path / PROJECT
-    (project_dir / "compiled").mkdir()
-    for position, stage in enumerate(_workflow_stages(str(authored)), start=1):
-        path = project_dir / "compiled" / f"{position:02d}_{stage['id']}.json"
-        path.write_text(json.dumps(stage), encoding="utf-8")
+    project_dir.mkdir(parents=True, exist_ok=True)
+    for stage in _workflow_stages(str(authored)):
+        add_stage(project_dir, stage)
     return project_dir
 
 

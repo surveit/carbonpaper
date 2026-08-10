@@ -22,7 +22,7 @@ from app.models import (
 from app.models.stages.input_data import Connector, ConnectorKind, InputDataStage
 from app.models.stages.signature import ReplacesSignature
 from app.services import data_model, project, versioning, workspace
-from app.services.loader import load_compiled_dir, write_stage
+from app.services.loader import load_stage_entries, save_stages
 from app.services.project import WorkflowFile, export_project, import_project
 
 _TINY_LIBRARY = SchemaLibrary(schemas=[NamedSchema(
@@ -35,7 +35,7 @@ _TINY_LIBRARY = SchemaLibrary(schemas=[NamedSchema(
 def test_round_trip_through_json_reproduces_the_source_and_mints_a_version(tmp_path):
     """export_project -> to_json -> model_validate_json ->
     import_project under a NEW name into a fresh workspace reproduces the
-    source project's document, data model, and compiled stage, and mints
+    source project's document, data model, and stage, and mints
     exactly one version on import.
 
     A WorkflowFile carries neither review state nor input data (see its
@@ -55,12 +55,8 @@ def test_round_trip_through_json_reproduces_the_source_and_mints_a_version(tmp_p
 
     name = project.create_project(
         "Round Trip Source", "Trace the shell companies.", source="test")
-    pdir = source_examples / name
-
     data_model.write_data_model(name, _TINY_LIBRARY)
 
-    compiled = pdir / "compiled"
-    compiled.mkdir()
     stage = InputDataStage(
         id="load_entities", description="Load Entities", type=StageType.input_data,
         connector=Connector(kind=ConnectorKind.file, params={"format": "csv"}),
@@ -70,7 +66,7 @@ def test_round_trip_through_json_reproduces_the_source_and_mints_a_version(tmp_p
             Column(name="entity_name", type="str", nullable=True),
         ]),
     )
-    write_stage(compiled / "01_load_entities.json", stage)
+    save_stages(name, [stage])
 
     exported = export_project(name)
     wf = WorkflowFile.model_validate_json(exported.to_json())
@@ -87,7 +83,7 @@ def test_round_trip_through_json_reproduces_the_source_and_mints_a_version(tmp_p
     assert imported_library is not None
     assert imported_library.model_dump() == _TINY_LIBRARY.model_dump()
 
-    [entry] = load_compiled_dir(target_pdir / "compiled")
+    [entry] = load_stage_entries(imported_name)
     assert entry.stage is not None
     assert stage_to_spec_dict(entry.stage) == stage_to_spec_dict(stage)
 

@@ -13,6 +13,7 @@ from app.runtime.stages import llm_transform as lt
 from app.services import versioning
 from app.services.project import save_working_copy_as_version
 from conftest import pinned_stages, resumed_stages
+from stage_seed import add_stage
 
 
 # The two shapes the fixtures below load: the (name, val) items csv, and the
@@ -34,15 +35,15 @@ def _seed_version(root):
 
 
 def _one_stage_project(root):
-    (root / "compiled").mkdir(parents=True)
-    (root / "data").mkdir(parents=True)
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "data").mkdir(parents=True, exist_ok=True)
     pd.DataFrame({"name": ["a", "b"], "val": [1, 2]}).to_csv(
         root / "data" / "items.csv", index=False)
     stage = {"id": "load", "description": "Load items", "type": "input_data",
              "connector": {"kind": "file",
                            "params": {"path": str(root / "data" / "items.csv"), "format": "csv"}},
              "signature": {"form": "replaces", "produces": _NAME_VAL_SCHEMA["columns"]}}
-    (root / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
+    add_stage(root, stage)
 
 
 def _two_stage_project(root):
@@ -56,7 +57,7 @@ def _two_stage_project(root):
                },
                "function": {"kind": "inline",
                             "code": "def transform(df):\n    return df\n"}}
-    (root / "compiled" / "02_consume.json").write_text(json.dumps(consume), encoding="utf-8")
+    add_stage(root, consume)
 
 
 def test_cancel_requested_before_run_starts_leaves_the_first_stage_pending(tmp_path):
@@ -120,8 +121,8 @@ def _three_stage_llm_project(root):
     Unlike _two_stage_project's FrameHandler-only 'consume' (which never
     enters the row driver), 'score' is driven by execution.py's row mapper —
     the mid-fan-out cancellation checkpoint under test lives there."""
-    (root / "compiled").mkdir(parents=True)
-    (root / "data").mkdir(parents=True)
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "data").mkdir(parents=True, exist_ok=True)
     pd.DataFrame({"id": [f"r{i}" for i in range(5)], "text": ["hi"] * 5}).to_csv(
         root / "data" / "items.csv", index=False)
     load = {
@@ -155,9 +156,9 @@ def _three_stage_llm_project(root):
         },
         "function": {"kind": "inline", "code": "def transform(df):\n    return df\n"},
     }
-    (root / "compiled" / "01_load.json").write_text(json.dumps(load), encoding="utf-8")
-    (root / "compiled" / "02_score.json").write_text(json.dumps(score), encoding="utf-8")
-    (root / "compiled" / "03_downstream.json").write_text(json.dumps(downstream), encoding="utf-8")
+    add_stage(root, load)
+    add_stage(root, score)
+    add_stage(root, downstream)
 
 
 def test_mid_stage_cancel_marks_the_running_stage_cancelled_not_pending(tmp_path, monkeypatch):

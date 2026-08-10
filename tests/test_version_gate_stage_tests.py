@@ -1,5 +1,4 @@
 """POST /project/{p}/version refuses to snapshot while any stage test is red."""
-import json
 from pathlib import Path
 
 import pytest
@@ -7,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.services import workspace
+from stage_seed import add_stage
 
 _IN_SCHEMA = {"columns": [{"name": "amount", "type": "float", "nullable": False}]}
 _OUT_SCHEMA = {"columns": [
@@ -16,14 +16,14 @@ _OUT_SCHEMA = {"columns": [
 
 
 def _seed_project(root: Path, expected_doubled: float) -> None:
-    compiled = root / "alpha" / "compiled"
-    compiled.mkdir(parents=True)
-    (compiled / "01_load.json").write_text(json.dumps({
+    compiled = root / "alpha"
+    compiled.mkdir(parents=True, exist_ok=True)
+    add_stage(compiled, {
         "id": "load", "description": "Load", "type": "input_data",
         "connector": {"kind": "file"},
         "signature": {"form": "replaces", "produces": _IN_SCHEMA["columns"]},
-    }), encoding="utf-8")
-    (compiled / "02_double.json").write_text(json.dumps({
+    })
+    add_stage(compiled, {
         "id": "double", "description": "Double", "type": "python_row_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
         "signature": {
@@ -38,7 +38,7 @@ def _seed_project(root: Path, expected_doubled: float) -> None:
             "inputs": {"load": [{"amount": 2.0}]},
             "expected": [{"amount": 2.0, "doubled": expected_doubled}],
         }],
-    }), encoding="utf-8")
+    })
 
 
 @pytest.fixture
@@ -67,6 +67,6 @@ def test_green_tests_allow_version(client: TestClient, tmp_path: Path) -> None:
 
 
 def test_project_without_workflow_still_gets_400(client: TestClient, tmp_path: Path) -> None:
-    (tmp_path / "alpha").mkdir()
+    (tmp_path / "alpha").mkdir(parents=True, exist_ok=True)
     response = client.post("/project/alpha/version", data={"message": "v1"})
     assert response.status_code == 400

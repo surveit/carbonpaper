@@ -1,5 +1,5 @@
 """A run page's workflow graph must come from the version the run PINNED, never
-from the live `compiled/` working copy, which drifts as it is edited. When the
+from the live working copy, which drifts as it is edited. When the
 pinned version cannot be resolved the page says so and draws NO graph.
 """
 from __future__ import annotations
@@ -19,6 +19,7 @@ from app.services import versioning
 from app.services import project as project_service
 from app.services.run import load_run_stages
 from conftest import pinned_stages
+from stage_seed import add_stage
 
 client = TestClient(app)
 
@@ -47,11 +48,10 @@ def _input_stage(stage_id: str, name: str, data_path: Path) -> dict:
 @pytest.fixture()
 def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     pdir = tmp_path / PROJECT
-    (pdir / "compiled").mkdir(parents=True)
+    pdir.mkdir(parents=True, exist_ok=True)
     data = pdir / "rows.csv"
     pd.DataFrame({"name": ["a", "b"], "val": [1, 2]}).to_csv(data, index=False)
-    (pdir / "compiled" / "01_load.json").write_text(
-        json.dumps(_input_stage(PINNED_ID, "Pinned stage", data)), encoding="utf-8")
+    add_stage(pdir, _input_stage(PINNED_ID, "Pinned stage", data))
     workspace.set_projects_dir(tmp_path)
     return pdir
 
@@ -65,13 +65,11 @@ def _run_once(project_dir: Path) -> str:
 
 
 def _drift_the_working_copy(project_dir: Path) -> None:
-    """Replace compiled/ with a DIFFERENT valid workflow, as an author editing
+    """Replace the working copy with a DIFFERENT valid workflow, as an author editing
     the project after the run would. Nothing re-versions it, so the run's pinned
     version and the working copy now disagree."""
-    (project_dir / "compiled" / "01_load.json").write_text(
-        json.dumps(_input_stage(DRIFTED_ID, "Drifted stage",
-                                project_dir / "rows.csv")),
-        encoding="utf-8")
+    add_stage(project_dir, _input_stage(DRIFTED_ID, "Drifted stage",
+                                project_dir / "rows.csv"))
 
 
 def _rewrite_manifest(project_dir: Path, run_id: str, **changes: object) -> None:
@@ -81,7 +79,7 @@ def _rewrite_manifest(project_dir: Path, run_id: str, **changes: object) -> None
     path.write_text(json.dumps(manifest), encoding="utf-8")
 
 
-# ─── The regression: the graph tracks the pinned version, not compiled/ ──────
+# ─── The regression: the graph tracks the pinned version, not the copy ──────
 
 def test_run_page_graph_stays_on_the_pinned_version_after_the_working_copy_drifts(
     project: Path,

@@ -20,6 +20,7 @@ from app.web.review_packet.pages import PACKET_MAX_TABLE_ROWS
 from app.web.routers.review_packet import _write_zip
 from app.web.loading import MAX_TABLE_ROWS
 from app.services.review_packet.checksums import compute_sha256
+from stage_seed import add_stage
 
 _PROJECT = "proj"
 
@@ -47,8 +48,8 @@ def exported(project_dir, tmp_path):
 
 
 def _make_project(root):
-    (root / "compiled").mkdir(parents=True)
-    (root / "data").mkdir(parents=True)
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "data").mkdir(parents=True, exist_ok=True)
     pd.DataFrame({"name": ["a", "b"], "val": [1, 2]}).to_csv(
         root / "data" / "items.csv", index=False
     )
@@ -58,7 +59,7 @@ def _make_project(root):
 
 
 def _write_stage(root, filename, stage):
-    (root / "compiled" / filename).write_text(json.dumps(stage), encoding="utf-8")
+    add_stage(root, stage)
 
 
 def _load_stage(root):
@@ -474,7 +475,7 @@ def _client():
 def test_the_packet_zip_trades_bytes_for_speed_on_compression(tmp_path):
     # Level 1 over the default 6, so a silent revert shows up as a smaller file.
     root = tmp_path / "packet-root"
-    root.mkdir()
+    root.mkdir(parents=True, exist_ok=True)
     payload = ("registrant,client,amount\n" * 8000).encode()
     (root / "big.csv").write_bytes(payload)
     archive = tmp_path / "a.zip"

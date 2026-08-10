@@ -13,6 +13,9 @@ import app.web.loading as loading
 import app.services.run as run_service
 from app.main import app
 from app.services import workspace
+from app.models.named_schemas import NamedSchema
+from app.services.data_model import DataModel
+from stage_seed import add_stage
 
 client = TestClient(app)
 
@@ -53,15 +56,10 @@ def demo_project(tmp_path, monkeypatch):
     """A demo project on disk (a compiled two-stage workflow + a one-schema data
     model), with the projects root pointed at it via set_projects_dir."""
     demo = tmp_path / "demo"
-    compiled = demo / "compiled"
-    compiled.mkdir(parents=True)
-    (compiled / "01_load.json").write_text(json.dumps(_load(tmp_path), indent=2), encoding="utf-8")
-    (compiled / "02_extract.json").write_text(json.dumps(_EXTRACT, indent=2), encoding="utf-8")
-    schemas = demo / "schemas"
-    schemas.mkdir()
-    (schemas / "01_documents.json").write_text(
-        json.dumps(_SCHEMA, indent=2), encoding="utf-8"
-    )
+    demo.mkdir(parents=True, exist_ok=True)
+    add_stage(demo, _load(tmp_path))
+    add_stage(demo, _EXTRACT)
+    DataModel(id="demo", schemas=[NamedSchema.model_validate(_SCHEMA)]).save()
     workspace.set_projects_dir(tmp_path)
     return tmp_path
 

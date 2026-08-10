@@ -4,7 +4,6 @@ and redirects to that detail page, and the run trigger explains the published
 gate."""
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
@@ -14,6 +13,7 @@ from app.main import app
 from app.services import versioning
 from app.services import project as project_service
 from app.services import workspace
+from stage_seed import add_stage
 
 client = TestClient(app)
 
@@ -34,9 +34,9 @@ _STAGE = {
 @pytest.fixture()
 def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     pdir = tmp_path / "demo"
-    compiled = pdir / "compiled"
-    compiled.mkdir(parents=True)
-    (compiled / "01_load.json").write_text(json.dumps(_STAGE), encoding="utf-8")
+    compiled = pdir
+    compiled.mkdir(parents=True, exist_ok=True)
+    add_stage(compiled, _STAGE)
     workspace.set_projects_dir(tmp_path)
     return pdir
 

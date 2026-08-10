@@ -1,110 +1,140 @@
-"""Load + save for a project's compiled stage files.
+"""Load + save for a project's WORKING COPY — its mutable list of stages.
 
-One JSON file per stage under `<project>/compiled/`. This module is the ONE place
-that reaches the disk for them: nothing else globs `compiled/*.json`.
+One `working_copy` document per project, keyed by project name. This module is
+the ONE place that reaches the store for it: nothing else names the collection.
 """
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import ClassVar
 
-from pydantic import ValidationError
+from pydantic import Field, ValidationError
 
+from app.core.errors import DocumentNotFound
 from app.core.paths import repo_root
-from app.models.workflow import Workflow, validate_workflow
-from app.models.stage import Stage, parse_stage, stage_to_json
+from app.core.persistence import (
+    JsonDict,
+    PersistedModel,
+    PersistenceScope,
+    get_store,
+)
+from app.models.stage import STAGE_SPEC_SCHEMA_VERSION, Stage, parse_stage, stage_to_spec_dict
 from app.models.stages.code import PythonFunction
 from app.models.stages.starlark import StarlarkFunction
+from app.models.workflow import Workflow, validate_workflow
 from app.core.utils import format_errors
 
 from .errors import WorkflowLoadError
 
-# Keys the loaders inject onto a loaded stage/schema dict for their own
-# bookkeeping — never part of the spec, so a writer must strip them before
-# validating or persisting (both spec models are `extra="forbid"`).
-LOADER_BOOKKEEPING_KEYS: set[str] = {"_filename", "_order", "_error"}
+
+class WorkingCopy(PersistedModel):
+    """A project's mutable stage list, `id`'d by project name."""
+
+    collection: ClassVar[str] = "working_copy"
+    SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
+    SCHEMA_VERSION: ClassVar[int] = STAGE_SPEC_SCHEMA_VERSION
+    # The same spec-dict shape WorkflowVersion freezes its stages in, so a stage
+    # reads identically in the working copy and in a version cut from it.
+    DUMP_OPTS: ClassVar[JsonDict] = {"by_alias": True, "exclude_none": True}
+
+    stages: list[Stage] = Field(default_factory=list)
 
 
 @dataclass
-class CompiledStageFile:
-    """One compiled file: its parsed Stage (None if invalid) and any issues."""
-    filename: str
+class StageEntry:
+    """One stored stage: its parsed Stage (None if invalid) and any issues."""
+    label: str
     stage: Stage | None = None
     issues: list[str] = field(default_factory=list)
 
 
-def list_stage_files(compiled_dir: Path) -> list[Path]:
-    """Every compiled stage file in `compiled_dir`, in filename order — the ONE
-    definition of which files are stages, so callers never glob the dir themselves.
-    An absent dir lists as empty: a project has no stage files until its first stage
-    is written. Says nothing about whether the files parse or validate."""
-    return sorted(compiled_dir.glob("*.json"))
+def exists(project: str) -> bool:
+    """Whether a working copy is stored; says nothing about whether it validates."""
+    return WorkingCopy.exists(project)
 
 
-def load_compiled_dir(compiled_dir: Path) -> list[CompiledStageFile]:
-    entries: list[CompiledStageFile] = []
-    for f in list_stage_files(compiled_dir):
-        entry = CompiledStageFile(filename=f.name)
-        entries.append(entry)
+def load_stage_entries(project: str) -> list[StageEntry]:
+    """Parsed per stage, so ONE invalid stage is an issue, not an exception."""
+    entries: list[StageEntry] = []
+    for index, spec in enumerate(read_stage_specs(project)):
+        label = _label(spec, index)
         try:
-            data = json.loads(f.read_text(encoding="utf-8"))
-        except json.JSONDecodeError as exc:
-            entry.issues.append(f"JSON parse error: {exc}")
-            continue
-        if not data:
-            entry.issues.append("file contains no stage object")
-            continue
-        try:
-            entry.stage = parse_stage(data)
+            entries.append(StageEntry(label=label, stage=parse_stage(spec)))
         except ValidationError as err:
-            entry.issues.extend(format_errors(err))
+            entries.append(StageEntry(label=label, issues=format_errors(err)))
     return entries
 
 
-def load_workflow_object(project_dir: Path) -> Workflow:
-    """Strict load of a project's compiled workflow as one in-memory `Workflow`
-    object: parse every stage, collect ALL issues (per-file schema errors and
-    cross-stage graph problems), and raise WorkflowLoadError if the dir is empty or
-    anything is invalid — so the runner and version snapshotter refuse to execute or
-    freeze an unloadable workflow. The single strict entry point; `load_workflow`
-    (the list accessor) delegates here."""
-    compiled_dir = project_dir / "compiled"
-    entries = load_compiled_dir(compiled_dir)
-    issues = [f"{e.filename}: {i}" for e in entries for i in e.issues]
+def load_workflow_object(project: str) -> Workflow:
+    """Strict load of a project's working copy as one in-memory `Workflow` object:
+    parse every stage, collect ALL issues (per-stage schema errors and cross-stage
+    graph problems), and raise WorkflowLoadError if it is empty or anything is
+    invalid — so the runner and version snapshotter refuse to execute or freeze an
+    unloadable workflow. The single strict entry point; `load_workflow` (the list
+    accessor) delegates here."""
+    entries = load_stage_entries(project)
+    issues = [f"{e.label}: {i}" for e in entries for i in e.issues]
     if not entries:
-        issues.append(f"no compiled stage files found in {compiled_dir}")
+        issues.append(f"project '{project}' has no stages")
     stages = [e.stage for e in entries if e.stage is not None]
     issues += validate_workflow(stages)
     if issues:
-        raise WorkflowLoadError(compiled_dir, issues)
+        raise WorkflowLoadError(f"project {project!r} working copy", issues)
     return Workflow(stages=stages)
 
 
-def load_workflow(project_dir: Path) -> list[Stage]:
+def load_workflow(project: str) -> list[Stage]:
     """The workflow's validated stages, for callers that want the list (the runner,
     the version snapshotter). Strict — delegates to `load_workflow_object`."""
-    return load_workflow_object(project_dir).stages
+    return load_workflow_object(project).stages
 
 
-# ─── Find & save ─────────────────────────────────────────────────────────────
+# ─── Raw specs & save ────────────────────────────────────────────────────────
 
-def find_stage_file(compiled_dir: Path, stage_id: str) -> Path | None:
-    """The compiled file whose stage carries this id, or None. Reads each file
-    only far enough to match the id (one stage per file, by convention)."""
-    for f in list_stage_files(compiled_dir):
-        try:
-            data = json.loads(f.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
-            continue
-        if isinstance(data, dict) and data.get("id") == stage_id:
-            return f
-    return None
+def read_stage_specs(project: str) -> list[JsonDict]:
+    """The stored stage specs, unvalidated and in order; [] when unstored."""
+    try:
+        # Strict `read`: an ABSENT working copy is a real empty answer, but an
+        # unparseable one is corruption and must raise rather than read as empty
+        # and let an edit build on a workflow it never saw.
+        document = get_store().read(WorkingCopy.collection, project)
+    except DocumentNotFound:
+        return []
+    stages = document.get("stages")
+    return [s for s in stages if isinstance(s, dict)] if isinstance(stages, list) else []
 
 
-def write_stage(path: Path, stage: Stage) -> None:
-    """Persist one validated stage to `path` as on-disk JSON."""
-    path.write_text(stage_to_json(stage), encoding="utf-8")
+def save_stages(project: str, stages: list[Stage]) -> None:
+    """A whole-list write, so a removal leaves nothing behind."""
+    stored = WorkingCopy.load_or_none(project)
+    # A fresh record, not a mutated one: `.stages` is never assigned from outside
+    # app/models (tests/arch/test_model_encapsulation.py). `created_at` carries
+    # forward so it keeps meaning first-authored.
+    born = {"created_at": stored.created_at} if stored is not None else {}
+    WorkingCopy(id=project, stages=stages, **born).save()
+
+
+def save_stage_specs(project: str, specs: list[JsonDict]) -> None:
+    """Raises `pydantic.ValidationError` if any spec is not a stage."""
+    save_stages(project, [parse_stage(spec) for spec in specs])
+
+
+def find_stage(project: str, stage_id: str) -> Stage | None:
+    """The stored stage carrying this id, or None."""
+    return next((e.stage for e in load_stage_entries(project)
+                 if e.stage is not None and e.stage.id == stage_id), None)
+
+
+def _label(spec: JsonDict, index: int) -> str:
+    """How an issue names its stage: the id, or the position when there is none."""
+    stage_id = spec.get("id")
+    return stage_id if isinstance(stage_id, str) and stage_id else f"stage #{index + 1}"
+
+
+def stage_specs_by_id(project: str) -> dict[str, JsonDict]:
+    """`{id: spec dict}` — the map the stage editor validates a change against."""
+    return {stage.id: stage_to_spec_dict(stage) for stage in load_workflow(project)}
 
 
 # ─── Source & code reads ─────────────────────────────────────────────────────
@@ -138,3 +168,4 @@ def resolve_function_code(stage_def: Stage | None) -> str | None:
     if fn.kind == "inline":
         return fn.code
     return None
+

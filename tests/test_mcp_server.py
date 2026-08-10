@@ -11,8 +11,9 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from app.models import parse_stage, StageDraft
+from app.models import StageDraft
 from app.services import workspace
+from stage_seed import read_stages, set_stages
 
 HEADERS = {
     "Accept": "application/json, text/event-stream",
@@ -109,7 +110,7 @@ def test_generate_data_model_without_document_fails_loudly(tmp_path, monkeypatch
     from app.mcp import server
 
     workspace.set_projects_dir(tmp_path)
-    (tmp_path / "empty_proj").mkdir()
+    (tmp_path / "empty_proj").mkdir(parents=True, exist_ok=True)
     with pytest.raises(ValueError):
         asyncio.run(server.generate_data_model(project_id="empty_proj"))
 
@@ -129,14 +130,9 @@ _LOAD_STAGE = StageDraft.model_validate({
 })
 
 
-def _write_compiled_workflow(pdir: Path) -> None:
-    """A minimal 3-stage compiled workflow: an input_data source, a
-    python_row_function with one passing + one failing test, and an untested
-    python transform (the coverage gap run_stage_tests should surface)."""
-    from app.services.loader import write_stage
-
-    compiled = pdir / "compiled"
-    compiled.mkdir(parents=True)
+def _store_workflow(pdir: Path) -> None:
+    """A source, a row function with one passing + one failing test, and an untested one."""
+    pdir.mkdir(parents=True, exist_ok=True)
     stages: list[dict[str, object]] = [
         {"id": "load", "description": "Load", "type": "input_data", "connector": {"kind": "file"},
          "signature": {"form": "replaces", "produces": _IN_SCHEMA["columns"]}},
@@ -161,8 +157,7 @@ def _write_compiled_workflow(pdir: Path) -> None:
          },
          "function": {"kind": "inline", "code": _DOUBLE}},
     ]
-    for spec in stages:
-        write_stage(compiled / f"{spec['id']}.json", parse_stage(spec))
+    set_stages(pdir, stages)
 
 
 def test_run_stage_tests_reports_summary_diffs_and_coverage(tmp_path, monkeypatch):
@@ -170,7 +165,7 @@ def test_run_stage_tests_reports_summary_diffs_and_coverage(tmp_path, monkeypatc
 
     workspace.set_projects_dir(tmp_path)
     pdir = tmp_path / "trail"
-    _write_compiled_workflow(pdir)
+    _store_workflow(pdir)
 
     report = server.run_stage_tests(project_id="trail")
     assert set(report) == {"summary", "stages", "untested_stages"}
@@ -187,7 +182,7 @@ def test_run_stage_tests_scopes_to_one_stage(tmp_path, monkeypatch):
 
     workspace.set_projects_dir(tmp_path)
     pdir = tmp_path / "trail"
-    _write_compiled_workflow(pdir)
+    _store_workflow(pdir)
 
     report = server.run_stage_tests(project_id="trail", stage_id="double")
     assert report["summary"]["tests_total"] == 2
@@ -217,16 +212,16 @@ def test_mcp_remove_stage_returns_ok_and_issues(tmp_path, monkeypatch):
 
     workspace.set_projects_dir(tmp_path)
     pdir = tmp_path / "trail"
-    _write_compiled_workflow(pdir)
+    _store_workflow(pdir)
 
     removed = server.remove_stage(project_id="trail", stage_id="untested")
     assert removed == {"ok": True, "issues": []}
-    assert not (pdir / "compiled" / "untested.json").exists()
+    assert "untested" not in {s["id"] for s in read_stages(pdir)}
 
     # `double` still inputs from `load`, so removing `load` is refused with issues.
     refused = server.remove_stage(project_id="trail", stage_id="load")
     assert refused["ok"] is False and refused["issues"]
-    assert (pdir / "compiled" / "load.json").exists()
+    assert "load" in {s["id"] for s in read_stages(pdir)}
 
 
 def test_mcp_stage_tools_report_an_unknown_stage_id_as_issues(tmp_path, monkeypatch):
@@ -235,7 +230,7 @@ def test_mcp_stage_tools_report_an_unknown_stage_id_as_issues(tmp_path, monkeypa
     from app.mcp import server
 
     workspace.set_projects_dir(tmp_path)
-    _write_compiled_workflow(tmp_path / "trail")
+    _store_workflow(tmp_path / "trail")
 
     removed = server.remove_stage(project_id="trail", stage_id="ghost")
     assert removed["ok"] is False and any("ghost" in i for i in removed["issues"])
@@ -245,21 +240,21 @@ def test_mcp_stage_tools_report_an_unknown_stage_id_as_issues(tmp_path, monkeypa
 
 
 def test_mcp_add_stage_reports_an_unloadable_workflow_as_issues(tmp_path, monkeypatch):
-    """A compiled/ dir that holds a broken stage file still refuses the write — and
-    the refusal reaches the client on the documented {ok: False, issues} channel."""
+    """A working copy holding a broken stage still refuses the write — and the
+    refusal reaches the client on the documented {ok: False, issues} channel."""
     from app.mcp import server
 
     workspace.set_projects_dir(tmp_path)
-    compiled = tmp_path / "trail" / "compiled"
-    compiled.mkdir(parents=True)
-    (compiled / "broken.json").write_text('{"id": "broken", "type": "not_a_real_type"}', encoding="utf-8")
+    pdir = tmp_path / "trail"
+    pdir.mkdir(parents=True, exist_ok=True)
+    set_stages(pdir, [{"id": "broken", "type": "not_a_real_type"}])
 
     added = server.add_stage(
         project_id="trail",
         stages=[_LOAD_STAGE],
     )
     assert added["ok"] is False and added["issues"]
-    assert not (compiled / "load.json").exists()
+    assert "load" not in {s["id"] for s in read_stages(pdir)}
 
 
 def test_mcp_add_stage_refuses_to_invent_a_project(tmp_path, monkeypatch):
@@ -363,7 +358,7 @@ def test_mcp_add_stage_refuses_an_invalid_stage_on_the_issues_channel(tmp_path, 
     from app.mcp import server
 
     workspace.set_projects_dir(tmp_path)
-    _write_compiled_workflow(tmp_path / "trail")
+    _store_workflow(tmp_path / "trail")
 
     _content, refused = asyncio.run(
         server.mcp.call_tool("add_stage", {"project_id": "trail", "stages": [_UNADDITIVE_LLM_STAGE]})
@@ -371,7 +366,7 @@ def test_mcp_add_stage_refuses_an_invalid_stage_on_the_issues_channel(tmp_path, 
 
     assert refused["ok"] is False
     assert any("prompt template" in issue for issue in refused["issues"])
-    assert not (tmp_path / "trail" / "compiled" / "score.json").exists()
+    assert "score" not in {s["id"] for s in read_stages(tmp_path / "trail")}
 
 
 def test_add_stage_input_schema_omits_the_server_owned_fields(tmp_path, monkeypatch):
@@ -387,7 +382,7 @@ def test_add_stage_input_schema_omits_the_server_owned_fields(tmp_path, monkeypa
 
 
 def test_mcp_save_version_snapshots_the_working_copy_unpublished(tmp_path, monkeypatch):
-    """save_version freezes the CURRENT compiled workflow into a version the agent
+    """save_version freezes the CURRENT working copy into a version the agent
     owns end-to-end — but publishing stays human-only, so the snapshot is born
     unpublished."""
     from app.mcp import server
@@ -395,7 +390,7 @@ def test_mcp_save_version_snapshots_the_working_copy_unpublished(tmp_path, monke
 
     workspace.set_projects_dir(tmp_path)
     pdir = tmp_path / "trail"
-    _write_compiled_workflow(pdir)
+    _store_workflow(pdir)
 
     saved = server.save_version(project_id="trail", message="first cut")
     assert saved["ok"] is True and saved["issues"] == []
@@ -418,7 +413,7 @@ def test_mcp_save_version_omitting_the_parent_records_none(tmp_path, monkeypatch
 
     workspace.set_projects_dir(tmp_path)
     pdir = tmp_path / "trail"
-    _write_compiled_workflow(pdir)
+    _store_workflow(pdir)
 
     server.save_version(project_id="trail", message="first cut")
     time.sleep(1)  # version ids are second-resolution timestamps
@@ -436,7 +431,7 @@ def test_mcp_save_version_records_the_caller_supplied_parent(tmp_path, monkeypat
 
     workspace.set_projects_dir(tmp_path)
     pdir = tmp_path / "trail"
-    _write_compiled_workflow(pdir)
+    _store_workflow(pdir)
 
     first = server.save_version(project_id="trail", message="first cut")
     time.sleep(1)  # version ids are second-resolution timestamps
@@ -457,7 +452,7 @@ def test_mcp_save_version_refuses_a_parent_that_does_not_exist(tmp_path, monkeyp
 
     workspace.set_projects_dir(tmp_path)
     pdir = tmp_path / "trail"
-    _write_compiled_workflow(pdir)
+    _store_workflow(pdir)
 
     server.save_version(project_id="trail", message="first cut")
     before = [v.version_id for v in versioning.list_versions(pdir)]
@@ -480,9 +475,8 @@ def test_mcp_save_version_refuses_an_unloadable_working_copy(tmp_path, monkeypat
 
     workspace.set_projects_dir(tmp_path)
     pdir = tmp_path / "trail"
-    (pdir / "compiled").mkdir(parents=True)
-    (pdir / "compiled" / "broken.json").write_text(
-        '{"id": "broken", "type": "not_a_real_type"}', encoding="utf-8")
+    pdir.mkdir(parents=True, exist_ok=True)
+    set_stages(pdir, [{"id": "broken", "type": "not_a_real_type"}])
 
     refused = server.save_version(project_id="trail", message="doomed")
     assert refused["ok"] is False and refused["issues"]
@@ -505,7 +499,7 @@ def _saved_version(tmp_path, monkeypatch) -> str:
     from app.services import workspace
 
     workspace.set_projects_dir(tmp_path)
-    _write_compiled_workflow(tmp_path / "trail")
+    _store_workflow(tmp_path / "trail")
     return server.save_version(project_id="trail", message="first cut")["version_id"]
 
 

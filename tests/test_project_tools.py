@@ -12,6 +12,7 @@ from app.models.review_guide import ReviewGuideDraft, ReviewGuideStep
 from app.services.versioning import ReviewGuide
 from app.services import workspace
 from app.services.project import Project
+from stage_seed import add_stage, read_stage
 
 # Minimal valid config block per stage type (app/models/stage.py:
 # each type's stage model declares the ones it requires). Mirrors
@@ -71,11 +72,9 @@ def _stage(sid: str, name: str, stype: str, inputs: list[str] | None = None) -> 
 def _seed(examples: Path, name: str) -> Path:
     """A project on disk AND in the store. Identity is the Project record, so a
     staged directory alone is not a project — list_projects() reads the store."""
-    compiled = examples / name / "compiled"
-    compiled.mkdir(parents=True, exist_ok=True)
-    (compiled / "01_load.json").write_text(
-        json.dumps(_stage("load", "Load rows", "input_data")), encoding="utf-8"
-    )
+    pdir = examples / name
+    pdir.mkdir(parents=True, exist_ok=True)
+    add_stage(pdir, _stage("load", "Load rows", "input_data"))
     Project(id=name).save()
     return examples / name
 
@@ -112,18 +111,18 @@ def test_edit_stage_tool_writes_and_reports_ok(examples_root: Path) -> None:
     # The tool reports only ok + issues; the node's review colour is computed by the
     # review layer, not returned by the writer.
     assert out["ok"] is True and out == {"ok": True, "issues": []}
-    assert "Load rows v2" in (pdir / "compiled" / "01_load.json").read_text(encoding="utf-8")
+    assert read_stage(pdir, "load")["description"] == "Load rows v2"
 
 
 def test_edit_stage_tool_invalid_writes_nothing_and_reports_issues(examples_root: Path) -> None:
     pdir = _seed(examples_root, "alpha")
-    before = (pdir / "compiled" / "01_load.json").read_text(encoding="utf-8")
+    before = read_stage(pdir, "load")
     tools = _tools("alpha")
     out = _tool(tools, "edit_stage")(
         "alpha", "load", json.dumps({"id": "load", "description": "x", "type": "not_a_real_type"})
     )
     assert out["ok"] is False and out["issues"]
-    assert (pdir / "compiled" / "01_load.json").read_text(encoding="utf-8") == before
+    assert read_stage(pdir, "load") == before
 
 
 def test_project_id_cannot_escape_the_workspace(examples_root: Path) -> None:

@@ -1,9 +1,9 @@
 """Bring a project working copy's on-disk artifacts into the document store.
 
 Alembic reaches the store's JSON payloads; the artifacts still under
-`<project>/schemas/` were never in it. This is their one-way path in: read each
-project directory, validate what it holds, and save it as the document today's
-code reads.
+`<project>/schemas/` and `<project>/compiled/` were never in it. This is their
+one-way path in: read each project directory, validate what it holds, and save
+it as the document today's code reads.
 
 Refuses a project it cannot determine rather than storing a guess — a refusal
 names the project and why, and never holds back the projects that did import.
@@ -22,17 +22,20 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from app.core.paths import repo_root
+from app.core.persistence import PersistedModel
 from app.core.store_config import configure_default_stores
 from app.core.utils import format_errors
 from app.models.named_schemas import NamedSchema
+from app.models.stage import parse_stage
 from app.services.data_model import DataModel
+from app.services.loader import WorkingCopy
 
 
 @dataclass
 class ImportPlan:
     """What one pass would store, and the projects it refuses with why."""
 
-    records: list[DataModel] = field(default_factory=list)
+    records: list[PersistedModel] = field(default_factory=list)
     refused: list[str] = field(default_factory=list)
 
 
@@ -51,13 +54,35 @@ def main() -> None:
 
 
 def plan_import(projects_dir: Path) -> ImportPlan:
-    """Every data model this can bring into the store, and the refusals."""
+    """Every record this can bring into the store, and the refusals."""
     plan = ImportPlan()
     if not projects_dir.is_dir():
         return plan
     for project_dir in sorted(p for p in projects_dir.iterdir() if p.is_dir()):
         _plan_data_model(project_dir, plan)
+        _plan_working_copy(project_dir, plan)
     return plan
+
+
+def _plan_working_copy(project_dir: Path, plan: ImportPlan) -> None:
+    """`<project>/compiled/*.json` as one WorkingCopy record, or a refusal."""
+    compiled_dir = project_dir / "compiled"
+    if not compiled_dir.is_dir():
+        return
+    stages = []
+    for path in sorted(compiled_dir.glob("*.json")):
+        try:
+            stages.append(parse_stage(_read_spec(path)))
+        except json.JSONDecodeError as exc:
+            plan.refused.append(f"{project_dir.name}/compiled/{path.name}: JSON parse error: {exc}")
+            return
+        except ValidationError as exc:
+            plan.refused.append(
+                f"{project_dir.name}/compiled/{path.name}: {'; '.join(format_errors(exc))}"
+            )
+            return
+    if stages:
+        plan.records.append(WorkingCopy(id=project_dir.name, stages=stages))
 
 
 def _plan_data_model(project_dir: Path, plan: ImportPlan) -> None:
@@ -82,8 +107,8 @@ def _plan_data_model(project_dir: Path, plan: ImportPlan) -> None:
 
 
 def _read_spec(path: Path) -> dict[str, object]:
-    """One schema file's spec — the `_`-prefixed keys the old on-disk reader
-    injected are bookkeeping, and NamedSchema forbids extras."""
+    """One file's spec — the `_`-prefixed keys the old on-disk readers injected
+    are bookkeeping, and both spec models forbid extras."""
     document = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(document, dict):
         raise ValidationError.from_exception_data("NamedSchema", [])
@@ -94,11 +119,19 @@ def _report(plan: ImportPlan, *, apply: bool) -> None:
     for line in plan.refused:
         print(f"REFUSED  {line}")
     if not plan.records:
-        print("no on-disk data model left to import")
+        print("no on-disk artifact left to import")
         return
-    print(f"{len(plan.records)} data model(s) {'-> storing' if apply else '(dry run)'}:")
+    print(f"{len(plan.records)} record(s) {'-> storing' if apply else '(dry run)'}:")
     for record in plan.records:
-        print(f"  {record.id}: {len(record.schemas)} schema(s)")
+        print(f"  {record.collection}/{record.id}: {_size_of(record)}")
+
+
+def _size_of(record: PersistedModel) -> str:
+    if isinstance(record, DataModel):
+        return f"{len(record.schemas)} schema(s)"
+    if isinstance(record, WorkingCopy):
+        return f"{len(record.stages)} stage(s)"
+    raise TypeError(f"no size known for {type(record).__name__}")
 
 
 if __name__ == "__main__":

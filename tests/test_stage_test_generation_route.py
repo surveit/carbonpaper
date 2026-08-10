@@ -3,7 +3,6 @@ POST and the follow-up status polls; the faked turn runs on that same loop.
 """
 from __future__ import annotations
 
-import json
 import time
 from pathlib import Path
 from typing import Any
@@ -22,6 +21,7 @@ from app.models.stages.stage_tests import (
 )
 from app.main import app
 from app.services import workspace
+from stage_seed import add_stage, read_stage, set_stages
 
 _IN_SCHEMA = {"columns": [{"name": "amount", "type": "float", "nullable": False}]}
 _OUT_SCHEMA = {"columns": [
@@ -36,15 +36,15 @@ def _seed_project(root: Path) -> Path:
     are generated for; `publish` and `load` are non-python controls for the
     button/template assertions."""
     project_dir = root / "alpha"
-    project_dir.mkdir(parents=True)
+    project_dir.mkdir(parents=True, exist_ok=True)
     (project_dir / "document.md").write_text("Double the amount.", encoding="utf-8")
-    compiled = project_dir / "compiled"
-    compiled.mkdir()
-    (compiled / "01_load.json").write_text(json.dumps({
+    pdir = project_dir
+    pdir.mkdir(parents=True, exist_ok=True)
+    add_stage(pdir, {
         "id": "load", "description": "Load", "type": "input_data",
         "connector": {"kind": "file"}, "signature": {"form": "replaces", "produces": _IN_SCHEMA["columns"]},
-    }), encoding="utf-8")
-    (compiled / "02_double.json").write_text(json.dumps({
+    })
+    add_stage(pdir, {
         "id": "double", "description": "Double", "type": "python_row_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
         "signature": {
@@ -54,13 +54,13 @@ def _seed_project(root: Path) -> Path:
         },
         "function": {"kind": "inline", "summary": "Test fixture step.", "corner_cases": [],
                      "code": "def transform(row):\n    return {**row, 'doubled': row['amount'] * 2}\n"},
-    }), encoding="utf-8")
-    (compiled / "03_publish.json").write_text(json.dumps({
+    })
+    add_stage(pdir, {
         "id": "publish", "description": "Publish", "type": "publish",
         "inputs": [{"id": "double", "schema": _OUT_SCHEMA}],
         "function": {"kind": "inline", "summary": "Test fixture step.", "corner_cases": [], "code": "def transform(df, output_dir):\n    return df\n"},
         "publish": {}, "signature": {"form": "replaces"},
-    }), encoding="utf-8")
+    })
     return project_dir
 
 
@@ -172,7 +172,7 @@ def test_generate_tests_generates_and_patches_the_stage(client: TestClient, tmp_
     status = _poll_until_inactive(client, "alpha", sid)
     assert status["error"] is None
 
-    stage = json.loads((project_dir / "compiled" / "02_double.json").read_text(encoding="utf-8"))
+    stage = read_stage(project_dir, "double")
     assert stage["tests"][0]["name"] == "doubles_two"
 
 
@@ -201,19 +201,19 @@ def test_status_reports_error_after_failed_generation(client: TestClient, tmp_pa
 
     assert status["error"] is not None
     assert status["error"].startswith(GENERATION_FAILURE_PREFIX)
-    stage = json.loads((project_dir / "compiled" / "02_double.json").read_text(encoding="utf-8"))
+    stage = read_stage(project_dir, "double")
     assert "tests" not in stage  # nothing written on a failed generation
 
 
 def test_generate_tests_rejects_python_stage_without_a_signature(client: TestClient, tmp_path: Path):
     """A stage with no signature does not parse, so the route 400s while loading."""
     project_dir = _seed_project(tmp_path)
-    (project_dir / "compiled" / "02_double.json").write_text(json.dumps({
+    add_stage(project_dir, {
         "id": "double", "description": "Double", "type": "python_row_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
         "function": {"kind": "inline", "summary": "Test fixture step.", "corner_cases": [],
                      "code": "def transform(row):\n    return {**row, 'doubled': row['amount'] * 2}\n"},
-    }), encoding="utf-8")
+    })
     before = len(SessionStore().list_sessions())
 
     response = client.post("/project/alpha/node/double/generate-tests")
@@ -224,17 +224,17 @@ def test_generate_tests_rejects_python_stage_without_a_signature(client: TestCli
 
 
 def test_generate_tests_maps_workflow_load_error_to_400(client: TestClient, tmp_path: Path):
-    """A project whose compiled/ workflow fails to load (here: one stage file holds
+    """A project whose workflow fails to load (here: one stage holds
     invalid JSON) makes `generation.start_stage_test_generation`'s `load_workflow`
     call raise `WorkflowLoadError` — the route must map that to 400, the same as the
     ValueError cases above, not let it propagate as an uncaught 500."""
     _seed_project(tmp_path)
-    (tmp_path / "alpha" / "compiled" / "01_load.json").write_text("{not valid json", encoding="utf-8")
+    set_stages(tmp_path / "alpha", [{"id": "load", "type": "not_a_real_type"}])
 
     response = client.post("/project/alpha/node/double/generate-tests")
 
     assert response.status_code == 400
-    assert "JSON parse error" in response.json()["detail"]
+    assert "not_a_real_type" in response.json()["detail"]
 
 
 def test_status_unknown_session_is_404(client: TestClient, tmp_path: Path):

@@ -24,7 +24,12 @@ from app.models.run_manifest import (
 )
 from app.runtime.manifest import resolve_output_path
 from app.services.run import resolve_version
-from app.services.loader import CompiledStageFile, load_compiled_dir
+from app.services.loader import (
+    StageEntry,
+    exists as has_working_copy,
+    load_stage_entries,
+    read_stage_specs,
+)
 from app.services.versioning import list_versions, load_version_stages
 from app.services.data_model import load_schemas
 from app.services.workspace import resolve_project_dir
@@ -64,8 +69,7 @@ def list_projects() -> list[dict[str, Any]]:
 def _build_project_card(p: Path) -> dict[str, Any] | None:
     """One project dir's dashboard card, or None if `p` carries none of the
     creation markers (document/workflow/schemas) and so is not a project."""
-    compiled_dir = p / "compiled"
-    n_stages = len(list(compiled_dir.glob("*.json"))) if compiled_dir.is_dir() else 0
+    n_stages = len(read_stage_specs(p.name))
     has_workflow = n_stages > 0
     n_schemas = len(load_schemas(p.name))
     has_schemas = n_schemas > 0
@@ -103,40 +107,33 @@ def _manifest_counts_as_run(run_dir: Path) -> bool:
 
 @dataclass
 class StageListing:
-    """Compiled stages for the viewer. All-or-nothing: if every file is valid,
-    `stages` holds them and `issues` is empty; if ANY file is invalid, `stages`
-    is empty and `issues` names the broken files. `order` maps stage id →
-    filename order prefix (empty when there are issues)."""
+    """The working copy's stages for the viewer. All-or-nothing: if every stage is
+    valid, `stages` holds them and `issues` is empty; if ANY is invalid, `stages`
+    is empty and `issues` names the broken ones."""
     stages: list[Stage]
-    issues: list[CompiledStageFile]
-    order: dict[str, str]
+    issues: list[StageEntry]
 
 
 def load_stages(project: str) -> StageListing:
-    compiled_dir = projects_dir() / project / "compiled"
-    if not compiled_dir.is_dir():
-        raise HTTPException(status_code=404, detail=f"No compiled stages for {project}")
-    entries = load_compiled_dir(compiled_dir)
+    if not has_working_copy(project):
+        raise HTTPException(status_code=404, detail=f"No workflow for {project}")
+    entries = load_stage_entries(project)
     issues = [e for e in entries if e.issues]
     if issues:
-        # One invalid file breaks the whole workflow — its edges no longer
+        # One invalid stage breaks the whole workflow — its edges no longer
         # resolve, so the surviving stages form a workflow with holes. Rendering that
         # is "unusable but lies." Return no stages, only the issues, so the
         # viewer shows what's broken instead of a false graph.
-        return StageListing(stages=[], issues=issues, order={})
-    stages = [e.stage for e in entries if e.stage is not None]
-    order = {e.stage.id: e.filename.split("_", 1)[0]
-             for e in entries if e.stage is not None}
-    return StageListing(stages=stages, issues=[], order=order)
+        return StageListing(stages=[], issues=issues)
+    return StageListing(stages=[e.stage for e in entries if e.stage is not None], issues=[])
 
 
 def load_stages_or_empty(project: str) -> StageListing:
     """Like load_stages, but returns an EMPTY listing instead of 404 when the project
-    has no compiled/ workflow yet. For the shell's workflow section, which renders the
+    has no workflow yet. For the shell's workflow section, which renders the
     locked/empty page (not an error) for a project that has no workflow authored."""
-    compiled_dir = projects_dir() / project / "compiled"
-    if not compiled_dir.is_dir():
-        return StageListing(stages=[], issues=[], order={})
+    if not has_working_copy(project):
+        return StageListing(stages=[], issues=[])
     return load_stages(project)
 
 

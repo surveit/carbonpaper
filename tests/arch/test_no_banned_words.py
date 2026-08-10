@@ -11,7 +11,7 @@ from pathlib import Path
 from arch import find_banned_words, scan_all_text
 
 # "canonical to whom, by what rule?" — say what actually holds: a sorted-key JSON
-# dump, the spec-dict form, the on-disk text, LOADER_BOOKKEEPING_KEYS.
+# dump, the spec-dict form, the stored payload shape.
 #
 # "deriv*" — we do not derive anything here. An LLM turn that writes a stage's
 # example test cases GENERATES them (test generation). A value computed from

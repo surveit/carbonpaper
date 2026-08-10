@@ -25,6 +25,7 @@ from app.models.stages.human_review_queue import ReviewVerdict
 from conftest import (
     QUEUE_COLUMNS, pinned_stages, queue_added_columns, queue_columns, resumed_stages,
 )
+from stage_seed import add_stage
 
 PROJECT = "queue_route_journey"
 
@@ -51,8 +52,8 @@ def _with_queue_signature(stage):
 
 
 def _write_stage(root, filename, stage):
-    (root / "compiled").mkdir(parents=True, exist_ok=True)
-    (root / "compiled" / filename).write_text(json.dumps(stage), encoding="utf-8")
+    root.mkdir(parents=True, exist_ok=True)
+    add_stage(root, stage)
 
 
 def _load_quotes_stage(root):

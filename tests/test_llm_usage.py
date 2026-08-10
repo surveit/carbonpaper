@@ -8,6 +8,7 @@ from app.models import parse_stage, Stage
 from app.models.stage import StageType
 from app.runtime.stages import HANDLERS
 from conftest import contribution_of, make_run_context, pinned_stages
+from stage_seed import add_stage
 
 
 def test_summed_adds_fields_and_counts_calls():
@@ -74,7 +75,6 @@ def test_row_usage_sums_across_rows_into_ctx(monkeypatch):
 def test_run_manifest_records_stage_llm_usage(tmp_path, monkeypatch):
     # A full run: an llm_transform stage's summed usage lands on its manifest
     # record (and thus on disk), where the run's stage panel reads it.
-    import json
 
     from app.runtime.runner import execute_run
     from app.services import versioning
@@ -83,8 +83,8 @@ def test_run_manifest_records_stage_llm_usage(tmp_path, monkeypatch):
     monkeypatch.setattr(lt, "call_llm", _fake_call_llm(
         {"score": 5}, LlmUsage(input_tokens=10, output_tokens=4, cost_usd=0.001, calls=1)))
 
-    (tmp_path / "compiled").mkdir(parents=True)
-    (tmp_path / "data").mkdir(parents=True)
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    (tmp_path / "data").mkdir(parents=True, exist_ok=True)
     pd.DataFrame({"id": ["a", "b"], "text": ["x", "y"]}).to_csv(
         tmp_path / "data" / "in.csv", index=False)
     load = {"id": "load", "description": "Load", "type": "input_data",
@@ -111,8 +111,8 @@ def test_run_manifest_records_stage_llm_usage(tmp_path, monkeypatch):
                     "adds": [{"name": "score", "type": "int", "nullable": True}],
                 },
                 "llm": {"prompt_template": "{text}"}}
-    (tmp_path / "compiled" / "01_load.json").write_text(json.dumps(load), encoding="utf-8")
-    (tmp_path / "compiled" / "02_classify.json").write_text(json.dumps(classify), encoding="utf-8")
+    add_stage(tmp_path, load)
+    add_stage(tmp_path, classify)
     vid = save_working_copy_as_version(tmp_path, message="seed", reviewer="test").version_id
     versioning.publish_version(tmp_path, vid, reviewer="human")
 

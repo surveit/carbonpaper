@@ -258,7 +258,7 @@ async def project_workflow(request: Request, project_name: str):
     # A valid workflow draws off typed Stages; a broken/partial one falls back to the
     # raw draft dicts so its graph still renders with the holes visible.
     stages: list[Any] = (
-        list(listing.stages) if listing.stages else project._load_compiled_stages(pdir)
+        list(listing.stages) if listing.stages else project.load_stage_specs(project_name)
     )
     mermaid = build_mermaid_graph(stages, project_name) if stages else None
     return templates.TemplateResponse(

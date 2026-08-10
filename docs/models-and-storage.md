@@ -25,29 +25,26 @@ case: `validate_workflow(stages) -> list[str]` and `validate_stage(stage) -> lis
   compiled workflows (weighting is done inside `python_frame_function` modules).
 
 **Enforced at load, via `app/services/loader.py`.** This is the only place that
-reads the on-disk compiled-stage JSON (`compiled/<NN>_<stage_id>.json`, the JSON
-dump of the validated `Stage` model; the `NN_` prefix orders the stage list in
-the UI); everything past it speaks `Stage` objects, not dicts. Two entry points,
-both parsing each file through `parse_stage`:
+reads a project's `working_copy` document (one record per project, keyed by
+project name, holding the ordered stage list); everything past it speaks `Stage`
+objects, not dicts. Two entry points, both parsing each spec through
+`parse_stage`:
 - `load_workflow` — strict, for the runner. Any invalid stage or
   cross-stage issue raises `WorkflowLoadError`, and the runner refuses to
   execute the workflow.
-- `load_compiled_dir` — tolerant, per-file, for the viewer. Each compiled file
-  gets a `CompiledStageFile` (parsed `Stage` or `None` + an issues list). If any
-  file is invalid, the viewer surfaces the issues and renders no workflow at all
+- `load_stage_entries` — tolerant, per-stage, for the viewer. Each stored spec
+  gets a `StageEntry` (parsed `Stage` or `None` + an issues list). If any is
+  invalid, the viewer surfaces the issues and renders no workflow at all
   (a partial graph with holes would mislead) instead of crashing.
 
 `app/runtime/handlers.py`, `runner.py`, `preview.py`, and the web layer all consume
 the typed `Stage` objects this loader returns.
 
-## Storage convention — `<object_type>/<object_id>.data` — DECIDED, NOT YET IMPLEMENTED
+## Storage
 
-Objects are stored on disk as `<object_type>/<object_id>.data`, with a **uniform
-`.data` extension** for consistency (e.g. `workflow/<workflow_id>.data`, `run/<run_id>.data`,
-`decision/<decision_id>.data`). "We're not making a DB, but we still follow a clean
-`<object_type>/<object_id>` object store."
-
-Current layout is `examples/<name>/{compiled, runs/<id>/…, decisions, data, code, stages}`.
-Migrating to the new convention touches the runner's output paths, `main.py`'s
-loader, and moves existing example runs — so it's **deferred to a separate, reviewed
-change**, not bundled with the model work.
+Every record is a JSON document in the SQLite key-value store
+(`app/core/persistence.py`), keyed by `(collection, id)`. Frames are parquet.
+`app/services/loader.py` owns `working_copy`, `app/services/data_model.py` owns
+`data_model`, `app/services/versioning.py` owns `workflow_version` and
+`review_guide`, `app/services/drafts.py` owns `draft`, `app/services/project.py`
+owns `project`, and `app/core/stage_cache.py` owns the stage-result cache.

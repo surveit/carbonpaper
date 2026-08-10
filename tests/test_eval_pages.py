@@ -1,10 +1,9 @@
 """Route tests for the eval read pages (app/web/routers/evals.py). Builds a demo
-project on disk — a compiled two-stage workflow, one valid+compatible eval with an
+project on disk — a pdir two-stage workflow, one valid+compatible eval with an
 attached dataset, plus one leftover config that no longer validates — points
 the projects root and REPO_ROOT at it, and checks each page renders the truthful state."""
 from __future__ import annotations
 
-import json
 
 import pandas as pd
 import pytest
@@ -25,6 +24,7 @@ from app.core.persistence import get_store
 from app.evals.store import save_eval_config, save_eval_run
 from app.services.versioning import WorkflowVersion
 from app.services import workspace
+from stage_seed import add_stage
 
 client = TestClient(app)
 
@@ -64,22 +64,22 @@ _TARGET = {
 
 @pytest.fixture(autouse=True)
 def demo_project(tmp_path, monkeypatch):
-    """A demo project with a compiled override→target workflow and one compatible
+    """A demo project with a pdir override→target workflow and one compatible
     eval whose dataset is on disk, plus a stale config that fails EvalConfig
     validation. Repoints the projects root (project lookup) and REPO_ROOT (dataset path
     resolution) at tmp_path in every module that captured them by import."""
     demo = tmp_path / "demo"
-    compiled = demo / "compiled"
-    compiled.mkdir(parents=True)
-    (compiled / "01_load.json").write_text(json.dumps(_override(tmp_path)), encoding="utf-8")
-    (compiled / "02_classify.json").write_text(json.dumps(_TARGET), encoding="utf-8")
+    pdir = demo
+    pdir.mkdir(parents=True, exist_ok=True)
+    add_stage(pdir, _override(tmp_path))
+    add_stage(pdir, _TARGET)
 
     workspace.set_projects_dir(tmp_path)
     monkeypatch.setattr(evals_router, "REPO_ROOT", tmp_path, raising=False)
 
     # The eval dataset: the override stage's output columns + the checked column.
     data_dir = demo / "eval_data"
-    data_dir.mkdir()
+    data_dir.mkdir(parents=True, exist_ok=True)
     pd.DataFrame({"doc_id": ["d1", "d2"], "text": ["a", "b"],
                   "label": ["x", "y"]}).to_csv(data_dir / "cases.csv", index=False)
     dataset = TableRef(

@@ -33,11 +33,7 @@ from app.services.versioning import ReviewGuide
 from app.core.persistence import PersistedModel, PersistenceScope
 from app.core.run_status import RunStatus
 from app.services import data_model, stage_edit, versioning, workspace
-from app.services.loader import (
-    load_compiled_dir,
-    load_workflow,
-    write_stage,
-)
+from app.services import loader
 from app.services.errors import WorkflowLoadError
 from app.services.stage_edit import AddStagesResult, EditStageResult
 
@@ -150,31 +146,9 @@ def find_document_path(pdir: Path) -> Path | None:
 # ─── Stage loading (counts / coverage) ────────────────────────────────────────
 
 
-def _load_compiled_stages(pdir: Path) -> list[dict[str, Any]]:
-    """Load the working copy's compiled/ stages as raw dicts, mirroring
-    app.services.loader's on-disk convention (sorted glob of compiled/*.json,
-    inject _filename/_order, surface a parse error as an _error stage rather than
-    dropping it). Returns [] when there is no compiled/ workflow yet, so the stage
-    count here matches exactly what the workflow page loads."""
-    compiled_dir = pdir / "compiled"
-    if not compiled_dir.is_dir():
-        return []
-    stages: list[dict[str, Any]] = []
-    for json_file in sorted(compiled_dir.glob("*.json")):
-        try:
-            data = json.loads(json_file.read_text(encoding="utf-8")) or {}
-        except json.JSONDecodeError as exc:
-            data = {
-                "id": json_file.stem,
-                "name": f"[JSON ERROR] {json_file.name}",
-                "type": "python_transform",
-                "compiler_notes": [f"JSON parse error: {exc}"],
-                "_error": True,
-            }
-        data["_filename"] = json_file.name
-        data["_order"] = json_file.stem.split("_", 1)[0]
-        stages.append(data)
-    return stages
+def load_stage_specs(project: str) -> list[dict[str, Any]]:
+    """Raw specs, valid or not — the draft graph the workflow page falls back to."""
+    return loader.read_stage_specs(project)
 
 
 # ─── Run summary ──────────────────────────────────────────────────────────────
@@ -289,7 +263,7 @@ def project_state(pdir: Path) -> ProjectState:
     data_model_status = DataModelStatus(present=bool(schemas), n_schemas=len(schemas))
 
     # ── Workflow (compiled stages) ──
-    stages = _load_compiled_stages(pdir)
+    stages = load_stage_specs(name)
     workflow = WorkflowStatus(present=bool(stages), n_stages=len(stages))
 
     # ── Versions + runs ──
@@ -377,16 +351,14 @@ def list_projects() -> list[str]:
 def describe_workflow(name: str) -> dict[str, Any]:
     """A compact summary of one project's workflow (stage ids/types/inputs/review
     state), read through the tolerant loader."""
-    return workspace.project_workflow_summary(workspace.resolve_project_dir(name))
+    workspace.resolve_project_dir(name)
+    return workspace.project_workflow_summary(name)
 
 
 def read_stage(name: str, stage_id: str) -> str:
-    """The on-disk JSON text of one stage in a project's workflow. Raises ValueError if
-    the stage is not in the workflow."""
-    project_dir = workspace.resolve_project_dir(name)
-    stages = {c.stage.id: c.stage
-              for c in load_compiled_dir(project_dir / "compiled") if c.stage is not None}
-    stage = stages.get(stage_id)
+    """One stage's stored spec as JSON text; ValueError if it is not in the workflow."""
+    workspace.resolve_project_dir(name)
+    stage = loader.find_stage(name, stage_id)
     if stage is None:
         raise ValueError(f"no stage '{stage_id}' in project '{name}'")
     return stage_to_json(stage)
@@ -395,13 +367,13 @@ def read_stage(name: str, stage_id: str) -> str:
 def edit_stage(name: str, stage_id: str, changes_json: str) -> EditStageResult:
     """Apply a JSON Merge Patch to one stage of a project's workflow (validated
     before it writes; nothing written on failure)."""
-    return stage_edit.patch_stage_spec(_resolve_project_dir_to_write(name), stage_id, changes_json)
+    return stage_edit.patch_stage_spec(_project_to_write(name), stage_id, changes_json)
 
 
 def add_stage(name: str, stage_json: str) -> EditStageResult:
     """Add a new stage to a project's workflow (validated before it writes; nothing
     written on failure). The first stage of a project starts its workflow."""
-    return stage_edit.add_stage_spec(_resolve_project_dir_to_write(name), stage_json)
+    return stage_edit.add_stage_spec(_project_to_write(name), stage_json)
 
 
 def save_working_copy_as_version(
@@ -414,12 +386,11 @@ def save_working_copy_as_version(
     """Strict-loads first, so an invalid working copy raises WorkflowLoadError and writes
     nothing."""
     project_dir = Path(project_dir)
-    compiled_src = project_dir / "compiled"
-    if not compiled_src.is_dir():
+    if not loader.exists(project_dir.name):
         raise FileNotFoundError(
-            f"Cannot create a version: no compiled/ workflow at {compiled_src}"
+            f"Cannot create a version: project '{project_dir.name}' has no workflow"
         )
-    stages = load_workflow(project_dir)
+    stages = loader.load_workflow(project_dir.name)
     return versioning.create_version_from_stages(
         project_dir,
         [stage_to_spec_dict(s) for s in stages],
@@ -475,13 +446,13 @@ def add_stages(
     """Add several new stages to a project's workflow in one pass — ordered by
     their declared inputs, each validated against the whole graph, partial
     success kept. See `stage_edit.add_stage_specs`."""
-    return stage_edit.add_stage_specs(_resolve_project_dir_to_write(name), stages)
+    return stage_edit.add_stage_specs(_project_to_write(name), stages)
 
 
 def remove_stage(name: str, stage_id: str) -> EditStageResult:
     """Delete one stage from a project's workflow (the reduced workflow is validated
     first; nothing is deleted when another stage still inputs from it)."""
-    return stage_edit.remove_stage_spec(_resolve_project_dir_to_write(name), stage_id)
+    return stage_edit.remove_stage_spec(_project_to_write(name), stage_id)
 
 
 def read_review_guide(name: str, version_id: str) -> ReviewGuide | None:
@@ -502,18 +473,16 @@ def write_review_guide(
     )
     # save_version_guide validates before writing and raises otherwise, so past this line
     # `guide` is what a reader of that version now gets.
-    versioning.save_version_guide(_resolve_project_dir_to_write(name), version_id, guide)
+    versioning.save_version_guide(
+        workspace.resolve_project_dir(_project_to_write(name)), version_id, guide)
     return guide
 
 
-def _resolve_project_dir_to_write(name: str) -> Path:
-    """The directory of an EXISTING project, for the stage writers. A name with no
-    project directory raises: writing a stage must never bring a project into being,
-    now that the first stage creates the workflow's compiled/ dir."""
-    project_dir = workspace.resolve_project_dir(name)
-    if not project_dir.is_dir():
+def _project_to_write(name: str) -> str:
+    """Raises for an unknown name: writing a stage never brings a project into being."""
+    if not workspace.resolve_project_dir(name).is_dir():
         raise ValueError(f"no project '{name}' in the workspace")
-    return project_dir
+    return name
 
 
 # ─── Portable WorkflowFile: project export / import ──────────────────────────
@@ -568,7 +537,7 @@ def export_project(name: str) -> WorkflowFile:
     if document_path is None:
         raise ValueError(f"project '{name}' has no document — cannot export")
     library = data_model.load_data_model(name) or SchemaLibrary(schemas=[])
-    stages = [c.stage for c in load_compiled_dir(pdir / "compiled") if c.stage is not None]
+    stages = [e.stage for e in loader.load_stage_entries(name) if e.stage is not None]
     return WorkflowFile(
         name=name,
         document=Path(document_path).read_text(encoding="utf-8"),
@@ -593,11 +562,8 @@ def import_project(
     pdir = workspace.resolve_project_dir(target)
     create_project(target, wf.document, model=wf.model, source=wf.source)
     data_model.write_data_model(target, wf.data_model)
-    for i, stage in enumerate(wf.stages, start=1):
-        stage_path = pdir / "compiled" / f"{i:02d}_{stage.id}.json"
-        stage_path.parent.mkdir(parents=True, exist_ok=True)
-        write_stage(stage_path, stage)
     if wf.stages:
+        loader.save_stages(target, list(wf.stages))
         save_working_copy_as_version(
             pdir, message=f"Imported '{target}'", reviewer="import"
         )

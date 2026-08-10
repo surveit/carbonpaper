@@ -1,8 +1,7 @@
 """workspace.py — the projects workspace: the projects storage root, name→directory
 resolution, and project enumeration + workflow summaries. These back the editing
 agent's read tools and the status model. Uses the tolerant loader (a malformed
-compiled file becomes an issue, not an exception); imports nothing from the web
-layer."""
+stage becomes an issue, not an exception); imports nothing from the web layer."""
 
 from __future__ import annotations
 
@@ -11,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from app.core.paths import REPO_ROOT, repo_root as repo_root
-from app.services.loader import load_compiled_dir
+from app.services.loader import exists as has_working_copy, load_stage_entries
 # The projects storage root: <root>/<name>/ working copies live here. There is
 # exactly ONE in a running process — the app does not serve multiple
 # workspaces, so no function takes a root as an argument. Configure it the way
@@ -68,36 +67,29 @@ def resolve_run_dir(name: str, run_id: str) -> Path:
 
 
 def list_project_names() -> list[str]:
-    """Sorted names of every project directory under the projects root — a
-    directory counts only if it contains a `compiled/` subdirectory (an authored
-    workflow)."""
+    """Sorted names of every project under the projects root that has an authored
+    workflow (a stored working copy)."""
     root = projects_dir()
     if not root.is_dir():
         return []
-    return sorted(
-        child.name
-        for child in root.iterdir()
-        if child.is_dir() and (child / "compiled").is_dir()
-    )
+    return sorted(child.name for child in root.iterdir()
+                  if child.is_dir() and has_working_copy(child.name))
 
 
-def project_workflow_summary(project_dir: Path) -> dict[str, Any]:
+def project_workflow_summary(project: str) -> dict[str, Any]:
     """A compact summary of one project's workflow: each stage's id, type, name and
     upstream input ids. Never returns full stage specs — that is `read_stage`'s job.
-    A single malformed compiled file surfaces in `issues`."""
-    compiled = load_compiled_dir(project_dir / "compiled")
-
+    A single malformed stage surfaces in `issues`."""
     stages: list[dict[str, Any]] = []
     issues: list[str] = []
-    for compiled_file in compiled:
-        if compiled_file.stage is None:
-            issues.append(f"{compiled_file.filename}: {'; '.join(compiled_file.issues)}")
+    for entry in load_stage_entries(project):
+        if entry.stage is None:
+            issues.append(f"{entry.label}: {'; '.join(entry.issues)}")
             continue
-        stage = compiled_file.stage
         stages.append({
-            "id": stage.id,
-            "type": stage.type,
-            "description": stage.description,
-            "inputs": [ref.id for ref in stage.inputs],
+            "id": entry.stage.id,
+            "type": entry.stage.type,
+            "description": entry.stage.description,
+            "inputs": [ref.id for ref in entry.stage.inputs],
         })
-    return {"name": project_dir.name, "stages": stages, "issues": issues}
+    return {"name": project, "stages": stages, "issues": issues}

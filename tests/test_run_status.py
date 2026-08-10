@@ -16,6 +16,7 @@ from app.services import versioning
 from app.services.project import save_working_copy_as_version
 from app.services import workspace
 from conftest import pinned_stages
+from stage_seed import add_stage
 
 # The exact value sets, collected by grepping every `record["status"]` /
 # `manifest["status"]` literal the runner writes (app/runtime/runner.py) and
@@ -68,8 +69,8 @@ PROJECT = "status_enum_journey"
 
 
 def _make_project(root) -> None:
-    (root / "compiled").mkdir(parents=True)
-    (root / "data").mkdir(parents=True)
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "data").mkdir(parents=True, exist_ok=True)
     pd.DataFrame({"name": ["a", "b"], "val": [1, 2]}).to_csv(root / "data" / "items.csv", index=False)
     stage = {
         "id": "load", "description": "Load items", "type": "input_data",
@@ -83,7 +84,7 @@ def _make_project(root) -> None:
             ],
         },
     }
-    (root / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
+    add_stage(root, stage)
 
 
 def _seed_and_publish(project_dir) -> None:

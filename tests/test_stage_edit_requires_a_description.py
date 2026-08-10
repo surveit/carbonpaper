@@ -37,9 +37,9 @@ def _source_spec():
 
 @pytest.fixture
 def project(tmp_path):
-    (tmp_path / "compiled").mkdir()
-    assert add_stage_spec(tmp_path, json.dumps(_source_spec())).ok
-    return tmp_path
+    name = tmp_path.name
+    assert add_stage_spec(name, json.dumps(_source_spec())).ok
+    return name
 
 
 def test_adding_a_code_stage_without_a_summary_is_refused(project):

@@ -34,7 +34,7 @@ def test_committed_lobbying_fixture_imports_and_validates_cleanly(tmp_path):
 
     # The strict loader too — the same one create_version required to succeed
     # before import_project's version snapshot was written.
-    loaded_stages = load_workflow(project_dir)
+    loaded_stages = load_workflow(imported_name)
     assert {stage.id for stage in loaded_stages} == _EXPECTED_STAGE_IDS
 
     versions = versioning.list_versions(project_dir)

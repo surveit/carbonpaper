@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +17,7 @@ from app.models.stages.stage_tests import (
     PythonRowFunctionStageTest,
     build_stage_tests_model,
 )
+from stage_seed import add_stage, read_stage
 
 _IN_SCHEMA = {"columns": [{"name": "amount", "type": "float", "nullable": False}]}
 _OUT_SCHEMA = {"columns": [
@@ -42,13 +42,13 @@ def _seed_project(project_dir: Path, *, existing_tests: list[dict] | None = None
     stage tests are generated for."""
     project_dir.mkdir(parents=True, exist_ok=True)
     (project_dir / "document.md").write_text("Double the amount.", encoding="utf-8")
-    compiled = project_dir / "compiled"
-    compiled.mkdir()
-    (compiled / "01_load.json").write_text(json.dumps({
+    pdir = project_dir
+    pdir.mkdir(parents=True, exist_ok=True)
+    add_stage(pdir, {
         "id": "load", "description": "Load", "type": "input_data",
         "connector": {"kind": "file"},
         "signature": {"form": "replaces", "produces": _IN_SCHEMA["columns"]},
-    }), encoding="utf-8")
+    })
     double_spec: dict[str, Any] = {
         "id": "double", "description": "Double", "type": "python_row_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
@@ -62,7 +62,7 @@ def _seed_project(project_dir: Path, *, existing_tests: list[dict] | None = None
     }
     if existing_tests is not None:
         double_spec["tests"] = existing_tests
-    (compiled / "02_double.json").write_text(json.dumps(double_spec), encoding="utf-8")
+    add_stage(pdir, double_spec)
 
 
 def _valid_suite() -> Any:
@@ -83,7 +83,7 @@ def test_finish_stage_tests_patches_the_stage(tmp_path: Path):
 
     generation._finish_stage_tests(project_dir, "double", _valid_suite())
 
-    stage = json.loads((project_dir / "compiled" / "02_double.json").read_text(encoding="utf-8"))
+    stage = read_stage(project_dir, "double")
     assert len(stage["tests"]) == 1
     assert stage["tests"][0]["name"] == "doubles_two"
 
@@ -98,7 +98,7 @@ def test_finish_stage_tests_replaces_existing_tests(tmp_path: Path):
 
     generation._finish_stage_tests(project_dir, "double", _valid_suite())
 
-    stage = json.loads((project_dir / "compiled" / "02_double.json").read_text(encoding="utf-8"))
+    stage = read_stage(project_dir, "double")
     names = [t["name"] for t in stage["tests"]]
     assert names == ["doubles_two"]  # the old case is gone, wholesale replace
 
@@ -110,7 +110,7 @@ def test_finish_with_no_answer_raises(tmp_path: Path):
     with pytest.raises(GenerationError):
         generation._finish_stage_tests(project_dir, "double", None)
 
-    stage = json.loads((project_dir / "compiled" / "02_double.json").read_text(encoding="utf-8"))
+    stage = read_stage(project_dir, "double")
     assert "tests" not in stage  # nothing written on a failed generation
 
 
@@ -129,7 +129,7 @@ def test_finish_with_empty_suite_raises(tmp_path: Path):
     with pytest.raises(GenerationError, match="empty test suite"):
         generation._finish_stage_tests(project_dir, "double", empty_suite)
 
-    stage = json.loads((project_dir / "compiled" / "02_double.json").read_text(encoding="utf-8"))
+    stage = read_stage(project_dir, "double")
     names = [t["name"] for t in stage["tests"]]
     assert names == ["old_case"]  # existing tests survive — nothing written on rejection
 
@@ -145,27 +145,27 @@ def test_finish_stage_tests_preserves_null_cells(tmp_path: Path):
     recursed into) rather than deep-merging its contents. Pins that neither step
     silently turns a declared null into a missing key."""
     project_dir = tmp_path / "demo"
-    project_dir.mkdir(parents=True)
+    project_dir.mkdir(parents=True, exist_ok=True)
     (project_dir / "document.md").write_text("Double the amount.", encoding="utf-8")
-    compiled = project_dir / "compiled"
-    compiled.mkdir()
+    pdir = project_dir
+    pdir.mkdir(parents=True, exist_ok=True)
     out_schema = {"columns": [
         {"name": "amount", "type": "float", "nullable": False},
         {"name": "flag", "type": "bool", "nullable": True},
     ]}
-    (compiled / "01_load.json").write_text(json.dumps({
+    add_stage(pdir, {
         "id": "load", "description": "Load", "type": "input_data",
         "connector": {"kind": "file"},
         "signature": {"form": "replaces", "produces": _IN_SCHEMA["columns"]},
-    }), encoding="utf-8")
-    (compiled / "02_double.json").write_text(json.dumps({
+    })
+    add_stage(pdir, {
         "id": "double", "description": "Double", "type": "python_row_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
         "signature": {"form": "extends", "adds": [
             c for c in out_schema["columns"] if c not in _IN_SCHEMA["columns"]]},
         "function": {"kind": "inline", "summary": "Test fixture step.", "corner_cases": [],
                      "code": "def transform(row):\n    return {**row, 'flag': None}\n"},
-    }), encoding="utf-8")
+    })
 
     suite = _suite_model(out_schema).model_validate({
         "tests": [{
@@ -177,7 +177,7 @@ def test_finish_stage_tests_preserves_null_cells(tmp_path: Path):
 
     generation._finish_stage_tests(project_dir, "double", suite)
 
-    stage = json.loads((project_dir / "compiled" / "02_double.json").read_text(encoding="utf-8"))
+    stage = read_stage(project_dir, "double")
     assert stage["tests"][0]["expected"][0] == {"amount": 1.0, "flag": None}
 
 
@@ -252,7 +252,7 @@ def test_start_creates_hidden_viewonly_session(tmp_path: Path, monkeypatch: Any)
     assert session["agent_id"] is None  # view-only
     assert session["messages"]  # TurnManager persisted the conversation
 
-    stage = json.loads((project_dir / "compiled" / "02_double.json").read_text(encoding="utf-8"))
+    stage = read_stage(project_dir, "double")
     assert stage["tests"][0]["name"] == "doubles_two"  # completion hook patched the stage
 
 
@@ -311,5 +311,5 @@ def test_failed_generation_is_persisted_into_the_session(tmp_path: Path, monkeyp
     ]
     assert any(GENERATION_FAILURE_PREFIX in text for text in failure_texts)
 
-    stage = json.loads((project_dir / "compiled" / "02_double.json").read_text(encoding="utf-8"))
+    stage = read_stage(project_dir, "double")
     assert "tests" not in stage  # nothing written on a failed generation

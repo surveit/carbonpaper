@@ -2,7 +2,6 @@
 handle: python is the one transform a non-engineer reviewer cannot read, so the
 plain-language `summary` leads and the source is folded away last. A stage with
 no summary says so rather than silently leading with code."""
-import json
 from pathlib import Path
 
 import pytest
@@ -11,6 +10,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.models import parse_stage
 from app.services import workspace
+from stage_seed import add_stage
 
 _IN_SCHEMA = {"columns": [
     {"name": "bill_id", "type": "str", "nullable": False},
@@ -30,13 +30,13 @@ _SUMMARY = "Marks a bill as withdrawn when its status text says so."
 
 
 def _seed_project(root: Path) -> None:
-    compiled = root / "alpha" / "compiled"
-    compiled.mkdir(parents=True)
-    (compiled / "01_load.json").write_text(json.dumps({
+    pdir = root / "alpha"
+    pdir.mkdir(parents=True, exist_ok=True)
+    add_stage(pdir, {
         "id": "load", "description": "Load", "type": "input_data",
         "connector": {"kind": "file"}, "signature": {"form": "replaces", "produces": _IN_SCHEMA["columns"]},
-    }), encoding="utf-8")
-    (compiled / "02_flag.json").write_text(json.dumps({
+    })
+    add_stage(pdir, {
         "id": "flag_withdrawn", "description": "Flag withdrawn bills",
         "type": "python_row_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
@@ -51,8 +51,8 @@ def _seed_project(root: Path) -> None:
             "inputs": {"load": [{"bill_id": "HB1", "status": "Withdrawn"}]},
             "expected": [{"bill_id": "HB1", "status": "Withdrawn", "withdrawn": True}],
         }],
-    }), encoding="utf-8")
-    (compiled / "03_unsummarized.json").write_text(json.dumps({
+    })
+    add_stage(pdir, {
         "id": "no_summary", "description": "Unsummarized step",
         "type": "python_row_function",
         "inputs": [{"id": "flag_withdrawn", "schema": _OUT_SCHEMA}],
@@ -61,7 +61,7 @@ def _seed_project(root: Path) -> None:
             "reads": [{"input": "flag_withdrawn", "columns": _OUT_SCHEMA["columns"]}],
         },
         "function": {"kind": "inline", "code": "def transform(row):\n    return row\n"},
-    }), encoding="utf-8")
+    })
 
 
 @pytest.fixture

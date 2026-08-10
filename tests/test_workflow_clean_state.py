@@ -5,13 +5,13 @@ say so — and a workflow that never loaded must not say it.
 """
 from __future__ import annotations
 
-import json
 
 from fastapi.testclient import TestClient
 
 from app.main import app
 from app.services.project import create_project
 from test_journey_smoke import _point_examples_dir_at
+from stage_seed import add_stage
 
 client = TestClient(app)
 
@@ -37,11 +37,10 @@ def _make_load_stage(path):
 def _workflow_page(tmp_path, name, stages):
     _point_examples_dir_at(tmp_path)
     create_project(name, "A workflow.", source="test")
-    compiled = tmp_path / name / "compiled"
-    compiled.mkdir()
+    compiled = tmp_path / name
+    compiled.mkdir(parents=True, exist_ok=True)
     for position, stage in enumerate(stages, start=1):
-        (compiled / f"{position:02d}_{stage['id']}.json").write_text(
-            json.dumps(stage), encoding="utf-8")
+        add_stage(compiled, stage)
     resp = client.get(f"/project/{name}/workflow")
     assert resp.status_code == 200, resp.text
     return resp.text

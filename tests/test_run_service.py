@@ -11,6 +11,7 @@ from app.services import versioning
 from app.services import workspace
 from app.services.project import save_working_copy_as_version
 from app.services.versioning import list_versions
+from stage_seed import add_stage
 
 # The run service takes a project NAME and resolves it under the workspace root;
 # every test drives that one project.
@@ -34,8 +35,8 @@ def project_dir(tmp_path, monkeypatch):
 
 
 def _make_project(root):
-    (root / "compiled").mkdir(parents=True)
-    (root / "data").mkdir(parents=True)
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "data").mkdir(parents=True, exist_ok=True)
     pd.DataFrame({"name": ["a", "b"], "val": [1, 2]}).to_csv(
         root / "data" / "items.csv", index=False)
     stage = {
@@ -51,7 +52,7 @@ def _make_project(root):
             ],
         },
     }
-    (root / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
+    add_stage(root, stage)
 
 
 def _seed_version(root):

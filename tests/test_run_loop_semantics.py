@@ -20,6 +20,7 @@ from app.services.loader import load_workflow
 from app.services.project import save_working_copy_as_version
 from app.services import workspace
 from conftest import pinned_stages, queue_added_columns, queue_columns, resumed_stages
+from stage_seed import add_stage
 
 
 # The three frame shapes this file's DAGs carry. Declared once so an upstream's
@@ -42,8 +43,8 @@ def _seed_version(root):
 
 
 def _write_stage(root, filename, stage):
-    (root / "compiled").mkdir(parents=True, exist_ok=True)
-    (root / "compiled" / filename).write_text(json.dumps(stage), encoding="utf-8")
+    root.mkdir(parents=True, exist_ok=True)
+    add_stage(root, stage)
 
 
 def _load_items_stage(root, *, stage_id="load"):
@@ -513,7 +514,7 @@ def test_resume_after_error_reruns_the_errored_stage_and_its_downstream(tmp_path
     prepare_run and run_prepared are called separately so the file can be
     corrupted in between: preflight (in prepare_run) sees the valid file, the
     handler (in run_prepared) sees the empty one."""
-    (tmp_path / "data").mkdir(parents=True)
+    (tmp_path / "data").mkdir(parents=True, exist_ok=True)
     csv_path = tmp_path / "data" / "items.csv"
     pd.DataFrame({"id": ["a", "b"], "val": [1, 2]}).to_csv(csv_path, index=False)
     load = {"id": "load", "description": "Load", "type": "input_data",
@@ -582,7 +583,7 @@ def test_resume_reads_the_pinned_version_not_the_working_copy(tmp_path):
     # snapshot is untouched, so the resume must still find loadable stages.
     _write_stage(project_dir, "01_load.json", {"id": "load", "type": "input_data"})
     with pytest.raises(WorkflowLoadError):
-        load_workflow(project_dir)
+        load_workflow(project_dir.name)
 
     stages, workflow_version = resumed_stages(project_dir, halted["run_id"])
     assert [s.id for s in stages] == ["load", "review"]

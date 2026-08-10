@@ -12,6 +12,7 @@ from app.core.agent.store import MessageRole, PartType, open_session_store
 from app.services import generation, stage_edit, versioning
 from app.services import project as project_service
 from app.services.errors import WorkflowLoadError
+from app.services import loader
 from app.services.loader import resolve_function_code
 from app.models import stage_to_json
 from app.runtime.stage_tests import find_failing_stage_tests
@@ -60,7 +61,7 @@ async def node_edit(
     stage_id: str,
     spec_text: str = Form(...),
 ):
-    """The ONLY writer into compiled/."""
+    """The ONLY writer of the working copy from the web layer."""
     project_dir = projects_dir() / project
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
@@ -68,9 +69,9 @@ async def node_edit(
     # The parse/validate/write core is `stage_edit.edit_stage_spec`, shared with the
     # editing agent's `edit_stage` tool; this route only maps its result onto HTTP.
     try:
-        result = stage_edit.edit_stage_spec(project_dir, stage_id, spec_text)
+        result = stage_edit.edit_stage_spec(project, stage_id, spec_text)
     except FileNotFoundError as exc:
-        # The project, or the stage's compiled file, is absent.
+        # The project, or the stage, is absent.
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     if not result.ok:
         # Nothing was written — fail loudly with the issue list, never a partial write.
@@ -129,7 +130,7 @@ def _find_generation_failure(messages: list[dict]) -> str | None:
 
 @router.post("/project/{project}/version")
 async def create_version_route(project: str, message: str = Form(...)):
-    """Snapshot the working copy's {compiled/, schemas/} into a new version."""
+    """Snapshot the working copy's stages + data model into a new version."""
     project_dir = projects_dir() / project
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
@@ -138,9 +139,9 @@ async def create_version_route(project: str, message: str = Form(...)):
     # snapshot, so it must not immortalise a python transform that fails its
     # own tests. Absent tests don't block — the gate holds existing
     # tests to green, it does not require them. The gate only applies when a
-    # compiled workflow exists; without one, save_working_copy_as_version's own
+    # workflow exists; without one, save_working_copy_as_version's own
     # FileNotFoundError reports the missing workflow as a 400 below.
-    if (project_dir / "compiled").is_dir():
+    if loader.exists(project):
         failing = find_failing_stage_tests(load_stages(project).stages)
         if failing:
             return JSONResponse({"ok": False, "issues": failing}, status_code=400)

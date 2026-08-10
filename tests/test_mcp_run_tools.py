@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 
 import pandas as pd
 
@@ -10,12 +9,13 @@ from app.services import versioning
 from app.services.project import save_working_copy_as_version
 from app.services.versioning import WorkflowVersion
 from app.services import workspace
+from stage_seed import add_stage
 
 
 def _make_run_project(root):
     """A tiny file-connector project (from tests/test_run_service.py), published."""
-    (root / "compiled").mkdir(parents=True)
-    (root / "data").mkdir(parents=True)
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "data").mkdir(parents=True, exist_ok=True)
     pd.DataFrame({"name": ["a", "b"], "val": [1, 2]}).to_csv(
         root / "data" / "items.csv", index=False)
     stage = {
@@ -31,7 +31,7 @@ def _make_run_project(root):
             ],
         },
     }
-    (root / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
+    add_stage(root, stage)
     vid = save_working_copy_as_version(root, message="seed", reviewer="test").version_id
     versioning.publish_version(root, vid, reviewer="human")
     return vid
@@ -61,7 +61,7 @@ _CLASSIFY = {
 def _make_workflow_test_project(root):
     """A `demo` project with a bound 4-row source and one deterministic stage,
     seeded as an unpublished version (workflow tests work on unpublished candidates)."""
-    (root / "data").mkdir(parents=True)
+    (root / "data").mkdir(parents=True, exist_ok=True)
     pd.DataFrame({"doc_id": ["a", "b", "c", "d"], "score": [1, -1, 2, -3]}).to_csv(
         root / "data" / "rows.csv", index=False)
     load = dict(_LOAD_STAGE_TMPL,
@@ -102,7 +102,7 @@ def test_run_workflow_translates_no_version_to_error(tmp_path, monkeypatch):
 
     workspace.set_projects_dir(tmp_path)
     _sync_background(monkeypatch)
-    (tmp_path / "unready").mkdir()
+    (tmp_path / "unready").mkdir(parents=True, exist_ok=True)
 
     result = server.run_workflow(project_id="unready")
     assert result["ok"] is False

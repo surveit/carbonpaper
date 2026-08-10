@@ -264,16 +264,16 @@ async def generate_stage_tests(project_id: str, stage_id: str) -> dict[str, Any]
 
 @mcp.tool(description=TOOL_SPECS["run_stage_tests"].description)
 def run_stage_tests(project_id: str, stage_id: str | None = None) -> dict[str, Any]:
-    pdir = _resolve_existing_project(project_id)
-    stages = loader.load_workflow(pdir)
+    _resolve_existing_project(project_id)
+    stages = loader.load_workflow(project_id)
     report: stage_tests.StageTestsReport = stage_tests.run_stage_tests(stages, stage_id)
     return report.model_dump(mode="json")
 
 
 @mcp.tool(description=TOOL_SPECS["report_compiler_warnings"].description)
 def report_compiler_warnings(project_id: str) -> dict[str, Any]:
-    pdir = _resolve_existing_project(project_id)
-    stages = loader.load_workflow(pdir)
+    _resolve_existing_project(project_id)
+    stages = loader.load_workflow(project_id)
     failing = stage_tests.run_stage_tests(stages).count_failing_by_stage()
     report = find_workflow_compiler_warnings(stages, failing)
     return {

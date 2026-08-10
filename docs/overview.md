@@ -13,13 +13,15 @@ number or unsourced claim defeats the purpose. Two rules recur in the code:
 ## Vocabulary (locked 2026-07-04)
 - **project** — the container directory holding everything below.
 - **methodology** — the authored prose method (`methodology_raw.md`).
-- **workflow** — the executable stage graph it compiles into (`compiled/*.json`, one
-  validated `Stage` per file; a DAG of typed stages, every edge schema-validated).
+- **workflow** — the executable stage graph it compiles into (the project's
+  `working_copy` document, an ordered list of validated `Stage`s; a DAG of typed
+  stages, every edge schema-validated).
 
 A project dir also holds `code/`, `data/`, `runs/<id>/` (outputs + `manifest.json`) —
-runtime data, not source. Review decisions are documents in the store
-(`app.core.stage_cache`), not a project subdir. Versions are documents in the store
-(the `workflow_version` collection), not a project subdir.
+runtime data, not source. Everything else is a document in the store: the working
+copy (`working_copy`), the data model (`data_model`), versions
+(`workflow_version`), guides, drafts, and review decisions
+(`app.core.stage_cache`).
 
 ## The three features
 | Feature | Code | Status |

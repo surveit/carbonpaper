@@ -13,6 +13,7 @@ from app.services import versioning
 from app.services import workspace
 from app.services.project import save_working_copy_as_version
 from app.web.routers.runs import _collect_limits
+from stage_seed import add_stage
 
 client = TestClient(app)
 
@@ -57,7 +58,7 @@ def test_fractional_limit_raises():
 @pytest.fixture
 def project(tmp_path, monkeypatch):
     proj = tmp_path / "demo"
-    (proj / "compiled").mkdir(parents=True)
+    proj.mkdir(parents=True, exist_ok=True)
     data = proj / "a.csv"
     pd.DataFrame({"name": ["x", "y", "z"], "val": [1, 2, 3]}).to_csv(data, index=False)
     # output_schema names the CSV's columns; every non-publish stage must declare
@@ -72,7 +73,7 @@ def project(tmp_path, monkeypatch):
              },
              "connector": {"kind": "file",
                            "params": {"path": str(data), "format": "csv"}}}
-    (proj / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
+    add_stage(proj, stage)
     vid = save_working_copy_as_version(proj, message="seed", reviewer="test").version_id
     versioning.publish_version(proj, vid, reviewer="human")
     workspace.set_projects_dir(tmp_path)

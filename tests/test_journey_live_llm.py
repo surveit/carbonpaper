@@ -5,7 +5,6 @@ run. With no backend this tier FAILS rather than skips.
 from __future__ import annotations
 
 import io
-import json
 
 import pandas as pd
 import pytest
@@ -16,6 +15,7 @@ from app.main import app
 from app.services.project import create_project
 from app.services.versioning import list_versions
 from test_journey_smoke import _point_examples_dir_at, assert_run_ok
+from stage_seed import add_stage
 
 client = TestClient(app)
 
@@ -89,10 +89,9 @@ def live_project(tmp_path, monkeypatch):
 
     create_project(PROJECT, "Classify claims and publish the table.", source="live smoke test")
     project_dir = tmp_path / PROJECT
-    (project_dir / "compiled").mkdir()
-    for position, stage in enumerate(_workflow_stages(str(source)), start=1):
-        path = project_dir / "compiled" / f"{position:02d}_{stage['id']}.json"
-        path.write_text(json.dumps(stage), encoding="utf-8")
+    project_dir.mkdir(parents=True, exist_ok=True)
+    for stage in _workflow_stages(str(source)):
+        add_stage(project_dir, stage)
     return project_dir
 
 

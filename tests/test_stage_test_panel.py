@@ -1,5 +1,4 @@
 """The node review partial renders the stage's tests as a skimmable report."""
-import json
 from pathlib import Path
 
 import pytest
@@ -7,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.services import workspace
+from stage_seed import add_stage
 
 _IN_SCHEMA = {"columns": [{"name": "amount", "type": "float", "nullable": False}]}
 _OUT_SCHEMA = {"columns": [
@@ -16,13 +16,13 @@ _OUT_SCHEMA = {"columns": [
 
 
 def _seed_project(root: Path) -> None:
-    compiled = root / "alpha" / "compiled"
-    compiled.mkdir(parents=True)
-    (compiled / "01_load.json").write_text(json.dumps({
+    pdir = root / "alpha"
+    pdir.mkdir(parents=True, exist_ok=True)
+    add_stage(pdir, {
         "id": "load", "description": "Load", "type": "input_data",
         "connector": {"kind": "file"}, "signature": {"form": "replaces", "produces": _IN_SCHEMA["columns"]},
-    }), encoding="utf-8")
-    (compiled / "02_double.json").write_text(json.dumps({
+    })
+    add_stage(pdir, {
         "id": "double", "description": "Double", "type": "python_row_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
         "signature": {
@@ -40,7 +40,7 @@ def _seed_project(root: Path) -> None:
              "inputs": {"load": [{"amount": 3.0}]},
              "expected": [{"amount": 3.0, "doubled": 7.0}]},
         ],
-    }), encoding="utf-8")
+    })
 
 
 @pytest.fixture

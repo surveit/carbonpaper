@@ -136,6 +136,6 @@ once on the terminal transition. Scratch: pick N input rows → `…/stage/<sid>
 
 Every stage definition a run page shows or executes (panel, lineage panel, scratch re-run)
 comes from the version the run pinned, via `services.run.load_pinned_stage_def` /
-`load_run_stages` — never `compiled/`.
+`load_run_stages` — never the working copy.
 Unresolvable version → the panels show a stated reason in place of the definition and the
 scratch re-run returns 409 rather than executing the working copy.

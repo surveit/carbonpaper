@@ -1,5 +1,5 @@
 """A run's stage views must describe the version the run PINNED, never the live
-`compiled/` working copy: the stage panel's source and schemas, the lineage
+working copy: the stage panel's source and schemas, the lineage
 panel's transform, and the scratch re-run's handler. When the pinned version
 cannot be resolved the panels say so and the scratch re-run refuses to execute.
 """
@@ -18,6 +18,7 @@ from app.runtime.runner import execute_run
 from app.services import versioning
 from app.services import project as project_service
 from conftest import pinned_stages
+from stage_seed import add_stage
 
 client = TestClient(app)
 
@@ -73,13 +74,11 @@ def _classify_stage(marker: str) -> dict:
 @pytest.fixture()
 def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     pdir = tmp_path / PROJECT
-    (pdir / "compiled").mkdir(parents=True)
+    pdir.mkdir(parents=True, exist_ok=True)
     data = pdir / "rows.csv"
     pd.DataFrame({"name": ["a", "b"], "val": [1, 2]}).to_csv(data, index=False)
-    (pdir / "compiled" / "01_load.json").write_text(
-        json.dumps(_load_stage(data)), encoding="utf-8")
-    (pdir / "compiled" / "02_classify.json").write_text(
-        json.dumps(_classify_stage(PINNED_MARKER)), encoding="utf-8")
+    add_stage(pdir, _load_stage(data))
+    add_stage(pdir, _classify_stage(PINNED_MARKER))
     workspace.set_projects_dir(tmp_path)
     return pdir
 
@@ -96,8 +95,7 @@ def _drift_the_working_copy(project_dir: Path) -> None:
     """Edit the stage in place, as an author would after the run. Nothing
     re-versions it, so the run's pinned version and the working copy disagree
     on what `classify` does."""
-    (project_dir / "compiled" / "02_classify.json").write_text(
-        json.dumps(_classify_stage(DRIFTED_MARKER)), encoding="utf-8")
+    add_stage(project_dir, _classify_stage(DRIFTED_MARKER))
 
 
 def _unpin_the_run(project_dir: Path, run_id: str) -> None:
@@ -124,7 +122,7 @@ def _scratch_preview(run_id: str):
         json={"indices": [0]})
 
 
-# ─── The regression: stage views track the pinned version, not compiled/ ─────
+# ─── The regression: stage views track the pinned version, not the copy ─────
 
 def test_stage_panel_shows_the_source_that_ran_after_the_working_copy_drifts(
     project: Path,

@@ -12,6 +12,7 @@ from app.services.data_model import DataModel
 from app.services.versioning import WorkflowVersion
 from app.web.loading import list_projects
 from app.services import workspace
+from stage_seed import set_stages
 
 client = TestClient(app)
 
@@ -25,13 +26,12 @@ def examples_root(tmp_path, monkeypatch):
 
 def _make_document_only_project(root, name="fresh"):
     """A project exactly as POST /project/new leaves it before any generation:
-    document.md + project.json, no schemas/, no compiled/."""
+    document.md + project.json, no data model, no workflow."""
     proj = root / name
-    proj.mkdir()
+    proj.mkdir(parents=True, exist_ok=True)
     (proj / "document.md").write_text("methodology prose", encoding="utf-8")
     (proj / "project.json").write_text(
-        json.dumps({"name": name, "model": "sonnet"}), encoding="utf-8"
-    )
+        json.dumps({"name": name, "model": "sonnet"}), encoding="utf-8")
     return proj
 
 
@@ -100,25 +100,22 @@ def test_half_written_version_snapshot_fails_the_listing_loudly(examples_root):
 
 
 def test_random_directory_is_not_a_project(examples_root):
-    (examples_root / "scratch").mkdir()
+    (examples_root / "scratch").mkdir(parents=True, exist_ok=True)
     assert list_projects() == []
 
 
-def test_card_counts_compiled_stages_schemas_and_runs_with_a_manifest(examples_root):
+def test_card_counts_stages_schemas_and_runs_with_a_manifest(examples_root):
     proj = _make_document_only_project(examples_root, name="counted")
-    compiled_dir = proj / "compiled"
-    compiled_dir.mkdir()
-    (compiled_dir / "010_load.json").write_text("{}", encoding="utf-8")
-    (compiled_dir / "020_score.json").write_text("{}", encoding="utf-8")
+    set_stages(proj, [{"id": "load"}, {"id": "score"}])
     DataModel(id="counted", schemas=[
         NamedSchema(name="claim", kind=SchemaKind.reference, title="Claim", columns=[]),
     ]).save()
     runs_dir = proj / "runs"
     finished_run = runs_dir / "20260101T000000"
-    finished_run.mkdir(parents=True)
+    finished_run.mkdir(parents=True, exist_ok=True)
     (finished_run / "manifest.json").write_text("{}", encoding="utf-8")
     unfinished_run = runs_dir / "20260102T000000"
-    unfinished_run.mkdir()  # no manifest.json — not yet a real run
+    unfinished_run.mkdir(parents=True, exist_ok=True)  # no manifest.json — not yet a real run
 
     [card] = list_projects()
     assert card["n_stages"] == 2

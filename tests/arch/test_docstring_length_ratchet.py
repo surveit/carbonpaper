@@ -401,8 +401,6 @@ _GRANDFATHERED: frozenset[str] = frozenset(
         "app/services/generation.py::_finish_stage_tests",
         "app/services/generation.py::start_generation",
         "app/services/generation.py::start_stage_test_generation",
-        "app/services/loader.py::find_stage_file",
-        "app/services/loader.py::list_stage_files",
         "app/services/loader.py::load_workflow",
         "app/services/loader.py::load_workflow_object",
         "app/services/loader.py::resolve_function_code",
@@ -413,8 +411,6 @@ _GRANDFATHERED: frozenset[str] = frozenset(
         "app/services/project.py::WorkflowFile",
         "app/services/project.py::WorkflowFile._drop_null_stage_keys",
         "app/services/project.py::WorkflowFile.to_json",
-        "app/services/project.py::_load_compiled_stages",
-        "app/services/project.py::_resolve_project_dir_to_write",
         "app/services/project.py::add_stage",
         "app/services/project.py::add_stages",
         "app/services/project.py::create_project",
@@ -426,7 +422,6 @@ _GRANDFATHERED: frozenset[str] = frozenset(
         "app/services/project.py::list_projects",
         "app/services/project.py::project_meta",
         "app/services/project.py::project_state",
-        "app/services/project.py::read_stage",
         "app/services/project.py::remove_stage",
         "app/services/project.py::sanitize_project_name",
         "app/services/project.py::write_project_meta",
@@ -443,7 +438,6 @@ _GRANDFATHERED: frozenset[str] = frozenset(
         "app/services/stage_edit.py::_find_blocking_input",
         "app/services/stage_edit.py::_find_description_issues",
         "app/services/stage_edit.py::_merge_patch",
-        "app/services/stage_edit.py::_strip_bookkeeping_keys",
         "app/services/stage_edit.py::add_stage_spec",
         "app/services/stage_edit.py::add_stage_specs",
         "app/services/stage_edit.py::edit_stage_spec",
@@ -762,7 +756,6 @@ _GRANDFATHERED: frozenset[str] = frozenset(
         "tests/test_mcp_run_tools.py::_make_workflow_test_project",
         "tests/test_mcp_run_tools.py::test_run_workflow_test_delegates_and_reports_verdict",
         "tests/test_mcp_run_tools.py::test_run_workflow_translates_no_version_to_error",
-        "tests/test_mcp_server.py::_write_compiled_workflow",
         "tests/test_mcp_server.py::test_add_stage_input_schema_omits_the_server_owned_fields",
         "tests/test_mcp_server.py::test_mcp_add_stage_drops_server_owned_fields_and_names_them",
         "tests/test_mcp_server.py::test_mcp_add_stage_refuses_an_invalid_stage_on_the_issues_channel",
@@ -894,7 +887,6 @@ _GRANDFATHERED: frozenset[str] = frozenset(
         "tests/test_stage_certification.py::test_a_frame_function_is_certifiable_too",
         "tests/test_stage_certification.py::test_any_non_passing_case_revokes_certification",
         "tests/test_stage_certification.py::test_filter_rows_with_no_description_is_undescribed_not_untestable",
-        "tests/test_stage_edit.py::_seed_empty",
         "tests/test_stage_edit_requires_a_description.py::test_a_config_only_stage_needs_no_summary",
         "tests/test_stage_edit_requires_a_description.py::test_an_empty_corner_case_list_is_a_valid_answer",
         "tests/test_stage_edit_requires_a_description.py::test_editing_a_summary_away_is_refused",
@@ -1662,7 +1654,7 @@ def test_measure_symbol_entrance_prose_dedents_a_deeply_nested_docstring(tmp_pat
 
 def test_measure_symbol_entrance_prose_reads_relative_posix_path(tmp_path: Path) -> None:
     nested = tmp_path / "app" / "sub"
-    nested.mkdir(parents=True)
+    nested.mkdir(parents=True, exist_ok=True)
     file = _write_module(nested, 'def go():\n    """Short."""\n')
     [measurement] = measure_symbol_entrance_prose([file], tmp_path)
     assert measurement.path == "app/sub/m.py"

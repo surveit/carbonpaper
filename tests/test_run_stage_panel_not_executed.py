@@ -19,6 +19,7 @@ from app.services import versioning
 from app.services import project as project_service
 from app.services.workflow_test import run_workflow_test
 from conftest import pinned_stages
+from stage_seed import add_stage
 
 client = TestClient(app)
 
@@ -51,12 +52,11 @@ def _stages(data_path: Path) -> list[dict]:
 @pytest.fixture()
 def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     pdir = tmp_path / PROJECT
-    (pdir / "compiled").mkdir(parents=True)
+    pdir.mkdir(parents=True, exist_ok=True)
     data = pdir / "rows.csv"
     pd.DataFrame({"name": ["a", "b"], "val": [1, 2]}).to_csv(data, index=False)
     for index, stage in enumerate(_stages(data), start=1):
-        (pdir / "compiled" / f"{index:02d}_{stage['id']}.json").write_text(
-            json.dumps(stage), encoding="utf-8")
+        add_stage(pdir, stage)
     workspace.set_projects_dir(tmp_path)
     version_id = project_service.save_working_copy_as_version(
         pdir, message="v1", reviewer="test").version_id

@@ -21,6 +21,7 @@ from conftest import (
     QUEUE_COLUMNS, contribution_of, make_run_context, pinned_stages,
     queue_added_columns, resumed_stages,
 )
+from stage_seed import add_stage
 
 PROJECT = "hrq-cache-tests"
 
@@ -312,7 +313,7 @@ def test_bust_cache_reads_no_cache_entries_at_all(tmp_path, monkeypatch):
 
 def test_legacy_decisions_parquet_never_read(tmp_path):
     decisions_dir = tmp_path / "decisions"
-    decisions_dir.mkdir()
+    decisions_dir.mkdir(parents=True, exist_ok=True)
     pd.DataFrame([{
         "content_hash": "whatever", "decision": "approve", "modified_score": None,
         "reviewer": "local", "reviewed_at": "2026-07-01T00:00:00", "source_run_id": "run0",
@@ -683,8 +684,8 @@ def test_cancelled_execution_reports_no_queue_counts(tmp_path, monkeypatch):
 
 
 def _write_stage(root, filename, stage):
-    (root / "compiled").mkdir(parents=True, exist_ok=True)
-    (root / "compiled" / filename).write_text(json.dumps(stage), encoding="utf-8")
+    root.mkdir(parents=True, exist_ok=True)
+    add_stage(root, stage)
 
 
 def _seed_version(root):
