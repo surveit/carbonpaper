@@ -10,24 +10,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # uv installs the dev requirements in place of pip. setup-uv owns the
-      # dependency cache (enable-cache), so setup-python no longer passes
-      # `cache: pip` — it stays only to supply the 3.12 interpreter that
-      # `uv pip install --system` installs into.
+      # uv project mode: `uv sync --frozen` installs the exact pins in uv.lock
+      # into .venv and fails rather than re-resolving if the lock has drifted
+      # from pyproject.toml. setup-uv owns the dependency cache (enable-cache),
+      # so setup-python no longer passes `cache: pip` — it stays only to supply
+      # the 3.12 interpreter uv builds the environment on.
       - uses: astral-sh/setup-uv@v9.0.0
         with:
           enable-cache: true
-          cache-dependency-glob: |
-            requirements.txt
-            requirements-dev.txt
+          cache-dependency-glob: uv.lock
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: uv pip install --system -r requirements-dev.txt
-      - run: ruff check .
+      - run: uv sync --frozen
+      - run: uv run --frozen ruff check .
       # Architecture boundaries: contracts live in pyproject [tool.importlinter].
       # PYTHONPATH=. lets grimp import the `app` package (run from source, not installed).
-      - run: PYTHONPATH=. lint-imports
+      - run: PYTHONPATH=. uv run --frozen lint-imports
 
   typecheck:
     runs-on: ubuntu-latest
@@ -36,16 +35,14 @@ jobs:
       - uses: astral-sh/setup-uv@v9.0.0
         with:
           enable-cache: true
-          cache-dependency-glob: |
-            requirements.txt
-            requirements-dev.txt
+          cache-dependency-glob: uv.lock
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      # requirements-dev pulls in requirements.txt, so mypy sees real signatures
-      # (fastapi, claude-agent-sdk, ...).
-      - run: uv pip install --system -r requirements-dev.txt
-      - run: mypy
+      # The dev group pulls in the runtime dependencies too, so mypy sees real
+      # signatures (fastapi, claude-agent-sdk, ...).
+      - run: uv sync --frozen
+      - run: uv run --frozen mypy
 
   test:
     runs-on: ubuntu-latest
@@ -54,13 +51,11 @@ jobs:
       - uses: astral-sh/setup-uv@v9.0.0
         with:
           enable-cache: true
-          cache-dependency-glob: |
-            requirements.txt
-            requirements-dev.txt
+          cache-dependency-glob: uv.lock
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: uv pip install --system -r requirements-dev.txt
+      - run: uv sync --frozen
       # Guard for refs without tests/: warn loudly instead of green-lighting a
       # bare `pytest`, which would collect the root-level manual probe scripts
       # (test_roldugin.py etc.) that hit real APIs. tests/ and app/ are named
@@ -68,7 +63,7 @@ jobs:
       # the colocated app/**/_arch_tests/ architecture checks DO run in CI.
       - run: |
           if [ -d tests ]; then
-            python -m pytest tests/ app/
+            uv run --frozen python -m pytest tests/ app/
           else
             echo "::warning::No tests/ directory on this ref — pytest was NOT run."
           fi
@@ -95,20 +90,18 @@ jobs:
       - uses: astral-sh/setup-uv@v9.0.0
         with:
           enable-cache: true
-          cache-dependency-glob: |
-            requirements.txt
-            requirements-dev.txt
+          cache-dependency-glob: uv.lock
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: uv pip install --system -r requirements-dev.txt
+      - run: uv sync --frozen
       # tools/import_graph_report.py --root points grimp at a different
       # checkout's `app` package for its analysis, reusing this (head)
       # checkout's own copy of the script and of tests/arch/ — the base
       # checkout only needs its `app/` source, never its own copy of either.
-      - run: python tools/import_graph_report.py > head-metrics.json
-      - run: python tools/import_graph_report.py --root base > base-metrics.json
-      - run: python tools/import_graph_report.py --markdown head-metrics.json base-metrics.json > comment-body.md
+      - run: uv run --frozen python tools/import_graph_report.py > head-metrics.json
+      - run: uv run --frozen python tools/import_graph_report.py --root base > base-metrics.json
+      - run: uv run --frozen python tools/import_graph_report.py --markdown head-metrics.json base-metrics.json > comment-body.md
       # Raw data lives alongside the cooked report: the comment shows the
       # rendered table, but the JSON these two invocations produced is kept
       # too so it can be re-sliced without recomputing. Short retention —
