@@ -16,7 +16,7 @@
         {# The trail is the whole left side and the ONLY way back: no page adds a
            back link of its own. A page with no trail to pass (an error, a partial
            rendered standalone) falls back to the bare brand rather than nothing. #}
-        {% block breadcrumbs %}<a href="/" class="brand">workflow</a>{% endblock %}
+        {% block breadcrumbs %}<a href="/" class="brand">{% include "_wordmark.html" %}</a>{% endblock %}
         <a href="/admin" class="back-link header-right">Admin</a>
     </header>
     <main>

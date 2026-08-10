@@ -23,8 +23,13 @@ header {
     background: var(--raised);
 }
 
-.brand { font-weight: 600; font-size: 17px; color: var(--fg); text-decoration: none; letter-spacing: -0.2px; }
-.brand .dot { color: var(--accent); }
+.brand { color: var(--fg); text-decoration: none; }
+/* The mark (_wordmark.html): small caps-height, widely tracked, the second half in
+   the transfer ink. It sets its own size and tracking wherever it sits, so the
+   header fallback and the trail's home rung read identically. */
+.wordmark { font-weight: 600; font-size: 12.5px; letter-spacing: 0.16em;
+    text-transform: uppercase; color: var(--fg); white-space: nowrap; }
+.wordmark-transfer { color: var(--accent); }
 
 .back-link { color: var(--muted); text-decoration: none; font-size: 14px; }
 .back-link:hover { color: var(--accent); }
@@ -42,7 +47,6 @@ header {
     min-width: 0; }
 .crumb-link { color: var(--muted); text-decoration: none; white-space: nowrap; }
 .crumb-link:hover { color: var(--accent); text-decoration: underline; }
-.crumb-home { font-weight: 600; color: var(--fg); letter-spacing: -0.2px; }
 .crumb-sep { color: var(--border-strong); user-select: none; }
 .crumb-here { color: var(--fg); font-weight: 600; white-space: nowrap; }
 .crumb-here code, .crumb-link code, .crumb-switch code { font-size: 12.5px; }

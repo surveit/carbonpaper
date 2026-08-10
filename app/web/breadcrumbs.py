@@ -104,7 +104,8 @@ def build_home_crumbs(here: str) -> list[Crumb]:
     return [_home(), _here(here)]
 
 
-_HOME_LABEL = "workflow"
+# The trail's first rung renders the wordmark (_wordmark.html) rather than this text.
+_HOME_LABEL = "CarbonPaper"
 # Their own prefix: a picker beside the thing it lists gets shadowed by that thing's
 # own `{id}` route, which matches "picker" as an id.
 _PICKERS = "/pickers"
