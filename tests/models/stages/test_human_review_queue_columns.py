@@ -3,6 +3,8 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
+from conftest import reads_of
+
 from app.models import parse_stage
 from app.models.stages.human_review_queue import find_queue_column_issues
 
@@ -41,6 +43,7 @@ def _stage_spec(*, queue=None, input_columns=None, output_columns=None):
         "id": "wc", "type": "human_review_queue", "description": "wc",
         "inputs": [{"id": "src", "schema": {"columns": edge}}],
         "signature": {"form": "extends",
+                      "reads": reads_of("src", edge),
                       "adds": [c for c in outputs if c["name"] not in flowing]},
         "queue": {**_QUEUE, **(queue or {})},
     }
@@ -65,6 +68,25 @@ def test_filter_naming_a_column_the_input_lacks_is_rejected():
 def test_a_filter_over_input_columns_is_clean():
     stage = parse_stage(_stage_spec(queue={"filter": "assertion_text IS NOT NULL"}))
     assert find_queue_column_issues(stage) == []
+
+
+def test_a_filter_over_a_column_the_signature_does_not_read_is_rejected():
+    # The filter would test a column the narrowed row does not carry.
+    spec = _stage_spec(queue={"filter": "confidence > 3"})
+    spec["signature"]["reads"] = reads_of(
+        "src", [c for c in _INPUT_COLUMNS if c["name"] != "confidence"])
+    with pytest.raises(ValidationError, match="queue.filter tests `confidence`"):
+        parse_stage(spec)
+
+
+# ── the read set ─────────────────────────────────────────────────────────────
+
+
+def test_a_signature_reading_nothing_is_rejected():
+    spec = _stage_spec()
+    spec["signature"]["reads"] = []
+    with pytest.raises(ValidationError, match="reads nothing"):
+        parse_stage(spec)
 
 
 # ── 2. reviewed source columns ───────────────────────────────────────────────

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import pytest
 
+from conftest import reads_of
+
 from app import models as m
 from app.web.stage_test_views import build_certification
 
@@ -11,6 +13,8 @@ _SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True}]}
 # Which signature form a type takes: the reshaping family replaces its input,
 # the anchored family extends it.
 _REPLACES_TYPES = {"python_frame_function", "aggregate", "union", "input_data", "publish"}
+# The two the model refuses an empty read set on: each is handed only what it reads.
+_READS_THE_ROW_TYPES = {"filter_rows", "human_review_queue"}
 
 
 def _signature_for(type_, schema):
@@ -18,6 +22,8 @@ def _signature_for(type_, schema):
         return {"form": "replaces"}
     if type_ in _REPLACES_TYPES:
         return {"form": "replaces", "produces": schema["columns"]}
+    if type_ in _READS_THE_ROW_TYPES:
+        return {"form": "extends", "reads": reads_of("up", schema["columns"])}
     return {"form": "extends"}
 
 
