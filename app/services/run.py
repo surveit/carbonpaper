@@ -4,18 +4,15 @@ other run driver goes through here rather than importing the runner directly."""
 from __future__ import annotations
 
 import threading
-import time
 import traceback
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
 
 import pandas as pd
-from pydantic import BaseModel
 
 from app.core.errors import RunNotFoundError, RunVersionUnresolvableError
 from app.core.frames import read_frame_column_names
-from app.core.run_status import RunStatus
 from app.models import Stage
 from app.models.run_manifest import read_run_bindings, read_run_manifest
 from app.runtime.manifest import read_stage_output_frame, resolve_output_path
@@ -55,59 +52,6 @@ def execute(
 ) -> dict[str, Any]:
     return run_prepared(
         _prepare(project, version_id, bindings, limits, offsets, bust_cache)
-    )
-
-
-class StageOutcome(BaseModel):
-    stage_id: str
-    status: str
-    output_row_count: int
-    error: str | None = None
-
-
-class RunOutcome(BaseModel):
-    run_id: str
-    status: str
-    # False means the deadline passed with the run still executing — `status` is then
-    # "running" and `stages` says which stage is on. Never a failure.
-    is_terminal: bool
-    waited_seconds: float
-    stages: list[StageOutcome]
-
-
-def wait_for_run_to_finish(
-    project: str, run_id: str, *, timeout_seconds: float, poll_seconds: float = 1.0
-) -> RunOutcome:
-    """Blocks the CALLER's thread until the run settles or `timeout_seconds` passes."""
-    started = time.monotonic()
-    deadline = started + timeout_seconds
-    while True:
-        outcome = _read_outcome(project, run_id, time.monotonic() - started)
-        remaining = deadline - time.monotonic()
-        if outcome.is_terminal or remaining <= 0:
-            return outcome
-        time.sleep(min(poll_seconds, remaining))
-
-
-def _read_outcome(project: str, run_id: str, waited_seconds: float) -> RunOutcome:
-    manifest = read_run_status(project, run_id)
-    status = str(manifest["status"])
-    return RunOutcome(
-        run_id=run_id,
-        status=status,
-        is_terminal=status != RunStatus.RUNNING,
-        waited_seconds=round(waited_seconds, 1),
-        stages=[_read_stage_outcome(record) for record in manifest["stage_records"]],
-    )
-
-
-def _read_stage_outcome(record: Mapping[str, Any]) -> StageOutcome:
-    error = record.get("error")
-    return StageOutcome(
-        stage_id=str(record["stage_id"]),
-        status=str(record["status"]),
-        output_row_count=int(record["output_row_count"]),
-        error=str(error["message"]) if isinstance(error, Mapping) else None,
     )
 
 

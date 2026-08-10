@@ -25,7 +25,7 @@ _BASE_URL = "http://127.0.0.1:8788/"
 _EXPECTED_TOOLS = {
     "create_tutorial_project",
     "run_workflow",
-    "wait_for_run",
+    "get_run_status",
     "describe_workflow",
 }
 
@@ -66,7 +66,7 @@ def test_the_tutorial_agent_gets_none_of_the_editing_tools() -> None:
     bare = {name.rsplit("__", 1)[-1] for name in engine._allowed_tools}
 
     assert "add_stage" in editing and "save_version" in editing  # the list is real
-    assert bare & editing == {"describe_workflow", "run_workflow", "wait_for_run"}
+    assert bare & editing == {"describe_workflow"}
     for editing_only in ("add_stage", "edit_stage", "remove_stage", "save_version",
                          "create_draft", "set_draft_stage", "write_review_guide"):
         assert editing_only not in bare
@@ -92,12 +92,17 @@ def test_create_tutorial_project_binds_an_absolute_csv_to_every_input_stage(
     assert {s.id: Path(s.connector.params["path"]) for s in sources} == bound
 
 
-def test_two_tours_seed_two_distinct_projects(projects_root: Path) -> None:
+def test_a_second_tour_reuses_the_project_the_first_one_seeded(projects_root: Path) -> None:
+    """Accept what is already there rather than filling the workspace with copies."""
     first = _seed_a_tour()
+    (projects_root / first["name"] / "MINE.txt").write_text("kept", encoding="utf-8")
+
     second = _seed_a_tour()
 
-    assert first["name"] != second["name"]
-    assert {first["name"], second["name"]} <= set(project_service.list_projects())
+    assert second["name"] == first["name"]
+    assert project_service.list_projects() == [first["name"]]
+    # Reused, not re-imported: whatever the reader did to it is still there.
+    assert (projects_root / first["name"] / "MINE.txt").is_file()
 
 
 def test_the_handoff_command_is_built_from_this_workspaces_base_url() -> None:
@@ -157,28 +162,6 @@ def test_a_real_run_resolves_the_bound_csv_and_honours_the_row_cap(
     assert by_stage["judge_alignment"]["status"] == "error"
 
 
-def test_the_mcp_run_workflow_tool_forwards_limits_too(
-    projects_root: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from app.mcp import server
-
-    seeded = _seed_a_tour()
-    seen: dict[str, Any] = {}
-
-    def _capture(project: str, **kwargs: Any) -> str:
-        seen.update(kwargs)
-        return "20260810T101112"
-
-    monkeypatch.setattr(run_service, "start_run", _capture)
-    monkeypatch.setattr(run_service, "read_run_status", lambda p, r: {"status": "ok"})
-
-    started = server.run_workflow(
-        project_id=seeded["name"], limits={"raw_filings": 6}
-    )
-    assert started["run_id"] == "20260810T101112"
-    assert seen["limits"] == {"raw_filings": 6}
-
-
 def test_the_tour_seeds_a_review_guide_the_reader_can_open(projects_root: Path) -> None:
     seeded = _seed_a_tour()
 
@@ -193,41 +176,21 @@ def test_the_tour_seeds_a_review_guide_the_reader_can_open(projects_root: Path) 
     assert seeded["workflow_url"] == f"{_BASE_URL}project/{seeded['name']}/workflow"
 
 
-def test_wait_for_run_blocks_once_and_reports_the_terminal_status(
+def test_get_run_status_reads_the_manifest_back_without_waiting(
     projects_root: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(run_service, "read_run_status", lambda p, r: {
-        "run_id": r, "status": "ok",
-        "stage_records": [
-            {"stage_id": "raw_filings", "status": "ok", "output_row_count": 6}
-        ],
-    })
-    tool = next(t for t in _tools() if t.name == "wait_for_run")
-
-    out = _call(tool, {"project_id": "any", "run_id": "r", "timeout_seconds": 1})
-    waited = json.loads(out["content"][0]["text"])
-
-    assert waited["status"] == "ok"
-    assert waited["is_terminal"] is True
-    assert waited["stages"][0]["output_row_count"] == 6
-
-
-def test_wait_for_run_reports_a_still_running_run_rather_than_a_failure(
-    projects_root: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+    """The tour polls: a `running` status is an answer, not an error to recover from."""
     monkeypatch.setattr(run_service, "read_run_status", lambda p, r: {
         "run_id": r, "status": "running",
         "stage_records": [
             {"stage_id": "judge_alignment", "status": "running", "output_row_count": 0}
         ],
     })
-    tool = next(t for t in _tools() if t.name == "wait_for_run")
+    tool = next(t for t in _tools() if t.name == "get_run_status")
 
-    # timeout_seconds 1 so the deadline passes in this test rather than in 300s.
-    out = _call(tool, {"project_id": "any", "run_id": "r", "timeout_seconds": 1})
-    waited = json.loads(out["content"][0]["text"])
+    out = _call(tool, {"project_id": "any", "run_id": "r"})
+    status = json.loads(out["content"][0]["text"])
 
     assert out.get("is_error") is not True
-    assert waited["is_terminal"] is False
-    assert waited["status"] == "running"
-    assert waited["stages"][0]["stage_id"] == "judge_alignment"
+    assert status["status"] == "running"
+    assert status["stage_records"][0]["stage_id"] == "judge_alignment"

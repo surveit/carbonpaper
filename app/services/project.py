@@ -256,17 +256,6 @@ def sanitize_project_name(name: str) -> str:
     return re.sub(r"[^a-z0-9_]", "_", name.strip().lower()) or "project"
 
 
-def find_unused_project_name(base: str) -> str:
-    """`base`, else base_2 / base_3 … — the first name create_project would not refuse."""
-    safe = sanitize_project_name(base)
-    root = workspace.projects_dir()
-    candidate, suffix = safe, 1
-    while Project.exists(candidate) or (root / candidate / "document.md").is_file():
-        suffix += 1
-        candidate = f"{safe}_{suffix}"
-    return candidate
-
-
 def create_project(
     name: str,
     document: str,

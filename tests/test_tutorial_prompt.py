@@ -31,7 +31,7 @@ def test_the_prompt_names_no_tool_the_tour_does_not_hold() -> None:
     named = set(_IDENTIFIER.findall(TUTORIAL_SYSTEM_PROMPT)) & known
 
     assert named <= _tour_tool_names(), sorted(named - _tour_tool_names())
-    assert {"create_tutorial_project", "run_workflow", "wait_for_run"} <= named
+    assert {"create_tutorial_project", "run_workflow", "get_run_status"} <= named
 
 
 def test_beat_one_is_conversation_and_calls_no_tool() -> None:
@@ -128,12 +128,12 @@ def test_seeding_and_running_are_one_turn_with_no_boundary_to_ask_at() -> None:
 
     assert "ALL IN ONE TURN" in beat
     assert "One message, three tool calls, no pause anywhere inside it" in beat
-    for tool in ("create_tutorial_project", "run_workflow", "wait_for_run"):
+    for tool in ("create_tutorial_project", "run_workflow", "get_run_status"):
         assert tool in beat
     assert "Do not end your turn between them" in beat
     assert (
-        "Beat 2 is ONE turn. create_tutorial_project, run_workflow and wait_for_run "
-        "happen with no message between them"
+        "Beat 2 is ONE turn. create_tutorial_project, run_workflow and the "
+        "get_run_status polling happen with no message between them"
     ) in _flat(TUTORIAL_SYSTEM_PROMPT)
 
 
@@ -155,11 +155,11 @@ def test_the_tour_never_asks_permission_to_run() -> None:
     assert "Never ask permission to run the workflow." in TUTORIAL_SYSTEM_PROMPT
 
 
-def test_the_tour_waits_in_one_call_and_never_abandons_a_run() -> None:
+def test_the_tour_polls_the_run_out_and_never_abandons_it() -> None:
     beat = _flat(_beat(2))
 
-    assert "Then wait_for_run ONCE, and let it block" in beat
-    assert "call wait_for_run again" in beat
+    assert "poll get_run_status until its `status` is no longer `running`" in beat
+    assert "it is a run still going, and you call again" in beat
     assert "Never abandon a run you started" in beat
     assert "is NOT a failure" in _flat(TUTORIAL_SYSTEM_PROMPT)
 

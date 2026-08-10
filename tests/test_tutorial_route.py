@@ -1,4 +1,4 @@
-"""The tour's door: the home zero state's secondary CTA and the route behind it.
+"""The tour's door: the home zero state's only CTA and the route behind it.
 
 Offline throughout — the route opens a session and redirects; no agent turn runs.
 """
@@ -11,10 +11,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.models.authoring_lifecycle_note import (
-    AUTHORING_LIFECYCLE_GUIDANCE,
-    LIFECYCLE_ONE_LINE,
-)
 from app.services import workspace
 from app.tools.tutorial import TutorialContext
 from app.web.chat_router import _store
@@ -79,13 +75,6 @@ def test_the_zero_state_records_only_that_this_browser_started_the_tour() -> Non
     assert "Take the guided tour again" in page.text
     for claim in ("you have taken", "you've taken", "tour complete", "already toured"):
         assert claim not in page.text.lower(), claim
-
-
-def test_the_zero_state_sketches_the_lifecycle_in_the_authoring_prompts_words() -> None:
-    page = client.get("/")
-    # One string, so what the reader is promised is what the prompts enforce.
-    assert LIFECYCLE_ONE_LINE in page.text
-    assert LIFECYCLE_ONE_LINE in AUTHORING_LIFECYCLE_GUIDANCE
 
 
 def test_a_home_page_with_projects_does_not_offer_the_tour(examples_root: Path) -> None:

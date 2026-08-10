@@ -24,19 +24,12 @@ a join key, a generated ID, a bookkeeping column — goes in the plan with
 the reason it is needed; the user reads that plan against the mental model
 of THEIR OWN data."""
 
-# The same five steps in one line. The home zero state renders it to set a first-time
-# reader's expectations, so what the product promises and what the prompts enforce are
-# one string.
-LIFECYCLE_ONE_LINE = (
-    "research, a plan you sign off, the build, a smoke run before the full one"
-)
-
 # The full lifecycle, for the surfaces that author the workflow end to end (the
 # editing agent's prompt and the MCP instructions). Each numbered step is
 # headed by its CompilerPhase name, which test_authoring_lifecycle_prompt.py pins.
 AUTHORING_LIFECYCLE_GUIDANCE = f"""\
 A project runs in five phases: RESEARCH, PLANNING, BUILD, TEST_RUN,
-TEST_RUN_REVIEW. Authoring is gated: {LIFECYCLE_ONE_LINE}.
+TEST_RUN_REVIEW.
 1. RESEARCH FIRST. Read the prose and the real data. Building and running
    a prototype pipeline over limited rows IS research — to learn
    how the data shapes out through the stages. The gates govern committal, not exploration:
