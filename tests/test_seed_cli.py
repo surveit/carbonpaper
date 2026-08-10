@@ -9,6 +9,9 @@ from app.seeds.seed import discover_workflow_files, seed_all, seed_demo_data_if_
 from app.services import project
 
 _LOBBYING = "lobbying_issue_triage"
+_PALM = "palm_oil_mill_osint"
+# discover_workflow_files sorts, so imports land in fixture-filename order.
+_ALL_BUNDLES = [_LOBBYING, _PALM]
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -49,7 +52,7 @@ def test_seed_all_imports_the_lobbying_bundle_into_an_empty_workspace(tmp_path):
 
     imported = seed_all()
 
-    assert imported == [_LOBBYING]
+    assert imported == _ALL_BUNDLES
     assert _LOBBYING in project.list_projects()
 
 
@@ -57,7 +60,7 @@ def test_seed_all_skips_a_bundle_whose_project_already_exists(tmp_path):
     examples_dir = tmp_path / "examples"
     examples_dir.mkdir()
     first = seed_all()
-    assert first == [_LOBBYING]
+    assert first == _ALL_BUNDLES
 
     second = seed_all()
 
@@ -107,5 +110,5 @@ def test_seed_demo_data_if_enabled_seeds_when_env_var_is_1(tmp_path, monkeypatch
 
     imported = seed_demo_data_if_enabled()
 
-    assert imported == [_LOBBYING]
+    assert imported == _ALL_BUNDLES
     assert _LOBBYING in project.list_projects()

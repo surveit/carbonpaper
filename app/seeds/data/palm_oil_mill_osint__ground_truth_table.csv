@@ -1,0 +1,14 @@
+ground_truth_id,facility_uml_id,field_name,value,unit,source_url
+gt001,PO1000000054,oer,22.47,%,musimmas.com Batang Kulim 2023 recert (CU819846)
+gt002,PO1000000054,ker,6.17,%,musimmas.com Batang Kulim 2023 recert (CU819846)
+gt003,PO1000000054,net_ghg_t_co2e_per_t_cpo,3.95,tCO2e/t CPO,musimmas.com Batang Kulim 2023 recert
+gt004,PO1000000054,nameplate_capacity_t_ffb_hr,60,t FFB/hr,musimmas.com Batang Kulim 2023 recert
+gt005,PO1000000054,pome_methane_capture_electricity_pct,54,%,musimmas.com Batang Kulim 2023 recert
+gt006,PO1000000054,pome_methane_capture_flaring_pct,46,%,musimmas.com Batang Kulim 2023 recert
+gt007,PO1000000021,oer,18.43,%,bsigroup.com Buatan I ASA-4 (RSPO 638918)
+gt008,PO1000000021,ker,4.81,%,bsigroup.com Buatan I ASA-4 (RSPO 638918)
+gt009,PO1000000021,net_ghg_t_co2e_per_t_cpo,0.04,tCO2e/t CPO,bsigroup.com Buatan I ASA-4
+gt010,PO1000000021,nameplate_capacity_t_ffb_hr,60,t FFB/hr,bsigroup.com Buatan I ASA-4
+gt011,PO1000000021,pome_methane_capture_electricity_pct,97,%,bsigroup.com Buatan I ASA-4
+gt012,PO1000000058,nameplate_capacity_t_ffb_hr,120,t FFB/hr,rspo.org Sungai Lilin ASA-3
+gt013,PO1000000092,nameplate_capacity_t_ffb_hr,45,t FFB/hr,cdm.unfccc.int PDD 6872 (Agrowiratama)
