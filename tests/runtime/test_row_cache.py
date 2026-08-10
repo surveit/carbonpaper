@@ -18,6 +18,7 @@ from app.runtime.stages import HANDLERS
 from app.runtime.stages.execution import (
     ROW_ERROR_KEY,
     ROW_USAGE_KEY,
+    Row,
     RowMapHandler,
     _order_by_input_position,
 )
@@ -497,3 +498,111 @@ def test_every_row_mapped_stage_type_runs_under_the_interceptor():
     ):
         handler = HANDLERS[stage_type]
         assert isinstance(handler, RowMapHandler)
+
+
+# ── narrowing to the signature's declared reads ──────────────────────────────
+# Registered on llm_transform, whose reads the model pins to the prompt's
+# placeholders. Exercised here through a hand-built handler so the driver's own
+# behaviour is what is under test, not an LLM backend.
+
+_NOISE_COLUMN = {"name": "noise", "type": "str", "nullable": True}
+
+
+_READS_X = [{"input": "src", "columns": [{"name": "x", "type": "int", "nullable": True}]}]
+
+
+def _two_column_stage(*, reads=None, code: str = _DOUBLING_CODE) -> Stage:
+    """Reads `x`, and carries an unread `noise` column alongside it."""
+    return parse_stage({
+        "id": "double", "description": "Double", "type": "python_row_function",
+        "inputs": [{"id": "src", "schema": {"columns": [
+            {"name": "x", "type": "int", "nullable": True}, _NOISE_COLUMN]}}],
+        "signature": {
+            "form": "extends",
+            "reads": _READS_X if reads is None else reads,
+            "adds": [{"name": "y", "type": "int", "nullable": True}]},
+        "function": {"kind": "inline", "code": code},
+    })
+
+
+def _seen_rows_handler(seen: list[Row], **kwargs) -> RowMapHandler:
+    def make_mapper(stage, ctx, src):
+        def map_row(row, index):
+            seen.append(dict(row))
+            return {**row, "y": row["x"] * 2}
+        return map_row
+
+    return RowMapHandler(make_mapper=make_mapper, **kwargs)
+
+
+def _noisy_src(noise: list[str]) -> pd.DataFrame:
+    return pd.DataFrame({"x": [1, 2], "noise": noise})
+
+
+def test_the_mapper_is_handed_only_the_columns_the_signature_reads():
+    seen: list[Row] = []
+    handler = _seen_rows_handler(seen)
+
+    handler.execute(_two_column_stage(), {"src": _noisy_src(["a", "b"])}, _ctx())
+
+    assert seen == [{"x": 1}, {"x": 2}]  # `noise` never reached it
+
+
+def test_an_unread_column_still_flows_to_the_output():
+    """Narrowing hides a column from the mapper; the rejoin still carries it out."""
+    handler = _seen_rows_handler([])
+
+    out = handler.execute(_two_column_stage(), {"src": _noisy_src(["a", "b"])}, _ctx())
+
+    assert list(out["noise"]) == ["a", "b"]
+    assert list(out["y"]) == [2, 4]
+
+
+def test_a_column_the_stage_never_reads_stops_invalidating_its_cache():
+    """The payoff: keyed on what was READ, a row differing only in a blind
+    column is the same row."""
+    stage = _two_column_stage()
+    calls: list[Row] = []
+    handler = _seen_rows_handler(calls)
+
+    handler.execute(stage, {"src": _noisy_src(["a", "b"])}, _ctx(run_id="run1"))
+    assert len(calls) == 2
+
+    # Same `x` values, different `noise` — every row is a hit.
+    handler.execute(stage, {"src": _noisy_src(["CHANGED", "ALSO"])}, _ctx(run_id="run2"))
+    assert len(calls) == 2
+
+
+def test_a_signature_declaring_no_reads_is_handed_whole_rows():
+    """Empty `reads` means undeclared, not declared-to-read-nothing."""
+    seen: list[Row] = []
+    # The field defaults to empty and nothing obliges an author to fill it, so
+    # there is no contract to enforce — the mapper gets the whole row, as before.
+    _seen_rows_handler(seen).execute(
+        _two_column_stage(reads=[]), {"src": _noisy_src(["a", "b"])}, _ctx())
+
+    assert seen == [{"x": 1, "noise": "a"}, {"x": 2, "noise": "b"}]
+
+
+def test_undeclared_reads_leave_that_same_column_invalidating():
+    """The control: undeclared, the whole row keys."""
+    stage = _two_column_stage(reads=[])
+    # So the cache hit in the test above is narrowing's doing, not the fixture's.
+    calls: list[Row] = []
+    handler = _seen_rows_handler(calls)
+
+    handler.execute(stage, {"src": _noisy_src(["a", "b"])}, _ctx(run_id="run1"))
+    handler.execute(stage, {"src": _noisy_src(["CHANGED", "ALSO"])}, _ctx(run_id="run2"))
+
+    assert len(calls) == 4  # both rows recomputed
+
+
+def test_a_registered_row_function_may_not_read_past_its_declared_reads():
+    """No stage type gets a vote — the REGISTERED python_row_function narrows too."""
+    stage = _two_column_stage(
+        code="def transform(row):\n    return {**row, 'y': row['noise']}\n")
+    # Authored code reaching past its declared reads fails loudly rather than
+    # reading a value the signature never promised it.
+
+    with pytest.raises(KeyError, match="noise"):
+        _run(stage, _noisy_src(["a", "b"]), _ctx())

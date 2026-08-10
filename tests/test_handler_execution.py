@@ -172,8 +172,9 @@ def _empty_source() -> pd.DataFrame:
 
 def test_row_driver_empty_input():
     # No row means no mapper result to name the output's columns, so the frame
-    # takes the INPUT's columns. A 0x0 frame would make a downstream stage keyed
-    # on `id` raise KeyError instead of producing an empty result.
+    # takes the ones the signature promised — here an `extends` adding nothing,
+    # so the input's. A 0x0 frame would make a downstream stage keyed on `id`
+    # raise KeyError instead of producing an empty result.
     handler = RowMapHandler(make_mapper=lambda stage, ctx, src: lambda row, index: dict(row))
     ctx = make_run_context()
     out = handler.execute(
@@ -183,6 +184,23 @@ def test_row_driver_empty_input():
     assert out["id"].tolist() == []      # the column is real, not just a label
     # the substituted frame still carries the stage's contribution
     assert contribution_of(out).dropped_columns == []
+
+
+def test_row_driver_empty_input_still_emits_the_columns_the_signature_adds():
+    added = {"columns": [*_EMPTY_SOURCE_COLUMNS, {"name": "y", "type": "str", "nullable": True}]}
+    # The empty result is a RESULT, not an error: what downstream may read does
+    # not depend on whether a row survived. An `extends` promises its `adds`, so
+    # they are on the frame even though no mapper ran to produce them — without
+    # this the stage fails its own output schema on a legitimately empty input.
+    handler = RowMapHandler(make_mapper=lambda stage, ctx, src: lambda row, index: dict(row))
+    out = handler.execute(
+        _row_stage(output_schema=added, input_columns=_EMPTY_SOURCE_COLUMNS),
+        {"src": _empty_source()}, make_run_context())
+
+    assert len(out) == 0
+    assert list(out.columns) == ["x", "id", "y"]
+    assert out["y"].tolist() == []
+    assert out["x"].dtype == "int64"  # a column that flows keeps the input's dtype
 
 
 def test_row_driver_empty_input_reports_no_dropped_columns_when_projecting():

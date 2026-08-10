@@ -201,6 +201,11 @@ class RowMapHandler(StageHandler):
     count or order. A row-mapped stage resolves each row against the
     stage-result cache before calling the mapper (see `_open_row_caching`)
     unless it registers `caches_rows=False`.
+
+    Every row-mapped stage is narrowed to its signature's reads
+    (`_narrowed_reads`) — no registration opts in or out, because what a
+    transform may read is the author's contract and not a property of the shape
+    running it.
     """
 
     def __init__(
@@ -359,6 +364,8 @@ def _run_row_mapper(
             f"got {len(stage.inputs)}"
         )
     src = inputs[stage.inputs[0].id]
+    # Empty reads is UNDECLARED, not declared-empty — see #498.
+    reads = stage.anchor_reads() or None
     map_row = handler.make_mapper(stage, ctx, src)
     # The ONE line of per-row compute, optionally routed through the row cache
     # and the run log. Log outside cache, so a row the cache answers never
@@ -370,13 +377,14 @@ def _run_row_mapper(
     if caching is not None:
         compute_row = _map_row_through_cache(caching, compute_row, ctx.run_log, stage.id)
     records = list_rows(src)
+    seen = records if reads is None else [_narrow_row(row, reads) for row in records]
 
     results: list[Row | None] = [None] * len(records)
     if handler.parallelism > 1 and len(records) > 1:
         with ThreadPoolExecutor(max_workers=handler.parallelism) as pool:
             futures = {
                 pool.submit(compute_row, record, index): index
-                for index, record in enumerate(records)
+                for index, record in enumerate(seen)
             }
             for future in as_completed(futures):
                 if _consume_cancel(ctx):
@@ -388,7 +396,7 @@ def _run_row_mapper(
                     raise RunCancelled(f"stage {stage.id}: cancelled mid-fan-out")
                 results[futures[future]] = future.result()
     else:
-        for index, record in enumerate(records):
+        for index, record in enumerate(seen):
             if _consume_cancel(ctx):
                 raise RunCancelled(f"stage {stage.id}: cancelled")
             results[index] = compute_row(record, index)
@@ -403,14 +411,21 @@ def _run_row_mapper(
                 f"stage {stage.id}: row mapper must return one dict per row, "
                 f"got {type(result).__name__} for row {index}"
             )
-        out_rows.append(result)
+        # Rejoin: under narrowing the mapper only ever saw its declared reads, so
+        # the columns that merely FLOW come back from the input row here. The
+        # mapper's own keys win — that is what a rewrite or an add is.
+        out_rows.append(result if reads is None else {**records[index], **result})
         kept_indices.append(index)
     mapped = _finish_mapped_frame(pd.DataFrame(out_rows), handler, map_row, stage, ctx)
-    out = _restore_input_columns_when_nothing_named_them(mapped, src)
+    out = _finish_empty_result(mapped, src, stage)
     if handler.drops_rows:
         # The driver, not the stage, knows which input ordinals survived.
         attach_row_lineage(out, kept_rows_lineage(stage.inputs[0].id, kept_indices))
     return out
+
+
+def _narrow_row(row: Row, keep: frozenset[str]) -> Row:
+    return {key: value for key, value in row.items() if key in keep}
 
 
 # ── the row-level cache interceptor ──────────────────────────────────────────
@@ -574,8 +589,8 @@ def _run_batched(
     emit_batched_row_outcomes(
         ctx.run_log, stage.id, misses, [row.get(ROW_ERROR_KEY) for row in computed]
     )
-    return _restore_input_columns_when_nothing_named_them(
-        _finish_batched_frame(rows, handler, stage), src
+    return _finish_empty_result(
+        _finish_batched_frame(rows, handler, stage), src, stage
     )
 
 
@@ -639,27 +654,17 @@ def _finish_batched_frame(
     return _strip_and_project(df, _collect_internal_columns(df), handler, stage)
 
 
-def _restore_input_columns_when_nothing_named_them(
-    mapped: pd.DataFrame, src: pd.DataFrame
+def _finish_empty_result(
+    mapped: pd.DataFrame, src: pd.DataFrame, stage: Stage
 ) -> pd.DataFrame:
-    """The mapped frame, or — when it has neither rows nor columns — an empty
-    slice of the stage's input, carrying the mapped frame's `.attrs`.
-
-    A frame assembled from no results at all is 0 rows BY 0 COLUMNS: the input
-    was empty, so no mapper result named a single column. A downstream stage
-    keyed on an upstream column would then raise `KeyError` instead of producing
-    an empty result, and the input's own columns are the one honest shape
-    available. A frame that still carries a row or a column is returned
-    untouched.
-
-    The substituted frame takes the mapped one's `.attrs` verbatim, because the
-    stage's StageContribution rides there: an empty-input stage still reported
-    whatever it reported onto that contribution, and swapping the frame must not
-    swallow it."""
+    """A 0x0 frame extended nothing, so its promised columns are named here."""
     if len(mapped.columns) > 0 or len(mapped) > 0:
         return mapped
     empty = src.iloc[0:0].copy()
-    empty.attrs = dict(mapped.attrs)
+    promised = stage.resolve_output_schema()
+    if promised is not None:
+        empty = empty.reindex(columns=[column.name for column in promised.columns])
+    empty.attrs = dict(mapped.attrs)  # the StageContribution rides here
     return empty
 
 
@@ -782,10 +787,9 @@ def _project_onto_declared_columns(
     if not declared:
         return df
     if not len(df.columns) and not len(df):
-        # Not a violation: with an empty input no mapper result named a single
-        # column, so no row failed to produce a declared one. The driver hands
-        # this frame the input's own columns
-        # (_restore_input_columns_when_nothing_named_them).
+        # Not a violation: no mapper result named a single column, so no row
+        # failed to produce a declared one. The driver gives this frame the
+        # promised columns (_finish_empty_result).
         return df
     missing = [name for name in declared if name not in df.columns]
     if missing and not contribution.row_errors:

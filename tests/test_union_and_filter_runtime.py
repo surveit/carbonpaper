@@ -87,6 +87,36 @@ def test_filter_rows_keeps_true_rows_in_order_with_columns_unchanged(tmp_path):
     pd.testing.assert_frame_equal(out, expected)
 
 
+def test_a_filter_that_keeps_nothing_still_feeds_its_downstream_a_valid_frame(tmp_path):
+    """src -> f (keeps no row) -> tag, a row function adding `note`."""
+    src = pd.DataFrame({"a": ["x", "y"], "b": [1, 2]})
+    # `tag`'s mapper never runs, so nothing names a column; it must still emit
+    # `note`, because an empty result is a result and its output schema promises
+    # one. It used to inherit its INPUT's columns and then fail its own schema.
+    load = _load_stage("src", src, tmp_path)
+    filt = _filter_stage("f", "src", "def should_include(row): return row['b'] > 99")
+    tag = parse_stage({
+        "id": "tag", "description": "tag", "type": "python_row_function",
+        "inputs": [{"id": "f", "schema": _AB_SCHEMA}],
+        "signature": {"form": "extends",
+                      "reads": [{"input": "f", "columns": _AB_SCHEMA["columns"]}],
+                      "adds": [{"name": "note", "type": "str", "nullable": False}]},
+        "function": {"kind": "inline",
+                     "code": "def transform(row):\n    return {**row, 'note': 'seen'}\n"},
+    })
+    workflow = Workflow(stages=[load, filt, tag])
+
+    outputs = run_subset(
+        workflow, injected_outputs={},
+        stage_ids=["src", "f", "tag"], run_dir=tmp_path / "runs" / "r_empty",
+        repo_root=tmp_path,
+    )
+
+    out = outputs["tag"]
+    assert len(out) == 0
+    assert list(out.columns) == ["a", "b", "note"]
+
+
 def test_filter_rows_non_bool_return_is_a_loud_error(tmp_path):
     src = pd.DataFrame({"a": ["x"], "b": [1]})
     load = _load_stage("src", src, tmp_path)

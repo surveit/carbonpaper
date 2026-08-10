@@ -53,6 +53,8 @@ non-unique reference, `expand` allows m:n fan-out); `aggregate`;
 `human_review_queue` (row fingerprint → cached decision or halt);
 `publish` (a `function` module that writes artifacts).
 
+**A row-mapped stage sees only what its signature `reads`.**
+
 **Row caching is a property of the handler SHAPE, not of a stage type.** `RowMapHandler`
 wraps the one line of per-row compute (`execution._open_row_caching`), so `python_row_function`
 and a batch_size-1 `llm_transform` are cached by the same code; for the batched path the

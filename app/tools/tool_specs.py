@@ -17,10 +17,10 @@ surface shows it, so name the step well; use edit_stage to change an existing
 one), description (ONE line under that name, never a name itself), type, the
 config block(s) its type requires — connector
 / llm / function / join / aggregate / queue / union / filter, and `publish`
-needs BOTH its `publish` block and a `function` block — output_schema, inputs,
-and `signature` (REQUIRED for every NEW stage: what the transform reads and
-writes; only stages stored before signatures existed may lack one).
-read_stage on a similar existing stage shows the shape.
+needs BOTH its `publish` block and a `function` block — inputs each with a
+MANDATORY `schema`, and `signature`: what the transform reads and writes.
+There is no output_schema to send — the stage's output IS what the signature
+promises. read_stage on a similar existing stage shows the shape.
 
 Order does not matter: the batch is sorted by the `inputs` each stage
 declares, so a stage may name another stage in the SAME call as an input, or
