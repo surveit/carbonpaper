@@ -130,6 +130,11 @@ def test_runs_index_carries_no_run_form(project):
     assert '/project/demo/runs/new' in resp.text  # the action that reaches it
 
 
+def test_runs_index_carries_no_awaiting_review_banner(project):
+    """The result column marks each halted run on the row the reader has to open."""
+    assert "banner-review" not in client.get("/project/demo/runs").text
+
+
 def test_new_is_the_run_form_not_a_run_id(project):
     resp = client.get("/project/demo/runs/new")
     assert resp.status_code == 200

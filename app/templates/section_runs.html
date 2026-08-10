@@ -22,6 +22,11 @@
 
   Only manifest-backed runs appear, and a run whose manifest cannot be read says so
   in place of the parts it could not read.
+
+  No awaiting-review banner: the result column already marks each halted run
+  `Awaiting review` on its own row, which is the row the reader has to open. A banner
+  over the table restated that as a total and pointed at no run in particular. The
+  total is still on Overview and in the sidebar's next action.
 #}
 {% block section %}
 <div class="sec-head wf-head">
@@ -36,13 +41,6 @@
   </div>
   {% endif %}
 </div>
-
-{% if state.runs.awaiting_review > 0 %}
-<div class="banner banner-review">
-  <strong>{{ state.runs.awaiting_review }}</strong> run{% if state.runs.awaiting_review != 1 %}s{% endif %}
-  awaiting review — halted at a human-review queue. Open the run to clear its queue.
-</div>
-{% endif %}
 
 {% if runs %}
 <table class="stages runs-table">

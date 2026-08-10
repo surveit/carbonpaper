@@ -184,6 +184,11 @@
 
 .wf-head-title { min-width: 0; flex: 1 1 360px; }
 
+/* The lede's own 24px bottom margin is trapped inside this flex header, so it
+   could not collapse into the gap `.sec-head` and the following block already
+   agree on — the header paid for the space twice. One owner: `.sec-head`. */
+.wf-head .lede { margin-bottom: 0; }
+
 .wf-actions { flex: none; align-items: center; flex-wrap: wrap; }
 
 /* ═══ OVERVIEW section ═══ */
