@@ -1,8 +1,8 @@
 """The in-process tools the editing agent calls to read and edit a project's workflow.
 
 Tools go through the name-based `app.services` surfaces and never build a filesystem
-path. `get_current_project` must be called first — its value is what every other tool
-passes as `project_id`. A missing stage or column raises, never an invented default."""
+path. A session need not name a project — `get_current_project` returns None when none
+is bound. A missing stage or column raises, never an invented default."""
 
 from __future__ import annotations
 
@@ -20,16 +20,16 @@ from app.services.drafts import DraftDetail, DraftEdit, DraftView, SaveResult
 
 
 class EditingContext(BaseModel):
-    """What one editing session needs to bind its tools: the project it edits."""
+    """What one editing session binds its tools to: the project it edits, if one is bound."""
 
-    project_id: str
+    project_id: str | None = None
 
 
 def make_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
     def list_projects() -> list[str]:
         return project_service.list_projects()
 
-    def get_current_project() -> str:
+    def get_current_project() -> str | None:
         return ctx.project_id
 
     def describe_workflow(project_id: str) -> dict[str, Any]:

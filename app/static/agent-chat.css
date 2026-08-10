@@ -8,14 +8,9 @@
 .ac-backend { font-size: 12px; color: var(--muted); border: 1px solid var(--border);
     border-radius: 10px; padding: 2px 8px; white-space: nowrap; }
 
-/* Opening a chat, at the right end of the heading line. The editing agent binds to
-   one project, so naming it is part of the control rather than a step after it;
-   with no project to name, the line says so and offers the project instead. */
-.ac-new, .ac-new-none { margin-left: auto; display: flex; align-items: center; gap: 8px; }
-.ac-new-label { color: var(--muted); font-size: 13px; }
-.ac-new select { font: inherit; font-size: 14px; padding: 6px 9px; color: var(--fg);
-    background: var(--raised); border: 1px solid var(--border); border-radius: 6px; }
-.ac-new-none { color: var(--muted); font-size: 13px; }
+/* Opening a chat, at the right end of the heading line. A chat binds to no project,
+   so the control is the button alone. */
+.ac-new { margin-left: auto; }
 
 .ac-sessions { list-style: none; padding: 0; max-width: 1080px; }
 .ac-session { border: 1px solid var(--border); border-radius: 8px; background: var(--raised);
