@@ -77,7 +77,6 @@
                        justify-content: space-between; gap: 1.2rem; margin: 0 0 .15rem; }
   .run-overview-head > h2 { margin: 0; }
   .run-toolbar { display: flex; align-items: center; gap: .5rem; }
-  .run-toolbar .run-export { font-size: .8rem; padding: 5px 11px; }
   /* box-sizing: there is no global reset, so the padding below would otherwise put
      the menu 32px wider than the column and hang it off the left edge, where the
      work column's own scroll box clips it. */
@@ -159,7 +158,7 @@
 <h2>Run overview</h2>
 <div class="run-toolbar">
   {% if not is_running %}
-  <a class="btn ghost run-export" href="/project/{{ project }}/runs/{{ run_id }}/packet.zip"
+  <a class="btn secondary sm" href="/project/{{ project }}/runs/{{ run_id }}/packet.zip"
      title="This run's data, records, workflow and methodology as an offline folder someone outside can fact-check without this app.">📦 Export review packet</a>
   {% endif %}
   <button type="button" class="drawer-btn" id="audit-menu-btn" aria-expanded="false"
