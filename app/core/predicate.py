@@ -1,8 +1,8 @@
-"""Our SQL-ish predicate dialect for `where`/`filter` expressions. The grammar is
-restricted to the subset where `ast` (inspected here) and `pandas.eval`/
-`DataFrame.query` (executed by the runtime) resolve column references identically.
-Anything outside it — backticks, `@vars`, ... — raises `PredicateError` rather than
-reaching `.eval()`/`.query()` unvalidated."""
+"""Our SQL-ish predicate dialect for `where`/`filter` expressions: a closed set of AST
+node types AND a closed allowlist of attribute names. It admits only constructs where
+`ast` (inspected here) and `pandas.eval`/`DataFrame.query` (executed by the runtime)
+agree on column resolution, and no chain an author can write reaches past a column.
+Anything else raises `PredicateError` rather than reaching `.eval()`/`.query()`."""
 from __future__ import annotations
 
 import ast
@@ -17,6 +17,14 @@ _COMPARE_OPS: tuple[type[ast.cmpop], ...] = (
     ast.Eq, ast.NotEq, ast.Lt, ast.LtE, ast.Gt, ast.GtE,
 )
 
+# The attribute names the dialect admits, by the position a chain holds them in:
+# a method on a column, the `.str` accessor, and the methods reached through it.
+# `isna`/`notna` are what `_normalize` emits for IS NULL / IS NOT NULL.
+_COLUMN_METHODS = frozenset({"isna", "notna"})
+_STRING_ACCESSOR = frozenset({"str"})
+_STRING_METHODS = frozenset({"contains", "startswith"})
+_ALLOWED_ATTRIBUTES = _COLUMN_METHODS | _STRING_ACCESSOR | _STRING_METHODS
+
 
 @dataclass(frozen=True)
 class ParsedPredicate:
@@ -28,18 +36,7 @@ class ParsedPredicate:
 
 
 def parse_predicate(expr: str) -> ParsedPredicate:
-    """Parse one `where`/`filter` expression in our SQL-ish dialect into a
-    `ParsedPredicate`.
-
-    Normalizes the SQL-ish surface to a pandas expression, parses THAT string
-    with `ast` in eval mode, and walks the tree against a closed grammar:
-    boolean combinators, comparisons, `&`/`|`, `not`, bare column names,
-    literals, attribute access, and method calls on a column (`col.isna()`,
-    `col.str.contains('x')`). Raises `PredicateError` if `expr` doesn't even
-    parse as Python (backticks, `@vars`, and other non-Python surface — the
-    constructs where `ast` and `pandas.eval` could diverge, so rejecting them
-    is the point) or if the tree contains a node outside that grammar (a bare
-    function call, arithmetic, subscripting, a comprehension, ...)."""
+    """Normalize, parse with `ast`, walk the grammar; off-grammar raises `PredicateError`."""
     pandas_expr = _normalize(expr)
     try:
         tree = ast.parse(pandas_expr, mode="eval")
@@ -78,13 +75,7 @@ def _normalize(expr: str) -> str:
 
 
 def _validate_node(node: ast.AST, expr: str) -> None:
-    """Raise `PredicateError` unless every node in this expression subtree is
-    one where `ast` and pandas agree on column resolution: boolean
-    combinators, `&`/`|`, `not`, comparisons, bare names, literals, attribute
-    access, and method calls on a column. Recurses only into the child nodes
-    each allowed construct can legitimately hold — anything else (a bare-name
-    function call, arithmetic, subscripting, a comprehension, ...) is rejected
-    by name by the final `else` rather than silently admitted."""
+    """Recurses only into the children each admitted construct can hold; `else` rejects."""
     if isinstance(node, ast.BoolOp):
         _validate_bool_op(node, expr)
     elif isinstance(node, ast.BinOp):
@@ -98,7 +89,7 @@ def _validate_node(node: ast.AST, expr: str) -> None:
     elif isinstance(node, ast.Constant):
         pass
     elif isinstance(node, ast.Attribute):
-        _validate_node(node.value, expr)
+        _validate_attribute(node, expr)
     elif isinstance(node, ast.Call):
         _validate_call(node, expr)
     else:
@@ -151,6 +142,16 @@ def _validate_name(node: ast.Name, expr: str) -> None:
         raise PredicateError(
             f"filter is not valid: {expr!r} (name `{node.id}` is not a plain read reference)"
         )
+
+
+def _validate_attribute(node: ast.Attribute, expr: str) -> None:
+    """pandas getattr-walks a chain and calls what it lands on, so the names are a closed set."""
+    if node.attr not in _ALLOWED_ATTRIBUTES:
+        raise PredicateError(
+            f"filter is not valid: {expr!r} (attribute `.{node.attr}` is not supported; the only "
+            f"attributes a filter may use are {', '.join(sorted(_ALLOWED_ATTRIBUTES))})"
+        )
+    _validate_node(node.value, expr)
 
 
 def _validate_call(node: ast.Call, expr: str) -> None:
