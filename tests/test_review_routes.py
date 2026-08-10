@@ -90,7 +90,7 @@ _REVIEW_COLUMNS = queue_added_columns()
 
 def _score_stage():
     # llm_transform: scores each quote. The signature is additive (a stage invariant —
-    # app/models/stage.py's _llm_transform_one_to_one), so `quote` survives onto the
+    # find_llm_signature_issues refuses a rewrite), so `quote` survives onto the
     # queued row.
     return {"id": "score", "description": "Score quotes", "type": "llm_transform",
             "inputs": [{"id": "load", "schema": {

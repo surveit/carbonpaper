@@ -108,7 +108,7 @@ def test_missing_config_block_is_a_structured_missing_error():
     )
 
 
-# ── llm_transform's 1:1 contract (_llm_transform_one_to_one) ──────────────────
+# ── llm_transform's 1:1 contract (find_llm_signature_issues) ─────────────────
 def test_llm_transform_rejects_more_than_one_input():
     with pytest.raises(ValidationError, match="exactly one input, has 2"):
         m.parse_stage(S(
@@ -120,7 +120,7 @@ def test_llm_transform_rejects_more_than_one_input():
 
 def test_llm_transform_rejects_input_with_no_declared_schema():
     # `schema` is a required field on StageInput, so this never reaches
-    # _llm_transform_one_to_one — pydantic rejects the input itself.
+    # find_llm_signature_issues — pydantic rejects the input itself.
     with pytest.raises(ValidationError, match="inputs.0.schema"):
         m.parse_stage(S(
             id="extract", type="llm_transform",

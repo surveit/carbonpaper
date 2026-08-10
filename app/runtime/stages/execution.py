@@ -204,8 +204,8 @@ class RowMapHandler(StageHandler):
     concurrently — results are written back by input index, so output order is
     input order regardless of completion order. `trims_output_to_declared`
     asks the driver to cut the assembled frame down to exactly the columns
-    output_schema declares — a column-only operation that cannot change row
-    count or order. A row-mapped stage resolves each row against the
+    `resolve_output_schema` names — a column-only operation that cannot change
+    row count or order. A row-mapped stage resolves each row against the
     stage-result cache before calling the mapper (see `_open_row_caching`)
     unless it registers `caches_rows=False`.
 
@@ -732,8 +732,7 @@ def _strip_and_trim(
 def _strip_internal_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Drop every column `_INTERNAL_ROW_COLUMNS` declares strippable that is
     present on `df`. Unconditional — an internal column is driver machinery, so
-    it must never reach stage output, whether or not the stage declares an
-    output_schema."""
+    it must never reach stage output, whatever the stage's signature promises."""
     stripped = {
         internal.column
         for internal in _INTERNAL_ROW_COLUMNS
@@ -790,7 +789,7 @@ def _collect_cached_rows(df: pd.DataFrame, contribution: StageContribution) -> N
 def _trim_to_declared_columns(
     df: pd.DataFrame, stage: Stage, contribution: StageContribution
 ) -> pd.DataFrame:
-    """Exactly the columns output_schema declares, in declared order."""
+    """Exactly the columns `resolve_output_schema` names, in that order."""
     output_schema = stage.resolve_output_schema()
     declared = [c.name for c in output_schema.columns] if output_schema else []
     if not declared:

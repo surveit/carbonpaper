@@ -449,9 +449,7 @@ class TableSchema(_Base):
         identical spec — every Column spec field compared recursively via
         `_column_spec_differences`, prose (`description`/`source`) aside. I.e.
         this schema is a spec-preserving subset of `other`. Called by `subtract`
-        (the subtrahend must be a subset of the minuend when `strict=True`) and
-        by `Stage`'s 1:1 validator (a transform's input must be a subset of its
-        output)."""
+        (the subtrahend must be a subset of the minuend when `strict=True`)."""
         return not self.find_unsatisfied_columns(other, nullability="exact")
 
     def find_unsatisfied_columns(
