@@ -10,12 +10,13 @@
   href navigate, which is exactly what the packet needs.
 
   A stop — the stage that ENDED the run — is a line of this list like any other,
-  first and marked `stopped`, its message leading with WHICH of the two stories it
-  is, because they route to different people: the data no longer matches what the
-  stage declares (the data owner's) or the code broke (the engineer's). The first
-  links the panel's Data tab, the second its Transform tab. What only a stop has —
-  the columns it refused, the reason its author wrote, the traceback, the stages
-  downstream that never ran — is nested under its own line.
+  first and marked `stopped`. Its message names WHICH of the three failures it is,
+  because they route to different people: the stage's output no longer matches what
+  it declares (the data owner's), its authored code refused the input it was handed
+  (the author's), or the code broke (the engineer's). The first links the panel's
+  Data tab, the other two its Transform tab. What only a stop has — the columns it
+  refused, the reason its author wrote, the traceback, the stages downstream that
+  never ran — is nested under its own line.
 
   Drawn with the issue table the Workflow page's compiler warnings also use.
 
@@ -33,12 +34,12 @@
        severity="error", stage_id=stop.stage_id, subject="stopped",
        href=links.stage_anchor(stop.stage_id),
        tab="data" if stop.kind == 'schema' else "transform",
-       message=("the data changed" if stop.refused_data else "the code broke") ~ " — " ~ (
-         "refused its own output; it does not match the schema this stage declares"
+       message=(
+         "the data changed — refused its own output; it does not match the schema this stage declares"
            if stop.kind == 'schema' else
-         "refused the data it was given"
+         "Input validation failed on " ~ stop.stage_id
            if stop.kind == 'refused' else
-         "raised " ~ stop.error_type ~ " while it ran")) %}
+         "the code broke — raised " ~ stop.error_type ~ " while it ran")) %}
     {% if stop.kind == 'schema' %}
     <ul>{% for issue in stop.issues %}
       <li>{% if issue.column %}<code>{{ issue.column }}</code> — {% endif %}{{ issue.message }}</li>
