@@ -5,10 +5,13 @@
     · one row per file-kind input, built by the `input_row` macro below: a read-only
       path field (binding__<stage_id>) showing the SELECTED version's workflow-authored
       path, its Browse… button, and the row cap beside them
-    · a recompute-everything checkbox (bust_cache): submitted only when checked, so
-      its presence is the value. The run skips every stage-cache read and records
-      what it computes, so a human review queue re-asks the humans (see prepare_run's
-      `bust_cache` in app/runtime/runner.py)
+    · an Advanced fold holding the row-level cache checkbox (bust_cache): submitted
+      only when checked, so its presence is the value. The run skips every stage-cache
+      read and records what it computes, so a human review queue re-asks the humans
+      (see prepare_run's `bust_cache` in app/runtime/runner.py). Folded because the
+      default — reuse what has already been computed and already been approved — is
+      what nearly every run wants, and the alternative spends LLM calls and a
+      reviewer's time on rows that have both.
     · ▶ Run workflow
 
   Version and inputs belong together: different versions can author different input
@@ -37,7 +40,9 @@
   The row cap (limit__<stage_id>) is blank for the whole file, or a number N that caps
   this input stage at the first N rows it READS for this run only (prepare_run's
   `limits` in app/runtime/runner.py — this is just its web-form surface). It carries its
-  own <label>: inside the row's label it made "first"/"rows" focus the path field.
+  own <label>: inside the row's label it made "first"/"rows" focus the path field. Only
+  the number is bordered — "first" and "rows" sit outside the field, because a word
+  inside a field's frame reads as something the reader may type over.
 #}
 {% macro input_row(stage_id, path) %}
 <div class="run-input-row">
@@ -75,10 +80,14 @@
   <div class="run-inputs">
     {% for fi in file_inputs %}{{ input_row(fi.stage_id, fi.path) }}{% endfor %}
   </div>
-  <label class="run-bust-cache">
-    <input type="checkbox" name="bust_cache" value="on">
-    recompute everything (ignore cached results; a review queue re-asks the humans)
-  </label>
+  <details class="run-advanced">
+    <summary>Advanced</summary>
+    <label class="run-bust-cache">
+      <input type="checkbox" name="bust_cache" value="on">
+      <span>Do not use row-level cache (e.g. recompute rows that LLM has already
+        processed, or require human review on the same data they already approved)</span>
+    </label>
+  </details>
   <button type="submit" class="btn primary">▶ Run workflow</button>
   {# Inert until run_controls.js clones it; a <template>'s fields are not part of
      the form, so the empty stage_id below is never submitted. #}
