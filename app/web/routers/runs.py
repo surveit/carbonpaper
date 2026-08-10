@@ -53,7 +53,7 @@ from app.web.run_stage_panel import resolve_panel_links
 
 router = APIRouter()
 
-# How the run-log SSE tail polls events.jsonl, and how many empty polls it
+# How the run-log SSE tail polls the stored event log, and how many empty polls it
 # tolerates after the manifest has settled before it stops a stream whose
 # run_done marker never arrived.
 _EVENT_POLL_INTERVAL_S = 0.5
@@ -324,7 +324,7 @@ async def stream_run_events(
     run_dir = runs_dir(project) / run_id
     load_manifest(project, run_id)  # 404s if the run doesn't exist
     start = (
-        _tail_start_seq(run_dir / "events.jsonl", tail, stage)
+        _tail_start_seq(project, run_id, tail, stage)
         if from_seq is None
         else max(from_seq, 0)
     )
@@ -350,14 +350,14 @@ def select_stage_events(
     ]
 
 
-def _tail_start_seq(events_path: Path, tail: int, stage: str | None = None) -> int:
+def _tail_start_seq(project: str, run_id: str, tail: int, stage: str | None = None) -> int:
     """The seq to open a stream at so it yields the last `tail` events."""
     # One read of the log, and the answer comes off the parsed events rather than
     # from arithmetic on seq: taking `highest - tail` would assume seq has no
     # gaps, which is true of what the writer emits today but is not a property
     # the log itself carries. Under a stage filter the tail is counted over that
     # stage's events, so a stage buried in a 270k-event log still opens full.
-    events = select_stage_events(read_events_since(events_path, 0), stage)
+    events = select_stage_events(read_events_since(project, run_id, 0), stage)
     if not events:
         return 0
     if tail <= 0:
@@ -377,19 +377,18 @@ async def run_events_page(
     # Backwards paging only. Newer events arrive on the SSE feed, so a forwards
     # page would be a second route to the same events with its own cursor to
     # keep in step; there is nothing for it to do.
-    run_dir = runs_dir(project) / run_id
     load_manifest(project, run_id)  # 404s if the run doesn't exist
     limit = max(1, min(limit, EVENT_PAGE_MAX))
-    return _page_before(run_dir / "events.jsonl", before_seq, limit, stage)
+    return _page_before(project, run_id, before_seq, limit, stage)
 
 
 def _page_before(
-    events_path: Path, before_seq: int, limit: int, stage: str | None
+    project: str, run_id: str, before_seq: int, limit: int, stage: str | None
 ) -> dict[str, Any]:
     """The last `limit` events older than `before_seq`, after the stage filter."""
     older = [
         event
-        for event in select_stage_events(read_events_since(events_path, 0), stage)
+        for event in select_stage_events(read_events_since(project, run_id, 0), stage)
         if int(event["seq"]) < before_seq
     ]
     # The window is cut AFTER filtering, not from `before_seq - limit`: a stage
@@ -408,20 +407,19 @@ async def _tail_run_events(
     project: str, run_id: str, run_dir: Path, request: Request, from_seq: int,
     stage: str | None = None,
 ) -> AsyncIterator[str]:
-    """Drain runs/<id>/events.jsonl as it grows, ending on the run_done marker."""
-    # The same generator serves a FINISHED run: it drains the file and ends, so
+    """Drain this run's stored events as they arrive, ending on the run_done marker."""
+    # The same generator serves a FINISHED run: it drains the log and ends, so
     # the live feed and after-the-fact investigation are one code path.
     # `from_seq` resumes after a reconnect (every event carries a monotonic seq).
-    # File-tailing rather than asyncio wakeups is deliberate: the run and its LLM
-    # rows execute on worker threads with no access to the server loop, and a
-    # file crosses that boundary for free.
-    events_path = run_dir / "events.jsonl"
+    # Polling rather than asyncio wakeups is deliberate: the run and its LLM rows
+    # execute on worker threads with no access to the server loop, and the store
+    # crosses that boundary for free.
     cursor = from_seq
     idle_polls = 0
     while True:
         if await request.is_disconnected():
             return
-        new = read_events_since(events_path, cursor)
+        new = read_events_since(project, run_id, cursor)
         # The cursor clears the whole batch that was READ, not the subset the
         # stage filter yields: an event the filter drops must not come back on
         # the next poll.

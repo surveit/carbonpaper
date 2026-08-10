@@ -11,6 +11,7 @@ from app.core.errors import RunNotFoundError, RunVersionUnresolvableError
 from app.core.logging_config import log_elapsed
 from app.models import Stage, stage_to_spec_dict
 from app.runtime.manifest import resolve_output_path
+from app.runtime.run_log import read_events_since
 from app.services import run as run_service
 from app.services.review_packet import ReviewPacket
 from app.services.review_packet.checksums import write_checksums
@@ -40,7 +41,8 @@ def export_review_packet(project: str, run_id: str, dest_root: Path) -> ReviewPa
     with log_elapsed(_log, f"{project}/{run_id} data"):
         data = write_packet_data(
             root, run_dir, project_dir, view, workflow,
-            json.dumps(manifest, indent=2, default=str), stage_sources,
+            json.dumps(manifest, indent=2, default=str),
+            _serialize_events(project, run_id), stage_sources,
         )
     with log_elapsed(_log, f"{project}/{run_id} pages"):
         pages = write_packet_pages(
@@ -60,6 +62,14 @@ def export_review_packet(project: str, run_id: str, dest_root: Path) -> ReviewPa
         root=root,
         files=sorted([*data.written, *pages, checksums]),
         omitted=data.omitted,
+    )
+
+
+def _serialize_events(project: str, run_id: str) -> str:
+    """As JSON lines: the shape a packet reader's tooling already expects."""
+    return "".join(
+        json.dumps(event, default=str) + "\n"
+        for event in read_events_since(project, run_id, 0)
     )
 
 

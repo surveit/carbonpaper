@@ -1002,7 +1002,6 @@ _GRANDFATHERED_ENTRANCE_PROSE: frozenset[str] = frozenset(
         "app/runtime/run_log.py::DetailSink.emit",
         "app/runtime/run_log.py::RunLog._drain",
         "app/runtime/run_log.py::RunLog.emit",
-        "app/runtime/run_log.py::_count_logged_events",
         "app/runtime/run_log.py::read_events_since",
         "app/runtime/stage_tests.py::_compare",
         "app/runtime/stages/human_review_queue.py::PendingReview",

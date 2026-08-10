@@ -70,7 +70,7 @@ interceptor, which replays a human's recorded decision before its mapper is call
 mapper only ever passes a row through or defers it.
 
 ## `run_log.py` — the per-run event log
-`_execute_stages` opens a `RunLog` on `runs/<id>/events.jsonl` for every entry path and
+`_execute_stages` opens a `RunLog` on the run's stored chunks for every entry path and
 closes it (writing the terminal `run_done` marker) before returning. Workers emit
 lock-free; one writer thread stamps a monotonic `seq` + `ts` + `level` and appends one JSON
 line per event. `read_events_since(path, from_seq)` re-reads it for both the run page's SSE
@@ -126,4 +126,4 @@ package: it drives `app/services/run.py` (which resolves the newest published ve
 loads its stages), never `runner.py` directly. `<project>` is a
 NAME under the projects root, so a project outside it needs `CARBONPAPER_PROJECTS_DIR`.
 Outputs: the stored `run/<project>/<run_id>` manifest, plus
-`runs/<id>/{events.jsonl, outputs/*.parquet, artifacts/, queue/}`.
+`runs/<id>/{outputs/*.parquet, artifacts/, queue/}`.

@@ -53,3 +53,17 @@ def _key(project: str | Path, run_id: str) -> str:
 
 def _name(project: str | Path) -> str:
     return Path(project).name
+
+
+def store_events(project: str | Path, run_id: str, events: list[dict[str, Any]]) -> None:
+    """Seed a run's event log straight into its chunks, past the writer thread."""
+    from app.runtime.run_log import CHUNK_SIZE, RunEventChunk
+
+    grouped: dict[int, list[dict[str, Any]]] = {}
+    for event in events:
+        grouped.setdefault(int(event["seq"]) // CHUNK_SIZE, []).append(event)
+    name = _name(project)
+    for index, chunk_events in grouped.items():
+        RunEventChunk(
+            id=RunEventChunk.compose_id(name, run_id, index), events=chunk_events
+        ).save()

@@ -179,7 +179,7 @@ def _execute_stages(
     # Opened here, not in the RunContext constructors, so EVERY entry path
     # (run_prepared, execute_run, run_subset, resume_run) is logged regardless of
     # the ctx it built, and the log's lifetime is exactly this call's.
-    run_log = RunLog(run_dir / "events.jsonl")
+    run_log = RunLog(manifest.project, manifest.run_id)
     run_log.emit({
         "kind": RUN_START, "run_id": manifest.run_id, "stage_count": len(ordered),
     })

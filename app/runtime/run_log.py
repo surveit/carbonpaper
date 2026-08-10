@@ -1,18 +1,18 @@
-"""Per-run event log: the live-tailed drill-down companion to manifest.json.
+"""Per-run event log: the live-tailed drill-down companion to the run manifest.
 
-Workers emit lock-free; one writer thread appends JSON lines to
-runs/<run_id>/events.jsonl, which is both the SSE feed and the historical
-record. The manifest stays the source of truth for stage status.
+Workers emit lock-free; one writer thread appends to fixed-size stored chunks,
+which are both the SSE feed and the historical record. The manifest stays the
+source of truth for stage status.
 """
 from __future__ import annotations
 
 import contextvars
-import json
 import queue
 import threading
 from datetime import datetime
-from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
+
+from app.core.persistence import JsonDict, PersistedModel, PersistenceScope
 
 # Sentinel pushed by close() to tell the writer thread to drain and stop.
 _STOP = object()
@@ -53,16 +53,41 @@ LEVEL_LIFECYCLE = 0
 LEVEL_DETAIL = 1
 
 
+# Events per stored chunk. A 270k-event run is ~540 documents rather than 270k,
+# and a reader wanting `seq >= n` goes straight to chunk `n // CHUNK_SIZE`
+# because seq is a gapless counter from 0. The open chunk is REWRITTEN on each
+# flush, so a write costs one chunk, never the whole log.
+CHUNK_SIZE = 500
+
+# How long the writer thread waits for more events before flushing what it has,
+# so a slow run's SSE feed does not stall behind an unfilled chunk.
+_FLUSH_INTERVAL_S = 0.25
+
+
+class RunEventChunk(PersistedModel):
+    """One run's events `first_seq .. first_seq + len(events) - 1`."""
+
+    collection: ClassVar[str] = "run_events"
+    SCOPE: ClassVar[PersistenceScope] = PersistenceScope.RUN
+
+    events: list[JsonDict] = []
+
+    @staticmethod
+    def compose_id(project: str, run_id: str, index: int) -> str:
+        return f"{project}/{run_id}/{index:06d}"
+
+
 class RunLog:
     """One run's append log. Any thread may emit(); one writer thread writes."""
 
-    def __init__(self, path: Path):
-        self._path = path
+    def __init__(self, project: str, run_id: str):
+        self._project = project
+        self._run_id = run_id
         self._q: queue.Queue[Any] = queue.Queue()
         self._closed = False
         # Start the writer BEFORE returning so the first emit() is never lost.
         self._writer = threading.Thread(
-            target=self._drain, name=f"run-log:{path.parent.name}", daemon=True
+            target=self._drain, name=f"run-log:{run_id}", daemon=True
         )
         self._writer.start()
 
@@ -89,83 +114,85 @@ class RunLog:
         self._writer.join(timeout=5.0)
 
     def _drain(self) -> None:
-        # Append mode: a resumed run continues its existing log rather than
-        # truncating it. Flushed per line so the tailer sees events promptly.
-        # seq resumes at the file's line count, so it is the line index of the
-        # event it stamps and stays monotonic across any number of resumes — a
-        # restart at 0 would put the resumed events behind a tailer's cursor,
+        """Stamp each event, batch, and flush a chunk at a time."""
+        # seq resumes at the run's existing event count, so it is the position of
+        # the event it stamps and stays monotonic across any number of resumes —
+        # a restart at 0 would put the resumed events behind a tailer's cursor,
         # which drops every one of them.
-        try:
-            seq = _count_logged_events(self._path)
-            handle = self._path.open("a", encoding="utf-8")
-        except OSError:
-            return
-        try:
-            while True:
-                item = self._q.get()
-                if item is _STOP:
-                    return
-                record = {
+        seq = count_events(self._project, self._run_id)
+        pending: list[JsonDict] = []
+        while True:
+            item = self._await_next()
+            if item is not _STOP and item is not None:
+                pending.append({
                     "seq": seq,
                     "ts": datetime.now().isoformat(timespec="milliseconds"),
                     **item,
-                }
+                })
                 seq += 1
-                try:
-                    handle.write(json.dumps(record, default=str) + "\n")
-                    handle.flush()
-                except OSError:
-                    # A debug log must never take the run down. Drop and
-                    # continue; the manifest remains the authoritative outcome.
-                    pass
-        finally:
-            handle.close()
+            if pending and (item is None or item is _STOP or len(pending) >= CHUNK_SIZE):
+                self._flush(pending)
+                pending = []
+            if item is _STOP:
+                return
+
+    def _await_next(self) -> Any:
+        """The next queued item, or None when the flush interval elapses first."""
+        try:
+            return self._q.get(timeout=_FLUSH_INTERVAL_S)
+        except queue.Empty:
+            return None
+
+    def _flush(self, pending: list[JsonDict]) -> None:
+        """Write `pending` into the chunks it spans, rewriting each whole."""
+        for index, events in _group_by_chunk(pending).items():
+            # Chunk k holds seqs [k*CHUNK_SIZE, (k+1)*CHUNK_SIZE), so a batch
+            # straddling a boundary touches both. Rewriting the open chunk costs
+            # one chunk per flush and never the whole log.
+            chunk = _load_chunk(self._project, self._run_id, index) or RunEventChunk(
+                id=RunEventChunk.compose_id(self._project, self._run_id, index))
+            chunk.events = [*chunk.events, *events]
+            chunk.save()
 
 
-def _count_logged_events(path: Path) -> int:
-    """How many events `path` already holds — one per non-blank line."""
-    # A log that does not exist yet holds none; that is the count, not a
-    # stand-in for one. Any other OSError propagates to the caller, which
-    # cannot open the file for appending either.
-    if not path.exists():
-        return 0
-    with path.open("r", encoding="utf-8") as handle:
-        return sum(1 for line in handle if line.strip())
+def _group_by_chunk(events: list[JsonDict]) -> dict[int, list[JsonDict]]:
+    grouped: dict[int, list[JsonDict]] = {}
+    for event in events:
+        grouped.setdefault(int(event["seq"]) // CHUNK_SIZE, []).append(event)
+    return grouped
 
 
-def read_events_since(path: Path, from_seq: int) -> list[dict[str, Any]]:
-    """The events in `path` with seq >= from_seq, in file order."""
-    # Streamed line by line rather than slurped whole: the file reaches tens of
-    # MB on a large run, and there is no reason to hold all of it in memory to
-    # walk it once. A malformed line — possible when read mid-write — is skipped
-    # and picked up by the next poll once complete. A missing file (the writer
-    # hasn't created it yet) reads as empty.
-    #
-    # Every line is parsed. Measured on a 272k-event / 37MB log that is 0.24s,
-    # which is the honest price of asking a question about record contents. It
-    # would be tempting to read `seq` off the raw text and skip parsing the rest,
-    # but that couples the reader to json.dumps' key order — it would break
-    # silently, into slowness rather than an error, the moment someone reordered
-    # the writer's dict.
-    try:
-        handle = path.open("r", encoding="utf-8")
-    except OSError:
-        return []
+def _load_chunk(project: str, run_id: str, index: int) -> RunEventChunk | None:
+    return RunEventChunk.load_or_none(RunEventChunk.compose_id(project, run_id, index))
+
+
+def count_events(project: str, run_id: str) -> int:
+    """How many events this run has already logged."""
+    index = 0
+    # Chunk ids are dense from 0, so walking forward to the first partial one
+    # finds the end without listing anything.
+    while True:
+        chunk = _load_chunk(project, run_id, index)
+        if chunk is None:
+            return index * CHUNK_SIZE
+        if len(chunk.events) < CHUNK_SIZE:
+            return index * CHUNK_SIZE + len(chunk.events)
+        index += 1
+
+
+def read_events_since(project: str, run_id: str, from_seq: int) -> list[dict[str, Any]]:
+    """This run's events with seq >= from_seq, in emission order."""
+    # seq is a gapless counter from 0, so the first chunk that can hold
+    # `from_seq` is known by arithmetic — no listing, and no reading of the
+    # chunks before it.
     out: list[dict[str, Any]] = []
-    with handle:
-        for line in handle:
-            if not line.strip():
-                continue
-            try:
-                event = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            # Every event the writer emits carries a seq; a dict without one is
-            # skipped rather than assigned a fabricated position.
-            seq = event.get("seq")
-            if seq is not None and seq >= from_seq:
-                out.append(event)
-    return out
+    index = max(0, from_seq // CHUNK_SIZE)
+    while True:
+        chunk = _load_chunk(project, run_id, index)
+        if chunk is None:
+            return out
+        out.extend(e for e in chunk.events if int(e["seq"]) >= from_seq)
+        index += 1
 
 
 # ── the per-unit detail sink ─────────────────────────────────────────────────

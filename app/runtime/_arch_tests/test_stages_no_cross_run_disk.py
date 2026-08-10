@@ -1,7 +1,7 @@
 """Architecture: `app.core.stage_cache` is the only channel a stage handler may
 use to persist something outliving its own run. No `"project_dir"` dict key under
-`app/runtime/stages`, and no `.save()`/`.delete()` under `app/runtime` outside
-`manifest.py`, which owns the run's OWN (run-scoped) record.
+`app/runtime/stages`, and no `.save()`/`.delete()` under `app/runtime` outside the
+two modules owning the run's OWN (run-scoped) records.
 """
 from __future__ import annotations
 
@@ -16,12 +16,12 @@ _RUNTIME_DIR = Path(__file__).resolve().parents[1]
 
 _BANNED_PERSISTENCE_METHODS = frozenset({"save", "delete"})
 
-# The one module allowed to write a record: app/runtime/manifest.py owns the run
-# manifest, a PersistenceScope.RUN record keyed `<project>/<run_id>`. That is the
-# run's OWN state — the same thing `run_dir` writes were, before the manifest
+# The modules allowed to write a record, because each owns a PersistenceScope.RUN
+# one keyed by `<project>/<run_id>`: the run's manifest and its event log. That is
+# the run's OWN state — the same thing `run_dir` writes were, before those two
 # moved off disk — not the cross-run project scope this rule exists to protect.
 # Any OTHER runtime module writing a record is still the bug this catches.
-_RUN_SCOPED_RECORD_OWNER = "manifest.py"
+_RUN_SCOPED_RECORD_OWNERS = frozenset({"manifest.py", "run_log.py"})
 
 
 def find_persisted_write_call_offenders(paths: list[Path]) -> list[str]:
@@ -29,7 +29,7 @@ def find_persisted_write_call_offenders(paths: list[Path]) -> list[str]:
     or `.delete()` on anything — the two `PersistedModel` writes — directly."""
     offenders: list[str] = []
     for path in paths:
-        if path.name == _RUN_SCOPED_RECORD_OWNER:
+        if path.name in _RUN_SCOPED_RECORD_OWNERS:
             continue
         hits = collect_called_methods(parse_module(path)) & _BANNED_PERSISTENCE_METHODS
         if hits:
@@ -51,8 +51,8 @@ def test_runtime_never_calls_save_or_delete_directly() -> None:
     assert not offenders, (
         "app/runtime must reach a cross-run write only through the cache seam's "
         "own StageCache.put — never PersistedModel.save()/delete() directly, "
-        "even when it holds a legitimately-read entry instance. The one exception "
-        f"is {_RUN_SCOPED_RECORD_OWNER}, which owns the RUN-scoped manifest:\n  "
+        "even when it holds a legitimately-read entry instance. The exceptions "
+        f"are {sorted(_RUN_SCOPED_RECORD_OWNERS)}, which own RUN-scoped records:\n  "
         + "\n  ".join(offenders)
     )
 
