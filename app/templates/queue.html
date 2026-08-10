@@ -137,12 +137,18 @@
                       placeholder="Include any reasoning or citations for your decision">{{ item.prior_decision.review_notes if item.prior_decision and item.prior_decision.review_notes else '' }}</textarea>
         </label>
         {% endif %}
+        {# The one button names the verdict it is about to write, and the script
+           re-labels it the moment a field diverges from the value the page carried —
+           the same comparison `resolve_verdict` makes when the post lands. It opens
+           saying `approve` because an untouched card records exactly that. #}
         <div class="decision-controls">
             {% if item.prior_decision %}
             <button type="button" class="btn unlock-review" data-unlock>Change my review</button>
             {% endif %}
-            <button type="submit" class="btn primary"
-                    {% if item.prior_decision %}hidden{% endif %}>Submit</button>
+            <button type="submit" class="btn approve" data-verdict-button
+                    {% if item.prior_decision %}hidden{% endif %}>✓ Approve</button>
+            <span class="verdict-hint" data-verdict-hint
+                  {% if item.prior_decision %}hidden{% endif %}>records the value above, unchanged</span>
         </div>
     </form>
 </article>
@@ -197,7 +203,25 @@
   }
 
   // The verdict is settled server-side from submitted vs pre-filled values, so
-  // the page posts what it was showing rather than naming a verdict itself.
+  // the page posts what it was showing rather than naming a verdict itself. This
+  // mirrors that comparison for the label alone: the button says which of the two
+  // the submit will record, so nobody writes `modify` believing they approved.
+  function showVerdictOnButton(card) {
+    const values = readValues(card, 'value');
+    const prefill = readValues(card, 'prefill');
+    const changed = Object.keys(values).some(function (target) {
+      return values[target] !== prefill[target];
+    });
+    const button = card.querySelector('[data-verdict-button]');
+    const hint = card.querySelector('[data-verdict-hint]');
+    button.textContent = changed ? '✎ Save revision' : '✓ Approve';
+    button.classList.toggle('modify', changed);
+    button.classList.toggle('approve', !changed);
+    hint.textContent = changed
+      ? 'records your value in place of the one above'
+      : 'records the value above, unchanged';
+  }
+
   async function submitDecision(card, values) {
     if (!reviewerName()) {
       nameInput.focus();
@@ -237,6 +261,7 @@
     const opener = cell.querySelector('[data-edit-for]');
     opener.hidden = false;
     opener.focus();
+    showVerdictOnButton(reverter.closest('.queue-card'));
   }
 
   // A decided card records no new decision until the reviewer asks to change
@@ -248,7 +273,20 @@
     });
     button.hidden = true;
     card.querySelector('button[type="submit"]').hidden = false;
+    card.querySelector('[data-verdict-hint]').hidden = false;
+    showVerdictOnButton(card);
   }
+
+  // Every reviewed control, whichever kind: a typed number and a picked option
+  // both move the card between the two verdicts.
+  document.addEventListener('input', function (ev) {
+    const control = ev.target.closest('[data-target]');
+    if (control) showVerdictOnButton(control.closest('.queue-card'));
+  });
+  document.addEventListener('change', function (ev) {
+    const control = ev.target.closest('[data-target]');
+    if (control) showVerdictOnButton(control.closest('.queue-card'));
+  });
 
   document.addEventListener('click', function (ev) {
     const unlock = ev.target.closest('[data-unlock]');

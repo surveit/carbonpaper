@@ -222,8 +222,12 @@ def test_happy_path_renders_items_with_fingerprint_prior_decision_and_counts(tmp
     assert 'data-target="human_score"' in html
     assert 'type="number"' in html
     assert 'data-prefill="1"' in html  # the mocked upstream score
-    # One Submit per card; the verdict is settled server-side, so no button names one.
-    assert html.count(">Submit<") == html.count('<article class="queue-card')
+    # One decision button per card, opening on the verdict an untouched card records.
+    # It only LABELS that verdict: the page still posts none, the server settles it.
+    cards = html.count('<article class="queue-card')
+    assert html.count('<button type="submit"') == cards
+    assert html.count(">✓ Approve<") == cards
+    assert 'name="verdict"' not in html
     # The notes column is labelled by name, and nothing ties a note to a change.
     assert "<span>Review notes</span>" in html  # the declared column is `review_notes`
     assert 'placeholder="Include any reasoning or citations for your decision"' in html
@@ -1193,8 +1197,10 @@ def test_a_decided_card_disables_its_openers_and_offers_a_secondary_cta(tmp_path
     opener = re.search(r'<button type="button" class="value-display"[^>]*>', decided)
     assert opener is not None and "disabled" in opener.group(0)
     assert ">Change my review<" in decided
-    submit = re.search(r'<button type="submit" class="btn primary"[^>]*>', decided)
+    submit = re.search(r'<button type="submit" class="btn approve"[^>]*>', decided)
     assert submit is not None and re.search(r"\bhidden\b", submit.group(0))
+    hint = re.search(r'<span class="verdict-hint"[^>]*>', decided)
+    assert hint is not None and re.search(r"\bhidden\b", hint.group(0))
     assert "Recorded: <strong>approve</strong>" in " ".join(decided.split())
 
     stylesheet = "\n".join(
@@ -1203,15 +1209,17 @@ def test_a_decided_card_disables_its_openers_and_offers_a_secondary_cta(tmp_path
     )
     assert re.search(r"\.decision-controls \[hidden\]\s*\{[^}]*display:\s*none", stylesheet)
 
-    # The still-undecided row is the control: live openers, primary Submit, no CTA.
+    # The still-undecided row is the control: live openers, a live decision button, no CTA.
     undecided = html[html.index(
         f'data-input-fingerprint="{fingerprints["input_fingerprints"][1]}"'):]
     undecided = undecided[:undecided.index("</article>")]
     live = re.search(r'<button type="button" class="value-display"[^>]*>', undecided)
     assert live is not None and "disabled" not in live.group(0)
     assert ">Change my review<" not in undecided
-    open_submit = re.search(r'<button type="submit" class="btn primary"[^>]*>', undecided)
-    assert open_submit is not None and not re.search(r"hidden", open_submit.group(0))
+    open_submit = re.search(r'<button type="submit" class="btn approve"[^>]*>', undecided)
+    assert open_submit is not None and not re.search(r"\bhidden\b", open_submit.group(0))
+    open_hint = re.search(r'<span class="verdict-hint"[^>]*>', undecided)
+    assert open_hint is not None and not re.search(r"\bhidden\b", open_hint.group(0))
 
 
 def test_unlocking_a_decided_card_records_a_new_verdict_on_resubmit(tmp_path, monkeypatch):

@@ -55,6 +55,8 @@
 .decision-controls [hidden] { display: none; }
 /* Secondary by omission of .primary: a decided card is not asking for input. */
 .btn.unlock-review { border-style: dashed; }
+/* Says in words what the submit is about to write, beside the button that writes it. */
+.verdict-hint { font-size: 12px; color: var(--muted); }
 .btn.approve { background: var(--good-bg); color: var(--good-ink); border-color: var(--good-bd); }
 .btn.reject  { background: var(--bad-bg); color: var(--bad-ink); border-color: var(--bad-bd); }
 .btn.modify  { background: var(--warn-bg); color: var(--warn-ink); border-color: var(--warn-bd); }
