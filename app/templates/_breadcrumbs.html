@@ -4,7 +4,9 @@
    SWITCHER — a button whose popover loads that partial the first time it is opened
    (static/breadcrumbs.js) — one carrying `href` is a link, and one carrying neither
    is the page you are on. A switcher rung names something the reader might have
-   meant a different one of; a section rung never does. #}
+   meant a different one of; a section rung never does.
+
+   The FIRST rung is home, and it renders the wordmark in place of its label. #}
 
 {% macro crumb_text(crumb) %}{% if crumb.is_code %}<code>{{ crumb.label }}</code>{% else %}{{ crumb.label }}{% endif %}{% endmacro %}
 
@@ -19,7 +21,7 @@
             class="crumb-caret" aria-hidden="true">▾</span></button>
   </span>
   {%- elif crumb.href %}
-  <a href="{{ crumb.href }}" class="crumb-link{% if loop.first %} crumb-home{% endif %}">{{ crumb_text(crumb) }}</a>
+  <a href="{{ crumb.href }}" class="crumb-link">{% if loop.first %}{% include "_wordmark.html" %}{% else %}{{ crumb_text(crumb) }}{% endif %}</a>
   {%- else %}
   <span class="crumb-here" aria-current="page">{{ crumb_text(crumb) }}</span>
   {%- endif %}
