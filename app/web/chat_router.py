@@ -5,13 +5,9 @@ the registry (app.core.agent.registry) rather than knowing any concrete agent.
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
-from fastapi.templating import Jinja2Templates
-
-import app.web.config as web_config
 
 from app.core.llm_sdk import CLI_PATH
 
@@ -20,12 +16,9 @@ from app.core.agent.sdk_engine import CLI_MODEL
 from app.core.agent.session import create_agent_session
 from app.core.agent.store import open_session_store
 from app.core.agent.turns import default_turn_manager
-
-TEMPLATES_DIR = Path(__file__).resolve().parent / "chat_templates"
+from app.web.config import templates
 
 router = APIRouter()
-templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
-templates.env.filters["friendly_time"] = web_config.friendly_time
 _store = open_session_store()
 _turns = default_turn_manager()
 
