@@ -204,6 +204,12 @@ class StageBase(StageCommon):
     type. Each type's own required config blocks and input arity are declared by
     its subclass under `app/models/stages/`."""
 
+    # Narrowed from StageCommon's optional: a STORED stage always has one, since
+    # its output schema resolves from the signature and nothing else. StageDraft
+    # keeps the optional — a stage mid-edit must still parse, so that parse_stage
+    # can refuse it with a message rather than a binding error.
+    signature: TransformSignature
+
     # False for the one type that emits files rather than a table (publish):
     # every other type's signature must promise at least one output column.
     REQUIRES_OUTPUT_SCHEMA: ClassVar[bool] = True
@@ -302,7 +308,6 @@ class StageBase(StageCommon):
         own fields — see e.g. QueueConfig, whose
         `routing`/`conflict_resolution`/`estimated_volume_per_week` route or match
         a decision without changing what the human is asked)."""
-        assert self.signature is not None  # _schemas_declared requires one
         fields: dict[str, Any] = {
             "type": self.type,
             "signature": self.signature.model_dump(mode="json", exclude_none=True),
@@ -349,9 +354,7 @@ class StageBase(StageCommon):
             for ref in self.inputs
             if not ref.table_schema.columns
         ]
-        if self.signature is None:
-            issues.append("declares no signature, so nothing says what it outputs")
-        elif self.REQUIRES_OUTPUT_SCHEMA and isinstance(
+        if self.REQUIRES_OUTPUT_SCHEMA and isinstance(
             self.signature, ReplacesSignature
         ) and not self.signature.produces:
             issues.append(
@@ -382,9 +385,7 @@ class StageBase(StageCommon):
 
     @model_validator(mode="after")
     def _signature_consistent(self) -> "StageBase":
-        """A declared signature must agree with the edges, the declared schemas, and the config."""
-        if self.signature is None:
-            return self
+        """The signature must agree with the edges, the declared schemas, and the config."""
         issues = find_signature_issues(self) + self.find_signature_config_issues()
         if issues:
             raise ValueError("; ".join(issues))

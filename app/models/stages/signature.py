@@ -112,10 +112,8 @@ SIGNATURE_ISSUE = "stage '{sid}': signature {problem}"
 
 
 def find_signature_issues(stage: "StageBase") -> list[str]:
-    """Signature-vs-stage disagreements; edge-only, per stage, [] without a signature."""
+    """Signature-vs-stage disagreements; edge-only, per stage."""
     signature = stage.signature
-    if signature is None:
-        return []
     issues = _find_read_issues(stage, signature.reads)
     if isinstance(signature, ExtendsSignature):
         issues.extend(_find_extends_issues(stage, signature))
@@ -178,10 +176,8 @@ def _find_extends_issues(stage: "StageBase", signature: ExtendsSignature) -> lis
 
 
 def promised_output_schema(stage: "StageBase") -> "TableSchema | None":
-    """The output the signature promises; None without one (or empty produces)."""
+    """The output the signature promises; None when it produces no table."""
     signature = stage.signature
-    if signature is None:
-        return None
     if isinstance(signature, ExtendsSignature):
         if not stage.inputs:
             return None

@@ -130,7 +130,6 @@ def find_join_column_issues(stage: "JoinStage") -> list[str]:
 def find_join_signature_issues(stage: "JoinStage") -> list[str]:
     """Keys must be read from their side, adds must be exactly `enrich_with`; rewrites are refused."""
     signature = stage.signature
-    assert signature is not None  # find_signature_config_issues runs only with one
     subject, reference = stage.inputs[0], stage.inputs[1]
     reads_by_input = {
         entry.input: {column.name for column in entry.columns}

@@ -182,7 +182,7 @@ class StageHandler(ABC):
         registered under (validate_registry_matches_model)."""
 
 
-class RowMapHandler(StageHandler):
+class RowMapTransformHandler(StageHandler):
     """Driven per row by the runtime; the mapper never sees the frame, so it
     cannot reorder or fan out rows.
 
@@ -193,7 +193,7 @@ class RowMapHandler(StageHandler):
     and records it as this stage's lineage; grain no longer holds, which is why
     the property below reports it. `caches_rows=False` skips row-grain caching
     for a stage whose per-row compute is cheaper than the fingerprint a lookup
-    would have to hash (the frame-level counterpart is FrameHandler's
+    would have to hash (the frame-level counterpart is FrameTransformHandler's
     `caches_frames`).
 
     `make_mapper` runs once per stage execution (resolve code, render prompt
@@ -239,7 +239,7 @@ class RowMapHandler(StageHandler):
         return not self.drops_rows
 
 
-class LLMTransformHandler(RowMapHandler):
+class LLMTransformHandler(RowMapTransformHandler):
     """llm_transform's handler. `batch_size` picks between two SEPARATE execution
     functions — never a mode folded into one — because they differ in more than
     speed:
@@ -254,7 +254,7 @@ class LLMTransformHandler(RowMapHandler):
       sees a whole chunk in one prompt, so a row's answer can be influenced by
       its batch-mates.
 
-    Subclassing RowMapHandler keeps `preserves_grain_and_order` honest for the
+    Subclassing RowMapTransformHandler keeps `preserves_grain_and_order` honest for the
     property the registry invariant is about — grain and order, which BOTH paths
     keep. It deliberately does not claim per-row independence; batch_size>1 trades
     that for cost, which is why it is opt-in and defaults to 1.
@@ -294,7 +294,7 @@ class SourceHandler(StageHandler):
         return True
 
 
-class FrameHandler(StageHandler):
+class FrameTransformHandler(StageHandler):
     """Sees whole input frame(s) keyed by upstream id; may reshape them.
 
     `caches_frames` lets the runtime resolve the WHOLE output frame against the
@@ -335,7 +335,7 @@ def validate_registry_matches_model(handlers: dict[StageType, StageHandler]) -> 
     """Raise unless each registered handler's `preserves_grain_and_order` agrees
     with the core is_grain_and_order_preserving fact for its stage type. Called
     when the registry module is imported, so a mis-shaped registration — a
-    preserving type wired as a FrameHandler, or the reverse — cannot start the
+    preserving type wired as a FrameTransformHandler, or the reverse — cannot start the
     app."""
     for stage_type, handler in handlers.items():
         handler_preserves = handler.preserves_grain_and_order
@@ -349,7 +349,7 @@ def validate_registry_matches_model(handlers: dict[StageType, StageHandler]) -> 
 
 
 def _run_row_mapper(
-    handler: RowMapHandler,
+    handler: RowMapTransformHandler,
     stage: Stage,
     inputs: dict[str, pd.DataFrame],
     ctx: RunContext,
@@ -652,7 +652,7 @@ def _order_by_input_position(
 
 
 def _finish_batched_frame(
-    rows: list[Row], handler: RowMapHandler, stage: Stage
+    rows: list[Row], handler: RowMapTransformHandler, stage: Stage
 ) -> pd.DataFrame:
     """The batched path's counterpart of `_finish_mapped_frame`: no mapper, so
     no post-map step — the internal columns are collected off the assembled
@@ -677,7 +677,7 @@ def _finish_empty_result(
 
 def _finish_mapped_frame(
     df: pd.DataFrame,
-    handler: RowMapHandler,
+    handler: RowMapTransformHandler,
     map_row: RowMapper,
     stage: Stage,
     ctx: RunContext,
@@ -712,7 +712,7 @@ def _collect_internal_columns(df: pd.DataFrame) -> StageContribution:
 def _strip_and_trim(
     df: pd.DataFrame,
     contribution: StageContribution,
-    handler: RowMapHandler,
+    handler: RowMapTransformHandler,
     stage: Stage,
 ) -> pd.DataFrame:
     """`df` with every internal column dropped and — where the handler asks for

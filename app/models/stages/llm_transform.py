@@ -125,7 +125,6 @@ class LLMTransformStage(StageBase):
 def find_llm_signature_issues(stage: "LLMTransformStage") -> list[str]:
     """Reads match the placeholders, one input, and something asked of the model."""
     signature = stage.signature
-    assert signature is not None  # find_signature_config_issues runs only with one
     if len(stage.inputs) != 1:
         return [f"stage '{stage.id}': llm_transform takes exactly one input, "
                 f"has {len(stage.inputs)}"]

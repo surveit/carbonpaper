@@ -6,7 +6,7 @@ the total coverage of stage types, as named, discoverable checks."""
 from __future__ import annotations
 
 from app.models.stage import StageType, is_grain_and_order_preserving
-from app.runtime.stages import HANDLERS, RowMapHandler
+from app.runtime.stages import HANDLERS, RowMapTransformHandler
 
 
 def test_human_review_queue_maps_one_row_at_a_time_so_its_shared_counters_stay_correct():
@@ -17,7 +17,7 @@ def test_human_review_queue_maps_one_row_at_a_time_so_its_shared_counters_stay_c
     is a silently wrong number, so the invariant is pinned here rather than
     left to a comment."""
     handler = HANDLERS[StageType.human_review_queue]
-    assert isinstance(handler, RowMapHandler)
+    assert isinstance(handler, RowMapTransformHandler)
     assert handler.parallelism == 1
 
 

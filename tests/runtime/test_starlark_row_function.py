@@ -9,7 +9,7 @@ import starlark
 from app.models import parse_stage
 from app.models.errors import StepRefused
 from app.models.stage import StageType
-from app.runtime.stages import HANDLERS, RowMapHandler
+from app.runtime.stages import HANDLERS, RowMapTransformHandler
 from conftest import make_run_context, reads_of
 
 DOUBLE = "def transform(row):\n    return {'n': row['n'], 'doubled': row['n'] * 2}\n"
@@ -35,9 +35,9 @@ def _stage(code, function=None, output_schema=None, input_columns=_N_COLUMN):
     })
 
 
-def _handler() -> RowMapHandler:
+def _handler() -> RowMapTransformHandler:
     handler = HANDLERS[StageType.starlark_row_function]
-    assert isinstance(handler, RowMapHandler)
+    assert isinstance(handler, RowMapTransformHandler)
     return handler
 
 

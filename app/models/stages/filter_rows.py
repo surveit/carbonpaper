@@ -85,7 +85,6 @@ class FilterRowsStage(StageBase):
 
     def find_signature_config_issues(self) -> list[str]:
         signature = self.signature
-        assert signature is not None  # find_signature_config_issues runs only with one
         if signature.adds or signature.rewrites:
             return [
                 f"stage '{self.id}': filter_rows keeps every kept row's columns "

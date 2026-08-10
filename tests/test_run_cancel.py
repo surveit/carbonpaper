@@ -117,7 +117,7 @@ def test_mid_run_cancel_preserves_the_completed_stages_output(tmp_path, monkeypa
 def _three_stage_llm_project(root):
     """input_data 'load' (5 rows) -> llm_transform 'score' (row-mapped, fans
     out under parallelism > 1) -> a python_frame_function 'downstream' stage.
-    Unlike _two_stage_project's FrameHandler-only 'consume' (which never
+    Unlike _two_stage_project's FrameTransformHandler-only 'consume' (which never
     enters the row driver), 'score' is driven by execution.py's row mapper —
     the mid-fan-out cancellation checkpoint under test lives there."""
     (root / "compiled").mkdir(parents=True)

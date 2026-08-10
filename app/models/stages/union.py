@@ -55,7 +55,6 @@ def find_union_column_issues(stage: "UnionStage") -> list[str]:
 def find_union_signature_issues(stage: "UnionStage") -> list[str]:
     """A union reads no columns, and every input must supply `produces`."""
     signature = stage.signature
-    assert signature is not None  # find_signature_config_issues runs only with one
     issues = [
         f"stage '{stage.id}': a union concatenates without consuming any column; "
         f"signature reads must be empty"

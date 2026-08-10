@@ -18,8 +18,8 @@ from app.runtime.stages.execution import (
     ROW_DEFERRED_KEY,
     ROW_ERROR_KEY,
     ROW_USAGE_KEY,
-    FrameHandler,
-    RowMapHandler,
+    FrameTransformHandler,
+    RowMapTransformHandler,
     SourceHandler,
     validate_registry_matches_model,
 )
@@ -63,7 +63,7 @@ def _two_input_stage():
 
 
 def test_row_driver_maps_in_input_order():
-    handler = RowMapHandler(make_mapper=lambda stage, ctx, src: lambda row, index: {"x": row["x"], "y": row["x"] * 10})
+    handler = RowMapTransformHandler(make_mapper=lambda stage, ctx, src: lambda row, index: {"x": row["x"], "y": row["x"] * 10})
     out = handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1, 2, 3]})}, make_run_context())
     assert list(out["x"]) == [1, 2, 3]
     assert list(out["y"]) == [10, 20, 30]
@@ -78,7 +78,7 @@ def test_row_driver_preserves_order_under_parallelism():
             return {"x": row["x"]}
         return map_row
 
-    handler = RowMapHandler(make_mapper=make_mapper, parallelism=4)
+    handler = RowMapTransformHandler(make_mapper=make_mapper, parallelism=4)
     out = handler.execute(_row_stage(), {"src": pd.DataFrame({"x": list(range(8))})}, make_run_context())
     assert list(out["x"]) == list(range(8))
 
@@ -101,7 +101,7 @@ def test_row_driver_parallel_branch_raises_run_cancelled_when_pre_requested():
             return {"x": row["x"]}
         return map_row
 
-    handler = RowMapHandler(make_mapper=make_mapper, parallelism=2)
+    handler = RowMapTransformHandler(make_mapper=make_mapper, parallelism=2)
     ctx = make_run_context(
         identity=RunIdentity(project="p-parallel", run_id="r-parallel"),
         stage_cache=StageCacheEntry.read_write(),
@@ -122,7 +122,7 @@ def test_row_driver_sequential_branch_raises_run_cancelled_when_pre_requested():
             return {"x": row["x"]}
         return map_row
 
-    handler = RowMapHandler(make_mapper=make_mapper)  # parallelism=1 -> sequential branch
+    handler = RowMapTransformHandler(make_mapper=make_mapper)  # parallelism=1 -> sequential branch
     ctx = make_run_context(
         identity=RunIdentity(project="p-seq", run_id="r-seq"),
         stage_cache=StageCacheEntry.read_write(),
@@ -138,25 +138,25 @@ def test_row_driver_ignores_cancellation_when_ctx_has_no_run_identity():
     # executor._subset_ctx) — cancellation must never apply to it, even if the
     # same run_id happens to be cancelled elsewhere.
     request_cancel("some-project", "some-run")
-    handler = RowMapHandler(make_mapper=lambda stage, ctx, src: lambda row, index: dict(row))
+    handler = RowMapTransformHandler(make_mapper=lambda stage, ctx, src: lambda row, index: dict(row))
     out = handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1, 2]})}, make_run_context())
     assert len(out) == 2  # ran to completion, unaffected
 
 
 def test_row_driver_is_one_to_one():
-    handler = RowMapHandler(make_mapper=lambda stage, ctx, src: lambda row, index: dict(row))
+    handler = RowMapTransformHandler(make_mapper=lambda stage, ctx, src: lambda row, index: dict(row))
     out = handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1, 2]})}, make_run_context())
     assert len(out) == 2
 
 
 def test_row_driver_rejects_non_dict_result():
-    handler = RowMapHandler(make_mapper=lambda stage, ctx, src: lambda row, index: 42)
+    handler = RowMapTransformHandler(make_mapper=lambda stage, ctx, src: lambda row, index: 42)
     with pytest.raises(ValueError, match="one dict per row"):
         handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1]})}, make_run_context())
 
 
 def test_row_driver_rejects_multiple_inputs():
-    handler = RowMapHandler(make_mapper=lambda stage, ctx, src: lambda row, index: dict(row))
+    handler = RowMapTransformHandler(make_mapper=lambda stage, ctx, src: lambda row, index: dict(row))
     frames = {"a": pd.DataFrame({"x": [1]}), "b": pd.DataFrame({"x": [1]})}
     with pytest.raises(ValueError, match="exactly one input"):
         handler.execute(_two_input_stage(), frames, make_run_context())
@@ -176,7 +176,7 @@ def test_row_driver_empty_input():
     # takes the ones the signature promised — here an `extends` adding nothing,
     # so the input's. A 0x0 frame would make a downstream stage keyed on `id`
     # raise KeyError instead of producing an empty result.
-    handler = RowMapHandler(make_mapper=lambda stage, ctx, src: lambda row, index: dict(row))
+    handler = RowMapTransformHandler(make_mapper=lambda stage, ctx, src: lambda row, index: dict(row))
     ctx = make_run_context()
     out = handler.execute(
         _row_stage(input_columns=_EMPTY_SOURCE_COLUMNS), {"src": _empty_source()}, ctx)
@@ -189,7 +189,7 @@ def test_row_driver_empty_input():
 
 def test_row_driver_empty_input_still_emits_the_columns_the_signature_adds():
     added = {"columns": [*_EMPTY_SOURCE_COLUMNS, {"name": "y", "type": "str", "nullable": True}]}
-    handler = RowMapHandler(make_mapper=lambda stage, ctx, src: lambda row, index: dict(row))
+    handler = RowMapTransformHandler(make_mapper=lambda stage, ctx, src: lambda row, index: dict(row))
     out = handler.execute(
         _row_stage(output_schema=added, input_columns=_EMPTY_SOURCE_COLUMNS),
         {"src": _empty_source()}, make_run_context())
@@ -204,7 +204,7 @@ def test_row_driver_empty_input_reports_no_dropped_columns_when_projecting():
     # Projection sees a frame with no columns at all, so it drops nothing —
     # an empty input must not be reported as having discarded `id`.
     schema = {"columns": [{"name": "x", "type": "int", "nullable": True}]}
-    handler = RowMapHandler(
+    handler = RowMapTransformHandler(
         make_mapper=lambda stage, ctx, src: lambda row, index: dict(row),
         trims_output_to_declared=True,
     )
@@ -225,7 +225,7 @@ def test_row_driver_collects_row_errors_without_dropping_the_stage():
             return {"x": row["x"], "y": row["x"] * 10}
         return map_row
 
-    handler = RowMapHandler(make_mapper=make_mapper)
+    handler = RowMapTransformHandler(make_mapper=make_mapper)
     ctx = make_run_context()
     out = handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1, 2, 3]})}, ctx)
     assert len(out) == 3                                    # stage completes, all rows kept
@@ -240,7 +240,7 @@ def test_row_driver_collects_multiple_row_errors_in_ascending_row_order():
             return {"x": row["x"], "y": row["x"] * 10}
         return map_row
 
-    handler = RowMapHandler(make_mapper=make_mapper)
+    handler = RowMapTransformHandler(make_mapper=make_mapper)
     ctx = make_run_context()
     # Rows at positions 0 and 2 of a 3-row input fail; position 1 succeeds.
     out = handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [10, 20, 30]})}, ctx)
@@ -253,7 +253,7 @@ def test_row_driver_collects_multiple_row_errors_in_ascending_row_order():
 
 def test_row_driver_projects_to_declared_columns():
     schema = {"columns": [{"name": "x", "type": "int", "nullable": True}, {"name": "score", "type": "int", "nullable": True}]}
-    handler = RowMapHandler(
+    handler = RowMapTransformHandler(
         make_mapper=lambda stage, ctx, src: lambda row, index: {"x": row["x"], "score": 1, "extra": "drop me"},
         trims_output_to_declared=True,
     )
@@ -301,7 +301,7 @@ class _MapperWhosePostMapStepRaises:
 
 def test_row_driver_runs_the_mappers_own_post_map_step_after_the_map():
     mapper = _MarksEveryRowAndKeepsTheFrame()
-    handler = RowMapHandler(make_mapper=lambda stage, ctx, src: mapper)
+    handler = RowMapTransformHandler(make_mapper=lambda stage, ctx, src: mapper)
     handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1, 2, 3]})}, make_run_context())
     [collected] = mapper.seen
     assert len(collected) == 3  # every mapped row
@@ -309,7 +309,7 @@ def test_row_driver_runs_the_mappers_own_post_map_step_after_the_map():
 
 
 def test_row_driver_lets_a_mappers_post_map_step_raise_out_of_execute():
-    handler = RowMapHandler(make_mapper=lambda stage, ctx, src: _MapperWhosePostMapStepRaises())
+    handler = RowMapTransformHandler(make_mapper=lambda stage, ctx, src: _MapperWhosePostMapStepRaises())
     with pytest.raises(RuntimeError, match="post-map step said stop"):
         handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1]})}, make_run_context())
 
@@ -318,7 +318,7 @@ def test_a_plain_closure_mapper_needs_no_post_map_step():
     """A mapper that is just a function — llm_transform's and
     python_row_function's shape — carries no `finish_mapped_rows`, and the
     driver runs it to completion without one."""
-    handler = RowMapHandler(make_mapper=lambda stage, ctx, src: lambda row, index: dict(row))
+    handler = RowMapTransformHandler(make_mapper=lambda stage, ctx, src: lambda row, index: dict(row))
     out = handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1, 2]})}, make_run_context())
     assert list(out["x"]) == [1, 2]
 
@@ -326,7 +326,7 @@ def test_a_plain_closure_mapper_needs_no_post_map_step():
 def test_internal_marker_columns_never_reach_output_even_without_an_output_schema():
     # No output_schema and no projection: the strip is the ONLY thing keeping
     # machinery columns out of stage output.
-    handler = RowMapHandler(make_mapper=_marks_every_row_with_every_marker)
+    handler = RowMapTransformHandler(make_mapper=_marks_every_row_with_every_marker)
     out = handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1, 2]})}, make_run_context())
     assert list(out.columns) == ["x"]  # user column survives, every marker is gone
 
@@ -338,7 +338,7 @@ def test_marker_columns_are_not_reported_as_dropped_user_columns():
         return map_row
 
     schema = {"columns": [{"name": "x", "type": "int", "nullable": True}]}
-    handler = RowMapHandler(make_mapper=make_mapper, trims_output_to_declared=True)
+    handler = RowMapTransformHandler(make_mapper=make_mapper, trims_output_to_declared=True)
     ctx = make_run_context()
     out = handler.execute(_row_stage(output_schema=schema), {"src": pd.DataFrame({"x": [1]})}, ctx)
     assert list(out.columns) == ["x"]
@@ -347,10 +347,10 @@ def test_marker_columns_are_not_reported_as_dropped_user_columns():
 
 
 def test_each_shape_reports_the_preservation_its_calling_convention_gives_it():
-    mapping = RowMapHandler(make_mapper=lambda stage, ctx, src: lambda row, index: dict(row))
+    mapping = RowMapTransformHandler(make_mapper=lambda stage, ctx, src: lambda row, index: dict(row))
     assert mapping.preserves_grain_and_order is True
     assert SourceHandler(read=lambda stage, ctx: pd.DataFrame()).preserves_grain_and_order is True
-    assert FrameHandler(apply=lambda stage, inputs, ctx: None).preserves_grain_and_order is False
+    assert FrameTransformHandler(apply=lambda stage, inputs, ctx: None).preserves_grain_and_order is False
 
 
 def test_source_handler_reads_without_frames():
@@ -360,32 +360,32 @@ def test_source_handler_reads_without_frames():
 
 
 def test_frame_handler_receives_frames():
-    handler = FrameHandler(apply=lambda stage, inputs, ctx: inputs["src"].head(1))
+    handler = FrameTransformHandler(apply=lambda stage, inputs, ctx: inputs["src"].head(1))
     out = handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1, 2]})}, make_run_context())
     assert len(out) == 1
 
 
 def _registry(llm_shape):
-    frame = FrameHandler(apply=lambda stage, inputs, ctx: pd.DataFrame())
+    frame = FrameTransformHandler(apply=lambda stage, inputs, ctx: pd.DataFrame())
     return {
         StageType.input_data: SourceHandler(read=lambda stage, ctx: pd.DataFrame()),
-        StageType.python_row_function: RowMapHandler(make_mapper=lambda s, c, src: lambda r, i: r),
+        StageType.python_row_function: RowMapTransformHandler(make_mapper=lambda s, c, src: lambda r, i: r),
         StageType.llm_transform: llm_shape,
         StageType.python_frame_function: frame,
         StageType.enrich: frame,
         StageType.expand: frame,
         StageType.aggregate: frame,
-        StageType.human_review_queue: RowMapHandler(make_mapper=lambda s, c, src: lambda r, i: r),
+        StageType.human_review_queue: RowMapTransformHandler(make_mapper=lambda s, c, src: lambda r, i: r),
         StageType.publish: frame,
     }
 
 
 def test_check_registry_accepts_shapes_matching_the_model():
-    good = _registry(RowMapHandler(make_mapper=lambda s, c, src: lambda r, i: r))
+    good = _registry(RowMapTransformHandler(make_mapper=lambda s, c, src: lambda r, i: r))
     validate_registry_matches_model(good)  # must not raise
 
 
 def test_check_registry_rejects_shape_disagreeing_with_model():
-    bad = _registry(FrameHandler(apply=lambda stage, inputs, ctx: pd.DataFrame()))
+    bad = _registry(FrameTransformHandler(apply=lambda stage, inputs, ctx: pd.DataFrame()))
     with pytest.raises(RuntimeError, match="is registered as"):
         validate_registry_matches_model(bad)
