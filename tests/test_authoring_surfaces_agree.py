@@ -69,3 +69,15 @@ def test_every_authorable_type_names_its_block_and_signature_form(
 
 def _flat(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
+
+
+def test_the_mcp_instructions_place_every_tool_it_offers() -> None:
+    # Its instructions are the only thing saying WHEN to call each tool.
+    import asyncio
+
+    from app.mcp.instructions import INSTRUCTIONS
+    from app.mcp.server import mcp
+
+    tools = asyncio.run(mcp.list_tools())
+    unplaced = sorted(t.name for t in tools if t.name not in INSTRUCTIONS)
+    assert not unplaced, f"offered but never placed in a phase: {unplaced}"
