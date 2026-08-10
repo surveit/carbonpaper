@@ -20,9 +20,7 @@
 </style>
 {% endblock %}
 
-{% block header_extra %}
-<a href="/" class="back-link">← projects</a>
-{% endblock %}
+{% block breadcrumbs %}{% include "_breadcrumbs.html" %}{% endblock %}
 
 {% block content %}
 <h1>New project · paste methodology → data model → workflow</h1>

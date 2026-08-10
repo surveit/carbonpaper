@@ -1,0 +1,28 @@
+{# The body of a switcher rung's popover, fetched by static/breadcrumbs.js.
+   Context: picker (app.web.breadcrumbs.Picker).
+
+   Each row carries the two things a reader picks by — how the thing came out, and the
+   sentence saying what it is. Both are read off the stored record; a version with no
+   authored message says so rather than being given one. `all_href` appears only where
+   the rows are the newest few, and its label states the total, so the cap is stated
+   rather than silent. #}
+<p class="crumb-pop-head">{{ picker.heading }}</p>
+{% for row in picker.rows %}
+<a class="crumb-pop-row{% if row.is_current %} cur{% endif %}" href="{{ row.href }}"
+   {% if row.is_current %}aria-current="true"{% endif %}>
+  <span class="crumb-pop-id">
+    {%- if row.is_code %}<code>{{ row.label }}</code>{% else %}{{ row.label }}{% endif %}
+    {%- if row.badge %}<span class="badge {{ row.badge_kind }}">{{ row.badge }}</span>{% endif %}
+  </span>
+  {%- if row.description %}<span class="crumb-pop-desc">{{ row.description }}</span>{% endif %}
+  {%- if row.timestamp or row.meta %}<span class="crumb-pop-meta">
+    {%- if row.timestamp %}{{ row.timestamp | friendly_time }}{% endif %}
+    {%- if row.timestamp and row.meta %} · {% endif %}
+    {%- if row.meta %}{{ row.meta }}{% endif %}</span>{% endif %}
+</a>
+{% else %}
+<p class="crumb-pop-empty">Nothing to switch to yet.</p>
+{% endfor %}
+{% if picker.all_href %}
+<a class="crumb-pop-all" href="{{ picker.all_href }}">{{ picker.all_label }} →</a>
+{% endif %}

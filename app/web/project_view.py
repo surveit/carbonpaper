@@ -11,6 +11,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 from app.services import project
+from app.web.breadcrumbs import Crumb, build_section_crumbs
 
 
 class NavItem(BaseModel):
@@ -35,25 +36,38 @@ class NextAction(BaseModel):
 
 
 class ShellState(project.ProjectState):
-    """A project's domain status snapshot (project.ProjectState) plus the two
-    web-layer additions the shell renders: the left-nav tree and the next_action
-    CTA (label text + routing — presentation concerns the domain model must not
-    carry). This is the object the shell and its section templates render."""
+    """A ProjectState plus what the web layer draws around it: nav tree, header
+    trail, next_action CTA."""
 
     nav: list[NavItem]
+    crumbs: list[Crumb]
     next_action: NextAction
 
 
-def shell_state(pdir: Path) -> ShellState:
-    """The domain status snapshot (project.project_state) plus the sidebar's nav
-    tree and next_action CTA. This is the object the shell and its section templates
-    render."""
+def shell_state(pdir: Path, section: str) -> ShellState:
+    """`section` is the active nav key; it both highlights the sidebar and names
+    the trail's last rung."""
     state = project.project_state(pdir)
+    nav = build_nav(state)
     return ShellState(
         **state.model_dump(),
-        nav=build_nav(state),
+        nav=nav,
+        crumbs=build_shell_crumbs(nav, section, state.name),
         next_action=_next_action(state),
     )
+
+
+def build_shell_crumbs(nav: list[NavItem], section: str, project_name: str) -> list[Crumb]:
+    """Labelled off the same nav tree the sidebar draws, so the two can never disagree."""
+    for item in nav:
+        if item.key == section:
+            return build_section_crumbs(project_name, label=item.label)
+        for child in item.children:
+            if child.key == section:
+                return build_section_crumbs(
+                    project_name, label=child.label, parent=(item.label, item.href)
+                )
+    raise ValueError(f"no nav item for section '{section}' — the trail would be unlabelled")
 
 
 def build_nav(state: project.ProjectState) -> list[NavItem]:

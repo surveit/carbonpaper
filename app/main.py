@@ -20,7 +20,7 @@ from app.web.config import (
     STATIC_DIR, RevalidatedStaticFiles, configure_projects_dir_from_env,
 )
 from app.web.routers import (
-    admin, editing, evals, guide, project, node, review, review_packet,
+    admin, editing, evals, guide, pickers, project, node, review, review_packet,
     run_lineage, run_stage, runs,
 )
 
@@ -70,6 +70,7 @@ app.include_router(evals.router)
 app.include_router(review.router)
 app.include_router(node.router)
 app.include_router(guide.router)
+app.include_router(pickers.router)
 app.include_router(admin.router)
 
 # The compiler's chat-driven editing entry ('Edit with agent' -> a chat session).

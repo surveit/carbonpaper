@@ -1,9 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ stage_id }} rows · {{ run_id }} · {{ project }}{% endblock %}
 
-{% block header_extra %}
-<a href="/project/{{ project }}/runs/{{ run_id }}" class="back-link">← run {{ run_id }}</a>
-{% endblock %}
+{% block breadcrumbs %}{% include "_breadcrumbs.html" %}{% endblock %}
 
 {% block content %}
 {# Two views of the same output: the stage diff (app.web.stage_diff → the

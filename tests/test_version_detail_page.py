@@ -55,19 +55,41 @@ def test_version_detail_renders_frozen_graph_and_publish(project: Path) -> None:
     assert meta.version_id in page.text
     assert "mermaid" in page.text          # the graph rendered
     assert "/publish" in page.text          # unpublished → Publish control present
-    assert 'href="/project/demo/workflow/versions"' in page.text  # ← All versions
+    # The way back is the Versions rung of the header trail, not a button of this
+    # page's own — no page carries a back link of its own any more.
+    assert 'href="/project/demo/workflow/versions" class="crumb-link"' in page.text
 
 
-def test_version_detail_offers_to_generate_a_missing_guide(project: Path) -> None:
-    """Publish is refused without a guide, so its page must carry the way to get one."""
+def test_version_detail_does_not_offer_to_generate_a_guide(project: Path) -> None:
+    """A guide is read beside a run's measured stages, so a run is where it is asked for."""
     meta = project_service.save_working_copy_as_version(project, message="v1", reviewer="local")
 
     page = client.get(f"/project/demo/workflow/version/{meta.version_id}")
 
-    assert 'data-role="generate-guide"' in page.text
-    # The button POSTs to this version's guide route (built client-side from VERSION).
-    assert "/workflow/version/${encodeURIComponent(VERSION)}/guide" in page.text
-    assert f'const VERSION = "{meta.version_id}"' in page.text
+    assert 'data-role="generate-guide"' not in page.text
+
+
+def test_version_detail_labels_the_authored_description(project: Path) -> None:
+    """The author's sentence sits under its own header, not inside the app's lede."""
+    meta = project_service.save_working_copy_as_version(
+        project, message="Nine flat categories, no severity.", reviewer="local"
+    )
+
+    page = client.get(f"/project/demo/workflow/version/{meta.version_id}")
+
+    assert "vd-desc-kicker" in page.text
+    assert "Nine flat categories, no severity." in page.text
+    # The boilerplate no longer runs into the authored half.
+    assert "A read-only snapshot of the workflow. Nine flat" not in page.text
+
+
+def test_version_detail_says_when_no_description_was_written(project: Path) -> None:
+    """An absent description is a fact about the version, so it is stated, not filled in."""
+    meta = project_service.save_working_copy_as_version(project, message="", reviewer="local")
+
+    page = client.get(f"/project/demo/workflow/version/{meta.version_id}")
+
+    assert "this version was cut without one" in page.text
 
 
 def _save_covering_guide(project_dir: Path, version_id: str) -> None:

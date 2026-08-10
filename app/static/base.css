@@ -28,6 +28,61 @@ header {
 
 .back-link { color: var(--muted); text-decoration: none; font-size: 14px; }
 .back-link:hover { color: var(--accent); }
+/* The header is a flex row of [trail][Admin]; the trail takes the slack so Admin
+   sits against the right edge whatever the trail's length. */
+.header-right { margin-left: auto; }
+
+/* ═══ The breadcrumb trail — the header's whole left side ═══
+   One component on every page, so the trail is the ONLY way back and there is no
+   second, page-shaped affordance to be inconsistent with. A rung that names a thing
+   the reader might have meant a different one of (the project, the version or run
+   being read) is a .crumb-switch and opens .crumb-pop; a rung naming a section is a
+   plain link. */
+.crumbs { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 13px;
+    min-width: 0; }
+.crumb-link { color: var(--muted); text-decoration: none; white-space: nowrap; }
+.crumb-link:hover { color: var(--accent); text-decoration: underline; }
+.crumb-home { font-weight: 600; color: var(--fg); letter-spacing: -0.2px; }
+.crumb-sep { color: var(--border-strong); user-select: none; }
+.crumb-here { color: var(--fg); font-weight: 600; white-space: nowrap; }
+.crumb-here code, .crumb-link code, .crumb-switch code { font-size: 12.5px; }
+
+.crumb-anchor { position: relative; display: inline-block; }
+.crumb-switch { font: inherit; font-size: 13px; color: var(--muted); background: none;
+    border: 1px solid transparent; border-radius: 4px; padding: 2px 6px; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.crumb-switch:hover { color: var(--fg); background: var(--hover); border-color: var(--border); }
+.crumb-switch.here { color: var(--fg); font-weight: 600; }
+.crumb-switch[aria-expanded="true"] { background: var(--hover);
+    border-color: var(--border-strong); color: var(--fg); }
+.crumb-switch:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--focus-halo); }
+.crumb-caret { font-size: 11px; line-height: 1; color: var(--muted); }
+
+.crumb-pop { position: absolute; top: calc(100% + 6px); left: 0; z-index: 60; width: 400px;
+    max-width: calc(100vw - 48px); background: var(--raised);
+    border: 1px solid var(--border-strong); border-radius: 6px; padding: 6px;
+    box-shadow: 0 8px 24px var(--shadow); max-height: 70vh; overflow-y: auto; }
+.crumb-pop[hidden] { display: none; }
+.crumb-pop-head { font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em;
+    color: var(--muted); margin: 4px 8px 6px; }
+.crumb-pop-row { display: block; padding: 7px 8px; border-radius: 4px; text-decoration: none; }
+.crumb-pop-row:hover { background: var(--hover); }
+.crumb-pop-row.cur { background: var(--sunk-deep); }
+.crumb-pop-id { display: flex; align-items: center; gap: 8px; }
+.crumb-pop-id code { font-size: 12.5px; color: var(--fg); }
+.crumb-pop-desc { display: block; font-size: 12.5px; color: var(--fg); margin-top: 3px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* One line, like the description above it: a run pinning a version with a long
+   authored message would otherwise wrap to three and treble the row's height. */
+.crumb-pop-meta { display: block; font-size: 11.5px; color: var(--muted); margin-top: 2px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crumb-pop-empty { font-size: 12.5px; color: var(--muted); margin: 4px 8px 8px; }
+/* Sticky: this row is the way out of a capped list, so it must not be the one thing
+   the reader has to scroll the popover to reach. */
+.crumb-pop-all { position: sticky; bottom: -6px; display: block; padding: 8px;
+    margin-top: 4px; background: var(--raised); border-top: 1px solid var(--border);
+    font-size: 12.5px; color: var(--accent); text-decoration: none; }
+.crumb-pop-all:hover { text-decoration: underline; }
 
 main { max-width: 1500px; margin: 0 auto; padding: 24px 28px 64px; }
 

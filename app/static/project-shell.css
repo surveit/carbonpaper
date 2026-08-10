@@ -191,6 +191,21 @@
 
 .wf-actions { flex: none; align-items: center; flex-wrap: wrap; }
 
+/* ═══ VERSION detail — the app's words, then the author's ═══
+   .vd-meta is what the app knows about any version (snapshot, parent, size); .vd-desc
+   is the sentence its author wrote about this one. They are deliberately unalike:
+   run together in one grey lede, the authored half read as chrome. */
+.vd-meta { font-size: 12.5px; color: var(--muted); margin: 4px 0 0; }
+.vd-meta .sep { color: var(--border-strong); margin: 0 6px; }
+
+.vd-desc { border-left: 2px solid var(--border-strong); padding-left: 14px;
+    margin: 16px 0 0; max-width: 78ch; }
+.vd-desc p { margin: 0; font-size: 15px; line-height: 1.5; color: var(--fg); }
+.vd-desc .vd-desc-kicker { font-size: 11px; text-transform: uppercase;
+    letter-spacing: .08em; color: var(--muted); margin: 0 0 4px; }
+.vd-desc .byline { font-size: 12.5px; color: var(--muted); margin-top: 6px; }
+.vd-desc.empty p { color: var(--muted); font-style: italic; font-size: 14px; }
+
 /* ═══ OVERVIEW section ═══ */
 .ov-head { margin-bottom: 18px; }
 

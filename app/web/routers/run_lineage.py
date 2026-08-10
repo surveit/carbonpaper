@@ -15,6 +15,7 @@ from app.runtime.trace import trace_row, trace_to_dict
 from app.web.stage_test_views import build_certification, shape_test_views
 from app.web.panel_links import AppPanelLinks
 from app.web.trace_view import build_trace_view
+from app.web.breadcrumbs import build_run_child_crumbs
 from app.web.config import templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
 from app.web.loading import load_manifest, runs_dir
@@ -120,6 +121,7 @@ async def run_stage_row_trace_view(
             "title": f"{view['start_stage']} · row {view['start_row']}",
             "view": view,
             "project": project,
+            "crumbs": build_run_child_crumbs(project, run_id, label="Row lineage"),
             "mermaid": mermaid,
         },
     )

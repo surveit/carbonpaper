@@ -13,6 +13,7 @@ from app.core.errors import ReviewValidationError
 from app.models import Stage, TableSchema
 from app.models.stages.human_review_queue import QueueConfig, resolve_queue_config
 from app.services import review
+from app.web.breadcrumbs import build_run_child_crumbs
 from app.web.config import templates
 from app.web.loading import (
     find_stage,
@@ -49,6 +50,7 @@ async def queue_page(request: Request, project: str, run_id: str, stage_id: str)
         "queue.html",
         {
             "project": project,
+            "crumbs": build_run_child_crumbs(project, run_id, label="Review queue"),
             "run_id": run_id,
             "stage_id": stage_id,
             "stage_def": stage_def,

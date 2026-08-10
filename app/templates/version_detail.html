@@ -10,6 +10,9 @@
 #}
 {% block title %}{{ state.meta.title or state.name }} · Version {{ version.version_id }}{% endblock %}
 
+{# Its own trail, not the shell's: the last rung is THIS version, and it switches. #}
+{% block breadcrumbs %}{% include "_breadcrumbs.html" %}{% endblock %}
+
 {% block section_head %}
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 <script>
@@ -28,10 +31,16 @@
 <div class="sec-head wf-head">
   <div class="wf-head-title">
     <h1>Version <code>{{ version.version_id }}</code></h1>
-    <p class="lede">A read-only snapshot of the workflow. {% if version.message %}{{ version.message }}{% endif %}</p>
+    {# The app's own words about what a version IS, kept apart from the author's
+       words about what THIS one does — the two used to run together in one grey
+       sentence, which read the authored half as chrome. #}
+    <p class="vd-meta">Read-only snapshot
+      {%- if version.parent_version %}<span class="sep">·</span>cut from
+        <a href="/project/{{ state.name }}/workflow/version/{{ version.parent_version }}"><code>{{ version.parent_version }}</code></a>
+      {%- else %}<span class="sep">·</span>first version{% endif %}
+      <span class="sep">·</span>{{ version.stages | length }} stage{{ '' if version.stages | length == 1 else 's' }}</p>
   </div>
   <div class="actions wf-actions">
-    <a href="/project/{{ state.name }}/workflow/versions" class="btn">← All versions</a>
     {% if version.published %}
     <span class="muted">✓ published {{ version.published_at | friendly_time }}</span>
     <form action="/project/{{ state.name }}/workflow/version/{{ version.version_id }}/run" method="post" style="display:inline">
@@ -46,13 +55,18 @@
   </div>
 </div>
 
-{# Offered only where a version has no guide: the reader who wants the walkthrough
-   is the one who needs the way to get it written. #}
-{% if not version_guide %}
-{% with project = state.name, guide_version_id = version.version_id %}
-{% include "_generate_guide.html" %}
-{% endwith %}
-{% endif %}
+{# The author's own sentence about what THIS version does, under a header that says
+   whose words these are. A version cut without one says so — nothing is written in
+   its place, and the absence is a fact about the version, not a gap in the page. #}
+<div class="vd-desc{% if not version.message %} empty{% endif %}">
+  <p class="vd-desc-kicker">Description</p>
+  {% if version.message %}
+  <p>{{ version.message }}</p>
+  {% if version.reviewer %}<p class="byline">written by {{ version.reviewer }} when this version was cut</p>{% endif %}
+  {% else %}
+  <p>No description — this version was cut without one.</p>
+  {% endif %}
+</div>
 
 <div class="wf-stack"><div class="wf-top">
   <div class="diagram-block">

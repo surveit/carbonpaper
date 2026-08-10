@@ -23,6 +23,7 @@ from app.models import (
 )
 from app.services import generation, project, versioning
 from app.services.loader import LOADER_BOOKKEEPING_KEYS, resolve_function_code
+from app.web.breadcrumbs import build_home_crumbs, build_version_crumbs
 from app.web.config import projects_dir, templates
 from app.runtime.stage_tests import run_stage_tests
 from app.web.stage_test_views import build_certification, shape_test_views
@@ -128,7 +129,11 @@ async def new_project_form(request: Request):
     return templates.TemplateResponse(
         request,
         "compile_new_methodology.html",
-        {"default_name": "", "default_doc": ""},
+        {
+            "crumbs": build_home_crumbs("New project"),
+            "default_name": "",
+            "default_doc": "",
+        },
     )
 
 
@@ -198,7 +203,7 @@ async def project_overview(request: Request, project_name: str):
     return templates.TemplateResponse(
         request,
         "section_overview.html",
-        {"state": shell_state(pdir), "section": "overview"},
+        {"state": shell_state(pdir, "overview"), "section": "overview"},
     )
 
 
@@ -209,7 +214,7 @@ async def project_document(request: Request, project_name: str):
     when the project has no document, and the template shows an empty state. The path
     line is state.document_path (absolute, truthful)."""
     pdir = _project_dir(project_name)
-    state = shell_state(pdir)
+    state = shell_state(pdir, "document")
     document = ""
     if state.document_path:
         try:
@@ -236,7 +241,7 @@ async def project_data_model(request: Request, project_name: str):
         request,
         "section_data_model.html",
         {
-            "state": shell_state(pdir),
+            "state": shell_state(pdir, "data_model"),
             "section": "data_model",
             "schemas": schemas,
             "er_diagram": build_schema_er_diagram(schemas) if schemas else None,
@@ -272,7 +277,7 @@ async def project_workflow(request: Request, project_name: str):
         request,
         "section_workflow.html",
         {
-            "state": shell_state(pdir),
+            "state": shell_state(pdir, "workflow"),
             "section": "workflow",
             "stages": stages,
             "mermaid": mermaid,
@@ -306,7 +311,7 @@ async def project_workflow_versions(request: Request, project_name: str):
     return templates.TemplateResponse(
         request,
         "versions.html",
-        {"state": shell_state(pdir), "section": "versions", "versions": versions},
+        {"state": shell_state(pdir, "versions"), "section": "versions", "versions": versions},
     )
 
 
@@ -334,10 +339,10 @@ async def project_workflow_version(request: Request, project_name: str, version_
         request,
         "version_detail.html",
         {
-            "state": shell_state(pdir),
+            "state": shell_state(pdir, "versions"),
             "section": "versions",
+            "crumbs": build_version_crumbs(project_name, version_id),
             "version": version,
-            "version_guide": versioning.find_latest_review_guide(project_name, version_id),
             "mermaid": build_mermaid_graph(version.stages, project_name),
         },
     )

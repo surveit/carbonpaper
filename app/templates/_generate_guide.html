@@ -1,14 +1,25 @@
-{# The Generate-guide control, shown wherever a version has NO review guide: the
-   version page, and the run view where the guide rail would be. It kicks the
-   authoring turn, polls the shared generation-session status, and reloads the page
-   on success — the guide is stored on the version, so the page then draws it.
+{# The Generate-guide control: the run view's guide rail, where the version that run
+   pinned carries no guide. It kicks the authoring turn, polls the shared
+   generation-session status, and reloads the page on success — the guide is stored
+   against the VERSION, so the rail then draws it for every run pinning that version.
+
+   It is offered HERE, and not on the version page, because a walkthrough is read
+   beside a run's stages and their measured outputs; the version page shows the frozen
+   graph, where there is nothing yet for the prose to be checked against.
 
    Context: project (the project name) and guide_version_id (the version the guide is
-   written against — on a run, the version that run pinned). Both are set by the
-   including template; the partial renders nothing else. #}
+   written against — the one this run pinned). Both are set by the including template;
+   the partial renders nothing else. #}
+<style>
+  /* Sized for the 360px rail it sits in, like the guide it stands in for. */
+  .guide-cta { border: 1px dashed var(--border-strong); border-radius: 5px; padding: 12px; }
+  .guide-cta .guide-cta-lead { font-size: 12.5px; color: var(--muted); margin: 0 0 10px; }
+  .guide-cta .nr-edit-msg { font-size: 12px; margin: 8px 0 0; }
+</style>
 <div class="guide-cta">
-  <p class="muted">No review guide yet — the walkthrough a reviewer reads beside this
-    version's stages to judge whether it does what the methodology says.</p>
+  <p class="guide-cta-lead">No review guide for the version this run pinned
+    (<code>{{ guide_version_id }}</code>) — the walkthrough a reviewer reads beside
+    these stages to judge whether the run did what the methodology says.</p>
   <button type="button" class="btn" data-role="generate-guide">Generate guide</button>
   <p class="nr-edit-msg" data-role="generate-guide-msg"></p>
 </div>
