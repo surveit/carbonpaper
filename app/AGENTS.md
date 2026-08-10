@@ -68,8 +68,7 @@ graph node — uses it, and a load they did not ask for (deep link, panel self-r
 ## The run page's workflow minimap (`.diagram-minimap` in `run_detail.html`)
 The graph is a 200px band held at `data-zoom-floor` — `diagram_viewport.js` will not fit a
 wide graph below that scale, so labels stay readable and the band is panned instead. Zoom,
-fit and fullscreen are icon buttons overlaid in its top-right; `.diagram-where` names the
-parked stage and its position in the run's order, which two visible nodes cannot. It opens
+fit and fullscreen are icon buttons overlaid in its top-right. It opens
 parked on the run's first stage (`_focusNode(..., {select: false})` — scrolls without
 outlining, so the band shows the flow's start without claiming a stage the reader has not
 picked). Clicking a node loads the stage section, which until then is not on the page.

@@ -76,21 +76,12 @@
 .diagram-minimap .diagram-tools button { width: 26px; height: 26px; padding: 0;
     display: flex; align-items: center; justify-content: center; line-height: 1;
     background: var(--bg); box-shadow: 0 1px 2px var(--shadow); }
-/* Where the band is parked, in the corner it is least likely to cover a node. */
-.diagram-minimap .diagram-where { position: absolute; left: 7px; bottom: 7px; z-index: 2;
-    margin: 0; font-size: 10.5px; color: var(--muted); background: var(--bg);
-    border: 1px solid var(--border); border-radius: 3px; padding: 1px 6px;
-    max-width: calc(100% - 130px); overflow: hidden; text-overflow: ellipsis;
-    white-space: nowrap; }
-.diagram-minimap .diagram-where:empty { display: none; }
-
 /* ── Fullscreen is the SURVEY: the whole graph plus the coverage line, which is the
       question a picture answers and a 200px band cannot. The block goes fullscreen,
       not the viewport, so the controls and the survey line come with it. ── */
 .diagram-survey { display: none; }
 .diagram-block:fullscreen { background: var(--bg); padding: 10px 14px; }
 .diagram-block:fullscreen .diagram-viewport { height: calc(100vh - 96px); max-height: none; }
-.diagram-block:fullscreen .diagram-where { display: none; }
 .diagram-block:fullscreen .diagram-survey { display: flex; gap: 20px; flex-wrap: wrap;
     align-items: baseline; font-size: 12.5px; padding-top: 9px; margin-top: 9px;
     border-top: 1px solid var(--border); }
