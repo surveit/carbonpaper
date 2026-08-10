@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from conftest import queue_added_columns, queue_columns
+from conftest import queue_added_columns, queue_columns, reads_of
 from pydantic import ValidationError
 
 from app import models as m
@@ -308,6 +308,7 @@ def test_queue_needs_no_hash_source_declared():
         id="rev", type="human_review_queue", inputs=[{"id": "a", "schema": _QUEUE_IN_SCHEMA}],
         signature={
             "form": "extends",
+            "reads": reads_of("a", _QUEUE_IN_COLUMNS),
             "adds": [
                 {"name": "human_score", "type": "int", "nullable": True},
                 {"name": "decision", "type": "str", "nullable": True},
@@ -736,6 +737,7 @@ _SIGNATURE = {
                      {"name": "n", "type": "int", "nullable": True}],
     },
     "human_review_queue": {"form": "extends",
+                           "reads": reads_of("facilities", _LEFT_SCHEMA["columns"]),
                            "adds": queue_added_columns("human_name", "str")},
     "python_frame_function": {"form": "replaces", "produces": _LEFT_SCHEMA["columns"]},
 }

@@ -45,7 +45,8 @@ def _seed_project(root: Path) -> None:
         "id": "select_incidental_filings", "description": "The incidental mentions",
         "type": "filter_rows",
         "inputs": [{"id": "all_filings", "schema": _SCHEMA}],
-        "signature": {"form": "extends"},
+        "signature": {"form": "extends",
+                      "reads": [{"input": "all_filings", "columns": _SCHEMA["columns"]}]},
         "filter": {"code": _PREDICATE},
     }), encoding="utf-8")
 

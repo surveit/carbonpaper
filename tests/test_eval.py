@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from conftest import queue_added_columns, queue_columns
+from conftest import queue_added_columns, queue_columns, reads_of
 from pydantic import ValidationError
 
 from app import models as m
@@ -86,6 +86,7 @@ def test_human_review_queue_is_grain_and_order_preserving():
                         inputs=[{"id": "a", "schema": _QUEUE_IN}],
                         queue=queue_columns(), signature={
                             "form": "extends",
+                            "reads": reads_of("a", _QUEUE_IN["columns"]),
                             "adds": [
                                 {"name": "human_score", "type": "int", "nullable": True},
                                 {"name": "decision", "type": "str", "nullable": True},

@@ -9,7 +9,7 @@ from app.core.stage_cache import StageCacheEntry
 from app.models import Stage, parse_stage
 from app.models.stages.human_review_queue import ReviewVerdict
 from app.services import review
-from conftest import queue_columns
+from conftest import queue_columns, reads_of
 
 FROZEN_ROW = {"id": "a", "score": 1}
 
@@ -27,7 +27,8 @@ def _stage(queue: dict[str, object] | None = None) -> Stage:
     return parse_stage({
         "id": "review", "description": "Review", "type": "human_review_queue",
         "inputs": [{"id": "scored", "schema": {"columns": _INPUT_COLUMNS}}],
-        "signature": {"form": "extends", "adds": _added_columns(block)},
+        "signature": {"form": "extends", "reads": reads_of("scored", _INPUT_COLUMNS),
+                      "adds": _added_columns(block)},
         "queue": block,
     })
 

@@ -8,7 +8,7 @@ import pytest
 from app.models import Stage, parse_stage
 from app.web import queue_view
 from app.web.loading import QueueFingerprints
-from conftest import queue_added_columns, queue_columns
+from conftest import queue_added_columns, queue_columns, reads_of
 
 
 def _queue_stage(
@@ -26,16 +26,17 @@ def _queue_stage(
     # declaration.
     added: list[dict[str, object]] = queue_added_columns(target, target_type)
     added[0] = {**added[0], **(target_spec or {})}
+    upstream_ids = input_ids or ["upstream"]
     inputs = [
         {"id": upstream, "schema": {"columns": input_columns}}
-        for upstream in (input_ids or ["upstream"])
+        for upstream in upstream_ids
     ]
-    signature: dict[str, object] = {"form": "extends", "adds": added}
-    if reads is not None:
-        signature["reads"] = [{
-            "input": inputs[0]["id"],
-            "columns": [c for c in input_columns if c["name"] in reads],
-        }]
+    read_columns = (input_columns if reads is None
+                    else [c for c in input_columns if c["name"] in reads])
+    signature: dict[str, object] = {
+        "form": "extends", "adds": added,
+        "reads": reads_of(upstream_ids[0], read_columns),
+    }
     return parse_stage({
         "id": "review", "description": "Review", "type": "human_review_queue",
         "inputs": inputs,

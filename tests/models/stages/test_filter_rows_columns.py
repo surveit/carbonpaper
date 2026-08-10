@@ -4,6 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.models import parse_stage
+from conftest import reads_of
 
 _AB_SCHEMA = {"columns": [{"name": "a", "type": "str", "nullable": True}, {"name": "b", "type": "int", "nullable": True}]}
 
@@ -12,7 +13,9 @@ def _filter_stage(*, signature=None, filter_cfg=None):
     return {
         "id": "f", "type": "filter_rows", "description": "f",
         "inputs": [{"id": "src", "schema": _AB_SCHEMA}],
-        "signature": signature or {"form": "extends"},
+        "signature": signature or {
+            "form": "extends", "reads": reads_of("src", _AB_SCHEMA["columns"]),
+        },
         "filter": filter_cfg or {"code": "def should_include(row): return row['b'] > 0"},
     }
 
@@ -20,6 +23,12 @@ def _filter_stage(*, signature=None, filter_cfg=None):
 def test_a_reads_only_signature_ok():
     stage = parse_stage(_filter_stage())
     assert [c.name for c in stage.resolve_output_schema().columns] == ["a", "b"]
+
+
+def test_a_signature_reading_nothing_is_rejected():
+    # Handed an empty row, the predicate keeps every row or none.
+    with pytest.raises(ValidationError, match="reads nothing"):
+        parse_stage(_filter_stage(signature={"form": "extends"}))
 
 
 def test_a_signature_that_adds_is_rejected():

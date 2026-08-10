@@ -10,6 +10,8 @@ from typing import Any
 
 from alembic import op
 
+from scripts.stage_signatures import backfill_anchor_reads
+
 revision = "0010"
 down_revision = "0009"
 branch_labels = None
@@ -23,10 +25,10 @@ depends_on = None
 # it. The runtime now hands a row-mapped mapper only what its signature declares,
 # so a stage of either type must say so or be handed nothing.
 #
-# Only a stage whose reads are EMPTY is touched. One that already names columns
-# was authored or repaired deliberately and this revision must not widen it.
+# The rewrite itself is backfill_anchor_reads, shared with
+# scripts.migrate_compiled_stage_files — a project's working copy carries the same
+# specs and no revision can reach it.
 _COLLECTIONS = ("workflow_version", "draft")
-_TYPES = ("filter_rows", "human_review_queue")
 
 
 def upgrade() -> None:
@@ -57,36 +59,5 @@ def _backfill_document(document: Any) -> bool:
     stages = document.get("stages") if isinstance(document, dict) else None
     if not isinstance(stages, list):
         return False
-    changed = [_backfill_stage(stage) for stage in stages if isinstance(stage, dict)]
+    changed = [backfill_anchor_reads(stage) for stage in stages if isinstance(stage, dict)]
     return any(changed)
-
-
-def _backfill_stage(stage: dict[str, Any]) -> bool:
-    if stage.get("type") not in _TYPES:
-        return False
-    signature = stage.get("signature")
-    if not isinstance(signature, dict) or signature.get("reads"):
-        return False
-    anchor = _anchor(stage)
-    if anchor is None:
-        return False
-    anchor_id, columns = anchor
-    if not columns:
-        return False
-    signature["reads"] = [{"input": anchor_id, "columns": columns}]
-    return True
-
-
-def _anchor(stage: dict[str, Any]) -> tuple[str, list[dict[str, Any]]] | None:
-    """The first input's id and declared columns, or None when it declares none."""
-    inputs = stage.get("inputs")
-    if not isinstance(inputs, list) or not inputs or not isinstance(inputs[0], dict):
-        return None
-    anchor_id = inputs[0].get("id")
-    schema = inputs[0].get("schema")
-    if not isinstance(anchor_id, str) or not isinstance(schema, dict):
-        return None
-    columns = schema.get("columns")
-    if not isinstance(columns, list):
-        return None
-    return anchor_id, [dict(column) for column in columns if isinstance(column, dict)]

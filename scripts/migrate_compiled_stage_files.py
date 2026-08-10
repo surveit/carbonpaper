@@ -11,6 +11,8 @@ Applied here, matching the revisions that do the same to the store:
   0006 — the stored `output_schema` left too; a stage's output resolves from its
          `signature`, synthesized here from the outer the file stored.
   0008 — `name` became `description`: a stage has one name, its id.
+  0010 — a filter_rows/human_review_queue signature reading nothing no longer
+         loads; its reads become the whole anchor edge.
 
 Usage:  python -m scripts.migrate_compiled_stage_files [--apply] [--projects-dir PATH]
 Without --apply it is a dry run and writes nothing.
@@ -28,7 +30,11 @@ from scripts.stage_description import (
     DescriptionUndeterminable,
     rename_name_to_description,
 )
-from scripts.stage_signatures import SignatureUndeterminable, add_signature
+from scripts.stage_signatures import (
+    SignatureUndeterminable,
+    add_signature,
+    backfill_anchor_reads,
+)
 
 _KEY = "primary_key"
 
@@ -84,7 +90,12 @@ def _migrate(spec: Any) -> bool:
     changed = _drop_primary_keys(spec)
     if not isinstance(spec, dict):
         return changed
-    return rename_name_to_description(spec) | add_signature(spec) | changed
+    return (
+        rename_name_to_description(spec)
+        | add_signature(spec)
+        | backfill_anchor_reads(spec)
+        | changed
+    )
 
 
 def _rewrite(path: Path) -> None:

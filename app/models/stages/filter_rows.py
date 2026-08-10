@@ -91,6 +91,13 @@ class FilterRowsStage(StageBase):
                 f"stage '{self.id}': filter_rows keeps every kept row's columns "
                 f"unchanged — its signature declares reads only, never adds or rewrites"
             ]
+        # An empty read set decides every row on an empty row: all kept or all dropped.
+        if not signature.reads:
+            return [
+                f"stage '{self.id}': its signature reads nothing, so the predicate would "
+                f"be handed an empty row and decide every row the same way — declare the "
+                f"columns `{self.filter.function or 'should_include'}` consumes"
+            ]
         return []
 
     def find_authored_code_block(self) -> FilterConfig:
@@ -123,7 +130,9 @@ NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
             "than deciding. `should_include(row)` is handed a plain dict and "
             "must return a bool — True keeps the row, False drops it; any other return "
             "type is a run-time error. Kept rows preserve their original relative order "
-            "and every column unchanged, so the signature never adds or rewrites."
+            "and every column unchanged, so the signature never adds or rewrites. The "
+            "predicate is handed exactly the columns the signature `reads`, so those must "
+            "cover every column it consumes and may never be empty."
         ),
     ),
 }

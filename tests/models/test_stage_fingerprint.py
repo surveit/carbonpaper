@@ -43,8 +43,12 @@ def _queue_stage(**queue_overrides):
                 {"name": "score", "type": "float", "nullable": False},
             ]},
         }],
-        # Every column the queue adds, since the signature must declare them all.
-        "signature": {"form": "extends", "adds": [
+        # Every column the queue adds, since the signature must declare them all,
+        # over the whole anchor edge, since a queue reads the row it shows.
+        "signature": {"form": "extends", "reads": [{"input": "src", "columns": [
+            {"name": "id", "type": "str", "nullable": False},
+            {"name": "score", "type": "float", "nullable": False},
+        ]}], "adds": [
             {"name": "human_score", "type": "float", "nullable": True},
             {"name": "decision", "type": "str", "nullable": True},
             {"name": "reviewer_id", "type": "str", "nullable": True},

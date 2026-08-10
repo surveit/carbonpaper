@@ -424,3 +424,17 @@ def test_publish_signature_must_produce_nothing():
     }
     msg = _issues(spec)
     assert "publish emits files, not a table" in msg
+
+
+def test_a_row_function_that_reads_nothing_is_accepted():
+    # One that stamps a constant consumes no column, and that is honest.
+    stage = parse_stage({
+        "id": "stamp", "description": "Stamp", "type": "python_row_function",
+        "inputs": [{"id": "load", "schema": {"columns": [
+            {"name": "id", "type": "str", "nullable": True}]}}],
+        "function": {"kind": "inline",
+                     "code": "def transform(row):\n    return {'src': 'q1'}\n"},
+        "signature": {"form": "extends",
+                      "adds": [{"name": "src", "type": "str", "nullable": True}]},
+    })
+    assert stage.anchor_reads() == frozenset()
