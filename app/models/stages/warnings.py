@@ -20,6 +20,7 @@ WarningKind = Literal[
     "unreviewable_code",
     "nondeterministic",
     "row_limit",
+    "stale_input_schema",
 ]
 
 # Each kind's severity, and the order the list is read in (errors first).
@@ -30,8 +31,13 @@ WarningKind = Literal[
 # them and hands the result in; either the code or the description is wrong, and
 # both are edits to this stage.
 #
-# The last two are deliberate authoring choices, wrong to refuse and still worth
-# telling a reviewer about: a `warning` is not thereby unimportant.
+# `nondeterministic` and `row_limit` are deliberate authoring choices, wrong to
+# refuse and still worth telling a reviewer about: a `warning` is not thereby
+# unimportant.
+#
+# `stale_input_schema` is a warning because nobody CHOSE it — an upstream grew a
+# column and this stage's copy did not follow. It refuses nothing until we know
+# how much stored work already drifted; promoting it is a one-line change here.
 SEVERITY: dict[str, UserFacingErrorSeverity] = {
     "undescribed": UserFacingErrorSeverity.error,
     "unexemplified": UserFacingErrorSeverity.error,
@@ -39,6 +45,7 @@ SEVERITY: dict[str, UserFacingErrorSeverity] = {
     "unreviewable_code": UserFacingErrorSeverity.error,
     "nondeterministic": UserFacingErrorSeverity.warning,
     "row_limit": UserFacingErrorSeverity.warning,
+    "stale_input_schema": UserFacingErrorSeverity.warning,
 }
 
 

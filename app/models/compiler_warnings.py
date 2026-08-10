@@ -39,11 +39,38 @@ def find_workflow_compiler_warnings(
     failing = failing_examples or {}
     warnings = [w for stage in stages
                 for w in find_stage_compiler_warnings(stage, failing.get(stage.id))]
+    warnings += _find_stale_input_schema_warnings(stages)
     order = list(SEVERITY)
     return CompilerWarningReport(
         warnings=sorted(warnings,
                         key=lambda w: (w.severity is not UserFacingErrorSeverity.error, order.index(w.kind)))
     )
+
+
+def _find_stale_input_schema_warnings(stages: list[Stage]) -> list[CompilerWarning]:
+    """Every input schema naming fewer columns than its upstream now produces."""
+    by_id = {stage.id: stage for stage in stages}
+    # An input `schema` CACHES what the upstream promises at this position; it
+    # does not narrow it (that is `signature.reads`, checked separately). So an
+    # omitted column is drift, and it does not stay local: an `extends` output is
+    # this schema extended, so the column silently leaves the declared output of
+    # every stage downstream while still flowing through them at runtime.
+    warnings: list[CompilerWarning] = []
+    for stage in stages:
+        for ref in stage.inputs:
+            upstream = by_id.get(ref.id)
+            produced = upstream.resolve_output_schema() if upstream else None
+            if produced is None:
+                continue  # a dangling input or a publish upstream: not this check's story
+            declared = {column.name for column in ref.table_schema.columns}
+            missing = [c.name for c in produced.columns if c.name not in declared]
+            if missing:
+                warnings.append(warn(
+                    stage, "stale_input_schema",
+                    f"its schema for input `{ref.id}` is missing {missing}, which "
+                    f"`{ref.id}` now produces — re-read the upstream's output",
+                ))
+    return warnings
 
 
 def find_stage_compiler_warnings(
