@@ -1,5 +1,5 @@
 """Committed example projects, portable via app.services.project.
 
-data/<name>.json is a WorkflowFile fixture; a sibling data/<name>.csv, when
-present, is sample input data (WorkflowFile carries none). capture_lobbying.py
-regenerates lobbying_issue_triage.json from a local source project."""
+data/<name>.json is a hand-edited WorkflowFile fixture; a sibling data/<name>.csv is
+sample input data (WorkflowFile carries none); data/review_guides/<name>.json is a
+ReviewGuideDraft, in a subdirectory so the fixture glob never reads one as a workflow."""

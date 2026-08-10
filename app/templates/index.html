@@ -55,13 +55,15 @@
     <p class="muted">Paste how your investigation works, and it becomes a chain of simple, inspectable steps you can run and rerun.</p>
     <div class="actions">
         <a href="/project/new" class="btn primary new-methodology-btn">＋ New project</a>
-        {# The tour is the second door, and only here: a reader who already has
-           projects has been through the part it walks. #}
+        {# Both doors are primary — either is a real way in, and the tour is only
+           offered here: a reader who already has projects has been through the part
+           it walks. #}
         <form method="post" action="/tutorial">
-            <button type="submit" class="btn secondary"
+            <button type="submit" class="btn primary"
                     title="Seeds a five-stage workflow over synthetic lobbying filings, and runs it with you.">Take a guided tour on sample data</button>
         </form>
     </div>
+    <p class="muted lifecycle-line">Either way it goes: {{ lifecycle_line }}.</p>
 </div>
 {% endif %}
 {% endblock %}

@@ -67,6 +67,9 @@
 .empty-state .actions { justify-content: center; align-items: center; margin-top: 18px; }
 .empty-state .actions .btn { margin-top: 0; }
 .empty-state .actions form { margin: 0; }
+/* The lifecycle sketch under the doors: smaller than the lead line, since it sets
+   expectations for after the click rather than asking for one. */
+.empty-state .lifecycle-line { margin-top: 18px; font-size: .85rem; }
 
 /* Compact stage list in left pane */
 table.stages.compact td, table.stages.compact th {

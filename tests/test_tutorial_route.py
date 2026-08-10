@@ -11,6 +11,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.models.authoring_lifecycle_note import (
+    AUTHORING_LIFECYCLE_GUIDANCE,
+    LIFECYCLE_ONE_LINE,
+)
 from app.services import workspace
 from app.tools.tutorial import TutorialContext
 from app.web.chat_router import _store
@@ -43,15 +47,23 @@ def _start_the_tour() -> str:
     return location.rsplit("/", 1)[-1]
 
 
-def test_the_zero_state_offers_the_tour_as_the_secondary_action() -> None:
+def test_the_zero_state_offers_the_tour_as_a_primary_action() -> None:
     page = client.get("/")
     assert page.status_code == 200
     assert "No projects yet" in page.text
     assert _CTA in page.text
     assert 'action="/tutorial"' in page.text
-    assert 'class="btn secondary"' in page.text
-    # Second door, not the first: the primary is still New project.
+    # Both doors are primary (#476), and the tour's is not styled as a lesser one.
     assert 'class="btn primary new-methodology-btn"' in page.text
+    assert 'class="btn primary"' in page.text
+    assert "btn secondary" not in page.text
+
+
+def test_the_zero_state_sketches_the_lifecycle_in_the_authoring_prompts_words() -> None:
+    page = client.get("/")
+    # One string, so what the reader is promised is what the prompts enforce.
+    assert LIFECYCLE_ONE_LINE in page.text
+    assert LIFECYCLE_ONE_LINE in AUTHORING_LIFECYCLE_GUIDANCE
 
 
 def test_a_home_page_with_projects_does_not_offer_the_tour(examples_root: Path) -> None:

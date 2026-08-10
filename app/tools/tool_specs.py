@@ -240,9 +240,10 @@ made cheap. Omit it and every stage reads its whole input. An unknown stage id
 is a loud error. The caps land in the manifest, so the slice is part of the
 run's provenance.
 
-Poll get_run_status(project_id, run_id) for live progress and the final
-status. On a pre-run failure (no stored version, an unbound input) returns
-{ok: False, error} and starts no run.""",
+Then call wait_for_run(project_id, run_id) ONCE and let it block — that is how
+you learn the outcome. Do not loop on a status reader. On a pre-run failure (no
+stored version, an unbound input) returns {ok: False, error} and starts no
+run.""",
     ),
     "run_workflow_test": ToolSpec(
         name="run_workflow_test",
@@ -292,6 +293,28 @@ retry. A VALID stage whose `inputs` reference a stage id you have not
 added yet IS stored — that's the workflow still being built, not a bad
 stage — and shows up in the returned `issues`.""",
     ),
+    "wait_for_run": ToolSpec(
+        name="wait_for_run",
+        description="""\
+Wait for one run to finish, in ONE call — this blocks server-side until the run
+reaches a terminal status (ok / warnings / errors / awaiting_review /
+cancelled) or `timeout_seconds` elapses, whichever comes first. It is the
+replacement for a polling loop, not a faster version of one: call it once and
+let it wait.
+
+Returns the run's `status`, `is_terminal`, `waited_seconds`, and one record per
+stage — `stage_id`, `status`, `output_row_count`, and `error` where a stage
+failed.
+
+`is_terminal` false means ONE thing: the deadline passed while the run was
+still executing. It is not a failure, not a timeout error, and not permission
+to stop — `status` is then `running` and the stage records say which stage is
+still going. Call this again to keep waiting, and never tell a reader that a
+run failed, stalled or was abandoned on the strength of an early return.
+
+An unknown or expired run_id raises, rather than returning a fabricated
+status.""",
+    ),
     "write_review_guide": ToolSpec(
         name="write_review_guide",
         description="""\
@@ -312,14 +335,19 @@ Import the committed tutorial workflow — a five-stage lobbying-disclosure tria
 over a SYNTHETIC bundled CSV — into this workspace as a real project, and bind
 that CSV to its input stage so the workflow can run. Takes no arguments.
 
-Returns `name` (the project name, made unique — running the tour twice creates
-two projects and overwrites nothing), `csv_path` (the absolute path actually
-bound), `stages` (each stage's id, type and one-line description, in workflow
-order) and `mcp_command` (the connect command for THIS workspace).
+Also stores the walkthrough committed beside the fixture as that version's
+review guide, so the project has one from the moment it exists.
 
-Quote `mcp_command` and `csv_path` verbatim; never rebuild either from memory.
-Describe the stages from the `stages` list you get back, not from what a
-five-stage triage workflow usually contains.""",
+Returns `name` (the project name, made unique — running the tour twice creates
+two projects and overwrites nothing), `version_id`, `csv_path` (the absolute
+path actually bound), `stages` (each stage's id, type and one-line description,
+in workflow order), `workflow_url` (the workflow's page), `guide_url` (that
+version's page, where the stored walkthrough is read) and `mcp_command` (the
+connect command for THIS workspace).
+
+Quote every URL, `mcp_command` and `csv_path` verbatim; never rebuild one from
+memory. Describe the stages from the `stages` list you get back, not from what
+a five-stage triage workflow usually contains.""",
 )
 
 # `save_version` is one NAME for two operations, because the surfaces author into

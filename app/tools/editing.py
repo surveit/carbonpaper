@@ -13,8 +13,16 @@ from pydantic import BaseModel
 from app.core.agent.bound_tool import BoundToolSpec
 from app.models import StageDraft
 from app.models.review_guide import ReviewGuideDraft
+from app.services.run import RunOutcome
 from app.services.versioning import ReviewGuide
 from app.services import drafts, project as project_service
+from app.tools.run_tools import (
+    RUN_TOOL_LABELS,
+    RUN_TOOL_SCHEMAS,
+    RunStarted,
+    start_run_of_stored_workflow,
+    wait_for_started_run,
+)
 from app.tools.tool_specs import SAVE_VERSION_FROM_DRAFT, TOOL_SPECS
 from app.services.drafts import DraftDetail, DraftEdit, DraftView, SaveResult
 
@@ -70,6 +78,19 @@ def make_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
     ) -> ReviewGuide:
         return project_service.write_review_guide(project_id, version_id, guide)
 
+    def run_workflow(
+        project_id: str, version_id: str = "", limits: dict[str, int] | None = None
+    ) -> RunStarted:
+        # In-app surface: base_url "/" makes run_url the path this workspace serves it on.
+        return start_run_of_stored_workflow(
+            project_id, version_id, limits, base_url="/"
+        )
+
+    def wait_for_run(
+        project_id: str, run_id: str, timeout_seconds: int = 0
+    ) -> RunOutcome:
+        return wait_for_started_run(project_id, run_id, timeout_seconds)
+
     tools: list[Callable[..., Any]] = [
         list_projects,
         get_current_project,
@@ -85,6 +106,8 @@ def make_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
         save_version,
         read_review_guide,
         write_review_guide,
+        run_workflow,
+        wait_for_run,
     ]
     return [
         BoundToolSpec(
@@ -206,6 +229,7 @@ TOOL_SCHEMAS: dict[str, ToolInputSchema] = {
             "rather than merging into it.",
         ],
     },
+    **RUN_TOOL_SCHEMAS,
 }
 
 
@@ -233,4 +257,5 @@ TOOL_LABELS: dict[str, str] = {
     "save_version": "Saving the draft as a version",
     "read_review_guide": "Reading the review guide",
     "write_review_guide": "Writing the review guide",
+    **RUN_TOOL_LABELS,
 }

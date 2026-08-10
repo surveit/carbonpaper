@@ -23,6 +23,7 @@ from app.models import (
     StageDraft,
     find_workflow_compiler_warnings,
 )
+from app.tools.run_tools import DEFAULT_WAIT_SECONDS, wait_for_started_run
 from app.tools.tool_specs import SAVE_VERSION_FROM_WORKING_COPY, TOOL_SPECS
 from app.mcp.instructions import INSTRUCTIONS
 from app.models.review_guide import ReviewGuideDraft
@@ -254,6 +255,14 @@ def run_workflow(
     except _RUN_TOOL_ERRORS as exc:
         return {"ok": False, "error": str(exc)}
     return {"run_id": run_id, "status": run_service.read_run_status(project_id, run_id)["status"]}
+
+
+@mcp.tool(description=TOOL_SPECS["wait_for_run"].description)
+def wait_for_run(
+    project_id: str, run_id: str, timeout_seconds: int = DEFAULT_WAIT_SECONDS
+) -> run_service.RunOutcome:
+    _resolve_existing_project(project_id)  # loud if the project doesn't exist
+    return wait_for_started_run(project_id, run_id, timeout_seconds)
 
 
 @mcp.tool(description=TOOL_SPECS["get_run_status"].description)

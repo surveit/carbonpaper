@@ -5,6 +5,7 @@ from pathlib import Path
 import pandas as pd
 
 from app.models import Stage, StageType
+from app.models.review_guide import ReviewGuideDraft
 from app.runtime.context import RunContext
 from app.runtime.stages import HANDLERS
 from app.services import project, versioning
@@ -16,6 +17,7 @@ _FIXTURE_PATH = (
     / "app" / "seeds" / "data" / "tutorial_lobbying_triage.json"
 )
 _CSV_PATH = _FIXTURE_PATH.with_suffix(".csv")
+_GUIDE_PATH = _FIXTURE_PATH.parent / "review_guides" / _FIXTURE_PATH.name
 
 _EXPECTED_STAGE_IDS = [
     "raw_filings",
@@ -29,6 +31,9 @@ _EXPECTED_STAGE_IDS = [
 _ROWS_IN_CSV = 24
 _ROWS_BELOW_THRESHOLD = 6
 _ROWS_KEPT = _ROWS_IN_CSV - _ROWS_BELOW_THRESHOLD
+_BATCH_SIZE = 12
+# The cap the tour's first run passes as limits {"raw_filings": N}.
+_TOUR_LIMIT = 6
 
 _POLICY_AREAS = [
     "Health",
@@ -147,10 +152,39 @@ def test_flag_followup_flags_only_what_the_methodology_says_it_flags():
     assert list(flagged["needs_followup"]) == expected
 
 
-def test_classify_issues_reads_four_filings_per_model_call():
+def test_classify_issues_reads_a_dozen_filings_per_model_call():
     classify = _stage(_load_fixture(), "classify_issues")
+    # Each call spawns a process, so the batch size is the tour's wall clock.
 
     assert classify.llm is not None
-    assert classify.llm.batch_size == 4
+    assert classify.llm.batch_size == _BATCH_SIZE
+    assert _ROWS_KEPT <= _BATCH_SIZE * 2
     for placeholder in ("{client}", "{registrant}", "{filing_period}", "{specific_issues}"):
         assert placeholder in classify.llm.prompt_data_template
+
+
+def test_the_methodology_document_states_the_batch_size_the_stage_uses():
+    wf = _load_fixture()
+    # The document is the source of record a reviewer reads against the stage.
+
+    assert "twelve at a time in one model call" in wf.document
+    assert "four at a time" not in wf.document
+
+
+def test_the_first_six_filings_are_one_model_call():
+    # What the tour's small run costs: beat 3 caps raw_filings at 6 rows.
+    df = pd.read_csv(_CSV_PATH).head(_TOUR_LIMIT)
+
+    assert int((df["amount_usd"] >= 50000).sum()) <= _BATCH_SIZE
+
+
+def test_the_committed_review_guide_accounts_for_every_stage():
+    guide = ReviewGuideDraft.model_validate_json(
+        _GUIDE_PATH.read_text(encoding="utf-8")
+    )
+
+    narrated = [stage_id for step in guide.steps for stage_id in step.stage_ids]
+    assert narrated == _EXPECTED_STAGE_IDS
+    assert guide.unnarrated == []
+    for step in guide.steps:
+        assert step.data_description and step.data_description.strip()

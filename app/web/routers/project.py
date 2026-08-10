@@ -21,6 +21,7 @@ from app.models import (
     validate_named_schema,
     validate_schema_library,
 )
+from app.models.authoring_lifecycle_note import LIFECYCLE_ONE_LINE
 from app.services import generation, project, versioning
 from app.services.loader import LOADER_BOOKKEEPING_KEYS, resolve_function_code
 from app.web.breadcrumbs import build_home_crumbs, build_version_crumbs
@@ -81,7 +82,7 @@ async def index(request: Request):
     return templates.TemplateResponse(
         request,
         "index.html",
-        {"projects": list_projects()},
+        {"projects": list_projects(), "lifecycle_line": LIFECYCLE_ONE_LINE},
     )
 
 

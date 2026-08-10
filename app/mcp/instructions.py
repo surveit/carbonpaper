@@ -85,7 +85,9 @@ record, and it returns the project_id every other tool takes.
 generate_data_model(project_id) runs in the background — poll get_project_status until
 schemas appear. The HUMAN then approves the data model in the web UI; no tool approves
 it. A run executes a stored version, and run_workflow(project_id, version_id?) is the
-full one — get_run_status(project_id, run_id) follows it to its outcome. Publishing is a
+full one — wait_for_run(project_id, run_id) blocks in ONE call until that run
+settles (get_run_status reads the manifest without waiting; do not loop on it).
+Publishing is a
 human's mark that they have looked at a version; it does not gate what a run may execute.
 
 {REVIEW_GUIDE_NOTE}
