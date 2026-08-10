@@ -8,6 +8,15 @@
 .ac-backend { font-size: 12px; color: var(--muted); border: 1px solid var(--border);
     border-radius: 10px; padding: 2px 8px; white-space: nowrap; }
 
+/* Opening a chat, at the right end of the heading line. The editing agent binds to
+   one project, so naming it is part of the control rather than a step after it;
+   with no project to name, the line says so and offers the project instead. */
+.ac-new, .ac-new-none { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.ac-new-label { color: var(--muted); font-size: 13px; }
+.ac-new select { font: inherit; font-size: 14px; padding: 6px 9px; color: var(--fg);
+    background: var(--raised); border: 1px solid var(--border); border-radius: 6px; }
+.ac-new-none { color: var(--muted); font-size: 13px; }
+
 .ac-sessions { list-style: none; padding: 0; max-width: 1080px; }
 .ac-session { border: 1px solid var(--border); border-radius: 8px; background: var(--raised);
     padding: 10px 12px; margin: 6px 0; }
@@ -27,10 +36,12 @@
 
 /* A typed turn is one or two lines, so it reads as a compact bubble against the
    right edge; the reply under it is unboxed prose, which a bubble would only
-   narrow. */
+   narrow. The bubble takes the quiet --info tint, not the saturated fill: its
+   position and shape already say who spoke, and a filled chip on this page
+   competes with the one element asking to be clicked, the Send button. */
 .ac-msg.user { align-self: flex-end; max-width: 72%; }
 .ac-msg.user .ac-role { text-align: right; }
-.ac-msg.user .ac-body { background: var(--info-bd); color: var(--on-dark);
+.ac-msg.user .ac-body { background: var(--info-bg); color: var(--info-ink);
     border-radius: 10px; padding: 8px 12px; }
 .ac-msg.assistant { align-self: stretch; }
 
