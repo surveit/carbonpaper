@@ -58,8 +58,9 @@ def test_download_returns_the_workflow_file_as_an_attachment(workspace_root):
     wf = WorkflowFile.model_validate_json(r.content)
     assert wf.name == _BUNDLE
     assert [stage.id for stage in wf.stages] == [
-        "raw_filings", "significant_filings", "classify_issues",
-        "flag_followup", "publish_report",
+        "raw_filings", "public_commitments", "significant_filings",
+        "matched_commitments", "judge_alignment", "flag_contradiction",
+        "publish_report",
     ]
 
 

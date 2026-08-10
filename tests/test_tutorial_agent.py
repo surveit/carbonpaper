@@ -72,25 +72,25 @@ def test_the_tutorial_agent_gets_none_of_the_editing_tools() -> None:
         assert editing_only not in bare
 
 
-def test_create_tutorial_project_imports_the_fixture_with_an_absolute_csv_bound(
+def test_create_tutorial_project_binds_an_absolute_csv_to_every_input_stage(
     projects_root: Path,
 ) -> None:
     seeded = _seed_a_tour()
 
     assert seeded["name"] in project_service.list_projects()
     assert [stage["id"] for stage in seeded["stages"]] == [
-        "raw_filings", "significant_filings", "classify_issues",
-        "flag_followup", "publish_report",
+        "raw_filings", "public_commitments", "significant_filings",
+        "matched_commitments", "judge_alignment", "flag_contradiction",
+        "publish_report",
     ]
 
-    bound = Path(seeded["csv_path"])
-    assert bound.is_absolute() and bound.is_file()
+    bound = {entry["stage_id"]: Path(entry["csv_path"]) for entry in seeded["bound_inputs"]}
+    assert set(bound) == {"raw_filings", "public_commitments"}
+    assert all(path.is_absolute() and path.is_file() for path in bound.values())
 
     stages = load_workflow(projects_root / seeded["name"])
-    source = next(s for s in stages if isinstance(s, InputDataStage))
-    stored = source.connector.params["path"]
-    assert Path(stored).is_absolute()
-    assert Path(stored) == bound
+    sources = [s for s in stages if isinstance(s, InputDataStage)]
+    assert {s.id: Path(s.connector.params["path"]) for s in sources} == bound
 
 
 def test_two_tours_seed_two_distinct_projects(projects_root: Path) -> None:
@@ -155,7 +155,7 @@ def test_a_real_run_resolves_the_bound_csv_and_honours_the_row_cap(
     # The filter runs before the model stage, so fewer rows would have reached it.
     assert by_stage["significant_filings"]["output_row_count"] < 6
     # No model is available offline, so the LLM stage is where this run stops.
-    assert by_stage["classify_issues"]["status"] == "error"
+    assert by_stage["judge_alignment"]["status"] == "error"
 
 
 def test_the_mcp_run_workflow_tool_forwards_limits_too(
@@ -219,7 +219,7 @@ def test_wait_for_run_reports_a_still_running_run_rather_than_a_failure(
     monkeypatch.setattr(run_service, "read_run_status", lambda p, r: {
         "run_id": r, "status": "running",
         "stage_records": [
-            {"stage_id": "classify_issues", "status": "running", "output_row_count": 0}
+            {"stage_id": "judge_alignment", "status": "running", "output_row_count": 0}
         ],
     })
     tool = next(t for t in _tools() if t.name == "wait_for_run")
@@ -231,4 +231,4 @@ def test_wait_for_run_reports_a_still_running_run_rather_than_a_failure(
     assert out.get("is_error") is not True
     assert waited["is_terminal"] is False
     assert waited["status"] == "running"
-    assert waited["stages"][0]["stage_id"] == "classify_issues"
+    assert waited["stages"][0]["stage_id"] == "judge_alignment"

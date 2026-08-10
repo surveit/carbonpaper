@@ -3,13 +3,13 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Tutorial Lobbying Triage</title>
+<title>Tutorial Lobbying Say-versus-Do</title>
 <style>
   body { font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
-         margin: 2rem auto; max-width: 1100px; padding: 0 1rem; line-height: 1.45; }
+         margin: 2rem auto; max-width: 1180px; padding: 0 1rem; line-height: 1.45; }
   h1 { font-size: 1.45rem; margin-bottom: .2rem; }
   p { margin: .5rem 0; }
-  .sub, .note, .muted, .issue { font-size: .85rem;
+  .sub, .note, .muted, .src { font-size: .85rem;
         color: color-mix(in srgb, currentColor 60%, transparent); }
   .note, .why { border-left: 3px solid color-mix(in srgb, currentColor 30%, transparent);
         padding: .1rem 0 .1rem .8rem; margin: 1rem 0; }
@@ -24,27 +24,26 @@
   .pill { border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
           border-radius: 999px; padding: .05rem .5rem; font-size: .78rem;
           white-space: nowrap; }
-  .reason { display: block; font-weight: 600; font-size: .82rem; }
-  .reason + .reason { margin-top: .25rem; }
-  .none { color: color-mix(in srgb, currentColor 40%, transparent); }
-  details { margin-top: .35rem; }
-  summary { font-size: .78rem; cursor: pointer;
-            color: color-mix(in srgb, currentColor 60%, transparent); }
-  .issue { margin: .3rem 0 0; max-width: 60ch; }
+  .none { color: color-mix(in srgb, currentColor 40%, transparent); font-style: italic; }
+  .src { display: block; margin-top: .2rem; }
+  .quote { margin: .4rem 0 0; font-size: .82rem; max-width: 44ch; }
+  .label { font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+           font-size: .7rem; display: block; }
 </style>
 </head>
 <body>
-<h1>Tutorial Lobbying Triage Report</h1>
-<p class="sub">[[filing_count]] filings cleared the spend filter; [[flagged_count]] are flagged for follow-up.</p>
-<p class="note">Synthetic sample data bundled with this tutorial &mdash; not live Senate LDA filings. No row describes a real filing, client or firm.</p>
-<p class="why">Every filing below reported enough lobbying spend to clear this workflow&rsquo;s filter. It is
-flagged when its own issue text never says what that money was asking for: no specific bill named, or
-the catch-all <em>Other</em> policy area. Money present, ask vague &mdash; that gap is the reason to go
-read the filing. It is a reading aid, not a verdict, and not a finding about the filer.</p>
+<h1>Tutorial Say-versus-Do Report</h1>
+<p class="sub">[[filing_count]] filings cleared the spend filter; [[flagged_count]] ask government for the opposite of what their client committed to in public; [[unmatched_count]] have no public commitment on record.</p>
+<p class="note">Invented sample data bundled with this tutorial, and deliberately engineered so the contradictions are easy to see &mdash; one short line per filing, one short line per commitment, and names that match exactly. Real filings and real commitments are neither short nor tidy. No row describes a real filing, client, firm or commitment.</p>
+<p class="why">Every filing below reported enough lobbying spend to clear this workflow&rsquo;s filter. Beside it
+sits what the same client said in public, where a commitment was on record. A filing is marked when it
+asks government for the opposite of that commitment &mdash; and where it is marked, both texts are
+printed together, so the contradiction is on the page rather than only in the flag.
+It is a reading aid, not a verdict, and not a finding about the filer.</p>
 <table>
 <thead><tr>
 <th>Filing</th><th>Client</th><th>Registrant</th><th>Period</th>
-<th>Reported spend</th><th>Policy area</th><th>What they said they wanted</th><th>Why follow up</th>
+<th>Reported spend</th><th>What this filing asks for</th><th>What they said in public</th><th>Why follow up</th>
 </tr></thead>
 <tbody>
 [[rows]]</tbody>
@@ -58,12 +57,16 @@ read the filing. It is a reading aid, not a verdict, and not a finding about the
 <td class="muted">[[registrant]]</td>
 <td>[[filing_period]]</td>
 <td class="num">[[amount]]</td>
-<td><span class="pill">[[policy_area]]</span></td>
-<td>[[primary_ask]]
-<details><summary>Issue text as filed</summary><p class="issue">[[specific_issues]]</p></details></td>
+<td>[[specific_issues]]</td>
+<td>[[commitment]]</td>
 <td>[[followup]]</td>
 </tr>
-<!--@ reason -->
-<span class="reason">[[reason]]</span>
-<!--@ no_followup -->
-<span class="none">&mdash;</span>
+<!--@ commitment -->
+[[public_commitment]]<span class="src">[[commitment_source]]</span>
+<!--@ no_commitment -->
+<span class="none">No public commitment on record</span>
+<!--@ judgment -->
+<span class="pill">[[alignment]]</span>
+<!--@ contradiction -->
+<p class="quote"><span class="label">Said</span>[[said]]</p>
+<p class="quote"><span class="label">Lobbied for</span>[[lobbied_for]]</p>

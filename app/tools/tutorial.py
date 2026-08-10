@@ -29,8 +29,12 @@ _FIXTURE_STEM = "tutorial_lobbying_triage"
 _DATA_DIR = Path(__file__).resolve().parents[1] / "seeds" / "data"
 # Not under data/*.json, which app.seeds.seed globs as WorkflowFile fixtures.
 _GUIDE_PATH = _DATA_DIR / "review_guides" / f"{_FIXTURE_STEM}.json"
-# The fixture records neither path, so the two files committed beside it are bound here.
-_INPUT_STAGE_ID = "raw_filings"
+# The fixture records no path at all, so every file committed beside it is bound here:
+# an input stage id -> the CSV it reads, plus the report template the publish stage fills.
+CSV_BY_STAGE_ID = {
+    "raw_filings": _DATA_DIR / f"{_FIXTURE_STEM}.csv",
+    "public_commitments": _DATA_DIR / "tutorial_public_commitments.csv",
+}
 _PUBLISH_STAGE_ID = "publish_report"
 _TEMPLATE_PATH = _DATA_DIR / "tutorial_triage_report.html"
 _TEMPLATE_TOKEN = "[[TEMPLATE_PATH]]"
@@ -47,10 +51,15 @@ class TutorialStage(BaseModel):
     description: str
 
 
+class BoundInput(BaseModel):
+    stage_id: str
+    csv_path: str
+
+
 class TutorialProject(BaseModel):
     name: str
     version_id: str
-    csv_path: str
+    bound_inputs: list[BoundInput]
     stages: list[TutorialStage]
     workflow_url: str
     guide_url: str
@@ -59,8 +68,7 @@ class TutorialProject(BaseModel):
 
 def make_tutorial_tools(ctx: TutorialContext) -> list[BoundToolSpec]:
     def create_tutorial_project() -> TutorialProject:
-        csv_path = _DATA_DIR / f"{_FIXTURE_STEM}.csv"
-        workflow_file = _read_fixture_bound_to(csv_path, _TEMPLATE_PATH)
+        workflow_file = _read_fixture_bound_to(CSV_BY_STAGE_ID, _TEMPLATE_PATH)
         name = import_project(
             workflow_file, name=find_unused_project_name(workflow_file.name)
         )
@@ -68,7 +76,10 @@ def make_tutorial_tools(ctx: TutorialContext) -> list[BoundToolSpec]:
         return TutorialProject(
             name=name,
             version_id=version_id,
-            csv_path=str(csv_path),
+            bound_inputs=[
+                BoundInput(stage_id=stage_id, csv_path=str(path))
+                for stage_id, path in CSV_BY_STAGE_ID.items()
+            ],
             stages=[
                 TutorialStage(
                     id=s.id, type=StageType(s.type).value, description=s.description
@@ -127,23 +138,26 @@ def _write_bundled_review_guide(project_name: str) -> str:
     return version_id
 
 
-def _read_fixture_bound_to(csv_path: Path, template_path: Path) -> WorkflowFile:
-    for path in (csv_path, template_path):
+def _read_fixture_bound_to(
+    csv_by_stage_id: dict[str, Path], template_path: Path
+) -> WorkflowFile:
+    for path in (*csv_by_stage_id.values(), template_path):
         if not path.is_file():
             raise FileNotFoundError(f"a file the tutorial fixture needs is missing: {path}")
     raw: dict[str, Any] = json.loads(
         (_DATA_DIR / f"{_FIXTURE_STEM}.json").read_text(encoding="utf-8")
     )
-    bound = [_bind_stage(stage, csv_path, template_path) for stage in raw["stages"]]
+    bound = [_bind_stage(stage, csv_by_stage_id, template_path) for stage in raw["stages"]]
     # Validated, not patched in place: Connector refuses a relative params.path, so a
     # path a run could not resolve fails here rather than at the first stage.
     return WorkflowFile.model_validate({**raw, "stages": bound})
 
 
 def _bind_stage(
-    stage: dict[str, Any], csv_path: Path, template_path: Path
+    stage: dict[str, Any], csv_by_stage_id: dict[str, Path], template_path: Path
 ) -> dict[str, Any]:
-    if stage.get("id") == _INPUT_STAGE_ID:
+    csv_path = csv_by_stage_id.get(str(stage.get("id")))
+    if csv_path is not None:
         return _with_csv_path(stage, csv_path)
     if stage.get("id") == _PUBLISH_STAGE_ID:
         return _with_template_path(stage, template_path)

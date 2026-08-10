@@ -331,23 +331,25 @@ of save_version.""",
 CREATE_TUTORIAL_PROJECT = ToolSpec(
     name="create_tutorial_project",
     description="""\
-Import the committed tutorial workflow — a five-stage lobbying-disclosure triage
-over a SYNTHETIC bundled CSV — into this workspace as a real project, and bind
-that CSV to its input stage so the workflow can run. Takes no arguments.
+Import the committed tutorial workflow — a seven-stage say-versus-do check that
+joins INVENTED lobbying filings to INVENTED public commitments — into this
+workspace as a real project, and bind both bundled CSVs to their input stages so
+the workflow can run. Takes no arguments.
 
 Also stores the walkthrough committed beside the fixture as that version's
 review guide, so the project has one from the moment it exists.
 
 Returns `name` (the project name, made unique — running the tour twice creates
-two projects and overwrites nothing), `version_id`, `csv_path` (the absolute
-path actually bound), `stages` (each stage's id, type and one-line description,
-in workflow order), `workflow_url` (the workflow's page), `guide_url` (that
-version's page, where the stored walkthrough is read) and `mcp_command` (the
-connect command for THIS workspace).
+two projects and overwrites nothing), `version_id`, `bound_inputs` (one entry
+per input stage: its `stage_id` and the absolute `csv_path` actually bound),
+`stages` (each stage's id, type and one-line description, in workflow order),
+`workflow_url` (the workflow's page), `guide_url` (that version's page, where
+the stored walkthrough is read) and `mcp_command` (the connect command for THIS
+workspace).
 
 Quote every URL, `mcp_command` and `csv_path` verbatim; never rebuild one from
 memory. Describe the stages from the `stages` list you get back, not from what
-a five-stage triage workflow usually contains.""",
+a triage workflow usually contains.""",
 )
 
 # `save_version` is one NAME for two operations, because the surfaces author into

@@ -2,9 +2,15 @@
   "steps": [
     {
       "title": "Load the quarter's filings",
-      "prose": "One row per filing from the bundled CSV: client, registrant, reported spend, and the filer's free-text account of what they lobbied on. Synthetic data shaped like a Senate LDA export; no real filing.",
+      "prose": "One row per filing: client, registrant, reported spend, and one line on what the filing asked for. Invented data, engineered short so the comparison is easy to see; no real filing.",
       "stage_ids": ["raw_filings"],
       "data_description": "Every filing in the sample, as the CSV records it."
+    },
+    {
+      "title": "Load what each client said in public",
+      "prose": "One row per organisation: one line of what it committed to publicly, and where it said it. Also invented. Check it really is one row per organisation — the join fails on a repeat.",
+      "stage_ids": ["public_commitments"],
+      "data_description": "Every organisation with a public commitment on record."
     },
     {
       "title": "Keep the filings above $50,000",
@@ -13,20 +19,26 @@
       "data_description": "Filings reporting at least $50,000; each drop is recorded."
     },
     {
-      "title": "Read each filing's issue text",
-      "prose": "A model reads `specific_issues` and adds `policy_area`, `targets_specific_bill` and a one-sentence `primary_ask`. Check each against the issue text; it is the weakest link.",
-      "stage_ids": ["classify_issues"],
-      "data_description": "The same filings, plus the model's three judgments."
+      "title": "Join each filing to its client's commitment",
+      "prose": "A left join on client name, so no filing is dropped. A filing with no matching commitment survives with the field blank — that blank is the join's record of a non-match, not missing data.",
+      "stage_ids": ["matched_commitments"],
+      "data_description": "Every surviving filing, plus its client's commitment where one matched."
     },
     {
-      "title": "Flag what needs a second look",
-      "prose": "Flags a filing that named no bill or landed in catch-all Other — either way the text did not pin down the ask. Plain code, so a wrong flag traces to a wrong classification.",
-      "stage_ids": ["flag_followup"],
-      "data_description": "Every surviving filing, plus `needs_followup`."
+      "title": "Read the two texts against each other",
+      "prose": "A model reads the commitment and the ask together and answers Contradicts, Matches, Unclear or No commitment given. Check each against both texts; it is the weakest link.",
+      "stage_ids": ["judge_alignment"],
+      "data_description": "The same filings, plus the model's judgment and its one-sentence note."
     },
     {
-      "title": "Publish the triage report",
-      "prose": "One HTML page: spend, primary ask, issue text as filed, and for a flagged filing which condition flagged it. Check that reason against the text.",
+      "title": "Flag the contradictions",
+      "prose": "Flags a filing only where a commitment was joined onto it and the model said Contradicts. Plain code, so a wrong flag traces to a wrong judgment, and a blank commitment never becomes one.",
+      "stage_ids": ["flag_contradiction"],
+      "data_description": "Every surviving filing, plus `contradicts_commitment`."
+    },
+    {
+      "title": "Publish the report",
+      "prose": "One HTML page: spend, the ask, the commitment or that none is on record, and for a flagged filing both texts together. Check the contradiction reads as one from those two texts alone.",
       "stage_ids": ["publish_report"],
       "data_description": "One row per surviving filing, as published."
     }

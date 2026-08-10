@@ -1,6 +1,6 @@
 {
   "name": "tutorial_lobbying_triage",
-  "document": "# Tutorial: Lobbying Disclosure Triage (synthetic sample)\n\n## Purpose\n\nFederal lobbying disclosures (Senate LDA \"LD-2\" filings) report which client hired which\nregistrant, how much was spent, and — in a free-text \"specific lobbying issues\" field —\nwhat they lobbied on. That free-text field is where the substance is, and it is messy.\nThis five-step tutorial workflow narrows a quarter of filings to the ones with real money\nbehind them, reads the issue text of each, and flags the ones a reporter should look at\nagain.\n\nThe sample data is SYNTHETIC and BUNDLED with this tutorial — invented organizations and\ninvented issue text, shaped like a real Senate LDA export. It is not live LDA data, and no\nrow in it describes a real filing, a real client, or a real lobbying firm. Nothing is\nfetched from the network.\n\n## Input data\n\nA single bundled CSV, `tutorial_lobbying_triage.csv`, one row per filing, with columns:\n\n- `filing_id` — stable, unique identifier for the filing\n- `client` — the organization that retained the lobbyists\n- `registrant` — the lobbying firm that filed the disclosure\n- `amount_usd` — reported lobbying spend for the period, in whole US dollars\n- `filing_period` — the reporting period, e.g. \"2024 Q1\"\n- `specific_issues` — the filer's free-text description of the specific issues lobbied\n\n## Step 1 — Keep the filings above $50,000\n\nDrop every filing reporting less than $50,000 of spend for the period; a filing reporting\nexactly $50,000 is kept (the threshold is inclusive). Kept filings pass through unchanged.\nA filing reporting no amount at all is not guessed either way — the step stops and says so.\n\n## Step 2 — Classify each filing's issue text (LLM)\n\nFor each surviving filing, read the `specific_issues` free text and add three fields — one\nfiling in, one filing out (the filing is neither dropped nor duplicated):\n\n- `policy_area` — the single best-fit policy area, one of: Health, Energy & Environment,\n  Finance & Taxation, Technology, Defense, Transportation, Agriculture, Other.\n- `targets_specific_bill` — true if the issue text names a specific piece of legislation\n  (for example a bill number like \"H.R. 3684\" or \"S. 1234\", or a named Act), false otherwise.\n- `primary_ask` — a single plain-language sentence summarizing what the client appears to want.\n\nFilings are read twelve at a time in one model call. This step makes no judgment about spend.\n\n## Step 3 — Flag the filings worth a second look\n\nAdd `needs_followup`, decided from Step 2's two judgments and nothing else: a filing needs\nfollow-up when it names no specific bill, or when it landed in the catch-all Other policy\narea. Both cases mean the issue text alone did not pin down what was being lobbied for. A\nfiling whose classification is blank is not guessed — the step stops and says so.\n\n## Step 4 — Publish the triage report\n\nProduce a single HTML page listing every surviving filing with client, registrant, reported\nspend, policy area, the primary ask and the issue text as filed. A flagged filing also shows\nwhich of Step 3's two conditions flagged it — no specific bill named, the catch-all Other\narea, or both — so the page carries the argument for a second look rather than a bare flag.\nNo score, no ranking and no recommendation — the report is a reading aid, not a verdict.\n\nThe page's markup and stylesheet are a committed template file, not text assembled inside the\nstep; the step fills its placeholders and writes the result.\n\n## Out of scope\n\nNo external fetching, no human-review queue, and no joins — a single linear pass from the\nbundled CSV to the published report.\n",
+  "document": "# Tutorial: Lobbying Say-versus-Do (deliberately artificial sample)\n\n## Purpose\n\nA lobbying filing says what an organisation paid to ask government for. A public\ncommitment says what that same organisation told everyone else it would do. Reporting in\nthis genre is almost always the join of the two: the lead is not a filing on its own, it\nis a filing that asks for the opposite of what its client promised in public. This\nsix-step tutorial workflow keeps the filings with real money behind them, joins each one\nto its client's public commitment, and flags the pairs that contradict.\n\nThe sample data is INVENTED and DELIBERATELY ENGINEERED to make that contradiction easy\nto see. Both files are one short line per row, every organisation is fictional, and the\ntwo files match one-to-one on a clean name. Real filings are pages of unpunctuated legal\nprose, real commitments are buried in reports, and the names never match — a real version\nof this workflow is a much harder piece of work than this one. This sample exists to make\nthe SHAPE of the analysis legible, not to stand in for the difficulty of it. Nothing is\nfetched from the network, and no row describes a real filing, client, firm or commitment.\n\n## Input data\n\nTwo bundled CSVs.\n\n`tutorial_lobbying_triage.csv`, one row per filing:\n\n- `filing_id` — stable, unique identifier for the filing\n- `client` — the organisation that retained the lobbyists\n- `registrant` — the lobbying firm that filed the disclosure\n- `amount_usd` — reported lobbying spend for the period, in whole US dollars\n- `filing_period` — the reporting period, e.g. \"2024 Q1\"\n- `specific_issues` — the filer's own one-line account of what this filing asked for\n\n`tutorial_public_commitments.csv`, one row per organisation:\n\n- `client` — the organisation that made the commitment\n- `public_commitment` — one line of what it said in public it would do\n- `commitment_source` — where it said it, e.g. \"2023 climate pledge\"\n\n## Step 1 — Keep the filings above $50,000\n\nDrop every filing reporting less than $50,000 of spend for the period; a filing reporting\nexactly $50,000 is kept (the threshold is inclusive). Kept filings pass through unchanged.\nA filing reporting no amount at all is not guessed either way — the step stops and says so.\nThis runs before the model step, so a dropped filing is never read by a model.\n\n## Step 2 — Join each filing to its client's public commitment\n\nBring `public_commitment` and `commitment_source` onto every surviving filing, matched on\nthe client name. This is a many-to-one join: the commitments file carries at most one row\nper organisation, and a repeat would fail the run rather than quietly multiply filings.\nNo filing is dropped here. A filing whose client has no commitment row keeps every one of\nits own fields and carries a blank commitment — the absence is the record, and the next\nstep is told to read it as an absence rather than as a judgment.\n\n## Step 3 — Judge the filing against the commitment (LLM)\n\nFor each filing, read the client's public commitment and this filing's ask together, and\nadd two fields — one filing in, one filing out (the filing is neither dropped nor duplicated):\n\n- `alignment` — one of: Contradicts, Matches, Unclear, No commitment given. \"Contradicts\"\n  means this filing asks government for the opposite of what the client committed to.\n  \"No commitment given\" is the answer when the commitment field is blank.\n- `alignment_note` — a single plain sentence naming what the client said and what this\n  filing asks for.\n\nThe model is given only these two texts, and is told not to use anything it knows about\nthe organisation and not to invent a commitment that is not in front of it. Filings are\nread twelve at a time in one model call.\n\n## Step 4 — Flag the contradictions\n\nAdd `contradicts_commitment`, decided in plain code from two fields and nothing else: a\nfiling contradicts when a commitment was actually joined onto it AND `alignment` reads\n\"Contradicts\". A filing with no commitment on record is never flagged — there is nothing\nfor it to contradict, and the code decides that, not the model. A filing that has a\ncommitment but no judgment is not guessed either — the step stops and says which filing\nit was.\n\n## Step 5 — Publish the report\n\nProduce a single HTML page listing every surviving filing with client, registrant,\nreported spend, what the filing asked for, what the client committed to in public (or that\nno commitment is on record), and the model's judgment. A flagged filing also shows both\nsides side by side — the commitment as said, and the ask as filed — so the page carries\nthe contradiction itself rather than a bare flag. No score, no ranking and no\nrecommendation: the report is a reading aid, not a verdict.\n\nThe page's markup and stylesheet are a committed template file, not text assembled inside\nthe step; the step fills its placeholders and writes the result.\n\n## Out of scope\n\nNo external fetching, no human-review queue, and no second join — one filter, one join,\none model read, one flag, one page.\n",
   "model": "sonnet",
   "source": "seed",
   "data_model": {
@@ -28,7 +28,7 @@
             "name": "client",
             "type": "str",
             "nullable": false,
-            "description": "Organization that retained the lobbyists."
+            "description": "Organisation that retained the lobbyists; the join key to the commitments file."
           },
           {
             "name": "registrant",
@@ -52,7 +52,7 @@
             "name": "specific_issues",
             "type": "str",
             "nullable": false,
-            "description": "Filer's free-text description of specific issues lobbied — the messy field the pipeline triages."
+            "description": "Filer's own one-line account of what this filing asked for."
           }
         ]
       },
@@ -66,7 +66,53 @@
           "format": "csv"
         },
         "refresh": "ad_hoc",
-        "notes": "The synthetic CSV bundled beside this fixture as app/seeds/data/tutorial_lobbying_triage.csv, mirroring the Senate LDA LD-2 export shape. No path is recorded here — the file is bound when a run starts. Nothing is fetched from the network."
+        "notes": "The invented CSV bundled beside this fixture as app/seeds/data/tutorial_lobbying_triage.csv, one short line per filing. No path is recorded here — the file is bound when a run starts. Nothing is fetched from the network."
+      }
+    },
+    {
+      "id": "public_commitments",
+      "type": "input_data",
+      "description": "Bundled Synthetic Public Commitments CSV",
+      "inputs": [],
+      "cache": true,
+      "compiler_notes": [
+        "One row per organisation, which is what lets the join downstream be an enrich (many-to-one, verified) rather than an expand: a repeated client here fails the run."
+      ],
+      "signature": {
+        "form": "replaces",
+        "reads": [],
+        "produces": [
+          {
+            "name": "client",
+            "type": "str",
+            "nullable": false,
+            "description": "Organisation that made the commitment; one row per organisation."
+          },
+          {
+            "name": "public_commitment",
+            "type": "str",
+            "nullable": false,
+            "description": "One line of what the organisation said in public it would do."
+          },
+          {
+            "name": "commitment_source",
+            "type": "str",
+            "nullable": false,
+            "description": "Where the organisation said it, e.g. '2023 climate pledge'."
+          }
+        ]
+      },
+      "source": {
+        "doc": "tutorial_public_commitments.csv",
+        "section": "Input data"
+      },
+      "connector": {
+        "kind": "file",
+        "params": {
+          "format": "csv"
+        },
+        "refresh": "ad_hoc",
+        "notes": "The invented CSV bundled beside this fixture as app/seeds/data/tutorial_public_commitments.csv, one short line per organisation. No path is recorded here — the file is bound when a run starts. Nothing is fetched from the network."
       }
     },
     {
@@ -115,7 +161,8 @@
       "cache": true,
       "compiler_notes": [
         "The threshold is inclusive on the low side: a filing reporting exactly $50,000 is kept.",
-        "amount_usd is declared non-null upstream, so a blank amount is already a schema violation; the predicate refuses rather than reading a blank as zero, which would drop the filing silently."
+        "amount_usd is declared non-null upstream, so a blank amount is already a schema violation; the predicate refuses rather than reading a blank as zero, which would drop the filing silently.",
+        "Placed before the join and the model step, so a dropped filing is never joined and never read by a model — the ordering, not the model, is what makes this cheap."
       ],
       "signature": {
         "form": "extends",
@@ -153,9 +200,9 @@
       }
     },
     {
-      "id": "classify_issues",
-      "type": "llm_transform",
-      "description": "Classify Issue Text per Filing",
+      "id": "matched_commitments",
+      "type": "enrich",
+      "description": "Join Each Filing to its Client's Public Commitment",
       "inputs": [
         {
           "id": "significant_filings",
@@ -193,15 +240,35 @@
               }
             ]
           }
+        },
+        {
+          "id": "public_commitments",
+          "table_schema": {
+            "columns": [
+              {
+                "name": "client",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "public_commitment",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "commitment_source",
+                "type": "str",
+                "nullable": false
+              }
+            ]
+          }
         }
       ],
       "cache": true,
       "compiler_notes": [
-        "Grain is strictly 1:1 — the document explicitly states no filing is dropped or duplicated in this step.",
-        "policy_area enum is closed; max_retries handles a hallucinated category value by letting the model retry on schema mismatch.",
-        "targets_specific_bill may produce false negatives when legislation is cited by colloquial name only (e.g. 'the farm bill') rather than a formal bill number or named Act — this limitation is not addressed in the source document.",
-        "batch_size 12 amortizes the instructions prefix across twelve filings per call, and each call is a process spawn, so the batch size sets how long a run takes; the filings in a batch share one context, which the document accepts for a per-filing classification this coarse.",
-        "client and filing_period are passed into the prompt as context only; they do not change the classification logic."
+        "enrich, not expand: the commitments file is one row per organisation, so a repeated client is a data error the runtime should fail the run on rather than silently multiplying filings.",
+        "A LEFT join, so no filing is dropped. A filing whose client has no commitment row survives carrying nulls in both landed columns, and its ABSENT second parent is what the run's lineage view shows — a null here means 'no row matched', which the next step reads as an absence rather than as a judgment.",
+        "`client` is the join key on both sides and needs no enrich_with entry; the two landed columns are named the same on both sides because the subject carries neither."
       ],
       "signature": {
         "form": "extends",
@@ -213,10 +280,89 @@
                 "name": "client",
                 "type": "str",
                 "nullable": false
+              }
+            ]
+          },
+          {
+            "input": "public_commitments",
+            "columns": [
+              {
+                "name": "client",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "public_commitment",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "commitment_source",
+                "type": "str",
+                "nullable": false
+              }
+            ]
+          }
+        ],
+        "adds": [
+          {
+            "name": "public_commitment",
+            "type": "str",
+            "nullable": true,
+            "description": "The client's public commitment, or null when no commitment row matched."
+          },
+          {
+            "name": "commitment_source",
+            "type": "str",
+            "nullable": true,
+            "description": "Where that commitment was said, or null when no commitment row matched."
+          }
+        ],
+        "rewrites": []
+      },
+      "source": {
+        "section": "Step 2 — Join each filing to its client's public commitment"
+      },
+      "join": {
+        "keys": [
+          {
+            "left": "client",
+            "right": "client"
+          }
+        ],
+        "enrich_with": {
+          "public_commitment": "public_commitment",
+          "commitment_source": "commitment_source"
+        }
+      }
+    },
+    {
+      "id": "judge_alignment",
+      "type": "llm_transform",
+      "description": "Judge the Filing's Ask Against the Public Commitment",
+      "inputs": [
+        {
+          "id": "matched_commitments",
+          "table_schema": {
+            "columns": [
+              {
+                "name": "filing_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "client",
+                "type": "str",
+                "nullable": false
               },
               {
                 "name": "registrant",
                 "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "amount_usd",
+                "type": "int",
                 "nullable": false
               },
               {
@@ -228,48 +374,80 @@
                 "name": "specific_issues",
                 "type": "str",
                 "nullable": false
+              },
+              {
+                "name": "public_commitment",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "commitment_source",
+                "type": "str",
+                "nullable": true
+              }
+            ]
+          }
+        }
+      ],
+      "cache": true,
+      "compiler_notes": [
+        "Grain is strictly 1:1 — the document states no filing is dropped or duplicated here.",
+        "public_commitment is nullable because the join leaves it blank for a filing whose client has no commitment row; the prompt names that case and fixes its answer, and the next step decides the flag from the join result rather than from this answer.",
+        "The prompt forbids using anything the model knows about the organisation, because the organisations are invented and any outside knowledge would be fabricated.",
+        "batch_size 12 amortises the instructions prefix across twelve filings per call, and each call is a process spawn, so the batch size sets how long a run takes; the filings in a batch share one context, which the document accepts for a per-filing judgment this coarse."
+      ],
+      "signature": {
+        "form": "extends",
+        "reads": [
+          {
+            "input": "matched_commitments",
+            "columns": [
+              {
+                "name": "client",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "specific_issues",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "public_commitment",
+                "type": "str",
+                "nullable": true
               }
             ]
           }
         ],
         "adds": [
           {
-            "name": "policy_area",
+            "name": "alignment",
             "type": "str",
             "nullable": true,
-            "description": "Single best-fit policy area from the fixed eight-value taxonomy.",
+            "description": "How this filing's ask stands against the client's public commitment.",
             "enum": [
-              "Health",
-              "Energy & Environment",
-              "Finance & Taxation",
-              "Technology",
-              "Defense",
-              "Transportation",
-              "Agriculture",
-              "Other"
+              "Contradicts",
+              "Matches",
+              "Unclear",
+              "No commitment given"
             ]
           },
           {
-            "name": "targets_specific_bill",
-            "type": "bool",
-            "nullable": true,
-            "description": "True when the issue text names a specific bill number or named Act; false otherwise."
-          },
-          {
-            "name": "primary_ask",
+            "name": "alignment_note",
             "type": "str",
             "nullable": true,
-            "description": "One plain-language sentence summarising what the client appears to want."
+            "description": "One sentence naming what the client said in public and what this filing asks for."
           }
         ],
         "rewrites": []
       },
       "source": {
-        "section": "Step 2 — Classify each filing's issue text (LLM)"
+        "section": "Step 3 — Judge the filing against the commitment (LLM)"
       },
       "llm": {
-        "prompt_instructions": "You are a policy analyst triaging federal lobbying disclosures.\n\nReturn a JSON object with exactly these three fields:\n\n1. \"policy_area\": the single best-fit category from this fixed list — choose exactly one:\n   Health | Energy & Environment | Finance & Taxation | Technology | Defense | Transportation | Agriculture | Other\n\n2. \"targets_specific_bill\": true if the text names a specific piece of legislation (e.g. a bill number such as H.R. 3684 or S. 1234, or a named Act), false otherwise.\n\n3. \"primary_ask\": a single plain-language sentence (no jargon) summarising what the client appears to want from government.",
-        "prompt_data_template": "Filing context:\n- Client: {client}\n- Registrant: {registrant}\n- Period: {filing_period}\n\nSpecific issues lobbied (verbatim from the disclosure):\n{specific_issues}",
+        "prompt_instructions": "You are checking one lobbying filing against what the same organisation has said in public.\n\nReturn a JSON object with exactly these two fields:\n\n1. \"alignment\": exactly one of — Contradicts | Matches | Unclear | No commitment given\n   - \"Contradicts\": the filing asks government for the opposite of what the commitment says.\n   - \"Matches\": the filing asks government for what the commitment says.\n   - \"Unclear\": the two texts are about different things, or neither supports nor conflicts with the other.\n   - \"No commitment given\": the commitment line is blank, or reads `nan` or `None` because no commitment was on record for that organisation. Answer this and nothing else in that case — do not judge, and do not supply a commitment yourself.\n\n2. \"alignment_note\": one plain sentence naming what the organisation said in public and what this filing asks for. Empty string when there is no commitment to compare against.\n\nJudge only the two texts in front of you. Do not use anything you know or believe about the organisation, and never invent, complete or paraphrase a commitment that is not printed here.",
+        "prompt_data_template": "Organisation: {client}\nWhat it committed to in public: {public_commitment}\nWhat this filing asks government for: {specific_issues}",
         "temperature": 0.0,
         "max_retries": 8,
         "response_format": "json",
@@ -277,12 +455,12 @@
       }
     },
     {
-      "id": "flag_followup",
+      "id": "flag_contradiction",
       "type": "python_row_function",
-      "description": "Flag filings whose issue text did not pin down a bill",
+      "description": "Flag filings that contradict their client's public commitment",
       "inputs": [
         {
-          "id": "classify_issues",
+          "id": "judge_alignment",
           "table_schema": {
             "columns": [
               {
@@ -316,27 +494,28 @@
                 "nullable": false
               },
               {
-                "name": "policy_area",
+                "name": "public_commitment",
                 "type": "str",
-                "nullable": true,
-                "enum": [
-                  "Health",
-                  "Energy & Environment",
-                  "Finance & Taxation",
-                  "Technology",
-                  "Defense",
-                  "Transportation",
-                  "Agriculture",
-                  "Other"
-                ]
-              },
-              {
-                "name": "targets_specific_bill",
-                "type": "bool",
                 "nullable": true
               },
               {
-                "name": "primary_ask",
+                "name": "commitment_source",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "alignment",
+                "type": "str",
+                "nullable": true,
+                "enum": [
+                  "Contradicts",
+                  "Matches",
+                  "Unclear",
+                  "No commitment given"
+                ]
+              },
+              {
+                "name": "alignment_note",
                 "type": "str",
                 "nullable": true
               }
@@ -346,79 +525,79 @@
       ],
       "cache": true,
       "compiler_notes": [
-        "Decided from targets_specific_bill and policy_area alone — no spend, no client, no re-reading of the issue text.",
-        "Both inputs are nullable because the classifier may leave them blank; a blank is refused rather than read as 'no bill', which would flag a filing the pipeline never actually judged."
+        "Decided from the joined commitment and the model's alignment alone — no spend, no re-reading of either text.",
+        "The no-commitment case is settled in code, not by the model: an absent commitment is never a contradiction, whatever the model answered for that row."
       ],
       "signature": {
         "form": "extends",
         "reads": [
           {
-            "input": "classify_issues",
+            "input": "judge_alignment",
             "columns": [
               {
-                "name": "policy_area",
+                "name": "public_commitment",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "alignment",
                 "type": "str",
                 "nullable": true,
                 "enum": [
-                  "Health",
-                  "Energy & Environment",
-                  "Finance & Taxation",
-                  "Technology",
-                  "Defense",
-                  "Transportation",
-                  "Agriculture",
-                  "Other"
+                  "Contradicts",
+                  "Matches",
+                  "Unclear",
+                  "No commitment given"
                 ]
-              },
-              {
-                "name": "targets_specific_bill",
-                "type": "bool",
-                "nullable": true
               }
             ]
           }
         ],
         "adds": [
           {
-            "name": "needs_followup",
+            "name": "contradicts_commitment",
             "type": "bool",
             "nullable": false,
-            "description": "True when the filing is worth a reporter's second look: the classifier tied it to no named bill, or it landed in the catch-all Other policy area."
+            "description": "True when a public commitment was joined onto this filing and the model judged the filing's ask to contradict it."
           }
         ],
         "rewrites": []
       },
       "source": {
-        "section": "Step 3 — Flag the filings worth a second look"
+        "section": "Step 4 — Flag the contradictions"
       },
       "function": {
         "kind": "inline",
-        "summary": "Marks a filing for follow-up when it names no specific bill, or when its policy area is the catch-all Other — both mean the issue text did not pin down what was being lobbied for. A filing missing either judgment is not guessed; the step stops and says which filing it was.",
+        "summary": "Flags a filing when a public commitment was joined onto it AND the model judged its ask to contradict that commitment. A filing with no commitment on record is never flagged — there is nothing for it to contradict. A filing that has a commitment but no judgment is not guessed; the step stops and says which filing it was.",
         "corner_cases": [
           {
-            "case": "a filing names a specific bill and has a policy area other than `Other`",
-            "expected": "the filing is kept and not flagged for follow-up"
+            "case": "a filing carries a commitment and `alignment` is `Contradicts`",
+            "expected": "the filing is flagged"
           },
           {
-            "case": "a filing names a specific bill but its policy area is `Other`",
-            "expected": "the filing is flagged for follow-up"
+            "case": "a filing carries a commitment and `alignment` is `Matches`",
+            "expected": "the filing is kept and not flagged"
           },
           {
-            "case": "`policy_area` or `targets_specific_bill` is blank",
+            "case": "the join matched no commitment, so `public_commitment` is blank",
+            "expected": "the filing is kept and not flagged, whatever `alignment` says"
+          },
+          {
+            "case": "a filing carries a commitment but `alignment` is blank",
             "expected": "the step fails, naming the filing, rather than flagging it either way"
           }
         ],
-        "code": "import pandas as pd\n\nCATCH_ALL_POLICY_AREA = \"Other\"\n\n\ndef transform(row):\n    policy_area = row[\"policy_area\"]\n    targets_bill = row[\"targets_specific_bill\"]\n    if policy_area is None or bool(pd.isna(policy_area)):\n        raise StepRefused(\n            f\"filing {row['filing_id']} has no policy area, so whether it needs a \"\n            f\"follow-up read cannot be decided\"\n        )\n    if targets_bill is None or bool(pd.isna(targets_bill)):\n        raise StepRefused(\n            f\"filing {row['filing_id']} has no judgment on whether it names a bill, so \"\n            f\"whether it needs a follow-up read cannot be decided\"\n        )\n    flagged = (not bool(targets_bill)) or str(policy_area) == CATCH_ALL_POLICY_AREA\n    return {**row, \"needs_followup\": bool(flagged)}\n",
+        "code": "import pandas as pd\n\nCONTRADICTS = \"Contradicts\"\n\n\ndef transform(row):\n    commitment = row[\"public_commitment\"]\n    if commitment is None or bool(pd.isna(commitment)):\n        # The join matched no commitment for this client, so there is nothing to\n        # contradict. Code decides this, not the model.\n        return {**row, \"contradicts_commitment\": False}\n    alignment = row[\"alignment\"]\n    if alignment is None or bool(pd.isna(alignment)):\n        raise StepRefused(\n            f\"filing {row['filing_id']} carries a public commitment but no judgment \"\n            f\"on it, so whether it contradicts that commitment cannot be decided\"\n        )\n    return {**row, \"contradicts_commitment\": str(alignment) == CONTRADICTS}\n",
         "requirements": []
       }
     },
     {
       "id": "publish_report",
       "type": "publish",
-      "description": "Publish HTML Triage Report",
+      "description": "Publish HTML Say-versus-Do Report",
       "inputs": [
         {
-          "id": "flag_followup",
+          "id": "flag_contradiction",
           "table_schema": {
             "columns": [
               {
@@ -452,32 +631,33 @@
                 "nullable": false
               },
               {
-                "name": "policy_area",
+                "name": "public_commitment",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "commitment_source",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "alignment",
                 "type": "str",
                 "nullable": true,
                 "enum": [
-                  "Health",
-                  "Energy & Environment",
-                  "Finance & Taxation",
-                  "Technology",
-                  "Defense",
-                  "Transportation",
-                  "Agriculture",
-                  "Other"
+                  "Contradicts",
+                  "Matches",
+                  "Unclear",
+                  "No commitment given"
                 ]
               },
               {
-                "name": "targets_specific_bill",
-                "type": "bool",
-                "nullable": true
-              },
-              {
-                "name": "primary_ask",
+                "name": "alignment_note",
                 "type": "str",
                 "nullable": true
               },
               {
-                "name": "needs_followup",
+                "name": "contradicts_commitment",
                 "type": "bool",
                 "nullable": false
               }
@@ -487,17 +667,17 @@
       ],
       "cache": true,
       "compiler_notes": [
-        "The document says this is a reading aid, not a verdict — no score, ranking or recommendation column is rendered. The follow-up cell restates the two conditions Step 3 decided on and adds nothing.",
-        "A filing flagged for follow-up that matches neither condition stops the step: the flag and the data it was decided from would disagree, and the page must not show a flag it cannot account for.",
-        "The report's markup and stylesheet are the committed file app/seeds/data/tutorial_triage_report.html; TEMPLATE_PATH is bound to it when the tutorial project is seeded, the way the input CSV's path is. A missing file or a missing section stops the step rather than publishing a half-rendered page.",
-        "specific_issues is rendered inside a collapsed disclosure rather than a column of its own, so the reader can check the vagueness claim against the text without the table becoming unscannable.",
+        "The document says this is a reading aid, not a verdict — no score, ranking or recommendation column is rendered. A flagged row shows the two texts the flag was decided from and adds nothing.",
+        "A filing flagged as contradicting a commitment the join never matched stops the step: the page must not show a contradiction it cannot print both sides of.",
+        "A filing with no commitment on record says so in its own cell rather than rendering an empty one, so the join's non-matches are visible on the page and not just in lineage.",
+        "The report's markup and stylesheet are the committed file app/seeds/data/tutorial_triage_report.html; TEMPLATE_PATH is bound to it when the tutorial project is seeded, the way the input CSV paths are. A missing file or a missing section stops the step rather than publishing a half-rendered page.",
         "This stage writes the HTML to disk and returns a file-path pointer rather than embedding the markup inline, which is practical at scale."
       ],
       "signature": {
         "form": "replaces",
         "reads": [
           {
-            "input": "flag_followup",
+            "input": "flag_contradiction",
             "columns": [
               {
                 "name": "filing_id",
@@ -530,32 +710,33 @@
                 "nullable": false
               },
               {
-                "name": "policy_area",
+                "name": "public_commitment",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "commitment_source",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "alignment",
                 "type": "str",
                 "nullable": true,
                 "enum": [
-                  "Health",
-                  "Energy & Environment",
-                  "Finance & Taxation",
-                  "Technology",
-                  "Defense",
-                  "Transportation",
-                  "Agriculture",
-                  "Other"
+                  "Contradicts",
+                  "Matches",
+                  "Unclear",
+                  "No commitment given"
                 ]
               },
               {
-                "name": "targets_specific_bill",
-                "type": "bool",
-                "nullable": true
-              },
-              {
-                "name": "primary_ask",
+                "name": "alignment_note",
                 "type": "str",
                 "nullable": true
               },
               {
-                "name": "needs_followup",
+                "name": "contradicts_commitment",
                 "type": "bool",
                 "nullable": false
               }
@@ -565,26 +746,30 @@
         "produces": []
       },
       "source": {
-        "section": "Step 4 — Publish the triage report"
+        "section": "Step 5 — Publish the report"
       },
       "function": {
         "kind": "inline",
-        "summary": "Fills the committed report template — one row per surviving filing, in the order they arrived — with the reported spend, the primary ask, the issue text as filed, and, for a flagged filing, which of the previous step's two conditions flagged it.",
+        "summary": "Fills the committed report template — one row per surviving filing, in the order they arrived — with the reported spend, what the filing asked for, what the client committed to in public or that no commitment is on record, the model's judgment, and for a flagged filing both texts side by side.",
         "corner_cases": [
           {
-            "case": "a filing is not flagged for follow-up",
-            "expected": "its follow-up cell is a dash — no reason is invented for it"
+            "case": "a filing contradicts its client's public commitment",
+            "expected": "its cell prints the commitment as said and the ask as filed, both"
           },
           {
-            "case": "a filing is flagged, names no bill, and sits in the catch-all Other area",
-            "expected": "both reasons are listed, not just the first"
+            "case": "the join matched no commitment for a filing",
+            "expected": "its commitment cell says no commitment is on record, rather than sitting empty"
+          },
+          {
+            "case": "a filing is flagged yet carries no commitment",
+            "expected": "the step fails — the page cannot print a contradiction's other side"
           },
           {
             "case": "the template file is missing, or has lost one of its sections",
             "expected": "the step fails, naming the file, rather than writing a partial page"
           }
         ],
-        "code": "import html as _html\nimport pathlib\n\nimport pandas as pd\n\n# Bound to the committed template when the tutorial project is seeded, the way the\n# input CSV's path is. The report's markup and stylesheet live in that file.\nTEMPLATE_PATH = \"[[TEMPLATE_PATH]]\"\n\nSECTION_MARKER = \"<!--@\"\nTOKEN_OPEN = \"[[\"\nSECTIONS = (\"document\", \"row\", \"reason\", \"no_followup\")\nCATCH_ALL_POLICY_AREA = \"Other\"\nNO_BILL_REASON = \"No specific bill named\"\nCATCH_ALL_REASON = \"Catch-all Other policy area\"\n\n\ndef transform(df, output_dir):\n    sections = _read_template_sections(TEMPLATE_PATH)\n    page = _fill(\n        sections[\"document\"],\n        filing_count=str(len(df)),\n        flagged_count=str(int(df[\"needs_followup\"].sum())),\n        rows=\"\".join(_render_row(sections, row) for _, row in df.iterrows()),\n    )\n    out_path = pathlib.Path(output_dir) / \"tutorial_triage_report.html\"\n    out_path.write_text(page, encoding=\"utf-8\")\n    return pd.DataFrame([{\"report_path\": str(out_path), \"filing_count\": len(df)}])\n\n\ndef _render_row(sections, row):\n    return _fill(\n        sections[\"row\"],\n        row_class=\"flagged\" if bool(row[\"needs_followup\"]) else \"\",\n        filing_id=_escaped(row[\"filing_id\"]),\n        client=_escaped(row[\"client\"]),\n        registrant=_escaped(row[\"registrant\"]),\n        filing_period=_escaped(row[\"filing_period\"]),\n        amount=\"$\" + format(int(row[\"amount_usd\"]), \",\"),\n        policy_area=_escaped(row[\"policy_area\"]),\n        primary_ask=_escaped(row[\"primary_ask\"]),\n        specific_issues=_escaped(row[\"specific_issues\"]),\n        followup=_render_followup(sections, row),\n    )\n\n\ndef _render_followup(sections, row):\n    \"\"\"The page has to carry the argument, not just the flag: spend is already in the\n    row, so this cell says what Step 3 found missing.\"\"\"\n    if not bool(row[\"needs_followup\"]):\n        return sections[\"no_followup\"]\n    reasons = []\n    if not bool(row[\"targets_specific_bill\"]):\n        reasons.append(NO_BILL_REASON)\n    if str(row[\"policy_area\"]) == CATCH_ALL_POLICY_AREA:\n        reasons.append(CATCH_ALL_REASON)\n    if not reasons:\n        raise StepRefused(\n            f\"filing {row['filing_id']} is flagged for follow-up yet names a bill and \"\n            f\"sits outside {CATCH_ALL_POLICY_AREA}, so this report cannot say why it \"\n            f\"was flagged\"\n        )\n    return \"\".join(_fill(sections[\"reason\"], reason=_escaped(r)) for r in reasons)\n\n\ndef _read_template_sections(path):\n    text = pathlib.Path(path).read_text(encoding=\"utf-8\")\n    sections = {}\n    name = None\n    for line in text.splitlines(keepends=True):\n        if line.startswith(SECTION_MARKER):\n            name = line.strip()[len(SECTION_MARKER):].removesuffix(\"-->\").strip()\n            sections[name] = []\n        elif name is not None:\n            sections[name].append(line)\n    missing = [wanted for wanted in SECTIONS if wanted not in sections]\n    if missing:\n        raise ValueError(f\"report template {path} has no {missing} section\")\n    return {name: \"\".join(lines) for name, lines in sections.items()}\n\n\ndef _fill(template, **values):\n    filled = template\n    for name, value in values.items():\n        filled = filled.replace(TOKEN_OPEN + name + \"]]\", value)\n    if TOKEN_OPEN in filled:\n        raise ValueError(\n            f\"report template {TEMPLATE_PATH} has a placeholder this step does not fill\"\n        )\n    return filled\n\n\ndef _escaped(value):\n    return _html.escape(str(value))\n",
+        "code": "import html as _html\nimport pathlib\n\nimport pandas as pd\n\n# Bound to the committed template when the tutorial project is seeded, the way the\n# input CSV paths are. The report's markup and stylesheet live in that file.\nTEMPLATE_PATH = \"[[TEMPLATE_PATH]]\"\n\nSECTION_MARKER = \"<!--@\"\nTOKEN_OPEN = \"[[\"\nSECTIONS = (\"document\", \"row\", \"commitment\", \"no_commitment\", \"judgment\", \"contradiction\")\nNOT_JUDGED = \"not judged\"\nNO_SOURCE = \"source not recorded\"\n\n\ndef transform(df, output_dir):\n    sections = _read_template_sections(TEMPLATE_PATH)\n    page = _fill(\n        sections[\"document\"],\n        filing_count=str(len(df)),\n        flagged_count=str(int(df[\"contradicts_commitment\"].sum())),\n        unmatched_count=str(int(df[\"public_commitment\"].isna().sum())),\n        rows=\"\".join(_render_row(sections, row) for _, row in df.iterrows()),\n    )\n    out_path = pathlib.Path(output_dir) / \"tutorial_triage_report.html\"\n    out_path.write_text(page, encoding=\"utf-8\")\n    return pd.DataFrame([{\"report_path\": str(out_path), \"filing_count\": len(df)}])\n\n\ndef _render_row(sections, row):\n    return _fill(\n        sections[\"row\"],\n        row_class=\"flagged\" if bool(row[\"contradicts_commitment\"]) else \"\",\n        filing_id=_escaped(row[\"filing_id\"]),\n        client=_escaped(row[\"client\"]),\n        registrant=_escaped(row[\"registrant\"]),\n        filing_period=_escaped(row[\"filing_period\"]),\n        amount=\"$\" + format(int(row[\"amount_usd\"]), \",\"),\n        specific_issues=_escaped(row[\"specific_issues\"]),\n        commitment=_render_commitment(sections, row),\n        followup=_render_followup(sections, row),\n    )\n\n\ndef _render_commitment(sections, row):\n    said = _present(row[\"public_commitment\"])\n    if said is None:\n        return sections[\"no_commitment\"]\n    return _fill(\n        sections[\"commitment\"],\n        public_commitment=_escaped(said),\n        commitment_source=_escaped(_present(row[\"commitment_source\"]) or NO_SOURCE),\n    )\n\n\ndef _render_followup(sections, row):\n    # A flag is not an argument: a flagged row shows both texts it was decided from.\n    judgment = _fill(\n        sections[\"judgment\"],\n        alignment=_escaped(_present(row[\"alignment\"]) or NOT_JUDGED),\n    )\n    if not bool(row[\"contradicts_commitment\"]):\n        return judgment\n    said = _present(row[\"public_commitment\"])\n    if said is None:\n        raise StepRefused(\n            f\"filing {row['filing_id']} is flagged as contradicting a public \"\n            f\"commitment, yet the join matched none onto it, so this report cannot \"\n            f\"say what it contradicts\"\n        )\n    return judgment + _fill(\n        sections[\"contradiction\"],\n        said=_escaped(said),\n        lobbied_for=_escaped(row[\"specific_issues\"]),\n    )\n\n\ndef _read_template_sections(path):\n    text = pathlib.Path(path).read_text(encoding=\"utf-8\")\n    sections = {}\n    name = None\n    for line in text.splitlines(keepends=True):\n        if line.startswith(SECTION_MARKER):\n            name = line.strip()[len(SECTION_MARKER):].removesuffix(\"-->\").strip()\n            sections[name] = []\n        elif name is not None:\n            sections[name].append(line)\n    missing = [wanted for wanted in SECTIONS if wanted not in sections]\n    if missing:\n        raise ValueError(f\"report template {path} has no {missing} section\")\n    return {name: \"\".join(lines) for name, lines in sections.items()}\n\n\ndef _fill(template, **values):\n    filled = template\n    for name, value in values.items():\n        filled = filled.replace(TOKEN_OPEN + name + \"]]\", value)\n    if TOKEN_OPEN in filled:\n        raise ValueError(\n            f\"report template {TEMPLATE_PATH} has a placeholder this step does not fill\"\n        )\n    return filled\n\n\ndef _escaped(value):\n    return _html.escape(str(value))\n\n\ndef _present(value):\n    if value is None or bool(pd.isna(value)):\n        return None\n    return str(value)\n",
         "requirements": []
       },
       "publish": {
