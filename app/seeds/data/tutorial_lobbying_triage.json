@@ -1,0 +1,582 @@
+{
+  "name": "tutorial_lobbying_triage",
+  "document": "# Tutorial: Lobbying Disclosure Triage (synthetic sample)\n\n## Purpose\n\nFederal lobbying disclosures (Senate LDA \"LD-2\" filings) report which client hired which\nregistrant, how much was spent, and — in a free-text \"specific lobbying issues\" field —\nwhat they lobbied on. That free-text field is where the substance is, and it is messy.\nThis five-step tutorial workflow narrows a quarter of filings to the ones with real money\nbehind them, reads the issue text of each, and flags the ones a reporter should look at\nagain.\n\nThe sample data is SYNTHETIC and BUNDLED with this tutorial — invented organizations and\ninvented issue text, shaped like a real Senate LDA export. It is not live LDA data, and no\nrow in it describes a real filing, a real client, or a real lobbying firm. Nothing is\nfetched from the network.\n\n## Input data\n\nA single bundled CSV, `tutorial_lobbying_triage.csv`, one row per filing, with columns:\n\n- `filing_id` — stable, unique identifier for the filing\n- `client` — the organization that retained the lobbyists\n- `registrant` — the lobbying firm that filed the disclosure\n- `amount_usd` — reported lobbying spend for the period, in whole US dollars\n- `filing_period` — the reporting period, e.g. \"2024 Q1\"\n- `specific_issues` — the filer's free-text description of the specific issues lobbied\n\n## Step 1 — Keep the filings above $50,000\n\nDrop every filing reporting less than $50,000 of spend for the period; a filing reporting\nexactly $50,000 is kept (the threshold is inclusive). Kept filings pass through unchanged.\nA filing reporting no amount at all is not guessed either way — the step stops and says so.\n\n## Step 2 — Classify each filing's issue text (LLM)\n\nFor each surviving filing, read the `specific_issues` free text and add three fields — one\nfiling in, one filing out (the filing is neither dropped nor duplicated):\n\n- `policy_area` — the single best-fit policy area, one of: Health, Energy & Environment,\n  Finance & Taxation, Technology, Defense, Transportation, Agriculture, Other.\n- `targets_specific_bill` — true if the issue text names a specific piece of legislation\n  (for example a bill number like \"H.R. 3684\" or \"S. 1234\", or a named Act), false otherwise.\n- `primary_ask` — a single plain-language sentence summarizing what the client appears to want.\n\nFilings are read four at a time in one model call. This step makes no judgment about spend.\n\n## Step 3 — Flag the filings worth a second look\n\nAdd `needs_followup`, decided from Step 2's two judgments and nothing else: a filing needs\nfollow-up when it names no specific bill, or when it landed in the catch-all Other policy\narea. Both cases mean the issue text alone did not pin down what was being lobbied for. A\nfiling whose classification is blank is not guessed — the step stops and says so.\n\n## Step 4 — Publish the triage report\n\nProduce a single HTML page listing every surviving filing with client, registrant, reported\nspend, policy area, the follow-up flag, and the primary ask. No score and no recommendation\n— the report is a reading aid, not a verdict.\n\n## Out of scope\n\nNo external fetching, no human-review queue, and no joins — a single linear pass from the\nbundled CSV to the published report.\n",
+  "model": "sonnet",
+  "source": "seed",
+  "data_model": {
+    "schemas": []
+  },
+  "stages": [
+    {
+      "id": "raw_filings",
+      "type": "input_data",
+      "description": "Bundled Synthetic Lobbying Filings CSV",
+      "inputs": [],
+      "cache": true,
+      "compiler_notes": [],
+      "signature": {
+        "form": "replaces",
+        "reads": [],
+        "produces": [
+          {
+            "name": "filing_id",
+            "type": "str",
+            "nullable": false,
+            "description": "Stable unique identifier for the filing; primary key."
+          },
+          {
+            "name": "client",
+            "type": "str",
+            "nullable": false,
+            "description": "Organization that retained the lobbyists."
+          },
+          {
+            "name": "registrant",
+            "type": "str",
+            "nullable": false,
+            "description": "Lobbying firm that filed the disclosure."
+          },
+          {
+            "name": "amount_usd",
+            "type": "int",
+            "nullable": false,
+            "description": "Reported lobbying spend for the period in whole US dollars."
+          },
+          {
+            "name": "filing_period",
+            "type": "str",
+            "nullable": false,
+            "description": "Reporting period label as it appears in the filing, e.g. '2024 Q1'."
+          },
+          {
+            "name": "specific_issues",
+            "type": "str",
+            "nullable": false,
+            "description": "Filer's free-text description of specific issues lobbied — the messy field the pipeline triages."
+          }
+        ]
+      },
+      "source": {
+        "doc": "tutorial_lobbying_triage.csv",
+        "section": "Input data"
+      },
+      "connector": {
+        "kind": "file",
+        "params": {
+          "format": "csv"
+        },
+        "refresh": "ad_hoc",
+        "notes": "The synthetic CSV bundled beside this fixture as app/seeds/data/tutorial_lobbying_triage.csv, mirroring the Senate LDA LD-2 export shape. No path is recorded here — the file is bound when a run starts. Nothing is fetched from the network."
+      }
+    },
+    {
+      "id": "significant_filings",
+      "type": "filter_rows",
+      "description": "Keep filings reporting at least $50,000 of spend",
+      "inputs": [
+        {
+          "id": "raw_filings",
+          "table_schema": {
+            "columns": [
+              {
+                "name": "filing_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "client",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "registrant",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "amount_usd",
+                "type": "int",
+                "nullable": false
+              },
+              {
+                "name": "filing_period",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "specific_issues",
+                "type": "str",
+                "nullable": false
+              }
+            ]
+          }
+        }
+      ],
+      "cache": true,
+      "compiler_notes": [
+        "The threshold is inclusive on the low side: a filing reporting exactly $50,000 is kept.",
+        "amount_usd is declared non-null upstream, so a blank amount is already a schema violation; the predicate refuses rather than reading a blank as zero, which would drop the filing silently."
+      ],
+      "signature": {
+        "form": "extends",
+        "reads": [
+          {
+            "input": "raw_filings",
+            "columns": [
+              {
+                "name": "amount_usd",
+                "type": "int",
+                "nullable": false
+              }
+            ]
+          }
+        ],
+        "adds": [],
+        "rewrites": []
+      },
+      "source": {
+        "section": "Step 1 — Keep the filings above $50,000"
+      },
+      "filter": {
+        "summary": "Keeps a filing when its reported spend is $50,000 or more, and drops it when it is less. A filing reporting no amount at all is not decided either way — the step stops and says which filing it was.",
+        "corner_cases": [
+          {
+            "case": "a filing reports exactly $50,000",
+            "expected": "the filing is kept — the threshold is inclusive"
+          },
+          {
+            "case": "a filing reports no `amount_usd` at all",
+            "expected": "the step fails, naming the filing, rather than dropping it"
+          }
+        ],
+        "code": "import pandas as pd\n\nTHRESHOLD_USD = 50000\n\n\ndef should_include(row):\n    amount = row[\"amount_usd\"]\n    if amount is None or bool(pd.isna(amount)):\n        raise StepRefused(\n            f\"filing {row['filing_id']} reports no lobbying amount, so it cannot be \"\n            f\"placed on either side of the ${THRESHOLD_USD:,} threshold\"\n        )\n    return int(amount) >= THRESHOLD_USD\n"
+      }
+    },
+    {
+      "id": "classify_issues",
+      "type": "llm_transform",
+      "description": "Classify Issue Text per Filing",
+      "inputs": [
+        {
+          "id": "significant_filings",
+          "table_schema": {
+            "columns": [
+              {
+                "name": "filing_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "client",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "registrant",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "amount_usd",
+                "type": "int",
+                "nullable": false
+              },
+              {
+                "name": "filing_period",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "specific_issues",
+                "type": "str",
+                "nullable": false
+              }
+            ]
+          }
+        }
+      ],
+      "cache": true,
+      "compiler_notes": [
+        "Grain is strictly 1:1 — the document explicitly states no filing is dropped or duplicated in this step.",
+        "policy_area enum is closed; max_retries handles a hallucinated category value by letting the model retry on schema mismatch.",
+        "targets_specific_bill may produce false negatives when legislation is cited by colloquial name only (e.g. 'the farm bill') rather than a formal bill number or named Act — this limitation is not addressed in the source document.",
+        "batch_size 4 amortizes the instructions prefix across four filings per call; the filings in a batch share one context, which the document accepts for a per-filing classification this coarse.",
+        "client and filing_period are passed into the prompt as context only; they do not change the classification logic."
+      ],
+      "signature": {
+        "form": "extends",
+        "reads": [
+          {
+            "input": "significant_filings",
+            "columns": [
+              {
+                "name": "client",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "registrant",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "filing_period",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "specific_issues",
+                "type": "str",
+                "nullable": false
+              }
+            ]
+          }
+        ],
+        "adds": [
+          {
+            "name": "policy_area",
+            "type": "str",
+            "nullable": true,
+            "description": "Single best-fit policy area from the fixed eight-value taxonomy.",
+            "enum": [
+              "Health",
+              "Energy & Environment",
+              "Finance & Taxation",
+              "Technology",
+              "Defense",
+              "Transportation",
+              "Agriculture",
+              "Other"
+            ]
+          },
+          {
+            "name": "targets_specific_bill",
+            "type": "bool",
+            "nullable": true,
+            "description": "True when the issue text names a specific bill number or named Act; false otherwise."
+          },
+          {
+            "name": "primary_ask",
+            "type": "str",
+            "nullable": true,
+            "description": "One plain-language sentence summarising what the client appears to want."
+          }
+        ],
+        "rewrites": []
+      },
+      "source": {
+        "section": "Step 2 — Classify each filing's issue text (LLM)"
+      },
+      "llm": {
+        "prompt_instructions": "You are a policy analyst triaging federal lobbying disclosures.\n\nReturn a JSON object with exactly these three fields:\n\n1. \"policy_area\": the single best-fit category from this fixed list — choose exactly one:\n   Health | Energy & Environment | Finance & Taxation | Technology | Defense | Transportation | Agriculture | Other\n\n2. \"targets_specific_bill\": true if the text names a specific piece of legislation (e.g. a bill number such as H.R. 3684 or S. 1234, or a named Act), false otherwise.\n\n3. \"primary_ask\": a single plain-language sentence (no jargon) summarising what the client appears to want from government.",
+        "prompt_data_template": "Filing context:\n- Client: {client}\n- Registrant: {registrant}\n- Period: {filing_period}\n\nSpecific issues lobbied (verbatim from the disclosure):\n{specific_issues}",
+        "temperature": 0.0,
+        "max_retries": 8,
+        "response_format": "json",
+        "batch_size": 4
+      }
+    },
+    {
+      "id": "flag_followup",
+      "type": "python_row_function",
+      "description": "Flag filings whose issue text did not pin down a bill",
+      "inputs": [
+        {
+          "id": "classify_issues",
+          "table_schema": {
+            "columns": [
+              {
+                "name": "filing_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "client",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "registrant",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "amount_usd",
+                "type": "int",
+                "nullable": false
+              },
+              {
+                "name": "filing_period",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "specific_issues",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "policy_area",
+                "type": "str",
+                "nullable": true,
+                "enum": [
+                  "Health",
+                  "Energy & Environment",
+                  "Finance & Taxation",
+                  "Technology",
+                  "Defense",
+                  "Transportation",
+                  "Agriculture",
+                  "Other"
+                ]
+              },
+              {
+                "name": "targets_specific_bill",
+                "type": "bool",
+                "nullable": true
+              },
+              {
+                "name": "primary_ask",
+                "type": "str",
+                "nullable": true
+              }
+            ]
+          }
+        }
+      ],
+      "cache": true,
+      "compiler_notes": [
+        "Decided from targets_specific_bill and policy_area alone — no spend, no client, no re-reading of the issue text.",
+        "Both inputs are nullable because the classifier may leave them blank; a blank is refused rather than read as 'no bill', which would flag a filing the pipeline never actually judged."
+      ],
+      "signature": {
+        "form": "extends",
+        "reads": [
+          {
+            "input": "classify_issues",
+            "columns": [
+              {
+                "name": "policy_area",
+                "type": "str",
+                "nullable": true,
+                "enum": [
+                  "Health",
+                  "Energy & Environment",
+                  "Finance & Taxation",
+                  "Technology",
+                  "Defense",
+                  "Transportation",
+                  "Agriculture",
+                  "Other"
+                ]
+              },
+              {
+                "name": "targets_specific_bill",
+                "type": "bool",
+                "nullable": true
+              }
+            ]
+          }
+        ],
+        "adds": [
+          {
+            "name": "needs_followup",
+            "type": "bool",
+            "nullable": false,
+            "description": "True when the filing is worth a reporter's second look: the classifier tied it to no named bill, or it landed in the catch-all Other policy area."
+          }
+        ],
+        "rewrites": []
+      },
+      "source": {
+        "section": "Step 3 — Flag the filings worth a second look"
+      },
+      "function": {
+        "kind": "inline",
+        "summary": "Marks a filing for follow-up when it names no specific bill, or when its policy area is the catch-all Other — both mean the issue text did not pin down what was being lobbied for. A filing missing either judgment is not guessed; the step stops and says which filing it was.",
+        "corner_cases": [
+          {
+            "case": "a filing names a specific bill and has a policy area other than `Other`",
+            "expected": "the filing is kept and not flagged for follow-up"
+          },
+          {
+            "case": "a filing names a specific bill but its policy area is `Other`",
+            "expected": "the filing is flagged for follow-up"
+          },
+          {
+            "case": "`policy_area` or `targets_specific_bill` is blank",
+            "expected": "the step fails, naming the filing, rather than flagging it either way"
+          }
+        ],
+        "code": "import pandas as pd\n\nCATCH_ALL_POLICY_AREA = \"Other\"\n\n\ndef transform(row):\n    policy_area = row[\"policy_area\"]\n    targets_bill = row[\"targets_specific_bill\"]\n    if policy_area is None or bool(pd.isna(policy_area)):\n        raise StepRefused(\n            f\"filing {row['filing_id']} has no policy area, so whether it needs a \"\n            f\"follow-up read cannot be decided\"\n        )\n    if targets_bill is None or bool(pd.isna(targets_bill)):\n        raise StepRefused(\n            f\"filing {row['filing_id']} has no judgment on whether it names a bill, so \"\n            f\"whether it needs a follow-up read cannot be decided\"\n        )\n    flagged = (not bool(targets_bill)) or str(policy_area) == CATCH_ALL_POLICY_AREA\n    return {**row, \"needs_followup\": bool(flagged)}\n",
+        "requirements": []
+      }
+    },
+    {
+      "id": "publish_report",
+      "type": "publish",
+      "description": "Publish HTML Triage Report",
+      "inputs": [
+        {
+          "id": "flag_followup",
+          "table_schema": {
+            "columns": [
+              {
+                "name": "filing_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "client",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "registrant",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "amount_usd",
+                "type": "int",
+                "nullable": false
+              },
+              {
+                "name": "filing_period",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "specific_issues",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "policy_area",
+                "type": "str",
+                "nullable": true,
+                "enum": [
+                  "Health",
+                  "Energy & Environment",
+                  "Finance & Taxation",
+                  "Technology",
+                  "Defense",
+                  "Transportation",
+                  "Agriculture",
+                  "Other"
+                ]
+              },
+              {
+                "name": "targets_specific_bill",
+                "type": "bool",
+                "nullable": true
+              },
+              {
+                "name": "primary_ask",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "needs_followup",
+                "type": "bool",
+                "nullable": false
+              }
+            ]
+          }
+        }
+      ],
+      "cache": true,
+      "compiler_notes": [
+        "The document says this is a reading aid, not a verdict — no scoring or recommendation column is rendered.",
+        "specific_issues raw text is intentionally omitted from the HTML table to keep the report scannable; it remains in the upstream frame for reference.",
+        "This stage writes the HTML to disk and returns a file-path pointer rather than embedding the markup inline, which is practical at scale.",
+        "No templating library dependency is introduced — the HTML is assembled with Python string concatenation and stdlib html.escape."
+      ],
+      "signature": {
+        "form": "replaces",
+        "reads": [
+          {
+            "input": "flag_followup",
+            "columns": [
+              {
+                "name": "filing_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "client",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "registrant",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "amount_usd",
+                "type": "int",
+                "nullable": false
+              },
+              {
+                "name": "filing_period",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "specific_issues",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "policy_area",
+                "type": "str",
+                "nullable": true,
+                "enum": [
+                  "Health",
+                  "Energy & Environment",
+                  "Finance & Taxation",
+                  "Technology",
+                  "Defense",
+                  "Transportation",
+                  "Agriculture",
+                  "Other"
+                ]
+              },
+              {
+                "name": "targets_specific_bill",
+                "type": "bool",
+                "nullable": true
+              },
+              {
+                "name": "primary_ask",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "needs_followup",
+                "type": "bool",
+                "nullable": false
+              }
+            ]
+          }
+        ],
+        "produces": []
+      },
+      "source": {
+        "section": "Step 4 — Publish the triage report"
+      },
+      "function": {
+        "kind": "inline",
+        "summary": "Writes the finished triage report as a single web page: one row per surviving filing, in the order they arrived, with the follow-up flag shown beside the policy area and the primary ask.",
+        "corner_cases": [],
+        "code": "import html as _html\nimport pathlib\n\nimport pandas as pd\n\n\nSTYLE = \"\"\"\n  body { font-family: -apple-system, \"Segoe UI\", Roboto, Arial, sans-serif;\n         margin: 2rem auto; max-width: 1040px; padding: 0 1rem; color: #1a1a1a; }\n  h1 { font-size: 1.5rem; margin-bottom: .2rem; }\n  .sub { color: #666; margin-top: 0; font-size: .9rem; }\n  .note { background: #fff8e1; border: 1px solid #ffe082; padding: .55rem .8rem;\n          border-radius: 6px; font-size: .82rem; color: #7a5b00; margin: 1rem 0 1.4rem; }\n  table { border-collapse: collapse; width: 100%; font-size: .9rem; }\n  th, td { text-align: left; padding: .5rem .6rem; border-bottom: 1px solid #ececec;\n           vertical-align: top; }\n  th { background: #fafafa; font-size: .72rem; text-transform: uppercase;\n       letter-spacing: .04em; color: #555; }\n  td.num { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }\n  td.muted { color: #777; }\n  .pill { background: #eef2ff; color: #3730a3; padding: .12rem .55rem;\n          border-radius: 999px; font-size: .78rem; white-space: nowrap; }\n  .flag-yes { color: #9a3412; font-weight: 600; }\n  .flag-no { color: #9ca3af; }\n\"\"\"\n\n\ndef _cell(value):\n    return \"<td>\" + _html.escape(str(value)) + \"</td>\"\n\n\ndef transform(df, output_dir):\n    pathlib.Path(output_dir).mkdir(parents=True, exist_ok=True)\n\n    body_rows = []\n    for _, row in df.iterrows():\n        follow_up = bool(row[\"needs_followup\"])\n        follow_html = (\n            \"<td class='flag-yes'>Follow up</td>\" if follow_up else \"<td class='flag-no'>-</td>\"\n        )\n        cells = (\n            _cell(row[\"filing_id\"])\n            + _cell(row[\"client\"])\n            + \"<td class='muted'>\" + _html.escape(str(row[\"registrant\"])) + \"</td>\"\n            + _cell(row[\"filing_period\"])\n            + \"<td class='num'>$\" + format(int(row[\"amount_usd\"]), \",\") + \"</td>\"\n            + \"<td><span class='pill'>\" + _html.escape(str(row[\"policy_area\"])) + \"</span></td>\"\n            + follow_html\n            + _cell(row[\"primary_ask\"])\n        )\n        body_rows.append(\"<tr>\" + cells + \"</tr>\")\n\n    flagged = int(df[\"needs_followup\"].sum())\n    html_doc = (\n        \"<!DOCTYPE html>\\n<html lang='en'>\\n<head>\\n<meta charset='UTF-8'>\\n\"\n        \"<title>Tutorial Lobbying Triage</title>\\n<style>\" + STYLE + \"</style>\\n\"\n        \"</head>\\n<body>\\n\"\n        \"<h1>Tutorial Lobbying Triage Report</h1>\\n\"\n        \"<p class='sub'>\" + str(len(df)) + \" filings above the $50,000 threshold; \"\n        + str(flagged) + \" flagged for follow-up.</p>\\n\"\n        \"<p class='note'>Synthetic sample data bundled with this tutorial \\u2014 not live \"\n        \"Senate LDA filings. This report is a reading aid, not a verdict.</p>\\n\"\n        \"<table>\\n<thead><tr>\"\n        \"<th>Filing</th><th>Client</th><th>Registrant</th><th>Period</th>\"\n        \"<th>Reported spend</th><th>Policy area</th><th>Follow-up?</th><th>Primary ask</th>\"\n        \"</tr></thead>\\n<tbody>\\n\" + \"\\n\".join(body_rows) + \"\\n</tbody>\\n</table>\\n\"\n        \"</body>\\n</html>\\n\"\n    )\n\n    out_path = pathlib.Path(output_dir) / \"tutorial_triage_report.html\"\n    out_path.write_text(html_doc, encoding=\"utf-8\")\n    return pd.DataFrame([{\"report_path\": str(out_path), \"filing_count\": len(df)}])\n",
+        "requirements": []
+      },
+      "publish": {
+        "format": "html_report",
+        "destination": "report"
+      }
+    }
+  ]
+}

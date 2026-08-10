@@ -9,6 +9,9 @@ from app.seeds.seed import discover_workflow_files, seed_all, seed_demo_data_if_
 from app.services import project
 
 _LOBBYING = "lobbying_issue_triage"
+_TUTORIAL = "tutorial_lobbying_triage"
+# Every committed bundle, in the order discover_workflow_files sorts them.
+_ALL_BUNDLES = [_LOBBYING, _TUTORIAL]
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -34,26 +37,26 @@ def test_seed_cli_subprocess_bootstraps_the_store_and_seeds(tmp_path):
     assert (examples_dir / _LOBBYING / "compiled").is_dir()
 
 
-def test_seed_all_imports_the_lobbying_bundle_into_an_empty_workspace(tmp_path):
+def test_seed_all_imports_every_committed_bundle_into_an_empty_workspace(tmp_path):
     examples_dir = tmp_path / "examples"
     examples_dir.mkdir()
 
     imported = seed_all()
 
-    assert imported == [_LOBBYING]
-    assert _LOBBYING in project.list_projects()
+    assert imported == _ALL_BUNDLES
+    assert set(_ALL_BUNDLES) <= set(project.list_projects())
 
 
 def test_seed_all_skips_a_bundle_whose_project_already_exists(tmp_path):
     examples_dir = tmp_path / "examples"
     examples_dir.mkdir()
     first = seed_all()
-    assert first == [_LOBBYING]
+    assert first == _ALL_BUNDLES
 
     second = seed_all()
 
     assert second == []
-    assert _LOBBYING in project.list_projects()
+    assert set(_ALL_BUNDLES) <= set(project.list_projects())
 
 
 def test_discover_workflow_files_finds_the_committed_lobbying_fixture():
@@ -98,5 +101,5 @@ def test_seed_demo_data_if_enabled_seeds_when_env_var_is_1(tmp_path, monkeypatch
 
     imported = seed_demo_data_if_enabled()
 
-    assert imported == [_LOBBYING]
-    assert _LOBBYING in project.list_projects()
+    assert imported == _ALL_BUNDLES
+    assert set(_ALL_BUNDLES) <= set(project.list_projects())
