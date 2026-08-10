@@ -55,6 +55,13 @@ async def chat_index(request: Request):
     })
 
 
+@router.post("/chat/new")
+async def new_chat():
+    """Open an editing session bound to no project; the agent asks which one it needs."""
+    sid = create_agent_session("editing", {}, title="New chat")
+    return RedirectResponse(url=f"/chat/{sid}", status_code=303)
+
+
 @router.post("/chat/agent/{agent_id}/sessions")
 async def new_agent_session(agent_id: str, request: Request):
     """Open a chat session bound to `agent_id`. The body carries the opaque
