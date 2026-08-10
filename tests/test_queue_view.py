@@ -19,6 +19,7 @@ def _queue_stage(
     target_type: str = "str",
     target_spec: dict[str, object] | None = None,
     input_ids: list[str] | None = None,
+    reads: list[str] | None = None,
 ) -> Stage:
     # A `human_review_queue` stage over `input_columns`, adding exactly what its
     # `queue` block names. `target_spec` overrides the reviewed TARGET column's
@@ -29,10 +30,16 @@ def _queue_stage(
         {"id": upstream, "schema": {"columns": input_columns}}
         for upstream in (input_ids or ["upstream"])
     ]
+    signature: dict[str, object] = {"form": "extends", "adds": added}
+    if reads is not None:
+        signature["reads"] = [{
+            "input": inputs[0]["id"],
+            "columns": [c for c in input_columns if c["name"] in reads],
+        }]
     return parse_stage({
         "id": "review", "description": "Review", "type": "human_review_queue",
         "inputs": inputs,
-        "signature": {"form": "extends", "adds": added},
+        "signature": signature,
         "queue": queue_columns(source=source, target=target),
     })
 
@@ -110,7 +117,19 @@ def test_the_context_table_omits_the_columns_under_review():
 
     page = queue_view.build_queue_page("p", "r", stage, stage.queue, snapshot, None, None)
 
-    assert [column.name for column in page.context_columns] == ["id", "score"]
+    assert [column.name for column in page.read_columns] == ["id", "score"]
+    assert page.other_columns == []
+
+
+def test_the_columns_the_stage_declares_it_reads_lead_and_the_rest_fold():
+    # Declared reads lead; the rest fold.
+    stage = _queue_stage(_LABEL_COLUMNS, reads=["score"])
+    snapshot = pd.DataFrame({"id": ["a"], "score": [2], "label": ["high"]})
+
+    page = queue_view.build_queue_page("p", "r", stage, stage.queue, snapshot, None, None)
+
+    assert [column.name for column in page.read_columns] == ["score"]
+    assert [column.name for column in page.other_columns] == ["id"]
 
 
 # ── The reviewed fields ──────────────────────────────────────────────────────
