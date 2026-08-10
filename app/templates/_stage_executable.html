@@ -9,7 +9,7 @@
    Required context: stage, function_code (may be None).
    Optional context: llm_example {prompt, columns} — a rendered prompt
    from this run's actual input first row, for LLM stages. #}
-{% from "_schema_table.html" import schema_table %}
+{% from "_schema_table.html" import columns_table %}
 {% from "_stage_code.html" import stage_summary, stage_corner_cases %}
 {% from "_stage_certification.html" import stage_certification %}
 
@@ -36,12 +36,9 @@
     <h2>✨ LLM call</h2>
     {# Reply schema first, prompt second, settings last: a reviewer's first question
        is how much of the data this stage can touch, and the reply schema bounds it. #}
-    {# The reply spec the runtime compiles the model's response format from —
-       stage.llm_reply_schema() is that exact object, not a rebuilt copy. #}
-    {% set reply_schema = stage.llm_reply_schema() %}
-    {% if reply_schema %}
+    {% if stage.signature and stage.signature.adds %}
     <h3>expected answer shape</h3>
-    {{ schema_table(reply_schema) }}
+    {{ columns_table(stage.signature.adds) }}
     {% endif %}
     <h3>what the model is asked</h3>
     <pre class="prompt">{{ stage.llm.prompt_instructions }}</pre>

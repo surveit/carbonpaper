@@ -192,3 +192,4 @@ def test_a_workflow_with_a_failing_example_is_not_clean():
     )
     assert not report.is_clean
     assert [(w.stage_id, w.kind) for w in report.errors] == [("broken", "examples_failing")]
+

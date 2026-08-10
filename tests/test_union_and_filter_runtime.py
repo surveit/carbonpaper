@@ -91,9 +91,6 @@ def test_filter_rows_keeps_true_rows_in_order_with_columns_unchanged(tmp_path):
 def test_a_filter_that_keeps_nothing_still_feeds_its_downstream_a_valid_frame(tmp_path):
     """src -> f (keeps no row) -> tag, a row function adding `note`."""
     src = pd.DataFrame({"a": ["x", "y"], "b": [1, 2]})
-    # `tag`'s mapper never runs, so nothing names a column; it must still emit
-    # `note`, because an empty result is a result and its output schema promises
-    # one. It used to inherit its INPUT's columns and then fail its own schema.
     load = _load_stage("src", src, tmp_path)
     filt = _filter_stage("f", "src", "def should_include(row): return row['b'] > 99")
     tag = parse_stage({

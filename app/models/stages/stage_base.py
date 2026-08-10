@@ -267,11 +267,6 @@ class StageBase(StageCommon):
         config directly."""
         return []
 
-    def llm_reply_schema(self) -> Optional[TableSchema]:
-        """What an llm_transform's model reply itself must carry; None for every
-        other type."""
-        return None
-
     def resolve_output_schema(self) -> Optional[TableSchema]:
         """What the signature promises; None only for a stage that emits no table."""
         return promised_output_schema(self)

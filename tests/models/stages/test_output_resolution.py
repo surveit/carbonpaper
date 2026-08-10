@@ -106,8 +106,7 @@ def test_a_signature_only_llm_stage_resolves_its_reply_schema():
             "adds": [{"name": "score", "type": "int", "nullable": True}],
         },
     })
-    reply = stage.llm_reply_schema()
-    assert [(c.name, c.type) for c in reply.columns] == [("score", "int")]
+    assert [(c.name, c.type) for c in stage.signature.adds] == [("score", "int")]
 
 
 def test_a_signature_only_enrich_resolves_from_bring_and_anchor():
