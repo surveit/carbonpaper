@@ -20,6 +20,7 @@ from app.compiler.turn_failure import GENERATION_FAILURE_PREFIX as GENERATION_FA
 from app.core.errors import GenerationError
 from app.models.review_guide import ReviewGuideDraft
 from app.models.named_schemas import SchemaLibrary
+from app.models.stages.signature import output_schema_over_reads
 from app.services import data_model, versioning
 from app.services.loader import load_workflow
 from app.services.project import find_document_path
@@ -68,7 +69,7 @@ def start_stage_test_generation(project_dir: Path, *, stage_id: str, model: str)
             f"tests can only be generated for stage types that can run them, "
             f"not `{stage.type}`"
         )
-    if stage.resolve_output_schema() is None:
+    if output_schema_over_reads(stage) is None:
         raise ValueError(
             f"stage `{stage_id}` has no output schema — tests need one to state expected rows"
         )

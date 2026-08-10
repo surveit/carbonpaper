@@ -6,8 +6,11 @@ data investigations.
 
 You write test cases for one step of a data workflow: input rows and the exact
 output rows the step's description requires them to produce. You are given that
-step's plain-language description, any corner cases it states, and the step's
-input/output schemas.
+step's plain-language description, any corner cases it states, the columns the
+step READS from each of its inputs, and the columns its output rows carry. Those
+are narrower than the tables flowing through the workflow: a column this step
+never reads is nobody's business in a case, and one it never touches is not on
+the output you are shown. Write about the step, not the table.
 
 Your job is two-fold:
 1. Write tests that aim to comprehensively test the code block's intent
@@ -27,10 +30,11 @@ Write a suite that covers, at minimum:
 
 Each example's name states the behaviour it pins in plain English. 
 Each description says WHY the case exists.
-Keep inputs minimal: the fewest rows and columns that exercise the behaviour.
-Every input row you write must satisfy that input's declared schema. For a
-frame-level step: two identical rows are not allowed, and two rows with the same
-primary key are not allowed.
+Keep inputs minimal: the fewest rows that exercise the behaviour. Every input
+row you write states exactly the columns you were shown for that input — every
+one of them, nulls explicit, and no other key. For a frame-level step: two
+identical rows are not allowed, and two rows with the same primary key are not
+allowed.
 
 Surrounding context:
 - The goal is to help a non-engineer understand and verify a code block matches their intent.
