@@ -1,7 +1,7 @@
-"""Workspace admin page: load a packaged seed fixture into the workspace, or
-export a project back to a portable WorkflowFile document.
+"""Workspace admin page: load a packaged seed fixture, download a project as a
+portable WorkflowFile document, or upload one back into the workspace.
 
-Every path param is checked against a known list before use, so a request for an
+Every path param is matched against a known list before use, so a request for an
 unknown name 404s instead of reaching the seam with unsanitized input.
 """
 from __future__ import annotations
@@ -9,14 +9,15 @@ from __future__ import annotations
 from pathlib import Path
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import APIRouter, File, HTTPException, Request, UploadFile
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from pydantic import ValidationError
 
 from app.core.errors import ProjectExistsError
 from app.seeds.seed import discover_workflow_files
 from app.services import project
 from app.services.project import WorkflowFile, export_project, import_project
-from app.web.config import REPO_ROOT, templates
+from app.web.config import templates
 
 router = APIRouter()
 
@@ -84,14 +85,35 @@ async def load_bundle(bundle: str):
     return _redirect_to_admin(f"Loaded '{name}' from bundle '{bundle}'.")
 
 
-@router.post("/admin/export/{project_name}")
-async def export_project_route(project_name: str):
-    """Export a project to REPO_ROOT/exports/<project>.json — a WorkflowFile
-    document. Overwrites a prior export of the same project name (an export is
-    a snapshot users regenerate on demand, not an append-only archive)."""
+@router.get("/admin/export/{project_name}")
+async def download_project(project_name: str) -> Response:
+    """A project's WorkflowFile document as a `<project>.json` browser download."""
     name = _known_project(project_name)
-    wf = export_project(name)
-    dest = REPO_ROOT / "exports" / f"{name}.json"
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_text(wf.to_json(), encoding="utf-8")
-    return _redirect_to_admin(f"Exported '{name}' to {dest}.")
+    return Response(
+        content=export_project(name).to_json(),
+        media_type="application/json",
+        headers={"content-disposition": f'attachment; filename="{name}.json"'},
+    )
+
+
+@router.post("/admin/import")
+async def upload_project(file: UploadFile = File(...)):
+    """Import an uploaded WorkflowFile. Nothing is written until it validates."""
+    wf = _parse_workflow_file(await file.read(), file.filename)
+    try:
+        name = import_project(wf)
+    except ProjectExistsError:
+        existing_name = project.sanitize_project_name(wf.name)
+        return _redirect_to_admin(f"'{existing_name}' already exists — not imported.")
+    return _redirect_to_admin(f"Imported '{name}' from an uploaded file.")
+
+
+def _parse_workflow_file(raw: bytes, filename: str | None) -> WorkflowFile:
+    """The whole upload as a WorkflowFile, or a 400 — no project is written on the way."""
+    try:
+        return WorkflowFile.model_validate_json(raw)
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"'{filename}' is not a valid WorkflowFile document: {exc}",
+        ) from exc

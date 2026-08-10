@@ -4,7 +4,7 @@
 <div class="dash-header">
     <div class="dash-header-text">
         <h1>Workspace admin</h1>
-        <p class="lede">Load a packaged seed bundle into this workspace, or export a project to a portable bundle directory.</p>
+        <p class="lede">Load a packaged seed bundle into this workspace, download a project as a portable bundle file, or upload one back.</p>
     </div>
 </div>
 
@@ -49,9 +49,7 @@
         <tr>
             <td><a href="/project/{{ p }}">{{ p }}</a></td>
             <td>
-                <form method="post" action="/admin/export/{{ p }}" style="display:inline;">
-                    <button type="submit" class="btn">Export</button>
-                </form>
+                <a href="/admin/export/{{ p }}" class="btn" download>Download bundle</a>
             </td>
         </tr>
         {% endfor %}
@@ -64,4 +62,11 @@
     <a href="/project/new" class="btn primary">＋ New project</a>
 </div>
 {% endif %}
+
+<h2>Upload a bundle</h2>
+<p class="muted">A bundle file downloaded from this or another workspace. The upload is rejected whole if it does not parse — a project is never partly written.</p>
+<form method="post" action="/admin/import" enctype="multipart/form-data">
+    <input type="file" name="file" accept="application/json,.json" required>
+    <button type="submit" class="btn">Upload</button>
+</form>
 {% endblock %}
