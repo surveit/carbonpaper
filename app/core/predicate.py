@@ -19,10 +19,16 @@ _COMPARE_OPS: tuple[type[ast.cmpop], ...] = (
 
 # The attribute names the dialect admits, by the position a chain holds them in:
 # a method on a column, the `.str` accessor, and the methods reached through it.
-# `isna`/`notna` are what `_normalize` emits for IS NULL / IS NOT NULL.
+# `isna`/`notna` are what `_normalize` emits for IS NULL / IS NOT NULL. Every name
+# under `.str` returns a boolean mask over the rows, and a boolean Series has no
+# `.str`, so no admitted chain continues past the mask it lands on.
 _COLUMN_METHODS = frozenset({"isna", "notna"})
 _STRING_ACCESSOR = frozenset({"str"})
-_STRING_METHODS = frozenset({"contains", "startswith"})
+_STRING_METHODS = frozenset({
+    "contains", "endswith", "fullmatch", "isalnum", "isalpha", "isascii",
+    "isdecimal", "isdigit", "islower", "isnumeric", "isspace", "istitle",
+    "isupper", "match", "startswith",
+})
 _ALLOWED_ATTRIBUTES = _COLUMN_METHODS | _STRING_ACCESSOR | _STRING_METHODS
 
 
@@ -148,8 +154,10 @@ def _validate_attribute(node: ast.Attribute, expr: str) -> None:
     """pandas getattr-walks a chain and calls what it lands on, so the names are a closed set."""
     if node.attr not in _ALLOWED_ATTRIBUTES:
         raise PredicateError(
-            f"filter is not valid: {expr!r} (attribute `.{node.attr}` is not supported; the only "
-            f"attributes a filter may use are {', '.join(sorted(_ALLOWED_ATTRIBUTES))})"
+            f"filter is not valid: {expr!r} (attribute `.{node.attr}` is not supported; a filter "
+            f"may use {', '.join(sorted(_COLUMN_METHODS))} on a column, "
+            f"{', '.join(sorted(_STRING_ACCESSOR))} to reach string methods, and through it "
+            f"{', '.join(sorted(_STRING_METHODS))})"
         )
     _validate_node(node.value, expr)
 
