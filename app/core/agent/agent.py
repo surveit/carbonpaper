@@ -103,6 +103,7 @@ class Agent(Generic[Model]):
         max_attempts: int = 4,
         extra_tools: list[str] | None = None,
         max_turns: int | None = None,
+        thinking: dict[str, str] | None = None,
     ) -> None:
         self._system_prompt = system_prompt
         self._target_schema = target_schema
@@ -117,6 +118,7 @@ class Agent(Generic[Model]):
         # Turn cap. A research agent needs many more turns than a submit-only one,
         # because every search and fetch costs a turn.
         self._max_turns = max_turns
+        self._thinking = thinking
         # Per-run capture state, written by submit_answer during the run.
         self._answer: Model | None = None
         self._attempts = 0
@@ -223,4 +225,5 @@ class Agent(Generic[Model]):
             allowed_tools=allowed + self._extra_tools,
             model=self._model,
             max_turns=self._max_turns or (self._max_attempts + 2),
+            thinking=self._thinking,
         )

@@ -83,6 +83,7 @@ class ClaudeAgentSdkEngine:
         tool_labels: dict[str, str] | None = None,
         model: str = CLI_MODEL,
         max_turns: int | None = None,
+        thinking: dict[str, Any] | None = None,
         builtin_tools: list[str] | None = None,
     ) -> None:
         self._system_prompt = system_prompt
@@ -103,6 +104,9 @@ class ClaudeAgentSdkEngine:
         # tool loop — e.g. app.core.agent.agent.Agent's submit-and-retry — sets this so a
         # model that never produces a valid answer cannot loop forever.
         self._max_turns = max_turns
+        # The CLI's own thinking setting when None. `{"type": "disabled"}` is the
+        # one a classifier wants: reasoning it never reads is most of its bill.
+        self._thinking = thinking
         # Token/cost usage from the most recent stream_turn's terminal
         # ResultMessage (None until one arrives). Read by the headless Agent to
         # attribute spend to the caller.
@@ -127,6 +131,8 @@ class ClaudeAgentSdkEngine:
         )
         if self._max_turns is not None:
             kw["max_turns"] = self._max_turns
+        if self._thinking is not None:
+            kw["thinking"] = self._thinking
         if resume:
             kw["resume"] = resume
         if _CLI_PATH is not None:

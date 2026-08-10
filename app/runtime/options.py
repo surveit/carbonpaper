@@ -23,6 +23,22 @@ DEFAULT_MODEL = LLMModel.parse(
     source="CARBONPAPER_LLM_MODEL",
 )
 DEFAULT_PARALLEL = int(os.environ.get("CARBONPAPER_LLM_PARALLEL", "4"))
+
+
+def _read_thinking() -> dict[str, str] | None:
+    """Unset leaves the CLI's own setting; `disabled` also CHANGES ANSWERS, not just cost."""
+    raw = os.environ.get("CARBONPAPER_LLM_THINKING")
+    if raw is None or not raw.strip():
+        return None
+    if raw.strip() != "disabled":
+        raise LLMError(
+            f"CARBONPAPER_LLM_THINKING={raw!r} is not a setting this runtime has: "
+            "the only accepted value is 'disabled', and unset leaves the CLI's own."
+        )
+    return {"type": "disabled"}
+
+
+THINKING_CONFIG = _read_thinking()
 DEFAULT_TIMEOUT_S = int(os.environ.get("CARBONPAPER_LLM_TIMEOUT_S", "180"))
 
 # A stage granted research tools works on a completely different clock: it searches,

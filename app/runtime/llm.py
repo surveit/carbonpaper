@@ -20,6 +20,7 @@ from app.models.stages.llm_transform import LLMConfig
 
 from .options import (
     DEFAULT_MODEL,
+    THINKING_CONFIG,
     DEFAULT_TIMEOUT_S,
     RESEARCH_MAX_TURNS,
     RESEARCH_TIMEOUT_S,
@@ -176,6 +177,7 @@ def _run_agent(
             model=model_name,
             extra_tools=list(tools or []),
             max_turns=RESEARCH_MAX_TURNS if researching else None,
+            thinking=THINKING_CONFIG,
         )
         try:
             answer = run_sync(
