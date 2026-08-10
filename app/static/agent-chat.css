@@ -1,0 +1,86 @@
+/* The agent chat at /chat: the session index, the message log, and the docked composer. */
+
+/* ═══ The session index (chat_index.html) ═══ */
+.ac-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+
+/* Which model backend answers. Its own chip: it names neither a stage type nor a
+   run state, so it borrows neither vocabulary's class. */
+.ac-backend { font-size: 12px; color: var(--muted); border: 1px solid var(--border);
+    border-radius: 10px; padding: 2px 8px; white-space: nowrap; }
+
+.ac-sessions { list-style: none; padding: 0; max-width: 1080px; }
+.ac-session { border: 1px solid var(--border); border-radius: 8px; background: var(--raised);
+    padding: 10px 12px; margin: 6px 0; }
+.ac-session a { text-decoration: none; font-weight: 500; }
+.ac-session-meta { color: var(--muted); font-size: 12px; }
+
+/* ═══ The transcript (chat.html) ═══ */
+/* 1080px rather than main's 1500: a reading measure for prose. The composer is
+   fixed to the viewport, so the log's own bottom padding is what keeps the last
+   turn clear of it. */
+.ac-log { max-width: 1080px; margin: 0 auto; padding: 8px 0 128px;
+    display: flex; flex-direction: column; gap: 14px; }
+
+.ac-role { font-size: 11px; text-transform: uppercase; letter-spacing: .04em;
+    color: var(--muted); margin-bottom: 4px; }
+.ac-body { white-space: pre-wrap; word-wrap: break-word; }
+
+/* A typed turn is one or two lines, so it reads as a compact bubble against the
+   right edge; the reply under it is unboxed prose, which a bubble would only
+   narrow. */
+.ac-msg.user { align-self: flex-end; max-width: 72%; }
+.ac-msg.user .ac-role { text-align: right; }
+.ac-msg.user .ac-body { background: var(--info-bd); color: var(--on-dark);
+    border-radius: 10px; padding: 8px 12px; }
+.ac-msg.assistant { align-self: stretch; }
+
+.ac-think { margin: 2px 0 8px; border-left: 3px solid var(--border-strong);
+    background: var(--sunk-deep); border-radius: 4px; }
+.ac-think > summary { cursor: pointer; color: var(--muted); font-size: 12px;
+    padding: 5px 8px; user-select: none; }
+.ac-think-text { font-style: italic; color: var(--muted); font-size: 13px;
+    padding: 0 10px 8px; white-space: pre-wrap; }
+
+.ac-tool { margin: 4px 0; }
+.ac-tool > summary { cursor: pointer; list-style: none; color: var(--good-bd); font-size: 12px;
+    background: var(--good-bg); border: 1px solid var(--good-bd); border-radius: 6px;
+    padding: 3px 9px; display: inline-block; user-select: none; }
+.ac-tool > summary::-webkit-details-marker { display: none; }
+.ac-tool > summary::before { content: "▸ "; color: var(--muted); }
+.ac-tool[open] > summary::before { content: "▾ "; }
+.ac-tool-json { font-family: ui-monospace, monospace; font-size: 11px; color: var(--good-ink);
+    background: var(--good-bg); border: 1px solid var(--good-bd); border-radius: 6px;
+    padding: 6px 9px; margin: 4px 0 0; white-space: pre-wrap; overflow-x: auto; }
+.ac-tool-label { font-size: 10px; text-transform: uppercase; letter-spacing: .04em;
+    color: var(--muted); margin: 6px 0 1px; }
+
+.ac-err { color: var(--bad-ink); font-size: 13px; }
+.ac-warn { background: var(--warn-bg); border: 1px solid var(--warn-bd); border-radius: 8px;
+    padding: 8px 12px; font-size: 13px; margin: 10px 0; }
+
+/* The gap while the model thinks — the block-level backend sends nothing until the
+   first content, so without this the reply area is blank. */
+.ac-spinner { display: inline-flex; align-items: center; gap: 5px; padding: 6px 2px; }
+.ac-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--border-strong);
+    animation: ac-spin 1.2s infinite ease-in-out both; }
+.ac-dot:nth-child(2) { animation-delay: .15s; }
+.ac-dot:nth-child(3) { animation-delay: .3s; }
+.ac-sp-label { color: var(--muted); font-size: 12px; font-style: italic; margin-left: 2px; }
+@keyframes ac-spin { 0%, 80%, 100% { transform: scale(.6); opacity: .35 } 40% { transform: scale(1); opacity: 1 } }
+
+/* ═══ The composer ═══ */
+/* Fixed to the viewport bottom: main is a scrolling document with no height
+   contract, so a full-height flex shell would mean scoping 100vh onto this page
+   alone. The inner row holds the log's 1080px so the two line up. */
+.ac-dock { position: fixed; bottom: 0; left: 0; right: 0; background: var(--raised);
+    border-top: 1px solid var(--border); }
+/* 28px, main's own side padding: below the width the column can hold, the row
+   then narrows exactly as the log above it does instead of drifting wider. */
+.ac-composer { max-width: 1080px; margin: 0 auto; padding: 10px 28px; display: flex; gap: 8px; }
+.ac-view-only { color: var(--muted); font-size: 13px; font-style: italic; }
+.ac-input { flex: 1; font: inherit; padding: 9px 11px; border: 1px solid var(--border);
+    border-radius: 8px; }
+.ac-send { font: inherit; padding: 9px 16px; border-radius: 8px; border: 1px solid var(--accent);
+    background: var(--accent); color: var(--on-dark); cursor: pointer; }
+.ac-send:hover { background: var(--accent-deep); border-color: var(--accent-deep); }
+.ac-send:disabled { opacity: .5; cursor: default; }

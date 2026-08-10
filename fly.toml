@@ -1,0 +1,41 @@
+# Fly.io deployment. The GitHub integration builds this repo's Dockerfile on push;
+# there is no deploy workflow and no token in the repo.
+#
+# No credential is in this file. ANTHROPIC_API_KEY is a secret, set out of band
+# with `fly secrets set`; Fly injects it into the machine's environment, where the
+# Claude Code CLI that claude-agent-sdk spawns picks it up. That environment is
+# the single auth seam — a subscription-authenticated deploy swaps in
+# CLAUDE_CODE_OAUTH_TOKEN and drops the API key without touching the image. See
+# the README for why the two must not both be set.
+#
+# No [deploy] release_command: a release command runs on a temporary machine with
+# no volume attached, so it cannot reach /data/app.db. `alembic upgrade head` runs
+# in docker-entrypoint.sh instead, on the machine that owns the volume.
+
+app = "carbonpaper"
+primary_region = "iad"
+
+[build]
+
+[env]
+  CARBONPAPER_DB_PATH = "/data/app.db"
+  CARBONPAPER_PROJECTS_DIR = "/data/projects"
+
+# One machine, one volume. The document store is SQLite on this volume and the
+# projects/frames trees are plain files beside it, so a second machine would be a
+# second, diverging workspace — not a replica.
+[[mounts]]
+  source = "carbonpaper_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 2
+  memory_mb = 2048

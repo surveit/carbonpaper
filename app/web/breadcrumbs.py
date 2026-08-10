@@ -104,8 +104,17 @@ def build_home_crumbs(here: str) -> list[Crumb]:
     return [_home(), _here(here)]
 
 
+def build_chat_crumbs(title: str | None) -> list[Crumb]:
+    """One agent chat session, under the session list."""
+    return [_home(), _link(_CHATS_LABEL, _CHATS_HREF), _here(title or _UNTITLED_SESSION)]
+
+
 # The trail's first rung renders the wordmark (_wordmark.html) rather than this text.
 _HOME_LABEL = "CarbonPaper"
+_CHATS_LABEL = "Chats"
+_CHATS_HREF = "/chat"
+# States the absence rather than naming the session something it is not called.
+_UNTITLED_SESSION = "Untitled session"
 # Their own prefix: a picker beside the thing it lists gets shadowed by that thing's
 # own `{id}` route, which matches "picker" as an id.
 _PICKERS = "/pickers"

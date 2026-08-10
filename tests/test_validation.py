@@ -100,14 +100,12 @@ def test_numeric_range_value_outside_bounds_warns():
     assert any("range" in msg for msg in msgs), msgs
 
 
-def test_no_schema_declared_returns_single_warning_and_no_error():
+def test_no_schema_declared_produces_no_issues():
+    # publish emits files, not a table, so declaring no schema is the expected case.
     report = validate_dataframe(pd.DataFrame({"a": [1]}), None, stage_id="s", phase="input")
-    assert len(report.issues) == 1
-    issue = report.issues[0]
-    assert issue.severity == "warning"
-    assert issue.column is None
-    assert issue.message == "No schema declared; skipping checks."
+    assert report.issues == []
     assert report.ok
+    assert report.rows == 1
 
 
 def test_missing_declared_column_errors():

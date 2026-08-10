@@ -32,13 +32,24 @@
   .app-side { position: static; }
 }
 
-.app-side-brand {
-    display: block;
-    text-decoration: none;
-    color: var(--fg);
+/* The sidebar's heading line: the project it names, and the control that hides it.
+   The rule under them belongs to the line, not to the link, so it still spans the
+   whole column once the toggle shares the row. */
+.app-side-head {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
     padding: 4px 10px 12px;
     border-bottom: 1px solid var(--border);
     margin-bottom: 4px;
+}
+
+.app-side-brand {
+    display: block;
+    flex: 1;
+    min-width: 0;
+    text-decoration: none;
+    color: var(--fg);
 }
 
 .app-side-kicker {

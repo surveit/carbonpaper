@@ -57,7 +57,12 @@
   /* Same trap as .app-side: an author `display` rule would beat [hidden]. */
   .run-nav[hidden] { display: none; }
   .run-section[hidden] { display: none; }
-  .run-nav-head { display: flex; align-items: center; margin-bottom: 6px; }
+  /* The column's heading line. It is titled here rather than in the partials below
+     because the collapse control shares the line, and the title is the same whether
+     the version carries a guide or only the offer to write one. */
+  .run-nav-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .run-nav-head h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em;
+                     color: var(--muted); margin: 0; }
   .run-nav-head .drawer-btn { margin-left: auto; }
   .nav-expand { position: sticky; top: 0; align-self: start; }
   .run-main { min-width: 0; height: 100%; overflow-y: auto; padding-right: 6px; }
@@ -133,6 +138,7 @@
 </button>
 <div class="run-nav fade-scroll" id="run-nav">
   <div class="run-nav-head">
+    <h2>Review guide</h2>
     <button type="button" class="drawer-btn" id="nav-collapse"
             title="Hide the review guide" aria-label="Hide the review guide">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -142,7 +148,9 @@
     </button>
   </div>
   {% if guide %}
+  {% with titled_by_host = true %}
   {% include "_run_guide.html" %}
+  {% endwith %}
   {% else %}
   {% with guide_version_id = header.version.version_id %}
   {% include "_generate_guide.html" %}

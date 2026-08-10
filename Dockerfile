@@ -1,0 +1,50 @@
+FROM python:3.12-slim
+
+# curl + ca-certificates fetch the Claude Code CLI installer below; git is what the
+# CLI itself shells out to. No compiler: every package uv.lock pins resolves to a
+# manylinux x86_64 or pure-python wheel on this base, starlark-pyo3's compiled
+# extension (manylinux_2_17) included, so there is nothing to build from source.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl git \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+WORKDIR /app
+
+# --frozen: install exactly what uv.lock pins, and fail the build if the lock has
+# drifted from pyproject.toml rather than quietly re-resolving to newer versions.
+# --no-dev leaves the test/lint group out of the image. `[tool.uv] package = false`
+# means nothing is built from this directory, so only these two files are needed.
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev --no-cache
+ENV PATH="/app/.venv/bin:${PATH}"
+
+# The standalone native installer: no Node.js in the image. It needs only bash,
+# curl and coreutils, and installs under $HOME rather than system-wide — as root
+# with SUDO_USER unset, that is /root/.local/bin/claude, which the PATH below puts
+# where app.core.llm_sdk's shutil.which("claude") looks.
+#
+# `claude --version` is a BUILD GATE, not a smoke test: the installer places the
+# binary itself, so a release that moves it would otherwise produce an image that
+# builds clean and then fails every llm_transform stage at run time.
+RUN curl -fsSL https://claude.ai/install.sh | bash
+ENV PATH="/root/.local/bin:${PATH}"
+RUN claude --version
+
+COPY alembic.ini ./
+COPY alembic ./alembic
+COPY app ./app
+COPY docker-entrypoint.sh ./
+RUN chmod +x docker-entrypoint.sh
+
+# The volume Fly mounts at /data holds both: app.core.store_config computes the
+# frames root from the database path's own directory, so pinning the database
+# carries the frames with it and CARBONPAPER_FRAMES_ROOT stays unset.
+ENV CARBONPAPER_DB_PATH=/data/app.db \
+    CARBONPAPER_PROJECTS_DIR=/data/projects \
+    PYTHONUNBUFFERED=1
+
+EXPOSE 8080
+
+ENTRYPOINT ["./docker-entrypoint.sh"]

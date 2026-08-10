@@ -17,7 +17,8 @@
            back link of its own. A page with no trail to pass (an error, a partial
            rendered standalone) falls back to the bare brand rather than nothing. #}
         {% block breadcrumbs %}<a href="/" class="brand">{% include "_wordmark.html" %}</a>{% endblock %}
-        <a href="/admin" class="back-link header-right">Admin</a>
+        <a href="/chat" class="back-link header-right">Chats</a>
+        <a href="/admin" class="back-link">Admin</a>
     </header>
     <main>
         {% block content %}{% endblock %}

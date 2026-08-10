@@ -1,8 +1,53 @@
-# Tool configuration only — the app is run from source (uvicorn app.main:app),
-# not installed as a package.
+# Dependencies + tool configuration. The app is still run from source (uvicorn
+# app.main:app) and is NOT installed as a package — `[tool.uv] package = false`
+# below is what keeps `uv sync` from trying to build it. The `[project]` table
+# exists so uv can resolve and LOCK the dependency set into uv.lock; that lock is
+# what CI and the container image install from.
 #
 # Lint/typecheck scope: ruff respects .gitignore, so examples/ and saydo/
 # (generated + scratch content) are skipped via the ignore file, not here.
+
+[project]
+name = "carbonpaper"
+version = "0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "jinja2>=3.1",
+    "pandas>=2.0",
+    "pyarrow>=15.0",
+    "openpyxl>=3.1",           # .xlsx reader behind input_data format=xlsx
+    "python-multipart>=0.0.9",
+    "claude-agent-sdk>=0.2.10", # real LLM backend for llm_transform stages (needs the claude CLI installed)
+    "mcp>=1.23",               # streamable-HTTP MCP server (app/mcp) — already a claude-agent-sdk dependency
+    "alembic>=1.18",           # data migrations for the document store (alembic/versions)
+    "pydantic>=2",             # stage/schema contract models (app/models)
+    "starlark-pyo3==2026.1",   # sandboxed interpreter for starlark_row_function stages
+]
+
+# Dev/test-only. `uv sync` installs these by default; the container image passes
+# --no-dev so none of it ships. Lint + typecheck are pinned EXACTLY (stubs
+# included) so a new rule or stub release cannot break CI on its own; bump
+# deliberately.
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "httpx>=0.27",              # fastapi.testclient (starlette TestClient) transport
+    "ruff==0.15.20",
+    "mypy==2.1.0",
+    "import-linter==2.13",      # architecture-boundary contracts in [tool.importlinter]
+    "radon==6.0.1",             # cyclomatic-complexity ratchet in tests/arch/test_complexity_ratchet.py
+    "pandas-stubs==3.0.3.260530",
+    "types-PyYAML==6.0.12.20250516",   # stubs for `import yaml` in app/services/eval_store.py
+    "types-openpyxl==3.1.5.20260724",  # stubs for `import openpyxl` in tests/test_xlsx_input.py
+]
+
+[tool.uv]
+# The repo is a dependency set, not a distribution: there is no package to build
+# and app/ is imported from the working directory. Without this uv sync fails
+# trying to build `carbonpaper` as a wheel.
+package = false
 
 [tool.ruff]
 target-version = "py312"
@@ -23,7 +68,7 @@ files = ["app", "tools", "tests"]
 # would make mypy see each file under two names (test_x AND tests.test_x) and
 # fail with "Source file found twice under different module names".
 # No blanket ignore_missing_imports: pandas-stubs and types-PyYAML are installed
-# via requirements-dev.txt, and the other deps ship their own types.
+# via the `dev` dependency group, and the other deps ship their own types.
 
 # pyarrow is the exception: its compiled `pyarrow.lib` extension ships no
 # py.typed marker, so mypy can't analyze `import pyarrow` under CI (a locally

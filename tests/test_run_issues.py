@@ -1,7 +1,8 @@
 """The run page's issue index (app/web/run_issues.py + _run_issues.html).
 ONE list: the stop that ended the run is a line of it like any other. The two
-stories a stop can be telling ("the data changed" / "the code broke") must still
-read apart at a glance, because they route to different people.
+three failures a stop can be reporting — the stage's output, the input its author
+refused, the code — must still read apart at a glance, because they route to
+different people.
 """
 from __future__ import annotations
 
@@ -11,7 +12,7 @@ from app.models import StepRefused, parse_stage
 from app.models.run_manifest import SCHEMA_REFUSAL_ERROR_TYPE
 from app.web.config import templates
 from app.web.panel_links import AppPanelLinks
-from app.web.run_issues import build_run_issues
+from app.web.run_issues import StopKind, build_run_issues
 
 PROJECT = "issues"
 RUN = "20260806T090100"
@@ -110,7 +111,7 @@ def test_a_data_refusal_reads_as_the_data_question_the_message_already_asks():
 
     stop = issues.stopped[0]
     assert stop.stage_id == "classify_issues"
-    assert stop.refused_data
+    assert stop.kind is StopKind.schema
     # The line is the report's own wording — the panel and the index cannot drift.
     assert [(i.column, i.message) for i in stop.issues] == [("issue_type", ENUM_MESSAGE)]
 
@@ -119,7 +120,7 @@ def test_a_transform_exception_stays_engineer_facing_in_the_same_section():
     issues = build_run_issues(_manifest(_crash("publish_report")), None)
 
     stop = issues.stopped[0]
-    assert not stop.refused_data
+    assert stop.kind is StopKind.crash
     assert (stop.error_type, stop.error_message) == ("KeyError", "'client_name'")
     assert stop.traceback is not None
 
@@ -128,7 +129,7 @@ def test_an_authored_refusal_is_the_datas_story_not_the_codes():
     """`raise StepRefused(...)` is a step declining its input, not a bug in it."""
     stop = build_run_issues(_manifest(_refused("publish_workbook")), None).stopped[0]
 
-    assert stop.refused_data
+    assert stop.kind is StopKind.refused
     assert stop.error_message == REFUSAL_REASON
 
 
@@ -240,8 +241,10 @@ def _render(manifest: dict[str, Any], stages: Any = None) -> str:
     )
 
 
-def test_the_two_stop_stories_are_labelled_apart_in_the_markup():
+def test_each_stop_story_is_worded_apart_in_the_markup():
     assert "the data changed" in _render(_manifest(_refusal("classify_issues")))
+    assert ("Input validation failed on publish_workbook"
+            in _render(_manifest(_refused("publish_workbook"))))
     assert "the code broke" in _render(_manifest(_crash("publish_report")))
 
 
@@ -259,7 +262,7 @@ def test_a_crash_deep_links_the_panels_transform_tab_instead():
 def test_an_authored_refusal_leads_with_its_reason_and_not_its_exception_name():
     html = _render(_manifest(_refused("publish_workbook")))
 
-    assert "the data changed" in html
+    assert "Input validation failed on publish_workbook" in html
     assert "which this workbook has no wording for" in html
     assert StepRefused.__name__ not in html
     assert 'data-stage-tab="transform"' in html

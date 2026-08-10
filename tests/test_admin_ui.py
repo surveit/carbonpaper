@@ -1,12 +1,11 @@
-"""Isolated by repointing the projects root and admin.py's own captured
-REPO_ROOT; patching only one leaves the tests writing into the real workspace.
+"""Isolated by repointing the projects root, so the tests never read or write
+the real workspace.
 """
 from __future__ import annotations
 
 import pytest
 from fastapi.testclient import TestClient
 
-import app.web.routers.admin as admin_router
 from app.main import app
 from app.services import project, workspace
 from app.services.project import WorkflowFile
@@ -17,15 +16,11 @@ _LOBBYING = "lobbying_issue_triage"
 
 
 @pytest.fixture(autouse=True)
-def workspace_root(tmp_path, monkeypatch):
-    """A fresh projects root plus its containing repo
-    root (admin_router.REPO_ROOT, the base for exported bundles) — the same
-    examples/ + exports/ layout the real repo has, so path handling in
-    export_project matches production."""
+def workspace_root(tmp_path):
+    """A fresh projects root — the examples/ layout the real repo has."""
     examples_dir = tmp_path / "examples"
     examples_dir.mkdir()
     workspace.set_projects_dir(examples_dir)
-    monkeypatch.setattr(admin_router, "REPO_ROOT", tmp_path, raising=False)
     return examples_dir
 
 
@@ -54,15 +49,14 @@ def test_loading_the_same_bundle_twice_does_not_crash(workspace_root):
     assert _LOBBYING in project.list_projects()
 
 
-def test_export_project_writes_a_workflow_file_json(workspace_root):
+def test_download_returns_the_workflow_file_as_an_attachment(workspace_root):
     client.post(f"/admin/load/{_LOBBYING}", follow_redirects=False)
 
-    r = client.post(f"/admin/export/{_LOBBYING}", follow_redirects=False)
+    r = client.get(f"/admin/export/{_LOBBYING}")
 
-    assert r.status_code == 303
-    dest = admin_router.REPO_ROOT / "exports" / f"{_LOBBYING}.json"
-    assert dest.is_file()
-    wf = WorkflowFile.model_validate_json(dest.read_text(encoding="utf-8"))
+    assert r.status_code == 200
+    assert r.headers["content-disposition"] == f'attachment; filename="{_LOBBYING}.json"'
+    wf = WorkflowFile.model_validate_json(r.content)
     assert wf.name == _LOBBYING
     assert {stage.id for stage in wf.stages} == {
         "raw_filings", "classify_issues", "rank_by_spend", "publish_report",
@@ -74,6 +68,66 @@ def test_load_unknown_bundle_is_a_clean_404():
     assert r.status_code == 404
 
 
-def test_export_unknown_project_is_a_clean_404():
-    r = client.post("/admin/export/does_not_exist", follow_redirects=False)
+def test_download_unknown_project_is_a_clean_404():
+    r = client.get("/admin/export/does_not_exist")
     assert r.status_code == 404
+
+
+# ─── Upload ───────────────────────────────────────────────────────────────────
+
+
+def _upload(payload: bytes, filename: str = "bundle.json"):
+    return client.post(
+        "/admin/import",
+        files={"file": (filename, payload, "application/json")},
+        follow_redirects=False,
+    )
+
+
+def test_a_downloaded_bundle_uploads_back_into_an_empty_workspace(workspace_root):
+    client.post(f"/admin/load/{_LOBBYING}", follow_redirects=False)
+    downloaded = client.get(f"/admin/export/{_LOBBYING}").content
+    _empty_workspace(workspace_root.parent / "second")
+
+    r = _upload(downloaded)
+
+    assert r.status_code == 303
+    assert _LOBBYING in project.list_projects()
+    assert client.get(f"/admin/export/{_LOBBYING}").content == downloaded
+
+
+def test_uploading_a_bundle_whose_project_exists_leaves_it_alone(workspace_root):
+    client.post(f"/admin/load/{_LOBBYING}", follow_redirects=False)
+    downloaded = client.get(f"/admin/export/{_LOBBYING}").content
+
+    r = _upload(downloaded)
+
+    assert r.status_code == 303
+    assert "already+exists" in r.headers["location"]
+
+
+def _empty_workspace(root):
+    """A second workspace — own projects root AND own store, since identity is a store record."""
+    from app.core.persistence import SqliteKvStore, configure_store
+
+    root.mkdir(parents=True, exist_ok=True)
+    workspace.set_projects_dir(root)
+    configure_store(SqliteKvStore(":memory:"))
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        b"{not json at all",
+        b'{"name": "half_a_bundle", "document": "hi"}',
+        b'{"name": "bad_stage", "document": "hi", "model": "sonnet", "source": "test",'
+        b' "data_model": {"schemas": []}, "stages": [{"id": "s", "type": "not_a_type"}]}',
+    ],
+    ids=["unparseable", "missing_fields", "unknown_stage_type"],
+)
+def test_a_malformed_upload_400s_and_writes_no_project(payload):
+    r = _upload(payload)
+
+    assert r.status_code == 400
+    assert "not a valid WorkflowFile document" in r.json()["detail"]
+    assert project.list_projects() == []
