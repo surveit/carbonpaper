@@ -7,7 +7,6 @@ Routes under test:
 from __future__ import annotations
 
 import io
-import json
 from pathlib import Path
 
 import pandas as pd
@@ -18,6 +17,7 @@ import app.web.loading as loading
 from app.web.loading import render_frame_as_text
 from app.main import app
 from app.services import workspace
+from run_seed import read_manifest, store_manifest
 
 PROJ = "testmeth"
 RUN = "run-0001"
@@ -55,7 +55,7 @@ def _write_run(
             }
         ],
     }
-    (run_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    store_manifest(run_dir.parent.parent, run_dir.name, manifest)
     return run_dir
 
 
@@ -227,9 +227,9 @@ def test_rows_404_when_output_file_missing(examples_dir, client):
 
 def test_rows_rejects_output_path_outside_run_dir(examples_dir, client):
     run_dir = _write_run(examples_dir, _df(2))
-    manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
+    manifest = read_manifest(run_dir.parent.parent, run_dir.name)
     manifest["stage_records"][0]["output_path"] = "../../../../etc/passwd"
-    (run_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    store_manifest(run_dir.parent.parent, run_dir.name, manifest)
     r = client.get(f"/project/{PROJ}/runs/{RUN}/stage/{STAGE}/rows")
     assert r.status_code == 404
 

@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.services import workspace
+from run_seed import store_manifest
 
 client = TestClient(app)
 
@@ -28,7 +29,7 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     manifest = json.loads((GOLDENS / "ok_run.json").read_text(encoding="utf-8"))
     run_dir = pdir / "runs" / manifest["run_id"]
     run_dir.mkdir(parents=True)
-    (run_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    store_manifest(run_dir.parent.parent, run_dir.name, manifest)
     return pdir
 
 

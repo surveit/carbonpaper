@@ -44,7 +44,7 @@ hands them in. `app/services/run.py` is the one place that composes this, and an
 import-linter contract keeps `runner.py` free of `app.services` so the arrow between the two
 points one way; `app/cli.py` drives that same seam. Per stage: validate
 inputs, reject duplicate rows, dispatch, validate output, write `outputs/<stage>.parquet`,
-flush `manifest.json` mid-run; halt-on-review + resume; per-run `--limit`/`--offset`
+flush the run's stored manifest mid-run; halt-on-review + resume; per-run `--limit`/`--offset`
 capping the rows a stage READS (cut off its inputs before its handler runs);
 `field_checks`. `stages/` — one module per type. `llm.py`/`options.py` — the agent
 backend (no fallback). `preview.py` — scratch re-runs.

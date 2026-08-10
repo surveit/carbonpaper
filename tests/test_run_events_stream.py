@@ -30,7 +30,7 @@ def _seed_run(tmp_path: Path, monkeypatch, events: list[dict]) -> str:
         input_bindings={},
     )
     manifest.status = RunStatus.OK
-    write_manifest(run_dir, manifest)
+    write_manifest(manifest)
     (run_dir / "events.jsonl").write_text(
         "".join(json.dumps(e) + "\n" for e in events), encoding="utf-8"
     )

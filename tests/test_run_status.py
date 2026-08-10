@@ -17,6 +17,7 @@ from app.services.project import save_working_copy_as_version
 from app.services import workspace
 from conftest import pinned_stages
 from stage_seed import add_stage
+from run_seed import manifest_text
 
 # The exact value sets, collected by grepping every `record["status"]` /
 # `manifest["status"]` literal the runner writes (app/runtime/runner.py) and
@@ -108,8 +109,7 @@ def test_a_real_run_produces_enum_statuses_that_round_trip_to_bare_strings(tmp_p
 
     # On disk — what templates/JS actually read — it round-trips to a bare
     # JSON string, with no trace of the enum class name.
-    run_dir = tmp_path / "runs" / manifest["run_id"]
-    raw_text = (run_dir / "manifest.json").read_text(encoding="utf-8")
+    raw_text = manifest_text(tmp_path, manifest["run_id"])
     on_disk = json.loads(raw_text)
     assert on_disk["status"] == "ok"
     assert on_disk["stage_records"][0]["status"] == "ok"

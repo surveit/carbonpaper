@@ -250,7 +250,7 @@ async def run_status(project: str, run_id: str):
     """Lightweight JSON for the live poller: current status, per-stage statuses,
     counts, and a freshly-built mermaid graph. Lets the run page update progress
     in place (no full-page reload) so it stays clickable while running."""
-    manifest = load_manifest(runs_dir(project) / run_id)
+    manifest = load_manifest(project, run_id)
     mstages = manifest.get("stage_records", [])
     status_by_id = {s["stage_id"]: s.get("status", "") for s in mstages}
     graph = build_run_graph(project, manifest, status_by_id)
@@ -322,14 +322,14 @@ async def stream_run_events(
     stage's own events, which is what the stage panel's log opens on.
     """
     run_dir = runs_dir(project) / run_id
-    load_manifest(run_dir)  # 404s if the run doesn't exist
+    load_manifest(project, run_id)  # 404s if the run doesn't exist
     start = (
         _tail_start_seq(run_dir / "events.jsonl", tail, stage)
         if from_seq is None
         else max(from_seq, 0)
     )
     return StreamingResponse(
-        _tail_run_events(run_dir, request, start, stage),
+        _tail_run_events(project, run_id, run_dir, request, start, stage),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
@@ -378,7 +378,7 @@ async def run_events_page(
     # page would be a second route to the same events with its own cursor to
     # keep in step; there is nothing for it to do.
     run_dir = runs_dir(project) / run_id
-    load_manifest(run_dir)  # 404s if the run doesn't exist
+    load_manifest(project, run_id)  # 404s if the run doesn't exist
     limit = max(1, min(limit, EVENT_PAGE_MAX))
     return _page_before(run_dir / "events.jsonl", before_seq, limit, stage)
 
@@ -405,7 +405,8 @@ def _page_before(
 
 
 async def _tail_run_events(
-    run_dir: Path, request: Request, from_seq: int, stage: str | None = None
+    project: str, run_id: str, run_dir: Path, request: Request, from_seq: int,
+    stage: str | None = None,
 ) -> AsyncIterator[str]:
     """Drain runs/<id>/events.jsonl as it grows, ending on the run_done marker."""
     # The same generator serves a FINISHED run: it drains the file and ends, so
@@ -433,7 +434,7 @@ async def _tail_run_events(
         # Fallback stop: if the writer never wrote run_done (a crash mid-run),
         # end once the manifest has settled AND a couple of polls added nothing,
         # so a client never hangs on an interrupted run.
-        if _find_terminal_status(run_dir) is not None:
+        if _find_terminal_status(project, run_id) is not None:
             idle_polls = 0 if new else idle_polls + 1
             if idle_polls >= _IDLE_POLLS_BEFORE_TERMINAL_STOP:
                 yield "event: done\ndata: {}\n\n"
@@ -441,16 +442,16 @@ async def _tail_run_events(
         await asyncio.sleep(_EVENT_POLL_INTERVAL_S)
 
 
-def _find_terminal_status(run_dir: Path) -> str | None:
+def _find_terminal_status(project: str, run_id: str) -> str | None:
     """This run's settled status, or None while it is still running."""
-    status = load_manifest(run_dir).get("status")
+    status = load_manifest(project, run_id).get("status")
     return None if status == RunStatus.RUNNING else status
 
 
 @router.get("/project/{project}/runs/{run_id}", response_class=HTMLResponse)
 async def run_detail(request: Request, project: str, run_id: str):
     run_dir = runs_dir(project) / run_id
-    manifest = load_manifest(run_dir)
+    manifest = load_manifest(project, run_id)
     status_by_id = {s["stage_id"]: s.get("status", "") for s in manifest.get("stage_records", [])}
     graph = build_run_graph(project, manifest, status_by_id)
 
@@ -514,9 +515,7 @@ async def resume_run_route(project: str, run_id: str):
     project_dir = projects_dir() / project
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
-    run_dir = runs_dir(project) / run_id
-    if not (run_dir / "manifest.json").exists():
-        raise HTTPException(status_code=404, detail="Run not found")
+    load_manifest(project, run_id)  # 404s if the run doesn't exist
     # Resume executes the version the run PINNED, so that snapshot is what has to
     # load — validating the live working copy here would block resuming a valid
     # run because of an unrelated edit. The seam loads it synchronously and only
@@ -542,8 +541,7 @@ async def cancel_run_route(project: str, run_id: str):
     no-op on a run that is already terminal — cancelling only means something
     while the run is still `running` — but redirects back either way, same as
     resume, so the page's poller/reload handles the rest."""
-    run_dir = runs_dir(project) / run_id
-    manifest = load_manifest(run_dir)  # 404s if the run doesn't exist
+    manifest = load_manifest(project, run_id)  # 404s if the run doesn't exist
     if manifest.get("status") == RunStatus.RUNNING:
         request_cancel(project, run_id)
     return RedirectResponse(

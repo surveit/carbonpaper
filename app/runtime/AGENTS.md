@@ -10,8 +10,8 @@ a production run. An import-linter contract forbids `app/runtime/runner.py` from
 ## `runner.py` — the executor
 `topological_sort` → `execute_run(project_dir, repo_root, stages, workflow_version)`. Per
 stage: validate declared inputs (`validation.py`), reject duplicate input rows, dispatch to
-the type's handler, validate the output, write `outputs/<stage>.parquet`, append to
-`manifest.json`.
+the type's handler, validate the output, write `outputs/<stage>.parquet`, flush the
+run's stored manifest (`run/<project>/<run_id>`).
 - **Duplicate-input throw (every stage type):** fails the stage if any input dataframe has
   exact duplicate full-content rows — the error names the input id + 0-based row numbers.
   Identity is a content hash over the whole row. If N draws per row are intended, add an explicit row_id upstream.
@@ -125,4 +125,5 @@ python -m app.cli <project>
 package: it drives `app/services/run.py` (which resolves the newest published version and
 loads its stages), never `runner.py` directly. `<project>` is a
 NAME under the projects root, so a project outside it needs `CARBONPAPER_PROJECTS_DIR`.
-Outputs: `runs/<id>/{manifest.json, events.jsonl, outputs/*.parquet, artifacts/, queue/}`.
+Outputs: the stored `run/<project>/<run_id>` manifest, plus
+`runs/<id>/{events.jsonl, outputs/*.parquet, artifacts/, queue/}`.

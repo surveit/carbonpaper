@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 
 import pandas as pd
 
@@ -14,6 +13,7 @@ from app.services import versioning
 from app.services.project import save_working_copy_as_version
 from conftest import pinned_stages, resumed_stages
 from stage_seed import add_stage
+from run_seed import read_manifest
 
 
 # The two shapes the fixtures below load: the (name, val) items csv, and the
@@ -110,7 +110,7 @@ def test_mid_run_cancel_preserves_the_completed_stages_output(tmp_path, monkeypa
     assert (run_dir / "outputs" / "load.parquet").exists()
     assert not (run_dir / "outputs" / "consume.parquet").exists()
 
-    on_disk = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
+    on_disk = read_manifest(run_dir.parent.parent, run_dir.name)
     assert on_disk["status"] == "cancelled"
     assert on_disk["cancelled_at"] == "consume"
 
@@ -193,7 +193,7 @@ def test_mid_stage_cancel_marks_the_running_stage_cancelled_not_pending(tmp_path
     assert not (run_dir / "outputs" / "score.parquet").exists()
     assert not (run_dir / "outputs" / "downstream.parquet").exists()
 
-    on_disk = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
+    on_disk = read_manifest(run_dir.parent.parent, run_dir.name)
     assert on_disk["status"] == "cancelled"
     assert on_disk["cancelled_at"] == "score"
 

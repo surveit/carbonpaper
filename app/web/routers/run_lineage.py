@@ -32,8 +32,7 @@ async def run_stage_lineage_panel(
     """The lineage page's Transform tab: the pinned stage definition, no output table."""
     # The row itself is already in the page's payload, marked against its parent
     # (app.web.trace_row_diff), so only the transform is fetched.
-    run_dir = runs_dir(project) / run_id
-    manifest = load_manifest(run_dir)
+    manifest = load_manifest(project, run_id)
     stage_record = next(
         (s for s in manifest.get("stage_records", []) if s.get("stage_id") == stage_id),
         None,
@@ -70,7 +69,7 @@ async def run_stage_row_trace(project: str, run_id: str, stage_id: str, row: int
     """One row's ancestry through row-preserving stages, as JSON."""
     # 404 if the run/stage is absent, 400 if the row ordinal is out of range.
     run_dir = runs_dir(project) / run_id
-    load_manifest(run_dir)  # 404s if the run doesn't exist
+    load_manifest(project, run_id)  # 404s if the run doesn't exist
     try:
         trace = trace_row(run_dir, stage_id, row)
     except StageNotInRun as exc:
@@ -91,7 +90,7 @@ async def run_stage_row_trace_view(
     # A numbered story and a graph toggle on top; clicking a stage loads the
     # row-trimmed panel below.
     run_dir = runs_dir(project) / run_id
-    manifest = load_manifest(run_dir)
+    manifest = load_manifest(project, run_id)
     try:
         trace = trace_row(run_dir, stage_id, row)
     except StageNotInRun as exc:

@@ -17,11 +17,11 @@ number or unsourced claim defeats the purpose. Two rules recur in the code:
   `working_copy` document, an ordered list of validated `Stage`s; a DAG of typed
   stages, every edge schema-validated).
 
-A project dir also holds `code/`, `data/`, `runs/<id>/` (outputs + `manifest.json`) —
+A project dir also holds `code/`, `data/`, `runs/<id>/` (stage output frames) —
 runtime data, not source. Everything else is a document in the store: the working
-copy (`working_copy`), the data model (`data_model`), versions
-(`workflow_version`), guides, drafts, and review decisions
-(`app.core.stage_cache`).
+copy (`working_copy`), the data model (`data_model`), the methodology
+(`methodology`), versions (`workflow_version`), run manifests (`run`), guides,
+drafts, and review decisions (`app.core.stage_cache`).
 
 ## The three features
 | Feature | Code | Status |

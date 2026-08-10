@@ -9,6 +9,7 @@ import pytest
 from app.core.run_status import RunStatus
 from app.services import workspace
 from app.web.run_index import build_run_index_rows
+from run_seed import store_manifest, store_manifest_text
 
 
 GOLDENS = Path(__file__).parent / "goldens"
@@ -23,12 +24,10 @@ def runs_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return runs
 
 
-def _write_run(runs: Path, run_id: str, manifest: object) -> None:
+def _write_run(runs: Path, run_id: str, manifest: dict) -> None:
     run_dir = runs / run_id
     run_dir.mkdir()
-    (run_dir / "manifest.json").write_text(
-        json.dumps(manifest, indent=2), encoding="utf-8"
-    )
+    store_manifest(run_dir.parent.parent, run_dir.name, manifest)
 
 
 def _current_manifest() -> dict[str, object]:
@@ -66,9 +65,7 @@ def test_valid_and_legacy_manifests_listed_side_by_side(runs_root: Path):
 
 
 def test_unparseable_json_is_corrupt_not_zero(runs_root: Path):
-    run_dir = runs_root / "20260101T000002"
-    run_dir.mkdir()
-    (run_dir / "manifest.json").write_text("{ not json", encoding="utf-8")
+    store_manifest_text(runs_root.parent, "20260101T000002", "{ not json")
 
     row, = build_run_index_rows("demo")
     assert row.status == "corrupt"

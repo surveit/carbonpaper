@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 
 import pandas as pd
 import pytest
@@ -14,6 +13,7 @@ from app.services import workspace
 from app.services.project import save_working_copy_as_version
 from app.web.routers.runs import _collect_limits
 from stage_seed import add_stage
+from run_seed import read_manifest
 
 client = TestClient(app)
 
@@ -84,7 +84,7 @@ def project(tmp_path, monkeypatch):
 
 def _manifest(proj):
     run_dir = sorted((proj / "runs").iterdir())[-1]
-    return json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
+    return read_manifest(run_dir.parent.parent, run_dir.name)
 
 
 def test_run_form_limit_field_becomes_a_manifest_limit_override(project):

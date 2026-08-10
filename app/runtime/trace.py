@@ -5,7 +5,6 @@ DAG, so later methodology edits don't affect it. Stays a single CHAIN even
 where a row has several parents, stopping where it cannot cross (`_split_spine`)."""
 from __future__ import annotations
 
-import json
 import math
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -22,7 +21,7 @@ from app.runtime.lineage import (
     RowParent,
     lineage_sidecar_path,
 )
-from app.runtime.manifest import resolve_output_path
+from app.runtime.manifest import read_run_manifest, resolve_output_path
 
 
 def _is_row_preserving(stage_type: str) -> bool:
@@ -71,10 +70,8 @@ class Trace:
 
 
 def _load_manifest(run_dir: Path) -> dict[str, Any]:
-    path = Path(run_dir) / "manifest.json"
-    if not path.exists():
-        raise FileNotFoundError(f"no manifest.json in {run_dir}")
-    return json.loads(path.read_text(encoding="utf-8"))
+    """The run's recorded manifest, found by the (project, run id) its dir names."""
+    return read_run_manifest(run_dir.parent.parent.name, run_dir.name).to_dict()
 
 
 def _stages_by_id(manifest: dict[str, Any]) -> dict[str, dict[str, Any]]:

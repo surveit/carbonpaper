@@ -21,7 +21,6 @@ from app.core.frames import write_frame_file, write_frame_file_with_csv_fallback
 from app.models import Stage, StageType, Workflow
 from app.models.run_manifest import (
     RowError,
-    RunManifest,
     SCHEMA_REFUSAL_ERROR_TYPE,
     StageContribution,
     StageErrorInfo,
@@ -33,7 +32,7 @@ from app.core.run_status import RunStatus, StageStatus
 from .cancellation import consume_cancel
 from .context import RunContext, RunIdentity
 from .errors import RunCancelled
-from .manifest import CONTRIBUTION_ATTR, create_run_manifest, write_manifest
+from .manifest import CONTRIBUTION_ATTR, RunManifest, create_run_manifest, write_manifest
 from .run_log import RUN_START, STAGE_DONE, STAGE_START, RunLog
 from .stages import HANDLERS, HaltForReview, StageHandler
 from .lineage import (
@@ -77,7 +76,7 @@ def run_subset(
     run_dir: Path,
     repo_root: Path,
     params: RunParameters = RunParameters(),
-    project: str | None = None,
+    project: str,
     workflow_version: str | None = None,
     identity: RunIdentity | None = None,
 ) -> dict[str, pd.DataFrame]:
@@ -93,9 +92,8 @@ def run_subset(
     failing stage's error before this raises — partial work is preserved for a
     caller to read back, not lost to a save-at-the-end.
 
-    `project`/`workflow_version` are the run's logical identity, recorded in the
-    manifest when a caller knows them and left None otherwise (never fabricated).
-    The run_id is `run_dir.name`.
+    `project` names the run; `workflow_version` is recorded when a caller knows
+    it and left None otherwise (never fabricated). The run_id is `run_dir.name`.
 
     Any input of a subset stage that names a stage outside the subset must appear in
     `injected_outputs`, or `_execute_stages` fails on it. Raises SubsetRunError if an
@@ -130,7 +128,7 @@ def run_subset(
     manifest = create_run_manifest(
         ordered, ctx, run_id=run_dir.name, project=project,
         workflow_version=workflow_version, input_bindings={})
-    write_manifest(run_dir, manifest)
+    write_manifest(manifest)
     outputs: dict[str, pd.DataFrame] = dict(injected_outputs)
     manifest = _execute_stages(ordered, ctx, manifest, run_dir, outputs)
     _raise_if_run_failed(manifest)
@@ -303,13 +301,11 @@ def _flush_manifest(
 ) -> None:
     """Write the manifest mid-run so the run page can show live progress (stages
     light up as they start/finish) instead of the whole pipeline running silently
-    and updating only at the very end. Persists a copy stamped with `updated_at`
-    and the given `status` (and the current per-stage records) WITHOUT mutating
-    the live manifest — so the final finalize-time write is not left carrying a
-    mid-run `updated_at` or a `running` status. The accumulated
-    human_review_queue_stats/dropped_columns already live on `manifest` (merged
-    per stage by
-    _merge_stage_contribution)."""
+    and updating only at the very end. Persists a COPY carrying `status` and the
+    current per-stage records, without mutating the live manifest — so the final
+    finalize-time write is not left carrying a mid-run `running` status. The
+    accumulated human_review_queue_stats/dropped_columns already live on
+    `manifest` (merged per stage by _merge_stage_contribution)."""
     snapshot = manifest.model_copy(update={
         "stage_records": [
             records_by_id.get(s.id)
@@ -317,12 +313,8 @@ def _flush_manifest(
             for s in ordered
         ],
         "status": status,
-        "updated_at": datetime.now().isoformat(timespec="seconds"),
     })
-    try:
-        write_manifest(run_dir, snapshot)
-    except OSError:
-        pass
+    write_manifest(snapshot)
 
 
 def _gather_stage_inputs(
@@ -698,7 +690,7 @@ def _finalize_run_manifest(
             record.status for record in manifest.stage_records
         )
 
-    write_manifest(run_dir, manifest)
+    write_manifest(manifest)
     return manifest
 
 

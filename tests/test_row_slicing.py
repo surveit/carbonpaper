@@ -43,8 +43,7 @@ def _run(stages: list[Stage], tmp_path, name: str) -> dict[str, pd.DataFrame]:
     return run_subset(
         Workflow(stages=stages), injected_outputs={},
         stage_ids=[s.id for s in stages], run_dir=tmp_path / "runs" / name,
-        repo_root=tmp_path,
-    )
+        repo_root=tmp_path, project=(tmp_path / "runs" / name).parent.parent.name)
 
 
 def test_limit_caps_the_rows_a_frame_handler_is_given(tmp_path):

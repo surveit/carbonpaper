@@ -2,12 +2,12 @@
 shared `write_run` fixture builder the later trace tests reuse."""
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pandas as pd
 
 from app.runtime.lineage import lineage_sidecar_path
+from run_seed import store_manifest
 from app.runtime.trace import (
     _is_row_preserving,
     _load_manifest,
@@ -49,12 +49,9 @@ def write_run(tmp_path: Path, stages: list[dict], run_id: str = "T1") -> Path:
             ],
             "output_validation_report": None,
         })
-    (run_dir / "manifest.json").write_text(
-        json.dumps({"run_id": run_id, "started_at": run_id, "project": tmp_path.parent.name,
+    store_manifest(run_dir.parent.parent, run_dir.name, {"run_id": run_id, "started_at": run_id, "project": tmp_path.parent.name,
                     "workflow_version": run_id, "status": "ok",
-                    "human_review_queue_stats": {}, "stage_records": records}),
-        encoding="utf-8",
-    )
+                    "human_review_queue_stats": {}, "stage_records": records})
     return run_dir
 
 

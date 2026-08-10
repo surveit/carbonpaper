@@ -60,8 +60,7 @@ def test_union_concatenates_two_inputs_in_declared_order(tmp_path):
 
     outputs = run_subset(
         workflow, injected_outputs={},
-        stage_ids=["left", "right", "u"], run_dir=tmp_path / "runs" / "r1", repo_root=tmp_path,
-    )
+        stage_ids=["left", "right", "u"], run_dir=tmp_path / "runs" / "r1", repo_root=tmp_path, project=(tmp_path / "runs" / "r1").parent.parent.name)
 
     out = outputs["u"][["a", "b"]].reset_index(drop=True)
     expected = pd.concat([left, right], ignore_index=True)
@@ -79,8 +78,7 @@ def test_filter_rows_keeps_true_rows_in_order_with_columns_unchanged(tmp_path):
 
     outputs = run_subset(
         workflow, injected_outputs={},
-        stage_ids=["src", "f"], run_dir=tmp_path / "runs" / "r2", repo_root=tmp_path,
-    )
+        stage_ids=["src", "f"], run_dir=tmp_path / "runs" / "r2", repo_root=tmp_path, project=(tmp_path / "runs" / "r2").parent.parent.name)
 
     out = outputs["f"][["a", "b"]].reset_index(drop=True)
     expected = pd.DataFrame({"a": ["x", "z"], "b": [1, 2]})
@@ -96,8 +94,7 @@ def test_filter_rows_non_bool_return_is_a_loud_error(tmp_path):
     with pytest.raises(SubsetRunError) as exc_info:
         run_subset(
             workflow, injected_outputs={},
-            stage_ids=["src", "f"], run_dir=tmp_path / "runs" / "r3", repo_root=tmp_path,
-        )
+            stage_ids=["src", "f"], run_dir=tmp_path / "runs" / "r3", repo_root=tmp_path, project=(tmp_path / "runs" / "r3").parent.parent.name)
     assert "should_include" in str(exc_info.value)
     assert "bool" in str(exc_info.value)
 
@@ -114,8 +111,7 @@ def test_trace_walks_through_filter_rows_to_the_right_source_row(tmp_path):
 
     run_subset(
         workflow, injected_outputs={},
-        stage_ids=["src", "f"], run_dir=run_dir, repo_root=tmp_path,
-    )
+        stage_ids=["src", "f"], run_dir=run_dir, repo_root=tmp_path, project=(run_dir).parent.parent.name)
 
     # f's output row 1 ('z', b=2) is src's row 2 — the dropped row ('y') sits
     # between them, so the walk must follow recorded lineage, not ordinal.
@@ -139,8 +135,7 @@ def test_trace_walks_through_union_to_the_right_source_row_in_the_right_input(tm
 
     run_subset(
         workflow, injected_outputs={},
-        stage_ids=["left", "right", "u"], run_dir=run_dir, repo_root=tmp_path,
-    )
+        stage_ids=["left", "right", "u"], run_dir=run_dir, repo_root=tmp_path, project=(run_dir).parent.parent.name)
 
     # union output row 3 is right's row 1 ('r1') — left has only 2 rows, so a
     # positional walk (matching ordinal 3 in 'left') would be plain wrong.
@@ -174,8 +169,7 @@ def test_trace_follows_lineage_after_a_limit_caps_what_the_filter_reads(tmp_path
 
     outputs = run_subset(
         workflow, injected_outputs={},
-        stage_ids=["src", "f"], run_dir=run_dir, repo_root=tmp_path,
-    )
+        stage_ids=["src", "f"], run_dir=run_dir, repo_root=tmp_path, project=(run_dir).parent.parent.name)
 
     # src row 2 ('z') would also have passed the predicate — it is outside the
     # window, so it was never offered to it.
@@ -206,6 +200,5 @@ def test_a_row_mapper_that_may_not_drop_still_rejects_a_none_row(tmp_path):
         run_subset(
             workflow, injected_outputs={},
             stage_ids=["src", "m"], run_dir=tmp_path / "runs" / "none_row",
-            repo_root=tmp_path,
-        )
+            repo_root=tmp_path, project=(tmp_path / "runs" / "none_row").parent.parent.name)
     assert "must return a dict per row" in str(exc_info.value)

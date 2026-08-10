@@ -20,7 +20,6 @@ from app.web.loading import (
     load_queue_fingerprints,
     load_stages,
     queue_snapshot,
-    runs_dir,
 )
 from app.web.queue_view import build_queue_page, find_definition_drift, require_reviewed_column
 
@@ -30,7 +29,7 @@ router = APIRouter()
 @router.get("/project/{project}/runs/{run_id}/queue/{stage_id}", response_class=HTMLResponse)
 async def queue_page(request: Request, project: str, run_id: str, stage_id: str):
     """Reviewer UI for one queue stage in one run."""
-    manifest = load_manifest(runs_dir(project) / run_id)
+    manifest = load_manifest(project, run_id)
     stage_def = _require_queue_stage(load_stages(project).stages, stage_id)
     queue = _require_queue_config(stage_def)
 

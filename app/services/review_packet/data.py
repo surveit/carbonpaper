@@ -40,11 +40,13 @@ def write_packet_data(
     project_dir: Path,
     view: RunView,
     workflow: str | None,
+    manifest: str,
     stage_sources: dict[str, Path | None],
 ) -> DataReport:
-    # `workflow` is the pinned version as JSON, or None when it could not be read.
     report = DataReport(written=[], omitted=[])
-    _copy_run_records(root, run_dir, report)
+    # `workflow` is the pinned version as JSON, or None when it could not be read;
+    # `manifest` is this run's recorded manifest, already serialized by the caller.
+    _write_run_records(root, run_dir, manifest, report)
     _write_workflow(root, workflow, view, report)
     _copy_document(root, project_dir, report)
     for stage in view.stages:
@@ -56,9 +58,11 @@ def write_packet_data(
     return report
 
 
-def _copy_run_records(root: Path, run_dir: Path, report: DataReport) -> None:
+def _write_run_records(
+    root: Path, run_dir: Path, manifest: str, report: DataReport
+) -> None:
     # events.jsonl carries the LLM prompts — the only record of what a model was asked.
-    _copy_file(run_dir / MANIFEST_FILE, root / MANIFEST_FILE, MANIFEST_FILE, report)
+    _write_text(root / MANIFEST_FILE, manifest, MANIFEST_FILE, report)
     _copy_file(run_dir / EVENTS_FILE, root / EVENTS_FILE, EVENTS_FILE, report)
 
 

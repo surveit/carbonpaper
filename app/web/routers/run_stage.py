@@ -46,7 +46,7 @@ async def run_stage_partial(
 ):
     """Per-run stage detail panel — status, validation, preview, error trace."""
     run_dir = runs_dir(project) / run_id
-    manifest = load_manifest(run_dir)
+    manifest = load_manifest(project, run_id)
     stage_record = next(
         (s for s in manifest.get("stage_records", []) if s.get("stage_id") == stage_id),
         None,
@@ -121,7 +121,7 @@ async def run_stage_rows(
     as the stage diff wherever one exists, which `?raw=1` turns off. The page
     links to the uncapped CSV download."""
     run_dir = runs_dir(project) / run_id
-    stage_record = manifest_stage(run_dir, stage_id)
+    stage_record = manifest_stage(project, run_id, stage_id)
     selected = _parse_ordinals(ordinals)
     table = (
         loading.load_selected_output_rows(run_dir, stage_record.get("output_path"), selected)
@@ -143,7 +143,7 @@ async def run_stage_rows(
             # rows by position, which a subset cannot honour.
             "diff": (
                 None if selected is not None
-                else _build_full_rows_diff(project, run_dir, stage_id, stage_record)
+                else _build_full_rows_diff(project, run_id, run_dir, stage_id, stage_record)
             ),
             "raw": raw,
             "links": resolve_panel_links(project, run_id),
@@ -171,10 +171,10 @@ def _parse_ordinals(ordinals: str | None) -> list[int] | None:
 
 
 def _build_full_rows_diff(
-    project: str, run_dir: Path, stage_id: str, stage_record: dict[str, Any]
+    project: str, run_id: str, run_dir: Path, stage_id: str, stage_record: dict[str, Any]
 ) -> StageDiff | None:
     """The full-rows page's diff, over its own row budget — None where none is honest."""
-    manifest = load_manifest(run_dir)
+    manifest = load_manifest(project, run_id)
     return build_stage_diff(
         run_service.load_pinned_stage_def(project, manifest, stage_id).stage,
         run_dir,
@@ -190,7 +190,7 @@ async def run_stage_rows_csv(project: str, run_id: str, stage_id: str):
     # UTF-8 behind a byte-order mark, so accented rows survive Excel on
     # Windows — `csv_download_body` carries the why.
     run_dir = runs_dir(project) / run_id
-    stage_record = manifest_stage(run_dir, stage_id)
+    stage_record = manifest_stage(project, run_id, stage_id)
     df = read_output_df(run_dir, stage_record.get("output_path"))
     filename = f"{project}__{run_id}__{stage_id}.csv"
     return Response(
@@ -215,7 +215,7 @@ async def run_stage_scratch_preview(
     stage's first upstream input.
     """
     run_dir = runs_dir(project) / run_id
-    manifest = load_manifest(run_dir)
+    manifest = load_manifest(project, run_id)
 
     try:
         body = await request.json()

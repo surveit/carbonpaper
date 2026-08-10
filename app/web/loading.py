@@ -12,17 +12,12 @@ from typing import Any
 import pandas as pd
 from fastapi import HTTPException
 
-from app.core.errors import NoVersionToRunError, RunManifestNotJson, StageOutputMissing
+from app.core.errors import NoVersionToRunError, RunNotFoundError, StageOutputMissing
 from app.core.frames import list_rows, read_frame_file, render_frame_as_csv_text
 from app.models import Stage, StageType
+from app.models.run_manifest import records_a_test_run
 from app.models.stages.llm_transform import LLMTransformStage
-from app.models.run_manifest import (
-    find_manifest_backed_run_dirs,
-    read_run_manifest,
-    read_run_manifest_json,
-    records_a_test_run,
-)
-from app.runtime.manifest import resolve_output_path
+from app.runtime.manifest import list_run_entries, read_run_manifest, resolve_output_path
 from app.services.run import resolve_version
 from app.services.loader import (
     StageEntry,
@@ -74,7 +69,7 @@ def _build_project_card(p: Path) -> dict[str, Any] | None:
     has_workflow = n_stages > 0
     n_schemas = len(load_schemas(p.name))
     has_schemas = n_schemas > 0
-    n_runs = _count_runs_with_manifest(p / "runs")
+    n_runs = _count_real_runs(p.name)
     has_document = methodology_exists(p.name)
     if not (has_workflow or has_schemas or has_document):
         return None
@@ -90,20 +85,16 @@ def _build_project_card(p: Path) -> dict[str, Any] | None:
     }
 
 
-def _count_runs_with_manifest(rdir: Path) -> int:
-    """So an in-progress/abandoned run dir, or a workflow test's run, is never counted."""
-    return sum(1 for run in find_manifest_backed_run_dirs(rdir) if _manifest_counts_as_run(run))
-
-
-def _manifest_counts_as_run(run_dir: Path) -> bool:
-    """Not a test — the default for a manifest recording no such flag, i.e. every run before it."""
-    try:
-        manifest = read_run_manifest_json(run_dir)
-    except RunManifestNotJson:
-        # Dropped, not counted 'corrupt' (as the project's own runs summary does):
-        # a card's headline count must not advertise a run nothing can be read off.
-        return False
-    return not records_a_test_run(manifest)
+def _count_real_runs(project: str) -> int:
+    """So a workflow test's run is never counted."""
+    return sum(
+        # Read off the RAW payload, so a run written before a field was renamed
+        # still counts. A record that is not even JSON is dropped, not counted
+        # 'corrupt' (as the project's own runs summary does): a card's headline
+        # count must not advertise a run nothing can be read off at all.
+        1 for entry in list_run_entries(project)
+        if entry.raw is not None and not records_a_test_run(entry.raw)
+    )
 
 
 @dataclass
@@ -201,17 +192,18 @@ def runs_dir(project: str) -> Path:
     return projects_dir() / project / "runs"
 
 
-def load_manifest(run_dir: Path) -> dict[str, Any]:
-    """A run's manifest.json as a dict, or 404 if the run doesn't exist.
+def load_manifest(project: str, run_id: str) -> dict[str, Any]:
+    """A run's recorded manifest as a dict, or 404 if the run doesn't exist.
 
     Parses through the typed `RunManifest`, so every consumer sees one shape:
     the model normalizes a legacy (pre-fork-aware) scalar `halted_at` stage-id
     string into a one-element list (a template `{% for %}` would otherwise
     iterate a bare string character-by-character), and re-serializes with unset
     optional fields omitted — the same shape the executor persisted."""
-    if not (run_dir / "manifest.json").exists():
-        raise HTTPException(status_code=404, detail="Run not found")
-    return read_run_manifest(run_dir).to_dict()
+    try:
+        return read_run_manifest(project, run_id).to_dict()
+    except RunNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Run not found") from exc
 
 
 # ─── Tabular output previews ─────────────────────────────────────────────────
@@ -247,9 +239,9 @@ def csv_download_body(df: pd.DataFrame) -> bytes:
     return (_UTF8_BOM + render_frame_as_csv_text(df)).encode("utf-8")
 
 
-def manifest_stage(run_dir: Path, stage_id: str) -> dict[str, Any]:
+def manifest_stage(project: str, run_id: str, stage_id: str) -> dict[str, Any]:
     """The manifest record for one stage of a run; 404 if run or stage missing."""
-    manifest = load_manifest(run_dir)
+    manifest = load_manifest(project, run_id)
     stage_record = next(
         (s for s in manifest.get("stage_records", []) if s.get("stage_id") == stage_id),
         None,

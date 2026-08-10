@@ -16,6 +16,7 @@ from app.services.project import create_project
 from app.services.versioning import list_versions
 from app.services import workspace
 from stage_seed import add_stage
+from run_seed import manifest_exists, read_manifest
 
 client = TestClient(app)
 
@@ -31,9 +32,11 @@ def assert_run_ok(status: dict, project_dir, run_id: str) -> None:
     if status.get("status") == "ok":
         return
     detail = "manifest.json not found"
-    manifest_path = project_dir / "runs" / run_id / "manifest.json"
-    if manifest_path.exists():
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest_project = project_dir
+
+    manifest_run = run_id
+    if manifest_exists(manifest_project, manifest_run):
+        manifest = read_manifest(manifest_project, manifest_run)
         problems = [
             record for record in manifest.get("stage_records", [])
             if record and record.get("status") not in ("ok", "pending")
@@ -81,9 +84,7 @@ def test_offline_journey_reaches_a_published_artifact(journey_project, tmp_path)
     assert status["terminal"] is True
 
     # The manifest records the binding's provenance: a run-supplied path, hashed.
-    manifest = json.loads(
-        (journey_project / "runs" / run_id / "manifest.json").read_text(encoding="utf-8")
-    )
+    manifest = read_manifest(journey_project, run_id)
     binding = manifest["input_bindings"]["load"]
     assert binding["source"] == "run"
     assert binding["sha256"]

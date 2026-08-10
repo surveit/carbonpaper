@@ -17,7 +17,6 @@ from pydantic import ValidationError as PydanticValidationError
 from app.core.errors import MissingInputBindingError
 from app.core.frames import read_frame_file
 from app.models import Stage, StageType
-from app.models.run_manifest import read_run_manifest
 from app.models.run_parameters import RunParameters
 from app.models.stages.input_data import Connector, InputDataStage
 from app.core.run_status import StageStatus
@@ -26,6 +25,7 @@ from .context import RunContext
 from .executor import _execute_stages, topological_sort
 from .manifest import (
     create_run_manifest,
+    read_run_manifest,
     resolve_output_path,
     write_manifest,
 )
@@ -219,7 +219,7 @@ def prepare_run(
         workflow_version=workflow_version,
         input_bindings=input_records,
     )
-    write_manifest(run_dir, manifest)
+    write_manifest(manifest)
     return {"run_id": run_id, "run_dir": run_dir, "ctx": ctx,
             "ordered": ordered, "manifest": manifest}
 
@@ -273,7 +273,7 @@ def resume_run(
     is re-checked here, so stages for some other version fail loudly instead of
     silently executing a different workflow than the halted run did."""
     run_dir = project_dir / "runs" / run_id
-    manifest = read_run_manifest(run_dir)
+    manifest = read_run_manifest(project_dir.name, run_id)
 
     if manifest.workflow_version != workflow_version:
         raise ValueError(

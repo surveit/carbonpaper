@@ -2,7 +2,6 @@
 form, defaulting to the latest version when the form omits version_id."""
 from __future__ import annotations
 
-import json
 import time
 
 import pandas as pd
@@ -15,6 +14,7 @@ from app.main import app
 from app.services.project import save_working_copy_as_version
 from app.services.versioning import list_versions, publish_version
 from stage_seed import add_stage, set_stages
+from run_seed import read_manifest
 
 client = TestClient(app)
 
@@ -54,7 +54,7 @@ def project_two_versions(tmp_path, monkeypatch):
 
 def _manifest(proj):
     run_dir = sorted((proj / "runs").iterdir())[-1]
-    return json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
+    return read_manifest(run_dir.parent.parent, run_dir.name)
 
 
 def test_posted_version_id_pins_the_run(project_two_versions):

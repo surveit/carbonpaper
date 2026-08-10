@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import time
 
 import pandas as pd
@@ -13,7 +12,7 @@ from app.core.run_status import RunStatus
 from app.models import parse_stage, Workflow
 from app.runtime.runner import execute_run, resume_run
 from app.runtime.executor import _raise_if_run_failed, run_subset
-from app.models.run_manifest import RunManifest
+from app.runtime.manifest import RunManifest
 from app.runtime.trace import trace_row
 from app.runtime.stages import llm_transform as lt
 from app.services.loader import WorkflowLoadError
@@ -22,6 +21,7 @@ from app.services.project import save_working_copy_as_version
 from app.services.versioning import list_versions
 from conftest import pinned_stages, resumed_stages
 from stage_seed import add_stage
+from run_seed import read_manifest, store_manifest
 
 
 # The two shapes every fixture in this file loads: the (name, val) items csv and
@@ -76,7 +76,7 @@ def test_limit_on_a_source_stage_caps_the_rows_it_loads(tmp_path):
     out = pd.read_parquet(run_dir / "outputs" / "load.parquet")
     assert len(out) == 2
 
-    on_disk = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
+    on_disk = read_manifest(tmp_path, manifest["run_id"])
     assert on_disk["run_id"] == manifest["run_id"]
     assert on_disk["status"] == "ok"
 
@@ -104,9 +104,7 @@ def test_per_run_limit_and_offset_slice_and_are_recorded(tmp_path):
     assert any(n.startswith("offset=1") for n in notes)
     assert any(n.startswith("limit=3") for n in notes)
 
-    on_disk = json.loads(
-        (tmp_path / "runs" / manifest["run_id"] / "manifest.json")
-        .read_text(encoding="utf-8"))
+    on_disk = read_manifest(tmp_path, manifest["run_id"])
     assert on_disk["parameters"]["limits"] == {"load": 3}
     assert on_disk["parameters"]["offsets"] == {"load": 1}
 
@@ -119,9 +117,7 @@ def test_bust_cache_is_recorded_on_the_manifest(tmp_path):
     manifest = execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path), bust_cache=True)
 
     assert manifest["parameters"]["bust_cache"] is True
-    on_disk = json.loads(
-        (tmp_path / "runs" / manifest["run_id"] / "manifest.json")
-        .read_text(encoding="utf-8"))
+    on_disk = read_manifest(tmp_path, manifest["run_id"])
     assert on_disk["parameters"]["bust_cache"] is True
 
 
@@ -545,8 +541,7 @@ def test_run_subset_surfaces_the_real_row_failure_message(tmp_path, monkeypatch)
     with pytest.raises(SubsetRunError) as exc_info:
         run_subset(
             workflow, injected_outputs=injected_outputs, stage_ids=["score"],
-            run_dir=tmp_path / "runs" / "subset1", repo_root=tmp_path,
-        )
+            run_dir=tmp_path / "runs" / "subset1", repo_root=tmp_path, project=(tmp_path / "runs" / "subset1").parent.parent.name)
 
     message = str(exc_info.value)
     assert "failed generation" in message and "boom" in message
@@ -589,17 +584,18 @@ def test_run_subset_preserves_partial_work_in_the_manifest_on_a_mid_frontier_err
     with pytest.raises(SubsetRunError):
         run_subset(
             workflow, injected_outputs=injected, stage_ids=["clean", "score"],
-            run_dir=run_dir, repo_root=tmp_path)
+            run_dir=run_dir, repo_root=tmp_path, project=(run_dir).parent.parent.name)
 
-    manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
+    manifest = read_manifest(run_dir.parent.parent, run_dir.name)
     records = {r["stage_id"]: r for r in manifest["stage_records"]}
     assert records["clean"]["status"] == "ok"          # completed upstream preserved
     assert records["score"]["status"] == "error"       # failing stage's error recorded
     assert records["score"]["error"] is not None
     assert "kaboom" in records["score"]["error"]["message"]
     assert manifest["status"] == "errors"
-    # Identity not supplied to this subset run — recorded honestly, not fabricated.
-    assert manifest["project"] is None
+    # The version was not supplied to this subset run — recorded honestly, not
+    # fabricated; the project is required, since it is the run's own id.
+    assert manifest["project"] == run_dir.parent.parent.name
     assert manifest["workflow_version"] is None
 
 
@@ -608,8 +604,8 @@ def test_raise_if_run_failed_lists_halted_stages_as_readable_text():
     _execute_stages). _raise_if_run_failed's message must read them out
     comma-joined, not as Python's list repr (`['review_a', 'review_b']`)."""
     manifest = RunManifest(
-        run_id="r", started_at="t", project=None, workflow_version=None,
-        limit_overrides={}, offset_overrides={}, run_bindings={}, input_bindings={},
+        run_id="r", started_at="t", project="p", workflow_version=None,
+        input_bindings={},
         human_review_queue_stats={}, dropped_columns={}, status="awaiting_review",
         stage_records=[], halted_at=["review_a", "review_b"],
     )
@@ -775,7 +771,7 @@ def test_resume_reapplies_run_bindings_for_a_pending_input_stage(tmp_path):
                     "elapsed_ms": 0, "output_row_count": 0, "error": None,
                     "started_at": None, "finished_at": None}],
     }
-    (run_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    store_manifest(run_dir.parent.parent, run_dir.name, manifest)
 
     result = resume_run(tmp_path, run_id, tmp_path, *resumed_stages(tmp_path, run_id))
 

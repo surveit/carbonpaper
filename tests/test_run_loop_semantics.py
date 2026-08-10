@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 
 import pandas as pd
 import pytest
@@ -21,6 +20,7 @@ from app.services.project import save_working_copy_as_version
 from app.services import workspace
 from conftest import pinned_stages, queue_added_columns, queue_columns, resumed_stages
 from stage_seed import add_stage
+from run_seed import read_manifest, store_manifest
 
 
 # The three frame shapes this file's DAGs carry. Declared once so an upstream's
@@ -264,9 +264,7 @@ def test_halted_queue_stages_item_counts_reach_the_run_manifest(tmp_path):
 
     # The same counts survive the round trip to disk — the run page reads them
     # back from manifest.json, not from the in-memory object.
-    on_disk = json.loads(
-        (tmp_path / "runs" / manifest["run_id"] / "manifest.json").read_text(encoding="utf-8")
-    )
+    on_disk = read_manifest(tmp_path, manifest["run_id"])
     assert on_disk["human_review_queue_stats"] == manifest["human_review_queue_stats"]
 
 
@@ -316,12 +314,14 @@ def test_legacy_scalar_halted_at_manifest_renders_one_queue_link(tmp_path, monke
     run_id = halted["run_id"]
 
     # Rewrite the on-disk manifest to the legacy scalar shape.
-    manifest_path = project_dir / "runs" / run_id / "manifest.json"
-    on_disk = json.loads(manifest_path.read_text(encoding="utf-8"))
-    on_disk["halted_at"] = "review"
-    manifest_path.write_text(json.dumps(on_disk), encoding="utf-8")
+    manifest_project = project_dir
 
-    normalized = loading.load_manifest(project_dir / "runs" / run_id)
+    manifest_run = run_id
+    on_disk = read_manifest(manifest_project, manifest_run)
+    on_disk["halted_at"] = "review"
+    store_manifest(manifest_project, manifest_run, on_disk)
+
+    normalized = loading.load_manifest(project_dir.name, run_id)
     assert normalized["halted_at"] == ["review"]
 
     client = TestClient(app)
@@ -346,8 +346,11 @@ def test_manifest_paths_are_posix_on_every_platform(tmp_path, monkeypatch):
 
     halted = run_prepared(prepare_run(project_dir, project_dir, *pinned_stages(project_dir)))
 
-    manifest_path = project_dir / "runs" / halted["run_id"] / "manifest.json"
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest_project = project_dir
+
+
+    manifest_run = halted["run_id"]
+    manifest = read_manifest(manifest_project, manifest_run)
     persisted = {
         (record["stage_id"], key): record[key]
         for record in manifest["stage_records"]
@@ -444,11 +447,11 @@ def test_cancel_after_a_halt_clears_halted_at_and_reports_cancelled(tmp_path, mo
     assert _stage_status(manifest, "review") == "awaiting_review"
     assert _stage_status(manifest, "good_tail") == "pending"
 
-    on_disk = json.loads(
-        (tmp_path / "runs" / manifest["run_id"] / "manifest.json").read_text(encoding="utf-8")
-    )
-    assert on_disk["status"] == "cancelled"
-    assert "halted_at" not in on_disk
+    # Through `to_dict` — what a run RECORDED — so the store's own bookkeeping
+    # and the never-set optionals are both out of the picture.
+    recorded = run_service.read_run_status(tmp_path.name, manifest["run_id"])
+    assert recorded["status"] == "cancelled"
+    assert "halted_at" not in recorded
 
 
 # ── Resume after error is not stale ──────────────────────────────────────────
@@ -606,10 +609,12 @@ def test_resume_of_a_run_with_no_pinned_version_fails_loudly(tmp_path):
     _seed_version(project_dir)
 
     halted = run_prepared(prepare_run(project_dir, project_dir, *pinned_stages(project_dir)))
-    manifest_path = project_dir / "runs" / halted["run_id"] / "manifest.json"
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest_project = project_dir
+
+    manifest_run = halted["run_id"]
+    manifest = read_manifest(manifest_project, manifest_run)
     manifest["workflow_version"] = None
-    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    store_manifest(manifest_project, manifest_run, manifest)
 
     with pytest.raises(RunVersionUnresolvableError, match="records no workflow version"):
         run_service.read_pinned_version("unpinned", halted["run_id"])

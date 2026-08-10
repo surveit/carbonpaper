@@ -4,17 +4,10 @@ The run id is no longer a column — it is the row's link target."""
 
 from __future__ import annotations
 
-from pathlib import Path
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 
-from app.core.errors import RunManifestNotJson
-from app.models.run_manifest import (
-    RunManifest,
-    find_manifest_backed_run_dirs,
-    read_run_manifest,
-)
-from app.web.loading import runs_dir
+from app.runtime.manifest import RunEntry, RunManifest, list_run_entries
 from app.web.run_header import (
     VersionNote,
     describe_run_duration,
@@ -47,8 +40,8 @@ def build_run_index_rows(project: str) -> list[RunIndexRow]:
     """One row per manifest-backed run of `project`, newest first."""
     seen_versions: dict[str, VersionNote] = {}
     return [
-        _build_row(project, run, seen_versions)
-        for run in reversed(find_manifest_backed_run_dirs(runs_dir(project)))
+        _build_row(project, entry, seen_versions)
+        for entry in reversed(list_run_entries(project))
     ]
 
 
@@ -76,19 +69,18 @@ def read_input_file_names(manifest: RunManifest) -> list[str]:
 
 
 def _build_row(
-    project: str, run: Path, seen_versions: dict[str, VersionNote]
+    project: str, entry: RunEntry, seen_versions: dict[str, VersionNote]
 ) -> RunIndexRow:
-    try:
-        manifest = read_run_manifest(run)
-    except (RunManifestNotJson, ValidationError):
+    if entry.manifest is None:
         # An identity-only row rather than counts it never read, so one unreadable
         # run never takes the index down with it. No test-run filter here on
         # purpose: the index LISTS test runs (flagged), the dashboard count omits them.
-        return RunIndexRow(run_id=run.name, status=_UNREADABLE_STATUS)
+        return RunIndexRow(run_id=entry.run_id, status=_UNREADABLE_STATUS)
+    manifest = entry.manifest
     persisted = manifest.to_dict()
     strip = build_stage_strip(persisted)
     return RunIndexRow(
-        run_id=run.name,
+        run_id=entry.run_id,
         status=str(manifest.status),
         started_at=manifest.started_at,
         duration=describe_run_duration(persisted),

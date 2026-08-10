@@ -2,7 +2,6 @@
 rendering one path field per file-kind input stage."""
 from __future__ import annotations
 
-import json
 import time
 
 import pandas as pd
@@ -15,6 +14,7 @@ from app.services import versioning
 from app.services import workspace
 from app.services.project import save_working_copy_as_version
 from stage_seed import add_stage, read_stage
+from run_seed import read_manifest
 
 client = TestClient(app)
 
@@ -48,7 +48,7 @@ def project(tmp_path, monkeypatch):
 
 def _manifest(proj):
     run_dir = sorted((proj / "runs").iterdir())[-1]
-    return json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
+    return read_manifest(run_dir.parent.parent, run_dir.name)
 
 
 def test_changed_field_becomes_run_binding(project, tmp_path):

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 
 import pandas as pd
 import pytest
@@ -14,6 +13,7 @@ from app.services import workspace
 from app.services.project import save_working_copy_as_version
 from app.web.routers.runs import _read_bust_cache
 from stage_seed import add_stage
+from run_seed import read_manifest
 
 client = TestClient(app)
 
@@ -53,7 +53,7 @@ def project(tmp_path, monkeypatch):
 
 def _manifest(proj):
     run_dir = sorted((proj / "runs").iterdir())[-1]
-    return json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
+    return read_manifest(run_dir.parent.parent, run_dir.name)
 
 
 def test_checked_box_becomes_a_busted_run(project):

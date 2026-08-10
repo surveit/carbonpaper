@@ -22,6 +22,7 @@ from conftest import (
     queue_added_columns, resumed_stages,
 )
 from stage_seed import add_stage
+from run_seed import read_manifest
 
 PROJECT = "hrq-cache-tests"
 
@@ -758,7 +759,7 @@ def test_resume_replays_the_runs_bust_cache(tmp_path):
     run_id = halted["run_id"]
 
     run_dir = project_dir / "runs" / run_id
-    assert json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))["parameters"]["bust_cache"]
+    assert read_manifest(run_dir.parent.parent, run_dir.name)["parameters"]["bust_cache"]
 
     snapshot = pd.read_parquet(run_dir / "queue" / "review.parquet")
     fingerprints = _read_fingerprints(run_dir / "queue" / "review.parquet")
