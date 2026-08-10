@@ -122,3 +122,22 @@ def test_plain_row_keeps_the_cheap_budget(monkeypatch):
     assert seen["extra_tools"] == []
     assert seen["max_turns"] is None
     assert seen["timeout"] == DEFAULT_TIMEOUT_S
+
+
+# ── plumbing: how much the model reasons ─────────────────────────────────────
+def test_a_stage_that_says_nothing_leaves_the_backend_setting_alone(monkeypatch):
+    seen = _capture(monkeypatch)
+    runtime_llm.call_llm("s1", _config(), {"q": "?"}, reply_model=Reply)
+    assert seen["thinking"] is None
+
+
+def test_a_stage_can_turn_the_reasoning_off(monkeypatch):
+    # Reasoning nobody reads was 90% of one classifier stage's bill.
+    seen = _capture(monkeypatch)
+    runtime_llm.call_llm("s1", _config(thinking="disabled"), {"q": "?"}, reply_model=Reply)
+    assert seen["thinking"] == {"type": "disabled"}
+
+
+def test_the_setting_is_part_of_what_the_stage_computes():
+    # It changes the answers, so a run under it must not read a cache filled without it.
+    assert "thinking" in LLMConfig.FINGERPRINT_FIELDS

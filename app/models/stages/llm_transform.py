@@ -38,6 +38,13 @@ GRANTABLE_TOOLS: frozenset[str] = frozenset({
 })
 
 
+# How much the model reasons before it answers. A LEVEL, not a token budget:
+# `budget_tokens` is removed on every current frontier model and returns 400
+# there, so a number stored in a workflow would break the day the stage's model
+# is repointed. These two names are the API's own and map straight through.
+THINKING_MODES = ("adaptive", "disabled")
+
+
 class LLMConfig(StageConfig):
     """llm_transform config block."""
     # Every field changes what this stage computes (the prompt, the model, the
@@ -45,6 +52,7 @@ class LLMConfig(StageConfig):
     FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({
         "prompt_instructions", "prompt_data_template", "model", "temperature",
         "max_retries", "response_format", "rubric", "tools", "batch_size",
+        "thinking",
     })
     INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset()
 
@@ -80,6 +88,17 @@ class LLMConfig(StageConfig):
             "still returns exactly one row out per row in. But batch-mates share one "
             "context, so a row's answer can be influenced by them — keep 1 when each "
             "row needs an independent judgment."
+        ),
+    )
+
+    thinking: Optional[Literal["adaptive", "disabled"]] = Field(
+        default=None,
+        description=(
+            "How much the model reasons before answering. Omit to leave the "
+            "backend's own setting. `disabled` is worth choosing when the answer is "
+            "one value from a short enum and nobody reads the reasoning — it was 90% "
+            "of one classifier stage's bill. It also CHANGES ANSWERS, so it is a "
+            "judgment about the stage, not only about cost."
         ),
     )
 

@@ -106,6 +106,7 @@ def call_llm(
     return _run_agent(
         _compose_system(llm_config.prompt_instructions), task, reply_model, model_name,
         llm_config.max_retries, usage_out, tools=llm_config.tools,
+        thinking=llm_config.thinking,
     )
 
 
@@ -130,7 +131,7 @@ def call_llm_batch(
     # so a research stage never reaches the batch driver.
     return _run_agent(
         _compose_system(instructions), task, reply_schema, model_name,
-        llm_config.max_retries, usage_out,
+        llm_config.max_retries, usage_out, thinking=llm_config.thinking,
     )
 
 
@@ -148,6 +149,7 @@ def _run_agent(
     max_retries: int,
     usage_out: list[LlmUsage] | None,
     tools: list[str] | None = None,
+    thinking: str | None = None,
 ) -> dict[str, Any]:
     """Run the structured-output Agent to a validated `target_schema`, dumped to a
     dict. `max_retries` handles TRANSIENT backend failures (a dropped CLI
@@ -177,7 +179,7 @@ def _run_agent(
             model=model_name,
             extra_tools=list(tools or []),
             max_turns=RESEARCH_MAX_TURNS if researching else None,
-            thinking=THINKING_CONFIG,
+            thinking={"type": thinking} if thinking else THINKING_CONFIG,
         )
         try:
             answer = run_sync(
