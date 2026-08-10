@@ -152,6 +152,18 @@ def _run_and_read(
     }
 
 
+def _run_and_count_replays(project: Path) -> dict[str, object]:
+    """One whole run, as each stage's manifest `cached_rows`."""
+    if (project / "runs").exists():
+        time.sleep(1.05)
+    manifest = execute_run(project, project, *pinned_stages(project))
+    assert manifest["status"] == "ok", manifest
+    return {
+        record["stage_id"]: record.get("cached_rows")
+        for record in manifest["stage_records"]
+    }
+
+
 def _invocations(probe: Path) -> Counter[str]:
     """How many times each stage's authored body ran, across every run so far."""
     if not probe.exists():
@@ -177,6 +189,19 @@ def test_a_second_run_recomputes_nothing_and_reproduces_the_first_exactly(tmp_pa
     second = _run_and_read(tmp_path)
     assert _invocations(probe) == _EVERYTHING_COMPUTED  # no body ran a second time
     _assert_same_outputs(first, second)
+
+
+def test_the_manifest_counts_the_rows_the_second_run_replayed(tmp_path):
+    """Only the row-mapped stages carry a count; the frame cache is another grain."""
+    _write_project(tmp_path)
+    _publish_a_version(tmp_path)
+
+    first = _run_and_count_replays(tmp_path)
+    assert first == {"load": None, "clean": None, "flag": None, "totals": None}
+
+    second = _run_and_count_replays(tmp_path)
+    assert second == {
+        "load": None, "clean": len(_ROWS), "flag": len(_ROWS), "totals": None}
 
 
 def test_bust_cache_recomputes_everything_and_leaves_the_cache_re_pinned(tmp_path):

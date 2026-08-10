@@ -578,6 +578,8 @@ def _merge_stage_contribution(
         record.add_note(note)
     if contribution.llm_usage is not None:
         record.llm_usage = contribution.llm_usage
+    if contribution.cached_rows is not None:
+        record.cached_rows = contribution.cached_rows
     if contribution.dropped_columns:
         manifest.record_dropped_columns(sid, contribution.dropped_columns)
     if contribution.human_review_queue_stats is not None:

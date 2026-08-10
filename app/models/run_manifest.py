@@ -64,6 +64,10 @@ class StageContribution(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     llm_usage: LlmUsage | None = None
+    # How many of the stage's output rows the row cache answered instead of the
+    # stage computing them. None where the stage ran uncached, so a stage that
+    # could not have replayed anything is never reported as having replayed zero.
+    cached_rows: int | None = None
     row_errors: list[RowError] = []
     dropped_columns: list[str] = []
     human_review_queue_stats: QueueStats | None = None
@@ -125,6 +129,9 @@ class StageRecord(BaseModel):
     output_row_count: int
     error: StageErrorInfo | None = None
     llm_usage: LlmUsage | None = None
+    # Optional, and absent from every manifest written before it existed: a
+    # record with no `cached_rows` means the count was never taken, not zero.
+    cached_rows: int | None = None
     notes: list[str] | None = None
     output_path: str | None = None
     queue_path: str | None = None

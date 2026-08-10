@@ -1,0 +1,107 @@
+"""The Data pane's `llm-stats` block over two runs of one llm_transform, model
+stubbed: the first pays, the second is answered entirely by the row cache and so
+writes no `llm_usage` at all. A block keyed off usage renders nothing for the
+second, which is exactly what a stage with no model looks like."""
+from __future__ import annotations
+
+import json
+import time
+from pathlib import Path
+
+import pandas as pd
+import pytest
+from fastapi.testclient import TestClient
+
+import app.services.workspace as workspace
+from app.core.agent.usage import LlmUsage
+from app.main import app
+from app.runtime.runner import execute_run
+from app.services import project as project_service
+from app.services import versioning
+from conftest import pinned_stages
+
+PROJECT = "cached_llm_panel"
+_COLUMNS = [{"name": "x", "type": "int", "nullable": True}]
+
+
+def _load_stage(data_path: Path) -> dict:
+    return {
+        "id": "load", "description": "Load rows", "type": "input_data",
+        "connector": {"kind": "file",
+                      "params": {"path": str(data_path), "format": "csv"}},
+        "signature": {"form": "replaces", "produces": _COLUMNS},
+    }
+
+
+def _judge_stage() -> dict:
+    return {
+        "id": "judge", "description": "Judge each row", "type": "llm_transform",
+        "inputs": [{"id": "load", "schema": {"columns": _COLUMNS}}],
+        "signature": {
+            "form": "extends",
+            "reads": [{"input": "load", "columns": _COLUMNS}],
+            "adds": [{"name": "verdict", "type": "str", "nullable": True}],
+        },
+        "llm": {"prompt_instructions": "judge it", "prompt_data_template": "{x}",
+                "batch_size": 1},
+    }
+
+
+@pytest.fixture()
+def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    pdir = tmp_path / PROJECT
+    (pdir / "compiled").mkdir(parents=True)
+    data = pdir / "rows.csv"
+    pd.DataFrame({"x": [1, 2]}).to_csv(data, index=False)
+    (pdir / "compiled" / "01_load.json").write_text(
+        json.dumps(_load_stage(data)), encoding="utf-8")
+    (pdir / "compiled" / "02_judge.json").write_text(
+        json.dumps(_judge_stage()), encoding="utf-8")
+    workspace.set_projects_dir(tmp_path)
+
+    def fake_call_llm(stage_id, llm, row, reply_model, usage_out):
+        usage_out.append(LlmUsage(input_tokens=10, output_tokens=5, cost_usd=0.25, calls=1))
+        return {"verdict": f"v{row['x']}"}
+
+    monkeypatch.setattr("app.runtime.stages.llm_transform.call_llm", fake_call_llm)
+    version_id = project_service.save_working_copy_as_version(
+        pdir, message="v1", reviewer="test").version_id
+    versioning.publish_version(pdir, version_id, reviewer="test")
+    return pdir
+
+
+def _run(project_dir: Path) -> str:
+    if (project_dir / "runs").exists():
+        time.sleep(1.05)  # run ids are second-resolution: one dir per run
+    return str(execute_run(project_dir, project_dir, *pinned_stages(project_dir))["run_id"])
+
+
+def _panel(run_id: str) -> str:
+    client = TestClient(app)
+    response = client.get(f"/project/{PROJECT}/runs/{run_id}/stage/judge/partial")
+    assert response.status_code == 200, response.text
+    return response.text
+
+
+def test_the_paying_run_still_reports_its_calls_and_cost(project: Path) -> None:
+    html = _panel(_run(project))
+    assert "llm-stats" in html
+    assert "$0.50" in html  # two rows at the stub's $0.25 each
+    assert "Reused, not recomputed" not in html
+
+
+def test_the_replayed_run_says_so_where_the_cost_would_be(project: Path) -> None:
+    _run(project)
+    replayed = _panel(_run(project))
+    assert "llm-stats" in replayed
+    assert "Reused, not recomputed" in replayed
+    assert "2 of 2 rows" in replayed
+    assert "the model was not called in this run" in replayed
+
+
+def test_the_replayed_run_names_the_model_it_did_not_call(project: Path) -> None:
+    """The model is what a reader checks the cost against, spend or no spend."""
+    _run(project)
+    replayed = _panel(_run(project))
+    assert "<dt>model</dt>" in replayed
+    assert "<dd>none</dd>" in replayed
