@@ -8,6 +8,7 @@ import json
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
+from pydantic import BaseModel
 
 from app.core.llm_sdk import CLI_PATH
 
@@ -18,6 +19,11 @@ from app.core.agent.store import open_session_store
 from app.core.agent.turns import default_turn_manager
 from app.web.breadcrumbs import build_chat_crumbs, build_home_crumbs
 from app.web.config import templates
+from app.web.markdown_render import render_markdown
+
+# The one place the sealed renderer is bound. app.web.config owns the shared env, so
+# the filter is registered here, beside the only page that uses it.
+templates.env.filters["markdown"] = render_markdown
 
 router = APIRouter()
 _store = open_session_store()
@@ -125,6 +131,20 @@ async def stream_turn(sid: str, turn_id: str, request: Request):
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+class RenderedReply(BaseModel):
+    text: str
+    html: str
+
+
+@router.get("/chat/{sid}/rendered-reply")
+async def get_rendered_reply(sid: str) -> RenderedReply:
+    """The client swaps only when `text` equals what it streamed — never a stale one."""
+    if not _store.exists(sid):
+        raise HTTPException(status_code=404, detail="Session not found")
+    text = _store.read_last_assistant_text(sid)
+    return RenderedReply(text=text, html=str(render_markdown(text)))
 
 
 @router.get("/chat/{sid}/messages")

@@ -32,7 +32,35 @@
    label used to. */
 .ac-role { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
     overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
-.ac-body { white-space: pre-wrap; word-wrap: break-word; }
+.ac-body { word-wrap: break-word; }
+/* Assistant replies are rendered markdown; .ac-streaming is the plain-text bubble
+   held mid-turn, before the swap at `done`. A user bubble is always plain text. */
+.ac-body.ac-streaming, .ac-msg.user .ac-body { white-space: pre-wrap; }
+
+.ac-msg.assistant .ac-body > :first-child { margin-top: 0; }
+.ac-msg.assistant .ac-body > :last-child { margin-bottom: 0; }
+.ac-msg.assistant .ac-body p,
+.ac-msg.assistant .ac-body ul,
+.ac-msg.assistant .ac-body ol { margin: 0 0 10px; }
+.ac-msg.assistant .ac-body ul, .ac-msg.assistant .ac-body ol { padding-left: 22px; }
+.ac-msg.assistant .ac-body li { margin: 2px 0; }
+.ac-msg.assistant .ac-body a { color: var(--info-bd); }
+.ac-msg.assistant .ac-body code { font-family: ui-monospace, monospace; font-size: 12px;
+    background: var(--sunk-deep); border: 1px solid var(--border); border-radius: 4px;
+    padding: 1px 4px; }
+.ac-msg.assistant .ac-body pre { font-family: ui-monospace, monospace; font-size: 12px;
+    background: var(--sunk-deep); border: 1px solid var(--border); border-radius: 6px;
+    padding: 8px 10px; overflow-x: auto; }
+.ac-msg.assistant .ac-body pre code { background: none; border: none; padding: 0; }
+.ac-msg.assistant .ac-body blockquote { margin: 0 0 10px; padding-left: 10px;
+    color: var(--muted); border-left: 3px solid var(--border-strong); }
+.ac-msg.assistant .ac-body h1,
+.ac-msg.assistant .ac-body h2,
+.ac-msg.assistant .ac-body h3 { font-size: 15px; margin: 12px 0 6px; }
+.ac-msg.assistant .ac-body table { border-collapse: collapse; font-size: 13px;
+    margin: 0 0 10px; }
+.ac-msg.assistant .ac-body th,
+.ac-msg.assistant .ac-body td { border: 1px solid var(--border); padding: 3px 7px; }
 
 /* A typed turn is one or two lines, so it reads as a compact bubble against the
    right edge; the reply under it is unboxed prose, which a bubble would only

@@ -21,7 +21,9 @@
           <details class="ac-think"><summary>💭 thinking</summary><div class="ac-think-text">{{ b.thinking }}</div></details>
         {% endif %}
         {% for t in b.tools %}<details class="ac-tool"><summary title="{{ t.label or t.name }}">Called a tool: {{ t.name }}</summary><pre class="ac-tool-json">{{ t.args }}</pre></details>{% endfor %}
-        <div class="ac-body">{{ b.text }}</div>
+        {# The markdown filter returns Markup from app.web.markdown_render — the only
+           thing on this page allowed past autoescape. User bubbles stay escaped text. #}
+        <div class="ac-body">{{ b.text | markdown }}</div>
       </div>
     {% endif %}
   {% endfor %}
@@ -92,7 +94,9 @@ function newAssistant() {
     },
     text(t) {
       stop();
-      if (!body) { body = el("ac-body"); b.appendChild(body); }
+      // Plain text while the turn is in flight: a half-arrived "[run](htt" would
+      // render as broken markup and flicker on every chunk.
+      if (!body) { body = el("ac-body ac-streaming"); b.appendChild(body); }
       body.textContent += t; scroll();
     },
     tool(name, args, label) {
@@ -120,6 +124,20 @@ function newAssistant() {
       scroll();
     },
     error(t) { stop(); const e = el("ac-err"); e.textContent = "⚠ " + t; b.appendChild(e); scroll(); },
+    // Turn over: swap the plain text for the server's markdown of the SAME text, so
+    // this bubble matches what a page reload renders. Any mismatch leaves it as text.
+    async renderStoredMarkdown() {
+      if (!body) return;
+      const streamed = body.textContent;
+      if (!streamed) return;
+      const r = await fetch(`/chat/${SID}/rendered-reply`);
+      if (!r.ok) return;
+      const stored = await r.json();
+      if (stored.text !== streamed) return;
+      body.innerHTML = stored.html;
+      body.classList.remove("ac-streaming");
+      scroll();
+    },
     stop
   };
 }
@@ -135,7 +153,7 @@ function connect(turnId, fromIndex) {
     else if (ev.kind === "tool_call") bubble.tool(ev.name, ev.args, ev.label);
     else if (ev.kind === "tool_result") bubble.toolResult(ev.content);
     else if (ev.kind === "error") bubble.error(ev.text);
-    else if (ev.kind === "done") { bubble.stop(); es.close(); streaming = false; if (sendBtn) sendBtn.disabled = false; if (input) input.focus(); }
+    else if (ev.kind === "done") { bubble.stop(); es.close(); streaming = false; if (sendBtn) sendBtn.disabled = false; if (input) input.focus(); bubble.renderStoredMarkdown(); }
   };
   es.onerror = () => { bubble.stop(); es.close(); streaming = false; if (sendBtn) sendBtn.disabled = false; };
 }

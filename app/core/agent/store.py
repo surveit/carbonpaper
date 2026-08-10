@@ -108,6 +108,13 @@ class SessionStore:
     def history_view(self, sid: str) -> list[dict]:
         return _render_history_bubbles(AgentSession.load(sid).messages)
 
+    def read_last_assistant_text(self, sid: str) -> str:
+        """Empty when the newest turn produced no text (tools only), or stored nothing."""
+        for bubble in reversed(self.history_view(sid)):
+            if bubble["role"] == "assistant":
+                return str(bubble["text"])
+        return ""
+
 
 def _render_history_bubbles(messages: list[dict]) -> list[dict]:
     """Tool results have no bubble: they are dropped here and never rendered on reload."""
