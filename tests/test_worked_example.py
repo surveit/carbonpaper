@@ -9,7 +9,7 @@ import re
 import pytest
 
 from app.models import parse_stage
-from app.models.stages.worked_example import WORKED_STAGE_EXAMPLE
+from app.tools.prompt_fragments import WORKED_STAGE_EXAMPLE
 
 
 @pytest.fixture(scope="module")

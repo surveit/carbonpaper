@@ -95,13 +95,13 @@ jobs:
         with:
           python-version: "3.12"
       - run: uv sync --frozen
-      # tools/import_graph_report.py --root points grimp at a different
+      # scripts/import_graph_report.py --root points grimp at a different
       # checkout's `app` package for its analysis, reusing this (head)
       # checkout's own copy of the script and of tests/arch/ — the base
       # checkout only needs its `app/` source, never its own copy of either.
-      - run: uv run --frozen python tools/import_graph_report.py > head-metrics.json
-      - run: uv run --frozen python tools/import_graph_report.py --root base > base-metrics.json
-      - run: uv run --frozen python tools/import_graph_report.py --markdown head-metrics.json base-metrics.json > comment-body.md
+      - run: uv run --frozen python scripts/import_graph_report.py > head-metrics.json
+      - run: uv run --frozen python scripts/import_graph_report.py --root base > base-metrics.json
+      - run: uv run --frozen python scripts/import_graph_report.py --markdown head-metrics.json base-metrics.json > comment-body.md
       # Raw data lives alongside the cooked report: the comment shows the
       # rendered table, but the JSON these two invocations produced is kept
       # too so it can be re-sliced without recomputing. Short retention —

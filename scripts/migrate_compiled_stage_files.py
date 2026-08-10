@@ -12,7 +12,7 @@ Applied here, matching the revisions that do the same to the store:
          `signature`, synthesized here from the outer the file stored.
   0008 — `name` became `description`: a stage has one name, its id.
 
-Usage:  python -m tools.migrate_compiled_stage_files [--apply] [--projects-dir PATH]
+Usage:  python -m scripts.migrate_compiled_stage_files [--apply] [--projects-dir PATH]
 Without --apply it is a dry run and writes nothing.
 """
 
@@ -24,11 +24,11 @@ from pathlib import Path
 from typing import Any
 
 from app.core.paths import repo_root
-from tools.stage_description import (
+from scripts.stage_description import (
     DescriptionUndeterminable,
     rename_name_to_description,
 )
-from tools.stage_signatures import SignatureUndeterminable, add_signature
+from scripts.stage_signatures import SignatureUndeterminable, add_signature
 
 _KEY = "primary_key"
 

@@ -10,7 +10,7 @@ from app.models.stages.stage_base import (
     STAGE_DESCRIPTION_MAX_CHARS,
     STAGE_ID_MAX_CHARS,
 )
-from tools.stage_description import (
+from scripts.stage_description import (
     DescriptionUndeterminable,
     rename_name_to_description,
 )

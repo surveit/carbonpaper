@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 
 from app.models import parse_stage
-from tools.stage_signatures import SignatureUndeterminable, add_signature
+from scripts.stage_signatures import SignatureUndeterminable, add_signature
 
 _EDGE = {"columns": [{"name": "id", "type": "str", "nullable": True},
                      {"name": "text", "type": "str", "nullable": True}]}

@@ -14,7 +14,7 @@ import grimp
 import pytest
 from arch.test_import_graph import ModuleDegree
 
-from tools.import_graph_report import (
+from scripts.import_graph_report import (
     FanExtremeReport,
     ImportGraphMetricError,
     ImportGraphMetricsReport,
@@ -24,7 +24,7 @@ from tools.import_graph_report import (
     render_comment_body,
 )
 
-_SCRIPT_PATH = Path(__file__).resolve().parent.parent / "tools" / "import_graph_report.py"
+_SCRIPT_PATH = Path(__file__).resolve().parent.parent / "scripts" / "import_graph_report.py"
 
 
 def _run_script(*args: str) -> subprocess.CompletedProcess[str]:
