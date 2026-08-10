@@ -486,3 +486,17 @@ def test_a_replaces_form_states_its_whole_output_however_narrow_its_reads():
     # Nothing flows under `replaces`, so narrowing the input narrows no output.
     assert [c.name for c in transform_output_schema(stage).columns] == ["total"]
     assert [c.name for c in transform_input_schemas(stage)["bills"].columns] == ["price"]
+
+
+def test_a_row_function_that_reads_nothing_is_accepted():
+    # One that stamps a constant consumes no column, and that is honest.
+    stage = parse_stage({
+        "id": "stamp", "description": "Stamp", "type": "python_row_function",
+        "inputs": [{"id": "load", "schema": {"columns": [
+            {"name": "id", "type": "str", "nullable": True}]}}],
+        "function": {"kind": "inline",
+                     "code": "def transform(row):\n    return {'src': 'q1'}\n"},
+        "signature": {"form": "extends",
+                      "adds": [{"name": "src", "type": "str", "nullable": True}]},
+    })
+    assert stage.anchor_reads() == frozenset()

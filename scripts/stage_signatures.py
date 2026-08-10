@@ -1,7 +1,7 @@
 """The signature a stored stage spec's `output_schema` and config imply.
 
 Shared by alembic revision 0006 (the document store) and
-tools.migrate_compiled_stage_files (a project's working copy), so a rewritten
+scripts.migrate_compiled_stage_files (a project's working copy), so a rewritten
 store and a rewritten compiled file cannot disagree about what a spec meant.
 
 REFUSES rather than guesses: an outer that dropped an anchor column does not
@@ -26,6 +26,9 @@ _EXTENDS_TYPES = frozenset({
 _REPLACES_TYPES = frozenset({
     "python_frame_function", "aggregate", "union", "input_data", "publish",
 })
+# The two types whose model REFUSES an empty read set, so a spec carrying one
+# does not load at all (app.models.stages.{filter_rows,human_review_queue}).
+_READS_THE_WHOLE_ANCHOR = frozenset({"filter_rows", "human_review_queue"})
 
 
 class SignatureUndeterminable(ValueError):
@@ -45,6 +48,30 @@ def add_signature(spec: dict[str, Any], *, allow_drops: bool = False) -> bool:
         if signature is not None:
             spec["signature"] = signature
     return spec.pop("output_schema", _MISSING) is not _MISSING or "signature" in spec
+
+
+def backfill_anchor_reads(spec: dict[str, Any]) -> bool:
+    """Give a filter_rows/queue spec whose `reads` are EMPTY the whole anchor edge;
+    False if unchanged."""
+    # Both types run an authored expression over the row — a predicate, a queue
+    # `filter` — so the whole anchor edge is what they may consume, and an empty
+    # `reads` understates it. A stage that already names columns was authored or
+    # repaired deliberately and is never widened here; one whose input declares no
+    # columns is left alone rather than given an invented edge.
+    if spec.get("type") not in _READS_THE_WHOLE_ANCHOR:
+        return False
+    signature = spec.get("signature")
+    if not isinstance(signature, dict) or signature.get("reads"):
+        return False
+    edges = _edges(spec)
+    if not edges:
+        return False
+    anchor_id, anchor_columns = edges[0]
+    reads = _reads(anchor_id, anchor_columns)
+    if not reads:
+        return False
+    signature["reads"] = reads
+    return True
 
 
 def find_dropped_anchor_columns(spec: dict[str, Any]) -> list[str]:

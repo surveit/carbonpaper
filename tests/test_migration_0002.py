@@ -12,7 +12,7 @@ from typing import Any
 import pytest
 
 from app.models.workflow import parse_workflow
-from tools.stage_signatures import add_signature
+from scripts.stage_signatures import add_signature
 
 _REVISION = (Path(__file__).resolve().parents[1]
              / "alembic/versions/0002_name_queue_and_join_columns.py")

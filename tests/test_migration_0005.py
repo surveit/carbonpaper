@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from app.services.drafts import Draft
-from tools.stage_signatures import add_signature
+from scripts.stage_signatures import add_signature
 
 _REVISION = (Path(__file__).resolve().parents[1]
              / "alembic/versions/0005_drop_primary_key_from_drafts.py")

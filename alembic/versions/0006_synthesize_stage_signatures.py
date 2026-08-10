@@ -10,7 +10,7 @@ from typing import Any
 
 from alembic import op
 
-from tools.stage_signatures import SignatureUndeterminable, add_signature
+from scripts.stage_signatures import SignatureUndeterminable, add_signature
 
 revision = "0006"
 down_revision = "0005"
@@ -19,7 +19,7 @@ depends_on = None
 
 # A stage's output schema now resolves from its `signature` alone, and the outer
 # is gone from the model, so a payload carrying one no longer loads. The
-# synthesis is shared with tools.migrate_compiled_stage_files — a project's
+# synthesis is shared with scripts.migrate_compiled_stage_files — a project's
 # working copy carries the same specs and no revision can reach it.
 #
 # add_signature RAISES (SignatureUndeterminable) on a stage whose outer dropped

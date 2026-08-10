@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from app.models.workflow import parse_workflow
-from tools.stage_signatures import add_signature
+from scripts.stage_signatures import add_signature
 
 _REVISION = (Path(__file__).resolve().parents[1]
              / "alembic/versions/0004_drop_primary_key_from_stage_schemas.py")

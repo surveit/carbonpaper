@@ -252,7 +252,7 @@ def test_the_tool_is_registered_on_the_mcp_surface(demo):
 def test_both_authoring_surfaces_carry_the_enum_from_data_guidance():
     from app.agents.compiler.prompt import EDITING_SYSTEM_PROMPT
     from app.mcp.server import INSTRUCTIONS
-    from app.models.enum_from_data_note import ENUM_FROM_DATA_GUIDANCE
+    from app.tools.prompt_fragments import ENUM_FROM_DATA_GUIDANCE
 
     assert ENUM_FROM_DATA_GUIDANCE in EDITING_SYSTEM_PROMPT
     assert ENUM_FROM_DATA_GUIDANCE in INSTRUCTIONS
@@ -260,7 +260,7 @@ def test_both_authoring_surfaces_carry_the_enum_from_data_guidance():
 
 def test_the_guidance_keeps_the_two_questions_and_the_sample_warning():
     from app.models.authoring_lifecycle_note import AUTHORING_LIFECYCLE_GUIDANCE
-    from app.models.enum_from_data_note import ENUM_FROM_DATA_GUIDANCE
+    from app.tools.prompt_fragments import ENUM_FROM_DATA_GUIDANCE
 
     text = ENUM_FROM_DATA_GUIDANCE
     assert "GENERATION" in text and "thousands of values and still be closed" in text

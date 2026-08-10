@@ -119,6 +119,9 @@ _QUEUE_REVIEW = {
     "queue": dict(QUEUE_COLUMNS),
     "signature": {
         "form": "extends",
+        "reads": [{"input": "load", "columns": [
+            {"name": "doc_id", "type": "str", "nullable": True},
+            {"name": "score", "type": "int", "nullable": True}]}],
         "adds": [
             {"name": "human_score", "type": "int", "nullable": True},
             {"name": "decision", "type": "str", "nullable": True},

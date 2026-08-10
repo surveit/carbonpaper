@@ -5,6 +5,10 @@
 <div class="ac-head">
   <h1>Chats</h1>
   <span class="ac-backend" title="which model backend answers">backend: {{ backend }}</span>
+  {# A chat starts bound to no project; the agent asks which one when it needs to know. #}
+  <form class="ac-new" method="post" action="/chat/new">
+    <button type="submit" class="btn primary sm">＋ New chat</button>
+  </form>
 </div>
 <ul class="ac-sessions">
   {% for s in sessions %}

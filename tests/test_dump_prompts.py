@@ -1,4 +1,4 @@
-"""The prompt dump (tools/dump_prompts.py) covers every prompt this app ships and
+"""The prompt dump (scripts/dump_prompts.py) covers every prompt this app ships and
 every tool offered beside it — a new surface that never reaches the dump fails here,
 because a dump that silently omits one reads as "this is all of it"."""
 from __future__ import annotations
@@ -12,7 +12,7 @@ from typing import Iterator
 import pytest
 
 from app.core.paths import repo_root
-from tools.dump_prompts import render_prompt_dump
+from scripts.dump_prompts import render_prompt_dump
 
 # A module-level string constant whose name ends in one of these is a prompt shipped
 # to a model. The dump has to contain its text.
@@ -33,7 +33,7 @@ def test_dump_contains_every_shipped_prompt(dump: str) -> None:
     ]
     assert not missing, (
         "prompt text that never reaches the dump — add its surface to "
-        "tools/dump_prompts.py:render_prompt_dump:\n  " + "\n  ".join(missing)
+        "scripts/dump_prompts.py:render_prompt_dump:\n  " + "\n  ".join(missing)
     )
 
 

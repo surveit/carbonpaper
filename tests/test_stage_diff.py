@@ -30,6 +30,7 @@ from app.web.stage_diff import (
     RowAlignedDiff,
     build_stage_diff,
 )
+from conftest import reads_of
 
 LOAD_ID = "load"
 _LOAD_PATH = f"outputs/{LOAD_ID}.parquet"
@@ -87,8 +88,8 @@ def _filter_stage() -> Stage:
     return parse_stage({
         "id": "keep", "description": "Keep", "type": "filter_rows",
         "inputs": [{"id": LOAD_ID, "schema": {"columns": _IN_COLUMNS}}],
-        "filter": {"code": "def should_include(row):\n    return True\n"},
-        "signature": {"form": "extends"},
+        "filter": {"code": "def should_include(row):\n    return row['val'] is not None\n"},
+        "signature": {"form": "extends", "reads": reads_of(LOAD_ID, _IN_COLUMNS)},
     })
 
 
@@ -256,6 +257,7 @@ def test_a_review_queue_shows_the_human_answer_beside_what_it_answered(tmp_path:
         },
         "signature": {
             "form": "extends",
+            "reads": reads_of(LOAD_ID, _IN_COLUMNS),
             "adds": [{"name": "reviewed_name", "type": "str", "nullable": True},
                      {"name": "verdict", "type": "str", "nullable": True},
                      {"name": "reviewer", "type": "str", "nullable": True},

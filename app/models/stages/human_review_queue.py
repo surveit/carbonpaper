@@ -8,6 +8,8 @@ from typing import ClassVar, Literal, Mapping, Optional
 
 from pydantic import Field, field_validator
 
+from app.core.errors import PredicateError
+from app.core.predicate import parse_predicate
 from app.models.schema import (
     SCALAR_COLUMN_TYPES,
     STR_COLUMN_TYPE,
@@ -119,9 +121,11 @@ class HumanReviewQueueStage(StageBase):
         input_schema = self.inputs[0].table_schema
         return (
             issues
+            + _find_unread_column_issues(self.id, self.queue, self.signature)
             + _find_reviewed_target_issues(self.id, self.queue, input_schema, adds_by_name)
             + _find_review_record_target_issues(self.id, self.queue, adds_by_name)
         )
+
 
 
 def resolve_queue_config(stage: StageBase) -> Optional[QueueConfig]:
@@ -158,6 +162,28 @@ def find_review_record_columns(queue: QueueConfig) -> list[tuple[str, str]]:
 
 
 # ── the individual checks ────────────────────────────────────────────────────
+def _find_unread_column_issues(
+    sid: str, queue: QueueConfig, signature: ExtendsSignature
+) -> list[str]:
+    # The human sees the narrowed row, so an unread column is one they never see.
+    read = {column.name for entry in signature.reads for column in entry.columns}
+    if not read:
+        return [
+            f"stage '{sid}': its signature reads nothing, so the row this stage "
+            f"queues for a human would carry no columns — declare what the "
+            f"reviewer needs to see"
+        ]
+    try:
+        tested = set(parse_predicate(queue.filter).columns) if queue.filter else set()
+    except PredicateError:
+        tested = set()  # _find_filter_issues already reports the bad predicate
+    return [
+        f"stage '{sid}': queue.filter tests `{name}` but the signature does not read it"
+        for name in sorted(tested - read)
+    ]
+
+
+
 def _find_filter_issues(sid: str, queue: QueueConfig, input_schema: TableSchema) -> list[str]:
     # Catches a filter reading a column the review is meant to SET.
     if not queue.filter:
@@ -298,7 +324,9 @@ NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
             "verdict column nullable. A reviewed column is ADDED beside its source, "
             "never modifying it: name it `reviewed_<source>` and declare it with the "
             "SAME spec, nullability at least as permissive. Its source must be scalar. "
-            "`queue.filter` may reference INPUT columns only. The verdict column holds "
+            "`queue.filter` may reference INPUT columns only. The reviewer sees exactly the "
+            "columns the signature `reads`: they must cover every column `queue.filter` "
+            "tests, and may never be empty. The verdict column holds "
             "\"approve\", \"modify\", or \"skipped\" (the filter did not select the row), so "
             "a downstream stage wanting only human-sanctioned values filters on != "
             "\"skipped\". Rows match a cached decision by fingerprinting the row itself; "

@@ -107,8 +107,11 @@ has no output schema.""",
     "get_current_project": ToolSpec(
         name="get_current_project",
         description="""\
-Return the id of the project this session is editing. Call this FIRST and
-pass its value as `project_id` to the other tools.""",
+Return the id of the project this session is editing, or nothing if this
+session was opened without one. Call this FIRST. If it returns an id, pass
+that id as `project_id` to the other tools. If it returns nothing, no project
+is bound: call list_projects and ask the user which one to work on — never
+guess, and never pick one for them.""",
     ),
     "get_project_status": ToolSpec(
         name="get_project_status",

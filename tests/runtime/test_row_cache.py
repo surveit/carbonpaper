@@ -635,7 +635,7 @@ def test_a_signature_declaring_no_anchor_reads_is_handed_empty_rows():
         _seen_rows_handler(seen).execute(
             _two_column_stage(reads=[]), {"src": _noisy_src(["a", "b"])}, _ctx())
     # So a row-mapped stage that reads its input must say so. The synthesis in
-    # tools/stage_signatures.py and migration 0010 leave no stored stage without
+    # scripts/stage_signatures.py and migration 0010 leave no stored stage without
     # reads; this is what an under-declared one now gets.
     assert seen == [{}]
 
