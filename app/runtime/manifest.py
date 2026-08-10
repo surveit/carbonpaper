@@ -8,6 +8,7 @@ only once the run reaches the point that sets it.
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -53,9 +54,17 @@ def create_run_manifest(
 
 
 def write_manifest(run_dir: Path, manifest: RunManifest) -> None:
-    (run_dir / "manifest.json").write_text(
+    path = run_dir / "manifest.json"
+    # Staged and swapped, never truncated in place: the run's background thread flushes
+    # through here while the run page and the run tools read the same file, and a
+    # truncating write leaves a window where a reader sees an empty file and raises
+    # RunManifestNotJson. os.replace is atomic within ONE filesystem, so the temp file
+    # is a sibling rather than somewhere under /tmp.
+    staged = path.with_suffix(".json.writing")
+    staged.write_text(
         json.dumps(manifest.to_dict(), indent=2, default=str), encoding="utf-8"
     )
+    os.replace(staged, path)
 
 
 def resolve_output_path(run_dir: Path, output_path: str | None) -> Path | None:
