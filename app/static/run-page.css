@@ -150,11 +150,25 @@ table.issue-table { width: 100%; border-collapse: collapse; font-size: .79rem; }
 .stage-run-log { margin-top: 1rem; border-top: 1px solid var(--border); padding-top: .6rem; }
 .stage-run-log > details > summary { font-size: .85em; color: var(--muted); }
 
-/* ── Runs index rows (section_runs.html) ── */
+/* ── Runs index rows (section_runs.html) ──
+   The ROW opens the run — its hover is the affordance, so the date inside it is
+   not tinted as a link and nothing competes to be the handle. The one link that
+   leaves the page is the version's `↗`. The result cell's squares carry the
+   colour; `.run-outcome` under them carries what the colours say, tinted only
+   for the two states that ask the reader for something. ── */
 .runs-table td { vertical-align: top; }
-.runs-table .run-sub { display: block; font-size: .74rem; color: var(--muted);
-    font-family: "SFMono-Regular", "Consolas", monospace; }
-.runs-table .run-diff { font-size: .82rem; color: var(--muted); }
+.runs-table tbody tr[data-href] { cursor: pointer; }
+.runs-table tbody tr[data-href]:hover { background: var(--hover); }
+.runs-table .run-date a { color: inherit; }
+.runs-table .open-away { display: inline-block; margin-left: .3em; color: var(--muted);
+    font-size: .82em; text-decoration: none; }
+.runs-table .open-away:hover { color: var(--accent); }
+.runs-table .run-date, .runs-table .run-duration { white-space: nowrap; }
+.runs-table .run-outcome { display: block; margin-top: .35rem; font-size: .78rem; color: var(--muted); }
+.runs-table .run-outcome.status-errors { color: var(--state-failed-ink); }
+.runs-table .run-outcome.status-awaiting_review { color: var(--state-review-ink); }
+.runs-table .flagchip { background: var(--infer-bg); color: var(--infer-ink); border: 1px solid var(--infer-bd);
+    padding: 1px 7px; border-radius: 3px; font-size: .74rem; cursor: help; white-space: nowrap; }
 .runs-table .unresolved { color: var(--state-warn-ink); cursor: help; }
 
 /* Both sit inside a `.run-section`, which owns the rule above them and the space

@@ -1,23 +1,23 @@
 {% extends "project_shell.html" %}
 {#
-  RUNS — the runs list, with awaiting-review runs surfaced at the top.
+  RUNS — the runs list.
 
   Four columns, none of which is the run id: `run_id` IS `started_at` (the same
   instant, machine-formatted), so it survives as the row's link target and on
   hover rather than as a column of its own.
 
-    when         relative time, with the run's duration under it
-    what it ran  the pinned version's message + the basenames of the files it read
-    result       the stage strip, the same partial the run page draws
-    differences  what THIS run set differently (row caps, cache, test run) — not
-                 a diff against another run
+    date      when the run started, in the reader's own timezone
+    version   the version this run pinned, linked, labelled by its message
+    duration  how long the run took
+    result    the stage strip (the same partial the run page draws), with the
+              run's status in words under it
 
   Context the route passes:
     state = project.project_state(mdir); section = "runs"
     runs  = app.web.run_index.build_run_index_rows(state.name) — list of RunIndexRow
 
-  The "awaiting review" count comes from state.runs.awaiting_review (a run halted at a
-  human_review_queue). Counts are truthful — only manifest-backed runs appear.
+  Only manifest-backed runs appear, and a run whose manifest cannot be read says so
+  in place of the parts it could not read.
 #}
 {% block section %}
 <div class="sec-head wf-head">
@@ -35,47 +35,58 @@
 </section>
 {% endif %}
 
-{% if state.runs.awaiting_review > 0 %}
-<div class="banner banner-review">
-  <strong>{{ state.runs.awaiting_review }}</strong> run{% if state.runs.awaiting_review != 1 %}s{% endif %}
-  awaiting review — halted at a human-review queue. Open the run to clear its queue.
-</div>
-{% endif %}
-
 {% if runs %}
 <table class="stages runs-table">
   <thead>
-    <tr><th>when</th><th>what it ran</th><th>result</th><th>differences</th></tr>
+    <tr><th>date</th><th>workflow version</th><th>duration</th><th>result</th></tr>
   </thead>
   <tbody>
     {% for r in runs %}
-    <tr>
-      <td>
+    <tr class="js-run-row" data-href="/project/{{ state.name }}/runs/{{ r.run_id }}">
+      <td class="run-date">
         <a href="/project/{{ state.name }}/runs/{{ r.run_id }}" title="run {{ r.run_id }}">
-          {%- if r.started_at %}{{ r.started_at | relative_time }}{% else %}<code>{{ r.run_id }}</code>{% endif -%}
+          {%- if r.started_at %}{{ r.started_at | friendly_time }}{% else %}<code>{{ r.run_id }}</code>{% endif -%}
         </a>
-        {% if r.duration %}<span class="run-sub">{{ r.duration }}</span>{% endif %}
+        {%- if r.is_test_run %} <span class="flagchip"
+          title="A workflow test, not a production run: its numbers are not the project's output.">test run</span>
+        {%- endif %}
       </td>
       <td>
         {%- if r.version is none %}<span class="muted">(manifest unreadable)</span>
-        {%- elif r.version.message %}“{{ r.version.message }}”
         {%- elif r.version.error %}<span class="unresolved" title="{{ r.version.error }}">version
           {% if r.version.version_id %}<code>{{ r.version.version_id }}</code>{% endif %} could not be read</span>
-        {%- elif r.version.version_id %}<code>{{ r.version.version_id }}</code> <span class="muted">(no message)</span>
+        {%- elif r.version.version_id %}
+          {%- if r.version.message %}“{{ r.version.message }}”
+          {%- else %}<code>{{ r.version.version_id }}</code> <span class="muted">(no message)</span>{% endif %}
+          <a class="open-away" target="_blank" rel="noopener"
+             href="/project/{{ state.name }}/workflow/version/{{ r.version.version_id }}"
+             title="open version {{ r.version.version_id }} in a new tab">↗</a>
         {%- else %}<span class="unresolved">no workflow version recorded</span>
         {%- endif %}
-        {% if r.input_names %}<span class="run-sub">{{ r.input_names | join(' · ') }}</span>{% endif %}
       </td>
+      <td class="run-duration">{% if r.duration %}{{ r.duration }}{% endif %}</td>
       <td title="{{ r.result_summary }}">
         {%- if r.strip is none %}<span class="muted">(manifest unreadable)</span>
         {%- else %}{% with strip = r.strip, show_counts = false, strip_id = none %}{% include "_stage_strip.html" %}{% endwith %}
+          {%- if r.outcome %}<span class="run-outcome status-{{ r.status }}">{{ r.outcome }}</span>{% endif %}
         {%- endif %}
       </td>
-      <td class="run-diff">{% if r.differences %}{{ r.differences | join(' · ') }}{% endif %}</td>
     </tr>
     {% endfor %}
   </tbody>
 </table>
+<script>
+  // The whole row opens the run, so no one cell has to look like the handle.
+  // A click that landed on a link (the version's ↗, the date) is that link's.
+  document.querySelectorAll('.js-run-row').forEach(function (row) {
+    row.addEventListener('click', function (event) {
+      if (event.target.closest('a')) return;
+      var href = row.dataset.href;
+      if (event.metaKey || event.ctrlKey) window.open(href, '_blank', 'noopener');
+      else location.href = href;
+    });
+  });
+</script>
 {% else %}
 <div class="empty-state">
   <h2>No runs yet</h2>
