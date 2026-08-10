@@ -77,17 +77,18 @@ def _build_frame_cache_id(
 
 
 def compute_row_fingerprint(row: Mapping[str, object]) -> str:
-    """compute_short_hash over a sorted-key JSON dump of `row`: every null form a
-    pandas row cell can carry (None, float('nan'), pd.NA, pd.NaT — see
-    `app.core.frames.collapse_null_forms`) is mapped to JSON null first, so two
-    rows that differ only in which null form they carry hash identically. Column
-    order does not matter — json.dumps(sort_keys=True) makes key order irrelevant
-    regardless of the input mapping's own order. This construction defends
-    against exactly two instability sources that would otherwise change a
-    row's identity for free: null-form representation drift across a storage
-    round trip, and column order."""
+    """compute_short_hash over a sorted-key JSON dump of `row`, normalized exactly
+    as `_to_json_safe_row` normalizes what gets STORED — the two must agree, or a
+    row is filed under one identity and looked up under another. Three instability
+    sources are neutralised: null form (None/nan/pd.NA/pd.NaT all become JSON
+    null), column order (sort_keys), and cell representation — a list[str] cell is
+    an ndarray when freshly read from parquet and a list when replayed from the
+    cache, and those must hash alike."""
     normalized = {key: collapse_null_forms(value) for key, value in row.items()}
-    payload = json.dumps(normalized, sort_keys=True, separators=(",", ":"), default=str)
+    payload = json.dumps(
+        normalized, sort_keys=True, separators=(",", ":"),
+        default=convert_cell_to_json_native,
+    )
     return compute_short_hash(payload)
 
 
