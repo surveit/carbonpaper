@@ -259,12 +259,13 @@
 </section>
 
 {# ── 4. STAGE DETAILS — one stage, picked from the band above or the guide rail.
-      Not on the page until one is: an empty panel with a "pick a stage" placeholder
-      is a heading, a lede and a box of nothing, all claiming space on a page whose
-      whole point is having less on it. loadStage() unhides it. ── #}
-<section class="run-section" id="run-stage-section" hidden>
-<h2>Stage details</h2>
-<p class="lede">One stage of this run: what it produced, the contract it declares, and the transform it applied.</p>
+      Not on the page until one is: a placeholder box claims space on a page whose
+      whole point is having less on it. loadStage() unhides it.
+
+      Untitled, and with no rule above it: it is not a peer of the sections around
+      it but the RESULT of clicking one of them, and the panel opens with the
+      stage's own name, which says what it is better than a title could. ── #}
+<section class="run-section run-section-untitled" id="run-stage-section" hidden>
 <div class="stage-panel-full" id="stage-panel"></div>
 </section>
 

@@ -13,11 +13,13 @@
 
 <div class="run-stage-panel">
 
-<div class="stage-header">
-    <span class="type-tag {{ type_class.get(stage.type, 'custom') }}">{{ type_glyph.get(stage.type, '') }} {{ stage.type }}</span>
-    <span class="run-status status-pending">not run</span>
-    <h2><code>{{ stage.id }}</code></h2>
-    <p class="stage-id">{{ stage.description }}</p>
+<div class="stage-panel-head">
+    <div class="head-line">
+        <h2><code>{{ stage.id }}</code></h2>
+        <span class="type-tag {{ type_class.get(stage.type, 'custom') }}">{{ type_glyph.get(stage.type, '') }} {{ stage.type }}</span>
+    </div>
+    <p class="stage-blurb">{{ stage.description }}</p>
+    <p class="stage-facts"><span class="run-status status-pending">not run</span></p>
 </div>
 
 <p class="banner" id="stage-not-executed">

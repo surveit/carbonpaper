@@ -132,6 +132,10 @@ table.issue-table { width: 100%; border-collapse: collapse; font-size: .79rem; }
 .run-section { margin-top: 1.8rem; border-top: 2px solid var(--border); padding-top: 1rem; }
 .run-section > h2 { margin: 0 0 .15rem; font-size: 15px; }
 .run-section > .lede { margin: 0 0 .7rem; font-size: .81rem; }
+/* A section whose content names itself takes neither a title nor the rule: the
+   stage panel is what clicking the workflow band produced, so a rule between the
+   two would cut it off from the thing that opened it. */
+.run-section.run-section-untitled { border-top: 0; padding-top: 0; margin-top: 1.3rem; }
 
 /* ── The run log's disclosure (_run_log_panel.html), rendered both scoped to a
       stage inside its panel and unscoped at the foot of the run page. ── */
