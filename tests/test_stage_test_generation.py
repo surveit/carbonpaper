@@ -1,6 +1,7 @@
 """The generator bridge: task assembly is code-blind, document-blind, and grounded
 in the step's own description."""
 import pytest
+from pydantic import ValidationError
 
 from app.compiler.stage_tests import build_stage_test_generator, render_generation_task
 from app.models import parse_stage, Stage
@@ -116,3 +117,41 @@ def test_generator_target_schema_is_stage_bound():
         agent._target_schema.model_validate({"tests": [{
             "name": "x", "inputs": {"ghost": [{"amount": 1.0}]},
             "expected": [{"amount": 1.0, "doubled": 2.0}]}]})
+
+
+def _narrow_reads_stage() -> Stage:
+    """Reads `amount` off an input that also carries `memo`, which flows past it."""
+    return parse_stage({
+        "id": "double", "description": "Double", "type": "python_row_function",
+        "inputs": [{"id": "load", "schema": {"columns": [
+            {"name": "amount", "type": "float", "nullable": False},
+            {"name": "memo", "type": "str", "nullable": False},
+        ]}}],
+        "function": {"kind": "inline", "code": _CODE, "summary": _SUMMARY},
+        "signature": {
+            "form": "extends",
+            "reads": [{"input": "load", "columns": [
+                {"name": "amount", "type": "float", "nullable": False}]}],
+            "adds": [{"name": "doubled", "type": "float", "nullable": False}],
+        },
+    })
+
+
+def test_task_shows_each_input_as_what_the_step_reads_from_it():
+    # Showing the whole edge would ask for fixture columns the gate then refuses.
+    task = render_generation_task(_DOC, _narrow_reads_stage())
+    assert "amount" in task and "doubled" in task
+    assert "memo" not in task
+
+
+def test_target_schema_binds_the_case_to_the_reads_not_the_input_edge():
+    agent = build_stage_test_generator(_DOC, _narrow_reads_stage())
+    suite = agent._target_schema.model_validate({"tests": [{
+        "name": "doubles_two", "inputs": {"load": [{"amount": 2.0}]},
+        "expected": [{"amount": 2.0, "doubled": 4.0}]}]})
+    assert suite.tests[0].inputs == {"load": [{"amount": 2.0}]}
+    with pytest.raises(ValidationError, match="memo"):
+        agent._target_schema.model_validate({"tests": [{
+            "name": "states_a_column_the_step_never_reads",
+            "inputs": {"load": [{"amount": 2.0, "memo": "rent"}]},
+            "expected": [{"amount": 2.0, "doubled": 4.0}]}]})

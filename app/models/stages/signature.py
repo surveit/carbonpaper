@@ -153,12 +153,7 @@ def _find_extends_issues(stage: "StageBase", signature: ExtendsSignature) -> lis
     anchor = stage.inputs[0]
     issues: list[str] = []
 
-    anchor_reads = {
-        column.name
-        for entry in signature.reads
-        if entry.input == anchor.id
-        for column in entry.columns
-    }
+    anchor_reads = {column.name for column in anchor_read_columns(stage)}
     issues.extend(
         _issue(stage, f"rewrites `{column.name}` without reading it from the anchor "
                       f"input `{anchor.id}`")
@@ -189,6 +184,44 @@ def promised_output_schema(stage: "StageBase") -> "TableSchema | None":
     if not signature.produces:
         return None
     return TableSchema(columns=signature.produces)
+
+
+def anchor_read_columns(stage: "StageBase") -> list[Column]:
+    """What the transform consumes from its anchor input; [] unless the form flows the rest."""
+    signature = stage.signature
+    if not stage.inputs or not isinstance(signature, ExtendsSignature):
+        return []
+    anchor = stage.inputs[0].id
+    return [
+        column
+        for entry in signature.reads
+        if entry.input == anchor
+        for column in entry.columns
+    ]
+
+
+def input_read_schemas(stage: "StageBase") -> dict[StageId, TableSchema]:
+    """Per declared input, what the transform consumes from it — empty where it reads none."""
+    signature = stage.signature
+    reads = {} if signature is None else {
+        entry.input: list(entry.columns) for entry in signature.reads
+    }
+    return {
+        ref.id: TableSchema(columns=reads.get(ref.id, [])) for ref in stage.inputs
+    }
+
+
+def output_schema_over_reads(stage: "StageBase") -> "TableSchema | None":
+    """What comes out when the input carries ONLY the reads; None when that is no columns."""
+    signature = stage.signature
+    if signature is None:
+        return None
+    # Nothing flows under `replaces`, so narrowing the input cannot narrow the output.
+    if isinstance(signature, ReplacesSignature):
+        return TableSchema(columns=signature.produces) if signature.produces else None
+    read = TableSchema(columns=anchor_read_columns(stage))
+    extended = read.extend(signature.rewrites, signature.adds)
+    return extended if extended.columns else None
 
 
 def _issue(stage: "StageBase", problem: str) -> str:

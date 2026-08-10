@@ -8,6 +8,10 @@ import pytest
 from pydantic import ValidationError
 
 from app.models.stage import parse_stage
+from app.models.stages.signature import (
+    input_read_schemas,
+    output_schema_over_reads,
+)
 
 
 _EDGE = {
@@ -424,3 +428,61 @@ def test_publish_signature_must_produce_nothing():
     }
     msg = _issues(spec)
     assert "publish emits files, not a table" in msg
+
+
+# ── the schemas a stage's TESTS are stated in ────────────────────────────────
+# A test states what the transform consumes and what it leaves over that, which
+# is narrower than the input edge wherever a column merely flows past the stage.
+
+def test_read_schemas_narrow_each_input_to_what_the_transform_consumes():
+    stage = parse_stage(_row_function_stage(signature={
+        "form": "extends",
+        "reads": [{"input": "bills", "columns": [
+            {"name": "price", "type": "str", "nullable": True}]}],
+        "adds": [{"name": "note", "type": "str", "nullable": True}],
+    }))
+    assert [c.name for c in input_read_schemas(stage)["bills"].columns] == ["price"]
+
+
+def test_the_output_over_the_reads_drops_what_only_flows_through():
+    stage = parse_stage(_row_function_stage(signature={
+        "form": "extends",
+        "reads": [{"input": "bills", "columns": [
+            {"name": "price", "type": "str", "nullable": True}]}],
+        "adds": [{"name": "note", "type": "str", "nullable": True}],
+    }))
+    # `title` is on the promised output because it flows; over a frame carrying
+    # only the reads there is no `title` to flow, so a case never states one.
+    assert [c.name for c in stage.resolve_output_schema().columns] == [
+        "price", "title", "note"]
+    assert [c.name for c in output_schema_over_reads(stage).columns] == ["price", "note"]
+
+
+def test_a_rewrite_lands_on_the_read_column_over_the_reads_too():
+    stage = parse_stage(_row_function_stage(signature={
+        "form": "extends",
+        "reads": [{"input": "bills", "columns": [
+            {"name": "price", "type": "str", "nullable": True}]}],
+        "rewrites": [{"name": "price", "type": "float", "nullable": True}],
+    }))
+    assert [(c.name, c.type) for c in output_schema_over_reads(stage).columns] == [
+        ("price", "float")]
+
+
+def test_a_replaces_form_states_its_whole_output_however_narrow_its_reads():
+    stage = parse_stage({
+        "id": "regroup",
+        "description": "Regroup bills",
+        "type": "python_frame_function",
+        "inputs": [{"id": "bills", "schema": _EDGE}],
+        "function": {"kind": "inline", "code": "def transform(df):\n    return df"},
+        "signature": {
+            "form": "replaces",
+            "reads": [{"input": "bills", "columns": [
+                {"name": "price", "type": "str", "nullable": True}]}],
+            "produces": [{"name": "total", "type": "float", "nullable": True}],
+        },
+    })
+    # Nothing flows under `replaces`, so narrowing the input narrows no output.
+    assert [c.name for c in output_schema_over_reads(stage).columns] == ["total"]
+    assert [c.name for c in input_read_schemas(stage)["bills"].columns] == ["price"]

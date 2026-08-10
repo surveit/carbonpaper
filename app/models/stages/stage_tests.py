@@ -23,18 +23,21 @@ from app.core.utils import format_errors
 from app.models.schema import StageId, TableSchema, _Base
 
 # One row: column name → cell value. WHICH columns is not knowable here — it comes
-# from the stage's own declared schema, checked at validate_test_rows — so this is a
+# from the stage's own signature, checked at validate_test_rows — so this is a
 # dynamic boundary, not a model waiting to be written.
 DataRow: TypeAlias = dict[str, Any]
 
 _INPUTS_DESCRIPTION = (
     "Rows fed to the stage, keyed by the upstream stage id they come from — exactly "
-    "its declared input ids. Every row states every column, nulls explicit."
+    "its declared input ids. Every row states every column the signature READS from "
+    "that input and no other, nulls explicit: what the upstream also carries past "
+    "the transform is not part of the case."
 )
 _EXPECTED_DESCRIPTION = (
-    "The rows the step must produce, or null to claim it must FAIL rather than return "
-    "a value it cannot stand behind. [] is not null: [] is success with no rows. "
-    "State one; no default."
+    "The rows the step must produce over exactly those inputs — so a column that "
+    "merely flows through appears here only if the case fed it in. Or null to claim "
+    "the step must FAIL rather than return a value it cannot stand behind. [] is not "
+    "null: [] is success with no rows. State one; no default."
 )
 
 # Exactly one input holding exactly one row: what a step the runtime invokes per row
@@ -113,21 +116,23 @@ def validate_stage_tests(input_ids: list[StageId], tests: list[StageTest]) -> No
 
 
 def validate_test_rows(
-    input_schemas: dict[StageId, TableSchema],
-    output_schema: TableSchema,
+    read_schemas: dict[StageId, TableSchema],
+    expected_schema: TableSchema,
     tests: list[StageTest],
 ) -> None:
     """Raise ValueError if any test row fails the schema it claims to instance.
-    Judged through TableSchema.to_pydantic_model, so every declared column must be
-    on EVERY row (a nullable one as an explicit None) and no other key is allowed —
+    `read_schemas` is what the signature READS from each input, not what the
+    upstream produces there, so a case states only what the transform consumes.
+    Judged through TableSchema.to_pydantic_model, so every column of that schema must
+    be on EVERY row (a nullable one as an explicit None) and no other key is allowed —
     stricter than the runtime's stage-I/O validation, which only warns on an
     undeclared column: a real stage may pass extras through, but a test row
     inventing one states the wrong shape. Assumes validate_stage_tests passed."""
     input_models = {
         input_id: schema.to_pydantic_model(f"{input_id}_row")
-        for input_id, schema in input_schemas.items()
+        for input_id, schema in read_schemas.items()
     }
-    expected_model = output_schema.to_pydantic_model("expected_row")
+    expected_model = expected_schema.to_pydantic_model("expected_row")
     problems = [
         problem
         for test in tests
@@ -138,8 +143,8 @@ def validate_test_rows(
 
 
 def validate_test_frames(
-    input_schemas: dict[StageId, TableSchema],
-    output_schema: TableSchema,
+    read_schemas: dict[StageId, TableSchema],
+    expected_schema: TableSchema,
     tests: list[StageTest],
 ) -> None:
     """Raise ValueError if a test's rows break a cross-row rule a real run enforces."""
@@ -149,7 +154,7 @@ def validate_test_frames(
     problems = [
         problem
         for test in tests
-        for problem in _find_test_frame_problems(test, input_schemas, output_schema)
+        for problem in _find_test_frame_problems(test, read_schemas, expected_schema)
     ]
     if problems:
         raise ValueError("; ".join(problems))
@@ -157,12 +162,12 @@ def validate_test_frames(
 
 def build_stage_tests_model(
     test_class: type[StageTest],
-    input_schemas: dict[StageId, TableSchema],
-    output_schema: TableSchema,
+    read_schemas: dict[StageId, TableSchema],
+    expected_schema: TableSchema,
 ) -> type[BaseModel]:
-    """A ``{"tests": [test_class, ...]}`` model bound to one stage's inputs and output
-    schema, so an agent's submit_answer rejects a malformed suite inside the agent
-    loop rather than at stage-write time."""
+    """A ``{"tests": [test_class, ...]}`` model bound to what one stage's signature reads
+    per input and what it leaves over those reads, so an agent's submit_answer rejects a
+    malformed suite inside the agent loop rather than at stage-write time."""
 
     class StageTestSuite(BaseModel):
         tests: list[StageTest]
@@ -171,9 +176,9 @@ def build_stage_tests_model(
 
         @model_validator(mode="after")
         def _stage_rules(self) -> "StageTestSuite":
-            validate_stage_tests(list(input_schemas), self.tests)
-            validate_test_rows(input_schemas, output_schema, self.tests)
-            validate_test_frames(input_schemas, output_schema, self.tests)
+            validate_stage_tests(list(read_schemas), self.tests)
+            validate_test_rows(read_schemas, expected_schema, self.tests)
+            validate_test_frames(read_schemas, expected_schema, self.tests)
             return self
 
     # `list[test_class]` is a runtime type, so it enters through an Any-typed handle
@@ -205,15 +210,15 @@ def _find_test_row_problems(
 
 def _find_test_frame_problems(
     test: StageTest,
-    input_schemas: dict[StageId, TableSchema],
-    output_schema: TableSchema,
+    read_schemas: dict[StageId, TableSchema],
+    expected_schema: TableSchema,
 ) -> list[str]:
     # An input frame must pass the rule the runner applies to a stage input
     # (no exact duplicate rows). A test states frames a real run would have
     # to accept — no stricter, no looser.
     return [
         f"test {test.name!r}, input {input_id!r}: {violation.message}"
-        for input_id in input_schemas
+        for input_id in read_schemas
         for violation in find_frame_violations(pd.DataFrame(test.inputs[input_id]))
     ]
 
