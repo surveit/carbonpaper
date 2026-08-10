@@ -136,6 +136,42 @@ def find_production_run_imports(paths: list[Path]) -> list[str]:
     return offenders
 
 
+_PROJECT_DIR_NAMES = {"project_dir", "pdir", "project_directory"}
+_PROJECTS_ROOT_FUNC = "projects_dir"
+
+
+def find_project_directory_names(paths: list[Path], *, root: Path) -> list[str]:
+    """Every place a file names a project DIRECTORY rather than a project id."""
+    offenders: list[str] = []
+    for path in paths:
+        rel = path.relative_to(root).as_posix()
+        for node in ast.walk(parse_module(path)):
+            line = getattr(node, "lineno", 0)
+            offenders += [f"{rel}:{line} {detail}" for detail in _describe_node(node)]
+    return sorted(offenders)
+
+
+def _describe_node(node: ast.AST) -> list[str]:
+    if isinstance(node, ast.arg) and node.arg in _PROJECT_DIR_NAMES:
+        return [f"parameter `{node.arg}` — take a project id (str) instead"]
+    if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+        if node.id in _PROJECT_DIR_NAMES:
+            return [f"binds `{node.id}` — resolve the directory inside a service instead"]
+    if _is_projects_root_join(node):
+        return [f"joins onto `{_PROJECTS_ROOT_FUNC}()` — call a service that takes the id"]
+    return []
+
+
+def _is_projects_root_join(node: ast.AST) -> bool:
+    return (
+        isinstance(node, ast.BinOp)
+        and isinstance(node.op, ast.Div)
+        and isinstance(node.left, ast.Call)
+        and isinstance(node.left.func, ast.Name)
+        and node.left.func.id == _PROJECTS_ROOT_FUNC
+    )
+
+
 def find_check_prefixed_functions(paths: list[Path]) -> list[str]:
     """Function definitions named ``check_*`` / ``_check_*`` — the vocabulary
     for a function that enforces or reports on an invariant is ``validate_*``

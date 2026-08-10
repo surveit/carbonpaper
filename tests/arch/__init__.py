@@ -13,6 +13,7 @@ from arch.predicates import (
     find_banned_words as find_banned_words,
     find_check_prefixed_functions as find_check_prefixed_functions,
     find_production_run_imports as find_production_run_imports,
+    find_project_directory_names as find_project_directory_names,
 )
 from arch.scope import (
     find_governed_files as find_governed_files,

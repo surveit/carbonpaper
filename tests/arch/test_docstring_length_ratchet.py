@@ -454,7 +454,6 @@ _GRANDFATHERED: frozenset[str] = frozenset(
         "app/services/versioning.py::_invalid_version_document",
         "app/services/versioning.py::create_version_from_stages",
         "app/services/versioning.py::find_latest_version_id",
-        "app/services/versioning.py::list_versions",
         "app/services/versioning.py::load_version",
         "app/services/versioning.py::load_version_stages",
         "app/services/versioning.py::publish_version",

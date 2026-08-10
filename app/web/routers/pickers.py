@@ -7,17 +7,14 @@ by `/project/{project}/runs/{run_id}`, which matched it as a run named "picker".
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
 from app.core.run_status import RunStatus
-from app.services import versioning
-from app.services.project import list_projects
-from app.services.versioning import WorkflowVersion
+from app.services.project import list_projects, project_exists
+from app.services.versioning import WorkflowVersion, list_project_versions
 from app.web.breadcrumbs import Picker, PickerRow
-from app.web.config import projects_dir, templates
+from app.web.config import templates
 from app.web.run_index import RunIndexRow, build_run_index_rows
 
 router = APIRouter()
@@ -43,8 +40,8 @@ async def projects_picker(request: Request, current: str = ""):
 
 @router.get("/pickers/project/{project}/versions", response_class=HTMLResponse)
 async def versions_picker(request: Request, project: str, current: str = ""):
-    pdir = _project_dir(project)
-    versions = versioning.list_versions(pdir)  # newest-first
+    _refuse_unknown_project(project)
+    versions = list_project_versions(project)  # newest-first
     return _render(request, Picker(
         heading="Versions of this workflow",
         rows=[_version_row(project, version, current) for version in versions[:_ROW_CAP]],
@@ -55,7 +52,7 @@ async def versions_picker(request: Request, project: str, current: str = ""):
 
 @router.get("/pickers/project/{project}/runs", response_class=HTMLResponse)
 async def runs_picker(request: Request, project: str, current: str = ""):
-    _project_dir(project)
+    _refuse_unknown_project(project)
     runs = build_run_index_rows(project)  # newest-first
     return _render(request, Picker(
         heading="Runs of this workflow",
@@ -70,6 +67,12 @@ async def runs_picker(request: Request, project: str, current: str = ""):
 _PUBLISHED = "published"
 _UNPUBLISHED = "unpublished"
 _NO_DESCRIPTION = "No description"
+
+
+def _refuse_unknown_project(project: str) -> None:
+    # Also refuses an id escaping the workspace, which `projects_dir() / project` accepted.
+    if not project_exists(project):
+        raise HTTPException(status_code=404, detail=f"No project '{project}'")
 
 
 def _version_row(project: str, version: WorkflowVersion, current: str) -> PickerRow:
@@ -122,13 +125,6 @@ _RUN_BADGE_KINDS = {
 
 def _all_label(total: int, noun: str) -> str:
     return f"All {total} {noun}{'' if total == 1 else 's'}"
-
-
-def _project_dir(project: str) -> Path:
-    pdir = projects_dir() / project
-    if not pdir.is_dir():
-        raise HTTPException(status_code=404, detail=f"No project '{project}'")
-    return pdir
 
 
 def _render(request: Request, picker: Picker) -> HTMLResponse:

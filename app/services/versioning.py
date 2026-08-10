@@ -284,12 +284,13 @@ def _invalid_version_document(doc_id: str, exc: ValidationError) -> WorkflowLoad
 
 
 def list_versions(project_dir: Path) -> list[WorkflowVersion]:
-    """All versions for a project, NEWEST-FIRST. A stored document that fails
-    the WorkflowVersion contract raises WorkflowLoadError (see
-    _invalid_version_document) — the whole listing fails rather than quietly
-    presenting a store with an invalid document in it as healthy. No versions
-    stored yet -> []."""
-    name = Path(project_dir).name
+    """Prefer list_project_versions: this reads `project_dir` only to take its name."""
+    return list_project_versions(Path(project_dir).name)
+
+
+def list_project_versions(project_id: str) -> list[WorkflowVersion]:
+    """NEWEST-FIRST. One invalid stored document fails the whole listing, loudly."""
+    name = project_id
     versions: list[WorkflowVersion] = []
     for doc_id, data in get_store().read_all("workflow_version", f"{name}/"):
         try:
