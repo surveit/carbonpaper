@@ -104,6 +104,12 @@ ROW_USAGE_KEY = "_usage"
 # that emits it reads it back in its own `finish_mapped_rows`.
 ROW_DEFERRED_KEY = "_deferred"
 
+# Internal column marking a row the row cache answered rather than the stage
+# computing it. Stamped where the hit is read, so both row-mapped paths carry it;
+# the driver counts them onto the stage's StageContribution. A computed row never
+# carries the column, so a stage with no hits reports no count rather than a zero.
+ROW_CACHED_KEY = "_cached"
+
 
 class _InternalRowColumn(NamedTuple):
     """One internal column a mapper may attach, and what the driver does about
@@ -126,6 +132,7 @@ _INTERNAL_ROW_COLUMNS = (
     _InternalRowColumn(ROW_ERROR_KEY, stripped_from_output=True, blocks_recording=True),
     _InternalRowColumn(ROW_USAGE_KEY, stripped_from_output=True, blocks_recording=False),
     _InternalRowColumn(ROW_DEFERRED_KEY, stripped_from_output=True, blocks_recording=True),
+    _InternalRowColumn(ROW_CACHED_KEY, stripped_from_output=True, blocks_recording=False),
 )
 
 
@@ -464,8 +471,9 @@ def _open_row_caching(stage: Stage, ctx: RunContext) -> _RowCaching | None:
 
 
 def _find_cached_row(caching: _RowCaching, input_row: Row) -> Row | None:
+    """The recorded answer for `input_row`, marked as the replay it is."""
     recorded = caching.recorded_outputs.get(compute_row_fingerprint(input_row))
-    return None if recorded is None else dict(recorded)
+    return None if recorded is None else {**recorded, ROW_CACHED_KEY: True}
 
 
 def _record_row_output(caching: _RowCaching, input_row: Row, output_row: Row) -> None:
@@ -693,6 +701,7 @@ def _collect_internal_columns(df: pd.DataFrame) -> StageContribution:
     contribution = StageContribution()
     _collect_row_errors(df, contribution)
     _collect_row_usage(df, contribution)
+    _collect_cached_rows(df, contribution)
     return contribution
 
 
@@ -765,6 +774,13 @@ def _collect_row_usage(df: pd.DataFrame, contribution: StageContribution) -> Non
         return
     parts = [value for value in df[ROW_USAGE_KEY] if isinstance(value, LlmUsage)]
     contribution.llm_usage = LlmUsage.summed(parts)
+
+
+def _collect_cached_rows(df: pd.DataFrame, contribution: StageContribution) -> None:
+    """No column means nothing was replayed: no count is recorded, never a zero."""
+    if ROW_CACHED_KEY not in df.columns:
+        return
+    contribution.cached_rows = int(sum(value is True for value in df[ROW_CACHED_KEY]))
 
 
 def _project_onto_declared_columns(

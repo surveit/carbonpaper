@@ -92,21 +92,42 @@
        authored. `calls` and `cost_usd` are the fields that hold up: calls equals
        ceil(rows / batch_size) and cost tracks it. LlmUsage's token counts agree with
        neither and are not shown. #}
-    {% if stage.llm_usage and stage.llm_usage.calls %}
+    {# Shown for every stage that HAS a model, not only one that spent: an
+       absent `llm_usage` is what a fully replayed stage looks like, and hiding
+       the block on that made "reused, cost nothing" and "no model here" render
+       identically. It is also shown where usage was recorded but the pinned
+       version no longer resolves, since the spend is still this run's fact. #}
     {% set u = stage.llm_usage %}
-    {% set batch = stage_def.llm.batch_size if stage_def and stage_def.llm else None %}
+    {% set llm = stage_def.llm if stage_def else None %}
+    {% if llm or (u and u.calls) %}
+    {% set batch = llm.batch_size if llm else None %}
     <dl class="llm-stats">
-        {% if stage_def and stage_def.llm %}
-        <div><dt>model</dt><dd><code>{{ stage_def.llm.model }}</code></dd></div>
+        {% if llm %}
+        <div><dt>model</dt><dd><code>{{ llm.model }}</code></dd></div>
         {% endif %}
+        {% if u and u.calls %}
         <div><dt>calls</dt><dd>{{ "{:,}".format(u.calls) }}</dd></div>
         {% if batch and batch > 1 %}<div><dt>rows per call</dt><dd>{{ batch }}</dd></div>{% endif %}
         <div><dt>cost</dt><dd>{{ u.cost_usd | usd }}</dd></div>
+        {% else %}
+        {# `none` rather than a zero: the manifest recorded no call and no cost
+           for this run, which is not the same claim as a measured $0.00. #}
+        <div><dt>calls</dt><dd>none</dd></div>
+        <div><dt>cost</dt><dd>none</dd></div>
+        {% endif %}
     </dl>
+    {% if u and u.calls %}
     {% if batch and batch > 1 %}
     <p class="banner banner-warn">Rows were judged <b>{{ batch }} at a time</b>, not one by one —
         each call was shown {{ batch }} rows together and answered for all of them. A row's answer
         could have been swayed by the {{ batch - 1 }} beside it.</p>
+    {% endif %}
+    {% else %}
+    {# `cached_rows` is absent from every manifest written before the runtime
+       counted replays, so the count is stated only where it was taken. #}
+    <p class="muted"><b>Reused, not recomputed.</b>
+        {% if stage.cached_rows %}{{ "{:,}".format(stage.cached_rows) }} of {{ "{:,}".format(stage.output_row_count or 0) }} row{% if (stage.output_row_count or 0) != 1 %}s{% endif %} came back from results an earlier run already produced,{% else %}The rows came back from results an earlier run already produced,{% endif %}
+        so the model was not called in this run and this run spent nothing on this stage.</p>
     {% endif %}
     {% endif %}
     {# Stage-aware diff (app.web.stage_diff): a row_aligned diff or a

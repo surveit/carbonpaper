@@ -15,7 +15,9 @@ from app.models import parse_stage, Stage
 from app.models.stage import StageType
 from app.runtime.context import RunIdentity
 from app.runtime.stages import HANDLERS
+from app.runtime.manifest import CONTRIBUTION_ATTR
 from app.runtime.stages.execution import (
+    ROW_CACHED_KEY,
     ROW_ERROR_KEY,
     ROW_USAGE_KEY,
     RowMapHandler,
@@ -481,6 +483,59 @@ def test_run_llm_batches_computes_every_row_it_is_given(monkeypatch):
 
     assert batches == [[1, 2]]
     assert [row["verdict"] for row in rows] == ["v1", "v2"]
+
+
+# ── the replayed-row count the run page reads ────────────────────────────────
+
+
+def _replayed(out: pd.DataFrame) -> int | None:
+    return out.attrs[CONTRIBUTION_ATTR].cached_rows
+
+
+def test_a_computing_run_reports_no_replay_count_at_all(monkeypatch):
+    """None, not zero — a zero would read as a measurement that was taken."""
+    _stub_call_llm(monkeypatch, [])
+    assert _replayed(_run(_llm_stage(), _src([1, 2]), _ctx(run_id="run1"))) is None
+
+
+def test_a_fully_replayed_llm_stage_counts_every_row(monkeypatch):
+    stage = _llm_stage()
+    _stub_call_llm(monkeypatch, [])
+    _run(stage, _src([1, 2]), _ctx(run_id="run1"))
+
+    assert _replayed(_run(stage, _src([1, 2]), _ctx(run_id="run2"))) == 2
+
+
+def test_a_partly_replayed_batched_stage_counts_only_the_hits(monkeypatch):
+    stage = _llm_stage(batch_size=2)
+    _stub_call_llm_batch(monkeypatch, [])
+    _run(stage, _src([1, 2]), _ctx(run_id="run1"))
+
+    out = _run(stage, _src([1, 2, 7, 8]), _ctx(run_id="run2"))
+    assert _replayed(out) == 2
+
+
+def test_the_replay_marker_never_reaches_stage_output(monkeypatch):
+    """A replayed frame must be column-for-column what a computed one was."""
+    stage = _llm_stage()
+    _stub_call_llm(monkeypatch, [])
+    computed = _run(stage, _src([1]), _ctx(run_id="run1"))
+
+    replayed = _run(stage, _src([1]), _ctx(run_id="run2"))
+    assert list(replayed.columns) == list(computed.columns)
+    assert ROW_CACHED_KEY not in replayed.columns
+
+
+def test_a_replayed_row_is_never_re_recorded_carrying_the_marker(monkeypatch):
+    """A path that re-pinned a hit would put driver machinery in the entry."""
+    stage = _llm_stage()
+    _stub_call_llm(monkeypatch, [])
+    _run(stage, _src([1]), _ctx(run_id="run1"))
+    _run(stage, _src([1]), _ctx(run_id="run2"))
+
+    [entry] = _entries(stage)
+    assert entry.output_row is not None
+    assert ROW_CACHED_KEY not in entry.output_row
 
 
 # ── every row-mapped registration caches: the shape has no opt-out ───────────
