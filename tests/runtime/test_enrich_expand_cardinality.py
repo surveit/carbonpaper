@@ -45,9 +45,7 @@ def test_enrich_keeps_an_unmatched_subject_row_carrying_nulls():
 
 
 def test_enrich_preserves_subject_order_even_when_the_keys_are_unsorted():
-    # The type comment claims enrich leaves row count AND order unchanged. Sorted
-    # subject keys would pass either way, so the keys here are deliberately out of
-    # order and the reference is in a different order again.
+    # Sorted subject keys would pass either way, so these are deliberately out of order.
     stage = _join_stage("enrich")
     subject = pd.DataFrame({"x": [30, 10, 20, 10]})
     reference = pd.DataFrame({"x": [10, 20, 30], "z": ["ten", "twenty", "thirty"]})

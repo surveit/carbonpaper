@@ -33,7 +33,6 @@ _ID_TEXT_SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True},
 
 
 def _seed_version(root):
-    """The version a run targets: runs never create one, so a test must snapshot first."""
     return save_working_copy_as_version(root, message="test seed", reviewer="test").version_id
 
 
@@ -53,9 +52,6 @@ def _make_project(root):
 
 
 def test_limit_on_a_source_stage_caps_the_rows_it_loads(tmp_path):
-    # input_data is the one stage type with no input frames, so the frame it
-    # just loaded is the runtime's only handle on its rows: the cap lands there.
-    # A limit that silently did nothing on a source would be the worst outcome.
     _make_project(tmp_path)
     _seed_version(tmp_path)
     manifest = execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path))
@@ -76,9 +72,7 @@ def test_limit_on_a_source_stage_caps_the_rows_it_loads(tmp_path):
 
 
 def test_per_run_limit_and_offset_slice_and_are_recorded(tmp_path):
-    # 5 rows, static `limit: 2` in the stage spec. The per-run cap wins over
-    # the static one, and the offset skips rows BEFORE the cap is applied:
-    # offset 1 skips row 0, then limit 3 reads rows 1-3.
+    # Offset applies BEFORE the cap: offset 1 skips row 0, then limit 3 reads rows 1-3.
     _make_project(tmp_path)
     _seed_version(tmp_path)
     manifest = execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path),
@@ -106,8 +100,6 @@ def test_per_run_limit_and_offset_slice_and_are_recorded(tmp_path):
 
 
 def test_bust_cache_is_recorded_on_the_manifest(tmp_path):
-    """A recompute-everything run records the flag as run provenance, so a
-    reader (and the resume) knows this run refused every cache read."""
     _make_project(tmp_path)
     _seed_version(tmp_path)
     manifest = execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path), bust_cache=True)
@@ -127,7 +119,6 @@ def test_an_ordinary_run_records_bust_cache_false(tmp_path):
 
 
 def test_cli_bust_cache_flag_reaches_the_run(monkeypatch):
-    """--bust-cache threads into the run; without it the run is not busted."""
     calls: list[bool] = []
 
     def fake_execute(project, *, version_id=None, bindings=None, limits=None,
@@ -160,7 +151,6 @@ _IDENTITY_ROW_FUNCTION = "def transform(row):\n    return row\n"
 
 
 def _row_mapped_project(root, rows: list[dict], code: str):
-    """input_data loading `rows` from CSV, feeding a python_row_function running `code`."""
     (root / "compiled").mkdir(parents=True)
     (root / "data").mkdir(parents=True)
     pd.DataFrame(rows).to_csv(root / "data" / "items.csv", index=False)
@@ -184,8 +174,8 @@ def _row_mapped_project(root, rows: list[dict], code: str):
 
 
 def test_offset_makes_the_trace_land_on_the_true_upstream_row(tmp_path):
-    # The row driver counts from the frame it was HANDED, which an offset starts
-    # two rows in. Unshifted, that lineage would send the trace to load's row 0.
+    # The row driver counts from the frame it was handed; unshifted, the trace
+    # would land on load's row 0.
     _row_mapped_project(tmp_path, [{"name": f"row{i}", "val": i} for i in range(5)],
                         _IDENTITY_ROW_FUNCTION)
     _seed_version(tmp_path)
@@ -203,9 +193,7 @@ def test_offset_makes_the_trace_land_on_the_true_upstream_row(tmp_path):
 
 
 def test_a_limited_stage_is_not_failed_by_a_duplicate_row_it_never_reads(tmp_path):
-    # Rows 0 and 3 are exact duplicates, which fails any stage fed both. Under a
-    # cap of 3 the stage is handed neither pair member twice, so it runs clean:
-    # a dry run must not be failed by a row outside the window it asked for.
+    # Rows 0 and 3 are exact duplicates; a cap of 3 hands the stage only one of them.
     _row_mapped_project(tmp_path, [
         {"name": "a", "val": 1}, {"name": "b", "val": 2},
         {"name": "c", "val": 3}, {"name": "a", "val": 1},
@@ -220,8 +208,6 @@ def test_a_limited_stage_is_not_failed_by_a_duplicate_row_it_never_reads(tmp_pat
 
 
 def _two_stage_project(root, rows: list[dict]):
-    """input_data loading `rows` from CSV, feeding an identity
-    python_frame_function. Exercises the runner's per-stage input checks."""
     (root / "compiled").mkdir(parents=True)
     (root / "data").mkdir(parents=True)
     pd.DataFrame(rows).to_csv(root / "data" / "items.csv", index=False)
@@ -249,8 +235,7 @@ def _two_stage_project(root, rows: list[dict]):
 
 
 def test_duplicate_input_rows_fail_the_stage(tmp_path):
-    # Rows 0 and 2 are identical across EVERY column. That the `name` values
-    # collide is not the point — full-content duplication is.
+    # Rows 0 and 2 are identical across EVERY column — not just a `name` clash.
     _two_stage_project(tmp_path, [
         {"name": "a", "val": 1},
         {"name": "b", "val": 2},
@@ -270,8 +255,7 @@ def test_duplicate_input_rows_fail_the_stage(tmp_path):
 
 
 def test_distinct_input_rows_pass(tmp_path):
-    # Same values in `name` but distinct full rows — an explicit
-    # distinguishing column is exactly the documented escape hatch.
+    # Same `name`, distinct full rows — the documented escape hatch.
     _two_stage_project(tmp_path, [
         {"name": "a", "val": 1},
         {"name": "a", "val": 2},
@@ -285,10 +269,6 @@ def test_distinct_input_rows_pass(tmp_path):
 
 
 def _output_schema_violation_project(root, transform_code: str):
-    """load → shape (a frame function running `transform_code`) → tail. `shape`
-    declares the (name, val) schema; what its code actually returns is the
-    variable under test, and `tail` exists to show what the run does downstream
-    of it."""
     (root / "compiled").mkdir(parents=True)
     (root / "data").mkdir(parents=True)
     pd.DataFrame({"name": ["a", "b"], "val": [1, 2]}).to_csv(
@@ -325,9 +305,7 @@ def _output_schema_violation_project(root, transform_code: str):
 
 
 def test_output_missing_a_declared_column_errors_the_stage_and_blocks_downstream(tmp_path):
-    # An error-severity OUTPUT issue is a stage failure, not a warning: the
-    # frame does not satisfy the declared schema, so no downstream stage may
-    # consume it. Same fork-block a raised handler exception gets.
+    # An error-severity OUTPUT issue is a stage failure: no downstream may consume it.
     _output_schema_violation_project(
         tmp_path, "def transform(df):\n    return df[['name']]\n")
     _seed_version(tmp_path)
@@ -346,9 +324,7 @@ def test_output_missing_a_declared_column_errors_the_stage_and_blocks_downstream
 
 
 def test_warning_only_output_report_does_not_error_the_stage(tmp_path):
-    # An undeclared extra column is warning-severity. It must not be swept into
-    # the error rule — every declared column is there, so downstream may consume
-    # the frame and the stage carries no error record.
+    # An undeclared extra column is warning-severity: every declared column is there.
     _output_schema_violation_project(
         tmp_path, "def transform(df):\n    df['extra'] = 1\n    return df\n")
     _seed_version(tmp_path)
@@ -364,8 +340,7 @@ def test_warning_only_output_report_does_not_error_the_stage(tmp_path):
 
 
 def test_output_validation_error_other_than_a_missing_column_also_errors_the_stage(tmp_path):
-    # The rule is on severity, not on one issue kind: a null in a column
-    # declared non-nullable is error-severity and fails the stage the same way.
+    # The rule is on severity, not on one issue kind.
     (tmp_path / "compiled").mkdir(parents=True)
     (tmp_path / "data").mkdir(parents=True)
     pd.DataFrame({"name": ["a"], "val": [1]}).to_csv(
@@ -447,8 +422,6 @@ def test_value_outside_a_declared_enum_errors_the_stage_and_blocks_downstream(tm
 
 
 def _llm_transform_project(root):
-    """input_data loading one row, feeding an llm_transform. Exercises the
-    runner's row-error surfacing when a row's generation fails."""
     (root / "compiled").mkdir(parents=True)
     (root / "data").mkdir(parents=True)
     pd.DataFrame({"id": ["r1"], "text": ["hi"]}).to_csv(
@@ -479,11 +452,7 @@ def _llm_transform_project(root):
 
 
 def test_llm_generation_failure_surfaces_as_error_status_not_raised(tmp_path, monkeypatch):
-    # A row's generation failure must show up as an error-severity output issue,
-    # flip the stage to status=error, AND carry a populated error record naming
-    # the real cause (so _raise_if_run_failed / eval subset runs don't report
-    # "unknown error") — WITHOUT raising, so the stage still completes and keeps
-    # its (partial) output.
+    # Without raising — the stage still completes and keeps its (partial) output.
     def boom(stage_id, llm_config, row, **kw):
         raise RuntimeError("boom")
 
@@ -506,9 +475,7 @@ def test_llm_generation_failure_surfaces_as_error_status_not_raised(tmp_path, mo
 
 
 def test_run_subset_surfaces_the_real_row_failure_message(tmp_path, monkeypatch):
-    # run_subset backs eval/preview runs (app/evals/runner.py). A row failure
-    # must raise SubsetRunError naming the real cause via record["error"] —
-    # not "unknown error" — because _raise_if_run_failed reads that field.
+    # run_subset backs eval/preview runs (app/evals/runner.py).
     def boom(stage_id, llm_config, row, **kw):
         raise RuntimeError("boom")
 
@@ -550,10 +517,7 @@ def test_run_subset_surfaces_the_real_row_failure_message(tmp_path, monkeypatch)
 
 
 def test_run_subset_preserves_partial_work_in_the_manifest_on_a_mid_frontier_error(tmp_path):
-    # run_subset owns a live manifest: when a mid-frontier stage errors, the
-    # manifest on disk at that moment must already show the completed upstream
-    # stage as ok and the failing stage's error — partial work is preserved for a
-    # caller (workflow test / eval) to read back, not lost to a save-at-the-end.
+    # run_subset saves as it goes, so the partial work is on disk at the error.
     load = parse_stage({
         "id": "load", "description": "Load items", "type": "input_data",
         "connector": {"kind": "file"},
@@ -600,9 +564,6 @@ def test_run_subset_preserves_partial_work_in_the_manifest_on_a_mid_frontier_err
 
 
 def test_raise_if_run_failed_lists_halted_stages_as_readable_text():
-    """`halted_at` is a list of stage ids (see app/runtime/runner.py's
-    _execute_stages). _raise_if_run_failed's message must read them out
-    comma-joined, not as Python's list repr (`['review_a', 'review_b']`)."""
     manifest = RunManifest(
         run_id="r", started_at="t", project=None, workflow_version=None,
         limit_overrides={}, offset_overrides={}, run_bindings={}, input_bindings={},
@@ -619,9 +580,6 @@ def test_raise_if_run_failed_lists_halted_stages_as_readable_text():
 
 
 def test_run_without_a_version_fails_loudly(tmp_path):
-    """A run targets an existing version and never creates one: a valid but
-    unversioned working copy raises NoVersionToRunError and leaves nothing on
-    disk — no run dir, no fabricated version."""
     _make_project(tmp_path)  # valid working copy, but no version created
     with pytest.raises(NoVersionToRunError):
         execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path))
@@ -630,7 +588,6 @@ def test_run_without_a_version_fails_loudly(tmp_path):
 
 
 def test_the_newest_version_runs_even_when_an_older_one_is_the_published_one(tmp_path):
-    """No version_id pins the newest STORED version, not the newest published one."""
     _make_project(tmp_path)
     published_id = _seed_version(tmp_path)
     versioning.publish_version(tmp_path, published_id, reviewer="human")
@@ -645,7 +602,6 @@ def test_the_newest_version_runs_even_when_an_older_one_is_the_published_one(tmp
 
 
 def test_run_with_no_published_version_succeeds(tmp_path):
-    """A stored version runs whether or not anyone published it."""
     _make_project(tmp_path)
     vid = save_working_copy_as_version(tmp_path, message="unpublished", reviewer="test").version_id
 
@@ -655,7 +611,6 @@ def test_run_with_no_published_version_succeeds(tmp_path):
 
 
 def test_run_with_explicit_unpublished_id_succeeds(tmp_path):
-    """An explicit version_id naming an unpublished version runs THAT version."""
     _make_project(tmp_path)
     unpublished_id = save_working_copy_as_version(tmp_path, message="unpublished", reviewer="test").version_id
 
@@ -665,9 +620,6 @@ def test_run_with_explicit_unpublished_id_succeeds(tmp_path):
 
 
 def test_create_version_rejects_invalid_working_copy(tmp_path):
-    """save_working_copy_as_version strict-loads before it snapshots: an invalid
-    working copy raises WorkflowLoadError and writes NOTHING, so no invalid
-    workflow can be immortalised as a version."""
     (tmp_path / "compiled").mkdir(parents=True)
     bad = {"id": "load", "description": "Load", "type": "input_data",
            "connector": {"kind": "file",
@@ -683,12 +635,6 @@ def test_create_version_rejects_invalid_working_copy(tmp_path):
 
 
 def test_invalid_workflow_never_becomes_a_version_and_run_never_pins_stale(tmp_path):
-    """Regression for the version-lifecycle bug: a run used to snapshot the
-    working copy as a version BEFORE validating it, so an invalid workflow got
-    immortalised as 'the latest' and every later default run reloaded that
-    poisoned snapshot and failed with a stale error. Now runs never create
-    versions and save_working_copy_as_version validates first, so the bug is
-    impossible."""
     # Invalid working copy: file connector params.path is relative, not absolute.
     (tmp_path / "compiled").mkdir(parents=True)
     bad = {"id": "load", "description": "Load", "type": "input_data",
@@ -730,18 +676,8 @@ def test_invalid_workflow_never_becomes_a_version_and_run_never_pins_stale(tmp_p
 
 
 def test_resume_reapplies_run_bindings_for_a_pending_input_stage(tmp_path):
-    """Regression: an input stage that had NOT executed before a halt must
-    resume using its manifest-recorded RUN binding, not whatever path (or
-    absence of one) the workflow itself authors — otherwise the manifest's
-    `source: "run"` provenance record would be a lie, and a workflow-authored
-    path-free input stage would KeyError on resume instead of reading the
-    bound file.
-
-    Constructing a genuine halt-then-resume through human_review_queue is
-    disproportionate scaffolding for this fix, so this exercises resume_run's
-    actual contract directly: a hand-built manifest (as prepare_run + a halt
-    would have produced) naming a pending input stage with a `source: "run"`
-    binding, and a workflow that authors NO path for it."""
+    """Hand-builds the post-halt manifest: a real halt through human_review_queue is
+    disproportionate."""
     (tmp_path / "compiled").mkdir(parents=True)
     stage = {"id": "load", "description": "Load items", "type": "input_data",
               "connector": {"kind": "file", "params": {}},  # no workflow-authored path
@@ -785,10 +721,7 @@ def test_resume_reapplies_run_bindings_for_a_pending_input_stage(tmp_path):
 def test_the_documented_cli_runs_a_project_with_nothing_configured(
     tmp_path, monkeypatch, projects_root
 ):
-    """`python -m app.cli <project>` is a standalone process: no
-    server lifespan wired storage for it, so its own entry point must. Seeds a
-    version through an on-disk store, then drops BOTH process-wide stores to
-    simulate the fresh process the CLI actually runs in."""
+    """Drops both process-wide stores: no server lifespan wires storage for the CLI."""
     from app.core import frames as frames_module
     from app.core import persistence as persistence_module
     from app.core.persistence import SqliteKvStore, configure_store
@@ -817,8 +750,6 @@ _FRAME_STAGE_CODE = "def transform(df):\n    return df.assign(double=df['val'] *
 
 
 def _add_frame_stage(root):
-    """A python_frame_function downstream of `load` — the shape the frame cache
-    intercepts, so a run of this project exercises the frame store."""
     (root / "compiled" / "02_totals.json").write_text(json.dumps({
         "id": "totals", "description": "Totals", "type": "python_frame_function",
         "inputs": [{"id": "load", "schema": _NAME_VAL_SCHEMA}],
@@ -836,8 +767,6 @@ def _add_frame_stage(root):
 
 
 def test_a_frame_stage_succeeds_with_no_frame_store_configured(tmp_path, monkeypatch):
-    """The dogfooded regression: a process with a document store but no frame
-    store must still run a frame stage — a cache miss is never a stage error."""
     from app.core import frames as frames_module
 
     _make_project(tmp_path)

@@ -115,7 +115,4 @@ _DEFAULT_TURN_MANAGER = TurnManager()
 
 
 def default_turn_manager() -> TurnManager:
-    """The process-wide TurnManager the chat SSE route reads from. Headless starters
-    (e.g. generation) start turns on this SAME instance, so a live turn is streamable at
-    /chat/<sid> while it runs."""
     return _DEFAULT_TURN_MANAGER

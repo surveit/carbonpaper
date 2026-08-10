@@ -47,7 +47,6 @@ def _write_stage(root, filename, stage):
 
 
 def _load_items_stage(root, *, stage_id="load"):
-    """An input_data stage reading a 2-row csv the test writes to disk."""
     (root / "data").mkdir(parents=True, exist_ok=True)
     csv_path = root / "data" / f"{stage_id}.csv"
     pd.DataFrame({"id": ["a", "b"], "val": [1, 2]}).to_csv(csv_path, index=False)
@@ -58,9 +57,6 @@ def _load_items_stage(root, *, stage_id="load"):
 
 
 def _raising_stage(stage_id, input_id, name="Boom", schema=_ID_VAL_SCHEMA):
-    """A python_frame_function whose transform raises — the stage errors. It
-    emits nothing, so `schema` (its input's shape) stands as what it produces
-    too: the identity shape it would have emitted had it not raised."""
     return {"id": stage_id, "description": name, "type": "python_frame_function",
             "inputs": [{"id": input_id, "schema": schema}],
             "signature": {"form": "replaces", "produces": schema["columns"]},
@@ -69,8 +65,6 @@ def _raising_stage(stage_id, input_id, name="Boom", schema=_ID_VAL_SCHEMA):
 
 
 def _passthrough_stage(stage_id, input_id, name="Passthrough", schema=_ID_VAL_SCHEMA):
-    """An identity python_frame_function: `schema` is both the shape it expects
-    from `input_id` and the shape it emits."""
     return {"id": stage_id, "description": name, "type": "python_frame_function",
             "inputs": [{"id": input_id, "schema": schema}],
             "signature": {"form": "replaces", "produces": schema["columns"]},
@@ -79,7 +73,6 @@ def _passthrough_stage(stage_id, input_id, name="Passthrough", schema=_ID_VAL_SC
 
 
 def _score_load_stage(root):
-    """An input_data stage reading a 2-row (id, text) csv for an llm_transform."""
     (root / "data").mkdir(parents=True, exist_ok=True)
     csv_path = root / "data" / "score_items.csv"
     pd.DataFrame({"id": ["a", "b"], "text": ["x", "y"]}).to_csv(csv_path, index=False)
@@ -90,7 +83,6 @@ def _score_load_stage(root):
 
 
 def _score_stage(stage_id, input_id, name="Score"):
-    """An llm_transform adding a non-null `score` column to each (id, text) row."""
     return {"id": stage_id, "description": name, "type": "llm_transform",
             "inputs": [{"id": input_id, "schema": _ID_TEXT_SCHEMA}],
             "signature": {
@@ -102,7 +94,6 @@ def _score_stage(stage_id, input_id, name="Score"):
 
 
 def _queue_stage(stage_id, input_id, name="Review"):
-    """A human_review_queue with no cached decisions yet — it halts."""
     return {"id": stage_id, "description": name, "type": "human_review_queue",
             "inputs": [{"id": input_id, "schema": _ID_VAL_SCHEMA}],
             "signature": {"form": "extends",
@@ -112,8 +103,6 @@ def _queue_stage(stage_id, input_id, name="Review"):
 
 
 def _five_item_load_stage(root):
-    """An input_data stage reading 5 rows whose `val` runs 1..5, so a queue
-    filter can split them into unequal partitions."""
     (root / "data").mkdir(parents=True, exist_ok=True)
     csv_path = root / "data" / "five_items.csv"
     pd.DataFrame({"id": list("abcde"), "val": [1, 2, 3, 4, 5]}).to_csv(csv_path, index=False)
@@ -124,9 +113,6 @@ def _five_item_load_stage(root):
 
 
 def _filtered_queue_stage(stage_id, input_id, flt, name="Review"):
-    """A human_review_queue that reviews only the rows `flt` selects. With no
-    cached decisions, every selected row is pending — so it halts. Adds the same
-    columns as `_queue_stage`."""
     return {"id": stage_id, "description": name, "type": "human_review_queue",
             "inputs": [{"id": input_id, "schema": _ID_VAL_SCHEMA}],
             "signature": {"form": "extends",
@@ -145,8 +131,6 @@ def _stage_status(manifest, stage_id):
 # ── Error blocks downstream only ─────────────────────────────────────────────
 
 def test_error_blocks_transitive_downstream_in_a_chain(tmp_path):
-    """load -> boom (errors) -> tail. boom errors, so tail never runs: it stays
-    pending with no output file, and the run reports errors."""
     _write_stage(tmp_path, "01_load.json", _load_items_stage(tmp_path))
     _write_stage(tmp_path, "02_boom.json", _raising_stage("boom", "load"))
     _write_stage(tmp_path, "03_tail.json", _passthrough_stage("tail", "boom"))
@@ -166,8 +150,6 @@ def test_error_blocks_transitive_downstream_in_a_chain(tmp_path):
 
 
 def test_error_in_one_fork_lets_the_independent_fork_finish(tmp_path):
-    """load -> {boom (errors) -> boom_tail} and load -> good_tail. The good fork
-    runs to ok; only boom's own downstream is blocked."""
     _write_stage(tmp_path, "01_load.json", _load_items_stage(tmp_path))
     _write_stage(tmp_path, "02_boom.json", _raising_stage("boom", "load"))
     _write_stage(tmp_path, "03_boom_tail.json", _passthrough_stage("boom_tail", "boom"))
@@ -190,9 +172,6 @@ def test_error_in_one_fork_lets_the_independent_fork_finish(tmp_path):
 # ── Halt is fork-aware ───────────────────────────────────────────────────────
 
 def test_halt_in_one_fork_lets_the_independent_fork_finish(tmp_path):
-    """load -> {review (halts) -> review_tail} and load -> good_tail. The halted
-    stage is awaiting_review, its downstream pending, the independent fork ok,
-    and the run is awaiting_review."""
     _write_stage(tmp_path, "01_load.json", _load_items_stage(tmp_path))
     _write_stage(tmp_path, "02_review.json", _queue_stage("review", "load"))
     _write_stage(tmp_path, "03_review_tail.json", _passthrough_stage("review_tail", "review"))
@@ -213,9 +192,6 @@ def test_halt_in_one_fork_lets_the_independent_fork_finish(tmp_path):
 
 
 def test_two_parallel_halts_each_block_only_their_own_downstream(tmp_path):
-    """load -> {review_a (halts) -> tail_a} and load -> {review_b (halts) ->
-    tail_b}. Both queue stages halt; each blocks only its own tail; halted_at
-    lists both."""
     _write_stage(tmp_path, "01_load.json", _load_items_stage(tmp_path))
     _write_stage(tmp_path, "02_review_a.json", _queue_stage("review_a", "load"))
     _write_stage(tmp_path, "03_tail_a.json", _passthrough_stage("tail_a", "review_a"))
@@ -234,19 +210,7 @@ def test_two_parallel_halts_each_block_only_their_own_downstream(tmp_path):
 
 
 def test_halted_queue_stages_item_counts_reach_the_run_manifest(tmp_path):
-    """A halting queue stage's item counts land in the run manifest, with the
-    numbers the map actually produced.
-
-    The counts are accumulated on the mapper and travel out on the stage's
-    StageContribution — and on the halt path the raise, not a returned frame,
-    is what carries it, so the executor folds `HaltForReview.contribution` into
-    the manifest. That fold is the only thing standing between the counters and
-    the run page; asserting the key exists would not catch a fold that zeroed
-    them, so the exact numbers are asserted.
-
-    5 rows in, filter `val > 3`: 2 rows are subject to review and 3 pass
-    through. No decision is cached, so both reviewable rows are pending and
-    none is decided."""
+    """On the halt path the raise, not a returned frame, carries the counts into the manifest."""
     _write_stage(tmp_path, "01_load.json", _five_item_load_stage(tmp_path))
     _write_stage(tmp_path, "02_review.json",
                  _filtered_queue_stage("review", "load", "val > 3"))
@@ -274,10 +238,6 @@ def test_halted_queue_stages_item_counts_reach_the_run_manifest(tmp_path):
 def test_multi_halt_run_renders_the_full_halted_at_list_through_the_web_layer(
     tmp_path, monkeypatch
 ):
-    """Verifies the `/status` JSON poller and run_detail.html against a real
-    2-halt run — Part A's status consumers must render the whole `halted_at`
-    list, not just the first (or a single scalar id, the pre-fork-aware
-    shape)."""
     workspace.set_projects_dir(tmp_path)
     project_dir = tmp_path / "multi_halt_web"
     _write_stage(project_dir, "01_load.json", _load_items_stage(project_dir))
@@ -303,10 +263,6 @@ def test_multi_halt_run_renders_the_full_halted_at_list_through_the_web_layer(
 # ── Legacy scalar halted_at manifests ────────────────────────────────────────
 
 def test_legacy_scalar_halted_at_manifest_renders_one_queue_link(tmp_path, monkeypatch):
-    """A pre-fork-aware manifest persisted `halted_at` as a scalar stage-id
-    string. load_manifest normalizes it to a one-element list so run_detail.html
-    renders a single review-queue link, not one per character (a `{% for %}`
-    over a string iterates characters)."""
     workspace.set_projects_dir(tmp_path)
     project_dir = tmp_path / "legacy_halt"
     _write_stage(project_dir, "01_load.json", _load_items_stage(project_dir))
@@ -336,9 +292,6 @@ def test_legacy_scalar_halted_at_manifest_renders_one_queue_link(tmp_path, monke
 
 
 def test_manifest_paths_are_posix_on_every_platform(tmp_path, monkeypatch):
-    """`output_path` and `queue_path` are persisted POSIX-style: the manifest
-    is a portable JSON record, so identical runs must serialize identically
-    regardless of the OS's native path separator."""
     workspace.set_projects_dir(tmp_path)
     project_dir = tmp_path / "posix_paths"
     _write_stage(project_dir, "01_load.json", _load_items_stage(project_dir))
@@ -363,11 +316,7 @@ def test_manifest_paths_are_posix_on_every_platform(tmp_path, monkeypatch):
 # ── Resume clears the stale halt marker ──────────────────────────────────────
 
 def test_resume_pops_stale_halted_at_before_re_executing(tmp_path, monkeypatch):
-    """A resumed run is no longer halted, so resume_run must hand _execute_stages
-    a manifest WITHOUT `halted_at` — otherwise a mid-run flush (which persists
-    status `running`) would carry the halt marker and the run page would show the
-    review banner + queue links while the halted stage re-runs. The loop re-adds
-    `halted_at` only if a stage halts again."""
+    """Else a mid-run flush carries the marker and the run page shows the review banner."""
     _write_stage(tmp_path, "01_load.json", _load_items_stage(tmp_path))
     _write_stage(tmp_path, "02_review.json", _queue_stage("review", "load"))
     _seed_version(tmp_path)
@@ -392,9 +341,6 @@ def test_resume_pops_stale_halted_at_before_re_executing(tmp_path, monkeypatch):
 # ── Mixed error + halt ───────────────────────────────────────────────────────
 
 def test_error_and_halt_together_report_errors_but_keep_stage_awaiting_review(tmp_path):
-    """load -> {boom (errors)} and load -> {review (halts)}. The overall run is
-    errors (error wins), while the halted stage still reads awaiting_review and
-    is listed in halted_at."""
     _write_stage(tmp_path, "01_load.json", _load_items_stage(tmp_path))
     _write_stage(tmp_path, "02_boom.json", _raising_stage("boom", "load"))
     _write_stage(tmp_path, "03_review.json", _queue_stage("review", "load"))
@@ -411,18 +357,6 @@ def test_error_and_halt_together_report_errors_but_keep_stage_awaiting_review(tm
 # ── Cancel after a halt ──────────────────────────────────────────────────────
 
 def test_cancel_after_a_halt_clears_halted_at_and_reports_cancelled(tmp_path, monkeypatch):
-    """load -> review (halts, `continue`s to the next stage) -> good_tail. A
-    cancel is consumed at good_tail's between-stage checkpoint, AFTER review
-    already halted. Cancel is a hard stop that wins over an earlier halt: the
-    manifest must not carry a leftover `halted_at` (which would make
-    run_detail.html show the halt review banner on a cancelled run) — mirrors
-    the pre-fork-aware runner, whose cancelled branch always popped
-    `halted_at`.
-
-    consume_cancel is monkeypatched deterministically (same technique as
-    test_run_cancel.py's mid-run cancel test) so the cancel lands on the third
-    between-stage checkpoint (good_tail's) rather than depending on thread
-    timing."""
     _write_stage(tmp_path, "01_load.json", _load_items_stage(tmp_path))
     _write_stage(tmp_path, "02_review.json", _queue_stage("review", "load"))
     _write_stage(tmp_path, "03_good.json", _passthrough_stage("good_tail", "load"))
@@ -455,17 +389,7 @@ def test_cancel_after_a_halt_clears_halted_at_and_reports_cancelled(tmp_path, mo
 # ── Resume after error is not stale ──────────────────────────────────────────
 
 def test_row_error_stage_blocks_downstream_and_resume_is_not_stale(tmp_path, monkeypatch):
-    """load -> score (llm, one row fails generation) -> tail, plus an independent
-    load -> good_tail fork. A per-row generation failure marks `score` `error`,
-    so it MUST block its downstream exactly like a raised error: `tail` stays
-    pending with no output file (never run on `score`'s partial frame and marked
-    `ok`), while the independent `good_tail` fork finishes. On resume with the
-    failure removed, `score` re-runs and `tail` runs on its real (non-stale)
-    output. This is the row-error path of the fabricated-success/stale-reuse bug
-    the fork-blocking invariant closes."""
-    # Which row's generation fails, keyed on `text` — the one column the stage's
-    # signature reads, and so the only one the mapper is handed. Cleared before resume.
-    failing = {"text": "x"}
+    failing = {"text": "x"}  # `text` is the one column the signature reads
 
     def fake_call_llm(stage_id, llm_config, row, **kwargs):
         if row["text"] == failing["text"]:
@@ -508,15 +432,6 @@ def test_row_error_stage_blocks_downstream_and_resume_is_not_stale(tmp_path, mon
 
 
 def test_resume_after_error_reruns_the_errored_stage_and_its_downstream(tmp_path):
-    """load -> mid -> tail. `load` passes preflight (a valid csv exists) but is
-    then truncated to empty before execution, so it errors at read time. Its
-    downstream mid + tail stay pending — never marked `ok` on `load`'s absent
-    output — so on resume they re-run against `load`'s real data rather than
-    reusing a stale empty frame. This is the stale-reuse bug the invariant closes.
-
-    prepare_run and run_prepared are called separately so the file can be
-    corrupted in between: preflight (in prepare_run) sees the valid file, the
-    handler (in run_prepared) sees the empty one."""
     (tmp_path / "data").mkdir(parents=True)
     csv_path = tmp_path / "data" / "items.csv"
     pd.DataFrame({"id": ["a", "b"], "val": [1, 2]}).to_csv(csv_path, index=False)
@@ -557,7 +472,6 @@ def test_resume_after_error_reruns_the_errored_stage_and_its_downstream(tmp_path
 # ── A resume executes the version its run pinned, and nothing else ───────────
 
 def test_resume_refuses_stages_belonging_to_another_version(tmp_path):
-    """The runner is handed stages, so it re-checks they are the pinned ones."""
     workspace.set_projects_dir(tmp_path)
     project_dir = tmp_path / "wrong_version"
     _write_stage(project_dir, "01_load.json", _load_items_stage(project_dir))
@@ -572,7 +486,6 @@ def test_resume_refuses_stages_belonging_to_another_version(tmp_path):
 
 
 def test_resume_reads_the_pinned_version_not_the_working_copy(tmp_path):
-    """Regression: an invalid working copy must not block resuming a valid pinned run."""
     workspace.set_projects_dir(tmp_path)
     project_dir = tmp_path / "drifted_copy"
     _write_stage(project_dir, "01_load.json", _load_items_stage(project_dir))
@@ -598,10 +511,6 @@ def test_resume_reads_the_pinned_version_not_the_working_copy(tmp_path):
 
 
 def test_resume_of_a_run_with_no_pinned_version_fails_loudly(tmp_path):
-    """A run naming no snapshot cannot be resumed — refuse rather than guess which."""
-    # `workflow_version: null` is the manifest's own unpinned shape (what a subset
-    # run writes), not a corrupted file: RunManifest requires the KEY, so an absent
-    # one fails at parse time and never reaches this guard.
     workspace.set_projects_dir(tmp_path)
     project_dir = tmp_path / "unpinned"
     _write_stage(project_dir, "01_load.json", _load_items_stage(project_dir))

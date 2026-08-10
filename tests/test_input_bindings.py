@@ -66,15 +66,12 @@ def test_binding_merges_over_params(tmp_path):
 
 
 def test_invalid_merged_params_rejected_naming_the_stage(tmp_path):
-    # The runner attaches no meaning to params — the Connector model re-validates
-    # the merged result (here: a relative path) and the error names the stage.
+    # Connector re-validates the merged result; the relative path below is what fails.
     with pytest.raises(ValueError, match="load"):
         apply_run_bindings([_input_stage("load", None)], {"load": {"path": "data/items.csv"}})
 
 
 def test_non_dict_binding_rejected_with_stage_id(tmp_path):
-    # A binding is a dict of connector params — a bare path string (the old
-    # shorthand) or any other non-dict must fail loudly and name the stage.
     with pytest.raises(ValueError, match="load"):
         apply_run_bindings([_input_stage("load", None)], {"load": str(tmp_path / "b.csv")})
 
@@ -87,8 +84,6 @@ def test_unknown_binding_key_rejected(tmp_path):
 
 
 def test_binding_connectorless_stage_rejected(tmp_path):
-    # Bindings override connector params; a stage with no connector has nothing
-    # to bind, whatever its type. Generic rule — no file/type special-casing.
     stages = [_input_stage("load", str(tmp_path / "a.csv")),
               _connectorless_stage("score", "load")]
     with pytest.raises(ValueError, match="score"):
@@ -211,9 +206,7 @@ def test_handler_ignores_repo_root_for_file_inputs(tmp_path):
 
 
 def test_read_input_data_names_the_stage_when_no_path_is_bound(tmp_path):
-    # A path-free input reaching the handler directly (run_subset, or any
-    # caller that skips prepare_run's preflight) must fail with a message that
-    # names the stage and explains why, not a bare KeyError.
+    # The handler reached directly (run_subset), skipping prepare_run's preflight.
     stage = _input_stage("load_lobbying_filings", None)
     with pytest.raises(ValueError, match="load_lobbying_filings"):
         read_input_data(stage, ctx=make_run_context())

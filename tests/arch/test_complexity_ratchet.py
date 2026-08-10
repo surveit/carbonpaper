@@ -30,13 +30,6 @@ _SOURCE_EXEMPT_PARTS = _EXEMPT_PARTS - {"_arch_tests"}
 
 @dataclass(frozen=True)
 class FunctionComplexity:
-    """One function/method/closure's measured cyclomatic complexity.
-
-    ``path`` is repo-relative with forward slashes (identical on Windows and
-    CI Linux); ``function`` is the qualified name described in the module
-    docstring.
-    """
-
     path: str
     line: int
     function: str
@@ -44,14 +37,6 @@ class FunctionComplexity:
 
 
 def find_app_source_files(root: Path) -> list[Path]:
-    """Every ``.py`` file under `root`, except a dot-directory or one of
-    `_SOURCE_EXEMPT_PARTS` (``arch.scope``'s own exemptions, so third-party
-    code vendored under ``app/_vendor/`` is never held to this rule) — the
-    one difference from ``arch.scope`` is that ``_arch_tests/`` stays in
-    scope here (see the module docstring). A part is checked on the path
-    relative to `root`, not the absolute path: this worktree can itself live
-    under a dot-directory (e.g. a git worktree under ``.claude/``), and
-    checking the absolute path would spuriously exempt everything under it."""
     files = [
         path
         for path in sorted(root.rglob("*.py"))
@@ -65,11 +50,6 @@ def find_app_source_files(root: Path) -> list[Path]:
 
 
 def measure_function_complexities(paths: list[Path], repo_root: Path) -> list[FunctionComplexity]:
-    """Every function, method, and closure in `paths`, at its measured
-    complexity — except an `@typing.overload` stub (see `find_overload_stub_lines`),
-    which is never included: its body is always the trivial `...`, so admitting
-    it would only create a same-name collision for `index_by_identity` to
-    (correctly) reject, without protecting against anything."""
     measurements: list[FunctionComplexity] = []
     for path in paths:
         rel_path = path.relative_to(repo_root).as_posix()
@@ -84,11 +64,7 @@ def measure_function_complexities(paths: list[Path], repo_root: Path) -> list[Fu
 
 
 def find_overload_stub_lines(text: str) -> set[int]:
-    """Line numbers of every function/method def in `text` decorated with
-    `overload` — bare (`@overload`) or dotted (`@typing.overload`). radon's own
-    `Function.lineno` for a def is the same line ast reports here (the `def`
-    line, not the decorator), so a caller can match these lines against radon's
-    measurements directly."""
+    """radon's Function.lineno matches these ast line numbers: the `def` line, not the decorator."""
     tree = ast.parse(text)
     return {
         node.lineno
@@ -107,21 +83,12 @@ def _has_overload_decorator(node: ast.FunctionDef | ast.AsyncFunctionDef) -> boo
 
 
 def find_functions_over_threshold(measurements: list[FunctionComplexity]) -> list[str]:
-    """Human-readable offender lines for every function in `measurements`
-    whose complexity exceeds `_COMPLEXITY_THRESHOLD` — there is no exception
-    list, so this is the whole rule."""
     by_key = index_by_identity(measurements, source="the measured functions")
     return [_describe_violation(by_key[key]) for key in sorted(by_key) if by_key[key].complexity > _COMPLEXITY_THRESHOLD]
 
 
 def index_by_identity(measurements: list[FunctionComplexity], *, source: str) -> dict[tuple[str, str], FunctionComplexity]:
-    """`measurements` keyed by ``(path, function)``, raising loudly on a
-    duplicate identity instead of silently keeping the last one. Two blocks
-    that resolve to the same qualified name — ``@typing.overload`` stubs, or
-    a platform-conditional ``def foo(): ... / def foo(): ...`` under
-    ``if``/``else`` — would otherwise collapse into one dict entry and drop
-    the other's complexity unnoticed, which could let a real violator slip
-    past silently instead of failing loud."""
+    """Raises on a duplicate identity; overload stubs and an if/else `def` pair both collide."""
     by_key: dict[tuple[str, str], FunctionComplexity] = {}
     for m in measurements:
         key = (m.path, m.function)
@@ -153,9 +120,6 @@ def test_functions_do_not_exceed_the_complexity_ratchet() -> None:
 def _measure_function_and_closures(
     func: Function, rel_path: str, parent: str | None, overload_lines: set[int]
 ) -> list[FunctionComplexity]:
-    """`func` and every closure nested inside it, recursively, each as a
-    `FunctionComplexity` — except `func` itself when its line is one of
-    `overload_lines` (an `@typing.overload` stub), which is dropped."""
     name = func.fullname if parent is None else f"{parent}.<{func.name}>"
     measurements = (
         [] if func.lineno in overload_lines
@@ -198,10 +162,6 @@ def test_find_app_source_files_excludes_pycache(tmp_path: Path) -> None:
 
 
 def test_find_app_source_files_excludes_vendor_but_includes_arch_tests(tmp_path: Path) -> None:
-    """Third-party code vendored under `_vendor/` (one of `arch.scope`'s
-    shared exemptions) must never be held to this rule, while
-    `_arch_tests/` — this rule's one deliberate difference from
-    `arch.scope` — stays in scope."""
     (tmp_path / "_vendor").mkdir()
     (tmp_path / "_vendor" / "third_party.py").write_text("", encoding="utf-8")
     (tmp_path / "_arch_tests").mkdir()
@@ -212,11 +172,7 @@ def test_find_app_source_files_excludes_vendor_but_includes_arch_tests(tmp_path:
 
 
 def test_find_app_source_files_ignores_a_dot_directory_in_the_scanned_root_prefix(tmp_path: Path) -> None:
-    """Exemptions are checked on the path relative to `root`, not the
-    absolute path: this repo's own worktrees live under `.claude/`, so a
-    `root` whose absolute prefix contains a dot-directory must not
-    spuriously exempt everything underneath it (the same concern
-    `arch.scope`'s module docstring documents for its own scan)."""
+    """This repo's own worktrees live under `.claude/`, so an absolute check exempts everything."""
     root = tmp_path / ".claude" / "worktrees" / "x" / "app"
     root.mkdir(parents=True)
     (root / "mod.py").write_text("", encoding="utf-8")
@@ -316,12 +272,6 @@ def test_find_overload_stub_lines_ignores_undecorated_functions() -> None:
 def test_measure_function_complexities_excludes_overload_stubs_but_keeps_the_implementation(
     tmp_path: Path,
 ) -> None:
-    """The bug this guards: an `@typing.overload` group's stubs and its real
-    implementation all resolve to the same qualified name, which would
-    otherwise make `index_by_identity` raise on every overloaded method in
-    app/ — a false positive this measurement-layer exclusion prevents by never
-    handing the (trivial, always-`...`-bodied) stubs to it in the first
-    place."""
     file = tmp_path / "m.py"
     file.write_text(
         "from typing import overload\n"
@@ -357,11 +307,6 @@ def test_measure_function_complexities_qualifies_a_closure_inside_a_method(tmp_p
 def test_measure_function_complexities_surfaces_both_blocks_of_a_platform_conditional_duplicate_name(
     tmp_path: Path,
 ) -> None:
-    """Two ``def foo():`` under ``if``/``else`` (or, equivalently,
-    ``@typing.overload`` stubs) both resolve to the same qualified name —
-    radon reports both as separate blocks rather than collapsing them, so the
-    measurement layer must surface both too; it is `index_by_identity`
-    downstream that must then refuse to silently pick one."""
     file = tmp_path / "m.py"
     file.write_text(
         "if True:\n"
@@ -401,10 +346,6 @@ def test_index_by_identity_raises_on_two_measurements_for_the_same_identity() ->
 
 
 def test_index_by_identity_raise_offers_a_remedy_for_the_unrenamable_overload_case() -> None:
-    """`@typing.overload` stubs are named as an expected trigger for this
-    collision, and a stub cannot simply be renamed — the message must offer
-    a remedy that is actually possible for that case, not just "give it a
-    distinct name"."""
     duplicates = [
         _make_measurement(path="a.py", function="go", line=1, complexity=25),
         _make_measurement(path="a.py", function="go", line=10, complexity=30),
@@ -422,12 +363,7 @@ def test_index_by_identity_keeps_two_different_functions_in_the_same_file() -> N
     assert set(index_by_identity(distinct, source="test")) == {("a.py", "go"), ("a.py", "stop")}
 
 
-def test_find_functions_over_threshold_raises_on_two_measurements_for_the_same_identity() -> None:
-    """The bug this guards: without a loud raise, a dict comprehension keyed
-    by (path, function) would silently keep only the LAST of two same-named
-    blocks — e.g. a platform-conditional `def foo(): / def foo():` under
-    `if`/`else` — and a genuinely violating one could be the one dropped,
-    letting it slip past silently instead of failing loud."""
+def test_find_functions_over_threshold_raises_rather_than_dropping_the_violating_duplicate() -> None:
     duplicates = [
         _make_measurement(path="a.py", function="go", line=1, complexity=25),
         _make_measurement(path="a.py", function="go", line=10, complexity=5),

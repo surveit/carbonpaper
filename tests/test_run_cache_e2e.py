@@ -34,9 +34,7 @@ _NOTHING_COMPUTED: Counter[str] = Counter()
 
 
 def _probe_call(probe: Path, tag: str) -> str:
-    """Two lines of authored python that append `tag` to the probe file. The
-    path is embedded as a literal, so it is part of the stage's definition
-    fingerprint — constant within one test, which is what the cache keys on."""
+    """The probe path is a literal in the code, so it is part of the stage's definition fingerprint."""
     return (
         f"    with open({json.dumps(str(probe))}, 'a', encoding='utf-8') as handle:\n"
         f"        handle.write('{tag}\\n')\n"
@@ -72,9 +70,6 @@ def _totals_code(probe: Path, *, edit: str = "") -> str:
 def _write_project(
     root: Path, *, clean_edit: str = "", totals_edit: str = "", flag_cache: bool = True
 ) -> Path:
-    """`load` (csv) -> `clean` -> `flag` -> `totals`: two row-mapped stages and
-    then a frame-shaped one, so a run crosses both cache grains. Returns the
-    probe file every stage appends to."""
     probe = root / "probe.log"
     (root / "compiled").mkdir(parents=True, exist_ok=True)
     (root / "data").mkdir(parents=True, exist_ok=True)
@@ -119,8 +114,6 @@ def _write_project(
 
 
 def _append_input_row(root: Path, row: dict[str, object]) -> None:
-    """Add a row to the csv `load` reads. `load` is a source stage — nothing
-    caches it — so the next run simply sees the longer frame."""
     pd.DataFrame(_ROWS + [row]).to_csv(root / "data" / "items.csv", index=False)
 
 
@@ -139,8 +132,6 @@ def _publish_a_version(root: Path) -> str:
 def _run_and_read(
     project: Path, *, bust_cache: bool = False
 ) -> dict[str, pd.DataFrame]:
-    """One whole run through the production entry point, and every stage's
-    output frame read back off disk."""
     if (project / "runs").exists():
         time.sleep(1.05)  # run ids are second-resolution: one dir per run
     manifest = execute_run(project, project, *pinned_stages(project), bust_cache=bust_cache)
@@ -153,7 +144,6 @@ def _run_and_read(
 
 
 def _run_and_count_replays(project: Path) -> dict[str, object]:
-    """One whole run, as each stage's manifest `cached_rows`."""
     if (project / "runs").exists():
         time.sleep(1.05)
     manifest = execute_run(project, project, *pinned_stages(project))
@@ -165,7 +155,6 @@ def _run_and_count_replays(project: Path) -> dict[str, object]:
 
 
 def _invocations(probe: Path) -> Counter[str]:
-    """How many times each stage's authored body ran, across every run so far."""
     if not probe.exists():
         return Counter()
     return Counter(probe.read_text(encoding="utf-8").split())
@@ -205,11 +194,7 @@ def test_the_manifest_counts_the_rows_the_second_run_replayed(tmp_path):
 
 
 def test_bust_cache_recomputes_everything_and_leaves_the_cache_re_pinned(tmp_path):
-    """Re-pinned, not merely stale. A busted run over rows the first run already
-    pinned proves only that the READS were skipped — the run after it would hit
-    the first run's entries either way. So the busted run is given a row NOTHING
-    has ever pinned: the run after it replays that row only if the busted run
-    recorded what it recomputed."""
+    """The busted run is given a row nothing has ever pinned, or the next run would replay anyway."""
     probe = _write_project(tmp_path)
     _publish_a_version(tmp_path)
 
@@ -232,9 +217,7 @@ def test_bust_cache_recomputes_everything_and_leaves_the_cache_re_pinned(tmp_pat
 
 
 def test_editing_one_stages_function_body_invalidates_that_stage_alone(tmp_path):
-    """`clean`'s edit changes its definition fingerprint but not its output, so
-    `flag` still sees the rows it was pinned against and `totals` still sees the
-    frame it was pinned against — both replay."""
+    """The edit changes `clean`'s fingerprint but not its output, so the stages below still replay."""
     probe = _write_project(tmp_path)
     _publish_a_version(tmp_path)
     first = _run_and_read(tmp_path)
@@ -249,8 +232,6 @@ def test_editing_one_stages_function_body_invalidates_that_stage_alone(tmp_path)
 
 
 def test_editing_the_frame_stages_body_invalidates_only_the_frame_stage(tmp_path):
-    """The other grain of the same property: the frame entry is keyed on the
-    stage definition too, and the row stages upstream are untouched by its edit."""
     probe = _write_project(tmp_path)
     _publish_a_version(tmp_path)
     first = _run_and_read(tmp_path)
@@ -269,9 +250,6 @@ def test_editing_the_frame_stages_body_invalidates_only_the_frame_stage(tmp_path
 
 
 def test_one_new_input_row_recomputes_only_that_row_but_the_whole_frame(tmp_path):
-    """What the two grains cost differently: a row stage replays the three rows
-    it pinned and computes only the new one, while the frame stage's entry is
-    keyed on its WHOLE input, so a single new row misses it entirely."""
     probe = _write_project(tmp_path)
     _publish_a_version(tmp_path)
     _run_and_read(tmp_path)
@@ -298,20 +276,7 @@ def test_a_stage_declaring_cache_false_recomputes_on_every_run(tmp_path):
 
 
 def test_the_cache_survives_a_process_restart_and_a_change_of_directory(tmp_path):
-    """The one property no in-process test can observe: a payload pinned by a
-    run that has EXITED is replayed by a later, unrelated process. Both grains
-    at once — the row payloads live in the document store, the frame payload in
-    a parquet under the frame store, so a tally that does not grow is evidence
-    that both were read back off disk.
-
-    The two runs are launched from DIFFERENT directories, neither of them the
-    project, with only CARBONPAPER_DB_PATH set and the frames root left to its default:
-    a frames root that resolved against the working directory rather than
-    against the pinned database would send the two runs to different roots, and
-    the second would miss the frame entry and recompute `totals`.
-
-    Two real interpreter startups is the price; nothing cheaper distinguishes a
-    durable store from a process-lifetime one."""
+    """Two different cwds: a frames root resolved against cwd would split the two runs' stores."""
     from app.core.persistence import SqliteKvStore, configure_store
 
     db = tmp_path / "workspace" / "app.db"
@@ -333,9 +298,6 @@ def test_the_cache_survives_a_process_restart_and_a_change_of_directory(tmp_path
 
 
 def _run_in_a_fresh_process(project: Path, *, db: Path, cwd: Path) -> None:
-    """One whole run through the runner CLI in a process that has configured no
-    store of its own — the faithful exercise of a restart, as
-    tests/test_seed_cli.py is of a store-free process."""
     repo_root = Path(__file__).resolve().parents[1]
     env = {k: v for k, v in os.environ.items() if k != "CARBONPAPER_FRAMES_ROOT"}
     result = subprocess.run(
@@ -354,9 +316,7 @@ def _run_in_a_fresh_process(project: Path, *, db: Path, cwd: Path) -> None:
 
 
 def test_a_first_run_of_a_fresh_project_replays_nothing(tmp_path):
-    """The baseline the rest of this module reads against: with an empty cache
-    every stage body runs, so a later tally that does NOT grow is evidence of a
-    replay rather than of a probe that never fired."""
+    """Grounds the module: a tally that does not grow is a replay, not a probe that never fired."""
     probe = _write_project(tmp_path)
     assert _invocations(probe) == _NOTHING_COMPUTED
     _publish_a_version(tmp_path)

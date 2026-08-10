@@ -35,8 +35,6 @@ _GRANDFATHERED: dict[str, set[str]] = {
 
 
 def _reads_handle(path: Path, attr: str) -> bool:
-    """Deliberately syntactic — `<stage|stage_def|self>.<attr>`; a stricter check needs
-    types."""
     try:
         tree = ast.parse(path.read_text(encoding="utf-8"))
     except (SyntaxError, UnicodeDecodeError):
@@ -67,9 +65,7 @@ def test_a_stage_handle_is_read_only_by_the_module_that_owns_it() -> None:
     )
 
 
-def test_the_grandfathered_list_is_honest() -> None:
-    """A stale entry hides that the boundary was reached, so the list could never reach
-    empty."""
+def test_a_stale_grandfathered_entry_fails_so_the_list_can_reach_empty() -> None:
     stale = [
         f"stage.{attr}: {rel} no longer reads it — drop it from _GRANDFATHERED"
         for attr, files in _GRANDFATHERED.items()

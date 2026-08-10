@@ -42,9 +42,6 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def test_versions_list_shows_read_only_unpublished_status(project: Path) -> None:
-    """The LIST shows published state read-only — no Publish form/button. Publishing
-    is an approval act gated behind having looked at the version, so the action lives
-    only on the version-detail page."""
     project_service.save_working_copy_as_version(project, message="v1", reviewer="local")
     page = client.get("/project/demo/workflow/versions")
     assert page.status_code == 200
@@ -59,8 +56,6 @@ def test_versions_list_never_contains_a_publish_form(project: Path) -> None:
 
 
 def test_publish_route_stamps_and_redirects_to_detail(project: Path) -> None:
-    """Publish now redirects to the version's own detail page (you land back on the
-    version you just approved), not the list."""
     meta = project_service.save_working_copy_as_version(project, message="v1", reviewer="local")
     resp = client.post(
         f"/project/demo/versions/{meta.version_id}/publish", follow_redirects=False
@@ -73,14 +68,13 @@ def test_publish_route_stamps_and_redirects_to_detail(project: Path) -> None:
 
 
 def test_run_of_a_project_with_no_version_says_there_is_none(project: Path) -> None:
-    """The only remaining refusal: nothing stored for the run to pin to."""
     resp = client.post("/project/demo/run", follow_redirects=False)
     assert resp.status_code == 400
     assert "No version to run" in resp.json()["detail"]
 
 
 def test_run_of_unpublished_project_is_not_refused_for_being_unpublished(project: Path) -> None:
-    """This fixture's input authors no path, so the run stops there — never on publish."""
+    """The fixture's input authors no path, so the run stops there — never on publish."""
     project_service.save_working_copy_as_version(project, message="v1", reviewer="local")
     resp = client.post("/project/demo/run", follow_redirects=False)
     assert resp.status_code == 400

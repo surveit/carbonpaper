@@ -42,8 +42,6 @@ def _llm_stage() -> Stage:
 
 
 def _fake_call_llm(reply, per_call_usage: LlmUsage):
-    """A call_llm stand-in: returns `reply`, and appends `per_call_usage` to the
-    caller's usage_out sink (as the real call_llm does on each attempt)."""
     def _call(*_a, usage_out=None, **_k):
         if usage_out is not None:
             usage_out.append(per_call_usage)
@@ -72,8 +70,6 @@ def test_row_usage_sums_across_rows_into_ctx(monkeypatch):
 
 
 def test_run_manifest_records_stage_llm_usage(tmp_path, monkeypatch):
-    # A full run: an llm_transform stage's summed usage lands on its manifest
-    # record (and thus on disk), where the run's stage panel reads it.
     import json
 
     from app.runtime.runner import execute_run
@@ -129,8 +125,6 @@ def test_run_manifest_records_stage_llm_usage(tmp_path, monkeypatch):
 
 
 def test_failed_row_still_records_the_tokens_it_spent(monkeypatch):
-    # A row whose call raises after spending tokens (e.g. a rejected schema then a
-    # timeout) must still count those tokens — usage is not only successful calls.
     def _call(*_a, usage_out=None, **_k):
         if usage_out is not None:
             usage_out.append(LlmUsage(input_tokens=8, output_tokens=0, cost_usd=0.0005, calls=1))

@@ -13,16 +13,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_seed_cli_subprocess_bootstraps_the_store_and_seeds(tmp_path):
-    """The `python -m app.seeds` CLI must run end-to-end in a FRESH process,
-    where NOTHING has configured the document store — no app.main lifespan, no
-    autouse test fixture. Regression for the post-migration bug: versions moved
-    into the document store, so import_project -> create_version -> get_store()
-    now requires a configured store, and the standalone CLI (which the fixture
-    masks in-process) crashed with 'document store not configured'.
-
-    A subprocess is the only faithful exercise of a store-free process. It is
-    pointed at a temp workspace + temp DB via the CARBONPAPER_ env overrides so it never
-    touches the real examples/ or data/app.db."""
+    """In-process the autouse store fixture masks the bug; only a subprocess is store-free."""
     examples_dir = tmp_path / "examples"
     examples_dir.mkdir()
     env = {

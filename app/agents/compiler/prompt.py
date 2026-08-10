@@ -49,7 +49,6 @@ def build_editing_system_prompt() -> str:
 
 
 def render_stage_anatomy_section() -> str:
-    """What holds for every stage, so no type's own note restates it."""
     governed = ", ".join(f"`{name}`" for name in AUTHORABLE_CODE_CARRYING_TYPES)
     return "\n\n".join([
         "# Anatomy of a stage",
@@ -62,7 +61,6 @@ def render_stage_anatomy_section() -> str:
 
 
 def render_stage_type_catalog() -> str:
-    """Only what is specific to one type — the anatomy above covers the rest."""
     return "# The stage types you can use\n" + render_type_catalog()
 
 

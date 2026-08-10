@@ -39,8 +39,6 @@ def _load_upstream_inputs(
     run_dir: Path,
     output_by_id: dict[str, str | None],
 ) -> dict[str, pd.DataFrame]:
-    """Load each declared upstream input's output dataframe from this run's
-    on-disk outputs. Raises PreviewError if any upstream output is missing."""
     inputs: dict[str, pd.DataFrame] = {}
     for ref in stage_def.inputs:
         iid = ref.id
@@ -61,8 +59,6 @@ def _load_upstream_inputs(
 
 @dataclass(frozen=True)
 class StagePreview:
-    """A scratch re-run's result. `frame` holds real values — rendering it is the caller's."""
-
     frame: pd.DataFrame
     input_rows: int
     selected_indices: list[int]
@@ -76,16 +72,7 @@ def run_stage_preview(
     output_by_id: dict[str, str | None],
     selected_indices: list[int],
 ) -> StagePreview:
-    """Run `stage_def`'s handler on the chosen rows of its FIRST upstream input,
-    entirely in memory, and return the output as records.
-
-    `selected_indices` are positional row indices (0-based) into the first
-    upstream input's dataframe — the same rows the panel shows in its input
-    preview. Other upstream inputs (e.g. a join's reference input) are passed
-    through whole, since "row N of a join" isn't well defined.
-
-    Never writes to disk.
-    """
+    """`selected_indices` are 0-based positional; upstream inputs after the first pass through whole."""
     stype = stage_def.type
     if stype not in PREVIEWABLE_TYPES:
         raise PreviewError(

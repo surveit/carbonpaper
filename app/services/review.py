@@ -17,11 +17,7 @@ from app.models.stages.human_review_queue import (
 def resolve_verdict(
     supplied: Mapping[str, str | None], prefilled: Mapping[str, str | None]
 ) -> ReviewVerdict:
-    """`modify` iff a submitted value differs from what THE PAGE carried as its prefill."""
-    # Deliberately not compared against a server-side recompute of the prefill: the
-    # reviewer decided against what they were shown, and a decision landing between
-    # render and submit would change what a recompute produced. A reviewer who
-    # retypes an identical value records `approve` — `modify` means the value changed.
+    """`modify` iff a value differs from THE PAGE's prefill, never a server-side recompute."""
     unmatched = sorted(set(supplied) ^ set(prefilled))
     if unmatched:
         raise ReviewValidationError(
@@ -42,8 +38,6 @@ def record_decision(
     reviewer: str, reviewed_at: str,
 ) -> None:
     """`reviewed_values` is keyed by TARGET column name, already coerced by the caller."""
-    # This validates the key set against what the queue block declares, not the
-    # value types.
     queue = _require_queue_config(stage)
     _validate_verdict_came_from_a_human(verdict)
     _validate_reviewed_values_match_declared_columns(queue, reviewed_values)

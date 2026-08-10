@@ -33,20 +33,6 @@ _TINY_LIBRARY = SchemaLibrary(schemas=[NamedSchema(
 
 
 def test_round_trip_through_json_reproduces_the_source_and_mints_a_version(tmp_path):
-    """export_project -> to_json -> model_validate_json ->
-    import_project under a NEW name into a fresh workspace reproduces the
-    source project's document, data model, and compiled stage, and mints
-    exactly one version on import.
-
-    A WorkflowFile carries neither review state nor input data (see its
-    docstring), so a fresh import always starts with a clean review slate —
-    even though the source below has BOTH its data model and its one stage
-    approved. Locked down explicitly so that scope doesn't silently drift
-    back to carrying approvals across the seam.
-
-    A process has ONE workspace, so the two halves are two sequential states of
-    it — export out of the source root, repoint, import into the target root —
-    which is what a real export/import across machines actually does."""
     source_examples = tmp_path / "source_examples"
     target_examples = tmp_path / "target_examples"
     source_examples.mkdir()
@@ -96,10 +82,6 @@ def test_round_trip_through_json_reproduces_the_source_and_mints_a_version(tmp_p
 
 
 def test_a_bundle_from_before_per_type_stages_still_imports(tmp_path):
-    """A bundle exported by an older build carries every config block on every
-    stage, null for the ones its type does not use. Those keys are unknown on a
-    per-type stage model, so WorkflowFile drops the null ones on the way in —
-    a file already on disk must not become unimportable."""
     legacy = json.dumps({
         "name": "legacy", "document": "# doc", "model": "m", "source": "s",
         "data_model": _TINY_LIBRARY.model_dump(mode="json"),
@@ -120,8 +102,6 @@ def test_a_bundle_from_before_per_type_stages_still_imports(tmp_path):
 
 
 def test_a_non_null_foreign_config_block_is_still_refused(tmp_path):
-    """Only NULL blocks are dropped: an input_data stage carrying a populated
-    `llm:` block is a real error and must not be silently discarded."""
     bundle = json.dumps({
         "name": "bad", "document": "# doc", "model": "m", "source": "s",
         "data_model": _TINY_LIBRARY.model_dump(mode="json"),

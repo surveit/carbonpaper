@@ -15,7 +15,6 @@ from app.models.stages.publish import PublishFormat
 
 
 def S(**kw):
-    """Stage dict with a default name (name is required)."""
     kw.setdefault("description", kw.get("id", "x"))
     return kw
 
@@ -36,8 +35,6 @@ _KV_SCHEMA = {"columns": [{"name": "k", "type": "str", "nullable": True},
 
 
 def _build_enrich_on_k(*, join):
-    """A two-input enrich on `k`, declared end to end, so a test can vary only
-    the `join` block."""
     return S(id="j", type="enrich",
              inputs=[{"id": "a", "schema": _K_SCHEMA}, {"id": "b", "schema": _KV_SCHEMA}],
              signature={"form": "extends",
@@ -98,8 +95,6 @@ def test_valid_llm_transform():
 
 
 def test_missing_config_block_is_a_structured_missing_error():
-    """The type's own model declares `llm` required, so the refusal is pydantic's
-    own `missing` against that field — not a hand-written cross-field message."""
     with pytest.raises(ValidationError) as exc:
         m.parse_stage(S(id="x", type="llm_transform", inputs=[{"id": "a"}]))
     assert any(
@@ -119,8 +114,7 @@ def test_llm_transform_rejects_more_than_one_input():
 
 
 def test_llm_transform_rejects_input_with_no_declared_schema():
-    # `schema` is a required field on StageInput, so this never reaches
-    # _llm_transform_one_to_one — pydantic rejects the input itself.
+    # `schema` is required on StageInput, so this never reaches _llm_transform_one_to_one.
     with pytest.raises(ValidationError, match="inputs.0.schema"):
         m.parse_stage(S(
             id="extract", type="llm_transform",
@@ -150,8 +144,6 @@ def test_llm_transform_rejects_output_that_adds_no_columns():
 
 
 def test_publish_requires_the_function_block_it_actually_runs():
-    """PublishStage declares BOTH blocks required: `publish` is the rendering
-    config, `function` is the code the stage runs."""
     with pytest.raises(ValidationError) as exc:
         m.parse_stage(S(id="p", type="publish", inputs=[{"id": "a"}], publish={"format": "json"}))
     assert any(
@@ -175,8 +167,7 @@ def test_python_function_inline_needs_code():
 
 
 def test_python_function_inline_code_must_compile():
-    # a bare body with a top-level `return` does not compile — the exact error the
-    # runtime hits when it exec()s the code, now caught at validation time.
+    # A bare body with a top-level `return` does not compile — the error exec() raises.
     with pytest.raises(ValidationError):
         m.parse_stage(S(id="t", type="python_row_function", inputs=[{"id": "a"}],
                                  function={"kind": "inline", "code": "row['x'] = 1\nreturn row"}))
@@ -218,10 +209,6 @@ def test_join_min_inputs(t):
 
 @pytest.mark.parametrize("t", ["enrich", "expand"])
 def test_join_rejects_a_third_input(t):
-    """A join reads inputs[0] and inputs[1] only, so a third declared input
-    would be silently ignored — refuse it instead. Arity is declarative
-    (`max_length=2` on the field), so the refusal is a `too_long` error on
-    `inputs` rather than a hand-written message."""
     with pytest.raises(ValidationError) as err:
         m.parse_stage(S(
             id="j", type=t,
@@ -235,7 +222,6 @@ def test_join_rejects_a_third_input(t):
 
 
 def test_aggregate_rejects_a_second_input():
-    """The handler reads inputs[0] only, so a second input would be silently ignored."""
     with pytest.raises(ValidationError) as err:
         m.parse_stage(S(
             id="agg", type="aggregate",
@@ -255,7 +241,6 @@ def test_aggregate_rejects_a_second_input():
 
 
 def test_human_review_queue_rejects_a_second_input():
-    """The queue reviews one input frame; a second would be silently ignored."""
     with pytest.raises(ValidationError) as err:
         m.parse_stage(S(
             id="q", type="human_review_queue",
@@ -301,9 +286,7 @@ def test_source_parses_as_sourceref(tmp_path):
 
 
 def test_queue_needs_no_hash_source_declared():
-    # A human_review_queue row is matched to a cached decision by fingerprinting
-    # the row itself (app.core.stage_cache) — no upstream key or
-    # explicit column list is required to build the stage.
+    # A queue row is matched to a cached decision by fingerprinting the row itself.
     s = m.parse_stage(S(
         id="rev", type="human_review_queue", inputs=[{"id": "a", "schema": _QUEUE_IN_SCHEMA}],
         signature={
@@ -385,8 +368,7 @@ def test_implemented_connectors_ok(tmp_path):
 
 
 def test_weighted_formula_cut():
-    # weighted_* aren't in the contract — no aggregate stage uses them (weighting
-    # is done inside python_transform modules).
+    # weighted_* are not in the contract: no aggregate stage uses them.
     with pytest.raises(ValidationError):
         AggregationOp.model_validate({"formula": "weighted_mean", "output_column": "o",
                                         "value_column": "v", "weight_column": "w"})
@@ -413,8 +395,7 @@ def test_model_enum_rejects_unknown():
 
 
 def test_model_enum_rejects_unversioned_alias():
-    # A stage naming "haiku" would run on whatever the CLI maps that to today and
-    # something else after the next release, with nothing in the spec to show it moved.
+    # "haiku" would silently move to a different model on the next CLI release.
     with pytest.raises(ValidationError):
         m.parse_stage(S(id="e", type="llm_transform", inputs=[{"id": "a"}],
                                  llm={"prompt_template": "p", "model": "haiku"}))
@@ -445,8 +426,6 @@ def test_inputs_are_refs_with_schema():
 
 
 def test_inputs_bare_id_shorthand_normalises_then_fails_on_the_missing_schema():
-    """`inputs: ["a"]` still normalises to `[{"id": "a"}]`, which then fails on
-    the required `schema` rather than on the string's shape."""
     issues = m.validate_stage(S(
         id="x", type="python_frame_function", inputs=["a"],
         signature={"form": "replaces", "produces": _K_SCHEMA["columns"]},
@@ -533,8 +512,7 @@ def test_llm_transform_rejects_double_braced_input_column():
 
 
 def test_llm_transform_rejects_spaced_double_braced_input_column():
-    # The usual Jinja spelling "{{ content }}" (with spaces) is also an escaped
-    # literal under str.format_map — it must be rejected just like "{{content}}".
+    # "{{ content }}" is an escaped literal under str.format_map, just like "{{content}}".
     with pytest.raises(ValidationError, match="double-brace"):
         m.parse_stage(S(
             id="extract", type="llm_transform",
@@ -584,8 +562,6 @@ def test_prompt_template_field_names_str_format_map_and_single_brace():
 
 
 def test_llm_config_accepts_old_prompt_template_key_via_alias():
-    """Old stored JSON with the pre-split key `prompt_template` must still load,
-    landing in prompt_data_template with prompt_instructions defaulting to ""."""
     cfg = LLMConfig.model_validate({"prompt_template": "do {id}"})
     assert cfg.prompt_data_template == "do {id}"
     assert cfg.prompt_instructions == ""
@@ -612,8 +588,6 @@ def test_llm_config_model_dump_emits_field_name_not_alias():
 
 
 def test_data_template_required():
-    """prompt_data_template (or its old alias prompt_template) stayed required
-    after the field split — neither key present must raise."""
     with pytest.raises(ValidationError):
         LLMConfig.model_validate({"prompt_instructions": "Be terse."})
 
@@ -670,8 +644,6 @@ def test_both_fields_round_trip():
 
 # ── schema-driven output deliverability ─────────────────────────────────────
 def test_output_schema_issues_raise_at_stage_construction():
-    """The deliverability check is a Stage model validator: an undeliverable
-    declared column fails construction, naming the column."""
     spec = {
         "id": "totals",
         "description": "Totals",
@@ -746,9 +718,7 @@ NON_EXEMPT_TYPES = ["python_row_function", "python_frame_function", "enrich", "e
 
 
 def _schema_spec(stage_type, *, inputs_declared=True, declare_output=True):
-    """A minimal, otherwise-valid stage of `stage_type`. `inputs_declared` is
-    True/False for all inputs or a per-input list of flags; a False input carries
-    only its id, no `schema`."""
+    """`inputs_declared`: one flag for all inputs, or a per-input list of flags."""
     ids = _INPUT_IDS.get(stage_type, ["facilities"])
     flags = inputs_declared if isinstance(inputs_declared, list) else [inputs_declared] * len(ids)
     schemas = [_LEFT_SCHEMA, _RIGHT_SCHEMA]
@@ -780,8 +750,6 @@ def _rejection_message(spec) -> str:
 
 @pytest.mark.parametrize("t", NON_EXEMPT_TYPES)
 def test_stage_rejects_input_that_declares_no_schema(t):
-    # `schema` is a required field on StageInput: pydantic locates the offending
-    # input by index rather than naming its upstream id.
     msg = _rejection_message(_schema_spec(t, inputs_declared=False))
     assert "inputs.0.schema" in msg
     assert "Field required" in msg
@@ -805,7 +773,6 @@ def test_fully_declared_stage_accepted(t):
 
 
 def test_input_data_rejects_a_missing_signature(tmp_path):
-    """Its exemption is input-side only: the signature still says what it produces."""
     msg = _rejection_message(_input_data_spec(tmp_path, declare_output=False))
     assert "signature" in msg and "Field required" in msg
 
@@ -815,13 +782,11 @@ def test_input_data_with_a_signature_accepted(tmp_path):
 
 
 def test_publish_producing_nothing_accepted():
-    """publish emits files, not a table — its signature produces nothing."""
     s = m.parse_stage(_schema_spec("publish", declare_output=False))
     assert s.resolve_output_schema() is None
 
 
 def test_publish_rejects_input_that_declares_no_schema():
-    """publish's exemption is output-side only: its inputs must still be declared."""
     msg = _rejection_message(_schema_spec("publish", inputs_declared=False, declare_output=False))
     assert "inputs.0.schema" in msg
     assert "Field required" in msg
@@ -836,8 +801,7 @@ _EMPTY_SCHEMA: dict[str, list[object]] = {"columns": []}
 
 
 def test_stage_rejects_input_whose_schema_declares_no_columns():
-    """A zero-column schema is not a declaration: an empty projection makes the
-    edge check inert, which is exactly what the mandate closes."""
+    """An empty projection makes the edge check inert, so zero columns is not a declaration."""
     spec = _schema_spec("python_row_function")
     spec["inputs"] = [{"id": "facilities", "schema": _EMPTY_SCHEMA}]
     msg = _rejection_message(spec)
@@ -852,8 +816,6 @@ def test_stage_rejects_a_signature_that_produces_no_columns():
 
 
 def test_output_schema_issues_surface_in_draft_validation():
-    """The compiler's non-fatal channel reports the same issue as a string
-    instead of raising — the submit/re-fire loop feeds it back to the model."""
     from app.models.workflow import validate_workflow_draft
 
     issues = validate_workflow_draft([{

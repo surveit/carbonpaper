@@ -68,8 +68,7 @@ def test_no_editing_description_names_a_tool_that_surface_lacks() -> None:
 
 
 def test_the_detector_sees_the_cross_references_the_descriptions_carry() -> None:
-    # Without this the two tests above pass on an empty or unparsed surface, which is
-    # exactly the failure mode they exist to catch.
+    # Without this the two tests above pass on an empty or unparsed surface.
     known = find_known_tool_names()
     for surface in (find_mcp_descriptions(), find_editing_descriptions()):
         named = find_names_a_description_uses(surface["add_stage"], known)

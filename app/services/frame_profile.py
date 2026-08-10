@@ -52,7 +52,6 @@ def _count_distinct_values(present: pd.Series) -> list[ValueCount]:
 
 
 def _summarize_numeric_range(present: pd.Series) -> NumericRange | None:
-    """None for anything not numerically typed — including a numeric-looking `str` column."""
     if present.empty or not pd.api.types.is_numeric_dtype(present):
         return None
     if pd.api.types.is_bool_dtype(present):

@@ -64,10 +64,6 @@ _TARGET = {
 
 @pytest.fixture(autouse=True)
 def demo_project(tmp_path, monkeypatch):
-    """A demo project with a compiled override→target workflow and one compatible
-    eval whose dataset is on disk, plus a stale config that fails EvalConfig
-    validation. Repoints the projects root (project lookup) and REPO_ROOT (dataset path
-    resolution) at tmp_path in every module that captured them by import."""
     demo = tmp_path / "demo"
     compiled = demo / "compiled"
     compiled.mkdir(parents=True)
@@ -101,8 +97,6 @@ def demo_project(tmp_path, monkeypatch):
 
 
 def test_evals_index_lists_configs_with_status():
-    """The Evals section lists each stored config with its one-word status: the
-    compatible-but-unrun eval as `never run`, the unparseable one as `broken`."""
     r = client.get("/project/demo/evals")
     assert r.status_code == 200
     assert "Label check" in r.text
@@ -111,15 +105,12 @@ def test_evals_index_lists_configs_with_status():
 
 
 def test_sidebar_has_evals_nav_item():
-    """Every project section shows the Evals sidebar link."""
     r = client.get("/project/demo")
     assert r.status_code == 200
     assert 'href="/project/demo/evals"' in r.text
 
 
 def test_eval_detail_shows_pathway_compatibility_and_dataset():
-    """The detail page renders the override→target pathway, an OK compatibility
-    verdict, the dataset preview rows, and the scoring rule for the checked column."""
     r = client.get("/project/demo/evals/label_check")
     assert r.status_code == 200
     assert "load" in r.text and "classify" in r.text          # pathway
@@ -133,7 +124,6 @@ def test_eval_detail_404_for_unknown_config():
 
 
 def test_eval_run_page_renders_a_seeded_run():
-    """A stored EvalRun renders its version, settings frontier, and metrics."""
     run = EvalRun(
         id="run1", config="label_check", project="demo",
         workflow_version="v1", status="scored",
@@ -153,8 +143,6 @@ def test_eval_run_page_404_when_run_missing():
 
 
 def test_eval_detail_shows_no_versions_note_when_project_has_no_version():
-    """No stored version -> the page can't offer a run form (nothing to select),
-    so it shows a disabled note instead."""
     r = client.get("/project/demo/evals/label_check")
     assert r.status_code == 200
     assert 'name="version_id"' not in r.text
@@ -162,8 +150,6 @@ def test_eval_detail_shows_no_versions_note_when_project_has_no_version():
 
 
 def test_eval_detail_offers_a_version_select_newest_first_marking_unpublished():
-    """With versions present, the run form offers a <select> populated
-    newest-first, marking each unpublished option."""
     WorkflowVersion(id="demo/v1", version_id="v1", created_at="2026-07-10T00:00:00",
                     message="m", reviewer="r", published=True).save()
     WorkflowVersion(id="demo/v2-draft", version_id="v2-draft", created_at="2026-07-11T00:00:00",

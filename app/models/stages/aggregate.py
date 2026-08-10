@@ -8,7 +8,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import ClassVar, Literal, Optional
 
-from pydantic import Field, model_validator
+from pydantic import ConfigDict, Field, model_validator
 
 from app.core.errors import PredicateError
 from app.core.predicate import parse_predicate
@@ -22,6 +22,7 @@ from app.models.stages.shared import (
 )
 from app.models.stages.node_spec import NodeTypeSpec
 from app.models.stages.signature import ReplacesSignature
+from app.models.tool_schema_prompts import AGGREGATE_CONFIG_DESCRIPTION
 
 
 
@@ -52,9 +53,8 @@ class AggregationOp(_Base):
 
 
 class AggregateConfig(StageConfig):
-    """aggregate config block."""
-    # Every field changes what this stage computes (grouping, aggregations) —
-    # see StageBase.compute_definition_fingerprint.
+    model_config = ConfigDict(json_schema_extra={"description": AGGREGATE_CONFIG_DESCRIPTION})
+
     FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({"group_by", "aggregations"})
     INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset()
 
@@ -89,9 +89,6 @@ AGG_FORMULA_LIST = "list"
 
 
 def find_aggregate_column_issues(stage: "AggregateStage") -> list[str]:
-    """Every `group_by` entry, aggregation `value_column`, and column an
-    aggregation's `where` references that is absent from the resolved single
-    input."""
     aggregate = stage.aggregate
     cols = resolve_input_columns(stage, 0)
     issues = [
@@ -119,7 +116,6 @@ def find_aggregate_column_issues(stage: "AggregateStage") -> list[str]:
 
 
 def find_aggregate_signature_issues(stage: "AggregateStage") -> list[str]:
-    """Reads must be exactly what the config consumes; produces exactly what the formulas compute."""
     signature = stage.signature
     assert signature is not None  # find_signature_config_issues runs only with one
     aggregate = stage.aggregate
@@ -167,11 +163,6 @@ def find_aggregate_signature_issues(stage: "AggregateStage") -> list[str]:
 def compute_aggregate_output_types(
     aggregate: "AggregateConfig", edge: "TableSchema"
 ) -> dict[str, str | None]:
-    """The columns the aggregate config emits, each mapped to its computed type
-    (None = unknowable): a group_by column carries its edge type through, and an
-    aggregation follows its formula — count/count_distinct->int, mean->float;
-    sum->the value column's type for int/float/str (pandas sum of strings
-    concatenates); min/max/first->that type; list->list[<that type>]."""
     def edge_type(name: str | None) -> str | None:
         if name is None:
             return None
@@ -186,6 +177,7 @@ def compute_aggregate_output_types(
         elif op.formula == "mean":
             computed[op.output_column] = "float"
         elif op.formula == "sum":
+            # str is in the set because a pandas sum over strings concatenates them.
             computed[op.output_column] = (
                 value_type if value_type in ("int", "float", "str") else None
             )

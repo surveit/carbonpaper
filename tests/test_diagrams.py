@@ -6,11 +6,6 @@ from app.web.diagrams import build_mermaid_graph
 
 
 def test_cancelled_stage_gets_glyph_and_grey_stroke() -> None:
-    """A stage whose run status is 'cancelled' (set when a run is cancelled
-    during that stage's fan-out) gets the ✖ glyph in its node label and a grey
-    stroke override — the same distinct treatment other terminal statuses get,
-    so the cancelled stage is visible in the graph rather than rendering as an
-    unstyled default node."""
     stages = [{"id": "s1", "description": "Stage One", "type": "input_data"}]
     graph = build_mermaid_graph(stages, "demo", status_by_id={"s1": "cancelled"})
     assert "✖" in graph
@@ -18,7 +13,6 @@ def test_cancelled_stage_gets_glyph_and_grey_stroke() -> None:
 
 
 def test_plain_stage_with_no_status_renders_the_bare_node() -> None:
-    """No status_by_id: no status prefix and no stroke override line at all."""
     stages = [{"id": "s1", "description": "Stage One", "type": "input_data"}]
     graph = build_mermaid_graph(stages, "demo")
     assert graph.startswith("flowchart LR")
@@ -30,7 +24,6 @@ def test_plain_stage_with_no_status_renders_the_bare_node() -> None:
 
 
 def test_every_node_class_gets_the_same_neutral_surface() -> None:
-    """Stroke is a node's only colour: the glyph and type-name subtitle carry the type."""
     surfaces = {
         line.strip().split(" ", 2)[2]
         for line in build_mermaid_graph([], "demo").splitlines()
@@ -52,7 +45,6 @@ def test_notes_eval_and_review_indicators_all_appear() -> None:
 
 
 def test_an_unrecognized_status_draws_no_stroke_override() -> None:
-    """An unmapped status leaves the type class's default stroke, not an invented one."""
     stages = [{"id": "s1", "description": "Stage One", "type": "input_data"}]
     graph = build_mermaid_graph(stages, "demo", status_by_id={"s1": "some_unmapped_status"})
     assert "style s1 stroke:" not in graph
@@ -75,9 +67,6 @@ def test_edges_are_drawn_from_input_ids() -> None:
 
 
 def test_typed_stage_input_renders_the_same_as_the_equivalent_draft_dict(tmp_path) -> None:
-    """build_mermaid_graph also accepts real Stage objects (the isinstance(s,
-    Stage) branch of _node_view) — pinned so the two input shapes stay
-    interchangeable."""
     stage = parse_stage({
         "id": "load", "description": "Load", "type": "input_data",
         "connector": {"kind": "file",

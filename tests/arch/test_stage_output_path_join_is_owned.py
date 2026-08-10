@@ -15,7 +15,6 @@ _RECORDED_PATH = "output_path"
 
 
 def find_output_path_joins(tree: ast.AST, source: str) -> list[int]:
-    """Line numbers of every `<anything> / <expr mentioning output_path>` division."""
     carriers = find_names_carrying_a_recorded_path(tree, source)
     return [
         node.lineno
@@ -26,7 +25,6 @@ def find_output_path_joins(tree: ast.AST, source: str) -> list[int]:
 
 
 def find_names_carrying_a_recorded_path(tree: ast.AST, source: str) -> set[str]:
-    """Locals assigned from an expression that reads a record's `output_path`."""
     carriers: set[str] = set()
     for node in ast.walk(tree):
         if not isinstance(node, ast.Assign):
@@ -64,7 +62,6 @@ def test_only_the_manifest_joins_a_run_dir_to_a_recorded_output_path() -> None:
 
 
 def test_the_detector_sees_the_shapes_a_reader_actually_writes() -> None:
-    # Else the test above passes on a detector that matches nothing.
     for snippet in (
         "frame = run_dir / record.output_path\n",
         'frame = run_dir / stage_record["output_path"]\n',

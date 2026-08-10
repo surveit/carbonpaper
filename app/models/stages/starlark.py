@@ -8,7 +8,7 @@ from collections.abc import Sequence
 from typing import ClassVar, Literal, Optional
 
 import starlark
-from pydantic import Field, model_validator
+from pydantic import ConfigDict, Field, model_validator
 
 from app.core.starlark_source import (
     DEFAULT_FUNCTION_NAME,
@@ -23,6 +23,7 @@ from app.models.stages.node_spec import NodeTypeSpec
 from app.models.stages.signature import ExtendsSignature
 from app.models.stages.stage_tests import StarlarkRowFunctionStageTest
 from app.models.stages.warnings import CompilerWarning, warn
+from app.models.tool_schema_prompts import STARLARK_FUNCTION_DESCRIPTION
 
 # REFUSE_BUILTIN is registered so write-time validation compiles source in the
 # same shape execution does: Starlark resolves free variables STATICALLY at
@@ -82,7 +83,8 @@ def validate_starlark_function_code(code: str, function: str | None) -> None:
 
 
 class StarlarkFunction(StageConfig):
-    """Config block for starlark_row_function: inline Starlark, no importable module."""
+    model_config = ConfigDict(json_schema_extra={"description": STARLARK_FUNCTION_DESCRIPTION})
+
     FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({"code", "function"})
     INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset({"summary", "corner_cases"})
 
@@ -95,7 +97,6 @@ class StarlarkFunction(StageConfig):
 
     @model_validator(mode="after")
     def _source_is_runnable(block: "StarlarkFunction") -> "StarlarkFunction":
-        # `block`, not `self`: a config-block field, not code.py's stage handle.
         validate_starlark_function_code(block.code, block.function)
         return block
 
@@ -125,8 +126,6 @@ class StarlarkRowFunctionStage(StageBase):
 
 
 def find_starlark_warnings(stage: "StarlarkRowFunctionStage") -> list[CompilerWarning]:
-    """Warnings about `stage.starlark` — raised here and only here, since this
-    module owns it."""
     if not (stage.starlark.summary or "").strip():
         return [warn(stage, "undescribed",
                      "no plain-language description — reviewable only by reading its code")]

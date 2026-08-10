@@ -30,8 +30,6 @@ LINEAGE_ATTR = "row_lineage"
 
 
 class EdgeKind(str, Enum):
-    """How a parent relates to the row it produced."""
-
     # An enrich's subject row, and the reference row merged into it.
     direct = "direct"
     # Every filing in the quarter an aggregate totalled into one row.
@@ -43,8 +41,6 @@ class EdgeKind(str, Enum):
 
 @dataclass(frozen=True)
 class RowParent:
-    """One input row that fed an output row."""
-
     stage_id: str
     row_ordinal: int
     kind: str = EdgeKind.direct.value
@@ -56,11 +52,8 @@ class RowParent:
 
 @dataclass(frozen=True)
 class RowLineage:
-    """Entry i is the list of parents of output row i, in output order."""
+    """Entry i is the list of parents of output row i, spine first, in output order."""
 
-    # Spine first, then branches. A parent ABSENT from a row's list records a
-    # NON-MATCH — the one thing that tells "no matching row existed" apart from
-    # "matched a row whose columns are null", which nulls alone cannot carry.
     parents: list[list[RowParent]] = field(default_factory=list)
 
     def __post_init__(self) -> None:
@@ -72,9 +65,7 @@ class RowLineage:
         return len(self.parents)
 
     def shifted(self, offset: int) -> "RowLineage":
-        """Ordinals counted from a sliced input frame's first row, moved onto the upstream's own."""
-        # ONE offset covers every parent of every row: the runtime cuts the same
-        # window out of each of a stage's inputs, so a join's two sides shift together.
+        # One offset covers every parent: the runtime cuts the same window out of each input.
         if offset == 0:
             return self
         return RowLineage([
@@ -83,7 +74,6 @@ class RowLineage:
         ])
 
     def to_frame(self) -> pd.DataFrame:
-        """One row per output row; the four columns are parallel per-parent lists."""
         return pd.DataFrame({
             TRACE_SOURCE_STAGE_KEY: pd.Series(
                 [[p.stage_id for p in entry] for entry in self.parents], dtype=object),
@@ -98,10 +88,7 @@ class RowLineage:
 
     @classmethod
     def from_frame(cls, df: pd.DataFrame) -> "RowLineage":
-        """Read a sidecar frame back, including one written before lineage went multi-parent."""
-        # A pre-multi-parent sidecar held SCALARS and no kind column, and an
-        # earlier one named no columns — each reads as one unattributed direct
-        # parent, so old runs stay traceable without a migration.
+        """The absent columns are pre-multi-parent sidecars; old runs stay readable unmigrated."""
         has_kind = TRACE_EDGE_KIND_KEY in df.columns
         has_columns = TRACE_SOURCE_COLUMNS_KEY in df.columns
         parents: list[list[RowParent]] = []
@@ -124,13 +111,11 @@ class RowLineage:
 
 
 def _columns_or_none(cell: Any) -> tuple[str, ...] | None:
-    """A parent's recorded columns; an empty list reads as unattributed, not as no columns."""
     names = _as_list(cell)
     return tuple(str(c) for c in names) if names else None
 
 
 def _as_list(value: Any) -> list[Any]:
-    """A sidecar cell as a plain list: array, scalar and null all normalize here."""
     if isinstance(value, np.ndarray):
         return value.tolist()
     if isinstance(value, (list, tuple)):
@@ -141,14 +126,12 @@ def _as_list(value: Any) -> list[Any]:
 
 
 def attach_row_lineage(df: pd.DataFrame, lineage: RowLineage) -> pd.DataFrame:
-    """Hand `lineage` out on `.attrs`; call it on the frame the handler RETURNS."""
-    # `.attrs` does not survive a frame being rebuilt, so an earlier call is lost.
+    """`.attrs` does not survive a rebuild — call this on the frame the handler RETURNS."""
     df.attrs[LINEAGE_ATTR] = lineage
     return df
 
 
 def read_row_lineage(df: pd.DataFrame | None) -> RowLineage | None:
-    """The lineage a handler attached, or None where none rode along."""
     if df is None:
         return None
     attached = df.attrs.get(LINEAGE_ATTR)
@@ -158,23 +141,18 @@ def read_row_lineage(df: pd.DataFrame | None) -> RowLineage | None:
 def single_parent_lineage(
     source_stage_id: str, source_rows: Iterable[int]
 ) -> RowLineage:
-    """One parent per output row: `source_rows` are that input's ordinals, in output order."""
     return RowLineage([
         [RowParent(source_stage_id, int(r))] for r in source_rows
     ])
 
 
 def kept_rows_lineage(source_stage_id: str, kept_indices: list[int]) -> RowLineage:
-    """For a stage that emitted a subsequence of one input's rows (filter_rows)."""
     return single_parent_lineage(source_stage_id, kept_indices)
 
 
 def concatenated_inputs_lineage(
     stage: "Stage", inputs: dict[str, pd.DataFrame], first_row_ordinal: int = 0
 ) -> RowLineage:
-    """For a union: read off the input row counts alone, so the stage is not consulted."""
-    # `inputs` are the frames the handler was GIVEN, so where the runtime sliced
-    # them the first row is the upstream's `first_row_ordinal`, not its row 0.
     parents: list[list[RowParent]] = []
     for ref in stage.inputs:
         rows = len(inputs[ref.id])
@@ -188,12 +166,7 @@ def concatenated_inputs_lineage(
 def merged_inputs_lineage(
     inputs: Sequence[tuple[str, Iterable[Any]]],
 ) -> RowLineage:
-    """At most one row from each of N inputs per output row; FIRST is the one the walk follows."""
-    # Ordinals arrive as read back off the merged frame, so an input that did not
-    # match this row is NaN/None and is then simply absent from its parents —
-    # that absence IS the recorded non-match. Order carries the preference: the
-    # earliest input that did match becomes the spine, so a row where the
-    # preferred one is absent still gets walked, on the data rather than a default.
+    """`inputs` order is the spine preference; an unmatched input is absent, recording a non-match."""
     parents: list[list[RowParent]] = []
     for ordinals in zip(*(rows for _stage_id, rows in inputs)):
         parents.append([
@@ -205,14 +178,12 @@ def merged_inputs_lineage(
 
 
 def _is_missing(value: Any) -> bool:
-    """True for an ordinal a merge left unmatched (NaN, None and pd.NA alike)."""
     return value is None or bool(pd.isna(value))
 
 
 def grouped_contributions_lineage(
     source_stage_id: str, contributors: list[dict[int, tuple[str, ...]]]
 ) -> RowLineage:
-    """For an aggregate: entry i names every input row that fed output row i, and what it fed."""
     return RowLineage([
         # A row appears ONCE carrying every column it fed, which is what keeps
         # this O(input rows) rather than O(rows x aggregations).
@@ -225,5 +196,4 @@ def grouped_contributions_lineage(
 
 
 def lineage_sidecar_path(run_dir: Path, stage_id: str) -> Path:
-    """Where a stage's sidecar lives, alongside its output parquet in the run dir."""
     return Path(run_dir) / "outputs" / f"{stage_id}.lineage.parquet"

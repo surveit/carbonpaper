@@ -19,10 +19,6 @@ _THINGS = ("brook", "cove", "delta", "dune", "fern", "glen", "knoll", "lamp",
 
 
 def generate_word_triplet_id(taken: set[str], rng: random.Random | None = None) -> str:
-    """A word-triplet id (e.g. brisk-otter-lamp) not in `taken` — short enough to
-    retype reliably and unmistakable for a timestamp id. 4096 combinations dwarf
-    the handful of live ids any one caller holds; fails loudly if the space is
-    somehow exhausted rather than looping forever."""
     rng = rng or random.Random()
     for _ in range(10_000):
         candidate = "-".join(
@@ -35,8 +31,6 @@ def generate_word_triplet_id(taken: set[str], rng: random.Random | None = None) 
 
 # ── Content hashing ──────────────────────────────────────────────────────────
 def compute_short_hash(text: str) -> str:
-    """The first 16 hex characters of the SHA-1 digest of `text`
-    (UTF-8 encoded): `sha1(text.encode("utf-8")).hexdigest()[:16]`."""
     return hashlib.sha1(text.encode("utf-8")).hexdigest()[:16]
 
 
@@ -50,7 +44,7 @@ _ABBREVIATION_UNITS = ((1_000_000, "m"), (1_000, "k"))
 
 
 def abbreviate_count(n: int) -> str:
-    """`45061` → `45.1k`. LOSSY — the caller must keep the exact count reachable."""
+    """LOSSY (`45061` → `45.1k`) — the caller must keep the exact count reachable."""
     if n < 0:
         raise ValueError(f"Not a count: {n}")
     for unit, suffix in _ABBREVIATION_UNITS:
@@ -63,7 +57,6 @@ def abbreviate_count(n: int) -> str:
 
 # ── Error formatting ─────────────────────────────────────────────────────────
 def format_errors(err: ValidationError) -> list[str]:
-    """Pydantic errors → human-readable issue strings."""
     out: list[str] = []
     for e in err.errors():
         loc = ".".join(str(p) for p in e.get("loc", ()) if p != "stages")

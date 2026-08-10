@@ -35,10 +35,7 @@ def _filter_stage(sid: str, input_id: str, predicate_code: str) -> Stage:
 
 
 def _load_stage(sid: str, df: pd.DataFrame, tmp_path) -> Stage:
-    """A REAL input_data stage backed by a csv file, not an injected output —
-    the trace tests need this stage's own output persisted in the run
-    directory to walk into it, which run_subset only does for a stage it
-    actually executes."""
+    """Real, not injected: run_subset persists an output only for a stage it actually executes."""
     path = tmp_path / f"{sid}.csv"
     df.to_csv(path, index=False)
     return parse_stage({
@@ -89,7 +86,6 @@ def test_filter_rows_keeps_true_rows_in_order_with_columns_unchanged(tmp_path):
 
 
 def test_a_filter_that_keeps_nothing_still_feeds_its_downstream_a_valid_frame(tmp_path):
-    """src -> f (keeps no row) -> tag, a row function adding `note`."""
     src = pd.DataFrame({"a": ["x", "y"], "b": [1, 2]})
     load = _load_stage("src", src, tmp_path)
     filt = _filter_stage("f", "src", "def should_include(row): return row['b'] > 99")
@@ -190,9 +186,6 @@ def test_trace_walks_through_union_to_the_right_source_row_in_the_right_input(tm
 
 
 def test_trace_follows_lineage_after_a_limit_caps_what_the_filter_reads(tmp_path):
-    # A limit caps the filter's INPUT, so the predicate runs over src rows 0-1
-    # only. The one row it keeps is src row 1, and the lineage the driver
-    # recorded against the sliced frame has to name that ordinal.
     src = pd.DataFrame({"a": ["x", "y", "z"], "b": [-1, 1, 2]})
     load = _load_stage("src", src, tmp_path)
     filt = _filter_stage("f", "src", "def should_include(row): return row['b'] > 0")
@@ -214,9 +207,6 @@ def test_trace_follows_lineage_after_a_limit_caps_what_the_filter_reads(tmp_path
 
 
 def test_a_row_mapper_that_may_not_drop_still_rejects_a_none_row(tmp_path):
-    """Dropping is a per-handler capability (filter_rows), not a licence for
-    every row-mapped stage: python_row_function returning None is still the
-    loud error it was."""
     src = pd.DataFrame({"a": ["x"], "b": [1]})
     load = _load_stage("src", src, tmp_path)
     mapper = parse_stage({

@@ -71,8 +71,6 @@ def test_from_seq_resumes_after_a_reconnect(tmp_path, monkeypatch):
 
 
 def test_an_interrupted_run_ends_the_stream_instead_of_hanging(tmp_path, monkeypatch):
-    # No run_done marker: the writer died mid-run. The manifest is terminal, so
-    # the tail gives up rather than polling a file nothing will ever append to.
     url = _seed_run(tmp_path, monkeypatch, [
         {"seq": 0, "kind": "run_start", "level": 0},
     ])
@@ -84,7 +82,6 @@ def test_an_interrupted_run_ends_the_stream_instead_of_hanging(tmp_path, monkeyp
 
 
 def _lifecycle_events(count: int) -> list[dict]:
-    """`count` row events, seq 0..count-1, the last of them the run_done marker."""
     return [
         {"seq": i, "kind": "row_ok", "stage": "s", "row": i, "level": 0}
         for i in range(count - 1)
@@ -94,9 +91,7 @@ def _lifecycle_events(count: int) -> list[dict]:
 def test_a_long_log_opens_on_the_tail_rather_than_replaying_all_of_it(
     tmp_path, monkeypatch
 ):
-    """The freeze this default exists to prevent: a row-per-event log of a large
-    stage runs to hundreds of thousands of events, and streaming all of them on
-    page load is more than the panel can render."""
+    """A large stage logs hundreds of thousands of events — replaying them all froze the panel."""
     url = _seed_run(tmp_path, monkeypatch, _lifecycle_events(1200))
 
     response = TestClient(app).get(url, params={"tail": 100})
@@ -112,8 +107,6 @@ def test_a_long_log_opens_on_the_tail_rather_than_replaying_all_of_it(
 
 
 def test_an_explicit_from_seq_still_wins_over_the_tail_default(tmp_path, monkeypatch):
-    # A reconnect names its cursor; falling back to the tail would skip whatever
-    # arrived between the drop and the retry.
     url = _seed_run(tmp_path, monkeypatch, _lifecycle_events(1200))
 
     response = TestClient(app).get(url, params={"from_seq": 0, "tail": 100})
@@ -161,7 +154,6 @@ def _two_stage_events() -> list[dict]:
 def test_a_stage_scoped_feed_carries_only_that_stage_and_the_end_marker(
     tmp_path, monkeypatch
 ):
-    """run_done rides through the filter: it is what ends the stream."""
     url = _seed_run(tmp_path, monkeypatch, _two_stage_events())
 
     response = TestClient(app).get(url, params={"stage": "load"})
@@ -175,7 +167,6 @@ def test_a_stage_scoped_feed_carries_only_that_stage_and_the_end_marker(
 
 
 def test_the_stage_tail_is_counted_over_that_stage_s_own_events(tmp_path, monkeypatch):
-    """Counting the tail over the whole file would open a quiet stage empty."""
     events = [
         {"seq": i, "kind": "row_ok", "stage": "noisy", "row": i, "level": 0}
         for i in range(1000)
@@ -200,7 +191,6 @@ def test_the_stage_tail_is_counted_over_that_stage_s_own_events(tmp_path, monkey
 def test_load_older_pages_over_the_filtered_events_not_a_seq_window(
     tmp_path, monkeypatch
 ):
-    """A seq window would page back a nearly empty page for a sparse stage."""
     events = [
         {"seq": i, "kind": "row_ok", "stage": "quiet" if i % 100 == 0 else "noisy",
          "row": i, "level": 0}

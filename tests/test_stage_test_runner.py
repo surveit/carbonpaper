@@ -69,8 +69,7 @@ def test_test_violating_input_schema_is_malformed_not_code_bug():
 
 
 def test_nan_output_matches_expected_none():
-    # Null and NaN are one absence: a float column stores an expected None as
-    # NaN, so a NaN result must satisfy a test that expected None.
+    # One absence: a float column stores an expected None as NaN.
     stage = _row_stage(
         "def transform(row):\n    return {**row, 'doubled': float('nan')}\n",
         [{"name": "expects_none_gets_nan", "inputs": {"load": [{"amount": 1.0}]},
@@ -133,8 +132,7 @@ def test_failure_case_passes_when_the_step_refuses():
 
 
 def test_inline_code_raises_step_refused_without_importing_it():
-    # Proves the namespace seeding, not just the verdict: the same code with the
-    # name unseeded would die with NameError, which is an `error`, not `passed`.
+    # Unseeded, the same code dies with NameError — an `error`, not `passed`.
     stage = _row_stage(_REFUSES, [{
         "name": "refuses_foreign_currency", "inputs": {"load": [{"amount": 1.0}]},
         "expected": None,
@@ -146,9 +144,6 @@ def test_inline_code_raises_step_refused_without_importing_it():
 
 
 def test_failure_case_is_error_when_the_step_raises_something_else():
-    # A KeyError is the step falling over, not refusing. Telling those apart is the
-    # whole point of pinning the TYPE: a buggy step must not certify as an honest
-    # refusal just because it happened to raise.
     stage = _row_stage(
         "def transform(row):\n    raise KeyError('income')\n",
         [{"name": "refuses_foreign_currency", "inputs": {"load": [{"amount": 1.0}]},
@@ -170,8 +165,7 @@ def test_failure_case_that_returns_rows_is_mismatch():
 
 
 def test_failure_case_returning_a_non_dataframe_is_mismatch_not_crash():
-    # The expected-failure verdict is reached before the return value is known to
-    # be a frame, so the message must not reach for a row count it cannot have.
+    # The verdict is reached before the return is known to be a frame; no row count exists.
     stage = _frame_stage(
         "def transform(df):\n    return 7\n",
         [{"name": "expects_refusal", "inputs": {"load": [{"amount": 2.0}]},
@@ -183,9 +177,7 @@ def test_failure_case_returning_a_non_dataframe_is_mismatch_not_crash():
 
 
 def test_failure_case_returning_zero_rows_is_mismatch_not_passed():
-    # The subtle one: a frame step that returns an EMPTY frame succeeded. Judging
-    # the failure claim by row count would read that as "no rows, so it must have
-    # failed" — so the returned-a-value verdict has to come before any comparison.
+    # An EMPTY frame still succeeded, so the returned-a-value verdict precedes any row count.
     stage = _frame_stage(
         "def transform(df):\n    return df.head(0)\n",
         [{"name": "expects_refusal", "inputs": {"load": [{"amount": 2.0}]},
@@ -207,9 +199,6 @@ def test_rows_case_raising_is_still_error():
 
 
 def test_failure_case_skips_expected_row_schema_checks_but_not_its_inputs():
-    # `expected` is None, so there is no output shape to lint — the output schema's
-    # non-nullable `amount` must not be judged against a phantom empty frame. The
-    # input rows are still checked: this one violates the input schema.
     refuses = _row_stage(_REFUSES, [{
         "name": "refuses_foreign_currency", "inputs": {"load": [{"amount": 1.0}]},
         "expected": None,
@@ -251,8 +240,6 @@ def _frame_stage(code: str, tests: list[dict]) -> Stage:
 
 
 def test_frame_function_output_order_does_not_matter():
-    # The function sorts descending; the test expects ascending order. The
-    # type is not order-preserving, so a test must not pin an ordering.
     stage = _frame_stage(
         "def transform(df):\n"
         "    return df.sort_values('amount', ascending=False).reset_index(drop=True)\n",
@@ -265,8 +252,6 @@ def test_frame_function_output_order_does_not_matter():
 
 
 def test_omitted_column_in_expected_row_claims_none():
-    # The malformed gate only requires each declared column to appear somewhere
-    # in the expected rows; a row that omits a column is claiming None there.
     labelled_schema = {"columns": [
         {"name": "amount", "type": "float", "nullable": False},
         {"name": "label", "type": "str", "nullable": True},
@@ -317,9 +302,6 @@ def test_row_count_mismatch_reported():
 
 
 def test_frame_function_returning_none_is_error_not_crash():
-    # A very common authoring mistake: mutating in place (inplace=True) rather
-    # than returning the transformed frame. This must surface as an `error`
-    # result, not raise out of the runner.
     stage = _frame_stage(
         "def transform(df):\n    df.sort_values('amount', inplace=True)\n",
         [{"name": "mutates_in_place",
@@ -395,10 +377,7 @@ def test_multi_input_frame_test_passes():
 
 
 def test_multi_input_frame_positional_order_is_declared_order():
-    # Both inputs share a schema and each carries one distinguishable row.
-    # `transform` returns its FIRST positional argument; if the handler
-    # passed frames in dict order (or the wrong order) this would return
-    # the `right` input's row instead of `left`'s.
+    # `transform` returns its FIRST argument, so a wrong order would yield `right`'s row.
     id_schema = {"columns": [{"name": "id", "type": "str", "nullable": False}]}
     stage = parse_stage({
         "id": "first", "description": "First", "type": "python_frame_function",

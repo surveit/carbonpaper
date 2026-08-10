@@ -22,8 +22,6 @@ class IssueView(BaseModel):
 
 
 class ValidationView(BaseModel):
-    """`ok` is the run's own verdict, carried over rather than recomputed."""
-
     label: str
     ok: bool
     rows: int | None
@@ -31,8 +29,6 @@ class ValidationView(BaseModel):
 
 
 class InputBindingView(BaseModel):
-    """`path` locates the file to copy; `filename` is what the pages show."""
-
     stage_id: str
     path: str
     filename: str
@@ -42,8 +38,6 @@ class InputBindingView(BaseModel):
 
 
 class StageView(BaseModel):
-    # `record` is the manifest entry verbatim; the stage-panel template reads it unshaped.
-
     record: dict[str, Any]
     stage_id: str
     type: str
@@ -79,8 +73,6 @@ def build_run_view(
     definitions: dict[str, Stage],
     definition_error: str | None,
 ) -> RunView:
-    # `definition_error` says why `definitions` is empty; a blank workflow would
-    # read as "no steps".
     return RunView(
         project=str(manifest.get("project") or ""),
         run_id=str(manifest.get("run_id") or ""),
@@ -133,7 +125,6 @@ def _build_stage_view(
 
 
 def _build_validation_views(record: dict[str, Any]) -> list[ValidationView]:
-    """Input reports first (one per schema-declaring upstream), then the output."""
     views = [
         _build_validation_view(report, "input")
         for report in record.get("input_validation_report") or []

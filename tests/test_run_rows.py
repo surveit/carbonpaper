@@ -27,7 +27,6 @@ STAGE = "stage_a"
 def _write_run(
     examples_dir: Path, df: pd.DataFrame, fmt: str = "parquet"
 ) -> Path:
-    """Lay out examples/<PROJ>/runs/<RUN>/ with a manifest + one stage output."""
     run_dir = examples_dir / PROJ / "runs" / RUN
     (run_dir / "outputs").mkdir(parents=True)
     output_rel = f"outputs/{STAGE}.{fmt}"
@@ -169,9 +168,6 @@ def test_csv_download_from_csv_output(examples_dir, client):
 
 
 def _accented_df() -> pd.DataFrame:
-    """Rows in the shape that exposed the encoding bug."""
-    # French/Dutch text plus an emoji, with an accent in a column NAME too — a
-    # mark that survives the re-import shows up in the column name first.
     return pd.DataFrame(
         {
             "média": ["Ce sac ne mérite qu'une chose", "Offrons un verre à Pascal"],
@@ -181,10 +177,7 @@ def _accented_df() -> pd.DataFrame:
 
 
 def test_csv_download_opens_with_a_utf8_byte_order_mark(examples_dir, client):
-    """The mark is what makes Excel on Windows read the download as UTF-8."""
-    # Without it Excel falls back to the machine's legacy code page, which is
-    # what rendered "mérite" as "mÃ©rite" for Windows reviewers while the same
-    # download was fine on macOS.
+    """Without it Excel on Windows falls back to its legacy code page and shows mérite as mÃ©rite."""
     _write_run(examples_dir, _accented_df())
     r = client.get(f"/project/{PROJ}/runs/{RUN}/stage/{STAGE}/rows.csv")
     assert r.status_code == 200
@@ -196,8 +189,6 @@ def test_csv_download_opens_with_a_utf8_byte_order_mark(examples_dir, client):
 
 
 def test_csv_download_reimports_without_the_mark_in_a_column_name(examples_dir, client):
-    """A downloaded CSV re-imports with no U+FEFF prefix on its first column name."""
-    # It can be fed straight back in through an `input_data` csv connector.
     _write_run(examples_dir, _accented_df())
     r = client.get(f"/project/{PROJ}/runs/{RUN}/stage/{STAGE}/rows.csv")
     got = pd.read_csv(io.BytesIO(r.content))
@@ -235,7 +226,6 @@ def test_rows_rejects_output_path_outside_run_dir(examples_dir, client):
 
 
 def test_rows_page_renders_a_nullable_int_column(examples_dir, client):
-    """A declared nullable int with real nulls is Int64 on disk; the page must serve it."""
     frame = pd.DataFrame({
         "name": ["rowval_0000", "rowval_0001"],
         "likes": pd.Series([None, 7], dtype="Int64"),
@@ -253,7 +243,6 @@ def test_rows_page_renders_a_nullable_int_column(examples_dir, client):
     ("object", ["x", None], ["x", ""]),
 ])
 def test_a_masked_dtype_renders_its_null_as_blank(dtype, values, expected):
-    """pandas' nullable dtypes reject fillna(""), so the render goes via object."""
     frame = pd.DataFrame({"c": pd.Series(values, dtype=dtype)})
     assert list(render_frame_as_text(frame)["c"]) == expected
 
@@ -269,6 +258,5 @@ def test_a_sequence_cell_survives_beside_a_masked_null():
 
 
 def test_a_date_keeps_its_compact_rendering_and_a_missing_one_is_blank():
-    """Rendering must not spell a date out to 00:00:00, nor a missing one as "NaT"."""
     frame = pd.DataFrame({"d": pd.to_datetime(["2026-01-01", None])})
     assert list(render_frame_as_text(frame)["d"]) == ["2026-01-01", ""]

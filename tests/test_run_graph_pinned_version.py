@@ -28,8 +28,6 @@ DRIFTED_ID = "drifted_stage"
 
 
 def _input_stage(stage_id: str, name: str, data_path: Path) -> dict:
-    # output_schema names rows.csv's columns; every non-publish stage must
-    # declare one (app/models/stage.py: Stage._schemas_declared).
     return {
         "id": stage_id, "description": name, "type": "input_data",
         "connector": {"kind": "file",
@@ -57,7 +55,6 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def _run_once(project_dir: Path) -> str:
-    """Snapshot + publish the working copy, run it, and return the run id."""
     version_id = project_service.save_working_copy_as_version(
         project_dir, message="v1", reviewer="test").version_id
     versioning.publish_version(project_dir, version_id, reviewer="test")
@@ -65,9 +62,6 @@ def _run_once(project_dir: Path) -> str:
 
 
 def _drift_the_working_copy(project_dir: Path) -> None:
-    """Replace compiled/ with a DIFFERENT valid workflow, as an author editing
-    the project after the run would. Nothing re-versions it, so the run's pinned
-    version and the working copy now disagree."""
     (project_dir / "compiled" / "01_load.json").write_text(
         json.dumps(_input_stage(DRIFTED_ID, "Drifted stage",
                                 project_dir / "rows.csv")),
@@ -102,8 +96,6 @@ def test_run_page_graph_stays_on_the_pinned_version_after_the_working_copy_drift
 
 
 def test_status_poller_graph_stays_on_the_pinned_version(project: Path) -> None:
-    """The live poller rebuilds the graph on every tick, so it needs the same
-    pinning — otherwise an open run page would drift mid-poll."""
     run_id = _run_once(project)
     _drift_the_working_copy(project)
 
@@ -147,9 +139,7 @@ def test_run_page_says_the_graph_is_unavailable_when_the_version_is_missing(
 
 
 def test_run_with_a_null_pinned_version_shows_no_graph(project: Path) -> None:
-    """A run that recorded no workflow version — `RunManifest.workflow_version`
-    is null, as a subset run's is. There is no way to know what it executed, so
-    the page says that instead of guessing."""
+    """A subset run really does record a null version — a real state, not a corrupt manifest."""
     run_id = _run_once(project)
     _drift_the_working_copy(project)
     _rewrite_manifest(project, run_id, workflow_version=None)
@@ -187,8 +177,6 @@ def test_load_run_stages_reads_the_pinned_version(project: Path) -> None:
 
 
 def test_load_run_stages_raises_rather_than_falling_back(project: Path) -> None:
-    """Both unresolvable shapes raise. Neither returns the working copy — a
-    silent fallback here is what put a wrong graph on the run page."""
     with pytest.raises(RunVersionUnresolvableError, match="records no workflow version"):
         load_run_stages(PROJECT, {"workflow_version": None})
     with pytest.raises(RunVersionUnresolvableError, match="could not be read"):

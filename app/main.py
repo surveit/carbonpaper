@@ -35,8 +35,7 @@ from app.agents.compiler import config as _editing_agent_config  # noqa: F401
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-    # Without this an app INFO record goes nowhere: uvicorn's own dictConfig
-    # leaves the root logger at WARNING with no handler attached.
+    # uvicorn's dictConfig leaves the root logger at WARNING unhandled, so app INFO goes nowhere.
     configure_app_logging()
     # Guarded inside configure_default_stores, so a store configured ahead of
     # time (the test suite's autouse fixtures) wins over the on-disk defaults —

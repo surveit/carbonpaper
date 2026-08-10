@@ -20,12 +20,7 @@ COLUMN_ISSUE = (
 
 
 def resolve_input_columns(stage: "StageBase", index: int) -> set[str]:
-    """The column names declared on `stage`'s input edge at `index` —
-    `inputs[index].table_schema` (aliased `schema:` on a compiled stage).
-    Deliberately EDGE-ONLY: a per-stage check must not reach for the
-    upstream producer's own output schema — this runs on one `Stage` in
-    isolation, at construction time, so the producer may not even be present
-    in whatever list of stages the caller happens to hold."""
+    """Edge-only by design: at construction time the upstream producer may not be present at all."""
     return {c.name for c in stage.inputs[index].table_schema.columns}
 
 
@@ -58,7 +53,6 @@ def find_internal_namespace_column_issues(stage: "StageBase") -> list[str]:
 
 
 def _signature_column_names(stage: "StageBase") -> list[str]:
-    """Every column name the signature mentions, duck-typed over both forms; [] without one."""
     signature = stage.signature
     if signature is None:
         return []
@@ -71,17 +65,12 @@ def _signature_column_names(stage: "StageBase") -> list[str]:
 
 
 def _internal_namespace_columns(schema: "TableSchema") -> list[str]:
-    """`schema`'s own column names that sit in the reserved namespace."""
     return [c.name for c in schema.columns if c.name.startswith(INTERNAL_COLUMN_PREFIX)]
 
 
 def find_predicate_column_issues(
     expr: str, *, stage_id: str, field: str, cols: set[str]
 ) -> list[str]:
-    """Issues for one where/filter predicate `expr` against the resolved
-    column set `cols`: a single issue naming the parse failure when `expr`
-    falls outside `app.core.predicate.parse_predicate`'s grammar, else one
-    `COLUMN_ISSUE` per column `expr` references that is absent from `cols`."""
     try:
         referenced = parse_predicate(expr).columns
     except PredicateError as exc:
@@ -106,14 +95,7 @@ OUTPUT_TYPE_ISSUE = (
 def find_declared_vs_computed_issues(
     stage_id: str, block_name: str, declared: "TableSchema", computed: Mapping[str, str | None]
 ) -> list[str]:
-    """Issues for a declared output schema against the columns a config block can
-    actually produce: `computed` maps each producible column name to its computed
-    type, or None where the type is unknowable (e.g. a sum over a value column
-    the edge schema does not name). Every declared column must be producible by
-    name; where the computed
-    type is known, the declared `type` must equal it. Nullability/enum/range are
-    deliberately NOT compared — they are claims about data, not about what the
-    config block can produce."""
+    """Nullability/enum/range are deliberately not compared — they are claims about data, not shape."""
     issues: list[str] = []
     for column in declared.columns:
         if column.name not in computed:

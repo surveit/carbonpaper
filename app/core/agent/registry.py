@@ -14,8 +14,6 @@ from app.core.agent.bound_tool import BoundToolSpec
 
 
 class AgentConfig(BaseModel):
-    """The static description of one agent the registry can build an engine for."""
-
     model_config = ConfigDict(arbitrary_types_allowed=True)
     system_prompt: str
     model: str = "sonnet"
@@ -32,18 +30,10 @@ _registry: dict[str, tuple[AgentConfig, BuildTools]] = {}
 
 
 def register(agent_id: str, config: AgentConfig, build_tools: BuildTools) -> None:
-    """Register an agent under `agent_id` so `build_engine(agent_id, context)` can
-    construct it. Called at import by the module that owns the agent."""
     _registry[agent_id] = (config, build_tools)
 
 
 def build_engine(agent_id: str, context: dict[str, Any]) -> ClaudeAgentSdkEngine:
-    """Build the engine for a registered agent, binding it to `context`.
-
-    Looks up the (config, build_tools) pair (a KeyError for an unregistered
-    agent_id fails loudly rather than silently), validates the opaque context
-    against the agent's context_schema, builds that context's tools, wraps them as
-    an in-process SDK-MCP server, and returns the ready engine."""
     config, build_tools = _registry[agent_id]
     ctx = config.context_schema.model_validate(context)
     specs = build_tools(ctx)
@@ -66,7 +56,6 @@ def build_engine(agent_id: str, context: dict[str, Any]) -> ClaudeAgentSdkEngine
 def build_mcp_server(
     specs: list[BoundToolSpec],
 ) -> tuple[McpSdkServerConfig, list[str], list[SdkMcpTool[Any]]]:
-    """Returns `(server, allowed_tool_names, wrapped_tools)`."""
     wrapped = [spec.as_sdk_tool() for spec in specs]
     server = create_sdk_mcp_server(MCP_SERVER_NAME, tools=wrapped)
     allowed = [f"mcp__{MCP_SERVER_NAME}__{spec.name}" for spec in specs]

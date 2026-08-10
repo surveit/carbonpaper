@@ -16,10 +16,6 @@ _DEFAULT_DATA_DIR = Path(__file__).resolve().parent / "data"
 
 
 def discover_workflow_files(data_dir: Path | None = None) -> list[Path]:
-    """The WorkflowFile json fixture paths under `data_dir` (default: the
-    packaged app/seeds/data/), sorted for a deterministic import order. []
-    when `data_dir` doesn't exist (a truthful "no fixtures here", not an
-    error)."""
     root = Path(data_dir) if data_dir is not None else _DEFAULT_DATA_DIR
     if not root.is_dir():
         return []
@@ -29,18 +25,6 @@ def discover_workflow_files(data_dir: Path | None = None) -> list[Path]:
 def seed_all(
     *, data_dir: Path | None = None,
 ) -> list[str]:
-    """Import every discovered WorkflowFile fixture into the process's projects
-    workspace (see app.services.workspace.projects_dir) via import_project —
-    the same seam a UI or CLI caller would use, never generation.
-
-    Import-if-absent only: a fixture whose project already exists is left
-    exactly as it is (the resulting ProjectExistsError is caught and that
-    fixture is skipped — never overwritten). Returns the names of projects
-    actually imported; a skipped one is excluded.
-
-    Never fabricates: a malformed fixture makes WorkflowFile.model_validate_json
-    or import_project raise, and that raise is not caught here — it propagates
-    to the caller."""
     imported: list[str] = []
     for wf_path in discover_workflow_files(data_dir):
         wf = WorkflowFile.model_validate_json(wf_path.read_text(encoding="utf-8"))
@@ -53,15 +37,6 @@ def seed_all(
 
 
 def seed_demo_data_if_enabled() -> list[str]:
-    """The CARBONPAPER_SEED_DEMO=1 startup hook: when the env var is exactly "1",
-    seed the process's projects workspace from the committed
-    fixtures; every other value, including unset, is a no-op. Always calls
-    seed_all, which is seed-if-absent only (never destructive), so an
-    already-seeded workspace is untouched. Returns the project names actually
-    imported ([] when the gate is off or every fixture is already present).
-
-    app.main's lifespan makes exactly one call to this function after the
-    store is configured; it carries no seeding decisions of its own."""
     if os.environ.get("CARBONPAPER_SEED_DEMO") != "1":
         return []
     return seed_all()

@@ -79,9 +79,7 @@ _active_manager: StreamableHTTPSessionManager | None = None
 
 
 class _StreamableHTTPEndpoint:
-    """ASGI endpoint for /mcp: delegates to the CURRENT lifespan's manager. A
-    class instance (not a function) so Starlette's Route treats it as an ASGI
-    app rather than wrapping it as a request-response handler."""
+    """A class instance, not a function, so Starlette's Route treats it as an ASGI app."""
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         manager = _active_manager
@@ -98,11 +96,7 @@ handle_streamable_http = _StreamableHTTPEndpoint()
 
 @asynccontextmanager
 async def run_session_manager() -> AsyncIterator[None]:
-    """Run a fresh MCP session manager for one server lifetime (the app lifespan
-    enters this). Mirrors the manager FastMCP.streamable_http_app() would build
-    from this module's `mcp` settings; `_mcp_server` is the SDK's only handle to
-    the underlying low-level server (no public accessor — pyproject pins the mcp
-    version bound this relies on)."""
+    """`mcp._mcp_server` is private — the SDK has no public accessor; pyproject pins the mcp version."""
     global _active_manager
     manager = StreamableHTTPSessionManager(
         app=mcp._mcp_server,
@@ -211,11 +205,6 @@ def remove_stage(project_id: str, stage_id: str) -> dict[str, Any]:
 
 
 def catch_stage_edit_refusals(edit: Callable[[], EditStageResult]) -> dict[str, Any]:
-    """Run one stage-mutating service call and convert its expected refusals onto the
-    {ok, issues} channel these instructions document. An expected refusal — a stored
-    workflow that does not load, a stage id that is not in the workflow — comes back as
-    `issues` carrying the failure's own message, not as a tool exception a client is not
-    watching for. Any other exception propagates."""
     try:
         result = edit()
     except _STAGE_TOOL_ERRORS as exc:
@@ -307,9 +296,6 @@ def profile_stage_output_data_range(
 
 
 def _resolve_existing_project(project_id: str) -> Path:
-    """Resolve a project id to its directory, raising if no such project exists —
-    a typo'd id is a loud error, never an empty result that reads as a real
-    (empty) project."""
     pdir = workspace.resolve_project_dir(project_id)
     if not pdir.is_dir():
         raise ValueError(f"no project '{project_id}' in the workspace")
@@ -317,8 +303,6 @@ def _resolve_existing_project(project_id: str) -> Path:
 
 
 def _read_document(pdir: Path, project_id: str) -> str:
-    """The project's methodology document — the input every generation grounds on.
-    A missing document is a raised error, never an empty-string fallback."""
     doc_path = pdir / "document.md"
     if not doc_path.is_file():
         raise ValueError(f"project '{project_id}' has no document.md to generate from")

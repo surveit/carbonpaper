@@ -29,8 +29,6 @@ _ABSENT = "(none emitted)"
 
 
 class AgentRunDiagnostics(BaseModel):
-    """What the engine emitted during a run that submitted no valid answer."""
-
     model_config = ConfigDict(frozen=True)
 
     target_model: str
@@ -68,9 +66,6 @@ class AgentRunDiagnostics(BaseModel):
         return "\n".join(lines)
 
     def _render_availability(self) -> str:
-        """Whether the tool was on offer at all — the first thing to read when a
-        run emitted no call: `advertised=no` is an environment fault (the MCP
-        server did not connect), not the model declining to call it."""
         if self.tool_advertised is None:
             if self.unreadable_inits:
                 return f"tool availability: ({self.unreadable_inits} init(s) unreadable)"
@@ -117,13 +112,6 @@ def summarize_run(
 def _read_init_inventories(
     events: list[dict[str, Any]],
 ) -> tuple[list[dict[str, Any]], int]:
-    """The CLI's opening inventories and a count of the ones that would not parse.
-
-    The engine emits the init as `{"kind": "system", "subtype": "init", "text": <json>}`
-    — the inventory is the JSON body of `text`, not the event's own fields. This runs
-    while rendering an error message, so a body that is not a JSON object is counted
-    rather than raised; a caller reports that count instead of reading it as no init.
-    """
     inventories: list[dict[str, Any]] = []
     unreadable = 0
     for event in _find_events(events, _SYSTEM_KIND):
@@ -144,8 +132,6 @@ def _read_init_inventories(
 def _read_tool_advertised(
     inventories: list[dict[str, Any]], tool_name: str
 ) -> bool | None:
-    """True/False from the init inventory, or None where none arrived. Matched on
-    the BARE name: the CLI advertises the namespaced `mcp__<server>__<tool>`."""
     if not inventories:
         return None
     return any(
@@ -156,7 +142,6 @@ def _read_tool_advertised(
 
 
 def _describe_mcp_servers(inventories: list[dict[str, Any]]) -> list[str]:
-    """`name=status` per MCP server the init inventory listed."""
     return [
         f"{server.get('name', '?')}={server.get('status', '?')}"
         for inventory in inventories
@@ -171,8 +156,6 @@ def _count_tool_calls(events: list[dict[str, Any]], tool_name: str) -> int:
 
 
 def _find_tool_results(events: list[dict[str, Any]]) -> list[str]:
-    # A tool_result event carries no tool name, but the run allows exactly one
-    # tool, so every result here is that tool's.
     results = _find_events(events, _TOOL_RESULT_KIND)
     return [str(event.get("content", "")) for event in results]
 

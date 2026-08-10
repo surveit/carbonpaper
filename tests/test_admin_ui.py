@@ -17,7 +17,6 @@ _LOBBYING = "lobbying_issue_triage"
 
 @pytest.fixture(autouse=True)
 def workspace_root(tmp_path):
-    """A fresh projects root — the examples/ layout the real repo has."""
     examples_dir = tmp_path / "examples"
     examples_dir.mkdir()
     workspace.set_projects_dir(examples_dir)
@@ -107,7 +106,7 @@ def test_uploading_a_bundle_whose_project_exists_leaves_it_alone(workspace_root)
 
 
 def _empty_workspace(root):
-    """A second workspace — own projects root AND own store, since identity is a store record."""
+    """A fresh directory is not enough on its own — project identity is a store record."""
     from app.core.persistence import SqliteKvStore, configure_store
 
     root.mkdir(parents=True, exist_ok=True)

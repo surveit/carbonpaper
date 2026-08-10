@@ -50,8 +50,6 @@ _SCHEMA = {
 
 @pytest.fixture(autouse=True)
 def demo_project(tmp_path, monkeypatch):
-    """A demo project on disk (a compiled two-stage workflow + a one-schema data
-    model), with the projects root pointed at it via set_projects_dir."""
     demo = tmp_path / "demo"
     compiled = demo / "compiled"
     compiled.mkdir(parents=True)
@@ -71,10 +69,6 @@ def test_index():
 
 
 def test_project_page():
-    """GET /project/{name} is the project OVERVIEW (the shell landing section) — the
-    identity + status tiles, not the stage graph (which moved to the /workflow
-    section). It renders from project_state, so it names the project and shows its
-    status; it does not list stage ids."""
     r = client.get("/project/demo")
     assert r.status_code == 200
     assert "demo" in r.text                                 # project identity rendered
@@ -82,9 +76,6 @@ def test_project_page():
 
 
 def test_project_shell_has_no_manual_edit_with_agent_control():
-    """The manual 'Edit with agent' side control was removed: the data model (and then
-    the workflow) is generated automatically on upload, so the shell no longer offers a
-    per-project agent button to author it by hand."""
     r = client.get("/project/demo")
     assert r.status_code == 200
     assert "edit-agent" not in r.text
@@ -92,16 +83,12 @@ def test_project_shell_has_no_manual_edit_with_agent_control():
 
 
 def test_workflow_section_renders_the_graph():
-    """GET /project/{name}/workflow renders the belief-coloured stage graph. With a
-    compiled workflow present, the mermaid source names the stages even before the
-    data-model gate is approved (the template locks interaction, not the graph)."""
     r = client.get("/project/demo/workflow")
     assert r.status_code == 200
     assert "extract" in r.text                              # a stage id in the graph
 
 
 def test_workflow_page_run_links_to_the_new_run_config_form():
-    """A run is configured on ONE surface, so the Workflow page links there."""
     r = client.get("/project/demo/workflow")
     # Picking a version and binding inputs happen together on the New run page; the
     # affordance here links to it rather than posting a bare run of its own.
@@ -111,7 +98,6 @@ def test_workflow_page_run_links_to_the_new_run_config_form():
 
 
 def test_trigger_run_returns_400_on_invalid_dag(monkeypatch):
-    """The run route surfaces a load failure as a 400 with the issue list."""
     from app.services.loader import WorkflowLoadError
 
     def _boom(project, **kwargs):
@@ -127,9 +113,6 @@ def test_trigger_run_returns_400_on_invalid_dag(monkeypatch):
 
 
 def test_build_nav_groups_workflow_children(demo_project):
-    """build_nav returns Versions/Runs/Evals as CHILDREN of the Workflow item;
-    the top level carries only Overview / Document / Data model / Workflow. This
-    is the sidebar's contract — the template renders exactly this tree."""
     from app.web.project_view import build_nav, shell_state
 
     nav = build_nav(shell_state(demo_project / "demo", "overview"))
@@ -141,7 +124,6 @@ def test_build_nav_groups_workflow_children(demo_project):
 
 
 def test_the_nav_carries_no_status_marks(demo_project):
-    """The sidebar is a table of contents: labels and hrefs, nothing else to decode."""
     from app.web.project_view import build_nav, shell_state
 
     nav = build_nav(shell_state(demo_project / "demo", "overview"))
@@ -151,16 +133,12 @@ def test_the_nav_carries_no_status_marks(demo_project):
 
 
 def test_workflow_page_points_to_versions_tab():
-    """Option B: the version list lives on the Versions tab; the Workflow page keeps
-    the Create-version control and links to that tab, not a duplicated inline list."""
     html = client.get("/project/demo/workflow").text
     assert "wf-versions-link" in html                  # the pointer to the tab
     assert 'href="/project/demo/workflow/versions"' in html     # which links there
 
 
 def test_sidebar_nests_versions_runs_evals_under_workflow():
-    """The rendered sidebar puts Versions/Runs/Evals inside a Workflow children
-    container, each linking to its own section — not as top-level items."""
     html = client.get("/project/demo").text
     assert "app-nav-children" in html
     assert 'href="/project/demo/workflow"' in html
@@ -169,9 +147,6 @@ def test_sidebar_nests_versions_runs_evals_under_workflow():
 
 
 def test_sidebar_has_no_workflow_lock():
-    """The data-model lock is gone: no locked glyph, no locked panel, no locked
-    nav item — the sidebar and the workflow page render fully regardless of data
-    model state."""
     for path in ("/project/demo", "/project/demo/workflow"):
         html = client.get(path).text
         assert "🔒" not in html
@@ -180,8 +155,6 @@ def test_sidebar_has_no_workflow_lock():
 
 
 def test_versions_page_uses_the_project_shell():
-    """The Versions page is a shell section (carries the sidebar), so the Versions
-    nav child leads somewhere consistent with the rest of the app, not a bare page."""
     r = client.get("/project/demo/versions")
     assert r.status_code == 200
     html = r.text
@@ -197,9 +170,7 @@ def test_new_project_page_shows_mcp_connect():
 
 
 def test_display_cell_serializes_datetimes():
-    """Queue/table cells can hold pd.Timestamp (e.g. a run's `timestamp` or
-    `reviewed_at` column); display_cell must hand the template something the
-    Jinja `tojson` filter can serialize, or the review-queue page 500s."""
+    """A pd.Timestamp the Jinja `tojson` filter cannot serialize 500s the review-queue page."""
     import datetime as dt
 
     import pandas as pd

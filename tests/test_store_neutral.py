@@ -20,8 +20,7 @@ def test_project_session_roundtrips_neutral_transcript():
 
 
 def test_list_sessions_returns_newest_first():
-    # Same-second creation makes wall-clock ordering flaky, so seed created_at
-    # directly: this pins the sort key, not the timing.
+    # Seeding created_at pins the sort key: same-second creation makes wall-clock order flaky.
     AgentSession(id="older", created_at="2026-01-01T00:00:00", title="older").save()
     AgentSession(id="newer", created_at="2026-01-02T00:00:00", title="newer").save()
     sessions = SessionStore().list_sessions()

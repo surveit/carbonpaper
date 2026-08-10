@@ -45,23 +45,18 @@ def test_named_column_json_schema_requires_both():
 
 
 def test_the_requirement_reaches_the_schema_library_the_data_model_agent_submits():
-    # SchemaLibrary is the data-model agent's target_schema, so its $defs are what
-    # the agent reads when it writes a column.
     defs = _defs(SchemaLibrary)
     assert _OWED <= set(defs["NamedColumn"]["required"])
     assert _OWED <= set(defs["Column"]["required"])  # nested `fields` sub-columns
 
 
 def test_the_requirement_reaches_the_submit_answer_tool_input_schema():
-    # The end of the chain: this expression is verbatim what `Agent.build_engine` hands
-    # the tool as its `input_schema`, so it proves the requirement survives that wrapping.
+    # This expression is verbatim what `Agent.build_engine` hands the tool as `input_schema`.
     input_schema = advertise_more_than_one_argument(SchemaLibrary.model_json_schema())
     assert _OWED <= set(input_schema["$defs"]["NamedColumn"]["required"])
 
 
 # ── the payoff: looseness survives, but only when stated ─────────────────────
 def test_a_column_may_still_be_declared_loose_it_just_has_to_say_so():
-    # The point is not that every column tightens — an as-filed text column stays
-    # `str`/nullable. It is that the declaration says which it is.
     loose = TableSchema(columns=[Column(name="income", type="str", nullable=True)])
     assert loose.columns[0].nullable is True

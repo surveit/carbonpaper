@@ -29,8 +29,6 @@ class _Reply(BaseModel):
 
 
 class _FakeAgent:
-    """Streams a couple of events to the emit sink, then returns a valid reply."""
-
     last_usage = None
 
     def __init__(self, **_kwargs: Any) -> None:

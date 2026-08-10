@@ -31,10 +31,6 @@ _OUT_SCHEMA = {"columns": [
 
 
 def _seed_project(root: Path) -> Path:
-    """A project (alpha) with a document and a three-stage workflow
-    load -> double -> publish. `double` (python_row_function) is the stage tests
-    are generated for; `publish` and `load` are non-python controls for the
-    button/template assertions."""
     project_dir = root / "alpha"
     project_dir.mkdir(parents=True)
     (project_dir / "document.md").write_text("Double the amount.", encoding="utf-8")
@@ -65,8 +61,6 @@ def _seed_project(root: Path) -> Path:
 
 
 def _valid_suite() -> Any:
-    """A validated StageTestSuite for the `double` stage's shape (one input
-    `load`, a python_row_function so each test is one row in / one row out)."""
     suite_model = build_stage_tests_model(
         PythonRowFunctionStageTest,
         {"load": TableSchema.model_validate(_IN_SCHEMA)},
@@ -82,10 +76,6 @@ def _valid_suite() -> Any:
 
 
 class _FakeGeneratorAgent:
-    """Stands in for the stage-test generator Agent: stream_turn 'submits' a valid
-    suite and returns a transcript, exactly as the real submit_answer + engine
-    would during the turn."""
-
     task = "generate tests for stage `double` and submit them"
 
     def __init__(self) -> None:
@@ -108,9 +98,6 @@ class _FakeGeneratorAgent:
 
 
 class _FakeGeneratorAgentNoAnswer:
-    """A generator whose turn ends without ever calling submit_answer — exercises
-    the no-answer -> GenerationError -> persisted-failure path."""
-
     task = "generate tests for stage `double` and submit them"
 
     def __init__(self) -> None:
@@ -131,12 +118,7 @@ class _FakeGeneratorAgentNoAnswer:
 
 @pytest.fixture
 def client(tmp_path: Path, monkeypatch):
-    """The review-partial's TestClient fixture (tests/test_stage_test_panel.py),
-    but held open as a context manager: the generation turn is fire-and-forget
-    background work on the client's own event loop, so that loop must survive
-    across the POST and the follow-up status polls, not be torn down after each
-    request (starlette's TestClient tears down a fresh portal per call unless
-    it's used as `with TestClient(app) as client:`)."""
+    """TestClient must be a context manager: the background turn needs the loop to outlive the POST."""
     workspace.set_projects_dir(tmp_path)
     with TestClient(app) as c:
         yield c
@@ -206,7 +188,6 @@ def test_status_reports_error_after_failed_generation(client: TestClient, tmp_pa
 
 
 def test_generate_tests_rejects_python_stage_without_a_signature(client: TestClient, tmp_path: Path):
-    """A stage with no signature does not parse, so the route 400s while loading."""
     project_dir = _seed_project(tmp_path)
     (project_dir / "compiled" / "02_double.json").write_text(json.dumps({
         "id": "double", "description": "Double", "type": "python_row_function",
@@ -224,10 +205,6 @@ def test_generate_tests_rejects_python_stage_without_a_signature(client: TestCli
 
 
 def test_generate_tests_maps_workflow_load_error_to_400(client: TestClient, tmp_path: Path):
-    """A project whose compiled/ workflow fails to load (here: one stage file holds
-    invalid JSON) makes `generation.start_stage_test_generation`'s `load_workflow`
-    call raise `WorkflowLoadError` — the route must map that to 400, the same as the
-    ValueError cases above, not let it propagate as an uncaught 500."""
     _seed_project(tmp_path)
     (tmp_path / "alpha" / "compiled" / "01_load.json").write_text("{not valid json", encoding="utf-8")
 

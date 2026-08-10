@@ -43,8 +43,6 @@ SEVERITY: dict[str, UserFacingErrorSeverity] = {
 
 
 class CompilerWarning(_Base):
-    """One thing wrong with one stage as written."""
-
     kind: WarningKind
     stage_id: str
     detail: str
