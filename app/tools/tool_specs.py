@@ -230,9 +230,19 @@ its `run_id` immediately — the run executes in the background. This is a run
 of record: it writes a manifest under the project's runs/ dir and produces the
 workflow's published artifacts. `version_id` pins a specific stored version,
 published or not (omit for the newest stored one); a missing version is a
-loud error, never a silent fallback. Poll get_run_status(project_id, run_id)
-for live progress and the final status. On a pre-run failure (no stored
-version, an unbound input) returns {ok: False, error} and starts no run.""",
+loud error, never a silent fallback.
+
+`limits` caps how many rows a stage READS: {"<stage id>": N} gives that stage
+only the first N rows of each of its inputs — for a source stage, the first N
+rows of the file it loads — overriding any `limit:` in the stage spec. Every
+stage below it sees the smaller frame, so capping the source is how a run is
+made cheap. Omit it and every stage reads its whole input. An unknown stage id
+is a loud error. The caps land in the manifest, so the slice is part of the
+run's provenance.
+
+Poll get_run_status(project_id, run_id) for live progress and the final
+status. On a pre-run failure (no stored version, an unbound input) returns
+{ok: False, error} and starts no run.""",
     ),
     "run_workflow_test": ToolSpec(
         name="run_workflow_test",
@@ -292,6 +302,25 @@ Written in TEST_RUN_REVIEW — after this version's smoke run, not off the back
 of save_version.""",
     ),
 }
+
+# The tutorial agent's own seeding tool. It lives beside TOOL_SPECS rather than in
+# it: only that agent has it, and no other surface exposes a tool of this name.
+CREATE_TUTORIAL_PROJECT = ToolSpec(
+    name="create_tutorial_project",
+    description="""\
+Import the committed tutorial workflow — a five-stage lobbying-disclosure triage
+over a SYNTHETIC bundled CSV — into this workspace as a real project, and bind
+that CSV to its input stage so the workflow can run. Takes no arguments.
+
+Returns `name` (the project name, made unique — running the tour twice creates
+two projects and overwrites nothing), `csv_path` (the absolute path actually
+bound), `stages` (each stage's id, type and one-line description, in workflow
+order) and `mcp_command` (the connect command for THIS workspace).
+
+Quote `mcp_command` and `csv_path` verbatim; never rebuild either from memory.
+Describe the stages from the `stages` list you get back, not from what a
+five-stage triage workflow usually contains.""",
+)
 
 # `save_version` is one NAME for two operations, because the surfaces author into
 # different places: the MCP server edits the working copy, the editing agent

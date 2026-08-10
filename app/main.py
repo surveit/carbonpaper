@@ -32,6 +32,10 @@ from app.mcp.server import handle_streamable_http, run_session_manager
 # populated by import side effect; keep this import even though the name is unused.
 from app.agents.compiler import config as _editing_agent_config  # noqa: F401
 
+# Same import-side-effect registration for the scripted product tour, so
+# build_engine("tutorial", …) resolves.
+from app.agents.tutorial import config as _tutorial_agent_config  # noqa: F401
+
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
