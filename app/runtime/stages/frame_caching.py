@@ -9,6 +9,7 @@ import pandas as pd
 
 from app.models import Stage
 
+from app.core.frames import table_to_frame
 from app.core.errors import FrameNotSerializableError
 from app.core.frames import is_frame_store_configured
 from app.core.stage_cache import ReadOnlyStageCache, StageCache
@@ -117,7 +118,7 @@ def record_frame_output(
             stage_id=caching.key.stage_id,
             stage_fingerprint=caching.key.stage_fingerprint,
             input_frames=input_frames,
-            frame=output.frame,
+            frame=table_to_frame(output.table),
         )
     except FrameNotSerializableError as exc:
         output.contribution.notes.append(f"Stage output left uncached: {exc}")

@@ -32,7 +32,7 @@ from app.runtime.run_log import (
 )
 from app.runtime.stages import HANDLERS
 from app.runtime.stages.llm_transform import run_llm_batches
-from conftest import make_run_context
+from conftest import as_inputs, make_run_context
 
 PROJECT = "run-log-tests"
 
@@ -89,7 +89,7 @@ def _events(path: Path, log: RunLog) -> list[dict[str, Any]]:
 
 def _run(stage: Stage, values: list[int], ctx: RunContext) -> pd.DataFrame:
     out = HANDLERS[StageType(stage.type)].execute(
-        stage, {"src": pd.DataFrame({"x": values})}, ctx
+        stage, as_inputs({"src": pd.DataFrame({"x": values})}), ctx
     )
     assert out is not None
     return out
@@ -153,7 +153,7 @@ def test_a_batched_chunk_binds_the_input_rows_it_actually_covers(tmp_path, monke
     )
     ctx, log = _logged_ctx(tmp_path, "batched")
     rows = run_llm_batches(
-        _llm_stage(batch_size=2), {"src": pd.DataFrame({"x": [7, 8]})}, ctx, 1, [3, 4]
+        _llm_stage(batch_size=2), as_inputs({"src": pd.DataFrame({"x": [7, 8]})}), ctx, 1, [3, 4]
     )
 
     assert [row["verdict"] for row in rows] == ["a", "b"]
@@ -174,17 +174,17 @@ def test_the_batched_path_logs_replayed_and_computed_rows_apart(tmp_path, monkey
     def fake_run_batches(stage, inputs, ctx, parallelism, positions):
         handed.append(list(positions))
         return [{**row, "verdict": f"v{row['x']}"}
-                for row in inputs[stage.inputs[0].id].to_dict("records")]
+                for row in inputs[stage.inputs[0].id].to_pylist()]
 
     monkeypatch.setattr(handler, "run_batches", fake_run_batches)
     stage = _llm_stage(batch_size=2)
 
     seed_ctx, seed_log = _logged_ctx(tmp_path, "seed")
-    handler.execute(stage, {"src": pd.DataFrame({"x": [1, 2]})}, seed_ctx)
+    handler.execute(stage, as_inputs({"src": pd.DataFrame({"x": [1, 2]})}), seed_ctx)
     seed_log.close()
 
     ctx, log = _logged_ctx(tmp_path, "replay")
-    handler.execute(stage, {"src": pd.DataFrame({"x": [1, 2, 3]})}, ctx)
+    handler.execute(stage, as_inputs({"src": pd.DataFrame({"x": [1, 2, 3]})}), ctx)
 
     assert handed == [[0, 1], [2]]
     assert _row_events(_events(tmp_path / "replay.jsonl", log)) == [

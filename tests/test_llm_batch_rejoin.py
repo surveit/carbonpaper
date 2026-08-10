@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import pandas as pd
-from conftest import contribution_of, make_run_context
+from conftest import as_inputs, rows_of, contribution_of, make_run_context
 
 from app.models import parse_stage, Stage
 from app.models.stage import StageType
@@ -34,14 +34,14 @@ def _run(monkeypatch, fake, *, batch_size=3, max_retries=0, src=_SRC):
     monkeypatch.setattr(lt, "call_llm_batch", fake)
     ctx = make_run_context()
     out = HANDLERS[StageType.llm_transform].execute(
-        _stage(batch_size, max_retries), {"load": src.copy()}, ctx)
+        _stage(batch_size, max_retries), as_inputs({"load": src.copy()}), ctx)
     # When a whole chunk fails, no row produced `label`, so the declared column is
     # absent from output (same as the 1:1 path when every row errors) — treat that
     # as "no label" per row rather than a KeyError.
-    if "label" in out.frame.columns:
-        labels = {row.post_id: row.label for row in out.frame.itertuples()}
+    if "label" in rows_of(out).columns:
+        labels = {row.post_id: row.label for row in rows_of(out).itertuples()}
     else:
-        labels = {post_id: None for post_id in out.frame["post_id"]}
+        labels = {post_id: None for post_id in rows_of(out)["post_id"]}
     return out, labels, ctx
 
 
@@ -59,7 +59,7 @@ def test_matched_by_row_number_not_reply_order(monkeypatch):
         {"row_number": 2, "label": "L2"},
         {"row_number": 0, "label": "L0"},
         {"row_number": 1, "label": "L1"}]})
-    assert list(out.frame["post_id"]) == ["a", "b", "c"]         # input order preserved
+    assert list(rows_of(out)["post_id"]) == ["a", "b", "c"]         # input order preserved
     assert labels == {"a": "L0", "b": "L1", "c": "L2"}     # matched by number, not position
     assert not contribution_of(out).row_errors
 
@@ -123,7 +123,7 @@ def test_grain_and_order_preserved_across_chunks(monkeypatch):
     # batch_size 2 over 3 rows → two chunks. Output is still exactly the 3 input
     # rows, in input order.
     out, labels, ctx = _run(monkeypatch, _clean, batch_size=2)
-    assert list(out.frame["post_id"]) == ["a", "b", "c"]         # count + order preserved
+    assert list(rows_of(out)["post_id"]) == ["a", "b", "c"]         # count + order preserved
     assert not contribution_of(out).row_errors
 
 
@@ -137,7 +137,7 @@ def test_batched_run_reports_only_user_columns_as_dropped(monkeypatch):
     out, labels, ctx = _run(monkeypatch, _clean, src=src)
     # the user column, and ONLY it
     assert contribution_of(out).dropped_columns == ["note"]
-    assert lt.ROW_USAGE_KEY not in out.frame.columns
+    assert lt.ROW_USAGE_KEY not in rows_of(out).columns
 
 
 def test_batched_chunk_failure_reports_no_marker_as_a_dropped_column(monkeypatch):
@@ -148,4 +148,4 @@ def test_batched_chunk_failure_reports_no_marker_as_a_dropped_column(monkeypatch
         {"row_number": 0, "label": "L0"}, {"row_number": 2, "label": "L2"}]})
     assert contribution_of(out).row_errors                  # the chunk did fail
     assert not contribution_of(out).dropped_columns
-    assert lt.ROW_ERROR_KEY not in out.frame.columns and lt.ROW_USAGE_KEY not in out.frame.columns
+    assert lt.ROW_ERROR_KEY not in rows_of(out).columns and lt.ROW_USAGE_KEY not in rows_of(out).columns

@@ -11,11 +11,12 @@ from pathlib import Path
 from typing import Any, Mapping
 
 import pandas as pd
+import pyarrow as pa
 import pyarrow.lib as pa_lib
 from pydantic import ValidationError as PydanticValidationError
 
 from app.core.errors import MissingInputBindingError
-from app.core.frames import read_frame_file
+from app.core.frames import frame_to_table, read_frame_file
 from app.models import Stage, StageType
 from app.models.run_manifest import read_run_manifest
 from app.models.run_parameters import RunParameters
@@ -290,7 +291,7 @@ def resume_run(
     ordered = topological_sort(stages)
 
     # Reload outputs from disk for stages that completed successfully.
-    outputs_so_far: dict[str, pd.DataFrame] = {}
+    outputs_so_far: dict[str, pa.Table] = {}
     for record in manifest.stage_records:
         if record.status not in (StageStatus.OK, StageStatus.VALIDATION_WARNINGS):
             continue
@@ -298,7 +299,7 @@ def resume_run(
             path = resolve_output_path(run_dir, record.output_path)
             if path is None or not path.exists():
                 continue
-            outputs_so_far[record.stage_id] = read_frame_file(path)
+            outputs_so_far[record.stage_id] = frame_to_table(read_frame_file(path))
         except (pa_lib.ArrowException, pd.errors.ParserError, OSError, ValueError):
             # A prior output file that's missing/corrupt/unreadable is
             # treated as not-yet-produced; the stage simply re-runs.

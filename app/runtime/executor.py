@@ -14,10 +14,11 @@ from pathlib import Path
 from typing import Iterable, NamedTuple
 
 import pandas as pd
+import pyarrow as pa
 
 from app.core.errors import SubsetRunError
 from app.core.frame_checks import find_duplicate_row_violations
-from app.core.frames import write_frame_file, write_frame_file_with_csv_fallback
+from app.core.frames import frame_to_table, table_to_frame, write_frame_file, write_frame_file_with_csv_fallback
 from app.models import Stage, StageType, Workflow
 from app.models.run_manifest import (
     RowError,
@@ -130,7 +131,9 @@ def run_subset(
         ordered, ctx, run_id=run_dir.name, project=project,
         workflow_version=workflow_version, input_bindings={})
     write_manifest(run_dir, manifest)
-    outputs: dict[str, pd.DataFrame] = dict(injected_outputs)
+    outputs: dict[str, pa.Table] = {
+        sid: frame_to_table(frame) for sid, frame in injected_outputs.items()
+    }
     manifest = _execute_stages(ordered, ctx, manifest, run_dir, outputs)
     _raise_if_run_failed(manifest)
     return outputs
@@ -174,7 +177,7 @@ def _execute_stages(
     ctx: RunContext,
     manifest: RunManifest,
     run_dir: Path,
-    outputs_so_far: dict[str, pd.DataFrame],
+    outputs_so_far: dict[str, pa.Table],
 ) -> RunManifest:
     """Execute ordered stages under this run's own event log."""
     # Opened here, not in the RunContext constructors, so EVERY entry path
@@ -200,7 +203,7 @@ def _run_ordered_stages(
     ctx: RunContext,
     manifest: RunManifest,
     run_dir: Path,
-    outputs_so_far: dict[str, pd.DataFrame],
+    outputs_so_far: dict[str, pa.Table],
 ) -> RunManifest:
     """Execute ordered stages, honoring HaltForReview and RunCancelled.
 
@@ -325,7 +328,7 @@ def _flush_manifest(
 
 
 def _gather_stage_inputs(
-    stage: Stage, outputs_so_far: dict[str, pd.DataFrame], ctx: RunContext,
+    stage: Stage, outputs_so_far: dict[str, pa.Table], ctx: RunContext,
     record: StageRecord,
 ) -> tuple[dict[str, pd.DataFrame], _RowWindow]:
     """The rows this stage's handler will be given, keyed by producer id, cut to
@@ -335,17 +338,20 @@ def _gather_stage_inputs(
     turns that into this stage's own error."""
     sid = stage.id
     window = _resolve_row_window(stage, ctx)
-    inputs_for_stage: dict[str, pd.DataFrame] = {}
+    inputs_for_stage: dict[str, pa.Table] = {}
     for ref in stage.inputs:
         if ref.id not in outputs_so_far:
             raise RuntimeError(f"Upstream stage '{ref.id}' has no output yet")
-        df = _take_row_window(
+        table = _take_row_window(
             outputs_so_far[ref.id], window, f"from input '{ref.id}'", record)
-        _reject_duplicate_input_rows(df, ref.id, sid)
-        inputs_for_stage[ref.id] = df
+        inputs_for_stage[ref.id] = table
+        # Both cross-row checks and schema validation still read rows, so the
+        # frame is materialized once here and handed to both.
+        frame = table_to_frame(table)
+        _reject_duplicate_input_rows(frame, ref.id, sid)
         if ref.table_schema is not None:
             rep = validate_dataframe(
-                df, ref.table_schema, stage_id=sid, phase=f"input:{ref.id}",
+                frame, ref.table_schema, stage_id=sid, phase=f"input:{ref.id}",
             )
             record.input_validation_report.append(rep.to_dict())
     return inputs_for_stage, window
@@ -399,19 +405,19 @@ def _resolve_row_window(stage: Stage, ctx: RunContext) -> _RowWindow:
 
 
 def _take_row_window(
-    df: pd.DataFrame, window: _RowWindow, source: str, record: StageRecord
-) -> pd.DataFrame:
-    """`window` of `df`'s rows; every cut actually taken is noted on `record`, never silent."""
-    if window.start > 0 and len(df) > 0:
+    table: pa.Table, window: _RowWindow, source: str, record: StageRecord
+) -> pa.Table:
+    """`window` of `table`'s rows; every cut actually taken is noted on `record`, never silent."""
+    if window.start > 0 and len(table) > 0:
         record.add_note(
             f"offset={window.start}: skipped the first "
-            f"{min(window.start, len(df))} of {len(df)} row(s) {source}"
+            f"{min(window.start, len(table))} of {len(table)} row(s) {source}"
         )
-        df = df.iloc[window.start:].reset_index(drop=True).copy()
-    if window.cap is not None and len(df) > window.cap:
-        record.add_note(f"limit={window.cap}: read {window.cap} of {len(df)} row(s) {source}")
-        df = df.head(window.cap).copy()
-    return df
+        table = table.slice(window.start)
+    if window.cap is not None and len(table) > window.cap:
+        record.add_note(f"limit={window.cap}: read {window.cap} of {len(table)} row(s) {source}")
+        table = table.slice(0, window.cap)
+    return table
 
 
 def _persist_row_lineage(lineage: RowLineage, sid: str, run_dir: Path) -> None:
@@ -439,11 +445,11 @@ def _stage_row_lineage(
         return output.lineage.shifted(window.start)
     if stage.type == StageType.union:
         return concatenated_inputs_lineage(stage, inputs, window.start)
-    return _sliced_input_lineage(stage, output.frame, window)
+    return _sliced_input_lineage(stage, output.table, window)
 
 
 def _sliced_input_lineage(
-    stage: Stage, output: pd.DataFrame | None, window: _RowWindow
+    stage: Stage, output: pa.Table | None, window: _RowWindow
 ) -> RowLineage | None:
     """A sliced stage's rows named by their true upstream ordinals, for the trace to cross."""
     if window.start == 0 and window.cap is None:
@@ -455,10 +461,10 @@ def _sliced_input_lineage(
         stage.inputs[0].id, list(range(window.start, window.start + rows)))
 
 
-def _persist_stage_output(output: pd.DataFrame, sid: str, run_dir: Path, record: StageRecord) -> Path:
+def _persist_stage_output(output: pa.Table, sid: str, run_dir: Path, record: StageRecord) -> Path:
     """The stage's artifact path, after writing it — the CSV fallback is NOTED on `record`."""
     written = write_frame_file_with_csv_fallback(
-        output, run_dir / "outputs" / f"{sid}.parquet"
+        table_to_frame(output), run_dir / "outputs" / f"{sid}.parquet"
     )
     if written.parquet_error is not None:
         record.add_note(f"Wrote CSV instead of parquet: {written.parquet_error}")
@@ -470,8 +476,8 @@ def _finalize_stage_output(
     window: _RowWindow,
     record: StageRecord,
     output: StageOutput | None,
-    inputs_for_stage: dict[str, pd.DataFrame],
-    outputs_so_far: dict[str, pd.DataFrame],
+    inputs_for_stage: dict[str, pa.Table],
+    outputs_so_far: dict[str, pa.Table],
     run_dir: Path,
     manifest: RunManifest,
 ) -> bool:
@@ -489,15 +495,17 @@ def _finalize_stage_output(
     on this stage's non-conforming frame and marked `ok`; False otherwise."""
     sid = stage.id
     if output is None:
-        output = StageOutput(pd.DataFrame())
+        output = StageOutput(pa.table({}))
     row_errors = _merge_stage_contribution(output.contribution, sid, manifest, record)
     lineage = _stage_row_lineage(stage, output, inputs_for_stage, window)
-    frame = output.frame
+    table = output.table
+    frame = table_to_frame(table)
     if not stage.inputs:
         # A stage with no inputs originates its rows outside the run, so the
         # frame it just loaded is the runtime's only handle on them: its window
         # is taken here rather than on an input frame that does not exist.
-        frame = _take_row_window(frame, window, "loaded from the source", record)
+        table = _take_row_window(table, window, "loaded from the source", record)
+        frame = table_to_frame(table)
     if lineage is not None:
         _persist_row_lineage(lineage, sid, run_dir)
 
@@ -510,8 +518,8 @@ def _finalize_stage_output(
         ]
     record.output_validation_report = out_rep.to_dict()
 
-    output_path = _persist_stage_output(frame, sid, run_dir, record)
-    outputs_so_far[sid] = frame
+    output_path = _persist_stage_output(table, sid, run_dir, record)
+    outputs_so_far[sid] = table
 
     if row_errors:
         record.status = StageStatus.ERROR
@@ -566,7 +574,7 @@ def _merge_stage_contribution(
 def _run_stage(
     stage: Stage,
     ctx: RunContext,
-    outputs_so_far: dict[str, pd.DataFrame],
+    outputs_so_far: dict[str, pa.Table],
     records_by_id: dict[str, StageRecord],
     manifest: RunManifest,
     ordered: list[Stage],

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pandas as pd
 
+from conftest import as_inputs, rows_of
 from app.models import parse_stage
 from app.runtime.stage_output import StageOutput
 from app.runtime.lineage import (
@@ -42,7 +43,7 @@ _BIG_N_COL = {"name": "big_n", "type": "int", "nullable": True}
 
 
 def _persistable(out: StageOutput):
-    return out.frame, out.lineage
+    return rows_of(out), out.lineage
 
 
 def _parents_of(lineage: RowLineage, out_row: int):
@@ -51,10 +52,10 @@ def _parents_of(lineage: RowLineage, out_row: int):
 
 def test_every_contributing_row_is_recorded_once_whatever_it_fed():
     out = handle_aggregate(_stage([_TOTAL, _BIG_N], [_TOTAL_COL, _BIG_N_COL]),
-                           {"filings": FILINGS}, None)
+                           as_inputs({"filings": FILINGS}), None)
     lineage = out.lineage
     assert lineage is not None
-    assert len(lineage) == len(out.frame)
+    assert len(lineage) == len(rows_of(out))
     # Five input rows, five parent entries across the whole sidecar: a row that
     # fed BOTH columns appears once carrying both, not once per column. This is
     # what keeps the sidecar O(input rows) rather than O(rows x aggregations).
@@ -63,9 +64,9 @@ def test_every_contributing_row_is_recorded_once_whatever_it_fed():
 
 def test_a_where_narrows_which_column_a_row_is_recorded_against():
     out = handle_aggregate(_stage([_TOTAL, _BIG_N], [_TOTAL_COL, _BIG_N_COL]),
-                           {"filings": FILINGS}, None)
+                           as_inputs({"filings": FILINGS}), None)
     lineage = out.lineage
-    firm_a = list(out.frame["firm"]).index("a")
+    firm_a = list(rows_of(out)["firm"]).index("a")
     # amt=10 fell outside `amt > 25`, so it fed the total and nothing else,
     # while amt=30 fed both. Recording the group cohort would say both rows fed
     # big_n, overstating what is behind that number.
@@ -73,9 +74,9 @@ def test_a_where_narrows_which_column_a_row_is_recorded_against():
 
 
 def test_the_missing_group_key_keeps_its_own_contributors():
-    out = handle_aggregate(_stage([_TOTAL], [_TOTAL_COL]), {"filings": FILINGS}, None)
+    out = handle_aggregate(_stage([_TOTAL], [_TOTAL_COL]), as_inputs({"filings": FILINGS}), None)
     lineage = out.lineage
-    missing = [i for i, firm in enumerate(out.frame["firm"]) if pd.isna(firm)]
+    missing = [i for i, firm in enumerate(rows_of(out)["firm"]) if pd.isna(firm)]
     assert len(missing) == 1
     # dropna=False gives NaN its own group; the rows behind it are the rows that
     # had no firm, not a silently dropped set.
@@ -87,21 +88,21 @@ def test_an_unfiltered_row_is_recorded_against_every_column():
     lineage = handle_aggregate(
         _stage([_TOTAL, second], [_TOTAL_COL, {"name": "biggest", "type": "int",
                                                "nullable": True}]),
-        {"filings": FILINGS}, None).lineage
+        as_inputs({"filings": FILINGS}), None).lineage
     # With no `where` anywhere, every contributor fed every number.
     assert all(p.columns == ("total", "biggest")
                for entry in lineage.parents for p in entry)
 
 
 def test_no_trace_column_reaches_the_output():
-    out = handle_aggregate(_stage([_TOTAL], [_TOTAL_COL]), {"filings": FILINGS}, None).frame
+    out = rows_of(handle_aggregate(_stage([_TOTAL], [_TOTAL_COL]), as_inputs({"filings": FILINGS}), None))
     assert not [c for c in out.columns if c.startswith("_trace")]
     assert list(out.columns) == ["firm", "total"]
 
 
 def test_the_sidecar_round_trips_through_parquet(tmp_path):
     lineage = handle_aggregate(
-        _stage([_TOTAL, _BIG_N], [_TOTAL_COL, _BIG_N_COL]), {"filings": FILINGS}, None).lineage
+        _stage([_TOTAL, _BIG_N], [_TOTAL_COL, _BIG_N_COL]), as_inputs({"filings": FILINGS}), None).lineage
     path = tmp_path / "sidecar.parquet"
     lineage.to_frame().to_parquet(path, index=False)
     assert RowLineage.from_frame(pd.read_parquet(path)) == lineage
@@ -109,7 +110,7 @@ def test_the_sidecar_round_trips_through_parquet(tmp_path):
 
 def test_the_walk_reports_contributors_and_stops(tmp_path):
     out, lineage = _persistable(
-        handle_aggregate(_stage([_TOTAL], [_TOTAL_COL]), {"filings": FILINGS}, None))
+        handle_aggregate(_stage([_TOTAL], [_TOTAL_COL]), as_inputs({"filings": FILINGS}), None))
     run_dir = write_run(tmp_path, [
         {"id": "filings", "type": "input_data", "parents": [], "df": FILINGS},
         {"id": "agg", "type": "aggregate", "parents": ["filings"],
@@ -129,7 +130,7 @@ def test_the_walk_reports_contributors_and_stops(tmp_path):
 def test_a_contributor_carries_the_columns_it_fed_into_the_payload(tmp_path):
     from app.runtime.trace import trace_to_dict
     out, lineage = _persistable(handle_aggregate(
-        _stage([_TOTAL, _BIG_N], [_TOTAL_COL, _BIG_N_COL]), {"filings": FILINGS}, None))
+        _stage([_TOTAL, _BIG_N], [_TOTAL_COL, _BIG_N_COL]), as_inputs({"filings": FILINGS}), None))
     run_dir = write_run(tmp_path, [
         {"id": "filings", "type": "input_data", "parents": [], "df": FILINGS},
         {"id": "agg", "type": "aggregate", "parents": ["filings"],
@@ -151,7 +152,7 @@ def test_a_contributor_carries_the_columns_it_fed_into_the_payload(tmp_path):
 
 def test_a_contributor_is_a_promotable_starting_point(tmp_path):
     out, lineage = _persistable(
-        handle_aggregate(_stage([_TOTAL], [_TOTAL_COL]), {"filings": FILINGS}, None))
+        handle_aggregate(_stage([_TOTAL], [_TOTAL_COL]), as_inputs({"filings": FILINGS}), None))
     run_dir = write_run(tmp_path, [
         {"id": "filings", "type": "input_data", "parents": [], "df": FILINGS},
         {"id": "agg", "type": "aggregate", "parents": ["filings"],

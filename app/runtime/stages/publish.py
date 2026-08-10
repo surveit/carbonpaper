@@ -6,9 +6,10 @@ import inspect
 from pathlib import Path
 from typing import Any, Callable
 
-import pandas as pd
+import pyarrow as pa
 
 from app.core.errors import TraceLinksUnavailableError
+from app.core.frames import table_to_frame
 from app.models import Stage
 from app.models.stages.publish import PublishStage
 
@@ -21,7 +22,7 @@ from .python_functions import _load_python_function
 TRACE_LINKS_KWARG = "trace_links"
 
 
-def handle_publish(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext) -> StageOutput:
+def handle_publish(stage: Stage, inputs: dict[str, pa.Table], ctx: RunContext) -> StageOutput:
     """Publish stages have a function: block. Run the function and capture its
     output dataframe (paths to artifacts). The function gets the input frames
     positionally, an `output_dir` kwarg, and a `trace_links` RowTraceLinker only
@@ -29,12 +30,12 @@ def handle_publish(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContex
     publish_stage = narrow_stage(stage, PublishStage)
     output_dir = _prepare_output_dir(publish_stage, ctx)
     fn = _load_python_function(publish_stage)
-    args = [inputs[ref.id] for ref in stage.inputs]
+    args = [table_to_frame(inputs[ref.id]) for ref in stage.inputs]
 
     linker = _resolve_trace_linker(fn, publish_stage, ctx)
     if linker is None:
-        return StageOutput(fn(*args, output_dir=str(output_dir)))
-    return StageOutput(fn(*args, output_dir=str(output_dir), trace_links=linker))
+        return StageOutput.of_frame(fn(*args, output_dir=str(output_dir)))
+    return StageOutput.of_frame(fn(*args, output_dir=str(output_dir), trace_links=linker))
 
 
 def _prepare_output_dir(stage: PublishStage, ctx: RunContext) -> Path:

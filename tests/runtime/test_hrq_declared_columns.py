@@ -10,7 +10,7 @@ from app.models.stage import StageType
 from app.runtime.context import RunContext, RunIdentity
 from app.runtime.stages import HANDLERS
 from app.core.stage_cache import StageCache
-from conftest import make_run_context, queue_columns, reads_of
+from conftest import rows_of, as_inputs, make_run_context, queue_columns, reads_of
 
 PROJECT = "hrq-declared-columns"
 
@@ -62,7 +62,7 @@ def _production_ctx(tmp_path: Path) -> RunContext:
 
 def _run(stage: Stage, ctx: RunContext, src: pd.DataFrame | None = None) -> pd.DataFrame:
     out = HANDLERS[StageType.human_review_queue].execute(
-        stage, {"scored": src if src is not None else _src()}, ctx)
+        stage, as_inputs({"scored": src if src is not None else _src()}), ctx)
     assert out is not None  # a row-mapped stage always produces a frame
     return out
 
@@ -78,12 +78,12 @@ def test_filtered_out_row_is_skipped_with_the_source_value_copied(tmp_path):
     stage = _stage(queue_columns(source="score", target="human_score"), flt="id == 'nobody'")
     out = _run(stage, _production_ctx(tmp_path))
 
-    assert list(out.frame["id"]) == ["r0", "r1"]           # every row kept, in input order
-    assert list(out.frame["human_score"]) == [1, 2]        # copied from `score`
-    assert list(out.frame["decision"]) == ["skipped", "skipped"]
-    assert out.frame["reviewer_id"].isna().all()           # no reviewer is invented
-    assert out.frame["reviewed_at"].isna().all()
-    assert out.frame["review_notes"].isna().all()
+    assert list(rows_of(out)["id"]) == ["r0", "r1"]           # every row kept, in input order
+    assert list(rows_of(out)["human_score"]) == [1, 2]        # copied from `score`
+    assert list(rows_of(out)["decision"]) == ["skipped", "skipped"]
+    assert rows_of(out)["reviewer_id"].isna().all()           # no reviewer is invented
+    assert rows_of(out)["reviewed_at"].isna().all()
+    assert rows_of(out)["review_notes"].isna().all()
 
 
 def test_declared_names_are_the_only_columns_added(tmp_path):
@@ -97,11 +97,11 @@ def test_declared_names_are_the_only_columns_added(tmp_path):
     }, flt="id == 'nobody'")
     out = _run(stage, _production_ctx(tmp_path))
 
-    assert list(out.frame.columns) == [
+    assert list(rows_of(out).columns) == [
         "id", "score", "label", "checked_score", "review_verdict",
         "checked_by", "checked_at",
     ]
-    assert list(out.frame["review_verdict"]) == ["skipped", "skipped"]
+    assert list(rows_of(out)["review_verdict"]) == ["skipped", "skipped"]
 
 
 def test_each_reviewed_pair_maps_independently(tmp_path):
@@ -111,8 +111,8 @@ def test_each_reviewed_pair_maps_independently(tmp_path):
     }, flt="id == 'nobody'")
     out = _run(stage, _production_ctx(tmp_path))
 
-    assert list(out.frame["human_score"]) == [1, 2]
-    assert list(out.frame["human_label"]) == ["pos", "neg"]
+    assert list(rows_of(out)["human_score"]) == [1, 2]
+    assert list(rows_of(out)["human_label"]) == ["pos", "neg"]
 
 
 # ── Auto-approve: same copy, verdict `approve` ─────────────────────────────
@@ -129,10 +129,10 @@ def test_auto_approve_copies_the_source_value_under_the_approve_verdict(tmp_path
     stage = _stage(queue_columns(source="score", target="human_score"))
     out = _run(stage, _auto_approve_ctx(tmp_path))
 
-    assert list(out.frame["human_score"]) == [1, 2]
-    assert list(out.frame["decision"]) == ["approve", "approve"]
-    assert out.frame["reviewer_id"].isna().all()
-    assert out.frame["reviewed_at"].isna().all()
+    assert list(rows_of(out)["human_score"]) == [1, 2]
+    assert list(rows_of(out)["decision"]) == ["approve", "approve"]
+    assert rows_of(out)["reviewer_id"].isna().all()
+    assert rows_of(out)["reviewed_at"].isna().all()
 
 
 # ── A frame that does not match the declared schema fails loudly ───────────

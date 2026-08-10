@@ -4,6 +4,9 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
+from conftest import rows_of, as_inputs
+
+from app.core.frames import read_frame_file, write_frame_file
 from app.models import parse_stage
 from app.runtime.context import RunContext
 from app.runtime.lineage import EdgeKind
@@ -69,11 +72,11 @@ def _stage(aggregations, produces):
 
 def _run_output(aggregations, produces, frame=FILINGS) -> StageOutput:
     ctx = RunContext.for_stages_outside_a_run(repo_root=None, run_dir=None)
-    return handle_aggregate(_stage(aggregations, produces), {"filings": frame}, ctx)
+    return handle_aggregate(_stage(aggregations, produces), as_inputs({"filings": frame}), ctx)
 
 
 def _run(aggregations, produces, frame=FILINGS) -> pd.DataFrame:
-    return _run_output(aggregations, produces, frame).frame
+    return rows_of(_run_output(aggregations, produces, frame))
 
 
 def _all_formulas(frame=FILINGS) -> dict:
@@ -165,7 +168,7 @@ def test_an_empty_slice_matches_what_the_grouped_path_emits_for_that_group():
         "aggregate": {"group_by": ["k"], "aggregations": [total, none_pass]},
     })
     ctx = RunContext.for_stages_outside_a_run(repo_root=None, run_dir=None)
-    by_group = handle_aggregate(grouped, {"filings": FILINGS.assign(k="all")}, ctx).frame.iloc[0]
+    by_group = rows_of(handle_aggregate(grouped, as_inputs({"filings": FILINGS.assign(k="all")}), ctx)).iloc[0]
 
     assert whole["total"] == by_group["total"]
     assert pd.isna(whole["big_n"]) and pd.isna(by_group["big_n"])
@@ -196,7 +199,7 @@ def test_an_empty_input_records_one_row_with_no_contributors():
 
 def test_a_contributor_is_a_promotable_starting_point(tmp_path):
     produced = _run_output(_ALL_FORMULAS, _ALL_PRODUCES)
-    out, lineage = produced.frame, produced.lineage
+    out, lineage = rows_of(produced), produced.lineage
     run_dir = write_run(tmp_path, [
         {"id": "filings", "type": "input_data", "parents": [], "df": FILINGS},
         {"id": "agg", "type": "aggregate", "parents": ["filings"],
@@ -215,7 +218,7 @@ def test_a_contributor_is_a_promotable_starting_point(tmp_path):
 
 def test_the_walk_says_no_row_fed_an_empty_group_rather_than_blaming_position(tmp_path):
     produced = _run_output(_ALL_FORMULAS, _ALL_PRODUCES, _EMPTY)
-    out, lineage = produced.frame, produced.lineage
+    out, lineage = rows_of(produced), produced.lineage
     run_dir = write_run(tmp_path, [
         {"id": "filings", "type": "input_data", "parents": [], "df": _EMPTY},
         {"id": "agg", "type": "aggregate", "parents": ["filings"],
@@ -252,5 +255,8 @@ def test_the_one_row_passes_its_declared_output_schema(frame):
 @pytest.mark.parametrize("frame", [FILINGS, _EMPTY], ids=["rows", "empty"])
 def test_the_one_row_round_trips_through_parquet(frame, tmp_path):
     out, _ = _output_report(frame)
-    out.to_parquet(tmp_path / "out.parquet", index=False)
-    assert len(pd.read_parquet(tmp_path / "out.parquet")) == 1
+    # Through the frame seam, not pd.read_parquet: a list column comes back as
+    # pd.ArrowDtype, which plain pandas cannot read — the reason frames.py owns
+    # every frame read (tests/arch/test_frame_file_io_is_owned.py).
+    write_frame_file(out, tmp_path / "out.parquet")
+    assert len(read_frame_file(tmp_path / "out.parquet")) == 1

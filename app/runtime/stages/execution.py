@@ -10,6 +10,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable, NamedTuple, Protocol, TypeVar, runtime_checkable
 
 import pandas as pd
+import pyarrow as pa
 
 from app.models import Stage
 from app.models.run_manifest import RowError, StageContribution
@@ -17,7 +18,7 @@ from app.models.stage import StageBase, StageType, is_grain_and_order_preserving
 from app.models.stages.llm_transform import LLMTransformStage
 
 from app.core.agent.usage import LlmUsage
-from app.core.frames import list_rows
+from app.core.frames import list_table_rows, table_to_frame
 from app.core.stage_cache import StageCache, compute_row_fingerprint
 
 from .frame_caching import (
@@ -81,7 +82,7 @@ MakeRowMapper = Callable[[Stage, RunContext, pd.DataFrame], RowMapper]
 # nothing about caching: which rows it is asked about is the shape's decision
 # (see `_run_batched`).
 RunBatches = Callable[
-    [Stage, dict[str, pd.DataFrame], RunContext, int, list[int]], list["Row"]
+    [Stage, dict[str, pa.Table], RunContext, int, list[int]], list["Row"]
 ]
 
 # Internal column a row mapper attaches to a row it could not produce (e.g. an
@@ -170,7 +171,7 @@ class StageHandler(ABC):
 
     @abstractmethod
     def execute(
-        self, stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext
+        self, stage: Stage, inputs: dict[str, pa.Table], ctx: RunContext
     ) -> StageOutput | None: ...
 
     @property
@@ -230,7 +231,7 @@ class RowMapHandler(StageHandler):
         self.caches_rows = caches_rows
 
     def execute(
-        self, stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext
+        self, stage: Stage, inputs: dict[str, pa.Table], ctx: RunContext
     ) -> StageOutput:
         return _run_row_mapper(self, stage, inputs, ctx)
 
@@ -271,7 +272,7 @@ class LLMTransformHandler(RowMapHandler):
         self.run_batches = run_batches
 
     def execute(
-        self, stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext
+        self, stage: Stage, inputs: dict[str, pa.Table], ctx: RunContext
     ) -> StageOutput:
         if narrow_stage(stage, LLMTransformStage).llm.batch_size > 1:
             return _run_batched(self, stage, inputs, ctx)
@@ -285,9 +286,9 @@ class SourceHandler(StageHandler):
         self.read = read
 
     def execute(
-        self, stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext
+        self, stage: Stage, inputs: dict[str, pa.Table], ctx: RunContext
     ) -> StageOutput:
-        return StageOutput(self.read(stage, ctx))
+        return StageOutput.of_frame(self.read(stage, ctx))
 
     @property
     def preserves_grain_and_order(self) -> bool:
@@ -307,24 +308,27 @@ class FrameHandler(StageHandler):
 
     def __init__(
         self,
-        apply: Callable[[Stage, dict[str, pd.DataFrame], RunContext], StageOutput | None],
+        apply: Callable[[Stage, dict[str, pa.Table], RunContext], StageOutput | None],
         caches_frames: bool = True,
     ) -> None:
         self.apply = apply
         self.caches_frames = caches_frames
 
     def execute(
-        self, stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext
+        self, stage: Stage, inputs: dict[str, pa.Table], ctx: RunContext
     ) -> StageOutput | None:
         caching = open_frame_caching(stage, ctx, self.caches_frames)
         if caching.key is None:
             output = self.apply(stage, inputs, ctx)
             return note_skipped_caching(output, caching.skipped_note)
-        input_frames = [inputs[ref.id] for ref in stage.inputs]
+        # The frame cache keys on a pandas-sourced fingerprint, and that hash
+        # addresses every entry already recorded — so the inputs are materialized
+        # here rather than the keying moved to arrow. See tests/test_fingerprint_goldens.py.
+        input_frames = [table_to_frame(inputs[ref.id]) for ref in stage.inputs]
         cached = find_cached_frame(caching, input_frames)
         if cached is not None:
             # A replayed frame carries no contribution: nothing ran to report.
-            return StageOutput(cached)
+            return StageOutput.of_frame(cached)
         return record_frame_output(caching, input_frames, self.apply(stage, inputs, ctx))
 
     @property
@@ -352,7 +356,7 @@ def validate_registry_matches_model(handlers: dict[StageType, StageHandler]) -> 
 def _run_row_mapper(
     handler: RowMapHandler,
     stage: Stage,
-    inputs: dict[str, pd.DataFrame],
+    inputs: dict[str, pa.Table],
     ctx: RunContext,
 ) -> StageOutput:
     """Map the stage's per-row function over its single input, in input order.
@@ -373,7 +377,9 @@ def _run_row_mapper(
         )
     src = inputs[stage.inputs[0].id]
     reads = stage.anchor_reads()
-    map_row = handler.make_mapper(stage, ctx, src)
+    # `make_mapper` does frame-wide setup (resolve code, render prompt additions),
+    # so it is one of the places pandas is materialized — see docs/pandas-seam.md.
+    map_row = handler.make_mapper(stage, ctx, table_to_frame(src))
     # The ONE line of per-row compute, optionally routed through the row cache
     # and the run log. Log outside cache, so a row the cache answers never
     # reaches the mapper's lifecycle wrapper and is logged as the replay it is.
@@ -383,7 +389,7 @@ def _run_row_mapper(
     compute_row = _log_row_lifecycle(map_row, ctx.run_log, stage.id)
     if caching is not None:
         compute_row = _map_row_through_cache(caching, compute_row, ctx.run_log, stage.id)
-    records = list_rows(src)
+    records = list_table_rows(src)
     seen = [_narrow_row(row, reads) for row in records]
 
     results: list[Row | None] = [None] * len(records)
@@ -428,7 +434,7 @@ def _run_row_mapper(
     lineage = (
         kept_rows_lineage(stage.inputs[0].id, kept_indices) if handler.drops_rows else None
     )
-    return StageOutput(
+    return StageOutput.of_frame(
         _finish_empty_result(mapped.frame, src, stage), mapped.contribution, lineage
     )
 
@@ -577,14 +583,14 @@ def _log_row_lifecycle(map_row: RowMapper, log: RunLog | None, stage_id: str) ->
 def _run_batched(
     handler: "LLMTransformHandler",
     stage: Stage,
-    inputs: dict[str, pd.DataFrame],
+    inputs: dict[str, pa.Table],
     ctx: RunContext,
 ) -> StageOutput:
     """Run the stage's batched execution function over only the rows the cache
     cannot already answer, and assemble its rows back into INPUT order alongside
     the hits."""
     src = inputs[stage.inputs[0].id]
-    records = list_rows(src)
+    records = list_table_rows(src)
     caching = _open_row_caching(stage, ctx)
     hits = {} if caching is None else _find_cached_rows_by_position(caching, records)
     misses = [index for index in range(len(records)) if index not in hits]
@@ -600,8 +606,8 @@ def _run_batched(
         ctx.run_log, stage.id, misses, [row.get(ROW_ERROR_KEY) for row in computed]
     )
     batched = _finish_batched_frame(rows, handler, stage)
-    return batched.with_frame(
-        _finish_empty_result(batched.frame, src, stage)
+    return StageOutput.of_frame(
+        _finish_empty_result(batched.frame, src, stage), batched.contribution
     )
 
 
@@ -620,7 +626,7 @@ def _find_cached_rows_by_position(
 def _compute_batched_rows(
     handler: "LLMTransformHandler",
     stage: Stage,
-    src: pd.DataFrame,
+    src: pa.Table,
     misses: list[int],
     ctx: RunContext,
 ) -> list[Row]:
@@ -630,7 +636,7 @@ def _compute_batched_rows(
     if not misses:
         return []
     return handler.run_batches(
-        stage, {stage.inputs[0].id: src.iloc[misses]}, ctx, handler.parallelism, misses
+        stage, {stage.inputs[0].id: src.take(misses)}, ctx, handler.parallelism, misses
     )
 
 
@@ -655,24 +661,33 @@ def _order_by_input_position(
     return [by_position[position] for position in range(row_count)]
 
 
+# Not a StageOutput: coercing to arrow here and again for the empty-result step
+# would convert twice. The driver coerces once, at its own boundary.
+class _MappedFrame(NamedTuple):
+    """The row driver's intermediate — assembled rows plus what they reported."""
+
+    frame: pd.DataFrame
+    contribution: StageContribution
+
+
 def _finish_batched_frame(
     rows: list[Row], handler: RowMapHandler, stage: Stage
-) -> StageOutput:
+) -> _MappedFrame:
     """The batched path's counterpart of `_finish_mapped_frame`: no mapper, so
     no post-map step — the internal columns are collected off the assembled
     frame, then stripped and the frame trimmed."""
     df = pd.DataFrame(rows)
     contribution = _collect_internal_columns(df)
-    return StageOutput(_strip_and_trim(df, contribution, handler, stage), contribution)
+    return _MappedFrame(_strip_and_trim(df, contribution, handler, stage), contribution)
 
 
 def _finish_empty_result(
-    mapped: pd.DataFrame, src: pd.DataFrame, stage: Stage
+    mapped: pd.DataFrame, src: pa.Table, stage: Stage
 ) -> pd.DataFrame:
     """A 0x0 frame extended nothing, so its promised columns are named here."""
     if len(mapped.columns) > 0 or len(mapped) > 0:
         return mapped
-    empty = src.iloc[0:0].copy()
+    empty = table_to_frame(src.schema.empty_table())
     promised = stage.resolve_output_schema()
     if promised is not None:
         empty = empty.reindex(columns=[column.name for column in promised.columns])
@@ -685,7 +700,7 @@ def _finish_mapped_frame(
     map_row: RowMapper,
     stage: Stage,
     ctx: RunContext,
-) -> StageOutput:
+) -> _MappedFrame:
     """Turn the assembled per-row results into the stage's output: collect the
     driver's own internal columns onto this stage's `StageContribution`, hand
     the frame back to the mapper where the mapper is a `PostMapRowMapper`, then
@@ -698,7 +713,7 @@ def _finish_mapped_frame(
     contribution = _collect_internal_columns(df)
     if isinstance(map_row, PostMapRowMapper):
         map_row.finish_mapped_rows(stage, df, ctx, contribution)
-    return StageOutput(_strip_and_trim(df, contribution, handler, stage), contribution)
+    return _MappedFrame(_strip_and_trim(df, contribution, handler, stage), contribution)
 
 
 def _collect_internal_columns(df: pd.DataFrame) -> StageContribution:

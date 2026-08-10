@@ -4,12 +4,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pandas as pd
+import pyarrow as pa
 import pytest
 
 from app.core.stage_cache import ReadOnlyStageCache
 from app.models import Stage
 from app.models.run_manifest import StageContribution, read_run_manifest
 from app.models.run_parameters import RunParameters
+from app.core.frames import frame_to_table, table_to_frame
 from app.runtime.stage_output import StageOutput
 from app.runtime.context import (
     RunContext,
@@ -33,6 +36,16 @@ def resumed_stages(project_dir: Path, run_id: str) -> tuple[list[Stage], str]:
     workflow_version = read_run_manifest(project_dir / "runs" / run_id).workflow_version
     assert workflow_version, f"run {run_id} records no workflow_version"
     return load_version_stages(project_dir, workflow_version), workflow_version
+
+
+def as_inputs(frames: dict[str, pd.DataFrame]) -> dict[str, pa.Table]:
+    """Handler inputs. Arrow is the wire format, so a test that builds pandas says so here."""
+    return {name: frame_to_table(frame) for name, frame in frames.items()}
+
+
+def rows_of(output: StageOutput) -> pd.DataFrame:
+    """A handler's output as pandas, for a test that asserts on rows."""
+    return table_to_frame(output.table)
 
 
 def contribution_of(output: StageOutput) -> StageContribution:

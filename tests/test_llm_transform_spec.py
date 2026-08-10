@@ -15,7 +15,7 @@ from app.models.schema import TableSchema
 from app.models.stage import StageType
 from app.runtime.stages import HANDLERS
 from app.runtime.stages import llm_transform as lt
-from conftest import contribution_of, make_run_context
+from conftest import as_inputs, rows_of, contribution_of, make_run_context
 
 
 def _stage():
@@ -39,7 +39,7 @@ def _stage():
 
 def _run(stage, frames, ctx=None):
     return HANDLERS[StageType.llm_transform].execute(
-        stage, frames, ctx if ctx is not None else make_run_context())
+        stage, as_inputs(frames), ctx if ctx is not None else make_run_context())
 
 
 def test_reply_model_is_the_subtracted_spec(monkeypatch):
@@ -69,8 +69,8 @@ def test_reply_model_enforces_the_spec():
 def test_output_rows_carry_reply_columns(monkeypatch):
     monkeypatch.setattr(lt, "call_llm", lambda *a, **k: {"score": 7})
     out = _run(_stage(), {"load": pd.DataFrame({"id": ["r1"], "text": ["hi"]})})
-    assert out.frame.loc[0, "score"] == 7
-    assert out.frame.loc[0, "id"] == "r1"
+    assert rows_of(out).loc[0, "score"] == 7
+    assert rows_of(out).loc[0, "id"] == "r1"
 
 
 def test_backend_error_surfaces_as_row_error_not_raised(monkeypatch):
@@ -80,7 +80,7 @@ def test_backend_error_surfaces_as_row_error_not_raised(monkeypatch):
     monkeypatch.setattr(lt, "call_llm", boom)
     ctx = make_run_context()
     out = _run(_stage(), {"load": pd.DataFrame({"id": ["r1"], "text": ["hi"]})}, ctx)
-    assert len(out.frame) == 1                                    # not raised; stage completes
+    assert len(rows_of(out)) == 1                                    # not raised; stage completes
     assert contribution_of(out).row_errors == [{"row": 0, "message": "backend down"}]
 
 
@@ -94,5 +94,5 @@ def test_timeout_with_empty_message_is_captured_and_labeled(monkeypatch):
     monkeypatch.setattr(lt, "call_llm", boom)
     ctx = make_run_context()
     out = _run(_stage(), {"load": pd.DataFrame({"id": ["r1"], "text": ["hi"]})}, ctx)
-    assert len(out.frame) == 1                                    # not raised; stage completes
+    assert len(rows_of(out)) == 1                                    # not raised; stage completes
     assert contribution_of(out).row_errors == [{"row": 0, "message": "TimeoutError"}]

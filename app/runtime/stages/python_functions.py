@@ -9,7 +9,10 @@ import importlib
 from typing import Any, Callable
 
 import pandas as pd
+import pyarrow as pa
 
+from app.core.frames import table_to_frame
+from app.core.errors import AuthoredFrameExpected
 from app.models import FunctionKind, Stage
 from app.models.stages.code import (
     PythonFrameFunctionStage,
@@ -44,13 +47,13 @@ def _load_python_function(stage: CodeCarryingStage) -> Callable[..., Any]:
     raise ValueError(f"Unknown function kind for stage {stage.id}: {fn_spec.kind}")
 
 
-def handle_python_frame_function(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext) -> StageOutput:
+def handle_python_frame_function(stage: Stage, inputs: dict[str, pa.Table], ctx: RunContext) -> StageOutput:
     """Whole-frame transform: the function sees the full input frame(s) and may
     reshape them (group-by, pivot, dedup, multi-input merge)."""
     fn = _load_python_function(narrow_stage(stage, PythonFrameFunctionStage))
     # Pass dataframes positionally in declared input order.
-    args = [inputs[ref.id] for ref in stage.inputs]
-    return StageOutput(fn(*args))
+    args = [table_to_frame(inputs[ref.id]) for ref in stage.inputs]
+    return StageOutput.of_frame(_require_frame(fn(*args), stage))
 
 
 def make_python_row_mapper(stage: Stage, ctx: RunContext, src: pd.DataFrame) -> RowMapper:
@@ -70,3 +73,13 @@ def make_python_row_mapper(stage: Stage, ctx: RunContext, src: pd.DataFrame) -> 
         return result
 
     return map_row
+
+
+def _require_frame(result: Any, stage: Stage) -> pd.DataFrame:
+    """Checked before the coercion to arrow, so a wrong return type is not reported
+    as a crash."""
+    if not isinstance(result, pd.DataFrame):
+        raise AuthoredFrameExpected(
+            f"stage {stage.id}: function returned {type(result).__name__}, expected a DataFrame"
+        )
+    return result

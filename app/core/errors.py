@@ -105,6 +105,20 @@ class FrameNotSerializableError(Exception):
     is NOT reported this way — it propagates."""
 
 
+# Named rather than null-filled: a union's inputs are declared schema-identical,
+# so a column present on one side and not the other is a bug upstream, not a
+# shape for the concatenation to paper over with a value nothing supplied.
+class FrameConcatMismatchError(ValueError):
+    """Tables given to `concat_tables` disagree on their column names."""
+
+
+# Raised BEFORE the frame is coerced to arrow, so the caller can tell an authored
+# function that returned the wrong thing from one that refused: a refusal raises
+# StepRefused and satisfies an expected-failure test, this does not.
+class AuthoredFrameExpected(TypeError):
+    """An authored `transform`/publish function returned something other than a DataFrame."""
+
+
 class ProjectExistsError(Exception):
     """A project create was requested for a name whose examples/<name>/ directory
     already exists. Raised (loudly) rather than clobbering existing data — the

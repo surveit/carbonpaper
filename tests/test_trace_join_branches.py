@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pandas as pd
 
+from conftest import as_inputs, rows_of
 from app.models import parse_stage
 from app.runtime.lineage import (
     EdgeKind,
@@ -170,8 +171,8 @@ def test_handler_lineage_reaches_the_executor_channel():
         "join": {"keys": [{"left": "client", "right": "client"}],
                   "enrich_with": {"agency": "agency"}},
     })
-    produced = handle_enrich(stage, {"filings": FILINGS, "contracts": CONTRACTS}, None)
-    out, lineage = produced.frame, produced.lineage
+    produced = handle_enrich(stage, as_inputs({"filings": FILINGS, "contracts": CONTRACTS}), None)
+    out, lineage = rows_of(produced), produced.lineage
     assert lineage is not None
     assert len(lineage) == len(out)
     assert lineage.parents == [
@@ -214,8 +215,8 @@ def test_expand_records_the_subject_row_each_fanned_out_row_came_from():
     })
     two_contracts = pd.DataFrame({"client": ["Acme", "Acme"], "agency": ["HHS", "DOD"]})
 
-    produced = handle_expand(stage, {"filings": FILINGS, "contracts": two_contracts}, None)
-    out = produced.frame
+    produced = handle_expand(stage, as_inputs({"filings": FILINGS, "contracts": two_contracts}), None)
+    out = rows_of(produced)
 
     assert list(out["agency"])[:2] == ["HHS", "DOD"]
     assert pd.isna(out["agency"].iat[2])

@@ -6,6 +6,7 @@ import pandas as pd
 import pytest
 
 from app.core.errors import SubsetRunError
+from app.core.frames import table_to_frame
 from app.models import parse_stage, Stage, Workflow
 from app.runtime.executor import run_subset
 from app.runtime.lineage import concatenated_inputs_lineage
@@ -66,8 +67,8 @@ def test_limit_caps_the_rows_a_frame_handler_is_given(tmp_path):
 
     outputs = _run([load, counted], tmp_path, "frame_cap")
 
-    assert list(outputs["counted"]["seen"]) == [3, 3, 3]
-    assert list(outputs["counted"]["val"]) == [0, 1, 2]
+    assert list(table_to_frame(outputs["counted"])["seen"]) == [3, 3, 3]
+    assert list(table_to_frame(outputs["counted"])["val"]) == [0, 1, 2]
 
 
 def test_limit_keeps_the_row_mapper_off_the_rows_past_the_cap(tmp_path):
@@ -88,7 +89,7 @@ def test_limit_keeps_the_row_mapper_off_the_rows_past_the_cap(tmp_path):
 
     outputs = _run([load, mapper], tmp_path, "mapper_cap")
 
-    assert list(outputs["m"]["val"]) == [0, 1, 2]
+    assert list(table_to_frame(outputs["m"])["val"]) == [0, 1, 2]
 
 
 def test_the_uncapped_run_of_that_same_mapper_still_fails(tmp_path):
@@ -122,7 +123,7 @@ def test_a_limit_cuts_the_same_window_off_every_input_of_a_union(tmp_path):
     outputs = _run([left, right, union], tmp_path, "union_cap")
 
     # Two rows from EACH input, not the first two rows of the concatenation.
-    assert list(outputs["u"]["name"]) == ["l0", "l1", "r10", "r11"]
+    assert list(table_to_frame(outputs["u"])["name"]) == ["l0", "l1", "r10", "r11"]
 
 
 def test_union_lineage_counts_from_the_first_row_the_stage_actually_read():

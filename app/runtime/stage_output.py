@@ -1,14 +1,15 @@
-"""What a stage handler returns: its rows, plus the two things that used to ride
-the frame's `.attrs`. Fields, not a side channel — `.attrs` did not survive a
-frame being rebuilt, so an attachment made before the last rebuild was silently
-lost, and it cannot reach a parquet either.
+"""What a stage handler returns: its rows as an arrow table, plus the two things
+that used to ride the frame's `.attrs`. Arrow is the wire format; pandas is
+materialized only where authored code reads a frame — see `docs/pandas-seam.md`.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 
 import pandas as pd
+import pyarrow as pa
 
+from app.core.frames import frame_to_table
 from app.models.run_manifest import StageContribution
 
 from .lineage import RowLineage
@@ -16,7 +17,7 @@ from .lineage import RowLineage
 
 @dataclass(frozen=True)
 class StageOutput:
-    frame: pd.DataFrame
+    table: pa.Table
     # What this stage owes the manifest — token usage, per-row errors, dropped
     # columns, queue tallies. Empty rather than None: every reader merges it
     # unconditionally instead of testing for absence first.
@@ -26,6 +27,20 @@ class StageOutput:
     # which is distinct from an empty lineage claiming no row had a parent.
     lineage: RowLineage | None = None
 
-    def with_frame(self, frame: pd.DataFrame) -> "StageOutput":
-        """The same contribution and lineage over a rebuilt frame."""
-        return replace(self, frame=frame)
+    @classmethod
+    def of_frame(
+        cls,
+        frame: pd.DataFrame,
+        contribution: StageContribution | None = None,
+        lineage: RowLineage | None = None,
+    ) -> "StageOutput":
+        """For a handler that materialized pandas to run authored code — it coerces back here."""
+        return cls(
+            frame_to_table(frame),
+            contribution if contribution is not None else StageContribution(),
+            lineage,
+        )
+
+    def with_table(self, table: pa.Table) -> "StageOutput":
+        """The same contribution and lineage over a rebuilt table."""
+        return replace(self, table=table)

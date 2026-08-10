@@ -6,7 +6,7 @@ from app.runtime.stages import HANDLERS
 from app.models import parse_stage
 from app.models.stage import StageType
 from app.core.stage_cache import StageCacheEntry
-from conftest import QUEUE_COLUMNS, make_run_context, queue_added_columns
+from conftest import as_inputs, QUEUE_COLUMNS, make_run_context, queue_added_columns
 
 
 def test_bad_filter_raises_instead_of_skipping_review(tmp_path):
@@ -32,7 +32,7 @@ def test_bad_filter_raises_instead_of_skipping_review(tmp_path):
         stage_cache=StageCacheEntry.read_write(),
     )
     with pytest.raises(ValueError, match="filter could not be evaluated"):
-        HANDLERS[StageType.human_review_queue].execute(stage, inputs, ctx)
+        HANDLERS[StageType.human_review_queue].execute(stage, as_inputs(inputs), ctx)
 
 
 def test_a_cell_the_filter_cannot_answer_names_the_stage_and_the_filter(tmp_path):
@@ -57,7 +57,7 @@ def test_a_cell_the_filter_cannot_answer_names_the_stage_and_the_filter(tmp_path
         stage_cache=StageCacheEntry.read_write(),
     )
     with pytest.raises(ValueError) as excinfo:
-        HANDLERS[StageType.human_review_queue].execute(stage, inputs, ctx)
+        HANDLERS[StageType.human_review_queue].execute(stage, as_inputs(inputs), ctx)
     message = str(excinfo.value)
     assert "human_review_queue 'q'" in message
     assert "score > 1" in message

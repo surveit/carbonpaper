@@ -14,7 +14,8 @@ from typing import Any, Literal
 import pandas as pd
 from pydantic import BaseModel
 
-from app.core.frames import list_rows
+from app.core.frames import frame_to_table, table_to_frame, list_rows
+from app.core.errors import AuthoredFrameExpected
 from app.models import Stage, TableSchema
 from app.models.errors import StepRefused
 from app.models.stage import StageType
@@ -182,8 +183,16 @@ def _run_one_test(stage: Stage, test: StageTest) -> StageTestResult:
     # require_run_dir rather than touching a fabricated path.
     ctx = RunContext.for_stages_outside_a_run(None, None)
     try:
-        produced = HANDLERS[StageType(stage.type)].execute(stage, input_frames, ctx)
-        actual = produced.frame if produced is not None else None
+        produced = HANDLERS[StageType(stage.type)].execute(
+            stage, {name: frame_to_table(f) for name, f in input_frames.items()}, ctx)
+        actual = table_to_frame(produced.table) if produced is not None else None
+    except AuthoredFrameExpected as exc:
+        # Not a refusal and not a crash: the function ran and returned the wrong
+        # kind of thing, which an expected-failure test must not accept.
+        if test.expected is None:
+            return StageTestResult(
+                test.name, "mismatch", message=f"expected the step to fail, got {exc}")
+        return StageTestResult(test.name, "error", message=str(exc))
     except Exception as exc:  # noqa: BLE001 — the function is authored code; any raise IS the result
         return _judge_raise(test, exc)
     if test.expected is None:

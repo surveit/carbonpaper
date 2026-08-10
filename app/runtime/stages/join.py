@@ -9,7 +9,9 @@ from typing import Literal, Optional
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 
+from app.core.frames import table_to_frame
 from app.models import Stage
 from app.models.stages.join import JoinStage
 
@@ -26,20 +28,20 @@ JOIN_SUBJECT_ORD_KEY = "_trace_join_subject_ord"
 JOIN_REFERENCE_ORD_KEY = "_trace_join_reference_ord"
 
 
-def handle_enrich(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext) -> StageOutput:
+def handle_enrich(stage: Stage, inputs: dict[str, pa.Table], ctx: RunContext) -> StageOutput:
     # validate="m:1" makes pandas VERIFY the reference is unique on the key
     # rather than trusting the author: a duplicate would otherwise multiply
     # subject rows silently, which is expand's job, not this one's.
     return _join_reference_into_subject(stage, inputs, validate="m:1")
 
 
-def handle_expand(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext) -> StageOutput:
+def handle_expand(stage: Stage, inputs: dict[str, pa.Table], ctx: RunContext) -> StageOutput:
     return _join_reference_into_subject(stage, inputs, validate=None)
 
 
 def _join_reference_into_subject(
     stage: Stage,
-    inputs: dict[str, pd.DataFrame],
+    inputs: dict[str, pa.Table],
     validate: Optional[Literal["m:1"]],
 ) -> pd.DataFrame:
     join_stage = narrow_stage(stage, JoinStage)
@@ -48,11 +50,14 @@ def _join_reference_into_subject(
     reference_id = join_stage.inputs[1].id
     keys = join_cfg.keys
 
+    # A join is a pandas merge, so both sides are materialized here — the seam is
+    # local to this handler, not on its signature (docs/pandas-seam.md).
+    subject_frame = table_to_frame(inputs[subject_id])
     # Carry each side's row ordinal through the merge so the pairing can be read
     # back off the result. `.assign` copies, so the caller's frames are untouched.
-    subject = inputs[subject_id].assign(
-        **{JOIN_SUBJECT_ORD_KEY: np.arange(len(inputs[subject_id]))})
-    reference = inputs[reference_id]
+    subject = subject_frame.assign(
+        **{JOIN_SUBJECT_ORD_KEY: np.arange(len(subject_frame))})
+    reference = table_to_frame(inputs[reference_id])
 
     # Only the keys, each enrich_with column already under its landed name,
     # and the ordinal carrier cross the merge. Landed-name collisions are
@@ -88,8 +93,8 @@ def _join_reference_into_subject(
     ])
     # The projection drops both ordinal carriers. Attach LAST: the projection
     # rebuilds the frame and `.attrs` would not survive it.
-    projected = joined[[*inputs[subject_id].columns, *join_cfg.enrich_with.values()]]
-    return StageOutput(projected, lineage=lineage)
+    projected = joined[[*subject_frame.columns, *join_cfg.enrich_with.values()]]
+    return StageOutput.of_frame(projected, lineage=lineage)
 
 
 def _describe_cardinality_failure(
