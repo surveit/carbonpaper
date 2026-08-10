@@ -105,8 +105,6 @@ _GRANDFATHERED: frozenset[str] = frozenset(
         "app/core/persistence.py::validate_id",
         "app/core/predicate.py::ParsedPredicate",
         "app/core/predicate.py::_normalize",
-        "app/core/predicate.py::_validate_node",
-        "app/core/predicate.py::parse_predicate",
         "app/core/prompt_template.py::find_template_fields",
         "app/core/run_status.py::RunStatus",
         "app/core/stage_cache.py::ReadOnlyStageCache",
