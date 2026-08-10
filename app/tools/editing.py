@@ -134,10 +134,11 @@ TOOL_SCHEMAS: dict[str, ToolInputSchema] = {
         "project_id": Annotated[str, "The project id (call get_current_project first)."],
         "stages": Annotated[
             list[StageDraft],
-            "The complete NEW stages: each with id (new and unique), name, type, the "
+            "The complete NEW stages: each with id (new and unique — the stage's only "
+            "name), description, type, the "
             "config block(s) its type requires (connector / llm / function / ...; "
-            "`publish` needs BOTH its `publish` block and a `function` block), MANDATORY "
-            "output_schema, and inputs each with a MANDATORY `schema`. Every id in inputs "
+            "`publish` needs BOTH its `publish` block and a `function` block), a MANDATORY "
+            "`signature`, and inputs each with a MANDATORY `schema`. Every id in inputs "
             "must already be a stage in this workflow or in this same call.",
         ],
     },

@@ -105,8 +105,8 @@ the schema afterwards.)
    the same call or one already in the workflow. Stages that validate are stored even if
    another in the batch fails; the result's added/failed/skipped says which is which. The
    workflow starts with an input_data stage that reads the source and takes no inputs.
-6. An upstream stage's output_schema is what flows down the edge. A stage's MANDATORY
-   declared input schema is usually that schema verbatim; it differs when the stage reads
+6. What an upstream stage's `signature` promises is what flows down the edge. A stage's
+   MANDATORY declared input schema is usually that verbatim; it differs when the stage reads
    only part of what upstream emits. Either way it must be a subset the upstream can satisfy.
 7. As the graph grows: describe_workflow(project_id) for the shape (ids, types, inputs,
    review state), read_stage(project_id, stage_id) for one stage in full,
