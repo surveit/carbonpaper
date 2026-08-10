@@ -7,6 +7,11 @@ import re
 
 import pytest
 
+from app.models.authoring_conduct_note import (
+    HANDOVER_BARS_NOTE,
+    HOW_YOU_WORK_NOTE,
+    REVIEW_GUIDE_NOTE,
+)
 from app.models.authoring_lifecycle_note import AUTHORING_LIFECYCLE_GUIDANCE
 from app.models.enum_from_data_note import ENUM_FROM_DATA_GUIDANCE
 from app.models.product_note import CONCEPTS_NOTE, ROLE_NOTE
@@ -24,6 +29,9 @@ from app.models.stages.worked_example import WORKED_STAGE_EXAMPLE
 SHARED_GUIDANCE = {
     "role": ROLE_NOTE,
     "concepts": CONCEPTS_NOTE,
+    "how_you_work": HOW_YOU_WORK_NOTE,
+    "review_guide": REVIEW_GUIDE_NOTE,
+    "handover_bars": HANDOVER_BARS_NOTE,
     "lifecycle": AUTHORING_LIFECYCLE_GUIDANCE,
     "enum_from_data": ENUM_FROM_DATA_GUIDANCE,
     "stage_anatomy": render_stage_anatomy(),

@@ -5,6 +5,11 @@ edits at runtime, so the prompt names no specific project."""
 
 from __future__ import annotations
 
+from app.models.authoring_conduct_note import (
+    HANDOVER_BARS_NOTE,
+    HOW_YOU_WORK_NOTE,
+    REVIEW_GUIDE_NOTE,
+)
 from app.models.authoring_lifecycle_note import AUTHORING_LIFECYCLE_GUIDANCE
 from app.models.enum_from_data_note import ENUM_FROM_DATA_GUIDANCE
 from app.models.product_note import CONCEPTS_NOTE, ROLE_NOTE
@@ -17,36 +22,24 @@ from app.models.stages.node_types import AUTHORABLE_CODE_CARRYING_TYPES
 from app.models.stages.signature import SIGNATURE_CONTRACT_NOTE
 from app.models.stages.worked_example import WORKED_STAGE_EXAMPLE
 
-_HOW_YOU_WORK = """\
-# How you work
-Read before you edit (describe_workflow, read_stage). Prefer small, targeted changes.
-Every edit may have complex validations, so large expensive edits that result in errors
-are token inefficient.
-
-Never invent a column, source, model, or value — if you lack it, ask the user. The reason
-for this rule is that an LLM invented figure will not survive the validation step, which
-itself exists to ensure that the asymmetric risk of publishing something wrong is
-prevented.
-
+_DRAFTS = """\
 For a multi-stage restructure, work in a scratch copy instead of editing live:
 create_draft (pass from_version to seed it from an existing version's stages; omit it to
 start empty), then iterate with set_draft_stage / remove_draft_stage — invalid
 intermediate states are fine there, and read_draft shows what still blocks saving.
 
 When the proposal is finished, save_version once, with a message for the human reviewer
-explaining what changed and why.
-
-A workflow does not explain itself, so a version the human has to understand before
-acting on it needs write_review_guide: an ordered walkthrough, in the methodology's own
-terms, saying what each part does and what a reviewer should check. Write it in
-TEST_RUN_REVIEW — after the smoke run, never straight off save_version."""
+explaining what changed and why."""
 
 
 def build_editing_system_prompt() -> str:
     return "\n\n".join([
         ROLE_NOTE,
         CONCEPTS_NOTE,
-        _HOW_YOU_WORK,
+        HOW_YOU_WORK_NOTE,
+        _DRAFTS,
+        REVIEW_GUIDE_NOTE,
+        HANDOVER_BARS_NOTE,
         f"# Project lifecycle\n{AUTHORING_LIFECYCLE_GUIDANCE}",
         f"# Rules for workflows\n\n## Constrain inputs as tightly as possible\n"
         f"{ENUM_FROM_DATA_GUIDANCE}",

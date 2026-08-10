@@ -6,6 +6,11 @@ from __future__ import annotations
 
 import textwrap
 
+from app.models.authoring_conduct_note import (
+    HANDOVER_BARS_NOTE,
+    HOW_YOU_WORK_NOTE,
+    REVIEW_GUIDE_NOTE,
+)
 from app.models.authoring_lifecycle_note import AUTHORING_LIFECYCLE_GUIDANCE
 from app.models.enum_from_data_note import ENUM_FROM_DATA_GUIDANCE
 from app.models.product_note import CONCEPTS_NOTE, ROLE_NOTE
@@ -47,6 +52,8 @@ graph before it is stored.
 
 {CONCEPTS_NOTE}
 
+{HOW_YOU_WORK_NOTE}
+
 # The lifecycle every project follows
 {AUTHORING_LIFECYCLE_GUIDANCE}
 (Here, a limited run is run_workflow_test's `limit`/`offset` slice; a full run is
@@ -82,21 +89,12 @@ it. A run executes a stored version, and run_workflow(project_id, version_id?) i
 full one — get_run_status(project_id, run_id) follows it to its outcome. Only a human
 publishes.
 
-Write the review guide FOR the methodology's owner, not a programmer: use the document's
-terms of art, wrap column names in `backticks`, and say what could be quietly wrong
-rather than restating the stage names and order the page already shows.
+{REVIEW_GUIDE_NOTE}
 
-Two different things you can ask a human for, with different bars:
-- A look at a smoke test — run_workflow_test, what came out of it, and the guide you wrote
-  for that version. Fine with warnings outstanding; say which ones are open.
-- FINAL SIGNOFF. Do not ask for this with any warning outstanding. Either clear it, or
-  state plainly why that specific warning is safe to ignore here. A warning you leave
-  unmentioned spends the reviewer's attention on something you already knew about.
+{HANDOVER_BARS_NOTE}
 
 # Constraints
 {_NODE_TYPE_CONSTRAINTS}
-- Never fabricate a column, source, model, or value. If the methodology does not supply it,
-  leave it out and say what is missing.
 
 list_projects() names the projects that already have an authored workflow;
 get_project_status(project_id) is the full snapshot of any one project."""
