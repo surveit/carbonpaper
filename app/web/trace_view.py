@@ -10,7 +10,7 @@ from dataclasses import asdict, dataclass
 from typing import Any
 
 from app.models import Stage
-from app.models.stages.code import PythonFrameFunctionStage, PythonRowFunctionStage
+from app.models.stages.code import PandasFrameFunctionStage, PythonRowFunctionStage
 from app.models.stages.input_data import InputDataStage
 from app.models.stages.join import EnrichStage, ExpandStage
 from app.models.stages.llm_transform import LLMTransformStage
@@ -60,7 +60,7 @@ def _transform_of(stage: Stage | None) -> dict[str, Any]:
         path = stage.connector.params.get("path")
         src = path or (stage.source.doc if stage.source else None)
         return {"kind": "source", "detail": src or "originates the rows"}
-    if isinstance(stage, (PythonRowFunctionStage, PythonFrameFunctionStage)):
+    if isinstance(stage, (PythonRowFunctionStage, PandasFrameFunctionStage)):
         # Full source: the whole module file for a module ref, the inline code
         # for an inline ref — never a partial snippet or a bare reference.
         return {"kind": "python", "detail": resolve_function_code(stage)}

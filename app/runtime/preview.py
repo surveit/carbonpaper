@@ -25,7 +25,7 @@ from .stages import HANDLERS
 # run as an ephemeral scratch preview.
 PREVIEWABLE_TYPES: set[str] = {
     "python_row_function",
-    "python_frame_function",
+    "pandas_frame_function",
     "starlark_row_function",
     "llm_transform",
     "enrich",

@@ -51,7 +51,7 @@ _SNAKE_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 StageId: TypeAlias = str
 
 
-# Shared by every authored-code block (python_row_function/python_frame_function,
+# Shared by every authored-code block (python_row_function/pandas_frame_function,
 # publish's function block, filter_rows) — lives here, below `stage.py`, so a
 # config class defined in its own module can use it without a cycle.
 class FunctionKind(str, Enum):

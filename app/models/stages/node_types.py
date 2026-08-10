@@ -46,7 +46,7 @@ AUTHORABLE_TYPES: dict[str, NodeTypeSpec] = {
 # The types whose config carries authored code all owe a plain-language `summary`
 # and `corner_cases`, refused on write by app.services.stage_edit; their specs carry
 # the contract notes, pinned by tests/test_node_type_notes.py.
-CODE_CARRYING_TYPES = ("python_row_function", "python_frame_function", "publish",
+CODE_CARRYING_TYPES = ("python_row_function", "pandas_frame_function", "publish",
                        "filter_rows", "starlark_row_function")
 
 # The subset a prompt names: a retired type's rule is still enforced on a stored

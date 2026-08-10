@@ -10,7 +10,7 @@ from app.web.stage_test_views import build_certification
 _SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True}]}
 # Which signature form a type takes: the reshaping family replaces its input,
 # the anchored family extends it.
-_REPLACES_TYPES = {"python_frame_function", "aggregate", "union", "input_data", "publish"}
+_REPLACES_TYPES = {"pandas_frame_function", "aggregate", "union", "input_data", "publish"}
 
 
 def _signature_for(type_, schema):
@@ -97,7 +97,7 @@ def test_a_stage_whose_behaviour_is_not_code_gets_no_badge():
 def test_a_frame_function_is_certifiable_too():
     """Certification is about a summary being checked, not about grain — a frame
     function carries both a summary and tests."""
-    stage = _stage(summary="Ranks the rows.", type_="python_frame_function")
+    stage = _stage(summary="Ranks the rows.", type_="pandas_frame_function")
     assert build_certification(stage, _views("passed")).status == "certified"
 
 

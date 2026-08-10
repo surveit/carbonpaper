@@ -10,7 +10,7 @@ from app.models import find_stage_compiler_warnings, find_workflow_compiler_warn
 _SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True}]}
 # Which signature form a type takes: the reshaping family replaces its input,
 # the anchored family extends it.
-_REPLACES_TYPES = {"python_frame_function", "aggregate", "union", "input_data", "publish"}
+_REPLACES_TYPES = {"pandas_frame_function", "aggregate", "union", "input_data", "publish"}
 
 
 def _signature_for(type_, schema):

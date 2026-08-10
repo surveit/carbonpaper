@@ -25,7 +25,7 @@ _DOUBLING_CODE = "def transform(df):\n    return df.assign(y=df['x'] * 2)\n"
 
 def _frame_stage(code: str = _DOUBLING_CODE, *, cache: bool = True) -> Stage:
     return parse_stage({
-        "id": "double", "description": "Double", "type": "python_frame_function",
+        "id": "double", "description": "Double", "type": "pandas_frame_function",
         "inputs": [{"id": "src", "schema": _X}], "cache": cache,
         "signature": {
             "form": "replaces",
@@ -72,7 +72,7 @@ def _cached_frame(stage: Stage, inputs: list[pd.DataFrame]) -> pd.DataFrame | No
     )
 
 
-# ── python_frame_function ────────────────────────────────────────────────────
+# ── pandas_frame_function ────────────────────────────────────────────────────
 
 
 def test_a_second_run_returns_the_cached_frame_without_calling_the_transform():
@@ -89,7 +89,7 @@ def test_a_second_run_returns_the_cached_frame_without_calling_the_transform():
     assert calls == [2]  # apply was not called again
 
 
-def test_the_registered_python_frame_function_replays_its_recorded_frame():
+def test_the_registered_pandas_frame_function_replays_its_recorded_frame():
     """Through the REGISTERED handler, not a hand-built one. The recorded frame
     is seeded with an answer the authored function would never produce, so the
     values that come back are themselves the evidence of a replay — running the
@@ -101,7 +101,7 @@ def test_the_registered_python_frame_function_replays_its_recorded_frame():
         input_frames=[src], frame=pd.DataFrame({"x": [1, 2], "y": [999, 999]}),
     )
 
-    out = HANDLERS[StageType.python_frame_function].execute(
+    out = HANDLERS[StageType.pandas_frame_function].execute(
         stage, as_inputs({"src": src}), _ctx(run_id="run1"))
     assert out is not None
     assert list(rows_of(out)["y"]) == [999, 999]  # the authored `x * 2` would have said [2, 4]
@@ -136,7 +136,7 @@ def test_reordering_the_input_rows_invalidates_the_cached_frame():
 
 def _two_input_stage() -> Stage:
     return parse_stage({
-        "id": "merge", "description": "Merge", "type": "python_frame_function",
+        "id": "merge", "description": "Merge", "type": "pandas_frame_function",
         "inputs": [{"id": "left", "schema": _X}, {"id": "right", "schema": _X}],
         "signature": {
             "form": "replaces",
@@ -328,9 +328,9 @@ def test_a_handler_that_returns_none_records_nothing():
 
 
 def test_only_the_unbounded_frame_shaped_type_caches():
-    """`python_frame_function` runs arbitrary user code, so a hit can skip
+    """`pandas_frame_function` runs arbitrary user code, so a hit can skip
     unbounded work; `enrich`/`expand`, `aggregate` and `publish` each opt out."""
-    assert _frame_handler(StageType.python_frame_function).caches_frames is True
+    assert _frame_handler(StageType.pandas_frame_function).caches_frames is True
     for stage_type in (StageType.enrich, StageType.expand, StageType.aggregate,
                        StageType.publish):
         assert _frame_handler(stage_type).caches_frames is False

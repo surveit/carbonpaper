@@ -23,7 +23,7 @@ def test_workflow_clean(tmp_path):
     wf = m.parse_workflow([
         S(id="load", type="input_data", signature={"form": "replaces", "produces": _K["columns"]},
           connector={"kind": "file", "params": {"path": str(tmp_path / "d.csv"), "format": "csv"}}),
-        S(id="extract", type="python_frame_function", inputs=[_in("load")],
+        S(id="extract", type="pandas_frame_function", inputs=[_in("load")],
           function={"kind": "inline", "code": "def transform(row): return row"},
           signature={
               "form": "replaces",
@@ -47,7 +47,7 @@ def test_workflow_duplicate_ids(tmp_path):
 def test_workflow_dangling_input():
     with pytest.raises(ValidationError):
         m.parse_workflow([
-            S(id="b", type="python_frame_function", inputs=[_in("ghost")],
+            S(id="b", type="pandas_frame_function", inputs=[_in("ghost")],
               function={"kind": "inline", "code": "def transform(row): return row"},
               signature={
                   "form": "replaces",
@@ -60,13 +60,13 @@ def test_workflow_dangling_input():
 def test_workflow_cycle():
     with pytest.raises(ValidationError):
         m.parse_workflow([
-            S(id="a", type="python_frame_function", inputs=[_in("b")], signature={
+            S(id="a", type="pandas_frame_function", inputs=[_in("b")], signature={
                 "form": "replaces",
                 "reads": [{"input": "b", "columns": _K["columns"]}],
                 "produces": _K["columns"],
             },
               function={"kind": "inline", "code": "def transform(row): return row"}),
-            S(id="b", type="python_frame_function", inputs=[_in("a")], signature={
+            S(id="b", type="pandas_frame_function", inputs=[_in("a")], signature={
                 "form": "replaces",
                 "reads": [{"input": "a", "columns": _K["columns"]}],
                 "produces": _K["columns"],
@@ -96,13 +96,13 @@ def test_validate_inputs_resolve_reports_all_dangling():
 
 
 def test_detect_cycle_reports_cycle():
-    a = parse_stage(S(id="a", type="python_frame_function", inputs=[_in("b")], signature={
+    a = parse_stage(S(id="a", type="pandas_frame_function", inputs=[_in("b")], signature={
         "form": "replaces",
         "reads": [{"input": "b", "columns": _K["columns"]}],
         "produces": _K["columns"],
     },
                                function={"kind": "inline", "code": "def transform(row): return row"}))
-    b = parse_stage(S(id="b", type="python_frame_function", inputs=[_in("a")], signature={
+    b = parse_stage(S(id="b", type="pandas_frame_function", inputs=[_in("a")], signature={
         "form": "replaces",
         "reads": [{"input": "a", "columns": _K["columns"]}],
         "produces": _K["columns"],
@@ -114,7 +114,7 @@ def test_detect_cycle_reports_cycle():
 def test_detect_cycle_empty_when_acyclic(tmp_path):
     a = parse_stage(S(id="a", type="input_data", signature={"form": "replaces", "produces": _K["columns"]},
                                connector={"kind": "file", "params": {"path": str(tmp_path / "d.csv")}}))
-    b = parse_stage(S(id="b", type="python_frame_function", inputs=[_in("a")], signature={
+    b = parse_stage(S(id="b", type="pandas_frame_function", inputs=[_in("a")], signature={
         "form": "replaces",
         "reads": [{"input": "a", "columns": _K["columns"]}],
         "produces": _K["columns"],
@@ -237,10 +237,10 @@ def _producer(**over):
 
 
 def _consumer(input_schema, **over):
-    """python_frame_function `down` consuming `up`, declaring `input_schema`.
+    """pandas_frame_function `down` consuming `up`, declaring `input_schema`.
     Its `transform` is the identity, so it emits exactly what it consumes."""
     base = dict(
-        id="down", type="python_frame_function",
+        id="down", type="pandas_frame_function",
         inputs=[{"id": "up", "schema": input_schema}],
         function={"kind": "inline", "code": "def transform(df): return df"},
         signature={"form": "replaces", "produces": input_schema["columns"]},
@@ -380,7 +380,7 @@ _Y = {"columns": [{"name": "y", "type": "str", "nullable": True}]}
 
 
 def _reader(stage_id, upstream):
-    return S(id=stage_id, type="python_frame_function", inputs=[_in(upstream)],
+    return S(id=stage_id, type="pandas_frame_function", inputs=[_in(upstream)],
              function={"kind": "inline", "code": "def transform(df): return df"},
              signature={"form": "replaces", "produces": _K["columns"]})
 

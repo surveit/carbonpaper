@@ -326,7 +326,7 @@
     },
     {
       "id": "rank_by_spend",
-      "type": "python_frame_function",
+      "type": "pandas_frame_function",
       "inputs": [
         {
           "id": "classify_issues",

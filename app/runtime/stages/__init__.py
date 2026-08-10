@@ -29,7 +29,7 @@ from .input_data import preflight_input_data, read_input_data
 from .join import handle_enrich, handle_expand
 from .llm_transform import make_llm_row_mapper, run_llm_batches
 from .publish import handle_publish
-from .python_functions import handle_python_frame_function, make_python_row_mapper
+from .python_functions import handle_pandas_frame_function, make_python_row_mapper
 from .starlark_functions import make_starlark_row_mapper
 from .union import handle_union
 
@@ -43,12 +43,12 @@ HANDLERS: dict[StageType, StageHandler] = {
     StageType.input_data: SourceHandler(read_input_data),
     # parallelism stays 1: the mapped function is user-authored code, not assumed thread-safe.
     StageType.python_row_function: RowMapHandler(make_python_row_mapper),
-    StageType.python_frame_function: FrameHandler(handle_python_frame_function),
+    StageType.pandas_frame_function: FrameHandler(handle_pandas_frame_function),
     # caches_frames=False: the joins (enrich/expand) and aggregate are bounded
     # vectorised primitives whose compute is lower-order than the hash of their
     # own input, so fingerprinting the inputs costs more than the pandas
     # operation a hit would skip — the cache would only ever slow them down.
-    # python_frame_function above runs arbitrary user code of unbounded cost and
+    # pandas_frame_function above runs arbitrary user code of unbounded cost and
     # does cache.
     StageType.enrich: FrameHandler(handle_enrich, caches_frames=False),
     StageType.expand: FrameHandler(handle_expand, caches_frames=False),

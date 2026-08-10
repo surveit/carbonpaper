@@ -41,7 +41,7 @@ _CLASSIFY_SCHEMA = {"columns": [{"name": "name", "type": "str", "nullable": True
 # Uppercases `name` where val > 1 (a changed cell) and adds `label` (an added
 # column), so the classify diff has one of each to show. It carries `junk`
 # through because it must: an `extends` signature flows every anchor column, so
-# a row-mapped stage cannot drop one — that is python_frame_function's job.
+# a row-mapped stage cannot drop one — that is pandas_frame_function's job.
 _CLASSIFY_CODE = (
     "def transform(row):\n"
     "    name = row['name'].upper() if row['val'] > 1 else row['name']\n"

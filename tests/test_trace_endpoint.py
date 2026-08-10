@@ -121,7 +121,7 @@ def test_trace_view_says_reshaping_not_traceable(tmp_path, monkeypatch):
     deduped = pd.DataFrame({"facility_id": ["a"]})  # a frame function reshaped rows
     write_run(project_runs, [
         {"id": "seeds", "type": "input_data", "parents": [], "df": seeds},
-        {"id": "dedup", "type": "python_frame_function", "parents": ["seeds"], "df": deduped},
+        {"id": "dedup", "type": "pandas_frame_function", "parents": ["seeds"], "df": deduped},
     ], run_id="R2")
     workspace.set_projects_dir(tmp_path)
     resp = TestClient(app).get("/project/proj/runs/R2/stage/dedup/row/0/trace/view")

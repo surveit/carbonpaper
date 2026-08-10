@@ -73,7 +73,7 @@
     },
     {
       "stage_id": "tail",
-      "type": "python_frame_function",
+      "type": "pandas_frame_function",
       "status": "pending",
       "input_validation_report": [],
       "output_validation_report": null,

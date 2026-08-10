@@ -21,7 +21,7 @@ def _load_revision(name: str) -> Any:
 
 def _stage(stage_id: str) -> dict[str, Any]:
     columns = [{"name": "id", "type": "str", "nullable": True}]
-    return {"id": stage_id, "description": stage_id, "type": "python_frame_function",
+    return {"id": stage_id, "description": stage_id, "type": "pandas_frame_function",
             "inputs": [{"id": "src", "schema": {"columns": list(columns)}}],
             "function": {"kind": "inline", "summary": "Passes rows through.",
                          "code": "def transform(df):\n    return df"},

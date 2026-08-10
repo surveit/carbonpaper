@@ -51,7 +51,7 @@ def _row_stage(output_schema=None, input_columns=_X_COLUMN):
 
 def _two_input_stage():
     return parse_stage({
-        "id": "t2", "description": "t2", "type": "python_frame_function",
+        "id": "t2", "description": "t2", "type": "pandas_frame_function",
         "inputs": [{"id": "a", "schema": {"columns": _X_COLUMN}},
                    {"id": "b", "schema": {"columns": _X_COLUMN}}],
         "signature": {
@@ -372,7 +372,7 @@ def _registry(llm_shape):
         StageType.input_data: SourceHandler(read=lambda stage, ctx: pd.DataFrame()),
         StageType.python_row_function: RowMapHandler(make_mapper=lambda s, c, src: lambda r, i: r),
         StageType.llm_transform: llm_shape,
-        StageType.python_frame_function: frame,
+        StageType.pandas_frame_function: frame,
         StageType.enrich: frame,
         StageType.expand: frame,
         StageType.aggregate: frame,

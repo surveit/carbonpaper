@@ -1,5 +1,5 @@
 """The python-code block and its validation: the inline code a python_row_function /
-python_frame_function (or a publish stage's function block) carries must parse,
+pandas_frame_function (or a publish stage's function block) carries must parse,
 compile, and define the function the runtime calls. Also holds the wording of the
 `summary` every authored-code block asks for, so PythonFunction and FilterConfig
 cannot drift apart."""
@@ -18,7 +18,7 @@ from app.models.stages.stage_base import StageBase, StageInput, StageType
 from app.models.stages.node_spec import NodeTypeSpec
 from app.models.stages.signature import ExtendsSignature, ReplacesSignature
 from app.models.stages.stage_tests import (
-    PythonFrameFunctionStageTest,
+    PandasFrameFunctionStageTest,
     PythonRowFunctionStageTest,
 )
 from app.models.stages.warnings import CompilerWarning, warn
@@ -158,7 +158,7 @@ def validate_inline_function_code(
 
 
 class PythonFunction(StageConfig):
-    """Config block for python_row_function / python_frame_function (and publish). The
+    """Config block for python_row_function / pandas_frame_function (and publish). The
     row-vs-frame distinction lives in the stage `type`, not here — the runtime
     reads the type to decide whether to invoke this per row or per frame."""
     # Every field changes what this stage computes (the code/module it runs)
@@ -179,7 +179,7 @@ class PythonFunction(StageConfig):
         description=(
             "Inline Python defining `function` (default `transform`). Signature by stage "
             "type: python_row_function `def transform(row: dict) -> dict` (1 row in, 1 out; "
-            "cannot reorder or fan out); python_frame_function "
+            "cannot reorder or fan out); pandas_frame_function "
             "`def transform(df, ...) -> DataFrame` (inputs positional in declared order); "
             "publish `def transform(df, ..., output_dir, trace_links) -> DataFrame` (writes "
             "artifact files into output_dir; the returned frame lists them). When the "
@@ -250,7 +250,7 @@ class PythonRowFunctionStage(CarriesPythonFunctionStage):
     type: Literal[StageType.python_row_function]
     CARRIES_RUNNABLE_TESTS: ClassVar[bool] = True
     # Exactly one input: the runtime maps the function over one frame's rows, so
-    # a second input is a join or a python_frame_function.
+    # a second input is a join or a pandas_frame_function.
     inputs: list[StageInput] = Field(default_factory=list, min_length=1, max_length=1)
     tests: Optional[Sequence[PythonRowFunctionStageTest]] = None
     # The code is opaque to load-time validation, so unlike the config-driven
@@ -261,11 +261,11 @@ class PythonRowFunctionStage(CarriesPythonFunctionStage):
     signature: ExtendsSignature
 
 
-class PythonFrameFunctionStage(CarriesPythonFunctionStage):
-    type: Literal[StageType.python_frame_function]
+class PandasFrameFunctionStage(CarriesPythonFunctionStage):
+    type: Literal[StageType.pandas_frame_function]
     CARRIES_RUNNABLE_TESTS: ClassVar[bool] = True
     inputs: list[StageInput] = Field(default_factory=list, min_length=1)
-    tests: Optional[Sequence[PythonFrameFunctionStageTest]] = None
+    tests: Optional[Sequence[PandasFrameFunctionStageTest]] = None
     signature: ReplacesSignature
 
 # Authoring copy for this module's stage type(s); assembled into NODE_TYPES.
@@ -284,14 +284,14 @@ NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
             "needs a Python library (e.g. regex, date parsing beyond ISO-8601, numpy math) "
             "that Starlark's builtin-only environment cannot express. "
             "Takes exactly ONE input — to combine data from another input use enrich/expand, "
-            "or python_frame_function. "
+            "or pandas_frame_function. "
             "`transform(row)` is handed a plain dict and must return a plain dict, and that "
             "dict IS the output row: a key you do not return is absent from the output, so "
             "carry columns through explicitly (`return {**row, ...}`). The function is shown "
             "neither the frame nor the row's position, so it cannot fan out, drop or reorder."
         ),
     ),
-    "python_frame_function": NodeTypeSpec(
+    "pandas_frame_function": NodeTypeSpec(
         summary="Python over the whole dataframe(s); may reshape (dedup, pivot, multi-input merge).",
         signature_form="replaces",
         blocks=["function"],

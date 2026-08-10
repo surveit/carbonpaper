@@ -8,7 +8,7 @@ from app.models import Stage, parse_stage, stage_to_spec_dict, TableSchema
 from app.models.stages.stage_base import StageBase, StageType, find_stage_test_class
 from app.models.stages.stage_tests import (
     FilterRowsStageTest,
-    PythonFrameFunctionStageTest,
+    PandasFrameFunctionStageTest,
     PythonRowFunctionStageTest,
     StageTest,
     build_stage_tests_model,
@@ -108,7 +108,7 @@ def test_a_filter_test_states_the_kept_row_the_drop_or_a_refusal():
 
 
 def test_a_frame_function_test_is_free_on_both_sides():
-    test = PythonFrameFunctionStageTest(
+    test = PandasFrameFunctionStageTest(
         name="regroups", inputs={"load": [{"a": 1}, {"a": 2}]}, expected=[]
     )
     assert test.inputs == {"load": [{"a": 1}, {"a": 2}]} and test.expected == []
@@ -142,7 +142,7 @@ def test_multi_input_test_missing_one_input_is_rejected():
     left_schema = {"columns": [{"name": "id", "type": "str", "nullable": False}]}
     right_schema = {"columns": [{"name": "id", "type": "str", "nullable": False}]}
     stage = {
-        "id": "merge", "description": "Merge", "type": "python_frame_function",
+        "id": "merge", "description": "Merge", "type": "pandas_frame_function",
         "inputs": [
             {"id": "left", "schema": left_schema},
             {"id": "right", "schema": right_schema},
@@ -256,7 +256,7 @@ def test_stage_tests_model_rejects_a_wrongly_typed_cell():
 
 def _frame_suite_model(in_schema: dict) -> type:
     return build_stage_tests_model(
-        PythonFrameFunctionStageTest,
+        PandasFrameFunctionStageTest,
         {"load": TableSchema.model_validate(in_schema)},
         TableSchema.model_validate(in_schema),
     )
@@ -400,7 +400,7 @@ def test_stage_tests_model_accepts_an_empty_input_case():
     """No rows means no columns to disagree with — an "empty upstream" case is
     legitimate, and the runtime builds its frame from the declared schema."""
     model = build_stage_tests_model(
-        PythonFrameFunctionStageTest,
+        PandasFrameFunctionStageTest,
         {"load": TableSchema.model_validate(_IN_SCHEMA)},
         TableSchema.model_validate(_OUT_SCHEMA),
     )

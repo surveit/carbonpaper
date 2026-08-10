@@ -54,7 +54,7 @@ def test_limit_caps_the_rows_a_frame_handler_is_given(tmp_path):
     # leave 3 rows all saying the handler had been given 5.
     load = _load_stage("src", _rows("s", 5), tmp_path)
     counted = parse_stage({
-        "id": "counted", "description": "counted", "type": "python_frame_function",
+        "id": "counted", "description": "counted", "type": "pandas_frame_function",
         "inputs": [{"id": "src", "schema": _NAME_VAL_SCHEMA}],
         "signature": {
             "form": "replaces",

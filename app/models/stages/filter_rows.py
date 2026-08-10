@@ -75,7 +75,7 @@ class FilterRowsStage(StageBase):
     CARRIES_RUNNABLE_TESTS: ClassVar[bool] = True
     filter: FilterConfig
     # Exactly one input: a predicate decides row by row, and two inputs is a
-    # join or a python_frame_function.
+    # join or a pandas_frame_function.
     inputs: list[StageInput] = Field(default_factory=list, min_length=1, max_length=1)
     tests: Optional[Sequence[FilterRowsStageTest]] = None
     signature: ExtendsSignature

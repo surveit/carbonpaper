@@ -68,7 +68,7 @@ def test_strict_load_raises_with_all_issues(tmp_path):
 
 
 def test_strict_load_catches_cross_stage_issues(tmp_path):
-    dangling = {"id": "x", "description": "X", "type": "python_frame_function",
+    dangling = {"id": "x", "description": "X", "type": "pandas_frame_function",
                 "inputs": [{"id": "missing_upstream",
                             "schema": {"columns": [{"name": "k", "type": "str", "nullable": True}]}}],
                 "function": {"kind": "inline", "code": "def transform(row): return row"},

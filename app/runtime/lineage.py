@@ -29,7 +29,7 @@ class EdgeKind(str, Enum):
     direct = "direct"
     # Every filing in the quarter an aggregate totalled into one row.
     contribution = "contribution"
-    # A python_frame_function pivoted the frame: this input fed the output, but
+    # A pandas_frame_function pivoted the frame: this input fed the output, but
     # which of its rows fed THIS row was not recoverable.
     unknown = "unknown"
 

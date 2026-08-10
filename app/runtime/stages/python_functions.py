@@ -1,4 +1,4 @@
-"""Handlers for the python_row_function and python_frame_function stage types -
+"""Handlers for the python_row_function and pandas_frame_function stage types -
 the two grains of running python over the input, differing only in
 what the function is shown (a row dict or the whole frame).
 """
@@ -15,7 +15,7 @@ from app.core.frames import table_to_frame
 from app.core.errors import AuthoredFrameExpected
 from app.models import FunctionKind, Stage
 from app.models.stages.code import (
-    PythonFrameFunctionStage,
+    PandasFrameFunctionStage,
     PythonRowFunctionStage,
 )
 from app.models.stages.publish import PublishStage
@@ -27,7 +27,7 @@ from .execution import Row, RowMapper, narrow_stage
 
 
 # The three types whose behaviour is a `function` block.
-CodeCarryingStage = PythonRowFunctionStage | PythonFrameFunctionStage | PublishStage
+CodeCarryingStage = PythonRowFunctionStage | PandasFrameFunctionStage | PublishStage
 
 
 def _load_python_function(stage: CodeCarryingStage) -> Callable[..., Any]:
@@ -47,10 +47,10 @@ def _load_python_function(stage: CodeCarryingStage) -> Callable[..., Any]:
     raise ValueError(f"Unknown function kind for stage {stage.id}: {fn_spec.kind}")
 
 
-def handle_python_frame_function(stage: Stage, inputs: dict[str, pa.Table], ctx: RunContext) -> StageOutput:
+def handle_pandas_frame_function(stage: Stage, inputs: dict[str, pa.Table], ctx: RunContext) -> StageOutput:
     """Whole-frame transform: the function sees the full input frame(s) and may
     reshape them (group-by, pivot, dedup, multi-input merge)."""
-    fn = _load_python_function(narrow_stage(stage, PythonFrameFunctionStage))
+    fn = _load_python_function(narrow_stage(stage, PandasFrameFunctionStage))
     # Pass dataframes positionally in declared input order.
     args = [table_to_frame(inputs[ref.id]) for ref in stage.inputs]
     return StageOutput.of_frame(_require_frame(fn(*args), stage))

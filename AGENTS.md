@@ -7,7 +7,7 @@ directory · **methodology** = the authored prose (`methodology_raw.md`) ·
 code map → `docs/architecture.md`; quickstart → `README.md`.
 
 ## The 12 stage types
-`input_data` · `llm_transform` · `python_row_function` · `python_frame_function` ·
+`input_data` · `llm_transform` · `python_row_function` · `pandas_frame_function` ·
 `starlark_row_function` · `enrich` · `expand` · `aggregate` · `human_review_queue` ·
 `publish` · `union` · `filter_rows`. Prefer `python_row_function` (runtime-enforced 1:1)
 unless the logic needs the whole frame; prefer `starlark_row_function` over

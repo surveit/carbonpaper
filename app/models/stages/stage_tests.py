@@ -87,7 +87,7 @@ class FilterRowsStageTest(StageTest):
     )
 
 
-class PythonFrameFunctionStageTest(StageTest):
+class PandasFrameFunctionStageTest(StageTest):
     """Any rows in → any rows out, or a refusal: a frame function may reshape freely."""
     expected: Optional[list[DataRow]] = Field(description=_EXPECTED_DESCRIPTION)
 

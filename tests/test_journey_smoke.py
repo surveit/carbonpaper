@@ -185,7 +185,7 @@ def _workflow_stages(authored_path: str) -> list[dict]:
                           "adds": [{"name": "flagged", "type": "bool", "nullable": True}]},
         },
         {
-            "id": "totals", "description": "Total per flag", "type": "python_frame_function",
+            "id": "totals", "description": "Total per flag", "type": "pandas_frame_function",
             "inputs": [{"id": "flag", "schema": flag_schema}],
             "function": {"kind": "inline", "code": (
                 "def transform(df):\n"

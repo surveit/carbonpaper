@@ -22,7 +22,7 @@ case: `validate_workflow(stages) -> list[str]` and `validate_stage(stage) -> lis
   (`http`/`scrape`/`api`/`manual_upload`/`sql`) were declared but never had a
   handler — add them back alongside a handler.
 - Weighted aggregation formulas (`weighted_mean`/`weighted_sum`) — unused in the
-  compiled workflows (weighting is done inside `python_frame_function` modules).
+  compiled workflows (weighting is done inside `pandas_frame_function` modules).
 
 **Enforced at load, via `app/services/loader.py`.** This is the only place that
 reads the on-disk compiled-stage JSON (`compiled/<NN>_<stage_id>.json`, the JSON

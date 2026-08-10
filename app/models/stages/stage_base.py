@@ -50,10 +50,10 @@ class StageType(str, Enum):
     #   python_row_function   — runtime maps the function over the input's rows,
     #                           one row in → one row out. It never sees the frame,
     #                           so it *cannot* fan out / fan in. Prefer this.
-    #   python_frame_function — runtime hands it the whole frame(s); it may reshape
+    #   pandas_frame_function — runtime hands it the whole frame(s); it may reshape
     #                           (group-by, pivot, dedup, multi-input merge).
     python_row_function = "python_row_function"
-    python_frame_function = "python_frame_function"
+    pandas_frame_function = "pandas_frame_function"
     # Two LEFT joins over exactly two inputs (inputs[0] = subject,
     # inputs[1] = reference), differing ONLY in the cardinality they permit —
     # which is why the TYPE carries it rather than a config field:
@@ -78,6 +78,22 @@ class StageType(str, Enum):
     union = "union"
     filter_rows = "filter_rows"
     starlark_row_function = "starlark_row_function"
+
+    @classmethod
+    def _missing_(cls, value: object) -> "StageType | None":
+        return _LEGACY_TYPE_NAMES.get(value) if isinstance(value, str) else None
+
+
+# Names a stored record may still carry, mapped to the member that replaced them.
+# This reaches a RUN MANIFEST and nothing else: a manifest is the historical
+# record of what executed, so it keeps the name the type had at the time rather
+# than being rewritten. Stage SPECS are migrated instead (alembic 0011 for the
+# document store, scripts/migrate_compiled_stage_files.py for a project's working
+# copy) — `_missing_` cannot serve them, because `Stage` is a discriminated union
+# and pydantic resolves the discriminator before any enum coercion runs.
+_LEGACY_TYPE_NAMES: dict[str, StageType] = {
+    "python_frame_function": StageType.pandas_frame_function,
+}
 
 
 # The stage types that guarantee output row i came from input row i — 1:1 and in
@@ -406,7 +422,7 @@ class StageBase(StageCommon):
           - python_row_function → yes (runtime maps it per row, in emit order — enforced 1:1)
           - starlark_row_function → yes (same calling convention as python_row_function,
                                  sandboxed by construction)
-          - python_frame_function → NO (may reshape OR reorder the frame)
+          - pandas_frame_function → NO (may reshape OR reorder the frame)
           - llm_transform      → yes (per-row 1:1 in emit order in v1; a fan-out LLM
                                  like doc→pieces is out of scope until fan-out evals)
           - input_data         → yes (originates the rows)
