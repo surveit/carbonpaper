@@ -13,6 +13,7 @@ from typing import Any, Callable
 from claude_agent_sdk import (
     AssistantMessage,
     ClaudeAgentOptions,
+    ThinkingConfig,
     query,
     ResultMessage,
     SystemMessage,
@@ -83,7 +84,7 @@ class ClaudeAgentSdkEngine:
         tool_labels: dict[str, str] | None = None,
         model: str = CLI_MODEL,
         max_turns: int | None = None,
-        thinking: dict[str, Any] | None = None,
+        thinking: ThinkingConfig | None = None,
         builtin_tools: list[str] | None = None,
     ) -> None:
         self._system_prompt = system_prompt

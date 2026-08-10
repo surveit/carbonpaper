@@ -42,7 +42,7 @@ GRANTABLE_TOOLS: frozenset[str] = frozenset({
 # `budget_tokens` is removed on every current frontier model and returns 400
 # there, so a number stored in a workflow would break the day the stage's model
 # is repointed. These two names are the API's own and map straight through.
-THINKING_MODES = ("adaptive", "disabled")
+ThinkingMode = Literal["adaptive", "disabled"]
 
 
 class LLMConfig(StageConfig):
@@ -91,7 +91,7 @@ class LLMConfig(StageConfig):
         ),
     )
 
-    thinking: Optional[Literal["adaptive", "disabled"]] = Field(
+    thinking: Optional[ThinkingMode] = Field(
         default=None,
         description=(
             "How much the model reasons before answering. Omit to leave the "

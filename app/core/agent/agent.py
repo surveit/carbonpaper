@@ -13,7 +13,7 @@ from pydantic import BaseModel, ValidationError
 from app.core.agent.diagnostics import AgentRunDiagnostics, summarize_run
 from app.core.agent.registry import build_mcp_server
 from app.core.agent.bound_tool import BoundToolSpec
-from app.core.agent.sdk_engine import CLI_MODEL, ClaudeAgentSdkEngine
+from app.core.agent.sdk_engine import CLI_MODEL, ClaudeAgentSdkEngine, ThinkingConfig
 from app.core.agent.usage import LlmUsage
 from app.core.errors import GenerationError
 from app.core.utils import format_errors
@@ -103,7 +103,7 @@ class Agent(Generic[Model]):
         max_attempts: int = 4,
         extra_tools: list[str] | None = None,
         max_turns: int | None = None,
-        thinking: dict[str, str] | None = None,
+        thinking: ThinkingConfig | None = None,
     ) -> None:
         self._system_prompt = system_prompt
         self._target_schema = target_schema

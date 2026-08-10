@@ -16,11 +16,11 @@ from app.core.agent.agent import Agent
 from app.core.agent.usage import LlmUsage
 from app.core.errors import LLMError
 from app.core.llm_sdk import run_sync
-from app.models.stages.llm_transform import LLMConfig
+from app.core.agent.sdk_engine import ThinkingConfig
+from app.models.stages.llm_transform import LLMConfig, ThinkingMode
 
 from .options import (
     DEFAULT_MODEL,
-    THINKING_CONFIG,
     DEFAULT_TIMEOUT_S,
     RESEARCH_MAX_TURNS,
     RESEARCH_TIMEOUT_S,
@@ -135,6 +135,12 @@ def call_llm_batch(
     )
 
 
+def _thinking_config(mode: "ThinkingMode | None") -> ThinkingConfig | None:
+    if mode is None:
+        return None
+    return {"type": "disabled"} if mode == "disabled" else {"type": "adaptive"}
+
+
 def _compose_system(instructions: str) -> str:
     """The agent's base system prompt plus the stage's row-invariant
     `prompt_instructions`, if any — the stable prefix shared across rows/chunks."""
@@ -149,7 +155,7 @@ def _run_agent(
     max_retries: int,
     usage_out: list[LlmUsage] | None,
     tools: list[str] | None = None,
-    thinking: str | None = None,
+    thinking: ThinkingMode | None = None,
 ) -> dict[str, Any]:
     """Run the structured-output Agent to a validated `target_schema`, dumped to a
     dict. `max_retries` handles TRANSIENT backend failures (a dropped CLI
@@ -179,7 +185,7 @@ def _run_agent(
             model=model_name,
             extra_tools=list(tools or []),
             max_turns=RESEARCH_MAX_TURNS if researching else None,
-            thinking={"type": thinking} if thinking else THINKING_CONFIG,
+            thinking=_thinking_config(thinking),
         )
         try:
             answer = run_sync(
