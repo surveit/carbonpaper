@@ -15,6 +15,10 @@ from app.services import run as run_service
 from app.services.review_packet import ReviewPacket
 from app.services.review_packet.checksums import write_checksums
 from app.services.review_packet.data import write_packet_data
+from app.services.review_packet.notebook import (
+    NOTEBOOK_FILE,
+    build_run_notebook,
+)
 from app.services.review_packet.views import RunView, build_run_view
 from app.services.run_guide import RunGuideView, build_run_guide_view
 from app.services.workspace import resolve_project_dir
@@ -50,6 +54,8 @@ def export_review_packet(project: str, run_id: str, dest_root: Path) -> ReviewPa
             _load_guide(project, manifest),
             _build_diagram(stages, project, view),
         )
+    with log_elapsed(_log, f"{project}/{run_id} notebook"):
+        notebook = _write_notebook(root, view)
     with log_elapsed(_log, f"{project}/{run_id} checksums"):
         checksums = write_checksums(root)
 
@@ -57,9 +63,14 @@ def export_review_packet(project: str, run_id: str, dest_root: Path) -> ReviewPa
         project=view.project or project,
         run_id=view.run_id or run_id,
         root=root,
-        files=sorted([*data.written, *pages, checksums]),
+        files=sorted([*data.written, *pages, notebook, checksums]),
         omitted=data.omitted,
     )
+
+
+def _write_notebook(root: Path, view: RunView) -> str:
+    (root / NOTEBOOK_FILE).write_text(build_run_notebook(view), encoding="utf-8")
+    return NOTEBOOK_FILE
 
 
 def _build_diagram(stages: list[Stage], project: str, view: RunView) -> str:
