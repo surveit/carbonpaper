@@ -15,6 +15,7 @@ from app.core.agent.agent import Agent
 from app.core.agent.store import open_session_store
 from app.core.agent.turns import default_turn_manager
 from app.models import Stage
+from app.models.authoring_lifecycle_note import CompilerPhase
 from app.models.stages.stage_base import find_stage_test_class
 from app.models.stages.stage_tests import build_stage_tests_model
 
@@ -44,7 +45,7 @@ def start_stage_test_generation_agent(
         agent_id=None,  # view-only: rendered + streamed, but no agent to continue it
         context={
             "project_id": project_id,
-            "phase": "stage_tests",
+            "phase": CompilerPhase.BUILD,
             "stage_id": stage.id,
             "hidden": True,
         },

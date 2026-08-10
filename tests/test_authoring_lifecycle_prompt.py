@@ -1,13 +1,13 @@
 """Every prompt that can invent schema or artifacts carries the gated authoring
-lifecycle (app/models/authoring_lifecycle_note.py) — research, a plan the user
-signs off (major stages + every intermediate concept with its why), the build,
-a smoke run before the full one. The workflow-authoring surfaces get the full
-lifecycle; the data-model prompt gets the intermediate-concepts slice."""
+lifecycle (app/models/authoring_lifecycle_note.py) — the five CompilerPhase phases,
+each with its gate. The workflow-authoring surfaces get the full lifecycle; the
+data-model prompt gets the intermediate-concepts slice."""
 from __future__ import annotations
 
 from app.models.authoring_lifecycle_note import (
     AUTHORING_LIFECYCLE_GUIDANCE,
     INTERMEDIATE_CONCEPTS_NOTE,
+    CompilerPhase,
 )
 
 
@@ -35,8 +35,14 @@ def test_lifecycle_embeds_the_slice_verbatim() -> None:
     assert INTERMEDIATE_CONCEPTS_NOTE in AUTHORING_LIFECYCLE_GUIDANCE
 
 
+def test_lifecycle_heads_a_step_with_every_phase_name() -> None:
+    # The prose and CompilerPhase are one vocabulary, or this fails.
+    for phase in CompilerPhase:
+        assert phase.name in AUTHORING_LIFECYCLE_GUIDANCE, phase
+
+
 def test_lifecycle_states_the_steps_and_their_gates() -> None:
-    # The four steps, each gate's substance, and the on-artifact trace — the
+    # The five steps, each gate's substance, and the on-artifact trace — the
     # lifecycle is only a lifecycle while every gate survives edits.
     assert "RESEARCH FIRST" in AUTHORING_LIFECYCLE_GUIDANCE
     assert "PLAN, AND ASK QUESTIONS" in AUTHORING_LIFECYCLE_GUIDANCE
@@ -48,6 +54,26 @@ def test_lifecycle_states_the_steps_and_their_gates() -> None:
     assert "SMOKE BEFORE FULL" in AUTHORING_LIFECYCLE_GUIDANCE
     assert "row limits" in AUTHORING_LIFECYCLE_GUIDANCE
     assert "full-run budget" in AUTHORING_LIFECYCLE_GUIDANCE
+
+
+def test_stage_tests_are_built_before_the_run_not_after() -> None:
+    # BUILD owns the example tests; after the run is too late.
+    assert "example tests pass here, not after the run" in AUTHORING_LIFECYCLE_GUIDANCE
+
+
+def test_the_guide_is_written_after_the_smoke_run() -> None:
+    # Why TEST_RUN_REVIEW is its own phase: the run rewrites what the guide covers.
+    assert "WRITE THE GUIDE LAST" in AUTHORING_LIFECYCLE_GUIDANCE
+    assert "the run has since changed" in AUTHORING_LIFECYCLE_GUIDANCE
+    assert "warnings you did not clear" in AUTHORING_LIFECYCLE_GUIDANCE
+
+
+def test_editing_prompt_tells_the_agent_when_to_write_the_guide() -> None:
+    # The lifecycle names the phase; the prompt has to name the tool call.
+    from app.agents.compiler.prompt import EDITING_SYSTEM_PROMPT
+
+    assert "write_review_guide" in EDITING_SYSTEM_PROMPT
+    assert "after the smoke run, never straight off save_version" in EDITING_SYSTEM_PROMPT
 
 
 def test_research_may_build_a_prototype_without_skipping_the_gates() -> None:

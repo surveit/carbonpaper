@@ -48,7 +48,7 @@ def client():
 def test_mcp_endpoint_initializes(client):
     resp = client.post("/mcp", json=INITIALIZE, headers=HEADERS)
     assert resp.status_code == 200
-    assert resp.json()["result"]["serverInfo"]["name"] == "glassbox"
+    assert resp.json()["result"]["serverInfo"]["name"] == "carbonpaper"
     assert resp.history == []  # exact-path match — a 307 redirect would break non-following MCP clients
 
 

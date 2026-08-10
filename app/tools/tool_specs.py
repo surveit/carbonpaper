@@ -1,5 +1,5 @@
 """Every tool description both authoring surfaces read, keyed by tool name.
-The glassbox MCP server and the editing agent expose overlapping tools; holding the
+The MCP server and the editing agent expose overlapping tools; holding the
 prose once is what stops the two drifting. `save_version` is the one name meaning two
 different operations — see SAVE_VERSION_* below."""
 from __future__ import annotations
@@ -12,15 +12,11 @@ TOOL_SPECS: dict[str, ToolSpec] = {
         description="""\
 Create NEW stages in the workflow. `stages` is a LIST — submit every stage
 you are ready to author in ONE call; a list of one is the single-stage case.
-Each is a FULL stage: id (new and unique, and the stage's ONLY name — every
-surface shows it, so name the step well; use edit_stage to change an existing
-one), description (ONE line under that name, never a name itself), type, the
-config block(s) its type requires — connector
-/ llm / function / join / aggregate / queue / union / filter, and `publish`
-needs BOTH its `publish` block and a `function` block — inputs each with a
-MANDATORY `schema`, and `signature`: what the transform reads and writes.
-There is no output_schema to send — the stage's output IS what the signature
-promises. read_stage on a similar existing stage shows the shape.
+Each is a FULL stage, as the anatomy describes one. Its `id` is new, unique,
+and the stage's ONLY name — every surface shows it, so name the step well;
+use edit_stage to change an existing one. `publish` is the one type needing
+TWO blocks: its own and a `function`. There is no output_schema to send —
+the stage's output IS what its signature promises.
 
 Order does not matter: the batch is sorted by the `inputs` each stage
 declares, so a stage may name another stage in the SAME call as an input, or
@@ -35,22 +31,17 @@ resolved output does not supply is refused. The result reports every stage:
   failed  — [{id, issues}]; that stage was NOT written, the rest still were
   skipped — [{id, because}]; not attempted, because a stage it inputs from
             failed or was itself skipped
-  issues  — every failure's issues flattened, so `ok`/`issues` reads the same
-            as it always has
 
-Fix what `failed` names and re-send only the failed and skipped stages:
-read_stage the named upstream, repair the declared input schema against what
-that stage really outputs. A batch that cannot be ordered at all — duplicate
-ids, or a cycle among the submitted stages — is refused whole, with NOTHING
-written and the cycle named in `issues`.
+Re-send only the failed and skipped stages. A batch that cannot be ordered at
+all — duplicate ids, or a cycle among the submitted stages — is refused whole,
+with NOTHING written and the cycle named in `issues`.
 
 Copying a stage from read_stage is fine: the server-owned fields it carries
 (tests, eval, review, source) are dropped rather than refused, and a
 `warnings` entry names the stage and the fields dropped from it. Any OTHER
 unknown field is still an error — a typo'd field name never passes silently.
 
-New nodes land 'unreviewed' for a human to approve. The FIRST stage of a
-project starts its workflow — no other tool creates one.""",
+The FIRST stage of a project starts its workflow — no other tool creates one.""",
     ),
     "create_draft": ToolSpec(
         name="create_draft",
@@ -88,9 +79,7 @@ ONLY the fields to change (a JSON Merge Patch): {"limit": 100} sets limit;
 {"llm": {"model": "claude-opus-5"}} changes only llm.model and leaves the rest of the
 llm block intact; {"limit": null} deletes a field. Fields you do not mention
 are preserved exactly. Validated first; if invalid, nothing is written and
-the issues are returned. A successful edit drops the node to 'edited_stale'
-for a human to re-approve — you cannot approve it yourself. You cannot
-change a stage's id this way.""",
+the issues are returned. You cannot change a stage's id this way.""",
     ),
     "generate_data_model": ToolSpec(
         name="generate_data_model",
@@ -295,12 +284,15 @@ stage — and shows up in the returned `issues`.""",
         name="write_review_guide",
         description="""\
 Store the walkthrough a human reads to understand what this version of the
-workflow does. Replaces any guide already on that version, whole.""",
+workflow does. Replaces any guide already on that version, whole.
+
+Written in TEST_RUN_REVIEW — after this version's smoke run, not off the back
+of save_version.""",
     ),
 }
 
 # `save_version` is one NAME for two operations, because the surfaces author into
-# different places: the glassbox server edits the working copy, the editing agent
+# different places: the MCP server edits the working copy, the editing agent
 # builds a draft. Unifying them means retiring the working copy — see issue #357.
 SAVE_VERSION_FROM_WORKING_COPY = ToolSpec(
     name="save_version",

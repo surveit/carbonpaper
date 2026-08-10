@@ -14,6 +14,7 @@ from app.core.agent.store import open_session_store
 from app.core.agent.turns import default_turn_manager
 from app.core.errors import GenerationError, ReviewGuideValidationError
 from app.models import Stage, stage_to_json
+from app.models.authoring_lifecycle_note import CompilerPhase
 from app.models.review_guide import ReviewGuideDraft
 from app.models.workflow import find_stages_reaching_publish, sort_stages_by_dependency
 
@@ -45,7 +46,7 @@ def start_review_guide_generation_agent(
         agent_id=None,  # view-only: rendered + streamed, but no agent to continue it
         context={
             "project_id": project_id,
-            "phase": "review_guide",
+            "phase": CompilerPhase.TEST_RUN_REVIEW,
             "version_id": version_id,
             "hidden": True,
         },

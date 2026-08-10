@@ -81,7 +81,7 @@ app.include_router(editing.router)
 # engine (session store, turn manager, agent registry) in app/core/agent.
 app.include_router(chat_router)
 
-# The MCP authoring surface ("glassbox"): an exact-path ASGI route, not a Mount —
+# The MCP authoring surface: an exact-path ASGI route, not a Mount —
 # a Mount never matches its own bare path and would 307-redirect POST /mcp to
 # /mcp/, which not every MCP client follows. The endpoint delegates to the
 # session manager the current lifespan runs.

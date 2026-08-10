@@ -13,8 +13,6 @@ from app.models.schema import StageConfig
 from app.models.stages.stage_base import StageBase, StageInput, StageType
 from app.models.stages.warnings import CompilerWarning, warn
 from app.models.stages.code import (
-    CODE_CORNER_CASES_CONTRACT_NOTE,
-    CODE_SUMMARY_CONTRACT_NOTE,
     CORNER_CASES_DESCRIPTION,
     SUMMARY_DESCRIPTION,
     CornerCase,
@@ -126,7 +124,6 @@ NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
             "must return a bool — True keeps the row, False drops it; any other return "
             "type is a run-time error. Kept rows preserve their original relative order "
             "and every column unchanged, so the signature never adds or rewrites."
-            f" {CODE_SUMMARY_CONTRACT_NOTE} {CODE_CORNER_CASES_CONTRACT_NOTE}"
         ),
     ),
 }

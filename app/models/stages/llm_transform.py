@@ -279,8 +279,7 @@ NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
             "prefix, cutting latency (and cost on a per-token backend). "
             "prompt_data_template is the minimal per-row input framing, rendered with "
             "Python's str.format_map: inject a column as {column_name}. "
-            "Strictly ADDITIVE and 1:1: every input column flows through unchanged, and "
-            "the signature adds at least one column (one input row -> one output row)."
+            "Strictly ADDITIVE: the signature adds at least one column."
         ),
     ),
 }

@@ -1,6 +1,6 @@
 """A tool description is prose the model reads as instruction, so every tool name in
 it must be registered on the SAME surface. One shared registry (app/tools/tool_specs.py)
-feeds two surfaces with different tool sets, so a pointer true on the glassbox MCP server
+feeds two surfaces with different tool sets, so a pointer true on the MCP server
 can be a dead instruction on the editing agent.
 """
 from __future__ import annotations

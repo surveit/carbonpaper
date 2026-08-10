@@ -239,7 +239,7 @@ def test_a_column_a_stage_computes_is_profilable_though_no_file_holds_it(demo):
     assert [value["value"] for value in profile["values"]] == ["pos", "neg"]
 
 
-def test_the_tool_is_registered_on_the_glassbox_surface(demo):
+def test_the_tool_is_registered_on_the_mcp_surface(demo):
     from app.mcp import server
 
     assert "profile_stage_output_data_range" in {

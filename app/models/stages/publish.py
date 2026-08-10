@@ -11,8 +11,6 @@ from pydantic import Field
 from app.models.schema import StageConfig
 from app.models.stages.stage_base import StageInput, StageType
 from app.models.stages.code import (
-    CODE_CORNER_CASES_CONTRACT_NOTE,
-    CODE_SUMMARY_CONTRACT_NOTE,
     CarriesPythonFunctionStage,
 )
 from app.models.stages.shared import COLUMN_ISSUE, resolve_input_columns
@@ -110,7 +108,6 @@ NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
             "filter, or dedup before reading the ordinal — position is the only key the "
             "trace has. Omit the keyword for a format that cannot carry a link (csv, json). "
             "The one type whose signature produces nothing: it emits files, not a table."
-            f" {CODE_SUMMARY_CONTRACT_NOTE} {CODE_CORNER_CASES_CONTRACT_NOTE}"
         ),
     ),
 }
