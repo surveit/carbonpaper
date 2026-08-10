@@ -17,12 +17,14 @@
    a section with no title of its own, so the three lines are stacked tight and
    nothing separates them from the tab strip a few lines below. */
 .stage-panel-head { margin: 0 0 .2rem; }
+/* The chip sits beside the name, not out at the right margin: pinned right it is
+   the width of the reader's window away from the word it qualifies, and a long
+   type name (`python_frame_function`) makes that distance obvious. */
 .stage-panel-head .head-line {
     display: flex;
     align-items: baseline;
-    justify-content: space-between;
     flex-wrap: wrap;
-    gap: 6px 16px;
+    gap: 6px 14px;
 }
 .stage-panel-head h2 { margin: 0; }
 .stage-panel-head .stage-blurb { margin: .35rem 0 0; color: var(--muted); }
