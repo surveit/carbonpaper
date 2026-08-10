@@ -57,11 +57,6 @@ class StoppedStage(BaseModel):
     # could not be read: its edges are the only thing that says so.
     never_ran: list[str]
 
-    @property
-    def refused_data(self) -> bool:
-        """Which of the two stories the page tells — they route to different people."""
-        return self.kind is not StopKind.crash
-
 
 class FlaggedStage(BaseModel):
     """One stage's issues that did not stop the run."""

@@ -64,9 +64,10 @@ work column, not the nav rail: its four-column table needs the width. Drawn with
 the macros own the heading (`17 warnings, 2 errors`, a severity with none of them left out), so
 neither page can word its counts differently.
 - **A stop** — an `error` stage, the run's own end — is the FIRST line, marked `stopped`, its
-  message leading with which story it is, because they route to different people: a schema
-  refusal (`OutputSchemaViolation`) and an authored `StepRefused` are the data's and link the
-  panel's **Data** / **Transform** tab; any other exception is the code's and keeps its type.
+  message naming which failure it is, because they route to different people: a schema
+  refusal (`OutputSchemaViolation`) says the data changed and links the panel's **Data** tab;
+  an authored `StepRefused` reads `Input validation failed on <stage id>` and links its
+  **Transform** tab; any other exception is the code's and keeps its type.
   What only a stop carries nests under its own line through the row macro's call block — the
   columns it refused, the reason its author wrote, its traceback, and the stages downstream
   that never ran, read off the pinned version's edges (with no readable version it names none
