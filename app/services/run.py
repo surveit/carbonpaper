@@ -184,9 +184,9 @@ def _validate_run_exists(run_dir: Path, project: str, run_id: str) -> None:
 
 
 def resolve_version(project: str, version_id: str | None) -> str:
-    """The published workflow version a run would pin to (None -> newest
-    published). Raises NoVersionToRunError if `version_id` names an unpublished
-    or missing version, or if the project has no published version. A thin,
+    """The workflow version a run would pin to (None -> newest stored, published
+    or not). Raises FileNotFoundError if `version_id` names no stored version,
+    and NoVersionToRunError if the project stores no version at all. A thin,
     side-effect-free pass-through to versioning's resolver, taking the project
     NAME so a caller holding only a name (e.g. the web layer's project listing)
     needs no project directory of its own."""

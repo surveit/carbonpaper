@@ -55,7 +55,7 @@ class ProjectCard:
     has_document: bool
     has_workflow: bool
     has_schemas: bool
-    # A published version exists, so a run can pin one. This decides where the
+    # A stored version exists, so a run can pin one. This decides where the
     # card LINKS; `status` is what it SAYS, and the two move independently.
     is_ready: bool
     n_stages: int

@@ -218,7 +218,7 @@ def test_workflow_test_raises_when_no_source_stage(demo):
 
 def test_workflow_test_runs_an_explicit_unpublished_version(demo):
     """A workflow test evaluates a candidate BEFORE it is published, so an explicit
-    unpublished version_id runs (unlike a production run, which requires publish)."""
+    unpublished version_id runs."""
     _seed(demo, [_load_stage(demo), _CLASSIFY], version_id="v1", published=False)
     result = run_workflow_test("demo", version_id="v1")
     assert result["ok"] is True

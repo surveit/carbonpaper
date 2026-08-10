@@ -30,9 +30,9 @@ from app.web.project_cards import ProjectCard, tally_runs
 
 def list_projects() -> list[ProjectCard]:
     """One project card per dir under examples/, in the shape the home dashboard
-    renders. `is_ready` is True iff at least one PUBLISHED version exists, because
-    a run pins a published version (app.services.run.resolve_version) and an
-    unpublished, agent-minted draft is not runnable. Sorted by name.
+    renders. `is_ready` is True iff the project stores at least one version, because
+    a run pins a stored version (app.services.run.resolve_version) and a project with
+    none has nothing to run. Sorted by name.
 
     Every flag and count is read off disk — a card never advertises a
     stage/schema/run/version that isn't there. A directory counts as a project
@@ -71,7 +71,7 @@ def _build_project_card(p: Path) -> ProjectCard | None:
         has_document=has_document,
         has_workflow=has_workflow,
         has_schemas=has_schemas,
-        is_ready=any(v.published for v in list_versions(p)),
+        is_ready=bool(list_versions(p)),
         n_stages=n_stages,
         n_schemas=n_schemas,
         n_runs=runs.real,

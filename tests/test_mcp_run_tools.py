@@ -6,14 +6,13 @@ import pandas as pd
 
 import app.services.run as run_service
 from app.models import parse_stage
-from app.services import versioning
 from app.services.project import save_working_copy_as_version
 from app.services.versioning import WorkflowVersion
 from app.services import workspace
 
 
 def _make_run_project(root):
-    """A tiny file-connector project (from tests/test_run_service.py), published."""
+    """A tiny file-connector project (from tests/test_run_service.py)."""
     (root / "compiled").mkdir(parents=True)
     (root / "data").mkdir(parents=True)
     pd.DataFrame({"name": ["a", "b"], "val": [1, 2]}).to_csv(
@@ -32,9 +31,7 @@ def _make_run_project(root):
         },
     }
     (root / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
-    vid = save_working_copy_as_version(root, message="seed", reviewer="test").version_id
-    versioning.publish_version(root, vid, reviewer="human")
-    return vid
+    return save_working_copy_as_version(root, message="seed", reviewer="test").version_id
 
 
 _LOAD_SCHEMA = {"columns": [{"name": "doc_id", "type": "str", "nullable": True},
@@ -60,7 +57,7 @@ _CLASSIFY = {
 
 def _make_workflow_test_project(root):
     """A `demo` project with a bound 4-row source and one deterministic stage,
-    seeded as an unpublished version (workflow tests work on unpublished candidates)."""
+    seeded as an unpublished version — any stored version runs."""
     (root / "data").mkdir(parents=True)
     pd.DataFrame({"doc_id": ["a", "b", "c", "d"], "score": [1, -1, 2, -3]}).to_csv(
         root / "data" / "rows.csv", index=False)
@@ -96,7 +93,7 @@ def test_run_workflow_starts_a_real_run_pollable_by_get_run_status(tmp_path, mon
 
 
 def test_run_workflow_translates_no_version_to_error(tmp_path, monkeypatch):
-    """A project with no published version fails loudly as {ok: False, error},
+    """A project with no stored version fails loudly as {ok: False, error},
     never a traceback or a fabricated run id."""
     from app.mcp import server
 

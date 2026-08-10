@@ -33,13 +33,8 @@ _ID_TEXT_SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True},
 
 
 def _seed_version(root):
-    """Create the initial version a run targets, and PUBLISH it. Runs no longer
-    create versions, so a test that builds a working copy must snapshot it into
-    a version before running against it; runs are also gated on published, so
-    the seed must be published for a run against it to succeed."""
-    vid = save_working_copy_as_version(root, message="test seed", reviewer="test").version_id
-    versioning.publish_version(root, vid, reviewer="human")
-    return vid
+    """The version a run targets: runs never create one, so a test must snapshot first."""
+    return save_working_copy_as_version(root, message="test seed", reviewer="test").version_id
 
 
 def _make_project(root):
@@ -634,42 +629,39 @@ def test_run_without_a_version_fails_loudly(tmp_path):
     assert list_versions(tmp_path) == []
 
 
-def test_unpublished_latest_is_skipped_for_an_older_published_version(tmp_path):
-    """A run given no explicit version_id pins to the newest PUBLISHED version,
-    not merely the newest version — an unpublished draft snapshot never leaks
-    into a run just because it is more recent."""
+def test_the_newest_version_runs_even_when_an_older_one_is_the_published_one(tmp_path):
+    """No version_id pins the newest STORED version, not the newest published one."""
     _make_project(tmp_path)
-    published_id = _seed_version(tmp_path)  # published
+    published_id = _seed_version(tmp_path)
+    versioning.publish_version(tmp_path, published_id, reviewer="human")
 
     time.sleep(1)  # version ids are second-resolution
-    save_working_copy_as_version(tmp_path, message="unpublished newer", reviewer="test")
+    newer = save_working_copy_as_version(
+        tmp_path, message="unpublished newer", reviewer="test").version_id
 
     manifest = execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path))
-    assert manifest["workflow_version"] == published_id
+    assert manifest["workflow_version"] == newer
     assert manifest["status"] == "ok"
 
 
-def test_run_with_no_published_version_fails_loudly(tmp_path):
-    """A version exists but nothing is published yet: a run still refuses,
-    just like the no-version-at-all case, rather than silently running an
-    unreviewed snapshot."""
+def test_run_with_no_published_version_succeeds(tmp_path):
+    """A stored version runs whether or not anyone published it."""
     _make_project(tmp_path)
-    save_working_copy_as_version(tmp_path, message="unpublished", reviewer="test")
+    vid = save_working_copy_as_version(tmp_path, message="unpublished", reviewer="test").version_id
 
-    with pytest.raises(NoVersionToRunError):
-        execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path))
-    assert not (tmp_path / "runs").exists()
+    manifest = execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path))
+    assert manifest["workflow_version"] == vid
+    assert manifest["status"] == "ok"
 
 
-def test_run_with_explicit_unpublished_id_fails_loudly(tmp_path):
-    """An explicit version_id naming a real but unpublished version is refused
-    the same way — a run pins to a published version, never to a draft."""
+def test_run_with_explicit_unpublished_id_succeeds(tmp_path):
+    """An explicit version_id naming an unpublished version runs THAT version."""
     _make_project(tmp_path)
     unpublished_id = save_working_copy_as_version(tmp_path, message="unpublished", reviewer="test").version_id
 
-    with pytest.raises(NoVersionToRunError):
-        execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path), version_id=unpublished_id)
-    assert not (tmp_path / "runs").exists()
+    manifest = execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path, unpublished_id))
+    assert manifest["workflow_version"] == unpublished_id
+    assert manifest["status"] == "ok"
 
 
 def test_create_version_rejects_invalid_working_copy(tmp_path):

@@ -29,8 +29,8 @@ def pinned_stages(project_dir: Path, version_id: str | None = None) -> tuple[lis
 
 def resumed_stages(project_dir: Path, run_id: str) -> tuple[list[Stage], str]:
     """The (stages, version id) a resume must execute: the version THIS run pinned."""
-    # Read off the manifest, not the newest published version, so a resume stays on
-    # the snapshot the halted run started on even if a newer one was published since.
+    # Read off the manifest, not the newest version, so a resume stays on the
+    # snapshot the halted run started on even if a newer one was saved since.
     workflow_version = read_run_manifest(project_dir / "runs" / run_id).workflow_version
     assert workflow_version, f"run {run_id} records no workflow_version"
     return load_version_stages(project_dir, workflow_version), workflow_version

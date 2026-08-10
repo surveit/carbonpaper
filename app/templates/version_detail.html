@@ -2,7 +2,7 @@
 {#
   VERSION DETAIL — one immutable workflow version, read-only. Its frozen stage
   graph plus metadata (message, published state) and the actions that target this
-  version: publish, run this version.
+  version: run this version (any version runs), and publish while it is unpublished.
 
   Context: state; section="versions"; version (the versioning.load_version
            WorkflowVersion, `published` among its own attributes); mermaid
@@ -43,15 +43,15 @@
   <div class="actions wf-actions">
     {% if version.published %}
     <span class="muted">✓ published {{ version.published_at | friendly_time }}</span>
+    {% else %}
+    <form action="/project/{{ state.name }}/versions/{{ version.version_id }}/publish" method="post" style="display:inline">
+      <button type="submit" class="btn">Publish</button>
+    </form>
+    <span class="muted">unpublished</span>
+    {% endif %}
     <form action="/project/{{ state.name }}/workflow/version/{{ version.version_id }}/run" method="post" style="display:inline">
       <button type="submit" class="btn primary">▶ Run this version</button>
     </form>
-    {% else %}
-    <form action="/project/{{ state.name }}/versions/{{ version.version_id }}/publish" method="post" style="display:inline">
-      <button type="submit" class="btn primary">Publish</button>
-    </form>
-    <span class="muted">unpublished — publish to run</span>
-    {% endif %}
   </div>
 </div>
 

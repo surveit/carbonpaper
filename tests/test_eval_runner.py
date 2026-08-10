@@ -189,8 +189,8 @@ def test_run_eval_raises_when_incompatible(project):
 def test_run_eval_scores_an_explicit_unpublished_version(project):
     """An eval is a validation tool: it must be able to score ANY version the
     user selects, published or not, to decide whether to publish it. A named
-    version that exists but is an unpublished agent draft is runnable — the
-    recorded workflow_version is exactly the one selected."""
+    version that is an unpublished agent draft is scorable — the recorded
+    workflow_version is exactly the one selected."""
     repo_root, demo, config = project
     WorkflowVersion(
         id="demo/v2-draft", version_id="v2-draft", created_at="2026-07-11T00:00:00",
@@ -206,7 +206,7 @@ def test_run_eval_scores_an_explicit_unpublished_version(project):
 def test_run_eval_none_version_id_resolves_to_newest_overall(project):
     """None resolves to the newest version overall (any published state) —
     an unpublished draft that is newer than the published version is picked,
-    since selecting the version to eval is now explicit, not gated."""
+    since selecting the version to eval is explicit."""
     repo_root, demo, config = project
     WorkflowVersion(
         id="demo/v2-draft", version_id="v2-draft", created_at="2026-07-11T00:00:00",
@@ -265,7 +265,7 @@ def test_trigger_route_400s_when_not_runnable(project, monkeypatch):
 
 def test_trigger_route_scores_an_explicitly_selected_unpublished_version(project, monkeypatch):
     """Selecting an unpublished version by id in the run form scores THAT
-    version — the route no longer auto-pins to a published latest."""
+    version — the route never auto-pins to some other latest."""
     repo_root, demo, config = project
     save_eval_config(demo, config)
     WorkflowVersion(

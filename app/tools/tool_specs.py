@@ -222,42 +222,41 @@ generate_stage_tests), never to bend the test to the code.""",
     "run_workflow": ToolSpec(
         name="run_workflow",
         description="""\
-Start a REAL production run of the project's published workflow and return
+Start a REAL production run of the project's stored workflow and return
 its `run_id` immediately — the run executes in the background. This is a run
 of record: it writes a manifest under the project's runs/ dir and produces the
-workflow's published artifacts. `version_id` pins a specific published version
-(omit for the newest published one); an unpublished or missing version is a
+workflow's published artifacts. `version_id` pins a specific stored version,
+published or not (omit for the newest stored one); a missing version is a
 loud error, never a silent fallback. Poll get_run_status(project_id, run_id)
-for live progress and the final status. On a pre-run failure (nothing
-published, an unbound input) returns {ok: False, error} and starts no run.""",
+for live progress and the final status. On a pre-run failure (no stored
+version, an unbound input) returns {ok: False, error} and starts no run.""",
     ),
     "run_workflow_test": ToolSpec(
         name="run_workflow_test",
         description="""\
 Run a workflow test, so an author can watch the pipeline execute on real
 data before publishing. It IS a real run — same `runs/` dir, manifest, and
-trace/view routes as run_workflow's — and differs from run_workflow on
-exactly six axes:
+trace/view routes as run_workflow's — over the same versions run_workflow
+takes (any stored version, published or not; omit `version_id` for the newest
+stored — so save_version first, there is no unsaved-edits mode). It differs
+from run_workflow on exactly five axes:
 
-1. VERSION: any stored version, published or not (run_workflow pins a
-   published one). Omit `version_id` for the newest stored. Runs execute a
-   STORED version, so save_version first — there is no unsaved-edits mode.
-2. SOURCE: the `limit` rows from `offset` of the workflow's bound source,
+1. SOURCE: the `limit` rows from `offset` of the workflow's bound source,
    injected (run_workflow reads the whole source through input_data). `limit`
    is the run's budget — every LLM stage pays per row, so state it; null is
    the whole source.
-3. SCOPE: `stage_ids` names the stages to execute. A source stage named there
+2. SCOPE: `stage_ids` names the stages to execute. A source stage named there
    EXECUTES instead of taking an injected frame, over the SAME `limit`/`offset`
    window — so naming a source with `limit` null is how you see an input
    column's complete vocabulary without paying for the stages below it. Every
    producer a named stage reads must be named too, or run over the injected
    slice, or that stage errors on its absent input. Omit `stage_ids` and every
    non-input stage runs.
-4. EXECUTION: synchronous — this returns when the run is done (run_workflow
+3. EXECUTION: synchronous — this returns when the run is done (run_workflow
    returns a run_id immediately and executes on a background thread).
-5. REVIEW QUEUE: a human_review_queue stage auto-approves every row in
+4. REVIEW QUEUE: a human_review_queue stage auto-approves every row in
    memory (run_workflow halts there and waits for a human).
-6. STAGE CACHE: read-only — it may replay a workflow run's cached results
+5. STAGE CACHE: read-only — it may replay a workflow run's cached results
    but records none of its own, so it cannot affect a later run.
 
 Marked `is_test_run` on the manifest, so it never counts as the project's
@@ -315,7 +314,7 @@ SAVE_VERSION_FROM_DRAFT = ToolSpec(
 Freeze the draft into a new immutable version — your proposal for a
 human to review. Validates the whole workflow first: an invalid draft is
 refused with the full issue list and nothing is written. The version is
-born UNPUBLISHED; only a human can publish it (runs execute published
-versions only). `message` says what changed and why, for the reviewer.
+born UNPUBLISHED; only a human can publish it, and publishing records that
+they have read it. `message` says what changed and why, for the reviewer.
 Save once per finished proposal, not per edit.""",
 )

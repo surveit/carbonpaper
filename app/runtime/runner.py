@@ -140,7 +140,7 @@ def prepare_run(
     the live `compiled/` working copy, so working-copy edits can never affect
     this run. `workflow_version` is the id those stages came from and is
     recorded in the manifest. Because the caller resolves first, a project with
-    no published version — or an invalid snapshot — fails there, before this is
+    no stored version — or an invalid snapshot — fails there, before this is
     reached, so no run dir is left behind.
 
     `limits` is a per-RUN row-cap override: {stage_id: N} caps that stage at

@@ -236,10 +236,9 @@ def test_latest_version_id_returns_newest(tmp_path: Path):
 
 
 def test_latest_version_id_includes_unpublished_draft(tmp_path: Path):
-    """latest_version_id is eval-scoped only (the eval runner's default + eval
-    status display) and is not the production-run gate — it reports the
-    newest version overall, published or not. An eval is a validation tool
-    that must be able to score a newer unpublished draft."""
+    """latest_version_id reports the newest version overall, published or not:
+    an eval is a validation tool that must be able to score a newer
+    unpublished draft."""
     WorkflowVersion(id=f"{tmp_path.name}/20260101T000000", version_id="20260101T000000",
             created_at="x", message="m", reviewer="r", published=True).save()
     WorkflowVersion(id=f"{tmp_path.name}/20260201T000000", version_id="20260201T000000",

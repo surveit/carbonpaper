@@ -18,15 +18,14 @@ class RowOutOfRange(ValueError):
 
 
 class NoVersionToRunError(Exception):
-    """A run was requested for a project that has no PUBLISHED version to run.
+    """A run was requested for a project that stores NO version to run.
 
     Runs are read-only with respect to versions: a run targets an existing,
-    published version and never creates or publishes one. Version creation and
-    publishing are separate explicit acts (the "Create version" and "Publish"
-    actions). Raised when `version_id` is None and no version is published yet
-    — rather than fabricating a snapshot as a run side effect, which would
-    immortalise (and potentially poison) the working copy — and when an
-    explicit `version_id` names a version that exists but isn't published."""
+    stored version and never creates one — version creation is a separate
+    explicit act. Raised only when the project has no stored version at all,
+    rather than fabricating a snapshot as a run side effect, which would
+    immortalise (and potentially poison) the working copy. A named
+    `version_id` that no version document backs raises FileNotFoundError."""
 
 
 class RunVersionUnresolvableError(Exception):
@@ -80,10 +79,10 @@ class NoWorkflowTestSourceError(Exception):
 
 class NoWorkflowTestVersionError(Exception):
     """A workflow test was requested on a project with no stored workflow version
-    to sample against. Unlike a production run (which pins a PUBLISHED version), a
-    workflow test accepts any stored immutable version — but there must be at least
-    one. Raised (loudly, naming the project) rather than falling back to the
-    working copy or fabricating a version."""
+    to sample against. A workflow test accepts any stored immutable version — but
+    there must be at least one. Raised (loudly, naming the project) rather than
+    falling back to the working copy or fabricating a version; a production run's
+    equivalent refusal is NoVersionToRunError."""
 
 
 class LLMError(Exception):
