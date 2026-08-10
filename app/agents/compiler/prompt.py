@@ -53,9 +53,7 @@ start empty), then iterate with set_draft_stage / remove_draft_stage — invalid
 intermediate states are fine there, and read_draft shows what still blocks saving.
 
 When the proposal is finished, save_version once, with a message for the human reviewer
-explaining what changed and why. The resulting version is born UNPUBLISHED: only a human
-publishes it, and runs execute published versions only. For a single-field tweak to the
-live workflow, edit_stage remains the direct path.
+explaining what changed and why.
 
 A workflow does not explain itself, so a version the human has to understand before
 acting on it needs write_review_guide: an ordered walkthrough, in the methodology's own

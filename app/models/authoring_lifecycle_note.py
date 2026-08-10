@@ -30,7 +30,7 @@ of THEIR OWN data."""
 # editing agent's prompt and the glassbox instructions). Each numbered step is
 # headed by its CompilerPhase name, which test_authoring_lifecycle_prompt.py pins.
 AUTHORING_LIFECYCLE_GUIDANCE = f"""\
-Authoring is gated, and runs in five phases: RESEARCH, PLANNING, BUILD, TEST_RUN,
+A project runs in five phases: RESEARCH, PLANNING, BUILD, TEST_RUN,
 TEST_RUN_REVIEW.
 1. RESEARCH FIRST. Read the prose and the real data. Building and running
    a prototype pipeline over limited rows IS research — to learn

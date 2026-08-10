@@ -23,4 +23,4 @@ The distinct COUNT is evidence, never the criterion. Two questions decide:
    SILENTLY. That is a design commitment, so it goes in the PLAN.
 
 Values read off a sliced run, off a frame below a filter or an aggregate, or off a
-cut value list are a SAMPLE, not the set. Say which one you have."""
+cut value list are a SAMPLE, not the set. Say which one you have. Say which one you have."""

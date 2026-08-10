@@ -166,12 +166,27 @@ def render_surface(
         f"\n## {title}\n",
         f"`{source}` · model: {model}\n",
         f"{note}\n",
+        _budget_line(system_prompt, tools),
         f"### System prompt ({len(system_prompt):,} characters)\n",
         f"```text\n{system_prompt}\n```\n",
-        f"### Tools ({len(tools)})\n",
+        f"### Tools ({len(tools)}, {_tool_chars(tools):,} characters of description)\n",
     ]
     blocks += [render_tool(tool) for tool in tools] or ["_None._\n"]
     return "\n".join(blocks)
+
+
+def _budget_line(system_prompt: str, tools: list[types.Tool]) -> str:
+    """Tool descriptions are shipped text too — counting only the prompt understates it."""
+    tool_chars = _tool_chars(tools)
+    total = len(system_prompt) + tool_chars
+    return (
+        f"**{total:,} characters** reach the model: {len(system_prompt):,} of system "
+        f"prompt + {tool_chars:,} of tool description.\n"
+    )
+
+
+def _tool_chars(tools: list[types.Tool]) -> int:
+    return sum(len(tool.description or "") for tool in tools)
 
 
 def render_tool(tool: types.Tool) -> str:

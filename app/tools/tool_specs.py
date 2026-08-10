@@ -12,15 +12,11 @@ TOOL_SPECS: dict[str, ToolSpec] = {
         description="""\
 Create NEW stages in the workflow. `stages` is a LIST — submit every stage
 you are ready to author in ONE call; a list of one is the single-stage case.
-Each is a FULL stage: id (new and unique, and the stage's ONLY name — every
-surface shows it, so name the step well; use edit_stage to change an existing
-one), description (ONE line under that name, never a name itself), type, the
-config block(s) its type requires — connector
-/ llm / function / join / aggregate / queue / union / filter, and `publish`
-needs BOTH its `publish` block and a `function` block — inputs each with a
-MANDATORY `schema`, and `signature`: what the transform reads and writes.
-There is no output_schema to send — the stage's output IS what the signature
-promises. read_stage on a similar existing stage shows the shape.
+Each is a FULL stage, as the anatomy describes one. Its `id` is new, unique,
+and the stage's ONLY name — every surface shows it, so name the step well;
+use edit_stage to change an existing one. `publish` is the one type needing
+TWO blocks: its own and a `function`. There is no output_schema to send —
+the stage's output IS what its signature promises.
 
 Order does not matter: the batch is sorted by the `inputs` each stage
 declares, so a stage may name another stage in the SAME call as an input, or
@@ -35,14 +31,10 @@ resolved output does not supply is refused. The result reports every stage:
   failed  — [{id, issues}]; that stage was NOT written, the rest still were
   skipped — [{id, because}]; not attempted, because a stage it inputs from
             failed or was itself skipped
-  issues  — every failure's issues flattened, so `ok`/`issues` reads the same
-            as it always has
 
-Fix what `failed` names and re-send only the failed and skipped stages:
-read_stage the named upstream, repair the declared input schema against what
-that stage really outputs. A batch that cannot be ordered at all — duplicate
-ids, or a cycle among the submitted stages — is refused whole, with NOTHING
-written and the cycle named in `issues`.
+Re-send only the failed and skipped stages. A batch that cannot be ordered at
+all — duplicate ids, or a cycle among the submitted stages — is refused whole,
+with NOTHING written and the cycle named in `issues`.
 
 Copying a stage from read_stage is fine: the server-owned fields it carries
 (tests, eval, review, source) are dropped rather than refused, and a

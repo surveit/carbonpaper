@@ -31,8 +31,4 @@ WORKED_STAGE_EXAMPLE = """\
     "code": "def transform(row):\\n    reported = row['reported_amount']\\n    if reported == None:\\n        return dict(row, amount_usd = None)\\n    if not reported.startswith('$'):\\n        refuse('reported_amount %s is not US dollars' % reported)\\n    return dict(row, amount_usd = float(reported[1:].replace(',', '')))\\n"
   }
 }
-```
-Read it as: `reads` names only what the code consumes — `filing_id` passes through
-untouched and is not a read. `adds` is the one new column, so `form` is `extends`.
-The summary and corner cases describe the behaviour without the code, because that is
-all the reviewer and the test generator are shown."""
+```"""

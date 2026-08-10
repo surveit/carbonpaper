@@ -34,12 +34,11 @@ def _render_grain_table() -> str:
     reshaping = sorted(t for t in _catalog_types() if not is_grain_and_order_preserving(t))
     return "\n".join([
         "Row grain — whether one input row becomes exactly one output row, in order. "
-        "Fixed by type, never by what you write:",
+        "Fixed by type.",
         f"  1:1, order preserved: {_names(one_to_one)}",
         f"  may add, drop or reorder rows: {_names(reshaping)}",
         "A stage that reshapes breaks row-position provenance: a figure computed in "
-        "one cannot be traced to the rows behind it. `aggregate` records its grouping, "
-        "so prefer it over a frame function whenever a stage boils rows down to figures.",
+        "one cannot be traced to the rows behind it.",
     ])
 
 
