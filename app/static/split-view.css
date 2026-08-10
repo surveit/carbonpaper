@@ -60,6 +60,14 @@
 .empty-state .btn,
 .empty-state form { margin-top: 18px; }
 
+/* Where a zero state offers a second door beside its primary, `.actions` puts the
+   pair on one row — centred, because a flex row does not inherit the centring the
+   rest of the block gets from text-align. The row takes over the gap above, so the
+   pair sits exactly where a lone button would have. */
+.empty-state .actions { justify-content: center; align-items: center; margin-top: 18px; }
+.empty-state .actions .btn { margin-top: 0; }
+.empty-state .actions form { margin: 0; }
+
 /* Compact stage list in left pane */
 table.stages.compact td, table.stages.compact th {
     padding: 5px 10px;

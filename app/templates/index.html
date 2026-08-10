@@ -53,7 +53,15 @@
 <div class="empty-state">
     <h2>No projects yet — start your first one</h2>
     <p class="muted">Paste how your investigation works, and it becomes a chain of simple, inspectable steps you can run and rerun.</p>
-    <a href="/project/new" class="btn primary new-methodology-btn">＋ New project</a>
+    <div class="actions">
+        <a href="/project/new" class="btn primary new-methodology-btn">＋ New project</a>
+        {# The tour is the second door, and only here: a reader who already has
+           projects has been through the part it walks. #}
+        <form method="post" action="/tutorial">
+            <button type="submit" class="btn secondary"
+                    title="Seeds a five-stage workflow over synthetic lobbying filings, and runs it with you.">Take a guided tour on sample data</button>
+        </form>
+    </div>
 </div>
 {% endif %}
 {% endblock %}
