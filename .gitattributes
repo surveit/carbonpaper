@@ -1,3 +1,7 @@
 # CI runs these on Linux; a CRLF checkout on a developer machine would make the
 # committed shebang unrunnable there and is pointless for a file only bash reads.
 .github/scripts/*.sh text eol=lf
+
+# Same rule, load-bearing rather than tidy: the container's `/bin/sh` reads this
+# file's shebang literally, so a CRLF checkout makes the image refuse to boot.
+docker-entrypoint.sh text eol=lf
