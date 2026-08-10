@@ -6,7 +6,11 @@ from app.models.stages.code import (
     CODE_CORNER_CASES_CONTRACT_NOTE,
     CODE_SUMMARY_CONTRACT_NOTE,
 )
-from app.models.stages.node_types import CODE_CARRYING_TYPES, NODE_TYPES
+from app.models.stages.node_types import (
+    AUTHORABLE_CODE_CARRYING_TYPES,
+    NODE_TYPES,
+    RETIRED_TYPES,
+)
 
 
 def test_human_review_queue_note_states_the_fingerprint_matching():
@@ -82,8 +86,15 @@ def test_the_shared_code_notes_reach_each_surface_exactly_once():
 def test_each_governed_type_is_marked_where_the_shared_note_is_stated():
     # Nothing else now connects the hoisted rule to the types it binds.
     for prompt in _authoring_prompts():
-        for stage_type in CODE_CARRYING_TYPES:
+        for stage_type in AUTHORABLE_CODE_CARRYING_TYPES:
             assert f"`{stage_type}`" in prompt, stage_type
+
+
+def test_a_retired_type_is_offered_by_neither_prompt():
+    # It still loads and runs; advertising it would invite authoring a new one.
+    for prompt in _authoring_prompts():
+        for stage_type in RETIRED_TYPES:
+            assert stage_type not in prompt, stage_type
 
 
 def test_no_type_note_still_carries_the_shared_text():

@@ -48,3 +48,9 @@ AUTHORABLE_TYPES: dict[str, NodeTypeSpec] = {
 # the contract notes, pinned by tests/test_node_type_notes.py.
 CODE_CARRYING_TYPES = ("python_row_function", "python_frame_function", "publish",
                        "filter_rows", "starlark_row_function")
+
+# The subset a prompt names: a retired type's rule is still enforced on a stored
+# stage, but naming it would advertise a type the catalog no longer offers.
+AUTHORABLE_CODE_CARRYING_TYPES = tuple(
+    name for name in CODE_CARRYING_TYPES if name not in RETIRED_TYPES
+)

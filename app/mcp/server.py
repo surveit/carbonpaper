@@ -34,7 +34,10 @@ from app.models.stages.code import (
     CODE_SUMMARY_CONTRACT_NOTE,
 )
 from app.models.stages.anatomy_note import render_stage_anatomy
-from app.models.stages.node_types import AUTHORABLE_TYPES, CODE_CARRYING_TYPES
+from app.models.stages.node_types import (
+    AUTHORABLE_CODE_CARRYING_TYPES,
+    AUTHORABLE_TYPES,
+)
 from app.models.stages.worked_example import WORKED_STAGE_EXAMPLE
 from app.runtime import stage_tests
 from app.services import generation
@@ -71,7 +74,7 @@ _STAGE_TOOL_ERRORS = (WorkflowLoadError, FileNotFoundError)
 
 def _render_node_type_constraints() -> str:
     """From the shared specs, so the two authoring prompts cannot drift apart."""
-    governed = ", ".join(f"`{name}`" for name in CODE_CARRYING_TYPES)
+    governed = ", ".join(f"`{name}`" for name in AUTHORABLE_CODE_CARRYING_TYPES)
     return "\n".join([
         textwrap.fill(render_stage_anatomy(), width=88),
         "",

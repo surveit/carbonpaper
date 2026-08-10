@@ -12,7 +12,11 @@ from app.models.stages.code import (
     CODE_CORNER_CASES_CONTRACT_NOTE,
     CODE_SUMMARY_CONTRACT_NOTE,
 )
-from app.models.stages.node_types import AUTHORABLE_TYPES, CODE_CARRYING_TYPES
+from app.models.stages.node_types import (
+    AUTHORABLE_CODE_CARRYING_TYPES,
+    AUTHORABLE_TYPES,
+    CODE_CARRYING_TYPES,
+)
 from app.models.stages.signature import SIGNATURE_CONTRACT_NOTE
 from app.models.stages.worked_example import WORKED_STAGE_EXAMPLE
 
@@ -74,7 +78,7 @@ def build_editing_system_prompt() -> str:
 
 def render_stage_anatomy_section() -> str:
     """What holds for every stage, so no type's own note restates it."""
-    governed = ", ".join(f"`{name}`" for name in CODE_CARRYING_TYPES)
+    governed = ", ".join(f"`{name}`" for name in AUTHORABLE_CODE_CARRYING_TYPES)
     return "\n\n".join([
         "# Anatomy of a stage",
         render_stage_anatomy(),

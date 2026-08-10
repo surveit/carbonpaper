@@ -136,7 +136,7 @@ def find_starlark_warnings(stage: "StarlarkRowFunctionStage") -> list[CompilerWa
 # authoring prompts render. Assembled into NODE_TYPES by app.models.stages.
 NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
     "starlark_row_function": NodeTypeSpec(
-        summary="Sandboxed Starlark run once per row: one row in → one row out. Prefer this over python_row_function.",
+        summary="Sandboxed Starlark run once per row: one row in → one row out.",
         signature_form="extends",
         blocks=["starlark"],
         requires_inputs=True,
@@ -144,21 +144,17 @@ NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
         required=["code"],
         optional=["function", "summary"],
         notes=(
-            "PREFER THIS over python_row_function for row transforms. Starlark is Python's "
-            "syntax minus imports, file and network access, classes, while, and try/except, "
-            "so the step cannot read or write anything outside its row. Recursion is not "
-            "rejected — a self-terminating recursive function runs — but is bounded by a "
-            "call-stack limit (a `Starlark call stack overflow`), so it cannot loop forever "
-            "the way an unbounded while would. "
-            "`transform(row)` is handed a plain dict and must return a plain dict, and that "
-            "dict IS the output row: a key you do not return is absent, so carry columns "
-            "through explicitly (`return dict(row, key=value)`). Values arrive as strings, numbers, "
-            "booleans, None, lists and dicts; dates and timestamps arrive as ISO-8601 "
-            "strings and every missing value arrives as None. An integer beyond 2**63-1 "
-            "stops the step rather than losing precision. Call `refuse(\"reason\")` to "
-            "decline a row you cannot honestly process. Module-level variables freeze after "
-            "load — keep state in locals. Use python_row_function only when the step "
-            "genuinely needs a Python library."
+            "Starlark is Python's syntax minus imports, file and network access, classes, "
+            "while, and try/except, so the step cannot read or write anything outside "
+            "its row. Recursion runs but is bounded by a call-stack limit, so it cannot "
+            "loop forever. `transform(row)` is handed a plain dict and must return a "
+            "plain dict, and that dict IS the output row: a key you do not return is "
+            "absent, so carry columns through explicitly (`return dict(row, key=value)`). "
+            "Values arrive as strings, numbers, booleans, None, lists and dicts; dates "
+            "and timestamps as ISO-8601 strings, every missing value as None. An integer "
+            "beyond 2**63-1 stops the step rather than losing precision. Call "
+            "`refuse(\"reason\")` to decline a row you cannot honestly process. "
+            "Module-level variables freeze after load — keep state in locals."
         ),
     ),
 }
