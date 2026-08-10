@@ -13,9 +13,10 @@
 //  2. File picker — a run reads its input files off the server's disk by absolute
 //     path, but a browser <input type=file> hands over only bytes, never a path
 //     (every OS hides it). So Browse… opens the native file dialog, then uploads
-//     the chosen file to POST /project/<name>/upload-input, which saves it and
-//     returns the saved copy's absolute path — that goes into the (read-only)
-//     field. Browse is the only way to set it; the field itself isn't typeable.
+//     the chosen file to POST /project/<name>/upload-input, which saves it under
+//     its own content hash and returns that copy's absolute path — which goes
+//     into the (read-only) field. Browse is the only way to set it; the field
+//     itself isn't typeable.
 (function () {
   // A rebuilt row is a clone of the form's <template>, which _run_controls.html
   // renders from the same macro as the server-rendered rows — so there is no
@@ -60,18 +61,14 @@
   }
 
   // ─── Upload a browser-picked file, then fill the path field ─────────────
-  function stageIdOf(input) {
-    var name = input.getAttribute("name") || "";
-    return name.indexOf("binding__") === 0 ? name.slice("binding__".length) : "";
-  }
-
   async function uploadFile(file, input, project, btn) {
     var label = btn.textContent;
     btn.disabled = true;
     btn.textContent = "Uploading…";
     try {
+      // No stage id: the server stores the file under its own content hash, so the
+      // same file picked for two stages is one copy that either may bind.
       var fd = new FormData();
-      fd.append("stage_id", stageIdOf(input));
       fd.append("file", file);
       var resp = await fetch(
         "/project/" + encodeURIComponent(project) + "/upload-input",

@@ -9,7 +9,7 @@ import mimetypes
 from dataclasses import dataclass
 from typing import Any
 
-from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from fastapi.datastructures import FormData
 from fastapi.responses import (
     FileResponse,
@@ -33,13 +33,13 @@ from app.services.errors import WorkflowLoadError
 from app.services.versioning import list_versions
 from app.services import run as run_service
 from app.services.run_guide import build_run_guide_view
+from app.services.uploads import save_upload
 from app.runtime.cancellation import request_cancel
 from app.web.breadcrumbs import build_run_crumbs, build_runs_child_crumbs
 from app.web.config import EVENT_TAIL, projects_dir, templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
 from app.web.loading import (
     list_file_inputs,
-    save_uploaded_input,
     load_manifest,
     runs_dir,
 )
@@ -139,19 +139,13 @@ async def run_inputs(project: str, version_id: str | None = None):
 
 
 @router.post("/project/{project}/upload-input")
-async def upload_input(
-    project: str,
-    stage_id: str = Form(...),
-    file: UploadFile = File(...),
-):
-    project_dir = projects_dir() / project
-    if not project_dir.is_dir():
+async def upload_input(project: str, file: UploadFile = File(...)):
+    if not (projects_dir() / project).is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
     if not file.filename:
         return JSONResponse({"ok": False, "error": "no file provided"}, status_code=400)
-    path = await run_in_threadpool(
-        save_uploaded_input, project_dir, stage_id, file.filename, file.file
-    )
+    # Off the event loop: the copy streams a file of any size to disk and hashes it.
+    path = await run_in_threadpool(save_upload, project, file.filename, file.file)
     return JSONResponse({"ok": True, "path": str(path)})
 
 

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import shutil
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
@@ -146,25 +145,6 @@ def list_file_inputs(project: str, version_id: str | None = None) -> list[dict[s
         for s in stages
         if s.type == StageType.input_data and s.connector.kind == "file"
     ]
-
-
-# ─── Uploaded run-input files ────────────────────────────────────────────────
-
-def _safe_component(raw: str, fallback: str) -> str:
-    """Path('../..').name is '..', not '' — hence the explicit specials check."""
-    name = Path(raw).name
-    return fallback if name in ("", ".", "..") else name
-
-
-def save_uploaded_input(project_dir: Path, stage_id: str, filename: str, src) -> Path:
-    safe_stage = _safe_component(stage_id, "input")
-    safe_name = _safe_component(filename, "upload.dat")
-    dest_dir = project_dir / "uploads" / safe_stage
-    dest_dir.mkdir(parents=True, exist_ok=True)
-    dest = dest_dir / safe_name
-    with dest.open("wb") as out:
-        shutil.copyfileobj(src, out)
-    return dest.resolve()
 
 
 # ─── Runs & manifests ────────────────────────────────────────────────────────
