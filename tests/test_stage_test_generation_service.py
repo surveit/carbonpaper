@@ -14,6 +14,7 @@ from app.core.agent.store import SessionStore
 from app.core.agent.turns import TurnManager
 from app.core.errors import GenerationError
 from app.models import TableSchema
+from app.models.authoring_lifecycle_note import CompilerPhase
 from app.models.stages.stage_tests import (
     PythonRowFunctionStageTest,
     build_stage_tests_model,
@@ -247,7 +248,7 @@ def test_start_creates_hidden_viewonly_session(tmp_path: Path, monkeypatch: Any)
 
     session = store.load(sid)
     assert session["context"]["hidden"] is True
-    assert session["context"]["phase"] == "stage_tests"
+    assert session["context"]["phase"] == CompilerPhase.BUILD
     assert session["context"]["stage_id"] == "double"
     assert session["agent_id"] is None  # view-only
     assert session["messages"]  # TurnManager persisted the conversation

@@ -1,5 +1,5 @@
 """The editing agent's system prompt: a fixed instruction, the shared gated
-authoring lifecycle (research, signed-off plan, build, smoke run before full),
+authoring lifecycle (research, planning, build, test_run, test_run_review),
 the shared rule on declaring an enum from the data itself, and a rendered catalog of
 the stage types it can build. The agent learns which project it edits at runtime
 via get_current_project, so the prompt names no specific project."""
@@ -28,11 +28,15 @@ _SYSTEM_PROMPT = (
     "blocks saving. When the proposal is finished, save_version once, with a message "
     "for the human reviewer explaining what changed and why. The resulting version "
     "is born UNPUBLISHED: only a human publishes it, and runs execute published "
-    "versions only. A workflow does not explain itself, so once it needs the human to "
-    "understand it before they act on it, call write_review_guide for the version "
-    "save_version returned: an ordered walkthrough, in the methodology's own terms, "
-    "saying what each part does and what a reviewer should check. For a "
-    "single-field tweak to the live workflow, edit_stage remains the direct path."
+    "versions only. For a single-field tweak to the live workflow, edit_stage "
+    "remains the direct path.\n\n"
+    "A workflow does not explain itself, so a version the human has to understand "
+    "before acting on it needs write_review_guide: an ordered walkthrough, in the "
+    "methodology's own terms, saying what each part does and what a reviewer should "
+    "check. Write it in TEST_RUN_REVIEW, after the smoke run and before you hand "
+    "anything back — never straight off save_version. The smoke run is what tells you "
+    "the workflow is wrong, and every fix it forces makes a guide written earlier "
+    "describe stages that are no longer there."
 )
 
 
