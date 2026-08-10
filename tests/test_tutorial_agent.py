@@ -79,9 +79,8 @@ def test_create_tutorial_project_binds_an_absolute_csv_to_every_input_stage(
 
     assert seeded["name"] in project_service.list_projects()
     assert [stage["id"] for stage in seeded["stages"]] == [
-        "raw_filings", "public_commitments", "significant_filings",
-        "matched_commitments", "judge_alignment", "flag_contradiction",
-        "publish_report",
+        "raw_filings", "public_commitments", "matched_commitments",
+        "judge_alignment", "flag_contradiction", "publish_report",
     ]
 
     bound = {entry["stage_id"]: Path(entry["csv_path"]) for entry in seeded["bound_inputs"]}
@@ -152,8 +151,8 @@ def test_a_real_run_resolves_the_bound_csv_and_honours_the_row_cap(
     status = run_service.read_run_status(seeded["name"], started["run_id"])
     by_stage = {r["stage_id"]: r for r in status["stage_records"]}
     assert by_stage["raw_filings"]["output_row_count"] == 6
-    # The filter runs before the model stage, so fewer rows would have reached it.
-    assert by_stage["significant_filings"]["output_row_count"] < 6
+    # The join drops no filing, so the cap is what every later stage sees.
+    assert by_stage["matched_commitments"]["output_row_count"] == 6
     # No model is available offline, so the LLM stage is where this run stops.
     assert by_stage["judge_alignment"]["status"] == "error"
 

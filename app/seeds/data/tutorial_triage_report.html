@@ -33,17 +33,20 @@
 </head>
 <body>
 <h1>Tutorial Say-versus-Do Report</h1>
-<p class="sub">[[filing_count]] filings cleared the spend filter; [[flagged_count]] ask government for the opposite of what their client committed to in public; [[unmatched_count]] have no public commitment on record.</p>
-<p class="note">Invented sample data bundled with this tutorial, and deliberately engineered so the contradictions are easy to see &mdash; one short line per filing, one short line per commitment, and names that match exactly. Real filings and real commitments are neither short nor tidy. No row describes a real filing, client, firm or commitment.</p>
-<p class="why">Every filing below reported enough lobbying spend to clear this workflow&rsquo;s filter. Beside it
-sits what the same client said in public, where a commitment was on record. A filing is marked when it
-asks government for the opposite of that commitment &mdash; and where it is marked, both texts are
-printed together, so the contradiction is on the page rather than only in the flag.
-It is a reading aid, not a verdict, and not a finding about the filer.</p>
+<p class="sub">[[filing_count]] filings; [[flagged_count]] ask government for the opposite of what their client committed to in public; [[unmatched_count]] have no public commitment on record.</p>
+<p class="note">Invented sample data bundled with this tutorial. No row describes a real filing, client, firm or commitment.</p>
+<p class="why">Beside each filing sits what the same client said in public, where a commitment was on
+record. A filing is marked when it asks government for the opposite of that commitment &mdash; and where
+it is marked, both texts are printed together, so the contradiction is on the page rather than only in
+the flag. It is a reading aid, not a verdict, and not a finding about the filer.
+Every row carries a <em>Show the work</em> link back through each stage that touched it to the input row
+it came from. Those links are served by the app that produced this page; in a copy of this file opened
+on its own they will not resolve.</p>
 <table>
 <thead><tr>
 <th>Filing</th><th>Client</th><th>Registrant</th><th>Period</th>
 <th>Reported spend</th><th>What this filing asks for</th><th>What they said in public</th><th>Why follow up</th>
+<th>Show the work</th>
 </tr></thead>
 <tbody>
 [[rows]]</tbody>
@@ -60,7 +63,10 @@ It is a reading aid, not a verdict, and not a finding about the filer.</p>
 <td>[[specific_issues]]</td>
 <td>[[commitment]]</td>
 <td>[[followup]]</td>
+<td>[[trace]]</td>
 </tr>
+<!--@ trace -->
+<a href="[[trace_url]]">Lineage</a>
 <!--@ commitment -->
 [[public_commitment]]<span class="src">[[commitment_source]]</span>
 <!--@ no_commitment -->
