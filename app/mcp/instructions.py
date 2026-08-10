@@ -9,15 +9,12 @@ import textwrap
 from app.models.authoring_lifecycle_note import AUTHORING_LIFECYCLE_GUIDANCE
 from app.models.enum_from_data_note import ENUM_FROM_DATA_GUIDANCE
 from app.models.product_note import CONCEPTS_NOTE, ROLE_NOTE
-from app.models.stages.anatomy_note import render_stage_anatomy
+from app.models.stages.anatomy_note import render_stage_anatomy, render_type_catalog
 from app.models.stages.code import (
     CODE_CORNER_CASES_CONTRACT_NOTE,
     CODE_SUMMARY_CONTRACT_NOTE,
 )
-from app.models.stages.node_types import (
-    AUTHORABLE_CODE_CARRYING_TYPES,
-    AUTHORABLE_TYPES,
-)
+from app.models.stages.node_types import AUTHORABLE_CODE_CARRYING_TYPES
 from app.models.stages.signature import SIGNATURE_CONTRACT_NOTE
 from app.models.stages.worked_example import WORKED_STAGE_EXAMPLE
 
@@ -37,8 +34,7 @@ def _render_node_type_constraints() -> str:
         "A stage, whole:",
         WORKED_STAGE_EXAMPLE,
         "",
-        *(textwrap.fill(f"- {stage_type} — {spec.notes}", width=88, subsequent_indent="  ")
-          for stage_type, spec in AUTHORABLE_TYPES.items()),
+        render_type_catalog(),
     ])
 
 

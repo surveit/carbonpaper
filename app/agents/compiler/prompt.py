@@ -8,16 +8,12 @@ from __future__ import annotations
 from app.models.authoring_lifecycle_note import AUTHORING_LIFECYCLE_GUIDANCE
 from app.models.enum_from_data_note import ENUM_FROM_DATA_GUIDANCE
 from app.models.product_note import CONCEPTS_NOTE, ROLE_NOTE
-from app.models.stages.anatomy_note import render_stage_anatomy
+from app.models.stages.anatomy_note import render_stage_anatomy, render_type_catalog
 from app.models.stages.code import (
     CODE_CORNER_CASES_CONTRACT_NOTE,
     CODE_SUMMARY_CONTRACT_NOTE,
 )
-from app.models.stages.node_types import (
-    AUTHORABLE_CODE_CARRYING_TYPES,
-    AUTHORABLE_TYPES,
-    CODE_CARRYING_TYPES,
-)
+from app.models.stages.node_types import AUTHORABLE_CODE_CARRYING_TYPES
 from app.models.stages.signature import SIGNATURE_CONTRACT_NOTE
 from app.models.stages.worked_example import WORKED_STAGE_EXAMPLE
 
@@ -74,27 +70,7 @@ def render_stage_anatomy_section() -> str:
 
 def render_stage_type_catalog() -> str:
     """Only what is specific to one type — the anatomy above covers the rest."""
-    return "\n".join([
-        "# The stage types you can use",
-        *[_render_stage_type(stage_type, spec)
-          for stage_type, spec in AUTHORABLE_TYPES.items()],
-    ])
-
-
-def _render_stage_type(stage_type: str, spec: object) -> str:
-    assert isinstance(spec, type(AUTHORABLE_TYPES[stage_type]))
-    blocks = ", ".join(f"`{b}`" for b in spec.blocks)
-    required = ", ".join(spec.required) or "none"
-    takes = "takes inputs" if spec.requires_inputs else "no inputs"
-    carries = " CARRIES CODE." if stage_type in CODE_CARRYING_TYPES else ""
-    lines = [
-        f"- {stage_type} — {spec.summary}{carries}",
-        f"    blocks {blocks}; required: {required}; {takes}; "
-        f"signature form: {spec.signature_form}",
-    ]
-    if spec.notes:
-        lines.append(f"    note: {spec.notes}")
-    return "\n".join(lines)
+    return "# The stage types you can use\n" + render_type_catalog()
 
 
 EDITING_SYSTEM_PROMPT = build_editing_system_prompt()

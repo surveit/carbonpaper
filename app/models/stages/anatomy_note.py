@@ -5,7 +5,7 @@ runtime is held to.
 """
 from __future__ import annotations
 
-from app.models.stages.node_types import AUTHORABLE_TYPES
+from app.models.stages.node_types import AUTHORABLE_TYPES, CODE_CARRYING_TYPES
 from app.models.stages.stage_base import StageType, is_grain_and_order_preserving
 
 _WHAT_EVERY_STAGE_DECLARES = """\
@@ -48,3 +48,24 @@ def _catalog_types() -> list[StageType]:
 
 def _names(types: list[StageType]) -> str:
     return ", ".join(t.value for t in types)
+
+
+def render_type_catalog(indent: str = "    ") -> str:
+    """The authorable types, rendered identically on every authoring surface."""
+    return "\n".join(_render_type(name, indent) for name in AUTHORABLE_TYPES)
+
+
+def _render_type(stage_type: str, indent: str) -> str:
+    spec = AUTHORABLE_TYPES[stage_type]
+    blocks = ", ".join(f"`{b}`" for b in spec.blocks)
+    required = ", ".join(spec.required) or "none"
+    takes = "takes inputs" if spec.requires_inputs else "no inputs"
+    carries = " CARRIES CODE." if stage_type in CODE_CARRYING_TYPES else ""
+    lines = [
+        f"- {stage_type} — {spec.summary}{carries}",
+        f"{indent}blocks {blocks}; required: {required}; {takes}; "
+        f"signature form: {spec.signature_form}",
+    ]
+    if spec.notes:
+        lines.append(f"{indent}note: {spec.notes}")
+    return "\n".join(lines)

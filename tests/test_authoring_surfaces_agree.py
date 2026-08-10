@@ -10,7 +10,7 @@ import pytest
 from app.models.authoring_lifecycle_note import AUTHORING_LIFECYCLE_GUIDANCE
 from app.models.enum_from_data_note import ENUM_FROM_DATA_GUIDANCE
 from app.models.product_note import CONCEPTS_NOTE, ROLE_NOTE
-from app.models.stages.anatomy_note import render_stage_anatomy
+from app.models.stages.anatomy_note import render_stage_anatomy, render_type_catalog
 from app.models.stages.code import (
     CODE_CORNER_CASES_CONTRACT_NOTE,
     CODE_SUMMARY_CONTRACT_NOTE,
@@ -49,10 +49,22 @@ def test_shared_guidance_reaches_both_surfaces(name: str, surfaces: dict[str, st
     assert not missing, f"`{name}` is missing from: {', '.join(missing)}"
 
 
-def test_every_authorable_type_is_offered_by_both_surfaces(surfaces: dict[str, str]) -> None:
-    for stage_type in AUTHORABLE_TYPES:
+def test_the_type_catalog_is_rendered_identically_on_both_surfaces(
+    surfaces: dict[str, str],
+) -> None:
+    # Not just present — the same text, blocks and signature form included.
+    catalog = _flat(render_type_catalog())
+    missing = [s for s, text in surfaces.items() if catalog not in _flat(text)]
+    assert not missing, f"type catalog differs on: {', '.join(missing)}"
+
+
+def test_every_authorable_type_names_its_block_and_signature_form(
+    surfaces: dict[str, str],
+) -> None:
+    for stage_type, spec in AUTHORABLE_TYPES.items():
         for surface, text in surfaces.items():
             assert f"- {stage_type} —" in text, f"{stage_type} missing from {surface}"
+        assert f"signature form: {spec.signature_form}" in _flat(render_type_catalog())
 
 
 def _flat(text: str) -> str:
