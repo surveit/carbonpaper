@@ -46,10 +46,9 @@ def test_the_workflow_is_introduced_by_why_it_exists_not_by_its_stage_list() -> 
     beat = _flat(_beat(2))
 
     assert "ONE sentence" in beat and "what this EXAMPLE workflow is for" in beat
-    assert "The filter is not the point; the LEAD is" in beat
+    assert "The mechanics are not the point; the LEAD is" in beat
     assert "what the client said in public against what the same client paid to ask" in beat
-    assert "Do NOT list the seven stages in the chat" in beat
-    assert "workflow_url" in beat and "guide_url" in beat
+    assert "Do NOT list the six stages in the chat" in beat
 
 
 def test_the_worked_beat_calls_it_an_example_workflow_and_says_what_it_is_hunting() -> None:
@@ -58,36 +57,40 @@ def test_the_worked_beat_calls_it_an_example_workflow_and_says_what_it_is_huntin
 
     assert "This example workflow puts what an organization promised in public" in worked
     assert "flags the filings asking for the opposite of the promise" in worked
-    assert "earns a reporter's phone call" in worked
 
 
-def test_the_tour_admits_the_dataset_is_deliberately_engineered() -> None:
-    """Not "synthetic" in passing: what was engineered, and what that costs."""
+def test_the_tour_admits_the_dataset_is_invented_in_a_sentence_of_its_own() -> None:
+    """One line, before any claim about the data — not a paragraph on how it was built."""
     beat = _flat(_beat(2))
 
-    assert "ADMIT WHAT THIS DATASET IS" in beat
-    assert 'Not "synthetic" and on to the next sentence' in beat
-    assert "invented AND DELIBERATELY ENGINEERED so the contradiction is obvious" in beat
-    for cost in ("real filings run to pages", "the names never line up",
-                 "much harder than what they are about to watch"):
-        assert cost in beat, cost
-    assert "a property of the demo, stated as such" in beat
-    assert "not a disclaimer to hurry past" in beat
+    assert "before anything else about the data, say plainly that it is invented" in beat
+    assert "One sentence of its own" in beat
+    assert "not a paragraph on how the demo was built" in beat
 
 
-def test_the_engineered_data_admission_is_a_hard_rule_too() -> None:
+def test_the_invented_data_admission_is_a_hard_rule_too() -> None:
     rules = _flat(TUTORIAL_SYSTEM_PROMPT)
 
-    assert "INVENTED AND DELIBERATELY ENGINEERED so the contradiction is obvious" in rules
-    assert '"Synthetic" on its own does not discharge this rule' in rules
+    assert "The sample data is INVENTED, and you say so plainly at beat 2" in rules
+    assert '"Synthetic"' in rules and "does not discharge this rule" in rules
 
 
-def test_the_worked_beat_shows_the_admission_as_its_own_paragraph() -> None:
+def test_the_worked_beat_shows_the_admission_as_its_own_line() -> None:
     worked = _flat(TUTORIAL_SYSTEM_PROMPT)
 
-    assert "it is deliberately engineered to make that contradiction obvious" in worked
-    assert "the shape of the analysis, not the difficulty of it" in worked
-    assert "The admission about the data is a paragraph of its own" in worked
+    assert "The data is invented." in worked
+    assert "The data is admitted to be invented, in a line of its own" in worked
+
+
+def test_the_run_beat_hands_over_exactly_one_link() -> None:
+    """Three links at the end of a turn is three decisions; the run is the one to make."""
+    beat = _flat(_beat(2))
+
+    assert "`run_url` is the ONLY link this beat hands over" in beat
+    assert "Beat 2 ends on ONE link, `run_url`." in _flat(TUTORIAL_SYSTEM_PROMPT)
+    # The other two pages are not lost — beat 4 is where they are offered.
+    assert "the first beat that may hand over `workflow_url`" in _flat(_beat(4))
+    assert "guide_url" in _flat(_beat(4))
 
 
 def test_seeding_and_running_are_one_turn_with_no_boundary_to_ask_at() -> None:
@@ -135,7 +138,7 @@ def test_the_tour_waits_in_one_call_and_never_abandons_a_run() -> None:
 def test_the_run_beat_ends_by_handing_over_rather_than_offering_a_menu() -> None:
     beat = _flat(_beat(2))
 
-    assert "go click that link, poke around it, and come back when they are done" in beat
+    assert "asking them to explore the run and come back when they are done" in beat
     assert "No menu" in beat and "no question" in beat
     assert "The page is the thing now, not you." in beat
 
@@ -176,7 +179,7 @@ def test_the_tour_starts_lineage_from_a_data_stage_not_from_the_report() -> None
 
     assert "NOT from the report" in beat
     assert "lineage stops at the publish stage" in beat
-    assert "significant_filings" in beat and "flag_contradiction" in beat
+    assert "matched_commitments" in beat and "flag_contradiction" in beat
 
 
 def test_the_tour_points_at_the_unmatched_rows_absent_parent() -> None:
@@ -190,7 +193,7 @@ def test_the_tour_points_at_the_unmatched_rows_absent_parent() -> None:
 
 def test_the_no_fabrication_rules_survive_the_rewrite() -> None:
     for rule in (
-        "The sample data is INVENTED AND DELIBERATELY ENGINEERED",
+        "The sample data is INVENTED, and you say so plainly at beat 2",
         "Never state a number, row count, duration, version or finding you did not read",
         "Never claim a capability this tour did not demonstrate",
         "If a tool has not told you a number, you do not have it.",
