@@ -15,7 +15,7 @@ from app.web.markdown_render import render_markdown
 
 client = TestClient(app)
 
-_CHAT_TEMPLATE = Path(__file__).resolve().parents[1] / "app/web/chat_templates/chat.html"
+_CHAT_TEMPLATE = Path(__file__).resolve().parents[1] / "app/templates/chat.html"
 
 
 def open_session_saying(text: str) -> str:

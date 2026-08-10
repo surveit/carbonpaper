@@ -451,6 +451,11 @@
             "input": "judge_alignment",
             "columns": [
               {
+                "name": "filing_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
                 "name": "public_commitment",
                 "type": "str",
                 "nullable": true
