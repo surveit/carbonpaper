@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block breadcrumbs %}{% include "_breadcrumbs.html" %}{% endblock %}
+{% block content %}
+<div class="ac-head">
+  <span class="ac-backend" title="which model backend answers">backend: {{ backend }}</span>
+</div>
+
+{% if backend_error %}
+  <div class="ac-warn"><strong>Backend unavailable:</strong> {{ backend_error }}</div>
+{% endif %}
+
+<div class="ac-log" id="log">
+  {% for b in history %}
+    {% if b.role == "user" %}
+      <div class="ac-msg user"><div class="ac-role">you</div><div class="ac-body">{{ b.text }}</div></div>
+    {% else %}
+      <div class="ac-msg assistant">
+        <div class="ac-role">assistant</div>
+        {% if b.thinking %}
+          <details class="ac-think"><summary>💭 thinking</summary><div class="ac-think-text">{{ b.thinking }}</div></details>
+        {% endif %}
+        {% for t in b.tools %}<details class="ac-tool"><summary>🔧 {{ t.label or t.name }}</summary><pre class="ac-tool-json">{{ t.args }}</pre></details>{% endfor %}
+        <div class="ac-body">{{ b.text }}</div>
+      </div>
+    {% endif %}
+  {% endfor %}
+  {% if pending_user %}
+    <div class="ac-msg user"><div class="ac-role">you</div><div class="ac-body">{{ pending_user }}</div></div>
+  {% endif %}
+</div>
+
+<div class="ac-dock">
+{% if view_only %}
+  <div class="ac-composer ac-view-only">Read-only generation view — watch it run; there's no agent here to reply to.</div>
+{% else %}
+  <div class="ac-composer">
+    <input class="ac-input" id="input" placeholder="Message… (Enter to send)" autocomplete="off" />
+    <button class="ac-send" id="send">Send</button>
+  </div>
+{% endif %}
+</div>
+
+<script>
+const SID = {{ session_id | tojson }};
+const ACTIVE_TURN = {{ active_turn | tojson }};
+const MESSAGE_URL = `/chat/${SID}/message`;
+const log = document.getElementById("log");
+const input = document.getElementById("input");
+const sendBtn = document.getElementById("send");
+let streaming = false;
+
+function el(cls, html) { const d = document.createElement("div"); d.className = cls; if (html !== undefined) d.innerHTML = html; return d; }
+function scroll() { window.scrollTo(0, document.body.scrollHeight); }
+function fmtJson(s) { try { return JSON.stringify(JSON.parse(s), null, 2); } catch (e) { return s || ""; } }
+function toolPre(text) { const p = document.createElement("pre"); p.className = "ac-tool-json"; p.textContent = fmtJson(text); return p; }
+
+function addUser(text) {
+  const b = el("ac-msg user");
+  b.appendChild(el("ac-role", "you"));
+  const body = el("ac-body"); body.textContent = text; b.appendChild(body);
+  log.appendChild(b); scroll();
+}
+
+// Build an assistant bubble with lazily-created thinking / text / tool regions.
+function newAssistant() {
+  const b = el("ac-msg assistant");
+  b.appendChild(el("ac-role", "assistant"));
+  // Spinner from bubble creation until the first content arrives, so the gap
+  // while the model thinks (esp. the block-level claude_cli backend) isn't blank.
+  const spinner = el("ac-spinner",
+    '<span class="ac-dot"></span><span class="ac-dot"></span><span class="ac-dot"></span><span class="ac-sp-label">thinking…</span>');
+  b.appendChild(spinner);
+  let think = null, thinkText = null, body = null;
+  const pendingTools = [];  // tool_call disclosures awaiting their tool_result (FIFO)
+  log.appendChild(b); scroll();
+  function stop() { if (spinner.parentNode) spinner.remove(); }
+  return {
+    thinking(t) {
+      stop();
+      if (!think) {
+        think = document.createElement("details"); think.className = "ac-think"; think.open = true;
+        const s = document.createElement("summary"); s.textContent = "💭 thinking"; think.appendChild(s);
+        thinkText = el("ac-think-text"); think.appendChild(thinkText);
+        b.appendChild(think);
+      }
+      thinkText.textContent += t; scroll();
+    },
+    text(t) {
+      stop();
+      if (!body) { body = el("ac-body"); b.appendChild(body); }
+      body.textContent += t; scroll();
+    },
+    tool(name, args, label) {
+      stop();
+      const d = document.createElement("details"); d.className = "ac-tool";
+      const sum = document.createElement("summary"); sum.textContent = "🔧 " + (label || name); d.appendChild(sum);
+      d.appendChild(toolPre(args));
+      b.appendChild(d); pendingTools.push(d); scroll();
+    },
+    toolResult(content) {
+      stop();
+      const d = pendingTools.shift();
+      if (d) {
+        const lbl = el("ac-tool-label"); lbl.textContent = "result"; d.appendChild(lbl);
+        d.appendChild(toolPre(content));
+      } else {  // result with no matching call (shouldn't happen) — show standalone
+        const d2 = document.createElement("details"); d2.className = "ac-tool";
+        const sum = document.createElement("summary"); sum.textContent = "↳ result"; d2.appendChild(sum);
+        d2.appendChild(toolPre(content)); b.appendChild(d2);
+      }
+      scroll();
+    },
+    error(t) { stop(); const e = el("ac-err"); e.textContent = "⚠ " + t; b.appendChild(e); scroll(); },
+    stop
+  };
+}
+
+function connect(turnId, fromIndex) {
+  streaming = true; if (sendBtn) sendBtn.disabled = true;
+  const bubble = newAssistant();
+  const es = new EventSource(`/chat/${SID}/turn/${turnId}/stream?from=${fromIndex||0}`);
+  es.onmessage = (m) => {
+    const ev = JSON.parse(m.data);
+    if (ev.kind === "thinking") bubble.thinking(ev.text);
+    else if (ev.kind === "text") bubble.text(ev.text);
+    else if (ev.kind === "tool_call") bubble.tool(ev.name, ev.args, ev.label);
+    else if (ev.kind === "tool_result") bubble.toolResult(ev.content);
+    else if (ev.kind === "error") bubble.error(ev.text);
+    else if (ev.kind === "done") { bubble.stop(); es.close(); streaming = false; if (sendBtn) sendBtn.disabled = false; if (input) input.focus(); }
+  };
+  es.onerror = () => { bubble.stop(); es.close(); streaming = false; if (sendBtn) sendBtn.disabled = false; };
+}
+
+async function send() {
+  const text = input.value.trim();
+  if (!text || streaming) return;
+  input.value = "";
+  addUser(text);
+  const r = await fetch(MESSAGE_URL, {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({text})
+  });
+  const data = await r.json();
+  if (!data.ok) { const b = newAssistant(); b.error(data.error || "request failed"); return; }
+  connect(data.turn_id, 0);
+}
+
+// The composer exists only when a real agent is bound; a view-only generation session has
+// no input to wire, but must still reattach to stream its live turn.
+if (input && sendBtn) {
+  sendBtn.addEventListener("click", send);
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } });
+}
+
+// Reattach to an in-flight turn after navigating away and back.
+if (ACTIVE_TURN) connect(ACTIVE_TURN, 0);
+if (input) input.focus();
+</script>
+{% endblock %}

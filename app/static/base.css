@@ -33,8 +33,9 @@ header {
 
 .back-link { color: var(--muted); text-decoration: none; font-size: 14px; }
 .back-link:hover { color: var(--accent); }
-/* The header is a flex row of [trail][Admin]; the trail takes the slack so Admin
-   sits against the right edge whatever the trail's length. */
+/* The header is a flex row of [trail][the right-slot links]; the trail takes the
+   slack so they sit against the right edge whatever the trail's length. Only the
+   FIRST of the group carries this — the header's own gap spaces the rest. */
 .header-right { margin-left: auto; }
 
 /* ═══ The breadcrumb trail — the header's whole left side ═══

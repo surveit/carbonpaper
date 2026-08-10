@@ -5,13 +5,9 @@ the registry (app.core.agent.registry) rather than knowing any concrete agent.
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
-from fastapi.templating import Jinja2Templates
-
-import app.web.config as web_config
 
 from app.core.llm_sdk import CLI_PATH
 
@@ -20,12 +16,10 @@ from app.core.agent.sdk_engine import CLI_MODEL
 from app.core.agent.session import create_agent_session
 from app.core.agent.store import open_session_store
 from app.core.agent.turns import default_turn_manager
-
-TEMPLATES_DIR = Path(__file__).resolve().parent / "chat_templates"
+from app.web.breadcrumbs import build_chat_crumbs, build_home_crumbs
+from app.web.config import templates
 
 router = APIRouter()
-templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
-templates.env.filters["friendly_time"] = web_config.friendly_time
 _store = open_session_store()
 _turns = default_turn_manager()
 
@@ -57,6 +51,7 @@ async def chat_index(request: Request):
     return templates.TemplateResponse(request, "chat_index.html", {
         "sessions": visible_sessions,
         "backend": _backend_label(),
+        "crumbs": build_home_crumbs("Chats"),
     })
 
 
@@ -87,6 +82,7 @@ async def chat_page(request: Request, sid: str):
         "view_only": data.get("agent_id") is None,
         "backend": _backend_label(),
         "backend_error": _backend_error(),
+        "crumbs": build_chat_crumbs(data.get("title")),
     })
 
 

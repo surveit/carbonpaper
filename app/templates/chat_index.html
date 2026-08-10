@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Chats{% endblock %}
+{% block breadcrumbs %}{% include "_breadcrumbs.html" %}{% endblock %}
+{% block content %}
+<div class="ac-head">
+  <h1>Chats</h1>
+  <span class="ac-backend" title="which model backend answers">backend: {{ backend }}</span>
+</div>
+<ul class="ac-sessions">
+  {% for s in sessions %}
+    <li class="ac-session">
+      <a href="/chat/{{ s.session_id }}">{{ s.title }}</a>
+      <div class="ac-session-meta">{{ s.session_id }} · {{ s.created_at | friendly_time }}</div>
+    </li>
+  {% else %}
+    <li class="ac-session ac-session-meta">No sessions yet.</li>
+  {% endfor %}
+</ul>
+{% endblock %}
