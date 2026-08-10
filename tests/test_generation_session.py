@@ -8,7 +8,10 @@ import app.compiler.data_model as data_model
 import app.services.generation as generation
 from app.core.agent.store import SessionStore
 from app.core.agent.turns import TurnManager
-from app.models.named_schemas import SchemaLibrary
+from app.models.named_schemas import NamedSchema, SchemaKind, SchemaLibrary
+from app.services.data_model import load_schemas
+
+_A_SCHEMA = NamedSchema(name="claim", kind=SchemaKind.reference, title="Claim", columns=[])
 
 
 # ── the completion hook (_finish_data_model): persist the schemas, nothing more ──────
@@ -17,9 +20,11 @@ def test_finish_persists_schemas_on_success(tmp_path: Path):
     project_dir = tmp_path / "demo"
     project_dir.mkdir()
 
-    generation._finish_data_model(project_dir, SchemaLibrary(schemas=[]))
+    generation._finish_data_model(
+        project_dir, SchemaLibrary(schemas=[_A_SCHEMA]))
 
-    assert (project_dir / "schemas").exists()  # schemas persisted; the workflow is NOT auto-built
+    # Persisted; the workflow is NOT auto-built.
+    assert load_schemas("demo") == [_A_SCHEMA]
 
 
 def test_finish_does_nothing_when_no_answer_was_submitted(tmp_path: Path):
@@ -28,7 +33,7 @@ def test_finish_does_nothing_when_no_answer_was_submitted(tmp_path: Path):
 
     generation._finish_data_model(project_dir, None)
 
-    assert not (project_dir / "schemas").exists()  # nothing written on a failed data model
+    assert load_schemas("demo") == []  # nothing written on a failed data model
 
 
 # ── start_generation wiring: session up front + a live, streamable turn ──────────────
@@ -53,7 +58,7 @@ class _FakeAgent:
         class _Engine:
             async def stream_turn(self, prompt: str, *, message_history: Any, emit: Any, resume: Any):
                 emit({"kind": "text", "text": "authored"})
-                agent._answer = SchemaLibrary(schemas=[])  # the submit_answer tool would set this
+                agent._answer = SchemaLibrary(schemas=[_A_SCHEMA])  # submit_answer would set this
                 return [{"role": "assistant", "parts": [{"type": "text", "text": "authored"}]}], None
 
         return _Engine()
@@ -84,4 +89,4 @@ def test_start_generation_creates_a_session_and_runs_a_live_turn(tmp_path: Path,
 
     assert store.exists(sid)
     assert store.load(sid)["messages"]          # TurnManager persisted the conversation
-    assert (project_dir / "schemas").exists()   # completion hook persisted the schemas
+    assert load_schemas("demo") == [_A_SCHEMA]  # completion hook persisted the schemas

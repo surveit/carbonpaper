@@ -115,7 +115,7 @@ def _finish_data_model(project_dir: Path, answer: SchemaLibrary | None) -> None:
     already streamed to the live turn; there is nothing to persist."""
     if answer is None:
         return
-    data_model.write_data_model(project_dir, answer)
+    data_model.write_data_model(project_dir.name, answer)
 
 
 def _finish_review_guide(

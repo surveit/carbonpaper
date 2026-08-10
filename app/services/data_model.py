@@ -1,37 +1,61 @@
-"""Data-model service: load and write a project's data model (the named schemas
-under examples/<name>/schemas/). This module is the sole writer of schemas/ —
-generation hands its validated result here, and readers that need a validated
-SchemaLibrary (not raw dicts) load through here."""
+"""A project's data model — its named schemas — as one stored document.
+
+Sole owner of the "data_model" collection: generation hands its validated result
+here, and every reader that wants schemas comes through here rather than
+composing a path.
+"""
 from __future__ import annotations
 
-import json
-from pathlib import Path
+from typing import ClassVar
 
-from app.models import parse_schema_library
-from app.models.named_schemas import SchemaLibrary
-from app.services import workspace
+from pydantic import Field
 
-
-def load_data_model(project_dir: Path) -> SchemaLibrary | None:
-    """The project's data model as a validated SchemaLibrary; None when absent."""
-    schemas = workspace.load_schemas(project_dir)
-    if not schemas:
-        return None
-    # Strip the loader's bookkeeping keys (_filename/…) before the model validates.
-    return parse_schema_library(
-        [{k: v for k, v in s.items() if not k.startswith("_")} for s in schemas]
-    )
+from app.core.persistence import PersistedModel, PersistenceScope
+from app.models.named_schemas import NamedSchema, SchemaLibrary
 
 
-def write_data_model(project_dir: Path, library: SchemaLibrary) -> None:
-    """Replace schemas/ with the given data model — clear stale files a shrinking
-    re-generation would leave, then write one NN_<name>.json per schema. The library
-    is already validated by the caller, so this only writes."""
-    schemas_dir = project_dir / "schemas"
-    schemas_dir.mkdir(parents=True, exist_ok=True)
-    for stale in schemas_dir.glob("*.json"):
-        stale.unlink()
-    for index, schema in enumerate(library.schemas, start=1):
-        payload = schema.model_dump(mode="json", exclude_none=True)
-        path = schemas_dir / f"{index:02d}_{schema.name}.json"
-        path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+class DataModel(PersistedModel):
+    """One project's named schemas, `id`'d by project name."""
+
+    collection: ClassVar[str] = "data_model"
+    SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
+
+    # Each schema validates on its own; the LIBRARY rules — unique names,
+    # resolvable references — are deliberately NOT applied here, so a data model
+    # that has drifted into inconsistency still loads and the page can show the
+    # reader what is wrong instead of failing to render. SchemaLibrary owns those
+    # rules, and load_data_model below is where they are enforced.
+    schemas: list[NamedSchema] = Field(default_factory=list)
+
+
+def load_schemas(project: str) -> list[NamedSchema]:
+    """The project's schemas, or [] when it has no data model yet."""
+    record = DataModel.load_or_none(project)
+    return list(record.schemas) if record is not None else []
+
+
+def load_data_model(project: str) -> SchemaLibrary | None:
+    """Strict: raises if the stored schemas no longer form a consistent library."""
+    schemas = load_schemas(project)
+    return SchemaLibrary(schemas=schemas) if schemas else None
+
+
+def write_data_model(project: str, library: SchemaLibrary) -> None:
+    """Whole-model write, so a shrinking re-generation leaves no stale schema."""
+    _save(project, list(library.schemas))
+
+
+def write_schema(project: str, schema: NamedSchema) -> None:
+    """Revise the schema of this name in place; KeyError if there is none."""
+    schemas = load_schemas(project)
+    index = next((i for i, s in enumerate(schemas) if s.name == schema.name), None)
+    if index is None:
+        raise KeyError(schema.name)
+    schemas[index] = schema
+    _save(project, schemas)
+
+
+def _save(project: str, schemas: list[NamedSchema]) -> None:
+    record = DataModel.load_or_none(project) or DataModel(id=project)
+    record.schemas = schemas
+    record.save()

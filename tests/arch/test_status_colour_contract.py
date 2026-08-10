@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from app.models.named_schemas import NamedSchema, SchemaKind
 from app.web.diagrams import _NODE_SURFACE, _STATUS_STROKE, build_schema_table_graph
 
 _PALETTE = Path(__file__).resolve().parents[2] / "app" / "static" / "palette.css"
@@ -27,8 +28,8 @@ _CLASSDEF = re.compile(r"classDef (\w+) (\S+)")
 
 # One named schema per kind, so build_schema_table_graph emits every classDef.
 _ONE_SCHEMA_PER_KIND = [
-    {"name": "reference_kind", "kind": "reference"}, {"name": "input_kind", "kind": "input"},
-    {"name": "computed_kind", "kind": "computed"}, {"name": "truth_kind", "kind": "ground_truth"},
+    NamedSchema(name=f"{kind.value}_kind", kind=kind, title=kind.value, columns=[])
+    for kind in SchemaKind
 ]
 
 

@@ -31,6 +31,7 @@ from app.models.review_guide import ReviewGuideDraft
 from app.services.versioning import ReviewGuide
 from app.models.stages.node_types import NODE_TYPES
 from app.runtime import stage_tests
+from app.services import data_model
 from app.services import generation
 from app.services import loader
 from app.services import frame_profile
@@ -284,8 +285,9 @@ def report_compiler_warnings(project_id: str) -> dict[str, Any]:
 
 @mcp.tool(description=TOOL_SPECS["read_data_model"].description)
 def read_data_model(project_id: str) -> list[dict[str, Any]]:
-    pdir = _resolve_existing_project(project_id)
-    return workspace.load_schemas(pdir)
+    _resolve_existing_project(project_id)
+    return [s.model_dump(mode="json", exclude_none=True)
+            for s in data_model.load_schemas(project_id)]
 
 
 @mcp.tool(description=TOOL_SPECS["describe_workflow"].description)

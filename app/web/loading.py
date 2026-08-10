@@ -26,7 +26,8 @@ from app.runtime.manifest import resolve_output_path
 from app.services.run import resolve_version
 from app.services.loader import CompiledStageFile, load_compiled_dir
 from app.services.versioning import list_versions, load_version_stages
-from app.services.workspace import load_schemas, resolve_project_dir
+from app.services.data_model import load_schemas
+from app.services.workspace import resolve_project_dir
 from app.web.config import projects_dir
 
 
@@ -64,11 +65,10 @@ def _build_project_card(p: Path) -> dict[str, Any] | None:
     """One project dir's dashboard card, or None if `p` carries none of the
     creation markers (document/workflow/schemas) and so is not a project."""
     compiled_dir = p / "compiled"
-    schemas_dir = p / "schemas"
     n_stages = len(list(compiled_dir.glob("*.json"))) if compiled_dir.is_dir() else 0
     has_workflow = n_stages > 0
-    has_schemas = schemas_dir.is_dir() and any(schemas_dir.glob("*.json"))
-    n_schemas = len(load_schemas(p)) if has_schemas else 0
+    n_schemas = len(load_schemas(p.name))
+    has_schemas = n_schemas > 0
     n_runs = _count_runs_with_manifest(p / "runs")
     has_document = (p / "document.md").is_file() or (p / "project.json").is_file()
     if not (has_workflow or has_schemas or has_document):

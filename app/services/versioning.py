@@ -18,8 +18,9 @@ from app.models.review_guide import ReviewGuideStep
 from app.models.workflow import find_stages_reaching_publish, parse_workflow
 from app.core.persistence import PersistedModel, PersistenceScope, get_store
 from app.core.utils import format_errors
+from app.models.named_schemas import NamedSchema
+from app.services.data_model import load_schemas
 from app.services.errors import WorkflowLoadError
-from app.services.workspace import load_schemas
 
 
 class WorkflowVersion(PersistedModel):
@@ -43,7 +44,7 @@ class WorkflowVersion(PersistedModel):
     message: str
     reviewer: str
     stages: list[Stage] = Field(default_factory=list)
-    schemas: list[dict[str, Any]] = Field(default_factory=list)
+    schemas: list[NamedSchema] = Field(default_factory=list)
     published: bool = False
     published_at: str | None = None
     published_by: str | None = None
@@ -90,8 +91,8 @@ def create_version_from_stages(
     issues alike) on anything invalid; nothing is written in that case. Every
     version is therefore a loadable workflow, from this seam or any other.
 
-    schemas/ is read via workspace.load_schemas, which returns [] when the project
-    has no schema library yet — a project with no data model still versions
+    The data model is read via data_model.load_schemas, which returns [] when the
+    project has no schema library yet — a project with no data model still versions
     cleanly (the absence is truthful, not an error).
 
     version_id has 1-second resolution; two versions minted within the same
@@ -100,7 +101,7 @@ def create_version_from_stages(
     guarded against."""
     project_dir = Path(project_dir)
     workflow = parse_workflow(stages)
-    schemas = load_schemas(project_dir)
+    schemas = load_schemas(project_dir.name)
 
     version_id = datetime.now().strftime("%Y%m%dT%H%M%S")
     project = project_dir.name

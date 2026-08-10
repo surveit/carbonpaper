@@ -285,8 +285,8 @@ def project_state(pdir: Path) -> ProjectState:
     has_document = doc_path is not None
 
     # ── Data model (named schemas) ──
-    schemas = workspace.load_schemas(pdir)
-    data_model = DataModelStatus(present=bool(schemas), n_schemas=len(schemas))
+    schemas = data_model.load_schemas(name)
+    data_model_status = DataModelStatus(present=bool(schemas), n_schemas=len(schemas))
 
     # ── Workflow (compiled stages) ──
     stages = _load_compiled_stages(pdir)
@@ -302,7 +302,7 @@ def project_state(pdir: Path) -> ProjectState:
         has_document=has_document,
         # Absolute path string (or None) — a link target, never fabricated.
         document_path=str(doc_path) if doc_path else None,
-        data_model=data_model,
+        data_model=data_model_status,
         workflow=workflow,
         versions=n_versions,
         runs=runs,
@@ -567,7 +567,7 @@ def export_project(name: str) -> WorkflowFile:
     document_path = project_state(pdir).document_path
     if document_path is None:
         raise ValueError(f"project '{name}' has no document — cannot export")
-    library = data_model.load_data_model(pdir) or SchemaLibrary(schemas=[])
+    library = data_model.load_data_model(name) or SchemaLibrary(schemas=[])
     stages = [c.stage for c in load_compiled_dir(pdir / "compiled") if c.stage is not None]
     return WorkflowFile(
         name=name,
@@ -592,7 +592,7 @@ def import_project(
     target = sanitize_project_name(name or wf.name)
     pdir = workspace.resolve_project_dir(target)
     create_project(target, wf.document, model=wf.model, source=wf.source)
-    data_model.write_data_model(pdir, wf.data_model)
+    data_model.write_data_model(target, wf.data_model)
     for i, stage in enumerate(wf.stages, start=1):
         stage_path = pdir / "compiled" / f"{i:02d}_{stage.id}.json"
         stage_path.parent.mkdir(parents=True, exist_ok=True)

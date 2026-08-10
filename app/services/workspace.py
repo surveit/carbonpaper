@@ -1,12 +1,11 @@
 """workspace.py — the projects workspace: the projects storage root, name→directory
-resolution, the named-schema data-model reader, and project enumeration + workflow
-summaries. These back the editing agent's read tools and the status model. Uses the
-tolerant loader (a malformed compiled file becomes an issue, not an exception);
-imports nothing from the web layer."""
+resolution, and project enumeration + workflow summaries. These back the editing
+agent's read tools and the status model. Uses the tolerant loader (a malformed
+compiled file becomes an issue, not an exception); imports nothing from the web
+layer."""
 
 from __future__ import annotations
 
-import json
 import os
 from pathlib import Path
 from typing import Any
@@ -66,35 +65,6 @@ def resolve_project_dir(name: str) -> Path:
 def resolve_run_dir(name: str, run_id: str) -> Path:
     """Where one run of a project lives. Services name the runs/ layout only here."""
     return resolve_project_dir(name) / "runs" / run_id
-
-
-def load_schemas(project_dir: Path) -> list[dict[str, Any]]:
-    """Load the named-schema data model from <project_dir>/schemas/*.json — one schema
-    object per file (the shape the schema writer emits). Returns [] if the project has
-    no data model yet. A JSON parse error surfaces as an _error schema rather than
-    dropping the file silently."""
-    schemas_dir = Path(project_dir) / "schemas"
-    if not schemas_dir.is_dir():
-        return []
-    schemas: list[dict[str, Any]] = []
-    for schema_file in sorted(schemas_dir.glob("*.json")):
-        try:
-            doc = json.loads(schema_file.read_text(encoding="utf-8"))
-        except json.JSONDecodeError as exc:
-            schemas.append({
-                "name": schema_file.stem,
-                "title": f"[JSON ERROR] {schema_file.name}",
-                "kind": "reference",
-                "notes": f"JSON parse error: {exc}",
-                "_filename": schema_file.name,
-                "_error": True,
-            })
-            continue
-        if not doc:
-            continue
-        doc["_filename"] = schema_file.name
-        schemas.append(doc)
-    return schemas
 
 
 def list_project_names() -> list[str]:

@@ -57,7 +57,7 @@ def test_round_trip_through_json_reproduces_the_source_and_mints_a_version(tmp_p
         "Round Trip Source", "Trace the shell companies.", source="test")
     pdir = source_examples / name
 
-    data_model.write_data_model(pdir, _TINY_LIBRARY)
+    data_model.write_data_model(name, _TINY_LIBRARY)
 
     compiled = pdir / "compiled"
     compiled.mkdir()
@@ -83,7 +83,7 @@ def test_round_trip_through_json_reproduces_the_source_and_mints_a_version(tmp_p
 
     assert (target_pdir / "document.md").read_text(encoding="utf-8") == "Trace the shell companies."
 
-    imported_library = data_model.load_data_model(target_pdir)
+    imported_library = data_model.load_data_model(imported_name)
     assert imported_library is not None
     assert imported_library.model_dump() == _TINY_LIBRARY.model_dump()
 

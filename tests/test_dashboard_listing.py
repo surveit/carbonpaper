@@ -7,6 +7,8 @@ from fastapi.testclient import TestClient
 
 from app.core.persistence import get_store
 from app.main import app
+from app.models.named_schemas import NamedSchema, SchemaKind
+from app.services.data_model import DataModel
 from app.services.versioning import WorkflowVersion
 from app.web.loading import list_projects
 from app.services import workspace
@@ -108,11 +110,9 @@ def test_card_counts_compiled_stages_schemas_and_runs_with_a_manifest(examples_r
     compiled_dir.mkdir()
     (compiled_dir / "010_load.json").write_text("{}", encoding="utf-8")
     (compiled_dir / "020_score.json").write_text("{}", encoding="utf-8")
-    schemas_dir = proj / "schemas"
-    schemas_dir.mkdir()
-    (schemas_dir / "claim.json").write_text(
-        json.dumps({"name": "claim", "columns": []}), encoding="utf-8"
-    )
+    DataModel(id="counted", schemas=[
+        NamedSchema(name="claim", kind=SchemaKind.reference, title="Claim", columns=[]),
+    ]).save()
     runs_dir = proj / "runs"
     finished_run = runs_dir / "20260101T000000"
     finished_run.mkdir(parents=True)

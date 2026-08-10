@@ -3,9 +3,11 @@ project's stages. No I/O — stages in, diagram source out."""
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Iterator
 from typing import Any
 
 from app.models import Stage, StageBase
+from app.models.named_schemas import NamedColumn, NamedSchema
 from app.core.run_status import StageStatus
 
 
@@ -74,12 +76,12 @@ SCHEMA_KIND_GLYPH = {
 SCHEMA_KIND_ORDER = ["reference", "input", "computed", "ground_truth"]
 
 
-def build_schema_er_diagram(schemas: list[dict[str, Any]]) -> str:
+def build_schema_er_diagram(schemas: list[NamedSchema]) -> str:
     """Mermaid erDiagram from NAMED schemas (the data model). FK edges come from
     explicit column `references` (schema or schema.column) — a real graph, not a
     PK-name-collision heuristic. An empty-column schema still renders as an entity so
     the reader sees it exists."""
-    names = {s.get("name") for s in schemas if s.get("name")}
+    names = {s.name for s in schemas}
     lines = ["erDiagram"]
     for s in schemas:
         lines.extend(_render_er_entity_block(s))
@@ -87,65 +89,64 @@ def build_schema_er_diagram(schemas: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-def _render_er_entity_block(s: dict[str, Any]) -> list[str]:
+def _render_er_entity_block(s: NamedSchema) -> list[str]:
     """One schema's `erDiagram` entity block: its `{ ... }` braces, an `any`
     placeholder row if it declares no columns, else one row per column."""
-    sid = s.get("name")
-    if not sid:
-        return []
-    cols = s.get("columns") or []
-    pk_set = set(s.get("primary_key") or [])
-    lines = [f"    {sid} {{"]
-    if not cols:
-        lines.append(f"        any _ \"({s.get('kind', '')})\"")
-    for col in cols:
-        line = _render_er_column_row(col, pk_set)
-        if line is not None:
-            lines.append(line)
+    pk_set = set(s.primary_key or [])
+    lines = [f"    {s.name} {{"]
+    if not s.columns:
+        lines.append(f'        any _ "({s.kind})"')
+    lines.extend(_render_er_column_row(col, pk_set) for col in s.columns)
     lines.append("    }")
     return lines
 
 
-def _render_er_column_row(col: dict[str, Any], pk_set: set[Any]) -> str | None:
-    """One column's row inside an entity block — type, name, PK/FK marker,
-    and a truncated, quote-escaped description comment — or `None` for a
-    column with no name."""
-    name = col.get("name", "")
-    if not name:
-        return None
-    t = _safe_mermaid_type(col.get("type", "str"))
-    marker = "PK" if name in pk_set else ("FK" if col.get("references") else "")
-    label = col.get("description") or ""
+def _render_er_column_row(col: NamedColumn, pk_set: set[str]) -> str:
+    """One column's row inside an entity block — type, name, PK/FK marker, and a
+    truncated, quote-escaped description comment."""
+    t = _safe_mermaid_type(col.type)
+    marker = "PK" if col.name in pk_set else ("FK" if col.references else "")
+    label = col.description or ""
     comment = f' "{label.replace(chr(34), chr(39))[:48]}"' if label else ""
-    line = f"        {t} {name}"
+    line = f"        {t} {col.name}"
     if marker:
         line += f" {marker}"
     return line + comment
 
 
-def _collect_er_fk_edges(schemas: list[dict[str, Any]], names: set[Any]) -> list[str]:
-    """One deduplicated `erDiagram` edge per referencing column: a referencing
-    column draws an edge from the target schema to this one, skipping a
-    reference to an unknown schema or to the referencing schema itself."""
-    edges: list[str] = []
-    seen_edges: set[str] = set()
+def _collect_er_fk_edges(schemas: list[NamedSchema], names: set[str]) -> list[str]:
+    """One `erDiagram` edge per referencing column, drawn from the target schema
+    to the one whose column carries the key."""
+    # Not deduplicated, unlike the table-level view: this edge line names the
+    # referencing COLUMN, and a schema's column names are unique, so no two can
+    # produce the same line.
+    return [
+        f"    {target} ||--o{{ {s.name} : {col.name}"
+        for s, col, target in _resolved_references(schemas, names)
+    ]
+
+
+def _resolved_references(
+    schemas: list[NamedSchema], names: set[str]
+) -> Iterator[tuple[NamedSchema, NamedColumn, str]]:
+    """The (schema, column, target) triples both FK edge builders draw from."""
     for s in schemas:
-        sid = s.get("name")
-        for col in s.get("columns") or []:
-            ref = col.get("references") if isinstance(col, dict) else None
-            if not ref:
+        for col in s.columns:
+            if not col.references:
                 continue
-            target = ref.split(".", 1)[0].strip()
-            if target not in names or target == sid:
-                continue
-            edge = f"    {target} ||--o{{ {sid} : {col.get('name')}"
-            if edge not in seen_edges:
-                seen_edges.add(edge)
-                edges.append(edge)
-    return edges
+            target = col.references.split(".", 1)[0].strip()
+            # A reference to an unknown schema, or to the referencing schema
+            # itself, draws no edge.
+            if target in names and target != s.name:
+                yield s, col, target
 
 
-def build_schema_table_graph(schemas: list[dict[str, Any]]) -> str:
+def _dedupe(lines: Iterable[str]) -> list[str]:
+    """`lines` with repeats dropped, first occurrence order kept."""
+    return list(dict.fromkeys(lines))
+
+
+def build_schema_table_graph(schemas: list[NamedSchema]) -> str:
     """Mermaid flowchart of the data model at TABLE level: one node per named
     schema (name + title, coloured by kind), one edge per foreign-key reference.
     The columns-free companion to build_schema_er_diagram — same deterministic
@@ -155,7 +156,7 @@ def build_schema_table_graph(schemas: list[dict[str, Any]]) -> str:
     Nodes click through to focusSchema(name) so the page can open that schema's
     reference detail."""
     lines = ["flowchart LR"]
-    names = {s.get("name") for s in schemas if s.get("name")}
+    names = {s.name for s in schemas}
 
     for s in schemas:
         lines.extend(_render_table_node_block(s))
@@ -173,45 +174,29 @@ def build_schema_table_graph(schemas: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-def _render_table_node_block(s: dict[str, Any]) -> list[str]:
+def _render_table_node_block(s: NamedSchema) -> list[str]:
     """One schema's flowchart node + click handler: name + title (dropped
-    when identical to the name), coloured by kind. [] for a nameless
-    schema."""
-    sid = s.get("name")
-    if not sid:
-        return []
-    klass = SCHEMA_KIND_CLASS.get(s.get("kind", ""), "custom")
-    title = (s.get("title") or "").strip().replace('"', "'")[:48]
-    label = f'"<b>{sid}</b>'
-    if title and title != sid:
+    when identical to the name), coloured by kind."""
+    klass = SCHEMA_KIND_CLASS.get(s.kind, "custom")
+    title = s.title.strip().replace('"', "'")[:48]
+    label = f'"<b>{s.name}</b>'
+    if title and title != s.name:
         label += f"<br/><span style='font-size:10px;color:#5c6169'>{title}</span>"
     label += '"'
     return [
-        f"    {sid}[{label}]:::{klass}",
-        f'    click {sid} call focusSchema("{sid}") "Open columns"',
+        f"    {s.name}[{label}]:::{klass}",
+        f'    click {s.name} call focusSchema("{s.name}") "Open columns"',
     ]
 
 
-def _collect_table_fk_edges(schemas: list[dict[str, Any]], names: set[Any]) -> list[str]:
+def _collect_table_fk_edges(schemas: list[NamedSchema], names: set[str]) -> list[str]:
     """One deduplicated table-level edge per referencing column: referenced
     schema --> the schema whose column carries the key. Same extraction as
     the ER view's `_collect_er_fk_edges`, drawn at table granularity."""
-    edges: list[str] = []
-    seen_edges: set[str] = set()
-    for s in schemas:
-        sid = s.get("name")
-        for col in s.get("columns") or []:
-            ref = col.get("references") if isinstance(col, dict) else None
-            if not ref:
-                continue
-            target = ref.split(".", 1)[0].strip()
-            if target not in names or target == sid:
-                continue
-            edge = f"    {target} --> {sid}"
-            if edge not in seen_edges:
-                seen_edges.add(edge)
-                edges.append(edge)
-    return edges
+    return _dedupe(
+        f"    {target} --> {s.name}"
+        for s, _col, target in _resolved_references(schemas, names)
+    )
 
 
 def _node_view(s: Stage | dict[str, Any]) -> dict[str, Any]:

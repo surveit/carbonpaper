@@ -35,7 +35,10 @@ The contract, in `app/models/named_schemas.py`:
 - A **`SchemaLibrary`** is the set of a project's named schemas;
   `parse_schema_library` / `validate_schema_library` are the entry points.
 
-**What is NOT here (yet):** no `schemas/` directory ships in any project;
+A project's schemas are stored as one `data_model` document keyed by project name
+(`app/services/data_model.py`), never as files.
+
+**What is NOT here (yet):**
 workflow stages do not structurally import named schemas (an import mechanism
 was built and deliberately reverted as premature — stages reference schemas
 loosely, by intent). If you re-introduce coupling, make it loose first.

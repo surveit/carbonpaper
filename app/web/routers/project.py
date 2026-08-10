@@ -21,8 +21,9 @@ from app.models import (
     validate_named_schema,
     validate_schema_library,
 )
-from app.services import generation, project, versioning
-from app.services.loader import LOADER_BOOKKEEPING_KEYS, resolve_function_code
+from app.models.named_schemas import NamedSchema
+from app.services import data_model, generation, project, versioning
+from app.services.loader import resolve_function_code
 from app.web.config import projects_dir, templates
 from app.runtime.stage_tests import run_stage_tests
 from app.web.stage_test_views import build_certification, shape_test_views
@@ -38,7 +39,6 @@ from app.web.diagrams import (
 )
 from app.web.loading import (
     list_projects,
-    load_schemas,
     load_stages_or_empty,
 )
 from app.web.project_view import shell_state
@@ -61,23 +61,14 @@ def _project_dir(project_name: str) -> Path:
 
 # ─── Per-schema edit seed ─────────────────────────────────────────────────────
 
-def _schema_spec(schema: dict[str, Any]) -> dict[str, Any]:
-    """One schema with loader bookkeeping (_filename/_order/_error) removed — the
-    spec only. The schema model is `extra="forbid"`, so validation and the edit
-    textarea must both see the spec, never the bookkeeping keys the loader injects."""
-    return {k: v for k, v in schema.items() if k not in LOADER_BOOKKEEPING_KEYS}
-
-
-def _schema_json_map(schemas: list[dict[str, Any]]) -> dict[str, str]:
-    """name → JSON text for the per-schema edit textareas — the spec only (loader
-    bookkeeping stripped), so it round-trips through the schema-edit writer cleanly."""
-    out: dict[str, str] = {}
-    for s in schemas:
-        name = s.get("name")
-        if not name:
-            continue
-        out[name] = json.dumps(_schema_spec(s), indent=2, ensure_ascii=False)
-    return out
+def _schema_json_map(schemas: list[NamedSchema]) -> dict[str, str]:
+    """name → JSON text for the per-schema edit textareas, in the shape the
+    schema-edit writer parses back."""
+    return {
+        s.name: json.dumps(s.model_dump(mode="json", exclude_none=True),
+                           indent=2, ensure_ascii=False)
+        for s in schemas
+    }
 
 
 # ─── Home dashboard ──────────────────────────────────────────────────────────
@@ -231,7 +222,7 @@ async def project_data_model(request: Request, project_name: str):
     the authoring chat. The chat/edit actions POST to the
     /project/{name}/data-model/... routes below."""
     pdir = _project_dir(project_name)
-    schemas = load_schemas(pdir)
+    schemas = data_model.load_schemas(project_name)
     return templates.TemplateResponse(
         request,
         "section_data_model.html",
@@ -241,7 +232,9 @@ async def project_data_model(request: Request, project_name: str):
             "schemas": schemas,
             "er_diagram": build_schema_er_diagram(schemas) if schemas else None,
             "table_graph": build_schema_table_graph(schemas) if schemas else None,
-            "issues": validate_schema_library([_schema_spec(s) for s in schemas]) if schemas else [],
+            "issues": validate_schema_library(
+                [s.model_dump(mode="json", exclude_none=True) for s in schemas]
+            ) if schemas else [],
             "schema_json": _schema_json_map(schemas),
             "kind_order": SCHEMA_KIND_ORDER,
             "kind_class": SCHEMA_KIND_CLASS,
@@ -388,13 +381,13 @@ async def version_stage_partial(
 
 @router.post("/project/{project_name}/schema/{schema_name}/edit")
 async def edit_schema(project_name: str, schema_name: str, json_text: str = Form(...)):
-    """The ONLY writer into examples/<name>/schemas/. Parse the posted JSON, validate
-    it with validate_named_schema, and — only if clean — write it back to the schema's
-    file. On validation issues return 400 with the issue list and write NOTHING (fail
-    loudly, never a silent partial write)."""
-    pdir = _project_dir(project_name)
+    """The ONLY writer of a single schema. Parse the posted JSON, validate it with
+    validate_named_schema, and — only if clean — store it back over the schema of
+    that name. On validation issues return 400 with the issue list and store
+    NOTHING (fail loudly, never a silent partial write)."""
+    _project_dir(project_name)
 
-    # Parse — a parse error is the reviewer's, surfaced as a 400 issue, file untouched.
+    # Parse — a parse error is the reviewer's, surfaced as a 400 issue, nothing stored.
     try:
         parsed = json.loads(json_text)
     except json.JSONDecodeError as exc:
@@ -405,12 +398,9 @@ async def edit_schema(project_name: str, schema_name: str, json_text: str = Form
             status_code=400,
         )
 
-    # Strip loader bookkeeping keys before validating/writing.
-    schema = {k: v for k, v in parsed.items() if k not in LOADER_BOOKKEEPING_KEYS}
-
-    # Guard: no renaming a schema via edit (no writing one file's content under
-    # another's name). The path name is authoritative.
-    parsed_name = schema.get("name")
+    # Guard: no renaming a schema via edit (no storing one schema's content under
+    # another's name). The name in the route is authoritative.
+    parsed_name = parsed.get("name")
     if parsed_name != schema_name:
         return JSONResponse(
             {"ok": False,
@@ -418,28 +408,18 @@ async def edit_schema(project_name: str, schema_name: str, json_text: str = Form
             status_code=400,
         )
 
-    issues = validate_named_schema(schema)
+    issues = validate_named_schema(parsed)
     if issues:
-        # Refused — the write never happens, the file is unchanged.
+        # Refused — the write never happens, the stored schema is unchanged.
         return JSONResponse({"ok": False, "issues": issues}, status_code=400)
 
-    # Guard: the target file must ALREADY exist (edit revises; it does not create —
-    # that's the compiler's job). Find it via the same loader convention.
-    schemas_dir = pdir / "schemas"
-    target: Path | None = None
-    for schema_file in sorted(schemas_dir.glob("*.json")):
-        try:
-            doc = json.loads(schema_file.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
-            continue
-        if isinstance(doc, dict) and doc.get("name") == schema_name:
-            target = schema_file
-            break
-    if target is None:
+    # Guard: the schema must ALREADY exist (edit revises; it does not create —
+    # that's the compiler's job).
+    try:
+        data_model.write_schema(project_name, NamedSchema.model_validate(parsed))
+    except KeyError as exc:
         raise HTTPException(
             status_code=404,
-            detail=f"No existing schema file for '{schema_name}' in examples/{project_name}/schemas/",
-        )
-
-    target.write_text(json.dumps(schema, indent=2, ensure_ascii=False), encoding="utf-8")
+            detail=f"No existing schema '{schema_name}' in project '{project_name}'",
+        ) from exc
     return JSONResponse({"ok": True})
