@@ -128,7 +128,7 @@ def test_negative_limit_returns_400_and_creates_no_run(project):
     assert not (project / "runs").exists()
 
 
-def test_runs_page_shows_a_limit_field_per_file_input(project):
-    resp = client.get("/project/demo/runs")
+def test_new_run_page_shows_a_limit_field_per_file_input(project):
+    resp = client.get("/project/demo/runs/new")
     assert resp.status_code == 200
     assert 'name="limit__load"' in resp.text

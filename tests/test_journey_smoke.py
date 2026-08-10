@@ -59,7 +59,7 @@ def test_offline_journey_reaches_a_published_artifact(journey_project, tmp_path)
     assert resp.status_code == 303, resp.text
 
     # The run form offers a binding field for the file input stage.
-    resp = client.get(f"/project/{PROJECT}/runs")
+    resp = client.get(f"/project/{PROJECT}/runs/new")
     assert resp.status_code == 200
     assert 'name="binding__load"' in resp.text
 

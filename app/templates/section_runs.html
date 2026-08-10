@@ -12,6 +12,10 @@
     result    the stage strip (the same partial the run page draws), with the
               run's status in words under it
 
+  Configuring a run is a different task from reading the history, and has its own
+  fields — it lives on its own page (section_run_new.html), which the "▶ New run"
+  action and the empty state link to.
+
   Context the route passes:
     state = project.project_state(mdir); section = "runs"
     runs  = app.web.run_index.build_run_index_rows(state.name) — list of RunIndexRow
@@ -26,13 +30,18 @@
     <p class="lede">Each run pins to a workflow <strong>version</strong> and reads its
       snapshot, so a run is reproducible against the exact workflow it executed.</p>
   </div>
+  {% if state.workflow.present %}
+  <div class="actions wf-actions">
+    <a href="/project/{{ state.name }}/runs/new" class="btn primary">▶ New run</a>
+  </div>
+  {% endif %}
 </div>
 
-{% if state.workflow.present %}
-<section class="run-launch">
-  <h2>Run the workflow</h2>
-  {% include "_run_controls.html" %}
-</section>
+{% if state.runs.awaiting_review > 0 %}
+<div class="banner banner-review">
+  <strong>{{ state.runs.awaiting_review }}</strong> run{% if state.runs.awaiting_review != 1 %}s{% endif %}
+  awaiting review — halted at a human-review queue. Open the run to clear its queue.
+</div>
 {% endif %}
 
 {% if runs %}
@@ -92,7 +101,7 @@
   <h2>No runs yet</h2>
   <p class="muted">
     {% if state.workflow.present %}
-      Click <strong>▶ Run workflow</strong> above (or on the Workflow page) to execute the pipeline end-to-end.
+      <a href="/project/{{ state.name }}/runs/new">Configure a run</a> to execute the pipeline end-to-end.
     {% else %}
       Build the workflow first, then run it.
     {% endif %}

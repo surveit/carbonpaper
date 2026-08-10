@@ -75,7 +75,7 @@ def test_an_unchecked_box_submits_nothing_and_the_run_is_not_busted(project):
     assert _manifest(project)["parameters"]["bust_cache"] is False
 
 
-def test_runs_page_offers_the_checkbox(project):
-    resp = client.get("/project/demo/runs")
+def test_new_run_page_offers_the_checkbox(project):
+    resp = client.get("/project/demo/runs/new")
     assert resp.status_code == 200
     assert 'name="bust_cache"' in resp.text

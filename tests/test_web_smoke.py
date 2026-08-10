@@ -100,14 +100,14 @@ def test_workflow_section_renders_the_graph():
     assert "extract" in r.text                              # a stage id in the graph
 
 
-def test_workflow_page_run_links_to_the_runs_config_form():
-    """Running is configured (pick version + set inputs) on ONE surface — the Runs
-    page. The Workflow page's run affordance links there rather than posting a bare
-    run inline, so version + inputs are never split across two places."""
+def test_workflow_page_run_links_to_the_new_run_config_form():
+    """A run is configured on ONE surface, so the Workflow page links there."""
     r = client.get("/project/demo/workflow")
+    # Picking a version and binding inputs happen together on the New run page; the
+    # affordance here links to it rather than posting a bare run of its own.
     assert r.status_code == 200
-    assert 'href="/project/demo/runs" class="btn primary"' in r.text  # links to the config form
-    assert '<form action="/project/demo/run"' not in r.text           # no inline bare run
+    assert 'href="/project/demo/runs/new" class="btn primary"' in r.text  # the config form
+    assert '<form action="/project/demo/run"' not in r.text               # no inline bare run
 
 
 def test_trigger_run_returns_400_on_invalid_dag(monkeypatch):

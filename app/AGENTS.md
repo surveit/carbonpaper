@@ -9,7 +9,11 @@ routers in `app/web/routers/`, which import the Runner (`app.runtime`) and the s
 - `/` project list · `/project/<m>` the project shell (Overview · Document · Data model ·
   Workflow · Runs); the Workflow section carries the mermaid graph + inline node review
   (`/project/<m>/node/<id>/review-partial`).
-- `/project/<m>/runs`, `/runs/<id>` — run history + detail.
+- `/project/<m>/runs`, `/runs/<id>` — run history + detail. `/runs/new` is the
+  run-launch form (version picker, one path field + row cap per file input, the
+  recompute checkbox) — the one surface where a run is configured, which the history
+  page's ▶ New run and the Workflow page's ▶ Run workflow both link to. Registered
+  ahead of `/runs/<id>`, which would otherwise read `new` as a run id.
 - `/project/<m>/runs/<id>/queue/<stage>` — the human-review queue UI (+ `/decide`, `/resume`).
 
 ## The run page's two columns (`run_detail.html`)

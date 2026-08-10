@@ -86,7 +86,7 @@ def _next_action(state: project.ProjectState) -> NextAction:
     Ladder (top-down):
       1. no data model             → author it            (/data_model)
       2. no workflow               → build the workflow   (/workflow)
-      3. workflow, 0 runs          → run it               (/workflow/versions)
+      3. workflow, 0 runs          → run it               (/runs/new)
       4. runs awaiting_review>0    → review the run       (/runs)
       5. otherwise                 → view runs            (/runs)
     """
@@ -110,13 +110,13 @@ def _next_action(state: project.ProjectState) -> NextAction:
             label="Build the workflow",
             href=f"{base}/workflow",
         )
-    # 3. Workflow present but never run → run it (picked from the version list,
-    #    since a run pins to a published version).
+    # 3. Workflow present but never run → run it (on the run-launch page, which is
+    #    where the version is picked and the inputs bound).
     if runs.n == 0:
         return NextAction(
             key="run_workflow",
             label="Run the workflow",
-            href=f"{base}/workflow/versions",
+            href=f"{base}/runs/new",
         )
     # 6. A run is halted awaiting review → review the run.
     if runs.awaiting_review > 0:

@@ -61,9 +61,9 @@
   </div>
   <div class="actions wf-actions">
     {% if stages %}
-    {# Running is configured on the Runs page (pick version + set input paths), so
+    {# Running is configured on the New run page (pick version + set input paths), so
        version and inputs are never split across two surfaces. #}
-    <a href="/project/{{ state.name }}/runs" class="btn primary">▶ Run workflow</a>
+    <a href="/project/{{ state.name }}/runs/new" class="btn primary">▶ Run workflow</a>
     <button type="button" class="btn" id="create-version-btn">Create version</button>
     {% endif %}
     <a href="/project/{{ state.name }}/runs" class="btn">All runs</a>
