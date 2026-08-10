@@ -82,15 +82,13 @@ def build_stage_test_generator(
             f"tests can only be generated for stage types that can run them, "
             f"not `{stage.type}`"
         )
-    task = render_generation_task(document, stage)  # raises if there is no output schema
-    output_schema = transform_output_schema(stage)
-    assert output_schema is not None
+    task = render_generation_task(document, stage)
     return Agent(
         system_prompt=STAGE_TESTS_SYSTEM_PROMPT,
         target_schema=build_stage_tests_model(
             find_stage_test_class(type(stage)),
             transform_input_schemas(stage),
-            output_schema,
+            transform_output_schema(stage),
         ),
         task=task,
         model=model,
@@ -112,11 +110,6 @@ def render_generation_task(document: str, stage: Stage) -> str:
     `document` is accepted and unused for that reason; it stays in the signature
     because the caller holds it and removing it would invite passing it back in.
 
-    The schemas rendered are the SIGNATURE's, not the input edges': each input is
-    shown only the columns this step reads from it, and the output only what it
-    leaves over those — so a case states the step's own vocabulary and nothing the
-    upstream merely happens to carry.
-
     Raises ValueError when the stage has no summary: there is no description to
     work from, and a suite written from something else would make the panel's
     "checked against the code" claim untrue."""
@@ -127,10 +120,6 @@ def render_generation_task(document: str, stage: Stage) -> str:
             f"description, so write one first (there is nothing to check the code against)"
         )
     output_schema = transform_output_schema(stage)
-    if output_schema is None:
-        raise ValueError(
-            f"stage `{stage.id}` has no output schema — tests need one to state expected rows"
-        )
     read_schemas = transform_input_schemas(stage)
     inputs = "\n\n".join(
         f"Input `{ref.id}` — what this step reads from it:\n"

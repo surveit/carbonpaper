@@ -201,26 +201,23 @@ def anchor_read_columns(stage: "StageBase") -> list[Column]:
 
 
 def transform_input_schemas(stage: "StageBase") -> dict[StageId, TableSchema]:
-    """Per declared input, what the transform consumes from it — empty where it reads none."""
+    """Per declared input, what the transform READS from it — empty where it reads none."""
     signature = stage.signature
-    reads = {} if signature is None else {
-        entry.input: list(entry.columns) for entry in signature.reads
-    }
+    assert signature is not None, f"stage `{stage.id}`: no signature"
+    reads = {entry.input: list(entry.columns) for entry in signature.reads}
     return {
         ref.id: TableSchema(columns=reads.get(ref.id, [])) for ref in stage.inputs
     }
 
 
-def transform_output_schema(stage: "StageBase") -> "TableSchema | None":
-    """What the transform writes: `produces`, or its input extended by rewrites and adds."""
+def transform_output_schema(stage: "StageBase") -> TableSchema:
+    """What the transform WRITES: `produces`, or the columns it rewrites and adds."""
     signature = stage.signature
-    if signature is None:
-        return None
+    assert signature is not None, f"stage `{stage.id}`: no signature"
     if isinstance(signature, ReplacesSignature):
-        return TableSchema(columns=signature.produces) if signature.produces else None
-    base = TableSchema(columns=anchor_read_columns(stage))
-    extended = base.extend(signature.rewrites, signature.adds)
-    return extended if extended.columns else None
+        assert signature.produces, f"stage `{stage.id}` ({stage.type}) writes no table"
+        return TableSchema(columns=signature.produces)
+    return TableSchema(columns=[*signature.rewrites, *signature.adds])
 
 
 def _issue(stage: "StageBase", problem: str) -> str:

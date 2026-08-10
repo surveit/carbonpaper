@@ -431,8 +431,8 @@ def test_publish_signature_must_produce_nothing():
 
 
 # ── the schemas a stage's TESTS are stated in ────────────────────────────────
-# A test states what the transform consumes and what it leaves over that, which
-# is narrower than the input edge wherever a column merely flows past the stage.
+# A test states what the transform consumes and what it writes — neither of which
+# is the stage's own input/output, wherever a column merely flows past the stage.
 
 def test_read_schemas_narrow_each_input_to_what_the_transform_consumes():
     stage = parse_stage(_row_function_stage(signature={
@@ -444,21 +444,21 @@ def test_read_schemas_narrow_each_input_to_what_the_transform_consumes():
     assert [c.name for c in transform_input_schemas(stage)["bills"].columns] == ["price"]
 
 
-def test_the_output_over_the_reads_drops_what_only_flows_through():
+def test_the_transform_output_is_what_it_writes_not_what_flows_past_it():
     stage = parse_stage(_row_function_stage(signature={
         "form": "extends",
         "reads": [{"input": "bills", "columns": [
             {"name": "price", "type": "str", "nullable": True}]}],
         "adds": [{"name": "note", "type": "str", "nullable": True}],
     }))
-    # `title` is on the promised output because it flows; over a frame carrying
-    # only the reads there is no `title` to flow, so a case never states one.
+    # `price` and `title` are on the STAGE's output — one read, one not — because
+    # both flow. Neither is written, so neither is the transform's output.
     assert [c.name for c in stage.resolve_output_schema().columns] == [
         "price", "title", "note"]
-    assert [c.name for c in transform_output_schema(stage).columns] == ["price", "note"]
+    assert [c.name for c in transform_output_schema(stage).columns] == ["note"]
 
 
-def test_a_rewrite_lands_on_the_read_column_over_the_reads_too():
+def test_a_rewritten_column_is_written_so_it_is_on_the_transform_output():
     stage = parse_stage(_row_function_stage(signature={
         "form": "extends",
         "reads": [{"input": "bills", "columns": [

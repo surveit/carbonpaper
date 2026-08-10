@@ -20,7 +20,6 @@ from app.compiler.turn_failure import GENERATION_FAILURE_PREFIX as GENERATION_FA
 from app.core.errors import GenerationError
 from app.models.review_guide import ReviewGuideDraft
 from app.models.named_schemas import SchemaLibrary
-from app.models.stages.signature import transform_output_schema
 from app.services import data_model, versioning
 from app.services.loader import load_workflow
 from app.services.project import find_document_path
@@ -47,10 +46,8 @@ def start_stage_test_generation(project_dir: Path, *, stage_id: str, model: str)
     """Kick off STAGE-TEST generation for one stage and return the id of
     the (hidden, view-only) chat session streaming the turn. Loads document.md and the
     stage's current compiled spec — raising ValueError if the project has no document,
-    `stage_id` names no stage in the compiled workflow, the stage's type carries no
-    runnable tests, or the stage resolves no output schema (tests need one to state
-    expected rows).
-    Every one of these checks runs BEFORE the
+    `stage_id` names no stage in the compiled workflow, or the stage's type carries no
+    runnable tests. Every one of these checks runs BEFORE the
     session/turn are started, so a rejected stage never creates an orphaned session
     (build_stage_test_generator / render_generation_task would raise the same errors, but only
     after the session already exists). On completion, `_finish_stage_tests`
@@ -69,11 +66,6 @@ def start_stage_test_generation(project_dir: Path, *, stage_id: str, model: str)
             f"tests can only be generated for stage types that can run them, "
             f"not `{stage.type}`"
         )
-    # Not a user-facing refusal: publish is the one type whose signature writes no
-    # table, and CARRIES_RUNNABLE_TESTS above already excluded it. None here is ours.
-    assert transform_output_schema(stage) is not None, (
-        f"stage `{stage_id}` carries runnable tests but its signature writes nothing"
-    )
     return start_stage_test_generation_agent(
         document=doc_path.read_text(encoding="utf-8"),
         stage=stage,

@@ -1,8 +1,8 @@
 """Run a stage's authored tests against its actual code, through the SAME handler
 registry the real runner uses. A test is stated in its SIGNATURE's vocabulary: rows
-in are what the stage READS, rows out what it leaves over those — the frame the row
-driver narrows to anyway. Comparison is on the expected columns, counts None and
-float NaN as one absence, and is a multiset, so no test pins an ordering.
+in are what the transform READS, rows out what it WRITES. Comparison is on the
+expected columns, counts None and float NaN as one absence, and is a multiset, so
+no test pins an ordering.
 """
 from __future__ import annotations
 
@@ -219,14 +219,12 @@ def _judge_raise(test: StageTest, exc: Exception) -> StageTestResult:
     return StageTestResult(test.name, "error", message=f"{type(exc).__name__}: {exc}")
 
 
-def _build_frame(rows: list[dict[str, Any]], schema: TableSchema | None) -> pd.DataFrame:
-    """Rows → dataframe. An empty test frame still carries the schema's
-    columns, so an "empty input" case validates and executes like a real empty
-    upstream output would."""
+def _build_frame(rows: list[dict[str, Any]], schema: TableSchema) -> pd.DataFrame:
+    """An empty case still carries the schema's columns, so it executes like a real
+    empty upstream would."""
     if rows:
         return pd.DataFrame(rows)
-    columns = [c.name for c in schema.columns] if schema is not None else []
-    return pd.DataFrame(columns=columns)
+    return pd.DataFrame(columns=[column.name for column in schema.columns])
 
 
 def _validate_test_against_schemas(
@@ -235,10 +233,8 @@ def _validate_test_against_schemas(
     input_frames: dict[str, pd.DataFrame],
     input_schemas: dict[str, TableSchema],
 ) -> str | None:
-    """Schema-lint the test itself (error-severity issues only): its input
-    rows against what the signature reads from each input, its expected rows
-    against what the stage leaves over those reads. Returns a joined message,
-    or None when the test is well-formed."""
+    """Schema-lint the test itself, error-severity only: its rows in against the
+    reads, its rows out against the writes."""
     problems: list[str] = []
     for ref in stage.inputs:
         report = validate_dataframe(
@@ -265,14 +261,8 @@ def _validate_test_against_schemas(
 
 
 def _compare(stage: Stage, test: StageTest, actual: pd.DataFrame) -> StageTestResult:
-    # Compare on what the stage leaves over its READS, not on its full output
-    # schema: the columns that merely flow are absent from a narrowed case and
-    # asking after them would fail every test. Python transforms always declare a
-    # signature; publish (the schema-less terminal stage) cannot carry tests. And a
-    # failure case (expected is None) has already been judged by now.
     output_schema = transform_output_schema(stage)
-    assert output_schema is not None
-    assert test.expected is not None
+    assert test.expected is not None  # a failure case was judged before this
     columns = [column.name for column in output_schema.columns]
     expected_rows = [_select_cells(row, columns) for row in test.expected]
     actual_rows = [_select_cells(row, columns) for row in list_rows(actual)]

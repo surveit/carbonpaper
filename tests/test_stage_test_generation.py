@@ -148,10 +148,10 @@ def test_target_schema_binds_the_case_to_the_reads_not_the_input_edge():
     agent = build_stage_test_generator(_DOC, _narrow_reads_stage())
     suite = agent._target_schema.model_validate({"tests": [{
         "name": "doubles_two", "inputs": {"load": [{"amount": 2.0}]},
-        "expected": [{"amount": 2.0, "doubled": 4.0}]}]})
+        "expected": [{"doubled": 4.0}]}]})
     assert suite.tests[0].inputs == {"load": [{"amount": 2.0}]}
     with pytest.raises(ValidationError, match="memo"):
         agent._target_schema.model_validate({"tests": [{
             "name": "states_a_column_the_step_never_reads",
             "inputs": {"load": [{"amount": 2.0, "memo": "rent"}]},
-            "expected": [{"amount": 2.0, "doubled": 4.0}]}]})
+            "expected": [{"doubled": 4.0}]}]})
