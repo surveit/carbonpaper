@@ -14,7 +14,8 @@ from app.models import Stage
 from app.models.stages.join import JoinStage
 
 from ..context import RunContext
-from ..lineage import attach_row_lineage, merged_inputs_lineage
+from ..stage_output import StageOutput
+from ..lineage import merged_inputs_lineage
 from .execution import narrow_stage
 
 # Ordinal carriers for the merge, dropped before the frame is returned. They sit
@@ -25,14 +26,14 @@ JOIN_SUBJECT_ORD_KEY = "_trace_join_subject_ord"
 JOIN_REFERENCE_ORD_KEY = "_trace_join_reference_ord"
 
 
-def handle_enrich(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext) -> pd.DataFrame:
+def handle_enrich(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext) -> StageOutput:
     # validate="m:1" makes pandas VERIFY the reference is unique on the key
     # rather than trusting the author: a duplicate would otherwise multiply
     # subject rows silently, which is expand's job, not this one's.
     return _join_reference_into_subject(stage, inputs, validate="m:1")
 
 
-def handle_expand(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext) -> pd.DataFrame:
+def handle_expand(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext) -> StageOutput:
     return _join_reference_into_subject(stage, inputs, validate=None)
 
 
@@ -88,7 +89,7 @@ def _join_reference_into_subject(
     # The projection drops both ordinal carriers. Attach LAST: the projection
     # rebuilds the frame and `.attrs` would not survive it.
     projected = joined[[*inputs[subject_id].columns, *join_cfg.enrich_with.values()]]
-    return attach_row_lineage(projected, lineage)
+    return StageOutput(projected, lineage=lineage)
 
 
 def _describe_cardinality_failure(

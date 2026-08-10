@@ -9,7 +9,6 @@ from app.runtime.lineage import (
     EdgeKind,
     RowLineage,
     RowParent,
-    read_row_lineage,
 )
 from app.runtime.stages.join import handle_enrich, handle_expand
 from app.runtime.trace import trace_row
@@ -171,8 +170,8 @@ def test_handler_lineage_reaches_the_executor_channel():
         "join": {"keys": [{"left": "client", "right": "client"}],
                   "enrich_with": {"agency": "agency"}},
     })
-    out = handle_enrich(stage, {"filings": FILINGS, "contracts": CONTRACTS}, None)
-    lineage = read_row_lineage(out)
+    produced = handle_enrich(stage, {"filings": FILINGS, "contracts": CONTRACTS}, None)
+    out, lineage = produced.frame, produced.lineage
     assert lineage is not None
     assert len(lineage) == len(out)
     assert lineage.parents == [
@@ -215,11 +214,12 @@ def test_expand_records_the_subject_row_each_fanned_out_row_came_from():
     })
     two_contracts = pd.DataFrame({"client": ["Acme", "Acme"], "agency": ["HHS", "DOD"]})
 
-    out = handle_expand(stage, {"filings": FILINGS, "contracts": two_contracts}, None)
+    produced = handle_expand(stage, {"filings": FILINGS, "contracts": two_contracts}, None)
+    out = produced.frame
 
     assert list(out["agency"])[:2] == ["HHS", "DOD"]
     assert pd.isna(out["agency"].iat[2])
-    lineage = read_row_lineage(out)
+    lineage = produced.lineage
     assert lineage is not None
     # Both fanned-out rows name the SAME subject row; the unmatched one still has
     # a single parent, so the fan-out and the non-match are both readable.

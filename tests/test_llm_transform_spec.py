@@ -69,8 +69,8 @@ def test_reply_model_enforces_the_spec():
 def test_output_rows_carry_reply_columns(monkeypatch):
     monkeypatch.setattr(lt, "call_llm", lambda *a, **k: {"score": 7})
     out = _run(_stage(), {"load": pd.DataFrame({"id": ["r1"], "text": ["hi"]})})
-    assert out.loc[0, "score"] == 7
-    assert out.loc[0, "id"] == "r1"
+    assert out.frame.loc[0, "score"] == 7
+    assert out.frame.loc[0, "id"] == "r1"
 
 
 def test_backend_error_surfaces_as_row_error_not_raised(monkeypatch):
@@ -80,7 +80,7 @@ def test_backend_error_surfaces_as_row_error_not_raised(monkeypatch):
     monkeypatch.setattr(lt, "call_llm", boom)
     ctx = make_run_context()
     out = _run(_stage(), {"load": pd.DataFrame({"id": ["r1"], "text": ["hi"]})}, ctx)
-    assert len(out) == 1                                    # not raised; stage completes
+    assert len(out.frame) == 1                                    # not raised; stage completes
     assert contribution_of(out).row_errors == [{"row": 0, "message": "backend down"}]
 
 
@@ -94,5 +94,5 @@ def test_timeout_with_empty_message_is_captured_and_labeled(monkeypatch):
     monkeypatch.setattr(lt, "call_llm", boom)
     ctx = make_run_context()
     out = _run(_stage(), {"load": pd.DataFrame({"id": ["r1"], "text": ["hi"]})}, ctx)
-    assert len(out) == 1                                    # not raised; stage completes
+    assert len(out.frame) == 1                                    # not raised; stage completes
     assert contribution_of(out).row_errors == [{"row": 0, "message": "TimeoutError"}]

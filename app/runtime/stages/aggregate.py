@@ -19,7 +19,8 @@ from app.models.stages.aggregate import (
 )
 
 from ..context import RunContext
-from ..lineage import attach_row_lineage, grouped_contributions_lineage
+from ..stage_output import StageOutput
+from ..lineage import grouped_contributions_lineage
 from .execution import narrow_stage
 
 # Carries each input row's ordinal through the same grouping the numbers go
@@ -28,7 +29,7 @@ from .execution import narrow_stage
 ORDINAL_KEY = "_trace_aggregate_ord"
 
 
-def handle_aggregate(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext) -> pd.DataFrame:
+def handle_aggregate(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext) -> StageOutput:
     agg_cfg = narrow_stage(stage, AggregateStage).aggregate
     input_id = stage.inputs[0].id
     df = inputs[input_id]
@@ -41,8 +42,8 @@ def handle_aggregate(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunCont
         results, contributors = _aggregate_by_group(rows, agg_cfg.group_by, agg_cfg.aggregations)
     else:
         results, contributors = _reduce_whole_frame(rows, agg_cfg.aggregations)
-    return attach_row_lineage(
-        results, grouped_contributions_lineage(input_id, contributors))
+    return StageOutput(
+        results, lineage=grouped_contributions_lineage(input_id, contributors))
 
 
 def _aggregate_by_group(

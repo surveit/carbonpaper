@@ -1,7 +1,7 @@
 """Per-row provenance for a stage whose output isn't row-preserving BY POSITION
 (filter_rows, union, join), worked out by the RUNTIME, never reported by the
-authored stage. It rides the output frame's `.attrs` rather than columns on it,
-so no runtime machinery can reach a stage's real output. A row may have several
+authored stage. It is a field on `StageOutput`, never a column on the frame, so
+no runtime machinery can reach a stage's real output. A row may have several
 parents, so the sidecar is list-valued — see `RowLineage`."""
 from __future__ import annotations
 
@@ -20,13 +20,6 @@ TRACE_SOURCE_STAGE_KEY = "_trace_source_stage"
 TRACE_SOURCE_ROW_KEY = "_trace_source_row"
 TRACE_EDGE_KIND_KEY = "_trace_edge_kind"
 TRACE_SOURCE_COLUMNS_KEY = "_trace_source_columns"
-
-# The `.attrs` channel the row driver hands lineage out on. The executor reads
-# it BEFORE any row slicing and pops it before persisting — `.attrs` does not
-# survive parquet. The row-grain cache sits below this: a row replayed from
-# cache fills its slot exactly as a computed one does, so the two never
-# interact.
-LINEAGE_ATTR = "row_lineage"
 
 
 class EdgeKind(str, Enum):
@@ -138,21 +131,6 @@ def _as_list(value: Any) -> list[Any]:
     if value is None or (isinstance(value, float) and np.isnan(value)):
         return []
     return [value]
-
-
-def attach_row_lineage(df: pd.DataFrame, lineage: RowLineage) -> pd.DataFrame:
-    """Hand `lineage` out on `.attrs`; call it on the frame the handler RETURNS."""
-    # `.attrs` does not survive a frame being rebuilt, so an earlier call is lost.
-    df.attrs[LINEAGE_ATTR] = lineage
-    return df
-
-
-def read_row_lineage(df: pd.DataFrame | None) -> RowLineage | None:
-    """The lineage a handler attached, or None where none rode along."""
-    if df is None:
-        return None
-    attached = df.attrs.get(LINEAGE_ATTR)
-    return attached if isinstance(attached, RowLineage) else None
 
 
 def single_parent_lineage(

@@ -32,17 +32,16 @@ from app.core.run_status import RunStatus, StageStatus
 
 from .cancellation import consume_cancel
 from .context import RunContext, RunIdentity
+from .stage_output import StageOutput
 from .errors import RunCancelled
-from .manifest import CONTRIBUTION_ATTR, create_run_manifest, write_manifest
+from .manifest import create_run_manifest, write_manifest
 from .run_log import RUN_START, STAGE_DONE, STAGE_START, RunLog
 from .stages import HANDLERS, HaltForReview, StageHandler
 from .lineage import (
-    LINEAGE_ATTR,
     RowLineage,
     concatenated_inputs_lineage,
     kept_rows_lineage,
     lineage_sidecar_path,
-    read_row_lineage,
 )
 from app.models.severity import UserFacingErrorSeverity
 from .validation import Issue, ValidationReport, validate_dataframe
@@ -424,25 +423,23 @@ def _persist_row_lineage(lineage: RowLineage, sid: str, run_dir: Path) -> None:
 
 
 def _stage_row_lineage(
-    stage: Stage, output: pd.DataFrame | None, inputs: dict[str, pd.DataFrame],
+    stage: Stage, output: StageOutput, inputs: dict[str, pd.DataFrame],
     window: _RowWindow,
 ) -> RowLineage | None:
     """This stage's per-row provenance, or None where output row i is input row
     i and the trace needs no help crossing it.
 
     Every source is the runtime's own knowledge, never the stage's report of
-    itself: the row driver's record of which input ordinals it emitted, riding
-    the frame's `.attrs`; for a union, the row counts of the inputs the runtime
+    itself: the row driver's record of which input ordinals it emitted; for a union, the row counts of the inputs the runtime
     handed over, since concatenation is in declared order; and, for a stage the
     runtime sliced, the window it cut. The first two count from the start of the
     SLICED input frames the handler was given, so both are shifted back onto the
     upstream stage's own ordinals."""
-    driven = read_row_lineage(output)
-    if driven is not None:
-        return driven.shifted(window.start)
+    if output.lineage is not None:
+        return output.lineage.shifted(window.start)
     if stage.type == StageType.union:
         return concatenated_inputs_lineage(stage, inputs, window.start)
-    return _sliced_input_lineage(stage, output, window)
+    return _sliced_input_lineage(stage, output.frame, window)
 
 
 def _sliced_input_lineage(
@@ -472,7 +469,7 @@ def _finalize_stage_output(
     stage: Stage,
     window: _RowWindow,
     record: StageRecord,
-    output: pd.DataFrame | None,
+    output: StageOutput | None,
     inputs_for_stage: dict[str, pd.DataFrame],
     outputs_so_far: dict[str, pd.DataFrame],
     run_dir: Path,
@@ -491,30 +488,20 @@ def _finalize_stage_output(
     stage to `blocked`, so every transitive consumer is skipped rather than run
     on this stage's non-conforming frame and marked `ok`; False otherwise."""
     sid = stage.id
-    # Read the stage's contribution off the handler's frame BEFORE any frame is
-    # rebuilt (which drops `.attrs`), then merge usage into this record and
-    # human_review_queue_stats/dropped_columns into the manifest.
-    contribution = _read_stage_contribution(output)
-    row_errors = _merge_stage_contribution(contribution, sid, manifest, record)
-
     if output is None:
-        output = pd.DataFrame()
-    # Drop the contribution channel so it never reaches the persisted parquet
-    # (its metadata isn't JSON-serializable) — it has been merged above.
-    output.attrs.pop(CONTRIBUTION_ATTR, None)
+        output = StageOutput(pd.DataFrame())
+    row_errors = _merge_stage_contribution(output.contribution, sid, manifest, record)
     lineage = _stage_row_lineage(stage, output, inputs_for_stage, window)
-    # Drop the lineage channel for the same reason as the contribution one
-    # above: `.attrs` is not JSON-serializable and must not reach the parquet.
-    output.attrs.pop(LINEAGE_ATTR, None)
+    frame = output.frame
     if not stage.inputs:
         # A stage with no inputs originates its rows outside the run, so the
         # frame it just loaded is the runtime's only handle on them: its window
         # is taken here rather than on an input frame that does not exist.
-        output = _take_row_window(output, window, "loaded from the source", record)
+        frame = _take_row_window(frame, window, "loaded from the source", record)
     if lineage is not None:
         _persist_row_lineage(lineage, sid, run_dir)
 
-    out_rep = validate_dataframe(output, stage.resolve_output_schema(), stage_id=sid, phase="output")
+    out_rep = validate_dataframe(frame, stage.resolve_output_schema(), stage_id=sid, phase="output")
     if row_errors:
         out_rep.issues[0:0] = [
             Issue("error", None,
@@ -523,8 +510,8 @@ def _finalize_stage_output(
         ]
     record.output_validation_report = out_rep.to_dict()
 
-    output_path = _persist_stage_output(output, sid, run_dir, record)
-    outputs_so_far[sid] = output
+    output_path = _persist_stage_output(frame, sid, run_dir, record)
+    outputs_so_far[sid] = frame
 
     if row_errors:
         record.status = StageStatus.ERROR
@@ -544,23 +531,11 @@ def _finalize_stage_output(
         record.status = StageStatus.OK if all(
             v["ok"] for v in record.input_validation_report
         ) else StageStatus.VALIDATION_WARNINGS
-    record.output_row_count = int(len(output))
+    record.output_row_count = int(len(frame))
     # Manifest paths are POSIX-style so the persisted JSON is identical on
     # every platform.
     record.output_path = output_path.relative_to(run_dir).as_posix()
     return record.status == StageStatus.ERROR
-
-
-def _read_stage_contribution(output: pd.DataFrame | None) -> StageContribution:
-    """The StageContribution a handler attached to its output frame's `.attrs`,
-    or an empty one when there is no frame (a stage that produced nothing) or no
-    contribution (a handler that reported none)."""
-    if output is None:
-        return StageContribution()
-    attached = output.attrs.get(CONTRIBUTION_ATTR)
-    if isinstance(attached, StageContribution):
-        return attached
-    return StageContribution()
 
 
 def _merge_stage_contribution(

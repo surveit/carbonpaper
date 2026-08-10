@@ -36,21 +36,21 @@ def test_row_function_maps_per_row():
     code = "def transform(row):\n    return {'x': row['x'], 'y': row['x'] * 10}\n"
     out = _run(_stage(code, output_columns=_X_COLUMN + [{"name": "y", "type": "int", "nullable": True}]),
                {"src": df})
-    assert len(out) == 3                    # 1:1 — one row out per row in
-    assert list(out["y"]) == [10, 20, 30]
+    assert len(out.frame) == 3                    # 1:1 — one row out per row in
+    assert list(out.frame["y"]) == [10, 20, 30]
 
 
 def test_row_function_cannot_filter_the_frame():
     # the body only ever sees a single row, so it cannot drop rows
     df = pd.DataFrame({"x": [1, 2]})
     out = _run(_stage("def transform(row):\n    return {'x': row['x']}\n"), {"src": df})
-    assert len(out) == 2
+    assert len(out.frame) == 2
 
 
 def test_row_function_empty_input():
     df = pd.DataFrame({"x": pd.Series([], dtype="int64")})
     out = _run(_stage("def transform(row):\n    return {'x': row['x']}\n"), {"src": df})
-    assert len(out) == 0
+    assert len(out.frame) == 0
 
 
 def test_row_function_rejects_non_dict_return():

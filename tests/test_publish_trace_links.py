@@ -90,7 +90,7 @@ def test_handler_passes_a_linker_when_the_function_declares_it(tmp_path):
     html = (tmp_path / "run" / "artifacts" / "build" / "index.html").read_text(encoding="utf-8")
     assert "/project/palm/runs/R1/stage/enrich/row/0/trace/view" in html
     assert "/project/palm/runs/R1/stage/enrich/row/1/trace/view" in html
-    assert len(result) == 1
+    assert len(result.frame) == 1
 
 
 def test_handler_leaves_a_function_without_the_keyword_untouched(tmp_path):

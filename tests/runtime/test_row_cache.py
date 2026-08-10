@@ -14,8 +14,8 @@ from app.core.stage_cache import (
 from app.models import parse_stage, Stage
 from app.models.stage import StageType
 from app.runtime.context import RunIdentity
+from app.runtime.stage_output import StageOutput
 from app.runtime.stages import HANDLERS
-from app.runtime.manifest import CONTRIBUTION_ATTR
 from app.runtime.stages.execution import (
     ROW_CACHED_KEY,
     ROW_ERROR_KEY,
@@ -78,7 +78,7 @@ def _src(values: list[int]) -> pd.DataFrame:
     return pd.DataFrame({"x": values})
 
 
-def _run(stage: Stage, src: pd.DataFrame, ctx) -> pd.DataFrame:
+def _run(stage: Stage, src: pd.DataFrame, ctx) -> StageOutput:
     out = HANDLERS[StageType(stage.type)].execute(stage, {"src": src}, ctx)
     assert out is not None
     return out
@@ -109,11 +109,11 @@ def test_second_run_reuses_the_cache_and_never_calls_the_mapper():
     handler = _counting_row_handler(calls)
 
     first = handler.execute(stage, {"src": src}, _ctx(run_id="run1"))
-    assert list(first["y"]) == [2, 4]
+    assert list(first.frame["y"]) == [2, 4]
     assert calls == [1, 2]
 
     second = handler.execute(stage, {"src": src.copy()}, _ctx(run_id="run2"))
-    assert list(second["y"]) == [2, 4]
+    assert list(second.frame["y"]) == [2, 4]
     assert calls == [1, 2]  # the mapper was not called again
 
 
@@ -131,7 +131,7 @@ def test_registered_python_row_function_replays_a_recorded_row_over_its_own_code
     )
 
     out = _run(stage, _src([1]), _ctx(run_id="run1"))
-    assert list(out["y"]) == [999]  # the authored `x * 2` would have said 2
+    assert list(out.frame["y"]) == [999]  # the authored `x * 2` would have said 2
 
 
 def test_changing_the_stage_definition_invalidates_every_row():
@@ -307,11 +307,11 @@ def test_llm_transform_row_path_does_not_call_the_model_for_a_cached_row(monkeyp
     stage = _llm_stage()
 
     first = _run(stage, _src([1, 2]), _ctx(run_id="run1"))
-    assert list(first["verdict"]) == ["v1", "v2"]
+    assert list(first.frame["verdict"]) == ["v1", "v2"]
     assert len(calls) == 2
 
     second = _run(stage, _src([1, 2]), _ctx(run_id="run2"))
-    assert list(second["verdict"]) == ["v1", "v2"]
+    assert list(second.frame["verdict"]) == ["v1", "v2"]
     assert len(calls) == 2  # the model was not called again
 
 
@@ -373,7 +373,7 @@ def test_batched_path_caches_every_computed_row(monkeypatch):
     stage = _llm_stage(batch_size=2)
 
     out = _run(stage, _src([1, 2]), _ctx(run_id="run1"))
-    assert list(out["verdict"]) == ["v1", "v2"]
+    assert list(out.frame["verdict"]) == ["v1", "v2"]
     assert batches == [[1, 2]]
     assert len(_entries(stage)) == 2
 
@@ -387,8 +387,8 @@ def test_a_partial_batched_hit_calls_the_model_for_the_misses_only(monkeypatch):
 
     out = _run(stage, _src([1, 2, 7, 8]), _ctx(run_id="run2"))
     assert batches == [[7, 8]]  # rows 1 and 2 replayed; only the misses batched
-    assert list(out["x"]) == [1, 2, 7, 8]          # grain and order still hold
-    assert list(out["verdict"]) == ["v1", "v2", "v7", "v8"]
+    assert list(out.frame["x"]) == [1, 2, 7, 8]          # grain and order still hold
+    assert list(out.frame["verdict"]) == ["v1", "v2", "v7", "v8"]
 
 
 def test_batched_misses_that_were_not_adjacent_rejoin_their_own_rows(monkeypatch):
@@ -402,8 +402,8 @@ def test_batched_misses_that_were_not_adjacent_rejoin_their_own_rows(monkeypatch
 
     out = _run(stage, _src([1, 2, 3, 4, 5]), _ctx(run_id="run2"))
     assert batches == [[1, 3], [5]]
-    assert list(out["x"]) == [1, 2, 3, 4, 5]
-    assert list(out["verdict"]) == ["v1", "v2", "v3", "v4", "v5"]
+    assert list(out.frame["x"]) == [1, 2, 3, 4, 5]
+    assert list(out.frame["verdict"]) == ["v1", "v2", "v3", "v4", "v5"]
 
 
 def test_a_failed_batch_records_nothing(monkeypatch):
@@ -414,7 +414,7 @@ def test_a_failed_batch_records_nothing(monkeypatch):
         "app.runtime.stages.llm_transform.call_llm_batch", failing_call_llm_batch)
     stage = _llm_stage(batch_size=2)
     out = _run(stage, _src([1, 2]), _ctx(run_id="run1"))
-    assert len(out) == 2          # every row still emitted, carrying its failure
+    assert len(out.frame) == 2          # every row still emitted, carrying its failure
     assert _entries(stage) == []  # and nothing pinned
 
 
@@ -489,8 +489,8 @@ def test_run_llm_batches_computes_every_row_it_is_given(monkeypatch):
 # ── the replayed-row count the run page reads ────────────────────────────────
 
 
-def _replayed(out: pd.DataFrame) -> int | None:
-    return out.attrs[CONTRIBUTION_ATTR].cached_rows
+def _replayed(out: StageOutput) -> int | None:
+    return out.contribution.cached_rows
 
 
 def test_a_computing_run_reports_no_replay_count_at_all(monkeypatch):
@@ -523,8 +523,8 @@ def test_the_replay_marker_never_reaches_stage_output(monkeypatch):
     computed = _run(stage, _src([1]), _ctx(run_id="run1"))
 
     replayed = _run(stage, _src([1]), _ctx(run_id="run2"))
-    assert list(replayed.columns) == list(computed.columns)
-    assert ROW_CACHED_KEY not in replayed.columns
+    assert list(replayed.frame.columns) == list(computed.frame.columns)
+    assert ROW_CACHED_KEY not in replayed.frame.columns
 
 
 def test_a_replayed_row_is_never_re_recorded_carrying_the_marker(monkeypatch):
@@ -609,8 +609,8 @@ def test_an_unread_column_still_flows_to_the_output():
 
     out = handler.execute(_two_column_stage(), {"src": _noisy_src(["a", "b"])}, _ctx())
 
-    assert list(out["noise"]) == ["a", "b"]
-    assert list(out["y"]) == [2, 4]
+    assert list(out.frame["noise"]) == ["a", "b"]
+    assert list(out.frame["y"]) == [2, 4]
 
 
 def test_a_column_the_stage_never_reads_stops_invalidating_its_cache():

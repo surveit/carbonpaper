@@ -182,7 +182,8 @@ def _run_one_test(stage: Stage, test: StageTest) -> StageTestResult:
     # require_run_dir rather than touching a fabricated path.
     ctx = RunContext.for_stages_outside_a_run(None, None)
     try:
-        actual = HANDLERS[StageType(stage.type)].execute(stage, input_frames, ctx)
+        produced = HANDLERS[StageType(stage.type)].execute(stage, input_frames, ctx)
+        actual = produced.frame if produced is not None else None
     except Exception as exc:  # noqa: BLE001 — the function is authored code; any raise IS the result
         return _judge_raise(test, exc)
     if test.expected is None:

@@ -28,8 +28,8 @@ from .frame_caching import (
 )
 from ..cancellation import consume_cancel
 from ..context import RunContext
-from ..lineage import attach_row_lineage, kept_rows_lineage
-from ..manifest import CONTRIBUTION_ATTR
+from ..stage_output import StageOutput
+from ..lineage import kept_rows_lineage
 from ..errors import RunCancelled
 from ..run_log import RunLog, bind_row_sink, unbind_detail_sink
 from .row_events import (
@@ -171,7 +171,7 @@ class StageHandler(ABC):
     @abstractmethod
     def execute(
         self, stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext
-    ) -> pd.DataFrame | None: ...
+    ) -> StageOutput | None: ...
 
     @property
     @abstractmethod
@@ -231,7 +231,7 @@ class RowMapHandler(StageHandler):
 
     def execute(
         self, stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext
-    ) -> pd.DataFrame:
+    ) -> StageOutput:
         return _run_row_mapper(self, stage, inputs, ctx)
 
     @property
@@ -272,7 +272,7 @@ class LLMTransformHandler(RowMapHandler):
 
     def execute(
         self, stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext
-    ) -> pd.DataFrame:
+    ) -> StageOutput:
         if narrow_stage(stage, LLMTransformStage).llm.batch_size > 1:
             return _run_batched(self, stage, inputs, ctx)
         return _run_row_mapper(self, stage, inputs, ctx)
@@ -286,8 +286,8 @@ class SourceHandler(StageHandler):
 
     def execute(
         self, stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext
-    ) -> pd.DataFrame:
-        return self.read(stage, ctx)
+    ) -> StageOutput:
+        return StageOutput(self.read(stage, ctx))
 
     @property
     def preserves_grain_and_order(self) -> bool:
@@ -307,7 +307,7 @@ class FrameHandler(StageHandler):
 
     def __init__(
         self,
-        apply: Callable[[Stage, dict[str, pd.DataFrame], RunContext], pd.DataFrame | None],
+        apply: Callable[[Stage, dict[str, pd.DataFrame], RunContext], StageOutput | None],
         caches_frames: bool = True,
     ) -> None:
         self.apply = apply
@@ -315,7 +315,7 @@ class FrameHandler(StageHandler):
 
     def execute(
         self, stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext
-    ) -> pd.DataFrame | None:
+    ) -> StageOutput | None:
         caching = open_frame_caching(stage, ctx, self.caches_frames)
         if caching.key is None:
             output = self.apply(stage, inputs, ctx)
@@ -323,7 +323,8 @@ class FrameHandler(StageHandler):
         input_frames = [inputs[ref.id] for ref in stage.inputs]
         cached = find_cached_frame(caching, input_frames)
         if cached is not None:
-            return cached
+            # A replayed frame carries no contribution: nothing ran to report.
+            return StageOutput(cached)
         return record_frame_output(caching, input_frames, self.apply(stage, inputs, ctx))
 
     @property
@@ -353,7 +354,7 @@ def _run_row_mapper(
     stage: Stage,
     inputs: dict[str, pd.DataFrame],
     ctx: RunContext,
-) -> pd.DataFrame:
+) -> StageOutput:
     """Map the stage's per-row function over its single input, in input order.
 
     Grain and order hold by construction: exactly one result slot exists per
@@ -423,11 +424,13 @@ def _run_row_mapper(
         out_rows.append({**records[index], **result})
         kept_indices.append(index)
     mapped = _finish_mapped_frame(pd.DataFrame(out_rows), handler, map_row, stage, ctx)
-    out = _finish_empty_result(mapped, src, stage)
-    if handler.drops_rows:
-        # The driver, not the stage, knows which input ordinals survived.
-        attach_row_lineage(out, kept_rows_lineage(stage.inputs[0].id, kept_indices))
-    return out
+    # The driver, not the stage, knows which input ordinals survived.
+    lineage = (
+        kept_rows_lineage(stage.inputs[0].id, kept_indices) if handler.drops_rows else None
+    )
+    return StageOutput(
+        _finish_empty_result(mapped.frame, src, stage), mapped.contribution, lineage
+    )
 
 
 def _narrow_row(row: Row, keep: frozenset[str]) -> Row:
@@ -576,7 +579,7 @@ def _run_batched(
     stage: Stage,
     inputs: dict[str, pd.DataFrame],
     ctx: RunContext,
-) -> pd.DataFrame:
+) -> StageOutput:
     """Run the stage's batched execution function over only the rows the cache
     cannot already answer, and assemble its rows back into INPUT order alongside
     the hits."""
@@ -596,8 +599,9 @@ def _run_batched(
     emit_batched_row_outcomes(
         ctx.run_log, stage.id, misses, [row.get(ROW_ERROR_KEY) for row in computed]
     )
-    return _finish_empty_result(
-        _finish_batched_frame(rows, handler, stage), src, stage
+    batched = _finish_batched_frame(rows, handler, stage)
+    return batched.with_frame(
+        _finish_empty_result(batched.frame, src, stage)
     )
 
 
@@ -653,12 +657,13 @@ def _order_by_input_position(
 
 def _finish_batched_frame(
     rows: list[Row], handler: RowMapHandler, stage: Stage
-) -> pd.DataFrame:
+) -> StageOutput:
     """The batched path's counterpart of `_finish_mapped_frame`: no mapper, so
     no post-map step — the internal columns are collected off the assembled
     frame, then stripped and the frame trimmed."""
     df = pd.DataFrame(rows)
-    return _strip_and_trim(df, _collect_internal_columns(df), handler, stage)
+    contribution = _collect_internal_columns(df)
+    return StageOutput(_strip_and_trim(df, contribution, handler, stage), contribution)
 
 
 def _finish_empty_result(
@@ -671,7 +676,6 @@ def _finish_empty_result(
     promised = stage.resolve_output_schema()
     if promised is not None:
         empty = empty.reindex(columns=[column.name for column in promised.columns])
-    empty.attrs = dict(mapped.attrs)  # the StageContribution rides here
     return empty
 
 
@@ -681,22 +685,20 @@ def _finish_mapped_frame(
     map_row: RowMapper,
     stage: Stage,
     ctx: RunContext,
-) -> pd.DataFrame:
-    """Turn the assembled per-row results into the stage's output frame: collect
-    the driver's own internal columns onto this stage's `StageContribution`, hand
+) -> StageOutput:
+    """Turn the assembled per-row results into the stage's output: collect the
+    driver's own internal columns onto this stage's `StageContribution`, hand
     the frame back to the mapper where the mapper is a `PostMapRowMapper`, then
     strip every internal column and — where the handler asks for it — trim
     onto the declared columns.
 
     The mapper's window is exact: `finish_mapped_rows` runs before the strip, so
-    it is the last step that sees an internal column at all.
-
-    The contribution rides out on the returned frame's `.attrs`; the executor
-    merges it into the manifest. Nothing accumulates in the (frozen) context."""
+    it is the last step that sees an internal column at all. Nothing accumulates
+    in the (frozen) context."""
     contribution = _collect_internal_columns(df)
     if isinstance(map_row, PostMapRowMapper):
         map_row.finish_mapped_rows(stage, df, ctx, contribution)
-    return _strip_and_trim(df, contribution, handler, stage)
+    return StageOutput(_strip_and_trim(df, contribution, handler, stage), contribution)
 
 
 def _collect_internal_columns(df: pd.DataFrame) -> StageContribution:
@@ -716,8 +718,7 @@ def _strip_and_trim(
     stage: Stage,
 ) -> pd.DataFrame:
     """`df` with every internal column dropped and — where the handler asks for
-    it — cut down to the declared columns, carrying `contribution` out on its
-    `.attrs` for the executor to merge into the manifest.
+    it — cut down to the declared columns.
 
     Strip before project, in that order: the projection reports every column it
     drops as a user column the stage produced and discarded, and an internal
@@ -725,7 +726,6 @@ def _strip_and_trim(
     df = _strip_internal_columns(df)
     if handler.trims_output_to_declared:
         df = _trim_to_declared_columns(df, stage, contribution)
-    df.attrs[CONTRIBUTION_ATTR] = contribution
     return df
 
 

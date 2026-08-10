@@ -41,7 +41,7 @@ def test_llm_transform_drops_undeclared_columns_including_former_hardcoded_ids(m
     out = HANDLERS[StageType.llm_transform].execute(
         stage, {"load": pd.DataFrame({"id": ["r1"], "text": ["hi"]})}, ctx)
 
-    assert list(out.columns) == ["id", "text", "score"]
+    assert list(out.frame.columns) == ["id", "text", "score"]
     dropped = contribution_of(out).dropped_columns
     assert "benchmark_id" in dropped and "query_id" in dropped
 
@@ -62,8 +62,8 @@ def test_llm_transform_declared_input_column_rides_through(monkeypatch):
     src = pd.DataFrame({"id": ["r1"], "text": ["hi"], "entity_id": ["C:acme"]})
     out = HANDLERS[StageType.llm_transform].execute(stage, {"load": src}, ctx)
 
-    assert list(out.columns) == ["id", "text", "entity_id", "score"]
-    assert out.loc[0, "entity_id"] == "C:acme"                # rode through from input
+    assert list(out.frame.columns) == ["id", "text", "entity_id", "score"]
+    assert out.frame.loc[0, "entity_id"] == "C:acme"                # rode through from input
     assert not contribution_of(out).dropped_columns           # nothing undeclared
 
 
@@ -133,6 +133,6 @@ def test_human_review_queue_carries_every_input_column_through(tmp_path):
     ctx = _queue_test_ctx(tmp_path, "keeps-declared-columns")
     out = HANDLERS[StageType.human_review_queue].execute(stage, {"scored": _src_scored()}, ctx)
 
-    assert list(out.columns) == [c["name"] for c in _SCORED_COLUMNS] + [
+    assert list(out.frame.columns) == [c["name"] for c in _SCORED_COLUMNS] + [
         "final_score"] + _REVIEW_RECORD
     assert contribution_of(out).dropped_columns == []

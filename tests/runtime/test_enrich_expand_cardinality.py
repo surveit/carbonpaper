@@ -40,8 +40,8 @@ def _run(handler, stage_type: str, reference: pd.DataFrame) -> pd.DataFrame:
 
 def test_enrich_keeps_an_unmatched_subject_row_carrying_nulls():
     out = _run(handle_enrich, "enrich", pd.DataFrame({"x": [1], "z": ["a"]}))
-    assert list(out["x"]) == [1, 2]
-    assert out["z"].tolist()[0] == "a" and pd.isna(out["z"].tolist()[1])
+    assert list(out.frame["x"]) == [1, 2]
+    assert out.frame["z"].tolist()[0] == "a" and pd.isna(out.frame["z"].tolist()[1])
 
 
 def test_enrich_preserves_subject_order_even_when_the_keys_are_unsorted():
@@ -52,8 +52,8 @@ def test_enrich_preserves_subject_order_even_when_the_keys_are_unsorted():
     subject = pd.DataFrame({"x": [30, 10, 20, 10]})
     reference = pd.DataFrame({"x": [10, 20, 30], "z": ["ten", "twenty", "thirty"]})
     out = handle_enrich(stage, {"subject": subject, "reference": reference}, make_run_context())
-    assert list(out["x"]) == [30, 10, 20, 10]
-    assert list(out["z"]) == ["thirty", "ten", "twenty", "ten"]
+    assert list(out.frame["x"]) == [30, 10, 20, 10]
+    assert list(out.frame["z"]) == ["thirty", "ten", "twenty", "ten"]
 
 
 def test_enrich_fails_loudly_when_the_reference_repeats_a_key():
@@ -69,8 +69,8 @@ def test_enrich_fails_loudly_when_the_reference_repeats_a_key():
 
 def test_expand_fans_a_subject_row_out_over_every_matching_reference_row():
     out = _run(handle_expand, "expand", pd.DataFrame({"x": [1, 1], "z": ["a", "b"]}))
-    assert list(out["x"]) == [1, 1, 2]
-    assert out["z"].tolist()[:2] == ["a", "b"] and pd.isna(out["z"].tolist()[2])
+    assert list(out.frame["x"]) == [1, 1, 2]
+    assert out.frame["z"].tolist()[:2] == ["a", "b"] and pd.isna(out.frame["z"].tolist()[2])
 
 
 def test_output_is_subject_columns_plus_enrich_with_only():
@@ -81,7 +81,7 @@ def test_output_is_subject_columns_plus_enrich_with_only():
          "reference": pd.DataFrame({"x": [1], "z": ["a"], "extra": ["noise"]})},
         make_run_context(),
     )
-    assert list(out.columns) == ["x", "z"]
+    assert list(out.frame.columns) == ["x", "z"]
 
 
 def test_a_brought_column_lands_under_its_authored_name():
@@ -106,8 +106,8 @@ def test_a_brought_column_lands_under_its_authored_name():
          "reference": pd.DataFrame({"x": [1], "z": ["a"]})},
         make_run_context(),
     )
-    assert list(out.columns) == ["x", "z2"]
-    assert out["z2"].tolist()[0] == "a" and pd.isna(out["z2"].tolist()[1])
+    assert list(out.frame.columns) == ["x", "z2"]
+    assert out.frame["z2"].tolist()[0] == "a" and pd.isna(out.frame["z2"].tolist()[1])
 
 
 def test_a_right_key_sharing_a_subject_columns_name_is_dropped():
@@ -137,5 +137,5 @@ def test_a_right_key_sharing_a_subject_columns_name_is_dropped():
          "reference": pd.DataFrame({"k": [1], "z": ["a"]})},
         make_run_context(),
     )
-    assert list(out.columns) == ["x", "z"]
-    assert out["z"].tolist()[0] == "a" and pd.isna(out["z"].tolist()[1])
+    assert list(out.frame.columns) == ["x", "z"]
+    assert out.frame["z"].tolist()[0] == "a" and pd.isna(out.frame["z"].tolist()[1])

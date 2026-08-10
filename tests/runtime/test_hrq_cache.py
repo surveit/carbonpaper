@@ -141,9 +141,9 @@ def test_decided_rows_reused_across_runs(tmp_path):
     _approve_every_row(snapshot, fingerprints)
 
     out = _run_queue_stage(stage, {"scored": src.copy()}, _ctx(tmp_path, run_id="run2"))
-    assert len(out) == 2
-    assert sorted(out["human_score"].tolist()) == [0, 1]
-    assert (out["decision"] == "approve").all()
+    assert len(out.frame) == 2
+    assert sorted(out.frame["human_score"].tolist()) == [0, 1]
+    assert (out.frame["decision"] == "approve").all()
 
 
 # ── 2. Editing the stage definition invalidates every cached decision ──────
@@ -264,7 +264,7 @@ def test_bust_cache_defers_every_queueable_row_despite_cached_decisions(tmp_path
     assert list(busted["id"]) == ["r0", "r1"]
 
     out = _run_queue_stage(stage, {"scored": src.copy()}, _ctx(tmp_path, run_id="run3"))
-    assert (out["decision"] == "approve").all()
+    assert (out.frame["decision"] == "approve").all()
 
 
 def test_bust_cache_leaves_passed_through_rows_alone(tmp_path):
@@ -361,7 +361,7 @@ def test_output_rows_stay_in_input_order(tmp_path):
     _approve_every_row(snapshot, fingerprints)
 
     out = _run_queue_stage(stage, {"scored": src.copy()}, _ctx(tmp_path, run_id="run2"))
-    assert list(out["id"]) == ["r0", "r1", "r2", "r3"]
+    assert list(out.frame["id"]) == ["r0", "r1", "r2", "r3"]
 
 
 def test_a_modified_row_stays_in_its_own_position_carrying_the_human_score(tmp_path):
@@ -383,9 +383,9 @@ def test_a_modified_row_stays_in_its_own_position_carrying_the_human_score(tmp_p
                       verdict=verdict, modified_score=score)
 
     out = _run_queue_stage(stage, {"scored": src.copy()}, _ctx(tmp_path, run_id="run2"))
-    assert list(out["id"]) == ["r0", "r1", "r2"]
-    assert list(out["decision"]) == ["approve", "modify", "approve"]
-    modified = out.loc[out["id"] == "r1"].iloc[0]
+    assert list(out.frame["id"]) == ["r0", "r1", "r2"]
+    assert list(out.frame["decision"]) == ["approve", "modify", "approve"]
+    modified = out.frame.loc[out.frame["id"] == "r1"].iloc[0]
     assert modified["human_score"] == 77.0
     assert modified["score"] == 1                 # what the AI said is still on the row
     assert modified["reviewer_id"] == "local"     # and who changed it, when
@@ -425,11 +425,11 @@ def test_every_output_row_carries_a_verdict_covering_every_outcome(tmp_path):
                       verdict=verdict, modified_score=score)
 
     out = _run_queue_stage(stage, {"scored": src.copy()}, _ctx(tmp_path, run_id="run2"))
-    assert list(out["decision"]) == [
+    assert list(out.frame["decision"]) == [
         "skipped", "approve", "modify", "modify", "skipped"]
-    assert out["decision"].notna().all()
+    assert out.frame["decision"].notna().all()
 
-    approved_only = out[out["decision"] == ReviewVerdict.approve.value]
+    approved_only = out.frame[out.frame["decision"] == ReviewVerdict.approve.value]
     assert list(approved_only["id"]) == ["r1"]  # the two unreviewed rows would be lost
 
 
@@ -453,9 +453,9 @@ def test_every_decided_row_is_emitted_with_only_the_declared_columns(tmp_path):
                       verdict=ReviewVerdict.modify, modified_score=3.0)
 
     out = _run_queue_stage(stage, {"scored": src.copy()}, _ctx(tmp_path, run_id="run2"))
-    assert list(out.columns) == ["id", "score"] + [
+    assert list(out.frame.columns) == ["id", "score"] + [
         c["name"] for c in queue_added_columns()]
-    assert out["id"].tolist() == ["r0", "r1"]
+    assert out.frame["id"].tolist() == ["r0", "r1"]
 
 
 def test_a_cached_entry_holding_no_output_row_re_queues_the_row(tmp_path):
@@ -504,7 +504,7 @@ def test_queue_stats_count_every_row_the_reviewer_answered(tmp_path):
                       verdict=verdict, modified_score=score)
 
     out = _run_queue_stage(stage, {"scored": src.copy()}, _ctx(tmp_path, run_id="run2"))
-    assert list(out["id"]) == ["r0", "r1", "r2", "r3"]
+    assert list(out.frame["id"]) == ["r0", "r1", "r2", "r3"]
     assert contribution_of(out).human_review_queue_stats == {
         "items_queued_total": 2, "items_passed_through": 2,
         "items_pending": 0, "items_decided": 2,
@@ -573,13 +573,13 @@ def test_a_passed_through_row_round_trips_through_the_cache(tmp_path):
     first = _run_queue_stage(stage, {"scored": src}, _ctx(tmp_path, run_id="run1"))
     second = _run_queue_stage(stage, {"scored": src.copy()}, _ctx(tmp_path, run_id="run2"))
 
-    assert list(second["decision"]) == [ReviewVerdict.skipped] * 4
+    assert list(second.frame["decision"]) == [ReviewVerdict.skipped] * 4
     for column in ("id", "score", "decision", "human_score"):
-        assert list(second[column]) == list(first[column])
+        assert list(second.frame[column]) == list(first.frame[column])
     # The columns a skipped row leaves empty stay empty through the round trip;
     # the cache payload is JSON, so pandas' NA comes back as None.
     for column in ("reviewer_id", "reviewed_at", "review_notes"):
-        assert first[column].isna().all() and second[column].isna().all()
+        assert first.frame[column].isna().all() and second.frame[column].isna().all()
     assert contribution_of(second).human_review_queue_stats == {
         "items_queued_total": 0, "items_passed_through": 4,
         "items_pending": 0, "items_decided": 0,
@@ -596,7 +596,7 @@ def test_changing_the_filter_re_evaluates_a_passed_through_row(tmp_path):
 
     out = _run_queue_stage(
         _stage(flt="flag == 'nothing-matches'", input_columns=_FLAGGED_COLUMNS), {"scored": src}, _ctx(tmp_path, run_id="run1"))
-    assert list(out["decision"]) == [ReviewVerdict.skipped] * 4
+    assert list(out.frame["decision"]) == [ReviewVerdict.skipped] * 4
 
     snapshot, _fingerprints = _halt_and_read_snapshot(
         _stage(flt="flag == 'skip'", input_columns=_FLAGGED_COLUMNS), {"scored": src.copy()}, _ctx(tmp_path, run_id="run2"))

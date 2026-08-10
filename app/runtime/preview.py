@@ -125,7 +125,6 @@ def run_stage_preview(
     ctx = RunContext.for_stages_outside_a_run(repo_root, run_dir)
 
     output = handler.execute(stage_def, inputs, ctx)
-    if output is None:
-        output = pd.DataFrame()
+    frame = pd.DataFrame() if output is None else output.frame
 
-    return StagePreview(frame=output, input_rows=len(valid), selected_indices=valid)
+    return StagePreview(frame=frame, input_rows=len(valid), selected_indices=valid)

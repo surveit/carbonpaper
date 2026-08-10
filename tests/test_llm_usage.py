@@ -57,8 +57,8 @@ def test_row_usage_key_never_reaches_stage_output(monkeypatch):
     ctx = make_run_context()
     out = HANDLERS[StageType.llm_transform].execute(
         _llm_stage(), {"load": pd.DataFrame({"id": ["r1", "r2"], "text": ["a", "b"]})}, ctx)
-    assert lt.ROW_USAGE_KEY not in out.columns
-    assert list(out.columns) == ["id", "text", "score"]
+    assert lt.ROW_USAGE_KEY not in out.frame.columns
+    assert list(out.frame.columns) == ["id", "text", "score"]
 
 
 def test_row_usage_sums_across_rows_into_ctx(monkeypatch):

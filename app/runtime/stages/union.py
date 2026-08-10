@@ -10,8 +10,9 @@ import pandas as pd
 from app.models import Stage
 
 from ..context import RunContext
+from ..stage_output import StageOutput
 
 
-def handle_union(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext) -> pd.DataFrame:
+def handle_union(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext) -> StageOutput:
     frames = [inputs[ref.id] for ref in stage.inputs]
-    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+    return StageOutput(pd.concat(frames, ignore_index=True) if frames else pd.DataFrame())

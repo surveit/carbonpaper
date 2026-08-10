@@ -4,18 +4,17 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pandas as pd
 import pytest
 
 from app.core.stage_cache import ReadOnlyStageCache
 from app.models import Stage
 from app.models.run_manifest import StageContribution, read_run_manifest
 from app.models.run_parameters import RunParameters
+from app.runtime.stage_output import StageOutput
 from app.runtime.context import (
     RunContext,
     RunIdentity,
 )
-from app.runtime.manifest import CONTRIBUTION_ATTR
 from app.services.versioning import load_version_stages, resolve_version_id
 
 
@@ -36,12 +35,11 @@ def resumed_stages(project_dir: Path, run_id: str) -> tuple[list[Stage], str]:
     return load_version_stages(project_dir, workflow_version), workflow_version
 
 
-def contribution_of(frame: pd.DataFrame) -> StageContribution:
-    """The StageContribution a handler attached to its output frame's `.attrs`.
-    A handler reports its usage/errors/dropped-columns/queue tallies here (the
-    executor merges it into the manifest), so a direct-handler test reads them
-    off the returned frame rather than off the context."""
-    return frame.attrs[CONTRIBUTION_ATTR]
+def contribution_of(output: StageOutput) -> StageContribution:
+    """What a handler reported alongside its rows — usage, per-row errors,
+    dropped columns, queue tallies. The executor merges it into the manifest, so
+    a direct-handler test reads it off the returned StageOutput, not the context."""
+    return output.contribution
 
 
 @pytest.fixture(autouse=True)

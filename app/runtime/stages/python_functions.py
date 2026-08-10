@@ -19,6 +19,7 @@ from app.models.stages.publish import PublishStage
 
 from ..code import load_function
 from ..context import RunContext
+from ..stage_output import StageOutput
 from .execution import Row, RowMapper, narrow_stage
 
 
@@ -43,13 +44,13 @@ def _load_python_function(stage: CodeCarryingStage) -> Callable[..., Any]:
     raise ValueError(f"Unknown function kind for stage {stage.id}: {fn_spec.kind}")
 
 
-def handle_python_frame_function(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext) -> pd.DataFrame:
+def handle_python_frame_function(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext) -> StageOutput:
     """Whole-frame transform: the function sees the full input frame(s) and may
     reshape them (group-by, pivot, dedup, multi-input merge)."""
     fn = _load_python_function(narrow_stage(stage, PythonFrameFunctionStage))
     # Pass dataframes positionally in declared input order.
     args = [inputs[ref.id] for ref in stage.inputs]
-    return fn(*args)
+    return StageOutput(fn(*args))
 
 
 def make_python_row_mapper(stage: Stage, ctx: RunContext, src: pd.DataFrame) -> RowMapper:

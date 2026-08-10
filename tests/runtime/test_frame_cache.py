@@ -8,8 +8,8 @@ from app.core.stage_cache import ReadOnlyStageCache, StageCache, StageCacheEntry
 from app.models import parse_stage, Stage
 from app.models.stage import StageType
 from app.runtime.context import RunIdentity
-from app.runtime.manifest import CONTRIBUTION_ATTR
 from app.runtime.stages import HANDLERS
+from app.runtime.stage_output import StageOutput
 from app.runtime.stages.execution import FrameHandler
 from conftest import make_run_context
 
@@ -52,7 +52,7 @@ def _counting_frame_handler(calls: list[int], **kwargs) -> FrameHandler:
     def apply(stage, inputs, ctx):
         src = inputs[stage.inputs[0].id]
         calls.append(len(src))
-        return src.assign(y=src["x"] * 2)
+        return StageOutput(src.assign(y=src["x"] * 2))
 
     return FrameHandler(apply=apply, **kwargs)
 
@@ -78,11 +78,11 @@ def test_a_second_run_returns_the_cached_frame_without_calling_the_transform():
     handler = _counting_frame_handler(calls)
 
     first = handler.execute(stage, {"src": src}, _ctx(run_id="run1"))
-    assert first is not None and list(first["y"]) == [2, 4]
+    assert first is not None and list(first.frame["y"]) == [2, 4]
     assert calls == [2]
 
     second = handler.execute(stage, {"src": src.copy()}, _ctx(run_id="run2"))
-    assert second is not None and list(second["y"]) == [2, 4]
+    assert second is not None and list(second.frame["y"]) == [2, 4]
     assert calls == [2]  # apply was not called again
 
 
@@ -101,7 +101,7 @@ def test_the_registered_python_frame_function_replays_its_recorded_frame():
     out = HANDLERS[StageType.python_frame_function].execute(
         stage, {"src": src}, _ctx(run_id="run1"))
     assert out is not None
-    assert list(out["y"]) == [999, 999]  # the authored `x * 2` would have said [2, 4]
+    assert list(out.frame["y"]) == [999, 999]  # the authored `x * 2` would have said [2, 4]
 
 
 def test_a_definition_change_invalidates_the_cached_frame():
@@ -213,8 +213,8 @@ def test_enrich_computes_every_run_and_records_nothing():
     left, right = pd.DataFrame({"x": [1, 2]}), pd.DataFrame({"x": [1], "z": ["a"]})
     out = HANDLERS[StageType.enrich].execute(
         stage, {"left": left, "right": right}, _ctx())
-    assert out is not None and list(out["x"]) == [1, 2]
-    assert out["z"].tolist()[0] == "a" and pd.isna(out["z"].tolist()[1])
+    assert out is not None and list(out.frame["x"]) == [1, 2]
+    assert out.frame["z"].tolist()[0] == "a" and pd.isna(out.frame["z"].tolist()[1])
 
     assert _cached_frame(stage, [left, right]) is None
     assert _entries(stage) == []
@@ -224,7 +224,7 @@ def test_aggregate_computes_every_run_and_records_nothing():
     stage = _aggregate_stage()
     src = pd.DataFrame({"g": ["a", "a", "b"]})
     out = HANDLERS[StageType.aggregate].execute(stage, {"src": src}, _ctx())
-    assert out is not None and sorted(out["n"]) == [1, 2]
+    assert out is not None and sorted(out.frame["n"]) == [1, 2]
 
     assert _cached_frame(stage, [src]) is None
     assert _entries(stage) == []
@@ -363,7 +363,7 @@ def test_publish_runs_its_side_effect_every_run_and_writes_no_entry(tmp_path):
             stage_cache=StageCache(),
         ))
         # The side effect happened this run: the path names THIS run's dir.
-        assert out is not None and run_id in out["path"].iloc[0]
+        assert out is not None and run_id in out.frame["path"].iloc[0]
     assert _cached_frame(stage, [_src([1])]) is None
 
 
@@ -374,13 +374,13 @@ def test_a_frame_parquet_cannot_serialize_leaves_the_run_uncached_with_a_note():
     stage = _frame_stage()
 
     def apply(stage, inputs, ctx):
-        return pd.DataFrame({"x": [{"nested": np.array([1, 2])}, 3]})
+        return StageOutput(pd.DataFrame({"x": [{"nested": np.array([1, 2])}, 3]}))
 
     out = FrameHandler(apply=apply).execute(stage, {"src": _src([1])}, _ctx())
-    assert out is not None and len(out) == 2       # the run succeeded
+    assert out is not None and len(out.frame) == 2       # the run succeeded
     assert _cached_frame(stage, [_src([1])]) is None  # uncached
 
-    notes = out.attrs[CONTRIBUTION_ATTR].notes
+    notes = out.contribution.notes
     assert len(notes) == 1 and "uncached" in notes[0]
 
 
@@ -395,10 +395,10 @@ def test_no_frame_store_configured_computes_normally_and_caches_nothing(monkeypa
     calls: list[int] = []
 
     out = _counting_frame_handler(calls).execute(stage, {"src": _src([1, 2])}, _ctx())
-    assert out is not None and list(out["y"]) == [2, 4]
+    assert out is not None and list(out.frame["y"]) == [2, 4]
     assert calls == [2]
 
-    notes = out.attrs[CONTRIBUTION_ATTR].notes
+    notes = out.contribution.notes
     assert len(notes) == 1
     assert "no frame store" in notes[0] and stage.id in notes[0]
 
@@ -419,9 +419,9 @@ def test_a_deliberate_opt_out_carries_no_note(monkeypatch):
     out = _counting_frame_handler(calls).execute(
         _frame_stage(cache=False), {"src": _src([1])}, _ctx())
     assert out is not None
-    assert CONTRIBUTION_ATTR not in out.attrs
+    assert out.contribution.notes == []
 
     out = _counting_frame_handler(calls).execute(
         _frame_stage(), {"src": _src([1])}, make_run_context())
     assert out is not None
-    assert CONTRIBUTION_ATTR not in out.attrs
+    assert out.contribution.notes == []

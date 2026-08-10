@@ -5,11 +5,10 @@ from __future__ import annotations
 import pandas as pd
 
 from app.models import parse_stage
+from app.runtime.stage_output import StageOutput
 from app.runtime.lineage import (
-    LINEAGE_ATTR,
     EdgeKind,
     RowLineage,
-    read_row_lineage,
 )
 from app.runtime.stages.aggregate import handle_aggregate
 from app.runtime.trace import trace_row
@@ -42,12 +41,8 @@ _TOTAL_COL = {"name": "total", "type": "int", "nullable": True}
 _BIG_N_COL = {"name": "big_n", "type": "int", "nullable": True}
 
 
-def _persistable(out: pd.DataFrame):
-    lineage = read_row_lineage(out)
-    out.attrs.pop(LINEAGE_ATTR, None)
-    # The executor pops the channel before persisting because `.attrs` is not
-    # JSON-serializable and parquet refuses the frame outright.
-    return out, lineage
+def _persistable(out: StageOutput):
+    return out.frame, out.lineage
 
 
 def _parents_of(lineage: RowLineage, out_row: int):
@@ -57,9 +52,9 @@ def _parents_of(lineage: RowLineage, out_row: int):
 def test_every_contributing_row_is_recorded_once_whatever_it_fed():
     out = handle_aggregate(_stage([_TOTAL, _BIG_N], [_TOTAL_COL, _BIG_N_COL]),
                            {"filings": FILINGS}, None)
-    lineage = read_row_lineage(out)
+    lineage = out.lineage
     assert lineage is not None
-    assert len(lineage) == len(out)
+    assert len(lineage) == len(out.frame)
     # Five input rows, five parent entries across the whole sidecar: a row that
     # fed BOTH columns appears once carrying both, not once per column. This is
     # what keeps the sidecar O(input rows) rather than O(rows x aggregations).
@@ -69,8 +64,8 @@ def test_every_contributing_row_is_recorded_once_whatever_it_fed():
 def test_a_where_narrows_which_column_a_row_is_recorded_against():
     out = handle_aggregate(_stage([_TOTAL, _BIG_N], [_TOTAL_COL, _BIG_N_COL]),
                            {"filings": FILINGS}, None)
-    lineage = read_row_lineage(out)
-    firm_a = list(out["firm"]).index("a")
+    lineage = out.lineage
+    firm_a = list(out.frame["firm"]).index("a")
     # amt=10 fell outside `amt > 25`, so it fed the total and nothing else,
     # while amt=30 fed both. Recording the group cohort would say both rows fed
     # big_n, overstating what is behind that number.
@@ -79,8 +74,8 @@ def test_a_where_narrows_which_column_a_row_is_recorded_against():
 
 def test_the_missing_group_key_keeps_its_own_contributors():
     out = handle_aggregate(_stage([_TOTAL], [_TOTAL_COL]), {"filings": FILINGS}, None)
-    lineage = read_row_lineage(out)
-    missing = [i for i, firm in enumerate(out["firm"]) if pd.isna(firm)]
+    lineage = out.lineage
+    missing = [i for i, firm in enumerate(out.frame["firm"]) if pd.isna(firm)]
     assert len(missing) == 1
     # dropna=False gives NaN its own group; the rows behind it are the rows that
     # had no firm, not a silently dropped set.
@@ -89,24 +84,24 @@ def test_the_missing_group_key_keeps_its_own_contributors():
 
 def test_an_unfiltered_row_is_recorded_against_every_column():
     second = {"output_column": "biggest", "formula": "max", "value_column": "amt"}
-    lineage = read_row_lineage(handle_aggregate(
+    lineage = handle_aggregate(
         _stage([_TOTAL, second], [_TOTAL_COL, {"name": "biggest", "type": "int",
                                                "nullable": True}]),
-        {"filings": FILINGS}, None))
+        {"filings": FILINGS}, None).lineage
     # With no `where` anywhere, every contributor fed every number.
     assert all(p.columns == ("total", "biggest")
                for entry in lineage.parents for p in entry)
 
 
 def test_no_trace_column_reaches_the_output():
-    out = handle_aggregate(_stage([_TOTAL], [_TOTAL_COL]), {"filings": FILINGS}, None)
+    out = handle_aggregate(_stage([_TOTAL], [_TOTAL_COL]), {"filings": FILINGS}, None).frame
     assert not [c for c in out.columns if c.startswith("_trace")]
     assert list(out.columns) == ["firm", "total"]
 
 
 def test_the_sidecar_round_trips_through_parquet(tmp_path):
-    lineage = read_row_lineage(handle_aggregate(
-        _stage([_TOTAL, _BIG_N], [_TOTAL_COL, _BIG_N_COL]), {"filings": FILINGS}, None))
+    lineage = handle_aggregate(
+        _stage([_TOTAL, _BIG_N], [_TOTAL_COL, _BIG_N_COL]), {"filings": FILINGS}, None).lineage
     path = tmp_path / "sidecar.parquet"
     lineage.to_frame().to_parquet(path, index=False)
     assert RowLineage.from_frame(pd.read_parquet(path)) == lineage

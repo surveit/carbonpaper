@@ -44,7 +44,7 @@ def test_the_example_code_matches_its_stated_corner_cases(spec: dict) -> None:
     handler = HANDLERS[StageType.starlark_row_function]
     blank = pd.DataFrame([{"filing_id": "F1", "reported_amount": None}])
     out = handler.execute(stage, {"filings": blank}, make_run_context())
-    assert out is not None and out["amount_usd"].isna().all()
+    assert out is not None and out.frame["amount_usd"].isna().all()
 
     euros = pd.DataFrame([{"filing_id": "F2", "reported_amount": "\u20ac45,00"}])
     with pytest.raises(StepRefused):

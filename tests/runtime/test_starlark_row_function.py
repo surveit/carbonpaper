@@ -44,7 +44,7 @@ def _handler() -> RowMapHandler:
 def test_maps_the_function_over_every_row():
     stage = _stage(DOUBLE, output_schema=_N_DOUBLED_SCHEMA)
     out = _handler().execute(stage, {"src": pd.DataFrame({"n": [1, 2, 3]})}, make_run_context())
-    assert list(out["doubled"]) == [2, 4, 6]
+    assert list(out.frame["doubled"]) == [2, 4, 6]
 
 
 def test_starlark_cannot_reach_the_python_object_graph():
@@ -83,13 +83,13 @@ def test_a_row_with_a_datetime_is_marshalled_before_starlark_sees_it():
         stage, {"src": pd.DataFrame({"ts": [pd.Timestamp("2024-01-02T03:04:05")]})},
         make_run_context(),
     )
-    assert out["iso"].tolist() == ["2024-01-02T03:04:05"]
+    assert out.frame["iso"].tolist() == ["2024-01-02T03:04:05"]
 
 
 def test_an_empty_function_name_falls_back_to_transform():
     stage = _stage(DOUBLE, function="", output_schema=_N_DOUBLED_SCHEMA)
     out = _handler().execute(stage, {"src": pd.DataFrame({"n": [5]})}, make_run_context())
-    assert out["doubled"].tolist() == [10]
+    assert out.frame["doubled"].tolist() == [10]
 
 
 def test_the_type_is_registered_as_grain_and_order_preserving():

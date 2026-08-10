@@ -30,7 +30,7 @@ def _counts() -> pd.DataFrame:
              "value_column": "registrant"}]},
     })
     ctx = RunContext.for_stages_outside_a_run(repo_root=None, run_dir=None)
-    return handle_aggregate(stage, {"filings": FILINGS}, ctx)
+    return handle_aggregate(stage, {"filings": FILINGS}, ctx).frame
 
 
 def _by_firm() -> dict[str, int]:

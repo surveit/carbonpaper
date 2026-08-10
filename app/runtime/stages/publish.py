@@ -13,6 +13,7 @@ from app.models import Stage
 from app.models.stages.publish import PublishStage
 
 from ..context import RunContext
+from ..stage_output import StageOutput
 from ..trace_links import RowTraceLinker
 from .execution import narrow_stage
 from .python_functions import _load_python_function
@@ -20,7 +21,7 @@ from .python_functions import _load_python_function
 TRACE_LINKS_KWARG = "trace_links"
 
 
-def handle_publish(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext) -> pd.DataFrame:
+def handle_publish(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext) -> StageOutput:
     """Publish stages have a function: block. Run the function and capture its
     output dataframe (paths to artifacts). The function gets the input frames
     positionally, an `output_dir` kwarg, and a `trace_links` RowTraceLinker only
@@ -32,8 +33,8 @@ def handle_publish(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContex
 
     linker = _resolve_trace_linker(fn, publish_stage, ctx)
     if linker is None:
-        return fn(*args, output_dir=str(output_dir))
-    return fn(*args, output_dir=str(output_dir), trace_links=linker)
+        return StageOutput(fn(*args, output_dir=str(output_dir)))
+    return StageOutput(fn(*args, output_dir=str(output_dir), trace_links=linker))
 
 
 def _prepare_output_dir(stage: PublishStage, ctx: RunContext) -> Path:
