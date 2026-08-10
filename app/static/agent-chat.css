@@ -47,16 +47,22 @@
 .ac-think-text { font-style: italic; color: var(--muted); font-size: 13px;
     padding: 0 10px 8px; white-space: pre-wrap; }
 
-.ac-tool { margin: 4px 0; }
-.ac-tool > summary { cursor: pointer; list-style: none; color: var(--good-bd); font-size: 12px;
-    background: var(--good-bg); border: 1px solid var(--good-bd); border-radius: 6px;
-    padding: 3px 9px; display: inline-block; user-select: none; }
+/* A tool call is scaffolding — how the reply was reached, not the reply — so it
+   is quieter than the prose beside it: a muted line with a disclosure triangle,
+   no tint and no border. It also takes no state colour, because it answers
+   neither of the two questions colour is spent on here: it is not a run state
+   and it is not a verdict. The tinted chip it replaces read as a passed check.
+   The folded body is the only part that gets a surface, and only once opened. */
+.ac-tool { margin: 1px 0; }
+.ac-tool > summary { cursor: pointer; list-style: none; color: var(--muted); font-size: 12px;
+    padding: 1px 0; display: inline-block; user-select: none; }
+.ac-tool > summary:hover { color: var(--fg); }
 .ac-tool > summary::-webkit-details-marker { display: none; }
-.ac-tool > summary::before { content: "▸ "; color: var(--muted); }
+.ac-tool > summary::before { content: "▸ "; color: var(--border-strong); }
 .ac-tool[open] > summary::before { content: "▾ "; }
-.ac-tool-json { font-family: ui-monospace, monospace; font-size: 11px; color: var(--good-ink);
-    background: var(--good-bg); border: 1px solid var(--good-bd); border-radius: 6px;
-    padding: 6px 9px; margin: 4px 0 0; white-space: pre-wrap; overflow-x: auto; }
+.ac-tool-json { font-family: ui-monospace, monospace; font-size: 11px; color: var(--muted);
+    background: var(--sunk); border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 9px; margin: 4px 0 6px; white-space: pre-wrap; overflow-x: auto; }
 .ac-tool-label { font-size: 10px; text-transform: uppercase; letter-spacing: .04em;
     color: var(--muted); margin: 6px 0 1px; }
 

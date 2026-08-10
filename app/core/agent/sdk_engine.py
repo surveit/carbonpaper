@@ -152,9 +152,12 @@ class ClaudeAgentSdkEngine:
             if isinstance(msg, AssistantMessage):
                 for block in msg.content:
                     if isinstance(block, ThinkingBlock):
+                        # A redacted or signature-only block carries no text; emitting
+                        # it opens an empty disclosure in the transcript.
                         text = getattr(block, "thinking", "")
-                        emit({"kind": "thinking", "text": text})
-                        assistant_parts.append({"type": "thinking", "text": text})
+                        if text.strip():
+                            emit({"kind": "thinking", "text": text})
+                            assistant_parts.append({"type": "thinking", "text": text})
                     elif isinstance(block, TextBlock):
                         emit({"kind": "text", "text": block.text})
                         assistant_parts.append({"type": "text", "text": block.text})

@@ -25,6 +25,11 @@ class _Result:
         self.content = content
 
 
+class _Think:
+    def __init__(self, thinking: str) -> None:
+        self.thinking = thinking
+
+
 class _Asst:
     def __init__(self, content: list[Any]) -> None:
         self.content = content
@@ -81,6 +86,39 @@ def test_stream_turn_maps_blocks_to_normalized_events(monkeypatch: Any) -> None:
     assert tool_parts and tool_parts[0]["label"] == "Editing a stage"
     tool_call_ev = next(e for e in events if e["kind"] == "tool_call")
     assert tool_call_ev["label"] == "Editing a stage"
+
+
+def test_stream_turn_drops_a_thinking_block_carrying_no_text(monkeypatch: Any) -> None:
+    """A redacted or signature-only block arrives with empty `thinking`; passing it
+    on opens an empty disclosure in the transcript, which reads as a load failure."""
+
+    async def fake_query(*, prompt: str, options: Any) -> Any:
+        yield _Asst([_Think("   \n "), _Think("weighing it"), _Text("Done.")])
+        yield _Done()
+
+    monkeypatch.setattr(se, "query", fake_query)
+    monkeypatch.setattr(se, "AssistantMessage", _Asst)
+    monkeypatch.setattr(se, "UserMessage", _User)
+    monkeypatch.setattr(se, "ResultMessage", _Done)
+    monkeypatch.setattr(se, "TextBlock", _Text)
+    monkeypatch.setattr(se, "ToolUseBlock", _Tool)
+    monkeypatch.setattr(se, "ToolResultBlock", _Result)
+    monkeypatch.setattr(se, "ThinkingBlock", _Think)
+
+    events: list[dict[str, Any]] = []
+    engine = se.ClaudeAgentSdkEngine(
+        system_prompt="sp", mcp_server=object(), allowed_tools=[], tool_labels={}
+    )
+    transcript, _ = asyncio.run(
+        engine.stream_turn("go", message_history=[], emit=events.append)
+    )
+    assert [(e["kind"], e.get("text")) for e in events] == [
+        ("thinking", "weighing it"),
+        ("text", "Done."),
+    ]
+    # and the empty one is not stored either, so a reload renders no block for it
+    thinking_parts = [p for m in transcript for p in m["parts"] if p.get("type") == "thinking"]
+    assert [p["text"] for p in thinking_parts] == ["weighing it"]
 
 
 def test_stream_turn_surfaces_in_band_result_error(monkeypatch: Any) -> None:
