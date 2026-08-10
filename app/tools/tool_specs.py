@@ -49,8 +49,7 @@ Copying a stage from read_stage is fine: the server-owned fields it carries
 `warnings` entry names the stage and the fields dropped from it. Any OTHER
 unknown field is still an error — a typo'd field name never passes silently.
 
-New nodes land 'unreviewed' for a human to approve. The FIRST stage of a
-project starts its workflow — no other tool creates one.""",
+The FIRST stage of a project starts its workflow — no other tool creates one.""",
     ),
     "create_draft": ToolSpec(
         name="create_draft",
@@ -88,9 +87,7 @@ ONLY the fields to change (a JSON Merge Patch): {"limit": 100} sets limit;
 {"llm": {"model": "claude-opus-5"}} changes only llm.model and leaves the rest of the
 llm block intact; {"limit": null} deletes a field. Fields you do not mention
 are preserved exactly. Validated first; if invalid, nothing is written and
-the issues are returned. A successful edit drops the node to 'edited_stale'
-for a human to re-approve — you cannot approve it yourself. You cannot
-change a stage's id this way.""",
+the issues are returned. You cannot change a stage's id this way.""",
     ),
     "generate_data_model": ToolSpec(
         name="generate_data_model",

@@ -185,6 +185,17 @@ def compute_join_output_types(
             joined[landed] = right_types[src]
     return joined
 
+# Both join types share their whole contract except the cardinality they permit,
+# so the shared half is written once and each type states only its own rule.
+JOIN_SHARED_NOTE = (
+    "Takes EXACTLY TWO inputs: inputs[0] is the SUBJECT, inputs[1] is the REFERENCE. "
+    "Every subject row survives (unmatched rows carry nulls in the landed columns); "
+    "dropping rows is `filter_rows`' job. `enrich_with` maps each reference column to "
+    "the name it lands under, usually the same; a same-named key pair needs no entry. "
+    "A join only ADDS: a landed name the subject already carries is refused — pick a "
+    "new one (`score: score_r`). The signature adds exactly the landed columns."
+)
+
 # Authoring copy for this module's stage type(s); assembled into NODE_TYPES.
 NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
     "enrich": NodeTypeSpec(
@@ -196,15 +207,9 @@ NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
         required=["keys", "enrich_with"],
         optional=[],
         notes=(
-            "Takes EXACTLY TWO inputs: inputs[0] is the SUBJECT, inputs[1] is the REFERENCE. "
             "Row count and order come out unchanged: the runtime VERIFIES the reference is "
             "unique on the key, and a repeat FAILS THE RUN — use `expand` for intended "
-            "fan-out. Every subject row survives (unmatched rows carry nulls in the landed "
-            "columns); dropping rows is `filter_rows`' job. `enrich_with` maps each reference "
-            "column to the name it lands under, usually the same. A join only ADDS: a landed "
-            "name the subject already carries is refused — pick a new one (`score: score_r`). "
-            "A same-named key pair needs no entry. The signature adds exactly the landed "
-            "columns; every subject column flows through."
+            f"fan-out. {JOIN_SHARED_NOTE}"
         ),
     ),
     "expand": NodeTypeSpec(
@@ -216,15 +221,8 @@ NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
         required=["keys", "enrich_with"],
         optional=[],
         notes=(
-            "Takes EXACTLY TWO inputs: inputs[0] is the SUBJECT, inputs[1] is the REFERENCE. "
-            "The reference MAY repeat a key, so one subject row can fan out to several — use "
-            "`enrich` when a repeat is a bug you want caught. Every subject row survives "
-            "(unmatched rows carry nulls in the landed columns); dropping rows is "
-            "`filter_rows`' job. `enrich_with` maps each reference column to the name it "
-            "lands under, usually the same. A join only ADDS: a landed name the subject "
-            "already carries is refused — pick a new one (`score: score_r`). A same-named "
-            "key pair needs no entry. The signature adds exactly the landed columns; every "
-            "subject column flows through."
+            "The reference MAY repeat a key, so one subject row can fan out to several — "
+            f"use `enrich` when a repeat is a bug you want caught. {JOIN_SHARED_NOTE}"
         ),
     ),
 }

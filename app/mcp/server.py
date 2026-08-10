@@ -33,7 +33,9 @@ from app.models.stages.code import (
     CODE_CORNER_CASES_CONTRACT_NOTE,
     CODE_SUMMARY_CONTRACT_NOTE,
 )
-from app.models.stages.node_types import CODE_CARRYING_TYPES, NODE_TYPES
+from app.models.stages.anatomy_note import render_stage_anatomy
+from app.models.stages.node_types import AUTHORABLE_TYPES, CODE_CARRYING_TYPES
+from app.models.stages.worked_example import WORKED_STAGE_EXAMPLE
 from app.runtime import stage_tests
 from app.services import generation
 from app.services import loader
@@ -68,15 +70,20 @@ _STAGE_TOOL_ERRORS = (WorkflowLoadError, FileNotFoundError)
 
 
 def _render_node_type_constraints() -> str:
-    """From NODE_TYPES, so the two authoring prompts cannot drift apart."""
+    """From the shared specs, so the two authoring prompts cannot drift apart."""
     governed = ", ".join(f"`{name}`" for name in CODE_CARRYING_TYPES)
     return "\n".join([
+        textwrap.fill(render_stage_anatomy(), width=88),
+        "",
         f"Describing authored code (applies to: {governed}):",
         textwrap.fill(CODE_SUMMARY_CONTRACT_NOTE, width=88),
         textwrap.fill(CODE_CORNER_CASES_CONTRACT_NOTE, width=88),
         "",
+        "A stage, whole:",
+        WORKED_STAGE_EXAMPLE,
+        "",
         *(textwrap.fill(f"- {stage_type} — {spec.notes}", width=88, subsequent_indent="  ")
-          for stage_type, spec in NODE_TYPES.items()),
+          for stage_type, spec in AUTHORABLE_TYPES.items()),
     ])
 
 
@@ -123,8 +130,7 @@ the schema afterwards.)
    JSON Merge Patch), remove_stage(project_id, stage_id) to undo a stage you added
    (refused while another stage still lists it in `inputs`).
 
-Added stages land `unreviewed`. REVIEW AND APPROVAL ARE HUMAN-ONLY, in the web UI, and
-only a human publishes.
+Only a human publishes a version, and a run executes a published one.
 
 # BUILD — per-stage tests
 8. Once a python-transform stage exists, generate_stage_tests writes its tests from the

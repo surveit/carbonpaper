@@ -1,18 +1,20 @@
-"""The editing agent's system prompt, assembled in six sections: role, concepts,
-how it works, the authoring lifecycle, the tightly-constrained-input rule, and the
-stage-type catalog. The agent learns which project it edits at runtime via
-get_current_project, so the prompt names no specific project."""
+"""The editing agent's system prompt, assembled in seven sections: role, concepts,
+how it works, the authoring lifecycle, the tightly-constrained-input rule, the stage
+anatomy every type shares, and the per-type catalog. The agent learns which project it
+edits at runtime, so the prompt names no specific project."""
 
 from __future__ import annotations
 
 from app.models.authoring_lifecycle_note import AUTHORING_LIFECYCLE_GUIDANCE
 from app.models.enum_from_data_note import ENUM_FROM_DATA_GUIDANCE
+from app.models.stages.anatomy_note import render_stage_anatomy
 from app.models.stages.code import (
     CODE_CORNER_CASES_CONTRACT_NOTE,
     CODE_SUMMARY_CONTRACT_NOTE,
 )
-from app.models.stages.node_types import CODE_CARRYING_TYPES, NODE_TYPES
+from app.models.stages.node_types import AUTHORABLE_TYPES, CODE_CARRYING_TYPES
 from app.models.stages.signature import SIGNATURE_CONTRACT_NOTE
+from app.models.stages.worked_example import WORKED_STAGE_EXAMPLE
 
 _ROLE = """\
 # Role
@@ -32,12 +34,9 @@ _CONCEPTS = """\
 
 _HOW_YOU_WORK = """\
 # How you work
-Call get_current_project FIRST and pass its value as the `project_id` argument to every
-other tool. Read before you edit (describe_workflow, read_stage). Prefer small, targeted
-changes: edit_stage, add_stage and remove_stage (refused while another stage still inputs
-from the one you remove). Every edit may have complex validations, so large expensive
-edits that result in errors are token inefficient. Every edit lands as UNREVIEWED for a
-human to approve — you cannot approve stages.
+Read before you edit (describe_workflow, read_stage). Prefer small, targeted changes.
+Every edit may have complex validations, so large expensive edits that result in errors
+are token inefficient.
 
 Never invent a column, source, model, or value — if you lack it, ask the user. The reason
 for this rule is that an LLM invented figure will not survive the validation step, which
@@ -68,36 +67,35 @@ def build_editing_system_prompt() -> str:
         f"# Project lifecycle\n{AUTHORING_LIFECYCLE_GUIDANCE}",
         f"# Rules for workflows\n\n## Constrain inputs as tightly as possible\n"
         f"{ENUM_FROM_DATA_GUIDANCE}",
+        render_stage_anatomy_section(),
         render_stage_type_catalog(),
     ])
 
 
-def render_stage_type_catalog() -> str:
-    """Every NodeTypeSpec, under the rules that govern whole groups of them."""
-    return "\n".join([
-        "# Workflow data model details",
-        "",
+def render_stage_anatomy_section() -> str:
+    """What holds for every stage, so no type's own note restates it."""
+    governed = ", ".join(f"`{name}`" for name in CODE_CARRYING_TYPES)
+    return "\n\n".join([
+        "# Anatomy of a stage",
+        render_stage_anatomy(),
         SIGNATURE_CONTRACT_NOTE,
-        "",
-        _authored_code_rules(),
-        "",
-        "The stage types you can use:",
-        *[_render_stage_type(stage_type, spec) for stage_type, spec in NODE_TYPES.items()],
+        f"## Describing authored code (applies to: {governed})\n"
+        f"{CODE_SUMMARY_CONTRACT_NOTE}\n{CODE_CORNER_CASES_CONTRACT_NOTE}",
+        f"## A stage, whole\n{WORKED_STAGE_EXAMPLE}",
     ])
 
 
-def _authored_code_rules() -> str:
-    """The description contract, stated once for the types marked CARRIES CODE below."""
-    governed = ", ".join(f"`{name}`" for name in CODE_CARRYING_TYPES)
+def render_stage_type_catalog() -> str:
+    """Only what is specific to one type — the anatomy above covers the rest."""
     return "\n".join([
-        f"## Describing authored code (applies to: {governed})",
-        CODE_SUMMARY_CONTRACT_NOTE,
-        CODE_CORNER_CASES_CONTRACT_NOTE,
+        "# The stage types you can use",
+        *[_render_stage_type(stage_type, spec)
+          for stage_type, spec in AUTHORABLE_TYPES.items()],
     ])
 
 
 def _render_stage_type(stage_type: str, spec: object) -> str:
-    assert isinstance(spec, type(NODE_TYPES[stage_type]))
+    assert isinstance(spec, type(AUTHORABLE_TYPES[stage_type]))
     blocks = ", ".join(f"`{b}`" for b in spec.blocks)
     required = ", ".join(spec.required) or "none"
     takes = "takes inputs" if spec.requires_inputs else "no inputs"

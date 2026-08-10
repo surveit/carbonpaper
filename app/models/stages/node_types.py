@@ -32,6 +32,17 @@ NODE_TYPES: dict[str, NodeTypeSpec] = {
     **_STARLARK,
 }
 
+# Types that still LOAD and RUN but are no longer offered for authoring, so the
+# prompts stop advertising them: starlark_row_function does the same job sandboxed.
+# Not a deletion — a stored version holding one must keep loading.
+RETIRED_TYPES = ("python_row_function",)
+
+# What the authoring prompts list. NODE_TYPES stays whole: the runtime, the
+# diagrams and the trace all read it for types a stored workflow may still carry.
+AUTHORABLE_TYPES: dict[str, NodeTypeSpec] = {
+    name: spec for name, spec in NODE_TYPES.items() if name not in RETIRED_TYPES
+}
+
 # The types whose config carries authored code all owe a plain-language `summary`
 # and `corner_cases`, refused on write by app.services.stage_edit; their specs carry
 # the contract notes, pinned by tests/test_node_type_notes.py.
