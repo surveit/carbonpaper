@@ -40,13 +40,7 @@
        stage.llm_reply_schema() is that exact object, not a rebuilt copy. #}
     {% set reply_schema = stage.llm_reply_schema() %}
     {% if reply_schema %}
-    <h3>the model may only return</h3>
-    <p class="muted">What the model must return per row: the output schema minus the input
-        schema — the columns this stage adds. Input columns are rejoined by the runtime and
-        are not part of the reply.{% if stage.llm.batch_size and stage.llm.batch_size > 1 %}
-        Batched ({{ stage.llm.batch_size }} rows per call), so the reply is
-        <code>{"results": [...]}</code> and each item also carries the
-        <code>row_number</code> it was shown, which rejoins it to its row.{% endif %}</p>
+    <h3>expected answer shape</h3>
     {{ schema_table(reply_schema) }}
     {% endif %}
     <h3>what the model is asked</h3>
