@@ -1,6 +1,7 @@
-"""The runs index rows: when a run happened, what it ran, how it came out (the
-same stage strip the run page draws), and what this run itself did differently.
-The run id is no longer a column — it is the row's link target."""
+"""The runs index rows: when a run happened, the version it pinned, how long it
+took, and how it came out (the same stage strip the run page draws, under the
+run's outcome in words). The run id is no longer a column — it is the row's
+link target."""
 
 from __future__ import annotations
 
@@ -9,18 +10,10 @@ from pathlib import Path
 from pydantic import BaseModel, ValidationError
 
 from app.core.errors import RunManifestNotJson
-from app.models.run_manifest import (
-    RunManifest,
-    find_manifest_backed_run_dirs,
-    read_run_manifest,
-)
+from app.core.run_status import RunStatus
+from app.models.run_manifest import find_manifest_backed_run_dirs, read_run_manifest
 from app.web.loading import runs_dir
-from app.web.run_header import (
-    VersionNote,
-    describe_run_duration,
-    read_file_name,
-    read_version_note,
-)
+from app.web.run_header import VersionNote, describe_run_duration, read_version_note
 from app.web.stage_strip import StageStrip, build_stage_strip, describe_stage_tallies
 
 _UNREADABLE_STATUS = "corrupt"
@@ -34,12 +27,13 @@ class RunIndexRow(BaseModel):
     started_at: str | None = None
     duration: str | None = None
     version: VersionNote | None = None
-    input_names: list[str] = []
     strip: StageStrip | None = None
     # The strip's counts in words, for the result cell's tooltip: the squares
     # carry the colour, this carries what the colours say.
     result_summary: str = ""
-    differences: list[str] = []
+    # The run's own status in the reader's words, under the strip. Empty for a
+    # manifest that could not be read — that cell states the unreadability instead.
+    outcome: str = ""
     is_test_run: bool = False
 
 
@@ -52,27 +46,21 @@ def build_run_index_rows(project: str) -> list[RunIndexRow]:
     ]
 
 
-def describe_run_differences(manifest: RunManifest) -> list[str]:
-    """What THIS run did differently — its own settings, not a diff against another run."""
-    differences = [
-        f"first {cap} rows of {stage_id}"
-        for stage_id, cap in sorted(manifest.parameters.limits.items())
-    ]
-    if manifest.parameters.bust_cache:
-        differences.append("cache off")
-    if manifest.parameters.is_test_run:
-        differences.append("test run")
-    return differences
+def describe_run_outcome(status: str) -> str:
+    """A run's status in the reader's words, or the raw status this reader has no word for."""
+    return _OUTCOME_WORDS.get(status, status)
 
 
-def read_input_file_names(manifest: RunManifest) -> list[str]:
-    """The basename of each file this run read — never the absolute path."""
-    names = []
-    for binding in manifest.input_bindings.values():
-        path = binding.get("path")
-        if path:
-            names.append(read_file_name(str(path)))
-    return names
+# Keyed by the stored string, which is what a manifest carries and what the row
+# holds — an enum-keyed lookup would miss every one of them.
+_OUTCOME_WORDS = {
+    RunStatus.RUNNING.value: "running",
+    RunStatus.OK.value: "complete",
+    RunStatus.WARNINGS.value: "complete, with warnings",
+    RunStatus.ERRORS.value: "error",
+    RunStatus.AWAITING_REVIEW.value: "pending review",
+    RunStatus.CANCELLED.value: "cancelled",
+}
 
 
 def _build_row(
@@ -93,10 +81,9 @@ def _build_row(
         started_at=manifest.started_at,
         duration=describe_run_duration(persisted),
         version=_read_version(project, manifest.workflow_version, seen_versions),
-        input_names=read_input_file_names(manifest),
         strip=strip,
         result_summary=describe_stage_tallies(strip),
-        differences=describe_run_differences(manifest),
+        outcome=describe_run_outcome(str(manifest.status)),
         is_test_run=manifest.parameters.is_test_run,
     )
 

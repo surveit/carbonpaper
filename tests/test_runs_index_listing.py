@@ -55,6 +55,7 @@ def test_valid_and_legacy_manifests_listed_side_by_side(runs_root: Path):
     assert good.strip is not None
     assert [(s.stage_id, s.status) for s in good.strip.squares] == [("load", "ok")]
     assert good.result_summary == "1 done"
+    assert good.outcome == "complete"
 
     # A manifest this reader cannot parse yields an identity-only row rather than
     # counts it never read — no strip, no version, no timestamp.
@@ -63,6 +64,9 @@ def test_valid_and_legacy_manifests_listed_side_by_side(runs_root: Path):
     assert legacy.strip is None
     assert legacy.version is None
     assert legacy.started_at is None
+    # No outcome word either: the result cell states the unreadability instead of
+    # putting a status under a strip it never built.
+    assert legacy.outcome == ""
 
 
 def test_unparseable_json_is_corrupt_not_zero(runs_root: Path):
@@ -75,9 +79,8 @@ def test_unparseable_json_is_corrupt_not_zero(runs_root: Path):
     assert row.strip is None
 
 
-def test_a_workflow_test_run_is_listed_and_reported_as_a_difference(runs_root: Path):
-    # A workflow test writes into runs/ like a production run, so it appears in
-    # the same listing — and "test run" is what makes its row different.
+def test_a_workflow_test_run_is_listed_and_flagged_as_one(runs_root: Path):
+    # A test writes into runs/ like a production run, so it is listed — flagged.
     test_run = _current_manifest()
     test_run["is_test_run"] = True
     _write_run(runs_root, "20260101T000003", test_run)
@@ -85,7 +88,6 @@ def test_a_workflow_test_run_is_listed_and_reported_as_a_difference(runs_root: P
     row, = build_run_index_rows("demo")
     assert row.run_id == "20260101T000003"
     assert row.is_test_run is True
-    assert row.differences == ["test run"]
 
 
 def test_a_manifest_predating_the_field_reads_as_not_a_test(runs_root: Path):
@@ -94,25 +96,26 @@ def test_a_manifest_predating_the_field_reads_as_not_a_test(runs_root: Path):
 
     row, = build_run_index_rows("demo")
     assert row.is_test_run is False
-    assert row.differences == []
 
 
-def test_the_row_names_the_input_files_by_basename_only(runs_root: Path):
-    # The golden's binding records a Windows absolute path; the row shows the
-    # file, not where it sat on the machine that ran it.
-    _write_run(runs_root, "20260101T000005", _current_manifest())
+@pytest.mark.parametrize(
+    ("status", "outcome"),
+    [
+        (RunStatus.OK, "complete"),
+        (RunStatus.WARNINGS, "complete, with warnings"),
+        (RunStatus.ERRORS, "error"),
+        (RunStatus.AWAITING_REVIEW, "pending review"),
+        (RunStatus.CANCELLED, "cancelled"),
+        (RunStatus.RUNNING, "running"),
+    ],
+)
+def test_every_run_status_has_a_word_under_the_strip(
+    runs_root: Path, status: RunStatus, outcome: str
+):
+    _write_run(runs_root, "20260101T000006", {**_current_manifest(), "status": status})
 
     row, = build_run_index_rows("demo")
-    assert row.input_names == ["load.csv"]
-
-
-def test_row_caps_and_a_busted_cache_are_the_row_differences(runs_root: Path):
-    _write_run(runs_root, "20260101T000006",
-               {**_current_manifest(), "limit_overrides": {"load": 500},
-                "bust_cache": True})
-
-    row, = build_run_index_rows("demo")
-    assert row.differences == ["first 500 rows of load", "cache off"]
+    assert row.outcome == outcome
 
 
 def test_an_unresolvable_pinned_version_says_so_instead_of_a_message(runs_root: Path):
