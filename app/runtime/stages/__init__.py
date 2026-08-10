@@ -53,11 +53,20 @@ HANDLERS: dict[StageType, StageHandler] = {
     StageType.enrich: FrameHandler(handle_enrich, caches_frames=False),
     StageType.expand: FrameHandler(handle_expand, caches_frames=False),
     StageType.aggregate: FrameHandler(handle_aggregate, caches_frames=False),
+    # narrows_to_reads: an llm_transform's signature reads are the prompt's
+    # {placeholders} — the model pins them to each other in both directions
+    # (find_llm_signature_issues), so narrowing here can starve no prompt. It is
+    # the one shape where the reads are PROVEN complete rather than claimed,
+    # which is also why the opaque-code shapes above do not carry it. Applies to
+    # the per-row path only; batch_size > 1 routes to run_llm_batches, which
+    # keys its own lookups on the full row (batch_size is fingerprinted, so the
+    # two paths never share cache entries).
     StageType.llm_transform: LLMTransformHandler(
         make_llm_row_mapper,
         run_llm_batches,
         parallelism=DEFAULT_PARALLEL,
         project_output_to_declared=True,
+        narrows_to_reads=True,
     ),
     StageType.human_review_queue: RowMapHandler(
         make_human_review_mapper,

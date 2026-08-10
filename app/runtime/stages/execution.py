@@ -15,6 +15,7 @@ from app.models import Stage
 from app.models.run_manifest import RowError, StageContribution
 from app.models.stage import StageBase, StageType, is_grain_and_order_preserving
 from app.models.stages.llm_transform import LLMTransformStage
+from app.models.stages.signature import ExtendsSignature
 
 from app.core.agent.usage import LlmUsage
 from app.core.frames import list_rows
@@ -201,6 +202,15 @@ class RowMapHandler(StageHandler):
     count or order. A row-mapped stage resolves each row against the
     stage-result cache before calling the mapper (see `_open_row_caching`)
     unless it registers `caches_rows=False`.
+
+    `narrows_to_reads` hands the mapper ONLY the anchor columns the signature
+    declares it reads, rejoining the rest afterwards (`_narrowed_reads`). The
+    two consequences must move together: a mapper that touches an undeclared
+    column now fails on that row rather than reading it silently, AND the row
+    cache keys on the narrowed row, so a column the stage never reads stops
+    invalidating its answers. Registering it claims the signature's reads are
+    COMPLETE, so it belongs only where something proves that — llm_transform,
+    whose reads the model pins to the prompt's placeholders in both directions.
     """
 
     def __init__(
@@ -210,12 +220,14 @@ class RowMapHandler(StageHandler):
         project_output_to_declared: bool = False,
         drops_rows: bool = False,
         caches_rows: bool = True,
+        narrows_to_reads: bool = False,
     ) -> None:
         self.make_mapper = make_mapper
         self.parallelism = parallelism
         self.project_output_to_declared = project_output_to_declared
         self.drops_rows = drops_rows
         self.caches_rows = caches_rows
+        self.narrows_to_reads = narrows_to_reads
 
     def execute(
         self, stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext
@@ -254,8 +266,12 @@ class LLMTransformHandler(RowMapHandler):
         run_batches: RunBatches,
         parallelism: int = 1,
         project_output_to_declared: bool = False,
+        narrows_to_reads: bool = False,
     ) -> None:
-        super().__init__(make_mapper, parallelism, project_output_to_declared)
+        super().__init__(
+            make_mapper, parallelism, project_output_to_declared,
+            narrows_to_reads=narrows_to_reads,
+        )
         self.run_batches = run_batches
 
     def execute(
@@ -359,6 +375,7 @@ def _run_row_mapper(
             f"got {len(stage.inputs)}"
         )
     src = inputs[stage.inputs[0].id]
+    reads = _narrowed_reads(stage) if handler.narrows_to_reads else None
     map_row = handler.make_mapper(stage, ctx, src)
     # The ONE line of per-row compute, optionally routed through the row cache
     # and the run log. Log outside cache, so a row the cache answers never
@@ -370,13 +387,17 @@ def _run_row_mapper(
     if caching is not None:
         compute_row = _map_row_through_cache(caching, compute_row, ctx.run_log, stage.id)
     records = list_rows(src)
+    # What the mapper SEES. Identical to `records` unless the handler narrows,
+    # and the cache interceptor fingerprints whatever is passed here — which is
+    # how narrowing re-keys the cache without the cache knowing about it.
+    seen = records if reads is None else [_project_row(row, reads) for row in records]
 
     results: list[Row | None] = [None] * len(records)
     if handler.parallelism > 1 and len(records) > 1:
         with ThreadPoolExecutor(max_workers=handler.parallelism) as pool:
             futures = {
                 pool.submit(compute_row, record, index): index
-                for index, record in enumerate(records)
+                for index, record in enumerate(seen)
             }
             for future in as_completed(futures):
                 if _consume_cancel(ctx):
@@ -388,7 +409,7 @@ def _run_row_mapper(
                     raise RunCancelled(f"stage {stage.id}: cancelled mid-fan-out")
                 results[futures[future]] = future.result()
     else:
-        for index, record in enumerate(records):
+        for index, record in enumerate(seen):
             if _consume_cancel(ctx):
                 raise RunCancelled(f"stage {stage.id}: cancelled")
             results[index] = compute_row(record, index)
@@ -403,7 +424,10 @@ def _run_row_mapper(
                 f"stage {stage.id}: row mapper must return one dict per row, "
                 f"got {type(result).__name__} for row {index}"
             )
-        out_rows.append(result)
+        # Rejoin: under narrowing the mapper only ever saw its declared reads, so
+        # the columns that merely FLOW come back from the input row here. The
+        # mapper's own keys win — that is what a rewrite or an add is.
+        out_rows.append(result if reads is None else {**records[index], **result})
         kept_indices.append(index)
     mapped = _finish_mapped_frame(pd.DataFrame(out_rows), handler, map_row, stage, ctx)
     out = _restore_input_columns_when_nothing_named_them(mapped, src)
@@ -411,6 +435,25 @@ def _run_row_mapper(
         # The driver, not the stage, knows which input ordinals survived.
         attach_row_lineage(out, kept_rows_lineage(stage.inputs[0].id, kept_indices))
     return out
+
+
+def _narrowed_reads(stage: Stage) -> frozenset[str] | None:
+    """The anchor columns the signature reads; None where nothing flows, so
+    there is no rejoin to make."""
+    signature = stage.signature
+    if not stage.inputs or not isinstance(signature, ExtendsSignature):
+        return None
+    anchor = stage.inputs[0].id
+    return frozenset(
+        column.name
+        for entry in signature.reads
+        if entry.input == anchor
+        for column in entry.columns
+    )
+
+
+def _project_row(row: Row, keep: frozenset[str]) -> Row:
+    return {key: value for key, value in row.items() if key in keep}
 
 
 # ── the row-level cache interceptor ──────────────────────────────────────────

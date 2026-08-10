@@ -461,10 +461,12 @@ def test_row_error_stage_blocks_downstream_and_resume_is_not_stale(tmp_path, mon
     failure removed, `score` re-runs and `tail` runs on its real (non-stale)
     output. This is the row-error path of the fabricated-success/stale-reuse bug
     the fork-blocking invariant closes."""
-    failing = {"id": "a"}  # which input id's generation fails; cleared before resume
+    # Which row's generation fails, keyed on `text` — the one column the stage's
+    # signature reads, and so the only one the mapper is handed. Cleared before resume.
+    failing = {"text": "x"}
 
     def fake_call_llm(stage_id, llm_config, row, **kwargs):
-        if row["id"] == failing["id"]:
+        if row["text"] == failing["text"]:
             raise RuntimeError("boom")
         return {"score": 5}
 
@@ -491,7 +493,7 @@ def test_row_error_stage_blocks_downstream_and_resume_is_not_stale(tmp_path, mon
 
     # Remove the failure and resume the same run: score re-runs (both rows now
     # succeed), and tail runs on score's real output rather than a stale frame.
-    failing["id"] = None
+    failing["text"] = None
     resumed = runner.resume_run(tmp_path, first["run_id"], tmp_path,
                             *resumed_stages(tmp_path, first["run_id"]))
 

@@ -18,6 +18,7 @@ from app.runtime.stages import HANDLERS
 from app.runtime.stages.execution import (
     ROW_ERROR_KEY,
     ROW_USAGE_KEY,
+    Row,
     RowMapHandler,
     _order_by_input_position,
 )
@@ -497,3 +498,96 @@ def test_every_row_mapped_stage_type_runs_under_the_interceptor():
     ):
         handler = HANDLERS[stage_type]
         assert isinstance(handler, RowMapHandler)
+
+
+# ── narrowing to the signature's declared reads ──────────────────────────────
+# Registered on llm_transform, whose reads the model pins to the prompt's
+# placeholders. Exercised here through a hand-built handler so the driver's own
+# behaviour is what is under test, not an LLM backend.
+
+_NOISE_COLUMN = {"name": "noise", "type": "str", "nullable": True}
+
+
+def _two_column_stage() -> Stage:
+    """Reads `x`, and carries an unread `noise` column alongside it."""
+    return parse_stage({
+        "id": "double", "description": "Double", "type": "python_row_function",
+        "inputs": [{"id": "src", "schema": {"columns": [
+            {"name": "x", "type": "int", "nullable": True}, _NOISE_COLUMN]}}],
+        "signature": {
+            "form": "extends",
+            "reads": [{"input": "src",
+                       "columns": [{"name": "x", "type": "int", "nullable": True}]}],
+            "adds": [{"name": "y", "type": "int", "nullable": True}]},
+        "function": {"kind": "inline", "code": _DOUBLING_CODE},
+    })
+
+
+def _seen_rows_handler(seen: list[Row], **kwargs) -> RowMapHandler:
+    def make_mapper(stage, ctx, src):
+        def map_row(row, index):
+            seen.append(dict(row))
+            return {**row, "y": row["x"] * 2}
+        return map_row
+
+    return RowMapHandler(make_mapper=make_mapper, **kwargs)
+
+
+def _noisy_src(noise: list[str]) -> pd.DataFrame:
+    return pd.DataFrame({"x": [1, 2], "noise": noise})
+
+
+def test_the_mapper_is_handed_only_the_columns_the_signature_reads():
+    seen: list[Row] = []
+    handler = _seen_rows_handler(seen, narrows_to_reads=True)
+
+    handler.execute(_two_column_stage(), {"src": _noisy_src(["a", "b"])}, _ctx())
+
+    assert seen == [{"x": 1}, {"x": 2}]  # `noise` never reached it
+
+
+def test_an_unread_column_still_flows_to_the_output():
+    """Narrowing hides a column from the mapper; the rejoin still carries it out."""
+    handler = _seen_rows_handler([], narrows_to_reads=True)
+
+    out = handler.execute(_two_column_stage(), {"src": _noisy_src(["a", "b"])}, _ctx())
+
+    assert list(out["noise"]) == ["a", "b"]
+    assert list(out["y"]) == [2, 4]
+
+
+def test_a_column_the_stage_never_reads_stops_invalidating_its_cache():
+    """The payoff: keyed on what was READ, a row differing only in a blind
+    column is the same row."""
+    stage = _two_column_stage()
+    calls: list[Row] = []
+    handler = _seen_rows_handler(calls, narrows_to_reads=True)
+
+    handler.execute(stage, {"src": _noisy_src(["a", "b"])}, _ctx(run_id="run1"))
+    assert len(calls) == 2
+
+    # Same `x` values, different `noise` — every row is a hit.
+    handler.execute(stage, {"src": _noisy_src(["CHANGED", "ALSO"])}, _ctx(run_id="run2"))
+    assert len(calls) == 2
+
+
+def test_without_narrowing_that_same_column_still_invalidates():
+    """The control: unnarrowed the whole row keys, so the hit above is
+    narrowing's, not the fixture's."""
+    stage = _two_column_stage()
+    calls: list[Row] = []
+    handler = _seen_rows_handler(calls)
+
+    handler.execute(stage, {"src": _noisy_src(["a", "b"])}, _ctx(run_id="run1"))
+    handler.execute(stage, {"src": _noisy_src(["CHANGED", "ALSO"])}, _ctx(run_id="run2"))
+
+    assert len(calls) == 4  # both rows recomputed
+
+
+def test_the_registered_llm_handler_narrows():
+    """The one registration carrying it, so the flag cannot be lost in a refactor
+    without a test saying so."""
+    handler = HANDLERS[StageType.llm_transform]
+    assert isinstance(handler, RowMapHandler)
+    assert handler.narrows_to_reads is True
+    assert HANDLERS[StageType.python_row_function].narrows_to_reads is False
