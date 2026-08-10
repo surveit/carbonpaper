@@ -47,7 +47,7 @@ def make_llm_row_mapper(stage: Stage, ctx: RunContext, src: pd.DataFrame) -> Row
     def map_row(row: Row, index: int) -> Row:
         # Per-attempt usage lands here (success or failure); the row carries its
         # summed usage out under ROW_USAGE_KEY for the driver to aggregate. Like
-        # ROW_ERROR_KEY, it is an undeclared column and the output projection
+        # ROW_ERROR_KEY, it is an undeclared column and the output trim
         # drops it, so it never reaches stage output.
         usages: list[LlmUsage] = []
         try:
@@ -90,7 +90,7 @@ def run_llm_batches(
     computed, with `positions` naming where each one sits in the stage's input —
     the only thing that lets a chunk's run-log detail be attributed to the rows
     it actually covers. The rows returned carry their internal columns,
-    un-stripped and unprojected — the shape assembles the stage's output frame
+    un-stripped and untrimmed — the shape assembles the stage's output frame
     from them."""
     llm = narrow_stage(stage, LLMTransformStage).llm
     assert stage.resolve_output_schema() is not None and stage.inputs[0].table_schema is not None
