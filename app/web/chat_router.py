@@ -16,6 +16,7 @@ from app.core.agent.sdk_engine import CLI_MODEL
 from app.core.agent.session import create_agent_session
 from app.core.agent.store import open_session_store
 from app.core.agent.turns import default_turn_manager
+from app.services.project import list_projects
 from app.web.breadcrumbs import build_chat_crumbs, build_home_crumbs
 from app.web.config import templates
 
@@ -51,6 +52,9 @@ async def chat_index(request: Request):
     return templates.TemplateResponse(request, "chat_index.html", {
         "sessions": visible_sessions,
         "backend": _backend_label(),
+        # Names only, for the New chat picker: the editing agent's context requires a
+        # project_id, so a session is always about one and the reader names which.
+        "projects": list_projects(),
         "crumbs": build_home_crumbs("Chats"),
     })
 
