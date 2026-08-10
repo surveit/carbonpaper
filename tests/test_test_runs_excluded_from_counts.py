@@ -55,7 +55,7 @@ def test_dashboard_card_n_runs_excludes_test_runs(tmp_path, monkeypatch):
     _write_manifest(root / "runs" / "20260102T000000", status="ok", is_test_run=True)
 
     card, = loading.list_projects()
-    assert card["n_runs"] == 1
+    assert card.n_runs == 1
 
 
 def test_a_legacy_manifests_flat_flag_still_excludes_it(tmp_path):
@@ -71,4 +71,4 @@ def test_a_legacy_manifests_flat_flag_still_excludes_it(tmp_path):
 
     assert project_service._runs_summary(root).n == 1
     card, = loading.list_projects()
-    assert card["n_runs"] == 1
+    assert card.n_runs == 1

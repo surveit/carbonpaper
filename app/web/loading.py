@@ -12,33 +12,26 @@ from typing import Any
 import pandas as pd
 from fastapi import HTTPException
 
-from app.core.errors import NoVersionToRunError, RunManifestNotJson, StageOutputMissing
+from app.core.errors import NoVersionToRunError, StageOutputMissing
 from app.core.frames import list_rows, read_frame_file, render_frame_as_csv_text
 from app.models import Stage, StageType
 from app.models.stages.llm_transform import LLMTransformStage
-from app.models.run_manifest import (
-    find_manifest_backed_run_dirs,
-    read_run_manifest,
-    read_run_manifest_json,
-    records_a_test_run,
-)
+from app.models.run_manifest import read_run_manifest
 from app.runtime.manifest import resolve_output_path
 from app.services.run import resolve_version
 from app.services.loader import CompiledStageFile, load_compiled_dir
 from app.services.versioning import list_versions, load_version_stages
 from app.services.workspace import load_schemas, resolve_project_dir
 from app.web.config import projects_dir
+from app.web.project_cards import ProjectCard, tally_runs
 
 
 # ─── Projects & stages ──────────────────────────────────────────────────
 
-def list_projects() -> list[dict[str, Any]]:
+def list_projects() -> list[ProjectCard]:
     """One project card per dir under examples/, in the shape the home dashboard
-    renders. The card's headline question is binary — is the project still being
-    SET UP, or is it READY TO RUN? — so alongside the authored-what flags
-    (has_document / has_schemas / has_workflow) each card carries `is_ready`:
-    True iff at least one PUBLISHED version exists, because a run pins a
-    published version (app.services.run.resolve_version) and an
+    renders. `is_ready` is True iff at least one PUBLISHED version exists, because
+    a run pins a published version (app.services.run.resolve_version) and an
     unpublished, agent-minted draft is not runnable. Sorted by name.
 
     Every flag and count is read off disk — a card never advertises a
@@ -50,7 +43,7 @@ def list_projects() -> list[dict[str, Any]]:
     (mirrors the runs index), so the count is real runs, never inflated."""
     if not projects_dir().exists():
         return []
-    cards: list[dict[str, Any]] = []
+    cards: list[ProjectCard] = []
     for p in sorted(projects_dir().iterdir()):
         if not p.is_dir():
             continue
@@ -60,7 +53,7 @@ def list_projects() -> list[dict[str, Any]]:
     return cards
 
 
-def _build_project_card(p: Path) -> dict[str, Any] | None:
+def _build_project_card(p: Path) -> ProjectCard | None:
     """One project dir's dashboard card, or None if `p` carries none of the
     creation markers (document/workflow/schemas) and so is not a project."""
     compiled_dir = p / "compiled"
@@ -69,36 +62,22 @@ def _build_project_card(p: Path) -> dict[str, Any] | None:
     has_workflow = n_stages > 0
     has_schemas = schemas_dir.is_dir() and any(schemas_dir.glob("*.json"))
     n_schemas = len(load_schemas(p)) if has_schemas else 0
-    n_runs = _count_runs_with_manifest(p / "runs")
+    runs = tally_runs(p / "runs")
     has_document = (p / "document.md").is_file() or (p / "project.json").is_file()
     if not (has_workflow or has_schemas or has_document):
         return None
-    return {
-        "name": p.name,
-        "has_document": has_document,
-        "has_workflow": has_workflow,
-        "has_schemas": has_schemas,
-        "is_ready": any(v.published for v in list_versions(p)),
-        "n_stages": n_stages,
-        "n_schemas": n_schemas,
-        "n_runs": n_runs,
-    }
-
-
-def _count_runs_with_manifest(rdir: Path) -> int:
-    """So an in-progress/abandoned run dir, or a workflow test's run, is never counted."""
-    return sum(1 for run in find_manifest_backed_run_dirs(rdir) if _manifest_counts_as_run(run))
-
-
-def _manifest_counts_as_run(run_dir: Path) -> bool:
-    """Not a test — the default for a manifest recording no such flag, i.e. every run before it."""
-    try:
-        manifest = read_run_manifest_json(run_dir)
-    except RunManifestNotJson:
-        # Dropped, not counted 'corrupt' (as the project's own runs summary does):
-        # a card's headline count must not advertise a run nothing can be read off.
-        return False
-    return not records_a_test_run(manifest)
+    return ProjectCard(
+        name=p.name,
+        has_document=has_document,
+        has_workflow=has_workflow,
+        has_schemas=has_schemas,
+        is_ready=any(v.published for v in list_versions(p)),
+        n_stages=n_stages,
+        n_schemas=n_schemas,
+        n_runs=runs.real,
+        n_test_runs=runs.tests,
+        status=runs.headline,
+    )
 
 
 @dataclass
