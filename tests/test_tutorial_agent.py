@@ -212,9 +212,10 @@ def test_get_run_status_reads_the_manifest_back_without_waiting(
             {"stage_id": "judge_alignment", "status": "running", "output_row_count": 0}
         ],
     })
+    seeded = _seed_a_tour()
     tool = next(t for t in _tools() if t.name == "get_run_status")
 
-    out = _call(tool, {"project_id": "any", "run_id": "r"})
+    out = _call(tool, {"project_id": seeded["name"], "run_id": "r"})
     status = json.loads(out["content"][0]["text"])
 
     assert out.get("is_error") is not True

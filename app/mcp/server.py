@@ -23,6 +23,7 @@ from app.models import (
     StageDraft,
     find_workflow_compiler_warnings,
 )
+from app.tools import shared
 from app.tools.tool_specs import SAVE_VERSION_FROM_WORKING_COPY, TOOL_SPECS
 from app.mcp.instructions import INSTRUCTIONS
 from app.models.review_guide import ReviewGuideDraft
@@ -32,7 +33,6 @@ from app.services import generation
 from app.services import loader
 from app.services import frame_profile
 from app.services import project as project_service
-from app.services import run as run_service
 from app.services import versioning
 from app.services import workflow_test as workflow_test_service
 from app.services import workspace
@@ -180,8 +180,7 @@ def read_data_model(project_id: str) -> list[dict[str, Any]]:
 
 @mcp.tool(description=TOOL_SPECS["describe_workflow"].description)
 def describe_workflow(project_id: str) -> dict[str, Any]:
-    _resolve_existing_project(project_id)
-    return project_service.describe_workflow(project_id)
+    return shared.describe_workflow(project_id)
 
 
 @mcp.tool(description=TOOL_SPECS["read_stage"].description)
@@ -248,19 +247,16 @@ def run_workflow(
     version_id: str | None = None,
     limits: dict[str, int] | None = None,
 ) -> dict[str, Any]:
-    _resolve_existing_project(project_id)  # loud if the project doesn't exist
     try:
-        run_id = run_service.start_run(project_id, version_id=version_id, limits=limits)
+        return shared.run_workflow(project_id, version_id, limits)
     except _RUN_TOOL_ERRORS as exc:
         return {"ok": False, "error": str(exc)}
-    return {"run_id": run_id, "status": run_service.read_run_status(project_id, run_id)["status"]}
 
 
 @mcp.tool(description=TOOL_SPECS["get_run_status"].description)
 def get_run_status(project_id: str, run_id: str) -> dict[str, Any]:
-    _resolve_existing_project(project_id)  # loud if the project doesn't exist
     try:
-        return run_service.read_run_status(project_id, run_id)
+        return shared.get_run_status(project_id, run_id)
     except _RUN_TOOL_ERRORS as exc:
         return {"ok": False, "error": str(exc)}
 
@@ -300,10 +296,7 @@ def profile_stage_output_data_range(
 
 
 def _resolve_existing_project(project_id: str) -> Path:
-    pdir = workspace.resolve_project_dir(project_id)
-    if not pdir.is_dir():
-        raise ValueError(f"no project '{project_id}' in the workspace")
-    return pdir
+    return shared.resolve_existing_project(project_id)
 
 
 def _read_document(pdir: Path, project_id: str) -> str:
