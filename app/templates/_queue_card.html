@@ -6,6 +6,9 @@
          data-input-fingerprint="{{ item.input_fingerprint }}">
     <header>
         <span class="row-position">Row {{ row_position }} of {{ page.total }}</span>
+        {% if item.prior_decision %}
+        <span class="verdict-chip verdict-{{ item.prior_decision.verdict }}">✓ {{ item.prior_decision.verdict }}</span>
+        {% endif %}
         {% if item.lineage_url %}
         <a class="lineage-link" href="{{ item.lineage_url }}">lineage of the upstream row →</a>
         {% endif %}
@@ -13,7 +16,7 @@
 
     {% if page.context_columns %}
     <details class="queued-row" open>
-        <summary>Background for this row — not under review</summary>
+        <summary>Context for review</summary>
         {{ kv_table(page.context_columns, item.row) }}
     </details>
     {% endif %}
@@ -78,7 +81,10 @@
         {% if review_notes_column %}
         <label class="review-notes">
             <span>{{ page.review_notes_label }}</span>
-            <textarea rows="2" data-role="notes"
+            {# `readonly`, never `disabled`: the reviewer must still be able to select
+               and copy the note they recorded, and a decided card's box is frozen only
+               until "Change my review" lifts it. #}
+            <textarea rows="2" data-role="notes" {% if item.prior_decision %}readonly{% endif %}
                       placeholder="Include any reasoning or citations for your decision">{{ item.prior_decision.review_notes if item.prior_decision and item.prior_decision.review_notes else '' }}</textarea>
         </label>
         {% endif %}
