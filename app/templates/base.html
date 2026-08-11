@@ -23,7 +23,19 @@
     <main>
         {% block content %}{% endblock %}
     </main>
-    <script src="/static/cell-expand.js"></script>
+    {# td.cell-clip is clipped to one line by CSS, so a long value never widens
+       its column; clicking a cell lets it wrap and shows the whole value in
+       place. The title attribute the template writes is the hover fallback.
+       Delegated from the document, and here rather than on the pages holding a
+       data-preview table, so a new one of those cannot forget to wire it. #}
+    <script>
+    document.addEventListener('click', function (e) {
+        var cell = e.target.closest && e.target.closest('td.cell-clip');
+        if (!cell) return;
+        if (e.target.tagName === 'A') return;
+        cell.classList.toggle('expanded');
+    });
+    </script>
     <script src="/static/friendly-time.js"></script>
     <script src="/static/breadcrumbs.js"></script>
 </body>
