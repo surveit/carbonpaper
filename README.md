@@ -1,4 +1,4 @@
-# carbonpaper — reviewable AI workflows
+# Carbon Paper — reviewable AI workflows
 
 Run data/OSINT pipelines as **workflows of typed, schema-validated stages** with
 human-review gates and fully persisted runs — testable and reviewable, not a black box.
@@ -23,9 +23,9 @@ uv run python -m app.cli <project>                  # run a project's workflow f
 `/data`. The Fly GitHub integration builds the Dockerfile on push, so the repo
 carries no deploy workflow and no token.
 
-State lives on the volume: `CARBONPAPER_DB_PATH=/data/app.db` (the document
-store) and `CARBONPAPER_PROJECTS_DIR=/data/projects`. The frame store follows the
-database path's own directory, so `CARBONPAPER_FRAMES_ROOT` stays unset.
+State lives on the volume: `CARBON_PAPER_DB_PATH=/data/app.db` (the document
+store) and `CARBON_PAPER_PROJECTS_DIR=/data/projects`. The frame store follows the
+database path's own directory, so `CARBON_PAPER_FRAMES_ROOT` stays unset.
 `docker-entrypoint.sh` creates both directories, runs `alembic upgrade head`, then
 execs uvicorn on port 8080 — the migration is in the entrypoint rather than a
 `release_command` because a release machine has no volume attached.

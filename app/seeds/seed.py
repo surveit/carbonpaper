@@ -37,6 +37,6 @@ def seed_all(
 
 
 def seed_demo_data_if_enabled() -> list[str]:
-    if os.environ.get("CARBONPAPER_SEED_DEMO") != "1":
+    if os.environ.get("CARBON_PAPER_SEED_DEMO") != "1":
         return []
     return seed_all()

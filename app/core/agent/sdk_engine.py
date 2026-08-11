@@ -29,7 +29,7 @@ from claude_agent_sdk import (
 from app.core.agent.usage import LlmUsage
 from app.core.llm_sdk import CLI_PATH as _CLI_PATH
 
-CLI_MODEL = os.environ.get("CARBONPAPER_CHAT_CLI_MODEL", "sonnet")
+CLI_MODEL = os.environ.get("CARBON_PAPER_CHAT_CLI_MODEL", "sonnet")
 
 # The in-process MCP server name the tools are mounted under. The CLI addresses a
 # tool as f"mcp__{MCP_SERVER_NAME}__{tool_name}". Kept here (not in registry) so

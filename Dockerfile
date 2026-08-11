@@ -40,9 +40,9 @@ RUN chmod +x docker-entrypoint.sh
 
 # The volume Fly mounts at /data holds both: app.core.store_config computes the
 # frames root from the database path's own directory, so pinning the database
-# carries the frames with it and CARBONPAPER_FRAMES_ROOT stays unset.
-ENV CARBONPAPER_DB_PATH=/data/app.db \
-    CARBONPAPER_PROJECTS_DIR=/data/projects \
+# carries the frames with it and CARBON_PAPER_FRAMES_ROOT stays unset.
+ENV CARBON_PAPER_DB_PATH=/data/app.db \
+    CARBON_PAPER_PROJECTS_DIR=/data/projects \
     PYTHONUNBUFFERED=1
 
 EXPOSE 8080

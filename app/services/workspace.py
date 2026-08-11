@@ -38,7 +38,7 @@ def projects_dir() -> Path:
 
 def configure_projects_dir_from_env() -> None:
     """Call from a composition root, never at import time — it would override a later setter."""
-    configured = os.environ.get("CARBONPAPER_PROJECTS_DIR")
+    configured = os.environ.get("CARBON_PAPER_PROJECTS_DIR")
     if configured:
         set_projects_dir(Path(configured))
 

@@ -10,11 +10,11 @@ from app.models.stages.node_types import AUTHORABLE_TYPES, CODE_CARRYING_TYPES
 from app.models.stages.stage_base import StageType, is_grain_and_order_preserving
 
 
-# ─── What CarbonPaper is ─────────────────────────────────────────
+# ─── What Carbon Paper is ────────────────────────────────────────
 
 ROLE_NOTE = """\
 # Role
-You are an AI assistant in CarbonPaper, which exists to help non-AI engineers get
+You are an AI assistant in Carbon Paper, which exists to help non-AI engineers get
 results that can pass a verification challenge. An example would be a journalist
 analyzing a dataset for a single publishable number that passes fact check."""
 

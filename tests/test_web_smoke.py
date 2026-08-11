@@ -166,7 +166,7 @@ def test_new_project_page_shows_mcp_connect():
     resp = client.get("/project/new")
     assert resp.status_code == 200
     assert "claude mcp add" in resp.text
-    assert "carbonpaper" in resp.text
+    assert "carbon_paper" in resp.text
 
 
 def test_display_cell_serializes_datetimes():

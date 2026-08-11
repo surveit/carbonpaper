@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 
+from app.core.store_config import refuse_renamed_env_vars
 from app.seeds.bootstrap import configure_projects_dir_from_env, ensure_store_configured
 from app.seeds.seed import discover_workflow_files, seed_all
 
@@ -20,6 +21,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> None:
     _parse_args(argv)
+    refuse_renamed_env_vars()
     configure_projects_dir_from_env()
     ensure_store_configured()
     imported = set(seed_all())

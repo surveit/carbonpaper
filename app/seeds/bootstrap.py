@@ -14,7 +14,7 @@ from app.services.workspace import configure_projects_dir_from_env as configure_
 def ensure_store_configured() -> None:
     if is_store_configured():
         return
-    db_path = os.environ.get("CARBONPAPER_DB_PATH", "data/app.db")
+    db_path = os.environ.get("CARBON_PAPER_DB_PATH", "data/app.db")
     Path(db_path).parent.mkdir(parents=True, exist_ok=True)
     configure_store(SqliteKvStore(db_path))
 

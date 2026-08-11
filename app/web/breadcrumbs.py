@@ -101,7 +101,7 @@ def build_chat_crumbs(title: str | None) -> list[Crumb]:
 
 
 # The trail's first rung renders the wordmark (_wordmark.html) rather than this text.
-_HOME_LABEL = "CarbonPaper"
+_HOME_LABEL = "Carbon Paper"
 _CHATS_LABEL = "Chats"
 _CHATS_HREF = "/chat"
 # States the absence rather than naming the session something it is not called.

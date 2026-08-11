@@ -18,8 +18,8 @@ def test_seed_cli_subprocess_bootstraps_the_store_and_seeds(tmp_path):
     examples_dir.mkdir()
     env = {
         **os.environ,
-        "CARBONPAPER_PROJECTS_DIR": str(examples_dir),
-        "CARBONPAPER_DB_PATH": str(tmp_path / "app.db"),
+        "CARBON_PAPER_PROJECTS_DIR": str(examples_dir),
+        "CARBON_PAPER_DB_PATH": str(tmp_path / "app.db"),
     }
     result = subprocess.run(
         [sys.executable, "-m", "app.seeds"],
@@ -81,7 +81,7 @@ def test_discover_workflow_files_returns_empty_list_for_a_missing_data_dir(tmp_p
 
 
 def test_seed_demo_data_if_enabled_is_a_noop_when_env_var_unset(tmp_path, monkeypatch):
-    monkeypatch.delenv("CARBONPAPER_SEED_DEMO", raising=False)
+    monkeypatch.delenv("CARBON_PAPER_SEED_DEMO", raising=False)
     examples_dir = tmp_path / "examples"
     examples_dir.mkdir()
 
@@ -92,7 +92,7 @@ def test_seed_demo_data_if_enabled_is_a_noop_when_env_var_unset(tmp_path, monkey
 
 
 def test_seed_demo_data_if_enabled_seeds_when_env_var_is_1(tmp_path, monkeypatch):
-    monkeypatch.setenv("CARBONPAPER_SEED_DEMO", "1")
+    monkeypatch.setenv("CARBON_PAPER_SEED_DEMO", "1")
     examples_dir = tmp_path / "examples"
     examples_dir.mkdir()
 
