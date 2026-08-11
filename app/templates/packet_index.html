@@ -2,10 +2,19 @@
 {% block title %}Review packet · {{ run.project }} · {{ run.run_id }}{% endblock %}
 {% block content %}
 
-{# Same shell as the run view: body left, review guide as a right rail. The rail's
-   layout and its collapse drawer both live in _run_guide.html, so mirroring the
-   structure is what makes them work here. #}
-<div class="run-shell{% if guide %} with-guide{% endif %}" id="run-shell">
+{# The run view's own two columns (run-page.css): the guide is the LEFT spine, the
+   body the work surface, and a packet whose version carries no guide takes the whole
+   width. The rail is titled here, as the run page titles it, so the guide partial
+   does not title itself a second time. #}
+<div class="run-shell{% if not guide %} no-nav{% endif %}" id="run-shell">
+
+{% if guide %}
+<div class="run-nav" id="run-nav">
+  <div class="run-nav-head"><h2>Review guide</h2></div>
+  {% with titled_by_host = true %}{% include "_run_guide.html" %}{% endwith %}
+</div>
+{% endif %}
+
 <div class="run-main">
 
 <div class="stage-header">
@@ -127,8 +136,6 @@
 </section>
 
 </div>{# /.run-main #}
-
-{% if guide %}{% include "_run_guide.html" %}{% endif %}
 </div>{# /.run-shell #}
 
 {% if mermaid %}

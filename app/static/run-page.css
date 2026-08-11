@@ -175,6 +175,32 @@ table.issue-table { width: 100%; border-collapse: collapse; font-size: .79rem; }
     padding: 1px 7px; border-radius: 3px; font-size: .74rem; cursor: help; white-space: nowrap; }
 .runs-table .unresolved { color: var(--state-warn-ink); cursor: help; }
 
+/* ── The NAV spine and the WORK surface, as COLUMNS. The spine is the review guide,
+      so a version carrying none leaves the work surface the whole width rather than a
+      titled empty column beside it.
+
+      Here rather than in run_detail.html's own <style> because the review packet
+      renders the same two columns from a static folder, and a rail it cannot lay out
+      falls to the foot of the page and reads as an appendix. run_detail.html keeps
+      what only a fixed-viewport app has: the panes' independent scrolling, the fade
+      and the collapse control. ── */
+.run-shell { display: grid; gap: 18px; grid-template-columns: 360px minmax(0, 1fr);
+    align-items: stretch; }
+.run-shell.no-nav { grid-template-columns: minmax(0, 1fr); }
+.run-nav { min-width: 0; padding-right: 16px; border-right: 1px solid var(--border); }
+/* An author `display` rule would beat [hidden]. */
+.run-nav[hidden] { display: none; }
+.run-main { min-width: 0; }
+.run-nav-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.run-nav-head h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--muted); margin: 0; }
+
+/* One column, guide first: at this width a 360px rail leaves the tables unreadable. */
+@media (max-width: 1000px) {
+    .run-shell, .run-shell.no-nav { grid-template-columns: 1fr; }
+    .run-nav { border-right: 0; padding-right: 0; }
+}
+
 /* Both sit inside a `.run-section`, which owns the rule above them and the space
    around it — neither draws its own. */
 .workflow-full { width: 100%; margin: 0 0 .3rem; }

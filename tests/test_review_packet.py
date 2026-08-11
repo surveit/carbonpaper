@@ -403,6 +403,18 @@ def test_index_carries_the_versions_review_guide(project_dir, tmp_path):
     assert "Check the doubling" in index
     assert "twice its input" in index
     assert 'href="stages/double.html"' in index
+    # The guide is the LEFT spine, as on the run page — not a trailer under the body.
+    # `run-nav` before `run-main` in source order IS the column order under the grid.
+    assert index.index('class="run-nav"') < index.index('class="run-main"')
+    assert "run-shell no-nav" not in index
+    # Titled once: the rail's own head, not the partial titling itself again.
+    assert index.count("<h2>Review guide</h2>") == 1
+
+
+def test_index_takes_the_whole_width_when_the_version_has_no_guide(exported):
+    index = (exported.root / "index.html").read_text(encoding="utf-8")
+    assert "run-shell no-nav" in index
+    assert 'class="run-nav"' not in index
 
 
 def test_guide_stage_links_reach_the_packets_own_pages(project_dir, tmp_path):
