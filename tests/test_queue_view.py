@@ -120,15 +120,15 @@ def test_the_context_table_omits_the_columns_under_review():
 
 
 @pytest.mark.parametrize(
+    # The card names the SOURCE column, so its tooltip describes that column —
+    # the target's description is about where the reviewer's own value lands.
     "target_spec, expected",
     [
-        ({"description": "the label after review"}, "the label after review"),  # the TARGET's
-        ({}, "high when the score exceeds one"),                     # else the SOURCE column's
+        ({"description": "the label after review"}, "high when the score exceeds one"),
+        ({}, "high when the score exceeds one"),
     ],
 )
-def test_a_reviewed_field_describes_itself_from_the_target_then_the_source(
-    target_spec, expected
-):
+def test_a_reviewed_field_describes_the_column_under_review(target_spec, expected):
     stage = _queue_stage(_LABEL_COLUMNS, target_spec=target_spec)
 
     field, = queue_view.build_reviewed_fields(stage, stage.queue)
@@ -176,8 +176,10 @@ def test_a_declared_range_becomes_the_fields_bounds():
 
 def test_the_notes_label_prefers_the_declared_description():
     stage = _queue_stage(_LABEL_COLUMNS)
-    assert queue_view.resolve_notes_label(stage, "review_notes") == "Review notes"
-    assert queue_view.resolve_notes_label(stage, "reviewer_notes") == "Reviewer notes"
+    # No description declared: the box is labelled for what it is, not for the
+    # column name the note happens to be stored under.
+    assert queue_view.resolve_notes_label(stage, "review_notes") == "Notes"
+    assert queue_view.resolve_notes_label(stage, "reviewer_notes") == "Notes"
 
     described = stage.model_copy(update={"signature": stage.signature.model_copy(
         update={"adds": [

@@ -22,8 +22,12 @@
     {% endif %}
 
     <form class="review-form">
-        <p class="review-section-heading">Columns to review</p>
+        {# Two named halves: the column under review and the value it arrived with,
+           then the reviewer's own answer. The stored column each answer lands in is
+           named once, on the decided card's recorded line at the foot. #}
         <div class="reviewed-fields">
+        <p class="field-column-heading under-review">Columns to review</p>
+        <p class="field-column-heading">Your review</p>
         {% for field in page.reviewed_fields %}
         {% set field_id = 'rf-' ~ item.input_fingerprint ~ '-' ~ field.target %}
         {# The upstream value is what this stage received for the column; `prefill`
@@ -33,17 +37,10 @@
         {% set upstream_text = item.upstream_text.get(field.target) %}
         {% set prefill = item.prefill.get(field.target) %}
         {% set prefill_text = '' if prefill is none else prefill %}
-        {% set recorded = item.prior_decision.reviewed_values.get(field.target) if item.prior_decision else none %}
         <div class="reviewed-field">
             <label for="{{ field_id }}"
-                   {% if field.description %}title="{{ field.description }}"{% endif %}>{{ field.target }}</label>
-            <span class="upstream-value">received <code>{{ field.source }}</code>:
-                <strong>{% if upstream_text is none or upstream_text == '' %}<em>no value</em>{% else %}{{ upstream_text }}{% endif %}</strong>
-                {% if item.prior_decision %}
-                <span class="recorded-value">· you recorded
-                    <strong>{% if recorded is none %}<em>no value</em>{% else %}{{ recorded }}{% endif %}</strong></span>
-                {% endif %}
-            </span>
+                   {% if field.description %}title="{{ field.description }}"{% endif %}>{{ field.source }}</label>
+            <span class="upstream-value">{% if upstream_text is none or upstream_text == '' %}<em>no value</em>{% else %}{{ upstream_text }}{% endif %}</span>
             <div class="field-control">
                 {# A decided card is not asking for input: its openers are really
                    disabled (not merely styled so) until "Change my review" unlocks them. #}

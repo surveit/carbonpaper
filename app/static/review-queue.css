@@ -110,19 +110,31 @@
     letter-spacing: .04em; color: var(--muted);
 }
 
-/* One row per reviewed column: name, the value the stage received, the field. */
+/* One row per reviewed column: the column under review, the value the stage
+   received for it, the reviewer's field. The dashed rule above separates the
+   section from the context table. */
 .reviewed-fields {
     display: grid; grid-template-columns: max-content 1fr minmax(140px, 18rem);
-    gap: 8px 14px; align-items: center;
-    margin-top: 8px;
+    gap: 6px 14px; align-items: center;
+    margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border);
 }
+.reviewed-fields .field-column-heading {
+    margin: 0; padding-bottom: 6px; border-bottom: 1px dashed var(--border);
+    font-size: 12px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: .04em; color: var(--muted);
+}
+/* Spans the name and the received value: one heading over both, because both
+   are what came in. */
+.reviewed-fields .field-column-heading.under-review { grid-column: 1 / 3; }
 .reviewed-field { display: contents; }
-.reviewed-field label { font-weight: 600; font-size: 13px; }
-.reviewed-field .upstream-value { font-size: 12px; color: var(--muted); }
+.reviewed-field label {
+    font-weight: 600; font-size: 13px;
+    font-family: "SFMono-Regular", "Consolas", "Liberation Mono", Menlo, monospace;
+}
+.reviewed-field .upstream-value { font-size: 13px; }
 .reviewed-field input, .reviewed-field select {
     padding: 5px 8px; border: 1px solid var(--border); border-radius: 3px; font: inherit; font-size: 14px;
 }
-.reviewed-field .recorded-value { font-size: 12px; color: var(--info-ink); }
 
 /* A reviewed value is read-only until its `change` button swaps in the control. */
 .field-control { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }

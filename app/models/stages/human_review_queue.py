@@ -76,7 +76,9 @@ class QueueConfig(StageConfig):
         default=None,
         description=(
             "Optional: name the column a reviewer's free-text note lands in. Omit it and "
-            "the stage neither offers a notes box nor adds a notes column."
+            "the stage neither offers a notes box nor adds a notes column. That column's "
+            "`description` is the label over the box, which otherwise reads `Notes` — "
+            "write one only where the review needs specific documentation."
         ),
     )
     sort: list[QueueSortKey] = Field(

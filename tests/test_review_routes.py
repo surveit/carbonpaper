@@ -216,8 +216,8 @@ def test_happy_path_renders_items_with_fingerprint_prior_decision_and_counts(tmp
     assert 'data-prefill="1"' in html  # the mocked upstream score
     # One Submit per card; the verdict is settled server-side, so no button names one.
     assert html.count(">Submit<") == html.count('<article class="queue-card')
-    # The notes column is labelled by name, and nothing ties a note to a change.
-    assert "<span>Review notes</span>" in html  # the declared column is `review_notes`
+    # The notes box is labelled for what it is, and nothing ties a note to a change.
+    assert "<span>Notes</span>" in html  # `review_notes` declares no description
     assert 'placeholder="Include any reasoning or citations for your decision"' in html
 
 
@@ -541,9 +541,10 @@ def test_queue_page_prefills_a_decided_row_from_the_recorded_value(tmp_path, mon
     decided = html[html.index(f'data-input-fingerprint="{first_fp}"'):]
     decided = decided[:decided.index("</article>")]
     assert 'value="99"' in decided          # the field opens on the recorded value
-    # what the stage received stays visible beside it, labelled as received
-    assert "received <code>score</code>: <strong>1</strong>" in " ".join(decided.split())
-    assert "you recorded" in decided
+    # what the stage received stays visible beside it, under the heading that names it
+    assert '<span class="upstream-value">1</span>' in " ".join(decided.split())
+    # The control already shows the recorded value, so the row does not say it twice.
+    assert "recorded-value" not in decided and "you recorded" not in decided
 
 
 # ── 8. Controls whose value has its own spelling: bool, date/datetime, range ─
@@ -595,7 +596,7 @@ def test_a_null_bool_ai_value_is_never_rendered_as_false(tmp_path, monkeypatch):
 
     assert 'type="checkbox"' not in html
     # the absent upstream value shown as absent, not as "false"
-    assert "received <code>flag</code>: <strong><em>no value</em></strong>" in " ".join(html.split())
+    assert '<span class="upstream-value"><em>no value</em></span>' in " ".join(html.split())
     assert "— unset —" in html
     assert _find_selected_option(html, "human_flag") == ""
 
@@ -617,10 +618,9 @@ def test_a_bool_select_opens_on_the_recorded_value_of_a_decided_row(tmp_path, mo
 
     assert _find_selected_option(html, "human_flag") == "true"
     # what the stage received stays visible beside the recorded value
-    assert "received <code>flag</code>: <strong>false</strong>" in " ".join(html.split())
-    # The labels spell the value the way the options do — never a python repr
+    assert '<span class="upstream-value">false</span>' in " ".join(html.split())
+    # The page spells a value the way the options do — never a python repr
     # sitting beside a select that reads `true`.
-    assert "you recorded <strong>true</strong>" in " ".join(html.split())
     assert "True" not in html and "False" not in html
 
 
@@ -875,7 +875,7 @@ def test_a_queue_whose_upstream_is_not_an_llm_transform_renders_and_links(tmp_pa
         assert f'data-input-fingerprint="{fp}"' in html
     assert 'data-target="human_label"' in html
     assert "AI" not in html
-    assert "received <code>label</code>:" in " ".join(html.split())
+    assert '<span class="upstream-value">' in html
 
     assert _lineage_urls(project, run_id) == [
         f"/project/{project}/runs/{run_id}/stage/label/row/{o}/trace/view"
@@ -953,15 +953,12 @@ def test_the_card_renders_the_described_queued_row_and_its_review_section(tmp_pa
 
     table = card[card.index('<table class="kv">'):card.index("</table>")]
     assert re.findall(r"<code>(\w+)</code>", table) == ["id", "score"]  # `label` is reviewed
-    assert "received <code>label</code>:" in " ".join(card.split())
 
     # A declared description becomes the tooltip; `id` declares none and gets none.
     described = re.search(r'<th[^>]*title="([^"]*)"[^>]*>\s*<code>(\w+)</code>', card)
     assert described is not None
     assert described.groups() == ("the score this row was labelled from", "score")
     assert re.search(r'<th[^>]*>\s*<code>id</code>', table) is not None
-    label = re.search(r'<label[^>]*for="[^"]*human_label"[^>]*>', html, re.DOTALL)
-    assert label is not None and 'title="the label after review"' in label.group(0)
 
     positions = re.findall(r'<span class="row-position">([^<]*)</span>', html)
     assert positions == [f"Row {n} of {len(positions)}" for n in range(1, len(positions) + 1)]
@@ -987,6 +984,42 @@ def test_the_unreviewed_columns_are_labelled_as_what_the_review_is_judged_agains
     assert '<p class="review-section-heading">Context for review</p>' in block
     assert "not under review" not in card
     assert "<details" not in card
+
+
+def test_the_field_row_leads_with_the_column_under_review_under_two_headings(
+        tmp_path, monkeypatch):
+    _run_id, _fingerprints, html = _described_queue_html(
+        tmp_path, monkeypatch, "queue_route_field_row")
+
+    card = " ".join(_first_card(html).split())
+    fields = card[card.index('<div class="reviewed-fields">'):]
+    # Two named halves: what came in on the left, the reviewer's own answer on the right.
+    assert re.findall(r'<p class="field-column-heading[^"]*">([^<]*)</p>', fields) == [
+        "Columns to review", "Your review"]
+
+    named = re.search(r'<label for="[^"]*human_label"([^>]*)>([^<]*)</label>', fields)
+    assert named is not None
+    # The reviewer is judging `label`; `human_label` is only where the answer lands,
+    # so it is named on the recorded line of a decided card and nowhere on this row.
+    assert named.group(2) == "label"
+    assert 'title="high when the score exceeds one"' in named.group(1)
+    shown = re.sub(r"<[^>]*>", " ", fields[:fields.index('<div class="field-control">')])
+    assert "human_label" not in shown
+
+    # No description on the notes column: the box is labelled for what it is.
+    assert "<span>Notes</span>" in card
+
+
+def test_the_recorded_line_is_where_a_decided_card_names_the_stored_column(
+        tmp_path, monkeypatch):
+    _project_dir, _run_id, _fingerprints, html = _decided_queue_html(tmp_path, monkeypatch)
+
+    decided = " ".join(_first_card(html).split())
+    recorded = decided[decided.index('<p class="prior-decision">'):]
+    assert "human_score" in recorded
+    fields = decided[decided.index('<div class="reviewed-fields">'):
+                     decided.index('<div class="field-control">')]
+    assert "human_score" not in re.sub(r"<[^>]*>", " ", fields)
 
 
 def test_a_reviewed_value_is_read_only_until_its_edit_button_is_pressed(tmp_path, monkeypatch):
