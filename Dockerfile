@@ -35,6 +35,11 @@ RUN claude --version
 COPY alembic.ini ./
 COPY alembic ./alembic
 COPY app ./app
+# Four migrations import scripts.stage_signatures / scripts.stage_description at
+# module level, so alembic cannot even build its revision map without this —
+# the entrypoint's `alembic upgrade head` dies and the machine never boots.
+# alembic.ini's `prepend_sys_path = .` is what resolves it from WORKDIR.
+COPY scripts ./scripts
 COPY docker-entrypoint.sh ./
 RUN chmod +x docker-entrypoint.sh
 
