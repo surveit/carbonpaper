@@ -25,10 +25,7 @@ class JoinKey(_Base):
 
 
 class JoinConfig(StageConfig):
-    """enrich/expand handle; cardinality lives in the stage TYPE."""
-    # Both change what this stage computes.
     FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({"keys", "enrich_with"})
-    # ...so they feed Stage.compute_definition_fingerprint.
     INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset()
 
     keys: list[JoinKey] = Field(min_length=1)
@@ -58,8 +55,6 @@ class JoinConfig(StageConfig):
 
 
 class JoinStage(StageBase):
-    """enrich and expand differ only in the cardinality the runtime enforces —
-    the config, the arity and the column rules are the same."""
     join: JoinConfig
     inputs: list[StageInput] = Field(default_factory=list, min_length=2, max_length=2)
     signature: ExtendsSignature
@@ -96,7 +91,6 @@ ENRICH_WITH_SHADOWS_KEY_ISSUE = (
 
 
 def find_join_column_issues(stage: "JoinStage") -> list[str]:
-    """Keys and enrich_with sources their side's edge cannot satisfy; a landed name the subject carries."""
     join = stage.join
     left = resolve_input_columns(stage, 0)
     right = resolve_input_columns(stage, 1)
@@ -128,7 +122,6 @@ def find_join_column_issues(stage: "JoinStage") -> list[str]:
 
 
 def find_join_signature_issues(stage: "JoinStage") -> list[str]:
-    """Keys must be read from their side, adds must be exactly `enrich_with`; rewrites are refused."""
     signature = stage.signature
     assert signature is not None  # find_signature_config_issues runs only with one
     subject, reference = stage.inputs[0], stage.inputs[1]
@@ -177,7 +170,6 @@ def find_join_signature_issues(stage: "JoinStage") -> list[str]:
 def compute_join_output_types(
     join: "JoinConfig", left: "TableSchema", right: "TableSchema"
 ) -> dict[str, str]:
-    """Left columns, then each `enrich_with` entry under its landed name with its source's type."""
     right_types = {c.name: c.type for c in right.columns}
     joined: dict[str, str] = {c.name: c.type for c in left.columns}
     for src, landed in join.enrich_with.items():

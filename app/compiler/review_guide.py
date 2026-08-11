@@ -38,8 +38,7 @@ def start_review_guide_generation_agent(
     model: str,
     on_answer: Callable[[ReviewGuideDraft | None], None],
 ) -> str:
-    """Returns the hidden view-only session's id. Must be called from the server event
-    loop."""
+    """Must be called from the server event loop — it starts a turn there."""
     store = open_session_store()
     session_id = store.create(
         title=f"Generation · review guide · {version_id}",
@@ -75,7 +74,6 @@ def start_review_guide_generation_agent(
 def build_review_guide_author(
     stages: list[Stage], version_id: str, document: str, *, model: str = "sonnet"
 ) -> Agent[ReviewGuideDraft]:
-    """The agent authors against `stages` alone — it holds no tool that reads a project."""
     return Agent(
         system_prompt=REVIEW_GUIDE_SYSTEM_PROMPT,
         target_schema=ReviewGuideDraft,
@@ -85,7 +83,6 @@ def build_review_guide_author(
 
 
 def render_guide_task(stages: list[Stage], version_id: str, document: str) -> str:
-    """The request, then the methodology document, then `stages` in execution order."""
     return (
         f"{GUIDE_REQUEST} — version `{version_id}`. Its stages are frozen below, in the "
         "order a run reaches them; account for every one of them, then submit the guide "

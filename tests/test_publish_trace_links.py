@@ -112,8 +112,6 @@ def test_handler_fails_loudly_when_a_scopeless_run_cannot_address_a_trace(tmp_pa
 # ── the emitted link resolves against the live app ────────────────────────────
 
 def test_a_link_emitted_into_published_html_resolves(tmp_path, monkeypatch):
-    """The publish function writes hrefs with the linker; the trace routes serve
-    them. Both halves run for real — only the run directory is a fixture."""
     project_runs = tmp_path / "proj" / "runs"
     project_runs.mkdir(parents=True)
     seeds = pd.DataFrame({"facility_id": ["a", "b"], "name": ["Alpha", "Beta"]})

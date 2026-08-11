@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import pytest
 
+from conftest import reads_of
+
 from app import models as m
 from app.web.stage_test_views import build_certification
 
@@ -11,6 +13,8 @@ _SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True}]}
 # Which signature form a type takes: the reshaping family replaces its input,
 # the anchored family extends it.
 _REPLACES_TYPES = {"python_frame_function", "aggregate", "union", "input_data", "publish"}
+# The two the model refuses an empty read set on: each is handed only what it reads.
+_READS_THE_ROW_TYPES = {"filter_rows", "human_review_queue"}
 
 
 def _signature_for(type_, schema):
@@ -18,6 +22,8 @@ def _signature_for(type_, schema):
         return {"form": "replaces"}
     if type_ in _REPLACES_TYPES:
         return {"form": "replaces", "produces": schema["columns"]}
+    if type_ in _READS_THE_ROW_TYPES:
+        return {"form": "extends", "reads": reads_of("up", schema["columns"])}
     return {"form": "extends"}
 
 
@@ -55,16 +61,12 @@ def test_all_passing_is_certified():
     ("passed", "mismatch"), ("error",), ("passed", "malformed"),
 ])
 def test_any_non_passing_case_revokes_certification(statuses):
-    """One disagreement is enough: the summary and the code demonstrably differ,
-    so the description is not a safe thing to review from."""
     cert = build_certification(_stage(summary="Does a thing."), _views(*statuses))
     assert cert.status == "failing"
     assert not cert.is_certified
 
 
 def test_a_summary_with_no_tests_is_untested_not_certified():
-    """The distinction the whole surface rests on — unverified must never render
-    as verified."""
     cert = build_certification(_stage(summary="Does a thing."), [])
     assert cert.status == "untested"
     assert not cert.is_certified
@@ -75,7 +77,6 @@ def test_no_summary_is_unsummarised():
 
 
 def test_a_stage_whose_behaviour_is_not_code_gets_no_badge():
-    """An enrich's keys are config a reviewer reads directly — nothing to certify."""
     stage = m.parse_stage({
         "id": "j", "description": "J", "type": "enrich",
         "inputs": [{"id": "a", "schema": _SCHEMA},
@@ -95,14 +96,11 @@ def test_a_stage_whose_behaviour_is_not_code_gets_no_badge():
 
 
 def test_a_frame_function_is_certifiable_too():
-    """Certification is about a summary being checked, not about grain — a frame
-    function carries both a summary and tests."""
     stage = _stage(summary="Ranks the rows.", type_="python_frame_function")
     assert build_certification(stage, _views("passed")).status == "certified"
 
 
 def test_a_code_carrying_type_that_cannot_run_examples_is_untestable():
-    """publish has a description no example can ever check, so `untestable`, not no badge."""
     stage = m.parse_stage({
         "id": "pub", "description": "Pub", "type": "publish",
         "signature": {"form": "replaces"},
@@ -115,7 +113,6 @@ def test_a_code_carrying_type_that_cannot_run_examples_is_untestable():
 
 
 def test_filter_rows_with_a_description_and_no_examples_is_untested():
-    """A filter CAN be exemplified, so the gap is that nobody wrote one, not that none can."""
     stage = _stage(summary="Keeps active rows.", type_="filter_rows", handle="filter")
     assert build_certification(stage, []).status == "untested"
 
@@ -126,14 +123,11 @@ def test_filter_rows_with_passing_examples_is_certified():
 
 
 def test_filter_rows_with_no_description_is_undescribed_not_untestable():
-    """Missing a description outranks being untestable: without one the step cannot
-    be reviewed at all, and that is the more actionable complaint."""
     stage = _stage(summary=None, type_="filter_rows", handle="filter")
     assert build_certification(stage, []).status == "unsummarised"
 
 
 def test_publish_carries_a_function_so_it_still_gets_a_badge():
-    """Its behaviour is authored code too, so a missing description is a real gap."""
     stage = m.parse_stage({
         "id": "pub", "description": "Pub", "type": "publish",
         "signature": {"form": "replaces"},

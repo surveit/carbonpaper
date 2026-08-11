@@ -48,7 +48,6 @@ def test_every_page_template_renders_the_trail() -> None:
 
 
 def test_no_route_passes_crumbs_a_template_will_discard() -> None:
-    """The lineage bug: a computed trail handed to a template that cannot draw it."""
     offenders = [
         f"{template} is rendered with `crumbs` but resolves no {_TRAIL_PARTIAL}"
         for template in sorted(_templates_rendered_with_crumbs())
@@ -66,7 +65,6 @@ def test_the_no_trail_list_carries_no_stale_entry() -> None:
 
 
 def _page_templates() -> list[str]:
-    """A whole page, not a fragment: `_`-prefixed is a partial, and routes do return those."""
     return sorted(n for n in _templates_rendered_by_routes() if not n.startswith("_"))
 
 

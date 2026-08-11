@@ -48,7 +48,6 @@ _BIG_N_COL = {"name": "big_n", "type": "int", "nullable": True}
 
 
 def _reads(aggregations):
-    """Exactly the columns the config consumes — a pinned set would fail its own cross-check."""
     consumed = {op["value_column"] for op in aggregations if op.get("value_column")}
     consumed.update(op["where"].split()[0] for op in aggregations if op.get("where"))
     return [c for c in _IN_SCHEMA["columns"] if c["name"] in consumed]
@@ -127,7 +126,6 @@ def test_an_empty_input_still_emits_exactly_one_row():
 
 @pytest.mark.parametrize("column", [op["output_column"] for op in _ALL_FORMULAS])
 def test_every_formula_over_an_empty_input_reports_null(column):
-    # Counting formulas included: `count` of nothing is absent, not 0.
     assert pd.isna(_all_formulas(_EMPTY)[column])
 
 
@@ -242,7 +240,6 @@ def _output_report(frame: pd.DataFrame):
 
 @pytest.mark.parametrize("frame", [FILINGS, _EMPTY], ids=["rows", "empty"])
 def test_the_one_row_passes_its_declared_output_schema(frame):
-    # An error-severity output issue fails the stage outright.
     _, report = _output_report(frame)
     assert report.ok, [i.message for i in report.issues]
 

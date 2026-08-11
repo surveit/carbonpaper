@@ -34,15 +34,11 @@ _ALLOWED_ATTRIBUTES = _COLUMN_METHODS | _STRING_ACCESSOR | _STRING_METHODS
 
 @dataclass(frozen=True)
 class ParsedPredicate:
-    """One `where`/`filter` expression, parsed once: the columns it
-    references (for a save-time check against a schema) and the pandas
-    expression string to run it (for `.eval()`/`.query()` at execution time)."""
     columns: frozenset[str]
     pandas_expr: str
 
 
 def parse_predicate(expr: str) -> ParsedPredicate:
-    """Normalize, parse with `ast`, walk the grammar; off-grammar raises `PredicateError`."""
     pandas_expr = _normalize(expr)
     try:
         tree = ast.parse(pandas_expr, mode="eval")
@@ -59,10 +55,7 @@ def parse_predicate(expr: str) -> ParsedPredicate:
 
 
 def _normalize(expr: str) -> str:
-    """Translate our SQL-ish predicate dialect to pandas eval syntax.
-
-    Wraps AND/OR operands in parens so bitwise &/| binds the right way,
-    and lowercases boolean literals."""
+    """Operands are parenthesised because bitwise `&`/`|` bind tighter than comparison."""
     e = expr
     e = e.replace(" IS NOT NULL", ".notna()")
     e = e.replace(" IS NULL", ".isna()")
@@ -81,7 +74,6 @@ def _normalize(expr: str) -> str:
 
 
 def _validate_node(node: ast.AST, expr: str) -> None:
-    """Recurses only into the children each admitted construct can hold; `else` rejects."""
     if isinstance(node, ast.BoolOp):
         _validate_bool_op(node, expr)
     elif isinstance(node, ast.BinOp):
@@ -151,7 +143,6 @@ def _validate_name(node: ast.Name, expr: str) -> None:
 
 
 def _validate_attribute(node: ast.Attribute, expr: str) -> None:
-    """pandas getattr-walks a chain and calls what it lands on, so the names are a closed set."""
     if node.attr not in _ALLOWED_ATTRIBUTES:
         raise PredicateError(
             f"filter is not valid: {expr!r} (attribute `.{node.attr}` is not supported; a filter "

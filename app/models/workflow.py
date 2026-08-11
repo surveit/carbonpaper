@@ -20,15 +20,12 @@ _StageT = TypeVar("_StageT", bound=StageCommon)
 
 
 def validate_unique_ids(stages: Sequence[StageCommon]) -> list[str]:
-    """One issue per stage id that appears more than once."""
     ids = [s.id for s in stages]
     dupes = sorted({i for i in ids if ids.count(i) > 1})
     return [f"duplicate stage id `{d}`" for d in dupes]
 
 
 def validate_inputs_resolve(stages: list[Stage]) -> list[str]:
-    """One issue per input that names no existing stage — all of them, so a
-    reviewer fixes every dangling edge in one pass rather than one per re-run."""
     ids = {s.id for s in stages}
     issues: list[str] = []
     for s in stages:
@@ -39,12 +36,6 @@ def validate_inputs_resolve(stages: list[Stage]) -> list[str]:
 
 
 def detect_cycle(stages: Sequence[StageCommon]) -> list[str]:
-    """A one-item list naming the first cycle found, or [] if acyclic. One cycle
-    is enough to reject the workflow; we don't enumerate them all. The stage graph
-    must stay acyclic — a cycle means the runner could never order the stages.
-
-    An input naming an id outside `stages` is not an edge here, so this finds
-    cycles WITHIN the given set only."""
     edges = {s.id: list(s.input_ids) for s in stages}
     WHITE, GRAY, BLACK = 0, 1, 2
     color = {sid: WHITE for sid in edges}
@@ -71,11 +62,7 @@ def detect_cycle(stages: Sequence[StageCommon]) -> list[str]:
 
 
 def sort_stages_by_dependency(stages: Sequence[_StageT]) -> list[_StageT]:
-    """`stages` reordered so every stage follows the stages it names in `inputs`.
-    An input naming an id outside `stages` imposes no order — it is already in the
-    workflow, or missing, which is a validation problem and not this function's.
-    Ties keep submission order. Ids must be unique (`validate_unique_ids`);
-    raises ValueError on a cycle, which `detect_cycle` reports far better."""
+    """Assumes ids are unique (`validate_unique_ids`); a duplicate silently misorders."""
     pending = list(stages)
     ordered: list[_StageT] = []
     while pending:
@@ -90,16 +77,7 @@ def sort_stages_by_dependency(stages: Sequence[_StageT]) -> list[_StageT]:
 
 
 def validate_edge_schemas(stages: list[Stage]) -> list[str]:
-    """One issue per workflow edge whose declared input schema the upstream stage
-    does not supply. `inputs[i].schema` is a REQUIREMENT — possibly a projection
-    naming only the columns the stage consumes — that the upstream's
-    resolved output schema must subsume (matching spec, compatible nullability, not
-    identity; see `TableSchema.find_unsatisfied_columns`). Reports every offending
-    column across every edge, so one pass surfaces them all.
-
-    Raises if an input dangles or its upstream resolves no output schema:
-    `validate_inputs_resolve` and `validate_publish_is_terminal` must run, and
-    pass, before this check (as `graph_issues` does)."""
+    """Raises unless `validate_inputs_resolve` and `validate_publish_is_terminal` ran and passed."""
     by_id = {s.id: s for s in stages}
     issues: list[str] = []
     for stage in stages:
@@ -124,9 +102,6 @@ def validate_edge_schemas(stages: list[Stage]) -> list[str]:
 
 
 def validate_publish_is_terminal(stages: list[Stage]) -> list[str]:
-    """One issue per edge whose upstream is a publish stage. A publish stage writes
-    files instead of producing a table, so nothing downstream can read it. Reports
-    every offending edge, not just the first."""
     publish_ids = {s.id for s in stages if s.type == StageType.publish}
     return [
         f"`{stage.id}`: input `{upstream}` is a publish stage — a publish stage "
@@ -138,7 +113,6 @@ def validate_publish_is_terminal(stages: list[Stage]) -> list[str]:
 
 
 def find_stages_reaching_publish(stages: Sequence[Stage]) -> set[str]:
-    """Ids of the publish stages' ANCESTORS — the stages whose work the published files carry."""
     inputs_of = {stage.id: stage.input_ids for stage in stages}
     reaching: set[str] = set()
     # Walked BACKWARD from the publish stages along `input_ids`, so a stage any number
@@ -166,28 +140,20 @@ def find_stages_reaching_publish(stages: Sequence[Stage]) -> set[str]:
 
 
 def graph_issues(stages: list[Stage]) -> list[str]:
-    """Every cross-stage problem in the workflow graph: duplicate ids, dangling
-    inputs, a cycle, an edge reading a publish stage, and any edge whose declared
-    input schema the upstream stage's resolved output does not supply. The single
-    source of truth both the strict
-    model validator and the non-fatal `validate_workflow` build on."""
-    # validate_edge_schemas raises rather than reports on an edge it cannot check:
-    # an input naming no stage, or an upstream resolving no output (only publish
-    # is exempt). Both are reportable findings of the two checks below, so it runs
-    # only once they pass.
     edge_check_prerequisites = (
         validate_inputs_resolve(stages) + validate_publish_is_terminal(stages)
     )
     issues = (
         validate_unique_ids(stages) + detect_cycle(stages) + edge_check_prerequisites
     )
+    # validate_edge_schemas RAISES on an edge these two report on, so it runs only once
+    # they come back clean.
     if edge_check_prerequisites:
         return issues
     return issues + validate_edge_schemas(stages)
 
 
 class Workflow(_Base):
-    """A whole workflow: validated stages with unique ids, resolvable inputs, acyclic."""
     stages: list[Stage]
 
     @model_validator(mode="after")
@@ -198,37 +164,18 @@ class Workflow(_Base):
         return self
 
     def index_stages_by_id(self) -> dict[str, Stage]:
-        """This workflow's stages keyed by id, for callers that need repeated
-        by-id lookup. Unique ids are already a graph invariant (see
-        `validate_unique_ids`), so this never collapses two stages onto one
-        key."""
         return {stage.id: stage for stage in self.stages}
 
 
 def parse_workflow(stages: list[dict[str, Any]]) -> Workflow:
-    """Parse + validate a list of stage dicts. Raises ValidationError if invalid."""
     return Workflow.model_validate({"stages": list(stages)})
 
 
 def validate_workflow(stages: list[Stage]) -> list[str]:
-    """Cross-stage checks on already-parsed stages, as human-readable issue
-    strings — every problem, not just the first: unique ids, inputs resolve,
-    acyclic, no stage reading a publish stage, and every edge's declared input
-    schema satisfied by what its upstream resolves as output. Per-stage
-    invariants (e.g. llm_transform being strictly 1:1) are
-    already enforced by `Stage` construction, so any `list[Stage]` reaching here
-    is stage-valid; this is the remaining, whole-graph seam `load_workflow` (and
-    hence `save_working_copy_as_version`) enforces, so an invalid workflow is never versioned
-    or run."""
     return graph_issues(stages)
 
 
 def validate_workflow_draft(stages: list[dict[str, Any]]) -> list[str]:
-    """Non-fatal validation of DRAFT stage dicts (e.g. a compiler's LLM output):
-    parse + validate the whole list and return human-readable issues ([] means a
-    clean-validating draft). Unlike validate_workflow, which runs the graph checks
-    on already-parsed Stages, this also surfaces per-stage schema errors straight
-    from raw dicts, so a caller can show problems instead of crashing."""
     try:
         Workflow.model_validate({"stages": list(stages)})
         return []

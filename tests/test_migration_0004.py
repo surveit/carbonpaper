@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from app.models.workflow import parse_workflow
-from tools.stage_signatures import add_signature
+from scripts.stage_signatures import add_signature
 
 _REVISION = (Path(__file__).resolve().parents[1]
              / "alembic/versions/0004_drop_primary_key_from_stage_schemas.py")
@@ -29,7 +29,6 @@ def _column(name: str) -> dict[str, Any]:
 
 
 def _v1_stages() -> list[dict[str, Any]]:
-    """A v1 workflow: every table schema still carries the key stages no longer take."""
     schema = {"columns": [_column("id")], "primary_key": ["id"]}
     return [
         {"id": "src", "description": "Source", "type": "input_data",

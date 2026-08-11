@@ -9,8 +9,6 @@ from enum import StrEnum
 
 
 class CompilerPhase(StrEnum):
-    """The phase a generation session runs in; the lifecycle prose is written around these."""
-
     RESEARCH = "research"
     PLANNING = "planning"
     BUILD = "build"

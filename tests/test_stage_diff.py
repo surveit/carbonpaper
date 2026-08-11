@@ -30,6 +30,7 @@ from app.web.stage_diff import (
     RowAlignedDiff,
     build_stage_diff,
 )
+from conftest import reads_of
 
 LOAD_ID = "load"
 _LOAD_PATH = f"outputs/{LOAD_ID}.parquet"
@@ -53,7 +54,6 @@ def _row_stage(output_columns: list[dict] | None = None) -> Stage:
 
 
 def _added(output_columns, edge_columns):
-    """What `output_columns` names beyond `edge_columns` — an extends signature's adds."""
     flowing = {c["name"] for c in edge_columns}
     return [c for c in output_columns if c["name"] not in flowing]
 
@@ -87,8 +87,8 @@ def _filter_stage() -> Stage:
     return parse_stage({
         "id": "keep", "description": "Keep", "type": "filter_rows",
         "inputs": [{"id": LOAD_ID, "schema": {"columns": _IN_COLUMNS}}],
-        "filter": {"code": "def should_include(row):\n    return True\n"},
-        "signature": {"form": "extends"},
+        "filter": {"code": "def should_include(row):\n    return row['val'] is not None\n"},
+        "signature": {"form": "extends", "reads": reads_of(LOAD_ID, _IN_COLUMNS)},
     })
 
 
@@ -111,7 +111,6 @@ def _diff(run_dir: Path, stage_def: Stage, out_rel: str):
 
 
 def _numbered_frame(rows: int) -> pd.DataFrame:
-    """`rows` rows wider than any window under test, so the cap is what limits the table."""
     return pd.DataFrame({"name": [f"r{i}" for i in range(rows)], "val": list(range(rows))})
 
 
@@ -167,9 +166,7 @@ def test_an_unchanged_passthrough_reports_every_value_carried(tmp_path: Path) ->
 def test_the_column_spine_is_the_input_frame_with_the_added_columns_after_it(
     tmp_path: Path,
 ) -> None:
-    # The INPUT is the base and the diff is painted over it: every input column
-    # holds its place whether the stage kept it or dropped it, and the columns
-    # the stage invented follow. Here `val` is dropped and `label` is added.
+    # Here `val` is dropped and `label` is added.
     _write_output(tmp_path, LOAD_ID, pd.DataFrame({"name": ["a"], "val": [1]}))
     out_rel = _write_output(tmp_path, "classify", pd.DataFrame(
         {"name": ["a"], "label": ["x"]}))
@@ -244,7 +241,6 @@ def test_a_starlark_row_function_is_admitted_to_the_row_aligned_diff(tmp_path: P
 
 
 def test_a_review_queue_shows_the_human_answer_beside_what_it_answered(tmp_path: Path) -> None:
-    """A reviewed value lands in an ADDED column, so the source it judged stays carried."""
     stage = parse_stage({
         "id": "gate", "description": "Gate", "type": "human_review_queue",
         "inputs": [{"id": LOAD_ID, "schema": {"columns": _IN_COLUMNS}}],
@@ -256,6 +252,7 @@ def test_a_review_queue_shows_the_human_answer_beside_what_it_answered(tmp_path:
         },
         "signature": {
             "form": "extends",
+            "reads": reads_of(LOAD_ID, _IN_COLUMNS),
             "adds": [{"name": "reviewed_name", "type": "str", "nullable": True},
                      {"name": "verdict", "type": "str", "nullable": True},
                      {"name": "reviewer", "type": "str", "nullable": True},
@@ -278,7 +275,6 @@ def test_a_review_queue_shows_the_human_answer_beside_what_it_answered(tmp_path:
 
 
 def test_every_grain_preserving_type_gets_a_diff_unless_it_has_nothing_to_compare() -> None:
-    """A new preserving type is covered without this pane being edited."""
     for stage_type in StageType:
         if not is_grain_and_order_preserving(stage_type):
             continue
@@ -296,7 +292,6 @@ def test_the_only_excluded_type_is_the_one_with_no_input_to_compare() -> None:
 # ─── enrich: the row-aligned diff against its SUBJECT input ──────────────────
 
 def _enrich_frames(tmp_path: Path) -> str:
-    """Subject and reference frames of equal length, so only the input id tells them apart."""
     _write_output(tmp_path, LOAD_ID, pd.DataFrame({"name": ["a", "b"], "val": [1, 2]}))
     _write_output(tmp_path, REF_ID, pd.DataFrame({"name": ["a", "b"], "extra": ["p", "q"]}))
     return _write_output(tmp_path, "route", pd.DataFrame(
@@ -309,8 +304,7 @@ def _join_diff(tmp_path: Path, stage_def: Stage, out_rel: str):
 
 
 def test_an_enrich_diffs_against_its_subject_input_not_its_reference(tmp_path: Path) -> None:
-    # enrich is a left merge pandas VERIFIES is m:1, so every subject row
-    # survives in input order — as strictly 1:1 as python_row_function.
+    # enrich is a left merge pandas VERIFIES is m:1, so every subject row survives.
     out_rel = _enrich_frames(tmp_path)
 
     diff = _join_diff(tmp_path, _join_stage("enrich"), out_rel)
@@ -327,8 +321,7 @@ def test_an_enrich_diffs_against_its_subject_input_not_its_reference(tmp_path: P
 def test_a_reference_frame_that_will_not_read_is_listed_without_a_row_count(
     tmp_path: Path,
 ) -> None:
-    # The diff never reads the reference frame to build the table, so its loss
-    # costs the count and nothing else — and an uncounted frame gets no number.
+    # The diff never reads the reference frame, so its loss costs the count alone.
     out_rel = _enrich_frames(tmp_path)
     (tmp_path / _REF_PATH).unlink()
 
@@ -447,7 +440,6 @@ def test_a_row_aligned_tally_names_the_columns_and_the_changed_cells(tmp_path: P
 
 
 def test_a_row_aligned_tally_states_the_zero_change_it_measured(tmp_path: Path) -> None:
-    """A positional diff DOES count changed cells, so a zero there is a measured fact."""
     frame = pd.DataFrame({"name": ["a", "b"], "val": [1, 2]})
     _write_output(tmp_path, LOAD_ID, frame)
     out_rel = _write_output(tmp_path, "classify", frame.copy())
@@ -462,7 +454,6 @@ def test_a_row_aligned_tally_states_the_zero_change_it_measured(tmp_path: Path) 
 def test_a_filter_tally_reports_rows_and_never_a_metric_it_did_not_measure(
     tmp_path: Path,
 ) -> None:
-    """A filter compares no cells and no columns, so it must report no number for either."""
     _write_output(tmp_path, LOAD_ID, pd.DataFrame(
         {"name": ["a", "b", "c", "d"], "val": [1, 2, 3, 4]}))
     out_rel = _write_output(tmp_path, "keep", pd.DataFrame({"name": ["a", "c"], "val": [1, 3]}))
@@ -488,7 +479,6 @@ def test_a_filter_that_dropped_nothing_says_so_rather_than_nothing(tmp_path: Pat
 
 
 def test_both_shapes_expose_the_output_row_count_under_one_name(tmp_path: Path) -> None:
-    """The header reads one field for either shape, so it needs no branch on the kind."""
     frame = pd.DataFrame({"name": ["a", "b"], "val": [1, 2]})
     _write_output(tmp_path, LOAD_ID, frame)
     aligned_rel = _write_output(tmp_path, "classify", frame.copy())
@@ -505,7 +495,6 @@ def test_both_shapes_expose_the_output_row_count_under_one_name(tmp_path: Path) 
 # ─── the row budget is a parameter, and each shape windows its own frame ─────
 
 def test_the_stage_panels_default_window_draws_a_hundred_rows(tmp_path: Path) -> None:
-    """The panel's window is a hundred rows — deep enough to read a stage, not sample it."""
     _write_output(tmp_path, LOAD_ID, _numbered_frame(120))
     out_rel = _write_output(tmp_path, "classify", _numbered_frame(120))
 
@@ -549,8 +538,7 @@ def test_the_row_budget_windows_the_output_frame_of_an_aligned_diff(tmp_path: Pa
 
 
 def test_the_row_budget_windows_the_input_frame_of_a_filter_diff(tmp_path: Path) -> None:
-    # A filter's table is over its INPUT rows, so dropped rows appear in place —
-    # a budget of 8 draws all 8 input rows, and nothing is left beyond it.
+    # A filter's table is over its INPUT rows, so a budget of 8 draws all 8 of them.
     _write_output(tmp_path, LOAD_ID, pd.DataFrame(
         {"name": list("abcdefgh"), "val": list(range(8))}))
     out_rel = _write_output(tmp_path, "keep", pd.DataFrame(
@@ -569,8 +557,7 @@ def test_the_row_budget_windows_the_input_frame_of_a_filter_diff(tmp_path: Path)
 # ─── out-of-scope stage types: no diff, ever ─────────────────────────────────
 
 def test_a_frame_function_gets_no_diff_even_at_matching_row_counts(tmp_path: Path) -> None:
-    # Same row count is not the contract — a frame function may reorder rows,
-    # so a positional diff would be a fabricated alignment.
+    # A frame function may reorder rows, so a positional diff would be fabricated.
     stage = parse_stage({
         "id": "reshape", "description": "Reshape", "type": "python_frame_function",
         "inputs": [{"id": LOAD_ID, "schema": {"columns": _IN_COLUMNS}}],
@@ -640,8 +627,7 @@ def test_a_filter_whose_sidecar_disagrees_with_its_output_yields_no_diff(tmp_pat
 
 
 def test_a_filter_whose_sidecar_ordinals_do_not_increase_yields_no_diff(tmp_path: Path) -> None:
-    # A filter emits a subsequence of its input, so kept ordinals strictly
-    # increase; a sidecar that says otherwise cannot vouch for the merge.
+    # A filter emits a subsequence, so kept ordinals strictly increase.
     _write_output(tmp_path, LOAD_ID, pd.DataFrame({"name": ["a", "b"], "val": [1, 2]}))
     out_rel = _write_output(tmp_path, "keep", pd.DataFrame({"name": ["b", "a"], "val": [2, 1]}))
     _write_lineage(tmp_path, "keep", kept=[1, 0])

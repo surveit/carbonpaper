@@ -78,7 +78,6 @@ def test_the_headline_is_the_newest_run(examples_root):
 
 
 def test_a_test_run_never_sets_the_headline(examples_root):
-    """A workflow test is the author's own probe, not the project's state."""
     proj = _make_project(examples_root, "p", [
         ("20260101T000000", {"status": RunStatus.ERRORS}),
         ("20260102T000000", {"status": RunStatus.OK, "is_test": True}),
@@ -96,7 +95,6 @@ def test_a_project_with_no_runs_is_in_progress(examples_root):
 
 
 def test_a_status_this_app_does_not_define_falls_through(examples_root):
-    """It counts as a run; it just cannot be the headline."""
     proj = _make_project(examples_root, "p", [
         ("20260101T000000", {"status": RunStatus.ERRORS}),
         ("20260102T000000", {"status": "teleported"}),
@@ -109,7 +107,6 @@ def test_a_status_this_app_does_not_define_falls_through(examples_root):
 # ── what the page renders ────────────────────────────────────────────────────
 
 def test_a_project_exercised_only_by_tests_does_not_claim_to_be_untouched(examples_root):
-    """"No runs yet" alone would state something the runs/ dir contradicts."""
     _make_project(examples_root, "probed", [
         ("20260101T000000", {"status": RunStatus.OK, "is_test": True}),
         ("20260102T000000", {"status": RunStatus.OK, "is_test": True}),

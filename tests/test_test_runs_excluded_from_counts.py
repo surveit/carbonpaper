@@ -15,7 +15,6 @@ from app.web import loading
 def _write_manifest(
     run_dir: Path, *, status: str, is_test_run: bool | None, legacy: bool = False
 ) -> None:
-    """`legacy` writes the flat pre-nesting key, which runs on disk today still carry."""
     run_dir.mkdir(parents=True)
     manifest: dict[str, object] = {"status": status}
     if is_test_run is not None:
@@ -25,8 +24,6 @@ def _write_manifest(
 
 
 def test_runs_summary_excludes_test_runs_from_every_count(tmp_path):
-    """A production run + a later (newer) workflow test: n/latest_status/
-    awaiting_review all read as if the test run were never there."""
     runs = tmp_path / "runs"
     _write_manifest(runs / "20260101T000000", status="ok", is_test_run=None)
     _write_manifest(runs / "20260102T000000", status="awaiting_review", is_test_run=True)
@@ -59,7 +56,6 @@ def test_dashboard_card_n_runs_excludes_test_runs(tmp_path, monkeypatch):
 
 
 def test_a_legacy_manifests_flat_flag_still_excludes_it(tmp_path):
-    """Else every historical workflow test starts counting as a real run."""
     workspace.set_projects_dir(tmp_path)
     root = tmp_path / "demo"
     root.mkdir()

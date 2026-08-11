@@ -21,6 +21,13 @@ import pandas as pd
 from app.core.frame_checks import find_frame_violations
 from app.core.utils import format_errors
 from app.models.schema import StageId, TableSchema, _Base
+from app.models.tool_schema_prompts import (
+    FILTER_ROWS_STAGE_TEST_DESCRIPTION,
+    PYTHON_FRAME_FUNCTION_STAGE_TEST_DESCRIPTION,
+    PYTHON_ROW_FUNCTION_STAGE_TEST_DESCRIPTION,
+    STAGE_TEST_DESCRIPTION,
+    STARLARK_ROW_FUNCTION_STAGE_TEST_DESCRIPTION,
+)
 
 # One row: column name → cell value. WHICH columns is not knowable here — it comes
 # from the stage's own declared schema, checked at validate_test_rows — so this is a
@@ -46,7 +53,8 @@ _OneInputRow: TypeAlias = Annotated[
 
 
 class StageTest(_Base):
-    """A rows case states `expected` rows; a failure case states `expected: null`."""
+    model_config = ConfigDict(json_schema_extra={"description": STAGE_TEST_DESCRIPTION})
+
     name: str
     description: Optional[str] = None
     inputs: dict[StageId, list[DataRow]] = Field(description=_INPUTS_DESCRIPTION)
@@ -56,15 +64,15 @@ class StageTest(_Base):
     def _keep_a_failure_claim_visible(
         self, handler: SerializerFunctionWrapHandler
     ) -> dict[str, Any]:
-        """`expected: null` survives an exclude_none dump — dropping the key would
-        reload as a missing required field, and read as a forgotten one."""
+        """Without this, an exclude_none dump drops the key and the record fails to reload."""
         data = handler(self)
         data.setdefault("expected", None)
         return data
 
 
 class PythonRowFunctionStageTest(StageTest):
-    """One row in → that one row out, or a refusal."""
+    model_config = ConfigDict(json_schema_extra={"description": PYTHON_ROW_FUNCTION_STAGE_TEST_DESCRIPTION})
+
     inputs: _OneInputRow = Field(description=_INPUTS_DESCRIPTION)
     expected: Optional[Annotated[list[DataRow], Field(min_length=1, max_length=1)]] = (
         Field(description=_EXPECTED_DESCRIPTION)
@@ -72,7 +80,8 @@ class PythonRowFunctionStageTest(StageTest):
 
 
 class StarlarkRowFunctionStageTest(StageTest):
-    """One row in → that one row out, or a refusal."""
+    model_config = ConfigDict(json_schema_extra={"description": STARLARK_ROW_FUNCTION_STAGE_TEST_DESCRIPTION})
+
     inputs: _OneInputRow = Field(description=_INPUTS_DESCRIPTION)
     expected: Optional[Annotated[list[DataRow], Field(min_length=1, max_length=1)]] = (
         Field(description=_EXPECTED_DESCRIPTION)
@@ -80,7 +89,8 @@ class StarlarkRowFunctionStageTest(StageTest):
 
 
 class FilterRowsStageTest(StageTest):
-    """One row in → that row kept, dropped (`[]`), or a refusal."""
+    model_config = ConfigDict(json_schema_extra={"description": FILTER_ROWS_STAGE_TEST_DESCRIPTION})
+
     inputs: _OneInputRow = Field(description=_INPUTS_DESCRIPTION)
     expected: Optional[Annotated[list[DataRow], Field(max_length=1)]] = Field(
         description=_EXPECTED_DESCRIPTION
@@ -88,16 +98,13 @@ class FilterRowsStageTest(StageTest):
 
 
 class PythonFrameFunctionStageTest(StageTest):
-    """Any rows in → any rows out, or a refusal: a frame function may reshape freely."""
+    model_config = ConfigDict(json_schema_extra={"description": PYTHON_FRAME_FUNCTION_STAGE_TEST_DESCRIPTION})
+
     expected: Optional[list[DataRow]] = Field(description=_EXPECTED_DESCRIPTION)
 
 
 def validate_stage_tests(input_ids: list[StageId], tests: list[StageTest]) -> None:
-    """Raise ValueError unless names are non-empty and unique and each test supplies
-    exactly `input_ids`. Per-type row arity is the StageTest subclass's job, and
-    WHETHER a type may carry tests at all is the caller's
-    (StageBase.CARRIES_RUNNABLE_TESTS)."""
-    names = [test.name for test in tests]
+    names =[test.name for test in tests]
     duplicates = sorted({n for n in names if names.count(n) > 1})
     if duplicates:
         raise ValueError(f"duplicate test name(s): {duplicates}")
@@ -117,12 +124,7 @@ def validate_test_rows(
     output_schema: TableSchema,
     tests: list[StageTest],
 ) -> None:
-    """Raise ValueError if any test row fails the schema it claims to instance.
-    Judged through TableSchema.to_pydantic_model, so every declared column must be
-    on EVERY row (a nullable one as an explicit None) and no other key is allowed —
-    stricter than the runtime's stage-I/O validation, which only warns on an
-    undeclared column: a real stage may pass extras through, but a test row
-    inventing one states the wrong shape. Assumes validate_stage_tests passed."""
+    """Assumes validate_stage_tests passed. Stricter than the runtime, which only warns on extras."""
     input_models = {
         input_id: schema.to_pydantic_model(f"{input_id}_row")
         for input_id, schema in input_schemas.items()
@@ -142,10 +144,7 @@ def validate_test_frames(
     output_schema: TableSchema,
     tests: list[StageTest],
 ) -> None:
-    """Raise ValueError if a test's rows break a cross-row rule a real run enforces."""
-    # The row-by-row checks (validate_test_rows) cannot see these: a row is
-    # well-formed on its own and the suite still states a frame no stage could
-    # ever be handed. Assumes validate_stage_tests passed.
+    """Assumes validate_stage_tests passed."""
     problems = [
         problem
         for test in tests
@@ -160,10 +159,6 @@ def build_stage_tests_model(
     input_schemas: dict[StageId, TableSchema],
     output_schema: TableSchema,
 ) -> type[BaseModel]:
-    """A ``{"tests": [test_class, ...]}`` model bound to one stage's inputs and output
-    schema, so an agent's submit_answer rejects a malformed suite inside the agent
-    loop rather than at stage-write time."""
-
     class StageTestSuite(BaseModel):
         tests: list[StageTest]
 
@@ -208,9 +203,6 @@ def _find_test_frame_problems(
     input_schemas: dict[StageId, TableSchema],
     output_schema: TableSchema,
 ) -> list[str]:
-    # An input frame must pass the rule the runner applies to a stage input
-    # (no exact duplicate rows). A test states frames a real run would have
-    # to accept — no stricter, no looser.
     return [
         f"test {test.name!r}, input {input_id!r}: {violation.message}"
         for input_id in input_schemas

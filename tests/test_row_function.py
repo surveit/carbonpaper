@@ -60,9 +60,7 @@ def test_row_function_rejects_non_dict_return():
 
 
 def test_row_function_rejects_multiple_inputs():
-    # python_row_function's max_inputs=1 is enforced by Stage validation itself
-    # (PythonRowFunctionStage declares inputs max_length=1), so a 2-input stage
-    # can't even be constructed.
+    # max_inputs=1 is Stage validation (inputs max_length=1), so a 2-input stage can't be built.
     code = "def transform(row):\n    return {'x': row['x']}\n"
     with pytest.raises(ValidationError):
         _stage(code, inputs=("a", "b"))

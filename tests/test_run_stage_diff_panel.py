@@ -148,25 +148,21 @@ def _panel(run_id: str, stage_id: str) -> str:
 
 
 def _diff_head(html: str) -> str:
-    """The header strip alone — every claim about the frame layout is about this."""
     assert 'class="preview-head diff-head"' in html
     # The strip's own elements are spans, so the first </div> closes the head.
     return html.split('class="preview-head diff-head"')[1].split("</div>")[0]
 
 
 def _unit_at(strip: str, frame_id: str) -> int:
-    """Where the unit naming `frame_id` sits in the strip — for asserting the order."""
     return strip.index(f">{frame_id}</code>")
 
 
 def _rows_toolbar(html: str) -> str:
-    """The full-rows page's toolbar alone — it holds only spans, so the first </div> ends it."""
     assert 'class="rows-toolbar"' in html
     return html.split('class="rows-toolbar"')[1].split("</div>")[0]
 
 
 def _output_unit(html: str) -> str:
-    """The header rail's output frame unit — where the raw view and the CSV live."""
     return _diff_head(html).split('class="diff-outputs"')[1]
 
 
@@ -185,7 +181,6 @@ def test_a_row_function_output_reads_as_a_diff_against_its_input(run_ctx) -> Non
 
 
 def test_the_rail_tallies_what_the_stage_did_in_one_line(run_ctx) -> None:
-    """The header says what changed; the prose paragraph and caption that said it are gone."""
     _pdir, run_id = run_ctx
     strip = _diff_head(_panel(run_id, CLASSIFY_ID))
     # classify adds `label` and uppercases one name.
@@ -194,7 +189,6 @@ def test_the_rail_tallies_what_the_stage_did_in_one_line(run_ctx) -> None:
 
 
 def test_neither_shape_carries_a_prose_block_the_table_already_says(run_ctx) -> None:
-    """The summary paragraph and the table caption are deleted, not merely reworded."""
     _pdir, run_id = run_ctx
     for stage_id in (CLASSIFY_ID, ROUTE_ID, KEEP_ID):
         html = _panel(run_id, stage_id)
@@ -205,10 +199,6 @@ def test_neither_shape_carries_a_prose_block_the_table_already_says(run_ctx) -> 
 
 
 def test_the_header_gives_every_frame_its_own_labelled_unit(run_ctx) -> None:
-    """Inputs → stage → output has to read off the LAYOUT, not off a sentence."""
-    # The enrich diffs against its subject, but the REFERENCE frame is where the
-    # added columns came from — it is a unit like any other, with the base one
-    # identifiable by the words in its label rather than by colour.
     _pdir, run_id = run_ctx
     strip = _diff_head(_panel(run_id, ROUTE_ID))
     # One unit per frame — both inputs and the output — each naming its own part.
@@ -226,10 +216,7 @@ def test_the_header_gives_every_frame_its_own_labelled_unit(run_ctx) -> None:
 
 
 def test_a_one_input_stage_names_its_only_input_without_a_base_marker(run_ctx) -> None:
-    """With the Inputs/Outputs tabs gone, both raw frames stay one click away."""
-    # With one input there is nothing to tell apart, so "base" would be noise;
-    # the two units still lay the input → output relation out structurally, and
-    # each still reaches its own full-rows view and CSV — no new endpoints.
+    # With one input there is nothing to tell apart, so "base" would be noise.
     _pdir, run_id = run_ctx
     strip = _diff_head(_panel(run_id, CLASSIFY_ID))
     assert strip.count('class="diff-frame ') == 2
@@ -242,11 +229,7 @@ def test_a_one_input_stage_names_its_only_input_without_a_base_marker(run_ctx) -
 
 
 def test_a_second_input_lengthens_the_input_stack_without_moving_the_output(run_ctx) -> None:
-    """The output is a sibling of the input stack, so input count cannot reposition it."""
-    # The layout is one horizontal axis: every input frame lives inside the
-    # stacked input list, and the output sits outside it — so a second input
-    # grows the list downward rather than pushing the output along or onto
-    # another line. app/static/node-detail.css holds that row to one line, top-aligned.
+    # app/static/node-detail.css holds the axis to one line, top-aligned.
     _pdir, run_id = run_ctx
     for stage_id, input_ids in ((CLASSIFY_ID, [LOAD_ID]),
                                 (ROUTE_ID, [CLASSIFY_ID, ROUTES_ID])):
@@ -261,14 +244,12 @@ def test_a_second_input_lengthens_the_input_stack_without_moving_the_output(run_
 
 
 def test_the_bracket_appears_only_where_there_is_more_than_one_input(run_ctx) -> None:
-    """It exists to converge a set; over a single frame it would be decoration."""
     _pdir, run_id = run_ctx
     assert "diff-brace" not in _diff_head(_panel(run_id, CLASSIFY_ID))
     assert "diff-brace" in _diff_head(_panel(run_id, ROUTE_ID))
 
 
 def test_every_frame_unit_carries_the_row_count_of_the_frame_it_names(run_ctx) -> None:
-    """The tallies live on the frames they count, not in a prose line beside them."""
     _pdir, run_id = run_ctx
     strip = _diff_head(_panel(run_id, ROUTE_ID))
     # 3 subject rows, 3 reference rows, 3 output rows — one count per unit.
@@ -276,7 +257,6 @@ def test_every_frame_unit_carries_the_row_count_of_the_frame_it_names(run_ctx) -
 
 
 def test_an_unread_reference_frame_shows_no_row_count_rather_than_a_guess(run_ctx) -> None:
-    """A count may only be shown for a frame that was actually read."""
     pdir, run_id = run_ctx
     # The reference frame is not needed to build the diff, so its loss must cost
     # the count and nothing else — never a fabricated or defaulted number.
@@ -298,14 +278,12 @@ def test_the_filter_header_folds_its_tallies_into_the_frames_and_the_rail(run_ct
 
 
 def test_the_filter_rail_reports_no_metric_the_filter_never_measured(run_ctx) -> None:
-    """A filter compares no cells and no columns, so a zero for either would be invented."""
     _pdir, run_id = run_ctx
     strip = _diff_head(_panel(run_id, KEEP_ID))
     assert "cells changed" not in strip and "cols" not in strip
 
 
 def test_both_shapes_put_their_tally_in_the_same_slot(run_ctx) -> None:
-    """One rail, one vocabulary — the filter shape gets no header treatment of its own."""
     _pdir, run_id = run_ctx
     for stage_id in (CLASSIFY_ID, ROUTE_ID, KEEP_ID):
         strip = _diff_head(_panel(run_id, stage_id))
@@ -317,7 +295,6 @@ def test_both_shapes_put_their_tally_in_the_same_slot(run_ctx) -> None:
 
 
 def test_the_full_rows_page_lays_the_frames_out_the_same_way(run_ctx) -> None:
-    """One partial, both surfaces: the strip is not forked for the bigger page."""
     _pdir, run_id = run_ctx
     strip = _diff_head(_rows_page(run_id, ROUTE_ID))
     assert strip.count('class="diff-frame ') == 3
@@ -364,7 +341,6 @@ def test_the_tab_strip_replaces_inputs_and_outputs(run_ctx) -> None:
 
 
 def test_the_data_pane_keeps_the_input_rows_without_the_picker(run_ctx) -> None:
-    """Reading the rows stays here; picking them to run on is the simulate page."""
     _pdir, run_id = run_ctx
     html = _panel(run_id, CLASSIFY_ID)
     assert "data-inputs" in html
@@ -418,9 +394,7 @@ def test_the_full_rows_page_reads_as_a_diff_by_default(run_ctx) -> None:
 
 
 def test_the_full_rows_diff_keeps_the_row_numbers_and_expandable_cells(run_ctx) -> None:
-    """What this page does better than the panel survives the diff."""
-    # Row numbers and the click-to-expand (title-hover) cell treatment are the
-    # page's own; the shared partial takes them as flags rather than being forked.
+    # The shared partial takes the row numbers and the click-to-expand cells as flags.
     _pdir, run_id = run_ctx
     html = _rows_page(run_id, CLASSIFY_ID)
     assert "diff-cell-changed" in html  # it IS the diff table these belong to
@@ -431,10 +405,6 @@ def test_the_full_rows_diff_keeps_the_row_numbers_and_expandable_cells(run_ctx) 
 
 
 def test_the_diff_page_leaves_the_view_toggle_and_the_csv_to_the_header(run_ctx) -> None:
-    """The output frame unit IS the toggle, so the toolbar repeats neither it nor the CSV."""
-    # The unit's "all rows" link is this page's own ?raw=1 view and its ⬇ CSV is
-    # the same rows.csv the toolbar button used to serve — a second copy of each
-    # would be two controls for one thing.
     _pdir, run_id = run_ctx
     html = _rows_page(run_id, CLASSIFY_ID)
     toolbar = _rows_toolbar(html)
@@ -448,7 +418,6 @@ def test_the_diff_page_leaves_the_view_toggle_and_the_csv_to_the_header(run_ctx)
 
 
 def test_the_capped_diff_warning_sends_the_reader_to_a_link_that_exists(run_ctx, monkeypatch) -> None:
-    """With no button on the strip, the sentence has to name the one link there is."""
     monkeypatch.setattr(loading, "MAX_TABLE_ROWS", 2)
     _pdir, run_id = run_ctx
     for stage_id in (CLASSIFY_ID, KEEP_ID):
@@ -459,9 +428,7 @@ def test_the_capped_diff_warning_sends_the_reader_to_a_link_that_exists(run_ctx,
 
 
 def test_raw_1_forces_the_plain_table_and_says_which_view_it_is(run_ctx) -> None:
-    """A reader arriving from a raw-frames link must not be handed an annotated table."""
-    # This branch renders no header rail, so the toolbar is the only route to
-    # both the other view and the download — it keeps them.
+    # This branch renders no header rail, so the toolbar is the only route out.
     _pdir, run_id = run_ctx
     html = _rows_page(run_id, CLASSIFY_ID, "?raw=1")
     assert "stage-diff" not in html
@@ -503,9 +470,7 @@ def test_the_full_rows_diff_is_windowed_by_the_table_row_cap(run_ctx, monkeypatc
 
 
 def test_a_capped_filter_page_counts_input_rows_not_output_rows(run_ctx, monkeypatch) -> None:
-    """The filter table is over INPUT rows, so the cap warning must say so."""
-    # keep's output has 2 rows and its input 3; a warning that said "of 2 rows"
-    # would be a false count for the table actually drawn.
+    # keep's output has 2 rows and its input 3; the table drawn is over the 3.
     monkeypatch.setattr(loading, "MAX_TABLE_ROWS", 2)
     _pdir, run_id = run_ctx
     html = _rows_page(run_id, KEEP_ID)
@@ -513,7 +478,6 @@ def test_a_capped_filter_page_counts_input_rows_not_output_rows(run_ctx, monkeyp
 
 
 def test_every_frame_unit_links_the_raw_view_not_another_diff(run_ctx) -> None:
-    """A unit's "all rows" is that frame itself; a diff of it would be a different claim."""
     # Every input plus the output, on a one-input and a two-input stage alike.
     _pdir, run_id = run_ctx
     for stage_id, linked in ((CLASSIFY_ID, [LOAD_ID, CLASSIFY_ID]),

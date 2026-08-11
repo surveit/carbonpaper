@@ -12,7 +12,6 @@ from conftest import contribution_of, make_run_context, queue_columns, reads_of
 
 
 def _llm_stage(input_columns, output_columns, pk=("id",)):
-    """A strictly-1:1 llm_transform outputting `output_columns`."""
     flowing = {c["name"] for c in input_columns}
     return parse_stage({
         "id": "evidence_extraction", "description": "Extract evidence", "type": "llm_transform",
@@ -27,9 +26,6 @@ def _llm_stage(input_columns, output_columns, pk=("id",)):
 
 
 def test_llm_transform_drops_undeclared_columns_including_former_hardcoded_ids(monkeypatch):
-    # The model returns benchmark_id / query_id — names the OLD hardcoded keep-list
-    # would have force-kept. The signature doesn't declare them, so they're dropped
-    # (and recorded), not resurrected.
     stage = _llm_stage(
         input_columns=[{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}],
         output_columns=[{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True},
@@ -47,9 +43,6 @@ def test_llm_transform_drops_undeclared_columns_including_former_hardcoded_ids(m
 
 
 def test_llm_transform_declared_input_column_rides_through(monkeypatch):
-    # entity_id is declared in BOTH schemas, so it's a passthrough: outside the
-    # reply spec (never asked of the model) yet kept because output_schema declares
-    # it. It survives by declaration, not because the runtime knows the name.
     stage = _llm_stage(
         input_columns=[{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True},
                        {"name": "entity_id", "type": "str", "nullable": True}],
@@ -103,9 +96,6 @@ def _queue_stage(output_schema, flt=None):
 
 
 def _src_scored():
-    # filter="entity_id == 'nope'" matches nothing, so every row is a
-    # pass-through row — avoids HaltForReview so the test can assert on the
-    # projected output directly.
     return pd.DataFrame([
         {"entity_id": "C:acme", "evidence_id": "d1#0", "quote": "we love climate policy",
          "score": 1, "benchmark_id": "B1", "query_id": "Q5"},
@@ -113,9 +103,7 @@ def _src_scored():
 
 
 def _queue_test_ctx(tmp_path, project: str) -> RunContext:
-    """A production-shaped ctx for running the human_review_queue handler:
-    identity + a writable stage cache, the project scope the handler's own
-    guard (`_require_project_scope`) requires."""
+    """The handler's `_require_project_scope` guard needs both an identity and a writable cache."""
     identity = RunIdentity(project=project, run_id="r1")
     return make_run_context(
         run_dir=tmp_path, identity=identity,
@@ -124,11 +112,10 @@ def _queue_test_ctx(tmp_path, project: str) -> RunContext:
 
 
 def test_human_review_queue_carries_every_input_column_through(tmp_path):
-    """A review stage only ADDS, so no input column can be left behind."""
     stage = _queue_stage(
         output_schema={"columns": [{"name": "evidence_id", "type": "str", "nullable": True},
                                     {"name": "final_score", "type": "int", "nullable": True}]},
-        flt="entity_id == 'nope'",
+        flt="entity_id == 'nope'",  # matches no row, so nothing halts
     )
     ctx = _queue_test_ctx(tmp_path, "keeps-declared-columns")
     out = HANDLERS[StageType.human_review_queue].execute(stage, {"scored": _src_scored()}, ctx)

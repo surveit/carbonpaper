@@ -10,7 +10,7 @@ from typing import Any
 
 from alembic import op
 
-from tools.stage_signatures import (
+from scripts.stage_signatures import (
     SignatureUndeterminable,
     add_signature,
     find_dropped_anchor_columns,

@@ -17,7 +17,6 @@ _TINTED = re.compile(r"background(?:-color)?\s*:\s*var\(--([a-z]+)-bg\)")
 
 
 def read_rules() -> list[tuple[str, str]]:
-    """(selector list, declaration block) for every rule in app/static/*.css."""
     rules = [
         (sel.strip(), body)
         for sel, body in _RULE.findall(_COMMENT.sub("", read_stylesheets()))
@@ -29,7 +28,6 @@ def read_rules() -> list[tuple[str, str]]:
 
 
 def find_tinted_variants() -> dict[str, str]:
-    """Variant class (`.btn.approve`) → the hue its background carries."""
     tinted = {}
     for selector, body in read_rules():
         hue = _TINTED.search(body)
@@ -69,7 +67,6 @@ def test_a_tinted_control_does_not_inherit_the_paper_hover() -> None:
 
 
 def test_the_scan_finds_the_tinted_controls_it_is_meant_to_guard() -> None:
-    """A changed selector style would make the rule above silently vacuous."""
     tinted = find_tinted_variants()
     assert len(tinted) >= 4, f"only found {tinted} — the parser has drifted from the CSS"
     assert ".btn.approve" in tinted, f"the approve button is not being seen: {sorted(tinted)}"

@@ -46,9 +46,7 @@ def test_renaming_a_column_changes_the_fingerprint():
     )
 
 
-def test_every_null_form_collapses_to_one_identity():
-    """A parquet round trip may hand back pd.NA where None went in; that must
-    not change what the frame is."""
+def test_every_null_form_a_parquet_round_trip_can_return_collapses_to_one_identity():
     with_none = pd.DataFrame({"x": [None]}, dtype=object)
     with_na = pd.DataFrame({"x": [pd.NA]}, dtype=object)
     with_nan = pd.DataFrame({"x": [float("nan")]}, dtype=object)
@@ -59,9 +57,7 @@ def test_every_null_form_collapses_to_one_identity():
     )
 
 
-def test_the_row_index_is_not_part_of_the_identity():
-    """Only the cells, their column order and their row order count — a
-    non-default index survives a parquet round trip as nothing at all."""
+def test_the_row_index_is_dropped_by_a_parquet_round_trip_so_it_is_not_the_identity():
     frame = pd.DataFrame({"x": [1, 2]})
     reindexed = frame.copy()
     reindexed.index = pd.Index([7, 9])
@@ -102,9 +98,6 @@ def test_an_unrecorded_input_reads_back_as_none():
 
 
 def test_the_accessors_key_on_the_input_frames_themselves():
-    """A caller hands the ordered input frames and never a fingerprint, so a
-    changed input resolves to a different entry without the caller doing
-    anything."""
     _record(pd.DataFrame({"x": [1]}))
     changed = [pd.DataFrame({"in": [2]})]
     assert ReadOnlyStageCache().find_cached_frame(*STAGE_KEY, changed) is None
@@ -117,8 +110,7 @@ def test_the_accessors_key_on_the_input_order():
     assert ReadOnlyStageCache().find_cached_frame(*STAGE_KEY, [left, right]) is not None
 
 
-def test_the_read_only_view_cannot_record_a_frame():
-    """Structurally absent, exactly as `record` is — not withheld by a check."""
+def test_the_read_only_view_has_no_record_attribute_rather_than_a_refusing_one():
     assert not hasattr(ReadOnlyStageCache(), "record_frame")
 
 

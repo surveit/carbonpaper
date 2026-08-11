@@ -1,4 +1,4 @@
-"""The prompt dump (tools/dump_prompts.py) covers every prompt this app ships and
+"""The prompt dump (scripts/dump_prompts.py) covers every prompt this app ships and
 every tool offered beside it — a new surface that never reaches the dump fails here,
 because a dump that silently omits one reads as "this is all of it"."""
 from __future__ import annotations
@@ -12,7 +12,7 @@ from typing import Iterator
 import pytest
 
 from app.core.paths import repo_root
-from tools.dump_prompts import render_prompt_dump
+from scripts.dump_prompts import render_prompt_dump
 
 # A module-level string constant whose name ends in one of these is a prompt shipped
 # to a model. The dump has to contain its text.
@@ -33,7 +33,7 @@ def test_dump_contains_every_shipped_prompt(dump: str) -> None:
     ]
     assert not missing, (
         "prompt text that never reaches the dump — add its surface to "
-        "tools/dump_prompts.py:render_prompt_dump:\n  " + "\n  ".join(missing)
+        "scripts/dump_prompts.py:render_prompt_dump:\n  " + "\n  ".join(missing)
     )
 
 
@@ -46,13 +46,11 @@ def test_dump_offers_the_editing_agent_every_tool_it_binds(dump: str) -> None:
 
 
 def test_dump_states_what_it_leaves_out(dump: str) -> None:
-    # Every per-run schema the dump cannot print says so where it is missing.
     assert "the per-run task (the user message)" in dump
     assert "built per stage" in dump
 
 
 def find_prompt_constants() -> list[tuple[Path, str, str]]:
-    """Read off the tree, so the checked set is never a hand-kept list."""
     found = []
     for path in sorted(repo_root().glob("app/**/*.py")):
         for name in _module_level_names(path):
@@ -65,7 +63,6 @@ def find_prompt_constants() -> list[tuple[Path, str, str]]:
 
 
 def _module_level_names(path: Path) -> Iterator[str]:
-    # Discovery is static; the value is read at runtime, so a built prompt counts.
     tree = ast.parse(path.read_text(encoding="utf-8"))
     for node in tree.body:
         if isinstance(node, ast.Assign) and len(node.targets) == 1:
@@ -79,13 +76,11 @@ def _module_name(path: Path) -> str:
 
 
 def _one_line(text: str) -> str:
-    # Both sides flatten, so source wrapping cannot fake a mismatch.
     return re.sub(r"\s+", " ", text).strip()
 
 
 def test_the_constant_scan_finds_the_known_surfaces() -> None:
-    # Guards the scan itself: a predicate that matched nothing would pass the test
-    # above vacuously.
+    # Without this, a scan matching nothing would pass the test above vacuously.
     names = {name for _path, name, _text in find_prompt_constants()}
     assert {"EDITING_SYSTEM_PROMPT", "INSTRUCTIONS", "DATA_MODEL_SYSTEM_PROMPT",
             "REVIEW_GUIDE_SYSTEM_PROMPT", "STAGE_TESTS_SYSTEM_PROMPT",

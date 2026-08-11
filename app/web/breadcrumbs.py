@@ -10,8 +10,6 @@ from pydantic import BaseModel
 
 
 class Crumb(BaseModel):
-    """`href` None is the page you are on. `picker` is the partial a switcher rung loads."""
-
     label: str
     href: str | None = None
     is_code: bool = False
@@ -19,7 +17,7 @@ class Crumb(BaseModel):
 
 
 class PickerRow(BaseModel):
-    """`badge_kind` is a `.badge` modifier (ok/warn/err/awaiting/pending), not a new hue."""
+    """`badge_kind` is a `.badge` modifier: ok/warn/err/awaiting/pending, not a new hue."""
 
     label: str
     href: str
@@ -35,8 +33,6 @@ class PickerRow(BaseModel):
 
 
 class Picker(BaseModel):
-    """`all_href` is set only where `rows` is the newest few of a longer list."""
-
     heading: str
     rows: list[PickerRow]
     all_href: str | None = None
@@ -46,7 +42,6 @@ class Picker(BaseModel):
 def build_section_crumbs(
     project: str, *, label: str, parent: tuple[str, str] | None = None
 ) -> list[Crumb]:
-    """A project section that is itself the page; `parent` is the (label, href) above it."""
     above = [_link(*parent)] if parent else []
     return [*_project_trail(project), *above, _here(label)]
 
@@ -65,12 +60,10 @@ def build_run_crumbs(project: str, run_id: str) -> list[Crumb]:
 
 
 def build_runs_child_crumbs(project: str, *, label: str) -> list[Crumb]:
-    """A page under Runs that is not itself a run — the launch form."""
     return [*_runs_trail(project), _here(label)]
 
 
 def build_run_child_crumbs(project: str, run_id: str, *, label: str) -> list[Crumb]:
-    """A page hanging off one run — its review queue, its stage rows, its lineage."""
     return [
         *build_run_crumbs(project, run_id)[:-1],
         _link(run_id, _run_href(project, run_id), is_code=True),
@@ -100,17 +93,15 @@ def build_eval_run_crumbs(
 
 
 def build_home_crumbs(here: str) -> list[Crumb]:
-    """A page above any project — the project list itself, Admin."""
     return [_home(), _here(here)]
 
 
 def build_chat_crumbs(title: str | None) -> list[Crumb]:
-    """One agent chat session, under the session list."""
     return [_home(), _link(_CHATS_LABEL, _CHATS_HREF), _here(title or _UNTITLED_SESSION)]
 
 
 # The trail's first rung renders the wordmark (_wordmark.html) rather than this text.
-_HOME_LABEL = "CarbonPaper"
+_HOME_LABEL = "Carbon Paper"
 _CHATS_LABEL = "Chats"
 _CHATS_HREF = "/chat"
 # States the absence rather than naming the session something it is not called.

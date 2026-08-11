@@ -23,8 +23,6 @@ DOCUMENT_FILE = "methodology.md"
 # Reported on the index rather than dropped: a silent gap reads as an absence of
 # data, which is a different and much worse claim than "this file was missing".
 class OmittedFile(BaseModel):
-    """A file the packet expected and could not write."""
-
     path: str
     reason: str
 
@@ -42,7 +40,6 @@ def write_packet_data(
     workflow: str | None,
     stage_sources: dict[str, Path | None],
 ) -> DataReport:
-    # `workflow` is the pinned version as JSON, or None when it could not be read.
     report = DataReport(written=[], omitted=[])
     _copy_run_records(root, run_dir, report)
     _write_workflow(root, workflow, view, report)
@@ -57,8 +54,8 @@ def write_packet_data(
 
 
 def _copy_run_records(root: Path, run_dir: Path, report: DataReport) -> None:
-    # events.jsonl carries the LLM prompts — the only record of what a model was asked.
     _copy_file(run_dir / MANIFEST_FILE, root / MANIFEST_FILE, MANIFEST_FILE, report)
+    # events.jsonl carries the LLM prompts — the only record of what a model was asked.
     _copy_file(run_dir / EVENTS_FILE, root / EVENTS_FILE, EVENTS_FILE, report)
 
 
@@ -80,7 +77,6 @@ def _write_workflow(
 
 
 def _copy_document(root: Path, project_dir: Path, report: DataReport) -> None:
-    """The authored methodology the workflow was compiled from."""
     source = find_document_path(project_dir)
     if source is None:
         report.omitted.append(
@@ -130,7 +126,6 @@ def _write_csv(root: Path, source: Path, stage_id: str, report: DataReport) -> N
 def _copy_input_file(
     root: Path, path: str, stage_id: str, index: int, report: DataReport
 ) -> None:
-    # Named by stage: two stages may bind files of the same name.
     source = Path(path)
     relative = f"{INPUTS_DIR}/{index:02d}-{stage_id}{source.suffix}"
     if not path or not source.is_file():

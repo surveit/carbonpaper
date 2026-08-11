@@ -39,7 +39,6 @@ def project_dir(tmp_path):
 
 @pytest.fixture
 def exported(project_dir, tmp_path):
-    """One finished run of a two-stage project, exported to `packets/`."""
     _make_project(project_dir)
     _seed_version(project_dir)
     run_id = run_service.start_run(_PROJECT)
@@ -113,7 +112,6 @@ def _seed_version(root):
 
 
 def test_packet_holds_every_stage_output_as_csv(exported):
-    """One uncapped CSV per stage that produced output."""
     load = pd.read_csv(exported.root / "data" / "load.csv")
     double = pd.read_csv(exported.root / "data" / "double.csv")
     assert list(load["val"]) == [1, 2]
@@ -121,14 +119,12 @@ def test_packet_holds_every_stage_output_as_csv(exported):
 
 
 def test_packet_keeps_the_raw_file_the_run_wrote(exported):
-    """A CSV round trip loses dtypes, so the raw parquet travels too."""
     raw = exported.root / "data" / "raw" / "load.parquet"
     assert raw.is_file()
     assert list(pd.read_parquet(raw)["val"]) == [1, 2]
 
 
 def test_packet_carries_the_run_records_and_the_workflow(exported):
-    """The run records, the methodology prose, and the frozen stages."""
     for name in ("manifest.json", "events.jsonl", "methodology.md", "workflow.json"):
         assert (exported.root / name).is_file(), name
     stages = json.loads((exported.root / "workflow.json").read_text(encoding="utf-8"))
@@ -136,7 +132,6 @@ def test_packet_carries_the_run_records_and_the_workflow(exported):
 
 
 def test_packet_copies_the_input_file_the_run_read(exported):
-    """The bound source file travels with the packet, named by its stage."""
     copies = sorted((exported.root / "inputs").glob("*"))
     assert len(copies) == 1
     assert "load" in copies[0].name
@@ -152,7 +147,6 @@ def test_index_links_every_stage_page(exported):
 
 
 def test_stage_page_leads_with_the_summary_and_shows_the_code(exported):
-    """Prose first; the code is there to check it against."""
     page = (exported.root / "stages" / "double.html").read_text(encoding="utf-8")
     assert "Doubles val and keeps the name unchanged." in page
     assert "the step fails rather than treating it as zero" in page
@@ -184,14 +178,12 @@ _ALLOWED_EXTERNAL = "https://cdn.jsdelivr.net/npm/mermaid@11.16.0/dist/mermaid.m
 
 
 def test_only_the_diagram_renderer_reaches_the_network(exported):
-    """One permitted external URL; anything else means the packet stopped being self-contained."""
     for page in exported.root.rglob("*.html"):
         for url in re.findall(r'(?:href|src)="((?:https?:)?//[^"]*)"', _markup_of(page)):
             assert url == _ALLOWED_EXTERNAL, f"{page.name} reaches {url}"
 
 
 def test_the_one_external_script_is_pinned_and_hash_checked(exported):
-    """No integrity+crossorigin and a compromised CDN executes in the reader's browser."""
     index = (exported.root / "index.html").read_text(encoding="utf-8")
     tag = re.search(r"<script[^>]*cdn\.jsdelivr[^>]*>", index)
     assert tag, "no diagram renderer tag on the index"
@@ -201,20 +193,17 @@ def test_the_one_external_script_is_pinned_and_hash_checked(exported):
 
 
 def test_the_diagram_survives_the_link_rotting(exported):
-    """A URL is not archival, so the flowchart also travels as text."""
     source = (exported.root / "workflow.mmd").read_text(encoding="utf-8")
     assert "flowchart" in source
     assert "double" in source
 
 
 def test_pages_reference_no_root_relative_url(exported):
-    """A leading `/` resolves against the filesystem root once the folder moves."""
     for page in exported.root.rglob("*.html"):
         assert not re.search(r'(?:href|src)="/', _markup_of(page)), page
 
 
 def test_vendored_app_stylesheet_pulls_nothing_off_the_network(exported):
-    """A packet concatenates app/static/*.css, so an @import in one breaks it offline."""
     css = (exported.root / "assets" / "style.css").read_text(encoding="utf-8")
     for pattern in (r"@import", r"url\(", r"@font-face"):
         assert not re.search(pattern, css), (
@@ -224,7 +213,6 @@ def test_vendored_app_stylesheet_pulls_nothing_off_the_network(exported):
 
 
 def test_packet_uses_the_apps_own_visual_vocabulary(exported):
-    """A reader's source should recognise the packet as the same product."""
     index = (exported.root / "index.html").read_text(encoding="utf-8")
     assert "assets/style.css" in index
     assert 'class="run-status status-ok"' in index
@@ -240,12 +228,10 @@ def _assert_every_href_resolves(root):
 
 
 def test_every_referenced_asset_exists_in_the_packet(exported):
-    """Each stylesheet and page link resolves to a file that is actually here."""
     _assert_every_href_resolves(exported.root)
 
 
 def test_checksums_cover_every_file_and_match(exported):
-    """`shasum -c checksums.txt` is the reviewer's tamper check."""
     lines = (exported.root / "checksums.txt").read_text(encoding="utf-8").splitlines()
     listed = {line.split("  ", 1)[1]: line.split("  ", 1)[0] for line in lines}
     on_disk = {
@@ -263,7 +249,6 @@ def test_packet_reports_nothing_omitted_for_a_complete_run(exported):
 
 
 def test_pages_name_the_stage_type_plainly(exported):
-    """A repr like "StageType.input_data" has no business on a reader's page."""
     for page in exported.root.rglob("*.html"):
         assert "StageType." not in page.read_text(encoding="utf-8")
 
@@ -283,7 +268,6 @@ def test_index_names_the_input_file_and_its_hash(exported):
 
 
 def test_missing_output_file_is_reported_not_skipped(project_dir, tmp_path):
-    """A missing output is named on the index, never dropped silently."""
     _make_project(project_dir)
     _seed_version(project_dir)
     run_id = run_service.start_run(_PROJECT)
@@ -299,7 +283,6 @@ def test_missing_output_file_is_reported_not_skipped(project_dir, tmp_path):
 
 
 def test_unreadable_version_is_stated_on_the_stage_page(project_dir, tmp_path, monkeypatch):
-    """A missing version is stated, not rendered as a stage with no transform."""
     _make_project(project_dir)
     _seed_version(project_dir)
     run_id = run_service.start_run(_PROJECT)
@@ -316,7 +299,6 @@ def test_unreadable_version_is_stated_on_the_stage_page(project_dir, tmp_path, m
 
 
 def test_a_stage_page_never_holds_less_than_a_served_page_would(project_dir, tmp_path):
-    # The packet may exceed the served cap but never fall under it.
     assert PACKET_MAX_TABLE_ROWS >= MAX_TABLE_ROWS
     _make_project(project_dir)
     rows = MAX_TABLE_ROWS
@@ -335,7 +317,6 @@ def test_a_stage_page_never_holds_less_than_a_served_page_would(project_dir, tmp
 def test_a_capped_stage_page_names_the_true_total_and_points_at_the_csv(
     project_dir, tmp_path
 ):
-    # A truncated table reads as the whole output unless the page says otherwise.
     _make_project(project_dir)
     rows = PACKET_MAX_TABLE_ROWS + 1
     pd.DataFrame(
@@ -353,14 +334,12 @@ def test_a_capped_stage_page_names_the_true_total_and_points_at_the_csv(
 
 
 def test_a_stage_page_offers_the_csv_rather_than_a_link_back_to_itself(exported):
-    # The stage page IS the full table in a packet, so "view all rows" has nowhere to go.
     page = (exported.root / "stages" / "double.html").read_text(encoding="utf-8")
     assert "view all rows" not in page
     assert 'href="../data/double.csv"' in page
 
 
 def test_every_step_stays_reachable_when_no_diagram_is_drawn(project_dir, tmp_path):
-    # The diagram is the one networked element, so the step links are the offline route.
     _make_project(project_dir)
     _seed_version(project_dir)
     run_id = run_service.start_run(_PROJECT)
@@ -386,7 +365,6 @@ def test_missing_run_raises_rather_than_writing_an_empty_packet(project_dir, tmp
 
 
 def test_index_carries_the_versions_review_guide(project_dir, tmp_path):
-    """The author's own account of what to scrutinise, from `_run_guide.html`."""
     _make_project(project_dir)
     version_id = _seed_version(project_dir)
     versioning.save_version_guide(
@@ -418,7 +396,6 @@ def test_index_carries_the_versions_review_guide(project_dir, tmp_path):
 
 
 def test_guide_stage_links_reach_the_packets_own_pages(project_dir, tmp_path):
-    """A packet chip must navigate, not sit on a `#id` with no panel to load."""
     _make_project(project_dir)
     version_id = _seed_version(project_dir)
     versioning.save_version_guide(
@@ -443,7 +420,6 @@ def test_guide_stage_links_reach_the_packets_own_pages(project_dir, tmp_path):
 
 
 def test_download_route_streams_a_zip_of_the_packet(project_dir):
-    """The whole packet, zipped, leaving nothing behind in the project."""
     _make_project(project_dir)
     _seed_version(project_dir)
     run_id = run_service.start_run(_PROJECT)
@@ -475,7 +451,6 @@ def _client():
 
 
 def test_the_packet_zip_trades_bytes_for_speed_on_compression(tmp_path):
-    # Level 1 over the default 6, so a silent revert shows up as a smaller file.
     root = tmp_path / "packet-root"
     root.mkdir()
     payload = ("registrant,client,amount\n" * 8000).encode()
@@ -497,7 +472,6 @@ def test_the_packet_zip_trades_bytes_for_speed_on_compression(tmp_path):
 def test_the_index_names_what_the_run_flagged_and_the_stage_page_does_not(
     project_dir, tmp_path
 ):
-    """One copy per packet, on the index — the same place the run page keeps it."""
     _make_project(project_dir)
     # An undeclared column the load stage's schema does not name: the run finishes
     # and its record carries a warning, which is what the index is here to show.

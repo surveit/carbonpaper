@@ -66,13 +66,10 @@
     </p>
     {% endif %}
 
-    {% if page.read_columns %}
-    <div class="queued-row">{{ kv_table(page.read_columns, item.row) }}</div>
-    {% endif %}
-    {% if page.other_columns %}
-    <details class="queued-row extra">
-        <summary>Additional context — not part of the judgement</summary>
-        {{ kv_table(page.other_columns, item.row) }}
+    {% if page.context_columns %}
+    <details class="queued-row" open>
+        <summary>Background for this row — not under review</summary>
+        {{ kv_table(page.context_columns, item.row) }}
     </details>
     {% endif %}
 
@@ -158,7 +155,7 @@
   const RUN_ID = {{ run_id | tojson }};
   const STAGE_ID = {{ stage_id | tojson }};
   const DECIDE_URL = `/project/${PROJECT}/runs/${RUN_ID}/queue/${STAGE_ID}/decide`;
-  const REVIEWER_KEY = 'carbonpaper.reviewer';
+  const REVIEWER_KEY = 'carbon_paper.reviewer';
 
   const nameInput = document.getElementById('reviewer-name');
   const hint = document.getElementById('reviewer-hint');

@@ -19,8 +19,6 @@ _SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 
 
 def _validate_slug(v: str) -> str:
-    """Object ids land on disk as `<object_type>/<object_id>.data`, so keep them
-    filesystem-safe: lowercase, digits, underscore or hyphen."""
     if not _SLUG_RE.match(v):
         raise ValueError(f"id {v!r} must be a slug (lowercase, digits, _ or -)")
     return v
@@ -31,16 +29,12 @@ SlugId = Annotated[str, AfterValidator(_validate_slug)]
 
 # ── Overrides ────────────────────────────────────────────────────────────────
 class StageOutputOverride(_Base):
-    """Inject `table` AS `stage_id`'s output, cutting that stage and everything
-    upstream of it out of the run. `stage_id` may be ANY stage, not just an input
-    — reference data, a fixture, whatever the eval needs held fixed."""
+    """Injecting `table` cuts `stage_id` and everything upstream of it out of the run."""
     stage_id: str
     table: TableRef
 
 
 class ScoringMetric(str, Enum):
-    """How `ExpectedOutput` grades one column: `exact` equality, `abs_tol`
-    within `tolerance`, or `sign` (same sign)."""
     exact = "exact"
     abs_tol = "abs_tol"
     sign = "sign"
@@ -48,12 +42,6 @@ class ScoringMetric(str, Enum):
 
 # ── The comparison ───────────────────────────────────────────────────────────
 class ExpectedOutput(_Base):
-    """One check: which `target_stage` output column to grade, and how. The
-    eval-dataset file's expected-output column for this check is not authored
-    here — it is named after `output_column` (the same name), unless
-    `output_column` conflicts with one of the override stage's own output
-    column names, in which case it is disambiguated (see
-    `app.evals.dataset_columns`)."""
     output_column: str
     metric: ScoringMetric = ScoringMetric.exact
     tolerance: Optional[float] = None
@@ -66,30 +54,13 @@ class ExpectedOutput(_Base):
 
 
 class CodeScorer(_Base):
-    """Escape hatch: `function(actual_df, dataset_df) -> dict[str, Any]` of metrics.
-    Needed when the path isn't grain-preserving (so declarative comparison can't
-    align rows) or the comparison isn't column-by-column."""
+    """The named function must be `function(actual_df, dataset_df) -> dict[str, Any]` of metrics."""
     module: str
     function: str
 
 
 # ── The eval config ──────────────────────────────────────────────────────────
 class EvalConfig(_Base):
-    """The authored eval: defined by its checks, plus how they plug into the
-    workflow's stages and how they're scored.
-
-    An optional eval-dataset `table` supplies the rows the checks run against:
-    its columns are `override_stage`'s output columns (injected as that
-    stage's whole output) plus one expected-output column per check, named
-    after the check's target column (`ExpectedOutput.output_column`). Each
-    check compares that expected-output column to the matching `target_stage`
-    output column. Row alignment between the injected eval-dataset rows and
-    the target's output is only well-defined when the override→target path is
-    grain-preserving (see `app.evals.run_settings.resolve_eval_run_settings`).
-    `reference_overrides`
-    inject extra data at other stages; `code` overrides the per-column
-    comparison when declarative scoring can't apply.
-    """
     id: SlugId
     project: str
     name: str
@@ -129,14 +100,7 @@ class EvalConfig(_Base):
 
 # ── Scorability (computed per run) ───────────────────────────────────────────
 class EvalRunSettings(_Base):
-    """How a given run will be scored, computed from the override→target path.
-
-    `frontier` is the set of stages that actually execute to produce the target
-    given the overrides (the target plus its non-overridden ancestors, not
-    traversing above an override — its output is injected). `can_score_declaratively`
-    is true iff every stage on the frontier preserves grain; otherwise the listed
-    `blocking_stages` fan out, fan in, or reshape, and the run needs a code scorer.
-    """
+    """`frontier`: the target plus its non-overridden ancestors — the walk stops at an override."""
     can_score_declaratively: bool
     frontier: list[str]
     blocking_stages: list[str]
@@ -144,7 +108,6 @@ class EvalRunSettings(_Base):
 
 # ── The run result ───────────────────────────────────────────────────────────
 class EvalRun(_Base):
-    """Result of running an EvalConfig against one workflow version."""
     id: SlugId
     config: str
     project: str

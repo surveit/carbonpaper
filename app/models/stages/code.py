@@ -10,7 +10,7 @@ import ast
 from collections.abc import Sequence
 from typing import ClassVar, Literal, Optional, Protocol
 
-from pydantic import Field, model_validator
+from pydantic import ConfigDict, Field, model_validator
 
 from app.models.errors import StepRefused
 from app.models.schema import FunctionKind, StageConfig, _Base
@@ -22,6 +22,10 @@ from app.models.stages.stage_tests import (
     PythonRowFunctionStageTest,
 )
 from app.models.stages.warnings import CompilerWarning, warn
+from app.models.tool_schema_prompts import (
+    CORNER_CASE_DESCRIPTION,
+    PYTHON_FUNCTION_DESCRIPTION,
+)
 
 # The instruction an authoring client reads when it fills in `summary`. Python
 # code is the one block a non-engineer reviewer cannot read for themselves, so
@@ -87,7 +91,7 @@ CODE_CORNER_CASES_CONTRACT_NOTE = (
 
 
 class CornerCase(_Base):
-    """One input where a step's behaviour needs stating, and what must happen."""
+    model_config = ConfigDict(json_schema_extra={"description": CORNER_CASE_DESCRIPTION})
 
     case: str = Field(
         description=(
@@ -105,18 +109,11 @@ class CornerCase(_Base):
 
 
 class AuthoredCode(Protocol):
-    """What every authored-code block carries for a reviewer: the plain-language
-    account of the code, and the cases it must handle. Structural, so a config
-    class satisfies it by declaring the two fields —
-    `StageBase.find_authored_code_block` returns whichever block a stage has."""
-
     summary: Optional[str]
     corner_cases: list[CornerCase]
 
 
 def _binds_name(tree: ast.Module, name: str) -> bool:
-    """True if a top-level def or assignment in `tree` binds `name` — i.e. what
-    `exec`ing the code would expose for the runtime to look up and call."""
     for node in tree.body:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name:
             return True
@@ -133,12 +130,6 @@ def validate_inline_function_code(
     default_name: str = "transform",
     return_hint: str = "a dict",
 ) -> None:
-    """Raise ValueError if inline function `code` does not compile or does not
-    define the function the runtime calls (`default_name` unless `function`
-    names another).
-
-    A single stage's invariant, enforced at write time so broken code (e.g. a
-    bare body with a top-level `return`) is rejected before the runner exec()s it."""
     try:
         tree = ast.parse(code)
         # compile() (like the runtime's exec) also catches a top-level `return`,
@@ -158,12 +149,8 @@ def validate_inline_function_code(
 
 
 class PythonFunction(StageConfig):
-    """Config block for python_row_function / python_frame_function (and publish). The
-    row-vs-frame distinction lives in the stage `type`, not here — the runtime
-    reads the type to decide whether to invoke this per row or per frame."""
-    # Every field changes what this stage computes (the code/module it runs)
-    # except `summary`, which describes that code to a reader — see
-    # StageBase.compute_definition_fingerprint.
+    model_config = ConfigDict(json_schema_extra={"description": PYTHON_FUNCTION_DESCRIPTION})
+
     FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({
         "kind", "code", "module", "function", "requirements",
     })
@@ -206,10 +193,6 @@ class PythonFunction(StageConfig):
 
     @model_validator(mode="after")
     def _inline_code_is_runnable(self) -> "PythonFunction":
-        """Inline code must parse and define the function the runtime calls
-        (`transform` by default). Enforced here — a single stage's invariant — so
-        broken code (e.g. a bare body with a top-level `return`) is rejected at
-        write time instead of raising only when the runner exec()s it."""
         if self.kind != FunctionKind.inline or not self.code:
             return self
         validate_inline_function_code(self.code, self.function)
@@ -218,8 +201,6 @@ class PythonFunction(StageConfig):
 
 def find_python_function_warnings(stage: "CarriesPythonFunctionStage"
                                   ) -> list[CompilerWarning]:
-    """Warnings about a `function` block — raised here and only here, since this module owns
-    it."""
     function = stage.function
     if not (function.summary or "").strip():
         return [warn(stage, "undescribed",
@@ -232,8 +213,6 @@ def find_python_function_warnings(stage: "CarriesPythonFunctionStage"
 
 
 class CarriesPythonFunctionStage(StageBase):
-    """Stage types whose behaviour is a `function` block; declared once so `.function` is read
-    here."""
     function: PythonFunction
 
     def fingerprint_blocks(self) -> dict[str, StageConfig]:

@@ -8,14 +8,13 @@ from typing import Any
 import pytest
 
 from app.models import parse_stage
-from tools.stage_signatures import SignatureUndeterminable, add_signature
+from scripts.stage_signatures import SignatureUndeterminable, add_signature
 
 _EDGE = {"columns": [{"name": "id", "type": "str", "nullable": True},
                      {"name": "text", "type": "str", "nullable": True}]}
 
 
 def _migrated(spec: dict[str, Any]) -> Any:
-    """`spec` through the synthesis, parsed by today's model."""
     upgraded = json.loads(json.dumps(spec))
     add_signature(upgraded)
     assert "output_schema" not in upgraded
@@ -40,7 +39,6 @@ def test_an_llm_transform_reads_what_its_template_injects():
 
 
 def test_a_row_function_keeps_the_whole_anchor_as_its_read_set():
-    # Opaque code may consume anything, so the honest read set is the whole edge.
     stage = _migrated({
         "id": "tag", "description": "Tag", "type": "python_row_function",
         "inputs": [{"id": "src", "schema": _EDGE}],
@@ -117,7 +115,6 @@ def test_the_synthesis_is_idempotent():
 
 
 def test_an_outer_that_dropped_a_column_is_refused_not_guessed():
-    """`extends` flows every anchor column, so a drop does not determine one."""
     with pytest.raises(SignatureUndeterminable, match="drops input column"):
         add_signature({
             "id": "drop", "description": "Drop", "type": "python_row_function",

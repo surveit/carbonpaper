@@ -54,15 +54,12 @@ def test_adding_a_code_stage_with_a_summary_is_accepted(project):
 
 
 def test_a_blank_summary_does_not_satisfy_the_gate(project):
-    """Whitespace is not a description, and an agent under pressure will try it."""
     result = add_stage_spec(project, json.dumps(_spec(summary="   ")))
     assert not result.ok
     assert any("summary` is required" in issue for issue in result.issues)
 
 
 def test_editing_a_summary_away_is_refused(project):
-    """The gate covers edits, not just creation — otherwise a description can be
-    removed from a stage that already passed."""
     assert add_stage_spec(project, json.dumps(_spec(summary="Passes rows through."))).ok
     result = edit_stage_spec(project, "tag", json.dumps(_spec()))
     assert not result.ok
@@ -70,8 +67,6 @@ def test_editing_a_summary_away_is_refused(project):
 
 
 def test_a_config_only_stage_needs_no_summary(project):
-    """An enrich's keys are config a reviewer reads directly — there is no authored
-    code for prose to stand in for."""
     result = add_stage_spec(project, json.dumps({
         "id": "j", "description": "J", "type": "enrich",
         "inputs": [{"id": "src", "schema": _SCHEMA},
@@ -92,15 +87,12 @@ def test_a_config_only_stage_needs_no_summary(project):
 
 
 def test_an_empty_corner_case_list_is_a_valid_answer(project):
-    """A step may genuinely have no awkward inputs, and requiring a non-empty list
-    would make an agent pad it and invent behaviour."""
     result = add_stage_spec(project, json.dumps(_spec(summary="Passes rows through.")))
     assert result.ok, result.issues
 
 
 def test_omitting_corner_cases_entirely_is_refused(project):
-    """`[]` and an absent key are the two states a reviewer most needs told apart:
-    "none" versus "never considered". Only the first may be written."""
+    """`[]` says "none"; an absent key says "never considered". Only the first may be written."""
     spec = _spec(summary="Passes rows through.")
     del spec["function"]["corner_cases"]
     result = add_stage_spec(project, json.dumps(spec))
@@ -118,13 +110,11 @@ def test_stated_corner_cases_round_trip(project):
 
 # ── the summary hard limit ───────────────────────────────────────────────────
 def test_the_field_description_states_the_limit_this_path_refuses_on():
-    # SUMMARY_DESCRIPTION is what an authoring client is shown before it writes; a
-    # number spelled out there would outlive the one these tests pin
+    # SUMMARY_DESCRIPTION is what an authoring client is shown before it writes.
     assert str(SUMMARY_MAX_CHARS) in SUMMARY_DESCRIPTION
 
 
 def test_a_summary_over_the_limit_is_refused(project):
-    """Enforced on write, so a long one can never be authored."""
     result = add_stage_spec(project, json.dumps(_spec(summary="x" * (SUMMARY_MAX_CHARS + 1))))
     assert not result.ok
     assert any(str(SUMMARY_MAX_CHARS) in issue for issue in result.issues)

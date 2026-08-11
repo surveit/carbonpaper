@@ -14,7 +14,7 @@ import grimp
 import pytest
 from arch.test_import_graph import ModuleDegree
 
-from tools.import_graph_report import (
+from scripts.import_graph_report import (
     FanExtremeReport,
     ImportGraphMetricError,
     ImportGraphMetricsReport,
@@ -24,13 +24,10 @@ from tools.import_graph_report import (
     render_comment_body,
 )
 
-_SCRIPT_PATH = Path(__file__).resolve().parent.parent / "tools" / "import_graph_report.py"
+_SCRIPT_PATH = Path(__file__).resolve().parent.parent / "scripts" / "import_graph_report.py"
 
 
 def _run_script(*args: str) -> subprocess.CompletedProcess[str]:
-    """Invoke the report script as a fresh subprocess — the same way the CI
-    job runs it (see the module docstring for why an in-process call can't
-    substitute for this when the target root differs from the real repo)."""
     return subprocess.run(
         [sys.executable, str(_SCRIPT_PATH), *args],
         capture_output=True,
@@ -42,9 +39,6 @@ def _run_script(*args: str) -> subprocess.CompletedProcess[str]:
 
 
 def _build_synthetic_graph(modules: list[str], edges: list[tuple[str, str]]) -> "grimp.ImportGraph":
-    """A grimp `ImportGraph` built entirely in memory (`add_module`/
-    `add_import`, no files on disk) — verified empirically against grimp
-    3.15 to support exactly this construction."""
     graph = grimp.ImportGraph()
     for module in modules:
         graph.add_module(module)
@@ -54,10 +48,7 @@ def _build_synthetic_graph(modules: list[str], edges: list[tuple[str, str]]) -> 
 
 
 def _reachable_via_manual_bfs(adjacency: dict[str, set[str]], start: str) -> set[str]:
-    """Independent, from-scratch reachable-set computation (breadth-first
-    over a plain adjacency dict) — deliberately not sharing any code with
-    grimp or with `compute_propagation_cost_percent`, so it can catch either
-    one being wrong."""
+    """Deliberately shares no code with grimp or the function under test, so it can catch either."""
     visited: set[str] = set()
     frontier = list(adjacency.get(start, set()))
     while frontier:
@@ -70,11 +61,6 @@ def _reachable_via_manual_bfs(adjacency: dict[str, set[str]], start: str) -> set
 
 
 class _InconsistentReachabilityGraph:
-    """A minimal stand-in exposing only the two traversal methods
-    `compute_propagation_cost_percent` calls, deliberately returning
-    forward/backward reachable sets that disagree — used to verify the
-    cross-check inside the function actually fires rather than silently
-    reporting whichever total it computed first."""
 
     def find_upstream_modules(self, module: str) -> set[str]:
         return {"nonempty"}
@@ -87,8 +73,6 @@ class _InconsistentReachabilityGraph:
 
 
 def test_grimp_find_upstream_modules_matches_a_manual_bfs_on_a_diamond() -> None:
-    # a -> b, a -> c, b -> d, c -> d: a reaches everything, b and c each
-    # reach only d, d reaches nothing.
     adjacency = {
         "pkg.a": {"pkg.b", "pkg.c"},
         "pkg.b": {"pkg.d"},
@@ -106,13 +90,12 @@ def test_grimp_find_upstream_modules_matches_a_manual_bfs_on_a_diamond() -> None
 
 
 def test_compute_propagation_cost_percent_on_a_three_chain() -> None:
-    # a -> b -> c: reachable ordered pairs are (a,b), (a,c), (b,c) = 3 of
-    # the 6 possible ordered pairs among 3 modules = 50%.
     graph = _build_synthetic_graph(
         modules=["pkg.a", "pkg.b", "pkg.c"],
         edges=[("pkg.a", "pkg.b"), ("pkg.b", "pkg.c")],
     )
     cost = compute_propagation_cost_percent(graph, frozenset({"pkg.a", "pkg.b", "pkg.c"}))
+    # (a,b), (a,c) and (b,c) reach; 3 of the 6 ordered pairs among 3 modules.
     assert cost == pytest.approx(50.0)
 
 
@@ -123,8 +106,6 @@ def test_compute_propagation_cost_percent_on_fully_disconnected_modules() -> Non
 
 
 def test_compute_propagation_cost_percent_on_a_complete_graph() -> None:
-    # Every module imports every other directly: all 6 ordered pairs among
-    # 3 modules are reachable = 100%.
     modules = ["pkg.a", "pkg.b", "pkg.c"]
     edges = [(a, b) for a in modules for b in modules if a != b]
     graph = _build_synthetic_graph(modules=modules, edges=edges)
@@ -187,9 +168,6 @@ def test_find_fan_extreme_returns_none_for_an_empty_graph() -> None:
 
 
 def _write_synthetic_three_chain_package(root: Path) -> None:
-    """A tiny real `app` package (a -> b -> c) written to `root`, so
-    `compute_import_graph_metrics` can be exercised end to end through
-    grimp's real filesystem scanning, not just in-memory graphs."""
     app_dir = root / "app"
     app_dir.mkdir()
     (app_dir / "__init__.py").write_text("", encoding="utf-8")
@@ -229,11 +207,6 @@ def test_compute_import_graph_metrics_fails_loudly_when_app_is_not_importable(tm
 
 
 def test_cli_rejects_root_and_markdown_together(tmp_path: Path) -> None:
-    # --root selects which checkout to compute metrics for; --markdown
-    # instead renders from two already-computed JSON files and never touches
-    # a checkout. Combining them is a contradictory invocation, so argparse
-    # must reject it loudly rather than silently picking one and ignoring
-    # the other.
     head_json = tmp_path / "head.json"
     base_json = tmp_path / "base.json"
     head_json.write_text("{}", encoding="utf-8")
@@ -246,10 +219,6 @@ def test_cli_rejects_root_and_markdown_together(tmp_path: Path) -> None:
 
 
 def test_compute_import_graph_metrics_on_the_real_repo_matches_the_arch_gate() -> None:
-    # The arch gate (tests/arch/test_import_graph.py) pins the real repo's
-    # import graph at zero cycles; this integration test checks the report
-    # script computes the same thing over the same real `app` package,
-    # plus sanity bounds on the new propagation-cost metric.
     repo_root = Path(__file__).resolve().parent.parent
     metrics = compute_import_graph_metrics(repo_root)
     assert metrics.cycles == 0

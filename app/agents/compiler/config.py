@@ -22,8 +22,6 @@ CONFIG = AgentConfig(
 
 
 def _build_editing_tools(context: BaseModel) -> list[BoundToolSpec]:
-    # build_engine hands the context back as the base type; it is an EditingContext
-    # because that is CONFIG.context_schema and build_engine validates against it.
     assert isinstance(context, EditingContext)
     return make_editing_tools(context)
 

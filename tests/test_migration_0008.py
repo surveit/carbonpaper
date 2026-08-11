@@ -10,7 +10,7 @@ from app.models.stages.stage_base import (
     STAGE_DESCRIPTION_MAX_CHARS,
     STAGE_ID_MAX_CHARS,
 )
-from tools.stage_description import (
+from scripts.stage_description import (
     DescriptionUndeterminable,
     rename_name_to_description,
 )
@@ -29,7 +29,6 @@ def test_a_stored_name_becomes_the_description_verbatim():
 
 
 def test_running_it_twice_changes_nothing_the_second_time():
-    """Idempotent, so a store that half-applied the revision can re-run the pass."""
     stage = _stage()
     rename_name_to_description(stage)
     assert rename_name_to_description(stage) is False
@@ -53,7 +52,6 @@ def test_an_empty_name_is_refused_rather_than_stored_as_a_description():
 
 
 def test_a_name_over_the_ceiling_is_refused_rather_than_truncated():
-    """Truncating would publish a sentence no human wrote — the cardinal rule."""
     long_name = "x" * (STAGE_DESCRIPTION_MAX_CHARS + 1)
     with pytest.raises(DescriptionUndeterminable, match="shorten it by hand"):
         rename_name_to_description(_stage(name=long_name))

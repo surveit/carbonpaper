@@ -11,10 +11,6 @@ from pydantic import BaseModel, ConfigDict
 
 
 class LlmUsage(BaseModel):
-    """One-or-more model calls' token counts and estimated cost. Frozen so a
-    computed total can't be mutated after the fact; fold parts with `+` or
-    `summed`. The default instance is the zero/identity."""
-
     model_config = ConfigDict(frozen=True)
 
     input_tokens: int = 0
@@ -32,7 +28,6 @@ class LlmUsage(BaseModel):
 
     @classmethod
     def summed(cls, parts: Iterable[LlmUsage]) -> LlmUsage:
-        """Field-wise total of `parts` (empty -> the zero instance)."""
         total = cls()
         for part in parts:
             total = total + part

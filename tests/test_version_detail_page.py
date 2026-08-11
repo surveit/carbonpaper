@@ -62,7 +62,6 @@ def test_version_detail_renders_frozen_graph_and_publish(project: Path) -> None:
 
 
 def test_version_detail_does_not_offer_to_generate_a_guide(project: Path) -> None:
-    """A guide is read beside a run's measured stages, so a run is where it is asked for."""
     meta = project_service.save_working_copy_as_version(project, message="v1", reviewer="local")
 
     page = client.get(f"/project/demo/workflow/version/{meta.version_id}")
@@ -71,7 +70,6 @@ def test_version_detail_does_not_offer_to_generate_a_guide(project: Path) -> Non
 
 
 def test_version_detail_labels_the_authored_description(project: Path) -> None:
-    """The author's sentence sits under its own header, not inside the app's lede."""
     meta = project_service.save_working_copy_as_version(
         project, message="Nine flat categories, no severity.", reviewer="local"
     )
@@ -85,7 +83,6 @@ def test_version_detail_labels_the_authored_description(project: Path) -> None:
 
 
 def test_version_detail_says_when_no_description_was_written(project: Path) -> None:
-    """An absent description is a fact about the version, so it is stated, not filled in."""
     meta = project_service.save_working_copy_as_version(project, message="", reviewer="local")
 
     page = client.get(f"/project/demo/workflow/version/{meta.version_id}")
@@ -94,7 +91,6 @@ def test_version_detail_says_when_no_description_was_written(project: Path) -> N
 
 
 def _save_covering_guide(project_dir: Path, version_id: str) -> None:
-    """A guide narrating every stage of the version in one step."""
     stages = versioning.load_version(project_dir, version_id).stages
     versioning.save_version_guide(
         project_dir,
@@ -129,7 +125,6 @@ def test_run_this_version_404_for_nonexistent_version(project: Path) -> None:
 
 
 def test_run_this_version_runs_whether_or_not_it_is_published(project: Path) -> None:
-    """The same version runs before and after a human publishes it."""
     meta = project_service.save_working_copy_as_version(project, message="v1", reviewer="local")
     vid = meta.version_id
 
@@ -146,11 +141,6 @@ def test_run_this_version_runs_whether_or_not_it_is_published(project: Path) -> 
 def test_run_this_version_400s_not_500s_on_unbound_input(
     project: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A version whose input stage authors no path (the workflow
-    leaves it for a run binding, per Connector's own docstring) is not
-    run-ready — prepare_run raises MissingInputBindingError. The route must
-    report this as a 400, the same way trigger_run does, not let it fall
-    through to an unhandled 500."""
     unbound_stage = {
         "id": "load", "description": "Load rows", "type": "input_data",
         "connector": {"kind": "file", "params": {"format": "csv"}},

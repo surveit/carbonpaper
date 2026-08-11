@@ -13,7 +13,7 @@ from pydantic import BaseModel, ValidationError
 from app.core.agent.diagnostics import AgentRunDiagnostics, summarize_run
 from app.core.agent.registry import build_mcp_server
 from app.core.agent.bound_tool import BoundToolSpec
-from app.core.agent.sdk_engine import CLI_MODEL, ClaudeAgentSdkEngine
+from app.core.agent.sdk_engine import CLI_MODEL, ClaudeAgentSdkEngine, ThinkingConfig
 from app.core.agent.usage import LlmUsage
 from app.core.errors import GenerationError
 from app.core.utils import format_errors
@@ -59,11 +59,7 @@ COMPANION_FIELD = "answer_is_complete"
 
 
 def advertise_more_than_one_argument(schema: dict[str, Any]) -> dict[str, Any]:
-    # Both halves measured over 6 runs of the failing shape: the companion argument
-    # alone still retried 2/6, spelling the lone argument out alone 0/6, together 0/6
-    # (and 0/8 on a longer run). Both kept — one breaks the shape, the other says what
-    # to pass. See the WORKAROUND note above before touching either.
-    """`schema` made non-degenerate iff it declares exactly one property."""
+    # Measured over 6 runs: the companion argument alone still retried 2/6, both together 0/6.
     properties = schema.get("properties", {})
     if len(properties) != 1:
         return schema
@@ -82,16 +78,7 @@ def advertise_more_than_one_argument(schema: dict[str, Any]) -> dict[str, Any]:
 
 
 class Agent(Generic[Model]):
-    """A headless agent that produces a validated `target_schema` instance.
-
-    Configure it with a system prompt (its instructions), a `target_schema` (the model
-    it must produce), and a `task` (the input to work from); call `run()` to get the
-    validated answer. The agent submits its answer via the `submit_answer` tool, whose
-    input schema is `target_schema`; `run()` returns the captured instance, or raises
-    GenerationError if the agent never submits a valid one within `max_attempts`.
-
-    One Agent runs once (it holds the run's capture state).
-    """
+    """One Agent runs once — it holds the run's capture state."""
 
     def __init__(
         self,
@@ -103,6 +90,7 @@ class Agent(Generic[Model]):
         max_attempts: int = 4,
         extra_tools: list[str] | None = None,
         max_turns: int | None = None,
+        thinking: ThinkingConfig | None = None,
     ) -> None:
         self._system_prompt = system_prompt
         self._target_schema = target_schema
@@ -117,6 +105,7 @@ class Agent(Generic[Model]):
         # Turn cap. A research agent needs many more turns than a submit-only one,
         # because every search and fetch costs a turn.
         self._max_turns = max_turns
+        self._thinking = thinking
         # Per-run capture state, written by submit_answer during the run.
         self._answer: Model | None = None
         self._attempts = 0
@@ -126,13 +115,6 @@ class Agent(Generic[Model]):
         self._last_usage: LlmUsage | None = None
 
     async def run(self, emit: Callable[[dict[str, Any]], None] | None = None) -> Model:
-        """Run the agent HEADLESSLY and return the validated `target_schema` it submits.
-        Raises GenerationError if no valid answer is submitted within `max_attempts` — it
-        never returns an invalid or fabricated one. (To run it as a live, streamable turn
-        instead, drive `build_engine()` through the TurnManager and read `answer`.)
-
-        `emit` opts into the turn's stream events (thinking/text/tool_call/
-        tool_result/error); the default forwards them nowhere."""
         engine = self.build_engine()
         # Collected whether or not a caller opted in: a failed run's only account
         # of what the model did is this stream, and the diagnosis of a run that
@@ -164,28 +146,17 @@ class Agent(Generic[Model]):
 
     @property
     def task(self) -> str:
-        """The framed input this agent works from — the prompt to stream when driving it
-        as a live turn (rather than headlessly via run())."""
         return self._task
 
     @property
     def answer(self) -> Model | None:
-        """The validated answer captured by submit_answer, or None if none has been
-        submitted. Read after driving the agent as a live turn to persist its result."""
         return self._answer
 
     @property
     def last_usage(self) -> LlmUsage | None:
-        """Token/cost usage of this run's CLI turn, or None if the turn produced
-        no ResultMessage (e.g. it timed out). Set even when run() raises, so a
-        failed attempt's spend is still attributable."""
         return self._last_usage
 
     def submit_answer(self, **fields: Any) -> str:
-        # Validates `fields` into target_schema and CAPTURES the instance on success —
-        # that captured object is what run() returns, so the agent never re-emits it. On
-        # failure it raises; the registry's tool wrapper turns the raise into an is_error
-        # tool result carrying these issues, which the agent then corrects and re-submits.
         self._attempts += 1
         fields.pop(COMPANION_FIELD, None)  # advertised only; see build_companion_property
         try:
@@ -199,11 +170,6 @@ class Agent(Generic[Model]):
         return "Accepted — recorded. You are done; do not restate it."
 
     def build_engine(self) -> ClaudeAgentSdkEngine:
-        """Build the engine that runs this agent: wrap the single submit_answer tool
-        (whose input schema IS target_schema) as an in-process server, capped at
-        max_attempts turns (+ a small buffer for any preamble/closing turn) so an agent
-        that never submits a valid answer cannot loop forever. Used by run(), and by a
-        caller driving the agent as a live turn: turns.start(engine=agent.build_engine()...)."""
         input_schema = advertise_more_than_one_argument(
             self._target_schema.model_json_schema())
         server, allowed, _wrapped = build_mcp_server([
@@ -223,4 +189,5 @@ class Agent(Generic[Model]):
             allowed_tools=allowed + self._extra_tools,
             model=self._model,
             max_turns=self._max_turns or (self._max_attempts + 2),
+            thinking=self._thinking,
         )

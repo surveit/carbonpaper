@@ -29,13 +29,11 @@ def _reserialize(raw: str) -> str:
 
 
 def test_a_current_shape_manifest_round_trips_byte_identical():
-    """Same keys, same order, same values."""
     raw = _golden("ok_run_nested_parameters")
     assert _reserialize(raw) == raw
 
 
 def test_a_legacy_manifest_keeps_every_recorded_parameter():
-    """The compat guarantee: a pre-nesting run still reports what it ran under."""
     legacy = json.loads(_golden("ok_run"))
     legacy |= {"limit_overrides": {"load": 2}, "offset_overrides": {"load": 1},
                "bust_cache": True, "is_test_run": True}
@@ -45,7 +43,6 @@ def test_a_legacy_manifest_keeps_every_recorded_parameter():
 
 
 def test_rewriting_a_legacy_manifest_migrates_it_to_the_nested_shape():
-    """Deliberate: a resumed legacy run rewrites its manifest, and it comes back nested."""
     rewritten = json.loads(_reserialize(_golden("ok_run")))
     assert rewritten["parameters"] == {"limits": {}, "offsets": {}, "run_bindings": {}}
     for gone in ("limit_overrides", "offset_overrides", "run_bindings", "bust_cache"):
@@ -54,17 +51,12 @@ def test_rewriting_a_legacy_manifest_migrates_it_to_the_nested_shape():
 
 @pytest.mark.parametrize("name", ["ok_run", "errored_run", "halted_run"])
 def test_a_legacy_manifest_round_trips_structurally(name: str):
-    """Nothing is lost but the parameters' position: read back, the two agree field for field."""
     raw = _golden(name)
     assert RunManifest.model_validate_json(_reserialize(raw)) == (
         RunManifest.model_validate_json(raw))
 
 
-def test_optional_fields_are_omitted_exactly_where_the_dict_code_omitted_them():
-    """Per-stage optional fields appear only on the records that earned them: a
-    ran stage carries `output_path` but no `queue_path`/`llm_usage`; a halted
-    queue stage carries `queue_path` but no `output_path`; a never-started
-    pending stage carries none of the four optionals."""
+def test_a_stage_record_carries_only_the_optionals_it_earned():
     halted = RunManifest.model_validate_json(_golden("halted_run"))
     by_id = {r.stage_id: r for r in halted.stage_records}
 
@@ -79,9 +71,6 @@ def test_optional_fields_are_omitted_exactly_where_the_dict_code_omitted_them():
 
 
 def test_minted_manifest_omits_the_run_level_optionals():
-    """A freshly-minted manifest is all-pending and carries none of the
-    run-level optionals the run only earns later (`finished_at`, `halted_at`,
-    `cancelled_at`, `resumed_at`, `updated_at`)."""
     abs_path = str((Path.cwd() / "x.csv").resolve())
     stage = parse_stage(
         {"id": "s", "description": "S", "type": "input_data",
@@ -107,9 +96,7 @@ def test_minted_manifest_omits_the_run_level_optionals():
 
 
 def test_legacy_scalar_halted_at_is_normalized_to_a_list():
-    """A pre-fork-aware manifest that persisted `halted_at` as a bare stage-id
-    string parses into a one-element list, so no template iterates it
-    character-by-character."""
+    """A template iterating a bare string would walk it character by character."""
     raw = json.loads(_golden("halted_run"))
     raw["halted_at"] = "review"
     manifest = RunManifest.model_validate(raw)
@@ -118,9 +105,6 @@ def test_legacy_scalar_halted_at_is_normalized_to_a_list():
 
 
 def test_clear_halt_drops_halted_at_from_serialization():
-    """`clear_halt` drops the halt marker so `exclude_unset` omits it — the
-    model equivalent of the dict code's `manifest.pop('halted_at', None)` on
-    resume."""
     manifest = RunManifest.model_validate_json(_golden("halted_run"))
     assert "halted_at" in manifest.to_dict()
     manifest.clear_halt()
@@ -128,10 +112,7 @@ def test_clear_halt_drops_halted_at_from_serialization():
 
 
 def test_recorded_tallies_survive_serialization_on_a_partial_manifest():
-    """A resumed legacy manifest that reached this run WITHOUT `dropped_columns`
-    still emits a tally recorded mid-run: `record_dropped_columns` marks the
-    field set so `exclude_unset` keeps it (an in-place dict mutation alone would
-    be dropped)."""
+    """`exclude_unset` drops an in-place mutation; `record_dropped_columns` marks the field set."""
     manifest = RunManifest(
         run_id="r", started_at="t", project="p", workflow_version="v",
         status=RunStatus.RUNNING, human_review_queue_stats={}, stage_records=[])
@@ -142,9 +123,6 @@ def test_recorded_tallies_survive_serialization_on_a_partial_manifest():
 
 
 def test_a_pre_rename_manifest_fails_loudly_instead_of_reporting_zero():
-    """The renamed keys carry no default, so a manifest written under the old
-    vocabulary (`stages`/`rows`/`queue_stats`/`input_validation`) is rejected at
-    parse rather than parsing into a fabricated empty/zero value."""
     legacy = json.loads(_golden("halted_run"))
     legacy["queue_stats"] = legacy.pop("human_review_queue_stats")
     legacy["stages"] = [
@@ -159,8 +137,6 @@ def test_a_pre_rename_manifest_fails_loudly_instead_of_reporting_zero():
 
 
 def test_empty_contribution_is_the_default():
-    """A stage that contributes nothing yields an empty StageContribution — no
-    usage, no errors, no drops, no queue stats."""
     empty = StageContribution()
     assert empty.llm_usage is None and empty.human_review_queue_stats is None
     assert empty.row_errors == [] and empty.dropped_columns == []

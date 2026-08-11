@@ -47,7 +47,6 @@ TYPE_GLYPH = {
 
 
 def _safe_mermaid_type(t: str) -> str:
-    """Mermaid erDiagram is picky — strip brackets, slashes, etc."""
     return (
         t.replace("[", "_")
          .replace("]", "")
@@ -75,10 +74,6 @@ SCHEMA_KIND_ORDER = ["reference", "input", "computed", "ground_truth"]
 
 
 def build_schema_er_diagram(schemas: list[dict[str, Any]]) -> str:
-    """Mermaid erDiagram from NAMED schemas (the data model). FK edges come from
-    explicit column `references` (schema or schema.column) — a real graph, not a
-    PK-name-collision heuristic. An empty-column schema still renders as an entity so
-    the reader sees it exists."""
     names = {s.get("name") for s in schemas if s.get("name")}
     lines = ["erDiagram"]
     for s in schemas:
@@ -88,8 +83,6 @@ def build_schema_er_diagram(schemas: list[dict[str, Any]]) -> str:
 
 
 def _render_er_entity_block(s: dict[str, Any]) -> list[str]:
-    """One schema's `erDiagram` entity block: its `{ ... }` braces, an `any`
-    placeholder row if it declares no columns, else one row per column."""
     sid = s.get("name")
     if not sid:
         return []
@@ -107,9 +100,6 @@ def _render_er_entity_block(s: dict[str, Any]) -> list[str]:
 
 
 def _render_er_column_row(col: dict[str, Any], pk_set: set[Any]) -> str | None:
-    """One column's row inside an entity block — type, name, PK/FK marker,
-    and a truncated, quote-escaped description comment — or `None` for a
-    column with no name."""
     name = col.get("name", "")
     if not name:
         return None
@@ -124,9 +114,6 @@ def _render_er_column_row(col: dict[str, Any], pk_set: set[Any]) -> str | None:
 
 
 def _collect_er_fk_edges(schemas: list[dict[str, Any]], names: set[Any]) -> list[str]:
-    """One deduplicated `erDiagram` edge per referencing column: a referencing
-    column draws an edge from the target schema to this one, skipping a
-    reference to an unknown schema or to the referencing schema itself."""
     edges: list[str] = []
     seen_edges: set[str] = set()
     for s in schemas:
@@ -146,14 +133,7 @@ def _collect_er_fk_edges(schemas: list[dict[str, Any]], names: set[Any]) -> list
 
 
 def build_schema_table_graph(schemas: list[dict[str, Any]]) -> str:
-    """Mermaid flowchart of the data model at TABLE level: one node per named
-    schema (name + title, coloured by kind), one edge per foreign-key reference.
-    The columns-free companion to build_schema_er_diagram — same deterministic
-    edge source (explicit column `references` only), so it makes no dataflow
-    claim: an edge A --> B means B carries a key pointing at A, and a table that
-    reads another without carrying its key (e.g. a roll-up) shows no edge.
-    Nodes click through to focusSchema(name) so the page can open that schema's
-    reference detail."""
+    """An edge A --> B means B carries a key pointing at A — never a dataflow claim."""
     lines = ["flowchart LR"]
     names = {s.get("name") for s in schemas if s.get("name")}
 
@@ -174,9 +154,6 @@ def build_schema_table_graph(schemas: list[dict[str, Any]]) -> str:
 
 
 def _render_table_node_block(s: dict[str, Any]) -> list[str]:
-    """One schema's flowchart node + click handler: name + title (dropped
-    when identical to the name), coloured by kind. [] for a nameless
-    schema."""
     sid = s.get("name")
     if not sid:
         return []
@@ -193,9 +170,6 @@ def _render_table_node_block(s: dict[str, Any]) -> list[str]:
 
 
 def _collect_table_fk_edges(schemas: list[dict[str, Any]], names: set[Any]) -> list[str]:
-    """One deduplicated table-level edge per referencing column: referenced
-    schema --> the schema whose column carries the key. Same extraction as
-    the ER view's `_collect_er_fk_edges`, drawn at table granularity."""
     edges: list[str] = []
     seen_edges: set[str] = set()
     for s in schemas:
@@ -215,11 +189,6 @@ def _collect_table_fk_edges(schemas: list[dict[str, Any]], names: set[Any]) -> l
 
 
 def _node_view(s: Stage | dict[str, Any]) -> dict[str, Any]:
-    """Read the label/edge fields a node needs off EITHER a typed Stage or a raw
-    draft dict, into a uniform dict. The workflow view passes validated Stages; the
-    project shell's workflow section passes draft dicts straight off disk (which may
-    not yet validate) — both render the same graph. `input_ids` normalises the
-    `inputs` shorthand (bare id string or {id: ...}) the Stage model also accepts."""
     if isinstance(s, StageBase):
         return {
             "id": s.id,
@@ -253,7 +222,6 @@ def build_mermaid_graph(
     project: str,
     status_by_id: dict[str, str] | None = None,
 ) -> str:
-    """Mermaid flowchart from typed Stages or draft dicts. Stroke = run status."""
     nodes = [_node_view(s) for s in stages]
     lines = ["flowchart LR"]
     for n in nodes:
@@ -276,7 +244,6 @@ _FALLBACK_NODE_CLASS = "custom"
 
 
 def _render_node_classdefs() -> list[str]:
-    """A `classDef` per class `_render_workflow_node_lines` can emit, all the same surface."""
     classes = sorted(set(TYPE_CLASS.values()) | {_FALLBACK_NODE_CLASS})
     return [f"    classDef {name} {_NODE_SURFACE}" for name in classes]
 
@@ -311,8 +278,6 @@ _STATUS_STROKE: dict[str, tuple[str, str]] = {
 def _render_workflow_node_lines(
     n: dict[str, Any], status_by_id: dict[str, str]
 ) -> list[str]:
-    """One node's flowchart declaration, click handler (always the one dispatcher,
-    static/diagram_nodes.js), and (if a status applies) a `style` line."""
     sid = n["id"]
     stype = n["type"]
     status = status_by_id.get(sid)
@@ -328,7 +293,6 @@ def _render_workflow_node_lines(
 
 
 def _build_workflow_node_label(n: dict[str, Any], status: str | None) -> str:
-    """The node's HTML label: glyphs, the stage id — its one name — then type and flags."""
     sid = n["id"]
     stype = n["type"]
     glyph = TYPE_GLYPH.get(stype, "")
@@ -353,8 +317,6 @@ def _build_node_tooltip(n: dict[str, Any]) -> str:
 
 
 def _resolve_stroke_line(sid: str, status: str | None) -> str | None:
-    """The `style {sid} stroke:...` override line, or None for the type
-    class's default stroke."""
     if not status or status not in _STATUS_STROKE:
         return None
     stroke, width = _STATUS_STROKE[status]

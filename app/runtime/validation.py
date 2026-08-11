@@ -90,9 +90,9 @@ def validate_dataframe(
     stage_id: str,
     phase: str,
 ) -> ValidationReport:
-    # A stage declaring no schema emits files rather than a table: nothing to check.
     report = ValidationReport(stage_id=stage_id, phase=phase, rows=len(df))
     if schema is None:
+        # A stage declaring no schema emits files rather than a table.
         return report
 
     columns: list[Column] = list(schema.columns)
@@ -134,8 +134,7 @@ def _find_nullability_issues(series: pd.Series, col: Column) -> list[Issue]:
 
 
 def _value_check_for(type_name: str) -> Callable[[Any], bool] | None:
-    """The predicate a value must satisfy for `type_name`, or None when the type admits
-    anything."""
+    """None means the type admits any value — not that `type_name` is unrecognised."""
     scalar = CELL_TYPE_PREDICATES.get(type_name)
     if scalar is not None:
         return scalar
@@ -157,8 +156,6 @@ def _value_check_for(type_name: str) -> Callable[[Any], bool] | None:
 
 
 def _find_type_issues(series: pd.Series, col: Column) -> list[Issue]:
-    """Values not matching the column's declared type; nulls are `_find_nullability_issues`'
-    job."""
     check = _value_check_for(col.type)
     if check is None:
         return []
@@ -202,7 +199,6 @@ def _find_numeric_range_issues(series: pd.Series, col: Column) -> list[Issue]:
 
 
 def _find_enum_issues(series: pd.Series, col: Column) -> list[Issue]:
-    """Values outside a `str` column's declared vocabulary — an error, like a bad type."""
     if not (col.enum and col.type == STR_COLUMN_TYPE):
         return []
     non_null = series.dropna()

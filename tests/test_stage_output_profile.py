@@ -44,7 +44,6 @@ _CLASSIFY = {
 
 @pytest.fixture
 def demo(tmp_path):
-    """A `demo` project whose input stage is bound to the source above."""
     workspace.set_projects_dir(tmp_path)
     project = tmp_path / "demo"
     (project / "data").mkdir(parents=True)
@@ -80,7 +79,6 @@ def test_a_test_naming_no_stages_injects_the_slice_and_skips_the_input(demo):
 
 
 def test_naming_a_stage_still_injects_the_slice_its_producer_owes_it(demo):
-    """Scope and slice are independent: `classify` runs alone, over 5 injected rows."""
     result = run_workflow_test("demo", stage_ids=["classify"], limit=5)
     assert result["ok"] is True
     assert len(read_stage_output("demo", result["run_id"], "classify")) == 5
@@ -95,14 +93,12 @@ def test_an_omitted_limit_injects_the_whole_source(demo):
 def test_the_window_is_the_same_rows_whether_the_source_is_injected_or_executed(
     demo, stage_ids
 ):
-    """The one thing scope must NOT change: `limit`/`offset` mean the same rows either way."""
     result = run_workflow_test("demo", stage_ids=stage_ids, limit=3, offset=2)
     frame = read_stage_output("demo", result["run_id"], "classify")
     assert list(frame["doc_id"]) == ["003", "004", "005"]
 
 
 def test_a_source_stage_that_executes_notes_the_cut_it_took(demo):
-    """A row cut is never silent: the stage record says how many of how many it read."""
     result = run_workflow_test("demo", stage_ids=["load"], limit=3)
     record = next(
         stage for stage in read_run_status("demo", result["run_id"])["stage_records"]
@@ -120,7 +116,6 @@ def test_naming_an_unknown_stage_names_the_real_ones(demo):
 
 
 def test_reading_a_stage_output_honours_the_declared_dtype(demo):
-    """A vocabulary must be read from the run, not the file: the dtypes disagree."""
     result = run_workflow_test("demo", stage_ids=["load"])
     frame = read_stage_output("demo", result["run_id"], "load")
     assert list(frame["doc_id"]) == list(_ROWS["doc_id"])
@@ -135,7 +130,6 @@ def test_reading_a_stage_the_run_does_not_have_names_the_ones_it_ran(demo):
 
 
 def test_reading_a_stage_that_wrote_no_output_is_loud(demo):
-    """An errored stage has a record but no file — a raise, never an empty frame."""
     bad = dict(_CLASSIFY, function={"kind": "inline", "code":
                                     "def transform(row):\n    raise ValueError('boom')"})
     WorkflowVersion(
@@ -192,7 +186,6 @@ def test_a_categorical_column_reports_a_count_per_value(demo):
 
 
 def test_a_numeric_column_reports_its_range(demo):
-    """min/max/mean/median is the answer for a numeric column; a value list is not."""
     run_id = run_workflow_test("demo", stage_ids=["load"])["run_id"]
     score = _profile("demo", run_id, "load", ["score"])["columns"][0]
     assert score["value_range"] == {
@@ -203,7 +196,6 @@ def test_a_numeric_column_reports_its_range(demo):
 
 
 def test_a_cut_list_reports_the_true_distinct_count_beside_it(demo):
-    """The property that must not be lost: a cut list never reads as a whole set."""
     run_id = run_workflow_test("demo", stage_ids=["load"])["run_id"]
     profile = _profile("demo", run_id, "load", ["doc_id"], max_values=2)["columns"][0]
     assert len(profile["values"]) == 2
@@ -233,7 +225,6 @@ def test_an_unknown_run_comes_back_as_a_loud_verdict(demo):
 
 
 def test_a_column_a_stage_computes_is_profilable_though_no_file_holds_it(demo):
-    """`label` exists only after classify runs — what a file read cannot answer."""
     run_id = run_workflow_test("demo", limit=6)["run_id"]
     profile = _profile("demo", run_id, "classify", ["label"])["columns"][0]
     assert [value["value"] for value in profile["values"]] == ["pos", "neg"]
@@ -252,7 +243,7 @@ def test_the_tool_is_registered_on_the_mcp_surface(demo):
 def test_both_authoring_surfaces_carry_the_enum_from_data_guidance():
     from app.agents.compiler.prompt import EDITING_SYSTEM_PROMPT
     from app.mcp.server import INSTRUCTIONS
-    from app.models.enum_from_data_note import ENUM_FROM_DATA_GUIDANCE
+    from app.tools.prompt_fragments import ENUM_FROM_DATA_GUIDANCE
 
     assert ENUM_FROM_DATA_GUIDANCE in EDITING_SYSTEM_PROMPT
     assert ENUM_FROM_DATA_GUIDANCE in INSTRUCTIONS
@@ -260,7 +251,7 @@ def test_both_authoring_surfaces_carry_the_enum_from_data_guidance():
 
 def test_the_guidance_keeps_the_two_questions_and_the_sample_warning():
     from app.models.authoring_lifecycle_note import AUTHORING_LIFECYCLE_GUIDANCE
-    from app.models.enum_from_data_note import ENUM_FROM_DATA_GUIDANCE
+    from app.tools.prompt_fragments import ENUM_FROM_DATA_GUIDANCE
 
     text = ENUM_FROM_DATA_GUIDANCE
     assert "GENERATION" in text and "thousands of values and still be closed" in text
@@ -276,7 +267,6 @@ def test_the_guidance_keeps_the_two_questions_and_the_sample_warning():
 
 
 def test_the_editing_prompt_asks_no_human_to_check_a_column(demo):
-    """The editing agent iterates; escalating an enum to a human was the wrong ask."""
     from app.agents.compiler.prompt import EDITING_SYSTEM_PROMPT
 
     assert "ask the human" not in EDITING_SYSTEM_PROMPT

@@ -19,7 +19,6 @@ _STATE_CLASSES = ("ok", "warn", "err", "awaiting")
 
 
 def find_hardcoded_type_badges() -> dict[str, list[str]]:
-    """Template path → the literal `badge <stage-type>` classes written into it."""
     pattern = re.compile(r'class="[^"]*\bbadge\s+(' + "|".join(sorted(set(TYPE_CLASS.values()))) + r')\b')
     found = {}
     for directory in _TEMPLATE_DIRS:
@@ -41,6 +40,5 @@ def test_no_template_hardcodes_a_stage_type_badge_class() -> None:
 
 
 def test_the_scan_would_see_a_borrowed_class() -> None:
-    """A renamed class or moved template would make the rule above vacuous."""
     assert TYPE_CLASS, "TYPE_CLASS is empty — the pattern would match nothing"
     assert all(d.is_dir() for d in _TEMPLATE_DIRS), f"{_TEMPLATE_DIRS} — templates moved"

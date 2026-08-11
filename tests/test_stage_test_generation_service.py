@@ -28,8 +28,6 @@ _OUT_SCHEMA = {"columns": [
 
 
 def _suite_model(output_schema: dict = _OUT_SCHEMA) -> Any:
-    """The suite model for the `double` stage: one input `load` carrying
-    _IN_SCHEMA, a python_row_function so each test is one row in / one row out."""
     return build_stage_tests_model(
         PythonRowFunctionStageTest,
         {"load": TableSchema.model_validate(_IN_SCHEMA)},
@@ -38,9 +36,6 @@ def _suite_model(output_schema: dict = _OUT_SCHEMA) -> Any:
 
 
 def _seed_project(project_dir: Path, *, existing_tests: list[dict] | None = None) -> None:
-    """A project with a document and a two-stage workflow (load -> double), mirroring the
-    fixture in tests/test_version_gate_stage_tests.py. `double` is the python_row_function
-    stage tests are generated for."""
     project_dir.mkdir(parents=True, exist_ok=True)
     (project_dir / "document.md").write_text("Double the amount.", encoding="utf-8")
     compiled = project_dir / "compiled"
@@ -116,9 +111,6 @@ def test_finish_with_no_answer_raises(tmp_path: Path):
 
 
 def test_finish_with_empty_suite_raises(tmp_path: Path):
-    """`{"tests": []}` validates as a suite (there is no case to refuse), but writing it
-    through would wipe any existing tests while reporting success. The completion hook
-    must reject it before it reaches stage_edit."""
     project_dir = tmp_path / "demo"
     _seed_project(project_dir, existing_tests=[{
         "name": "old_case",
@@ -136,15 +128,7 @@ def test_finish_with_empty_suite_raises(tmp_path: Path):
 
 
 def test_finish_stage_tests_preserves_null_cells(tmp_path: Path):
-    """A null cell in an expected row (e.g. a nullable column the transform sometimes
-    leaves unset) must survive the write path intact. `expected` is typed
-    `list[dict[str, Any]]` — a plain dict, not a sub-model — so pydantic's
-    `exclude_none=True` (used both when building the patch and when write_stage
-    re-serializes the validated Stage) only drops None MODEL FIELDS; it does not walk
-    into that dict to strip None entries. And patch_stage_spec's RFC 7386 merge patch
-    replaces the whole `tests` array wholesale (a list value is returned as-is, never
-    recursed into) rather than deep-merging its contents. Pins that neither step
-    silently turns a declared null into a missing key."""
+    """`exclude_none=True` drops None MODEL FIELDS; `expected` is a plain dict it never walks."""
     project_dir = tmp_path / "demo"
     project_dir.mkdir(parents=True)
     (project_dir / "document.md").write_text("Double the amount.", encoding="utf-8")
@@ -185,9 +169,6 @@ def test_finish_stage_tests_preserves_null_cells(tmp_path: Path):
 # ── start_stage_test_generation wiring: hidden view-only session + a live turn ───────────
 
 class _FakeGeneratorAgent:
-    """Stands in for the stage-test generator Agent driven as a live turn: stream_turn
-    'submits' a StageTestSuite and the engine returns a transcript, exactly as
-    submit_answer + the real engine would during the turn."""
 
     task = "generate tests for stage `double` and submit them"
 
@@ -211,8 +192,6 @@ class _FakeGeneratorAgent:
 
 
 def test_start_raises_before_session_for_non_python_stage(tmp_path: Path, monkeypatch: Any):
-    """`load` is an input_data stage — tests cannot be generated for it. The type check must
-    run before the session is created, so no orphaned session is left behind."""
     project_dir = tmp_path / "demo"
     _seed_project(project_dir)
     store = SessionStore()
@@ -258,9 +237,6 @@ def test_start_creates_hidden_viewonly_session(tmp_path: Path, monkeypatch: Any)
 
 
 class _FakeGeneratorAgentNoAnswer:
-    """Stands in for a generator whose turn ends without ever calling submit_answer — the
-    no-answer path _finish_stage_tests turns into a GenerationError, exercising the
-    on_done failure-persistence wrapper in app.compiler.stage_tests."""
 
     task = "generate tests for stage `double` and submit them"
 
@@ -282,9 +258,6 @@ class _FakeGeneratorAgentNoAnswer:
 
 
 def test_failed_generation_is_persisted_into_the_session(tmp_path: Path, monkeypatch: Any):
-    """A generation turn that ends with no submitted suite raises inside the completion hook.
-    That failure must not be lost to anyone who wasn't watching the live turn: it lands in
-    the session's persisted transcript, and the stage file is left unpatched."""
     project_dir = tmp_path / "demo"
     _seed_project(project_dir)
     store = SessionStore()

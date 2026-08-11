@@ -10,9 +10,6 @@ import enum
 
 
 class StageStatus(enum.StrEnum):
-    """One stage's outcome for a single run, as recorded in
-    `manifest["stage_records"][i]["status"]`."""
-
     PENDING = "pending"
     RUNNING = "running"
     OK = "ok"
@@ -23,11 +20,6 @@ class StageStatus(enum.StrEnum):
 
 
 class RunStatus(enum.StrEnum):
-    """A run's overall outcome across all its stages, as recorded in
-    `manifest["status"]`. Distinct from StageStatus: a run aggregates to
-    "errors"/"warnings" (plural) where a stage reports "error"/
-    "validation_warnings"."""
-
     RUNNING = "running"
     OK = "ok"
     WARNINGS = "warnings"

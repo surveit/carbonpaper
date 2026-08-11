@@ -27,9 +27,7 @@ def test_trace_to_dict_is_json_roundtrippable(tmp_path):
 
 
 def test_trace_to_dict_turns_non_finite_floats_into_null(tmp_path):
-    # A nullable numeric column (e.g. income, legitimately absent on most
-    # rows) arrives from pandas as NaN; +-inf is possible from a computed
-    # column too. None of the three are valid JSON tokens.
+    # None of NaN, +inf or -inf is a valid JSON token.
     seeds = pd.DataFrame({"facility_id": ["a", "b", "c"]})
     enrich = seeds.assign(income=[math.nan, math.inf, -math.inf], expenses=[0, 0.0, 5])
     run_dir = write_run(tmp_path, [

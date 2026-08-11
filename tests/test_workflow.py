@@ -155,7 +155,6 @@ def test_validate_workflow_reports_issues():
 # The invariant lives on the Stage model, so an ineligible stage fails to
 # construct — these assert the rejection at model_validate / parse_workflow.
 def _llm_1to1_dict(**over):
-    """Dict for a valid strictly-1:1 llm_transform: input {id(pk), text} → output adds score."""
     base = dict(
         id="score", type="llm_transform", inputs=[{
             "id": "load",
@@ -183,7 +182,6 @@ def test_llm_transform_valid_1to1_constructs():
 
 
 def test_llm_transform_rewriting_a_column_rejected():
-    """It passes its input through untouched, so it may not revise a column."""
     with pytest.raises(ValidationError, match="rewrites are not supported"):
         parse_stage(_llm_1to1_dict(signature={
             "form": "extends",
@@ -204,7 +202,6 @@ def test_llm_transform_adds_nothing_rejected():
 
 
 def test_parse_workflow_rejects_ineligible_llm_transform():
-    """The load seam (parse_workflow → Stage construction) rejects a non-1:1 stage."""
     bad = _llm_1to1_dict(signature={
             "form": "extends",
             "reads": [{"input": "load",
@@ -219,7 +216,6 @@ def test_parse_workflow_rejects_ineligible_llm_transform():
 # — possibly a projection — that the upstream stage's resolved output schema must
 # satisfy. Checked at save time as a cross-stage graph invariant.
 def _producer(**over):
-    """input_data stage `up` producing {id, text, score}."""
     base = dict(
         id="up", type="input_data",
         connector={"kind": "file"},
@@ -237,8 +233,6 @@ def _producer(**over):
 
 
 def _consumer(input_schema, **over):
-    """python_frame_function `down` consuming `up`, declaring `input_schema`.
-    Its `transform` is the identity, so it emits exactly what it consumes."""
     base = dict(
         id="down", type="python_frame_function",
         inputs=[{"id": "up", "schema": input_schema}],
@@ -260,8 +254,6 @@ def test_check_edge_schemas_clean_when_input_is_exact_copy():
 
 
 def test_check_edge_schemas_clean_when_input_is_a_projection():
-    # A projection naming only the columns the stage consumes is fine (subsumption,
-    # not identity) — `down` needs just `score`, `up` produces it.
     stages = m.parse_workflow([
         _producer(),
         _consumer({"columns": [{"name": "score", "type": "int", "nullable": True}]}),
@@ -270,7 +262,6 @@ def test_check_edge_schemas_clean_when_input_is_a_projection():
 
 
 def test_check_edge_schemas_flags_phantom_column():
-    # `down` requires `quote`, which `up` does not produce — the #36 phantom.
     stages = [
         parse_stage(_producer()),
         parse_stage(_consumer({"columns": [{"name": "quote", "type": "str", "nullable": True}]})),
@@ -281,8 +272,6 @@ def test_check_edge_schemas_flags_phantom_column():
 
 
 def test_check_edge_schemas_clean_when_producer_non_null_feeds_nullable_requirement():
-    # The review-queue pattern: producer emits `score` non-null; the consumer's
-    # input schema requires it only as nullable — a compatible (safe) edge.
     stages = m.parse_workflow([
         _producer(signature={"form": "replaces", "produces": [
             {"name": "id", "type": "str", "nullable": True},
@@ -316,8 +305,7 @@ def test_check_edge_schemas_flags_type_disagreement():
 
 
 def _publish_upstream_stages():
-    """`down` reads `pub`, the one stage type whose signature produces nothing —
-    built without the graph validator, which rejects the edge."""
+    """Built without the graph validator, which would reject the edge into `pub`."""
     return [
         parse_stage(_producer()),
         parse_stage(
@@ -334,31 +322,23 @@ def _publish_upstream_stages():
 
 
 def test_check_edge_schemas_raises_on_an_upstream_resolving_no_output():
-    """An upstream resolving none means validation was bypassed, not a finding to report."""
     with pytest.raises(ValueError, match="resolves no output schema"):
         m.validate_edge_schemas(_publish_upstream_stages())
 
 
 def test_graph_issues_reports_a_publish_upstream_instead_of_raising():
-    """The publish-terminal check gates validate_edge_schemas exactly as the
-    dangling-input check does, so this workflow comes back as a readable issue."""
     issues = m.validate_workflow(_publish_upstream_stages())
     assert len(issues) == 1
     assert "down" in issues[0] and "pub" in issues[0] and "publish stage" in issues[0]
 
 
 def test_check_edge_schemas_raises_on_an_input_naming_no_stage():
-    """A dangling input is a programming error here, not a finding: callers run
-    validate_inputs_resolve first (graph_issues does), so reaching this means
-    stage validation was bypassed."""
     stages = [parse_stage(_consumer({"columns": [{"name": "id", "type": "str", "nullable": True}]}))]
     with pytest.raises(ValueError, match="references no stage"):
         m.validate_edge_schemas(stages)
 
 
 def test_graph_issues_reports_a_dangling_input_instead_of_raising():
-    """graph_issues short-circuits before validate_edge_schemas when an input
-    dangles, so an invalid-but-reportable workflow still comes back as issues."""
     issues = m.validate_workflow(
         [parse_stage(_consumer({"columns": [{"name": "id", "type": "str", "nullable": True}]}))])
     assert issues == ["`down`: input `up` references no stage"]
@@ -438,13 +418,11 @@ def test_find_stages_reaching_publish_takes_the_direct_feeder():
 
 
 def test_find_stages_reaching_publish_leaves_out_the_publish_stage_itself():
-    """It does not carry work INTO the publishing — it is the publishing, and says so."""
     stages = [parse_stage(s) for s in (_loader(), _publish())]
     assert "pub" not in m.find_stages_reaching_publish(stages)
 
 
 def test_find_stages_reaching_publish_reaches_through_intermediate_stages():
-    """Two hops from publish is as load-bearing as one — the whole chain comes back."""
     stages = [parse_stage(s) for s in (
         _loader(), _reader("mid", "load"), _reader("near", "mid"), _publish(inputs=("near",)),
     )]
@@ -452,7 +430,6 @@ def test_find_stages_reaching_publish_reaches_through_intermediate_stages():
 
 
 def test_find_stages_reaching_publish_leaves_out_a_stage_nothing_published_reads():
-    """The carve-out: an assertion-style leaf feeding no publish stage is not in the set."""
     stages = [parse_stage(s) for s in (
         _loader(), _reader("checked", "load"), _publish(inputs=("load",)),
     )]
@@ -465,7 +442,6 @@ def test_find_stages_reaching_publish_is_empty_without_a_publish_stage():
 
 
 def test_find_stages_reaching_publish_unions_over_several_publish_stages():
-    """A stage reaching ANY publish stage counts, and a shared ancestor is not doubled."""
     stages = [parse_stage(s) for s in (
         _loader(), _reader("left", "load"), _reader("right", "load"),
         _publish("pub_a", inputs=("left",)), _publish("pub_b", inputs=("right",)),
@@ -484,8 +460,6 @@ def test_parse_workflow_accepts_terminal_publish():
 
 
 def test_parse_workflow_rejects_nonconformant_edge():
-    """The save gate (parse_workflow → Workflow model validator → graph_issues)
-    rejects a workflow whose edge is non-conformant."""
     with pytest.raises(ValidationError, match="quote"):
         m.parse_workflow([
             _producer(),
@@ -513,14 +487,10 @@ def test_sort_stages_by_dependency_puts_every_stage_after_its_inputs():
 
 
 def test_sort_stages_by_dependency_ignores_inputs_from_outside_the_given_set():
-    """An input already stored in the workflow constrains nothing about the order
-    of the stages being added — only intra-set edges do."""
     order = m.workflow.sort_stages_by_dependency([_build_stage_draft("b", ["stored"]), _build_stage_draft("a")])
     assert [s.id for s in order] == ["b", "a"], "ties keep submission order"
 
 
 def test_sort_stages_by_dependency_raises_on_a_cycle():
-    """No order exists, and returning one anyway would silently mis-order the
-    stages a caller then writes."""
     with pytest.raises(ValueError, match="cyclic"):
         m.workflow.sort_stages_by_dependency([_build_stage_draft("a", ["b"]), _build_stage_draft("b", ["a"])])

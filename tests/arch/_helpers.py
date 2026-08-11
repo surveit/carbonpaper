@@ -13,7 +13,6 @@ _STATIC_DIR = Path(__file__).resolve().parents[2] / "app" / "static"
 
 
 def read_stylesheets() -> str:
-    """Every app/static/*.css joined — a rule about the stylesheet must span the split."""
     sheets = sorted(_STATIC_DIR.glob("*.css"))
     if not sheets:
         raise ValueError(f"no .css files under {_STATIC_DIR} — these rules would be vacuous")
@@ -25,7 +24,6 @@ def parse_module(path: Path) -> ast.Module:
 
 
 def collect_called_funcs(tree: ast.Module) -> set[str]:
-    """Return the names of calls to a bare function, e.g. `open(...)` -> {"open"}."""
     return {
         node.func.id
         for node in ast.walk(tree)
@@ -34,7 +32,6 @@ def collect_called_funcs(tree: ast.Module) -> set[str]:
 
 
 def collect_called_methods(tree: ast.Module) -> set[str]:
-    """Return the attribute names of method calls, e.g. `p.write_text()` -> {"write_text"}."""
     return {
         node.func.attr
         for node in ast.walk(tree)
@@ -43,7 +40,6 @@ def collect_called_methods(tree: ast.Module) -> set[str]:
 
 
 def find_function_defs(tree: ast.Module) -> list[tuple[str, int]]:
-    """(name, lineno) of every function or async-function definition."""
     return [
         (node.name, node.lineno)
         for node in ast.walk(tree)
@@ -52,9 +48,7 @@ def find_function_defs(tree: ast.Module) -> list[tuple[str, int]]:
 
 
 def find_imported_modules(tree: ast.Module) -> set[str]:
-    """Dotted names this module imports: `import a.b` and `from a.b import c` both
-    yield "a.b". Relative imports (`from . import x`) are skipped — they are
-    same-package and never cross an architecture boundary."""
+    """Relative imports are skipped: same-package, they never cross an architecture boundary."""
     modules: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
@@ -66,11 +60,6 @@ def find_imported_modules(tree: ast.Module) -> set[str]:
 
 
 def find_dict_key_uses(tree: ast.Module, keys: set[str]) -> list[tuple[int, str]]:
-    """(lineno, key) of each place the module reads or writes one of `keys` as a
-    dict key: a subscript (`x["path"]`), a `.get("path", ...)` first argument, or
-    a dict-literal key (`{"path": ...}`). String constants elsewhere — docstrings,
-    messages, comparisons — do not count: the rule is about touching the keyed
-    data, not about mentioning the word."""
     uses: list[tuple[int, str]] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Subscript):
@@ -94,9 +83,6 @@ def find_dict_key_uses(tree: ast.Module, keys: set[str]) -> list[tuple[int, str]
 
 
 def find_subclasses_of(tree: ast.Module, base_name: str) -> list[ast.ClassDef]:
-    """`ClassDef` nodes in `tree` with a base named `base_name`: a plain name
-    base (`class Foo(Bar):`) or a dotted-attribute base (`class Foo(pkg.Bar):`)
-    both match on the base's simple (rightmost) name."""
     return [
         node
         for node in ast.walk(tree)
@@ -116,11 +102,6 @@ def _base_name_matches(base: ast.expr, name: str) -> bool:
 def find_class_body_assignment(
     node: ast.ClassDef, name: str
 ) -> ast.Assign | ast.AnnAssign | None:
-    """The class-body statement directly inside `node` that assigns `name` a
-    value — plain (`SCOPE = ...`) or annotated (`SCOPE: T = ...`). A bare
-    annotation with no value (`SCOPE: T`) does not count: it declares a type
-    but assigns nothing, so it would not satisfy the attribute at runtime
-    either."""
     for stmt in node.body:
         if (
             isinstance(stmt, ast.AnnAssign)
@@ -139,8 +120,6 @@ def find_class_body_assignment(
 def find_class_body_function(
     node: ast.ClassDef, name: str
 ) -> ast.FunctionDef | ast.AsyncFunctionDef | None:
-    """The function or method named `name` defined directly inside `node`'s
-    body, or None if the class body never defines it."""
     for stmt in node.body:
         if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)) and stmt.name == name:
             return stmt
@@ -148,11 +127,6 @@ def find_class_body_function(
 
 
 def find_numeric_get_defaults(tree: ast.Module) -> list[tuple[int, int]]:
-    """(lineno, end_lineno) of each `x.get(key, <int/float literal>)` call.
-
-    A silent numeric fallback: when `key` is missing this substitutes a made-up
-    number instead of failing loud. `True`/`False` defaults are not numbers here.
-    """
     spans: list[tuple[int, int]] = []
     for node in ast.walk(tree):
         if not (

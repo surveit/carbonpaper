@@ -5,7 +5,6 @@ second, which is exactly what a stage with no model looks like."""
 from __future__ import annotations
 
 import json
-import time
 from pathlib import Path
 
 import pandas as pd
@@ -71,8 +70,6 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def _run(project_dir: Path) -> str:
-    if (project_dir / "runs").exists():
-        time.sleep(1.05)  # run ids are second-resolution: one dir per run
     return str(execute_run(project_dir, project_dir, *pinned_stages(project_dir))["run_id"])
 
 
@@ -100,7 +97,6 @@ def test_the_replayed_run_says_so_where_the_cost_would_be(project: Path) -> None
 
 
 def test_the_replayed_run_names_the_model_it_did_not_call(project: Path) -> None:
-    """The model is what a reader checks the cost against, spend or no spend."""
     _run(project)
     replayed = _panel(_run(project))
     assert "<dt>model</dt>" in replayed

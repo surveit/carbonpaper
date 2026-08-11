@@ -21,10 +21,6 @@ TRACE_LINKS_KWARG = "trace_links"
 
 
 def handle_publish(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext) -> pd.DataFrame:
-    """Publish stages have a function: block. Run the function and capture its
-    output dataframe (paths to artifacts). The function gets the input frames
-    positionally, an `output_dir` kwarg, and a `trace_links` RowTraceLinker only
-    if it declares that keyword."""
     publish_stage = narrow_stage(stage, PublishStage)
     output_dir = _prepare_output_dir(publish_stage, ctx)
     fn = _load_python_function(publish_stage)
@@ -37,8 +33,6 @@ def handle_publish(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContex
 
 
 def _prepare_output_dir(stage: PublishStage, ctx: RunContext) -> Path:
-    """The runtime owns the run-dir layout, so it creates output_dir before the
-    authored function runs — the function just writes into it."""
     publish_cfg = stage.publish
     output_dir = (
         ctx.require_run_dir() / "artifacts" / Path(publish_cfg.destination or "build/").name
@@ -50,8 +44,6 @@ def _prepare_output_dir(stage: PublishStage, ctx: RunContext) -> Path:
 def _resolve_trace_linker(
     fn: Callable[..., Any], stage: PublishStage, ctx: RunContext
 ) -> RowTraceLinker | None:
-    """None unless the function declares the keyword, so a function written
-    against the plain `(df, output_dir)` signature keeps running unchanged."""
     if not _accepts_trace_links(fn):
         return None
     if ctx.identity is None:
@@ -64,8 +56,6 @@ def _resolve_trace_linker(
 
 
 def _accepts_trace_links(fn: Callable[..., Any]) -> bool:
-    """True when `fn` names the parameter, and also when it collects arbitrary
-    keywords via `**kwargs`."""
     parameters = inspect.signature(fn).parameters
     named = parameters.get(TRACE_LINKS_KWARG)
     if named is not None and named.kind is not inspect.Parameter.POSITIONAL_ONLY:

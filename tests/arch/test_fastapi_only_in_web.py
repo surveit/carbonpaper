@@ -18,15 +18,10 @@ _PERMITTED_DIR_PREFIX = "app/web/"
 
 
 def is_permitted_fastapi_importer(relative_path: str) -> bool:
-    """True if a repo-root-relative posix path is one of the two locations
-    allowed to import fastapi: anywhere under app/web/, or the app.main
-    entrypoint itself. Everything else is denied by default."""
     return relative_path == _ENTRYPOINT or relative_path.startswith(_PERMITTED_DIR_PREFIX)
 
 
 def find_fastapi_imports(tree: ast.Module) -> list[str]:
-    """Names of every fastapi import in `tree`: bare `fastapi` and any
-    submodule (`fastapi.responses`, ...), via the module's own dotted name."""
     return sorted(
         name for name in find_imported_modules(tree)
         if name == "fastapi" or name.startswith("fastapi.")
@@ -34,9 +29,6 @@ def find_fastapi_imports(tree: ast.Module) -> list[str]:
 
 
 def find_disallowed_fastapi_importers(paths: list[Path], repo_root: Path) -> list[str]:
-    """"<path>  imports <module>" for every file under `paths` that imports
-    fastapi and is not one of the permitted locations (see
-    `is_permitted_fastapi_importer`)."""
     offenders: list[str] = []
     for path in paths:
         relative = path.relative_to(repo_root).as_posix()
@@ -76,9 +68,6 @@ def test_is_permitted_fastapi_importer_rejects_a_non_web_module() -> None:
 
 
 def test_is_permitted_fastapi_importer_rejects_a_module_merely_prefixed_web() -> None:
-    """A directory literally named "app/webhooks" must not slip in on a naive
-    string prefix of "app/web" (without the trailing slash) — only the real
-    app/web/ package is permitted."""
     assert is_permitted_fastapi_importer("app/webhooks/handler.py") is False
 
 

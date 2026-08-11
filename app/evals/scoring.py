@@ -21,9 +21,6 @@ from app.evals.dataset_columns import (
 
 @dataclass
 class ScoreResult:
-    """The outcome of scoring one run: rollup `metrics` and the per-row result
-    table (one row per eval-dataset row, with each check's expected/actual/match
-    and whether the whole row passed)."""
     metrics: dict[str, Any]
     per_row: pd.DataFrame
 
@@ -32,11 +29,6 @@ def score_expected_outputs(
     config: EvalConfig, override: Stage, target: Stage,
     dataset_df: pd.DataFrame, target_df: pd.DataFrame,
 ) -> ScoreResult:
-    """Compare each check's expected-output column (in `dataset_df`) to the column
-    the target actually emitted (in `target_df`), aligned by row position.
-
-    Raises EvalGrainViolationError if the two frames differ in length — the
-    grain-preserving precondition positional alignment depends on did not hold."""
     if len(dataset_df) != len(target_df):
         raise EvalGrainViolationError(
             f"eval dataset has {len(dataset_df)} row(s) but the target produced "
@@ -49,8 +41,6 @@ def score_expected_outputs(
 
 @dataclass
 class _Check:
-    """One resolved check: the dataset column holding the expected value, the
-    target column that produced the actual value, and how to compare them."""
     expected_column: str
     target_column: str
     metric: str
@@ -58,10 +48,6 @@ class _Check:
 
 
 def _resolve_checks(config: EvalConfig, override: Stage, target: Stage) -> list[_Check]:
-    """Pair each check's target column with the (possibly deconflicted) dataset
-    column that carries its expected value. `deconflict_column_names` renames
-    every expected column the same way the eval-dataset schema was built, so the
-    names line up with the columns actually in `dataset_df`."""
     target_by_name = {c.name: c for c in get_output_columns_from_stage(target)}
     expected_source = [target_by_name[c.output_column] for c in config.expected_outputs]
     _, expected_columns = deconflict_column_names(
@@ -77,8 +63,6 @@ def _resolve_checks(config: EvalConfig, override: Stage, target: Stage) -> list[
 def _build_per_row_results(
     checks: list[_Check], dataset_df: pd.DataFrame, target_df: pd.DataFrame,
 ) -> pd.DataFrame:
-    """One row per eval-dataset row: each check's expected value, actual value, and
-    match flag, plus `row_passed` (all checks matched)."""
     columns: dict[str, list[Any]] = {}
     match_flags: list[list[bool]] = []
     for check in checks:
@@ -95,9 +79,6 @@ def _build_per_row_results(
 
 
 def _roll_up_metrics(checks: list[_Check], per_row: pd.DataFrame) -> dict[str, Any]:
-    """Accuracy over rows (a row counts only if all its checks matched) plus
-    per-check accuracy, so a reviewer sees both the headline and which check drags
-    it down."""
     n = len(per_row)
     metrics: dict[str, Any] = {
         "rows_scored": n,
@@ -112,9 +93,6 @@ def _roll_up_metrics(checks: list[_Check], per_row: pd.DataFrame) -> dict[str, A
 
 
 def _value_matches(expected: Any, actual: Any, metric: str, tolerance: float | None) -> bool:
-    """Does `actual` match `expected` under `metric`? exact = equality; abs_tol =
-    within `tolerance`; sign = same sign. A null on either side is never a match
-    (an unverifiable pair is not a pass)."""
     if pd.isna(expected) or pd.isna(actual):
         return False
     if metric == ScoringMetric.exact:

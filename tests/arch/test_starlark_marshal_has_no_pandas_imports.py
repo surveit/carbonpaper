@@ -14,8 +14,6 @@ _BANNED_PREFIXES = ("numpy", "pandas")
 
 
 def find_banned_data_library_imports(modules: set[str]) -> list[str]:
-    """Every module name in `modules` that is `numpy`/`pandas` or one of their
-    submodules."""
     return sorted(
         name
         for name in modules

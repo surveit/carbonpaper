@@ -43,9 +43,7 @@ _LOAD_STAGE = {
 
 
 def _seed(project_dir: Path, stage: dict = _LOAD_STAGE) -> None:
-    """A minimal, strictly-loadable working copy: one input_data stage. Uses a
-    path-free file connector so no data file needs to exist on disk (these
-    tests never execute the workflow, only snapshot its spec)."""
+    """A path-free file connector, so no data file need exist: nothing here executes."""
     compiled = project_dir / "compiled"
     compiled.mkdir(parents=True, exist_ok=True)
     (compiled / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
@@ -54,8 +52,6 @@ def _seed(project_dir: Path, stage: dict = _LOAD_STAGE) -> None:
 # ── save_working_copy_as_version ─────────────────────────────────────────────────
 
 def test_create_version_returns_meta_and_round_trips(tmp_path):
-    """save_working_copy_as_version's return value, list_versions, load_version and
-    load_version_stages all agree on the same version."""
     _seed(tmp_path)
     meta = save_working_copy_as_version(tmp_path, message="first cut", reviewer="ada")
 
@@ -75,9 +71,7 @@ def test_create_version_returns_meta_and_round_trips(tmp_path):
 
 
 def test_create_version_records_parent(tmp_path, monkeypatch):
-    """A second version, created with parent_version passed explicitly, records
-    the parent's id. version_id has 1-second resolution, so the clock is
-    monkeypatched to strictly advance between calls."""
+    """version_id has 1-second resolution, so the clock is monkeypatched to strictly advance."""
     _seed(tmp_path)
     base = datetime(2026, 1, 1, 12, 0, 0)
     tick = {"n": 0}
@@ -99,18 +93,12 @@ def test_create_version_records_parent(tmp_path, monkeypatch):
 
 
 def test_create_version_no_compiled_dir_raises_file_not_found(tmp_path):
-    """A project with no compiled/ workflow at all can't be versioned — fails
-    loudly and saves nothing, distinctly from an invalid-but-present workflow
-    (WorkflowLoadError, below)."""
     with pytest.raises(FileNotFoundError):
         save_working_copy_as_version(tmp_path, message="x", reviewer="test")
     assert list_versions(tmp_path) == []
 
 
 def test_create_version_invalid_workflow_raises_and_writes_nothing(tmp_path):
-    """save_working_copy_as_version strict-loads before it snapshots: an invalid
-    working copy raises WorkflowLoadError and saves NOTHING, so no invalid
-    workflow can be immortalised as a version."""
     (tmp_path / "compiled").mkdir()
     bad = {"id": "load", "description": "Load", "type": "input_data",
            "signature": {"form": "replaces", "produces": _ROWS_SCHEMA["columns"]},
@@ -124,31 +112,16 @@ def test_create_version_invalid_workflow_raises_and_writes_nothing(tmp_path):
     assert list_versions(tmp_path) == []
 
 
-def test_create_version_twice_within_a_second_overwrites(tmp_path, monkeypatch):
-    """version_id has 1-second resolution; two versions minted within the same
-    wall-clock second for the same project collide on doc id. This is an
-    accepted same-second clobber (no FileExistsError guard) — the second save
-    simply overwrites the first, so only one version survives."""
+def test_create_version_twice_within_a_second_keeps_both(tmp_path):
     _seed(tmp_path)
-
-    class _FixedClock:
-        @staticmethod
-        def now():
-            return datetime(2026, 1, 1, 12, 0, 0)
-
-    import app.services.versioning as versioning_module
-    monkeypatch.setattr(versioning_module, "datetime", _FixedClock)
 
     save_working_copy_as_version(tmp_path, message="first", reviewer="test")
     save_working_copy_as_version(tmp_path, message="second", reviewer="test")
 
-    [only] = list_versions(tmp_path)
-    assert only.message == "second"
+    assert [v.message for v in list_versions(tmp_path)] == ["second", "first"]
 
 
 def test_versions_are_scoped_per_project(tmp_path):
-    """Two different projects each version independently — listing one never
-    sees the other's (the store id is project-prefixed)."""
     proj_a, proj_b = tmp_path / "alpha", tmp_path / "beta"
     _seed(proj_a)
     _seed(proj_b)
@@ -173,11 +146,6 @@ def test_list_versions_newest_first(tmp_path):
 
 
 def test_list_versions_errors_on_a_corrupt_document(tmp_path):
-    """A stored document that fails the WorkflowVersion contract fails the whole
-    listing LOUDLY (WorkflowLoadError naming the document) — never a silent
-    skip, which would present a store holding an invalid document as healthy
-    and make the version invisible while its id still occupies the store. The
-    remedy for legacy/corrupt documents is a store migration, not tolerance."""
     _seed(tmp_path)
     save_working_copy_as_version(tmp_path, message="good", reviewer="test")
     get_store().write("workflow_version", f"{tmp_path.name}/20260101T000000", {"bogus": "data"})
@@ -198,12 +166,7 @@ def test_load_version_stages_missing_raises_file_not_found(tmp_path):
 
 
 def test_stored_version_missing_published_reads_as_unpublished(tmp_path):
-    """A stored document that carries no `published` key at all (e.g. written
-    under an older shape) reads as unpublished, the same as the field's plain
-    default — there is no special-casing of a missing key. This writes a
-    WorkflowVersion-shaped dict straight to the store, bypassing model
-    construction entirely, to prove the read path (not just construction)
-    applies the default."""
+    """Writes a raw dict to the store, so the READ path — not construction — applies the default."""
     vid = "20260101T000000"
     data = {
         "id": f"{tmp_path.name}/{vid}", "version_id": vid,
@@ -265,7 +228,6 @@ def test_find_latest_version_id_returns_the_newest_whatever_its_published_state(
 
 
 def test_resolve_version_id_defaults_to_the_newest_stored_version(tmp_path):
-    """An unpublished version that is newer than the published one is what a run pins."""
     _store_version(tmp_path, "20260101T000000", published=True)
     newest = _store_version(tmp_path, "20260201T000000", published=False)
     assert resolve_version_id(tmp_path, None) == newest
@@ -282,14 +244,12 @@ def test_resolve_version_id_returns_a_named_published_version(tmp_path):
 
 
 def test_resolve_version_id_raises_file_not_found_for_an_unknown_id(tmp_path):
-    """A named id nothing backs is not silently redirected to some other snapshot."""
     _store_version(tmp_path, "20260101T000000")
     with pytest.raises(FileNotFoundError):
         resolve_version_id(tmp_path, "nope")
 
 
 def test_resolve_version_id_raises_when_the_project_stores_no_version_at_all(tmp_path):
-    """The one remaining refusal: nothing to pin, and a run never creates a version."""
     with pytest.raises(NoVersionToRunError, match=tmp_path.name):
         resolve_version_id(tmp_path, None)
 
@@ -311,9 +271,6 @@ def test_create_version_from_stages_valid_is_loadable_and_unpublished(tmp_path):
 
 
 def test_create_version_from_stages_invalid_raises_and_writes_nothing(tmp_path):
-    """A stage input referencing a missing stage id fails Workflow's graph
-    validation as a pydantic.ValidationError, straight from the raw dicts —
-    create_version_from_stages never writes a version for an invalid graph."""
     dangling_input = {
         "id": "consume", "description": "Consume", "type": "python_frame_function",
         "inputs": [{"id": "no-such-stage", "schema": _ROWS_SCHEMA}],
@@ -341,8 +298,6 @@ _TALLY_STAGE = {
 
 
 def _two_stage_version(project_dir: Path) -> str:
-    """A stored two-stage version, so a guide can place one stage and leave the
-    other unnarrated."""
     return create_version_from_stages(
         project_dir, [_LOAD_STAGE, _TALLY_STAGE], message="two", reviewer="ada",
     ).version_id
@@ -362,7 +317,6 @@ def _guide(
 
 
 def test_a_guide_is_found_by_its_backpointers(tmp_path):
-    """No caller writes a storage key: the id autogenerates and the backpointers find it."""
     guide = ReviewGuide(project="demo", version_id="20260101T000000", steps=[])
 
     assert guide.id and guide.id != "demo/20260101T000000"
@@ -370,7 +324,6 @@ def test_a_guide_is_found_by_its_backpointers(tmp_path):
 
 
 def _recording_write(real_write, collections: list[str]):
-    """A DocumentStore.write that appends each written collection to `collections`."""
     def write(collection, id, data, schema_version=1):
         collections.append(collection)
         real_write(collection, id, data, schema_version)
@@ -378,7 +331,6 @@ def _recording_write(real_write, collections: list[str]):
 
 
 def test_save_version_guide_round_trips_as_its_own_document(tmp_path):
-    """Stored in its own collection, found by its backpointers, and comes back unchanged."""
     vid = _two_stage_version(tmp_path)
     saved = save_version_guide(tmp_path, vid, _guide(tmp_path, vid, ["load"], ["tally"]))
 
@@ -393,7 +345,6 @@ def test_save_version_guide_round_trips_as_its_own_document(tmp_path):
 
 
 def test_saving_a_guide_does_not_rewrite_the_version_document(tmp_path, monkeypatch):
-    """The invariant this storage shape restores: a version is written once, at creation."""
     vid = _two_stage_version(tmp_path)
     doc_id = f"{tmp_path.name}/{vid}"
     store = get_store()
@@ -435,8 +386,6 @@ def test_save_version_guide_rejects_an_unknown_id_in_unnarrated(tmp_path):
 
 
 def test_save_version_guide_rejects_a_stage_accounted_for_nowhere(tmp_path):
-    """A stage in neither a step nor `unnarrated` is a silent omission — refused, naming
-    it."""
     vid = _two_stage_version(tmp_path)
     with pytest.raises(ReviewGuideValidationError, match="tally"):
         save_version_guide(tmp_path, vid, _guide(tmp_path, vid, ["load"], []))
@@ -468,7 +417,6 @@ def test_save_version_guide_rejects_a_stage_narrated_by_two_steps(tmp_path):
 
 
 def test_save_version_guide_reports_every_offending_id_at_once(tmp_path):
-    """One message carries every problem, so the author fixes the guide in one pass."""
     vid = _two_stage_version(tmp_path)
     with pytest.raises(ReviewGuideValidationError) as exc:
         save_version_guide(tmp_path, vid, _guide(tmp_path, vid, ["ghost"], []))
@@ -482,7 +430,6 @@ def test_save_version_guide_reports_every_offending_id_at_once(tmp_path):
 # figure, so it must be narrated; a stage reaching no publish stage still may not be.
 
 def _published_version(project_dir: Path, publish_reads: str) -> str:
-    """A four-stage version: load -> mid -> {`checked`, publish}, so both cases exist."""
     stages: list[dict] = [
         _LOAD_STAGE,
         {"id": "mid", "description": "Middle", "type": "python_frame_function",
@@ -515,7 +462,6 @@ def test_save_version_guide_refuses_an_unnarrated_stage_that_feeds_publish(tmp_p
 
 
 def test_the_refusal_reaches_through_intermediate_stages(tmp_path):
-    """`load` is two hops from publish, and is as load-bearing as the stage feeding it."""
     vid = _published_version(tmp_path, publish_reads="mid")
     guide = _guide(tmp_path, vid, ["mid", "checked", "pub"], ["load"])
 
@@ -525,7 +471,6 @@ def test_the_refusal_reaches_through_intermediate_stages(tmp_path):
 
 
 def test_a_publish_stage_may_be_unnarrated_because_it_narrates_itself(tmp_path):
-    """The other half of the rule: `pub` does not carry work INTO the publishing."""
     vid = _published_version(tmp_path, publish_reads="mid")
     guide = _guide(tmp_path, vid, ["load", "mid", "checked"], ["pub"])
 
@@ -535,7 +480,6 @@ def test_a_publish_stage_may_be_unnarrated_because_it_narrates_itself(tmp_path):
 
 
 def test_the_stage_feeding_publish_is_refused_where_publish_itself_is_allowed(tmp_path):
-    """Both halves in one place: the ancestor is the rule, the publish stage is not."""
     vid = _published_version(tmp_path, publish_reads="mid")
 
     save_version_guide(
@@ -546,8 +490,6 @@ def test_the_stage_feeding_publish_is_refused_where_publish_itself_is_allowed(tm
 
 
 def test_a_stage_reaching_no_publish_stage_may_still_be_unnarrated(tmp_path):
-    """The carve-out, kept on purpose: `checked` asserts something and feeds nothing
-    published."""
     vid = _published_version(tmp_path, publish_reads="mid")
     guide = _guide(tmp_path, vid, ["load", "mid", "pub"], ["checked"])
 
@@ -585,7 +527,6 @@ def _guide_with_data_descriptions(
 
 
 def test_save_version_guide_refuses_a_section_with_no_data_sentence(tmp_path):
-    """The rail is janky without it, so a guide cannot be written missing one."""
     vid = _two_stage_version(tmp_path)
     guide = _guide_with_data_descriptions(tmp_path, vid, "The documents filed.", None)
 
@@ -595,7 +536,6 @@ def test_save_version_guide_refuses_a_section_with_no_data_sentence(tmp_path):
 
 
 def test_the_refusal_names_which_sections_are_missing_the_sentence(tmp_path):
-    """Naming them is the point — the author has to know what to go and write."""
     vid = _two_stage_version(tmp_path)
     guide = _guide_with_data_descriptions(tmp_path, vid, None, "   ")
 
@@ -606,7 +546,6 @@ def test_the_refusal_names_which_sections_are_missing_the_sentence(tmp_path):
 
 
 def test_a_blank_data_sentence_is_refused_as_absent(tmp_path):
-    """Whitespace is not a sentence — accepting it would put an empty line on the link."""
     vid = _two_stage_version(tmp_path)
     guide = _guide_with_data_descriptions(tmp_path, vid, "The documents filed.", "  \n ")
 
@@ -634,7 +573,6 @@ def test_save_version_guide_unknown_version_raises_file_not_found(tmp_path):
 
 
 def test_save_version_guide_rejects_a_guide_addressed_to_another_version(tmp_path):
-    """Saving a guide against a version it does not name is a caller bug, not a relocation."""
     vid = _two_stage_version(tmp_path)
     other = _guide(tmp_path, "20990101T000000", ["load"], ["tally"])
     with pytest.raises(ValueError, match="20990101T000000"):
@@ -648,7 +586,6 @@ def test_find_latest_review_guide_is_none_when_no_guide_was_saved(tmp_path):
 
 
 def test_writing_a_second_guide_appends_and_the_newest_one_wins(tmp_path):
-    """Guides append, so the live one is the newest written for that version."""
     vid = _two_stage_version(tmp_path)
     first = save_version_guide(tmp_path, vid, _guide(tmp_path, vid, ["load"], ["tally"]))
     second = save_version_guide(tmp_path, vid, _guide(tmp_path, vid, ["tally"], ["load"]))
@@ -659,7 +596,6 @@ def test_writing_a_second_guide_appends_and_the_newest_one_wins(tmp_path):
 
 
 def test_a_guide_for_another_version_is_not_returned(tmp_path):
-    """The backpointer is what selects, so a sibling version's guide never leaks in."""
     vid = _two_stage_version(tmp_path)
     save_version_guide(tmp_path, vid, _guide(tmp_path, vid, ["load"], ["tally"]))
 
@@ -668,14 +604,12 @@ def test_a_guide_for_another_version_is_not_returned(tmp_path):
 
 
 def test_a_version_document_carries_no_guide_key(tmp_path):
-    """A version's document holds the frozen workflow only."""
     vid = _two_stage_version(tmp_path)
     save_version_guide(tmp_path, vid, _guide(tmp_path, vid, ["load"], ["tally"]))
     assert "guide" not in get_store().read("workflow_version", f"{tmp_path.name}/{vid}")
 
 
 def test_a_version_document_with_an_embedded_guide_fails_loudly(tmp_path):
-    """A pre-split document carries a `guide` key: it raises rather than dropping the prose."""
     vid = "20260101T000000"
     data = {
         "id": f"{tmp_path.name}/{vid}", "version_id": vid,

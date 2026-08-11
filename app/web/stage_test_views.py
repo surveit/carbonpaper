@@ -18,13 +18,7 @@ CertificationStatus = Literal[
 
 
 class StageCertification(BaseModel):
-    """Whether a stage's plain-language summary has been checked against its code,
-    and on how many examples.
-
-    The claim `certified` licenses is narrow, and the template says so out loud:
-    the examples are authored from the methodology, never by running the code, so
-    passing them means the summary and the code agree ON THOSE EXAMPLES. It is not
-    a proof of correctness and says nothing about inputs no example covers."""
+    """`certified` means the summary and the code agree ON THE AUTHORED EXAMPLES, not that it is right."""
 
     status: CertificationStatus
     passing: int = 0
@@ -38,7 +32,6 @@ class StageCertification(BaseModel):
 def build_certification(
     stage: Stage, test_views: list[dict[str, Any]]
 ) -> Optional[StageCertification]:
-    """None for a config-only stage; missing a description outranks being untestable."""
     if not _carries_authored_code(stage):
         return None
     if not _summary_of(stage):
@@ -56,22 +49,15 @@ def build_certification(
 
 
 def _carries_authored_code(stage: Stage) -> bool:
-    """Is this stage's behaviour authored code a reviewer would otherwise have to
-    read? True for the `function` and `filter` blocks — the two that ask for a
-    `summary` — and false for a stage fixed entirely by config."""
     return stage.find_authored_code_block() is not None
 
 
 def _summary_of(stage: Stage) -> Optional[str]:
-    """The stage's plain-language summary, off whichever authored-code block it
-    carries."""
     block = stage.find_authored_code_block()
     return block.summary if block is not None else None
 
 
 def shape_test_views(stage: Optional[Stage]) -> list[dict[str, Any]]:
-    """Pair each of `stage`'s authored examples with its run result, shaped for
-    _stage_tests.html ([] for no stage, or a stage carrying none)."""
     if stage is None or not stage.tests:
         return []
     results = run_tests_for_stage(stage)
@@ -83,9 +69,8 @@ def shape_test_views(stage: Optional[Stage]) -> list[dict[str, Any]]:
 
 
 def _find_new_output_columns(stage: Stage) -> list[str]:
-    """The output columns no input declares — what this step adds."""
-    # Read off the declared schemas rather than the example rows: a case with an
-    # empty input would otherwise read as adding every column.
+    # Off the declared schemas, not the example rows: an empty input would read as
+    # adding every column.
     upstream = {
         column.name
         for stage_input in stage.inputs
@@ -123,7 +108,6 @@ def _shape_one_test(
 
 
 def _list_row_columns(rows: list[dict[str, Any]]) -> list[str]:
-    """Column order for rendering: first-appearance order across the rows."""
     seen: dict[str, None] = {}
     for row in rows:
         for key in row:

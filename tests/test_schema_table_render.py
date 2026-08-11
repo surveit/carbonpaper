@@ -38,7 +38,6 @@ def test_an_enum_column_shows_its_vocabulary_not_an_em_dash():
 
 
 def test_each_enum_value_is_its_own_chip_so_a_multi_word_value_reads_as_one():
-    """Joined into one string, a multi-word value wraps mid-value and blurs into its neighbour."""
     html = _render(Column(name="policy_area", type="str", nullable=False, enum=POLICY_AREAS))
 
     assert '<code class="enum-val">Energy &amp; Environment</code>' in html

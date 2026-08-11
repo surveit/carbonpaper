@@ -9,10 +9,6 @@ import string
 
 
 def find_template_fields(template: str) -> set[str]:
-    """Return the base field names `str.format_map` would interpolate in
-    `template`. Escaped braces (`{{ }}`) yield no field; `{a.b}` / `{a[0]}` yield
-    the base name `a`; positional `{}` / `{0}` are ignored — a prompt template
-    names input columns, not positions."""
     fields: set[str] = set()
     for _text, field_name, _format_spec, _conversion in string.Formatter().parse(template):
         if not field_name:

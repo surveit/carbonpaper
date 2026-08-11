@@ -8,6 +8,8 @@ from typing import ClassVar, Literal, Mapping, Optional
 
 from pydantic import Field, field_validator
 
+from app.core.errors import PredicateError
+from app.core.predicate import parse_predicate
 from app.models.schema import (
     SCALAR_COLUMN_TYPES,
     STR_COLUMN_TYPE,
@@ -29,11 +31,6 @@ class ReviewVerdict(str, Enum):
 
 
 class QueueConfig(StageConfig):
-    """human_review_queue config block: what the human is asked, and what the stage adds."""
-    # Every declared column name changes what the stage computes (which columns
-    # the human is asked about, and what the added columns are called); routing,
-    # conflict_resolution, and estimated_volume_per_week describe how a decision
-    # is routed, not what is asked — see StageBase.compute_definition_fingerprint.
     FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({
         "filter", "reviewer_instructions", "reviewed_columns",
         "verdict_column", "reviewer_column", "reviewed_at_column", "review_notes_column",
@@ -119,25 +116,23 @@ class HumanReviewQueueStage(StageBase):
         input_schema = self.inputs[0].table_schema
         return (
             issues
+            + _find_unread_column_issues(self.id, self.queue, self.signature)
             + _find_reviewed_target_issues(self.id, self.queue, input_schema, adds_by_name)
             + _find_review_record_target_issues(self.id, self.queue, adds_by_name)
         )
 
 
+
 def resolve_queue_config(stage: StageBase) -> Optional[QueueConfig]:
-    """The queue block, or None when `stage` is not a human_review_queue."""
-    # This module owns `.queue` (tests/arch/test_handle_access_is_owned.py), so
-    # every other layer asks for the block through here.
+    """The only sanctioned access to `.queue` (tests/arch/test_handle_access_is_owned.py)."""
     return stage.queue if isinstance(stage, HumanReviewQueueStage) else None
 
 
 def find_queue_column_issues(stage: HumanReviewQueueStage) -> list[str]:
-    """Every issue in one queue stage's column configuration, config side then signature side."""
     return stage.find_config_column_issues() + stage.find_signature_config_issues()
 
 
 def find_added_columns(queue: QueueConfig) -> list[tuple[str, str]]:
-    """Every column the stage adds, as (config field that names it, the name). Duplicates kept."""
     added = [
         (f"queue.reviewed_columns['{source}']", target)
         for source, target in queue.reviewed_columns.items()
@@ -146,7 +141,6 @@ def find_added_columns(queue: QueueConfig) -> list[tuple[str, str]]:
 
 
 def find_review_record_columns(queue: QueueConfig) -> list[tuple[str, str]]:
-    """The columns recording the act of reviewing, as (config field, name)."""
     columns = [
         ("queue.verdict_column", queue.verdict_column),
         ("queue.reviewer_column", queue.reviewer_column),
@@ -158,8 +152,29 @@ def find_review_record_columns(queue: QueueConfig) -> list[tuple[str, str]]:
 
 
 # ── the individual checks ────────────────────────────────────────────────────
+def _find_unread_column_issues(
+    sid: str, queue: QueueConfig, signature: ExtendsSignature
+) -> list[str]:
+    # The human sees the narrowed row, so an unread column is one they never see.
+    read = {column.name for entry in signature.reads for column in entry.columns}
+    if not read:
+        return [
+            f"stage '{sid}': its signature reads nothing, so the row this stage "
+            f"queues for a human would carry no columns — declare what the "
+            f"reviewer needs to see"
+        ]
+    try:
+        tested = set(parse_predicate(queue.filter).columns) if queue.filter else set()
+    except PredicateError:
+        tested = set()  # _find_filter_issues already reports the bad predicate
+    return [
+        f"stage '{sid}': queue.filter tests `{name}` but the signature does not read it"
+        for name in sorted(tested - read)
+    ]
+
+
+
 def _find_filter_issues(sid: str, queue: QueueConfig, input_schema: TableSchema) -> list[str]:
-    # Catches a filter reading a column the review is meant to SET.
     if not queue.filter:
         return []
     return find_predicate_column_issues(
@@ -192,12 +207,7 @@ def _find_reviewed_source_issues(
 def _find_added_column_collisions(
     sid: str, queue: QueueConfig, input_schema: TableSchema
 ) -> list[str]:
-    # THE check for "a review stage adds columns and never overwrites one": it runs on
-    # every queue stage, signature or not, and covers every name the queue block adds.
-    # This also catches two review stages in series where the second reuses the first's
-    # names. `find_signature_config_issues` keeps a declared signature pinned to these
-    # names rather than restating the rule.
-    existing = {c.name for c in input_schema.columns}
+    existing ={c.name for c in input_schema.columns}
     return [
         f"stage '{sid}': {field} adds column '{name}', which its input schema already "
         f"declares — a review stage adds columns and never overwrites one"
@@ -222,10 +232,6 @@ def _find_reviewed_target_issues(
     sid: str, queue: QueueConfig, input_schema: TableSchema,
     adds_by_name: Mapping[str, Column],
 ) -> list[str]:
-    # Each reviewed target must be among the signature's adds carrying its source
-    # column's full spec, and be at least as permissive about nulls. Framed as a
-    # producer/consumer check over a one-column schema pair: the declared target is
-    # the consumer, the source column renamed to the target is what supplies it.
     issues: list[str] = []
     for source, target in sorted(queue.reviewed_columns.items()):
         source_column = input_schema.column_for_name(source)
@@ -298,7 +304,9 @@ NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
             "verdict column nullable. A reviewed column is ADDED beside its source, "
             "never modifying it: name it `reviewed_<source>` and declare it with the "
             "SAME spec, nullability at least as permissive. Its source must be scalar. "
-            "`queue.filter` may reference INPUT columns only. The verdict column holds "
+            "`queue.filter` may reference INPUT columns only. The reviewer sees exactly the "
+            "columns the signature `reads`: they must cover every column `queue.filter` "
+            "tests, and may never be empty. The verdict column holds "
             "\"approve\", \"modify\", or \"skipped\" (the filter did not select the row), so "
             "a downstream stage wanting only human-sanctioned values filters on != "
             "\"skipped\". Rows match a cached decision by fingerprinting the row itself; "

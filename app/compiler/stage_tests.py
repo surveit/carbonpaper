@@ -28,17 +28,7 @@ def start_stage_test_generation_agent(
     model: str,
     on_answer: Callable[[BaseModel | None], None],
 ) -> str:
-    """Start the stage-test generator as a LIVE chat turn and return the session id.
-
-    The session is HIDDEN and VIEW-ONLY (`agent_id=None`, `context["hidden"] = True`):
-    it streams on the shared TurnManager like a workflow/data-model generation turn, but
-    is a background generation the project chat index does not list — there is no one to
-    reply to it. When the turn finishes, `on_answer` is called with the submitted suite
-    (a `StageTestSuite` bound to `stage`'s type/inputs) — or None if none was submitted.
-    If `on_answer` raises (e.g. the finisher's patch is refused), the error is appended to
-    the session's persisted transcript as an assistant message BEFORE it propagates — so
-    the failure is visible on session reload, not only to a client watching the live turn.
-    Must be called from the server event loop (it starts a turn there)."""
+    """Must be called from the server event loop — it starts a turn there."""
     store = open_session_store()
     session_id = store.create(
         title=f"Generation · stage tests · {stage.id}",
@@ -74,8 +64,6 @@ def start_stage_test_generation_agent(
 def build_stage_test_generator(
     document: str, stage: Stage, *, model: str = "sonnet"
 ) -> Agent[BaseModel]:
-    """The test-generation agent for one stage: target schema is the stage-bound
-    suite model, so a malformed suite bounces inside the agent loop."""
     if not stage.CARRIES_RUNNABLE_TESTS:
         raise ValueError(
             f"tests can only be generated for stage types that can run them, "
@@ -97,23 +85,7 @@ def build_stage_test_generator(
 
 
 def render_generation_task(document: str, stage: Stage) -> str:
-    """The generator's task string: the stage's DESCRIPTION — its `summary` and its
-    `corner_cases` — plus its identity and schemas.
-
-    The description, not the methodology document, is deliberately the whole
-    input. The examples exist to answer one question: does this step's code do what
-    its description says? An agent that had read the methodology could write a
-    correct-looking case the description never implies, and the suite would then
-    certify the methodology rather than the description a reviewer actually reads.
-    So the generator is shown exactly what the reviewer is shown, and nothing else —
-    not the code, not the document, not existing examples.
-
-    `document` is accepted and unused for that reason; it stays in the signature
-    because the caller holds it and removing it would invite passing it back in.
-
-    Raises ValueError when the stage has no summary: there is no description to
-    work from, and a suite written from something else would make the panel's
-    "checked against the code" claim untrue."""
+    """`document` is deliberately unused — the generator sees only what the reviewer sees."""
     summary = _authored_summary(stage)
     if not summary:
         raise ValueError(
@@ -140,16 +112,11 @@ def render_generation_task(document: str, stage: Stage) -> str:
 
 
 def _authored_summary(stage: Stage) -> str | None:
-    """The stage's plain-language summary, off whichever authored-code block it
-    carries."""
     block = stage.find_authored_code_block()
     return block.summary if block is not None else None
 
 
 def _render_corner_cases(stage: Stage) -> str:
-    """The declared corner cases, each an input and the outcome it must produce.
-    Empty string when none are declared — the generator still has to find edge cases
-    itself, it just has none stated for it."""
     block = stage.find_authored_code_block()
     if block is None or not block.corner_cases:
         return ""

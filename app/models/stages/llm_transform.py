@@ -38,13 +38,18 @@ GRANTABLE_TOOLS: frozenset[str] = frozenset({
 })
 
 
+# How much the model reasons before it answers. A LEVEL, not a token budget:
+# `budget_tokens` is removed on every current frontier model and returns 400
+# there, so a number stored in a workflow would break the day the stage's model
+# is repointed. These two names are the API's own and map straight through.
+ThinkingMode = Literal["adaptive", "disabled"]
+
+
 class LLMConfig(StageConfig):
-    """llm_transform config block."""
-    # Every field changes what this stage computes (the prompt, the model, the
-    # sampling/response knobs) — see StageBase.compute_definition_fingerprint.
     FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({
         "prompt_instructions", "prompt_data_template", "model", "temperature",
         "max_retries", "response_format", "rubric", "tools", "batch_size",
+        "thinking",
     })
     INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset()
 
@@ -83,6 +88,17 @@ class LLMConfig(StageConfig):
         ),
     )
 
+    thinking: Optional[ThinkingMode] = Field(
+        default=None,
+        description=(
+            "How much the model reasons before answering. Omit to leave the "
+            "backend's own setting. `disabled` is worth choosing when the answer is "
+            "one value from a short enum and nobody reads the reasoning — it was 90% "
+            "of one classifier stage's bill. It also CHANGES ANSWERS, so it is a "
+            "judgment about the stage, not only about cost."
+        ),
+    )
+
     @model_validator(mode="after")
     def _tools_are_known_names(self) -> "LLMConfig":
         if not self.tools:
@@ -108,7 +124,9 @@ class LLMConfig(StageConfig):
 class LLMTransformStage(StageBase):
     type: Literal[StageType.llm_transform]
     llm: LLMConfig
-    inputs: list[StageInput] = Field(default_factory=list, min_length=1)
+    # Exactly one input, like every other row-mapped type: the runtime maps the
+    # prompt over ONE frame's rows, so a second input names no rows to map.
+    inputs: list[StageInput] = Field(default_factory=list, min_length=1, max_length=1)
     signature: ExtendsSignature
 
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
@@ -123,12 +141,8 @@ class LLMTransformStage(StageBase):
 
 
 def find_llm_signature_issues(stage: "LLMTransformStage") -> list[str]:
-    """Reads match the placeholders, one input, and something asked of the model."""
     signature = stage.signature
     assert signature is not None  # find_signature_config_issues runs only with one
-    if len(stage.inputs) != 1:
-        return [f"stage '{stage.id}': llm_transform takes exactly one input, "
-                f"has {len(stage.inputs)}"]
     anchor_id = stage.inputs[0].id
     declared = {
         column.name
@@ -159,9 +173,6 @@ def find_llm_signature_issues(stage: "LLMTransformStage") -> list[str]:
 
 
 def find_llm_prompt_column_issues(stage: "LLMTransformStage") -> list[str]:
-    """Every way the prompt template's column references are wrong: a
-    `{placeholder}` absent from the resolved input, or an input column that is
-    double-braced and so never injected."""
     llm = stage.llm
     cols = resolve_input_columns(stage, 0)
     injected = find_template_fields(llm.prompt_data_template)
@@ -179,13 +190,6 @@ def find_llm_prompt_column_issues(stage: "LLMTransformStage") -> list[str]:
 def find_double_braced_input_issues(
     template: str, injected: set[str], input_schema: TableSchema
 ) -> list[str]:
-    """`{{col}}` is an escaped literal under str.format_map — it renders as the
-    text `{col}` and the row's value never reaches the model. Double-bracing a
-    REAL input column is therefore always a mistake: the author meant to inject
-    it. Reject exactly that. A prompt that injects nothing is unusual but
-    allowed, so this requires no injection — only that a named input column is
-    not escaped. Independent of the 1:1 grain contract: this is prompt wiring,
-    not schema shape."""
     double_braced = [
         column.name for column in input_schema.columns
         if column.name not in injected

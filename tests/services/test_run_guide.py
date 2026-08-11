@@ -50,7 +50,8 @@ _STAGES: list[dict[str, Any]] = [
     {"id": "keep_flagged", "description": "Keep the flagged rows", "type": "filter_rows",
      "inputs": [{"id": "add_flag", "schema": _FLAGGED}],
      "filter": {"code": "def should_include(row):\n    return row['flag']\n"},
-     "signature": {"form": "extends"}},
+     "signature": {"form": "extends",
+                   "reads": [{"input": "add_flag", "columns": [_FLAG]}]}},
     {"id": "attach_source", "description": "Attach the source", "type": "enrich",
      "inputs": [{"id": "keep_flagged", "schema": _FLAGGED},
                 {"id": "load_sources", "schema": _SOURCES}],
@@ -128,7 +129,6 @@ def _manifest(
 
 
 def _write_run_outputs(project_dir: Path, *, columns: dict[str, list[str]] | None = None):
-    """The frames a run leaves on disk — real parquet, so the width is a measured one."""
     outputs = project_dir / "runs" / _RUN_ID / "outputs"
     outputs.mkdir(parents=True, exist_ok=True)
     for stage_id, names in (columns if columns is not None else _WRITTEN_COLUMNS).items():
@@ -185,7 +185,6 @@ def test_a_step_carries_its_authored_prose_and_title(project_dir):
 
 
 def test_a_steps_stages_come_back_in_execution_order_not_guide_order(project_dir):
-    """The guide names attach_source before add_flag; the run reaches it after."""
     view = build_run_guide_view("demo", _manifest(_version_with_guide(project_dir)))
 
     assert [s.stage_id for s in view.steps[1].stages] == ["add_flag", "attach_source"]
@@ -232,7 +231,6 @@ def test_a_stage_this_run_did_not_execute_is_flagged_not_dropped(project_dir):
 
 
 def test_a_stage_id_the_version_does_not_define_is_kept_unresolved(project_dir):
-    """A document written past save_version_guide's validation must not lose a stage."""
     version_id = _version_with_guide(project_dir)
     # Saved past save_version_guide, which would have rejected the unknown id.
     ReviewGuide(
@@ -269,7 +267,6 @@ def test_a_stage_the_run_has_no_record_for_has_an_unknown_count_not_zero(project
 
 
 def test_a_record_carrying_no_count_leaves_the_count_unknown(project_dir):
-    """A stage that failed before it wrote a frame is recorded with no count at all."""
     manifest = _manifest(_version_with_guide(project_dir))
     manifest["stage_records"][1]["output_row_count"] = None
 
@@ -303,7 +300,6 @@ def test_each_stage_carries_the_column_count_of_the_frame_the_run_wrote(project_
 
 
 def test_the_column_count_is_the_frames_width_not_the_declared_schemas(project_dir):
-    """`keep_flagged` declares doc_id + flag and wrote a `note` column besides."""
     version_id = _version_with_guide(project_dir)
     _write_run_outputs(project_dir)
 
@@ -339,7 +335,6 @@ def test_an_unreadable_frame_leaves_the_column_count_unknown(project_dir):
 
 
 def test_the_two_halves_of_the_shape_are_measured_apart(project_dir):
-    """The run wrote a frame for a stage its manifest holds no row count for."""
     version_id = _version_with_guide(project_dir)
     _write_run_outputs(project_dir)
     manifest = _manifest(version_id)
@@ -406,7 +401,7 @@ def _store_a_guide_written_before_the_field_existed(project_dir: Path) -> str:
 
 
 def test_a_section_written_before_the_field_existed_still_loads(project_dir):
-    """The case a REQUIRED field would orphan: extra="forbid" still parses the record."""
+    """The case a REQUIRED field would orphan: the stored record predates the field."""
     version_id = _store_a_guide_written_before_the_field_existed(project_dir)
 
     view = build_run_guide_view("demo", _manifest(version_id))
@@ -415,7 +410,6 @@ def test_a_section_written_before_the_field_existed_still_loads(project_dir):
 
 
 def test_nothing_stands_in_for_a_missing_sentence(project_dir):
-    """No fallback to the title or a stage name — an absent sentence stays absent."""
     version_id = _store_a_guide_written_before_the_field_existed(project_dir)
 
     view = build_run_guide_view("demo", _manifest(version_id))
@@ -431,7 +425,6 @@ def _outputs(step) -> list[tuple[str, int | None]]:
 
 
 def test_a_step_leaves_the_stage_none_of_its_others_reads(project_dir):
-    """add_flag is read by keep_flagged, which attach_source reads — one terminal."""
     view = build_run_guide_view("demo", _manifest(_version_with_guide(project_dir)))
 
     assert _outputs(view.steps[1]) == [("attach_source", 4)]
@@ -451,7 +444,6 @@ def test_a_step_that_forks_leaves_every_branch_counted_on_its_own(project_dir):
 
 
 def test_a_stage_read_only_from_outside_the_step_is_still_a_terminal(project_dir):
-    """keep_flagged feeds attach_source, but no stage of THIS step reads it."""
     steps = [_STEPS[0], ReviewGuideStep(
         title="Cut it down", prose="Keeps the flagged rows.",
         stage_ids=["add_flag", "keep_flagged"],

@@ -49,9 +49,9 @@ def test_check_no_fabricated_numbers_ignores_bool_default(tmp_path: Path) -> Non
     assert check_no_fabricated_numbers([ok]) == []
 
 
-def test_predicate_flags_production_run_import(tmp_path: Path) -> None:
-    """find_production_run_imports flags app.runtime.runner (both `import` and
-    `from` forms) but leaves the sanctioned app.runtime.executor surface alone."""
+def test_find_production_run_imports_flags_both_runner_import_forms_not_the_executor(
+    tmp_path: Path,
+) -> None:
     from_form = tmp_path / "from_form.py"
     from_form.write_text("from app.runtime.runner import prepare_run\n", encoding="utf-8")
     import_form = tmp_path / "import_form.py"

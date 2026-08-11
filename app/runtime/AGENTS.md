@@ -126,5 +126,5 @@ python -m app.cli <project>
 `app/cli.py` is the CLI — a top-level entrypoint beside `app/main.py`, outside this
 package: it drives `app/services/run.py` (which resolves the newest stored version and
 loads its stages), never `runner.py` directly. `<project>` is a
-NAME under the projects root, so a project outside it needs `CARBONPAPER_PROJECTS_DIR`.
+NAME under the projects root, so a project outside it needs `CARBON_PAPER_PROJECTS_DIR`.
 Outputs: `runs/<id>/{manifest.json, events.jsonl, outputs/*.parquet, artifacts/, queue/}`.

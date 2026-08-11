@@ -29,7 +29,6 @@ class RunParameters(BaseModel):
 
     @model_validator(mode="after")
     def _only_a_test_run_may_auto_approve(self) -> RunParameters:
-        """`is_test_run` is what marks rows no human saw; without it they read as reviewed."""
         if self.queue_auto_approve and not self.is_test_run:
             raise ValueError(
                 "queue_auto_approve is set on a run that is not marked is_test_run — "

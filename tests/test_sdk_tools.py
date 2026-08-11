@@ -29,8 +29,6 @@ def _build(name: str) -> tuple[Any, list[str], list[SdkMcpTool[Any]]]:
 
 
 def _call(tool: SdkMcpTool[Any], args: dict[str, Any]) -> dict[str, Any]:
-    """Drive one tool handler to completion without a CLI subprocess."""
-
     async def _run() -> dict[str, Any]:
         return await tool.handler(args)
 
@@ -38,8 +36,6 @@ def _call(tool: SdkMcpTool[Any], args: dict[str, Any]) -> dict[str, Any]:
 
 
 def _seed(examples: Path, name: str) -> Path:
-    """Write one minimal, valid stage so read_stage/describe_workflow have real
-    on-disk state (mirrors tests/test_project_tools.py::_seed)."""
     compiled = examples / name / "compiled"
     compiled.mkdir(parents=True, exist_ok=True)
     stage = {
@@ -148,9 +144,6 @@ def test_draft_round_trip_creates_an_unpublished_version(examples_root: Path) ->
 
 
 def test_set_draft_stage_rejects_malformed_stage_as_tool_error(examples_root: Path) -> None:
-    """A malformed stage passed through the MCP tool boundary surfaces as an
-    is_error tool result (the ValueError set_draft_stage raises propagates
-    through registry._wrap), not a stored stage with issues."""
     _server, _allowed, tools = _build("congresswatch")
     by_name = {t.name: t for t in tools}
 
@@ -177,11 +170,7 @@ def test_set_draft_stage_rejects_malformed_stage_as_tool_error(examples_root: Pa
 
 
 def test_draft_stage_input_schema_round_trips_in_alias_form(examples_root: Path) -> None:
-    """A stage's `inputs[].schema` — Pydantic's StageInput.table_schema field,
-    aliased to the wire name `schema` — must come back to the agent under
-    `schema`, the same key the agent wrote, never the python field name
-    `table_schema`. Exercises tool_spec.as_tool_content's by_alias=True dump for
-    the one aliased field on Stage."""
+    """`schema` is the wire alias of Pydantic's StageInput.table_schema field."""
     _server, _allowed, tools = _build("congresswatch")
     by_name = {t.name: t for t in tools}
     upstream_schema = {"columns": [{"name": "id", "type": "str", "nullable": True}]}
@@ -225,11 +214,6 @@ def test_unknown_draft_id_surfaces_as_tool_error(examples_root: Path) -> None:
 
 
 def test_as_content_serializes_a_pydantic_model_to_its_fields() -> None:
-    """A tool returning a pydantic model (e.g. the draft tools' DraftView /
-    SaveResult) must reach the model as JSON content, not an unserializable
-    object — this is the seam create_draft/read_draft/set_draft_stage/
-    remove_draft_stage/save_version all rely on."""
-
     class _Sample(BaseModel):
         ok: bool
         label: str

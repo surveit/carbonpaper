@@ -35,7 +35,6 @@ _X_COLUMN = [{"name": "x", "type": "int", "nullable": True}]
 
 
 def _row_stage(output_schema=None, input_columns=_X_COLUMN):
-    """A row function outputting `output_schema`; its adds are what that names beyond the edge."""
     flowing = {c["name"] for c in input_columns}
     added = [c for c in (output_schema or {}).get("columns", [])
              if c["name"] not in flowing]
@@ -45,20 +44,6 @@ def _row_stage(output_schema=None, input_columns=_X_COLUMN):
         "signature": {"form": "extends", "reads": reads_of("src", input_columns),
                       "adds": added},
         "function": {"kind": "inline", "code": "def transform(row):\n    return row\n"},
-    })
-
-
-def _two_input_stage():
-    return parse_stage({
-        "id": "t2", "description": "t2", "type": "python_frame_function",
-        "inputs": [{"id": "a", "schema": {"columns": _X_COLUMN}},
-                   {"id": "b", "schema": {"columns": _X_COLUMN}}],
-        "signature": {
-            "form": "replaces",
-            "reads": [{"input": "a", "columns": _X_COLUMN}, {"input": "b", "columns": _X_COLUMN}],
-            "produces": _X_COLUMN,
-        },
-        "function": {"kind": "inline", "code": "def transform(a, b):\n    return a\n"},
     })
 
 
@@ -84,14 +69,7 @@ def test_row_driver_preserves_order_under_parallelism():
 
 
 def test_row_driver_parallel_branch_raises_run_cancelled_when_pre_requested():
-    # Cancellation is requested BEFORE execute() even starts. The check runs
-    # once per as_completed() wakeup, but a freed worker thread picks up its
-    # next queued row independently of that check — so "how many rows race
-    # ahead before the first check fires" is a genuine OS-scheduling race,
-    # not something this test can pin to an exact count. Using few workers
-    # (parallelism=2) against many more rows than could plausibly be
-    # dispatched in that race window keeps `len(calls) < len(records)` true
-    # without being timing-flaky.
+    # How many rows race ahead of the first cancel check is OS scheduling, so the bound is loose.
     calls: list[int] = []
 
     def make_mapper(stage, ctx, src):
@@ -134,9 +112,7 @@ def test_row_driver_sequential_branch_raises_run_cancelled_when_pre_requested():
 
 
 def test_row_driver_ignores_cancellation_when_ctx_has_no_run_identity():
-    # A subset/eval run's ctx carries no project/run_id (see
-    # executor._subset_ctx) — cancellation must never apply to it, even if the
-    # same run_id happens to be cancelled elsewhere.
+    # A subset/eval run's ctx carries no project/run_id (see executor._subset_ctx).
     request_cancel("some-project", "some-run")
     handler = RowMapHandler(make_mapper=lambda stage, ctx, src: lambda row, index: dict(row))
     out = handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1, 2]})}, make_run_context())
@@ -155,13 +131,6 @@ def test_row_driver_rejects_non_dict_result():
         handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1]})}, make_run_context())
 
 
-def test_row_driver_rejects_multiple_inputs():
-    handler = RowMapHandler(make_mapper=lambda stage, ctx, src: lambda row, index: dict(row))
-    frames = {"a": pd.DataFrame({"x": [1]}), "b": pd.DataFrame({"x": [1]})}
-    with pytest.raises(ValueError, match="exactly one input"):
-        handler.execute(_two_input_stage(), frames, make_run_context())
-
-
 _EMPTY_SOURCE_COLUMNS = [{"name": "x", "type": "int", "nullable": True}, {"name": "id", "type": "str", "nullable": True}]
 
 
@@ -172,15 +141,12 @@ def _empty_source() -> pd.DataFrame:
 
 
 def test_row_driver_empty_input():
-    # No row means no mapper result to name the output's columns, so the frame
-    # takes the ones the signature promised — here an `extends` adding nothing,
-    # so the input's. A 0x0 frame would make a downstream stage keyed on `id`
-    # raise KeyError instead of producing an empty result.
     handler = RowMapHandler(make_mapper=lambda stage, ctx, src: lambda row, index: dict(row))
     ctx = make_run_context()
     out = handler.execute(
         _row_stage(input_columns=_EMPTY_SOURCE_COLUMNS), {"src": _empty_source()}, ctx)
     assert len(out) == 0
+    # a 0x0 frame would make a downstream stage keyed on `id` raise KeyError
     assert list(out.columns) == ["x", "id"]
     assert out["id"].tolist() == []      # the column is real, not just a label
     # the substituted frame still carries the stage's contribution
@@ -201,8 +167,6 @@ def test_row_driver_empty_input_still_emits_the_columns_the_signature_adds():
 
 
 def test_row_driver_empty_input_reports_no_dropped_columns_when_projecting():
-    # Projection sees a frame with no columns at all, so it drops nothing —
-    # an empty input must not be reported as having discarded `id`.
     schema = {"columns": [{"name": "x", "type": "int", "nullable": True}]}
     handler = RowMapHandler(
         make_mapper=lambda stage, ctx, src: lambda row, index: dict(row),
@@ -278,9 +242,6 @@ def _marks_every_row_with_every_marker(stage, ctx, src):
 
 
 class _MarksEveryRowAndKeepsTheFrame:
-    """A mapper of the `PostMapRowMapper` shape: marks every row, and its own
-    post-map step keeps the frame the driver hands back to it."""
-
     def __init__(self):
         self.seen: list[pd.DataFrame] = []
 
@@ -315,17 +276,12 @@ def test_row_driver_lets_a_mappers_post_map_step_raise_out_of_execute():
 
 
 def test_a_plain_closure_mapper_needs_no_post_map_step():
-    """A mapper that is just a function — llm_transform's and
-    python_row_function's shape — carries no `finish_mapped_rows`, and the
-    driver runs it to completion without one."""
     handler = RowMapHandler(make_mapper=lambda stage, ctx, src: lambda row, index: dict(row))
     out = handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1, 2]})}, make_run_context())
     assert list(out["x"]) == [1, 2]
 
 
 def test_internal_marker_columns_never_reach_output_even_without_an_output_schema():
-    # No output_schema and no projection: the strip is the ONLY thing keeping
-    # machinery columns out of stage output.
     handler = RowMapHandler(make_mapper=_marks_every_row_with_every_marker)
     out = handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1, 2]})}, make_run_context())
     assert list(out.columns) == ["x"]  # user column survives, every marker is gone

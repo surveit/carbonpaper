@@ -8,6 +8,7 @@ only once the run reaches the point that sets it.
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -36,22 +37,6 @@ def create_run_manifest(
     workflow_version: str | None,
     input_bindings: dict[str, dict[str, Any]],
 ) -> RunManifest:
-    """The initial run manifest — every stage pending, status running. The single
-    source of the run-manifest shape: every caller mints it here and persists it
-    with write_manifest rather than hand-building the model, so the shape lives
-    with the engine that later updates it.
-
-    Everything the caller DECIDED is `ctx.params`, recorded verbatim — the same
-    object the engine executes against, so a caller cannot set one and record
-    another. What this takes besides is what the run turns out to BE: its identity,
-    and the preflight provenance of its bound inputs.
-
-    `project`/`workflow_version` are None for a subset run (run_subset) that was
-    not told its logical identity — recorded honestly as None rather than a
-    fabricated placeholder. A production run always supplies both.
-    `human_review_queue_stats` and `dropped_columns` start empty
-    and grow live as stages settle (the executor drains each stage's
-    StageContribution into them)."""
     return RunManifest(
         run_id=run_id,
         started_at=datetime.now().isoformat(timespec="seconds"),
@@ -69,16 +54,20 @@ def create_run_manifest(
 
 
 def write_manifest(run_dir: Path, manifest: RunManifest) -> None:
-    """The single writer of run_dir/manifest.json. The initial write (prepare_run),
-    every mid-run flush, and finalization all persist through here — dumping the
-    typed model to the same `exclude_unset` JSON shape a reader parses back."""
-    (run_dir / "manifest.json").write_text(
+    path = run_dir / "manifest.json"
+    # Staged and swapped, never truncated in place: the run's background thread flushes
+    # through here while the run page and the run tools read the same file, and a
+    # truncating write leaves a window where a reader sees an empty file and raises
+    # RunManifestNotJson. os.replace is atomic within ONE filesystem, so the temp file
+    # is a sibling rather than somewhere under /tmp.
+    staged = path.with_suffix(".json.writing")
+    staged.write_text(
         json.dumps(manifest.to_dict(), indent=2, default=str), encoding="utf-8"
     )
+    os.replace(staged, path)
 
 
 def resolve_output_path(run_dir: Path, output_path: str | None) -> Path | None:
-    """The sole join of a run dir to a recorded output path; None when the record names none."""
     if not output_path:
         return None
     resolved = (run_dir / output_path).resolve()
@@ -90,7 +79,6 @@ def resolve_output_path(run_dir: Path, output_path: str | None) -> Path | None:
 
 
 def read_stage_output_frame(run_dir: Path, stage_id: str) -> pd.DataFrame:
-    """The frame a stage of this run wrote, read from the path its own record names."""
     records = read_run_manifest(run_dir).stage_records
     record = _find_stage_record(records, run_dir, stage_id)
     path = resolve_output_path(run_dir, record.output_path)

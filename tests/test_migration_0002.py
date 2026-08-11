@@ -12,7 +12,7 @@ from typing import Any
 import pytest
 
 from app.models.workflow import parse_workflow
-from tools.stage_signatures import add_signature
+from scripts.stage_signatures import add_signature
 
 _REVISION = (Path(__file__).resolve().parents[1]
              / "alembic/versions/0002_name_queue_and_join_columns.py")
@@ -31,7 +31,6 @@ def _column(name: str) -> dict[str, Any]:
 
 
 def _v1_stages() -> list[dict[str, Any]]:
-    """A v1 workflow: a queue naming no columns, and an enrich naming no brought ones."""
     subject = {"columns": [_column("id"), _column("verdict")]}
     reference = {"columns": [_column("id"), _column("extra")]}
     return [

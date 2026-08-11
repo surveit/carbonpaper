@@ -148,7 +148,10 @@
     </button>
   </div>
   {% if guide %}
-  {% with titled_by_host = true %}
+  {# The rail is read top to bottom, so it ends where the run does: on the files the
+     run published. The same links as the Run outputs section, at the one place a
+     reader who followed the guide is already looking. #}
+  {% with titled_by_host = true, published_artifacts = header.artifacts %}
   {% include "_run_guide.html" %}
   {% endwith %}
   {% else %}

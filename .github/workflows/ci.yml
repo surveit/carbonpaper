@@ -6,6 +6,16 @@ on:
   pull_request:
 
 jobs:
+  # ruff, import-linter and mypy share one job because each takes seconds and
+  # Actions bills every job a whole minute: as separate jobs they cost three
+  # billed minutes for well under one minute of work, and each pays its own
+  # checkout and `uv sync` again. `if: always()` on the later steps keeps the
+  # split diagnosis a separate job used to give — a ruff failure still reports
+  # whether mypy also failed, rather than masking it.
+  #
+  # The job keeps the name `lint` because branch protection requires status
+  # checks by name; renaming it would leave master waiting on a context that no
+  # longer reports.
   lint:
     runs-on: ubuntu-latest
     steps:
@@ -22,27 +32,19 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: uv sync --frozen
-      - run: uv run --frozen ruff check .
-      # Architecture boundaries: contracts live in pyproject [tool.importlinter].
-      # PYTHONPATH=. lets grimp import the `app` package (run from source, not installed).
-      - run: PYTHONPATH=. uv run --frozen lint-imports
-
-  typecheck:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v9.0.0
-        with:
-          enable-cache: true
-          cache-dependency-glob: uv.lock
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
       # The dev group pulls in the runtime dependencies too, so mypy sees real
       # signatures (fastapi, claude-agent-sdk, ...).
       - run: uv sync --frozen
-      - run: uv run --frozen mypy
+      - id: ruff
+        run: uv run --frozen ruff check .
+      # Architecture boundaries: contracts live in pyproject [tool.importlinter].
+      # PYTHONPATH=. lets grimp import the `app` package (run from source, not installed).
+      - id: imports
+        if: always() && steps.ruff.conclusion != 'skipped'
+        run: PYTHONPATH=. uv run --frozen lint-imports
+      - id: types
+        if: always() && steps.ruff.conclusion != 'skipped'
+        run: uv run --frozen mypy
 
   test:
     runs-on: ubuntu-latest
@@ -95,13 +97,13 @@ jobs:
         with:
           python-version: "3.12"
       - run: uv sync --frozen
-      # tools/import_graph_report.py --root points grimp at a different
+      # scripts/import_graph_report.py --root points grimp at a different
       # checkout's `app` package for its analysis, reusing this (head)
       # checkout's own copy of the script and of tests/arch/ — the base
       # checkout only needs its `app/` source, never its own copy of either.
-      - run: uv run --frozen python tools/import_graph_report.py > head-metrics.json
-      - run: uv run --frozen python tools/import_graph_report.py --root base > base-metrics.json
-      - run: uv run --frozen python tools/import_graph_report.py --markdown head-metrics.json base-metrics.json > comment-body.md
+      - run: uv run --frozen python scripts/import_graph_report.py > head-metrics.json
+      - run: uv run --frozen python scripts/import_graph_report.py --root base > base-metrics.json
+      - run: uv run --frozen python scripts/import_graph_report.py --markdown head-metrics.json base-metrics.json > comment-body.md
       # Raw data lives alongside the cooked report: the comment shows the
       # rendered table, but the JSON these two invocations produced is kept
       # too so it can be re-sliced without recomputing. Short retention —

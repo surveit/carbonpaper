@@ -34,9 +34,6 @@ def test_finish_does_nothing_when_no_answer_was_submitted(tmp_path: Path):
 # ── start_generation wiring: session up front + a live, streamable turn ──────────────
 
 class _FakeAgent:
-    """Stands in for the data-model Agent driven as a live turn: build_engine() returns
-    an engine whose stream_turn 'submits' an answer (sets `_answer`) and returns a
-    transcript, exactly as the real submit_answer + engine would during the turn."""
 
     task = "author the data model and submit it"
 

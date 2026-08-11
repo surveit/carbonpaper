@@ -16,7 +16,6 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def find_dunder_all_assignments(tree: ast.Module) -> list[int]:
-    """Line numbers of every statement in `tree` that assigns ``__all__``, at any nesting."""
     return sorted(
         node.lineno
         for node in ast.walk(tree)
@@ -26,7 +25,6 @@ def find_dunder_all_assignments(tree: ast.Module) -> list[int]:
 
 
 def find_dunder_all_offenders(paths: list[Path], repo_root: Path) -> list[str]:
-    """"<path>:<lineno>" for every ``__all__`` assignment under `paths`."""
     return [
         f"{path.relative_to(repo_root).as_posix()}:{lineno}"
         for path in paths
@@ -68,7 +66,6 @@ def test_find_dunder_all_assignments_flags_an_indented_assignment() -> None:
 
 
 def test_find_dunder_all_assignments_ignores_a_mere_mention() -> None:
-    """Naming ``__all__`` in a literal or an attribute access binds nothing, so it is legal."""
     tree = ast.parse('help = "see __all__"\nnames = mod.__all__\n')
     assert find_dunder_all_assignments(tree) == []
 

@@ -52,8 +52,7 @@ def test_minutes_and_hours_count_up_from_there(tmp_path):
 
 
 def test_the_previous_calendar_day_reads_as_yesterday_with_the_clock_time(tmp_path):
-    # Calendar-based, not 24-hour-based: 23:30 last night is "yesterday" even
-    # though it is only 14 and a half hours back.
+    # Calendar-based, not 24-hour-based: 23:30 last night is still "yesterday".
     assert _describe("2026-07-29T16:12:00", tmp_path) == "yesterday, 4:12 PM"
     assert _describe("2026-07-29T23:30:00", tmp_path) == "yesterday, 11:30 PM"
 
@@ -63,8 +62,6 @@ def test_within_the_week_counts_days(tmp_path):
 
 
 def test_past_a_week_the_date_itself_is_more_use_than_a_count(tmp_path):
-    # "8 days ago" locates nothing, so the relative form gives up and states the
-    # date — the same absolute form an unmarked <time> gets.
     older = _describe("2026-07-22T09:11:33", tmp_path)
     assert older == _describe("2026-07-22T09:11:33", tmp_path, relative=False)
     assert "ago" not in (older or "")
@@ -77,6 +74,4 @@ def test_a_timestamp_ahead_of_the_clock_is_not_reported_as_ago(tmp_path):
 
 
 def test_an_unparseable_datetime_yields_nothing_to_paint(tmp_path):
-    # None, so the caller leaves the raw ISO standing rather than replacing a
-    # real value with "Invalid Date".
     assert _describe("not-a-date", tmp_path) is None

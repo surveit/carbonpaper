@@ -8,7 +8,7 @@
 # (generated + scratch content) are skipped via the ignore file, not here.
 
 [project]
-name = "carbonpaper"
+name = "carbon_paper"
 version = "0"
 requires-python = ">=3.12,<3.13"
 dependencies = [
@@ -19,6 +19,8 @@ dependencies = [
     "pyarrow>=15.0",
     "openpyxl>=3.1",           # .xlsx reader behind input_data format=xlsx
     "python-multipart>=0.0.9",
+    "markdown-it-py>=3.0",     # renders assistant chat text (app/web/markdown_render.py)
+    "linkify-it-py>=2.0",      # markdown-it's linkify rule: a bare URL in a reply becomes a link
     "claude-agent-sdk>=0.2.10", # real LLM backend for llm_transform stages (needs the claude CLI installed)
     "mcp>=1.23",               # streamable-HTTP MCP server (app/mcp) — already a claude-agent-sdk dependency
     "alembic>=1.18",           # data migrations for the document store (alembic/versions)
@@ -46,7 +48,7 @@ dev = [
 [tool.uv]
 # The repo is a dependency set, not a distribution: there is no package to build
 # and app/ is imported from the working directory. Without this uv sync fails
-# trying to build `carbonpaper` as a wheel.
+# trying to build `carbon_paper` as a wheel.
 package = false
 
 [tool.ruff]
@@ -59,7 +61,7 @@ select = ["E4", "E7", "E9", "F", "BLE"]
 
 [tool.mypy]
 python_version = "3.12"
-files = ["app", "tools", "tests"]
+files = ["app", "scripts", "tests"]
 # `tests` is checked directly (in `files`), which also puts its root on mypy's
 # module search path: the colocated arch tests under app/ (in _arch_tests/
 # folders) can `from arch import ...` because tests/arch/ is a package, and the
