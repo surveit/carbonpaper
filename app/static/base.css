@@ -14,7 +14,9 @@
 
 body { background: var(--bg); color: var(--fg); margin: 0; padding: 0; }
 
-header {
+/* The page chrome, and only it: scoped to body's own child so it cannot reach a
+   <header> an article gives itself (the queue card has one). */
+body > header {
     border-bottom: 1px solid var(--border);
     padding: 14px 28px;
     display: flex;

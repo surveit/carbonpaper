@@ -45,8 +45,10 @@
     border: 1px solid var(--border); border-left: 4px solid var(--border); border-radius: 5px;
     padding: 14px 18px; background: var(--raised);
 }
-.queue-card.decided-approve { border-left-color: var(--good-bd); background: var(--good-bg); }
-.queue-card.decided-modify  { border-left-color: var(--warn-bd); background: var(--warn-bg); }
+/* Done-ness is the rail plus the header chip; the body stays --raised so the
+   white controls standing on it never read as holes punched in a tint. */
+.queue-card.decided-approve { border-left-color: var(--good-bd); }
+.queue-card.decided-modify  { border-left-color: var(--warn-bd); }
 
 .queue-card header {
     display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
@@ -55,10 +57,25 @@
 .queue-card header .row-position { font-size: 13px; font-weight: 600; }
 .queue-card header .lineage-link { font-size: 13px; margin-left: auto; }
 
-.queue-card .prior-decision {
-    font-size: 13px; margin: 8px 0; padding: 8px 12px;
-    background: var(--info-bg); border-radius: 3px; color: var(--info-ink);
+/* Names the recorded verdict in a word, so the rail's hue is never the only
+   thing saying which one it was. */
+.verdict-chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+    padding: 2px 8px; border-radius: 10px; border: 1px solid;
 }
+.verdict-chip.verdict-approve {
+    border-color: var(--good-bd); color: var(--good-ink); background: var(--good-bg);
+}
+.verdict-chip.verdict-modify {
+    border-color: var(--warn-bd); color: var(--warn-ink); background: var(--warn-bg);
+}
+
+.queue-card .prior-decision {
+    font-size: 12.5px; color: var(--muted);
+    margin: 10px 0 0; padding-top: 9px; border-top: 1px dashed var(--border);
+}
+.queue-card .prior-decision strong { color: var(--fg); }
 
 .decision-controls {
     display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
@@ -139,6 +156,16 @@
     padding: 6px 8px; border: 1px solid var(--border); border-radius: 3px;
     font: inherit; font-size: 13px; resize: vertical;
 }
+/* A recorded note reads as text, not as a field asking to be filled — but stays
+   a textarea, so it is still selectable and still what the submit posts. */
+.review-notes textarea[readonly] {
+    padding-left: 0; border-color: transparent; background: none;
+    color: var(--muted); resize: none;
+}
+/* A frozen box holding nothing has nothing to show, and its prompt to write one
+   belongs to a card still asking for input — both come back with the box the
+   moment "Change my review" lifts the freeze. */
+.review-notes:has(textarea[readonly]:placeholder-shown) { display: none; }
 
 .queue-card .queued-row { margin: 8px 0; }
 

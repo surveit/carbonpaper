@@ -522,10 +522,7 @@ def test_queue_page_gates_the_items_behind_the_reviewer_name(tmp_path, monkeypat
     container = re.search(r"<div[^>]*id=\"queue-items\"[^>]*>", html)
     assert container is not None and re.search(r"\bhidden\b", container.group(0))
 
-    stylesheet = "\n".join(
-        sheet.read_text(encoding="utf-8")
-        for sheet in sorted((Path(app_package.__file__).parent / "static").glob("*.css"))
-    )
+    stylesheet = _stylesheet()
     # Without this rule the container's own `display: flex` beats the UA [hidden] rule
     # and the rows render anyway, leaving the gate visually inert.
     assert re.search(r"\.queue-items\[hidden\]\s*\{[^}]*display:\s*none", stylesheet)
@@ -936,6 +933,13 @@ def _first_card(html):
     return card[:card.index("</article>")]
 
 
+def _stylesheet():
+    return "\n".join(
+        sheet.read_text(encoding="utf-8")
+        for sheet in sorted((Path(app_package.__file__).parent / "static").glob("*.css"))
+    )
+
+
 def test_the_card_renders_the_described_queued_row_and_its_review_section(tmp_path, monkeypatch):
     run_id, fingerprints, html = _described_queue_html(
         tmp_path, monkeypatch, "queue_route_card")
@@ -970,6 +974,19 @@ def test_the_card_renders_the_described_queued_row_and_its_review_section(tmp_pa
     assert '<p class="instructions-text">Confirm the label against the score.</p>' in html
 
 
+def test_the_unreviewed_columns_are_labelled_as_what_the_review_is_judged_against(
+        tmp_path, monkeypatch):
+    _run_id, _fingerprints, html = _described_queue_html(
+        tmp_path, monkeypatch, "queue_route_context_label")
+
+    card = _first_card(html)
+    block = card[card.index('<details class="queued-row"'):card.index("</details>")]
+    # These columns are not up for edit, but they ARE what the reviewer weighs the
+    # edit against — so the label must not read as "ignore this".
+    assert "<summary>Context for review</summary>" in block
+    assert "not under review" not in card
+
+
 def test_a_reviewed_value_is_read_only_until_its_edit_button_is_pressed(tmp_path, monkeypatch):
     _project_dir, run_id, _run_dir, _snapshot, _fingerprints = _build_and_halt(tmp_path, monkeypatch)
 
@@ -981,10 +998,7 @@ def test_a_reviewed_value_is_read_only_until_its_edit_button_is_pressed(tmp_path
     assert opener is not None and "data-edit-for=" in opener.group(0)
     assert 'class="revert-edit"' in html
 
-    stylesheet = "\n".join(
-        sheet.read_text(encoding="utf-8")
-        for sheet in sorted((Path(app_package.__file__).parent / "static").glob("*.css"))
-    )
+    stylesheet = _stylesheet()
     # Without this rule the editor's own `display` beats the UA [hidden] rule and every
     # field is editable on load.
     assert re.search(r"\.field-control \[hidden\]\s*\{[^}]*display:\s*none", stylesheet)
@@ -1132,10 +1146,7 @@ def test_a_decided_card_disables_its_openers_and_offers_a_secondary_cta(tmp_path
     assert submit is not None and re.search(r"\bhidden\b", submit.group(0))
     assert "Recorded: <strong>approve</strong>" in " ".join(decided.split())
 
-    stylesheet = "\n".join(
-        sheet.read_text(encoding="utf-8")
-        for sheet in sorted((Path(app_package.__file__).parent / "static").glob("*.css"))
-    )
+    stylesheet = _stylesheet()
     # Without this rule `.btn`'s own `display` beats the UA [hidden] rule.
     assert re.search(r"\.decision-controls \[hidden\]\s*\{[^}]*display:\s*none", stylesheet)
 
@@ -1148,6 +1159,80 @@ def test_a_decided_card_disables_its_openers_and_offers_a_secondary_cta(tmp_path
     assert ">Change my review<" not in undecided
     open_submit = re.search(r'<button type="submit" class="btn primary"[^>]*>', undecided)
     assert open_submit is not None and not re.search(r"hidden", open_submit.group(0))
+
+
+def _undecided_card(html, fingerprints):
+    card = html[html.index(f'data-input-fingerprint="{fingerprints["input_fingerprints"][1]}"'):]
+    return card[:card.index("</article>")]
+
+
+def test_a_decided_card_states_its_verdict_in_a_word(tmp_path, monkeypatch):
+    _project_dir, _run_id, fingerprints, html = _decided_queue_html(tmp_path, monkeypatch)
+
+    chip = re.search(r'<span class="verdict-chip verdict-approve">([^<]*)</span>',
+                     _first_card(html))
+    assert chip is not None and "approve" in chip.group(1)
+    assert "verdict-chip" not in _undecided_card(html, fingerprints)
+
+    stylesheet = _stylesheet()
+    # The body keeps --raised: tinting it is what made the card's own white controls
+    # read as holes punched in it. The rail and the chip carry the verdict instead.
+    for verdict, stroke in (("approve", "--good-bd"), ("modify", "--warn-bd")):
+        rail = re.search(rf"\.queue-card\.decided-{verdict}\s*\{{([^}}]*)\}}", stylesheet)
+        assert rail is not None and f"border-left-color: var({stroke})" in rail.group(1)
+        assert "background" not in rail.group(1)
+        chip_rule = re.search(rf"\.verdict-chip\.verdict-{verdict}\s*\{{([^}}]*)\}}", stylesheet)
+        assert chip_rule is not None and f"border-color: var({stroke})" in chip_rule.group(1)
+
+
+def test_a_decided_cards_note_is_frozen_and_an_undecided_ones_is_not(tmp_path, monkeypatch):
+    _project_dir, _run_id, fingerprints, html = _decided_queue_html(tmp_path, monkeypatch)
+
+    frozen = re.search(r"<textarea[^>]*>", _first_card(html))
+    assert frozen is not None and "readonly" in frozen.group(0)
+    # Not `disabled`: that greys the text out and puts the note out of reach of a
+    # select-and-copy, which is the one thing a reviewer still wants from it.
+    assert "disabled" not in frozen.group(0)
+
+    live = re.search(r"<textarea[^>]*>", _undecided_card(html, fingerprints))
+    assert live is not None and "readonly" not in live.group(0)
+
+    stylesheet = _stylesheet()
+    assert re.search(r"\.review-notes textarea\[readonly\]\s*\{[^}]*border-color:\s*transparent",
+                     stylesheet)
+    # A frozen box the reviewer left empty takes its label down with it, rather
+    # than labelling a void; both return when `readonly` comes off.
+    assert re.search(
+        r"\.review-notes:has\(textarea\[readonly\]:placeholder-shown\)\s*\{[^}]*display:\s*none",
+        stylesheet)
+
+
+def test_freezing_the_note_cannot_change_what_a_decision_posts(tmp_path, monkeypatch):
+    _project_dir, run_id, fingerprints, _html = _decided_queue_html(tmp_path, monkeypatch)
+    fp = fingerprints["input_fingerprints"][0]
+    client = TestClient(app)
+    posted = client.post(
+        f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
+        data=_decide_data(fp, {"human_score": "1"}, review_notes="the note as recorded"))
+    assert posted.status_code == 200, posted.text
+
+    card = _first_card(
+        client.get(f"/project/{PROJECT}/runs/{run_id}/queue/review/card/{fp}").text)
+    frozen = re.search(r"<textarea([^>]*)>(.*?)</textarea>", card, re.DOTALL)
+    # `readonly` bars typing, not the value: the frozen box still carries the note.
+    assert frozen is not None and "readonly" in frozen.group(1)
+    assert frozen.group(2) == "the note as recorded"
+
+    source = (Path(app_package.__file__).parent / "templates" / "queue.html").read_text(
+        encoding="utf-8")
+    # And the payload is assembled field by field off the elements, so nothing that
+    # governs form serialisation stands between that value and the post.
+    assert re.search(
+        r"const notes = card\.querySelector\('\[data-role=\"notes\"\]'\);\s*"
+        r"if \(notes\) fd\.append\('review_notes', notes\.value\);", source)
+    assert "new FormData(form" not in source
+    # "Change my review" hands the box back, alongside the openers and Submit.
+    assert "if (notes) notes.readOnly = false;" in source
 
 
 def test_unlocking_a_decided_card_records_a_new_verdict_on_resubmit(tmp_path, monkeypatch):
@@ -1333,10 +1418,7 @@ def test_the_pager_is_rendered_above_and_below_the_list_and_starts_hidden(
         assert 'data-page-step="-1"' in nav and 'data-page-step="1"' in nav
         assert 'class="pager-readout"' in nav
 
-    stylesheet = "\n".join(
-        sheet.read_text(encoding="utf-8")
-        for sheet in sorted((Path(app_package.__file__).parent / "static").glob("*.css"))
-    )
+    stylesheet = _stylesheet()
     # Without this rule the nav's own `display: flex` beats the UA [hidden] rule
     # and a one-page queue is offered controls that do nothing.
     assert re.search(r"\.queue-pager\[hidden\]\s*\{[^}]*display:\s*none", stylesheet)
