@@ -30,13 +30,12 @@ class PublishConfig(StageConfig):
     model_config = ConfigDict(json_schema_extra={"description": PUBLISH_CONFIG_DESCRIPTION})
 
     FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({
-        "format", "destination", "template", "one_file_per", "cross_link",
+        "format", "destination", "one_file_per", "cross_link",
     })
     INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset()
 
     format: Optional[PublishFormat] = None
     destination: Optional[str] = None
-    template: Optional[str] = None
     one_file_per: Optional[str] = None
     cross_link: Optional[bool] = None
 
@@ -88,7 +87,7 @@ NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
         requires_inputs=True,
         min_inputs=1,
         required=[],
-        optional=["format", "destination", "template", "one_file_per", "cross_link",
+        optional=["format", "destination", "one_file_per", "cross_link",
                   "summary"],
         notes=(
             "Published output must be INTERROGABLE: every row or claim it renders links "
