@@ -18,11 +18,18 @@ class Project(PersistedModel):
     collection: ClassVar[str] = "project"
     SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
 
-    name: str
+    # Optional, and it must stay so: a project created before labels existed carries no
+    # `name` key, and PersistedModel.load is a strict extra="forbid" validate, so a
+    # required field would orphan every one of them. None is not a missing label — it
+    # means the id is still the only name the project has, which `label` reports.
+    name: str | None = None
     title: str | None = None
     model: str | None = None
     source: str | None = None
     authored_at: str | None = None
+
+    def label(self) -> str:
+        return self.name or self.id
 
 
 def mint_project_id() -> str:
@@ -30,11 +37,11 @@ def mint_project_id() -> str:
 
 
 def find_projects_by_name(name: str) -> list[Project]:
-    """Plural because `name` is not unique — reads every record, so never call it in a loop."""
-    return [record for record in Project.list() if record.name == name]
+    """Plural because a label is not unique — reads every record, so never call it in a loop."""
+    return [record for record in Project.list() if record.label() == name]
 
 
 def describe_project(project_id: str) -> str:
     """The label to SHOW for an id, falling back to the id — never a guessed name."""
     record = Project.load_or_none(project_id)
-    return project_id if record is None else record.name
+    return project_id if record is None else record.label()

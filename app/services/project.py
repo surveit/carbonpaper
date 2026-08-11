@@ -175,7 +175,7 @@ def project_meta(pdir: Path) -> ProjectMeta:
         return ProjectMeta(name=project_id, title=None, created_at=None,
                            model=None, source=None)
     return ProjectMeta(
-        name=record.name,
+        name=record.label(),
         title=record.title,
         created_at=record.authored_at,
         model=record.model,

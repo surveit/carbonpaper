@@ -89,3 +89,22 @@ def test_a_directory_with_no_record_is_its_own_id(workspace_root: Path) -> None:
 
     assert describe_project("copied_in") == "copied_in"
     assert project_meta(workspace_root / "copied_in").name == "copied_in"
+
+
+def test_a_record_from_before_labels_existed_still_loads(workspace_root: Path) -> None:
+    """No migration: `name` is optional, so a record written without one is valid as it stands."""
+    from app.core.persistence import get_store
+
+    get_store().write("project", "venezuela_lda_lobbying", {
+        "id": "venezuela_lda_lobbying",
+        "created_at": "2026-07-29T13:02:08",
+        "updated_at": "2026-07-29T13:02:08",
+        "model": "sonnet",
+        "source": "mcp",
+    })
+
+    record = Project.load("venezuela_lda_lobbying")
+    assert record.name is None
+    assert record.label() == "venezuela_lda_lobbying"
+    assert find_projects_by_name("venezuela_lda_lobbying") == [record]
+    assert describe_project("venezuela_lda_lobbying") == "venezuela_lda_lobbying"
