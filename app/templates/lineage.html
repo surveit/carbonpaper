@@ -82,7 +82,6 @@ body{display:flex;flex-direction:column;overflow:hidden}
 .lin-base code{background:var(--sunk-deep);padding:0 4px;border-radius:4px}
 .lin-said{border-radius:7px;padding:8px 11px;font-size:12.5px;margin-bottom:10px}
 .lin-said-idle{background:var(--state-idle-bg);color:var(--state-idle-ink)}
-.lin-said-join{background:var(--warn-bg);color:var(--state-warn-ink)}
 /* The row, transposed: one FIELD per line, so a wide row needs no horizontal
    scroll and the cells the step touched are on screen without hunting. Marks
    and tints are the run panel's diff vocabulary, turned on its side. */
@@ -113,7 +112,7 @@ tr.carried td.lin-v{color:var(--muted)}
   <div class="lin-story">
     <div class="lin-note">Every step below is this one row, as it stood after that stage. Click a step to see it.</div>
     <div id="story"></div>
-    <details class="lin-graph"><summary>Workflow graph</summary>
+    <details class="lin-graph"><summary>Lineage graph</summary>
       <pre class="mermaid" id="mmd">{{ mermaid }}</pre>
       <div id="nograph" class="nograph hidden">Graph needs the compiled workflow, which isn't available for this run.</div>
     </details>
@@ -144,8 +143,6 @@ function verb(n){
   if(k==='python') return `run python <span class="sid">${esc(n.stage_id)}()</span>`;
   if(k==='starlark') return `run Starlark <span class="sid">${esc(n.stage_id)}()</span>`;
   if(k==='llm') return `ask the LLM in ${sid}`;
-  if(k==='enrich') return `enrich with ${sid}`;
-  if(k==='expand') return `expand with ${sid}`;
   if(k==='union') return `carry through ${sid}`;
   if(k==='filter_rows') return `keep the row through ${sid}`;
   if(k==='aggregate') return `run aggregation ${sid}`;
@@ -163,17 +160,27 @@ function deltaOf(n){
   if(!parts.length && !n.base) return '';
   return `<span class="delta">${parts.length ? parts.join(' · ') : 'no cell changed'}</span>`;
 }
-// Where the row's OTHER parents go: in the sentence, at the step they belong to.
-// A join names the reference row it matched — or that it matched none, a recorded
-// fact rather than an inference from null cells. A fan-in names what it summarized.
-function fromOf(n){
-  const groups = n.contributor_groups || [], branches = n.branches || [];
-  if(groups.length){
-    return ' from ' + groups.map(g => gchip(g, groups.length > 1)).join('; ');
-  }
-  if(branches.length) return ' matched to ' + branches.map(bchip).join(' and ');
-  return JOIN_KINDS.includes(n.transform.kind)
-    ? ' <span class="nomatch">no reference row matched</span>' : '';
+// The whole sentence for one step: what the stage did, then the row's OTHER
+// parents, named at the step they belong to.
+function sentenceOf(n){
+  if(JOIN_KINDS.includes(n.transform.kind)) return joinSentence(n);
+  // A fan-in names what it summarized. Only an aggregate has contributors, so
+  // this and the join case never both apply.
+  const groups = n.contributor_groups || [];
+  const from = groups.length
+    ? ' from ' + groups.map(g => gchip(g, groups.length > 1)).join('; ') : '';
+  return `${verb(n)}${from}`;
+}
+// A join leads with the reference row it brought in, and names the stage after
+// it: the row is what the reader traces next, and the added cells came from it,
+// not from the stage. Matching none is a recorded fact, not an inference from
+// null cells, so it is stated in the same place.
+function joinSentence(n){
+  const kind = n.transform.kind, sid = `<span class="sid">${esc(n.stage_id)}</span>`;
+  const branches = n.branches || [];
+  return branches.length
+    ? `${kind} with ${branches.map(bchip).join(' and ')} in ${sid}`
+    : `${kind} in ${sid} — <span class="nomatch">no reference row matched</span>`;
 }
 function renderStory(){
   let html = '';
@@ -185,7 +192,7 @@ function renderStory(){
   }
   html += V.nodes.map((n, i) => `<button class="step ${i===sel?'on':''}" data-i="${i}">
       <span class="stepno">step ${n.step}</span>
-      <span>${verb(n)}${fromOf(n)}</span>
+      <span>${sentenceOf(n)}</span>
       <span class="right">${n.role==='claim' ? '<span class="claim-tag">published claim</span> ' : ''}<span class="row-chip">row ${n.row_ordinal}</span>${deltaOf(n)}</span>
     </button>`).join('');
   document.getElementById('story').innerHTML = html;
@@ -244,16 +251,7 @@ function fieldRow(f){
     <td class="lin-f" title="${esc(f.name)}"><span class="lin-mark">${mark}</span>${esc(f.name)}</td>
     <td class="lin-v"><div class="lin-clip">${text}${was}</div></td></tr>`;
 }
-// A join lands its added fields FROM the reference input; saying the stage
-// computed them would credit the wrong frame.
 function saidOf(n, touched){
-  const d = n.row_diff;
-  if(JOIN_KINDS.includes(n.transform.kind) && d.added){
-    const matched = (n.branches || []).length
-      ? `landed from ${n.branches.map(b => `${esc(b.stage_id)} row ${b.row_ordinal}`).join(' and ')}, not computed here.`
-      : 'landed empty: this row matched <b>no</b> reference row.';
-    return `<div class="lin-said lin-said-join">${d.added} field${d.added>1?'s':''} ${matched}</div>`;
-  }
   if(touched.length || !n.base) return '';
   return `<div class="lin-said lin-said-idle">No cell changed — the row kept every value and`
        + ` moved from <b>row ${n.base.row_ordinal}</b> to <b>row ${n.row_ordinal}</b>.</div>`;
