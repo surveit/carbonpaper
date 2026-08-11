@@ -6,20 +6,29 @@ batch is collected so one call surfaces every problem, not just the first.
 """
 from __future__ import annotations
 
-from typing import Any, Sequence, TypeVar
+from typing import Any, Protocol, Sequence, TypeVar
 
 from pydantic import ValidationError, model_validator
 
 from app.models.schema import _Base
-from app.models.stage import Stage, AuthoredStageFields, StageType
+from app.models.stage import Stage, StageType
 from app.core.utils import format_errors
 
-# Ordering and cycle detection read only the shared fields, so they hold a
-# submitted draft and a stored stage alike, and hand back what they were given.
-_StageT = TypeVar("_StageT", bound=AuthoredStageFields)
+
+# Ordering and cycle detection read a stage's id and its upstream ids and nothing
+# else, so they hold a submitted draft and a stored stage alike, and hand back what
+# they were given.
+class StageInGraph(Protocol):
+    id: str
+
+    @property
+    def input_ids(self) -> list[str]: ...
 
 
-def validate_unique_ids(stages: Sequence[AuthoredStageFields]) -> list[str]:
+_StageT = TypeVar("_StageT", bound=StageInGraph)
+
+
+def validate_unique_ids(stages: Sequence[StageInGraph]) -> list[str]:
     ids = [s.id for s in stages]
     dupes = sorted({i for i in ids if ids.count(i) > 1})
     return [f"duplicate stage id `{d}`" for d in dupes]
@@ -35,7 +44,7 @@ def validate_inputs_resolve(stages: list[Stage]) -> list[str]:
     return issues
 
 
-def detect_cycle(stages: Sequence[AuthoredStageFields]) -> list[str]:
+def detect_cycle(stages: Sequence[StageInGraph]) -> list[str]:
     edges = {s.id: list(s.input_ids) for s in stages}
     WHITE, GRAY, BLACK = 0, 1, 2
     color = {sid: WHITE for sid in edges}
