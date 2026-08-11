@@ -54,8 +54,6 @@ def find_internal_namespace_column_issues(stage: "StageBase") -> list[str]:
 
 def _signature_column_names(stage: "StageBase") -> list[str]:
     signature = stage.signature
-    if signature is None:
-        return []
     names = [
         column.name for entry in signature.reads for column in entry.columns
     ]

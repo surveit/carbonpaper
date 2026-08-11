@@ -160,7 +160,7 @@ class StageHandler(ABC):
     def preserves_grain_and_order(self) -> bool: ...
 
 
-class RowMapHandler(StageHandler):
+class RowMapTransformHandler(StageHandler):
     def __init__(
         self,
         make_mapper: MakeRowMapper,
@@ -185,7 +185,7 @@ class RowMapHandler(StageHandler):
         return not self.drops_rows
 
 
-class LLMTransformHandler(RowMapHandler):
+class LLMTransformHandler(RowMapTransformHandler):
     """batch_size > 1 keeps grain and order but NOT per-row independence: the model sees the chunk."""
 
     def __init__(
@@ -220,7 +220,7 @@ class SourceHandler(StageHandler):
         return True
 
 
-class FrameHandler(StageHandler):
+class FrameTransformHandler(StageHandler):
     def __init__(
         self,
         apply: Callable[[Stage, dict[str, pd.DataFrame], RunContext], pd.DataFrame | None],
@@ -260,7 +260,7 @@ def validate_registry_matches_model(handlers: dict[StageType, StageHandler]) -> 
         # The arity rule lives on the model's `inputs` field and is checked here
         # rather than per execution: a row-mapped handler maps ONE frame's rows,
         # so a type that admits a second input names no rows to map.
-        if isinstance(handler, RowMapHandler) and max_declared_inputs(stage_type) != 1:
+        if isinstance(handler, RowMapTransformHandler) and max_declared_inputs(stage_type) != 1:
             raise RuntimeError(
                 f"stage type {stage_type.value!r} is registered as "
                 f"{type(handler).__name__}, which maps one frame's rows, but its "
@@ -270,7 +270,7 @@ def validate_registry_matches_model(handlers: dict[StageType, StageHandler]) -> 
 
 
 def _run_row_mapper(
-    handler: RowMapHandler,
+    handler: RowMapTransformHandler,
     stage: Stage,
     inputs: dict[str, pd.DataFrame],
     ctx: RunContext,
@@ -527,7 +527,7 @@ def _order_by_input_position(
 
 
 def _finish_batched_frame(
-    rows: list[Row], handler: RowMapHandler, stage: Stage
+    rows: list[Row], handler: RowMapTransformHandler, stage: Stage
 ) -> pd.DataFrame:
     df = pd.DataFrame(rows)
     return _strip_and_trim(df, _collect_internal_columns(df), handler, stage)
@@ -548,7 +548,7 @@ def _finish_empty_result(
 
 def _finish_mapped_frame(
     df: pd.DataFrame,
-    handler: RowMapHandler,
+    handler: RowMapTransformHandler,
     map_row: RowMapper,
     stage: Stage,
     ctx: RunContext,
@@ -570,7 +570,7 @@ def _collect_internal_columns(df: pd.DataFrame) -> StageContribution:
 def _strip_and_trim(
     df: pd.DataFrame,
     contribution: StageContribution,
-    handler: RowMapHandler,
+    handler: RowMapTransformHandler,
     stage: Stage,
 ) -> pd.DataFrame:
     """Strip before trim: the trim reports what it drops as user columns, which an internal one is not."""

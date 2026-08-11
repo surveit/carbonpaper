@@ -58,7 +58,6 @@ class PublishStage(CarriesPythonFunctionStage):
 
     def find_signature_config_issues(self) -> list[str]:
         signature = self.signature
-        assert signature is not None  # find_signature_config_issues runs only with one
         if signature.produces:
             return [
                 f"stage '{self.id}': publish emits files, not a table — "

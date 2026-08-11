@@ -21,7 +21,7 @@ from app.runtime.stages.execution import (
     ROW_ERROR_KEY,
     ROW_USAGE_KEY,
     Row,
-    RowMapHandler,
+    RowMapTransformHandler,
     _order_by_input_position,
 )
 from app.runtime.stages.llm_transform import run_llm_batches
@@ -93,14 +93,14 @@ def _entries(stage: Stage) -> list[StageCacheEntry]:
 # ── python_row_function ──────────────────────────────────────────────────────
 
 
-def _counting_row_handler(calls: list[int], **kwargs) -> RowMapHandler:
+def _counting_row_handler(calls: list[int], **kwargs) -> RowMapTransformHandler:
     def make_mapper(stage, ctx, src):
         def map_row(row, index):
             calls.append(row["x"])
             return {**row, "y": row["x"] * 2}
         return map_row
 
-    return RowMapHandler(make_mapper=make_mapper, **kwargs)
+    return RowMapTransformHandler(make_mapper=make_mapper, **kwargs)
 
 
 def test_second_run_reuses_the_cache_and_never_calls_the_mapper():
@@ -158,7 +158,7 @@ def test_a_failed_row_is_never_recorded():
         return map_row
 
     stage = _row_stage()
-    handler = RowMapHandler(make_mapper=make_mapper)
+    handler = RowMapTransformHandler(make_mapper=make_mapper)
     handler.execute(stage, {"src": _src([1, 2])}, _ctx(run_id="run1"))
 
     recorded = {entry.input_fingerprint for entry in _entries(stage)}
@@ -264,7 +264,7 @@ def test_a_post_map_mapper_still_gets_its_post_map_step():
         def finish_mapped_rows(self, stage, df, ctx, contribution):
             seen.append(len(df))
 
-    handler = RowMapHandler(make_mapper=lambda stage, ctx, src: _Mapper())
+    handler = RowMapTransformHandler(make_mapper=lambda stage, ctx, src: _Mapper())
     handler.execute(_row_stage(), {"src": _src([1, 2])}, _ctx(run_id="postmap"))
     assert seen == [2]
 
@@ -509,7 +509,7 @@ def test_every_row_mapped_stage_type_runs_under_the_interceptor():
         StageType.human_review_queue,
     ):
         handler = HANDLERS[stage_type]
-        assert isinstance(handler, RowMapHandler)
+        assert isinstance(handler, RowMapTransformHandler)
 
 
 # ── narrowing to the signature's declared reads ──────────────────────────────
@@ -536,14 +536,14 @@ def _two_column_stage(*, reads=None, code: str = _DOUBLING_CODE) -> Stage:
     })
 
 
-def _seen_rows_handler(seen: list[Row], **kwargs) -> RowMapHandler:
+def _seen_rows_handler(seen: list[Row], **kwargs) -> RowMapTransformHandler:
     def make_mapper(stage, ctx, src):
         def map_row(row, index):
             seen.append(dict(row))
             return {**row, "y": row["x"] * 2}
         return map_row
 
-    return RowMapHandler(make_mapper=make_mapper, **kwargs)
+    return RowMapTransformHandler(make_mapper=make_mapper, **kwargs)
 
 
 def _noisy_src(noise: list[str]) -> pd.DataFrame:
