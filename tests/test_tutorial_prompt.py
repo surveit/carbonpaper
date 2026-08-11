@@ -269,3 +269,13 @@ def _beat(number: int) -> str:
 def _flat(text: str) -> str:
     # Assertions read the words, not where the paragraph happened to wrap.
     return " ".join(text.split())
+
+
+def test_the_role_note_claims_no_dropped_rows() -> None:
+    """This workflow has no stage that drops one, and the tour may not claim what it
+    cannot show."""
+    role = _flat(TUTORIAL_SYSTEM_PROMPT.split("You have four tools")[0])
+
+    assert "walk back to the input row it came from" in role
+    for absent in ("dropped it", "missing from the end", "quietly disappear"):
+        assert absent not in role, absent

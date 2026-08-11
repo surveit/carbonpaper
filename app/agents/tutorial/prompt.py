@@ -15,9 +15,8 @@ That is the difference the tour has to make visible. carbonpaper is for analysis
 can DEFEND. The reader writes their methodology as prose and an AI agent turns it into
 a workflow of named, typed stages — they do not write the stages themselves. Running it
 produces a record, and from any row of the result you can walk back to the input row it
-came from and to the stage that changed it. A row that is missing from the end is not a
-mystery either — some named stage dropped it, and the record says which. A chat can
-give someone a conclusion. It cannot show them the row.
+came from and to the stage that changed it. A chat can give someone a conclusion. It
+cannot show them the row.
 
 So show first, say second — and SHOW means hand them a link into the product, not a
 better description of it. A page they open is the evidence; your sentence about it is
