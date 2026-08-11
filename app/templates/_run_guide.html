@@ -192,6 +192,12 @@
   .guide-unnarrated h3 { font-size: 12px; margin: 0 0 3px; text-transform: none;
                          letter-spacing: 0; }
   .guide-unnarrated p { font-size: 11px; color: var(--muted); margin: 0 0 6px; }
+  .guide-published { margin-top: 14px; border-top: 1px solid var(--border);
+                     padding-top: 10px; }
+  .guide-published h3 { font-size: 12px; margin: 0 0 4px; text-transform: none;
+                        letter-spacing: 0; }
+  .guide-published ul { list-style: none; margin: 0; padding: 0; }
+  .guide-published li { font-size: 11.5px; margin: 2px 0; }
 
 </style>
 
@@ -270,6 +276,18 @@
       judgement a reviewer could act on.</p>
     <ul class="guide-stage-list">
       {% for s in guide.unnarrated %}{{ guide_stage(s) }}{% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+  {# Where the run ended up. Set by the caller that has the run's artifact links —
+     the packet page lays its files out differently and sets none, so it shows none. #}
+  {% if published_artifacts is defined and published_artifacts %}
+  <div class="guide-published">
+    <h3>Published</h3>
+    <ul>
+      {% for artifact in published_artifacts %}
+      <li><a href="{{ artifact.url }}">{{ artifact.name }}</a></li>
+      {% endfor %}
     </ul>
   </div>
   {% endif %}

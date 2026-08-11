@@ -8,16 +8,22 @@ import json
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
+from pydantic import BaseModel
 
 from app.core.llm_sdk import CLI_PATH
 
-from app.core.agent.registry import build_engine
+from app.core.agent.registry import build_engine, opening_prompt
 from app.core.agent.sdk_engine import CLI_MODEL
 from app.core.agent.session import create_agent_session
 from app.core.agent.store import open_session_store
 from app.core.agent.turns import default_turn_manager
 from app.web.breadcrumbs import build_chat_crumbs, build_home_crumbs
 from app.web.config import templates
+from app.web.markdown_render import render_markdown
+
+# The one place the sealed renderer is bound. app.web.config owns the shared env, so
+# the filter is registered here, beside the only page that uses it.
+templates.env.filters["markdown"] = render_markdown
 
 router = APIRouter()
 _store = open_session_store()
@@ -85,10 +91,37 @@ async def chat_page(request: Request, sid: str):
         # No bound agent → the UI renders and streams the session, but there is no agent to
         # reply to a typed message (post_message 400s), so the composer is hidden.
         "view_only": data.get("agent_id") is None,
+        "opens_itself": _has_unspoken_opening(data),
         "backend": _backend_label(),
         "backend_error": _backend_error(),
         "crumbs": build_chat_crumbs(data.get("title")),
     })
+
+
+def _has_unspoken_opening(data: dict) -> bool:
+    """True when this page must start the agent's opening turn on load."""
+    agent_id = data.get("agent_id")
+    if agent_id is None or data.get("messages") or data.get("active_turn"):
+        return False
+    return opening_prompt(agent_id) is not None
+
+
+@router.post("/chat/{sid}/open")
+async def open_conversation(sid: str):
+    """409s once the session has spoken, so a reload cannot make it greet twice."""
+    if not _store.exists(sid):
+        raise HTTPException(status_code=404, detail="Session not found")
+    data = _store.load(sid)
+    if not _has_unspoken_opening(data):
+        raise HTTPException(status_code=409, detail="session has already opened")
+    agent_id = data["agent_id"]
+    prompt = opening_prompt(agent_id)
+    assert prompt is not None  # _has_unspoken_opening checked it
+    engine = build_engine(agent_id, data.get("context") or {})
+    turn_id = _turns.start(
+        engine=engine, store=_store, session_id=sid, prompt=prompt, record_prompt=False
+    )
+    return JSONResponse({"ok": True, "turn_id": turn_id})
 
 
 @router.post("/chat/{sid}/message")
@@ -125,6 +158,20 @@ async def stream_turn(sid: str, turn_id: str, request: Request):
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+class RenderedReply(BaseModel):
+    text: str
+    html: str
+
+
+@router.get("/chat/{sid}/rendered-reply")
+async def get_rendered_reply(sid: str) -> RenderedReply:
+    """The client swaps only when `text` equals what it streamed — never a stale one."""
+    if not _store.exists(sid):
+        raise HTTPException(status_code=404, detail="Session not found")
+    text = _store.read_last_assistant_text(sid)
+    return RenderedReply(text=text, html=str(render_markdown(text)))
 
 
 @router.get("/chat/{sid}/messages")

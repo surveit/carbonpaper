@@ -243,10 +243,14 @@ def write_review_guide(
 
 
 @mcp.tool(description=TOOL_SPECS["run_workflow"].description)
-def run_workflow(project_id: str, version_id: str | None = None) -> dict[str, Any]:
+def run_workflow(
+    project_id: str,
+    version_id: str | None = None,
+    limits: dict[str, int] | None = None,
+) -> dict[str, Any]:
     _resolve_existing_project(project_id)  # loud if the project doesn't exist
     try:
-        run_id = run_service.start_run(project_id, version_id=version_id)
+        run_id = run_service.start_run(project_id, version_id=version_id, limits=limits)
     except _RUN_TOOL_ERRORS as exc:
         return {"ok": False, "error": str(exc)}
     return {"run_id": run_id, "status": run_service.read_run_status(project_id, run_id)["status"]}

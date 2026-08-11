@@ -232,7 +232,12 @@ workflow's published artifacts. `version_id` pins a specific stored version,
 published or not (omit for the newest stored one); a missing version is a
 loud error, never a silent fallback. Poll get_run_status(project_id, run_id)
 for live progress and the final status. On a pre-run failure (no stored
-version, an unbound input) returns {ok: False, error} and starts no run.""",
+version, an unbound input) returns {ok: False, error} and starts no run.
+
+`limits` caps how many rows a stage READS: {"<stage id>": N} gives that stage
+its first N rows and leaves every other stage whole. It bounds the WORK, not
+the spend of a stage that already ran — a cap on a stage downstream of a model
+step does not stop that model step reading everything. Omit it for a full run.""",
     ),
     "run_workflow_test": ToolSpec(
         name="run_workflow_test",

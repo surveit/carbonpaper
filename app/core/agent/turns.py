@@ -12,6 +12,8 @@ from typing import Any, Awaitable, Callable
 
 from claude_agent_sdk import ClaudeSDKError
 
+from app.core.agent.store import MessageRole, TranscriptMessage
+
 
 class Turn:
     def __init__(self, turn_id: str, session_id: str):
@@ -42,31 +44,41 @@ class Turn:
             self._waiters.remove(waiter)
 
 
+def _drop_user_messages(messages: list[TranscriptMessage]) -> list[TranscriptMessage]:
+    """An opening turn has no reader message, so the engine's echo of its prompt goes."""
+    return [m for m in messages if m["role"] != MessageRole.user.value]
+
+
 class TurnManager:
     def __init__(self):
         self._turns: dict[str, Turn] = {}
         self._tasks: dict[str, asyncio.Task] = {}
 
     def start(self, *, engine, store, session_id: str, prompt: str,
+              record_prompt: bool = True,
               on_done: Callable[[], Awaitable[None]] | None = None) -> str:
+        """`record_prompt=False` keeps `prompt` out of the stored transcript."""
         turn_id = uuid.uuid4().hex[:12]
         turn = Turn(turn_id, session_id)
         self._turns[turn_id] = turn
         history = store.load_messages(session_id)
         store.set_active_turn(session_id, turn_id)
         task = asyncio.create_task(
-            self._run(turn, engine, store, session_id, prompt, history, on_done)
+            self._run(turn, engine, store, session_id, prompt, history, record_prompt, on_done)
         )
         self._tasks[turn_id] = task
         return turn_id
 
-    async def _run(self, turn, engine, store, session_id, prompt, history, on_done) -> None:
+    async def _run(self, turn, engine, store, session_id, prompt, history,
+                   record_prompt, on_done) -> None:
         try:
             resume = store.resume_token(session_id)
             messages, resume_token = await engine.stream_turn(
                 prompt, message_history=history, emit=turn.emit, resume=resume
             )
-            store.save_messages(session_id, messages)
+            store.save_messages(
+                session_id, messages if record_prompt else _drop_user_messages(messages)
+            )
             if resume_token:
                 # Carry the CLI session forward so the next turn resumes this
                 # conversation (the demo backend returns None — nothing to carry).

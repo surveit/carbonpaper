@@ -21,7 +21,7 @@ from app.web.config import (
 )
 from app.web.routers import (
     admin, editing, evals, guide, pickers, project, node, review, review_packet,
-    run_lineage, run_stage, runs,
+    run_lineage, run_stage, runs, tutorial,
 )
 
 from app.web.chat_router import router as chat_router
@@ -31,6 +31,10 @@ from app.mcp.server import handle_streamable_http, run_session_manager
 # generic agent registry, so build_engine("editing", …) resolves. The registry is
 # populated by import side effect; keep this import even though the name is unused.
 from app.agents.compiler import config as _editing_agent_config  # noqa: F401
+
+# Same import-side-effect registration for the scripted product tour, so
+# build_engine("tutorial", …) resolves.
+from app.agents.tutorial import config as _tutorial_agent_config  # noqa: F401
 
 
 @asynccontextmanager
@@ -74,6 +78,9 @@ app.include_router(admin.router)
 
 # The compiler's chat-driven editing entry ('Edit with agent' -> a chat session).
 app.include_router(editing.router)
+
+# The home zero state's tour entry ('Take a guided tour' -> a chat session).
+app.include_router(tutorial.router)
 
 # Interactive, multi-turn chat surface (streaming + persistence). Separate from
 # the row-mapped llm_transform path; HTTP routes in app/web/chat_router.py, the
