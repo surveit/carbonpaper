@@ -17,6 +17,19 @@ body.packet .run-stage-panel,
 body.packet .stage-panel-full { max-height: none; overflow: visible; }
 body.packet .table-scroll { max-height: none; }
 
+/* base.css leaves 64px under the page for the run view, whose panes scroll inside a
+   fixed viewport and never reach it. Scrolled to the end of a document it is just
+   void, so the page closes on the same 24px it opens with. */
+body.packet main { padding-bottom: 24px; }
+
+/* The last table's own bottom margin collapses out of its section and is then trapped
+   by the work column — a grid item, so a BFC nothing escapes — where it lands as void
+   under the final row. It is spacing BETWEEN blocks, and the last block has nothing
+   below it to be spaced from. Two levels because the margin belongs to the table and
+   the section it collapsed through carries none of its own. */
+body.packet .run-main > :last-child,
+body.packet .run-main > :last-child > :last-child { margin-bottom: 0; }
+
 /* The columns are the run view's (run-page.css); only the height model differs. The
    run view scrolls each pane inside a viewport-height shell, which one ordinary
    document has no equivalent of — so the rail STICKS: the body scrolls under it, and
