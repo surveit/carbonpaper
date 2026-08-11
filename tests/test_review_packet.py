@@ -241,6 +241,18 @@ def test_every_referenced_asset_exists_in_the_packet(exported):
     _assert_every_href_resolves(exported.root)
 
 
+def test_the_index_says_how_to_check_the_hashes(exported):
+    # A hash a reader cannot check is not evidence, and the cut footer held the command.
+    index = (exported.root / "index.html").read_text(encoding="utf-8")
+    assert "shasum -a 256 -c checksums.txt" in index
+    assert 'href="checksums.txt"' in index
+
+
+def test_no_page_carries_a_footer(exported):
+    for page in exported.root.rglob("*.html"):
+        assert "<footer" not in page.read_text(encoding="utf-8"), page.name
+
+
 def test_checksums_cover_every_file_and_match(exported):
     lines = (exported.root / "checksums.txt").read_text(encoding="utf-8").splitlines()
     listed = {line.split("  ", 1)[1]: line.split("  ", 1)[0] for line in lines}

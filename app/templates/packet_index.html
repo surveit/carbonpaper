@@ -127,7 +127,9 @@
       <tr><td><a href="manifest.json">manifest.json</a></td><td>the run's own record: timings, statuses, checks, input bindings</td></tr>
       <tr><td><a href="events.jsonl">events.jsonl</a></td><td>the run event log, including the prompt text sent to the model</td></tr>
       <tr><td><code>data/</code></td><td>one CSV per step, uncapped; <code>data/raw/</code> holds the files the run actually wrote</td></tr>
-      <tr><td><a href="{{ checksums_href }}">checksums.txt</a></td><td>SHA-256 of every file above</td></tr>
+      {# The command rides on the row: it was the one thing the page footer carried
+         that is written nowhere else, and a hash nobody can check is not evidence. #}
+      <tr><td><a href="{{ checksums_href }}">checksums.txt</a></td><td>SHA-256 of every file above — check them with <code>shasum -a 256 -c checksums.txt</code></td></tr>
     </tbody>
   </table>
 </section>

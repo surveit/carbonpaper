@@ -143,7 +143,6 @@ def _write_stage_page(root: Path, run_dir: Path, view: RunView, stage: StageView
         run=view,
         assets=[f"../{ASSETS_DIR}/{name}" for name in STYLESHEETS],
         index_href="../index.html",
-        checksums_href=f"../{CHECKSUMS_FILE}",
         **_build_panel_context(run_dir, view, stage),
     )
     return _write(root / relative, html, relative)
