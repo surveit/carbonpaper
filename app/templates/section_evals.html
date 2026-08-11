@@ -48,7 +48,7 @@
   <tbody>
     {% for e in evals %}
     <tr>
-      <td><a href="/project/{{ state.name }}/evals/{{ e.id }}">{{ e.name }}</a></td>
+      <td><a href="/project/{{ state.id }}/evals/{{ e.id }}">{{ e.name }}</a></td>
       <td><span class="badge {{ badge_class.get(e.status, 'pending') }}">{{ e.status }}</span></td>
       <td>
         {% if e.issues %}

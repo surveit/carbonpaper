@@ -18,7 +18,7 @@
 
   Context the route passes:
     state = project.project_state(mdir); section = "runs"
-    runs  = app.web.run_index.build_run_index_rows(state.name) — list of RunIndexRow
+    runs  = app.web.run_index.build_run_index_rows(state.id) — list of RunIndexRow
 
   Only manifest-backed runs appear, and a run whose manifest cannot be read says so
   in place of the parts it could not read.
@@ -37,7 +37,7 @@
   </div>
   {% if state.workflow.present %}
   <div class="actions wf-actions">
-    <a href="/project/{{ state.name }}/runs/new" class="btn primary">▶ New run</a>
+    <a href="/project/{{ state.id }}/runs/new" class="btn primary">▶ New run</a>
   </div>
   {% endif %}
 </div>
@@ -49,9 +49,9 @@
   </thead>
   <tbody>
     {% for r in runs %}
-    <tr class="js-run-row" data-href="/project/{{ state.name }}/runs/{{ r.run_id }}">
+    <tr class="js-run-row" data-href="/project/{{ state.id }}/runs/{{ r.run_id }}">
       <td class="run-date">
-        <a href="/project/{{ state.name }}/runs/{{ r.run_id }}" title="run {{ r.run_id }}">
+        <a href="/project/{{ state.id }}/runs/{{ r.run_id }}" title="run {{ r.run_id }}">
           {%- if r.started_at %}{{ r.started_at | friendly_time }}{% else %}<code>{{ r.run_id }}</code>{% endif -%}
         </a>
         {%- if r.is_test_run %} <span class="flagchip"
@@ -66,7 +66,7 @@
           {%- if r.version.message %}“{{ r.version.message }}”
           {%- else %}<code>{{ r.version.version_id }}</code> <span class="muted">(no message)</span>{% endif %}
           <a class="open-away" target="_blank" rel="noopener"
-             href="/project/{{ state.name }}/workflow/version/{{ r.version.version_id }}"
+             href="/project/{{ state.id }}/workflow/version/{{ r.version.version_id }}"
              title="open version {{ r.version.version_id }} in a new tab">↗</a>
         {%- else %}<span class="unresolved">no workflow version recorded</span>
         {%- endif %}
@@ -99,10 +99,10 @@
   <h2>No runs yet</h2>
   {% if state.workflow.present %}
   <p>Pick a version, bind a file to each input, and execute the pipeline end-to-end.</p>
-  <a href="/project/{{ state.name }}/runs/new" class="btn primary">Start new run</a>
+  <a href="/project/{{ state.id }}/runs/new" class="btn primary">Start new run</a>
   {% else %}
   <p>A run executes a workflow, and this project does not have one yet.</p>
-  <a href="/project/{{ state.name }}/workflow" class="btn primary">Build the workflow</a>
+  <a href="/project/{{ state.id }}/workflow" class="btn primary">Build the workflow</a>
   {% endif %}
 </div>
 {% endif %}
