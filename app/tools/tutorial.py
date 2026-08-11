@@ -14,7 +14,7 @@ from app.core.agent.tool_spec import ToolSpec
 from app.models.review_guide import ReviewGuideDraft
 from app.services import project as project_service, run as run_service, workspace
 from app.services.project import WorkflowFile, import_project
-from app.services.project_record import find_projects_by_name
+from app.services.project import find_projects_by_name
 
 _FIXTURE_STEM = "tutorial_lobbying_triage"
 _DATA_DIR = Path(__file__).resolve().parents[1] / "seeds" / "data"

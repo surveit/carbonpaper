@@ -15,7 +15,7 @@ from claude_agent_sdk import SdkMcpTool
 
 import app.agents.tutorial.config  # noqa: F401 — registers the "tutorial" agent
 import app.services.run as run_service
-from app.services.project_record import Project
+from app.services.project import Project
 from app.core.agent.registry import build_engine, build_mcp_server
 from app.models.stages.input_data import InputDataStage
 from app.services import project as project_service

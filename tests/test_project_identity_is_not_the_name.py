@@ -10,7 +10,7 @@ import pytest
 
 from app.services import workspace
 from app.services.project import create_project, list_projects, project_meta
-from app.services.project_record import (
+from app.services.project import (
     Project,
     describe_project,
     find_projects_by_name,

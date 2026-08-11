@@ -10,11 +10,13 @@ import json
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, ClassVar, Sequence
 
 from pydantic import BaseModel, field_validator
 
 from app.core.errors import RunManifestNotJson
+from app.core.persistence import PersistedModel, PersistenceScope
+from app.core.timestamp_ids import mint_timestamp_id
 from app.models import (
     SchemaLibrary,
     Stage,
@@ -31,12 +33,6 @@ from app.models.run_manifest import (
 from app.services.versioning import ReviewGuide
 from app.core.run_status import RunStatus
 from app.services import data_model, stage_edit, versioning, workspace
-from app.services.project_record import (
-    Project as Project,
-    describe_project as describe_project,
-    find_projects_by_name as find_projects_by_name,
-    mint_project_id,
-)
 from app.services.loader import (
     load_compiled_dir,
     load_workflow,
@@ -44,6 +40,44 @@ from app.services.loader import (
 )
 from app.services.errors import WorkflowLoadError
 from app.services.stage_edit import AddStagesResult, EditStageResult
+
+
+# ─── Project identity record ──────────────────────────────────────────────────
+
+
+class Project(PersistedModel):
+    """`authored_at` is the project's own date; `created_at` stamps when this RECORD was written."""
+
+    collection: ClassVar[str] = "project"
+    SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
+
+    # Optional, and it must stay so: a project created before labels existed carries no
+    # `name` key, and PersistedModel.load is a strict extra="forbid" validate, so a
+    # required field would orphan every one of them. None is not a missing label — it
+    # means the id is still the only name the project has, which `label` reports.
+    name: str | None = None
+    title: str | None = None
+    model: str | None = None
+    source: str | None = None
+    authored_at: str | None = None
+
+    def label(self) -> str:
+        return self.name or self.id
+
+
+def mint_project_id() -> str:
+    return mint_timestamp_id()
+
+
+def find_projects_by_name(name: str) -> list[Project]:
+    """Plural because a label is not unique — reads every record, so never call it in a loop."""
+    return [record for record in Project.list() if record.label() == name]
+
+
+def describe_project(project_id: str) -> str:
+    """The label to SHOW for an id, falling back to the id — never a guessed name."""
+    record = Project.load_or_none(project_id)
+    return project_id if record is None else record.label()
 
 
 # ─── Status models ────────────────────────────────────────────────────────────

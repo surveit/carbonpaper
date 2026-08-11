@@ -8,7 +8,7 @@ from pathlib import Path
 
 from app.services.project import WorkflowFile, import_project, sanitize_project_name
 from app.services.workspace import projects_dir
-from app.services.project_record import find_projects_by_name
+from app.services.project import find_projects_by_name
 
 # The packaged fixtures directory: app/seeds/data/<name>.json, each a
 # self-contained WorkflowFile document (see app/seeds/__init__.py for the

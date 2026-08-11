@@ -11,7 +11,7 @@ from app.core.errors import ReviewGuideValidationError
 from app.models.review_guide import ReviewGuideDraft, ReviewGuideStep
 from app.services.versioning import ReviewGuide
 from app.services import workspace
-from app.services.project_record import Project
+from app.services.project import Project
 
 # Minimal valid config block per stage type (app/models/stage.py:
 # each type's stage model declares the ones it requires). Mirrors
