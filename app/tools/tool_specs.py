@@ -75,9 +75,9 @@ shape. Does not return full stage specs — use read_stage for one.""",
         name="edit_stage",
         description="""\
 Change specific fields of one stage. `changes_json` is a JSON object of
-ONLY the fields to change (a JSON Merge Patch): {"limit": 100} sets limit;
+ONLY the fields to change (a JSON Merge Patch): {"cache": false} sets cache;
 {"llm": {"model": "claude-opus-5"}} changes only llm.model and leaves the rest of the
-llm block intact; {"limit": null} deletes a field. Fields you do not mention
+llm block intact; a null value deletes a field. Fields you do not mention
 are preserved exactly. Validated first; if invalid, nothing is written and
 the issues are returned. You cannot change a stage's id this way.""",
     ),
@@ -206,7 +206,7 @@ remaining stage is allowed.""",
         description="""\
 Every problem with this workflow: undescribed stages, descriptions no examples
 check, examples that do not pass, code the review panel cannot show, and
-deliberate choices (cache off, row limit) a reviewer should be told about.
+deliberate choices (cache off) a reviewer should be told about.
 `errors` is the subset you can clear by editing the stage. This DOES run the
 examples — a workflow whose examples disagree with its code is not
 signed-off-able — but run_stage_tests is what tells you which case failed.""",

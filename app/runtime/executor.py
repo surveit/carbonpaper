@@ -243,7 +243,7 @@ def _gather_stage_inputs(
     stage: Stage, outputs_so_far: dict[str, pd.DataFrame], ctx: RunContext,
     record: StageRecord,
 ) -> tuple[dict[str, pd.DataFrame], _RowWindow]:
-    """Cuts the row window BEFORE the duplicate/schema checks, so `limit: 3` isn't failed by row 4,000."""
+    """Cuts the row window BEFORE the duplicate/schema checks, so a limit of 3 isn't failed by row 4,000."""
     sid = stage.id
     window = _resolve_row_window(stage, ctx)
     inputs_for_stage: dict[str, pd.DataFrame] = {}
@@ -295,7 +295,7 @@ class _RowWindow(NamedTuple):
 
 def _resolve_row_window(stage: Stage, ctx: RunContext) -> _RowWindow:
     offset = ctx.params.offsets.get(stage.id)
-    cap = ctx.params.limits.get(stage.id, stage.limit)
+    cap = ctx.params.limits.get(stage.id)
     return _RowWindow(
         offset if isinstance(offset, int) and offset > 0 else 0,
         cap if isinstance(cap, int) and cap >= 0 else None,

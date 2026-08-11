@@ -45,7 +45,6 @@ def _make_project(root):
         "connector": {"kind": "file",
                       "params": {"path": str(root / "data" / "items.csv"), "format": "csv"}},
         "signature": {"form": "replaces", "produces": _NAME_VAL_SCHEMA["columns"]},
-        "limit": 2,
     }
     (root / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
 
@@ -53,7 +52,8 @@ def _make_project(root):
 def test_limit_on_a_source_stage_caps_the_rows_it_loads(tmp_path):
     _make_project(tmp_path)
     _seed_version(tmp_path)
-    manifest = execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path))
+    manifest = execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path),
+                           limits={"load": 2})
 
     assert manifest["status"] == "ok"
     [rec] = manifest["stage_records"]
@@ -78,7 +78,7 @@ def test_per_run_limit_and_offset_slice_and_are_recorded(tmp_path):
                            limits={"load": 3}, offsets={"load": 1})
 
     [rec] = manifest["stage_records"]
-    assert rec["output_row_count"] == 3                                   # not the static 2
+    assert rec["output_row_count"] == 3
     out = pd.read_parquet(
         tmp_path / "runs" / manifest["run_id"] / "outputs" / "load.parquet")
     assert list(out["val"]) == [1, 2, 3]
@@ -777,5 +777,5 @@ def test_a_frame_stage_succeeds_with_no_frame_store_configured(tmp_path, monkeyp
     assert manifest["status"] == "ok"
     record = next(r for r in manifest["stage_records"] if r["stage_id"] == "totals")
     assert record["status"] == "ok"
-    assert record["output_row_count"] == 2
+    assert record["output_row_count"] == 5
     assert any("no frame store" in note for note in record["notes"])

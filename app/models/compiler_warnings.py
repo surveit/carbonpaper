@@ -83,8 +83,4 @@ def _find_deliberate_choice_warnings(stage: Stage) -> list[CompilerWarning]:
         warnings.append(warn(stage, "nondeterministic",
                              "declared intentionally non-deterministic (cache off), so it "
                              "re-rolls every run and its examples cannot pin its output"))
-    if stage.limit is not None:
-        warnings.append(warn(stage, "row_limit",
-                             f"reads at most {stage.limit} input rows, so a run over this "
-                             f"stage is a sample rather than the whole input"))
     return warnings

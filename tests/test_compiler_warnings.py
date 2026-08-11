@@ -128,10 +128,10 @@ def test_a_filter_with_no_examples_is_unexemplified():
     assert [w.kind for w in warnings] == ["unexemplified"]
 
 
-def test_cache_off_and_a_row_limit_are_notes_not_blockers():
+def test_cache_off_is_a_note_not_a_blocker():
     warnings = find_stage_compiler_warnings(
-        _stage(cache=False, limit=100, tests=[_PASSING_EXAMPLE]))
-    assert sorted(w.kind for w in warnings) == ["nondeterministic", "row_limit"]
+        _stage(cache=False, tests=[_PASSING_EXAMPLE]))
+    assert [w.kind for w in warnings] == ["nondeterministic"]
     assert all(w.severity == "warning" for w in warnings)
 
 

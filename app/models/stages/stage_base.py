@@ -158,10 +158,6 @@ class AuthoredStageFields(_Base):
     # not WHAT the stage computes, so flipping it must never invalidate an
     # entry already recorded.
     cache: bool = True
-    # Caps the rows this stage READS: the runtime cuts the window off every input
-    # frame before the handler runs, so a limited stage never fans out over the
-    # rows past it. A stage with no inputs caps the frame it loads instead.
-    limit: Optional[int] = None
     compiler_notes: list[str] = Field(default_factory=list)
 
     # The authored contract of what this stage reads and writes, per input —

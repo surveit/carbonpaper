@@ -9,6 +9,7 @@ import pytest
 
 from app.core.errors import SubsetRunError
 from app.models import parse_stage, Stage, Workflow
+from app.models.run_parameters import RunParameters
 from app.runtime.executor import run_subset
 from app.runtime.trace import trace_row
 
@@ -189,13 +190,13 @@ def test_trace_follows_lineage_after_a_limit_caps_what_the_filter_reads(tmp_path
     src = pd.DataFrame({"a": ["x", "y", "z"], "b": [-1, 1, 2]})
     load = _load_stage("src", src, tmp_path)
     filt = _filter_stage("f", "src", "def should_include(row): return row['b'] > 0")
-    filt = filt.model_copy(update={"limit": 2})
     workflow = Workflow(stages=[load, filt])
     run_dir = tmp_path / "runs" / "trace_filter_limit"
 
     outputs = run_subset(
         workflow, injected_outputs={},
         stage_ids=["src", "f"], run_dir=run_dir, repo_root=tmp_path,
+        params=RunParameters(limits={"f": 2}),
     )
 
     # src row 2 ('z') would also have passed the predicate — it is outside the

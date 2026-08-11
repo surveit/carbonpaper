@@ -83,10 +83,10 @@ def _score(pdir: Path) -> dict:
 
 def test_patch_changes_only_named_field_and_preserves_the_rest(tmp_path: Path) -> None:
     pdir = _seed(tmp_path)
-    result = stage_edit.patch_stage_spec(pdir, "score", json.dumps({"limit": 100}))
+    result = stage_edit.patch_stage_spec(pdir, "score", json.dumps({"cache": False}))
     assert result.ok is True
     after = _score(pdir)
-    assert after["limit"] == 100
+    assert after["cache"] is False
     # everything not named in the patch is preserved verbatim — the fidelity guarantee
     assert after["description"] == "Score rows"
     assert after["llm"]["model"] == "claude-sonnet-4-6"
@@ -105,10 +105,10 @@ def test_patch_deep_merges_nested_object(tmp_path: Path) -> None:
 
 def test_patch_null_deletes_a_field(tmp_path: Path) -> None:
     pdir = _seed(tmp_path)
-    stage_edit.patch_stage_spec(pdir, "score", json.dumps({"limit": 100}))
-    result = stage_edit.patch_stage_spec(pdir, "score", json.dumps({"limit": None}))
+    stage_edit.patch_stage_spec(pdir, "score", json.dumps({"review": {"rationale": "spot-check"}}))
+    result = stage_edit.patch_stage_spec(pdir, "score", json.dumps({"review": None}))
     assert result.ok is True
-    assert "limit" not in _score(pdir)
+    assert "review" not in _score(pdir)
 
 
 def test_patch_invalid_result_writes_nothing(tmp_path: Path) -> None:
@@ -128,7 +128,7 @@ def test_patch_cannot_change_id(tmp_path: Path) -> None:
 def test_patch_missing_stage_raises(tmp_path: Path) -> None:
     pdir = _seed(tmp_path)
     with pytest.raises(FileNotFoundError):
-        stage_edit.patch_stage_spec(pdir, "ghost", json.dumps({"limit": 1}))
+        stage_edit.patch_stage_spec(pdir, "ghost", json.dumps({"cache": False}))
 
 
 def test_edit_that_breaks_the_workflow_graph_is_rejected(tmp_path: Path) -> None:
@@ -294,4 +294,4 @@ def test_edit_stage_on_an_empty_workflow_raises(tmp_path: Path) -> None:
 def test_patch_stage_on_an_empty_workflow_raises(tmp_path: Path) -> None:
     pdir = _seed_empty(tmp_path)
     with pytest.raises(FileNotFoundError):
-        stage_edit.patch_stage_spec(pdir, "load", json.dumps({"limit": 1}))
+        stage_edit.patch_stage_spec(pdir, "load", json.dumps({"cache": False}))

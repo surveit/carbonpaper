@@ -1,5 +1,5 @@
-"""`limit` caps the rows a stage READS: the handler is never handed the rest, and a
-multi-input stage cuts the same window off every input."""
+"""A run's `limit` caps the rows a stage READS: the handler is never handed the rest, and
+a multi-input stage cuts the same window off every input."""
 from __future__ import annotations
 
 import pandas as pd
@@ -7,6 +7,7 @@ import pytest
 
 from app.core.errors import SubsetRunError
 from app.models import parse_stage, Stage, Workflow
+from app.models.run_parameters import RunParameters
 from app.runtime.executor import run_subset
 from app.runtime.lineage import concatenated_inputs_lineage
 
@@ -39,11 +40,13 @@ def _load_stage(sid: str, df: pd.DataFrame, tmp_path) -> Stage:
     })
 
 
-def _run(stages: list[Stage], tmp_path, name: str) -> dict[str, pd.DataFrame]:
+def _run(
+    stages: list[Stage], tmp_path, name: str, limits: dict[str, int] | None = None,
+) -> dict[str, pd.DataFrame]:
     return run_subset(
         Workflow(stages=stages), injected_outputs={},
         stage_ids=[s.id for s in stages], run_dir=tmp_path / "runs" / name,
-        repo_root=tmp_path,
+        repo_root=tmp_path, params=RunParameters(limits=limits or {}),
     )
 
 
@@ -59,10 +62,9 @@ def test_limit_caps_the_rows_a_frame_handler_is_given(tmp_path):
             "produces": _SEEN_SCHEMA["columns"],
         },
         "function": {"kind": "inline", "code": _COUNT_THE_FRAME},
-        "limit": 3,
     })
 
-    outputs = _run([load, counted], tmp_path, "frame_cap")
+    outputs = _run([load, counted], tmp_path, "frame_cap", limits={"counted": 3})
 
     assert list(outputs["counted"]["seen"]) == [3, 3, 3]
     assert list(outputs["counted"]["val"]) == [0, 1, 2]
@@ -79,10 +81,9 @@ def test_limit_keeps_the_row_mapper_off_the_rows_past_the_cap(tmp_path):
             "reads": [{"input": "src", "columns": _NAME_VAL_SCHEMA["columns"]}],
         },
         "function": {"kind": "inline", "code": _REFUSE_PAST_ROW_2},
-        "limit": 3,
     })
 
-    outputs = _run([load, mapper], tmp_path, "mapper_cap")
+    outputs = _run([load, mapper], tmp_path, "mapper_cap", limits={"m": 3})
 
     assert list(outputs["m"]["val"]) == [0, 1, 2]
 
@@ -112,10 +113,10 @@ def test_a_limit_cuts_the_same_window_off_every_input_of_a_union(tmp_path):
         "inputs": [{"id": "left", "schema": _NAME_VAL_SCHEMA},
                    {"id": "right", "schema": _NAME_VAL_SCHEMA}],
         "signature": {"form": "replaces", "produces": _NAME_VAL_SCHEMA["columns"]},
-        "union": {}, "limit": 2,
+        "union": {},
     })
 
-    outputs = _run([left, right, union], tmp_path, "union_cap")
+    outputs = _run([left, right, union], tmp_path, "union_cap", limits={"u": 2})
 
     # Two rows from EACH input, not the first two rows of the concatenation.
     assert list(outputs["u"]["name"]) == ["l0", "l1", "r10", "r11"]

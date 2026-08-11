@@ -242,7 +242,7 @@ def test_mcp_stage_tools_report_an_unknown_stage_id_as_issues(tmp_path, monkeypa
     removed = server.remove_stage(project_id=project_id, stage_id="ghost")
     assert removed["ok"] is False and any("ghost" in i for i in removed["issues"])
 
-    edited = server.edit_stage(project_id=project_id, stage_id="ghost", changes_json='{"limit": 1}')
+    edited = server.edit_stage(project_id=project_id, stage_id="ghost", changes_json='{"cache": false}')
     assert edited["ok"] is False and any("ghost" in i for i in edited["issues"])
 
 
