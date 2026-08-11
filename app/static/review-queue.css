@@ -37,7 +37,10 @@
    never moves under the pointer mid-review. */
 .queue-pager .btn:disabled { opacity: 0.5; cursor: default; }
 
-.queue-items { display: flex; flex-direction: column; gap: 14px; }
+/* Recording a decision grows its card BELOW the button just pressed. Scroll
+   anchoring reads that as the page shifting and scrolls to compensate, which is
+   the one thing that still moved the controls out from under the pointer. */
+.queue-items { display: flex; flex-direction: column; gap: 14px; overflow-anchor: none; }
 /* Companion to the display rule above: without it, `display: flex` beats the UA's
    [hidden] rule and the reviewer-name gate renders the rows anyway. */
 .queue-items[hidden] { display: none; }
@@ -50,9 +53,12 @@
 .queue-card.decided-approve { border-left-color: var(--good-bd); }
 .queue-card.decided-modify  { border-left-color: var(--warn-bd); }
 
+/* The chip is taller than the text beside it, so the height is reserved whether
+   or not a decision has been recorded — otherwise recording one grows the header
+   and pushes down everything the reviewer is looking at. */
 .queue-card header {
     display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
-    font-size: 13px; color: var(--muted); margin-bottom: 8px;
+    font-size: 13px; color: var(--muted); margin-bottom: 8px; min-height: 23px;
 }
 .queue-card header .row-position { font-size: 13px; font-weight: 600; }
 .queue-card header .lineage-link { font-size: 13px; margin-left: auto; }
@@ -174,10 +180,6 @@
     padding-left: 0; border-color: transparent; background: none;
     color: var(--muted); resize: none;
 }
-/* A frozen box holding nothing has nothing to show, and its prompt to write one
-   belongs to a card still asking for input — both come back with the box the
-   moment "Change my review" lifts the freeze. */
-.review-notes:has(textarea[readonly]:placeholder-shown) { display: none; }
 
 .queue-card .queued-row { margin: 8px 0; }
 
