@@ -1,8 +1,7 @@
-"""The project lifecycle service. A project's identity is the Project record (see
-below), not its examples/<name>/ working-copy directory — a directory may exist
-without a name clash. project_meta degrades TRUTHFULLY when no record can be
-found or built — it never invents a model or a creation date. import_project is
-import-if-absent: a name clash raises rather than replacing.
+"""The project lifecycle service. A project IS its id, which is also the name of its
+directory under the projects root; `name` is a label two projects may share, so
+nothing is ever refused for repeating one. project_meta degrades TRUTHFULLY when no
+record is found — it never invents a model, a creation date, or a label.
 """
 
 from __future__ import annotations
@@ -15,7 +14,9 @@ from typing import Any, ClassVar, Sequence
 
 from pydantic import BaseModel, field_validator
 
-from app.core.errors import ProjectExistsError, RunManifestNotJson
+from app.core.errors import RunManifestNotJson
+from app.core.persistence import PersistedModel, PersistenceScope
+from app.core.timestamp_ids import mint_timestamp_id
 from app.models import (
     SchemaLibrary,
     Stage,
@@ -30,7 +31,6 @@ from app.models.run_manifest import (
     records_a_test_run,
 )
 from app.services.versioning import ReviewGuide
-from app.core.persistence import PersistedModel, PersistenceScope
 from app.core.run_status import RunStatus
 from app.services import data_model, stage_edit, versioning, workspace
 from app.services.loader import (
@@ -42,7 +42,7 @@ from app.services.errors import WorkflowLoadError
 from app.services.stage_edit import AddStagesResult, EditStageResult
 
 
-# ─── Project identity record ───────────────────────────────────────────────────
+# ─── Project identity record ──────────────────────────────────────────────────
 
 
 class Project(PersistedModel):
@@ -51,10 +51,33 @@ class Project(PersistedModel):
     collection: ClassVar[str] = "project"
     SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
 
+    # Optional, and it must stay so: a project created before labels existed carries no
+    # `name` key, and PersistedModel.load is a strict extra="forbid" validate, so a
+    # required field would orphan every one of them. None is not a missing label — it
+    # means the id is still the only name the project has, which `label` reports.
+    name: str | None = None
     title: str | None = None
     model: str | None = None
     source: str | None = None
     authored_at: str | None = None
+
+    def label(self) -> str:
+        return self.name or self.id
+
+
+def mint_project_id() -> str:
+    return mint_timestamp_id()
+
+
+def find_projects_by_name(name: str) -> list[Project]:
+    """Plural because a label is not unique — reads every record, so never call it in a loop."""
+    return [record for record in Project.list() if record.label() == name]
+
+
+def describe_project(project_id: str) -> str:
+    """The label to SHOW for an id, falling back to the id — never a guessed name."""
+    record = Project.load_or_none(project_id)
+    return project_id if record is None else record.label()
 
 
 # ─── Status models ────────────────────────────────────────────────────────────
@@ -77,6 +100,13 @@ class RunsSummary(BaseModel):
     n: int
     awaiting_review: int
     latest_status: str | None
+
+
+class ProjectListing(BaseModel):
+    """What a tool hands back: `id` is what every other call takes, `name` is only shown."""
+
+    id: str
+    name: str
 
 
 class ProjectMeta(BaseModel):
@@ -178,12 +208,16 @@ def _runs_summary(pdir: Path) -> RunsSummary:
 
 def project_meta(pdir: Path) -> ProjectMeta:
     pdir = Path(pdir)
-    name = pdir.name
-    record = Project.load_or_none(name)
+    # The directory's name IS the project id. Older projects were created under a slug
+    # of their title and so read as one; a project created since carries a minted id.
+    project_id = pdir.name
+    record = Project.load_or_none(project_id)
     if record is None:
-        return ProjectMeta(name=name, title=None, created_at=None, model=None, source=None)
+        # No record: the id is the only name this project has, and it is not invented.
+        return ProjectMeta(name=project_id, title=None, created_at=None,
+                           model=None, source=None)
     return ProjectMeta(
-        name=name,
+        name=record.label(),
         title=record.title,
         created_at=record.authored_at,
         model=record.model,
@@ -263,28 +297,28 @@ def create_project(
     model: str = "sonnet",
     source: str,
 ) -> str:
-    """A bare directory of the same name is not a clash — it is written into."""
-    safe_name = sanitize_project_name(name)
+    """Returns the project ID, which is not the name: the name is a label and may repeat."""
+    label = sanitize_project_name(name)
     doc = document.strip()
     if not doc:
         raise ValueError("The methodology document is empty.")
-    if Project.exists(safe_name):
-        raise ProjectExistsError(
-            f"project '{safe_name}' already exists — choose a different name."
-        )
-    project_dir = workspace.projects_dir() / safe_name
-    if (project_dir / "document.md").is_file():
-        raise ProjectExistsError(
-            f"{safe_name}/document.md already exists — choose a different name."
-        )
+    # The id is minted, so it cannot collide and there is nothing to refuse. A second
+    # project called `venezuela_lda_lobbying` is a legitimate thing to want — the
+    # first one's directory, versions and cached rows are addressed by id, not by
+    # what either of them is called.
+    project_id = mint_project_id()
+    project_dir = workspace.projects_dir() / project_id
     project_dir.mkdir(parents=True, exist_ok=True)
     (project_dir / "document.md").write_text(doc, encoding="utf-8")
     created_at = datetime.now().isoformat(timespec="seconds")
     write_project_meta(
-        project_dir, name=safe_name, title=None, created_at=created_at, model=model, source=source,
+        project_dir, name=label, title=None, created_at=created_at, model=model, source=source,
     )
-    Project(id=safe_name, title=None, model=model, source=source, authored_at=created_at).save()
-    return safe_name
+    Project(
+        id=project_id, name=label, title=None,
+        model=model, source=source, authored_at=created_at,
+    ).save()
+    return project_id
 
 
 def project_exists(project_id: str) -> bool:
@@ -295,7 +329,16 @@ def project_exists(project_id: str) -> bool:
 
 
 def list_projects() -> list[str]:
+    """Ids, not names — a name identifies nothing, and two projects may share one."""
     return sorted(record.id for record in Project.list())
+
+
+def list_project_listings() -> list[ProjectListing]:
+    """Both halves: the id to pass back, and the label to say it by."""
+    return [
+        ProjectListing(id=record.id, name=record.label())
+        for record in sorted(Project.list(), key=lambda r: r.id)
+    ]
 
 
 def describe_workflow(name: str) -> dict[str, Any]:
@@ -442,20 +485,21 @@ class WorkflowFile(BaseModel):
         return self.model_dump_json(indent=2, exclude_none=True)
 
 
-def export_project(name: str) -> WorkflowFile:
-    pdir = workspace.resolve_project_dir(name)
+def export_project(project_id: str) -> WorkflowFile:
+    """The bundle carries the LABEL, not the id: importing it elsewhere mints a fresh id."""
+    pdir = workspace.resolve_project_dir(project_id)
     meta = project_meta(pdir)
     if meta.model is None or meta.source is None:
         raise ValueError(
-            f"project '{name}' has no recorded model/source in project.json — cannot export"
+            f"project '{project_id}' has no recorded model/source — cannot export"
         )
     document_path = project_state(pdir).document_path
     if document_path is None:
-        raise ValueError(f"project '{name}' has no document — cannot export")
+        raise ValueError(f"project '{project_id}' has no document — cannot export")
     library = data_model.load_data_model(pdir) or SchemaLibrary(schemas=[])
     stages = [c.stage for c in load_compiled_dir(pdir / "compiled") if c.stage is not None]
     return WorkflowFile(
-        name=name,
+        name=meta.name,
         document=Path(document_path).read_text(encoding="utf-8"),
         model=meta.model,
         source=meta.source,
@@ -467,9 +511,10 @@ def export_project(name: str) -> WorkflowFile:
 def import_project(
     wf: WorkflowFile, *, name: str | None = None,
 ) -> str:
-    target = sanitize_project_name(name or wf.name)
-    pdir = workspace.resolve_project_dir(target)
-    create_project(target, wf.document, model=wf.model, source=wf.source)
+    """Returns the project ID. Importing the same bundle twice makes two projects, not a clash."""
+    label = sanitize_project_name(name or wf.name)
+    project_id = create_project(label, wf.document, model=wf.model, source=wf.source)
+    pdir = workspace.resolve_project_dir(project_id)
     data_model.write_data_model(pdir, wf.data_model)
     for i, stage in enumerate(wf.stages, start=1):
         stage_path = pdir / "compiled" / f"{i:02d}_{stage.id}.json"
@@ -477,6 +522,6 @@ def import_project(
         write_stage(stage_path, stage)
     if wf.stages:
         save_working_copy_as_version(
-            pdir, message=f"Imported '{target}'", reviewer="import"
+            pdir, message=f"Imported '{label}'", reviewer="import"
         )
-    return target
+    return project_id

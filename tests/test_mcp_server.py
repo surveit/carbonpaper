@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 
 from app.models import parse_stage, StageDraft
 from app.services import workspace
+from app.services.project import ProjectListing
 
 HEADERS = {
     "Accept": "application/json, text/event-stream",
@@ -80,8 +81,11 @@ def test_create_project_tool_and_status(tmp_path, monkeypatch):
 
     workspace.set_projects_dir(tmp_path)
     created = server.create_project(name="Money Trail", document="Follow the filings.")
-    assert created["project_id"] == "money_trail"
-    status = server.get_project_status(project_id="money_trail")
+    project_id = created["project_id"]
+    # The id is minted, not slugged from the title — the title is only the label.
+    assert project_id != "money_trail"
+    assert server.list_projects() == [ProjectListing(id=project_id, name="money_trail")]
+    status = server.get_project_status(project_id=project_id)
     assert status["has_document"] is True
 
 
@@ -89,7 +93,7 @@ def test_generate_data_model_kicks_the_live_turn(tmp_path, monkeypatch):
     from app.mcp import server
 
     workspace.set_projects_dir(tmp_path)
-    server.create_project(name="probe", document="doc text")
+    project_id = server.create_project(name="probe", document="doc text")["project_id"]
 
     seen: dict[str, object] = {}
 
@@ -99,7 +103,7 @@ def test_generate_data_model_kicks_the_live_turn(tmp_path, monkeypatch):
         return "sess123"
 
     monkeypatch.setattr(server.generation, "start_generation", fake_start)
-    out = asyncio.run(server.generate_data_model(project_id="probe"))
+    out = asyncio.run(server.generate_data_model(project_id=project_id))
     assert out["watch"] == "/chat/sess123"
     assert seen["document"] == "doc text"
 
@@ -165,10 +169,11 @@ def test_run_stage_tests_reports_summary_diffs_and_coverage(tmp_path, monkeypatc
     from app.mcp import server
 
     workspace.set_projects_dir(tmp_path)
-    pdir = tmp_path / "trail"
+    project_id = "trail"
+    pdir = tmp_path / project_id
     _write_compiled_workflow(pdir)
 
-    report = server.run_stage_tests(project_id="trail")
+    report = server.run_stage_tests(project_id=project_id)
     assert set(report) == {"summary", "stages", "untested_stages"}
     assert report["untested_stages"] == ["untested"]
     assert report["summary"]["failed"] == 1
@@ -182,10 +187,11 @@ def test_run_stage_tests_scopes_to_one_stage(tmp_path, monkeypatch):
     from app.mcp import server
 
     workspace.set_projects_dir(tmp_path)
-    pdir = tmp_path / "trail"
+    project_id = "trail"
+    pdir = tmp_path / project_id
     _write_compiled_workflow(pdir)
 
-    report = server.run_stage_tests(project_id="trail", stage_id="double")
+    report = server.run_stage_tests(project_id=project_id, stage_id="double")
     assert report["summary"]["tests_total"] == 2
 
 
@@ -193,7 +199,7 @@ def test_generate_stage_tests_kicks_the_generation_turn(tmp_path, monkeypatch):
     from app.mcp import server
 
     workspace.set_projects_dir(tmp_path)
-    server.create_project(name="probe", document="doc text")
+    project_id = server.create_project(name="probe", document="doc text")["project_id"]
 
     seen: dict[str, object] = {}
 
@@ -202,7 +208,7 @@ def test_generate_stage_tests_kicks_the_generation_turn(tmp_path, monkeypatch):
         return "sess-tests"
 
     monkeypatch.setattr(server.generation, "start_stage_test_generation", fake_start)
-    out = asyncio.run(server.generate_stage_tests(project_id="probe", stage_id="double"))
+    out = asyncio.run(server.generate_stage_tests(project_id=project_id, stage_id="double"))
     assert out["status"] == "started"
     assert out["watch"] == "/chat/sess-tests"
     assert seen["stage_id"] == "double"
@@ -212,15 +218,16 @@ def test_mcp_remove_stage_returns_ok_and_issues(tmp_path, monkeypatch):
     from app.mcp import server
 
     workspace.set_projects_dir(tmp_path)
-    pdir = tmp_path / "trail"
+    project_id = "trail"
+    pdir = tmp_path / project_id
     _write_compiled_workflow(pdir)
 
-    removed = server.remove_stage(project_id="trail", stage_id="untested")
+    removed = server.remove_stage(project_id=project_id, stage_id="untested")
     assert removed == {"ok": True, "issues": []}
     assert not (pdir / "compiled" / "untested.json").exists()
 
     # `double` still inputs from `load`, so removing `load` is refused with issues.
-    refused = server.remove_stage(project_id="trail", stage_id="load")
+    refused = server.remove_stage(project_id=project_id, stage_id="load")
     assert refused["ok"] is False and refused["issues"]
     assert (pdir / "compiled" / "load.json").exists()
 
@@ -229,12 +236,13 @@ def test_mcp_stage_tools_report_an_unknown_stage_id_as_issues(tmp_path, monkeypa
     from app.mcp import server
 
     workspace.set_projects_dir(tmp_path)
-    _write_compiled_workflow(tmp_path / "trail")
+    project_id = "trail"
+    _write_compiled_workflow(tmp_path / project_id)
 
-    removed = server.remove_stage(project_id="trail", stage_id="ghost")
+    removed = server.remove_stage(project_id=project_id, stage_id="ghost")
     assert removed["ok"] is False and any("ghost" in i for i in removed["issues"])
 
-    edited = server.edit_stage(project_id="trail", stage_id="ghost", changes_json='{"limit": 1}')
+    edited = server.edit_stage(project_id=project_id, stage_id="ghost", changes_json='{"limit": 1}')
     assert edited["ok"] is False and any("ghost" in i for i in edited["issues"])
 
 
@@ -242,12 +250,13 @@ def test_mcp_add_stage_reports_an_unloadable_workflow_as_issues(tmp_path, monkey
     from app.mcp import server
 
     workspace.set_projects_dir(tmp_path)
-    compiled = tmp_path / "trail" / "compiled"
+    project_id = "trail"
+    compiled = tmp_path / project_id / "compiled"
     compiled.mkdir(parents=True)
     (compiled / "broken.json").write_text('{"id": "broken", "type": "not_a_real_type"}', encoding="utf-8")
 
     added = server.add_stage(
-        project_id="trail",
+        project_id=project_id,
         stages=[_LOAD_STAGE],
     )
     assert added["ok"] is False and added["issues"]
@@ -270,23 +279,25 @@ def test_mcp_add_stage_creates_the_first_stage_of_a_new_project(tmp_path, monkey
     from app.mcp import server
 
     workspace.set_projects_dir(tmp_path)
-    server.create_project(name="trail", document="Follow the filings.")
+    project_id = server.create_project(
+        name="trail", document="Follow the filings.")["project_id"]
 
     added = server.add_stage(
-        project_id="trail",
+        project_id=project_id,
         stages=[_LOAD_STAGE],
     )
     assert added == {
         "ok": True, "issues": [], "added": ["load"], "failed": [], "skipped": [],
     }, "a clean draft warns about nothing"
-    assert server.describe_workflow(project_id="trail")["stages"][0]["id"] == "load"
+    assert server.describe_workflow(project_id=project_id)["stages"][0]["id"] == "load"
 
 
 def test_mcp_add_stage_drops_server_owned_fields_and_names_them(tmp_path, monkeypatch):
     from app.mcp import server
 
     workspace.set_projects_dir(tmp_path)
-    server.create_project(name="trail", document="Follow the filings.")
+    project_id = server.create_project(
+        name="trail", document="Follow the filings.")["project_id"]
     echoed = {
         "id": "load", "description": "Load", "type": "input_data",
         "connector": {"kind": "file"},
@@ -298,7 +309,7 @@ def test_mcp_add_stage_drops_server_owned_fields_and_names_them(tmp_path, monkey
     }
 
     _content, added = asyncio.run(
-        server.mcp.call_tool("add_stage", {"project_id": "trail", "stages": [echoed]})
+        server.mcp.call_tool("add_stage", {"project_id": project_id, "stages": [echoed]})
     )
 
     assert added["ok"] is True and added["added"] == ["load"]
@@ -307,7 +318,7 @@ def test_mcp_add_stage_drops_server_owned_fields_and_names_them(tmp_path, monkey
     assert "tests" in named and "source" in named
     assert "eval" not in named and "review" not in named, "names only what was sent"
     assert "generate_stage_tests" in explanation
-    stored = json.loads(server.read_stage(project_id="trail", stage_id="load"))
+    stored = json.loads(server.read_stage(project_id=project_id, stage_id="load"))
     assert not {"tests", "source"} & set(stored)
 
 
@@ -315,14 +326,15 @@ def test_mcp_add_stage_still_refuses_an_unknown_field(tmp_path, monkeypatch):
     from app.mcp import server
 
     workspace.set_projects_dir(tmp_path)
-    server.create_project(name="trail", document="Follow the filings.")
+    project_id = server.create_project(
+        name="trail", document="Follow the filings.")["project_id"]
     typo = {
         "id": "load", "description": "Load", "type": "input_data",
         "connector": {"kind": "file"}, "nonsense": 1,
     }
 
     with pytest.raises(Exception, match="nonsense"):
-        asyncio.run(server.mcp.call_tool("add_stage", {"project_id": "trail", "stages": [typo]}))
+        asyncio.run(server.mcp.call_tool("add_stage", {"project_id": project_id, "stages": [typo]}))
 
 
 _UNADDITIVE_LLM_STAGE = {
@@ -344,10 +356,11 @@ def test_mcp_add_stage_refuses_an_invalid_stage_on_the_issues_channel(tmp_path, 
     from app.mcp import server
 
     workspace.set_projects_dir(tmp_path)
-    _write_compiled_workflow(tmp_path / "trail")
+    project_id = "trail"
+    _write_compiled_workflow(tmp_path / project_id)
 
     _content, refused = asyncio.run(
-        server.mcp.call_tool("add_stage", {"project_id": "trail", "stages": [_UNADDITIVE_LLM_STAGE]})
+        server.mcp.call_tool("add_stage", {"project_id": project_id, "stages": [_UNADDITIVE_LLM_STAGE]})
     )
 
     assert refused["ok"] is False
@@ -369,10 +382,11 @@ def test_mcp_save_version_snapshots_the_working_copy_unpublished(tmp_path, monke
     from app.services import versioning
 
     workspace.set_projects_dir(tmp_path)
-    pdir = tmp_path / "trail"
+    project_id = "trail"
+    pdir = tmp_path / project_id
     _write_compiled_workflow(pdir)
 
-    saved = server.save_version(project_id="trail", message="first cut")
+    saved = server.save_version(project_id=project_id, message="first cut")
     assert saved["ok"] is True and saved["issues"] == []
 
     [version] = versioning.list_versions(pdir)
@@ -388,11 +402,12 @@ def test_mcp_save_version_omitting_the_parent_records_none(tmp_path, monkeypatch
     from app.services import versioning
 
     workspace.set_projects_dir(tmp_path)
-    pdir = tmp_path / "trail"
+    project_id = "trail"
+    pdir = tmp_path / project_id
     _write_compiled_workflow(pdir)
 
-    server.save_version(project_id="trail", message="first cut")
-    second = server.save_version(project_id="trail", message="second cut")
+    server.save_version(project_id=project_id, message="first cut")
+    second = server.save_version(project_id=project_id, message="second cut")
 
     assert second["ok"] is True
     assert versioning.load_version(pdir, second["version_id"]).parent_version is None
@@ -403,12 +418,13 @@ def test_mcp_save_version_records_the_caller_supplied_parent(tmp_path, monkeypat
     from app.services import versioning
 
     workspace.set_projects_dir(tmp_path)
-    pdir = tmp_path / "trail"
+    project_id = "trail"
+    pdir = tmp_path / project_id
     _write_compiled_workflow(pdir)
 
-    first = server.save_version(project_id="trail", message="first cut")
+    first = server.save_version(project_id=project_id, message="first cut")
     second = server.save_version(
-        project_id="trail", message="second cut", parent_version=first["version_id"])
+        project_id=project_id, message="second cut", parent_version=first["version_id"])
 
     assert second["version_id"] != first["version_id"]
     saved = versioning.load_version(pdir, second["version_id"])
@@ -420,14 +436,15 @@ def test_mcp_save_version_refuses_a_parent_that_does_not_exist(tmp_path, monkeyp
     from app.services import versioning
 
     workspace.set_projects_dir(tmp_path)
-    pdir = tmp_path / "trail"
+    project_id = "trail"
+    pdir = tmp_path / project_id
     _write_compiled_workflow(pdir)
 
-    server.save_version(project_id="trail", message="first cut")
+    server.save_version(project_id=project_id, message="first cut")
     before = [v.version_id for v in versioning.list_versions(pdir)]
 
     refused = server.save_version(
-        project_id="trail", message="second cut", parent_version="20200101T000000")
+        project_id=project_id, message="second cut", parent_version="20200101T000000")
 
     assert refused["ok"] is False
     assert "20200101T000000" in " ".join(refused["issues"])
@@ -440,12 +457,13 @@ def test_mcp_save_version_refuses_an_unloadable_working_copy(tmp_path, monkeypat
     from app.services import versioning
 
     workspace.set_projects_dir(tmp_path)
-    pdir = tmp_path / "trail"
+    project_id = "trail"
+    pdir = tmp_path / project_id
     (pdir / "compiled").mkdir(parents=True)
     (pdir / "compiled" / "broken.json").write_text(
         '{"id": "broken", "type": "not_a_real_type"}', encoding="utf-8")
 
-    refused = server.save_version(project_id="trail", message="doomed")
+    refused = server.save_version(project_id=project_id, message="doomed")
     assert refused["ok"] is False and refused["issues"]
     assert "version_id" not in refused
     assert versioning.list_versions(pdir) == []
@@ -460,13 +478,16 @@ def test_mcp_save_version_refuses_to_invent_a_project(tmp_path, monkeypatch):
     assert list(tmp_path.iterdir()) == []
 
 
-def _saved_version(tmp_path, monkeypatch) -> str:
+def _saved_version(tmp_path, monkeypatch) -> tuple[str, str]:
     from app.mcp import server
     from app.services import workspace
 
     workspace.set_projects_dir(tmp_path)
-    _write_compiled_workflow(tmp_path / "trail")
-    return server.save_version(project_id="trail", message="first cut")["version_id"]
+    project_id = server.create_project(
+        name="trail", document="Follow the filings.")["project_id"]
+    _write_compiled_workflow(tmp_path / project_id)
+    saved = server.save_version(project_id=project_id, message="first cut")
+    return project_id, saved["version_id"]
 
 
 _GUIDE = {
@@ -482,8 +503,8 @@ _GUIDE = {
 def test_mcp_review_guide_round_trips_through_the_tool_boundary(tmp_path, monkeypatch):
     from app.mcp import server
 
-    version_id = _saved_version(tmp_path, monkeypatch)
-    args = {"project_id": "trail", "version_id": version_id}
+    project_id, version_id = _saved_version(tmp_path, monkeypatch)
+    args = {"project_id": project_id, "version_id": version_id}
     _content, before = asyncio.run(server.mcp.call_tool("read_review_guide", args))
     assert before["result"] is None
 
@@ -497,8 +518,8 @@ def test_mcp_review_guide_round_trips_through_the_tool_boundary(tmp_path, monkey
 def test_mcp_write_review_guide_refuses_a_mismatch_naming_the_stage(tmp_path, monkeypatch):
     from app.mcp import server
 
-    version_id = _saved_version(tmp_path, monkeypatch)
-    args = {"project_id": "trail", "version_id": version_id}
+    project_id, version_id = _saved_version(tmp_path, monkeypatch)
+    args = {"project_id": project_id, "version_id": version_id}
     partial = {"steps": _GUIDE["steps"], "unnarrated": ["load"]}  # 'untested' accounted for nowhere
 
     with pytest.raises(Exception, match="untested"):

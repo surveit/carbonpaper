@@ -36,13 +36,13 @@ def _make_load_stage(path):
 
 def _workflow_page(tmp_path, name, stages):
     _point_examples_dir_at(tmp_path)
-    create_project(name, "A workflow.", source="test")
-    compiled = tmp_path / name / "compiled"
+    project_id = create_project(name, "A workflow.", source="test")
+    compiled = tmp_path / project_id / "compiled"
     compiled.mkdir()
     for position, stage in enumerate(stages, start=1):
         (compiled / f"{position:02d}_{stage['id']}.json").write_text(
             json.dumps(stage), encoding="utf-8")
-    resp = client.get(f"/project/{name}/workflow")
+    resp = client.get(f"/project/{project_id}/workflow")
     assert resp.status_code == 200, resp.text
     return resp.text
 

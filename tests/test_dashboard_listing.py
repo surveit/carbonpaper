@@ -33,7 +33,8 @@ def _make_document_only_project(root, name="fresh"):
 def test_document_only_project_is_listed(examples_root):
     _make_document_only_project(examples_root)
     [card] = list_projects()
-    assert card.name == "fresh"
+    assert card.id == "fresh"
+    assert card.label == "fresh"
     assert card.has_document is True
     assert card.has_workflow is False
     assert card.has_schemas is False

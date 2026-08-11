@@ -13,10 +13,11 @@ from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from pydantic import ValidationError
 
-from app.core.errors import ProjectExistsError
 from app.seeds.seed import discover_workflow_files
 from app.services import project
-from app.services.project import WorkflowFile, export_project, import_project
+from app.services.project import (
+    WorkflowFile, describe_project, export_project, import_project,
+)
 from app.web.config import templates
 
 router = APIRouter()
@@ -64,33 +65,35 @@ async def admin_index(request: Request, msg: str | None = None):
 @router.post("/admin/load/{bundle}")
 async def load_bundle(bundle: str):
     wf = WorkflowFile.model_validate_json(_bundle_path(bundle).read_text(encoding="utf-8"))
-    try:
-        name = import_project(wf)
-    except ProjectExistsError:
-        existing_name = project.sanitize_project_name(wf.name)
-        return _redirect_to_admin(f"'{existing_name}' already exists — not loaded.")
-    return _redirect_to_admin(f"Loaded '{name}' from bundle '{bundle}'.")
+    # Loading a bundle twice makes a SECOND project rather than being refused: a label
+    # is not unique, so there is nothing to clash with and nothing to overwrite. The
+    # message names the id, which is the only half that tells the two of them apart.
+    project_id = import_project(wf)
+    return _redirect_to_admin(
+        f"Loaded '{describe_project(project_id)}' ({project_id}) from bundle '{bundle}'."
+    )
 
 
 @router.get("/admin/export/{project_name}")
 async def download_project(project_name: str) -> Response:
-    name = _known_project(project_name)
+    project_id = _known_project(project_name)
     return Response(
-        content=export_project(name).to_json(),
+        content=export_project(project_id).to_json(),
         media_type="application/json",
-        headers={"content-disposition": f'attachment; filename="{name}.json"'},
+        headers={
+            "content-disposition":
+                f'attachment; filename="{describe_project(project_id)}.json"'
+        },
     )
 
 
 @router.post("/admin/import")
 async def upload_project(file: UploadFile = File(...)):
     wf = _parse_workflow_file(await file.read(), file.filename)
-    try:
-        name = import_project(wf)
-    except ProjectExistsError:
-        existing_name = project.sanitize_project_name(wf.name)
-        return _redirect_to_admin(f"'{existing_name}' already exists — not imported.")
-    return _redirect_to_admin(f"Imported '{name}' from an uploaded file.")
+    project_id = import_project(wf)
+    return _redirect_to_admin(
+        f"Imported '{describe_project(project_id)}' ({project_id}) from an uploaded file."
+    )
 
 
 def _parse_workflow_file(raw: bytes, filename: str | None) -> WorkflowFile:

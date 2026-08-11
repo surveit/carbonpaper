@@ -71,7 +71,9 @@ def _seed(examples: Path, name: str) -> Path:
     (compiled / "01_load.json").write_text(
         json.dumps(_stage("load", "Load rows", "input_data")), encoding="utf-8"
     )
-    Project(id=name).save()
+    # The directory's name IS the id — this seeds one directly rather than through
+    # create_project, so the record must carry the same id the directory does.
+    Project(id=name, name=name).save()
     return examples / name
 
 
@@ -85,7 +87,7 @@ def _tool(specs: list[BoundToolSpec], fn_name: str) -> Callable:
 def test_read_tools_report_workspace(examples_root: Path) -> None:
     _seed(examples_root, "alpha")
     tools = _tools("alpha")
-    assert _tool(tools, "list_projects")() == ["alpha"]
+    assert [(p.id, p.name) for p in _tool(tools, "list_projects")()] == [("alpha", "alpha")]
     assert _tool(tools, "get_current_project")() == "alpha"
     assert _tool(tools, "describe_workflow")("alpha")["name"] == "alpha"
     assert '"id": "load"' in _tool(tools, "read_stage")("alpha", "load")

@@ -13,7 +13,8 @@ from pydantic import BaseModel
 from app.core.agent.tool_spec import ToolSpec
 from app.models.review_guide import ReviewGuideDraft
 from app.services import project as project_service, run as run_service, workspace
-from app.services.project import Project, WorkflowFile, import_project
+from app.services.project import WorkflowFile, import_project
+from app.services.project import find_projects_by_name
 
 _FIXTURE_STEM = "tutorial_lobbying_triage"
 _DATA_DIR = Path(__file__).resolve().parents[1] / "seeds" / "data"
@@ -44,16 +45,15 @@ class TutorialProject(BaseModel):
 
 
 def seed_tutorial_project(ctx: TutorialContext) -> TutorialProject:
-    name = _tutorial_project_name()
+    name = _find_reusable_tour_project()
     # A second tour reuses what the first seeded: the workspace is not the tour's to
     # fill up, and re-importing would discard whatever the reader did to it.
-    if not _is_on_disk(name):
+    if name is None:
         for path in (_FIXTURE, _GUIDE, *_CSV_BY_STAGE_ID.values()):
             if not path.is_file():
                 raise FileNotFoundError(f"the tutorial fixture needs {path}, which is missing")
         name = import_project(
             WorkflowFile.model_validate_json(_FIXTURE.read_text(encoding="utf-8")),
-            name=name,
         )
     version_id = run_service.resolve_version(name, None)
     project_service.write_review_guide(
@@ -75,22 +75,18 @@ def seed_tutorial_project(ctx: TutorialContext) -> TutorialProject:
     )
 
 
-def _tutorial_project_name() -> str:
-    """`base` unless a DELETED project still holds it; then base_2, base_3 …"""
-    base = project_service.sanitize_project_name(_FIXTURE_STEM)
-    candidate, suffix = base, 1
-    # delete_project rmtree's the directory and leaves the store record, and
-    # create_project refuses a name whose record exists, so a deleted project's name is
-    # reusable by neither route. Stepping over it is a workaround for #544.
-    while not _is_on_disk(candidate) and Project.exists(candidate):
-        suffix += 1
-        candidate = f"{base}_{suffix}"
-    return candidate
+def _find_reusable_tour_project() -> str | None:
+    """Newest first, so a reader who toured twice lands on the tour they last used."""
+    label = project_service.sanitize_project_name(_FIXTURE_STEM)
+    seeded = sorted(
+        (record.id for record in find_projects_by_name(label)), reverse=True
+    )
+    return next((project_id for project_id in seeded if _is_on_disk(project_id)), None)
 
 
-def _is_on_disk(name: str) -> bool:
-    """A project the workspace can run — not merely a name the store knows."""
-    return (workspace.projects_dir() / name / "document.md").is_file()
+def _is_on_disk(project_id: str) -> bool:
+    """A project the workspace can run — not merely an id the store knows."""
+    return (workspace.projects_dir() / project_id / "document.md").is_file()
 
 
 CREATE_TUTORIAL_PROJECT = ToolSpec(

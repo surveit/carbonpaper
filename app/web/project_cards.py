@@ -47,7 +47,9 @@ _RUN_STATUS_HEADLINES = {
 
 @dataclass(frozen=True)
 class ProjectCard:
-    name: str
+    # `id` addresses the project (it is its directory); `label` is only ever shown.
+    id: str
+    label: str
     has_document: bool
     has_workflow: bool
     has_schemas: bool
