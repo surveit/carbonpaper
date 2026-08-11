@@ -1237,11 +1237,21 @@ def test_a_decided_cards_note_is_frozen_and_an_undecided_ones_is_not(tmp_path, m
     stylesheet = _stylesheet()
     assert re.search(r"\.review-notes textarea\[readonly\]\s*\{[^}]*border-color:\s*transparent",
                      stylesheet)
-    # A frozen box the reviewer left empty takes its label down with it, rather
-    # than labelling a void; both return when `readonly` comes off.
-    assert re.search(
-        r"\.review-notes:has\(textarea\[readonly\]:placeholder-shown\)\s*\{[^}]*display:\s*none",
-        stylesheet)
+    # Freezing must not COLLAPSE the box. A decided card keeps the space an
+    # undecided one gave it, because a decision that reflowed the page under the
+    # reviewer is the defect this page was rebuilt to remove.
+    assert not re.search(r"\.review-notes[^{]*:placeholder-shown[^{]*\{[^}]*display:\s*none",
+                         stylesheet)
+
+
+def test_recording_a_decision_cannot_move_the_page_under_the_reviewer():
+    stylesheet = _stylesheet()
+
+    # Measured: without these two, submitting moved the controls 39px and scrolled
+    # the page 42px. A decided card grows BELOW the button just pressed, and both
+    # rules are what keep that growth from reaching anything above it.
+    assert re.search(r"\.queue-items\s*\{[^}]*overflow-anchor:\s*none", stylesheet)
+    assert re.search(r"\.queue-card header\s*\{[^}]*min-height:", stylesheet)
 
 
 def test_freezing_the_note_cannot_change_what_a_decision_posts(tmp_path, monkeypatch):
