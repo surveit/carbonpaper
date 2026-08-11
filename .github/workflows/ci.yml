@@ -6,6 +6,16 @@ on:
   pull_request:
 
 jobs:
+  # ruff, import-linter and mypy share one job because each takes seconds and
+  # Actions bills every job a whole minute: as separate jobs they cost three
+  # billed minutes for well under one minute of work, and each pays its own
+  # checkout and `uv sync` again. `if: always()` on the later steps keeps the
+  # split diagnosis a separate job used to give — a ruff failure still reports
+  # whether mypy also failed, rather than masking it.
+  #
+  # The job keeps the name `lint` because branch protection requires status
+  # checks by name; renaming it would leave master waiting on a context that no
+  # longer reports.
   lint:
     runs-on: ubuntu-latest
     steps:
@@ -22,27 +32,19 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: uv sync --frozen
-      - run: uv run --frozen ruff check .
-      # Architecture boundaries: contracts live in pyproject [tool.importlinter].
-      # PYTHONPATH=. lets grimp import the `app` package (run from source, not installed).
-      - run: PYTHONPATH=. uv run --frozen lint-imports
-
-  typecheck:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v9.0.0
-        with:
-          enable-cache: true
-          cache-dependency-glob: uv.lock
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
       # The dev group pulls in the runtime dependencies too, so mypy sees real
       # signatures (fastapi, claude-agent-sdk, ...).
       - run: uv sync --frozen
-      - run: uv run --frozen mypy
+      - id: ruff
+        run: uv run --frozen ruff check .
+      # Architecture boundaries: contracts live in pyproject [tool.importlinter].
+      # PYTHONPATH=. lets grimp import the `app` package (run from source, not installed).
+      - id: imports
+        if: always() && steps.ruff.conclusion != 'skipped'
+        run: PYTHONPATH=. uv run --frozen lint-imports
+      - id: types
+        if: always() && steps.ruff.conclusion != 'skipped'
+        run: uv run --frozen mypy
 
   test:
     runs-on: ubuntu-latest
@@ -61,9 +63,14 @@ jobs:
       # (test_roldugin.py etc.) that hit real APIs. tests/ and app/ are named
       # explicitly (not bare `pytest`) so the root probes stay uncollected while
       # the colocated app/**/_arch_tests/ architecture checks DO run in CI.
+      # -n: the suite is idle-bound, not CPU-bound — ~37s of a ~46s serial run is
+      # tests sleeping a whole second to let the second-resolution run/version id
+      # clock tick over (tests/test_run_cache_e2e.py and friends). Workers overlap
+      # those waits, so this cuts wall clock well past what the core count alone
+      # would suggest. Measured locally: 53s -> 22s, 2960 passed either way.
       - run: |
           if [ -d tests ]; then
-            uv run --frozen python -m pytest tests/ app/
+            uv run --frozen python -m pytest tests/ app/ -n 4
           else
             echo "::warning::No tests/ directory on this ref — pytest was NOT run."
           fi
