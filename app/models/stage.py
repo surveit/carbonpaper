@@ -6,7 +6,7 @@ a class. The per-type models live in `app/models/stages/`.
 """
 from __future__ import annotations
 
-from typing import Annotated, Any, Optional, Union
+from typing import Annotated, Any, Optional, Union, get_args
 
 from pydantic import (
     ConfigDict,
@@ -72,6 +72,21 @@ Stage = Annotated[
 ]
 
 _STAGE_ADAPTER: TypeAdapter[Stage] = TypeAdapter(Stage)
+
+_MODEL_BY_TYPE: dict[StageType, type[StageBase]] = {
+    get_args(member.model_fields["type"].annotation)[0]: member
+    for member in get_args(get_args(Stage)[0])
+}
+
+
+def max_declared_inputs(stage_type: StageType) -> int | None:
+    """The `inputs` cap this type's model enforces; None where it takes any number."""
+    caps = [
+        cap
+        for constraint in _MODEL_BY_TYPE[stage_type].model_fields["inputs"].metadata
+        if (cap := getattr(constraint, "max_length", None)) is not None
+    ]
+    return caps[0] if caps else None
 
 
 def parse_stage(spec: Any) -> Stage:

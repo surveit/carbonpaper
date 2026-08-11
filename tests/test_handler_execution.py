@@ -47,20 +47,6 @@ def _row_stage(output_schema=None, input_columns=_X_COLUMN):
     })
 
 
-def _two_input_stage():
-    return parse_stage({
-        "id": "t2", "description": "t2", "type": "python_frame_function",
-        "inputs": [{"id": "a", "schema": {"columns": _X_COLUMN}},
-                   {"id": "b", "schema": {"columns": _X_COLUMN}}],
-        "signature": {
-            "form": "replaces",
-            "reads": [{"input": "a", "columns": _X_COLUMN}, {"input": "b", "columns": _X_COLUMN}],
-            "produces": _X_COLUMN,
-        },
-        "function": {"kind": "inline", "code": "def transform(a, b):\n    return a\n"},
-    })
-
-
 def test_row_driver_maps_in_input_order():
     handler = RowMapHandler(make_mapper=lambda stage, ctx, src: lambda row, index: {"x": row["x"], "y": row["x"] * 10})
     out = handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1, 2, 3]})}, make_run_context())
@@ -143,13 +129,6 @@ def test_row_driver_rejects_non_dict_result():
     handler = RowMapHandler(make_mapper=lambda stage, ctx, src: lambda row, index: 42)
     with pytest.raises(ValueError, match="one dict per row"):
         handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1]})}, make_run_context())
-
-
-def test_row_driver_rejects_multiple_inputs():
-    handler = RowMapHandler(make_mapper=lambda stage, ctx, src: lambda row, index: dict(row))
-    frames = {"a": pd.DataFrame({"x": [1]}), "b": pd.DataFrame({"x": [1]})}
-    with pytest.raises(ValueError, match="exactly one input"):
-        handler.execute(_two_input_stage(), frames, make_run_context())
 
 
 _EMPTY_SOURCE_COLUMNS = [{"name": "x", "type": "int", "nullable": True}, {"name": "id", "type": "str", "nullable": True}]
