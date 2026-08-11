@@ -58,12 +58,17 @@
 <div class="load-issues">{{ dataset_error }}</div>
 {% else %}
 {% if dataset_capped %}<p class="lede">Showing the first {{ dataset_cap }} rows.</p>{% endif %}
+<p class="muted">Click any clipped cell to expand it (hover shows the full value).</p>
+{# The row-holding cells are never truncated: this page offers no download, so a
+   cut value would be unreachable. Clipping is CSS, and static/cell-expand.js
+   takes the click. #}
 <div class="table-scroll">
-<table class="table">
-  <thead><tr>{% for c in dataset_columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+<table class="data-preview">
+  <thead><tr><th class="row-num">#</th>{% for c in dataset_columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
   <tbody>
     {% for row in dataset_rows %}
-    <tr>{% for c in dataset_columns %}<td>{{ row.get(c, '') }}</td>{% endfor %}</tr>
+    <tr><td class="row-num muted">{{ loop.index }}</td>
+      {%- for c in dataset_columns %}{% set v = row.get(c, '') | string %}{% if v[:4] == 'http' %}<td class="cell-url"><a href="{{ v }}" target="_blank" rel="noopener">{{ v }}</a></td>{% else %}<td class="cell-clip" title="{{ v }}">{{ v }}</td>{% endif %}{% endfor %}</tr>
     {% endfor %}
   </tbody>
 </table>

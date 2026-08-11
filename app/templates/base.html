@@ -23,6 +23,9 @@
     <main>
         {% block content %}{% endblock %}
     </main>
+    {# Delegated from the document, so any page holding a data-preview table gets
+       click-to-expand without wiring it. #}
+    <script src="/static/cell-expand.js"></script>
     <script src="/static/friendly-time.js"></script>
     <script src="/static/breadcrumbs.js"></script>
 </body>
