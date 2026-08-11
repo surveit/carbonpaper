@@ -69,7 +69,6 @@ def test_a_testable_type_naming_no_stage_test_class_is_refused_at_definition():
     ids=lambda cls: cls.__name__,
 )
 def test_a_per_row_test_supplying_no_inputs_is_rejected(test_class):
-    """No input at all is a malformed test, not a test with zero rows in."""
     with pytest.raises(ValidationError, match="at least 1 item"):
         test_class(name="no_inputs", inputs={}, expected=None)
 
@@ -95,7 +94,6 @@ def test_a_row_function_test_states_exactly_one_expected_row():
 
 
 def test_a_filter_test_states_the_kept_row_the_drop_or_a_refusal():
-    """A filter keeps its row or drops it; it can neither fan out nor invent a row."""
     kept = FilterRowsStageTest(
         name="kept", inputs={"load": [{"a": 1}]}, expected=[{"a": 1}]
     )
@@ -172,8 +170,7 @@ def test_duplicate_test_names_rejected():
 
 
 def test_stage_without_tests_serializes_without_tests_key():
-    # stage_to_spec_dict feeds the node belief hash: adding the field must not
-    # change the dump of any existing stage, or all approvals drop to stale.
+    # stage_to_spec_dict feeds the node belief hash: a new field must not change an existing dump.
     spec = stage_to_spec_dict(parse_stage(_row_stage()))
     assert "tests" not in spec
 
@@ -269,8 +266,6 @@ _TWO_COLUMN_SCHEMA = {"columns": [
 
 
 def test_stage_tests_model_rejects_a_row_omitting_a_column_another_row_supplies():
-    """Every row states the whole schema. A nullable column is an explicit None,
-    not an absent key — the union of a case's rows is not enough."""
     bad = {
         "name": "second_row_drops_label",
         "inputs": {"load": [{"amount": 1.0, "label": "a"}, {"amount": 2.0}]},
@@ -302,7 +297,6 @@ _KEYED_SCHEMA = {
 
 
 def test_stage_tests_model_rejects_an_input_frame_repeating_a_whole_row():
-    """The runner rejects exact duplicate input rows for every stage type."""
     bad = {
         "name": "the_same_row_twice",
         "inputs": {"load": [{"amount": 1.0, "label": "a"},
@@ -317,8 +311,6 @@ def test_stage_tests_model_rejects_an_input_frame_repeating_a_whole_row():
 
 
 def test_stage_tests_model_accepts_repeated_expected_rows_under_no_key():
-    """A run applies the duplicate-row rule to a stage's INPUTS only."""
-    # So a step that legitimately emits identical rows can still state that.
     suite = _frame_suite_model(_TWO_COLUMN_SCHEMA).model_validate({"tests": [{
         "name": "one_row_in_two_identical_rows_out",
         "inputs": {"load": [{"amount": 1.0, "label": "a"}]},
@@ -335,8 +327,6 @@ _FAILURE_TEST = {
 
 
 def test_row_function_failure_case_needs_no_expected_row():
-    """One row in and no rows out is the point of a failure case, so the
-    one-row-in-one-row-out rule does not apply to it."""
     suite = _row_suite_model().model_validate({"tests": [_FAILURE_TEST]})
     assert suite.tests[0].expected is None
 
@@ -358,16 +348,13 @@ def test_failure_case_input_rows_are_still_schema_checked():
 
 
 def test_a_test_omitting_expected_is_rejected():
-    """`expected` has no default: a case that forgets it must be rejected outright
-    rather than read as the claim that the step fails."""
+    """Omitted must not be read as `expected: null`, the claim that the step fails."""
     missing = {k: v for k, v in _GOOD_TEST.items() if k != "expected"}
     with pytest.raises(ValidationError, match="expected"):
         _row_suite_model().model_validate({"tests": [missing]})
 
 
 def test_zero_expected_rows_is_not_a_failure_claim():
-    """[] and null are different claims: a frame step legitimately returns no rows,
-    and that case must survive validation as a rows case."""
     suite = _frame_suite_model(_IN_SCHEMA).model_validate({"tests": [{
         "name": "filters_everything_out",
         "inputs": {"load": [{"amount": 1.0}]},
@@ -377,8 +364,7 @@ def test_zero_expected_rows_is_not_a_failure_claim():
 
 
 def test_failure_case_survives_the_spec_dict_round_trip():
-    """The dump drops None-valued keys, so `expected: null` has to be written out
-    explicitly — dropped, it would reload as a case that forgot the field."""
+    """The dump drops None-valued keys, so `expected: null` must be written out explicitly."""
     stage = parse_stage(_row_stage([_FAILURE_TEST]))
     spec = stage_to_spec_dict(stage)
     assert spec["tests"][0]["expected"] is None
@@ -397,8 +383,6 @@ def test_rows_case_wire_form_is_unchanged():
 
 
 def test_stage_tests_model_accepts_an_empty_input_case():
-    """No rows means no columns to disagree with — an "empty upstream" case is
-    legitimate, and the runtime builds its frame from the declared schema."""
     model = build_stage_tests_model(
         PythonFrameFunctionStageTest,
         {"load": TableSchema.model_validate(_IN_SCHEMA)},

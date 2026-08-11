@@ -82,7 +82,6 @@ def test_new_run_page_offers_the_checkbox(project):
 
 
 def test_the_checkbox_sits_inside_the_advanced_fold(project):
-    """Folded, not removed: a <details> submits its content whether open or shut."""
     body = client.get("/project/demo/runs/new").text
     # The fold is closed on load (no `open`), and the checkbox is inside it — so the
     # default run reuses cached rows without the reader deciding anything.

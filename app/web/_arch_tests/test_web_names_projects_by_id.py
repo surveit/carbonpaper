@@ -41,7 +41,6 @@ def test_no_new_module_names_a_project_directory() -> None:
 
 
 def test_a_listed_module_never_grows_more_project_directory_names() -> None:
-    """A file on the list may not add offenders — the ratchet turns one way only."""
     offenders = _find_offenders()
     grown = [
         f"{module}: {_count_for(offenders, module)} now, {budget} when the rule was written"
@@ -55,7 +54,6 @@ def test_a_listed_module_never_grows_more_project_directory_names() -> None:
 
 
 def test_the_ratchet_carries_no_stale_entry() -> None:
-    """A module that stopped offending must leave the list, so the rule keeps its teeth."""
     offenders = _find_offenders()
     stale = [
         f"{module} (listed at {budget}, now {_count_for(offenders, module)})"

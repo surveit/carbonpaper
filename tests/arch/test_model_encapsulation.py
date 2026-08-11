@@ -28,20 +28,7 @@ def _accept_any_receiver(receiver: str | None) -> bool:
 
 @dataclass(frozen=True)
 class ProtectedAttributeRule:
-    """One row: a model attribute that only its owning package may reach into.
-
-    `receiver_is_relevant` filters which attribute accesses count: given the
-    identifier of the object the attribute was read off (`schema.columns` ->
-    "schema"; `df.columns` -> "df"; None when the receiver has no simple
-    identifier, e.g. a chained call result), it decides whether this access
-    is plausibly about the attribute this row protects rather than a
-    same-named but unrelated one. The default accepts every receiver.
-
-    `exempt_paths` names other files that declare their OWN attribute of the
-    same name and are that attribute's sole owner (see the `stages` row's
-    `Draft` entry below) — out of scope for this row entirely, the same way
-    the owner package itself is.
-    """
+    """`receiver_is_relevant` takes the receiver identifier (`schema.columns` -> "schema"), or None."""
 
     attribute: str
     owner: Path
@@ -96,10 +83,6 @@ _RULES: tuple[ProtectedAttributeRule, ...] = (
 
 
 def find_source_files(root: Path, rule: ProtectedAttributeRule) -> list[Path]:
-    """The .py files under `root` this rule governs: the shared arch-test
-    scope (see arch.scope for the base tests/_arch_tests/__pycache__
-    exemptions), minus every file under this rule's own owner package or one
-    of its exempt paths."""
     skip = (rule.owner, *rule.exempt_paths)
     files = [
         path
@@ -117,9 +100,6 @@ def find_source_files(root: Path, rule: ProtectedAttributeRule) -> list[Path]:
 def find_mutation_sites(
     tree: ast.Module, attribute: str, receiver_is_relevant: Callable[[str | None], bool] = _accept_any_receiver,
 ) -> list[tuple[int, str]]:
-    """(lineno, description) for every mutation of `attribute` in `tree`: an
-    assignment/augmented-assignment/del targeting it (or a subscript of it),
-    or a call to one of the list-mutating methods on it."""
     offenders: list[tuple[int, str]] = []
     for node in ast.walk(tree):
         if isinstance(node, (ast.Assign, ast.AugAssign)):
@@ -147,9 +127,6 @@ def find_mutation_sites(
 
 
 def _identify_receiver(value: ast.expr) -> str | None:
-    """The identifier `value` (the object side of an attribute access) reads
-    as: a bare name's own id, or a chained attribute's own (rightmost) attr.
-    None for anything else (e.g. a call result) — nothing to filter on."""
     if isinstance(value, ast.Name):
         return value.id
     if isinstance(value, ast.Attribute):
@@ -170,8 +147,6 @@ def _is_protected_access(
 def _describe_mutated_protected_target(
     target: ast.expr, attribute: str, receiver_is_relevant: Callable[[str | None], bool],
 ) -> str | None:
-    """Describe `target` if it IS the protected attribute or a subscript of
-    it — the two shapes an assignment/del target can take to mutate it."""
     if _is_protected_access(target, attribute, receiver_is_relevant):
         return f".{attribute}"
     if isinstance(target, ast.Subscript) and _is_protected_access(target.value, attribute, receiver_is_relevant):

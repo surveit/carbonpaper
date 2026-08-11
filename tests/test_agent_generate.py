@@ -17,16 +17,6 @@ class _Point(BaseModel):
 
 
 class _FakeEngine:
-    """Stands in for the SDK engine: stream_turn simulates the agent calling
-    submit_answer with each scripted arg-dict. A rejected call raises (as the real tool
-    would), which we swallow — the real agent would read the error and retry, which the
-    next scripted call represents.
-
-    `events` are emitted verbatim, in the real engine's event shapes, BEFORE the scripted
-    handler calls run. That separation is the point: the model can emit tool_call events
-    that never reach the handler, which is the failure this file's diagnostics tests
-    reproduce."""
-
     def __init__(
         self,
         submit: Callable[..., str],
@@ -69,8 +59,6 @@ _CI_ADVERTISED_TOOLS = [
 
 
 def _init_event(*, tools: list[str], text: str | None = None) -> dict[str, Any]:
-    """One CLI init as the ENGINE emits it: kind "system", subtype "init", and the
-    inventory as the JSON body of `text` (matching sdk_engine.stream_turn)."""
     body = json.dumps({
         "type": "system", "subtype": "init",
         "session_id": "bb443cc3-9afb-4dfb-844d-581e04d61679",
@@ -132,10 +120,8 @@ def _failure_message(monkeypatch: Any, fake_factory: Callable[[Any], _FakeEngine
 def test_failure_separates_calls_the_model_emitted_from_calls_the_handler_saw(
     monkeypatch: Any,
 ) -> None:
-    # #208's ambiguity: the handler counter alone cannot tell "the model never called the
-    # tool" from "the model called it and something upstream rejected the call". Here the
-    # model emits two tool_calls that never reach the handler, and the tool_result carries
-    # the upstream rejection — the message must show both numbers and that text.
+    # #208: a handler counter alone cannot tell "never called" from "called and
+    # rejected upstream".
     message = _failure_message(
         monkeypatch,
         lambda agent: _FakeEngine(
@@ -157,9 +143,6 @@ def test_failure_separates_calls_the_model_emitted_from_calls_the_handler_saw(
 def test_failure_shows_a_tool_less_completion_as_zero_calls_and_no_results(
     monkeypatch: Any,
 ) -> None:
-    # The other hypothesis: the model really never called the tool and answered in prose.
-    # The prose itself is the run log's job (llm_text); what the message must show is that
-    # nothing was emitted, stated as absent rather than left to be inferred.
     message = _failure_message(
         monkeypatch,
         lambda agent: _FakeEngine(
@@ -218,9 +201,8 @@ def test_failure_still_reports_the_handler_issues_of_a_rejected_submission(
 def test_failure_reads_the_tool_inventory_out_of_the_engines_init_event(
     monkeypatch: Any,
 ) -> None:
-    # The init arrives as kind "system" / subtype "init" with the inventory inside its
-    # JSON `text`; a reader that matches on kind "init" sees nothing and reports every
-    # failure as "no init". Fixture shape and tool list come from the real CI artifact.
+    # The init arrives as kind "system" / subtype "init", so matching on kind
+    # "init" sees nothing.
     message = _failure_message(
         monkeypatch,
         lambda agent: _FakeEngine(
@@ -238,8 +220,7 @@ def test_failure_reads_the_tool_inventory_out_of_the_engines_init_event(
 
 
 def test_failure_reports_a_tool_the_init_never_advertised(monkeypatch: Any) -> None:
-    # advertised=NO is the environment fault (the MCP server did not connect), which
-    # must not read the same as the model declining to call a tool it was offered.
+    # advertised=NO is an environment fault, not the model declining a tool it was offered.
     message = _failure_message(
         monkeypatch,
         lambda agent: _FakeEngine(
@@ -252,8 +233,7 @@ def test_failure_reports_a_tool_the_init_never_advertised(monkeypatch: Any) -> N
 def test_failure_counts_an_unreadable_init_instead_of_reading_it_as_absent(
     monkeypatch: Any,
 ) -> None:
-    # This code runs while rendering an error, so a truncated body must not raise —
-    # and must not silently become "no init", the reading that hides an init entirely.
+    # This code runs while rendering an error, so a truncated body must not raise.
     message = _failure_message(
         monkeypatch,
         lambda agent: _FakeEngine(
@@ -277,8 +257,7 @@ def test_failure_reports_no_init_when_the_engine_emitted_none(monkeypatch: Any) 
 def test_run_forwards_events_to_an_opted_in_caller_and_still_summarizes(
     monkeypatch: Any,
 ) -> None:
-    # The runtime's detail log opts in via `emit`; collecting for the failure summary
-    # must not consume the stream out from under it.
+    # Collecting for the failure summary must not consume the stream out from under `emit`.
     agent = _agent()
     forwarded: list[dict[str, Any]] = []
     events = [_tool_call_event(x=1), {"kind": "tool_result", "content": "rejected"}]
@@ -292,8 +271,7 @@ def test_run_forwards_events_to_an_opted_in_caller_and_still_summarizes(
 
 
 def test_answer_exposes_the_captured_submission_for_live_driving(monkeypatch: Any) -> None:
-    # When driven as a live turn, the caller reads `answer` after the turn (rather than
-    # run()'s return value) to persist the result.
+    # A live-turn caller reads `answer` after the turn rather than run()'s return value.
     agent = _agent()
     assert agent.answer is None
     agent.submit_answer(x=3, y=4)

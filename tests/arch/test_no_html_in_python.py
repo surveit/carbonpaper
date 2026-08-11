@@ -35,16 +35,14 @@ _HTML_TAG_PATTERN = re.compile(
 #   an edit above one of them re-anchors the entry rather than adding one.
 _ALLOWLIST: frozenset[tuple[str, int]] = frozenset(
     {
-        ("app/web/diagrams.py", 187),
-        ("app/web/diagrams.py", 342),
-        ("app/web/diagrams.py", 344),
+        ("app/web/diagrams.py", 164),
+        ("app/web/diagrams.py", 306),
+        ("app/web/diagrams.py", 308),
     }
 )
 
 
 def find_html_tag_string_literals(tree: ast.Module) -> list[tuple[int, str]]:
-    """(lineno, text) for every string-literal constant in `tree` whose text
-    contains one of the banned HTML-document tags (see module docstring)."""
     offenders: list[tuple[int, str]] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Constant) and isinstance(node.value, str):
@@ -91,9 +89,6 @@ def test_find_html_tag_string_literals_flags_tag_inside_an_fstring() -> None:
 
 
 def test_find_html_tag_string_literals_ignores_a_longer_word_sharing_the_tag_prefix() -> None:
-    """"<list of stage dicts as above>" is a compiler-prompt placeholder, not
-    a `<li>` tag — a naive substring search for "<li" would wrongly flag it,
-    which is exactly the false positive this rule must avoid."""
     tree = ast.parse('x = "<list of stage dicts as above>"\n')
     assert find_html_tag_string_literals(tree) == []
 

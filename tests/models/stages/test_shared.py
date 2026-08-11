@@ -34,9 +34,6 @@ def test_find_predicate_column_issues_clean_when_all_columns_resolve():
 
 
 def test_find_predicate_column_issues_turns_a_parse_failure_into_one_issue_not_raised():
-    """A predicate outside the closed grammar (app.core.predicate.parse_predicate
-    raises PredicateError) must not propagate — it becomes exactly one issue
-    string, so the caller always gets a list back."""
     issues = find_predicate_column_issues("`weird name` == 1", stage_id="s", field="queue.filter", cols={"a"})
     assert len(issues) == 1
     assert "s" in issues[0]

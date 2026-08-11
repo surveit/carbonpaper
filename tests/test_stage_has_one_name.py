@@ -50,7 +50,6 @@ def test_a_description_over_the_ceiling_is_refused():
 
 
 def test_both_ceilings_bind_the_draft_an_authoring_client_submits():
-    """StageDraft shares StageCommon, so an agent cannot slip past either ceiling."""
     with pytest.raises(ValidationError):
         StageDraft.model_validate(_spec(id="a" * (STAGE_ID_MAX_CHARS + 1)))
     with pytest.raises(ValidationError):
@@ -60,7 +59,6 @@ def test_both_ceilings_bind_the_draft_an_authoring_client_submits():
 
 
 def test_the_authoring_schema_carries_both_ceilings_to_the_agent():
-    """The agent reads StageDraft's JSON schema; the limits must reach it there."""
     properties = StageDraft.model_json_schema()["properties"]
     assert properties["id"]["maxLength"] == STAGE_ID_MAX_CHARS
     assert properties["description"]["maxLength"] == STAGE_DESCRIPTION_MAX_CHARS
@@ -81,7 +79,6 @@ def test_a_description_holding_a_quote_cannot_end_the_mermaid_tooltip_early():
 
 
 def test_a_manifest_written_before_the_rename_still_loads():
-    """Old manifests carry a per-stage `name` this model dropped; they must still parse."""
     legacy = """{"run_id": "r1", "started_at": "2026-01-01T00:00:00",
       "project": "demo", "workflow_version": null, "limit_overrides": {},
       "offset_overrides": {}, "run_bindings": {}, "input_bindings": {},

@@ -33,8 +33,6 @@ _ROW_NUMBER_FIELD = "row_number"
 
 # ── batch_size == 1: per-row path (grain + order + independence by construction) ──
 def make_llm_row_mapper(stage: Stage, ctx: RunContext, src: pd.DataFrame) -> RowMapper:
-    """Build this execution's per-row mapper. A row's reply depends only on that
-    row, so neither the input frame nor a row's position in it is read."""
     llm = narrow_stage(stage, LLMTransformStage).llm
 
     # What the model is asked for: the columns the signature adds, compiled to the
@@ -43,10 +41,6 @@ def make_llm_row_mapper(stage: Stage, ctx: RunContext, src: pd.DataFrame) -> Row
     reply_model = reply_spec.to_pydantic_model(f"{stage.id}_reply")
 
     def map_row(row: Row, index: int) -> Row:
-        # Per-attempt usage lands here (success or failure); the row carries its
-        # summed usage out under ROW_USAGE_KEY for the driver to aggregate. Like
-        # ROW_ERROR_KEY, it is an undeclared column and the output trim
-        # drops it, so it never reaches stage output.
         usages: list[LlmUsage] = []
         try:
             reply = call_llm(stage.id, llm, row, reply_model=reply_model, usage_out=usages)
@@ -72,24 +66,6 @@ def run_llm_batches(
     parallelism: int,
     positions: list[int],
 ) -> list[Row]:
-    """Compute one raw output row per input row, in chunks of
-    `stage.llm.batch_size` rows per model call, rejoining each reply to its row
-    by the batch-local row number.
-
-    Grain and order are held the same way the per-row path holds them — one
-    pre-allocated result slot per input row, filled by input index, assembled in
-    order — and then VERIFIED (no empty slot, count unchanged) before returning,
-    so a bug in the batch path surfaces as a loud runtime error rather than a
-    silently mis-grained result. Per-row independence is NOT preserved: the model
-    sees a whole chunk in one prompt (see module docstring).
-
-    Which rows arrive here is not this function's business: the handler shape
-    resolves the stage-result cache and hands over only the rows that must be
-    computed, with `positions` naming where each one sits in the stage's input —
-    the only thing that lets a chunk's run-log detail be attributed to the rows
-    it actually covers. The rows returned carry their internal columns,
-    un-stripped and untrimmed — the shape assembles the stage's output frame
-    from them."""
     llm = narrow_stage(stage, LLMTransformStage).llm
     assert stage.resolve_output_schema() is not None and stage.inputs[0].table_schema is not None
     batch_reply_schema = _build_batch_reply_schema(stage)
@@ -122,12 +98,7 @@ def _build_chunk_processor(
     positions: list[int],
     log: RunLog | None,
 ) -> Callable[[int, list[Row]], list[tuple[int, Row]]]:
-    """`_process_chunk` with this chunk's rows bound as the run log's detail sink."""
-    # Bound HERE rather than around the fan-out: a pool worker thread starts with
-    # an empty context, so the binding only reaches the model call if it happens
-    # on the thread that makes it. `positions` maps the chunk's offsets back to
-    # real input rows, so a chunk's prompt is never attributed to rows the cache
-    # already answered and this path skipped.
+    """Bound on the worker thread: a pool thread starts with an empty context, so an outer bind is lost."""
     def process_chunk(start: int, chunk: list[Row]) -> list[tuple[int, Row]]:
         token = bind_detail_sink(
             log, stage.id, tuple(positions[start : start + len(chunk)])
@@ -146,9 +117,6 @@ def _run_chunks(
     parallelism: int,
     process_chunk: Callable[[int, list[Row]], list[tuple[int, Row]]],
 ) -> list[tuple[int, Row]]:
-    """Every computed row, keyed by the position of the row it came from.
-    `_process_chunk` numbers each chunk 0..N-1 for the model; `start` turns that
-    number back into the row's own position."""
     chunks = [
         (start, records[start : start + size]) for start in range(0, len(records), size)
     ]
@@ -165,10 +133,6 @@ def _run_chunks(
 
 
 def _build_batch_reply_schema(stage: Stage) -> type:
-    """The schema one chunk's reply must match: `{"results": [<item>, ...]}` where
-    each item is the batch row number (the rejoin handle) plus the columns the
-    signature adds. The input primary key is NOT part of it — the row number is
-    the only handle."""
     reply_spec = TableSchema(columns=narrow_stage(stage, LLMTransformStage).signature.adds)
     number_column = Column(
         name=_ROW_NUMBER_FIELD, type="int", nullable=False,
@@ -185,16 +149,7 @@ def _build_batch_reply_schema(stage: Stage) -> type:
 def _process_chunk(
     stage: Stage, llm: Any, batch_reply_schema: type, start: int, chunk: list[Row]
 ) -> list[tuple[int, Row]]:
-    """Process one chunk, THROWING THE REPLY BACK TO THE MODEL on any anomaly.
-
-    The reply is valid only if its row numbers are exactly {0..N-1}, each once.
-    Anything else — a missing number, an unknown/out-of-range number, or a
-    duplicate — means the model lost track of the item↔result correspondence, so
-    the whole reply is untrustworthy: we re-call the model (up to max_retries,
-    telling it what was wrong). If it never returns a clean reply, EVERY row in
-    the chunk is failed with ROW_ERROR_KEY — we do not keep the answers that
-    happened to match, because a confused reply's other answers aren't trusted.
-    Nothing is ever fabricated."""
+    """A confused reply fails EVERY row of the chunk: the answers that matched are not trusted."""
     n = len(chunk)
     usages: list[LlmUsage] = []
     problem = "no reply produced"
@@ -220,11 +175,7 @@ def _process_chunk(
 def _validate_batch_reply(
     results: list[dict[str, Any]], n: int
 ) -> tuple[dict[int, dict[str, Any]] | None, str]:
-    """Accept a reply only if its row numbers are EXACTLY {0..N-1}, each once.
-    Return (results-by-number, "") on success, or (None, <what was wrong>) so the
-    caller can throw it back to the model. A count check alone is not enough — a
-    duplicate + a miss can pass on length — so we check the multiset, not the
-    size."""
+    """A count check is not enough: a duplicate plus a miss passes on length, so check the multiset."""
     numbers = [item.get(_ROW_NUMBER_FIELD) for item in results]
     if len(numbers) == n and sorted(x for x in numbers if isinstance(x, int)) == list(range(n)):
         return {int(item[_ROW_NUMBER_FIELD]): item for item in results}, ""
@@ -242,9 +193,7 @@ def _validate_batch_reply(
 def _emit_matched(
     start: int, chunk: list[Row], by_number: dict[int, dict[str, Any]], usages: list[LlmUsage]
 ) -> list[tuple[int, Row]]:
-    """Merge each matched reply onto its row (dropping the row-number handle) and
-    tag ROW_USAGE_KEY. The chunk's usage is attributed to its first row (usage is
-    per-call, not per-row); the rest carry zero so the stage total still sums."""
+    """Usage is per-call: the whole chunk's usage lands on its first row, the rest carry zero."""
     total = LlmUsage.summed(usages)
     out: list[tuple[int, Row]] = []
     for offset, row in enumerate(chunk):
@@ -257,8 +206,6 @@ def _emit_matched(
 def _emit_failed(
     start: int, chunk: list[Row], usages: list[LlmUsage], message: str
 ) -> list[tuple[int, Row]]:
-    """Fail EVERY row of a chunk whose reply never validated — its answers aren't
-    trusted. One slot per row still (grain preserved); each carries ROW_ERROR_KEY."""
     total = LlmUsage.summed(usages)
     return [
         (start + offset,
@@ -268,11 +215,6 @@ def _emit_failed(
 
 
 def _render_batch_task(template: str, chunk: list[Row], correction: str | None = None) -> str:
-    """The user-turn task for a chunk: the stage's per-row `prompt_data_template`
-    rendered for each row (so batched and unbatched calls see the same per-row
-    content), numbered 0..N-1, followed by the copy-the-number contract. The
-    stage's row-invariant `prompt_instructions` are NOT here — they go once into
-    the system prompt. On a retry the correction states what was wrong."""
     items = [f"### item {offset}\n{render_prompt(template, row)}" for offset, row in enumerate(chunk)]
     instruction = (
         f"The {len(chunk)} items above are numbered 0..{len(chunk) - 1}. Return exactly "

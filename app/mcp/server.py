@@ -1,4 +1,4 @@
-"""The CarbonPaper FastMCP server: authoring tools over app.services.
+"""The Carbon Paper FastMCP server: authoring tools over app.services.
 
 Tools resolve project directories only through workspace.resolve_project_dir, which refuses
 names escaping the workspace. Generation tools start LIVE chat turns on the server event
@@ -23,6 +23,7 @@ from app.models import (
     StageDraft,
     find_workflow_compiler_warnings,
 )
+from app.tools import shared
 from app.tools.tool_specs import SAVE_VERSION_FROM_WORKING_COPY, TOOL_SPECS
 from app.mcp.instructions import INSTRUCTIONS
 from app.models.review_guide import ReviewGuideDraft
@@ -32,7 +33,6 @@ from app.services import generation
 from app.services import loader
 from app.services import frame_profile
 from app.services import project as project_service
-from app.services import run as run_service
 from app.services import versioning
 from app.services import workflow_test as workflow_test_service
 from app.services import workspace
@@ -61,7 +61,7 @@ _STAGE_TOOL_ERRORS = (WorkflowLoadError, FileNotFoundError)
 
 
 mcp = FastMCP(
-    name="carbonpaper",
+    name="carbon_paper",
     instructions=INSTRUCTIONS,
     stateless_http=True,
     json_response=True,
@@ -79,9 +79,7 @@ _active_manager: StreamableHTTPSessionManager | None = None
 
 
 class _StreamableHTTPEndpoint:
-    """ASGI endpoint for /mcp: delegates to the CURRENT lifespan's manager. A
-    class instance (not a function) so Starlette's Route treats it as an ASGI
-    app rather than wrapping it as a request-response handler."""
+    """A class instance, not a function, so Starlette's Route treats it as an ASGI app."""
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         manager = _active_manager
@@ -98,11 +96,7 @@ handle_streamable_http = _StreamableHTTPEndpoint()
 
 @asynccontextmanager
 async def run_session_manager() -> AsyncIterator[None]:
-    """Run a fresh MCP session manager for one server lifetime (the app lifespan
-    enters this). Mirrors the manager FastMCP.streamable_http_app() would build
-    from this module's `mcp` settings; `_mcp_server` is the SDK's only handle to
-    the underlying low-level server (no public accessor — pyproject pins the mcp
-    version bound this relies on)."""
+    """`mcp._mcp_server` is private — the SDK has no public accessor; pyproject pins the mcp version."""
     global _active_manager
     manager = StreamableHTTPSessionManager(
         app=mcp._mcp_server,
@@ -186,8 +180,7 @@ def read_data_model(project_id: str) -> list[dict[str, Any]]:
 
 @mcp.tool(description=TOOL_SPECS["describe_workflow"].description)
 def describe_workflow(project_id: str) -> dict[str, Any]:
-    _resolve_existing_project(project_id)
-    return project_service.describe_workflow(project_id)
+    return shared.describe_workflow(project_id)
 
 
 @mcp.tool(description=TOOL_SPECS["read_stage"].description)
@@ -211,11 +204,6 @@ def remove_stage(project_id: str, stage_id: str) -> dict[str, Any]:
 
 
 def catch_stage_edit_refusals(edit: Callable[[], EditStageResult]) -> dict[str, Any]:
-    """Run one stage-mutating service call and convert its expected refusals onto the
-    {ok, issues} channel these instructions document. An expected refusal — a stored
-    workflow that does not load, a stage id that is not in the workflow — comes back as
-    `issues` carrying the failure's own message, not as a tool exception a client is not
-    watching for. Any other exception propagates."""
     try:
         result = edit()
     except _STAGE_TOOL_ERRORS as exc:
@@ -254,20 +242,21 @@ def write_review_guide(
 
 
 @mcp.tool(description=TOOL_SPECS["run_workflow"].description)
-def run_workflow(project_id: str, version_id: str | None = None) -> dict[str, Any]:
-    _resolve_existing_project(project_id)  # loud if the project doesn't exist
+def run_workflow(
+    project_id: str,
+    version_id: str | None = None,
+    limits: dict[str, int] | None = None,
+) -> dict[str, Any]:
     try:
-        run_id = run_service.start_run(project_id, version_id=version_id)
+        return shared.run_workflow(project_id, version_id, limits)
     except _RUN_TOOL_ERRORS as exc:
         return {"ok": False, "error": str(exc)}
-    return {"run_id": run_id, "status": run_service.read_run_status(project_id, run_id)["status"]}
 
 
 @mcp.tool(description=TOOL_SPECS["get_run_status"].description)
 def get_run_status(project_id: str, run_id: str) -> dict[str, Any]:
-    _resolve_existing_project(project_id)  # loud if the project doesn't exist
     try:
-        return run_service.read_run_status(project_id, run_id)
+        return shared.get_run_status(project_id, run_id)
     except _RUN_TOOL_ERRORS as exc:
         return {"ok": False, "error": str(exc)}
 
@@ -307,18 +296,10 @@ def profile_stage_output_data_range(
 
 
 def _resolve_existing_project(project_id: str) -> Path:
-    """Resolve a project id to its directory, raising if no such project exists —
-    a typo'd id is a loud error, never an empty result that reads as a real
-    (empty) project."""
-    pdir = workspace.resolve_project_dir(project_id)
-    if not pdir.is_dir():
-        raise ValueError(f"no project '{project_id}' in the workspace")
-    return pdir
+    return shared.resolve_existing_project(project_id)
 
 
 def _read_document(pdir: Path, project_id: str) -> str:
-    """The project's methodology document — the input every generation grounds on.
-    A missing document is a raised error, never an empty-string fallback."""
     doc_path = pdir / "document.md"
     if not doc_path.is_file():
         raise ValueError(f"project '{project_id}' has no document.md to generate from")

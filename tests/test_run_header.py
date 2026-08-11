@@ -114,8 +114,6 @@ def test_a_completed_run_that_published_nothing_offers_no_action_at_all():
 # ─── Where two states overlap ───────────────────────────────────────────────
 
 def test_a_run_both_halted_and_failed_leads_with_the_review():
-    # Review is the action only a human can take, so it takes the primary and
-    # the re-run drops to a secondary — both stay offered.
     manifest = _manifest(
         "awaiting_review",
         [("load", "ok"), ("review", "awaiting_review"), ("score", "error")],
@@ -220,7 +218,6 @@ def test_the_version_link_reads_as_its_message_not_its_timestamp_id(tmp_path: Pa
 
 
 def test_a_version_carrying_no_message_stays_clickable_under_its_id(tmp_path: Path):
-    """The message is optional, so it cannot be the only link text there is."""
     html = _render_version_line(tmp_path, VersionNote(version_id=VERSION_ID))
 
     assert f'/workflow/version/{VERSION_ID}"><code>{VERSION_ID}</code></a>' in html

@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import time
 from pathlib import Path
 
 import pytest
@@ -48,7 +47,7 @@ def client():
 def test_mcp_endpoint_initializes(client):
     resp = client.post("/mcp", json=INITIALIZE, headers=HEADERS)
     assert resp.status_code == 200
-    assert resp.json()["result"]["serverInfo"]["name"] == "carbonpaper"
+    assert resp.json()["result"]["serverInfo"]["name"] == "carbon_paper"
     assert resp.history == []  # exact-path match — a 307 redirect would break non-following MCP clients
 
 
@@ -130,9 +129,6 @@ _LOAD_STAGE = StageDraft.model_validate({
 
 
 def _write_compiled_workflow(pdir: Path) -> None:
-    """A minimal 3-stage compiled workflow: an input_data source, a
-    python_row_function with one passing + one failing test, and an untested
-    python transform (the coverage gap run_stage_tests should surface)."""
     from app.services.loader import write_stage
 
     compiled = pdir / "compiled"
@@ -230,8 +226,6 @@ def test_mcp_remove_stage_returns_ok_and_issues(tmp_path, monkeypatch):
 
 
 def test_mcp_stage_tools_report_an_unknown_stage_id_as_issues(tmp_path, monkeypatch):
-    """The documented refusal channel is {ok: False, issues}: a stage id that is not
-    in the workflow comes back on it rather than as a tool exception."""
     from app.mcp import server
 
     workspace.set_projects_dir(tmp_path)
@@ -245,8 +239,6 @@ def test_mcp_stage_tools_report_an_unknown_stage_id_as_issues(tmp_path, monkeypa
 
 
 def test_mcp_add_stage_reports_an_unloadable_workflow_as_issues(tmp_path, monkeypatch):
-    """A compiled/ dir that holds a broken stage file still refuses the write — and
-    the refusal reaches the client on the documented {ok: False, issues} channel."""
     from app.mcp import server
 
     workspace.set_projects_dir(tmp_path)
@@ -263,8 +255,6 @@ def test_mcp_add_stage_reports_an_unloadable_workflow_as_issues(tmp_path, monkey
 
 
 def test_mcp_add_stage_refuses_to_invent_a_project(tmp_path, monkeypatch):
-    """add_stage creates a workflow's first stage, never the project itself: a typo'd
-    project id is loud and writes nothing under the workspace."""
     from app.mcp import server
 
     workspace.set_projects_dir(tmp_path)
@@ -293,9 +283,6 @@ def test_mcp_add_stage_creates_the_first_stage_of_a_new_project(tmp_path, monkey
 
 
 def test_mcp_add_stage_drops_server_owned_fields_and_names_them(tmp_path, monkeypatch):
-    """A client that copies a stage out of read_stage echoes back fields only the
-    server writes. Saving it is the useful behavior — but silently is not, so the
-    result names the fields that were dropped."""
     from app.mcp import server
 
     workspace.set_projects_dir(tmp_path)
@@ -325,8 +312,6 @@ def test_mcp_add_stage_drops_server_owned_fields_and_names_them(tmp_path, monkey
 
 
 def test_mcp_add_stage_still_refuses_an_unknown_field(tmp_path, monkeypatch):
-    """Only the four KNOWN server-owned names are accepted-and-dropped. A typo'd
-    field name is still an error — otherwise the drop would swallow real mistakes."""
     from app.mcp import server
 
     workspace.set_projects_dir(tmp_path)
@@ -355,11 +340,7 @@ _UNADDITIVE_LLM_STAGE = {
 
 
 def test_mcp_add_stage_refuses_an_invalid_stage_on_the_issues_channel(tmp_path, monkeypatch):
-    """Driven through the real tool boundary, because that is where the risk is: a
-    stage that breaks a cross-field rule must bind as a StageDraft and be refused by
-    the handler as {ok: False, issues}. If the rule fired during FastMCP's parameter
-    binding instead, the client would get isError=true with raw Pydantic text — off
-    the refusal channel the instructions tell it to watch."""
+    """Through the real boundary: a rule firing during binding gives isError, not issues."""
     from app.mcp import server
 
     workspace.set_projects_dir(tmp_path)
@@ -375,9 +356,6 @@ def test_mcp_add_stage_refuses_an_invalid_stage_on_the_issues_channel(tmp_path, 
 
 
 def test_add_stage_input_schema_omits_the_server_owned_fields(tmp_path, monkeypatch):
-    """The stage shape ships in the tool's inputSchema, which FastMCP generates
-    itself from StageDraft — so the fields no authoring client writes must be absent
-    from the document the client is handed, not only from the model."""
     from app.mcp import server
 
     [tool] = [t for t in asyncio.run(server.mcp.list_tools()) if t.name == "add_stage"]
@@ -387,9 +365,6 @@ def test_add_stage_input_schema_omits_the_server_owned_fields(tmp_path, monkeypa
 
 
 def test_mcp_save_version_snapshots_the_working_copy_unpublished(tmp_path, monkeypatch):
-    """save_version freezes the CURRENT compiled workflow into a version the agent
-    owns end-to-end — but publishing stays human-only, so the snapshot is born
-    unpublished."""
     from app.mcp import server
     from app.services import versioning
 
@@ -409,10 +384,6 @@ def test_mcp_save_version_snapshots_the_working_copy_unpublished(tmp_path, monke
 
 
 def test_mcp_save_version_omitting_the_parent_records_none(tmp_path, monkeypatch):
-    """A caller that names no parent gets none recorded — even with a version already
-    stored. The agent authors against the working copy, so the newest stored version
-    is not evidence of what this snapshot descended from; asserting it would fabricate
-    the lineage the version exists to document."""
     from app.mcp import server
     from app.services import versioning
 
@@ -421,7 +392,6 @@ def test_mcp_save_version_omitting_the_parent_records_none(tmp_path, monkeypatch
     _write_compiled_workflow(pdir)
 
     server.save_version(project_id="trail", message="first cut")
-    time.sleep(1)  # version ids are second-resolution timestamps
     second = server.save_version(project_id="trail", message="second cut")
 
     assert second["ok"] is True
@@ -429,8 +399,6 @@ def test_mcp_save_version_omitting_the_parent_records_none(tmp_path, monkeypatch
 
 
 def test_mcp_save_version_records_the_caller_supplied_parent(tmp_path, monkeypatch):
-    """The parent the caller names is the one stored: the agent knows which version it
-    loaded, and that claim is the only basis for the lineage a reviewer walks."""
     from app.mcp import server
     from app.services import versioning
 
@@ -439,7 +407,6 @@ def test_mcp_save_version_records_the_caller_supplied_parent(tmp_path, monkeypat
     _write_compiled_workflow(pdir)
 
     first = server.save_version(project_id="trail", message="first cut")
-    time.sleep(1)  # version ids are second-resolution timestamps
     second = server.save_version(
         project_id="trail", message="second cut", parent_version=first["version_id"])
 
@@ -449,9 +416,6 @@ def test_mcp_save_version_records_the_caller_supplied_parent(tmp_path, monkeypat
 
 
 def test_mcp_save_version_refuses_a_parent_that_does_not_exist(tmp_path, monkeypatch):
-    """A parent id naming no stored version is refused on the {ok: False, issues}
-    channel and NOTHING is written — a dangling ancestor would be a lineage claim the
-    store cannot substantiate."""
     from app.mcp import server
     from app.services import versioning
 
@@ -461,7 +425,6 @@ def test_mcp_save_version_refuses_a_parent_that_does_not_exist(tmp_path, monkeyp
 
     server.save_version(project_id="trail", message="first cut")
     before = [v.version_id for v in versioning.list_versions(pdir)]
-    time.sleep(1)  # a second save would land a new id, so the list below would grow
 
     refused = server.save_version(
         project_id="trail", message="second cut", parent_version="20200101T000000")
@@ -473,8 +436,6 @@ def test_mcp_save_version_refuses_a_parent_that_does_not_exist(tmp_path, monkeyp
 
 
 def test_mcp_save_version_refuses_an_unloadable_working_copy(tmp_path, monkeypatch):
-    """An invalid working copy can never become a version: the refusal reaches the
-    client on the documented {ok: False, issues} channel and nothing is stored."""
     from app.mcp import server
     from app.services import versioning
 
@@ -491,7 +452,6 @@ def test_mcp_save_version_refuses_an_unloadable_working_copy(tmp_path, monkeypat
 
 
 def test_mcp_save_version_refuses_to_invent_a_project(tmp_path, monkeypatch):
-    """A typo'd project id is loud and writes nothing under the workspace."""
     from app.mcp import server
 
     workspace.set_projects_dir(tmp_path)
@@ -520,7 +480,6 @@ _GUIDE = {
 
 
 def test_mcp_review_guide_round_trips_through_the_tool_boundary(tmp_path, monkeypatch):
-    """Through call_tool, where the risk is: JSON the boundary must bind to a ReviewGuide."""
     from app.mcp import server
 
     version_id = _saved_version(tmp_path, monkeypatch)
@@ -536,8 +495,6 @@ def test_mcp_review_guide_round_trips_through_the_tool_boundary(tmp_path, monkey
 
 
 def test_mcp_write_review_guide_refuses_a_mismatch_naming_the_stage(tmp_path, monkeypatch):
-    """Refused with the id named, and the version keeps no guide rather than one skipping a
-    stage."""
     from app.mcp import server
 
     version_id = _saved_version(tmp_path, monkeypatch)

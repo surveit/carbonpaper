@@ -40,7 +40,6 @@ _OWNED_CALLS = {
 
 
 def find_unowned_frame_io(tree: ast.AST) -> list[tuple[int, str]]:
-    """(lineno, called name) of every frame-IO call in `tree`, by whatever name it is called."""
     found: list[tuple[int, str]] = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
@@ -78,13 +77,11 @@ def test_frame_files_are_read_and_written_only_through_app_core_frames() -> None
 
 
 def test_the_allowlist_names_files_that_exist() -> None:
-    # Else a rename turns the rule off for a file nobody is checking any more.
     missing = [rel for rel in _ALLOWLIST if not (_REPO_ROOT / rel).is_file()]
     assert not missing, f"stale allowlist entry: {missing}"
 
 
 def test_the_detector_sees_the_shapes_a_caller_actually_writes() -> None:
-    # Else the rule above passes on a detector that matches nothing.
     for snippet in (
         "df = pd.read_parquet(path)\n",
         "df = pandas.read_csv(path, dtype=d)\n",

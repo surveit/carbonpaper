@@ -56,8 +56,6 @@ _CLASSIFY = {
 
 @pytest.fixture
 def project(tmp_path):
-    """A `demo` project with a committed version `v1` (load → classify) and an eval
-    whose dataset's expected `label` is wrong on exactly one of four rows."""
     demo = tmp_path / "demo"
     demo.mkdir()
     WorkflowVersion(
@@ -83,9 +81,6 @@ def project(tmp_path):
 
 
 def test_run_eval_scores_the_pathway(project):
-    """A full run: inject the dataset at `load`, run `classify`, compare the produced
-    `label` to the expected one. 3 of 4 rows agree → accuracy 0.75, and the run is
-    persisted and reloadable."""
     repo_root, demo, config = project
     run = run_eval(demo, config, repo_root)
 
@@ -99,8 +94,6 @@ def test_run_eval_scores_the_pathway(project):
 
 
 def test_run_eval_writes_a_per_row_result_table(project):
-    """The per-row result table records each row's expected/actual/match, with the
-    one wrong row (doc c) flagged."""
     repo_root, demo, config = project
     run = run_eval(demo, config, repo_root)
 
@@ -119,6 +112,9 @@ _QUEUE_REVIEW = {
     "queue": dict(QUEUE_COLUMNS),
     "signature": {
         "form": "extends",
+        "reads": [{"input": "load", "columns": [
+            {"name": "doc_id", "type": "str", "nullable": True},
+            {"name": "score", "type": "int", "nullable": True}]}],
         "adds": [
             {"name": "human_score", "type": "int", "nullable": True},
             {"name": "decision", "type": "str", "nullable": True},
@@ -131,19 +127,7 @@ _QUEUE_REVIEW = {
 
 
 def test_run_eval_through_a_queue_stage_records_an_error_never_a_score(project):
-    """An eval pathway crossing a human_review_queue stage.
-
-    The stage is grain-and-order preserving, so the pathway is row-alignable and
-    the eval is no longer vetoed as unscorable before it runs — it is attempted.
-    What it meets is the subset runner, which carries no project scope, which is
-    exactly what a queue stage needs to replay the decisions a human recorded.
-    So the stage fails loudly and the run is recorded as an `error` naming that,
-    with no metrics.
-
-    The one outcome that must never appear here is a score. Making this pathway
-    complete would mean auto-approving every row, and auto-approval keeps the AI
-    score as the final score — an accuracy computed over that would be standing
-    on human decisions nobody made."""
+    """A score here would stand on human decisions nobody made: auto-approval keeps the AI value."""
     repo_root, demo, _config = project
     WorkflowVersion(
         id="demo/v-queue", version_id="v-queue", created_at="2026-07-12T00:00:00",
@@ -171,7 +155,6 @@ def test_run_eval_through_a_queue_stage_records_an_error_never_a_score(project):
 
 
 def test_run_eval_raises_when_no_dataset(project):
-    """An eval with no dataset can't be run — it raises rather than record a run."""
     repo_root, demo, config = project
     config = config.model_copy(update={"table": None})
     with pytest.raises(EvalNotScorableError, match="no dataset"):
@@ -179,7 +162,6 @@ def test_run_eval_raises_when_no_dataset(project):
 
 
 def test_run_eval_raises_when_incompatible(project):
-    """An eval whose target names no stage in the workflow is incompatible — raise."""
     repo_root, demo, config = project
     config = config.model_copy(update={"target_stage": "nonexistent"})
     with pytest.raises(EvalNotScorableError, match="incompatible"):
@@ -187,10 +169,6 @@ def test_run_eval_raises_when_incompatible(project):
 
 
 def test_run_eval_scores_an_explicit_unpublished_version(project):
-    """An eval is a validation tool: it must be able to score ANY version the
-    user selects, published or not, to decide whether to publish it. A named
-    version that is an unpublished agent draft is scorable — the recorded
-    workflow_version is exactly the one selected."""
     repo_root, demo, config = project
     WorkflowVersion(
         id="demo/v2-draft", version_id="v2-draft", created_at="2026-07-11T00:00:00",
@@ -204,9 +182,6 @@ def test_run_eval_scores_an_explicit_unpublished_version(project):
 
 
 def test_run_eval_none_version_id_resolves_to_newest_overall(project):
-    """None resolves to the newest version overall (any published state) —
-    an unpublished draft that is newer than the published version is picked,
-    since selecting the version to eval is explicit."""
     repo_root, demo, config = project
     WorkflowVersion(
         id="demo/v2-draft", version_id="v2-draft", created_at="2026-07-11T00:00:00",
@@ -218,17 +193,13 @@ def test_run_eval_none_version_id_resolves_to_newest_overall(project):
     assert run.workflow_version == "v2-draft"
 
 
-def test_run_eval_raises_when_selected_version_does_not_exist(project):
-    """An explicit version_id that names no stored version raises
-    FileNotFoundError (from load_version), not EvalNotScorableError."""
+def test_run_eval_raises_file_not_found_when_selected_version_does_not_exist(project):
     repo_root, demo, config = project
     with pytest.raises(FileNotFoundError):
         run_eval(demo, config, repo_root, version_id="nonexistent")
 
 
 def test_run_eval_raises_when_no_versions_exist_at_all(tmp_path):
-    """A project with no stored version at all has nothing an eval can run
-    against — that's the only case None-resolution still raises."""
     demo = tmp_path / "demo2"
     demo.mkdir()
     config = EvalConfig(
@@ -240,7 +211,6 @@ def test_run_eval_raises_when_no_versions_exist_at_all(tmp_path):
 
 
 def test_trigger_route_runs_and_redirects_to_the_run(project, monkeypatch):
-    """POST .../run scores the eval and 303-redirects to its new run page."""
     repo_root, demo, config = project
     save_eval_config(demo, config)
     workspace.set_projects_dir(repo_root)
@@ -252,7 +222,6 @@ def test_trigger_route_runs_and_redirects_to_the_run(project, monkeypatch):
 
 
 def test_trigger_route_400s_when_not_runnable(project, monkeypatch):
-    """An eval with no dataset can't be run; the route reports 400, not a redirect."""
     repo_root, demo, config = project
     save_eval_config(demo, config.model_copy(update={"table": None}))
     workspace.set_projects_dir(repo_root)
@@ -264,8 +233,6 @@ def test_trigger_route_400s_when_not_runnable(project, monkeypatch):
 
 
 def test_trigger_route_scores_an_explicitly_selected_unpublished_version(project, monkeypatch):
-    """Selecting an unpublished version by id in the run form scores THAT
-    version — the route never auto-pins to some other latest."""
     repo_root, demo, config = project
     save_eval_config(demo, config)
     WorkflowVersion(
@@ -286,8 +253,6 @@ def test_trigger_route_scores_an_explicitly_selected_unpublished_version(project
 
 
 def test_trigger_route_404s_when_selected_version_does_not_exist(project, monkeypatch):
-    """A version_id that names no stored version is a client error, not a
-    500 -- the route reports 404 with the reason."""
     repo_root, demo, config = project
     save_eval_config(demo, config)
     workspace.set_projects_dir(repo_root)

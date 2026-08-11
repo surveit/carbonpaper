@@ -14,6 +14,5 @@ router = APIRouter()
 
 @router.post("/project/{name}/edit-agent")
 async def open_editing_session(name: str):
-    """Open an editing-agent chat session for project `name` and redirect to it."""
     sid = create_agent_session("editing", {"project_id": name}, title=f"Editing: {name}")
     return RedirectResponse(url=f"/chat/{sid}", status_code=303)

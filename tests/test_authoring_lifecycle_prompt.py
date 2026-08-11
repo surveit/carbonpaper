@@ -30,8 +30,6 @@ def test_data_model_prompt_carries_the_intermediate_concepts_slice() -> None:
 
 
 def test_lifecycle_embeds_the_slice_verbatim() -> None:
-    # One source of truth: the full lifecycle carries the same slice the
-    # data-model prompt embeds, so the two cannot drift apart.
     assert INTERMEDIATE_CONCEPTS_NOTE in AUTHORING_LIFECYCLE_GUIDANCE
 
 
@@ -42,8 +40,6 @@ def test_lifecycle_heads_a_step_with_every_phase_name() -> None:
 
 
 def test_lifecycle_states_the_steps_and_their_gates() -> None:
-    # The five steps, each gate's substance, and the on-artifact trace — the
-    # lifecycle is only a lifecycle while every gate survives edits.
     assert "RESEARCH FIRST" in AUTHORING_LIFECYCLE_GUIDANCE
     assert "PLAN, AND ASK QUESTIONS" in AUTHORING_LIFECYCLE_GUIDANCE
     assert "major stages" in AUTHORING_LIFECYCLE_GUIDANCE
@@ -77,9 +73,6 @@ def test_editing_prompt_tells_the_agent_when_to_write_the_guide() -> None:
 
 
 def test_research_may_build_a_prototype_without_skipping_the_gates() -> None:
-    # Prototyping over limited rows is research — to learn how the data shapes
-    # out through the stages — but the gates govern committal, not exploration:
-    # the prototype is scaffolding, never the deliverable.
     assert "prototype pipeline" in AUTHORING_LIFECYCLE_GUIDANCE
     assert "IS research" in AUTHORING_LIFECYCLE_GUIDANCE
     assert "how the data shapes out" in AUTHORING_LIFECYCLE_GUIDANCE
@@ -89,8 +82,6 @@ def test_research_may_build_a_prototype_without_skipping_the_gates() -> None:
 
 
 def test_slice_states_the_reader_and_the_why() -> None:
-    # The rule (a concept carries its reason), where it is headed (the plan),
-    # and the reader checking it against their own data.
     assert "the reason it is needed" in INTERMEDIATE_CONCEPTS_NOTE
     assert "goes in the plan" in INTERMEDIATE_CONCEPTS_NOTE
     assert "THEIR OWN data" in INTERMEDIATE_CONCEPTS_NOTE

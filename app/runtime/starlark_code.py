@@ -34,8 +34,6 @@ _ERROR_LINE_MARKER = "\nerror: "
 
 
 class StarlarkFunctionHandle:
-    """One compiled Starlark function, callable per row."""
-
     def __init__(self, frozen: starlark.FrozenModule, function_name: str) -> None:
         self._frozen = frozen
         self._function_name = function_name
@@ -53,7 +51,6 @@ class StarlarkFunctionHandle:
 def compile_starlark_function(
     source: str, function_name: str, default_name: str
 ) -> StarlarkFunctionHandle | None:
-    """None when neither name is bound to a function — the caller names what it wanted."""
     module = compile_starlark_module(source, {REFUSE_BUILTIN: _refuse})
     bound = find_bound_function(module, (function_name, default_name))
     if bound is None:

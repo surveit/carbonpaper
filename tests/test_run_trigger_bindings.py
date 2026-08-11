@@ -3,7 +3,6 @@ rendering one path field per file-kind input stage."""
 from __future__ import annotations
 
 import json
-import time
 
 import pandas as pd
 import pytest
@@ -60,7 +59,6 @@ def test_changed_field_becomes_run_binding(project, tmp_path):
 
 
 def test_binding_carries_the_bound_files_own_format(project, tmp_path):
-    # The authored connector says csv; a bound parquet must not be read as one.
     other = tmp_path / "b.parquet"
     pd.DataFrame({"name": ["z"], "val": [9]}).to_parquet(other, index=False)
     resp = client.post("/project/demo/run",
@@ -90,16 +88,10 @@ def test_untouched_prefill_stays_workflow_source(project):
 
 
 def test_unbound_input_returns_400(project):
-    # Strip the authored path so the input is unbound, then post an empty field.
     compiled = project / "compiled" / "01_load.json"
     stage = json.loads(compiled.read_text(encoding="utf-8"))
     stage["connector"]["params"] = {}
     compiled.write_text(json.dumps(stage), encoding="utf-8")
-    # version ids are second-resolution timestamps (project_service.save_working_copy_as_version);
-    # without this the fixture's version and this one can land in the same
-    # wall-clock second and silently clobber each other, unrelated to what this
-    # test is checking.
-    time.sleep(1.1)
     vid = save_working_copy_as_version(project, message="unbound", reviewer="test").version_id
     versioning.publish_version(project, vid, reviewer="human")
 
@@ -131,12 +123,10 @@ def test_runs_index_carries_no_run_form(project):
 
 
 def test_runs_index_carries_no_awaiting_review_banner(project):
-    """The result column marks each halted run on the row the reader has to open."""
     assert "banner-review" not in client.get("/project/demo/runs").text
 
 
 def test_the_zero_state_offers_a_button_not_a_link_in_a_sentence(project):
-    """A screen with nothing on it has exactly one thing to do; it gets a button."""
     body = client.get("/project/demo/runs").text
     zero = body.split('class="empty-state"')[1].split("</div>")[0]
     assert "No runs yet" in zero
@@ -150,7 +140,6 @@ def test_new_is_the_run_form_not_a_run_id(project):
 
 
 def test_new_run_page_labels_the_row_cap_separately(project):
-    """The row cap gets its OWN label, so its words focus it and not the path field."""
     resp = client.get("/project/demo/runs/new")
     # It used to sit inside the row's label, where clicking "first"/"rows" focused
     # the read-only path field — the label's first control.
@@ -159,10 +148,6 @@ def test_new_run_page_labels_the_row_cap_separately(project):
 
 
 def _corrupt_version_document_with_relative_path(project):
-    """Simulate a version document written before absolute paths were enforced:
-    rewrite the stored WorkflowVersion RAW through the store (bypassing model
-    validation, as an older writer effectively did) so the document no longer
-    validates on read. Returns the corrupted version's id."""
     from app.core.persistence import get_store
     from app.services.versioning import list_versions
 

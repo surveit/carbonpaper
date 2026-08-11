@@ -126,8 +126,7 @@ def test_first_column_default_zero_reads_whole_frame(tmp_path):
 
 @pytest.mark.parametrize("sheet", [None, ["Sheet1"]])
 def test_multi_sheet_selection_rejected_up_front(sheet):
-    """sheet_name is str|int (exactly one sheet); None/list (pandas' "select several
-    sheets" forms) are rejected by XlsxReadParams before pd.read_excel ever runs."""
+    """None and a list are pandas' "several sheets" forms; a stage reads exactly one."""
     with pytest.raises(ValidationError, match="sheet_name"):
         _params(sheet_name=sheet)
 
@@ -187,8 +186,7 @@ def test_source_row_column_omitted_by_default(tmp_path):
 
 
 def test_source_row_column_holds_true_sheet_row_numbers(tmp_path):
-    # Each data cell carries the 1-based Excel row it lives on, so the assertion
-    # is self-evident: the recorded value must equal the cell's own claim.
+    # Each data cell carries the 1-based Excel row it lives on.
     path = _write(tmp_path, [["client", "row"], ["ACME", 2], ["BETA", 3]])
     df = _read_xlsx(path, _params(source_row_column="source_row"))
     assert list(df["source_row"]) == list(df["row"])

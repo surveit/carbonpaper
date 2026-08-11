@@ -32,16 +32,6 @@ _ALLOWLIST: frozenset[str] = frozenset()
 
 @dataclass(frozen=True)
 class LiteralComparisonSite:
-    """One place a string literal is a direct operand of a ``==``/``!=``/
-    ``in``/``not in`` comparison.
-
-    ``scope`` identifies the site: the enclosing function
-    (``"function:<name>@<def-lineno>"``), so repeated comparisons inside one
-    function share a scope and collapse to a single site, or
-    ``"module@<lineno>"`` when the comparison sits outside any function, so
-    two module-level comparisons on different lines count as two sites.
-    """
-
     value: str
     lineno: int
     scope: str
@@ -81,8 +71,6 @@ class _ComparisonLiteralVisitor(ast.NodeVisitor):
 
 
 def find_compared_string_literals(tree: ast.Module) -> list[LiteralComparisonSite]:
-    """Every qualifying string-literal comparison site in `tree` — see
-    `LiteralComparisonSite` for what counts and what a "site" is."""
     visitor = _ComparisonLiteralVisitor()
     visitor.visit(tree)
     return visitor.sites
@@ -91,10 +79,6 @@ def find_compared_string_literals(tree: ast.Module) -> list[LiteralComparisonSit
 def find_repeated_literal_values(
     sites_by_file: dict[str, list[LiteralComparisonSite]],
 ) -> dict[str, list[str]]:
-    """value -> sorted "<file>:<lineno> (<scope>)" descriptions, for every
-    value compared at two or more distinct (file, scope) sites across
-    `sites_by_file` (a same-function repeat collapses to one site, so it
-    alone never triggers this)."""
     descriptions_by_value_and_site: dict[str, dict[tuple[str, str], str]] = defaultdict(dict)
     for file, sites in sites_by_file.items():
         for site in sites:

@@ -12,7 +12,6 @@ from app import models as m
 
 
 def _row_function(output_schema: dict, input_columns: list[dict] | None = None) -> dict:
-    """A minimal python_row_function stage, so a test varies only its schemas."""
     edge = input_columns or [{"name": "id", "type": "str", "nullable": True}]
     # A row function only adds, so whatever `output_schema` names beyond the
     # input edge becomes the signature's adds.
@@ -55,7 +54,6 @@ def test_an_input_edge_column_with_a_leading_underscore_is_refused():
 
 
 def test_a_column_named_only_with_an_underscore_is_refused():
-    """Not just the keys the runtime happens to use today — the whole namespace."""
     with pytest.raises(ValidationError):
         m.parse_stage(
             _row_function({"columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "_anything", "type": "str", "nullable": True}]})
@@ -70,8 +68,6 @@ def test_an_underscore_inside_a_column_name_is_fine():
 
 
 def test_an_underscore_prefixed_key_nested_in_a_json_column_is_fine():
-    """A key inside a json object is a value on the frame's cell, not a column on
-    the frame, so it collides with no machinery."""
     stage = m.parse_stage(
         _row_function(
             {
@@ -90,8 +86,6 @@ def test_an_underscore_prefixed_key_nested_in_a_json_column_is_fine():
 
 
 def test_validate_stage_reports_it_as_a_non_fatal_issue():
-    """The compiler's own gate: `validate_stage` surfaces it as an issue string
-    rather than raising."""
     issues = m.validate_stage(
         _row_function({"columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "_error", "type": "str", "nullable": True}]})
     )
@@ -99,8 +93,6 @@ def test_validate_stage_reports_it_as_a_non_fatal_issue():
 
 
 def test_a_plain_table_schema_is_indifferent_to_the_prefix():
-    """The ban belongs to the STAGE contract, not to schema primitives: a
-    TableSchema on its own knows nothing about the runtime and validates fine."""
     schema = m.TableSchema.model_validate({"columns": [{"name": "a", "type": "str", "nullable": True}, {"name": "_b", "type": "str", "nullable": True}]})
     assert [c.name for c in schema.columns] == ["a", "_b"]
 

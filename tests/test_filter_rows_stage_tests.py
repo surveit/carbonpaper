@@ -40,7 +40,6 @@ def test_kept_row_passes():
 
 
 def test_dropped_row_passes_with_zero_expected_rows():
-    """One row in, NO row out — the case a python_row_function test rejects as fan-in."""
     stage = _filter_stage(_KEEP_ACTIVE, [{
         "name": "drops_a_closed_row", "inputs": {"load": [{"status": "closed"}]},
         "expected": [],
@@ -50,7 +49,6 @@ def test_dropped_row_passes_with_zero_expected_rows():
 
 
 def test_a_drop_is_not_read_as_a_refusal():
-    """Kept nothing (`[]`) must not satisfy a test claiming the step fails (`null`)."""
     stage = _filter_stage(_KEEP_ACTIVE, [{
         "name": "expects_a_refusal", "inputs": {"load": [{"status": "closed"}]},
         "expected": None,
@@ -69,7 +67,6 @@ def test_two_input_rows_are_rejected():
 
 
 def test_two_expected_rows_out_of_one_are_rejected():
-    """A filter cannot fan out — it keeps the row it was given or drops it."""
     with pytest.raises(ValidationError, match="at most 1 item"):
         _filter_stage(_KEEP_ACTIVE, [{
             "name": "fans_out", "inputs": {"load": [{"status": "active"}]},
@@ -86,7 +83,6 @@ _REFUSES = (
 
 
 def test_predicate_refuses_without_importing_step_refused():
-    """Pins the namespace seeding: unseeded, this same code dies with NameError."""
     assert "import" not in _REFUSES
     stage = _filter_stage(_REFUSES, [{
         "name": "refuses_a_blank_status", "inputs": {"load": [{"status": ""}]},
@@ -98,7 +94,6 @@ def test_predicate_refuses_without_importing_step_refused():
 
 
 def test_a_predicate_raising_something_else_is_an_error_not_a_refusal():
-    """A KeyError is the predicate falling over, not refusing — it must not certify."""
     stage = _filter_stage(
         "def should_include(row):\n    raise KeyError('state')\n",
         [{"name": "refuses_a_blank_status", "inputs": {"load": [{"status": ""}]},

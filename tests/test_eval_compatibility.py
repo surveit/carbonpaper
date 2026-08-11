@@ -23,9 +23,6 @@ def _file_input(id_, tmp_path, cols=("k",)):
 
 
 def _input_refs(inputs):
-    """Input refs for the builders below. An upstream `Stage` contributes its own
-    resolved output schema as the edge's expected schema; a plain id (an upstream
-    that does not exist as a Stage) must be paired with the schema to declare."""
     refs = []
     for upstream in inputs:
         if isinstance(upstream, m.StageBase):
@@ -37,7 +34,6 @@ def _input_refs(inputs):
 
 
 def _extends(refs, output_schema):
-    """The extends signature outputting `output_schema` over anchor `refs[0]`."""
     anchor = refs[0]["schema"] if refs else None
     # A row function only adds, so the adds are whatever `output_schema` names
     # beyond the anchor edge — letting each test keep saying what it OUTPUTS.
@@ -136,11 +132,7 @@ def test_unknown_reference_override_stage(tmp_path):
     assert report.settings is None
 
 
-def test_override_stage_has_no_output_schema(tmp_path):
-    # publish is the only type that declares no output_schema, so it is the only
-    # override stage this precondition can fire on. get_output_columns_from_stage
-    # would raise on it -- the precondition must report it, not let
-    # validate_eval_compatibility crash.
+def test_an_override_stage_with_no_output_schema_is_reported_not_crashed_on(tmp_path):
     src = _file_input("src", tmp_path, cols=["k", "v", "quote"])
     pub = m.parse_stage(S(
         id="pub", type="publish", inputs=_input_refs([src]),
@@ -156,7 +148,6 @@ def test_override_stage_has_no_output_schema(tmp_path):
 
 
 def test_eval_dataset_table_missing_a_column_of_override_schema(tmp_path):
-    # override's schema declares `extra_col`, which the eval-dataset table lacks.
     src = _file_input("src", tmp_path, cols=["k", "v", "quote", "extra_col"])
     tgt = _row("tgt", [src], output_schema={
         "columns": [{"name": "k", "type": "str", "nullable": True}, {"name": "score", "type": "float", "nullable": True}]})
@@ -203,10 +194,7 @@ def test_reference_override_missing_a_column_of_its_stage_schema(tmp_path):
     assert any("ref_stage" in p and "extra" in p for p in report.problems)
 
 
-def test_expected_output_column_not_in_target_schema(tmp_path):
-    # The checked-column resolution inside get_injected_columns would raise
-    # on this config -- the precondition check must catch it and report it,
-    # not let validate_eval_compatibility crash.
+def test_an_expected_output_column_not_on_the_target_is_reported_not_crashed_on(tmp_path):
     config = _config(expected_outputs=[
         {"output_column": "not_emitted", "metric": "abs_tol", "tolerance": 1}])
     report = validate_eval_compatibility(config, _stages(tmp_path))
@@ -249,9 +237,7 @@ def test_grain_blocking_stage_with_code_scorer_is_not_a_problem(tmp_path):
     assert report.problems == []
 
 
-def test_reference_override_stage_equals_target_stage(tmp_path):
-    # A reference override on the target stage would make resolve_eval_run_settings
-    # raise; validate_eval_compatibility must catch this itself and report it instead.
+def test_a_reference_override_on_the_target_stage_is_reported_not_crashed_on(tmp_path):
     config = _config(reference_overrides=[{"stage_id": "tgt", "table": _ref()}])
     report = validate_eval_compatibility(config, _stages(tmp_path))
     assert report.ok is False
@@ -259,9 +245,7 @@ def test_reference_override_stage_equals_target_stage(tmp_path):
     assert report.settings is None
 
 
-def test_stages_list_has_a_structural_problem(tmp_path):
-    # A dangling input elsewhere in the stage list must not reach
-    # Workflow.model_validate uncaught — it should surface as a problem string.
+def test_a_dangling_input_elsewhere_surfaces_as_a_problem_string(tmp_path):
     src = _file_input("src", tmp_path, cols=["k", "v", "quote"])
     tgt = _row("tgt", [src], output_schema={
         "columns": [{"name": "k", "type": "str", "nullable": True}, {"name": "score", "type": "float", "nullable": True}]})
@@ -274,8 +258,6 @@ def test_stages_list_has_a_structural_problem(tmp_path):
 
 
 def test_target_not_reachable_from_override_is_broken(tmp_path):
-    # Two independent branches off the same input: override feeds "a",
-    # target is "b", neither downstream of the other.
     src = _file_input("src", tmp_path, cols=["k", "v", "quote"])
     branch_a = _row("a", [src], output_schema={
         "columns": [{"name": "k", "type": "str", "nullable": True}, {"name": "score", "type": "float", "nullable": True}]})
@@ -312,9 +294,6 @@ def test_table_none_still_catches_target_assertion_error(tmp_path):
 
 # ── override coverage is conflict-aware (get_injected_columns) ───────────────
 def test_coverage_check_rejects_bare_name_on_a_conflicting_column(tmp_path):
-    # override's own output includes `v`; a check also grades `v` on the
-    # target -- the conflict means the eval-dataset table must carry
-    # `override.v`, not a bare `v`.
     src = _file_input("src", tmp_path, cols=["k", "v", "quote"])
     tgt = _row("tgt", [src], output_schema={
         "columns": [{"name": "k", "type": "str", "nullable": True}, {"name": "v", "type": "str", "nullable": True},
@@ -381,9 +360,6 @@ def test_get_output_columns_from_stage_raises_when_stage_has_no_output_schema(tm
 
 
 def test_get_injected_columns_raises_for_checked_column_not_on_target(tmp_path):
-    # An unresolvable check column is a precondition violation the caller
-    # (validate_eval_compatibility) must verify before calling in here -- it is
-    # not silently skipped.
     override = _file_input("src", tmp_path, cols=["k"])
     target = _row("tgt", [override], output_schema={"columns": [{"name": "k", "type": "str", "nullable": True}]})
     with pytest.raises(ValueError, match="not_emitted"):

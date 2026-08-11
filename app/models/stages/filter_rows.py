@@ -24,16 +24,6 @@ from app.models.stages.stage_tests import FilterRowsStageTest
 
 
 class FilterConfig(StageConfig):
-    """filter_rows config block: an authored row predicate, `def should_include(row:
-    dict) -> bool`. True keeps the row, False drops it; every kept row's
-    columns pass through unchanged and its relative order is preserved.
-
-    Inline code is the only source for that predicate: a filter decides, and a
-    decision that needs an importable module is doing more than deciding. There
-    is deliberately no `kind`/`module` here, unlike PythonFunction."""
-    # Every field changes what this stage computes (the predicate it runs)
-    # except `summary`, which describes that predicate to a reader — see
-    # StageBase.compute_definition_fingerprint.
     FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({"code", "function"})
     INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset({"summary", "corner_cases"})
 
@@ -90,6 +80,13 @@ class FilterRowsStage(StageBase):
                 f"stage '{self.id}': filter_rows keeps every kept row's columns "
                 f"unchanged — its signature declares reads only, never adds or rewrites"
             ]
+        # An empty read set decides every row on an empty row: all kept or all dropped.
+        if not signature.reads:
+            return [
+                f"stage '{self.id}': its signature reads nothing, so the predicate would "
+                f"be handed an empty row and decide every row the same way — declare the "
+                f"columns `{self.filter.function or 'should_include'}` consumes"
+            ]
         return []
 
     def find_authored_code_block(self) -> FilterConfig:
@@ -100,7 +97,6 @@ class FilterRowsStage(StageBase):
 
 
 def find_filter_warnings(stage: "FilterRowsStage") -> list[CompilerWarning]:
-    """Warnings about `stage.filter` — raised here and only here, since this module owns it."""
     if not (stage.filter.summary or "").strip():
         return [warn(stage, "undescribed",
                      "no plain-language description — reviewable only by reading its code")]
@@ -122,7 +118,9 @@ NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
             "than deciding. `should_include(row)` is handed a plain dict and "
             "must return a bool — True keeps the row, False drops it; any other return "
             "type is a run-time error. Kept rows preserve their original relative order "
-            "and every column unchanged, so the signature never adds or rewrites."
+            "and every column unchanged, so the signature never adds or rewrites. The "
+            "predicate is handed exactly the columns the signature `reads`, so those must "
+            "cover every column it consumes and may never be empty."
         ),
     ),
 }

@@ -42,13 +42,11 @@ def test_backtick_rejected():
 
 
 def test_unary_minus_rejected():
-    """Only NOT is an allowed unary operator; arithmetic negation is not."""
     with pytest.raises(PredicateError):
         parse_predicate("-score > 0")
 
 
 def test_is_comparison_rejected():
-    """Our dialect has no identity test — only Eq/NotEq/Lt/LtE/Gt/GtE."""
     with pytest.raises(PredicateError):
         parse_predicate("a is b")
 
@@ -85,13 +83,11 @@ def test_unknown_attribute_rejected():
 
 
 def test_str_accessor_method_not_in_dialect_rejected():
-    """`.str` is admitted, but only for the methods the dialect names."""
     with pytest.raises(PredicateError, match="attribute"):
         parse_predicate("claim_id.str.zfill(3)")
 
 
 def test_rejection_message_names_every_allowed_attribute():
-    """The message enumerates the allowlist, so it cannot drift from it."""
     with pytest.raises(PredicateError) as raised:
         parse_predicate("score.values")
     assert all(name in str(raised.value) for name in _ALLOWED_ATTRIBUTES)
@@ -135,7 +131,6 @@ def test_dialect_attributes_still_accepted(expr):
 
 @pytest.mark.parametrize("method", sorted(_STRING_METHODS))
 def test_allowlisted_string_method_yields_a_boolean_row_mask(method):
-    """What makes the allowlist safe: run through pandas, each name masks rows."""
     df = pd.DataFrame({"claim_id": ["Abc1", "xyz", " ", "42"]})
     parsed = parse_predicate(_render_string_method_call(method))
     mask = df.eval(parsed.pandas_expr)

@@ -6,7 +6,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import ClassVar, Literal, Optional
 
-from pydantic import Field
+from pydantic import ConfigDict, Field
 
 from app.models.schema import StageConfig
 from app.models.stages.stage_base import StageInput, StageType
@@ -16,6 +16,7 @@ from app.models.stages.code import (
 from app.models.stages.shared import COLUMN_ISSUE, resolve_input_columns
 from app.models.stages.node_spec import NodeTypeSpec
 from app.models.stages.signature import ReplacesSignature
+from app.models.tool_schema_prompts import PUBLISH_CONFIG_DESCRIPTION
 
 
 class PublishFormat(str, Enum):
@@ -26,10 +27,8 @@ class PublishFormat(str, Enum):
 
 
 class PublishConfig(StageConfig):
-    """publish rendering config. The code a publish stage RUNS lives in its
-    `function` block, not here."""
-    # Every field changes what this stage computes (format, destination,
-    # template, layout) — see StageBase.compute_definition_fingerprint.
+    model_config = ConfigDict(json_schema_extra={"description": PUBLISH_CONFIG_DESCRIPTION})
+
     FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({
         "format", "destination", "template", "one_file_per", "cross_link",
     })
@@ -43,9 +42,6 @@ class PublishConfig(StageConfig):
 
 
 class PublishStage(CarriesPythonFunctionStage):
-    """The `publish` block is this stage's rendering config; the `function`
-    block is the code it actually runs, so both are required and both are
-    fingerprinted."""
     # The one type that emits files rather than a table.
     REQUIRES_OUTPUT_SCHEMA: ClassVar[bool] = False
 
@@ -71,8 +67,6 @@ class PublishStage(CarriesPythonFunctionStage):
 
 
 def find_publish_column_issues(stage: "PublishStage") -> list[str]:
-    """One issue if `publish.one_file_per` is set and absent from the
-    resolved single input."""
     publish = stage.publish
     if not publish.one_file_per:
         return []

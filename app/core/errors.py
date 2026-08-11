@@ -4,155 +4,92 @@ from __future__ import annotations
 
 
 class StageNotInRun(ValueError):
-    """A trace was requested for a stage id absent from the run's manifest — a
-    bad path/param (→ 404), not an internal fault."""
+    pass
 
 
 class StageOutputMissing(ValueError):
-    """A stage of a run wrote no output frame — it errored, halted, or never started."""
+    pass
 
 
 class RowOutOfRange(ValueError):
-    """A trace was requested for a row ordinal outside a stage's output — a bad
-    path/param (→ 400), not an internal fault."""
+    pass
 
 
 class NoVersionToRunError(Exception):
-    """A run was requested for a project that stores NO version to run.
-
-    Runs are read-only with respect to versions: a run targets an existing,
-    stored version and never creates one — version creation is a separate
-    explicit act. Raised only when the project has no stored version at all,
-    rather than fabricating a snapshot as a run side effect, which would
-    immortalise (and potentially poison) the working copy. A named
-    `version_id` that no version document backs raises FileNotFoundError."""
+    """No stored version at all; a named version_id with no document raises FileNotFoundError."""
 
 
 class RunVersionUnresolvableError(Exception):
-    """A run's manifest names no `workflow_version`, or names one whose version
-    document is missing or no longer validates, so what the run executed cannot
-    be read. Its message is shown to the reader in place of the graph."""
+    pass
 
 
 class GenerationError(Exception):
-    """A headless agent generation could not produce a VALID artifact.
-
-    Raised by `app.core.agent.agent.Agent.run` when the agent does not submit output that
-    validates against the target schema within its attempt budget. Fails loudly rather
-    than returning or persisting a partial or fabricated result — the caller logs the
-    failure honestly, never a fake success."""
+    pass
 
 
 class EvalNotScorableError(Exception):
-    """An eval run was requested but the config can't be scored as it stands:
-    incompatible with the workflow, has no eval dataset, or taps a path that
-    isn't grain-preserving and carries no code scorer. The reason is the message."""
+    pass
 
 
 class EvalGrainViolationError(Exception):
-    """The pathway that compatibility judged grain-preserving did not, in fact,
-    return one target row per injected eval-dataset row — so the rows can't be
-    aligned by position to score. Raised (loudly) rather than aligning a
-    mismatched pair and reporting a fabricated result."""
+    pass
 
 
 class SubsetRunError(Exception):
-    """Running a subset of a workflow did not cleanly produce every requested
-    stage output: a stage errored, or the run halted for human review. The
-    message names what went wrong. (General runtime failure — callers like the
-    eval runner translate it into their own outcome, e.g. an `error` eval run.)"""
+    pass
 
 
 class TraceLinksUnavailableError(Exception):
-    """A publish function declared the `trace_links` keyword, but the run has no
-    project scope (`RunContext.identity is None` — a preview, subset, or
-    authored-test run), so no row-trace URL can be addressed."""
+    pass
 
 
 class NoWorkflowTestSourceError(Exception):
-    """A workflow test was requested on a workflow with no input_data stage to
-    sample from — there is no bound source to slice a preview off, so nothing can
-    be seeded and the frontier cannot run. Raised (loudly) rather than
-    workflow-testing an empty injection that every downstream stage would then
-    error on."""
+    pass
 
 
 class NoWorkflowTestVersionError(Exception):
-    """A workflow test was requested on a project with no stored workflow version
-    to sample against. A workflow test accepts any stored immutable version — but
-    there must be at least one. Raised (loudly, naming the project) rather than
-    falling back to the working copy or fabricating a version; a production run's
-    equivalent refusal is NoVersionToRunError."""
+    pass
 
 
 class LLMError(Exception):
-    """A live-LLM call failed, or no LLM backend is available."""
+    pass
 
 
 class DocumentNotFound(Exception):
-    """No document exists for a (collection, id) in the store. Raised by the
-    strict read path — `SqliteKvStore.read`/`.schema_version` and
-    `PersistedModel.load`. The tolerant path (`read_tolerant` /
-    `PersistedModel.load_or_none`) returns None instead. A genuine miss
-    surfaced loudly, never a fabricated empty document."""
+    """Raised by the strict read path; the tolerant read (`read_tolerant`/`load_or_none`) returns None."""
 
 
 class FrameNotSerializableError(Exception):
-    """A frame carries a dtype/shape parquet cannot represent, so it could not
-    be written to the frame store. Raised by the stage cache's frame write,
-    where caching is best-effort: the caller leaves the frame uncached and
-    surfaces the fact as a run note rather than failing the run. A disk/OS error
-    is NOT reported this way — it propagates."""
+    """A dtype/shape parquet cannot represent. A disk/OS error is NOT reported this way — it propagates."""
 
 
 class ProjectExistsError(Exception):
-    """A project create was requested for a name whose examples/<name>/ directory
-    already exists. Raised (loudly) rather than clobbering existing data — the
-    rename is the human's decision."""
+    pass
 
 
 class DraftNotFoundError(Exception):
-    """No draft exists for a (project, draft_id) — the id is malformed (fails the
-    word-triplet shape), or well-formed but no such document is stored. Drafts
-    are disposable scratch space with no promise of survival, so a miss is an
-    ordinary outcome: the caller starts a new one with create_draft rather than
-    treating this as corruption."""
+    pass
 
 
 class MissingInputBindingError(Exception):
-    """A run was requested but at least one stage's preflight found it unready
-    to run — e.g. an input stage with no file bound (no run binding supplied
-    and the workflow itself authors no path), or bound to a file that does not
-    exist. Raised before the run directory is created — a run never starts on
-    inputs that would have to be guessed. The message names every unready
-    stage."""
+    pass
 
 
 class RunNotFoundError(Exception):
-    """No run exists for a (project, run_id): the run directory has no
-    manifest.json — a bad/expired run id, not an internal fault. Raised (loudly)
-    by the run service's status read rather than returning an empty or fabricated
-    manifest for a run that never happened."""
+    pass
 
 
 class RunManifestNotJson(ValueError):
-    """A run's manifest.json is on disk but its bytes are not a JSON object."""
+    pass
 
 
 class ReviewValidationError(ValueError):
-    """A submitted review decision does not match what the queue stage declares."""
+    pass
 
 
 class ReviewGuideValidationError(ValueError):
-    """A guide does not account for exactly its version's stages; raised on WRITE, so none is
-    stored."""
+    """Raised on WRITE, so an invalid guide is never stored."""
 
 
 class PredicateError(ValueError):
-    """A `where`/`filter` expression (aggregate.where, human_review_queue.filter)
-    falls outside the closed grammar `app.core.predicate.parse_predicate`
-    accepts — unparseable as Python, or built from a construct the grammar
-    does not admit (a bare function call, arithmetic, subscripting, and the
-    like). Raised at parse time, before either save-time column validation or
-    runtime evaluation acts on the expression, so a rejected filter never
-    reaches `pandas.eval`/`.query()` unchecked."""
+    pass

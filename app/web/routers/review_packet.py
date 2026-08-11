@@ -20,8 +20,6 @@ _COMPRESS_LEVEL = 1
 
 @router.get("/project/{project}/runs/{run_id}/packet.zip")
 async def download_review_packet(project: str, run_id: str):
-    """Built in a temp directory and streamed, so exporting leaves nothing behind
-    in the project on disk."""
     try:
         content = await run_in_threadpool(_build_packet_zip, project, run_id)
     except RunNotFoundError as exc:
@@ -35,7 +33,6 @@ async def download_review_packet(project: str, run_id: str):
 
 
 def _build_packet_zip(project: str, run_id: str) -> bytes:
-    """The zip needs a real path, so it is read back before the temp dir goes."""
     with tempfile.TemporaryDirectory() as tmp:
         packet = export_review_packet(project, run_id, Path(tmp) / "packet")
         archive = Path(tmp) / "archive.zip"

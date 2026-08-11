@@ -104,7 +104,6 @@ def _run_row(project: str, run: RunIndexRow, current: str) -> PickerRow:
 
 
 def _describe_pinned_version(run: RunIndexRow) -> str | None:
-    """The version this run executed, named the way the run page names it."""
     if run.version is None or not run.version.version_id:
         return None
     return f"version {run.version.message or run.version.version_id}"

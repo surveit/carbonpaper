@@ -39,10 +39,6 @@ DATASET_PREVIEW_ROWS = 50
 
 @router.get("/project/{project}/evals", response_class=HTMLResponse)
 async def evals_index(request: Request, project: str):
-    """EVALS section of the project shell: one row per stored eval, each with its
-    current status. Passes the SAME shell_state the other sections do (so the
-    sidebar agrees) plus the status rows and any workflow-load issues that would
-    stop compatibility from being checked at all."""
     project_dir = _resolve_project_dir(project)
     listing = load_stages_or_empty(project)
     return templates.TemplateResponse(
@@ -58,9 +54,6 @@ async def evals_index(request: Request, project: str):
 
 
 def _build_eval_index_rows(project_dir: Path, stages: list[Stage]) -> list[dict[str, Any]]:
-    """One `{id, name, status, issues}` row per eval config, in
-    list_eval_configs order. A config that failed to validate shows as `broken`
-    with its issues; one that loaded shows its computed status."""
     latest_version = latest_version_id(project_dir)
     rows: list[dict[str, Any]] = []
     for entry in list_eval_configs(project_dir):
@@ -87,11 +80,6 @@ async def eval_detail(request: Request, project: str, eval_id: str):
 def _render_eval_detail(
     request: Request, project: str, project_dir: Path, config: EvalConfig
 ) -> HTMLResponse:
-    """Assemble the detail page: the override→target pathway, whether the config
-    still fits the workflow (compatibility), a read-only preview of the eval
-    dataset if one is attached, the scoring rules, the run history, and the
-    project's versions (newest-first) so the run form can offer a selection —
-    an eval scores whichever version the user picks, published or not."""
     stages = load_stages_or_empty(project).stages
     report = validate_eval_compatibility(config, stages)
     runs, runs_error = _list_eval_runs_safely(project_dir, config.id)
@@ -119,10 +107,6 @@ def _render_eval_detail(
 
 
 def _read_eval_dataset_preview(config: EvalConfig) -> dict[str, Any]:
-    """Read-only preview of the attached eval dataset, capped at
-    DATASET_PREVIEW_ROWS. Returns the declared columns (from the TableRef schema,
-    always available) plus rows read from disk; a read failure lands in
-    `dataset_error` so the page shows it instead of 500-ing."""
     if config.table is None:
         return {"has_eval_dataset": False, "dataset_columns": [], "dataset_rows": [],
                 "dataset_error": None, "dataset_capped": False,
@@ -176,11 +160,6 @@ async def eval_run_detail(request: Request, project: str, eval_id: str, run_id: 
 
 @router.post("/project/{project}/evals/{eval_id}/run")
 async def trigger_eval_run(request: Request, project: str, eval_id: str):
-    """Score the eval against the SELECTED workflow version (the `version_id`
-    form field; newest overall if omitted) and redirect to the run. Synchronous:
-    an eval that can't be run (incompatible, no dataset, or no version at all)
-    surfaces as a 400 with the reason; a selected version_id naming no stored
-    version surfaces as a 404 -- neither records a non-result."""
     project_dir = _resolve_project_dir(project)
     config = _load_config_or_404(project_dir, eval_id)
     form = await request.form()
@@ -200,7 +179,6 @@ async def trigger_eval_run(request: Request, project: str, eval_id: str):
 # ─── Shared helpers ──────────────────────────────────────────────────────────
 
 def _resolve_project_dir(project: str) -> Path:
-    """The project working copy under examples/<name>/, 404 if it isn't one."""
     project_dir = projects_dir() / project
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
@@ -208,7 +186,6 @@ def _resolve_project_dir(project: str) -> Path:
 
 
 def _load_config_or_404(project_dir: Path, eval_id: str) -> EvalConfig:
-    """Load one config by id, or 404 if it's missing or unreadable."""
     try:
         return load_eval_config(project_dir, eval_id)
     except (FileNotFoundError, ValueError) as exc:
@@ -218,8 +195,6 @@ def _load_config_or_404(project_dir: Path, eval_id: str) -> EvalConfig:
 def _resolve_eval_status(
     config: EvalConfig, stages: list[Stage], project_dir: Path, latest_version: str | None
 ) -> tuple[str, str | None]:
-    """The one-word status for a loaded config, plus a run-listing error string
-    if its `eval_run/` has a corrupt file (which forces `broken`)."""
     report = validate_eval_compatibility(config, stages)
     runs, run_issue = _list_eval_runs_safely(project_dir, config.id)
     status = ("broken" if run_issue else
@@ -229,8 +204,7 @@ def _resolve_eval_status(
 
 
 def _list_eval_runs_safely(project_dir: Path, config_id: str) -> tuple[list[EvalRun], str | None]:
-    """`list_eval_runs` raises loudly on a malformed `eval_run/*.json`; a page
-    should still render, so return the error text instead of propagating."""
+    """Swallowed so that one corrupt eval_run/*.json does not take the page down."""
     try:
         return list_eval_runs(project_dir, config_id), None
     except (OSError, ValueError) as exc:

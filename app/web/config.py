@@ -41,13 +41,6 @@ EVENT_TAIL = 500
 
 
 class RevalidatedStaticFiles(StaticFiles):
-    # Without a Cache-Control header a browser is free to invent a freshness
-    # lifetime from the asset's age and serve it without asking, so an edited
-    # stylesheet can go unseen for hours across an ordinary reload — the page
-    # then renders with markup from this build and CSS from an older one, which
-    # reads as a missing rule rather than a stale file. "no-cache" still stores
-    # the asset and still answers from it; it only requires the ETag be checked
-    # first, so a hit costs one 304 and no body.
     def file_response(
         self,
         full_path: str | os.PathLike[str],
@@ -56,23 +49,18 @@ class RevalidatedStaticFiles(StaticFiles):
         status_code: int = 200,
     ) -> Response:
         response = super().file_response(full_path, stat_result, scope, status_code)
+        # Without this a browser may invent a freshness lifetime and serve an edited
+        # stylesheet for hours; "no-cache" still answers from the store, via one 304.
         response.headers["Cache-Control"] = "no-cache"
         return response
 
 
 def friendly_time(v: object) -> Markup:
-    """Render a timestamp as a `<time datetime="...">` element whose text the
-    browser rewrites into its own local, human-readable form (base.html carries
-    the formatter script). The ISO string stays in the datetime attribute (and
-    as fallback text for no-JS), so nothing machine-readable is lost. Empty/None
-    renders as empty — callers keep their own `or '—'`-style fallbacks."""
+    """The browser rewrites the text to local form (base.html's script); no-JS sees the ISO."""
     return _time_element(v, "")
 
 
 def relative_time(v: object) -> Markup:
-    """Like friendly_time, but the browser writes "2 hours ago" for a recent one."""
-    # The exact value stays one hover away, the same convention friendly_time
-    # already set; older timestamps fall back to its absolute form.
     return _time_element(v, " data-relative")
 
 
@@ -84,7 +72,6 @@ def _time_element(v: object, attrs: str) -> Markup:
 
 
 def friendly_duration(v: object) -> str:
-    """Milliseconds as read-at-a-glance time: 834 ms, 42s, 29m 34s, 1h 12m."""
     if v is None or v == "":
         return ""
     ms = int(read_number(v, "friendly_duration"))
@@ -101,7 +88,6 @@ def friendly_duration(v: object) -> str:
 
 
 def usd(v: object) -> str:
-    """Dollars at a precision that survives rounding: $13.14, but $0.0032 under a cent."""
     if v is None or v == "":
         return ""
     amount = read_number(v, "usd")
@@ -109,7 +95,6 @@ def usd(v: object) -> str:
 
 
 def read_number(v: object, filter_name: str) -> float:
-    """A template value as a number, or a raise naming the filter that got handed junk."""
     if isinstance(v, bool) or not isinstance(v, (int, float, str)):
         raise TypeError(f"{filter_name} got {type(v).__name__}, which is not a number")
     return float(v)

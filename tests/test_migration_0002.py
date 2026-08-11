@@ -31,7 +31,6 @@ def _column(name: str) -> dict[str, Any]:
 
 
 def _v1_stages() -> list[dict[str, Any]]:
-    """A v1 workflow: a queue naming no columns, and an enrich naming no brought ones."""
     subject = {"columns": [_column("id"), _column("verdict")]}
     reference = {"columns": [_column("id"), _column("extra")]}
     return [

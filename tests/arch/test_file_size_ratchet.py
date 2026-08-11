@@ -36,18 +36,11 @@ _ALLOWLIST: frozenset[str] = frozenset()
 
 @dataclass(frozen=True)
 class FileSize:
-    """One file's measured logical line count.
-
-    ``path`` is repo-relative with forward slashes (identical on Windows and
-    CI Linux), matching `_ALLOWLIST`'s entries so the two compare directly.
-    """
-
     path: str
     lloc: int
 
 
 def measure_file_sizes(paths: list[Path], repo_root: Path) -> list[FileSize]:
-    """Every file in `paths` at its measured logical line count."""
     return [
         FileSize(path.relative_to(repo_root).as_posix(), _count_logical_lines(path))
         for path in paths
@@ -55,8 +48,6 @@ def measure_file_sizes(paths: list[Path], repo_root: Path) -> list[FileSize]:
 
 
 def find_ratchet_violations(sizes: list[FileSize], allowlist: frozenset[str]) -> list[str]:
-    """Human-readable offender lines for the three ratchet rules in the
-    module docstring, run over `sizes` against `allowlist`."""
     by_path = {size.path: size for size in sizes}
     offenders = [
         _describe_new_violation(size)
@@ -99,8 +90,6 @@ def _count_logical_lines(path: Path) -> int:
 
 
 def _describe_new_violation(size: FileSize) -> str:
-    """The remedy this names is deliberately narrow: the ceiling exists to force a
-    split, so squeezing back under it any other way defeats the rule."""
     return (
         f"{size.path}  lloc={size.lloc} (> {_LLOC_CEILING}, not in _ALLOWLIST) — split it "
         "into smaller modules; the allowlist must never grow.\n"
@@ -192,7 +181,6 @@ def test_measure_file_sizes_does_not_bill_comments_or_blank_lines(tmp_path: Path
 
 
 def test_measure_file_sizes_is_unchanged_by_reformatting(tmp_path: Path) -> None:
-    """The ceiling must not move when a formatter re-wraps a call across lines."""
     compact = tmp_path / "compact.py"
     compact.write_text("run(a, b, c, d)\n", encoding="utf-8")
     exploded = tmp_path / "exploded.py"

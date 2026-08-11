@@ -20,8 +20,6 @@ _BANNED_PARAM_NAMES = frozenset({"project_dir", "project_path", "project_root"})
 
 @dataclass(frozen=True)
 class RuntimeObjectRule:
-    """The scope this rule governs and the parameter names it bans there."""
-
     scope_file: Path
     banned_names: frozenset[str]
     rationale: str
@@ -54,10 +52,6 @@ _RULE = RuntimeObjectRule(
 
 
 def find_function_parameters(node: ast.FunctionDef | ast.AsyncFunctionDef) -> list[ast.arg]:
-    """Every named parameter of a function/method def, in declaration order:
-    positional-only, ordinary, ``*args``, keyword-only, ``**kwargs``. A bare
-    ``*`` keyword-only separator contributes no ``ast.arg`` and is naturally
-    absent from the result."""
     args = node.args
     params: list[ast.arg] = [*args.posonlyargs, *args.args]
     if args.vararg is not None:
@@ -71,10 +65,6 @@ def find_function_parameters(node: ast.FunctionDef | ast.AsyncFunctionDef) -> li
 def find_banned_parameter_uses(
     tree: ast.Module, banned_names: frozenset[str]
 ) -> list[tuple[int, str, str]]:
-    """(lineno, function_name, param_name) for every parameter in `tree` -
-    across every ``def``/``async def`` and method - whose name is in
-    `banned_names`. Lambdas are not walked: an anonymous function has no name
-    worth attributing an offense to."""
     offenders: list[tuple[int, str, str]] = []
     for node in ast.walk(tree):
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -151,15 +141,11 @@ def test_find_banned_parameter_uses_skips_lambda_parameters() -> None:
 
 
 def test_find_banned_parameter_uses_ignores_similarly_named_local_variable() -> None:
-    """A local variable assignment (not a parameter) never counts, even when
-    its name matches a banned token exactly - only the signature is scoped."""
     tree = ast.parse("def load(ctx):\n    project_dir = ctx['project_dir']\n    return project_dir\n")
     assert find_banned_parameter_uses(tree, _BANNED_PARAM_NAMES) == []
 
 
-def test_find_banned_parameter_uses_ignores_unrelated_root_suffixed_name() -> None:
-    """"repo_root" does not contain the exact banned token "project_root" -
-    matching is exact-name, not substring/segment, so it is not flagged."""
+def test_find_banned_parameter_uses_matches_exact_name_not_substring() -> None:
     tree = ast.parse("def load(repo_root):\n    return 1\n")
     assert find_banned_parameter_uses(tree, _BANNED_PARAM_NAMES) == []
 

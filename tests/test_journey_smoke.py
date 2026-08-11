@@ -22,11 +22,7 @@ PROJECT = "smoke_journey"
 
 
 def assert_run_ok(status: dict, project_dir, run_id: str) -> None:
-    """Assert the run finished `ok`; on anything else, fail with the
-    manifest's per-stage problem records spelled out in full. The bare
-    `assert ..., status` form is useless in CI: pytest truncates the status
-    dict's repr, so the one line that says WHICH stage failed and WHY never
-    reaches the log."""
+    """pytest truncates a bare `assert ..., status`, so which stage failed never reaches the log."""
     if status.get("status") == "ok":
         return
     detail = "manifest.json not found"
@@ -101,7 +97,6 @@ def test_offline_journey_reaches_a_published_artifact(journey_project, tmp_path)
 
 
 def test_publish_stage_records_no_output_validation_issue(journey_project):
-    """publish declares no output schema, so its record carries no issue about one."""
     client.post(f"/project/{PROJECT}/version", data={"message": "first version"})
     version_id = list_versions(journey_project)[0].version_id
     resp = client.post(f"/project/{PROJECT}/versions/{version_id}/publish",
@@ -145,14 +140,10 @@ def journey_project(tmp_path, monkeypatch):
 
 
 def _point_examples_dir_at(root) -> None:
-    """Point the process's projects storage root at `root`. One live root,
-    one call — every consumer reads it through workspace.projects_dir()."""
     workspace.set_projects_dir(root)
 
 
 def _workflow_stages(authored_path: str) -> list[dict]:
-    """A minimal workflow using one stage of each non-LLM executable family:
-    file input -> per-row transform -> frame reshape -> publish."""
     load_schema = {
         "columns": [{"name": "name", "type": "str", "nullable": True}, {"name": "val", "type": "int", "nullable": True}],
     }

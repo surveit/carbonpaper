@@ -29,7 +29,6 @@ def _column(name: str) -> dict[str, Any]:
 
 
 def _v1_stages() -> list[dict[str, Any]]:
-    """A v1 workflow: every table schema still carries the key stages no longer take."""
     schema = {"columns": [_column("id")], "primary_key": ["id"]}
     return [
         {"id": "src", "description": "Source", "type": "input_data",

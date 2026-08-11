@@ -74,7 +74,6 @@ def _manifest(*records: dict[str, Any]) -> dict[str, Any]:
 
 
 def _refusal(stage_id: str) -> dict[str, Any]:
-    """A stage that refused its own output over an enum violation, as #391 records it."""
     return _record(
         stage_id, "error",
         error={"type": SCHEMA_REFUSAL_ERROR_TYPE,
@@ -96,7 +95,6 @@ REFUSAL_REASON = "the counting steps produced ['manual_merge_rules'], which this
 
 
 def _refused(stage_id: str) -> dict[str, Any]:
-    """A stage whose own authored code raised StepRefused over what it was given."""
     return _record(
         stage_id, "error",
         error={"type": StepRefused.__name__, "message": REFUSAL_REASON,
@@ -126,7 +124,6 @@ def test_a_transform_exception_stays_engineer_facing_in_the_same_section():
 
 
 def test_an_authored_refusal_is_the_datas_story_not_the_codes():
-    """`raise StepRefused(...)` is a step declining its input, not a bug in it."""
     stop = build_run_issues(_manifest(_refused("publish_workbook")), None).stopped[0]
 
     assert stop.kind is StopKind.refused
@@ -151,7 +148,6 @@ def test_a_stop_names_the_downstream_stages_that_never_ran():
 
 
 def test_a_pending_stage_on_another_fork_is_not_blamed_on_this_stop():
-    """It never ran for its own reason, and this index does not know which."""
     manifest = _manifest(
         _record("load", "ok"),
         _refusal("classify_issues"),
@@ -187,7 +183,6 @@ def test_warnings_are_one_line_per_stage_column_message_not_one_per_row():
 
 
 def test_the_same_line_raised_on_both_sides_of_a_stage_is_one_entry():
-    """One thing to look at, and the entry says it happened on both sides."""
     passthrough = ("warning", None, "1 undeclared column(s) present: ['note']")
     manifest = _manifest(_record(
         "flag", "ok",
@@ -200,7 +195,6 @@ def test_the_same_line_raised_on_both_sides_of_a_stage_is_one_entry():
 
 
 def test_a_stopped_stages_warnings_still_show_up_under_worth_a_look():
-    """Its error is the headline above; the warning is not thereby cancelled."""
     record = _refusal("classify_issues")
     record["input_validation_report"] = [
         _report("input:load", ("warning", "note", "3 value(s) outside range [0, 9]"))
@@ -214,7 +208,6 @@ def test_a_stopped_stages_warnings_still_show_up_under_worth_a_look():
 
 
 def test_an_error_that_did_not_stop_the_run_is_still_indexed():
-    """An input-side error only warns the stage, so no other surface shows it."""
     manifest = _manifest(_record(
         "score", "validation_warnings",
         input_validation_report=[
@@ -294,7 +287,6 @@ def test_a_severity_nothing_raised_is_left_out_of_the_title_not_counted_as_zero(
 
 
 def test_a_stop_is_a_line_of_the_same_list_as_the_warnings_it_did_not_cause():
-    """One table, and a heading that counts the stop's own line among the errors."""
     html = _render(_manifest(
         _refusal("classify_issues"),
         _record("score", "validation_warnings",
@@ -308,7 +300,6 @@ def test_a_stop_is_a_line_of_the_same_list_as_the_warnings_it_did_not_cause():
 
 
 def test_what_only_a_stop_carries_is_nested_under_its_own_line():
-    """A crash's message and traceback are its line's small print, not another row."""
     html = _render(_manifest(_crash("publish_report")))
 
     assert html.count("<tr ") == 1

@@ -13,7 +13,6 @@ from app.services import workspace
 
 
 def load_data_model(project_dir: Path) -> SchemaLibrary | None:
-    """The project's data model as a validated SchemaLibrary; None when absent."""
     schemas = workspace.load_schemas(project_dir)
     if not schemas:
         return None
@@ -24,9 +23,7 @@ def load_data_model(project_dir: Path) -> SchemaLibrary | None:
 
 
 def write_data_model(project_dir: Path, library: SchemaLibrary) -> None:
-    """Replace schemas/ with the given data model — clear stale files a shrinking
-    re-generation would leave, then write one NN_<name>.json per schema. The library
-    is already validated by the caller, so this only writes."""
+    """Replaces schemas/ wholesale: every existing *.json is deleted first."""
     schemas_dir = project_dir / "schemas"
     schemas_dir.mkdir(parents=True, exist_ok=True)
     for stale in schemas_dir.glob("*.json"):

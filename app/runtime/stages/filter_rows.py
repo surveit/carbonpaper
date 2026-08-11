@@ -27,7 +27,6 @@ def _load_predicate(stage: Stage) -> Callable[[dict[str, Any]], object]:
 
 
 def make_filter_mapper(stage: Stage, ctx: RunContext, src: pd.DataFrame) -> RowMapper:
-    """Resolve the predicate once, then decide one row at a time."""
     predicate = _load_predicate(stage)
 
     def keep_or_drop(row: Row, index: int) -> Row | None:

@@ -14,9 +14,7 @@ from pathlib import Path
 
 
 def find_cli() -> str | None:
-    """Locate the Claude Code CLI. The SDK's own search misses the Windows
-    `.local/bin/claude.exe` (it probes `.local/bin/claude` without the
-    extension), so we look explicitly and hand the result to `cli_path`."""
+    """The SDK's own search misses Windows `.local/bin/claude.exe` — it probes without the extension."""
     found = shutil.which("claude")
     if found:
         return found
@@ -55,10 +53,6 @@ for _marker in (
 
 
 def run_sync(coro):
-    """Drive a coroutine to completion from sync code. If NO event loop is
-    running on this thread (a CLI call, or a ThreadPoolExecutor worker) use
-    asyncio.run directly; if one IS running (a FastAPI async route), asyncio.run
-    would raise, so run on a fresh worker thread with its own loop."""
     try:
         asyncio.get_running_loop()
     except RuntimeError:

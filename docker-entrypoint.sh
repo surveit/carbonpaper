@@ -8,7 +8,7 @@
 # server answering against a stale schema.
 set -e
 
-mkdir -p "$(dirname "$CARBONPAPER_DB_PATH")" "$CARBONPAPER_PROJECTS_DIR"
+mkdir -p "$(dirname "$CARBON_PAPER_DB_PATH")" "$CARBON_PAPER_PROJECTS_DIR"
 
 alembic upgrade head
 

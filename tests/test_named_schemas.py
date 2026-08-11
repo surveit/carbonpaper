@@ -31,8 +31,6 @@ def test_named_schema_title_required():
 
 
 def test_named_schema_is_a_table_schema():
-    """NamedSchema builds on the on-the-fly TableSchema; it inherits its column /
-    primary-key checks rather than re-implementing them."""
     s = m.NamedSchema.model_validate(
         {"name": "company", "kind": "reference", "title": "Company",
          "columns": [{"name": "company_id", "type": "str", "nullable": True}]}

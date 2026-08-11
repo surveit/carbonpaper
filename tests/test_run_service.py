@@ -18,16 +18,13 @@ _PROJECT = "proj"
 
 @pytest.fixture(autouse=True)
 def _synchronous_background(monkeypatch):
-    """Run the service's background launch inline so a test can assert on the
-    finished manifest without racing a daemon thread."""
+    """Runs the launch inline so a test can assert on the manifest without racing a daemon."""
     monkeypatch.setattr(run_service, "_run_in_background",
                         lambda target, *args: target(*args))
 
 
 @pytest.fixture
 def project_dir(tmp_path, monkeypatch):
-    """A workspace pointed at tmp_path with one project dir `proj/`; the service
-    resolves the name `proj` to this directory."""
     workspace.set_projects_dir(tmp_path)
     return tmp_path / _PROJECT
 
@@ -58,8 +55,6 @@ def _seed_version(root):
 
 
 def test_start_run_returns_run_id_and_writes_ok_manifest(project_dir):
-    """start_run mints a run id, executes the pinned version, and the on-disk
-    manifest reflects the finished run."""
     _make_project(project_dir)
     _seed_version(project_dir)
     run_id = run_service.start_run(_PROJECT)
@@ -69,7 +64,6 @@ def test_start_run_returns_run_id_and_writes_ok_manifest(project_dir):
 
 
 def test_start_run_pins_requested_version(project_dir):
-    """A version_id passed to start_run is the version recorded on the run."""
     _make_project(project_dir)
     vid = _seed_version(project_dir)
     run_id = run_service.start_run(_PROJECT, version_id=vid)
@@ -78,7 +72,6 @@ def test_start_run_pins_requested_version(project_dir):
 
 
 def test_read_run_status_returns_manifest_dict(project_dir):
-    """read_run_status returns the started run's manifest as a dict."""
     _make_project(project_dir)
     _seed_version(project_dir)
     run_id = run_service.start_run(_PROJECT)
@@ -88,14 +81,12 @@ def test_read_run_status_returns_manifest_dict(project_dir):
 
 
 def test_read_run_status_missing_run_raises(project_dir):
-    """A run id with no manifest fails loudly, not with an empty/fabricated status."""
     _make_project(project_dir)
     with pytest.raises(RunNotFoundError):
         run_service.read_run_status(_PROJECT, "20990101T000000")
 
 
 def test_resolve_version_defaults_to_latest_stored_and_raises_when_none(project_dir):
-    """None -> newest stored version, published or not; only a versionless project raises."""
     _make_project(project_dir)
     with pytest.raises(NoVersionToRunError):
         run_service.resolve_version(_PROJECT, None)

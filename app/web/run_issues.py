@@ -19,8 +19,6 @@ from app.web.stage_strip import read_stage_records
 
 
 class StopKind(str, Enum):
-    """`schema`/`refused` are the data's story; `crash` is the code's."""
-
     schema = "schema"    # the output carries values its declared schema forbids
     refused = "refused"  # authored code raised StepRefused on what it was given
     crash = "crash"      # anything else raised, a per-row generation failure included
@@ -34,8 +32,6 @@ _KIND_BY_ERROR_TYPE = {
 
 
 class ValidationIssue(BaseModel):
-    """One issue, worded by the report that raised it — never re-worded here."""
-
     severity: str
     column: str | None
     message: str
@@ -45,8 +41,6 @@ class ValidationIssue(BaseModel):
 
 
 class StoppedStage(BaseModel):
-    """A stage whose failure ended the run."""
-
     stage_id: str
     kind: StopKind
     error_type: str
@@ -59,8 +53,6 @@ class StoppedStage(BaseModel):
 
 
 class FlaggedStage(BaseModel):
-    """One stage's issues that did not stop the run."""
-
     stage_id: str
     issues: list[ValidationIssue]
 
@@ -73,7 +65,6 @@ class RunIssues(BaseModel):
     # table's, so the Workflow page's heading cannot drift from this one.
     @property
     def error_count(self) -> int:
-        """A stop is ONE line — the issues it names are nested under it, not counted twice."""
         return len(self.stopped) + self._count_flagged(UserFacingErrorSeverity.error)
 
     @property
@@ -92,7 +83,6 @@ class RunIssues(BaseModel):
 def build_run_issues(
     manifest: Mapping[str, Any], stages: Sequence[Stage] | None
 ) -> RunIssues:
-    """`stages` are the pinned version's, or None when that version could not be read."""
     records = read_stage_records(manifest)
     # Only their edges say which never-ran stage a given stop is what blocked, so
     # without them a stop names none rather than blaming the ones it can see.
@@ -140,7 +130,6 @@ def _view_stopped_stage(
 def _view_flagged_stages(
     records: Sequence[Mapping[str, Any]],
 ) -> list[FlaggedStage]:
-    """Every issue the stopped section does not carry, by stage, in the run's own order."""
     flagged = []
     for record in records:
         stopped = record.get("status") == StageStatus.ERROR
@@ -157,7 +146,6 @@ def _view_flagged_stages(
 
 
 def _read_stage_issues(record: Mapping[str, Any]) -> list[ValidationIssue]:
-    """One line per (severity, column, message) over the stage's reports, errors first."""
     phases_by_issue: dict[tuple[str, str | None, str], list[str]] = {}
     # A passed-through column raises the identical line on the input side and the
     # output side; that is one thing to look at, not two.
@@ -197,7 +185,6 @@ def _find_stages_it_blocked(
     never_ran: set[str],
     order: Sequence[str],
 ) -> list[str]:
-    """The stages downstream of `stage_id` that never ran, in the run's own order."""
     reached: set[str] = set()
     frontier = [stage_id]
     while frontier:
@@ -209,7 +196,6 @@ def _find_stages_it_blocked(
 
 
 def _index_consumers(stages: Sequence[Stage] | None) -> dict[str, list[str]]:
-    """Producer stage id -> the stages that read it."""
     consumers: dict[str, list[str]] = {}
     for stage in stages or ():
         for ref in stage.inputs:
@@ -222,7 +208,6 @@ def _read_stage_id(record: Mapping[str, Any]) -> str:
 
 
 def _read_optional_text(value: object) -> str | None:
-    """Absent stays absent, never "" — a column of none is not a column named nothing."""
     if value is None:
         return None
     text = str(value).strip()

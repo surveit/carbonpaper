@@ -34,22 +34,18 @@ def test_research_tools_are_accepted():
 
 
 def test_bash_is_grantable():
-    """Bash buys document extraction (pdftotext and friends); granting it is the author's
-    call."""
     assert _config(tools=["Bash"]).tools == ["Bash"]
 
 
 @pytest.mark.parametrize("tool", ["websearch", "web_search", "Websearch", "Fetch"])
 def test_unknown_tool_names_are_refused(tool):
-    """Names are case-sensitive: a misspelled one would grant nothing, silently."""
     with pytest.raises(ValidationError) as err:
         _config(tools=[tool])
     assert "unknown tool name" in str(err.value)
 
 
 def test_tools_refuse_batching():
-    """Batch-mates share one context, so one row's research would leak into
-    another row's answer."""
+    """Batch-mates share one context, so one row's research would leak into another's answer."""
     with pytest.raises(ValidationError) as err:
         _config(tools=["WebSearch"], batch_size=4)
     assert "batch_size=1" in str(err.value)
@@ -82,8 +78,6 @@ def test_agent_without_extra_tools_is_submit_only():
 
 # ── plumbing: the research budget ────────────────────────────────────────────
 def _capture(monkeypatch):
-    """Run call_llm against a stubbed agent, returning the Agent kwargs and the timeout
-    applied."""
     seen: dict = {}
 
     class StubAgent:
@@ -122,3 +116,22 @@ def test_plain_row_keeps_the_cheap_budget(monkeypatch):
     assert seen["extra_tools"] == []
     assert seen["max_turns"] is None
     assert seen["timeout"] == DEFAULT_TIMEOUT_S
+
+
+# ── plumbing: how much the model reasons ─────────────────────────────────────
+def test_a_stage_that_says_nothing_leaves_the_backend_setting_alone(monkeypatch):
+    seen = _capture(monkeypatch)
+    runtime_llm.call_llm("s1", _config(), {"q": "?"}, reply_model=Reply)
+    assert seen["thinking"] is None
+
+
+def test_a_stage_can_turn_the_reasoning_off(monkeypatch):
+    # Reasoning nobody reads was 90% of one classifier stage's bill.
+    seen = _capture(monkeypatch)
+    runtime_llm.call_llm("s1", _config(thinking="disabled"), {"q": "?"}, reply_model=Reply)
+    assert seen["thinking"] == {"type": "disabled"}
+
+
+def test_the_setting_is_part_of_what_the_stage_computes():
+    # It changes the answers, so a run under it must not read a cache filled without it.
+    assert "thinking" in LLMConfig.FINGERPRINT_FIELDS

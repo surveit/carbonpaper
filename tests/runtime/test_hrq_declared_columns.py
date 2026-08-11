@@ -20,10 +20,7 @@ _FRAME_COLUMNS = {"id": "str", "score": "int", "label": "str"}
 
 
 def _stage(queue: dict[str, object], flt: str | None = None) -> Stage:
-    # The input edge declares `_src()`'s columns plus any reviewed source a test
-    # deliberately leaves OUT of that frame: a stage naming an undeclared source cannot be
-    # built at all, and those tests are about a live frame that does not match what was
-    # declared.
+    # Declares reviewed sources a test leaves out of the frame; an undeclared source won't parse.
     if flt is not None:
         queue = {**queue, "filter": flt}
     reviewed = queue["reviewed_columns"]
@@ -71,10 +68,7 @@ def _run(stage: Stage, ctx: RunContext, src: pd.DataFrame | None = None) -> pd.D
 
 
 def test_filtered_out_row_is_skipped_with_the_source_value_copied(tmp_path):
-    # Declaring a filter is the author's statement that the model's values stand for the
-    # rows it excludes, so those values are copied into the reviewed columns. The verdict
-    # is `skipped`, not `approve`: no human saw the row, and `approve` would claim one
-    # did.
+    # `skipped`, not `approve`: no human saw the row, and `approve` would claim one did.
     stage = _stage(queue_columns(source="score", target="human_score"), flt="id == 'nobody'")
     out = _run(stage, _production_ctx(tmp_path))
 
@@ -87,8 +81,6 @@ def test_filtered_out_row_is_skipped_with_the_source_value_copied(tmp_path):
 
 
 def test_declared_names_are_the_only_columns_added(tmp_path):
-    # The added columns carry the author's names — the runtime knows no
-    # `final_score`/`ai_score` vocabulary of its own.
     stage = _stage({
         "reviewed_columns": {"score": "checked_score"},
         "verdict_column": "review_verdict",
@@ -124,8 +116,6 @@ def _auto_approve_ctx(tmp_path: Path) -> RunContext:
 
 
 def test_auto_approve_copies_the_source_value_under_the_approve_verdict(tmp_path):
-    # Auto-approve is human approval's stand-in in a test run, so it keeps approve
-    # semantics — but still invents no reviewer.
     stage = _stage(queue_columns(source="score", target="human_score"))
     out = _run(stage, _auto_approve_ctx(tmp_path))
 
@@ -139,9 +129,6 @@ def test_auto_approve_copies_the_source_value_under_the_approve_verdict(tmp_path
 
 
 def test_a_source_column_absent_from_the_frame_raises(tmp_path):
-    # Authoring-time validation checks reviewed_columns against the DECLARED input schema;
-    # this is the complement — a live frame that does not match it. No value may stand in
-    # for the missing column.
     stage = _stage({
         **queue_columns(), "reviewed_columns": {"confidence": "human_confidence"},
     }, flt="id == 'nobody'")
@@ -153,11 +140,7 @@ def test_a_source_column_absent_from_the_frame_raises(tmp_path):
 
 
 def test_a_queued_row_also_refuses_an_absent_source_column(tmp_path):
-    # The path that would otherwise hide the mismatch: with no filter every row is QUEUED,
-    # so no row is ever skipped or auto-approved and nothing reads `reviewed_columns` per
-    # row. The stage must still refuse rather than write a review snapshot and halt for a
-    # human — the frame it would hand the reviewer cannot produce the column the stage
-    # declares.
+    # With no filter every row is queued, so nothing reads `reviewed_columns` per row.
     stage = _stage({
         **queue_columns(), "reviewed_columns": {"confidence": "human_confidence"},
     })

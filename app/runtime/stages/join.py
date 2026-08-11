@@ -26,9 +26,7 @@ JOIN_REFERENCE_ORD_KEY = "_trace_join_reference_ord"
 
 
 def handle_enrich(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext) -> pd.DataFrame:
-    # validate="m:1" makes pandas VERIFY the reference is unique on the key
-    # rather than trusting the author: a duplicate would otherwise multiply
-    # subject rows silently, which is expand's job, not this one's.
+    # validate="m:1" verifies the reference is unique; a duplicate would silently fan out.
     return _join_reference_into_subject(stage, inputs, validate="m:1")
 
 
@@ -94,7 +92,6 @@ def _join_reference_into_subject(
 def _describe_cardinality_failure(
     stage: "JoinStage", reference_id: str, exc: pd.errors.MergeError
 ) -> str:
-    """Why an enrich refused to run, with the three real fixes."""
     # pandas' own message is appended because it names the duplicated key values.
     pairs = ", ".join(f"{k.left}={k.right}" for k in stage.join.keys)
     return (

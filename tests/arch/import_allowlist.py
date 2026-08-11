@@ -30,8 +30,6 @@ def find_disallowed_imports(
 def _find_governed_imports(
     tree: ast.Module, roots: set[str]
 ) -> list[tuple[int, str, str | None]]:
-    """(lineno, rendered statement, dotted name to test) — `None` for a relative
-    import, which resolves to a sibling this checker cannot name."""
     found: list[tuple[int, str, str | None]] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):

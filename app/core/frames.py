@@ -36,13 +36,10 @@ PARQUET_SUFFIX = ".parquet"
 
 
 def read_frame_file(path: Path) -> pd.DataFrame:
-    """Parquet, or the CSV a writer falls back to for a frame parquet cannot hold — by suffix."""
     return _read_frame_parquet(path) if path.suffix == PARQUET_SUFFIX else pd.read_csv(path)
 
 
 def write_frame_file(frame: pd.DataFrame, path: Path) -> None:
-    """The inverse of `read_frame_file`, dispatching on the same suffix. The index is never
-    written."""
     if path.suffix == PARQUET_SUFFIX:
         frame.to_parquet(path, index=False)
     else:
@@ -57,7 +54,6 @@ class FrameWrite(NamedTuple):
 
 
 def write_frame_file_with_csv_fallback(frame: pd.DataFrame, path: Path) -> FrameWrite:
-    """`path` as parquet, else its `.csv` sibling for a dtype/shape parquet cannot hold."""
     try:
         frame.to_parquet(path, index=False)
     # Mixed-type object columns and nested Python values are what CSV rescues,
@@ -72,7 +68,6 @@ def write_frame_file_with_csv_fallback(frame: pd.DataFrame, path: Path) -> Frame
 
 
 def render_frame_as_csv_text(frame: pd.DataFrame) -> str:
-    """`frame` as CSV text, no index — the same serialization `write_frame_file` puts on disk."""
     return frame.to_csv(index=False)
 
 
@@ -103,7 +98,6 @@ def read_source_excel(
     path: Path, *, sheet_name: str | int, header_row: int,
     dtype: Mapping[Hashable, Any] | None = None,
 ) -> pd.DataFrame:
-    """One sheet, so pandas hands back a frame — never the dict a None/list `sheet_name` returns."""
     frame = pd.read_excel(
         path, sheet_name=sheet_name, header=header_row, engine="openpyxl",
         # pandas types read_excel's `dtype` as Mapping[str, ...] and read_csv's
@@ -131,7 +125,6 @@ def _read_frame_parquet(path: Path) -> pd.DataFrame:
 
 
 def _map_list_type_to_arrow_dtype(arrow_type: pa.DataType) -> pd.ArrowDtype | None:
-    """None leaves the column on pandas' own default for that arrow type."""
     if (
         pa.types.is_list(arrow_type)
         or pa.types.is_large_list(arrow_type)
@@ -142,7 +135,6 @@ def _map_list_type_to_arrow_dtype(arrow_type: pa.DataType) -> pd.ArrowDtype | No
 
 
 def read_frame_column_names(path: Path) -> list[str]:
-    """The labels `read_frame_file` would return, without reading a row of data."""
     if path.suffix == PARQUET_SUFFIX:
         # Every writer here saves with index=False, so there is no index column to subtract.
         return [str(name) for name in pq.read_schema(path).names]
@@ -150,10 +142,6 @@ def read_frame_column_names(path: Path) -> list[str]:
 
 
 def list_rows(frame: pd.DataFrame) -> list[dict[str, Any]]:
-    """`frame` as one dict per row, column label → cell value. The labels are
-    pinned to `str`: pandas types them as `Hashable`, so a caller that keys a row
-    by a column name would otherwise be working against a wider type than any
-    frame read from parquet or CSV actually carries."""
     return [
         {str(label): value for label, value in record.items()}
         for record in frame.to_dict("records")
@@ -161,18 +149,7 @@ def list_rows(frame: pd.DataFrame) -> list[dict[str, Any]]:
 
 
 def collapse_null_forms(value: object) -> object:
-    """`value`, or None if `value` is one of the four pandas null forms a row
-    cell can carry: plain `None`, `float('nan')`, `pd.NA`, or `pd.NaT` — all
-    become None so a parquet round trip can't shift a row's identity;
-    everything else passes through unchanged. Each form is tested
-    individually — an identity check for None/pd.NA/pd.NaT, an explicit
-    isinstance+isnan for a float nan — rather than via a single `pd.isna` call:
-    pandas-stubs' `isna` overloads do not accept a bare `object` argument, and
-    calling it on an array-valued cell (list/tuple/dict/set) would return an
-    elementwise array whose truth value is ambiguous in a plain `if`. None of
-    the checks here ask pd.isna anything, so an array-valued cell simply
-    matches none of them and falls through to the final `return value`
-    unchanged."""
+    """Not `pd.isna`: its stubs refuse a bare `object`, and an array cell gives an ambiguous truth."""
     if value is None or value is pd.NA or value is pd.NaT:
         return None
     if isinstance(value, float) and math.isnan(value):
@@ -186,13 +163,10 @@ def is_null_form(value: object) -> bool:
 
 
 def is_sequence_cell(value: object) -> bool:
-    """Whether pandas presents the cell as multi-valued — parquet returns a written list as
-    ndarray."""
     return isinstance(value, (list, tuple, np.ndarray))
 
 
 def is_missing_cell(value: Any) -> bool:
-    """Catches `is_null_form`'s misses too: np.floating nan and bare np.datetime64 NaT."""
     if is_sequence_cell(value) or isinstance(value, dict):
         return False
     if is_null_form(value):
@@ -207,12 +181,10 @@ def is_bool_cell(value: Any) -> bool:
 
 
 def is_exact_int_cell(value: Any) -> bool:
-    """Unlike `_is_int_cell`, never true for a whole-valued float — 2.0 stays a float."""
     return not is_bool_cell(value) and isinstance(value, (int, np.integer))
 
 
 def is_exact_float_cell(value: Any) -> bool:
-    """The float counterpart to `is_exact_int_cell`: true only for an actual float."""
     return isinstance(value, (float, np.floating))
 
 
@@ -230,8 +202,6 @@ def is_exact_float_cell(value: Any) -> bool:
 
 
 def _is_int_cell(value: Any) -> bool:
-    # A Python bool is a subclass of int, but a column declared `int` that
-    # holds True/False is a real mismatch — reject it explicitly.
     if is_bool_cell(value):
         return False
     if isinstance(value, (int, np.integer)):
@@ -243,24 +213,19 @@ def _is_int_cell(value: Any) -> bool:
 
 
 def _is_float_cell(value: Any) -> bool:
-    # Ints in a float column are fine (pandas will not preserve the
-    # distinction anyway); bools are not.
     return isinstance(value, (float, np.floating)) or _is_int_cell(value)
 
 
 def _is_str_cell(value: Any) -> bool:
-    # np.str_ subclasses str; pandas `string` dtype yields plain str.
     return isinstance(value, str)
 
 
 def _is_datetime_cell(value: Any) -> bool:
-    # datetime.datetime covers pd.Timestamp (a subclass of it).
     return isinstance(value, (_dt.datetime, np.datetime64))
 
 
 def _is_date_cell(value: Any) -> bool:
-    # datetime.date covers datetime.datetime and pd.Timestamp: pandas has no
-    # date-only dtype, so a `date` column round-trips as a Timestamp.
+    # pandas has no date-only dtype, so a `date` column round-trips as a Timestamp.
     return isinstance(value, (_dt.date, np.datetime64))
 
 
@@ -275,8 +240,6 @@ CELL_TYPE_PREDICATES: Mapping[str, Callable[[Any], bool]] = {
 
 
 def dtype_proves_cell_type(series: pd.Series, type_name: str) -> bool:
-    """Whether the dtype alone proves every cell matches `type_name`; object dtype proves
-    nothing."""
     dtype = series.dtype
     types = pd.api.types
     if types.is_object_dtype(dtype):
@@ -301,11 +264,6 @@ def dtype_proves_cell_type(series: pd.Series, type_name: str) -> bool:
 
 
 def convert_cell_to_json_native(value: object) -> object:
-    """A `json.dumps` default for frame cells: a numpy scalar becomes its Python
-    equivalent via `.item()` (so a numeric cell survives as a JSON number rather
-    than a string), kept only when that equivalent is itself JSON-native;
-    everything else — a pandas Timestamp, a numpy datetime, an arbitrary object
-    — is stringified."""
     if isinstance(value, np.generic):
         native = value.item()
         if native is None or isinstance(native, (bool, int, float, str)):
@@ -315,25 +273,13 @@ def convert_cell_to_json_native(value: object) -> object:
 
 
 def compute_frames_fingerprint(frames: Sequence[pd.DataFrame]) -> str:
-    """One identity for an ordered sequence of frames — a frame-shaped stage's
-    inputs in its declared input order. Order matters: swapping a join's two
-    sides is a different input."""
     return compute_short_hash(
         json.dumps([compute_frame_fingerprint(frame) for frame in frames])
     )
 
 
 def compute_frame_fingerprint(frame: pd.DataFrame) -> str:
-    """compute_short_hash over a JSON dump of a WHOLE frame: its column
-    labels in their own order, then its cells row by row in their own order,
-    each cell collapsed through `collapse_null_forms` exactly as a row cell is.
-
-    Column and row ORDER are part of the identity here, unlike a row
-    fingerprint, where key order is deliberately irrelevant: a whole-frame
-    transform may index positionally or depend on sort order, so a reordered
-    input is a genuinely different input and must not resolve to the same
-    cached output. The frame's index is not part of the identity — it does not
-    survive the parquet round trip the payload takes."""
+    """Row/column ORDER is identity here, unlike a row fingerprint: a frame transform may sort."""
     payload = {
         "columns": [str(label) for label in frame.columns],
         "rows": [
@@ -379,9 +325,6 @@ _frame_store: FrameStore | None = None
 
 
 def configure_frame_store(store: FrameStore) -> None:
-    """Install the process-wide frame store. App startup calls this once with a
-    FrameStore under the workspace; each test installs a fresh one rooted at its
-    own tmp dir."""
     global _frame_store
     _frame_store = store
 
@@ -399,11 +342,6 @@ def is_frame_store_configured() -> bool:
 def save_frame_or_reject(
     collection: str, id: str, frame: pd.DataFrame, *, described_as: str
 ) -> None:
-    """Save `frame` to the configured store, raising `FrameNotSerializableError`
-    — prefixed `described_as` — for a dtype/shape parquet cannot represent,
-    after removing whatever partial file the failed write left, so a later read
-    never resolves to a truncated frame. A disk/OS error is deliberately NOT
-    converted: it propagates."""
     store = get_frame_store()
     try:
         store.save_frame(collection, id, frame)

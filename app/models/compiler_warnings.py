@@ -15,8 +15,6 @@ from app.models.stages.warnings import SEVERITY, CompilerWarning, warn
 
 
 class CompilerWarningReport(BaseModel):
-    """Every compiler warning for one workflow, errors first."""
-
     warnings: list[CompilerWarning]
 
     @property
@@ -25,17 +23,13 @@ class CompilerWarningReport(BaseModel):
 
     @property
     def is_clean(self) -> bool:
-        """True when no error remains; a warning still owes the reviewer a sentence."""
         return not self.errors
 
 
 def find_workflow_compiler_warnings(
     stages: list[Stage], failing_examples: Mapping[str, int] | None = None
 ) -> CompilerWarningReport:
-    # `failing_examples` is {stage id: how many of its examples do not pass}. The
-    # CALLER runs them: answering it means executing code, and app.runtime imports
-    # this module, so running them here would be a cycle.
-    """Every compiler warning across `stages`, errors first then by kind."""
+    """The CALLER runs the examples: app.runtime imports this module, so running them here cycles."""
     failing = failing_examples or {}
     warnings = [w for stage in stages
                 for w in find_stage_compiler_warnings(stage, failing.get(stage.id))]
@@ -49,7 +43,6 @@ def find_workflow_compiler_warnings(
 def find_stage_compiler_warnings(
     stage: Stage, failing_examples: int | None = None
 ) -> list[CompilerWarning]:
-    """Every warning for `stage` alone; only `examples_failing` needs them run."""
     warnings = stage.find_handle_compiler_warnings()
     # A stage with no description has nothing for examples to check, so complaining
     # about the examples too would be noise — fix the description first.
@@ -61,7 +54,6 @@ def find_stage_compiler_warnings(
 def _find_unchecked_description_warnings(
     stage: Stage, failing_examples: int | None
 ) -> list[CompilerWarning]:
-    """A description nothing checks against the code; only authored code has one."""
     if stage.find_authored_code_block() is None:
         return []
     if not stage.CARRIES_RUNNABLE_TESTS:
@@ -77,7 +69,6 @@ def _find_unchecked_description_warnings(
 def _find_failing_example_warning(
     stage: Stage, failing_examples: int | None
 ) -> list[CompilerWarning]:
-    """The one warning that needs the examples RUN, reported here with the rest."""
     if not failing_examples:
         return []
     total = len(stage.tests or [])
@@ -87,7 +78,6 @@ def _find_failing_example_warning(
 
 
 def _find_deliberate_choice_warnings(stage: Stage) -> list[CompilerWarning]:
-    """Legitimate settings that change what a reviewer sees and are invisible everywhere else."""
     warnings = []
     if not stage.cache:
         warnings.append(warn(stage, "nondeterministic",

@@ -11,8 +11,6 @@ from app.models.stage import Stage
 
 
 def get_output_columns_from_stage(stage: Stage) -> list[Column]:
-    """The output columns `stage` declares. Requires `stage` to declare an
-    output schema; raises `ValueError` if it doesn't."""
     output_schema = stage.resolve_output_schema()
     if output_schema is None:
         raise ValueError(f"stage {stage.id!r} declares no output schema")
@@ -22,10 +20,6 @@ def get_output_columns_from_stage(stage: Stage) -> list[Column]:
 def get_injected_columns(
     override: Stage, target: Stage, check_output_columns: list[str],
 ) -> list[Column]:
-    """The override-stage columns of the eval-dataset schema built for this
-    override/target/check set, deconflicted against the
-    checks' expected-output columns -- what a caller needs to check that an
-    eval-dataset file covers `override`'s output specifically."""
     injected, _ = _deconflicted_columns(override, target, check_output_columns)
     return injected
 
@@ -33,9 +27,6 @@ def get_injected_columns(
 def _deconflicted_columns(
     override: Stage, target: Stage, check_output_columns: list[str],
 ) -> tuple[list[Column], list[Column]]:
-    """Requires every name in `check_output_columns` to resolve against
-    `target`'s declared output; raises `ValueError` for a name that
-    doesn't."""
     override_columns = get_output_columns_from_stage(override)
     target_by_name = {c.name: c for c in get_output_columns_from_stage(target)}
     expected_output_columns = []
@@ -50,10 +41,6 @@ def _deconflicted_columns(
 def deconflict_column_names(
     override_columns: list[Column], expected_output_columns: list[Column],
 ) -> tuple[list[Column], list[Column]]:
-    """`override_columns` and `expected_output_columns`, renamed so no name is
-    shared between them: a name present on both sides is rewritten
-    `override.<name>` on the injected side and `output.<name>` on the
-    expected-output side."""
     conflicts = _find_column_name_conflicts(override_columns, expected_output_columns)
     injected = _rename_columns(override_columns, conflicts, prefix="override.")
     expected_output = _rename_columns(expected_output_columns, conflicts, prefix="output.")
@@ -68,7 +55,6 @@ def _find_column_name_conflicts(
 
 
 def _rename_columns(columns: list[Column], conflicts: set[str], *, prefix: str) -> list[Column]:
-    """A copy of `columns`, each conflicting name rewritten as `{prefix}{name}`."""
     renamed: dict[str, Column] = {}
     for col in columns:
         name = f"{prefix}{col.name}" if col.name in conflicts else col.name

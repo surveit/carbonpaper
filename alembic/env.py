@@ -6,7 +6,7 @@ from __future__ import annotations
 from alembic import context
 from sqlalchemy import create_engine
 
-from app.core.store_config import resolve_db_path
+from app.core.store_config import refuse_renamed_env_vars, resolve_db_path
 
 target_metadata = None
 
@@ -25,6 +25,8 @@ def run_migrations_offline() -> None:
     with context.begin_transaction():
         context.run_migrations()
 
+
+refuse_renamed_env_vars()
 
 if context.is_offline_mode():
     run_migrations_offline()

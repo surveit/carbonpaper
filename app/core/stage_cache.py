@@ -29,15 +29,7 @@ CACHED_FRAME_COLLECTION = "stage_cache_frames"
 
 
 class StageCacheEntry(PersistedModel):
-    """One cached stage output for one input key. `id` is
-    `_build_cache_id(project, stage_id, stage_fingerprint, input_fingerprint)`.
-    `output_row` is the stage's output for that key — an output row, or None
-    where the entry records none. `frozen_input` and `output_row`
-    are the sanctioned dynamic boundary (app.core.persistence.JsonDict):
-    arbitrary row shapes this module does not otherwise constrain. `frozen_input`
-    is the exact upstream row the stage saw, kept for auditability, not for
-    hashing: the row's identity is `input_fingerprint`, a value stored as given
-    rather than recomputed from `frozen_input`."""
+    """`frozen_input` is for audit, not hashing: `input_fingerprint` is stored as given, never recomputed."""
 
     collection: ClassVar[str] = "stage_cache"
     SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ_WRITE
@@ -52,7 +44,6 @@ class StageCacheEntry(PersistedModel):
 
     @classmethod
     def read_only(cls) -> "ReadOnlyStageCache":
-        """A view over the cache that cannot record."""
         return ReadOnlyStageCache()
 
     @classmethod
@@ -61,48 +52,26 @@ class StageCacheEntry(PersistedModel):
 
 
 def _build_cache_id(project: str, stage_id: str, stage_fingerprint: str, input_fingerprint: str) -> str:
-    """The composite store id for one cache entry:
-    `<project>/<stage_id>/<stage_fingerprint>/<input_fingerprint>`."""
     return f"{project}/{stage_id}/{stage_fingerprint}/{input_fingerprint}"
 
 
 def _build_frame_cache_id(
     project: str, stage_id: str, stage_fingerprint: str, input_frames: Sequence[pd.DataFrame]
 ) -> str:
-    """The store id a whole-frame payload is filed under: the entry id, with the
-    ordered input frames standing where a row's fingerprint stands."""
     return _build_cache_id(
         project, stage_id, stage_fingerprint, compute_frames_fingerprint(input_frames)
     )
 
 
 def compute_row_fingerprint(row: Mapping[str, object]) -> str:
-    """compute_short_hash over a sorted-key JSON dump of `row`: every null form a
-    pandas row cell can carry (None, float('nan'), pd.NA, pd.NaT — see
-    `app.core.frames.collapse_null_forms`) is mapped to JSON null first, so two
-    rows that differ only in which null form they carry hash identically. Column
-    order does not matter — json.dumps(sort_keys=True) makes key order irrelevant
-    regardless of the input mapping's own order. This construction defends
-    against exactly two instability sources that would otherwise change a
-    row's identity for free: null-form representation drift across a storage
-    round trip, and column order."""
+    """Null forms collapse and keys sort, so round-trip drift and column order cannot change a row's id."""
     normalized = {key: collapse_null_forms(value) for key, value in row.items()}
     payload = json.dumps(normalized, sort_keys=True, separators=(",", ":"), default=str)
     return compute_short_hash(payload)
 
 
 def _to_json_safe_row(row: Mapping[str, object]) -> JsonDict:
-    """`row` reduced to JSON-native types for storage as a `StageCacheEntry`'s
-    `frozen_input` or `output_row`: every null form collapses to JSON null (the same
-    `collapse_null_forms` step `compute_row_fingerprint` hashes under), a numpy
-    numeric scalar becomes its JSON-native Python equivalent (`np.int64(1)` ->
-    the number 1, not the string "1"), and any other non-JSON-native value (a
-    pandas Timestamp, ...) is stringified — see
-    `app.core.frames.convert_cell_to_json_native`, the `json.dumps` default.
-    Preserving numbers as numbers matters because the frozen row is read back as
-    a stage's output, where a stringified score would corrupt the numeric column
-    it feeds. `compute_row_fingerprint` keeps its own `default=str`, so
-    fingerprints are unaffected by this."""
+    """Numbers stay numbers: this row is read back as stage output, where a stringified score corrupts it."""
     normalized = {key: collapse_null_forms(value) for key, value in row.items()}
     safe: JsonDict = json.loads(
         json.dumps(normalized, default=convert_cell_to_json_native)
@@ -111,10 +80,6 @@ def _to_json_safe_row(row: Mapping[str, object]) -> JsonDict:
 
 
 class ReadOnlyStageCache:
-    """Read-only view over the stage-result cache. `record` is not defined here,
-    so an instance of this class cannot write a cache entry — the capability is
-    structurally absent, not withheld by a runtime check."""
-
     def get(
         self, project: str, stage_id: str, stage_fingerprint: str, input_fingerprint: str
     ) -> StageCacheEntry | None:
@@ -131,10 +96,6 @@ class ReadOnlyStageCache:
     def find_recorded_rows(
         self, project: str, stage_id: str, stage_fingerprint: str
     ) -> dict[str, JsonDict]:
-        """Every output row recorded against this stage definition, keyed by the
-        input fingerprint it was filed under — ONE store read for a whole stage
-        execution, rather than a `get` per row. An entry carrying no output row
-        is skipped: it replays nothing, so the row it was filed under misses."""
         return {
             entry.input_fingerprint: entry.output_row
             for entry in self.find_entries(project, stage_id, stage_fingerprint)
@@ -148,9 +109,7 @@ class ReadOnlyStageCache:
         stage_fingerprint: str,
         input_frames: Sequence[pd.DataFrame],
     ) -> pd.DataFrame | None:
-        """The whole output frame recorded for this stage definition against
-        exactly these input frames, or None. The ORDER of `input_frames` is part
-        of the key, so swapping a join's two sides is a different input."""
+        """`input_frames` ORDER is part of the key — swapping a join's two sides is a different input."""
         return get_frame_store().load_frame(
             CACHED_FRAME_COLLECTION,
             _build_frame_cache_id(project, stage_id, stage_fingerprint, input_frames),
@@ -158,9 +117,6 @@ class ReadOnlyStageCache:
 
 
 class StageCache(ReadOnlyStageCache):
-    """Read+write accessor over the stage-result cache: the read-only view plus
-    `record`."""
-
     def record(
         self,
         *,
@@ -171,12 +127,6 @@ class StageCache(ReadOnlyStageCache):
         input_row: Mapping[str, object],
         output_row: Mapping[str, object] | None,
     ) -> None:
-        """Build one cache entry from the given parts and save it. The id is
-        `_build_cache_id` of the four key parts; `input_row` and `output_row`
-        are each reduced to JSON-native types (`_to_json_safe_row`), with a
-        None `output_row` stored as None. `stage_fingerprint` and
-        `input_fingerprint` are stored exactly as passed — not recomputed from
-        `input_row`."""
         StageCacheEntry(
             id=_build_cache_id(project, stage_id, stage_fingerprint, input_fingerprint),
             project=project,
@@ -196,10 +146,6 @@ class StageCache(ReadOnlyStageCache):
         input_frames: Sequence[pd.DataFrame],
         frame: pd.DataFrame,
     ) -> None:
-        """Pin one whole output frame under the same composite key `record` uses,
-        in the frame store rather than as a `StageCacheEntry` field. A frame the
-        storage form cannot represent raises `FrameNotSerializableError` (see
-        `app.core.frames.save_frame_or_reject`)."""
         save_frame_or_reject(
             CACHED_FRAME_COLLECTION,
             _build_frame_cache_id(project, stage_id, stage_fingerprint, input_frames),

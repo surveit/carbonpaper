@@ -82,7 +82,6 @@ def test_a_section_reads_description_then_transforms_then_output() -> None:
 
 
 def test_the_transforms_are_not_folded_behind_a_disclosure() -> None:
-    """What a section DID is the thing the rail is for — a click would hide it."""
     html = _render(_section(_union()))
 
     assert "<details" not in html
@@ -106,7 +105,6 @@ def test_the_link_shows_the_abbreviated_size() -> None:
 
 
 def test_the_exact_count_rides_on_the_links_own_title() -> None:
-    """The abbreviation rounds a MEASURED number, so the measurement must stay here."""
     html = _render(_section(_union()))
 
     [title] = re.findall(r'<a class="guide-output"[^>]*title="([^"]*)"', html)
@@ -131,7 +129,6 @@ def test_an_unmeasured_half_says_so_and_is_never_rendered_as_a_zero(
 
 
 def test_a_stage_the_run_never_executed_says_so_rather_than_calling_it_unknown() -> None:
-    """"Unknown" describes the interface's knowledge; the reader needs what happened."""
     html = _render(_section(
         _stage_view("s", "S", rows=None, columns=None, executed=False)
     ))
@@ -143,7 +140,6 @@ def test_a_stage_the_run_never_executed_says_so_rather_than_calling_it_unknown()
 
 
 def test_a_stage_that_ran_but_measured_nothing_is_not_called_unexecuted() -> None:
-    """A different fact from never having run, so it does not borrow that sentence."""
     html = _render(_section(
         _stage_view("s", "S", rows=None, columns=None, executed=True)
     ))
@@ -153,7 +149,6 @@ def test_a_stage_that_ran_but_measured_nothing_is_not_called_unexecuted() -> Non
 
 
 def test_the_unmeasured_link_is_not_dressed_as_a_measured_one() -> None:
-    """The accent is link affordance; on the one link with no number it would mislead."""
     html = _render(_section(
         _stage_view("s", "S", rows=None, columns=None, executed=False)
     ))
@@ -170,7 +165,6 @@ def test_a_measured_empty_frame_still_reads_as_a_zero() -> None:
 # ── the output group ─────────────────────────────────────────────────────────
 
 def test_one_hairline_covers_every_pathway_out_of_a_section() -> None:
-    """Three ways out is one result with three ways out, so it gets one rule."""
     outputs = [
         _stage_view("select_core_filings", "Keep the paid filings", rows=40, columns=30),
         _stage_view("select_incidental_filings", "Keep the in-house ones", rows=24, columns=30),
@@ -196,7 +190,6 @@ def test_a_forking_section_names_each_branch_it_leaves() -> None:
 
 
 def test_a_section_with_no_authored_sentence_gets_its_link_and_no_sentence() -> None:
-    """Nothing is synthesised from the stage names to fill the gap."""
     html = _render(_section(_union()))
 
     assert "45.1k" in html

@@ -85,9 +85,7 @@ def test_backend_error_surfaces_as_row_error_not_raised(monkeypatch):
 
 
 def test_timeout_with_empty_message_is_captured_and_labeled(monkeypatch):
-    # asyncio.TimeoutError() (the real timeout path in app/runtime/llm.py)
-    # stringifies to "" — a message-less failure must still be captured (not
-    # mistaken for a successful row) and labeled with the exception's type name.
+    # asyncio.TimeoutError() stringifies to "" — the message-less failure is the point.
     def boom(stage_id, llm_config, row, **kw):
         raise asyncio.TimeoutError()
 

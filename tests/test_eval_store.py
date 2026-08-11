@@ -175,10 +175,6 @@ def test_load_eval_run_invalid_schema_raises_value_error(tmp_path: Path):
 
 
 def test_load_eval_run_ignores_sibling_invalid_run(tmp_path: Path):
-    """The requested run loads fine even when another run document for the same
-    project is invalid -- load_eval_run reads only the one document named by
-    run_id, unlike list_eval_runs which reads every eval_run document for the
-    project."""
     wanted = _run(id="run-good")
     save_eval_run(tmp_path, wanted)
     get_store().write("eval_run", f"{tmp_path.name}/run-bad", {"id": "run-bad"})
@@ -236,9 +232,6 @@ def test_latest_version_id_returns_newest(tmp_path: Path):
 
 
 def test_latest_version_id_includes_unpublished_draft(tmp_path: Path):
-    """latest_version_id reports the newest version overall, published or not:
-    an eval is a validation tool that must be able to score a newer
-    unpublished draft."""
     WorkflowVersion(id=f"{tmp_path.name}/20260101T000000", version_id="20260101T000000",
             created_at="x", message="m", reviewer="r", published=True).save()
     WorkflowVersion(id=f"{tmp_path.name}/20260201T000000", version_id="20260201T000000",

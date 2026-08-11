@@ -3,6 +3,7 @@ that code can see without importing it."""
 from __future__ import annotations
 
 import pytest
+from conftest import reads_of
 
 from app.models import Stage, parse_stage
 from app.models.errors import StepRefused
@@ -18,7 +19,6 @@ def test_the_named_function_is_returned():
 
 
 def test_the_default_name_is_the_fallback():
-    """`function` may name a function the code does not bind; the default still wins over None."""
     fn = load_function("def should_include(row):\n    return True\n",
                        "keep", "should_include")
     assert fn is not None and fn({}) is True
@@ -48,7 +48,7 @@ def _filter_stage(code: str) -> Stage:
     return parse_stage({
         "id": "keep_active", "description": "Keep active", "type": "filter_rows",
         "inputs": [{"id": "load", "schema": _SCHEMA}],
-        "signature": {"form": "extends"},
+        "signature": {"form": "extends", "reads": reads_of("load", _SCHEMA["columns"])},
         "filter": {"summary": "Keeps the rows marked active.", "code": code},
         "tests": [{"name": "keeps_an_active_row", "inputs": {"load": [{"status": "active"}]},
                    "expected": [{"status": "active"}]}],

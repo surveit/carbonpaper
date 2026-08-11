@@ -7,7 +7,6 @@ from app.models.stage import parse_stage
 
 
 def _aggregate_stage(*, produces, aggregations):
-    """One aggregate stage grouping facilities by company."""
     edge_schema = {
         "columns": [
             {"name": "company", "type": "str", "nullable": True},
@@ -30,7 +29,6 @@ def _aggregate_stage(*, produces, aggregations):
 
 
 def _reads_for(aggregations, edge_schema):
-    """Exactly what the config consumes: group_by plus value columns."""
     consumed = ["company", *(op["value_column"] for op in aggregations
                              if op.get("value_column"))]
     by_name = {c["name"]: c for c in edge_schema["columns"]}
@@ -55,7 +53,6 @@ def test_declared_column_not_producible_rejected():
 
 
 def test_count_output_declared_non_int_rejected():
-    # count gives int regardless of the input types.
     msg = _issues(_aggregate_stage(
         produces=[{"name": "n", "type": "str", "nullable": True}],
         aggregations=[{"output_column": "n", "formula": "count"}],
@@ -117,7 +114,6 @@ def test_sum_of_str_declared_int_rejected():
 
 
 def test_count_distinct_without_a_value_column_rejected():
-    # Unlike bare `count`, which counts rows, count_distinct counts a column's values.
     msg = _issues(_aggregate_stage(
         produces=[{"name": "company", "type": "str", "nullable": True},
                         {"name": "n_regions", "type": "int", "nullable": True}],
@@ -223,7 +219,6 @@ def test_whole_frame_producing_the_aggregations_alone_accepted():
 
 
 def test_whole_frame_declaring_a_group_column_rejected():
-    # `company` is no longer emitted — with no group keys nothing carries it out.
     msg = _issues(_whole_frame_stage(
         produces=[{"name": "company", "type": "str", "nullable": True},
                   {"name": "n", "type": "int", "nullable": True}],
@@ -269,7 +264,6 @@ def test_compute_aggregate_output_types_emits_the_aggregations_alone():
 
 
 def test_whole_frame_counting_rows_consumes_no_column_at_all():
-    # No group key, no value column, no `where` — so nothing is read.
     stage = parse_stage(_whole_frame_stage(
         produces=[{"name": "n", "type": "int", "nullable": True}],
         aggregations=[{"output_column": "n", "formula": "count"}],

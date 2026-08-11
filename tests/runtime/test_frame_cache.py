@@ -87,10 +87,6 @@ def test_a_second_run_returns_the_cached_frame_without_calling_the_transform():
 
 
 def test_the_registered_python_frame_function_replays_its_recorded_frame():
-    """Through the REGISTERED handler, not a hand-built one. The recorded frame
-    is seeded with an answer the authored function would never produce, so the
-    values that come back are themselves the evidence of a replay — running the
-    stage and reading the store back would only show that an entry exists."""
     stage, src = _frame_stage(), _src([1, 2])
     StageCache().record_frame(
         project=PROJECT, stage_id=stage.id,
@@ -122,8 +118,6 @@ def test_a_changed_input_cell_invalidates_the_cached_frame():
 
 
 def test_reordering_the_input_rows_invalidates_the_cached_frame():
-    """Order-sensitivity is a claim about correctness, not a comment: a whole-
-    frame transform may depend on row order, so a reorder must recompute."""
     stage = _frame_stage()
     calls: list[int] = []
     _counting_frame_handler(calls).execute(stage, {"src": _src([1, 2])}, _ctx())
@@ -149,8 +143,6 @@ def _two_input_stage() -> Stage:
 
 
 def test_the_key_covers_every_input_in_declared_order():
-    """A stage with two inputs keys on BOTH: changing the second one alone must
-    invalidate."""
     stage = _two_input_stage()
     left = _src([1, 2])
     calls: list[int] = []
@@ -205,10 +197,7 @@ def _aggregate_stage() -> Stage:
 
 
 def test_enrich_computes_every_run_and_records_nothing():
-    """Fingerprinting an enrich's two input frames costs more than the join a
-    hit would skip, so the stage is registered with caching off: it still
-    produces its output, and leaves no entry behind. Every subject row survives
-    the LEFT join — the unmatched one carries a null reference column."""
+    """Fingerprinting an enrich's two input frames costs more than the join a hit would skip."""
     stage = _enrich_stage()
     left, right = pd.DataFrame({"x": [1, 2]}), pd.DataFrame({"x": [1], "z": ["a"]})
     out = HANDLERS[StageType.enrich].execute(
@@ -244,11 +233,6 @@ def test_cache_false_writes_nothing():
 
 
 def test_cache_false_reads_nothing_that_is_already_pinned():
-    """The read half of the opt-out, which the write test above cannot reach: a
-    run that wrote nothing has nothing to replay, so re-computing proves only
-    that the store is empty. `cache` stays out of the definition fingerprint, so
-    the SAME stage cached once leaves a frame the uncached stage would find if it
-    looked — and it must still recompute."""
     calls: list[int] = []
     _counting_frame_handler(calls).execute(
         _frame_stage(cache=True), {"src": _src([1])}, _ctx(run_id="seed"))
@@ -260,10 +244,6 @@ def test_cache_false_reads_nothing_that_is_already_pinned():
 
 
 def test_bust_cache_skips_the_read_but_still_re_pins():
-    """The two halves of the claim need two busted runs, because one execution
-    resolves ONE key at this grain: a busted run over a pinned frame can show the
-    read was skipped, and a busted run over a frame nothing has pinned is the only
-    one whose recording a later run can detect."""
     stage = _frame_stage()
     calls: list[int] = []
     _counting_frame_handler(calls).execute(stage, {"src": _src([1])}, _ctx())
@@ -283,10 +263,7 @@ def test_bust_cache_skips_the_read_but_still_re_pins():
     assert calls == [1, 1, 2]
 
 
-def test_a_run_without_project_scope_touches_the_cache_at_all():
-    """The frame is pinned by a scoped run FIRST, so the un-scoped run walks past
-    an entry that was there to be had; without the seed, re-computing would prove
-    only an empty store."""
+def test_a_run_without_project_scope_neither_reads_nor_writes_the_cache():
     stage = _frame_stage()
     calls: list[int] = []
     _counting_frame_handler(calls).execute(stage, {"src": _src([1])}, _ctx(run_id="seed"))
@@ -325,8 +302,6 @@ def test_a_handler_that_returns_none_records_nothing():
 
 
 def test_only_the_unbounded_frame_shaped_type_caches():
-    """`python_frame_function` runs arbitrary user code, so a hit can skip
-    unbounded work; `enrich`/`expand`, `aggregate` and `publish` each opt out."""
     assert _frame_handler(StageType.python_frame_function).caches_frames is True
     for stage_type in (StageType.enrich, StageType.expand, StageType.aggregate,
                        StageType.publish):
@@ -388,8 +363,6 @@ def test_a_frame_parquet_cannot_serialize_leaves_the_run_uncached_with_a_note():
 
 
 def test_no_frame_store_configured_computes_normally_and_caches_nothing(monkeypatch):
-    """A cache MISS must never fail a stage. Every entry point except the web
-    app's lifespan reaches a run with no frame store configured."""
     monkeypatch.setattr("app.core.frames._frame_store", None)
     stage = _frame_stage()
     calls: list[int] = []
@@ -413,8 +386,6 @@ def test_no_frame_store_configured_leaves_nothing_to_replay(monkeypatch):
 
 
 def test_a_deliberate_opt_out_carries_no_note(monkeypatch):
-    """Only an UNAVAILABLE cache is noted. `cache: false` and a run with no
-    project scope are choices, not failures — noting them would be noise."""
     calls: list[int] = []
     out = _counting_frame_handler(calls).execute(
         _frame_stage(cache=False), {"src": _src([1])}, _ctx())

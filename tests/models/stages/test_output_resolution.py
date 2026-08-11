@@ -88,8 +88,10 @@ def test_an_edge_is_satisfied_by_the_upstream_resolved_outer():
             {"name": "title", "type": "str", "nullable": True},
             {"name": "note", "type": "str", "nullable": True},
         ]}}],
-        "filter": {"code": "def should_include(row):\n    return True"},
-        "signature": {"form": "extends"},
+        "filter": {"code": "def should_include(row):\n    return row['price'] is not None"},
+        "signature": {"form": "extends", "reads": [{"input": "clean", "columns": [
+            {"name": "price", "type": "float", "nullable": True},
+        ]}]},
     })
     assert validate_workflow([source, upstream, downstream]) == []
 

@@ -1,0 +1,53 @@
+{
+  "steps": [
+    {
+      "title": "Load the quarter's filings",
+      "prose": "One row per filing: client, registrant, reported spend, and one line on what the filing asked for. Invented data; no real filing.",
+      "stage_ids": [
+        "raw_filings"
+      ],
+      "data_description": "Every filing in the sample, as the CSV records it."
+    },
+    {
+      "title": "Load what each client said in public",
+      "prose": "One row per organisation: one line of what it committed to publicly, and where it said it. Also invented. Check it really is one row per organisation — the join fails on a repeat.",
+      "stage_ids": [
+        "public_commitments"
+      ],
+      "data_description": "Every organisation with a public commitment on record."
+    },
+    {
+      "title": "Join each filing to its client's commitment",
+      "prose": "A left join on client name, so no filing is dropped. A filing with no matching commitment survives with the field blank — that blank is the join's record of a non-match, not missing data.",
+      "stage_ids": [
+        "matched_commitments"
+      ],
+      "data_description": "Every filing, plus its client's commitment where one matched."
+    },
+    {
+      "title": "Read the two texts against each other",
+      "prose": "A model reads the commitment and the ask together and answers Contradicts, Matches, Unclear or No commitment given. Check each against both texts; it is the weakest link.",
+      "stage_ids": [
+        "judge_alignment"
+      ],
+      "data_description": "The same filings, plus the model's judgment and its one-sentence note."
+    },
+    {
+      "title": "Flag the contradictions",
+      "prose": "Flags a filing only where a commitment was joined onto it and the model said Contradicts. Plain code, so a wrong flag traces to a wrong judgment, and a blank commitment never becomes one.",
+      "stage_ids": [
+        "flag_contradiction"
+      ],
+      "data_description": "Every filing, plus `contradicts_commitment`."
+    },
+    {
+      "title": "Publish the report",
+      "prose": "One HTML page: the ask, the commitment or that none is on record, and for a flagged filing both texts together. Open it under Published, below; every row links back to its own lineage.",
+      "stage_ids": [
+        "publish_report"
+      ],
+      "data_description": "One row per filing, as published."
+    }
+  ],
+  "unnarrated": []
+}

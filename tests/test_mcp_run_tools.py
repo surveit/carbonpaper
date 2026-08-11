@@ -12,7 +12,6 @@ from app.services import workspace
 
 
 def _make_run_project(root):
-    """A tiny file-connector project (from tests/test_run_service.py)."""
     (root / "compiled").mkdir(parents=True)
     (root / "data").mkdir(parents=True)
     pd.DataFrame({"name": ["a", "b"], "val": [1, 2]}).to_csv(
@@ -56,8 +55,6 @@ _CLASSIFY = {
 
 
 def _make_workflow_test_project(root):
-    """A `demo` project with a bound 4-row source and one deterministic stage,
-    seeded as an unpublished version — any stored version runs."""
     (root / "data").mkdir(parents=True)
     pd.DataFrame({"doc_id": ["a", "b", "c", "d"], "score": [1, -1, 2, -3]}).to_csv(
         root / "data" / "rows.csv", index=False)
@@ -78,7 +75,6 @@ def _sync_background(monkeypatch):
 
 
 def test_run_workflow_starts_a_real_run_pollable_by_get_run_status(tmp_path, monkeypatch):
-    """run_workflow mints a real run id; get_run_status reads back its manifest."""
     from app.mcp import server
 
     workspace.set_projects_dir(tmp_path)
@@ -93,8 +89,6 @@ def test_run_workflow_starts_a_real_run_pollable_by_get_run_status(tmp_path, mon
 
 
 def test_run_workflow_translates_no_version_to_error(tmp_path, monkeypatch):
-    """A project with no stored version fails loudly as {ok: False, error},
-    never a traceback or a fabricated run id."""
     from app.mcp import server
 
     workspace.set_projects_dir(tmp_path)
@@ -108,7 +102,6 @@ def test_run_workflow_translates_no_version_to_error(tmp_path, monkeypatch):
 
 
 def test_get_run_status_missing_run_translates_to_error(tmp_path, monkeypatch):
-    """An unknown run id becomes {ok: False, error}, not a RunNotFoundError trace."""
     from app.mcp import server
 
     workspace.set_projects_dir(tmp_path)
@@ -120,8 +113,6 @@ def test_get_run_status_missing_run_translates_to_error(tmp_path, monkeypatch):
 
 
 def test_run_workflow_test_delegates_and_reports_verdict(tmp_path, monkeypatch):
-    """run_workflow_test runs the frontier over the slice and returns the
-    workflow-test verdict (ok True, the executed stage) — never a production run."""
     from app.mcp import server
 
     workspace.set_projects_dir(tmp_path)
@@ -141,7 +132,6 @@ def test_run_workflow_test_delegates_and_reports_verdict(tmp_path, monkeypatch):
 
 
 def test_run_tools_are_registered(tmp_path, monkeypatch):
-    """The three run tools are on the MCP tool registry."""
     from app.mcp import server
 
     names = {tool.name for tool in server.mcp._tool_manager.list_tools()}
