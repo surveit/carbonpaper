@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import shutil
 from pathlib import Path
 from typing import Any
 
@@ -50,7 +49,7 @@ router = APIRouter()
 # ─── Path guard ──────────────────────────────────────────────────────────────
 
 def _project_dir(project_name: str) -> Path:
-    """Direct-child-of-examples/ is the traversal guard delete_project's rmtree rests on."""
+    """404s a project with no directory, so a section page never renders over an absent one."""
     target = (projects_dir() / project_name).resolve()
     if target.parent != projects_dir().resolve() or not target.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project_name}'")
@@ -87,9 +86,13 @@ async def index(request: Request):
 
 @router.post("/project/{project_name}/delete")
 async def delete_project(project_name: str):
-    """Store documents survive: a project re-created under this name inherits its versions."""
-    target = _project_dir(project_name)
-    shutil.rmtree(target)
+    """Nothing survives: the record, versions, guides and drafts go with the directory."""
+    try:
+        # Not behind _project_dir on purpose: a record whose directory is already gone
+        # has none to find, and this route is what clears it.
+        project.delete_project(project_name)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     return RedirectResponse("/", status_code=303)
 
 
