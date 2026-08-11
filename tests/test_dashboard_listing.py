@@ -16,14 +16,11 @@ client = TestClient(app)
 
 @pytest.fixture(autouse=True)
 def examples_root(tmp_path, monkeypatch):
-    """The projects root repointed at a tmp dir."""
     workspace.set_projects_dir(tmp_path)
     return tmp_path
 
 
 def _make_document_only_project(root, name="fresh"):
-    """A project exactly as POST /project/new leaves it before any generation:
-    document.md + project.json, no schemas/, no compiled/."""
     proj = root / name
     proj.mkdir()
     (proj / "document.md").write_text("methodology prose", encoding="utf-8")
@@ -54,8 +51,6 @@ def test_document_only_project_renders_as_in_progress(examples_root):
 
 
 def test_versioned_project_is_ready_to_run(examples_root):
-    """A version is what makes a project runnable (runs target versions), so the
-    card flips to ready exactly when one exists."""
     proj = _make_document_only_project(examples_root, name="versioned")
     WorkflowVersion(
         id=f"{proj.name}/20260101T000000", version_id="20260101T000000",
@@ -69,7 +64,6 @@ def test_versioned_project_is_ready_to_run(examples_root):
 
 
 def test_unpublished_only_project_is_ready(examples_root):
-    """A run pins any stored version, so a project whose only one is a draft is ready."""
     proj = _make_document_only_project(examples_root, name="drafted")
     WorkflowVersion(
         id=f"{proj.name}/20260101T000000", version_id="20260101T000000",
@@ -83,10 +77,6 @@ def test_unpublished_only_project_is_ready(examples_root):
 
 
 def test_half_written_version_snapshot_fails_the_listing_loudly(examples_root):
-    """A stored document that fails the WorkflowVersion contract fails project
-    listing LOUDLY (list_versions raises WorkflowLoadError) — the dashboard must
-    not present a store holding an invalid document as healthy, and must never
-    guess whether the project is runnable. The remedy is a store migration."""
     from app.services.loader import WorkflowLoadError
 
     proj = _make_document_only_project(examples_root, name="halfway")

@@ -20,7 +20,6 @@ GOLDENS = Path(__file__).parent / "goldens"
 
 @pytest.fixture
 def project_dir(tmp_path: Path) -> Path:
-    """One project, `demo`, with an empty runs/ dir and the document that makes it a project."""
     workspace.set_projects_dir(tmp_path)
     pdir = tmp_path / "demo"
     (pdir / "runs").mkdir(parents=True)

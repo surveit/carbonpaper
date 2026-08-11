@@ -8,7 +8,7 @@ from contextlib import contextmanager
 from typing import Iterator, TextIO
 
 APP_LOGGER = "app"
-_HANDLER_NAME = "carbonpaper-app-console"
+_HANDLER_NAME = "carbon_paper-app-console"
 
 
 def configure_app_logging(

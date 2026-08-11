@@ -89,7 +89,6 @@ def test_strict_load_catches_cross_stage_issues(tmp_path):
 
 
 def test_strict_load_rejects_missing_or_empty_compiled_dir(tmp_path):
-    """A typo'd project path must fail loudly, not produce a valid 0-stage workflow."""
     with pytest.raises(WorkflowLoadError, match="no compiled stage files"):
         load_workflow(tmp_path)  # no compiled/ dir at all
     (tmp_path / "compiled").mkdir()

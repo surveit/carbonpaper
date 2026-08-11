@@ -54,7 +54,7 @@ LEVEL_DETAIL = 1
 
 
 class RunLog:
-    """One run's append log. Any thread may emit(); one writer thread writes."""
+    """Any thread may emit(); a single writer thread does the writing."""
 
     def __init__(self, path: Path):
         self._path = path
@@ -67,16 +67,13 @@ class RunLog:
         self._writer.start()
 
     def emit(self, event: dict[str, Any]) -> None:
-        """Queue one event: non-blocking, safe from any worker thread."""
-        # The writer stamps `seq` (the cursor an SSE client resumes from) and
-        # `ts`; callers supply `kind` plus whatever fields that kind needs.
+        # The writer stamps `seq` and `ts`; callers supply `kind` and that kind's fields.
         if self._closed:
             return
         event.setdefault("level", LEVEL_LIFECYCLE)
         self._q.put(event)
 
     def close(self) -> None:
-        """Emit the terminal run_done marker, flush, stop the writer. Idempotent."""
         if self._closed:
             return
         self._closed = True
@@ -89,13 +86,9 @@ class RunLog:
         self._writer.join(timeout=5.0)
 
     def _drain(self) -> None:
-        # Append mode: a resumed run continues its existing log rather than
-        # truncating it. Flushed per line so the tailer sees events promptly.
-        # seq resumes at the file's line count, so it is the line index of the
-        # event it stamps and stays monotonic across any number of resumes — a
-        # restart at 0 would put the resumed events behind a tailer's cursor,
-        # which drops every one of them.
         try:
+            # seq resumes at the line count: restarting at 0 would put resumed
+            # events behind a tailer's cursor, which drops every one of them.
             seq = _count_logged_events(self._path)
             handle = self._path.open("a", encoding="utf-8")
         except OSError:
@@ -123,10 +116,6 @@ class RunLog:
 
 
 def _count_logged_events(path: Path) -> int:
-    """How many events `path` already holds — one per non-blank line."""
-    # A log that does not exist yet holds none; that is the count, not a
-    # stand-in for one. Any other OSError propagates to the caller, which
-    # cannot open the file for appending either.
     if not path.exists():
         return 0
     with path.open("r", encoding="utf-8") as handle:
@@ -134,19 +123,6 @@ def _count_logged_events(path: Path) -> int:
 
 
 def read_events_since(path: Path, from_seq: int) -> list[dict[str, Any]]:
-    """The events in `path` with seq >= from_seq, in file order."""
-    # Streamed line by line rather than slurped whole: the file reaches tens of
-    # MB on a large run, and there is no reason to hold all of it in memory to
-    # walk it once. A malformed line — possible when read mid-write — is skipped
-    # and picked up by the next poll once complete. A missing file (the writer
-    # hasn't created it yet) reads as empty.
-    #
-    # Every line is parsed. Measured on a 272k-event / 37MB log that is 0.24s,
-    # which is the honest price of asking a question about record contents. It
-    # would be tempting to read `seq` off the raw text and skip parsing the rest,
-    # but that couples the reader to json.dumps' key order — it would break
-    # silently, into slowness rather than an error, the moment someone reordered
-    # the writer's dict.
     try:
         handle = path.open("r", encoding="utf-8")
     except OSError:
@@ -157,8 +133,11 @@ def read_events_since(path: Path, from_seq: int) -> list[dict[str, Any]]:
             if not line.strip():
                 continue
             try:
+                # Every line is parsed rather than `seq` read off the raw text:
+                # that would couple this to json.dumps' key order and break silently.
                 event = json.loads(line)
             except json.JSONDecodeError:
+                # Possible when read mid-write; the next poll picks the line up.
                 continue
             # Every event the writer emits carries a seq; a dict without one is
             # skipped rather than assigned a fabricated position.
@@ -183,14 +162,11 @@ def read_events_since(path: Path, from_seq: int) -> list[dict[str, Any]]:
 
 
 class DetailSink:
-    """The bound (log, stage, rows) a LEVEL_DETAIL emit is attributed to."""
-
     def __init__(self, log: RunLog, stage: str, rows: tuple[int, ...]):
         self._log, self._stage, self._rows = log, stage, rows
 
     def emit(self, kind: str, **fields: Any) -> None:
-        # `row` is the unit's first row; `rows` names the whole span, so a
-        # batched chunk's one prompt is never read as belonging to one row.
+        # `row` is the unit's first row, `rows` the whole span — a chunk's prompt is not one row's.
         self._log.emit({
             "kind": kind, "level": LEVEL_DETAIL, "stage": self._stage,
             "row": self._rows[0], "rows": list(self._rows), **fields,
@@ -205,12 +181,10 @@ Token = contextvars.Token["DetailSink | None"]
 
 
 def bind_row_sink(log: RunLog | None, stage: str, row: int) -> Token:
-    """Bind the detail sink for one row. A None log binds nothing."""
     return bind_detail_sink(log, stage, (row,))
 
 
 def bind_detail_sink(log: RunLog | None, stage: str, rows: tuple[int, ...]) -> Token:
-    """Bind the detail sink for one unit of work (a row, or a batched chunk)."""
     if log is None or not rows:
         return _detail_sink.set(None)
     return _detail_sink.set(DetailSink(log, stage, rows))
@@ -221,12 +195,10 @@ def unbind_detail_sink(token: Token) -> None:
 
 
 def current_detail_sink() -> DetailSink | None:
-    """The sink bound for the current row/chunk, or None outside a logged one."""
     return _detail_sink.get()
 
 
 def emit_llm_detail(kind: str, **fields: Any) -> None:
-    """Emit one detail event for the currently bound row/chunk; a no-op outside one."""
     sink = current_detail_sink()
     if sink is not None:
         sink.emit(kind, **fields)

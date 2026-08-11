@@ -28,10 +28,6 @@ router = APIRouter()
 # never a filesystem path built directly from the request.
 
 def _bundle_path(bundle: str) -> Path:
-    """The packaged WorkflowFile json path named `bundle`, or a 404. Matches
-    by stem against discover_workflow_files()'s own listing, so this can only
-    ever return a path the seam already enumerated from disk — never one
-    built from the unvalidated request string."""
     for candidate in discover_workflow_files():
         if candidate.stem == bundle:
             return candidate
@@ -39,14 +35,12 @@ def _bundle_path(bundle: str) -> Path:
 
 
 def _known_project(project_name: str) -> str:
-    """`project_name`, or a 404 if it names no current project."""
     if project_name not in project.list_projects():
         raise HTTPException(status_code=404, detail=f"No project '{project_name}'")
     return project_name
 
 
 def _redirect_to_admin(msg: str) -> RedirectResponse:
-    """303 back to the admin page carrying a one-line status message."""
     return RedirectResponse(url=f"/admin?{urlencode({'msg': msg})}", status_code=303)
 
 
@@ -54,9 +48,6 @@ def _redirect_to_admin(msg: str) -> RedirectResponse:
 
 @router.get("/admin", response_class=HTMLResponse)
 async def admin_index(request: Request, msg: str | None = None):
-    """The packaged seed fixtures (available to load) and the workspace's
-    current projects (available to export), plus the status message left by
-    the last action, if any."""
     return templates.TemplateResponse(
         request,
         "admin.html",
@@ -72,10 +63,6 @@ async def admin_index(request: Request, msg: str | None = None):
 
 @router.post("/admin/load/{bundle}")
 async def load_bundle(bundle: str):
-    """Import a seed fixture if its project doesn't already exist. Import-if-
-    absent only: an existing project of the same name is left exactly as it
-    is, reported back rather than clobbered, so loading the same bundle twice
-    is safe."""
     wf = WorkflowFile.model_validate_json(_bundle_path(bundle).read_text(encoding="utf-8"))
     try:
         name = import_project(wf)
@@ -87,7 +74,6 @@ async def load_bundle(bundle: str):
 
 @router.get("/admin/export/{project_name}")
 async def download_project(project_name: str) -> Response:
-    """A project's WorkflowFile document as a `<project>.json` browser download."""
     name = _known_project(project_name)
     return Response(
         content=export_project(name).to_json(),
@@ -98,7 +84,6 @@ async def download_project(project_name: str) -> Response:
 
 @router.post("/admin/import")
 async def upload_project(file: UploadFile = File(...)):
-    """Import an uploaded WorkflowFile. Nothing is written until it validates."""
     wf = _parse_workflow_file(await file.read(), file.filename)
     try:
         name = import_project(wf)
@@ -109,7 +94,6 @@ async def upload_project(file: UploadFile = File(...)):
 
 
 def _parse_workflow_file(raw: bytes, filename: str | None) -> WorkflowFile:
-    """The whole upload as a WorkflowFile, or a 400 — no project is written on the way."""
     try:
         return WorkflowFile.model_validate_json(raw)
     except ValidationError as exc:

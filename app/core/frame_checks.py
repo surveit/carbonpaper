@@ -22,12 +22,10 @@ class FrameViolation:
 
 
 def find_frame_violations(df: pd.DataFrame) -> list[FrameViolation]:
-    """Every cross-row rule the runner enforces on a stage input."""
     return find_duplicate_row_violations(df)
 
 
 def find_duplicate_row_violations(df: pd.DataFrame) -> list[FrameViolation]:
-    """Groups of rows identical across every column."""
     groups = _find_duplicate_row_groups(df)
     if not groups:
         return []
@@ -46,15 +44,12 @@ def find_duplicate_row_violations(df: pd.DataFrame) -> list[FrameViolation]:
 
 
 def _find_duplicate_row_groups(df: pd.DataFrame) -> list[list[int]]:
-    """Groups of 0-based row positions whose FULL row content is identical."""
-    # Identity is a content hash over every column's rendered value. repr()
-    # rather than str() so cells of different
-    # types with the same face value ("1" vs 1) stay distinct, and NaN/None/lists
-    # all render.
     if df is None or len(df) == 0:
         return []
     groups: dict[str, list[int]] = {}
     for pos, cells in enumerate(df.itertuples(index=False, name=None)):
+        # repr() not str(), so cells of different types with the same face value
+        # ("1" vs 1) stay distinct, and NaN/None/lists all render.
         rendered = "\x1f".join(repr(c) for c in cells)
         digest = hashlib.sha1(rendered.encode("utf-8")).hexdigest()
         groups.setdefault(digest, []).append(pos)

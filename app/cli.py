@@ -12,7 +12,7 @@ from typing import Any
 
 from app.core.errors import NoVersionToRunError
 from app.core.run_status import RunStatus
-from app.core.store_config import configure_default_stores
+from app.core.store_config import configure_default_stores, refuse_renamed_env_vars
 from app.services import run as run_service
 from app.services.errors import WorkflowLoadError
 from app.services.workspace import configure_projects_dir_from_env
@@ -20,6 +20,7 @@ from app.services.workspace import configure_projects_dir_from_env
 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
+    refuse_renamed_env_vars()
     configure_projects_dir_from_env()
     configure_default_stores()
     try:
@@ -52,7 +53,6 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
 
 
 def _parse_overrides(pairs: list[str]) -> dict[str, int] | None:
-    """`["clean=5"]` -> `{"clean": 5}`; None when the flag was not passed."""
     overrides: dict[str, int] = {}
     for pair in pairs:
         stage_id, separator, count = pair.partition("=")
@@ -63,7 +63,6 @@ def _parse_overrides(pairs: list[str]) -> dict[str, int] | None:
 
 
 def _summarize(manifest: dict[str, Any]) -> dict[str, Any]:
-    """The run's outcome as printed JSON: the pin, the status, one row per stage."""
     return {
         "run_id": manifest["run_id"],
         "workflow_version": manifest["workflow_version"],

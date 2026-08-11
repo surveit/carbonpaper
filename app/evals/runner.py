@@ -37,12 +37,6 @@ from app.services.versioning import load_version, load_version_stages
 def run_eval(
     project_dir: Path, config: EvalConfig, repo_root: Path, *, version_id: str | None = None,
 ) -> EvalRun:
-    """Run `config` against the SELECTED workflow version (the newest version
-    overall if `version_id` is None; see `_resolve_version`) and return the
-    saved EvalRun. An eval may score an unpublished version -- that is how a
-    proposal is validated before publishing. Raises EvalNotScorableError if the eval
-    can't be run at all (incompatible, no dataset attached, or the project has
-    no workflow version at all)."""
     version = _resolve_version(project_dir, version_id)
     workflow = Workflow(stages=load_version_stages(project_dir, version))
     report = validate_eval_compatibility(config, workflow.stages)
@@ -59,8 +53,6 @@ def run_eval(
 
 
 def _require_runnable(config: EvalConfig, report: CompatibilityReport) -> None:
-    """An eval that doesn't fit the workflow, or has no dataset, is not runnable —
-    raise rather than record a run that scored nothing."""
     if not report.ok:
         raise EvalNotScorableError(
             "eval is incompatible with the workflow: " + "; ".join(report.problems))
@@ -72,9 +64,6 @@ def _score_run(
     project_dir: Path, repo_root: Path, config: EvalConfig, version: str,
     settings: EvalRunSettings, workflow: Workflow,
 ) -> EvalRun:
-    """Run the injected stage subset to the target and score its output. A run
-    failure or a grain violation is recorded as an `error` run (with the reason),
-    not raised — the run happened, it just couldn't produce a score."""
     by_id = workflow.index_stages_by_id()
     override, target = by_id[config.override_stage], by_id[config.target_stage]
     assert config.table is not None  # _require_runnable checked this
@@ -100,8 +89,6 @@ def _score_run(
 def _build_injected_outputs(
     repo_root: Path, config: EvalConfig, override: Stage, target: Stage, dataset: pd.DataFrame,
 ) -> dict[str, pd.DataFrame]:
-    """The tables seeded as stage outputs before the subset runs: the eval dataset
-    as the override stage's output, plus each reference override's table."""
     outputs = {config.override_stage: _compute_override_output(override, target, config, dataset)}
     for ref in config.reference_overrides:
         outputs[ref.stage_id] = _read_table_ref(repo_root, ref.table)
@@ -111,10 +98,6 @@ def _build_injected_outputs(
 def _compute_override_output(
     override: Stage, target: Stage, config: EvalConfig, dataset: pd.DataFrame,
 ) -> pd.DataFrame:
-    """Compute the override stage's output from the eval dataset: take its injected
-    columns and rename them from their (possibly deconflicted) dataset names back to
-    the override stage's own output column names, so downstream stages see the schema
-    they expect."""
     override_columns = get_output_columns_from_stage(override)
     expected_source = [
         {c.name: c for c in get_output_columns_from_stage(target)}[check.output_column]
@@ -157,12 +140,7 @@ def _write_result_table(run_dir: Path, per_row: pd.DataFrame) -> Path:
 # ── Small helpers ────────────────────────────────────────────────────────────
 
 def _resolve_version(project_dir: Path, version_id: str | None) -> str:
-    """Resolve the workflow version an eval run will score: the version the
-    user SELECTED, published or not. An eval is a validation tool -- you eval
-    a version to decide whether to publish it. An explicit `version_id` must
-    name an existing version (a missing version id raises FileNotFoundError,
-    from load_version) and is returned as-is; None resolves to the newest
-    version overall, or raises if the project has no version at all."""
+    """Scores the SELECTED version, published or NOT — that is how a proposal is validated."""
     if version_id is not None:
         load_version(project_dir, version_id)  # raises FileNotFoundError if missing
         return version_id
@@ -174,8 +152,6 @@ def _resolve_version(project_dir: Path, version_id: str | None) -> str:
 
 
 def _read_table_ref(repo_root: Path, table: TableRef) -> pd.DataFrame:
-    """Read a TableRef into a DataFrame by its declared format. One case per
-    supported format; geojson is not a tabular eval input."""
     path = repo_root / table.path
     if table.format == FileFormat.csv:
         return read_source_csv(path)

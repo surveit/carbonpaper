@@ -98,9 +98,7 @@ def test_chat_page_renders_the_composer() -> None:
 
 
 def test_chat_page_hides_composer_for_view_only_session() -> None:
-    # A generation session is created with no bound agent (agent_id=None): the UI renders
-    # and streams it, but there is no agent to reply to a typed message (post_message would
-    # 400), so the composer must be hidden — while live streaming still works.
+    # No bound agent (agent_id=None), so post_message would 400 — hence no composer.
     sid = _store.create(title="Generation", agent_id=None, context={"phase": "workflow"})
     page = client.get(f"/chat/{sid}")
     assert page.status_code == 200

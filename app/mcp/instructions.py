@@ -25,7 +25,6 @@ from app.tools.prompt_fragments import WORKED_STAGE_EXAMPLE
 
 
 def _render_node_type_constraints() -> str:
-    """From the shared specs, so the two authoring prompts cannot drift apart."""
     governed = ", ".join(f"`{name}`" for name in AUTHORABLE_CODE_CARRYING_TYPES)
     return "\n".join([
         textwrap.fill(render_stage_anatomy(), width=88),

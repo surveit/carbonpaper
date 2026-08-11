@@ -35,7 +35,7 @@ STATUS_PASSED: Status = "passed"
 
 @dataclass
 class CellDiff:
-    """One differing cell: `row` indexes the compared (sorted) row order."""
+    """`row` indexes the compared (sorted) order, not the stage's input rows."""
     row: int
     column: str
     expected: Any
@@ -75,7 +75,6 @@ class StageTestsReport(BaseModel):
     untested_stages: list[str]
 
     def count_failing_by_stage(self) -> dict[str, int]:
-        """Stage id -> failing example count, omitting the clean ones."""
         counts = {
             run.stage_id: sum(1 for r in run.results if r.status != "passed")
             for run in self.stages
@@ -86,13 +85,6 @@ class StageTestsReport(BaseModel):
 def run_stage_tests(
     stages: list[Stage], stage_id: str | None = None
 ) -> StageTestsReport:
-    """Run authored stage tests against their current code and report the result.
-
-    With `stage_id` None, run every stage that can carry tests and does; with a
-    `stage_id`, run just that stage (raising ValueError if it names no stage, or
-    names one whose type carries no runnable tests). Either way,
-    `untested_stages` lists the in-scope stages that have no tests — a coverage
-    gap the caller should see, not a failure."""
     targets = _select_target_stages(stages, stage_id)
     runs = [_run_one_stage(stage) for stage in targets if stage.tests]
     untested = [stage.id for stage in targets if not stage.tests]
@@ -102,9 +94,6 @@ def run_stage_tests(
 
 
 def run_tests_for_stage(stage: Stage) -> list[StageTestResult]:
-    """Execute each of `stage.tests` through the stage's registered handler
-    and compare to its expected rows. Raises ValueError for stage types whose
-    tests cannot execute (the model forbids authoring them there anyway)."""
     if not stage.CARRIES_RUNNABLE_TESTS:
         raise ValueError(
             f"stage {stage.id} ({stage.type}) does not carry runnable tests"
@@ -113,10 +102,6 @@ def run_tests_for_stage(stage: Stage) -> list[StageTestResult]:
 
 
 def find_failing_stage_tests(stages: list[Stage]) -> list[str]:
-    """The version gate's check: run every stage's authored tests and
-    return one human-readable line per test the stage fails ([] = gate open).
-    Stages without tests contribute nothing — the gate holds existing tests to
-    green; it does not require tests to exist."""
     failures: list[str] = []
     for stage in stages:
         if not stage.tests:
@@ -131,9 +116,6 @@ def find_failing_stage_tests(stages: list[Stage]) -> list[str]:
 
 
 def _select_target_stages(stages: list[Stage], stage_id: str | None) -> list[Stage]:
-    """The stages a run covers: every one that can carry runnable tests when
-    `stage_id` is None, or exactly the named one — raising ValueError if it is
-    absent or is not a stage type that carries runnable tests."""
     if stage_id is None:
         return [stage for stage in stages if stage.CARRIES_RUNNABLE_TESTS]
     stage = _find_stage(stages, stage_id)
@@ -201,27 +183,18 @@ def _run_one_test(stage: Stage, test: StageTest) -> StageTestResult:
 
 
 def _describe_output(actual: Any) -> str:
-    """What the step returned instead of failing — row count only if it is a frame."""
     if isinstance(actual, pd.DataFrame):
         return f"{len(actual)} row(s)"
     return type(actual).__name__
 
 
 def _judge_raise(test: StageTest, exc: Exception) -> StageTestResult:
-    """Only StepRefused satisfies a failure case; every other raise is an error.
-
-    The type carries the whole signal — nothing is matched against the message. A
-    step that refuses says so by raising StepRefused; a KeyError from the same input
-    is the step falling over, which is what the test was written to tell apart, and
-    it stays an error even on a test that expected a failure."""
     if test.expected is None and isinstance(exc, StepRefused):
         return StageTestResult(test.name, "passed")
     return StageTestResult(test.name, "error", message=f"{type(exc).__name__}: {exc}")
 
 
 def _build_frame(rows: list[dict[str, Any]], schema: TableSchema) -> pd.DataFrame:
-    """An empty case still carries the schema's columns, so it executes like a real
-    empty upstream would."""
     if rows:
         return pd.DataFrame(rows)
     return pd.DataFrame(columns=[column.name for column in schema.columns])
@@ -233,8 +206,6 @@ def _validate_test_against_schemas(
     input_frames: dict[str, pd.DataFrame],
     input_schemas: dict[str, TableSchema],
 ) -> str | None:
-    """Schema-lint the test itself, error-severity only: its rows in against the
-    reads, its rows out against the writes."""
     problems: list[str] = []
     for ref in stage.inputs:
         report = validate_dataframe(
@@ -286,30 +257,19 @@ def _compare(stage: Stage, test: StageTest, actual: pd.DataFrame) -> StageTestRe
 
 
 def _select_cells(row: dict[str, Any], columns: list[str]) -> dict[str, Any]:
-    """Project a row onto the comparison columns. An omitted column in a row is
-    a claim of None: the malformed gate only guarantees each declared column
-    appears somewhere in the expected rows, not in every row dict."""
     return {column: row.get(column) for column in columns}
 
 
 def _values_equal(expected: Any, actual: Any) -> bool:
-    """Cell equality treating null and NaN as one absence: two absent cells are
-    equal, an absent and a present cell are not, and two present cells compare
-    by `==`. A pandas frame stores a null as NaN in a numeric column and as None
-    in an object column, so the runtime cannot tell the two apart — a test that
-    expects a null therefore matches either."""
+    """pandas stores a null as NaN or None by column dtype, so the two cannot be told apart."""
     if _is_absent(expected) or _is_absent(actual):
         return _is_absent(expected) and _is_absent(actual)
     return bool(expected == actual)
 
 
 def _is_absent(value: Any) -> bool:
-    """A cell is absent when it is None or float NaN — the two forms a null
-    takes in a pandas frame, which do not survive as distinct values."""
     return value is None or (isinstance(value, float) and math.isnan(value))
 
 
 def _sort_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """A stable, value-based row order applied to both sides so they compare
-    as a multiset — no test pins an output ordering."""
     return sorted(rows, key=lambda row: json.dumps(row, sort_keys=True, default=str))

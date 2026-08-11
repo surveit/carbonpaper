@@ -85,8 +85,6 @@ def test_unrecognized_kind_gets_the_custom_class():
 
 
 def test_no_fabricated_edges_without_references():
-    """A table that reads another without storing its key (e.g. a roll-up) gets
-    no edge — the graph under-claims rather than inventing dataflow."""
     schemas = [
         {"name": "comment", "kind": "computed",
          "columns": [{"name": "comment_id", "type": "str", "nullable": True}]},

@@ -17,7 +17,6 @@ _EDITING_TOOLS = _REPO_ROOT / "app/tools/editing.py"
 
 
 def find_mcp_tools(path: Path) -> list[tuple[str, ast.expr | None, str | None]]:
-    """Each `@mcp.tool(...)`-decorated function as (name, its `description=` value, docstring)."""
     found = []
     for node in ast.parse(path.read_text(encoding="utf-8")).body:
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):

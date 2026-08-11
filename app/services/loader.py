@@ -28,17 +28,12 @@ LOADER_BOOKKEEPING_KEYS: set[str] = {"_filename", "_order", "_error"}
 
 @dataclass
 class CompiledStageFile:
-    """One compiled file: its parsed Stage (None if invalid) and any issues."""
     filename: str
     stage: Stage | None = None
     issues: list[str] = field(default_factory=list)
 
 
 def list_stage_files(compiled_dir: Path) -> list[Path]:
-    """Every compiled stage file in `compiled_dir`, in filename order — the ONE
-    definition of which files are stages, so callers never glob the dir themselves.
-    An absent dir lists as empty: a project has no stage files until its first stage
-    is written. Says nothing about whether the files parse or validate."""
     return sorted(compiled_dir.glob("*.json"))
 
 
@@ -63,12 +58,6 @@ def load_compiled_dir(compiled_dir: Path) -> list[CompiledStageFile]:
 
 
 def load_workflow_object(project_dir: Path) -> Workflow:
-    """Strict load of a project's compiled workflow as one in-memory `Workflow`
-    object: parse every stage, collect ALL issues (per-file schema errors and
-    cross-stage graph problems), and raise WorkflowLoadError if the dir is empty or
-    anything is invalid — so the runner and version snapshotter refuse to execute or
-    freeze an unloadable workflow. The single strict entry point; `load_workflow`
-    (the list accessor) delegates here."""
     compiled_dir = project_dir / "compiled"
     entries = load_compiled_dir(compiled_dir)
     issues = [f"{e.filename}: {i}" for e in entries for i in e.issues]
@@ -82,16 +71,12 @@ def load_workflow_object(project_dir: Path) -> Workflow:
 
 
 def load_workflow(project_dir: Path) -> list[Stage]:
-    """The workflow's validated stages, for callers that want the list (the runner,
-    the version snapshotter). Strict — delegates to `load_workflow_object`."""
     return load_workflow_object(project_dir).stages
 
 
 # ─── Find & save ─────────────────────────────────────────────────────────────
 
 def find_stage_file(compiled_dir: Path, stage_id: str) -> Path | None:
-    """The compiled file whose stage carries this id, or None. Reads each file
-    only far enough to match the id (one stage per file, by convention)."""
     for f in list_stage_files(compiled_dir):
         try:
             data = json.loads(f.read_text(encoding="utf-8"))
@@ -103,14 +88,12 @@ def find_stage_file(compiled_dir: Path, stage_id: str) -> Path | None:
 
 
 def write_stage(path: Path, stage: Stage) -> None:
-    """Persist one validated stage to `path` as on-disk JSON."""
     path.write_text(stage_to_json(stage), encoding="utf-8")
 
 
 # ─── Source & code reads ─────────────────────────────────────────────────────
 
 def read_module_code(module_path: str) -> str | None:
-    """Resolve module 'examples.lobbymap.code.foo' to a file path and read it."""
     if not module_path:
         return None
     parts = module_path.split(".")
@@ -124,10 +107,6 @@ def read_module_code(module_path: str) -> str | None:
 
 
 def resolve_function_code(stage_def: Stage | None) -> str | None:
-    """Source for a stage's `function` (Python) or `starlark` block: the module
-    file for a Python module ref, else the inline code string. None for a stage
-    whose authored code is a filter predicate (inline on its own block) or that
-    has none."""
     fn = stage_def.find_authored_code_block() if stage_def else None
     if isinstance(fn, StarlarkFunction):
         return fn.code

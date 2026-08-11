@@ -28,8 +28,7 @@ MAX_RETRIES = 2  # transient-failure retries per row (attempts = retries + 1)
 
 @pytest.fixture
 def offline_llm():
-    """Override conftest's autouse offline forcing: this tier runs the real
-    backend. (Same fixture name shadows the session-wide monkeypatch.)"""
+    """Shadows conftest's autouse offline fixture so this tier hits the real backend."""
     yield
 
 

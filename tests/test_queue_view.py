@@ -21,9 +21,6 @@ def _queue_stage(
     input_ids: list[str] | None = None,
     reads: list[str] | None = None,
 ) -> Stage:
-    # A `human_review_queue` stage over `input_columns`, adding exactly what its
-    # `queue` block names. `target_spec` overrides the reviewed TARGET column's
-    # declaration.
     added: list[dict[str, object]] = queue_added_columns(target, target_type)
     added[0] = {**added[0], **(target_spec or {})}
     upstream_ids = input_ids or ["upstream"]
@@ -56,9 +53,7 @@ _LABEL_COLUMNS: list[dict[str, object]] = [
 
 
 def test_lineage_links_the_single_upstream_stage_at_the_sidecar_ordinal():
-    # The queue stage has produced no output at halt time, so a row's lineage link names
-    # the UPSTREAM stage and the row's ordinal from the sidecar — never the queue stage
-    # itself, and never a guessed position.
+    # At halt the queue stage has no output, so the link names the upstream stage and ordinal.
     stage = _queue_stage(_LABEL_COLUMNS, input_ids=["label"])
     fingerprints = QueueFingerprints("sf", ["fp0", "fp1"], [3, 7])
 
@@ -111,26 +106,12 @@ def test_a_schema_and_snapshot_that_disagree_are_reported_not_papered_over():
 
 
 def test_the_context_table_omits_the_columns_under_review():
-    # The context a reviewer is shown is the queued row MINUS the SOURCE of a reviewed
-    # column, which the review section prints beside its own control.
     stage = _queue_stage(_LABEL_COLUMNS)
     snapshot = pd.DataFrame({"id": ["a"], "score": [2], "label": ["high"]})
 
     page = queue_view.build_queue_page("p", "r", stage, stage.queue, snapshot, None, None)
 
-    assert [column.name for column in page.read_columns] == ["id", "score"]
-    assert page.other_columns == []
-
-
-def test_the_columns_the_stage_declares_it_reads_lead_and_the_rest_fold():
-    # Declared reads lead; the rest fold.
-    stage = _queue_stage(_LABEL_COLUMNS, reads=["score"])
-    snapshot = pd.DataFrame({"id": ["a"], "score": [2], "label": ["high"]})
-
-    page = queue_view.build_queue_page("p", "r", stage, stage.queue, snapshot, None, None)
-
-    assert [column.name for column in page.read_columns] == ["score"]
-    assert [column.name for column in page.other_columns] == ["id"]
+    assert [column.name for column in page.context_columns] == ["id", "score"]
 
 
 # ── The reviewed fields ──────────────────────────────────────────────────────
@@ -192,8 +173,6 @@ def test_a_declared_range_becomes_the_fields_bounds():
 
 
 def test_the_notes_label_prefers_the_declared_description():
-    # With no declared description the column name is spelled out — an undeclared
-    # `reviewer_notes` reads "Reviewer notes", never a hardcoded one.
     stage = _queue_stage(_LABEL_COLUMNS)
     assert queue_view.resolve_notes_label(stage, "review_notes") == "Review notes"
     assert queue_view.resolve_notes_label(stage, "reviewer_notes") == "Reviewer notes"

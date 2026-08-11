@@ -43,8 +43,6 @@ def test_fingerprint_and_incidental_fields_cover_every_model_field(config_cls):
 
 
 def _config_block_fields(stage_cls) -> set[str]:
-    """The config blocks a stage type declares for itself: its own fields (not the
-    ones every stage shares) whose type is a config class."""
     own = set(stage_cls.model_fields) - set(StageBase.model_fields)
     return {
         name for name in own
@@ -55,10 +53,7 @@ def _config_block_fields(stage_cls) -> set[str]:
 
 @pytest.mark.parametrize("stage_cls", get_args(get_args(Stage)[0]), ids=lambda c: c.__name__)
 def test_fingerprint_blocks_names_every_config_block_the_type_declares(stage_cls):
-    """The bug this pins: `publish` declares two config blocks and for a long time
-    fingerprinted only one, so editing the code it runs did not invalidate the
-    cache. A type that declares a block and leaves it out of `fingerprint_blocks`
-    reopens exactly that hole."""
+    """Pins the bug where publish fingerprinted one of its two config blocks, so code edits kept the cache."""
     declared = _config_block_fields(stage_cls)
     # model_construct skips validation, so the blocks can be sentinels: this
     # asks which fields fingerprint_blocks() reads, not what is in them.

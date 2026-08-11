@@ -12,7 +12,6 @@ TEMPLATES = Path(__file__).resolve().parents[2] / "app" / "templates"
 
 
 def _templates_rendering_a_stage_graph() -> list[Path]:
-    """Templates that drop a `{{ mermaid }}` stage graph into a <pre class="mermaid">."""
     found = []
     for path in sorted(TEMPLATES.glob("*.html")):
         text = path.read_text(encoding="utf-8")
@@ -34,9 +33,6 @@ def test_every_stage_graph_template_subscribes_to_node_clicks() -> None:
 
 
 def test_no_template_defines_its_own_mermaid_click_global() -> None:
-    """The old contract: each page defined `window.loadStage` for mermaid to find
-    by name. One dispatcher (window.dvNode) replaced it; re-introducing a private
-    global re-introduces the silent-miss failure mode."""
     offenders = [
         p.name for p in TEMPLATES.glob("*.html")
         if "window.loadStage" in p.read_text(encoding="utf-8")

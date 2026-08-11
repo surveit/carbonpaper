@@ -32,7 +32,6 @@ _PYTHON_LITERAL = re.compile(r"(?:fill|stroke|color|background|border)[a-z-]*\s*
 
 
 def find_colour_literals() -> dict[str, list[str]]:
-    """Every colour written outside the palette, as file → the literals it spends."""
     found: dict[str, list[str]] = {}
     for path in sorted(_APP.rglob("*")):
         rel = path.relative_to(_APP).as_posix()
@@ -67,7 +66,6 @@ def test_no_file_but_the_palette_writes_a_colour() -> None:
 
 
 def test_the_scan_reaches_the_stylesheet_it_is_meant_to_guard() -> None:
-    """A broken suffix filter or a moved app/ would make the rule above vacuous."""
     sheets = sorted((_APP / "static").glob("*.css"))
     assert sheets, "no stylesheet under app/static is being read — the rule is vacuous"
     for sheet in sheets:

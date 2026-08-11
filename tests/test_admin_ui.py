@@ -12,12 +12,11 @@ from app.services.project import WorkflowFile
 
 client = TestClient(app)
 
-_LOBBYING = "lobbying_issue_triage"
+_BUNDLE = "tutorial_lobbying_triage"
 
 
 @pytest.fixture(autouse=True)
 def workspace_root(tmp_path):
-    """A fresh projects root — the examples/ layout the real repo has."""
     examples_dir = tmp_path / "examples"
     examples_dir.mkdir()
     workspace.set_projects_dir(examples_dir)
@@ -28,39 +27,40 @@ def test_admin_page_lists_the_seed_bundle():
     r = client.get("/admin")
     assert r.status_code == 200
     assert "text/html" in r.headers["content-type"]
-    assert _LOBBYING in r.text
+    assert _BUNDLE in r.text
 
 
 def test_load_bundle_redirects_and_the_project_appears(workspace_root):
-    r = client.post(f"/admin/load/{_LOBBYING}", follow_redirects=False)
+    r = client.post(f"/admin/load/{_BUNDLE}", follow_redirects=False)
 
     assert r.status_code == 303
     assert r.headers["location"].startswith("/admin")
-    assert _LOBBYING in project.list_projects()
-    assert _LOBBYING in client.get("/admin").text
+    assert _BUNDLE in project.list_projects()
+    assert _BUNDLE in client.get("/admin").text
 
 
 def test_loading_the_same_bundle_twice_does_not_crash(workspace_root):
-    first = client.post(f"/admin/load/{_LOBBYING}", follow_redirects=False)
-    second = client.post(f"/admin/load/{_LOBBYING}", follow_redirects=False)
+    first = client.post(f"/admin/load/{_BUNDLE}", follow_redirects=False)
+    second = client.post(f"/admin/load/{_BUNDLE}", follow_redirects=False)
 
     assert first.status_code == 303
     assert second.status_code == 303
-    assert _LOBBYING in project.list_projects()
+    assert _BUNDLE in project.list_projects()
 
 
 def test_download_returns_the_workflow_file_as_an_attachment(workspace_root):
-    client.post(f"/admin/load/{_LOBBYING}", follow_redirects=False)
+    client.post(f"/admin/load/{_BUNDLE}", follow_redirects=False)
 
-    r = client.get(f"/admin/export/{_LOBBYING}")
+    r = client.get(f"/admin/export/{_BUNDLE}")
 
     assert r.status_code == 200
-    assert r.headers["content-disposition"] == f'attachment; filename="{_LOBBYING}.json"'
+    assert r.headers["content-disposition"] == f'attachment; filename="{_BUNDLE}.json"'
     wf = WorkflowFile.model_validate_json(r.content)
-    assert wf.name == _LOBBYING
-    assert {stage.id for stage in wf.stages} == {
-        "raw_filings", "classify_issues", "rank_by_spend", "publish_report",
-    }
+    assert wf.name == _BUNDLE
+    assert [stage.id for stage in wf.stages] == [
+        "raw_filings", "public_commitments", "matched_commitments",
+        "judge_alignment", "flag_contradiction", "publish_report",
+    ]
 
 
 def test_load_unknown_bundle_is_a_clean_404():
@@ -85,20 +85,20 @@ def _upload(payload: bytes, filename: str = "bundle.json"):
 
 
 def test_a_downloaded_bundle_uploads_back_into_an_empty_workspace(workspace_root):
-    client.post(f"/admin/load/{_LOBBYING}", follow_redirects=False)
-    downloaded = client.get(f"/admin/export/{_LOBBYING}").content
+    client.post(f"/admin/load/{_BUNDLE}", follow_redirects=False)
+    downloaded = client.get(f"/admin/export/{_BUNDLE}").content
     _empty_workspace(workspace_root.parent / "second")
 
     r = _upload(downloaded)
 
     assert r.status_code == 303
-    assert _LOBBYING in project.list_projects()
-    assert client.get(f"/admin/export/{_LOBBYING}").content == downloaded
+    assert _BUNDLE in project.list_projects()
+    assert client.get(f"/admin/export/{_BUNDLE}").content == downloaded
 
 
 def test_uploading_a_bundle_whose_project_exists_leaves_it_alone(workspace_root):
-    client.post(f"/admin/load/{_LOBBYING}", follow_redirects=False)
-    downloaded = client.get(f"/admin/export/{_LOBBYING}").content
+    client.post(f"/admin/load/{_BUNDLE}", follow_redirects=False)
+    downloaded = client.get(f"/admin/export/{_BUNDLE}").content
 
     r = _upload(downloaded)
 
@@ -107,7 +107,7 @@ def test_uploading_a_bundle_whose_project_exists_leaves_it_alone(workspace_root)
 
 
 def _empty_workspace(root):
-    """A second workspace — own projects root AND own store, since identity is a store record."""
+    """A fresh directory is not enough on its own — project identity is a store record."""
     from app.core.persistence import SqliteKvStore, configure_store
 
     root.mkdir(parents=True, exist_ok=True)

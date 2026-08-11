@@ -35,8 +35,6 @@ CONTRIBUTORS_NAMED = 3
 
 @dataclass(frozen=True)
 class ContributorGroup:
-    """Fan-in parents of one row that fed the SAME columns; `total` is the true count."""
-
     stage_id: str
     # None where the producer did not attribute its contribution to particular
     # output columns; otherwise the columns every row in this cohort fed.
@@ -51,9 +49,6 @@ class ContributorGroup:
 
 
 def _transform_of(stage: Stage | None) -> dict[str, Any]:
-    """What the stage did: a `kind` the template styles on, plus a `detail` blob."""
-    # `unknown` where the compiled stage is absent — the tracer needs only the
-    # run dir, and the compiled DAG may not be loadable.
     if stage is None:
         return {"kind": "unknown", "detail": None}
     if isinstance(stage, InputDataStage):
@@ -82,12 +77,6 @@ def _transform_of(stage: Stage | None) -> dict[str, Any]:
 def build_trace_view(
     trace: dict[str, Any], stages: dict[str, Stage], links: AppPanelLinks
 ) -> dict[str, Any]:
-    """Turn `trace` into the render payload: nodes chronological, claim last."""
-    # Each node carries its row — as fields marked against the parent row the
-    # walk came from — its transform, and any `branches`: parents the walk did
-    # not follow, offered as promotable traces rather than expanded inline, so
-    # the page stays one story. `upstream` folds the terminal stop reason onto
-    # the earliest node, not its own step.
     chrono = list(reversed(trace["steps"]))
     end = trace["end"]
     truncated = not end["reached_origin"]
@@ -118,7 +107,6 @@ def _build_node(
     i: int, chrono: list[dict[str, Any]], stages: dict[str, Stage],
     links: AppPanelLinks, truncated: bool,
 ) -> dict[str, Any]:
-    """One step as the page reads it: its row against its parent's, and where it links."""
     step = chrono[i]
     parent = chrono[i - 1] if i else None
     diff = build_row_diff(
@@ -166,14 +154,12 @@ def _spine_branches(step: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _role_of(i: int, total: int, truncated: bool) -> str:
-    """`claim` last, `source` first where the walk reached an origin, else `step`."""
     if i == total - 1:
         return "claim"
     return "source" if i == 0 and not truncated else "step"
 
 
 def _links_of(links: AppPanelLinks, stage_id: str, row_ordinal: int) -> dict[str, str]:
-    """Where one node points, in the app's own link vocabulary rather than a hand-built URL."""
     return {
         "stage": links.stage_anchor(stage_id),
         "rows": links.stage_rows(stage_id),
@@ -184,7 +170,6 @@ def _links_of(links: AppPanelLinks, stage_id: str, row_ordinal: int) -> dict[str
 def _group_contributors(
     contributions: list[dict[str, Any]], links: AppPanelLinks
 ) -> list[ContributorGroup]:
-    """Fan-in parents grouped by what they fed, each keeping its true size."""
     by_key: dict[tuple[str, tuple[str, ...] | None], list[dict[str, Any]]] = {}
     # Grouped over the WHOLE set before anything is dropped, so a cohort's
     # `total` and the number of cohorts are both exact however many rows are

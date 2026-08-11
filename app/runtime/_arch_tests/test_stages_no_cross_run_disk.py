@@ -19,8 +19,6 @@ _BANNED_PERSISTENCE_METHODS = frozenset({"save", "delete"})
 
 
 def find_persisted_write_call_offenders(paths: list[Path]) -> list[str]:
-    """"<path>: [<method>, ...]" for every file in `paths` that calls `.save()`
-    or `.delete()` on anything — the two `PersistedModel` writes — directly."""
     offenders: list[str] = []
     for path in paths:
         hits = collect_called_methods(parse_module(path)) & _BANNED_PERSISTENCE_METHODS

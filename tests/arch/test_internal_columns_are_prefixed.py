@@ -13,9 +13,6 @@ _TABLE = "_INTERNAL_ROW_COLUMNS"
 
 
 def read_declaration_table() -> tuple:
-    """`_INTERNAL_ROW_COLUMNS`, asserted present and non-empty: if it was renamed,
-    emptied or split, this rule is silently guarding nothing, so say so here
-    rather than pass."""
     table = getattr(execution, _TABLE, None)
     assert table, (
         f"app/runtime/stages/execution.py no longer declares a non-empty {_TABLE} — "

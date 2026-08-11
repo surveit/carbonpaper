@@ -48,9 +48,7 @@ def _run(stages: list[Stage], tmp_path, name: str) -> dict[str, pd.DataFrame]:
 
 
 def test_limit_caps_the_rows_a_frame_handler_is_given(tmp_path):
-    # `seen` is the row count the handler itself measured, so it reports what the
-    # runtime handed over — not what survived afterwards. Capping the OUTPUT would
-    # leave 3 rows all saying the handler had been given 5.
+    # `seen` is what the handler measured; capping the OUTPUT would leave 3 rows all saying 5.
     load = _load_stage("src", _rows("s", 5), tmp_path)
     counted = parse_stage({
         "id": "counted", "description": "counted", "type": "python_frame_function",
@@ -71,9 +69,7 @@ def test_limit_caps_the_rows_a_frame_handler_is_given(tmp_path):
 
 
 def test_limit_keeps_the_row_mapper_off_the_rows_past_the_cap(tmp_path):
-    # The mapper refuses any row past the cap, so the stage completing at all is
-    # the evidence: those rows never reached it. This is the LLM fan-out claim —
-    # a capped llm_transform makes N calls, it does not make them all and discard.
+    # The mapper raises past the cap, so the stage completing at all is the evidence.
     load = _load_stage("src", _rows("s", 5), tmp_path)
     mapper = parse_stage({
         "id": "m", "description": "m", "type": "python_row_function",
@@ -126,8 +122,6 @@ def test_a_limit_cuts_the_same_window_off_every_input_of_a_union(tmp_path):
 
 
 def test_union_lineage_counts_from_the_first_row_the_stage_actually_read():
-    # The runtime hands a union already-sliced frames, so their row 0 is the
-    # upstream's row `first_row_ordinal` — the sidecar has to say so.
     stage = parse_stage({
         "id": "u", "description": "u", "type": "union",
         "inputs": [{"id": "left", "schema": _NAME_VAL_SCHEMA},
@@ -136,6 +130,7 @@ def test_union_lineage_counts_from_the_first_row_the_stage_actually_read():
     })
     inputs = {"left": _rows("l", 2), "right": _rows("r", 2)}
 
+    # 5 is the first_row_ordinal: the union is handed frames already sliced upstream.
     lineage = concatenated_inputs_lineage(stage, inputs, 5)
 
     assert [[(p.stage_id, p.row_ordinal) for p in entry] for entry in lineage.parents] == [

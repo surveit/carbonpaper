@@ -45,7 +45,6 @@ router = APIRouter()
 async def run_stage_partial(
     request: Request, project: str, run_id: str, stage_id: str
 ):
-    """Per-run stage detail panel — status, validation, preview, error trace."""
     run_dir = runs_dir(project) / run_id
     manifest = load_manifest(run_dir)
     stage_record = next(
@@ -118,9 +117,6 @@ async def run_stage_rows(
     request: Request, project: str, run_id: str, stage_id: str, raw: bool = False,
     ordinals: str | None = None,
 ):
-    """Full table of one stage's output, capped at MAX_TABLE_ROWS rendered rows —
-    as the stage diff wherever one exists, which `?raw=1` turns off. The page
-    links to the uncapped CSV download."""
     run_dir = runs_dir(project) / run_id
     stage_record = manifest_stage(run_dir, stage_id)
     selected = _parse_ordinals(ordinals)
@@ -158,7 +154,6 @@ async def run_stage_rows(
 
 
 def _parse_ordinals(ordinals: str | None) -> list[int] | None:
-    """`?ordinals=3,7,9` as row numbers, or None where the page shows everything."""
     if ordinals is None:
         return None
     # A malformed entry is skipped rather than failing the page: the parameter
@@ -175,7 +170,6 @@ def _parse_ordinals(ordinals: str | None) -> list[int] | None:
 def _build_full_rows_diff(
     project: str, run_dir: Path, stage_id: str, stage_record: dict[str, Any]
 ) -> StageDiff | None:
-    """The full-rows page's diff, over its own row budget — None where none is honest."""
     manifest = load_manifest(run_dir)
     return build_stage_diff(
         run_service.load_pinned_stage_def(project, manifest, stage_id).stage,
@@ -188,9 +182,6 @@ def _build_full_rows_diff(
 
 @router.get("/project/{project}/runs/{run_id}/stage/{stage_id}/rows.csv")
 async def run_stage_rows_csv(project: str, run_id: str, stage_id: str):
-    """One stage's complete output as a CSV download (no row cap)."""
-    # UTF-8 behind a byte-order mark, so accented rows survive Excel on
-    # Windows — `csv_download_body` carries the why.
     run_dir = runs_dir(project) / run_id
     stage_record = manifest_stage(run_dir, stage_id)
     df = read_output_df(run_dir, stage_record.get("output_path"))
@@ -209,7 +200,6 @@ async def run_stage_rows_csv(project: str, run_id: str, stage_id: str):
 async def run_stage_simulate(
     request: Request, project: str, run_id: str, stage_id: str
 ):
-    """The page that drives the in-memory re-run below: pick rows, run, read."""
     run_dir = runs_dir(project) / run_id
     manifest = load_manifest(run_dir)
     # The page executes a stage under this run's name, so it offers only what the
@@ -260,16 +250,6 @@ async def run_stage_simulate(
 async def run_stage_scratch_preview(
     request: Request, project: str, run_id: str, stage_id: str
 ):
-    """SCRATCH in-memory re-run of one stage on a few selected input rows.
-
-    Reads the chosen rows from this run's upstream outputs, runs the stage's
-    handler in memory, and returns the output rows as JSON. Nothing is
-    persisted: no manifest change, no output file, no artifact. Posted to by the
-    simulate page's "Run transform on selected" button.
-
-    Body (JSON): {"indices": [int, ...]}  — positional row indices into the
-    stage's first upstream input.
-    """
     run_dir = runs_dir(project) / run_id
     manifest = load_manifest(run_dir)
 

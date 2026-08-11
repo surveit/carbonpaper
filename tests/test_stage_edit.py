@@ -132,8 +132,7 @@ def test_patch_missing_stage_raises(tmp_path: Path) -> None:
 
 
 def test_edit_that_breaks_the_workflow_graph_is_rejected(tmp_path: Path) -> None:
-    # Repoint score's input at a stage that doesn't exist. The stage is valid on
-    # its own, but the resulting WORKFLOW is not — so the write is refused.
+    # The stage is valid on its own; the resulting WORKFLOW is not.
     pdir = _seed(tmp_path)
     before = (pdir / "compiled" / "02_score.json").read_text(encoding="utf-8")
     result = stage_edit.patch_stage_spec(
@@ -199,8 +198,7 @@ def test_add_stage_rejects_duplicate_id(tmp_path: Path) -> None:
 
 
 def test_remove_stage_rejected_when_a_downstream_depends_on_it(tmp_path: Path) -> None:
-    # score inputs from load, so removing load would leave a dangling edge. The
-    # whole resulting workflow is validated BEFORE anything is unlinked.
+    # score inputs from load, so removing load would leave a dangling edge.
     pdir = _seed(tmp_path)
     result = stage_edit.remove_stage_spec(pdir, "load")
     assert result.ok is False
@@ -239,8 +237,6 @@ _FIRST_STAGE = {"id": "load", "description": "Load", "type": "input_data",
 
 
 def _seed_empty(tmp_path: Path) -> Path:
-    """A project whose compiled/ dir exists but holds no stage files — a project
-    before its first stage is added."""
     (tmp_path / "gamma" / "compiled").mkdir(parents=True)
     return tmp_path / "gamma"
 
@@ -262,9 +258,7 @@ def test_add_stage_creates_the_first_stage_when_compiled_dir_is_absent(tmp_path:
 
 
 def test_add_stage_still_refuses_when_the_existing_workflow_is_unloadable(tmp_path: Path) -> None:
-    # compiled/ holds a stage file that does not parse as a Stage. That is a
-    # BROKEN workflow, not an empty one: the edit must fail loudly rather than
-    # proceed against a partial (or silently empty) view of it.
+    # A stage file that does not parse is a BROKEN workflow, not an empty one.
     pdir = tmp_path / "epsilon"
     (pdir / "compiled").mkdir(parents=True)
     (pdir / "compiled" / "01_broken.json").write_text(

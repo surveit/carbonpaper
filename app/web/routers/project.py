@@ -50,10 +50,7 @@ router = APIRouter()
 # ─── Path guard ──────────────────────────────────────────────────────────────
 
 def _project_dir(project_name: str) -> Path:
-    """Resolve a project dir and 404 if it isn't a real project working copy. Guards
-    every section + authoring route: refuse anything that isn't a DIRECT child of
-    examples/ (no traversal, no absolute path), so a name like '..%2f..' or one
-    resolving outside examples/ can never read or delete anything here."""
+    """Direct-child-of-examples/ is the traversal guard delete_project's rmtree rests on."""
     target = (projects_dir() / project_name).resolve()
     if target.parent != projects_dir().resolve() or not target.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project_name}'")
@@ -63,15 +60,11 @@ def _project_dir(project_name: str) -> Path:
 # ─── Per-schema edit seed ─────────────────────────────────────────────────────
 
 def _schema_spec(schema: dict[str, Any]) -> dict[str, Any]:
-    """One schema with loader bookkeeping (_filename/_order/_error) removed — the
-    spec only. The schema model is `extra="forbid"`, so validation and the edit
-    textarea must both see the spec, never the bookkeeping keys the loader injects."""
+    """The schema model is `extra="forbid"`, so bookkeeping keys would fail validation."""
     return {k: v for k, v in schema.items() if k not in LOADER_BOOKKEEPING_KEYS}
 
 
 def _schema_json_map(schemas: list[dict[str, Any]]) -> dict[str, str]:
-    """name → JSON text for the per-schema edit textareas — the spec only (loader
-    bookkeeping stripped), so it round-trips through the schema-edit writer cleanly."""
     out: dict[str, str] = {}
     for s in schemas:
         name = s.get("name")
@@ -85,9 +78,6 @@ def _schema_json_map(schemas: list[dict[str, Any]]) -> dict[str, str]:
 
 @router.get("/", response_class=HTMLResponse)
 async def index(request: Request):
-    """The home dashboard: every project as a card (name, what's authored, counts),
-    plus create + per-card delete. Cards come from loading.list_projects (truthful
-    on-disk counts)."""
     return templates.TemplateResponse(
         request,
         "index.html",
@@ -97,14 +87,7 @@ async def index(request: Request):
 
 @router.post("/project/{project_name}/delete")
 async def delete_project(project_name: str):
-    """DESTRUCTIVE — remove an entire project DIRECTORY (schemas, workflow, run
-    outputs). The project's documents in the store — versions, node-review and
-    row-review decisions — are not touched, so a project deleted here and
-    re-created under the same name inherits them.
-    Guarded via _project_dir: only a DIRECT child directory of examples/
-    can be removed (so a traversal, an absolute path, or a name resolving outside
-    examples/ can never delete anything here). Only reachable via POST (the
-    dashboard's confirm()-gated form). Redirects to the dashboard (303) on success."""
+    """Store documents survive: a project re-created under this name inherits its versions."""
     target = _project_dir(project_name)
     shutil.rmtree(target)
     return RedirectResponse("/", status_code=303)
@@ -123,9 +106,6 @@ async def delete_project(project_name: str):
 
 @router.get("/project/new", response_class=HTMLResponse)
 async def new_project_form(request: Request):
-    """The project CREATE form — paste a methodology doc that lands in a new
-    examples/<name>/ working copy. Authoring then proceeds in the project's own
-    sections (data model → approve → workflow)."""
     return templates.TemplateResponse(
         request,
         "compile_new_methodology.html",
@@ -143,15 +123,6 @@ async def new_project_submit(
     doc_text: str = Form(...),
     model: str = Form("sonnet"),
 ):
-    """Create the examples/<name>/ working copy + its project.json, persist the pasted
-    document at document.md, then redirect to the project's data-model section where
-    authoring starts. The directory IS the session — the data-model stream keys off the
-    project name and reads document.md / writes chat.jsonl in here.
-
-    Truthfulness: we write project.json (via project.write_project_meta) so a NEW
-    project carries a real model + created_at (non-legacy); we never fabricate those
-    for legacy dirs. A name clash fails LOUDLY (400) rather than clobbering existing
-    data — the rename is the human's decision."""
     try:
         safe_name = project.create_project(name, doc_text, model=model, source="pasted document")
     except (ValueError, ProjectExistsError) as exc:
@@ -167,11 +138,6 @@ async def new_project_submit(
 
 @router.post("/project/{project_name}/generate")
 async def generate_project(project_name: str):
-    """(Re)kick data-model generation for an EXISTING project — the manual counterpart
-    to the auto-kick on create (for a legacy project that has a document but no data
-    model, or to regenerate from scratch). Reads document.md + the project's model,
-    starts the data-model phase as a LIVE chat turn, and redirects to that session so
-    the run is watchable. 400 if there is no document to generate from."""
     pdir = _project_dir(project_name)
     document_path = pdir / "document.md"
     if not document_path.is_file():
@@ -196,9 +162,6 @@ async def generate_project(project_name: str):
 
 @router.get("/project/{project_name}", response_class=HTMLResponse)
 async def project_overview(request: Request, project_name: str):
-    """OVERVIEW — the project hub: identity (meta), the 5 status tiles, and the
-    prominent "do this next" CTA. Renders ONLY from project_state (no section extras);
-    unknown facts (a legacy model/date) show truthfully as 'unknown', never fabricated."""
     pdir = _project_dir(project_name)
     return templates.TemplateResponse(
         request,
@@ -209,10 +172,6 @@ async def project_overview(request: Request, project_name: str):
 
 @router.get("/project/{project_name}/document", response_class=HTMLResponse)
 async def project_document(request: Request, project_name: str):
-    """DOCUMENT — the source methodology document, read-only. The route reads the file
-    server-side (the template never touches the filesystem); `document` is '' / None
-    when the project has no document, and the template shows an empty state. The path
-    line is state.document_path (absolute, truthful)."""
     pdir = _project_dir(project_name)
     state = shell_state(pdir, "document")
     document = ""
@@ -232,9 +191,6 @@ async def project_document(request: Request, project_name: str):
 
 @router.get("/project/{project_name}/data_model", response_class=HTMLResponse)
 async def project_data_model(request: Request, project_name: str):
-    """DATA MODEL — named-schema cards by kind + ER diagram + the per-schema edit +
-    the authoring chat. The chat/edit actions POST to the
-    /project/{name}/data-model/... routes below."""
     pdir = _project_dir(project_name)
     schemas = load_schemas(pdir)
     return templates.TemplateResponse(
@@ -257,14 +213,6 @@ async def project_data_model(request: Request, project_name: str):
 
 @router.get("/project/{project_name}/workflow", response_class=HTMLResponse)
 async def project_workflow(request: Request, project_name: str):
-    """WORKFLOW — the typed-stage pipeline: the mermaid graph, the per-node panel, and
-    the Build / Run / Create-version controls. The version list lives on its own
-    /workflow/versions tab, linked from here. Always navigable; renders an empty state
-    when no workflow is authored yet.
-
-    A workflow with a broken stage still renders — as a draft graph off raw dicts — so
-    the reviewer sees the holes. Empty (not a 404) when there is no workflow yet, so
-    the empty page renders."""
     pdir = _project_dir(project_name)
     listing = load_stages_or_empty(project_name)
     # A valid workflow draws off typed Stages; a broken/partial one falls back to the
@@ -300,12 +248,6 @@ async def project_workflow(request: Request, project_name: str):
 
 @router.get("/project/{project_name}/workflow/versions", response_class=HTMLResponse)
 async def project_workflow_versions(request: Request, project_name: str):
-    """VERSIONS — the version history, newest-first. Each version links to its
-    read-only detail; published state shows read-only here (publishing is an
-    approval act that happens on the detail page, after looking at the version).
-    The mutable working copy (edit + review + create-version) lives at /workflow; a
-    project with no versions yet shows the right CTA (generate a workflow, or
-    snapshot the working copy you already have)."""
     pdir = _project_dir(project_name)
     versions = versioning.list_versions(pdir)
     return templates.TemplateResponse(
@@ -317,7 +259,6 @@ async def project_workflow_versions(request: Request, project_name: str):
 
 @router.get("/project/{project_name}/versions")
 async def versions_redirect(project_name: str):
-    """The versions list moved to /workflow/versions; keep the old path working."""
     return RedirectResponse(
         url=f"/project/{project_name}/workflow/versions", status_code=307
     )
@@ -326,10 +267,6 @@ async def versions_redirect(project_name: str):
 @router.get("/project/{project_name}/workflow/version/{version_id}",
             response_class=HTMLResponse)
 async def project_workflow_version(request: Request, project_name: str, version_id: str):
-    """A single workflow VERSION, read-only: its frozen stage graph plus the
-    version's metadata, publish state, and the actions that target it (run this
-    version, and publish while it is unpublished). A version is immutable, so nothing here edits — belief
-    review lives on the working-copy editor. 404 if the version does not exist."""
     pdir = _project_dir(project_name)
     try:
         version = versioning.load_version(pdir, version_id)
@@ -355,9 +292,6 @@ async def project_workflow_version(request: Request, project_name: str, version_
 async def version_stage_partial(
     request: Request, project_name: str, version_id: str, stage_id: str
 ):
-    """One frozen stage of a version, read-only — the panel the version page's graph
-    nodes open. Reads the SNAPSHOT's stages, not the working copy: the point of the
-    version page is what was frozen, which may since have been edited or deleted."""
     pdir = _project_dir(project_name)
     try:
         version = versioning.load_version(pdir, version_id)
@@ -393,10 +327,6 @@ async def version_stage_partial(
 
 @router.post("/project/{project_name}/schema/{schema_name}/edit")
 async def edit_schema(project_name: str, schema_name: str, json_text: str = Form(...)):
-    """The ONLY writer into examples/<name>/schemas/. Parse the posted JSON, validate
-    it with validate_named_schema, and — only if clean — write it back to the schema's
-    file. On validation issues return 400 with the issue list and write NOTHING (fail
-    loudly, never a silent partial write)."""
     pdir = _project_dir(project_name)
 
     # Parse — a parse error is the reviewer's, surfaced as a 400 issue, file untouched.

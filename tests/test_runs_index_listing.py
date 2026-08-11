@@ -16,7 +16,6 @@ GOLDENS = Path(__file__).parent / "goldens"
 
 @pytest.fixture()
 def runs_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """The projects root repointed at a tmp workspace holding one project, `demo`."""
     workspace.set_projects_dir(tmp_path)
     runs = tmp_path / "demo" / "runs"
     runs.mkdir(parents=True)
@@ -36,14 +35,12 @@ def _current_manifest() -> dict[str, object]:
 
 
 def _pre_rename_manifest() -> dict[str, object]:
-    """The same run as persisted before `stage_records` was renamed from `stages`."""
     manifest = _current_manifest()
     manifest["stages"] = manifest.pop("stage_records")
     return manifest
 
 
 def test_valid_and_legacy_manifests_listed_side_by_side(runs_root: Path):
-    """The current-format run reports its true stages; the pre-rename run has none."""
     _write_run(runs_root, "20260101T000000", _current_manifest())
     _write_run(runs_root, "20260101T000001", _pre_rename_manifest())
 
@@ -80,7 +77,6 @@ def test_unparseable_json_is_corrupt_not_zero(runs_root: Path):
 
 
 def test_a_workflow_test_run_is_listed_and_flagged_as_one(runs_root: Path):
-    # A test writes into runs/ like a production run, so it is listed — flagged.
     test_run = _current_manifest()
     test_run["is_test_run"] = True
     _write_run(runs_root, "20260101T000003", test_run)
@@ -91,7 +87,6 @@ def test_a_workflow_test_run_is_listed_and_flagged_as_one(runs_root: Path):
 
 
 def test_a_manifest_predating_the_field_reads_as_not_a_test(runs_root: Path):
-    """No `is_test_run` key at all is not a test — the default, not a guess."""
     _write_run(runs_root, "20260101T000004", _current_manifest())
 
     row, = build_run_index_rows("demo")
@@ -119,8 +114,7 @@ def test_every_run_status_has_a_word_under_the_strip(
 
 
 def test_an_unresolvable_pinned_version_says_so_instead_of_a_message(runs_root: Path):
-    # The golden pins a version that does not exist in this workspace. The row
-    # reports the reason; it never shows an empty message as if it were real.
+    # The golden pins a version that does not exist in this workspace.
     _write_run(runs_root, "20260101T000007", _current_manifest())
 
     row, = build_run_index_rows("demo")

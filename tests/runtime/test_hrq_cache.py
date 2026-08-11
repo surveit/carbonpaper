@@ -83,8 +83,6 @@ def _src(rows: int = 2) -> pd.DataFrame:
 
 
 def _read_fingerprints(queue_path) -> dict:
-    """The sidecar `<stage>.fingerprints.json` beside a halted queue's own
-    snapshot file — same stem, whichever extension the snapshot landed on."""
     sidecar = queue_path.parent / f"{queue_path.stem}.fingerprints.json"
     parsed: dict = json.loads(sidecar.read_text(encoding="utf-8"))
     return parsed
@@ -104,13 +102,7 @@ def _put_approval(
     *, project: str = PROJECT, verdict: ReviewVerdict = ReviewVerdict.approve,
     modified_score: float | None = None,
 ) -> None:
-    """Cache one verdict (`approve` unless told otherwise) for one row of a
-    halted snapshot, matched to it by the sidecar's fingerprints — built
-    through the real review service (record_decision → the production cache
-    seam), never a hand-assembled entry or a raw store write. The frozen row is
-    the whole snapshot row, which is what the reviewer saw; `modified_score` is
-    the value the reviewer entered for QUEUE_COLUMNS' one reviewed column,
-    defaulting to the AI value the reviewer was shown."""
+    """Goes through the real review service, never a hand-assembled entry or a raw store write."""
     review.record_decision(
         project=project, stage=_stage(),
         stage_fingerprint=stage_fingerprint, input_fingerprint=input_fingerprint,
@@ -215,12 +207,6 @@ def test_fingerprints_stable_across_parquet_round_trip(tmp_path):
 
 
 def test_input_fingerprint_matches_original_row_before_any_review_record_stamped(tmp_path):
-    # The sidecar's `input_fingerprint` for a halted snapshot row must equal
-    # `compute_row_fingerprint` of that row's ORIGINAL upstream dict, recomputed
-    # independently here from `src` — never a value that shifts once the handler applies a
-    # cached decision. Fingerprinting happens on the upstream row before any review-record
-    # column is stamped, so a later column can never change the key a cached decision is
-    # matched on.
     stage = _stage()
     src = _src(3)
     expected_by_id = {
@@ -234,9 +220,6 @@ def test_input_fingerprint_matches_original_row_before_any_review_record_stamped
 
 
 def test_snapshot_columns_match_original_upstream_columns_exactly(tmp_path):
-    """The pending snapshot is written PURE: exactly the pending rows'
-    original upstream columns, no fingerprint or review-record column
-    ever added."""
     stage = _stage()
     src = _src(2)
 
@@ -248,10 +231,6 @@ def test_snapshot_columns_match_original_upstream_columns_exactly(tmp_path):
 
 
 def test_bust_cache_defers_every_queueable_row_despite_cached_decisions(tmp_path):
-    """`RunContext.bust_cache` skips the decision READ entirely: every row a
-    prior run decided halts again, so the humans are re-asked. The decisions
-    themselves are untouched on disk — a run without the flag still replays
-    them."""
     stage = _stage()
     src = _src(2)
 
@@ -268,9 +247,6 @@ def test_bust_cache_defers_every_queueable_row_despite_cached_decisions(tmp_path
 
 
 def test_bust_cache_leaves_passed_through_rows_alone(tmp_path):
-    """Only QUEUEABLE rows are re-asked: a row the queue filter does not select
-    still passes through, because no cached decision was involved in its
-    outcome."""
     stage = _stage(flt="flag == 'review'", input_columns=_FLAGGED_COLUMNS)
     src = _alternating_src()
 
@@ -287,8 +263,6 @@ def test_bust_cache_leaves_passed_through_rows_alone(tmp_path):
 
 
 def test_bust_cache_reads_no_cache_entries_at_all(tmp_path, monkeypatch):
-    """The read is SKIPPED, not filtered afterwards: the stage makes no
-    find_entries call under bust_cache."""
     cache = StageCache()
     calls: list[tuple[str, str, str]] = []
 
@@ -338,9 +312,7 @@ def test_hrq_requires_project_grant(tmp_path):
 
 
 def _alternating_src() -> pd.DataFrame:
-    """Rows whose `flag` alternates, so the filter below selects a
-    NON-CONTIGUOUS subset — the shape that tells input order apart from
-    decided-first order."""
+    """The alternating flag makes the queue subset NON-CONTIGUOUS: input order and decided-first differ."""
     return pd.DataFrame({
         "id": ["r0", "r1", "r2", "r3"],
         "score": [10, 11, 12, 13],
@@ -349,9 +321,6 @@ def _alternating_src() -> pd.DataFrame:
 
 
 def test_output_rows_stay_in_input_order(tmp_path):
-    """A frame whose reviewed and passed-through rows alternate comes back in
-    INPUT order — r0, r1, r2, r3 — not with the two decided rows hoisted to the
-    front."""
     stage = _stage(flt="flag == 'review'", input_columns=_FLAGGED_COLUMNS)
     src = _alternating_src()
 
@@ -365,9 +334,6 @@ def test_output_rows_stay_in_input_order(tmp_path):
 
 
 def test_a_modified_row_stays_in_its_own_position_carrying_the_human_score(tmp_path):
-    # A verdict that changes the row's value removes no row: the modified row is emitted
-    # in its own input position with the human score the reviewer entered, and the rows
-    # around it are untouched.
     stage = _stage()
     src = _src(3)
 
@@ -393,8 +359,6 @@ def test_a_modified_row_stays_in_its_own_position_carrying_the_human_score(tmp_p
 
 
 def _every_outcome_src() -> pd.DataFrame:
-    """Five rows: three the filter below selects (one per verdict), with a row
-    the filter passes through unreviewed on either side of them."""
     return pd.DataFrame({
         "id": ["r0", "r1", "r2", "r3", "r4"],
         "score": [10, 11, 12, 13, 14],
@@ -403,12 +367,7 @@ def _every_outcome_src() -> pd.DataFrame:
 
 
 def test_every_output_row_carries_a_verdict_covering_every_outcome(tmp_path):
-    # A real queue output covering every outcome: two rows the filter passed through
-    # unreviewed either side of three the reviewer decided. EVERY row carries a verdict
-    # value, so a downstream filter is a plain string comparison and never has to reason
-    # about a missing one. Filtering on `decision == "approve"` is asserted here as the
-    # trap it is: it silently takes the unreviewed rows with it — the queue deliberately
-    # let those through, and losing them is data loss.
+    # `decision == "approve"` silently drops the rows the queue passed through unreviewed.
     stage = _stage(flt="flag == 'review'", input_columns=_FLAGGED_COLUMNS)
     src = _every_outcome_src()
 
@@ -434,9 +393,6 @@ def test_every_output_row_carries_a_verdict_covering_every_outcome(tmp_path):
 
 
 def test_every_decided_row_is_emitted_with_only_the_declared_columns(tmp_path):
-    # Deciding EVERY queued row still emits every row, projected onto the columns
-    # output_schema declares. A queue stage can no longer hand a non-empty input on as a
-    # zero-row frame at all, whatever the reviewer decided.
     stage = parse_stage({
         "id": "review", "description": "Review", "type": "human_review_queue",
         "inputs": [{"id": "scored", "schema": {"columns": _SCORED_COLUMNS}}],
@@ -459,10 +415,6 @@ def test_every_decided_row_is_emitted_with_only_the_declared_columns(tmp_path):
 
 
 def test_a_cached_entry_holding_no_output_row_re_queues_the_row(tmp_path):
-    """The cache payload still permits an entry with no output row at all. A
-    row-mapped stage owes one output row per input row, so such an entry
-    replays nothing: the row is a MISS and defers, which re-queues it for the
-    human — the only thing anyone could do about it anyway."""
     stage = _stage()
     src = _src(1)
     row = {str(k): v for k, v in src.to_dict("records")[0].items()}
@@ -479,9 +431,6 @@ def test_a_cached_entry_holding_no_output_row_re_queues_the_row(tmp_path):
 
 
 def test_queue_stats_count_every_row_the_reviewer_answered(tmp_path):
-    # The manifest's per-stage item counts, over a run where every outcome occurs.
-    # `items_decided` counts what the reviewer ANSWERED, whatever the verdict — not what a
-    # downstream stage would keep.
     stage = _stage(flt="flag == 'review'", input_columns=_FLAGGED_COLUMNS)
     src = _alternating_src()
 
@@ -512,9 +461,6 @@ def test_queue_stats_count_every_row_the_reviewer_answered(tmp_path):
 
 
 def test_cache_is_read_once_per_stage_execution(tmp_path, monkeypatch):
-    """The cached decisions are looked up ONCE for the whole stage, not once
-    per row: the lookup belongs to building the mapper, and a per-row store
-    read would make a queue stage's cost scale with its row count."""
     cache = StageCache()
     calls: list[tuple[str, str, str]] = []
     find_entries = cache.find_entries
@@ -535,10 +481,6 @@ def test_cache_is_read_once_per_stage_execution(tmp_path, monkeypatch):
 
 
 def test_queue_stats_hold_when_every_row_is_served_from_the_cache(tmp_path, monkeypatch):
-    """The counts are computed from the assembled frame, not accumulated as rows
-    are mapped, so they survive a run where the driver's cache answers EVERY row
-    and the mapper is never called once — decided rows replaying a human's
-    verdict and passed-through rows replaying their own recorded output."""
     stage = _stage(flt="flag == 'review'", input_columns=_FLAGGED_COLUMNS)
     src = _alternating_src()
 
@@ -564,9 +506,6 @@ def test_queue_stats_hold_when_every_row_is_served_from_the_cache(tmp_path, monk
 
 
 def test_a_passed_through_row_round_trips_through_the_cache(tmp_path):
-    """A row the filter did not select is recorded like any other computed row.
-    The second run replays it rather than re-evaluating the filter for it, and
-    what comes back is the same output row."""
     stage = _stage(flt="flag == 'nothing-matches'", input_columns=_FLAGGED_COLUMNS)
     src = _alternating_src()
 
@@ -587,11 +526,7 @@ def test_a_passed_through_row_round_trips_through_the_cache(tmp_path):
 
 
 def test_changing_the_filter_re_evaluates_a_passed_through_row(tmp_path):
-    """`filter` is part of the stage's definition fingerprint, so entries
-    recorded under one filter are not in the key space the next definition
-    reads. A row recorded as passed-through therefore cannot replay "the filter
-    did not select me" once the filter DOES select it — it queues for the
-    human."""
+    """`filter` feeds the definition fingerprint, so entries recorded under one are in another key space."""
     src = _alternating_src()
 
     out = _run_queue_stage(
@@ -604,10 +539,6 @@ def test_changing_the_filter_re_evaluates_a_passed_through_row(tmp_path):
 
 
 def test_fingerprint_matches_the_drivers_own_row_dict(tmp_path):
-    """The sidecar's fingerprints are computed over the row dicts the row
-    driver builds (`src.to_dict("records")`, str-keyed), position by position —
-    so the key a decision is filed under is the key the next run's driver
-    recomputes."""
     src = _src(3)
     _snapshot, fingerprints = _halt_and_read_snapshot(
         _stage(), {"scored": src}, _ctx(tmp_path))
@@ -620,16 +551,7 @@ def test_fingerprint_matches_the_drivers_own_row_dict(tmp_path):
 
 
 def test_nullable_extension_dtype_cells_reach_the_reviewer_as_plain_numpy_values(tmp_path):
-    """The snapshot is REBUILT from the driver's row dicts rather than sliced
-    off the upstream frame, so pandas' nullable extension dtypes do not survive
-    it — and neither do the cell values that only those dtypes can hold. An
-    `Int64` column carrying a null comes back `float64`, so the reviewer sees
-    `1.0` where upstream held the integer `1`; a `boolean` column comes back
-    `object`, which changes the dtype but not the values.
-
-    This matters beyond display: what the reviewer decides on is frozen as the
-    cache entry's input, and the output row replayed on the next run is built
-    from that frozen row — so the widened value is what flows downstream."""
+    """The widened value is frozen as the cache entry's input, so it is what flows downstream."""
     src = pd.DataFrame({
         "id": ["r0", "r1"],
         "score": pd.array([1, None], dtype="Int64"),
@@ -649,9 +571,6 @@ def test_nullable_extension_dtype_cells_reach_the_reviewer_as_plain_numpy_values
 
 
 def test_cancel_mid_queue_map_marks_the_stage_cancelled(tmp_path):
-    """A cancel requested before the stage runs stops the row map with
-    RunCancelled — the run was cancelled, so it must not also be reported as
-    awaiting review."""
     ctx = _ctx(tmp_path, run_id="cancel-me")
     request_cancel(PROJECT, "cancel-me")
     with pytest.raises(RunCancelled):
@@ -659,15 +578,7 @@ def test_cancel_mid_queue_map_marks_the_stage_cancelled(tmp_path):
 
 
 def test_cancelled_execution_reports_no_queue_counts(tmp_path, monkeypatch):
-    """A resumed run's manifest already carries the halted run's queue counts —
-    the executor merged them when the halt fired, and the manifest, not the
-    context, is where they live. If the queue stage then cancels, this
-    execution produced no counts of its own: the cancel raises inside the row
-    map, before the post-map step that would report any. So the stage reports
-    nothing and the halt's counts stand, rather than being replaced by the
-    zeros a re-execution starts from. A manifest reading
-    `items_queued_total: 0` for a stage that queued 2 rows is a wrong number,
-    not a missing one."""
+    """A manifest reading 0 queued for a stage that queued 2 is a wrong number, not a missing one."""
     reported: list[object] = []
     monkeypatch.setattr(
         human_review_queue._QueueRowMapper,
@@ -716,13 +627,7 @@ def _review_stage_full():
 
 
 def test_resume_reattaches_cached_decisions_written_via_the_seam(tmp_path):
-    """A halted run, resumed with no in-process state beyond what prepare_run
-    left on disk and in the store (this test does not reuse the ctx/objects
-    prepare_run built — resume_run rebuilds everything from the manifest and a
-    fresh RunContext, exactly as a resume in a new process would). Decisions
-    cached via StageCache.put between the halt and the resume must reattach
-    and let the run complete — pinning fingerprint reattachment across the
-    upstream-frame reload resume_run performs from parquet."""
+    """Pins fingerprint reattachment across the upstream-frame reload resume_run performs from parquet."""
     project_dir = tmp_path / "resume_cache_project"
     _write_stage(project_dir, "01_load.json", _load_stage(project_dir))
     _write_stage(project_dir, "02_review.json", _review_stage_full())
@@ -747,11 +652,6 @@ def test_resume_reattaches_cached_decisions_written_via_the_seam(tmp_path):
 
 
 def test_resume_replays_the_runs_bust_cache(tmp_path):
-    """`bust_cache` is per-run state recorded on the manifest, so a RESUME of a
-    busted run is still busted: decisions recorded between the halt and the
-    resume are not read, and the queue stage halts again. The un-busted resume
-    of the same shape completes (test above), which is what makes this the
-    discriminating outcome."""
     project_dir = tmp_path / "resume_bust_project"
     _write_stage(project_dir, "01_load.json", _load_stage(project_dir))
     _write_stage(project_dir, "02_review.json", _review_stage_full())

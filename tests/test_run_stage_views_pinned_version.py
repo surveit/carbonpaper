@@ -44,8 +44,6 @@ def _load_stage(data_path: Path) -> dict:
 
 
 def _classify_stage(marker: str) -> dict:
-    """A python_row_function whose only observable difference between the pinned
-    version and the drifted working copy is the label it writes."""
     return {
         "id": CLASSIFY_ID, "description": f"Classify ({marker})",
         "type": "python_row_function",
@@ -85,7 +83,6 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def _run_once(project_dir: Path) -> str:
-    """Snapshot + publish the working copy, run it, and return the run id."""
     version_id = project_service.save_working_copy_as_version(
         project_dir, message="v1", reviewer="test").version_id
     versioning.publish_version(project_dir, version_id, reviewer="test")
@@ -93,16 +90,12 @@ def _run_once(project_dir: Path) -> str:
 
 
 def _drift_the_working_copy(project_dir: Path) -> None:
-    """Edit the stage in place, as an author would after the run. Nothing
-    re-versions it, so the run's pinned version and the working copy disagree
-    on what `classify` does."""
     (project_dir / "compiled" / "02_classify.json").write_text(
         json.dumps(_classify_stage(DRIFTED_MARKER)), encoding="utf-8")
 
 
 def _unpin_the_run(project_dir: Path, run_id: str) -> None:
-    """Drop the manifest's workflow_version, the shape a pre-versioning run has:
-    what it executed is unknowable."""
+    """Drops workflow_version — the shape a pre-versioning run really has on disk."""
     path = project_dir / "runs" / run_id / "manifest.json"
     manifest = json.loads(path.read_text(encoding="utf-8"))
     manifest["workflow_version"] = None
@@ -155,9 +148,6 @@ def test_lineage_panel_shows_the_transform_that_ran_after_drift(project: Path) -
 def test_scratch_preview_executes_the_stage_that_ran_not_the_working_copy(
     project: Path,
 ) -> None:
-    """The scratch re-run reads THIS run's rows and is labelled as this run's
-    transform, so it must execute the pinned handler — otherwise the panel
-    reports output that this run's workflow could never produce."""
     run_id = _run_once(project)
     _drift_the_working_copy(project)
 
@@ -213,8 +203,6 @@ def test_lineage_panel_says_the_definition_is_unavailable_when_the_run_is_unpinn
 def test_scratch_preview_refuses_to_execute_an_unresolvable_version(
     project: Path,
 ) -> None:
-    """Executing the working copy here would run code this run never ran and
-    label the result as this run's. Refuse instead."""
     run_id = _run_once(project)
     _drift_the_working_copy(project)
     _unpin_the_run(project, run_id)
@@ -230,7 +218,6 @@ def test_scratch_preview_refuses_to_execute_an_unresolvable_version(
 def test_stage_panel_hides_the_simulate_link_when_the_definition_is_unavailable(
     project: Path,
 ) -> None:
-    """The panel must not offer a re-run it would refuse."""
     run_id = _run_once(project)
     _unpin_the_run(project, run_id)
 
@@ -241,7 +228,6 @@ def test_stage_panel_hides_the_simulate_link_when_the_definition_is_unavailable(
 def test_stage_panel_leaves_the_validation_lines_to_the_run_page_index(
     project: Path,
 ) -> None:
-    """One copy per page: the index above words the same lines, from the same report."""
     run_id = _run_once(project)
 
     panel = _stage_panel(run_id)
@@ -251,7 +237,6 @@ def test_stage_panel_leaves_the_validation_lines_to_the_run_page_index(
 def test_the_simulate_page_refuses_a_run_whose_version_cannot_be_read(
     project: Path,
 ) -> None:
-    """No pinned definition, no page — the same refusal the POST gives."""
     run_id = _run_once(project)
     _unpin_the_run(project, run_id)
 
@@ -261,7 +246,6 @@ def test_the_simulate_page_refuses_a_run_whose_version_cannot_be_read(
 def test_the_simulate_page_offers_the_rows_and_says_nothing_is_saved(
     project: Path,
 ) -> None:
-    """The picker, the button and the promise the POST actually keeps."""
     run_id = _run_once(project)
 
     page = _simulate_page(run_id)

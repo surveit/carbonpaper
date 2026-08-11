@@ -33,8 +33,6 @@ class RunAction(BaseModel):
 
 
 class RunCta(BaseModel):
-    """`primary` is None for a run that finished clean — it asks nothing."""
-
     primary: RunAction | None = None
     secondary: list[RunAction] = []
     aside: str | None = None
@@ -46,7 +44,7 @@ class ArtifactLink(BaseModel):
 
 
 class VersionNote(BaseModel):
-    """The pinned version as the header states it — `message` or `error`, never both."""
+    """`message` or `error`, never both."""
 
     version_id: str | None
     message: str | None = None
@@ -54,8 +52,6 @@ class VersionNote(BaseModel):
 
 
 class RunLiveView(BaseModel):
-    """The header parts the run page's 2s poller refreshes in place."""
-
     duration: str | None
     duration_verb: str
     aside: str | None
@@ -93,7 +89,6 @@ def build_run_header(
 def build_live_view(
     project: str, run_id: str, manifest: Mapping[str, Any]
 ) -> RunLiveView:
-    """What the poller refreshes."""
     return _build_live_view(
         manifest,
         build_stage_strip(manifest),
@@ -106,8 +101,6 @@ def choose_run_cta(
     run_id: str,
     manifest: Mapping[str, Any],
 ) -> RunCta:
-    """The single action this run's state calls for, or none when it asks nothing."""
-    # The page states no status headline, so this button is how the state is read.
     base = f"/project/{project}/runs/{run_id}"
     if manifest.get("status") == RunStatus.RUNNING:
         return _build_cancel_cta(base, manifest)
@@ -124,7 +117,6 @@ def choose_run_cta(
 
 
 def find_halted_stage_ids(manifest: Mapping[str, Any]) -> list[str]:
-    """`halted_at` when the run recorded one, else every stage in awaiting_review."""
     halted = manifest.get("halted_at") or []
     if halted:
         return [str(stage_id) for stage_id in halted]
@@ -136,9 +128,6 @@ def find_halted_stage_ids(manifest: Mapping[str, Any]) -> list[str]:
 
 
 def read_version_note(project: str, version_id: object) -> VersionNote:
-    """The pinned version's `message`, or the stated reason it could not be read."""
-    # Never an empty message standing in for a real one: a version that resolved
-    # but carries no message is reported as having none.
     text = _read_text(version_id)
     if text is None:
         return VersionNote(version_id=None)
@@ -152,10 +141,6 @@ def read_version_note(project: str, version_id: object) -> VersionNote:
 def list_artifact_links(
     project: str, run_id: str, run_dir: Path, manifest: Mapping[str, Any]
 ) -> list[ArtifactLink]:
-    """Browsable links to the files a completed run published, empty until one has."""
-    # Only once the run has finished AND a publish stage completed, and only to
-    # files actually written under artifacts/ (preferring a browsable index.html)
-    # — never to a hardcoded guess.
     if manifest.get("status") in (RunStatus.RUNNING, None):
         return []
     has_ok_publish = any(
@@ -183,7 +168,6 @@ def list_artifact_links(
 def measure_elapsed_seconds(
     started_at: str | None, finished_at: str | None, *, still_running: bool
 ) -> float | None:
-    """None when the two timestamps cannot answer it — never a guessed duration."""
     start = _read_timestamp(started_at)
     if start is None:
         return None
@@ -202,7 +186,6 @@ def measure_elapsed_seconds(
 
 
 def format_duration(seconds: float) -> str:
-    """A run length as "48s", "2m 14s" or "1h 04m"."""
     whole = int(seconds)
     if whole < _SECONDS_PER_MINUTE:
         return f"{whole}s"
@@ -213,7 +196,6 @@ def format_duration(seconds: float) -> str:
 
 
 def describe_run_duration(manifest: Mapping[str, Any]) -> str | None:
-    """How long this run has taken so far, or None when that cannot be read."""
     seconds = measure_elapsed_seconds(
         _read_text(manifest.get("started_at")),
         _read_text(manifest.get("finished_at")),
@@ -223,7 +205,6 @@ def describe_run_duration(manifest: Mapping[str, Any]) -> str | None:
 
 
 def read_file_name(path: str) -> str:
-    """The last segment of a path recorded on either platform's separator."""
     return path.replace("\\", "/").rstrip("/").rsplit("/", 1)[-1]
 
 
@@ -302,7 +283,6 @@ def _describe_failed(errors: int) -> str:
 
 
 def _describe_review(manifest: Mapping[str, Any], stage_id: str) -> str:
-    """No item count when the run recorded none for that stage."""
     stats = manifest.get("human_review_queue_stats") or {}
     pending = (stats.get(stage_id) or {}).get("items_pending")
     if pending is None:
@@ -340,7 +320,6 @@ _SECONDS_PER_HOUR = 3600
 
 
 def _read_text(value: object) -> str | None:
-    """A manifest field as a non-empty string, or None — absent stays absent, not ""."""
     if value is None:
         return None
     text = str(value).strip()

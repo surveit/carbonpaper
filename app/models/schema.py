@@ -15,15 +15,15 @@ from pydantic import (
     field_validator,
     model_validator,
 )
+from app.models.tool_schema_prompts import (
+    SOURCE_REF_DESCRIPTION,
+    TABLE_SCHEMA_DESCRIPTION,
+)
 
 
 # ── Base ─────────────────────────────────────────────────────────────────────
 class _Base(BaseModel):
-    """Contract base. Unknown keys are rejected — a typo'd field is an invalid
-    stage, not silently-ignored data. Enum-typed fields hold their plain string
-    value after validation (compare with `==`, never `is`; never call `.value`).
-    Defaults are validated like any other value, and fields can be populated by
-    python name or alias."""
+    """An enum-typed field holds a plain string after validation: compare with `==`, not `is`."""
     model_config = ConfigDict(
         extra="forbid",
         use_enum_values=True,
@@ -33,11 +33,7 @@ class _Base(BaseModel):
 
 
 class StageConfig(_Base):
-    """One stage type's config block. Every field is classified into exactly one
-    of the two sets below, so a field added to a block forces the decision of
-    whether it changes what the stage computes
-    (`tests/models/test_stage_config_fingerprint_fields.py` holds the partition;
-    `StageBase.compute_definition_fingerprint` reads FINGERPRINT_FIELDS)."""
+    """Every field of a subclass must appear in exactly one of these two sets; a test enforces it."""
     FINGERPRINT_FIELDS: ClassVar[frozenset[str]]
     INCIDENTAL_FIELDS: ClassVar[frozenset[str]]
 
@@ -74,8 +70,6 @@ LIST_JSON_COLUMN_TYPE = "list[json]"
 
 
 def is_valid_column_type(t: str) -> bool:
-    """Scalar, `json`, or `list[X]` where X is scalar / `json` / a nested
-    `list[...]`."""
     if not isinstance(t, str):
         return False
     if t in SCALAR_COLUMN_TYPES or t in STRUCTURED_COLUMN_TYPES:
@@ -93,7 +87,8 @@ def is_valid_column_type(t: str) -> bool:
 
 # ── Provenance ───────────────────────────────────────────────────────────────
 class SourceRef(_Base):
-    """Where a stage's or schema's prose justification lives."""
+    model_config = ConfigDict(json_schema_extra={"description": SOURCE_REF_DESCRIPTION})
+
     doc: Optional[str] = None
     section: Optional[str] = None
     lines: Optional[list[int]] = None
@@ -107,8 +102,6 @@ RANGE_UNBOUNDED_MARKER = "inf"
 
 
 def _is_range_bound(v: Any) -> bool:
-    """Whether `v` is a valid `range` element: a non-bool number, or a string
-    containing RANGE_UNBOUNDED_MARKER (the unbounded-on-this-side sentinel)."""
     if isinstance(v, str):
         return RANGE_UNBOUNDED_MARKER in v
     return isinstance(v, (int, float)) and not isinstance(v, bool)
@@ -205,12 +198,6 @@ class Column(_Base):
 
     @model_validator(mode="after")
     def _range_is_numeric_bounds(self) -> "Column":
-        """`range` is a numeric [low, high] bounds pair, valid only on int/float
-        columns. Either bound may instead be a string containing "inf" (e.g.
-        "+inf", "-inf") as an unbounded sentinel on that side — the same
-        sentinel `app/runtime/validation.py` recognizes when checking row data
-        against a declared range. A categorical string vocabulary is declared
-        with `enum`, not `range`."""
         if self.range is None:
             return self
         if self.type not in ("int", "float"):
@@ -228,8 +215,6 @@ class Column(_Base):
         return self
 
     def resolve_numeric_bounds(self) -> tuple[float | None, float | None]:
-        # A declared numeric range as (low, high); a bound declared with the
-        # RANGE_UNBOUNDED_MARKER sentinel is None on that side.
         if self.range is None or self.type not in ("int", "float"):
             return (None, None)
         low, high = self.range
@@ -253,9 +238,6 @@ _SPEC_COLUMN_FIELDS: tuple[str, ...] = tuple(
 
 
 def _column_spec_differences(a: Column, b: Column) -> list[str]:
-    """Spec fields on which `a` and `b` differ (empty ⇒ same spec). Prose never
-    counts, at any nesting level; `fields` recurses, so a nested prose-only
-    difference is likewise ignored."""
     diffs: list[str] = []
     for field_name in _SPEC_COLUMN_FIELDS:
         if field_name == "fields":
@@ -267,8 +249,6 @@ def _column_spec_differences(a: Column, b: Column) -> list[str]:
 
 
 def _fields_spec_equal(a: Optional[list[Column]], b: Optional[list[Column]]) -> bool:
-    """Whether two nested-object `fields` lists describe the same shape by spec,
-    matching sub-columns by name and comparing each with `_column_spec_differences`."""
     if a is None or b is None:
         return a is None and b is None
     a_by_name = {c.name: c for c in a}
@@ -293,10 +273,6 @@ _SCALAR_TYPE_WORDING: dict[str, str] = {
 
 
 def _type_wording(t: str) -> str:
-    """English wording for a scalar or `list[<scalar>]` column type, for use
-    in prompts and messages. A `json`/`list[json]` column is rendered
-    recursively from its `fields`/`value_type` instead (see `_render_column`),
-    so this function is never called with those types."""
     if t in _SCALAR_TYPE_WORDING:
         return _SCALAR_TYPE_WORDING[t]
     m = _LIST_RE.match(t)
@@ -306,9 +282,6 @@ def _type_wording(t: str) -> str:
 
 
 def _numeric_range(col: Column) -> Optional[tuple[float, float]]:
-    """`col.range` as a (low, high) bounds pair, or None when the column
-    declares no range. `Column._range_is_numeric_bounds` guarantees a declared
-    range is exactly two numbers on an int/float column."""
     if col.range is None:
         return None
     lo, hi = col.range
@@ -316,9 +289,6 @@ def _numeric_range(col: Column) -> Optional[tuple[float, float]]:
 
 
 def _render_column(col: Column, indent: str) -> list[str]:
-    """One `"name": <shape> (required...)[ — description]` line for `col`,
-    followed by indented sub-lines when the shape is a nested object (a
-    `json`/`list[json]` column with `fields`)."""
     requiredness = "required, never null" if not col.nullable else "or null"
     header = f'{indent}"{col.name}":'
     sub_lines: list[str] = []
@@ -361,12 +331,9 @@ def _render_column(col: Column, indent: str) -> list[str]:
 
 
 class TableSchema(_Base):
-    """An anonymous schema — columns plus an optional primary key — that can be
-    declared inline (e.g. on a stage's input edge). `NamedSchema` promotes it to
-    a first-class, named artifact."""
-    # Sequence (covariant), not list: subclasses narrow the element type
-    # (NamedSchema.columns is list[NamedColumn]), which an invariant list
-    # would forbid. Pydantic still validates/stores a list at runtime.
+    model_config = ConfigDict(json_schema_extra={"description": TABLE_SCHEMA_DESCRIPTION})
+
+    # Sequence, not list: covariant, so NamedSchema can narrow columns to list[NamedColumn].
     columns: Sequence[Column]
     estimated_rows: Optional[int] = None
     notes: Optional[str] = None
@@ -381,15 +348,12 @@ class TableSchema(_Base):
         return self
 
     def column_for_name(self, name: str) -> Optional[Column]:
-        """The column named `name`, or `None` if this schema declares no such
-        column."""
         for c in self.columns:
             if c.name == name:
                 return c
         return None
 
     def extend(self, rewrites: Sequence[Column], adds: Sequence[Column]) -> "TableSchema":
-        """This schema with same-named `rewrites` replacing columns in place and `adds` appended."""
         rewrites_by_name = {column.name: column for column in rewrites}
         return TableSchema(columns=[
             *(rewrites_by_name.get(column.name, column) for column in self.columns),
@@ -397,19 +361,6 @@ class TableSchema(_Base):
         ])
 
     def subtract(self, other: "TableSchema", strict: bool = True) -> "TableSchema":
-        """The columns of `self` that `other` does not spec-match: absent from
-        `other` by name, or present but differing on a spec field per
-        `_column_spec_differences` (prose aside). The result is a schema
-        describing a reply object (no primary key or table-level metadata).
-
-        `strict=True` (the default) additionally requires `other` to be a
-        spec-preserving subset of `self` (`other.is_subset_of(self)`): every
-        column of `other` present in `self` with an identical spec, only prose
-        (`description`/`source`) may differ. Otherwise the two schemas
-        disagree and the difference is ill-defined, so this raises ValueError
-        naming the offending column(s) and the differing fields. `strict=False`
-        skips that requirement and just returns the columns `other` doesn't
-        cover."""
         self_by_name = {c.name: c for c in self.columns}
         if strict and not other.is_subset_of(self):
             problems = [
@@ -430,10 +381,6 @@ class TableSchema(_Base):
         )
 
     def differing_column_names(self, other: "TableSchema") -> set[str]:
-        """Column names where `self` and `other` disagree: present on only one
-        side, or present on both with a differing spec (prose aside, per
-        `_column_spec_differences`). Empty means the two schemas' columns are
-        identical, ignoring order and prose."""
         self_by_name = {c.name: c for c in self.columns}
         other_by_name = {c.name: c for c in other.columns}
         names = set(self_by_name) | set(other_by_name)
@@ -445,32 +392,11 @@ class TableSchema(_Base):
         }
 
     def is_subset_of(self, other: "TableSchema") -> bool:
-        """True exactly when every column here also appears in `other` with an
-        identical spec — every Column spec field compared recursively via
-        `_column_spec_differences`, prose (`description`/`source`) aside. I.e.
-        this schema is a spec-preserving subset of `other`. Called by `subtract`
-        (the subtrahend must be a subset of the minuend when `strict=True`) and
-        by `Stage`'s 1:1 validator (a transform's input must be a subset of its
-        output)."""
         return not self.find_unsatisfied_columns(other, nullability="exact")
 
     def find_unsatisfied_columns(
         self, producer: "TableSchema", nullability: Literal["compatible", "exact"] = "compatible"
     ) -> list[str]:
-        """One human-readable reason per column of this schema that `producer`
-        does not supply. `self` names the columns a consumer requires; `producer`
-        names what an upstream supplies. A column is unsatisfied when `producer`
-        does not declare it, or declares it with a differing spec (prose aside,
-        per `_column_spec_differences`). All offending columns are reported, not
-        just the first.
-
-        `nullability` governs how the two columns' `nullable` flags must relate:
-          - "compatible" (default): a non-null producer column satisfies a
-            nullable requirement — the producer's guarantee is stronger than
-            needed. Only the unsafe direction is flagged: a required non-null
-            column fed by a producer that may emit null.
-          - "exact": the flags must be identical (`is_subset_of` uses this — a
-            spec-preserving subset differs on no field at all)."""
         producer_by_name = {c.name: c for c in producer.columns}
         reasons: list[str] = []
         for required in self.columns:
@@ -488,11 +414,6 @@ class TableSchema(_Base):
         return reasons
 
     def to_prompt(self) -> str:
-        """Render this schema as instructions for an LLM reply: one line per
-        column stating its type, required/nullable wording, enum, range, and
-        description — recursing into a `json`/`list[json]` column's `fields`
-        as indented sub-lines, or naming its `value_type` for an open map —
-        plus header/footer lines naming the expected JSON shape."""
         lines = [
             "Return ONE JSON object only — no prose, no code fences — "
             "with exactly these keys:"
@@ -503,14 +424,7 @@ class TableSchema(_Base):
         return "\n".join(lines)
 
     def to_pydantic_model(self, name: str) -> type[BaseModel]:
-        """Compile this schema to a Pydantic model class named `name`, one
-        field per column: scalar type, nullability, enum vocabulary, numeric
-        range, and description all carry over, and a `json`/`list[json]`
-        column's `fields` become a nested model, validated recursively. Every
-        column is a REQUIRED field — `nullable` permits a None value, not an
-        absent key — and unknown keys are rejected. The model both validates a
-        reply and, via `model_json_schema()`, states the expected shape up
-        front (e.g. as an agent tool's input schema)."""
+        """Every column is a REQUIRED field: `nullable` permits a None value, not an absent key."""
         return _build_row_model(name, self.columns)
 
 

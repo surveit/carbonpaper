@@ -25,14 +25,12 @@ router = APIRouter()
 
 @router.get("/project/{project}/workflow/graph")
 async def workflow_graph(project: str):
-    """Swapped in after a spec edit, which may have changed a stage's inputs."""
     stages = load_stages(project).stages
     return JSONResponse({"mermaid": build_mermaid_graph(stages, project)})
 
 
 @router.get("/project/{project}/node/{stage_id}/panel", response_class=HTMLResponse)
 async def node_panel(request: Request, project: str, stage_id: str):
-    """Mirrors stage_view_partial, but its Spec tab is editable."""
     stages = load_stages(project).stages
     stage = find_stage(stages, stage_id)
     if stage is None:
@@ -60,7 +58,6 @@ async def node_edit(
     stage_id: str,
     spec_text: str = Form(...),
 ):
-    """The ONLY writer into compiled/."""
     project_dir = projects_dir() / project
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
@@ -80,7 +77,7 @@ async def node_edit(
 
 @router.post("/project/{project}/node/{stage_id}/generate-tests")
 async def node_generate_tests(project: str, stage_id: str):
-    """Returns the session id the JS poller watches. REPLACES the stage's tests."""
+    """Replaces the stage's existing tests."""
     project_dir = projects_dir() / project
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
@@ -98,7 +95,6 @@ async def node_generate_tests(project: str, stage_id: str):
 
 @router.get("/project/{project}/generation-session/{sid}/status")
 async def generation_session_status(project: str, sid: str):
-    """Poll target for a hidden generation session."""
     del project  # URL-namespaced only; sessions are looked up by id, not by project.
     store = open_session_store()
     if not store.exists(sid):
@@ -111,7 +107,6 @@ async def generation_session_status(project: str, sid: str):
 
 
 def _find_generation_failure(messages: list[dict]) -> str | None:
-    """The text `persist_generation_failure` appended, or None if it never ran."""
     for message in messages:
         if message.get("role") != MessageRole.assistant:
             continue
@@ -129,7 +124,6 @@ def _find_generation_failure(messages: list[dict]) -> str | None:
 
 @router.post("/project/{project}/version")
 async def create_version_route(project: str, message: str = Form(...)):
-    """Snapshot the working copy's {compiled/, schemas/} into a new version."""
     project_dir = projects_dir() / project
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
@@ -171,7 +165,6 @@ async def create_version_route(project: str, message: str = Form(...)):
 
 @router.post("/project/{project}/versions/{version_id}/publish")
 async def publish_version_route(project: str, version_id: str):
-    """Metadata only, idempotent: the gate a run pins to. Stage content is untouched."""
     project_dir = projects_dir() / project
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")

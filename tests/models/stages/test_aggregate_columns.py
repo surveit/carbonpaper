@@ -72,18 +72,11 @@ def test_where_valid_column_ok():
 
 
 def test_where_unparseable_predicate_rejected():
-    """A `where` outside the predicate grammar is a config-column issue too
-    (app.models.stages.shared.find_predicate_column_issues turns the
-    PredicateError into an issue string), not a raw uncaught exception."""
     with pytest.raises(ValidationError):
         parse_stage(_aggregate_stage(group_by=["a"], edge_columns=["a"], where="`weird name` == 1"))
 
 
 
 def test_column_declared_only_on_a_sibling_producer_is_not_enough():
-    """EDGE-only, never a producer-output union: even if some OTHER stage in
-    the workflow produces `sector`, this stage's own edge only declares `a` —
-    so `sector` is rejected. (There is no sibling stage here at all; a single
-    Stage's own construction is the whole check, by design.)"""
     with pytest.raises(ValidationError):
         parse_stage(_aggregate_stage(group_by=["sector"], edge_columns=["a"]))

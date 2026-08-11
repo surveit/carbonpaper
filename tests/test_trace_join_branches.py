@@ -26,8 +26,6 @@ JOINED = pd.DataFrame({
 
 
 def _join_run(tmp_path):
-    # filings + contracts -> j (enrich). Row 0 matched both sides; row 1 is the
-    # unmatched subject row, so it has one parent, not two.
     lineage = RowLineage([
         [RowParent("filings", 0), RowParent("contracts", 0)],
         [RowParent("filings", 1)],
@@ -56,8 +54,6 @@ def test_the_unfollowed_side_is_reported_as_a_branch(tmp_path):
 
 
 def test_promoting_a_branch_is_just_another_trace(tmp_path):
-    # The view re-enters trace_row at the branch: no queue, no pre-expansion —
-    # one walk per branch actually opened.
     run_dir = _join_run(tmp_path)
     branch = trace_row(run_dir, "j", 0).steps[0].branches[0]
     promoted = trace_row(run_dir, branch.stage_id, branch.row_ordinal)
@@ -67,8 +63,7 @@ def test_promoting_a_branch_is_just_another_trace(tmp_path):
 
 
 def test_an_unmatched_row_has_one_parent_and_no_branch(tmp_path):
-    # The recorded non-match: Borealis' agency is null whether no row matched or
-    # a matched row's column was itself null. Only the absent parent tells those apart.
+    # A null `agency` cannot say whether a row matched; only the absent parent tells those apart.
     trace = trace_row(_join_run(tmp_path), "j", 1)
     assert [s.stage_id for s in trace.steps] == ["j", "filings"]
     assert trace.steps[0].branches == []
@@ -77,8 +72,6 @@ def test_an_unmatched_row_has_one_parent_and_no_branch(tmp_path):
 
 
 def test_spine_follows_the_right_side_when_only_it_matched(tmp_path):
-    # An unmatched RIGHT row has the right side as its only parent, so the spine
-    # follows the data rather than a left-side default.
     lineage = RowLineage([[RowParent("contracts", 0)]])
     run_dir = write_run(tmp_path, [
         {"id": "filings", "type": "input_data", "parents": [], "df": FILINGS},
@@ -94,8 +87,6 @@ def test_spine_follows_the_right_side_when_only_it_matched(tmp_path):
 
 
 def test_contribution_parents_are_never_walked_into(tmp_path):
-    # An aggregate's contributors are a cohort to open, not a step to take, so the
-    # walk ends at the stage with them reported as branches.
     lineage = RowLineage([[
         RowParent("filings", 0, EdgeKind.contribution.value),
         RowParent("filings", 1, EdgeKind.contribution.value),
@@ -124,8 +115,6 @@ def test_branches_survive_serialization(tmp_path):
 
 
 def test_branches_reach_the_render_payload(tmp_path):
-    # The view offers a branch as a promotable trace, carrying the link back into
-    # this same page at that row.
     from app.runtime.trace import trace_to_dict
     from app.web.panel_links import AppPanelLinks
     from app.web.trace_view import build_trace_view
@@ -141,9 +130,7 @@ def test_branches_reach_the_render_payload(tmp_path):
 
 
 def test_handler_lineage_reaches_the_executor_channel():
-    # The seam: what the handler attaches is what the executor persists. Guards the
-    # `.attrs` channel against a later rebuild of the frame dropping it silently —
-    # the projection and the temp-column drop both rebuild.
+    # Guards the `.attrs` channel: a later rebuild of the frame would drop it silently.
     stage = parse_stage({
         "id": "j", "type": "enrich", "description": "j",
         "inputs": [
@@ -184,8 +171,7 @@ def test_handler_lineage_reaches_the_executor_channel():
 
 
 def test_expand_records_the_subject_row_each_fanned_out_row_came_from():
-    # expand is where recording is the ONLY route: m:n means output row i need not
-    # be subject row i, so nothing positional can recover the pairing afterwards.
+    # m:n means output row i need not be subject row i; nothing positional recovers the pairing.
     stage = parse_stage({
         "id": "x", "type": "expand", "description": "x",
         "inputs": [
@@ -255,9 +241,7 @@ def test_a_join_without_a_sidecar_stops_the_walk(tmp_path):
 
 
 def test_columns_new_is_only_what_the_join_added(tmp_path):
-    # The spine names the frame to diff against. With no parent to diff against a
-    # join reports every column it carries, which overstates its contribution —
-    # so this is a property of the recorded run, not of the stage type.
+    # With no spine to diff against, a join reports every column it carries.
     trace = trace_row(_join_run(tmp_path), "j", 0)
     assert trace.steps[0].columns_new == ["agency"]
     assert trace_row(

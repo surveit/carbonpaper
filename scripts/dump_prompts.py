@@ -19,6 +19,7 @@ from claude_agent_sdk import McpSdkServerConfig
 
 from app.agents.compiler.config import CONFIG as EDITING_CONFIG
 from app.compiler.data_model import build_data_model_agent
+from app.agents.tutorial.config import CONFIG as TUTORIAL_CONFIG
 from app.compiler.data_model_prompt import DATA_MODEL_SYSTEM_PROMPT
 from app.compiler.review_guide import build_review_guide_author
 from app.compiler.review_guide_prompt import REVIEW_GUIDE_SYSTEM_PROMPT
@@ -29,6 +30,8 @@ from app.core.agent.registry import build_mcp_server
 from app.core.agent.sdk_engine import MCP_SERVER_NAME
 from app.runtime.llm import SYSTEM_PROMPT as RUNTIME_SYSTEM_PROMPT
 from app.tools.editing import EditingContext, make_editing_tools
+from app.agents.tutorial.config import make_tutorial_tools
+from app.tools.tutorial import TutorialContext
 
 # The generation agents put their input in the TASK (the user message), not the system
 # prompt, so any value builds the same prompt and the same submit_answer schema. The
@@ -51,6 +54,7 @@ def main(argv: list[str] | None = None) -> int:
 def render_prompt_dump() -> str:
     surfaces = [
         render_editing_agent(),
+        render_tutorial_agent(),
         render_carbonpaper_server(),
         render_data_model_agent(),
         render_review_guide_agent(),
@@ -71,6 +75,23 @@ def render_editing_agent() -> str:
         ),
         system_prompt=EDITING_CONFIG.system_prompt,
         tools=read_bound_tools(make_editing_tools(EditingContext(project_id="<project_id>"))),
+    )
+
+
+def render_tutorial_agent() -> str:
+    return render_surface(
+        title="Tutorial agent",
+        source="app/agents/tutorial/prompt.py · tools: app/tools/tutorial.py",
+        model=TUTORIAL_CONFIG.model,
+        note=(
+            "The guided tour behind the home zero state. It speaks first: the chat page "
+            "runs one turn on TUTORIAL_OPENING_PROMPT as it loads, and that prompt is "
+            "never stored as a reader message. Read-only — it holds no editing tool."
+        ),
+        system_prompt=TUTORIAL_CONFIG.system_prompt,
+        tools=read_bound_tools(
+            make_tutorial_tools(TutorialContext(base_url="http://<host>/"))
+        ),
     )
 
 

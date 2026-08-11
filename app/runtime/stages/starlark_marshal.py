@@ -20,7 +20,6 @@ MAX_EXACT_INT = 2**63 - 1
 
 
 def marshal_row_for_starlark(row: dict[str, Any]) -> dict[str, Any]:
-    """One row as values Starlark holds exactly, or raise naming the column."""
     return {name: _marshal_value(name, value) for name, value in row.items()}
 
 

@@ -29,11 +29,6 @@ _log = logging.getLogger(__name__)
 
 
 def start_generation(project_dir: Path, *, document: str, model: str) -> str:
-    """Kick off DATA-MODEL generation and return the id of the chat session streaming the
-    conversation. The data-model agent runs as a LIVE turn (watchable at /chat/<sid>, persisted
-    when it ends); on a valid submission its schemas are written. The workflow is NOT auto-built
-    — the create-flow stops at the data model so it can be reviewed/approved first. Must be
-    called from the server event loop — the underlying turn is started there."""
     return start_data_model_generation_agent(
         document=document,
         project_name=project_dir.name,
@@ -43,17 +38,7 @@ def start_generation(project_dir: Path, *, document: str, model: str) -> str:
 
 
 def start_stage_test_generation(project_dir: Path, *, stage_id: str, model: str) -> str:
-    """Kick off STAGE-TEST generation for one stage and return the id of
-    the (hidden, view-only) chat session streaming the turn. Loads document.md and the
-    stage's current compiled spec — raising ValueError if the project has no document,
-    `stage_id` names no stage in the compiled workflow, or the stage's type carries no
-    runnable tests. Every one of these checks runs BEFORE the
-    session/turn are started, so a rejected stage never creates an orphaned session
-    (build_stage_test_generator / render_generation_task would raise the same errors, but only
-    after the session already exists). On completion, `_finish_stage_tests`
-    REPLACES the stage's tests wholesale with whatever suite the agent submitted — no
-    human-touched marker exists yet, so this is a destructive regenerate (documented on the
-    generate-tests button/route). Must be called from the server event loop."""
+    """Every check runs before the turn starts, so a rejected stage leaves no orphaned session."""
     doc_path = find_document_path(project_dir)
     if doc_path is None:
         raise ValueError(f"{project_dir.name} has no document to generate tests from")
@@ -78,10 +63,6 @@ def start_stage_test_generation(project_dir: Path, *, stage_id: str, model: str)
 def start_review_guide_generation(
     project_dir: Path, *, version_id: str, model: str
 ) -> str:
-    """Stages come off the VERSION, not the working copy. Must be called from the server
-    event loop."""
-    # Both refusals below run BEFORE the session is created, so neither leaves an
-    # orphaned session behind.
     version = versioning.load_version(project_dir, version_id)
     existing = versioning.find_latest_review_guide(project_dir.name, version_id)
     if existing is not None:
@@ -103,10 +84,6 @@ def start_review_guide_generation(
 
 
 def _finish_data_model(project_dir: Path, answer: SchemaLibrary | None) -> None:
-    """Completion hook for the data-model turn (runs on the event loop): if the agent submitted
-    a valid data model (`answer`), persist the schemas. The create-flow stops here — the
-    workflow is built later, on demand, from the reviewed data model. A failed submission was
-    already streamed to the live turn; there is nothing to persist."""
     if answer is None:
         return
     data_model.write_data_model(project_dir, answer)
@@ -115,8 +92,6 @@ def _finish_data_model(project_dir: Path, answer: SchemaLibrary | None) -> None:
 def _finish_review_guide(
     project_dir: Path, version_id: str, draft: ReviewGuideDraft | None
 ) -> None:
-    """Completion hook for the guide turn; either raise below reaches the transcript via the
-    caller."""
     if draft is None:
         raise GenerationError(
             f"review-guide generation for version '{version_id}' in {project_dir.name} "
@@ -133,25 +108,14 @@ def _finish_review_guide(
 
 
 def _finish_stage_tests(project_dir: Path, stage_id: str, answer: BaseModel | None) -> None:
-    """Completion hook for the stage-test-generation turn (runs on the event loop):
-    REPLACES `stage_id`'s tests wholesale with the submitted suite — the whole `tests`
-    array, not a merge of individual cases, since no human-touched marker exists yet to
-    tell an authored case from a stale one.
-
-    Fails loudly rather than writing on a doubt: `answer is None` (the agent never
-    submitted) or an empty `tests` array (the agent submitted a suite with no cases,
-    which would silently wipe any existing tests) both raise GenerationError, and a
-    patch that stage_edit.patch_stage_spec refuses (it validates the whole resulting
-    workflow before writing) raises GenerationError naming the reported issues —
-    never a silent no-op. Either GenerationError is caught by the caller
-    (start_stage_test_generation_agent's on_done hook), which persists it into the
-    session's transcript before re-raising."""
     if answer is None:
         raise GenerationError(
             f"stage-test generation for '{stage_id}' in {project_dir.name} "
             "did not submit a suite"
         )
     patch = answer.model_dump(mode="json", by_alias=True, exclude_none=True)
+    # The patch replaces the `tests` array wholesale, so an empty suite would wipe
+    # whatever the stage already had.
     if not patch.get("tests"):
         raise GenerationError(
             f"stage-test generation for '{stage_id}' in {project_dir.name} "

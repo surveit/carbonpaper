@@ -12,7 +12,6 @@ from app.core.agent.turns import TurnManager
 
 
 class _FakeEngine:
-    """Returns a fixed (transcript, resume_token) and emits one event mid-turn."""
 
     def __init__(self, transcript: list[dict[str, Any]], resume_token: str | None = None) -> None:
         self._transcript = transcript

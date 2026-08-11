@@ -18,15 +18,6 @@ from app.runtime.trace import (
 
 
 def write_run(tmp_path: Path, stages: list[dict], run_id: str = "T1") -> Path:
-    """Build a minimal run directory from a list of stage specs and return it.
-
-    Each spec: {"id": str, "type": str, "parents": list[str], "df": DataFrame},
-    plus an optional "lineage": RowLineage written as that stage's sidecar.
-    Writes outputs/<id>.parquet and a manifest.json whose per-stage records
-    carry `type`, `output_row_count`, `output_path`, and one
-    input_validation_report entry per
-    parent with phase "input:<parent>" — the exact shape the runner emits.
-    """
     run_dir = tmp_path / run_id
     (run_dir / "outputs").mkdir(parents=True)
     records = []
@@ -59,10 +50,7 @@ def write_run(tmp_path: Path, stages: list[dict], run_id: str = "T1") -> Path:
 
 
 def test_is_row_preserving_matches_the_model_classification():
-    # Sourced from the model's is_grain_and_order_preserving, not a tracer-local
-    # list, so a reclassified type is picked up here; an unknown one is never
-    # trusted. A join is absent even though an enrich's output IS in subject
-    # order: crossing it takes a recorded sidecar, not this.
+    # enrich is absent though its output is in subject order: crossing it takes a recorded sidecar.
     for stage_type in ("input_data", "python_row_function", "llm_transform",
                        "human_review_queue"):
         assert _is_row_preserving(stage_type) is True

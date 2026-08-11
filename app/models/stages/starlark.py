@@ -82,7 +82,6 @@ def validate_starlark_function_code(code: str, function: str | None) -> None:
 
 
 class StarlarkFunction(StageConfig):
-    """Config block for starlark_row_function: inline Starlark, no importable module."""
     FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({"code", "function"})
     INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset({"summary", "corner_cases"})
 
@@ -95,7 +94,6 @@ class StarlarkFunction(StageConfig):
 
     @model_validator(mode="after")
     def _source_is_runnable(block: "StarlarkFunction") -> "StarlarkFunction":
-        # `block`, not `self`: a config-block field, not code.py's stage handle.
         validate_starlark_function_code(block.code, block.function)
         return block
 
@@ -125,8 +123,6 @@ class StarlarkRowFunctionStage(StageBase):
 
 
 def find_starlark_warnings(stage: "StarlarkRowFunctionStage") -> list[CompilerWarning]:
-    """Warnings about `stage.starlark` — raised here and only here, since this
-    module owns it."""
     if not (stage.starlark.summary or "").strip():
         return [warn(stage, "undescribed",
                      "no plain-language description — reviewable only by reading its code")]

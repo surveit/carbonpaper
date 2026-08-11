@@ -118,10 +118,6 @@ def test_second_run_reuses_the_cache_and_never_calls_the_mapper():
 
 
 def test_registered_python_row_function_replays_a_recorded_row_over_its_own_code():
-    """Through the REGISTERED handler, not a hand-built one. The recorded row is
-    seeded with an answer the authored function would never produce, so the value
-    that comes back is itself the evidence of a replay — re-running the stage and
-    reading the store back would only show that entries exist."""
     stage = _row_stage()
     StageCache().record(
         project=PROJECT, stage_id=stage.id,
@@ -182,11 +178,6 @@ def test_cache_false_writes_nothing():
 
 
 def test_cache_false_reads_nothing_that_is_already_pinned():
-    """The read half of the opt-out, which the write test above cannot reach: a
-    run that wrote nothing has nothing to replay, so re-rolling proves only that
-    the store is empty. `cache` stays out of the definition fingerprint (see the
-    test below), so the SAME stage cached once leaves an entry the uncached stage
-    would find if it looked — and it must still re-roll."""
     calls: list[int] = []
     _counting_row_handler(calls).execute(
         _row_stage(cache=True), {"src": _src([1])}, _ctx(run_id="seed"))
@@ -205,12 +196,6 @@ def test_cache_false_does_not_change_the_definition_fingerprint():
 
 
 def test_bust_cache_skips_the_read_but_still_re_pins_the_entry():
-    """Re-pinned, not merely stale. A busted run over a row that is ALREADY
-    pinned proves only that the read was skipped: the run after it hits the first
-    run's entry either way, so the recording half of the claim goes untested. The
-    busted run is therefore also shown x=5, which nothing has ever pinned — the
-    run after it can replay x=5 only if the busted run recorded what it
-    recomputed."""
     stage = _row_stage()
     calls: list[int] = []
     _counting_row_handler(calls).execute(stage, {"src": _src([1])}, _ctx(run_id="run1"))
@@ -227,11 +212,7 @@ def test_bust_cache_skips_the_read_but_still_re_pins_the_entry():
     assert calls == [1, 1, 5]
 
 
-def test_a_run_without_project_scope_touches_the_cache_at_all():
-    """A subset/preview run carries no identity and no cache accessor, so the
-    interceptor never opens — the mapper answers every row. The row is pinned by
-    a scoped run FIRST, so the un-scoped run walks past an entry that was there
-    to be had; without the seed, re-computing would prove only an empty store."""
+def test_a_run_without_project_scope_neither_reads_nor_writes_the_cache():
     stage = _row_stage()
     calls: list[int] = []
     _counting_row_handler(calls).execute(stage, {"src": _src([1])}, _ctx(run_id="seed"))
@@ -273,9 +254,7 @@ def test_the_cache_is_read_once_per_execution(monkeypatch):
 
 
 def test_a_post_map_mapper_still_gets_its_post_map_step():
-    """The wrapper is used only in the map loop: `_finish_mapped_frame` tests
-    the ORIGINAL mapper for the PostMapRowMapper shape, so wrapping must not
-    hide it."""
+    """The cache wrapper must not hide the original mapper's post-map protocol from the driver."""
     seen: list[int] = []
 
     class _Mapper:
@@ -316,8 +295,7 @@ def test_llm_transform_row_path_does_not_call_the_model_for_a_cached_row(monkeyp
 
 
 def test_a_cached_llm_row_carries_no_usage(monkeypatch):
-    """Usage is per-call telemetry, stripped before recording — a replayed row
-    cost this run nothing, so it must not report spend."""
+    """A replayed row cost this run nothing, so keeping usage would report spend never paid."""
     calls: list[dict] = []
     _stub_call_llm(monkeypatch, calls)
     stage = _llm_stage()
@@ -350,8 +328,6 @@ def test_a_failed_llm_row_is_never_recorded(monkeypatch):
 
 
 def _stub_call_llm_batch(monkeypatch, batches: list[list[int]]) -> None:
-    """Answer a batched call from the rendered task alone: each item's task text
-    is the row's `x`, so the stub records which rows the model was shown."""
     def fake_call_llm_batch(stage_id, llm, instructions, task, reply_schema, usage_out):
         shown = [
             int(block.splitlines()[1])
@@ -392,8 +368,6 @@ def test_a_partial_batched_hit_calls_the_model_for_the_misses_only(monkeypatch):
 
 
 def test_batched_misses_that_were_not_adjacent_rejoin_their_own_rows(monkeypatch):
-    """A chunk is packed from the misses alone, so its rows need not be adjacent
-    in the input — each reply must still land on the row that produced it."""
     batches: list[list[int]] = []
     _stub_call_llm_batch(monkeypatch, batches)
     stage = _llm_stage(batch_size=2)
@@ -419,10 +393,6 @@ def test_a_failed_batch_records_nothing(monkeypatch):
 
 
 def test_batched_bust_cache_skips_the_read_but_re_pins(monkeypatch):
-    """The batched path's version of the row-grain test above, and shaped the
-    same way: the busted run is shown x=7, which nothing has ever pinned, so the
-    run after it is what proves the busted run recorded rather than merely
-    skipped its reads."""
     batches: list[list[int]] = []
     _stub_call_llm_batch(monkeypatch, batches)
     stage = _llm_stage(batch_size=2)
@@ -451,9 +421,6 @@ def test_batched_path_without_project_scope_calls_the_model_every_time(monkeypat
 
 
 def test_the_scatter_puts_every_row_back_in_its_own_input_position():
-    """The shape assembles hits and computed rows by INPUT position, never by
-    the order either arrived in: the computed rows come back in miss order and
-    land on the positions the misses came from."""
     hits = {0: {"x": 0, "from": "cache"}, 3: {"x": 3, "from": "cache"}}
     computed = [{"x": 1, "from": "model"}, {"x": 2, "from": "model"}]
 
@@ -464,16 +431,11 @@ def test_the_scatter_puts_every_row_back_in_its_own_input_position():
 
 
 def test_the_scatter_refuses_a_result_that_is_not_one_row_per_miss():
-    """A missing computed row would silently mis-grain the stage, so the gap is
-    raised instead of filled."""
     with pytest.raises(RuntimeError, match="batched execution returned 1 rows"):
         _order_by_input_position(_llm_stage(), {}, [0, 1], [{"x": 0}], 2)
 
 
 def test_run_llm_batches_computes_every_row_it_is_given(monkeypatch):
-    """The stage module resolves nothing: called directly with rows the cache
-    could answer, it still asks the model about all of them. Which rows reach it
-    is the shape's decision alone."""
     batches: list[list[int]] = []
     _stub_call_llm_batch(monkeypatch, batches)
     stage = _llm_stage(batch_size=2)
@@ -517,7 +479,6 @@ def test_a_partly_replayed_batched_stage_counts_only_the_hits(monkeypatch):
 
 
 def test_the_replay_marker_never_reaches_stage_output(monkeypatch):
-    """A replayed frame must be column-for-column what a computed one was."""
     stage = _llm_stage()
     _stub_call_llm(monkeypatch, [])
     computed = _run(stage, _src([1]), _ctx(run_id="run1"))
@@ -528,7 +489,6 @@ def test_the_replay_marker_never_reaches_stage_output(monkeypatch):
 
 
 def test_a_replayed_row_is_never_re_recorded_carrying_the_marker(monkeypatch):
-    """A path that re-pinned a hit would put driver machinery in the entry."""
     stage = _llm_stage()
     _stub_call_llm(monkeypatch, [])
     _run(stage, _src([1]), _ctx(run_id="run1"))
@@ -543,9 +503,6 @@ def test_a_replayed_row_is_never_re_recorded_carrying_the_marker(monkeypatch):
 
 
 def test_every_row_mapped_stage_type_runs_under_the_interceptor():
-    """No registration may exempt itself from the row cache — the interceptor is
-    a property of the shape, so a type that wants different caching has to say so
-    in `Stage.cache`, which is per-stage and visible to the author."""
     for stage_type in (
         StageType.python_row_function,
         StageType.llm_transform,
@@ -567,7 +524,6 @@ _READS_X = [{"input": "src", "columns": [{"name": "x", "type": "int", "nullable"
 
 
 def _two_column_stage(*, reads=None, code: str = _DOUBLING_CODE) -> Stage:
-    """Reads `x`, and carries an unread `noise` column alongside it."""
     return parse_stage({
         "id": "double", "description": "Double", "type": "python_row_function",
         "inputs": [{"id": "src", "schema": {"columns": [
@@ -604,7 +560,6 @@ def test_the_mapper_is_handed_only_the_columns_the_signature_reads():
 
 
 def test_an_unread_column_still_flows_to_the_output():
-    """Narrowing hides a column from the mapper; the rejoin still carries it out."""
     handler = _seen_rows_handler([])
 
     out = handler.execute(_two_column_stage(), {"src": _noisy_src(["a", "b"])}, _ctx())
@@ -614,8 +569,6 @@ def test_an_unread_column_still_flows_to_the_output():
 
 
 def test_a_column_the_stage_never_reads_stops_invalidating_its_cache():
-    """The payoff: keyed on what was READ, a row differing only in a blind
-    column is the same row."""
     stage = _two_column_stage()
     calls: list[Row] = []
     handler = _seen_rows_handler(calls)
@@ -629,7 +582,6 @@ def test_a_column_the_stage_never_reads_stops_invalidating_its_cache():
 
 
 def test_a_signature_declaring_no_anchor_reads_is_handed_empty_rows():
-    """Nothing is exempt: declare no reads and the mapper is handed nothing."""
     seen: list[Row] = []
     with pytest.raises(KeyError, match="x"):
         _seen_rows_handler(seen).execute(
@@ -641,7 +593,6 @@ def test_a_signature_declaring_no_anchor_reads_is_handed_empty_rows():
 
 
 def test_a_registered_row_function_may_not_read_past_its_declared_reads():
-    """No stage type gets a vote — the REGISTERED python_row_function narrows too."""
     stage = _two_column_stage(
         code="def transform(row):\n    return {**row, 'y': row['noise']}\n")
 

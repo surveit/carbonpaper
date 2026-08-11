@@ -13,15 +13,6 @@ def resolve_eval_run_settings(
     overrides: Iterable[str],
     target: str,
 ) -> EvalRunSettings:
-    """Walk the executed frontier from `target` upward, stopping at overrides, and
-    decide whether it can be scored automatically row-by-row (every frontier stage
-    grain-preserving) — the v1 condition for a single-table, row-aligned eval.
-
-    Whether an eval needs a code scorer is a property of the *path*, not the
-    author's preference — this function is where that's decided. It raises
-    (loudly) if `target` or any override names no stage, or if `target` is itself
-    overridden — a misconfigured eval should fail at definition, not at score time.
-    """
     by_id = workflow.index_stages_by_id()
     if target not in by_id:
         raise ValueError(f"target {target!r} is not a stage in the workflow")

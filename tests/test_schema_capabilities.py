@@ -234,9 +234,6 @@ def test_subtract_value_type_mismatch_throws():
 
 
 def test_subtract_nested_field_prose_difference_does_not_throw():
-    """Spec-equality recurses into `fields` but ignores prose at every level:
-    a sub-column differing only in description/source is a producer-vs-consumer
-    copy, not a spec change, so subtract must not throw."""
     a = _ts(columns=[{
         "name": "payload", "type": "json",
         "fields": [{"name": "x", "type": "str", "nullable": False, "description": "from producer"}],
@@ -251,7 +248,6 @@ def test_subtract_nested_field_prose_difference_does_not_throw():
 
 
 def test_subtract_nested_field_spec_difference_throws():
-    """Recursion still catches a real spec change in a sub-column (nullable)."""
     a = _ts(columns=[{
         "name": "payload", "type": "json",
         "fields": [{"name": "x", "type": "str", "nullable": True}],
@@ -265,9 +261,7 @@ def test_subtract_nested_field_spec_difference_throws():
 
 
 def test_spec_column_fields_read_off_the_model():
-    """The fields subtract compares for spec-equality are READ OFF the
-    Column model (every field except the prose ones), so a newly added schema
-    capability is compared automatically instead of being silently ignored."""
+    """So a newly added Column field is compared by subtract instead of being silently ignored."""
     from app.models import schema as sch
     prose = {"name", "description", "source"}
     assert set(sch._SPEC_COLUMN_FIELDS) == set(m.Column.model_fields) - prose
@@ -351,7 +345,6 @@ def test_find_unsatisfied_columns_flags_type_difference():
 
 
 def test_find_unsatisfied_columns_flags_required_non_null_fed_by_nullable_producer():
-    # The UNSAFE direction: consumer requires non-null, producer may emit null.
     required = _ts(columns=[{"name": "score", "type": "int", "nullable": False}])
     producer = _ts(columns=[{"name": "score", "type": "int", "nullable": True}])
     reasons = required.find_unsatisfied_columns(producer)
@@ -360,9 +353,6 @@ def test_find_unsatisfied_columns_flags_required_non_null_fed_by_nullable_produc
 
 
 def test_find_unsatisfied_columns_allows_nullable_requirement_fed_by_non_null_producer():
-    # The SAFE direction: a producer that never emits null satisfies a nullable
-    # requirement (stronger guarantee than needed) — nullability is compatible,
-    # not identical.
     required = _ts(columns=[{"name": "score", "type": "int", "nullable": True}])
     producer = _ts(columns=[{"name": "score", "type": "int", "nullable": False}])
     assert required.find_unsatisfied_columns(producer) == []
@@ -386,9 +376,6 @@ def test_find_unsatisfied_columns_reports_every_offending_column():
 
 
 def test_is_subset_of_uses_exact_nullability():
-    # is_subset_of demands a spec-preserving subset — nullability EXACT, so the
-    # safe-direction nullability difference find_unsatisfied_columns tolerates is
-    # still not a subset.
     nullable = _ts(columns=[{"name": "score", "type": "int", "nullable": True}])
     non_null = _ts(columns=[{"name": "score", "type": "int", "nullable": False}])
     assert nullable.is_subset_of(non_null) is False
@@ -410,9 +397,6 @@ def test_subtract_strict_false_ignores_prose_differences():
 
 
 def test_subtract_strict_false_does_not_throw_on_spec_delta():
-    # Unlike the strict=True default, strict=False tolerates `other` NOT
-    # being a spec-preserving subset of `self` -- it just reports what's
-    # uncovered instead of raising.
     a = _ts(columns=[{"name": "id", "type": "str", "nullable": True}])
     b = _ts(columns=[{"name": "id", "type": "int", "nullable": True}])
     diff = a.subtract(b, strict=False)
@@ -495,15 +479,12 @@ def test_to_prompt_range_listed():
 
 
 def test_range_on_str_column_rejected_use_enum():
-    """`range` is numeric bounds only; a categorical string vocabulary must be
-    declared with `enum`, not the old `range: [val1, val2, ...]` convention."""
     with pytest.raises(ValidationError, match="enum"):
         m.Column(name="source_class", type="str",
                  range=["org_websites", "corporate_media", "CDP"], nullable=True)
 
 
 def test_numeric_range_on_str_column_rejected():
-    """Even an all-numeric range is invalid on a non-numeric column."""
     with pytest.raises(ValidationError, match="range"):
         m.Column(name="code", type="str", range=[0, 10], nullable=True)
 

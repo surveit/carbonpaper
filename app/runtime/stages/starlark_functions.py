@@ -22,7 +22,6 @@ if TYPE_CHECKING:
 
 
 def make_starlark_row_mapper(stage: Stage, ctx: RunContext, src: pd.DataFrame) -> RowMapper:
-    """Compile once; the mapper sees one marshalled row and nothing else."""
     block = narrow_stage(stage, StarlarkRowFunctionStage).starlark
     function_name = block.function or DEFAULT_FUNCTION_NAME
     handle = compile_starlark_function(block.code, function_name, DEFAULT_FUNCTION_NAME)

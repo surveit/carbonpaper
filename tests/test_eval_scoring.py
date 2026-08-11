@@ -13,7 +13,6 @@ from app.evals.scoring import score_expected_outputs
 
 
 def _stage(id_, output_cols, tmp_path):
-    """A minimal input_data stage producing `output_cols`."""
     return m.parse_stage({
         "id": id_, "type": "input_data", "description": id_,
         "connector": {"kind": "file", "params": {"path": str(tmp_path / f"{id_}.csv")}},
@@ -73,10 +72,6 @@ def test_row_count_mismatch_raises_grain_violation(tmp_path):
 
 
 def test_checked_column_clashing_with_override_is_read_from_output_prefixed_column(tmp_path):
-    """When a checked target column shares a name with an override output column,
-    the expected value lives in the deconflicted `output.<name>` dataset column —
-    the scorer must compare THAT to the target's own `<name>`, not the injected
-    `override.<name>`."""
     override = _stage("ov", [{"name": "label", "type": "str", "nullable": True}], tmp_path)   # override emits `label`
     target = _stage("tg", [{"name": "label", "type": "str", "nullable": True}], tmp_path)     # target also emits `label`
     config = _config([ExpectedOutput(output_column="label", metric="exact")])

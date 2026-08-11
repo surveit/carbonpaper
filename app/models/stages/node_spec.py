@@ -7,8 +7,6 @@ from app.models.schema import _Base
 
 
 class NodeTypeSpec(_Base):
-    """What the authoring prompts render for one stage type."""
-
     summary: str
     signature_form: Literal["extends", "replaces"]
     blocks: list[str]

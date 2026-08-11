@@ -37,10 +37,6 @@ _JUSTIFIED_EXCEPTIONS: dict[str, str] = {}
 
 @dataclass(frozen=True)
 class ModuleDocstring:
-    """``path`` is repo-relative with forward slashes (identical on Windows and CI
-    Linux); ``lines`` counts physical lines of the raw docstring text, blank lines
-    included."""
-
     path: str
     lines: int
 
@@ -50,10 +46,6 @@ def find_governed_files(app_root: Path, tests_root: Path) -> list[Path]:
 
 
 def find_python_files(root: Path) -> list[Path]:
-    """Recursive, minus `_TESTS_EXEMPT_PARTS` (taken from the complexity ratchet's
-    set, so a future shared exemption reaches both scanners). Parts are checked on
-    the path relative to `root`: this repo's worktrees can live under a
-    dot-directory, whose absolute parts would spuriously exempt the whole tree."""
     files = [
         path
         for path in sorted(root.rglob("*.py"))
@@ -68,8 +60,6 @@ def find_python_files(root: Path) -> list[Path]:
 
 
 def measure_module_docstrings(paths: list[Path], repo_root: Path) -> list[ModuleDocstring]:
-    """Only files that HAVE a module docstring; a file without one is absent from
-    the result rather than measured as zero."""
     measurements = []
     for path in paths:
         docstring = ast.get_docstring(ast.parse(path.read_text(encoding="utf-8")), clean=False)
@@ -83,9 +73,6 @@ def measure_module_docstrings(paths: list[Path], repo_root: Path) -> list[Module
 def find_ratchet_violations(
     measurements: list[ModuleDocstring], exceptions: dict[str, str]
 ) -> list[str]:
-    """Offender lines for two rules: a module over the ceiling and not in
-    `exceptions`, and an `exceptions` entry that no longer describes an
-    over-ceiling module (stale — the ratchet may only shrink)."""
     by_path = {measurement.path: measurement for measurement in measurements}
     offenders = [
         _describe_violation(by_path[path])
@@ -181,8 +168,6 @@ def test_measure_module_docstrings_skips_a_file_whose_first_string_is_not_a_docs
 
 
 def test_measure_module_docstrings_counts_a_blank_line_inside_the_docstring(tmp_path: Path) -> None:
-    """Two short paragraphs measure 3, not 2 — the blank line between them counts,
-    which is what makes the ceiling force one contiguous block."""
     file = _write_module(tmp_path, '"""First para.\n\nSecond para.\n"""\n')
     [measurement] = measure_module_docstrings([file], tmp_path)
     assert measurement.lines == 3
@@ -232,8 +217,6 @@ def test_find_ratchet_violations_flags_a_stale_exception_for_a_missing_module() 
 
 
 def test_justified_exceptions_ships_empty_and_every_entry_carries_a_reason() -> None:
-    """The mechanism lands unused on purpose; if an entry is ever added, its reason
-    must be real prose, not an empty string."""
     assert _JUSTIFIED_EXCEPTIONS == {}
     assert all(reason.strip() for reason in _JUSTIFIED_EXCEPTIONS.values())
 
@@ -251,8 +234,6 @@ def test_find_python_files_returns_the_python_files_in_the_root(tmp_path: Path) 
 
 
 def test_find_python_files_recurses_into_a_subpackage_but_skips_exempt_parts(tmp_path: Path) -> None:
-    """A subpackage added under tests/arch/ must not silently fall out of the rule's
-    scope; `__pycache__` (a shared exempt part) must stay out of it."""
     subpackage = tmp_path / "sub"
     subpackage.mkdir()
     _write_module(subpackage, "x = 1\n", name="nested.py")

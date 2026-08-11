@@ -40,8 +40,7 @@ _FORMAT_BY_SUFFIX: dict[str, FileFormat] = {
 
 
 def resolve_file_format(path: str) -> FileFormat:
-    """The format a path's extension designates; raises rather than guess one a run would misread."""
-    suffix = Path(path).suffix.lower()
+    suffix =Path(path).suffix.lower()
     fmt = _FORMAT_BY_SUFFIX.get(suffix)
     if fmt is None:
         raise ValueError(
@@ -52,9 +51,6 @@ def resolve_file_format(path: str) -> FileFormat:
 
 
 class Connector(StageConfig):
-    """input_data config block."""
-    # Every field changes what this stage computes (which file, what params) —
-    # see StageBase.compute_definition_fingerprint.
     FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({"kind", "params", "refresh", "notes"})
     INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset()
 

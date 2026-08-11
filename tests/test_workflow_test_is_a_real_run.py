@@ -6,7 +6,6 @@ body actually runs, so a cache hit leaves the probe untouched."""
 from __future__ import annotations
 
 import json
-import time
 from collections import Counter
 from pathlib import Path
 
@@ -38,8 +37,6 @@ def _write_rows(root: Path, rows: list[dict[str, object]]) -> None:
 
 
 def _write_project(root: Path) -> Path:
-    """`load` (csv) -> `clean` (row-mapped, cached). Returns the probe file
-    `clean`'s body appends to."""
     probe = root / "probe.log"
     (root / "compiled").mkdir(parents=True, exist_ok=True)
     (root / "data").mkdir(parents=True, exist_ok=True)
@@ -84,8 +81,6 @@ def project(tmp_path, monkeypatch):
 
 
 def test_workflow_test_replays_cached_rows_and_writes_no_new_entries(project):
-    """A production run pins rows "a"/"b". A workflow test over the SAME rows
-    replays both from the cache — `clean`'s body never runs again."""
     probe = _write_project(project)
     _publish(project)
 
@@ -98,11 +93,7 @@ def test_workflow_test_replays_cached_rows_and_writes_no_new_entries(project):
     assert _invocations(probe) == Counter({"clean": 2})  # no new invocation
 
 
-def test_production_run_after_a_workflow_test_is_unaffected(project):
-    """The workflow test's slice includes a row ("c") no run has ever cached, so
-    it must compute it. If that computation leaked into the cache, a later
-    production run over the same row would replay it instead of recomputing —
-    the poisoning this seam must prevent. Assert the opposite."""
+def test_a_workflow_test_does_not_leak_its_computed_rows_into_the_production_cache(project):
     probe = _write_project(project)
     _publish(project)
     execute_run(project, project, *pinned_stages(project))
@@ -113,7 +104,6 @@ def test_production_run_after_a_workflow_test_is_unaffected(project):
     assert result["ok"] is True
     assert _invocations(probe) == Counter({"clean": 3})  # only "c" recomputed
 
-    time.sleep(1.05)  # run ids are second-resolution
     manifest = execute_run(project, project, *pinned_stages(project))
     assert manifest["status"] == "ok"
     # "a"/"b" still replay from the FIRST production run's cache, but "c"

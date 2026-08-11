@@ -81,10 +81,6 @@ def test_cancel_requested_before_run_starts_leaves_the_first_stage_pending(tmp_p
 
 
 def test_mid_run_cancel_preserves_the_completed_stages_output(tmp_path, monkeypatch):
-    """Cancellation arrives between stage 1 ('load') and stage 2 ('consume').
-    Simulated deterministically — consume_cancel returns False for stage 1's
-    checkpoint and True from stage 2's on — instead of coordinating real
-    threads, which would make the test timing-dependent."""
     _two_stage_project(tmp_path)
     _seed_version(tmp_path)
     prep = prepare_run(tmp_path, tmp_path, *pinned_stages(tmp_path))
@@ -115,11 +111,6 @@ def test_mid_run_cancel_preserves_the_completed_stages_output(tmp_path, monkeypa
 
 
 def _three_stage_llm_project(root):
-    """input_data 'load' (5 rows) -> llm_transform 'score' (row-mapped, fans
-    out under parallelism > 1) -> a python_frame_function 'downstream' stage.
-    Unlike _two_stage_project's FrameHandler-only 'consume' (which never
-    enters the row driver), 'score' is driven by execution.py's row mapper —
-    the mid-fan-out cancellation checkpoint under test lives there."""
     (root / "compiled").mkdir(parents=True)
     (root / "data").mkdir(parents=True)
     pd.DataFrame({"id": [f"r{i}" for i in range(5)], "text": ["hi"] * 5}).to_csv(
@@ -161,13 +152,7 @@ def _three_stage_llm_project(root):
 
 
 def test_mid_stage_cancel_marks_the_running_stage_cancelled_not_pending(tmp_path, monkeypatch):
-    """Cancellation arrives DURING 'score's row-mapper fan-out, not between
-    stages: execution.py's consume_cancel binding is forced True so the row
-    driver raises RunCancelled mid-fan-out, while executor.py's own consume_cancel
-    binding stays real (no message was requested) so 'score' starts rather than
-    being skipped by the between-stage checkpoint above. Exercises the runner's
-    `except RunCancelled:` branch: the stage that was RUNNING is recorded
-    'cancelled', distinct from a not-yet-started stage's 'pending'."""
+    """Only execution.py's cancel is forced — executor.py's stays real, so `score` starts."""
     def fake_call_llm(stage_id, llm_config, row, **kw):
         return {"score": 1}
 
@@ -198,10 +183,6 @@ def test_mid_stage_cancel_marks_the_running_stage_cancelled_not_pending(tmp_path
 
 
 def test_a_cancelled_run_can_be_resumed_and_runs_to_completion(tmp_path):
-    """Cancel is a consumed signal, not a terminal state. A run cancelled before
-    it starts can be resumed: the cancelled run popped the message, so the resume
-    finds an empty mailbox and runs every stage to 'ok'. Resuming needs no
-    special-casing of the cancel — that is the whole point of consume-on-read."""
     _two_stage_project(tmp_path)
     _seed_version(tmp_path)
     prep = prepare_run(tmp_path, tmp_path, *pinned_stages(tmp_path))

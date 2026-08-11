@@ -1,0 +1,78 @@
+<!--@ document -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Tutorial Lobbying Say-versus-Do</title>
+<style>
+  body { font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+         margin: 2rem auto; max-width: 1180px; padding: 0 1rem; line-height: 1.45; }
+  h1 { font-size: 1.45rem; margin-bottom: .2rem; }
+  p { margin: .5rem 0; }
+  .sub, .note, .muted, .src { font-size: .85rem;
+        color: color-mix(in srgb, currentColor 60%, transparent); }
+  .note, .why { border-left: 3px solid color-mix(in srgb, currentColor 30%, transparent);
+        padding: .1rem 0 .1rem .8rem; margin: 1rem 0; }
+  .why { font-size: .9rem; max-width: 62ch; }
+  table { border-collapse: collapse; width: 100%; font-size: .88rem; margin-top: 1.4rem; }
+  th, td { text-align: left; padding: .5rem .6rem; vertical-align: top;
+           border-bottom: 1px solid color-mix(in srgb, currentColor 15%, transparent); }
+  th { font-size: .7rem; text-transform: uppercase; letter-spacing: .05em;
+       border-bottom-width: 2px; }
+  td.num { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+  tr.flagged td:first-child { border-left: 3px solid currentColor; }
+  .pill { border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+          border-radius: 999px; padding: .05rem .5rem; font-size: .78rem;
+          white-space: nowrap; }
+  .none { color: color-mix(in srgb, currentColor 40%, transparent); font-style: italic; }
+  .src { display: block; margin-top: .2rem; }
+  .quote { margin: .4rem 0 0; font-size: .82rem; max-width: 44ch; }
+  .label { font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+           font-size: .7rem; display: block; }
+</style>
+</head>
+<body>
+<h1>Tutorial Say-versus-Do Report</h1>
+<p class="sub">[[filing_count]] filings; [[flagged_count]] ask government for the opposite of what their client committed to in public; [[unmatched_count]] have no public commitment on record.</p>
+<p class="note">Invented sample data bundled with this tutorial. No row describes a real filing, client, firm or commitment.</p>
+<p class="why">Beside each filing sits what the same client said in public, where a commitment was on
+record. A filing is marked when it asks government for the opposite of that commitment &mdash; and where
+it is marked, both texts are printed together, so the contradiction is on the page rather than only in
+the flag. It is a reading aid, not a verdict, and not a finding about the filer.
+Every row carries a <em>Show the work</em> link back through each stage that touched it to the input row
+it came from. Those links are served by the app that produced this page; in a copy of this file opened
+on its own they will not resolve.</p>
+<table>
+<thead><tr>
+<th>Filing</th><th>Client</th><th>Registrant</th><th>Period</th>
+<th>Reported spend</th><th>What this filing asks for</th><th>What they said in public</th><th>Why follow up</th>
+<th>Show the work</th>
+</tr></thead>
+<tbody>
+[[rows]]</tbody>
+</table>
+</body>
+</html>
+<!--@ row -->
+<tr class="[[row_class]]">
+<td>[[filing_id]]</td>
+<td>[[client]]</td>
+<td class="muted">[[registrant]]</td>
+<td>[[filing_period]]</td>
+<td class="num">[[amount]]</td>
+<td>[[specific_issues]]</td>
+<td>[[commitment]]</td>
+<td>[[followup]]</td>
+<td>[[trace]]</td>
+</tr>
+<!--@ trace -->
+<a href="[[trace_url]]">Lineage</a>
+<!--@ commitment -->
+[[public_commitment]]<span class="src">[[commitment_source]]</span>
+<!--@ no_commitment -->
+<span class="none">No public commitment on record</span>
+<!--@ judgment -->
+<span class="pill">[[alignment]]</span>
+<!--@ contradiction -->
+<p class="quote"><span class="label">Said</span>[[said]]</p>
+<p class="quote"><span class="label">Lobbied for</span>[[lobbied_for]]</p>

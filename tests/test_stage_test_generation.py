@@ -44,9 +44,7 @@ def test_task_contains_the_description_schemas_and_stage_meta():
 
 
 def test_task_never_contains_the_methodology_document():
-    """The examples exist to check the code against the DESCRIPTION. An agent that
-    had read the methodology could write a case the description never implies, and
-    the suite would then certify the methodology instead."""
+    """An agent that had read the methodology would certify the methodology, not the code."""
     task = render_generation_task(_DOC, _python_stage())
     assert _DOC not in task
     assert "METHODOLOGY" not in task
@@ -69,8 +67,6 @@ def test_task_never_contains_existing_tests():
 
 
 def test_stated_corner_cases_are_rendered_with_their_expected_outcome():
-    """Both halves must reach the generator: a case with no stated outcome is one it
-    would have to invent."""
     task = render_generation_task(_DOC, _python_stage(corner_cases=[
         {"case": "`amount` is blank", "expected": "the step fails"},
         {"case": "`amount` is negative", "expected": "the row is kept unchanged"},
@@ -82,16 +78,12 @@ def test_stated_corner_cases_are_rendered_with_their_expected_outcome():
 
 
 def test_no_corner_cases_still_renders_a_task():
-    """Declaring none is legal — the generator still has to find edge cases itself,
-    it just has none stated for it."""
     task = render_generation_task(_DOC, _python_stage(corner_cases=[]))
     assert _SUMMARY in task
     assert "corner case" not in task.lower()
 
 
 def test_a_stage_with_no_summary_cannot_generate_examples():
-    """There is no description to check the code against, so generating anything
-    would make the panel's 'checked against the code' claim untrue."""
     with pytest.raises(ValueError, match="has no summary"):
         render_generation_task(_DOC, _python_stage(summary=None))
 

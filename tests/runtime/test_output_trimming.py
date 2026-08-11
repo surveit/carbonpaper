@@ -9,7 +9,7 @@ from app.runtime.stages.execution import _trim_to_declared_columns
 
 
 def _rating_stage() -> Stage:
-    """Three declared output columns, under an id distinct from all of them."""
+    """The stage id is distinct from every declared column, so `"rate" in message` cannot false-match."""
     return parse_stage({
         "id": "rate", "description": "Rate", "type": "python_row_function",
         "inputs": [{"id": "load", "schema": {"columns": [{"name": "id", "type": "str", "nullable": True}]}}],

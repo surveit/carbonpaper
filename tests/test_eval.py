@@ -28,9 +28,6 @@ def _file_input(id_, tmp_path, output_schema=_K):
 
 
 def _py(id_, inputs, granularity="frame", schema=_K, **kw):
-    """granularity 'row' -> python_row_function, else python_frame_function.
-    `schema` is both the schema declared on every input edge and what the stage
-    outputs — the inline transform is the identity."""
     type_ = "python_row_function" if granularity == "row" else "python_frame_function"
     signature = ({"form": "extends"} if granularity == "row"
                  else {"form": "replaces", "produces": schema["columns"]})
@@ -54,7 +51,6 @@ def test_python_row_function_is_grain_and_order_preserving():
 
 
 def test_python_row_function_rejects_multiple_inputs():
-    # a row function maps over one input's rows — two inputs is an enrich/expand
     with pytest.raises(ValidationError):
         m.parse_stage(S(id="t", type="python_row_function",
                                  inputs=[{"id": "a", "schema": _K}, {"id": "b", "schema": _K}],
@@ -79,9 +75,7 @@ def test_input_data_is_grain_and_order_preserving(tmp_path):
 
 
 def test_human_review_queue_is_grain_and_order_preserving():
-    # The runtime maps the queue handler per row and it emits every one of
-    # them, whatever the verdict — so it is 1:1 in input order, and an eval
-    # pathway through a queue stage is row-alignable.
+    # The queue emits every row whatever the verdict, so it never drops the rejected ones.
     s = m.parse_stage(S(id="rev", type="human_review_queue",
                         inputs=[{"id": "a", "schema": _QUEUE_IN}],
                         queue=queue_columns(), signature={
@@ -103,8 +97,6 @@ def test_human_review_queue_is_grain_and_order_preserving():
 
 
 def test_publish_not_grain_and_order_preserving():
-    # handle_publish runs an authored function whose output is a table of
-    # artifact paths — different rows from its input, never row-alignable.
     s = m.parse_stage(S(id="pub", type="publish",
                                  inputs=[{"id": "a", "schema": _K}], publish={},
                                  signature={"form": "replaces"},
@@ -113,9 +105,7 @@ def test_publish_not_grain_and_order_preserving():
 
 
 def test_joins_and_aggregate_change_grain():
-    # enrich is registered as a frame handler, so even its m:1 shape is NOT
-    # grain-preserving: preservation is earned by the runtime driving the stage
-    # row by row, never asserted about an operation.
+    # enrich is m:1 yet False: preservation is earned by the row driver, never by the operation.
     j = m.parse_stage(S(id="j", type="enrich",
                                  inputs=[{"id": "a", "schema": _K}, {"id": "b", "schema": _KV}],
                                  join={"keys": [{"left": "k", "right": "k"}], "enrich_with": {"v": "v"}},
@@ -200,7 +190,6 @@ def test_eval_config_nonempty_expected_outputs():
 
 
 def test_eval_config_table_optional():
-    # A config with no eval-dataset file is valid: expected_outputs is still required.
     cfg = m.EvalConfig.model_validate({
         "id": "e1", "project": "lobbymap", "name": "E1",
         "override_stage": "a", "target_stage": "b",
@@ -210,8 +199,6 @@ def test_eval_config_table_optional():
 
 
 def test_eval_config_no_key_or_input_columns_fields():
-    # `key` and `input_columns` are not part of the contract: the injected
-    # columns are computed from override_stage's output schema, not authored.
     cfg = m.EvalConfig.model_validate({
         "id": "e1", "project": "lobbymap", "name": "E1",
         "override_stage": "a", "target_stage": "b",
@@ -222,8 +209,6 @@ def test_eval_config_no_key_or_input_columns_fields():
 
 
 def test_eval_config_rejects_stray_key_field():
-    # extra="forbid" (app/models/schema.py _Base): a leftover `key` value
-    # from an old config is a validation error, not silently-dropped data.
     with pytest.raises(ValidationError):
         m.EvalConfig.model_validate({
             "id": "e1", "project": "lobbymap", "name": "E1",
@@ -257,8 +242,6 @@ def test_expected_output_valid_with_no_expected_field():
 
 
 def test_expected_output_rejects_stray_expected_field():
-    # extra="forbid" (app/models/schema.py _Base): a leftover `expected` value
-    # from an old config is a validation error, not silently-dropped data.
     with pytest.raises(ValidationError):
         m.ExpectedOutput.model_validate({"output_column": "a", "expected": "b"})
 
@@ -291,7 +274,6 @@ def test_eval_run_has_no_passed_field():
 
 # ── resolve_eval_run_settings on a synthetic workflow ─────────────────────────────
 def _chain(tmp_path):
-    """a(input) → b(row) → c(frame) → d(row)."""
     return m.parse_workflow([
         _file_input("a", tmp_path),
         _py("b", ["a"], granularity="row"),

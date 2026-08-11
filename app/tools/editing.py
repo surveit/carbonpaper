@@ -15,13 +15,12 @@ from app.models import StageDraft
 from app.models.review_guide import ReviewGuideDraft
 from app.services.versioning import ReviewGuide
 from app.services import drafts, project as project_service
+from app.tools import shared
 from app.tools.tool_specs import SAVE_VERSION_FROM_DRAFT, TOOL_SPECS
 from app.services.drafts import DraftDetail, DraftEdit, DraftView, SaveResult
 
 
 class EditingContext(BaseModel):
-    """What one editing session binds its tools to: the project it edits, if one is bound."""
-
     project_id: str | None = None
 
 
@@ -31,9 +30,6 @@ def make_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
 
     def get_current_project() -> str | None:
         return ctx.project_id
-
-    def describe_workflow(project_id: str) -> dict[str, Any]:
-        return project_service.describe_workflow(project_id)
 
     def read_stage(project_id: str, stage_id: str) -> str:
         return project_service.read_stage(project_id, stage_id)
@@ -75,7 +71,6 @@ def make_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
     tools: list[Callable[..., Any]] = [
         list_projects,
         get_current_project,
-        describe_workflow,
         read_stage,
         edit_stage,
         add_stage,
@@ -97,7 +92,7 @@ def make_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
             label=TOOL_LABELS[fn.__name__],
         )
         for fn in tools
-    ]
+    ] + shared.bind("describe_workflow")
 
 
 # ── tool input schemas + display labels ──────────────────────────────────────
@@ -111,9 +106,6 @@ ToolInputSchema = dict[str, object]
 TOOL_SCHEMAS: dict[str, ToolInputSchema] = {
     "list_projects": {},
     "get_current_project": {},
-    "describe_workflow": {
-        "project_id": Annotated[str, "The project id (call get_current_project first)."],
-    },
     "read_stage": {
         "project_id": Annotated[str, "The project id (call get_current_project first)."],
         "stage_id": Annotated[str, "The stage's id, as shown by describe_workflow."],
@@ -223,7 +215,6 @@ _DESCRIPTIONS = TOOL_SPECS | {"save_version": SAVE_VERSION_FROM_DRAFT}
 TOOL_LABELS: dict[str, str] = {
     "list_projects": "Listing projects",
     "get_current_project": "Checking the current project",
-    "describe_workflow": "Reading the workflow",
     "read_stage": "Reading a stage",
     "edit_stage": "Editing a stage",
     "add_stage": "Adding a stage",

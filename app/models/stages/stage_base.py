@@ -96,15 +96,11 @@ _GRAIN_AND_ORDER_PRESERVING_TYPES: frozenset[StageType] = frozenset({
 
 
 def is_grain_and_order_preserving(stage_type: StageType) -> bool:
-    """Does one input row of this stage type map to exactly one output row, in the
-    same order? Fixed entirely by stage type — see the
-    StageBase.is_grain_and_order_preserving property for the per-type contract."""
     return stage_type in _GRAIN_AND_ORDER_PRESERVING_TYPES
 
 
 # ── Shared blocks ────────────────────────────────────────────────────────────
 class ReviewConfig(_Base):
-    """Routes a stage's outputs into human review."""
     when: Optional[str] = None
     routing: Optional[str] = None
     rationale: Optional[str] = None
@@ -112,7 +108,6 @@ class ReviewConfig(_Base):
 
 
 class StageInput(_Base):
-    """Spelled `schema:` on a compiled stage; pydantic reserves `schema` on BaseModel."""
     id: str
     table_schema: TableSchema = Field(alias="schema")
 
@@ -149,9 +144,6 @@ STAGE_DESCRIPTION_DESCRIPTION = (
 
 # ── The shared field list ────────────────────────────────────────────────────
 class StageCommon(_Base):
-    """The fields every stage carries whether it is being authored (`StageDraft`)
-    or stored (`StageBase` and its per-type subclasses), declared once so the two
-    cannot drift apart."""
     id: str = Field(max_length=STAGE_ID_MAX_CHARS, description=STAGE_ID_DESCRIPTION)
     type: StageType
     description: str = Field(
@@ -187,7 +179,6 @@ class StageCommon(_Base):
     @field_validator("inputs", mode="before")
     @classmethod
     def _bare_id_shorthand(cls, v: Any) -> Any:
-        """Accept `inputs: [upstream_id]` shorthand for `[{id: upstream_id}]`."""
         if not isinstance(v, list):
             return v
         return [{"id": item} if isinstance(item, str) else item for item in v]
@@ -199,13 +190,6 @@ class StageCommon(_Base):
 
 # ── The per-type stage base ──────────────────────────────────────────────────
 class StageBase(StageCommon):
-    """One node in the workflow: the authored fields plus the ones only the
-    server writes, and every rule a stored stage must satisfy regardless of its
-    type. Each type's own required config blocks and input arity are declared by
-    its subclass under `app/models/stages/`."""
-
-    # False for the one type that emits files rather than a table (publish):
-    # every other type's signature must promise at least one output column.
     REQUIRES_OUTPUT_SCHEMA: ClassVar[bool] = True
 
     # True for the types whose registered handler can execute one authored
@@ -215,7 +199,6 @@ class StageBase(StageCommon):
     CARRIES_RUNNABLE_TESTS: ClassVar[bool] = False
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
-        """A type whose handler runs tests must name the StageTest subclass stating its arity."""
         super().__init_subclass__(**kwargs)
         own_fields = vars(cls).get("__annotations__", {})
         if cls.CARRIES_RUNNABLE_TESTS and "tests" not in own_fields:
@@ -247,53 +230,29 @@ class StageBase(StageCommon):
 
     # ── the per-type hooks a subclass answers ────────────────────────────────
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
-        """The config blocks that decide what this stage computes, keyed by the
-        name they are spelled with on the stage."""
         raise NotImplementedError
 
     def find_config_column_issues(self) -> list[str]:
-        """Every column this stage's config names that its own input edge cannot
-        supply. [] for a type whose config names no column."""
         return []
 
     def find_authored_code_block(self) -> Optional["AuthoredCode"]:
-        """The block holding code a reviewer would otherwise have to read (it
-        carries `summary` and `corner_cases`), None for a stage fixed entirely by
-        config."""
         return None
 
     def find_handle_compiler_warnings(self) -> list["CompilerWarning"]:
-        """What the module owning this type's config block says; [] when a reviewer reads the
-        config directly."""
         return []
 
     def resolve_output_schema(self) -> Optional[TableSchema]:
-        """What the signature promises; None only for a stage that emits no table."""
         return promised_output_schema(self)
 
     def anchor_reads(self) -> frozenset[str]:
-        """Columns read from the anchor input; empty unless the form flows the rest."""
         return frozenset(column.name for column in anchor_read_columns(self))
 
     def find_signature_config_issues(self) -> list[str]:
-        """Signature-vs-config disagreements; [] when nothing cross-checks. Runs only with one."""
         return []
 
     # ── the fingerprint ──────────────────────────────────────────────────────
     def compute_definition_fingerprint(self) -> str:
-        """sha1[:16] over a sorted-key JSON dump of the output-determining subset
-        of this stage: {"type", "signature"} plus one entry per block
-        `fingerprint_blocks` names.
-        Every other field (id, description, source, inputs, review, cache, limit,
-        compiler_notes, eval, tests) is incidental — it does not change what this
-        stage computes — and stays out, `cache` included: it decides whether the
-        cache is consulted, not what the stage computes, so flipping it must not
-        invalidate an existing entry. Each block itself is trimmed to its class's
-        own `FINGERPRINT_FIELDS` (every config class declares
-        `FINGERPRINT_FIELDS`/`INCIDENTAL_FIELDS` explicitly, exhaustively over its
-        own fields — see e.g. QueueConfig, whose
-        `routing`/`conflict_resolution`/`estimated_volume_per_week` route or match
-        a decision without changing what the human is asked)."""
+        """Excludes `cache`: it decides whether the cache is consulted, not what the stage computes."""
         assert self.signature is not None  # _schemas_declared requires one
         fields: dict[str, Any] = {
             "type": self.type,
@@ -317,13 +276,11 @@ class StageBase(StageCommon):
     @field_validator("tests", mode="before")
     @classmethod
     def _empty_tests_means_absent(cls, v: Any) -> Any:
-        """Normalise `tests: []` to absent: the dumped spec is then identical
-        whether the key was omitted or given empty."""
+        """So the dumped spec is identical whether `tests` was omitted or given empty."""
         return None if v == [] else v
 
     @model_validator(mode="after")
     def _tests_shape(self) -> "StageBase":
-        """Tests belong only on a type whose handler can run them, at that type's arity."""
         if self.tests and not self.CARRIES_RUNNABLE_TESTS:
             raise ValueError(
                 f"tests are only supported on stage types whose handler can run "
@@ -334,8 +291,6 @@ class StageBase(StageCommon):
 
     @model_validator(mode="after")
     def _schemas_declared(self) -> "StageBase":
-        """Every schema this stage declares must be usable: non-empty, and naming no
-        column in the reserved `_` namespace (find_internal_namespace_column_issues)."""
         issues = [
             f"input `{ref.id}` declares a schema with no columns"
             for ref in self.inputs
@@ -356,17 +311,6 @@ class StageBase(StageCommon):
 
     @model_validator(mode="after")
     def _config_columns_resolve(self) -> "StageBase":
-        """Every column this stage's config directly names (a join key, an
-        aggregate group_by/value_column, publish.one_file_per, an llm prompt
-        {placeholder} — single-braced, since a double-braced one is never
-        injected) or references via a where/filter predicate (aggregate
-        `where`, human_review_queue `filter`) must resolve against that
-        reference's own input edge — `inputs[index].table_schema`, per
-        `app.models.stages.shared.resolve_input_columns`. EDGE-ONLY: this says
-        nothing about what an upstream producer itself declares, so it holds
-        for a single stage in isolation, independent of the rest of any
-        workflow. Cross-stage checks (unique ids, inputs resolve, acyclic) live
-        in `workflow.graph_issues`."""
         issues = self.find_config_column_issues()
         if issues:
             raise ValueError("; ".join(issues))
@@ -374,7 +318,6 @@ class StageBase(StageCommon):
 
     @model_validator(mode="after")
     def _signature_consistent(self) -> "StageBase":
-        """A declared signature must agree with the edges, the declared schemas, and the config."""
         if self.signature is None:
             return self
         issues = find_signature_issues(self) + self.find_signature_config_issues()
@@ -384,44 +327,10 @@ class StageBase(StageCommon):
 
     @property
     def is_grain_and_order_preserving(self) -> bool:
-        """Does one input row map to exactly one output row, IN THE SAME ORDER?
-        Grain-preserving means both: 1:1 (no rows added or dropped) AND order-
-        preserving (the Nth output row was produced from the Nth input row).
-        Declaring a type grain-preserving commits it to both — a stage that
-        reordered rows would break the guarantee even at 1:1.
-
-        This is the v1 eval gate AND the property a declarative (single-table,
-        row-aligned) eval relies on to align a target's output rows back to the
-        eval-dataset rows that produced them BY POSITION — no lineage id needed,
-        because position IS the identity through a grain-preserving path. Fixed
-        entirely by stage type (the module function is_grain_and_order_preserving):
-          - python_row_function → yes (runtime maps it per row, in emit order — enforced 1:1)
-          - starlark_row_function → yes (same calling convention as python_row_function,
-                                 sandboxed by construction)
-          - python_frame_function → NO (may reshape OR reorder the frame)
-          - llm_transform      → yes (per-row 1:1 in emit order in v1; a fan-out LLM
-                                 like doc→pieces is out of scope until fan-out evals)
-          - input_data         → yes (originates the rows)
-          - human_review_queue → yes — the runtime maps it per row, so an output row
-                                 is in its input row's position, and every input row
-                                 produces one: a rejected row stays, carrying the
-                                 rejection. Removing rows is a downstream filter
-                                 stage's job, not this one's.
-          - join (fan-out) / aggregate (fan-in) → NO; grain changes are deferred
-          - publish            → NO — handle_publish runs an authored function whose
-                                 output is a table of artifact paths, not the input
-                                 rows (and it is terminal — nothing downstream).
-          - filter_rows / union → NO — a filter drops rows, a union interleaves rows
-                                 from several inputs, so neither is 1:1-by-position.
-                                 Each output row's exact source (stage id + row
-                                 ordinal) is still recorded, in
-                                 app.runtime.lineage, for the trace to follow.
-        """
         return is_grain_and_order_preserving(self.type)
 
 
 def find_stage_test_class(stage_cls: type[StageBase]) -> type[StageTest]:
-    """The StageTest subclass this stage type's `tests` field holds — its test arity."""
     sequence_type, _none_type = get_args(stage_cls.model_fields["tests"].annotation)
     (test_class,) = get_args(sequence_type)
     assert issubclass(test_class, StageTest)  # __init_subclass__ admits nothing else

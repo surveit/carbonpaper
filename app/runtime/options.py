@@ -19,11 +19,12 @@ CLAUDE_BIN = shutil.which("claude") or CLI_PATH
 # `llm.model` records nothing about which model answered, so the default is the only
 # thing left saying what a run's rows were produced by.
 DEFAULT_MODEL = LLMModel.parse(
-    os.environ.get("CARBONPAPER_LLM_MODEL", LLMModel.claude_haiku_4_5.value),
-    source="CARBONPAPER_LLM_MODEL",
+    os.environ.get("CARBON_PAPER_LLM_MODEL", LLMModel.claude_haiku_4_5.value),
+    source="CARBON_PAPER_LLM_MODEL",
 )
-DEFAULT_PARALLEL = int(os.environ.get("CARBONPAPER_LLM_PARALLEL", "4"))
-DEFAULT_TIMEOUT_S = int(os.environ.get("CARBONPAPER_LLM_TIMEOUT_S", "180"))
+DEFAULT_PARALLEL = int(os.environ.get("CARBON_PAPER_LLM_PARALLEL", "4"))
+
+DEFAULT_TIMEOUT_S = int(os.environ.get("CARBON_PAPER_LLM_TIMEOUT_S", "180"))
 
 # A stage granted research tools works on a completely different clock: it searches,
 # fetches documents, and reads them before it can answer. The 180s row timeout above
@@ -38,15 +39,10 @@ RESEARCH_MAX_TURNS = int(os.environ.get("CW_LLM_RESEARCH_MAX_TURNS", "80"))
 
 
 def agent_available() -> bool:
-    """True when the structured-output agent backend can run: the
-    claude-agent-sdk package is importable AND a Claude CLI was located."""
     return CLAUDE_BIN is not None and importlib.util.find_spec("claude_agent_sdk") is not None
 
 
 def require_agent_backend() -> None:
-    """Raise `LLMError` unless the agent backend can run. The agent is the only
-    LLM backend — there is no fallback of any kind, so an `llm_transform` stage
-    either runs against a real model or fails loudly here."""
     if not agent_available():
         raise LLMError(
             "No LLM backend available: claude-agent-sdk isn't importable "

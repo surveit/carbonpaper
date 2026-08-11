@@ -75,7 +75,6 @@ def _build_diagram(stages: list[Stage], project: str, view: RunView) -> str:
 
 
 def _load_guide(project: str, manifest: dict[str, Any]) -> RunGuideView | None:
-    """The version's authored review guide; None when it carries none."""
     try:
         return build_run_guide_view(project, manifest)
     except RunVersionUnresolvableError:
@@ -85,7 +84,6 @@ def _load_guide(project: str, manifest: dict[str, Any]) -> RunGuideView | None:
 def _load_pinned_workflow(
     project: str, manifest: dict[str, Any]
 ) -> tuple[list[Stage], str | None, str | None]:
-    """The stages this run executed, their JSON, and why both are absent."""
     try:
         stages = run_service.load_run_stages(project, manifest)
     except (RunVersionUnresolvableError, RunNotFoundError) as exc:

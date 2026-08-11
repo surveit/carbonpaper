@@ -24,8 +24,6 @@ _READ_ONLY_METHOD = "read_only"
 
 
 def find_undeclared_scope_offenders(paths: list[Path]) -> list[str]:
-    """"<path>:<lineno>  class <name>" for every PersistedModel subclass under
-    `paths` whose class body never assigns `SCOPE` a value."""
     offenders: list[str] = []
     for path in paths:
         tree = parse_module(path)
@@ -36,9 +34,6 @@ def find_undeclared_scope_offenders(paths: list[Path]) -> list[str]:
 
 
 def find_project_read_write_missing_read_only_offenders(paths: list[Path]) -> list[str]:
-    """"<path>:<lineno>  class <name>" for every PersistedModel subclass whose
-    `SCOPE` is assigned `PersistenceScope.PROJECT_READ_WRITE` but whose class
-    body never defines `read_only`."""
     offenders: list[str] = []
     for path in paths:
         tree = parse_module(path)
@@ -52,10 +47,6 @@ def find_project_read_write_missing_read_only_offenders(paths: list[Path]) -> li
 
 
 def _assigns_project_read_write(stmt: ast.Assign | ast.AnnAssign) -> bool:
-    """True if a `find_class_body_assignment` hit's value is an attribute
-    access ending in `PROJECT_READ_WRITE` (`PersistenceScope.PROJECT_READ_WRITE`,
-    or any dotted path ending there) — a name-based match, since AST can't
-    resolve the attribute to the real enum member."""
     return isinstance(stmt.value, ast.Attribute) and stmt.value.attr == _PROJECT_READ_WRITE_ATTR
 
 
@@ -105,11 +96,9 @@ def test_find_undeclared_scope_offenders_accepts_a_declared_scope(tmp_path: Path
     assert find_undeclared_scope_offenders([target]) == []
 
 
-def test_find_undeclared_scope_offenders_rejects_a_bare_annotation_with_no_value(
+def test_find_undeclared_scope_offenders_rejects_the_base_class_bare_annotation(
     tmp_path: Path,
 ) -> None:
-    """A bare `SCOPE: ClassVar[PersistenceScope]` (the base class's own
-    declaration) assigns nothing, so it does not satisfy a subclass."""
     target = _write(
         tmp_path,
         "class Foo(PersistedModel):\n"
@@ -161,9 +150,6 @@ def test_find_project_read_write_missing_read_only_offenders_ignores_run_scope(t
 def test_find_project_read_write_missing_read_only_offenders_ignores_a_class_missing_scope(
     tmp_path: Path,
 ) -> None:
-    """A class that never declares SCOPE at all is `test_persisted_models_
-    declare_scope`'s offender, not this test's — it has no PROJECT_READ_WRITE
-    assignment to react to."""
     target = _write(tmp_path, "class Foo(PersistedModel):\n    pass\n")
     assert find_project_read_write_missing_read_only_offenders([target]) == []
 

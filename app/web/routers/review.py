@@ -30,7 +30,6 @@ router = APIRouter()
 
 @router.get("/project/{project}/runs/{run_id}/queue/{stage_id}", response_class=HTMLResponse)
 async def queue_page(request: Request, project: str, run_id: str, stage_id: str):
-    """Reviewer UI for one queue stage in one run."""
     manifest = load_manifest(runs_dir(project) / run_id)
     stage_def = _require_queue_stage(load_stages(project).stages, stage_id)
     queue = _require_queue_config(stage_def)
@@ -73,14 +72,6 @@ async def queue_decide(
     prefilled_values: str = Form(...),
     review_notes: str | None = Form(None),
 ):
-    # Persist a reviewer's decision as a `StageCacheEntry` keyed by this stage's
-    # definition fingerprint and this row's `input_fingerprint`. `reviewed_values` and
-    # `prefilled_values` are JSON objects keyed by reviewed TARGET column name — what the
-    # reviewer submitted, and what the page they submitted from had pre-filled. The
-    # verdict follows from the two, so the reviewer chooses none. The row is resolved by
-    # POSITION in the halted-queue sidecar's fingerprint list — never recomputed from live
-    # stages — so a fingerprint the sidecar can't vouch for 404s rather than being
-    # trusted.
     stage_def = _require_queue_stage(load_stages(project).stages, stage_id)
     queue = _require_queue_config(stage_def)
     attributed_to = _require_reviewer_name(reviewer)
@@ -144,7 +135,7 @@ def _require_reviewer_name(reviewer: str) -> str:
 
 
 def _parse_posted_values(raw: str, field: str) -> dict[str, str | None]:
-    """A posted JSON value map as its form controls carry it, keyed by reviewed TARGET column."""
+    """Keyed by reviewed TARGET column name, not the source column it was read from."""
     try:
         parsed = json.loads(raw)
     except json.JSONDecodeError as exc:
@@ -160,8 +151,7 @@ def _parse_posted_values(raw: str, field: str) -> dict[str, str | None]:
 
 
 def _as_posted_text(value: object) -> str | None:
-    """JSON null and blank alike become None — never assumed to be an allowed null."""
-    # None validates as a null only where the column declares one.
+    """Blank and JSON null both become None; whether a null is allowed is the column's call."""
     if value is None:
         return None
     if isinstance(value, bool):
@@ -178,7 +168,6 @@ def _as_posted_text(value: object) -> str | None:
 
 
 def _normalise_review_notes(review_notes: str | None) -> str | None:
-    """An HTML form posts an untouched notes box as "": blank means no note, not an empty one."""
     stripped = (review_notes or "").strip()
     return stripped or None
 
@@ -186,11 +175,7 @@ def _normalise_review_notes(review_notes: str | None) -> str | None:
 def _validate_reviewed_values(
     stage_def: Stage, queue: QueueConfig, supplied: Mapping[str, str | None]
 ) -> dict[str, object]:
-    """Each supplied value validated against its target column's whole declaration."""
-    # Type, nullability, enum vocabulary and numeric range alike, by compiling those
-    # columns to a Pydantic model. A key the stage does not declare passes through
-    # untouched: the review service owns the exactly-the-declared-columns rule, and
-    # duplicating it here would give it two places to drift.
+    """A key the stage does not declare passes through untouched — the review service owns that."""
     declared = {
         target: require_reviewed_column(stage_def, target)
         for target in queue.reviewed_columns.values()
@@ -219,11 +204,7 @@ def _describe_rejections(exc: ValidationError) -> str:
 def _resolve_queue_row(
     project: str, run_id: str, stage_id: str, input_fingerprint: str
 ) -> tuple[str, pd.Series]:
-    # The `(stage_fingerprint, row)` a decision names: `input_fingerprint`'s POSITION in
-    # the sidecar's `input_fingerprints` list, read off the same position in the halted-
-    # queue snapshot — the only source a decision's fingerprints may come from. 404 if
-    # there's no snapshot/sidecar for this stage, or no position matches: never trust a
-    # fingerprint the sidecar can't vouch for.
+    """Assumes the sidecar's fingerprint list is positionally aligned with the snapshot."""
     fingerprints = load_queue_fingerprints(project, run_id, stage_id)
     snapshot = queue_snapshot(project, run_id, stage_id)
     if fingerprints is not None and snapshot is not None:

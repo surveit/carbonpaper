@@ -70,8 +70,6 @@ def _panel(run_id: str, stage_id: str):
 
 
 def test_input_stage_of_a_workflow_test_opens_instead_of_404ing(project: Path):
-    """The run the workflow test wrote has a record for `classify` only — but its
-    graph still draws `load`, so `load`'s panel must open."""
     run_id = run_workflow_test(PROJECT, limit=2, offset=0)["run_id"]
     manifest = json.loads(
         (project / "runs" / run_id / "manifest.json").read_text(encoding="utf-8"))
@@ -94,8 +92,6 @@ def test_a_stage_the_run_never_heard_of_is_still_a_404(project: Path):
 
 
 def test_a_production_runs_input_stage_still_shows_its_run_detail(project: Path):
-    """The not-executed panel must not swallow the ordinary case: a production run
-    DOES execute its input stage, so that panel keeps showing this run's output."""
     run_id = str(execute_run(project, project, *pinned_stages(project))["run_id"])
 
     response = _panel(run_id, "load")

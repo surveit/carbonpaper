@@ -22,8 +22,7 @@ def artifact_dir(tmp_path, monkeypatch):
 
 
 def test_a_binary_artifact_is_served_rather_than_decoded(artifact_dir):
-    """The bytes below are not valid UTF-8; read_text would raise on them."""
-    body = b"PK\x03\x04\xd7\x00binary"
+    body = b"PK\x03\x04\xd7\x00binary"  # not valid UTF-8; read_text would raise
     (artifact_dir / "book.xlsx").write_bytes(body)
     response = TestClient(app).get("/project/proj/runs/R1/artifact/book.xlsx")
     assert response.status_code == 200

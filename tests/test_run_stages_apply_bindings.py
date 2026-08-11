@@ -35,7 +35,6 @@ def project(tmp_path):
 
 
 def _manifest(vid: str, bindings: dict[str, Any], *, nested: bool = True) -> dict[str, Any]:
-    """A run manifest in either on-disk shape — nested parameters, or the flat pre-nesting one."""
     base: dict[str, Any] = {"run_id": "20260806T000000", "workflow_version": vid}
     return {**base, "parameters": {"run_bindings": bindings}} if nested \
         else {**base, "run_bindings": bindings}
