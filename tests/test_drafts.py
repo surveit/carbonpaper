@@ -4,7 +4,6 @@ has to exist on disk.
 from __future__ import annotations
 
 import json
-import time
 from pathlib import Path
 
 import pytest
@@ -133,7 +132,6 @@ def test_save_version_freezes_valid_draft_and_chains_parent(examples: Path) -> N
     after = drafts.read_draft("demo", draft.id)
     assert after.parent_version == first.version_id
 
-    time.sleep(1)  # version ids are second-resolution timestamps
     second = drafts.save_version("demo", draft.id, message="two")
     assert second.version_id is not None
     saved_second = versioning.load_version(pdir, second.version_id)

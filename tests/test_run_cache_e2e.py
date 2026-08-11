@@ -8,7 +8,6 @@ import json
 import os
 import subprocess
 import sys
-import time
 from collections import Counter
 from pathlib import Path
 
@@ -132,8 +131,6 @@ def _publish_a_version(root: Path) -> str:
 def _run_and_read(
     project: Path, *, bust_cache: bool = False
 ) -> dict[str, pd.DataFrame]:
-    if (project / "runs").exists():
-        time.sleep(1.05)  # run ids are second-resolution: one dir per run
     manifest = execute_run(project, project, *pinned_stages(project), bust_cache=bust_cache)
     assert manifest["status"] == "ok", manifest
     run_dir = project / "runs" / manifest["run_id"]
@@ -144,8 +141,6 @@ def _run_and_read(
 
 
 def _run_and_count_replays(project: Path) -> dict[str, object]:
-    if (project / "runs").exists():
-        time.sleep(1.05)
     manifest = execute_run(project, project, *pinned_stages(project))
     assert manifest["status"] == "ok", manifest
     return {
@@ -222,7 +217,6 @@ def test_editing_one_stages_function_body_invalidates_that_stage_alone(tmp_path)
     _publish_a_version(tmp_path)
     first = _run_and_read(tmp_path)
 
-    time.sleep(1.05)  # version ids are second-resolution
     _write_project(tmp_path, clean_edit="\n# a comment the cache must notice\n")
     _publish_a_version(tmp_path)
 
@@ -240,7 +234,6 @@ def test_editing_the_frame_stages_body_invalidates_only_the_frame_stage(tmp_path
     # invalidation apart from a frame stage that simply always recomputes.
     assert _invocations(probe) == _EVERYTHING_COMPUTED
 
-    time.sleep(1.05)  # version ids are second-resolution
     _write_project(tmp_path, totals_edit="\n# a comment the cache must notice\n")
     _publish_a_version(tmp_path)
 
@@ -291,7 +284,6 @@ def test_the_cache_survives_a_process_restart_and_a_change_of_directory(tmp_path
     _run_in_a_fresh_process(tmp_path, db=db, cwd=first_cwd)
     assert _invocations(probe) == _EVERYTHING_COMPUTED
 
-    time.sleep(1.05)  # run ids are second-resolution: one dir per run
     _run_in_a_fresh_process(tmp_path, db=db, cwd=second_cwd)
 
     assert _invocations(probe) == _EVERYTHING_COMPUTED  # every stage replayed

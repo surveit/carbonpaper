@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import time
 
 import pandas as pd
 import pytest
@@ -592,7 +591,6 @@ def test_the_newest_version_runs_even_when_an_older_one_is_the_published_one(tmp
     published_id = _seed_version(tmp_path)
     versioning.publish_version(tmp_path, published_id, reviewer="human")
 
-    time.sleep(1)  # version ids are second-resolution
     newer = save_working_copy_as_version(
         tmp_path, message="unpublished newer", reviewer="test").version_id
 

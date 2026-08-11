@@ -3,7 +3,6 @@ rendering one path field per file-kind input stage."""
 from __future__ import annotations
 
 import json
-import time
 
 import pandas as pd
 import pytest
@@ -93,11 +92,6 @@ def test_unbound_input_returns_400(project):
     stage = json.loads(compiled.read_text(encoding="utf-8"))
     stage["connector"]["params"] = {}
     compiled.write_text(json.dumps(stage), encoding="utf-8")
-    # version ids are second-resolution timestamps (project_service.save_working_copy_as_version);
-    # without this the fixture's version and this one can land in the same
-    # wall-clock second and silently clobber each other, unrelated to what this
-    # test is checking.
-    time.sleep(1.1)
     vid = save_working_copy_as_version(project, message="unbound", reviewer="test").version_id
     versioning.publish_version(project, vid, reviewer="human")
 
