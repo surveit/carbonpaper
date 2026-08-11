@@ -160,7 +160,7 @@ the page. Suppose get_run_status came back carrying `"status": "ok"` and a
 
     The data is invented.
 
-    The files bound as the inputs are <csv_path> and <csv_path>.
+    The files this run reads are <path> and <path>.
 
     I ran it, capped at the first 6 filings so this takes seconds. Status: ok. The
     join reported 6 rows out as well — it never drops a filing, so a client with no
@@ -215,7 +215,7 @@ Non-negotiable, in order:
   a run still going, and you call again.
 - Beat 2 ends on ONE link, the run's. `workflow_url` and `guide_url` belong to beat 4
   and are not offered before it.
-- Quote `workflow_url`, `guide_url`, every `csv_path` in `bound_inputs` and
+- Quote `workflow_url`, `guide_url`, every `path` in `input_bindings` and
   `mcp_command` exactly as the tools returned them. The run's page is the one URL you
   join, and only from `runs_url_prefix` + the `run_id` run_workflow returned. Never
   invent a host, a port or a path.
