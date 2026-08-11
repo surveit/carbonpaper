@@ -28,10 +28,20 @@ primary_region = "iad"
   source = "carbonpaper_data"
   destination = "/data"
 
+# "suspend" snapshots the machine's memory to disk instead of shutting it down, so
+# a resume skips the whole boot: 1.3s of `alembic upgrade head` plus 2.5s importing
+# app.main, on top of ~12s reading the 649MB venv's native extensions off a cold
+# page cache. Measured at ~16s from machine start to listening, which the Fly proxy
+# gives up waiting for after ~8s — so the first request after an idle period 502s.
+#
+# Idle CPU and RAM are unbilled either way; this only changes what waking costs.
+# Suspension is documented for machines up to 2 GiB, which memory_mb below sits
+# exactly on. An ineligible machine falls back to a plain stop, so the worst case
+# here is the behaviour this replaces.
 [http_service]
   internal_port = 8080
   force_https = true
-  auto_stop_machines = "stop"
+  auto_stop_machines = "suspend"
   auto_start_machines = true
   min_machines_running = 0
 
