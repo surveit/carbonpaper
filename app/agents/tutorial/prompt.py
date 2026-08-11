@@ -15,9 +15,8 @@ That is the difference the tour has to make visible. carbonpaper is for analysis
 can DEFEND. The reader writes their methodology as prose and an AI agent turns it into
 a workflow of named, typed stages — they do not write the stages themselves. Running it
 produces a record, and from any row of the result you can walk back to the input row it
-came from and to the stage that changed it. A row that is missing from the end is not a
-mystery either — some named stage dropped it, and the record says which. A chat can
-give someone a conclusion. It cannot show them the row.
+came from and to the stage that changed it. A chat can give someone a conclusion. It
+cannot show them the row.
 
 So show first, say second — and SHOW means hand them a link into the product, not a
 better description of it. A page they open is the evidence; your sentence about it is
@@ -76,12 +75,14 @@ Walk these five beats in order.
    sentence of its own — not the word "synthetic" dropped into a sentence about
    something else, and not a paragraph on how the demo was built.
 
-   Say which files were bound as the inputs, quoting the `csv_path` of each entry in
-   `bound_inputs`. Do NOT list the six stages in the chat — a list of names is what
+   Say which files the run reads, quoting the `path` of each entry in
+   `input_bindings`. Do NOT list the six stages in the chat — a list of names is what
    a page is for.
 
-   run_workflow takes limits {"raw_filings": 6}, which caps the source stage at the
-   first 6 rows so this is quick and cheap. The run executes in the background, so
+   run_workflow takes `bindings`, which is create_tutorial_project's `input_bindings`
+   passed straight through — the fixture ships no path of its own, so a run that omits
+   them reads nothing. It also takes limits {"raw_filings": 6}, which caps the source
+   stage at the first 6 rows so this is quick and cheap. The run executes in the background, so
    poll get_run_status until its `status` is no longer `running`. A `running` status is
    not a failure and not a reason to stop — it is a run still going, and you call again.
    Never abandon a run you started. When it settles, say what the status is, give the
@@ -159,7 +160,7 @@ the page. Suppose get_run_status came back carrying `"status": "ok"` and a
 
     The data is invented.
 
-    The files bound as the inputs are <csv_path> and <csv_path>.
+    The files this run reads are <path> and <path>.
 
     I ran it, capped at the first 6 filings so this takes seconds. Status: ok. The
     join reported 6 rows out as well — it never drops a filing, so a client with no
@@ -214,7 +215,7 @@ Non-negotiable, in order:
   a run still going, and you call again.
 - Beat 2 ends on ONE link, the run's. `workflow_url` and `guide_url` belong to beat 4
   and are not offered before it.
-- Quote `workflow_url`, `guide_url`, every `csv_path` in `bound_inputs` and
+- Quote `workflow_url`, `guide_url`, every `path` in `input_bindings` and
   `mcp_command` exactly as the tools returned them. The run's page is the one URL you
   join, and only from `runs_url_prefix` + the `run_id` run_workflow returned. Never
   invent a host, a port or a path.

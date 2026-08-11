@@ -10,7 +10,7 @@ from app.models.stage import StageType
 from app.runtime.context import RunIdentity
 from app.runtime.manifest import CONTRIBUTION_ATTR
 from app.runtime.stages import HANDLERS
-from app.runtime.stages.execution import FrameHandler
+from app.runtime.stages.execution import FrameTransformHandler
 from conftest import make_run_context
 
 PROJECT = "frame-cache-tests"
@@ -48,13 +48,13 @@ def _src(values: list[int]) -> pd.DataFrame:
     return pd.DataFrame({"x": values})
 
 
-def _counting_frame_handler(calls: list[int], **kwargs) -> FrameHandler:
+def _counting_frame_handler(calls: list[int], **kwargs) -> FrameTransformHandler:
     def apply(stage, inputs, ctx):
         src = inputs[stage.inputs[0].id]
         calls.append(len(src))
         return src.assign(y=src["x"] * 2)
 
-    return FrameHandler(apply=apply, **kwargs)
+    return FrameTransformHandler(apply=apply, **kwargs)
 
 
 def _entries(stage: Stage) -> list[StageCacheEntry]:
@@ -293,7 +293,7 @@ def test_a_read_only_accessor_reuses_a_hit_but_records_nothing():
 
 def test_a_handler_that_returns_none_records_nothing():
     stage = _frame_stage()
-    handler = FrameHandler(apply=lambda stage, inputs, ctx: None)
+    handler = FrameTransformHandler(apply=lambda stage, inputs, ctx: None)
     assert handler.execute(stage, {"src": _src([1])}, _ctx()) is None
     assert _cached_frame(stage, [_src([1])]) is None
 
@@ -308,9 +308,9 @@ def test_only_the_unbounded_frame_shaped_type_caches():
         assert _frame_handler(stage_type).caches_frames is False
 
 
-def _frame_handler(stage_type: StageType) -> FrameHandler:
+def _frame_handler(stage_type: StageType) -> FrameTransformHandler:
     handler = HANDLERS[stage_type]
-    assert isinstance(handler, FrameHandler)
+    assert isinstance(handler, FrameTransformHandler)
     return handler
 
 
@@ -351,7 +351,7 @@ def test_a_frame_parquet_cannot_serialize_leaves_the_run_uncached_with_a_note():
     def apply(stage, inputs, ctx):
         return pd.DataFrame({"x": [{"nested": np.array([1, 2])}, 3]})
 
-    out = FrameHandler(apply=apply).execute(stage, {"src": _src([1])}, _ctx())
+    out = FrameTransformHandler(apply=apply).execute(stage, {"src": _src([1])}, _ctx())
     assert out is not None and len(out) == 2       # the run succeeded
     assert _cached_frame(stage, [_src([1])]) is None  # uncached
 

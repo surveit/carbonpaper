@@ -20,7 +20,9 @@ from app.models.run_manifest import QueueStats, StageContribution
 from app.models.stages.human_review_queue import (
     HumanReviewQueueStage,
     QueueConfig,
+    QueueSortKey,
     ReviewVerdict,
+    SortDirection,
 )
 from app.core.stage_cache import compute_row_fingerprint
 
@@ -82,7 +84,7 @@ class _QueueRowMapper:
         contribution: StageContribution,
     ) -> None:
         contribution.human_review_queue_stats = _compute_queue_stats(self._queue, df)
-        pending = _find_pending_reviews(df)
+        pending = _order_pending_reviews(self._queue.sort, _find_pending_reviews(df), stage.id)
         if not pending:
             return
         queue_path = _write_queue_files(ctx.require_run_dir() / "queue", stage, pending)
@@ -182,6 +184,38 @@ def _find_pending_reviews(df: pd.DataFrame) -> list[PendingReview]:
     if ROW_DEFERRED_KEY not in df.columns:
         return []
     return [value for value in df[ROW_DEFERRED_KEY] if isinstance(value, PendingReview)]
+
+
+# Permuting the pending list is what keeps the snapshot, its fingerprints and its
+# row ordinals aligned: all three are written from this one list below, so the
+# review order cannot drift from the decisions and lineage links it carries.
+def _order_pending_reviews(
+    sort: list[QueueSortKey], pending: list[PendingReview], sid: str
+) -> list[PendingReview]:
+    if not sort or not pending:
+        return pending
+    frame = pd.DataFrame([item.frozen_row for item in pending])  # index 0..n-1
+    _require_sort_columns_present(sort, frame, sid)
+    ordered = frame.sort_values(
+        by=[key.column for key in sort],
+        ascending=[key.direction == SortDirection.ascending for key in sort],
+        kind="stable",
+        na_position="last",  # a null is an absent value, so it leads no queue
+    )
+    return [pending[position] for position in ordered.index]
+
+
+def _require_sort_columns_present(
+    sort: list[QueueSortKey], frame: pd.DataFrame, sid: str
+) -> None:
+    missing = sorted({key.column for key in sort} - set(frame.columns))
+    if missing:
+        raise ValueError(
+            f"human_review_queue '{sid}': queue.sort orders by column(s) {missing}, "
+            f"which the queued rows do not carry (they have "
+            f"{sorted(str(c) for c in frame.columns)}). No substitute order may stand "
+            "in for the one the stage declares."
+        )
 
 
 def _write_queue_files(

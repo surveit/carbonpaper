@@ -8,11 +8,9 @@ This doc describes the models as they are.
 
 ## Named schemas — the data model as a first-class artifact
 
-The prototype began workflow-first: the data-model view was *read off* the
-workflow (it rendered each stage's inline output schema). You could not model
-your data without first authoring the pipeline. **Named schemas** invert this:
-the data model can be authored as its own artifact, and the workflow wired over
-it.
+**Named schemas** let the data model be authored as its own artifact, with the
+workflow wired over it, rather than read off the stages of a workflow you must
+author first.
 
 Why it matters (the forcing example from the LobbyMap work): you cannot write a
 benchmark-scoring stage until `query`, `data_source`, and `benchmark` exist as
@@ -57,11 +55,12 @@ authoritative description):
   construction**.
 - That 1:1 alignment is only well-defined when every stage on the
   override→target path preserves grain (no fan-out/fan-in).
-  `resolve_eval_run_settings` walks the path and checks each stage's
-  `is_grain_preserving` (defined per stage type in `app/models/stage.py`; the
-  `python_row_function` type exists precisely so the runtime *enforces* the 1:1
-  guarantee rather than trusting it); a non-preserving stage makes the eval
-  non-scorable and the settings say why.
+  `resolve_eval_run_settings` (`app/evals/run_settings.py`) walks the path and
+  checks each stage's `is_grain_and_order_preserving` (fixed per stage type in
+  `app/models/stages/stage_base.py`; the `python_row_function` type exists
+  precisely so the runtime *enforces* the 1:1 guarantee rather than trusting
+  it); a non-preserving stage makes the eval non-scorable and the settings say
+  why.
 - **`StageOutputOverride`** injects a whole table as some stage's output,
   cutting that stage and everything upstream out of the run —
   `reference_overrides` use this to supply extra data an eval-dataset row

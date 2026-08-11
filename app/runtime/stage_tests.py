@@ -1,8 +1,8 @@
-"""Run a stage's authored tests against its actual code, executing each through
-the SAME handler registry the real runner uses.
-
-Comparison is on the output_schema's columns, counts None and float NaN as one
-absence, and compares both sides as a multiset, so no test pins an ordering.
+"""Run a stage's authored tests against its actual code, through the SAME handler
+registry the real runner uses. A test is stated in its SIGNATURE's vocabulary: rows
+in are what the transform READS, rows out what it WRITES. Comparison is on the
+expected columns, counts None and float NaN as one absence, and is a multiset, so
+no test pins an ordering.
 """
 from __future__ import annotations
 
@@ -18,6 +18,7 @@ from app.core.frames import list_rows
 from app.models import Stage, TableSchema
 from app.models.errors import StepRefused
 from app.models.stage import StageType
+from app.models.stages.signature import transform_input_schemas, transform_output_schema
 from app.models.stages.stage_tests import StageTest
 from app.runtime.context import RunContext
 from app.runtime.stages import HANDLERS
@@ -150,11 +151,12 @@ def _summarize(runs: list[StageTestRun]) -> TestRunSummary:
 
 
 def _run_one_test(stage: Stage, test: StageTest) -> StageTestResult:
+    input_schemas = transform_input_schemas(stage)
     input_frames = {
-        ref.id: _build_frame(test.inputs[ref.id], ref.table_schema)
+        ref.id: _build_frame(test.inputs[ref.id], input_schemas[ref.id])
         for ref in stage.inputs
     }
-    malformed = _validate_test_against_schemas(stage, test, input_frames)
+    malformed = _validate_test_against_schemas(stage, test, input_frames, input_schemas)
     if malformed:
         return StageTestResult(test.name, "malformed", message=malformed)
     # Ephemeral context: every type declaring CARRIES_RUNNABLE_TESTS runs
@@ -192,20 +194,22 @@ def _judge_raise(test: StageTest, exc: Exception) -> StageTestResult:
     return StageTestResult(test.name, "error", message=f"{type(exc).__name__}: {exc}")
 
 
-def _build_frame(rows: list[dict[str, Any]], schema: TableSchema | None) -> pd.DataFrame:
+def _build_frame(rows: list[dict[str, Any]], schema: TableSchema) -> pd.DataFrame:
     if rows:
         return pd.DataFrame(rows)
-    columns = [c.name for c in schema.columns] if schema is not None else []
-    return pd.DataFrame(columns=columns)
+    return pd.DataFrame(columns=[column.name for column in schema.columns])
 
 
 def _validate_test_against_schemas(
-    stage: Stage, test: StageTest, input_frames: dict[str, pd.DataFrame]
+    stage: Stage,
+    test: StageTest,
+    input_frames: dict[str, pd.DataFrame],
+    input_schemas: dict[str, TableSchema],
 ) -> str | None:
     problems: list[str] = []
     for ref in stage.inputs:
         report = validate_dataframe(
-            input_frames[ref.id], ref.table_schema, stage_id=stage.id, phase="input"
+            input_frames[ref.id], input_schemas[ref.id], stage_id=stage.id, phase="input"
         )
         problems += [
             f"input {ref.id}: {issue.message}"
@@ -215,9 +219,10 @@ def _validate_test_against_schemas(
         # A failure case states no output rows, so there is no output shape to
         # lint — only its inputs, which a real run would still have to accept.
         return "; ".join(problems) if problems else None
-    expected_frame = _build_frame(test.expected, stage.resolve_output_schema())
+    output_schema = transform_output_schema(stage)
+    expected_frame = _build_frame(test.expected, output_schema)
     report = validate_dataframe(
-        expected_frame, stage.resolve_output_schema(), stage_id=stage.id, phase="output"
+        expected_frame, output_schema, stage_id=stage.id, phase="output"
     )
     problems += [
         f"expected rows: {issue.message}"
@@ -227,10 +232,8 @@ def _validate_test_against_schemas(
 
 
 def _compare(stage: Stage, test: StageTest, actual: pd.DataFrame) -> StageTestResult:
-    # Both asserts hold: publish carries no tests, and _judge_raise took the failure cases.
-    output_schema = stage.resolve_output_schema()
-    assert output_schema is not None
-    assert test.expected is not None
+    output_schema = transform_output_schema(stage)
+    assert test.expected is not None  # a failure case was judged before this
     columns = [column.name for column in output_schema.columns]
     expected_rows = [_select_cells(row, columns) for row in test.expected]
     actual_rows = [_select_cells(row, columns) for row in list_rows(actual)]

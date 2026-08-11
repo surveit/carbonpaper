@@ -23,7 +23,13 @@ from app.web.loading import (
     queue_snapshot,
     runs_dir,
 )
-from app.web.queue_view import build_queue_page, find_definition_drift, require_reviewed_column
+from app.web.queue_view import (
+    QueuePage,
+    build_queue_page,
+    find_definition_drift,
+    find_positioned_item,
+    require_reviewed_column,
+)
 
 router = APIRouter()
 
@@ -33,16 +39,7 @@ async def queue_page(request: Request, project: str, run_id: str, stage_id: str)
     manifest = load_manifest(runs_dir(project) / run_id)
     stage_def = _require_queue_stage(load_stages(project).stages, stage_id)
     queue = _require_queue_config(stage_def)
-
-    fingerprints = load_queue_fingerprints(project, run_id, stage_id)
-    drift = (
-        None if fingerprints is None
-        else find_definition_drift(stage_def, fingerprints.stage_fingerprint)
-    )
-    page = build_queue_page(
-        project, run_id, stage_def, queue,
-        queue_snapshot(project, run_id, stage_id), fingerprints, drift,
-    )
+    drift, page = _build_page(project, run_id, stage_id, stage_def, queue)
 
     return templates.TemplateResponse(
         request,
@@ -57,6 +54,37 @@ async def queue_page(request: Request, project: str, run_id: str, stage_id: str)
             "review_notes_column": queue.review_notes_column,
             "page": page,
             "manifest_status": manifest.get("status"),
+        },
+    )
+
+
+@router.get(
+    "/project/{project}/runs/{run_id}/queue/{stage_id}/card/{input_fingerprint}",
+    response_class=HTMLResponse,
+)
+async def queue_card_partial(
+    request: Request, project: str, run_id: str, stage_id: str, input_fingerprint: str
+):
+    stage_def = _require_queue_stage(load_stages(project).stages, stage_id)
+    queue = _require_queue_config(stage_def)
+    _drift, page = _build_page(project, run_id, stage_id, stage_def, queue)
+    positioned = find_positioned_item(page, input_fingerprint)
+    if positioned is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No queued row with input_fingerprint '{input_fingerprint}'",
+        )
+    return templates.TemplateResponse(
+        request,
+        "_queue_card.html",
+        {
+            "project": project,
+            "run_id": run_id,
+            "stage_id": stage_id,
+            "review_notes_column": queue.review_notes_column,
+            "page": page,
+            "item": positioned.item,
+            "row_position": positioned.row_position,
         },
     )
 
@@ -99,7 +127,26 @@ async def queue_decide(
     )
 
 
-# --- stage lookup, shared by both routes ---------------------------------------
+# --- the view model, shared by the page and the single-card routes -------------
+
+
+def _build_page(
+    project: str, run_id: str, stage_id: str, stage_def: Stage, queue: QueueConfig
+) -> tuple[str | None, QueuePage]:
+    """Returns the drift message beside the page: a drifted queue renders no items."""
+    fingerprints = load_queue_fingerprints(project, run_id, stage_id)
+    drift = (
+        None if fingerprints is None
+        else find_definition_drift(stage_def, fingerprints.stage_fingerprint)
+    )
+    page = build_queue_page(
+        project, run_id, stage_def, queue,
+        queue_snapshot(project, run_id, stage_id), fingerprints, drift,
+    )
+    return drift, page
+
+
+# --- stage lookup, shared by every route ---------------------------------------
 
 
 def _require_queue_stage(stages: list[Stage], stage_id: str) -> Stage:

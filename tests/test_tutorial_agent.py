@@ -74,24 +74,19 @@ def test_the_tutorial_agent_gets_none_of_the_editing_tools() -> None:
         assert editing_only not in bare
 
 
-def test_create_tutorial_project_binds_an_absolute_csv_to_every_input_stage(
-    projects_root: Path,
-) -> None:
+def test_the_seeded_project_keeps_no_path_of_its_own(projects_root: Path) -> None:
+    """The stored workflow stays portable: the files are named per run, not baked in."""
     seeded = _seed_a_tour()
 
     assert seeded["name"] in project_service.list_projects()
-    assert [stage["id"] for stage in seeded["stages"]] == [
-        "raw_filings", "public_commitments", "matched_commitments",
-        "judge_alignment", "flag_contradiction", "publish_report",
-    ]
+    bindings = seeded["input_bindings"]
+    assert set(bindings) == {"raw_filings", "public_commitments"}
+    assert all(Path(b["path"]).is_absolute() and Path(b["path"]).is_file()
+               for b in bindings.values())
 
-    bound = {entry["stage_id"]: Path(entry["csv_path"]) for entry in seeded["bound_inputs"]}
-    assert set(bound) == {"raw_filings", "public_commitments"}
-    assert all(path.is_absolute() and path.is_file() for path in bound.values())
-
-    stages = load_workflow(projects_root / seeded["name"])
-    sources = [s for s in stages if isinstance(s, InputDataStage)]
-    assert {s.id: Path(s.connector.params["path"]) for s in sources} == bound
+    sources = [s for s in load_workflow(projects_root / seeded["name"])
+               if isinstance(s, InputDataStage)]
+    assert [s.connector.params.get("path") for s in sources] == [None, None]
 
 
 def test_a_second_tour_reuses_the_project_the_first_one_seeded(projects_root: Path) -> None:
@@ -146,7 +141,8 @@ def test_run_workflow_passes_limits_through_to_the_run_service(
     monkeypatch.setattr(run_service, "read_run_status", lambda p, r: {"status": "ok"})
 
     tool = next(t for t in _tools() if t.name == "run_workflow")
-    out = _call(tool, {"project_id": seeded["name"], "limits": {"raw_filings": 6}})
+    out = _call(tool, {"project_id": seeded["name"], "limits": {"raw_filings": 6},
+                       "bindings": seeded["input_bindings"]})
     started = json.loads(out["content"][0]["text"])
 
     assert seen["project"] == seeded["name"]
@@ -169,14 +165,15 @@ def test_the_run_link_is_the_seeding_tools_prefix_plus_the_returned_run_id() -> 
 def test_a_real_run_resolves_the_bound_csv_and_honours_the_row_cap(
     projects_root: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Beat 3 for real: the bound CSV preflights, and the cap reaches the source."""
+    """Beat 3 for real: the run's bindings resolve, and the cap reaches the source."""
     monkeypatch.setattr(
         run_service, "_run_in_background", lambda target, *args: target(*args)
     )
     seeded = _seed_a_tour()
 
     tool = next(t for t in _tools() if t.name == "run_workflow")
-    out = _call(tool, {"project_id": seeded["name"], "limits": {"raw_filings": 6}})
+    out = _call(tool, {"project_id": seeded["name"], "limits": {"raw_filings": 6},
+                       "bindings": seeded["input_bindings"]})
     started = json.loads(out["content"][0]["text"])
 
     status = run_service.read_run_status(seeded["name"], started["run_id"])
@@ -194,7 +191,7 @@ def test_the_tour_seeds_a_review_guide_the_reader_can_open(projects_root: Path) 
     guide = project_service.read_review_guide(seeded["name"], seeded["version_id"])
     assert guide is not None
     narrated = [sid for step in guide.steps for sid in step.stage_ids]
-    assert narrated == [stage["id"] for stage in seeded["stages"]]
+    assert narrated == [s.id for s in load_workflow(projects_root / seeded["name"])]
     assert guide.unnarrated == []
     assert seeded["guide_url"] == (
         f"{_BASE_URL}project/{seeded['name']}/workflow/version/{seeded['version_id']}"

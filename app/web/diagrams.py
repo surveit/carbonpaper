@@ -260,19 +260,23 @@ _STATUS_GLYPH: dict[str, str] = {
     StageStatus.CANCELLED: "✖",
     StageStatus.PENDING: "…",
 }
-# Run STATUS → stroke colour. Seven statuses, five colours: _STATUS_GLYPH above
-# carries the distinction the shared colour drops (running ⟳ vs warnings ⚠,
-# cancelled ✖ vs pending …). Every colour here is one of the five --state-*
-# properties in palette.css, enforced by tests/arch/test_status_colour_contract.py.
+# Run STATUS → stroke colour. Seven statuses, four colours: _STATUS_GLYPH above
+# carries the distinction the shared colour drops (cancelled ✖ vs pending …, both
+# idle). Every colour here is one of the five --state-* properties in palette.css,
+# enforced by tests/arch/test_status_colour_contract.py.
 _STATUS_STROKE: dict[str, tuple[str, str]] = {
     StageStatus.OK: ("#2f6d30", "3px"),                    # done
-    StageStatus.RUNNING: ("#8b602c", "3px"),               # warning
+    StageStatus.RUNNING: ("#787d86", "3px"),               # idle
     StageStatus.VALIDATION_WARNINGS: ("#8b602c", "3px"),   # warning
     StageStatus.ERROR: ("#934133", "3px"),                 # failed
     StageStatus.AWAITING_REVIEW: ("#007a93", "4px"),       # needs a human
     StageStatus.CANCELLED: ("#787d86", "3px"),             # idle
     StageStatus.PENDING: ("#787d86", "1px"),               # idle
 }
+# A running stage has reached no verdict, so it spends no verdict hue — it strokes
+# idle, and the dashes are what say it is still moving. A mermaid `style` cannot
+# animate, so this is the still form of the stage strip's moving stripe.
+_STATUS_DASH: dict[str, str] = {StageStatus.RUNNING: "6 4"}
 
 
 def _render_workflow_node_lines(
@@ -320,4 +324,6 @@ def _resolve_stroke_line(sid: str, status: str | None) -> str | None:
     if not status or status not in _STATUS_STROKE:
         return None
     stroke, width = _STATUS_STROKE[status]
-    return f"    style {sid} stroke:{stroke},stroke-width:{width}"
+    dash = _STATUS_DASH.get(status)
+    dashed = f",stroke-dasharray:{dash}" if dash else ""
+    return f"    style {sid} stroke:{stroke},stroke-width:{width}{dashed}"

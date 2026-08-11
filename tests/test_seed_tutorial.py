@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import ast
-import json
 from pathlib import Path
 
 import pandas as pd
@@ -15,8 +13,6 @@ from app.runtime.stages import HANDLERS
 from app.services import project, versioning
 from app.services.loader import load_workflow
 from app.services.project import WorkflowFile, import_project
-from app.tools.tutorial import _read_fixture_bound_to
-from arch.test_no_html_in_python import find_html_tag_string_literals
 
 _FIXTURE_PATH = (
     Path(__file__).resolve().parents[1]
@@ -26,8 +22,6 @@ _CSV_PATH = _FIXTURE_PATH.with_suffix(".csv")
 _COMMITMENTS_PATH = _FIXTURE_PATH.parent / "tutorial_public_commitments.csv"
 _CSV_BY_STAGE_ID = {"raw_filings": _CSV_PATH, "public_commitments": _COMMITMENTS_PATH}
 _GUIDE_PATH = _FIXTURE_PATH.parent / "review_guides" / _FIXTURE_PATH.name
-_TEMPLATE_PATH = _FIXTURE_PATH.parent / "tutorial_triage_report.html"
-_TEMPLATE_TOKEN = "[[TEMPLATE_PATH]]"
 # Long enough to say what to check, short enough that the check is what is read.
 _GUIDE_PROSE_CEILING = 210
 
@@ -373,7 +367,8 @@ def _publish_a_report(tmp_path, df: pd.DataFrame) -> str:
 
 
 def _bound_fixture() -> WorkflowFile:
-    return _read_fixture_bound_to(_CSV_BY_STAGE_ID, _TEMPLATE_PATH)
+    """The fixture as committed — it needs no filling in to be a valid document."""
+    return WorkflowFile.model_validate_json(_FIXTURE_PATH.read_text(encoding="utf-8"))
 
 
 def _three_filings() -> pd.DataFrame:
@@ -477,75 +472,5 @@ def test_the_report_step_refuses_a_flag_it_cannot_print_both_sides_of(tmp_path):
 # ── the template is a file, not a string in the code ─────────────────────────
 
 
-def test_the_publish_stage_carries_no_markup_of_its_own():
-    """tests/arch/test_no_html_in_python.py's rule, applied to the stage's own code."""
-    code = _stage(_load_fixture(), "publish_report").function.code
-    assert code is not None
-
-    assert find_html_tag_string_literals(ast.parse(code)) == []
-    assert _TEMPLATE_TOKEN in code, "the code no longer names a template to read"
 
 
-def test_seeding_binds_the_committed_template_into_the_publish_stage():
-    bound = _stage(_bound_fixture(), "publish_report").function.code
-    assert bound is not None
-
-    assert _TEMPLATE_TOKEN not in bound
-    assert _TEMPLATE_PATH.as_posix() in bound
-    # A Windows path would land inside a Python string literal as escape sequences.
-    assert "\\" not in _TEMPLATE_PATH.as_posix()
-
-
-def test_seeding_binds_a_csv_into_every_input_stage():
-    bound = _bound_fixture()
-
-    for stage_id, csv_path in _CSV_BY_STAGE_ID.items():
-        stage = _stage(bound, stage_id)
-        assert stage.connector is not None
-        assert Path(stage.connector.params["path"]) == csv_path
-
-
-def test_a_missing_file_stops_the_seeding_rather_than_shipping_a_broken_stage(tmp_path):
-    with pytest.raises(FileNotFoundError, match="tutorial fixture needs is missing"):
-        _read_fixture_bound_to(_CSV_BY_STAGE_ID, tmp_path / "gone.html")
-
-    with pytest.raises(FileNotFoundError, match="tutorial fixture needs is missing"):
-        _read_fixture_bound_to(
-            {**_CSV_BY_STAGE_ID, "public_commitments": tmp_path / "gone.csv"},
-            _TEMPLATE_PATH,
-        )
-
-
-def test_the_report_step_stops_when_the_template_loses_a_section(tmp_path):
-    truncated = tmp_path / "truncated.html"
-    kept = _TEMPLATE_PATH.read_text(encoding="utf-8").split("<!--@ contradiction -->")[0]
-    truncated.write_text(kept, encoding="utf-8")
-    stage = _stage(_read_fixture_bound_to(_CSV_BY_STAGE_ID, truncated), "publish_report")
-    ctx = RunContext.for_workflow_test_run(tmp_path, tmp_path, "tutorial", "R-1")
-
-    with pytest.raises(ValueError, match="has no"):
-        HANDLERS[StageType(stage.type)].execute(
-            stage, {"flag_contradiction": _three_filings()}, ctx
-        )
-
-
-def test_the_template_declares_every_section_the_step_reads():
-    template = _TEMPLATE_PATH.read_text(encoding="utf-8")
-    code = _stage(_load_fixture(), "publish_report").function.code
-    assert code is not None
-    wanted = next(
-        node.value
-        for node in ast.walk(ast.parse(code))
-        if isinstance(node, ast.Assign)
-        and any(getattr(t, "id", "") == "SECTIONS" for t in node.targets)
-    )
-
-    for section in ast.literal_eval(wanted):
-        assert f"<!--@ {section} -->" in template, section
-
-
-def test_the_fixture_is_committed_as_json_and_the_template_beside_it():
-    assert _TEMPLATE_PATH.is_file()
-    # The seed glob reads data/*.json as workflows; the template must not be one.
-    assert json.loads(_FIXTURE_PATH.read_text(encoding="utf-8"))["name"]
-    assert _TEMPLATE_PATH.suffix == ".html"

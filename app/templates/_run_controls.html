@@ -1,7 +1,8 @@
 {#
   RUN CONTROLS — one form that configures AND launches a run:
-    · a version_id <select>: every stored version newest-first, the latest pre-selected
-      (so a run defaults to latest, any version is one click away)
+    · a version_id <select>: every stored version newest-first, `selected_version_id`
+      pre-selected — the latest unless the link that reached this page named one
+      (the version page's "Run this version" does)
     · one row per file-kind input, built by the `input_row` macro below: a read-only
       path field (binding__<stage_id>) showing the SELECTED version's workflow-authored
       path, its Browse… button, and the row cap beside them
@@ -24,7 +25,8 @@
   Context (inherited from the including template):
     state       = shell_state(pdir)         — state.name for the form action
     versions    = the project's stored versions, newest-first (may be empty)
-    file_inputs = loading.list_file_inputs(pdir)   — [{stage_id, path}]
+    selected_version_id = which of them the picker opens on (None with no versions)
+    file_inputs = loading.list_file_inputs(pdir, selected_version_id) — [{stage_id, path}]
 #}
 
 {#
@@ -73,7 +75,7 @@
   <label class="run-version">version
     <select name="version_id">
       {% for v in versions %}
-      <option value="{{ v.version_id }}"{% if loop.first %} selected{% endif %}>{{ v.version_id }}{% if v.message %} — {{ v.message }}{% endif %}{% if loop.first %} (latest){% endif %}</option>
+      <option value="{{ v.version_id }}"{% if v.version_id == selected_version_id %} selected{% endif %}>{{ v.version_id }}{% if v.message %} — {{ v.message }}{% endif %}{% if loop.first %} (latest){% endif %}</option>
       {% endfor %}
     </select>
   </label>

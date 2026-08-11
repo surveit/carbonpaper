@@ -74,6 +74,23 @@ def test_new_run_page_renders_version_picker_latest_selected(project_two_version
     assert 'name="binding__load"' in resp.text                # inputs share the form
 
 
+def test_new_run_page_opens_on_the_version_the_link_named(project_two_versions):
+    versions = list_versions(project_two_versions)  # newest-first
+    latest, older = versions[0].version_id, versions[-1].version_id
+
+    resp = client.get(f"/project/demo/runs/new?version_id={older}")
+
+    assert resp.status_code == 200
+    assert f'value="{older}" selected' in resp.text
+    assert f'value="{latest}" selected' not in resp.text
+
+
+def test_new_run_page_404s_for_a_version_id_no_version_carries(project_two_versions):
+    resp = client.get("/project/demo/runs/new?version_id=20990101T000000")
+    # Opening on the latest instead would launch a workflow other than the one named.
+    assert resp.status_code == 404
+
+
 def _seed_load_stage(proj):
     proj.mkdir(parents=True, exist_ok=True)
     (proj / "compiled").mkdir(parents=True)
@@ -165,6 +182,19 @@ def test_posting_the_selected_versions_own_authored_path_is_not_a_binding(
                        follow_redirects=False)
     assert resp.status_code == 303
     assert _manifest(proj)["input_bindings"]["load"]["source"] == "workflow"
+
+
+def test_new_run_page_binds_the_named_versions_own_input_paths(
+    project_versions_diff_paths,
+):
+    proj = project_versions_diff_paths
+    older = list_versions(proj)[-1].version_id  # v1, authored a.csv
+
+    resp = client.get(f"/project/demo/runs/new?version_id={older}")
+
+    authored, other = str(proj / "a.csv"), str(proj / "b.csv")
+    assert f'value="{authored}"' in resp.text
+    assert other not in resp.text
 
 
 def test_run_inputs_endpoint_returns_the_selected_versions_inputs(

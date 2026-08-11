@@ -114,7 +114,6 @@ def find_aggregate_column_issues(stage: "AggregateStage") -> list[str]:
 
 def find_aggregate_signature_issues(stage: "AggregateStage") -> list[str]:
     signature = stage.signature
-    assert signature is not None  # find_signature_config_issues runs only with one
     aggregate = stage.aggregate
     input_id = stage.inputs[0].id
 

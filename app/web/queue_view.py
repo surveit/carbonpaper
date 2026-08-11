@@ -73,6 +73,13 @@ class ReviewItem:
 
 
 @dataclass(frozen=True)
+class PositionedItem:
+    item: ReviewItem
+    # 1-based, matching the "Row N of total" the card shows.
+    row_position: int
+
+
+@dataclass(frozen=True)
 class QueuePage:
     reviewed_fields: list[ReviewedField]
     review_notes_label: str | None
@@ -114,6 +121,17 @@ def build_queue_page(
         reviewed_count=reviewed_count,
         total=len(items),
         all_reviewed=len(items) > 0 and reviewed_count == len(items),
+    )
+
+
+def find_positioned_item(page: QueuePage, input_fingerprint: str) -> PositionedItem | None:
+    return next(
+        (
+            PositionedItem(item=item, row_position=position)
+            for position, item in enumerate(page.items, start=1)
+            if item.input_fingerprint == input_fingerprint
+        ),
+        None,
     )
 
 

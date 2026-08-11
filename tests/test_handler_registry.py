@@ -12,13 +12,13 @@ from app.models.stage import (
     is_grain_and_order_preserving,
     max_declared_inputs,
 )
-from app.runtime.stages import HANDLERS, RowMapHandler, validate_registry_matches_model
+from app.runtime.stages import HANDLERS, RowMapTransformHandler, validate_registry_matches_model
 
 
 def test_human_review_queue_maps_one_row_at_a_time_so_its_shared_counters_stay_correct():
     """Its mapper's `+=` on one shared QueueStats dict is non-atomic: >1 silently under-counts."""
     handler = HANDLERS[StageType.human_review_queue]
-    assert isinstance(handler, RowMapHandler)
+    assert isinstance(handler, RowMapTransformHandler)
     assert handler.parallelism == 1
 
 
@@ -34,7 +34,7 @@ def test_every_stage_type_has_a_handler():
 def test_every_row_mapped_type_caps_its_inputs_at_one():
     """A row-mapped handler maps ONE frame's rows; a second input would name no rows."""
     for stage_type, handler in HANDLERS.items():
-        if isinstance(handler, RowMapHandler):
+        if isinstance(handler, RowMapTransformHandler):
             assert max_declared_inputs(stage_type) == 1, stage_type
 
 

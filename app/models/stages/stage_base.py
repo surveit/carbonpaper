@@ -26,9 +26,9 @@ from app.models.schema import (
 )
 from app.models.stages.shared import find_internal_namespace_column_issues
 from app.models.stages.signature import (
-    ExtendsSignature,
     ReplacesSignature,
     TransformSignature,
+    anchor_read_columns,
     find_signature_issues,
     promised_output_schema,
 )
@@ -190,6 +190,9 @@ class StageCommon(_Base):
 
 # ── The per-type stage base ──────────────────────────────────────────────────
 class StageBase(StageCommon):
+    # Narrowed from StageCommon's optional: a stored stage always has one.
+    signature: TransformSignature
+
     REQUIRES_OUTPUT_SCHEMA: ClassVar[bool] = True
 
     # True for the types whose registered handler can execute one authored
@@ -245,15 +248,7 @@ class StageBase(StageCommon):
         return promised_output_schema(self)
 
     def anchor_reads(self) -> frozenset[str]:
-        if not self.inputs or not isinstance(self.signature, ExtendsSignature):
-            return frozenset()
-        anchor = self.inputs[0].id
-        return frozenset(
-            column.name
-            for entry in self.signature.reads
-            if entry.input == anchor
-            for column in entry.columns
-        )
+        return frozenset(column.name for column in anchor_read_columns(self))
 
     def find_signature_config_issues(self) -> list[str]:
         return []
@@ -261,7 +256,6 @@ class StageBase(StageCommon):
     # ── the fingerprint ──────────────────────────────────────────────────────
     def compute_definition_fingerprint(self) -> str:
         """Excludes `cache`: it decides whether the cache is consulted, not what the stage computes."""
-        assert self.signature is not None  # _schemas_declared requires one
         fields: dict[str, Any] = {
             "type": self.type,
             "signature": self.signature.model_dump(mode="json", exclude_none=True),
@@ -304,9 +298,7 @@ class StageBase(StageCommon):
             for ref in self.inputs
             if not ref.table_schema.columns
         ]
-        if self.signature is None:
-            issues.append("declares no signature, so nothing says what it outputs")
-        elif self.REQUIRES_OUTPUT_SCHEMA and isinstance(
+        if self.REQUIRES_OUTPUT_SCHEMA and isinstance(
             self.signature, ReplacesSignature
         ) and not self.signature.produces:
             issues.append(
@@ -326,8 +318,6 @@ class StageBase(StageCommon):
 
     @model_validator(mode="after")
     def _signature_consistent(self) -> "StageBase":
-        if self.signature is None:
-            return self
         issues = find_signature_issues(self) + self.find_signature_config_issues()
         if issues:
             raise ValueError("; ".join(issues))
