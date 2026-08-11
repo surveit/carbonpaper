@@ -12,7 +12,6 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any, ClassVar, Optional, get_args
 
 from pydantic import (
-    ConfigDict,
     Field,
     field_validator,
     model_validator,
@@ -36,7 +35,6 @@ from app.models.stages.signature import (
 from app.models.stages.stage_tests import StageTest, validate_stage_tests
 from app.models.stages.warnings import CompilerWarning
 from app.core.utils import compute_short_hash
-from app.models.tool_schema_prompts import STAGE_INPUT_DESCRIPTION
 
 if TYPE_CHECKING:
     # app.models.stages.code imports this module, so the reference stays lazy.
@@ -110,8 +108,6 @@ class ReviewConfig(_Base):
 
 
 class StageInput(_Base):
-    model_config = ConfigDict(json_schema_extra={"description": STAGE_INPUT_DESCRIPTION})
-
     id: str
     table_schema: TableSchema = Field(alias="schema")
 

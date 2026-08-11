@@ -6,7 +6,7 @@ from __future__ import annotations
 import re
 from typing import Any, ClassVar, Literal, Optional
 
-from pydantic import AliasChoices, ConfigDict, Field, model_validator
+from pydantic import AliasChoices, Field, model_validator
 
 from app.core.llm.options import LLMModel
 from app.core.prompt_template import find_template_fields
@@ -15,7 +15,6 @@ from app.models.stages.stage_base import StageBase, StageInput, StageType
 from app.models.stages.shared import COLUMN_ISSUE, resolve_input_columns
 from app.models.stages.node_spec import NodeTypeSpec
 from app.models.stages.signature import ExtendsSignature
-from app.models.tool_schema_prompts import LLM_CONFIG_DESCRIPTION
 
 
 # Tool names an `llm_transform` stage may be granted, so a stage can RESEARCH — look
@@ -47,8 +46,6 @@ ThinkingMode = Literal["adaptive", "disabled"]
 
 
 class LLMConfig(StageConfig):
-    model_config = ConfigDict(json_schema_extra={"description": LLM_CONFIG_DESCRIPTION})
-
     FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({
         "prompt_instructions", "prompt_data_template", "model", "temperature",
         "max_retries", "response_format", "rubric", "tools", "batch_size",

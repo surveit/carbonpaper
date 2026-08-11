@@ -8,7 +8,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import ClassVar, Literal, Optional
 
-from pydantic import ConfigDict, Field, model_validator
+from pydantic import Field, model_validator
 
 from app.core.errors import PredicateError
 from app.core.predicate import parse_predicate
@@ -22,7 +22,6 @@ from app.models.stages.shared import (
 )
 from app.models.stages.node_spec import NodeTypeSpec
 from app.models.stages.signature import ReplacesSignature
-from app.models.tool_schema_prompts import AGGREGATE_CONFIG_DESCRIPTION
 
 
 
@@ -53,8 +52,6 @@ class AggregationOp(_Base):
 
 
 class AggregateConfig(StageConfig):
-    model_config = ConfigDict(json_schema_extra={"description": AGGREGATE_CONFIG_DESCRIPTION})
-
     FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({"group_by", "aggregations"})
     INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset()
 

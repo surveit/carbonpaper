@@ -108,8 +108,10 @@ def stage_to_json(stage: Stage) -> str:
 SERVER_OWNED_STAGE_FIELDS = ("tests", "eval", "review", "source")
 
 
+# Add no cross-field validator: an invalid stage must parse here and be refused later.
+# (Above the class deliberately — a docstring here would be copied into the tool schema
+# and read by the authoring agent. See tests/arch/test_tool_schema_models_carry_no_docstring.py.)
 class StageDraft(StageCommon):
-    """Add no cross-field validator: an invalid stage must parse here and be refused later."""
     model_config = ConfigDict(json_schema_extra={"description": STAGE_DRAFT_DESCRIPTION})
 
     connector: Optional[Connector] = None

@@ -6,7 +6,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import ClassVar, Literal, Optional
 
-from pydantic import ConfigDict, Field, model_validator
+from pydantic import Field, model_validator
 
 from app.models.errors import StepRefused
 from app.models.schema import StageConfig
@@ -21,12 +21,9 @@ from app.models.stages.code import (
 from app.models.stages.node_spec import NodeTypeSpec
 from app.models.stages.signature import ExtendsSignature
 from app.models.stages.stage_tests import FilterRowsStageTest
-from app.models.tool_schema_prompts import FILTER_CONFIG_DESCRIPTION
 
 
 class FilterConfig(StageConfig):
-    model_config = ConfigDict(json_schema_extra={"description": FILTER_CONFIG_DESCRIPTION})
-
     FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({"code", "function"})
     INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset({"summary", "corner_cases"})
 

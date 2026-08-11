@@ -6,7 +6,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import ClassVar, Literal, Mapping, Optional
 
-from pydantic import ConfigDict, Field, field_validator
+from pydantic import Field, field_validator
 
 from app.core.errors import PredicateError
 from app.core.predicate import parse_predicate
@@ -21,7 +21,6 @@ from app.models.stages.stage_base import StageBase, StageInput, StageType
 from app.models.stages.shared import find_predicate_column_issues
 from app.models.stages.node_spec import NodeTypeSpec
 from app.models.stages.signature import ExtendsSignature
-from app.models.tool_schema_prompts import QUEUE_CONFIG_DESCRIPTION
 
 
 class ReviewVerdict(str, Enum):
@@ -32,8 +31,6 @@ class ReviewVerdict(str, Enum):
 
 
 class QueueConfig(StageConfig):
-    model_config = ConfigDict(json_schema_extra={"description": QUEUE_CONFIG_DESCRIPTION})
-
     FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({
         "filter", "reviewer_instructions", "reviewed_columns",
         "verdict_column", "reviewer_column", "reviewed_at_column", "review_notes_column",
