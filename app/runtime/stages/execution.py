@@ -22,7 +22,7 @@ from app.models.stage import (
 from app.models.stages.llm_transform import LLMTransformStage
 
 from app.core.agent.usage import LlmUsage
-from app.core.frames import list_rows
+from app.core.frames import is_same_cell, list_rows
 from app.core.stage_cache import StageCache, compute_row_fingerprint
 
 from .frame_caching import (
@@ -277,6 +277,7 @@ def _run_row_mapper(
 ) -> pd.DataFrame:
     src = inputs[stage.inputs[0].id]
     reads = stage.anchor_reads()
+    writes = stage.declared_writes()
     map_row = handler.make_mapper(stage, ctx, src)
     # The ONE line of per-row compute, optionally routed through the row cache
     # and the run log. Log outside cache, so a row the cache answers never
@@ -324,7 +325,9 @@ def _run_row_mapper(
             )
         # Rejoin: under narrowing the mapper only ever saw its declared reads, so
         # the columns that merely FLOW come back from the input row here. The
-        # mapper's own keys win — that is what a rewrite or an add is.
+        # mapper's own keys win — that is what a rewrite or an add is — which is
+        # why a key outside the write set has to be refused before the merge.
+        _refuse_clobbered_columns(stage, writes, records[index], result, index)
         out_rows.append({**records[index], **result})
         kept_indices.append(index)
     mapped = _finish_mapped_frame(pd.DataFrame(out_rows), handler, map_row, stage, ctx)
@@ -337,6 +340,41 @@ def _run_row_mapper(
 
 def _narrow_row(row: Row, keep: frozenset[str]) -> Row:
     return {key: value for key, value in row.items() if key in keep}
+
+
+# ── the write set, enforced ──────────────────────────────────────────────────
+# The signature's `adds` + `rewrites` is what a stage may change; every other
+# input column merely FLOWS. Nothing about the rejoin makes that true on its own
+# — the mapper's keys win there — and output validation cannot see it either,
+# because a flowing column is in the promised schema carrying its ORIGINAL type,
+# so a wrong value of the right type passes clean. So it is checked here, on
+# every row of both row-mapped paths.
+#
+# Only keys the input row already carries are in scope: overwriting a flowing
+# column is the thing nothing else catches. A key the input does not carry is a
+# column the stage invented — a different thing, answered on the output side.
+# That is also what keeps the internal columns out of this: the model refuses a
+# `_`-prefixed input column, so `_error` and its siblings can never match one.
+
+
+def _refuse_clobbered_columns(
+    stage: Stage, writes: frozenset[str], input_row: Row, result: Row, index: int
+) -> None:
+    clobbered = sorted(
+        key
+        for key, value in result.items()
+        if key not in writes
+        and key in input_row
+        and not is_same_cell(input_row[key], value)
+    )
+    if clobbered:
+        raise ValueError(
+            f"stage {stage.id}: row {index} came back with a changed value for "
+            f"column(s) {clobbered}. Its signature writes {sorted(writes)}; every "
+            "other input column flows through untouched. Declare the change under "
+            "`rewrites`, which also has to read the column from the anchor input — "
+            "or leave the value alone."
+        )
 
 
 # ── the row-level cache interceptor ──────────────────────────────────────────
@@ -473,6 +511,12 @@ def _run_batched(
     # Ordered before recorded: the ordering step is what verifies one computed
     # row per miss, so nothing is pinned against a row it did not come from.
     rows = _order_by_input_position(stage, hits, misses, computed, len(records))
+    # This path assembles its own frame rather than being rejoined, so the rows
+    # it was handed carry every input column; the write set still bounds which
+    # of them a batch may have changed.
+    writes = stage.declared_writes()
+    for position, row in enumerate(rows):
+        _refuse_clobbered_columns(stage, writes, records[position], row, position)
     if caching is not None:
         for position, row in zip(misses, computed):
             _record_row_output(caching, records[position], row)

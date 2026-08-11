@@ -166,6 +166,32 @@ def is_sequence_cell(value: object) -> bool:
     return isinstance(value, (list, tuple, np.ndarray))
 
 
+def is_same_cell(left: object, right: object) -> bool:
+    """Value, not representation: a cell that round-tripped through a stage sandbox is unchanged."""
+    if left is right:
+        return True
+    return render_cell_signature(left) == render_cell_signature(right)
+
+
+def render_cell_signature(value: object) -> str:
+    """Total: `default=str` means no cell type can raise here, so no caller needs a fallback."""
+    return json.dumps(_collapse_cell_forms(value), sort_keys=True, default=str)
+
+
+def _collapse_cell_forms(value: object) -> object:
+    """The forms a cell takes on the way through pandas, parquet and a sandbox, collapsed to one."""
+    value = collapse_null_forms(value)
+    if isinstance(value, np.generic):
+        value = collapse_null_forms(value.item())
+    if isinstance(value, dict):
+        return {str(key): _collapse_cell_forms(item) for key, item in value.items()}
+    if is_sequence_cell(value):
+        return [_collapse_cell_forms(item) for item in cast(Sequence[object], value)]
+    if isinstance(value, (_dt.datetime, _dt.date)):
+        return value.isoformat()
+    return value
+
+
 def is_missing_cell(value: Any) -> bool:
     if is_sequence_cell(value) or isinstance(value, dict):
         return False
