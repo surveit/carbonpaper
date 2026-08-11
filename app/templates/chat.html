@@ -17,10 +17,10 @@
     {% else %}
       <div class="ac-msg assistant">
         <div class="ac-role">assistant</div>
-        {% if b.thinking %}
+        {% if b.thinking.strip() %}
           <details class="ac-think"><summary>💭 thinking</summary><div class="ac-think-text">{{ b.thinking }}</div></details>
         {% endif %}
-        {% for t in b.tools %}<details class="ac-tool"><summary>🔧 {{ t.label or t.name }}</summary><pre class="ac-tool-json">{{ t.args }}</pre></details>{% endfor %}
+        {% for t in b.tools %}<details class="ac-tool"><summary title="{{ t.label or t.name }}">Called a tool: {{ t.name }}</summary><pre class="ac-tool-json">{{ t.args }}</pre></details>{% endfor %}
         <div class="ac-body">{{ b.text }}</div>
       </div>
     {% endif %}
@@ -78,6 +78,10 @@ function newAssistant() {
   return {
     thinking(t) {
       stop();
+      // A block carrying no text is no thinking to show — an open, empty
+      // disclosure reads as content that failed to load. Once the block exists
+      // every chunk lands, so interior blank lines are kept.
+      if (!think && !t.trim()) return;
       if (!think) {
         think = document.createElement("details"); think.className = "ac-think"; think.open = true;
         const s = document.createElement("summary"); s.textContent = "💭 thinking"; think.appendChild(s);
@@ -94,7 +98,11 @@ function newAssistant() {
     tool(name, args, label) {
       stop();
       const d = document.createElement("details"); d.className = "ac-tool";
-      const sum = document.createElement("summary"); sum.textContent = "🔧 " + (label || name); d.appendChild(sum);
+      // The bare name, not the friendly label: the row is furniture, and every
+      // row opening the same way is what lets the eye skip the lot. The label
+      // is the tooltip, so it costs the page nothing and is still reachable.
+      const sum = document.createElement("summary");
+      sum.textContent = "Called a tool: " + name; sum.title = label || name; d.appendChild(sum);
       d.appendChild(toolPre(args));
       b.appendChild(d); pendingTools.push(d); scroll();
     },
