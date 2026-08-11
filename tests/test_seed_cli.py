@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -7,6 +8,7 @@ from pathlib import Path
 
 from app.seeds.seed import discover_workflow_files, seed_all, seed_demo_data_if_enabled
 from app.services import project
+from app.services.stage_edit import find_description_issues
 
 _TUTORIAL = "tutorial_lobbying_triage"
 # Every committed bundle, in the order discover_workflow_files sorts them.
@@ -121,3 +123,17 @@ def test_a_committed_review_guide_is_not_discovered_as_a_workflow_fixture():
 
     assert (guides / f"{_TUTORIAL}.json").is_file()
     assert guides not in {wf.parent for wf in discover_workflow_files()}
+
+
+def test_every_seeded_summary_can_be_written_back() -> None:
+    """The limit lives on the write path, so an over-long stored summary fails every edit."""
+    offenders = [
+        f"{path.name}::{stage['id']}: {issue}"
+        for path in discover_workflow_files()
+        for stage in json.loads(path.read_text(encoding="utf-8"))["stages"]
+        for issue in find_description_issues(stage)
+    ]
+    assert not offenders, (
+        "a seeded stage carries prose its own write path refuses, so every edit to it "
+        "fails and `generate tests` cannot save a suite:\n  " + "\n  ".join(offenders)
+    )

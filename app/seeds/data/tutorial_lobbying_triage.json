@@ -489,7 +489,7 @@
       },
       "function": {
         "kind": "inline",
-        "summary": "Flags a filing when a public commitment was joined onto it AND the model judged its ask to contradict that commitment. A filing with no commitment on record is never flagged — there is nothing for it to contradict. A filing that has a commitment but no judgment is not guessed; the step stops and says which filing it was.",
+        "summary": "Flags a filing when a public commitment was joined onto it AND the model judged its ask to contradict that commitment. A filing with no commitment on record is never flagged — there is nothing for it to contradict.",
         "corner_cases": [
           {
             "case": "a filing carries a commitment and `alignment` is `Contradicts`",
@@ -671,7 +671,7 @@
       },
       "function": {
         "kind": "inline",
-        "summary": "Fills the committed report template — one row per filing, in the order they arrived — with the reported spend, what the filing asked for, what the client committed to in public or that no commitment is on record, the model's judgment, and for a flagged filing both texts side by side.",
+        "summary": "Fills the committed report template — one row per filing, in the order they arrived — with the reported spend, what the filing asked for, what the client committed to in public, and the model's judgment.",
         "corner_cases": [
           {
             "case": "a filing contradicts its client's public commitment",

@@ -83,7 +83,7 @@ def _current_specs(project_dir: Path) -> dict[str, dict]:
 _AUTHORED_CODE_BLOCKS = ("function", "filter")
 
 
-def _find_description_issues(candidate: dict) -> list[str]:
+def find_description_issues(candidate: dict) -> list[str]:
     """Enforced on write, not on the model — on load it would refuse every stage stored before."""
     for block_name in _AUTHORED_CODE_BLOCKS:
         block = candidate.get(block_name)
@@ -130,7 +130,7 @@ def _apply(project_dir: Path, specs: dict[str, dict], stage_id: str, candidate: 
 
     resulting = {**specs, stage_id: candidate}
     issues = validate_workflow_draft(list(resulting.values()))
-    issues += _find_description_issues(candidate)
+    issues += find_description_issues(candidate)
     if issues:
         return EditStageResult(ok=False, issues=issues)
 
