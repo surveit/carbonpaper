@@ -11,6 +11,7 @@ from typing import Annotated, Any, Callable
 from pydantic import BaseModel
 
 from app.core.agent.bound_tool import BoundToolSpec
+from app.tools.types import ToolInputSchema
 from app.models import StageDraft
 from app.models.review_guide import ReviewGuideDraft
 from app.services.versioning import ReviewGuide
@@ -102,7 +103,6 @@ def make_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
 # Empty dict = no parameters. The value type is `object`, not `Any`: the entries are
 # opaque type-annotation objects we never introspect, so `object` types them
 # honestly without letting `Any` leak past the schema.
-ToolInputSchema = dict[str, object]
 TOOL_SCHEMAS: dict[str, ToolInputSchema] = {
     "list_projects": {},
     "get_current_project": {},

@@ -15,7 +15,7 @@ from app.runtime.stages import HANDLERS
 from app.services import project, versioning
 from app.services.loader import load_workflow
 from app.services.project import WorkflowFile, import_project
-from app.tools.tutorial import _read_fixture_bound_to
+from app.seeds.fixture_project import FixtureFiles, read_fixture_document
 from arch.test_no_html_in_python import find_html_tag_string_literals
 
 _FIXTURE_PATH = (
@@ -372,8 +372,16 @@ def _publish_a_report(tmp_path, df: pd.DataFrame) -> str:
     return Path(out.iloc[0]["report_path"]).read_text(encoding="utf-8")
 
 
+def _fixture_files(**overrides) -> FixtureFiles:
+    return FixtureFiles(
+        inputs=overrides.get("inputs", _CSV_BY_STAGE_ID),
+        code_files={_TEMPLATE_TOKEN: overrides.get("template", _TEMPLATE_PATH)},
+        review_guide=_GUIDE_PATH,
+    )
+
+
 def _bound_fixture() -> WorkflowFile:
-    return _read_fixture_bound_to(_CSV_BY_STAGE_ID, _TEMPLATE_PATH)
+    return read_fixture_document(_FIXTURE_PATH, _fixture_files())
 
 
 def _three_filings() -> pd.DataFrame:
@@ -506,13 +514,15 @@ def test_seeding_binds_a_csv_into_every_input_stage():
 
 
 def test_a_missing_file_stops_the_seeding_rather_than_shipping_a_broken_stage(tmp_path):
-    with pytest.raises(FileNotFoundError, match="tutorial fixture needs is missing"):
-        _read_fixture_bound_to(_CSV_BY_STAGE_ID, tmp_path / "gone.html")
+    with pytest.raises(FileNotFoundError, match="needs is missing"):
+        read_fixture_document(_FIXTURE_PATH, _fixture_files(template=tmp_path / "gone.html"))
 
-    with pytest.raises(FileNotFoundError, match="tutorial fixture needs is missing"):
-        _read_fixture_bound_to(
-            {**_CSV_BY_STAGE_ID, "public_commitments": tmp_path / "gone.csv"},
-            _TEMPLATE_PATH,
+    with pytest.raises(FileNotFoundError, match="needs is missing"):
+        read_fixture_document(
+            _FIXTURE_PATH,
+            _fixture_files(
+                inputs={**_CSV_BY_STAGE_ID, "public_commitments": tmp_path / "gone.csv"}
+            ),
         )
 
 
@@ -520,7 +530,10 @@ def test_the_report_step_stops_when_the_template_loses_a_section(tmp_path):
     truncated = tmp_path / "truncated.html"
     kept = _TEMPLATE_PATH.read_text(encoding="utf-8").split("<!--@ contradiction -->")[0]
     truncated.write_text(kept, encoding="utf-8")
-    stage = _stage(_read_fixture_bound_to(_CSV_BY_STAGE_ID, truncated), "publish_report")
+    stage = _stage(
+        read_fixture_document(_FIXTURE_PATH, _fixture_files(template=truncated)),
+        "publish_report",
+    )
     ctx = RunContext.for_workflow_test_run(tmp_path, tmp_path, "tutorial", "R-1")
 
     with pytest.raises(ValueError, match="has no"):
