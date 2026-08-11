@@ -9,14 +9,16 @@
   history is a different task. They shared the Runs page, and the form sat above
   the table it had nothing to do with. Here the form IS the page.
 
-  Reached from the Runs page's "▶ New run", the Workflow page's run affordance, and
-  the sidebar's next-action when a workflow has never been run.
+  Reached from the Runs page's "▶ New run", the Workflow page's run affordance, the
+  sidebar's next-action when a workflow has never been run, and a version page's
+  "▶ Run this version", which names its version in ?version_id=.
 
   Context the route passes:
     state = shell_state(pdir); section = "runs"  (Runs stays the active nav item —
             this is a sub-page of it, not a fifth thing in the tree)
     versions    = the project's stored versions, newest-first (may be empty)
-    file_inputs = loading.list_file_inputs(pdir) — [{stage_id, path}]
+    selected_version_id = ?version_id= if it named a stored version, else the latest
+    file_inputs = loading.list_file_inputs(pdir, selected_version_id) — [{stage_id, path}]
 #}
 {% block section %}
 <div class="sec-head wf-head">

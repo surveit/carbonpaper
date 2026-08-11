@@ -97,26 +97,6 @@ async def trigger_run(request: Request, project: str):
     )
 
 
-@router.post("/project/{project}/workflow/version/{version_id}/run")
-async def trigger_run_of_version(project: str, version_id: str):
-    project_dir = projects_dir() / project
-    if not project_dir.is_dir():
-        raise HTTPException(status_code=404, detail=f"No project '{project}'")
-    try:
-        run_id = run_service.start_run(project, version_id=version_id)
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except (MissingInputBindingError, ValueError) as exc:
-        # ValueError here is binding/limit/offset validation failures raised by
-        # apply_run_bindings / prepare_run — not a catch-all for other bugs.
-        return JSONResponse({"detail": str(exc)}, status_code=400)
-    except WorkflowLoadError as exc:
-        return JSONResponse({"detail": "workflow version failed validation",
-                             "issues": exc.issues}, status_code=400)
-    return RedirectResponse(url=f"/project/{project}/runs/{run_id}",
-                            status_code=303)
-
-
 def _collect_bindings(
     form: FormData, project: str, version_id: str | None = None
 ) -> dict[str, dict[str, str]]:
@@ -203,7 +183,7 @@ async def runs_index(request: Request, project: str):
 
 
 @router.get("/project/{project}/runs/new", response_class=HTMLResponse)
-async def run_new(request: Request, project: str):
+async def run_new(request: Request, project: str, version_id: str | None = None):
     pdir = projects_dir() / project
     if not pdir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
@@ -211,6 +191,13 @@ async def run_new(request: Request, project: str):
     # state), so the picker offers all of them newest-first. Registered ahead of
     # /runs/{run_id}, which would otherwise match "new" as a run id.
     versions = list_versions(pdir)
+    # ?version_id= pre-picks one (the version page's "Run this version" sends it).
+    # An id no version carries 404s rather than falling back to the latest, which
+    # would launch a different workflow than the link named.
+    if version_id is not None and not any(v.version_id == version_id for v in versions):
+        raise HTTPException(status_code=404,
+                            detail=f"No version '{version_id}' in project '{project}'")
+    selected = version_id or (versions[0].version_id if versions else None)
     return templates.TemplateResponse(
         request,
         "section_run_new.html",
@@ -219,7 +206,8 @@ async def run_new(request: Request, project: str):
             "section": "runs",
             "crumbs": build_runs_child_crumbs(project, label="New run"),
             "versions": versions,
-            "file_inputs": list_file_inputs(project),
+            "selected_version_id": selected,
+            "file_inputs": list_file_inputs(project, selected),
         },
     )
 

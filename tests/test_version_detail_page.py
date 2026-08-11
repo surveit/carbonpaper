@@ -117,39 +117,27 @@ def test_version_detail_404_for_unknown_version(project: Path) -> None:
     assert client.get("/project/demo/workflow/version/20990101T000000").status_code == 404
 
 
-def test_run_this_version_404_for_nonexistent_version(project: Path) -> None:
-    resp = client.post(
-        "/project/demo/workflow/version/20990101T000000/run", follow_redirects=False
-    )
-    assert resp.status_code == 404
-
-
-def test_run_this_version_runs_whether_or_not_it_is_published(project: Path) -> None:
+def test_run_this_version_opens_the_run_form_on_this_version(project: Path) -> None:
     meta = project_service.save_working_copy_as_version(project, message="v1", reviewer="local")
     vid = meta.version_id
 
-    unpub = client.post(f"/project/demo/workflow/version/{vid}/run", follow_redirects=False)
-    assert unpub.status_code == 303
-    assert "/runs/" in unpub.headers["location"]
+    page = client.get(f"/project/demo/workflow/version/{vid}")
+
+    # A link, not a form: the run's file bindings and row caps are picked on the
+    # run form, and this page cannot pick them.
+    assert f'href="/project/demo/runs/new?version_id={vid}"' in page.text
+    assert f'action="/project/demo/workflow/version/{vid}/run"' not in page.text
+    form = client.get(f"/project/demo/runs/new?version_id={vid}")
+    assert form.status_code == 200
+    assert f'value="{vid}" selected' in form.text
+
+
+def test_run_this_version_offered_whether_or_not_it_is_published(project: Path) -> None:
+    meta = project_service.save_working_copy_as_version(project, message="v1", reviewer="local")
+    vid = meta.version_id
+    link = f'href="/project/demo/runs/new?version_id={vid}"'
+
+    assert link in client.get(f"/project/demo/workflow/version/{vid}").text
 
     versioning.publish_version(project, vid, reviewer="local")
-    pub = client.post(f"/project/demo/workflow/version/{vid}/run", follow_redirects=False)
-    assert pub.status_code == 303
-    assert "/runs/" in pub.headers["location"]
-
-
-def test_run_this_version_400s_not_500s_on_unbound_input(
-    project: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    unbound_stage = {
-        "id": "load", "description": "Load rows", "type": "input_data",
-        "connector": {"kind": "file", "params": {"format": "csv"}},
-        "signature": {"form": "replaces", "produces": _ROWS_SCHEMA["columns"]},
-    }
-    meta = versioning.create_version_from_stages(
-        project, [unbound_stage], message="v-unbound", reviewer="local")
-    vid = meta.version_id
-
-    resp = client.post(f"/project/demo/workflow/version/{vid}/run", follow_redirects=False)
-    assert resp.status_code == 400
-    assert "no file bound" in resp.json()["detail"]
+    assert link in client.get(f"/project/demo/workflow/version/{vid}").text
