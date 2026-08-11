@@ -29,6 +29,7 @@ class ReviewedField:
     minimum: float | None
     maximum: float | None
     options: list[str] | None
+    # The SOURCE column's description: the card names that column, not the target.
     description: str | None
 
 
@@ -218,7 +219,7 @@ def resolve_notes_label(stage_def: Stage, column: str) -> str:
     declared = output_schema.column_for_name(column)
     if declared is not None and declared.description:
         return declared.description
-    return column.replace("_", " ").capitalize()
+    return "Notes"
 
 
 _VERDICT_LABELS = {
@@ -274,7 +275,7 @@ def _build_reviewed_field(
         source=source, target=target, control=control, nullable=column.nullable,
         step=_STEP_BY_COLUMN_TYPE.get(column.type), minimum=low, maximum=high,
         options=None if options is None else list(options),
-        description=column.description or source_description,
+        description=source_description,
     )
 
 
