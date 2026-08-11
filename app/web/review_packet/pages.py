@@ -71,6 +71,7 @@ def write_packet_pages(
     run_dir: Path,
     view: RunView,
     data: DataReport,
+    traced: frozenset[tuple[str, int]],
     guide: RunGuideView | None,
     diagram: str,
     issues: RunIssues,
@@ -84,7 +85,8 @@ def write_packet_pages(
     for stage in view.stages:
         written.append(
             _write_stage_page(
-                root, run_dir, view, stage, workflow_stages_by_id.get(stage.stage_id))
+                root, run_dir, view, stage,
+                workflow_stages_by_id.get(stage.stage_id), traced)
         )
     return written
 
@@ -150,6 +152,7 @@ def _write_asset(root: Path, name: str) -> str:
 def _write_stage_page(
     root: Path, run_dir: Path, view: RunView, stage: StageView,
     workflow_stage: WorkflowStage | None,
+    traced: frozenset[tuple[str, int]],
 ) -> str:
     relative = f"{STAGES_DIR}/{stage.stage_id}.html"
     html = _render(
@@ -158,13 +161,14 @@ def _write_stage_page(
         assets=[f"../{ASSETS_DIR}/{name}" for name in STYLESHEETS],
         code_scripts=[f"../{ASSETS_DIR}/{name}" for name in CODE_SCRIPTS],
         index_href="../index.html",
-        **_build_panel_context(run_dir, view, stage, workflow_stage),
+        **_build_panel_context(run_dir, view, stage, workflow_stage, traced),
     )
     return _write(root / relative, html, relative)
 
 
 def _build_panel_context(
-    run_dir: Path, view: RunView, stage: StageView, workflow_stage: WorkflowStage | None
+    run_dir: Path, view: RunView, stage: StageView,
+    workflow_stage: WorkflowStage | None, traced: frozenset[tuple[str, int]],
 ) -> dict[str, Any]:
     # The False/empty entries below are what make the packet's panel inert.
     stage_def = None if workflow_stage is None else workflow_stage.stage
@@ -194,7 +198,7 @@ def _build_panel_context(
         "can_generate_tests": False,
         "certification": None,
         "previewable": False,
-        "links": PacketPanelLinks(),
+        "links": PacketPanelLinks(traced=traced),
         "type_glyph": TYPE_GLYPH,
         "type_class": TYPE_CLASS,
     }

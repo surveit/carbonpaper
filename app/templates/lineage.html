@@ -2,11 +2,12 @@
 {# standalone page, so it repeats what base.html would have given it #}
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>lineage · {{ title }}</title>
-{% include "_stylesheets.html" %}
-<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+{% if assets %}{% for sheet in assets %}<link rel="stylesheet" href="{{ sheet }}">
+{% endfor %}{% else %}{% include "_stylesheets.html" %}{% endif %}
+{% if not offline %}<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>{% endif %}
 {# standalone page (does not extend base.html), so it loads the node dispatcher itself #}
-<script src="/static/diagram_nodes.js"></script>
-<script src="/static/breadcrumbs.js" defer></script>
+<script src="{{ static_root | default("/static/", true) }}diagram_nodes.js"></script>
+{% if not offline %}<script src="{{ static_root | default("/static/", true) }}breadcrumbs.js" defer></script>{% endif %}
 <style>
 /* The page is exactly the viewport: header, then two columns that scroll inside
    themselves. A sticky 100vh panel BELOW a header makes the document taller than
@@ -106,7 +107,7 @@ tr.carried td.lin-v{color:var(--muted)}
 {# Standalone (see the head above), so the trail is rendered here rather than
    inherited — a page with no trail is a page with no way back. #}
 <header>{% include "_breadcrumbs.html" %}
-  <a href="/admin" class="back-link header-right">Admin</a></header>
+  {% if not offline %}<a href="/admin" class="back-link header-right">Admin</a>{% endif %}</header>
 <div class="lin-head"><h1>Lineage</h1><div class="lin-sub" id="sub"></div></div>
 <div class="lin-split">
   <div class="lin-story">
@@ -129,6 +130,9 @@ tr.carried td.lin-v{color:var(--muted)}
 </div>
 <script>
 const V = {{ view | tojson }}, PROJECT = {{ project | tojson }};
+// A folder has no server to ask, so the packet sends the reader to the stage
+// page it already wrote instead of fetching the panel.
+const OFFLINE = {{ (offline | default(false)) | tojson }};
 const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 const JOIN_KINDS = ['enrich', 'expand'];
 let sel = V.nodes.length - 1, tab = 'row', scope = 'changed';
@@ -280,6 +284,11 @@ function renderRowTab(n){
 }
 async function renderTransformTab(n){
   const body = document.getElementById('pbody');
+  if(OFFLINE){
+    body.innerHTML = `<p class="muted">This stage's transform, its code and its tests are on `
+      + `<a href="${n.links.stage}">its stage page</a>.</p>`;
+    return;
+  }
   if(transformCache[n.stage_id] === undefined){
     body.innerHTML = '<p class="muted">loading…</p>';
     const url = `/project/${encodeURIComponent(PROJECT)}/runs/${encodeURIComponent(V.run_id)}`

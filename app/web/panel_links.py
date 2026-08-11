@@ -44,11 +44,21 @@ class AppPanelLinks:
         return f"#{stage_id}"
 
 
+def packet_lineage_href(to_root: str, stage_id: str, row: int) -> str:
+    return f"{to_root}lineage/{_segment(stage_id)}/{row}.html"
+
+
 class PacketPanelLinks:
     """`None` from a method means the template omits that link, not that it is broken."""
 
-    def __init__(self, to_root: str = "../") -> None:
+    def __init__(
+        self, to_root: str = "../", traced: frozenset[tuple[str, int]] | None = None
+    ) -> None:
         self._root = to_root  # "" from index.html, "../" from a page in stages/
+        # Which rows the packet holds a lineage page for. None means every row it
+        # is asked about — the lineage pages link each other, and a page is only
+        # ever asked for a row whose trace named it.
+        self._traced = traced
 
     def stage_anchor(self, stage_id: str) -> str:
         return f"{self._root}stages/{_segment(stage_id)}.html"
@@ -63,8 +73,10 @@ class PacketPanelLinks:
     def stage_csv(self, stage_id: str) -> str:
         return f"{self._root}data/{_segment(stage_id)}.csv"
 
-    def row_trace(self, stage_id: str, row: int) -> None:
-        return None
+    def row_trace(self, stage_id: str, row: int) -> str | None:
+        if self._traced is not None and (stage_id, row) not in self._traced:
+            return None
+        return packet_lineage_href(self._root, stage_id, row)
 
     def review_queue(self, stage_id: str) -> None:
         return None
@@ -82,3 +94,8 @@ class PacketPanelLinks:
 def _segment(value: str) -> str:
     """safe='' so an id carrying a `/` cannot widen the path."""
     return quote(value, safe="")
+
+# Either link set a trace view may be rendered against: the app's routes, or the
+# packet's relative files. `stage_rows` is the one that differs in TYPE — the
+# packet has no rows view — which is why ContributorGroup.rows_link is optional.
+PanelLinks = AppPanelLinks | PacketPanelLinks

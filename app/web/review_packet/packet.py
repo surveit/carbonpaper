@@ -20,6 +20,7 @@ from app.services.review_packet.views import RunView, build_run_view
 from app.services.run_guide import RunGuideView, build_run_guide_view
 from app.services.workspace import resolve_project_dir
 from app.web.diagrams import build_mermaid_graph
+from app.web.review_packet.lineage import write_packet_lineage
 from app.web.review_packet.pages import write_packet_pages
 
 _log = logging.getLogger(__name__)
@@ -43,12 +44,17 @@ def export_review_packet(project: str, run_id: str, dest_root: Path) -> ReviewPa
         data = write_packet_data(
             root, run_dir, project_dir, view, workflow, stage_sources
         )
+    # Before the pages: a stage table only offers "View lineage" on a row the
+    # packet actually holds a page for, so the traced set has to exist first.
+    with log_elapsed(_log, f"{project}/{run_id} lineage"):
+        lineage = write_packet_lineage(root, run_dir, view, {s.id: s for s in stages})
     with log_elapsed(_log, f"{project}/{run_id} pages"):
         pages = write_packet_pages(
             root,
             run_dir,
             view,
             data,
+            frozenset(lineage.traced),
             _load_guide(project, manifest),
             _build_diagram(workflow_stages, project, view),
             # `workflow_stages or None` is the difference between "nothing blocked"
@@ -63,7 +69,7 @@ def export_review_packet(project: str, run_id: str, dest_root: Path) -> ReviewPa
         project=view.project or project,
         run_id=view.run_id or run_id,
         root=root,
-        files=sorted([*data.written, *pages, checksums]),
+        files=sorted([*data.written, *pages, *lineage.written, checksums]),
         omitted=data.omitted,
     )
 

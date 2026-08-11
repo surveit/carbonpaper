@@ -17,7 +17,11 @@ from app.models.stages.llm_transform import LLMTransformStage
 from app.models.stages.starlark import StarlarkRowFunctionStage
 from app.runtime.lineage import EdgeKind
 from app.services.loader import resolve_function_code
-from app.web.panel_links import AppPanelLinks
+from app.web.panel_links import (
+    CONTRIBUTOR_ROWS_LINKED,
+    CONTRIBUTORS_NAMED,
+    PanelLinks,
+)
 from app.web.trace_row_diff import build_row_diff, row_diff_to_dict
 
 # How many contributing rows ONE cohort's link addresses. A `group_by: []`
@@ -76,7 +80,7 @@ def _transform_of(workflow_stage: WorkflowStage | None) -> dict[str, Any]:
 
 
 def build_trace_view(
-    trace: dict[str, Any], stages: dict[str, WorkflowStage], links: AppPanelLinks
+    trace: dict[str, Any], stages: dict[str, WorkflowStage], links: PanelLinks
 ) -> dict[str, Any]:
     chrono = list(reversed(trace["steps"]))
     end = trace["end"]
@@ -106,7 +110,7 @@ def build_trace_view(
 
 def _build_node(
     i: int, chrono: list[dict[str, Any]], stages: dict[str, WorkflowStage],
-    links: AppPanelLinks, truncated: bool,
+    links: PanelLinks, truncated: bool,
 ) -> dict[str, Any]:
     step = chrono[i]
     parent = chrono[i - 1] if i else None
@@ -160,7 +164,7 @@ def _role_of(i: int, total: int, truncated: bool) -> str:
     return "source" if i == 0 and not truncated else "step"
 
 
-def _links_of(links: AppPanelLinks, stage_id: str, row_ordinal: int) -> dict[str, str]:
+def _links_of(links: PanelLinks, stage_id: str, row_ordinal: int) -> dict[str, str | None]:
     return {
         "stage": links.stage_anchor(stage_id),
         "rows": links.stage_rows(stage_id),
@@ -169,7 +173,7 @@ def _links_of(links: AppPanelLinks, stage_id: str, row_ordinal: int) -> dict[str
 
 
 def _group_contributors(
-    contributions: list[dict[str, Any]], links: AppPanelLinks
+    contributions: list[dict[str, Any]], links: PanelLinks
 ) -> list[ContributorGroup]:
     by_key: dict[tuple[str, tuple[str, ...] | None], list[dict[str, Any]]] = {}
     # Grouped over the WHOLE set before anything is dropped, so a cohort's
@@ -188,7 +192,7 @@ def _group_contributors(
 
 def _one_group(
     stage_id: str, columns: tuple[str, ...] | None,
-    parents: list[dict[str, Any]], links: AppPanelLinks,
+    parents: list[dict[str, Any]], links: PanelLinks,
 ) -> ContributorGroup:
     linked = parents[:CONTRIBUTOR_ROWS_LINKED]
     named = parents[:CONTRIBUTORS_NAMED] if len(parents) <= CONTRIBUTORS_NAMED else []
