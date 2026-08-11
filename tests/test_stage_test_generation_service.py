@@ -15,6 +15,7 @@ from app.core.agent.turns import TurnManager
 from app.core.errors import GenerationError
 from app.models import TableSchema
 from app.models.authoring_lifecycle_note import CompilerPhase
+from app.models.stages.code import SUMMARY_MAX_CHARS
 from app.models.stages.stage_tests import (
     PythonRowFunctionStageTest,
     build_stage_tests_model,
@@ -202,6 +203,24 @@ def test_start_raises_before_session_for_non_python_stage(tmp_path: Path, monkey
         generation.start_stage_test_generation(project_dir, stage_id="load", model="sonnet")
 
     assert len(store.list_sessions()) == before  # no orphaned session
+
+
+def test_start_refuses_a_summary_the_write_path_would_reject(tmp_path: Path, monkeypatch: Any):
+    """Refused BEFORE the turn, not after its cost is spent."""
+    project_dir = tmp_path / "demo"
+    _seed_project(project_dir)
+    spec_path = project_dir / "compiled" / "02_double.json"
+    spec = json.loads(spec_path.read_text(encoding="utf-8"))
+    spec["function"]["summary"] = "x" * (SUMMARY_MAX_CHARS + 1)
+    spec_path.write_text(json.dumps(spec), encoding="utf-8")
+    store = SessionStore()
+    monkeypatch.setattr(compiler_stage_tests, "open_session_store", lambda: store)
+
+    before = len(store.list_sessions())
+    with pytest.raises(ValueError, match="cannot be written back"):
+        generation.start_stage_test_generation(project_dir, stage_id="double", model="sonnet")
+
+    assert len(store.list_sessions()) == before  # no session, so no turn was paid for
 
 
 def test_start_creates_hidden_viewonly_session(tmp_path: Path, monkeypatch: Any):

@@ -20,10 +20,11 @@ from app.compiler.turn_failure import GENERATION_FAILURE_PREFIX as GENERATION_FA
 from app.core.errors import GenerationError
 from app.models.review_guide import ReviewGuideDraft
 from app.models.named_schemas import SchemaLibrary
+from app.models.stage import stage_to_spec_dict
 from app.services import data_model, versioning
 from app.services.loader import load_workflow
 from app.services.project import find_document_path
-from app.services.stage_edit import patch_stage_spec
+from app.services.stage_edit import find_description_issues, patch_stage_spec
 
 _log = logging.getLogger(__name__)
 
@@ -50,6 +51,15 @@ def start_stage_test_generation(project_dir: Path, *, stage_id: str, model: str)
         raise ValueError(
             f"tests can only be generated for stage types that can run them, "
             f"not `{stage.type}`"
+        )
+    # Asked here because _finish_stage_tests writes the suite back through
+    # patch_stage_spec, which asks the same question — and a turn that cannot be
+    # persisted must not be paid for first.
+    unwritable = find_description_issues(stage_to_spec_dict(stage))
+    if unwritable:
+        raise ValueError(
+            f"stage `{stage_id}` cannot be written back as it stands, so a generated "
+            f"suite could not be saved: " + "; ".join(unwritable)
         )
     return start_stage_test_generation_agent(
         document=doc_path.read_text(encoding="utf-8"),
