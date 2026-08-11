@@ -12,9 +12,11 @@ routers in `app/web/routers/`, which import the Runner (`app.runtime`) and the s
 - `/project/<m>/runs`, `/runs/<id>` — run history + detail. `/runs/new` is the
   run-launch form (version picker, one path field + row cap per file input, and an
   **Advanced** fold holding the row-level cache checkbox) — the one surface where a run
-  is configured, which the history page's ▶ New run and the Workflow page's ▶ Run
-  workflow both link to. Registered ahead of `/runs/<id>`, which would otherwise read
-  `new` as a run id. The fold is closed on load and `<details>` submits its content
+  is configured, which the history page's ▶ New run, the Workflow page's ▶ Run
+  workflow and a version page's ▶ Run this version all link to — the last through
+  `?version_id=`, which pre-picks that version and binds its authored input paths (an
+  id no stored version carries 404s rather than opening on the latest). Registered
+  ahead of `/runs/<id>`, which would otherwise read `new` as a run id. The fold is closed on load and `<details>` submits its content
   either way, so the default run reuses cached rows without the reader deciding.
 - `/project/<m>/runs/<id>/queue/<stage>` — the human-review queue UI (+ `/decide`, `/resume`).
 

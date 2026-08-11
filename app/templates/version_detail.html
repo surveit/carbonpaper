@@ -49,9 +49,11 @@
     </form>
     <span class="muted">unpublished</span>
     {% endif %}
-    <form action="/project/{{ state.name }}/workflow/version/{{ version.version_id }}/run" method="post" style="display:inline">
-      <button type="submit" class="btn primary">▶ Run this version</button>
-    </form>
+    {# To the run form with this version pre-picked, not straight into a run: which
+       file each input reads and how many rows it takes are decisions of the run, and
+       this page cannot make them. #}
+    <a href="/project/{{ state.name }}/runs/new?version_id={{ version.version_id | urlencode }}"
+       class="btn primary">▶ Run this version</a>
   </div>
 </div>
 
