@@ -201,7 +201,6 @@ def anchor_read_columns(stage: "StageBase") -> list[Column]:
 
 
 def transform_input_schemas(stage: "StageBase") -> dict[StageId, TableSchema]:
-    """Per declared input, what the transform READS from it — empty where it reads none."""
     signature = stage.signature
     assert signature is not None, f"stage `{stage.id}`: no signature"
     reads = {entry.input: list(entry.columns) for entry in signature.reads}
@@ -211,7 +210,6 @@ def transform_input_schemas(stage: "StageBase") -> dict[StageId, TableSchema]:
 
 
 def transform_output_schema(stage: "StageBase") -> TableSchema:
-    """What the transform WRITES: `produces`, or the columns it rewrites and adds."""
     signature = stage.signature
     assert signature is not None, f"stage `{stage.id}`: no signature"
     if isinstance(signature, ReplacesSignature):
