@@ -19,7 +19,8 @@ from app.models.stages.input_data import InputDataStage
 from app.services import project as project_service
 from app.services.loader import load_workflow
 from app.tools.editing import EditingContext, make_editing_tools
-from app.tools.tutorial import TutorialContext, make_tutorial_tools
+from app.agents.tutorial.config import make_tutorial_tools
+from app.tools.tutorial import TutorialContext
 
 _BASE_URL = "http://127.0.0.1:8788/"
 _EXPECTED_TOOLS = {
@@ -125,7 +126,6 @@ def test_run_workflow_passes_limits_through_to_the_run_service(
 
     monkeypatch.setattr(run_service, "start_run", _capture)
     monkeypatch.setattr(run_service, "read_run_status", lambda p, r: {"status": "ok"})
-    monkeypatch.setattr(run_service, "read_pinned_version", lambda p, r: "v1")
 
     tool = next(t for t in _tools() if t.name == "run_workflow")
     out = _call(tool, {"project_id": seeded["name"], "limits": {"raw_filings": 6}})
@@ -134,8 +134,16 @@ def test_run_workflow_passes_limits_through_to_the_run_service(
     assert seen["project"] == seeded["name"]
     assert seen["limits"] == {"raw_filings": 6}
     assert seen["version_id"] is None
-    assert started["run_id"] == "20260810T101112"
-    assert started["run_url"] == (
+    # The same {run_id, status} the MCP surface returns — no tour-shaped extra field.
+    assert started == {"run_id": "20260810T101112", "status": "ok"}
+
+
+def test_the_run_link_is_the_seeding_tools_prefix_plus_the_returned_run_id() -> None:
+    """run_workflow returns a bare id, so the tour joins two tool-returned halves."""
+    seeded = _seed_a_tour()
+
+    assert seeded["runs_url_prefix"] == f"{_BASE_URL}project/{seeded['name']}/runs/"
+    assert seeded["runs_url_prefix"] + "20260810T101112" == (
         f"{_BASE_URL}project/{seeded['name']}/runs/20260810T101112"
     )
 

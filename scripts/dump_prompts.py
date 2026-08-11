@@ -30,7 +30,8 @@ from app.core.agent.registry import build_mcp_server
 from app.core.agent.sdk_engine import MCP_SERVER_NAME
 from app.runtime.llm import SYSTEM_PROMPT as RUNTIME_SYSTEM_PROMPT
 from app.tools.editing import EditingContext, make_editing_tools
-from app.tools.tutorial import TutorialContext, make_tutorial_tools
+from app.agents.tutorial.config import make_tutorial_tools
+from app.tools.tutorial import TutorialContext
 
 # The generation agents put their input in the TASK (the user message), not the system
 # prompt, so any value builds the same prompt and the same submit_answer schema. The

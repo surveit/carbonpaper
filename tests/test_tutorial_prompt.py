@@ -9,7 +9,8 @@ from pathlib import Path
 import app
 from app.agents.tutorial.prompt import TUTORIAL_SYSTEM_PROMPT
 from app.tools.tool_specs import TOOL_SPECS
-from app.tools.tutorial import TutorialContext, make_tutorial_tools
+from app.agents.tutorial.config import make_tutorial_tools
+from app.tools.tutorial import TutorialContext
 
 _IDENTIFIER = re.compile(r"[a-z_][a-z0-9_]*")
 _TEMPLATES = Path(app.__file__).resolve().parent / "templates"
@@ -115,8 +116,10 @@ def test_the_run_beat_hands_over_exactly_one_link() -> None:
     """Three links at the end of a turn is three decisions; the run is the one to make."""
     beat = _flat(_beat(2))
 
-    assert "`run_url` is the ONLY link this beat hands over" in beat
-    assert "Beat 2 ends on ONE link, `run_url`." in _flat(TUTORIAL_SYSTEM_PROMPT)
+    assert "That link is the ONLY one this beat hands over" in beat
+    assert "Beat 2 ends on ONE link, the run's." in _flat(TUTORIAL_SYSTEM_PROMPT)
+    # The one URL the tour joins, and only from two things a tool returned.
+    assert "`runs_url_prefix` with that `run_id` on the end" in beat
     # The other two pages are not lost — beat 4 is where they are offered.
     assert "the first beat that may hand over `workflow_url`" in _flat(_beat(4))
     assert "guide_url" in _flat(_beat(4))

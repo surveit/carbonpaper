@@ -1,23 +1,21 @@
-"""The tutorial agent's four tools: seed the committed tour fixture, run it, read it.
+"""Seeding the committed tour fixture: the one tool the tutorial agent does not share.
 
-Reaches the workspace only through app.services (import_project / start_run /
-read_run_status), never sqlite3 or app.core.persistence. No tool edits a stage."""
+Reaches the workspace only through app.services, never sqlite3 or app.core.persistence.
+The agent's other three tools are the app's own — see app.agents.tutorial.config."""
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Annotated, Any, Callable
+from typing import Any
 
 from pydantic import BaseModel
 
-from app.core.agent.bound_tool import BoundToolSpec
 from app.core.agent.tool_spec import ToolSpec
 from app.models import StageType
 from app.models.review_guide import ReviewGuideDraft
 from app.services import project as project_service, run as run_service
 from app.services.project import Project, WorkflowFile, import_project
-from app.tools.tool_specs import TOOL_SPECS
 
 _FIXTURE_STEM = "tutorial_lobbying_triage"
 _DATA_DIR = Path(__file__).resolve().parents[1] / "seeds" / "data"
@@ -57,79 +55,38 @@ class TutorialProject(BaseModel):
     stages: list[TutorialStage]
     workflow_url: str
     guide_url: str
+    runs_url_prefix: str
     mcp_command: str
 
 
-class RunStarted(BaseModel):
-    run_id: str
-    version_id: str
-    run_url: str
-
-
-def make_tutorial_tools(ctx: TutorialContext) -> list[BoundToolSpec]:
-    def create_tutorial_project() -> TutorialProject:
-        workflow_file = _read_fixture_bound_to(CSV_BY_STAGE_ID, _TEMPLATE_PATH)
-        # A second tour reuses the project the first one seeded rather than minting
-        # tutorial_lobbying_triage_2: the workspace is not the tour's to fill up, and
-        # importing over a live project would discard whatever the reader did to it.
-        name = project_service.sanitize_project_name(workflow_file.name)
-        if not Project.exists(name):
-            name = import_project(workflow_file, name=name)
-        version_id = _write_bundled_review_guide(name)
-        return TutorialProject(
-            name=name,
-            version_id=version_id,
-            bound_inputs=[
-                BoundInput(stage_id=stage_id, csv_path=str(path))
-                for stage_id, path in CSV_BY_STAGE_ID.items()
-            ],
-            stages=[
-                TutorialStage(
-                    id=s.id, type=StageType(s.type).value, description=s.description
-                )
-                for s in workflow_file.stages
-            ],
-            workflow_url=f"{ctx.base_url}project/{name}/workflow",
-            guide_url=f"{ctx.base_url}project/{name}/workflow/version/{version_id}",
-            mcp_command=f"claude mcp add --transport http carbonpaper {ctx.base_url}mcp",
-        )
-
-    def run_workflow(
-        project_id: str,
-        version_id: str = "",
-        limits: dict[str, int] | None = None,
-    ) -> RunStarted:
-        run_id = run_service.start_run(
-            project_id, version_id=version_id or None, limits=limits
-        )
-        return RunStarted(
-            run_id=run_id,
-            version_id=run_service.read_pinned_version(project_id, run_id),
-            run_url=f"{ctx.base_url}project/{project_id}/runs/{run_id}",
-        )
-
-    def get_run_status(project_id: str, run_id: str) -> dict[str, Any]:
-        return run_service.read_run_status(project_id, run_id)
-
-    def describe_workflow(project_id: str) -> dict[str, Any]:
-        return project_service.describe_workflow(project_id)
-
-    tools: list[Callable[..., Any]] = [
-        create_tutorial_project,
-        run_workflow,
-        get_run_status,
-        describe_workflow,
-    ]
-    return [
-        BoundToolSpec(
-            name=fn.__name__,
-            description=_DESCRIPTIONS[fn.__name__].description,
-            fn=fn,
-            input_schema=TOOL_SCHEMAS[fn.__name__],
-            label=TOOL_LABELS[fn.__name__],
-        )
-        for fn in tools
-    ]
+def seed_tutorial_project(ctx: TutorialContext) -> TutorialProject:
+    workflow_file = _read_fixture_bound_to(CSV_BY_STAGE_ID, _TEMPLATE_PATH)
+    # A second tour reuses the project the first one seeded rather than minting
+    # tutorial_lobbying_triage_2: the workspace is not the tour's to fill up, and
+    # re-importing would discard whatever the reader did to it.
+    name = project_service.sanitize_project_name(workflow_file.name)
+    if not Project.exists(name):
+        name = import_project(workflow_file, name=name)
+    version_id = _write_bundled_review_guide(name)
+    return TutorialProject(
+        name=name,
+        version_id=version_id,
+        bound_inputs=[
+            BoundInput(stage_id=stage_id, csv_path=str(path))
+            for stage_id, path in CSV_BY_STAGE_ID.items()
+        ],
+        stages=[
+            TutorialStage(id=s.id, type=StageType(s.type).value, description=s.description)
+            for s in workflow_file.stages
+        ],
+        workflow_url=f"{ctx.base_url}project/{name}/workflow",
+        guide_url=f"{ctx.base_url}project/{name}/workflow/version/{version_id}",
+        # run_workflow returns a bare run_id, as it does on every surface. The tour needs
+        # a link to hand over, so the prefix comes from here and the agent appends that
+        # id — both halves tool-returned, neither invented.
+        runs_url_prefix=f"{ctx.base_url}project/{name}/runs/",
+        mcp_command=f"claude mcp add --transport http carbonpaper {ctx.base_url}mcp",
+    )
 
 
 def _write_bundled_review_guide(project_name: str) -> str:
@@ -191,47 +148,13 @@ def _with_template_path(stage: dict[str, Any], template_path: Path) -> dict[str,
     }
 
 
-# ── tool input schemas + display labels ──────────────────────────────────────
-# Keyed by tool __name__, verified against make_tutorial_tools above. Same form as
-# app.tools.editing's: a plain type, or an Annotated[type, "description"] the SDK
-# turns into the JSON Schema the CLI sees. Empty dict = no parameters.
-_PROJECT_ID = Annotated[str, "The project name create_tutorial_project returned."]
-
-ToolInputSchema = dict[str, object]
-TOOL_SCHEMAS: dict[str, ToolInputSchema] = {
-    "create_tutorial_project": {},
-    "describe_workflow": {"project_id": _PROJECT_ID},
-    "run_workflow": {
-        "project_id": _PROJECT_ID,
-        "version_id": Annotated[str, "Omit for the project's newest stored version."],
-        "limits": Annotated[
-            dict[str, int] | None,
-            'Caps how many rows a stage READS: {"<stage id>": N}. Omit to read every row.',
-        ],
-    },
-    "get_run_status": {
-        "project_id": _PROJECT_ID,
-        "run_id": Annotated[str, "The run id run_workflow returned."],
-    },
-}
-
-# The tour describes its own seeding tool; the other three take the shared descriptions,
-# so what the tour is told about a run is what every other surface is told.
-_CREATE_TUTORIAL_PROJECT = ToolSpec(
+CREATE_TUTORIAL_PROJECT = ToolSpec(
     name="create_tutorial_project",
     description=(
         "Seed the committed tutorial project into this workspace and return it: its "
         "name, the stored version, the CSVs bound to each input stage, its stages, and "
-        "the URLs of its workflow and review guide. Takes no arguments — the fixture is "
-        "fixed. If the tutorial project is already in this workspace it is returned as "
-        "it stands, not replaced, so a second tour never overwrites the first."
+        "the URLs of its workflow, review guide and runs. Takes no arguments — the "
+        "fixture is fixed. If the tutorial project is already in this workspace it is "
+        "returned as it stands, not replaced, so a second tour never overwrites the first."
     ),
 )
-_DESCRIPTIONS = TOOL_SPECS | {"create_tutorial_project": _CREATE_TUTORIAL_PROJECT}
-
-TOOL_LABELS: dict[str, str] = {
-    "create_tutorial_project": "Setting up the tutorial project",
-    "describe_workflow": "Reading the workflow",
-    "run_workflow": "Running the workflow",
-    "get_run_status": "Checking the run",
-}
