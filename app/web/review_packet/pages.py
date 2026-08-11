@@ -18,6 +18,7 @@ from app.web.config import templates
 from app.web.loading import load_output_preview, load_output_table
 from app.web.panel_links import PacketPanelLinks
 from app.web.run_issues import RunIssues
+from app.web.stage_diff import build_stage_diff
 
 # The packet has no route to a further page, so a stage's table has to carry the
 # rows outright. Still capped: a browser opening a static file has no pagination
@@ -43,8 +44,13 @@ _APP_TEMPLATES = Path(__file__).resolve().parents[2] / "templates"
 _PACKET_STATIC = Path(__file__).parent / "static"
 _STATIC_HREF = re.compile(r'rel="stylesheet" href="/static/([^"]+)"')
 
-# The node-click dispatcher, vendored so the packet's graph nodes are live.
+# The node-click dispatcher, vendored so the packet's graph nodes are live, and the
+# zoom/pan/fullscreen viewport, so a graph too wide for the page can be read rather
+# than only squinted at. VIEWPORT_SCRIPT renders the diagram itself, which is why the
+# index initializes mermaid with startOnLoad false.
 NODE_SCRIPT = "diagram_nodes.js"
+VIEWPORT_SCRIPT = "diagram_viewport.js"
+DIAGRAM_SCRIPTS = (NODE_SCRIPT, VIEWPORT_SCRIPT)
 
 # The diagram renderer is the packet's ONE external request; the index says so.
 # Version-pinned rather than `mermaid@11`, so the URL and the hash cannot drift
@@ -64,7 +70,7 @@ def write_packet_pages(
     issues: RunIssues,
 ) -> list[str]:
     written = _write_stylesheets(root)
-    written.append(_write_node_script(root))
+    written.extend(_write_diagram_scripts(root))
     written.append(_write_diagram_source(root, diagram))
     written.append(_write_index(root, view, data, guide, diagram, issues))
     for stage in view.stages:
@@ -96,6 +102,7 @@ def _write_index(
         run=view,
         guide=guide,
         omitted=data.omitted,
+        artifacts=data.artifacts,
         assets=[f"{ASSETS_DIR}/{name}" for name in STYLESHEETS],
         stages_dir=STAGES_DIR,
         checksums_href=CHECKSUMS_FILE,
@@ -106,6 +113,7 @@ def _write_index(
         mermaid_url=MERMAID_URL,
         mermaid_sri=MERMAID_SRI,
         node_script=f"{ASSETS_DIR}/{NODE_SCRIPT}",
+        viewport_script=f"{ASSETS_DIR}/{VIEWPORT_SCRIPT}",
         type_glyph=TYPE_GLYPH,
         type_class=TYPE_CLASS,
     )
@@ -117,10 +125,14 @@ def _write_diagram_source(root: Path, diagram: str) -> str:
     return _write_text(root / WORKFLOW_DIAGRAM_FILE, diagram, WORKFLOW_DIAGRAM_FILE)
 
 
-def _write_node_script(root: Path) -> str:
-    relative = f"{ASSETS_DIR}/{NODE_SCRIPT}"
+def _write_diagram_scripts(root: Path) -> list[str]:
+    return [_write_asset(root, name) for name in DIAGRAM_SCRIPTS]
+
+
+def _write_asset(root: Path, name: str) -> str:
+    relative = f"{ASSETS_DIR}/{name}"
     return _write_text(
-        root / relative, (_APP_STATIC / NODE_SCRIPT).read_text(encoding="utf-8"), relative
+        root / relative, (_APP_STATIC / name).read_text(encoding="utf-8"), relative
     )
 
 
@@ -131,7 +143,6 @@ def _write_stage_page(root: Path, run_dir: Path, view: RunView, stage: StageView
         run=view,
         assets=[f"../{ASSETS_DIR}/{name}" for name in STYLESHEETS],
         index_href="../index.html",
-        checksums_href=f"../{CHECKSUMS_FILE}",
         **_build_panel_context(run_dir, view, stage),
     )
     return _write(root / relative, html, relative)
@@ -146,6 +157,17 @@ def _build_panel_context(run_dir: Path, view: RunView, stage: StageView) -> dict
         "stage_def": stage.definition,
         "stage_def_error": stage.definition_error,
         "preview": _load_full_table(run_dir, stage),
+        # Same window as the plain table it replaces, so a diffed step and an
+        # undiffed one show the same depth. Capping the diff costs nothing the plain
+        # table does not already cost: the types it covers are grain-and-order
+        # preserving, so its row i IS the output's row i.
+        "diff": build_stage_diff(
+            stage.definition,
+            run_dir,
+            stage.output_path,
+            {s.stage_id: s.output_path for s in view.stages},
+            rows_shown=PACKET_MAX_TABLE_ROWS,
+        ),
         "input_previews": _build_input_previews(run_dir, view, stage),
         "function_code": resolve_function_code(stage.definition),
         "llm_example": None,

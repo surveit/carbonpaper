@@ -45,27 +45,18 @@
   /* app-main does NOT scroll — its child does, so there is one scrollbar per pane. */
   .app-main { height: 100%; min-height: 0; overflow: hidden; }
 
-  /* ── The NAV spine and the WORK surface. The spine is the review guide, so a
-        version that carries none leaves the work surface the whole width rather
-        than a titled empty column beside it. ── */
-  .run-shell { height: 100%; min-height: 0; display: grid; gap: 18px;
-               grid-template-columns: 360px minmax(0, 1fr); align-items: stretch; }
+  /* The two columns themselves are in run-page.css, shared with the review packet.
+     What is here is what only a fixed-viewport app has: each pane scrolling on its
+     own, and the collapse the button below drives. */
+  .run-shell { height: 100%; min-height: 0; }
   .run-shell.nav-collapsed { grid-template-columns: auto minmax(0, 1fr); }
-  .run-shell.no-nav { grid-template-columns: minmax(0, 1fr); }
-  .run-nav { min-width: 0; height: 100%; overflow-y: auto; padding-right: 16px;
-             border-right: 1px solid var(--border); }
-  /* Same trap as .app-side: an author `display` rule would beat [hidden]. */
-  .run-nav[hidden] { display: none; }
+  .run-nav { height: 100%; overflow-y: auto; }
   .run-section[hidden] { display: none; }
-  /* The column's heading line. It is titled here rather than in the partials below
-     because the collapse control shares the line, and the title is the same whether
-     the version carries a guide or only the offer to write one. */
-  .run-nav-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-  .run-nav-head h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em;
-                     color: var(--muted); margin: 0; }
+  /* The rail is titled by this page rather than by the partials below, because the
+     collapse control shares the line. */
   .run-nav-head .drawer-btn { margin-left: auto; }
   .nav-expand { position: sticky; top: 0; align-self: start; }
-  .run-main { min-width: 0; height: 100%; overflow-y: auto; padding-right: 6px; }
+  .run-main { height: 100%; overflow-y: auto; padding-right: 6px; }
 
   /* ── The toolbar shares the first section's heading line, actions to the right:
         the run's title and what you can do to the run are one band, and neither
@@ -110,8 +101,7 @@
     body { height: auto; overflow: visible; }
     main { padding-bottom: 48px; }
     .app-shell, .app-side, .app-main, .run-shell, .run-main, .run-nav { height: auto; overflow: visible; }
-    .run-shell, .run-shell.nav-collapsed { grid-template-columns: 1fr; }
-    .run-nav { border-right: 0; padding-right: 0; }
+    .run-shell.nav-collapsed { grid-template-columns: 1fr; }
   }
 </style>
 

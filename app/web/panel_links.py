@@ -21,6 +21,10 @@ class AppPanelLinks:
             return rows
         return f"{rows}?{urlencode({'ordinals': ','.join(str(o) for o in ordinals)})}"
 
+    def stage_rows_raw(self, stage_id: str) -> str:
+        """`raw=1` or the diff partial's own page links back to itself."""
+        return f"{self._base}/stage/{_segment(stage_id)}/rows?raw=1"
+
     def stage_csv(self, stage_id: str) -> str:
         return f"{self._base}/stage/{_segment(stage_id)}/rows.csv"
 
@@ -50,6 +54,10 @@ class PacketPanelLinks:
         return f"{self._root}stages/{_segment(stage_id)}.html"
 
     def stage_rows(self, stage_id: str, ordinals: list[int] | None = None) -> None:
+        return None
+
+    def stage_rows_raw(self, stage_id: str) -> None:
+        """The uncapped rows are stage_csv's data/<id>.csv, linked beside this."""
         return None
 
     def stage_csv(self, stage_id: str) -> str:

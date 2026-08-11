@@ -2,10 +2,19 @@
 {% block title %}Review packet · {{ run.project }} · {{ run.run_id }}{% endblock %}
 {% block content %}
 
-{# Same shell as the run view: body left, review guide as a right rail. The rail's
-   layout and its collapse drawer both live in _run_guide.html, so mirroring the
-   structure is what makes them work here. #}
-<div class="run-shell{% if guide %} with-guide{% endif %}" id="run-shell">
+{# The run view's own two columns (run-page.css): the guide is the LEFT spine, the
+   body the work surface, and a packet whose version carries no guide takes the whole
+   width. The rail is titled here, as the run page titles it, so the guide partial
+   does not title itself a second time. #}
+<div class="run-shell{% if not guide %} no-nav{% endif %}" id="run-shell">
+
+{% if guide %}
+<div class="run-nav" id="run-nav">
+  <div class="run-nav-head"><h2>Review guide</h2></div>
+  {% with titled_by_host = true %}{% include "_run_guide.html" %}{% endwith %}
+</div>
+{% endif %}
+
 <div class="run-main">
 
 <div class="stage-header">
@@ -29,18 +38,48 @@
    its rows and its transform, not a verdict on them. #}
 {% include "_run_issues.html" %}
 
+{# The files a publish stage wrote, the same section the run page leads its results
+   with — here as relative links into artifacts/, so they open from the folder. #}
+{% if artifacts %}
+<section>
+  <h2>Run outputs</h2>
+  <ul class="run-outputs">
+    {% for path in artifacts %}<li><a href="{{ path }}">{{ path }}</a></li>{% endfor %}
+  </ul>
+</section>
+{% endif %}
+
 {% if run.stages %}
 <section>
   <h2>The workflow this run executed</h2>
+  {# Zoom, pan and fullscreen through the app's own diagram_viewport.js. NOT the run
+     page's minimap band: there the graph is navigation beside the work, here it is the
+     map of the whole run and gets the height, fitted to width with no zoom floor. #}
   {% if mermaid %}
-  <pre class="mermaid">
+  <p class="lede muted">Click a node to open that step. Drag to pan · ⌘/Ctrl-scroll to zoom.</p>
+  {# .workflow-full for the width: diagram_viewport.js collapses the svg to measure
+     the viewport, so a block with no width of its own measures 0 and fits to nothing. #}
+  <div class="workflow-full diagram-block">
+    <div class="diagram-tools">
+      <button type="button" data-zoom="in" title="Zoom in" aria-label="Zoom in">+</button>
+      <button type="button" data-zoom="out" title="Zoom out" aria-label="Zoom out">−</button>
+      <button type="button" data-zoom="reset" title="Fit to width" aria-label="Fit to width">↔</button>
+      <button type="button" class="diagram-fs" title="Fullscreen"
+              aria-label="Show the whole workflow fullscreen">⛶</button>
+    </div>
+    <div class="diagram-viewport">
+      <pre class="mermaid">
 {{ mermaid }}
-  </pre>
+      </pre>
+    </div>
+  </div>
   {% endif %}
-  {# Every step as a plain link, always. The diagram needs the network, and an
-     unreadable pinned version means no diagram at all — this is then the only
-     route to a step page. #}
-  <p class="packet-steps"><span class="muted">Steps:</span>
+  {# The FALLBACK route to the step pages, not a second index of them: the graph needs
+     the network and an unreadable pinned version draws none at all, either of which
+     would otherwise leave a reader no way through. Written every time so it is there
+     when nothing runs, and hidden by the script below once the graph has actually
+     drawn — the drawn graph is the same list, clickable. #}
+  <p class="packet-steps" id="packet-steps"><span class="muted">Steps:</span>
     {% for stage in run.stages %}<a href="{{ stages_dir }}/{{ stage.stage_id }}.html">{{ type_glyph.get(stage.type, "") }} <code>{{ stage.stage_id }}</code></a>{% if not loop.last %} · {% endif %}{% endfor %}
   </p>
 </section>
@@ -88,14 +127,14 @@
       <tr><td><a href="manifest.json">manifest.json</a></td><td>the run's own record: timings, statuses, checks, input bindings</td></tr>
       <tr><td><a href="events.jsonl">events.jsonl</a></td><td>the run event log, including the prompt text sent to the model</td></tr>
       <tr><td><code>data/</code></td><td>one CSV per step, uncapped; <code>data/raw/</code> holds the files the run actually wrote</td></tr>
-      <tr><td><a href="{{ checksums_href }}">checksums.txt</a></td><td>SHA-256 of every file above</td></tr>
+      {# The command rides on the row: it was the one thing the page footer carried
+         that is written nowhere else, and a hash nobody can check is not evidence. #}
+      <tr><td><a href="{{ checksums_href }}">checksums.txt</a></td><td>SHA-256 of every file above — check them with <code>shasum -a 256 -c checksums.txt</code></td></tr>
     </tbody>
   </table>
 </section>
 
 </div>{# /.run-main #}
-
-{% if guide %}{% include "_run_guide.html" %}{% endif %}
 </div>{# /.run-shell #}
 
 {% if mermaid %}
@@ -105,14 +144,38 @@
   // mermaid resolves the graph's `click … call dvNode(…)` binding by name at click
   // time; diagram_nodes.js re-broadcasts it, and subscribing is what makes the node
   // clickable. In the packet a click navigates, there being no panel to load into.
+  //
+  // startOnLoad false because diagram_viewport.js, loaded next, renders the diagram
+  // itself and then measures the svg to fit it — mermaid rendering on its own would
+  // race that, and the viewport would size against a diagram that is not there yet.
   if (window.mermaid) {
-    mermaid.initialize({ startOnLoad: true, theme: "default", securityLevel: "loose" });
+    mermaid.initialize({ startOnLoad: false, theme: "default", securityLevel: "loose" });
   }
   if (window.onDiagramNode) {
     onDiagramNode(function (stageId) {
       location.href = "{{ stages_dir }}/" + encodeURIComponent(stageId) + ".html";
     });
   }
+</script>
+<script src="{{ viewport_script }}"></script>
+<script>
+  // Drops the step list once the graph is on the page. mermaid renders async, and
+  // watching for the svg is what tells the two failures apart: a graph that drew
+  // (list goes) from a CDN that never answered (list stays, and is the only way in).
+  (function () {
+    var steps = document.getElementById("packet-steps");
+    var viewport = document.querySelector(".diagram-viewport");
+    if (!steps || !viewport) return;
+    function hideOnceDrawn() {
+      if (!viewport.querySelector("svg")) return false;
+      steps.hidden = true;
+      return true;
+    }
+    if (hideOnceDrawn()) return;
+    new MutationObserver(function (_records, self) {
+      if (hideOnceDrawn()) self.disconnect();
+    }).observe(viewport, { childList: true, subtree: true });
+  })();
 </script>
 {% endif %}
 
