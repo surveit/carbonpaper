@@ -8,7 +8,7 @@
 # (generated + scratch content) are skipped via the ignore file, not here.
 
 [project]
-name = "carbonpaper"
+name = "carbon_paper"
 version = "0"
 requires-python = ">=3.12,<3.13"
 dependencies = [
@@ -48,7 +48,7 @@ dev = [
 [tool.uv]
 # The repo is a dependency set, not a distribution: there is no package to build
 # and app/ is imported from the working directory. Without this uv sync fails
-# trying to build `carbonpaper` as a wheel.
+# trying to build `carbon_paper` as a wheel.
 package = false
 
 [tool.ruff]

@@ -1,4 +1,4 @@
-# carbonpaper — reviewable AI workflows
+# Carbon Paper — reviewable AI workflows
 
 **Workflows of typed, schema-validated stages** with human-review gates and persisted
 runs. Vocabulary (locked): **project** = the container

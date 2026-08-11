@@ -19,8 +19,8 @@ def unconfigured_stores(monkeypatch):
 
 def test_pinning_the_db_path_carries_the_frames_root_with_it(tmp_path, monkeypatch):
     """Otherwise frames resolve against the cwd: a run launched elsewhere silently misses every entry."""
-    monkeypatch.setenv("CARBONPAPER_DB_PATH", str(tmp_path / "workspace" / "app.db"))
-    monkeypatch.delenv("CARBONPAPER_FRAMES_ROOT", raising=False)
+    monkeypatch.setenv("CARBON_PAPER_DB_PATH", str(tmp_path / "workspace" / "app.db"))
+    monkeypatch.delenv("CARBON_PAPER_FRAMES_ROOT", raising=False)
 
     configure_default_stores()
 
@@ -28,8 +28,8 @@ def test_pinning_the_db_path_carries_the_frames_root_with_it(tmp_path, monkeypat
 
 
 def test_the_frames_root_is_still_separable_by_env(tmp_path, monkeypatch):
-    monkeypatch.setenv("CARBONPAPER_DB_PATH", str(tmp_path / "workspace" / "app.db"))
-    monkeypatch.setenv("CARBONPAPER_FRAMES_ROOT", str(tmp_path / "elsewhere"))
+    monkeypatch.setenv("CARBON_PAPER_DB_PATH", str(tmp_path / "workspace" / "app.db"))
+    monkeypatch.setenv("CARBON_PAPER_FRAMES_ROOT", str(tmp_path / "elsewhere"))
 
     configure_default_stores()
 
@@ -37,8 +37,8 @@ def test_the_frames_root_is_still_separable_by_env(tmp_path, monkeypatch):
 
 
 def test_both_defaults_land_under_the_same_relative_dir(tmp_path, monkeypatch):
-    monkeypatch.delenv("CARBONPAPER_DB_PATH", raising=False)
-    monkeypatch.delenv("CARBONPAPER_FRAMES_ROOT", raising=False)
+    monkeypatch.delenv("CARBON_PAPER_DB_PATH", raising=False)
+    monkeypatch.delenv("CARBON_PAPER_FRAMES_ROOT", raising=False)
     monkeypatch.chdir(tmp_path)
 
     configure_default_stores()

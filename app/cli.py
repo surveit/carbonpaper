@@ -12,7 +12,7 @@ from typing import Any
 
 from app.core.errors import NoVersionToRunError
 from app.core.run_status import RunStatus
-from app.core.store_config import configure_default_stores
+from app.core.store_config import configure_default_stores, refuse_renamed_env_vars
 from app.services import run as run_service
 from app.services.errors import WorkflowLoadError
 from app.services.workspace import configure_projects_dir_from_env
@@ -20,6 +20,7 @@ from app.services.workspace import configure_projects_dir_from_env
 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
+    refuse_renamed_env_vars()
     configure_projects_dir_from_env()
     configure_default_stores()
     try:

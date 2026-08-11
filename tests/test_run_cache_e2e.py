@@ -291,14 +291,14 @@ def test_the_cache_survives_a_process_restart_and_a_change_of_directory(tmp_path
 
 def _run_in_a_fresh_process(project: Path, *, db: Path, cwd: Path) -> None:
     repo_root = Path(__file__).resolve().parents[1]
-    env = {k: v for k, v in os.environ.items() if k != "CARBONPAPER_FRAMES_ROOT"}
+    env = {k: v for k, v in os.environ.items() if k != "CARBON_PAPER_FRAMES_ROOT"}
     result = subprocess.run(
         [sys.executable, "-m", "app.cli", project.name],
         cwd=cwd,
-        env={**env, "PYTHONPATH": str(repo_root), "CARBONPAPER_DB_PATH": str(db),
+        env={**env, "PYTHONPATH": str(repo_root), "CARBON_PAPER_DB_PATH": str(db),
              # The CLI takes a project NAME, so the fresh process needs the root to
              # resolve it under — the one thing a different cwd must not change.
-             "CARBONPAPER_PROJECTS_DIR": str(project.parent)},
+             "CARBON_PAPER_PROJECTS_DIR": str(project.parent)},
         capture_output=True, text=True,
     )
     assert result.returncode == 0, (

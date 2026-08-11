@@ -2,7 +2,7 @@
 
 The structured-output agent is the only backend: when it is unavailable
 (`options.require_agent_backend`) the call raises rather than fabricating output.
-Called once per row by the row driver, bounded parallelism (4, CARBONPAPER_LLM_PARALLEL)."""
+Called once per row by the row driver, bounded parallelism (4, CARBON_PAPER_LLM_PARALLEL)."""
 
 from __future__ import annotations
 

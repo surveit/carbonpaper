@@ -14,7 +14,7 @@ from fastapi import FastAPI
 from starlette.routing import Route
 
 from app.core.logging_config import configure_app_logging
-from app.core.store_config import configure_default_stores
+from app.core.store_config import configure_default_stores, refuse_renamed_env_vars
 from app.seeds.seed import seed_demo_data_if_enabled
 from app.web.config import (
     STATIC_DIR, RevalidatedStaticFiles, configure_projects_dir_from_env,
@@ -39,17 +39,18 @@ from app.agents.tutorial import config as _tutorial_agent_config  # noqa: F401
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    refuse_renamed_env_vars()
     # uvicorn's dictConfig leaves the root logger at WARNING unhandled, so app INFO goes nowhere.
     configure_app_logging()
     # Guarded inside configure_default_stores, so a store configured ahead of
     # time (the test suite's autouse fixtures) wins over the on-disk defaults —
     # the app never reconfigures a store that's already set.
     configure_default_stores()
-    # The projects root (CARBONPAPER_PROJECTS_DIR, default the repo's examples/). Read
+    # The projects root (CARBON_PAPER_PROJECTS_DIR, default the repo's examples/). Read
     # here rather than at import time in app.services.workspace, so the test
     # suite's own set_projects_dir() is never overridden by the environment.
     configure_projects_dir_from_env()
-    # Opt-in demo data: CARBONPAPER_SEED_DEMO=1 seeds the committed example bundles into
+    # Opt-in demo data: CARBON_PAPER_SEED_DEMO=1 seeds the committed example bundles into
     # the workspace (seed-if-absent, never destructive); a normal boot leaves
     # this env var unset, so it does nothing. All seeding logic lives in
     # app.seeds — this is its one call site.

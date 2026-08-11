@@ -19,12 +19,12 @@ CLAUDE_BIN = shutil.which("claude") or CLI_PATH
 # `llm.model` records nothing about which model answered, so the default is the only
 # thing left saying what a run's rows were produced by.
 DEFAULT_MODEL = LLMModel.parse(
-    os.environ.get("CARBONPAPER_LLM_MODEL", LLMModel.claude_haiku_4_5.value),
-    source="CARBONPAPER_LLM_MODEL",
+    os.environ.get("CARBON_PAPER_LLM_MODEL", LLMModel.claude_haiku_4_5.value),
+    source="CARBON_PAPER_LLM_MODEL",
 )
-DEFAULT_PARALLEL = int(os.environ.get("CARBONPAPER_LLM_PARALLEL", "4"))
+DEFAULT_PARALLEL = int(os.environ.get("CARBON_PAPER_LLM_PARALLEL", "4"))
 
-DEFAULT_TIMEOUT_S = int(os.environ.get("CARBONPAPER_LLM_TIMEOUT_S", "180"))
+DEFAULT_TIMEOUT_S = int(os.environ.get("CARBON_PAPER_LLM_TIMEOUT_S", "180"))
 
 # A stage granted research tools works on a completely different clock: it searches,
 # fetches documents, and reads them before it can answer. The 180s row timeout above

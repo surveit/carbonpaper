@@ -1,4 +1,4 @@
-"""The CarbonPaper FastMCP server: authoring tools over app.services.
+"""The Carbon Paper FastMCP server: authoring tools over app.services.
 
 Tools resolve project directories only through workspace.resolve_project_dir, which refuses
 names escaping the workspace. Generation tools start LIVE chat turns on the server event
@@ -61,7 +61,7 @@ _STAGE_TOOL_ERRORS = (WorkflowLoadError, FileNotFoundError)
 
 
 mcp = FastMCP(
-    name="carbonpaper",
+    name="carbon_paper",
     instructions=INSTRUCTIONS,
     stateless_http=True,
     json_response=True,
