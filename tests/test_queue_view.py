@@ -5,6 +5,8 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
+from fastapi import HTTPException
+
 from app.models import Stage, parse_stage
 from app.web import queue_view
 from app.web.loading import QueueFingerprints
@@ -258,3 +260,16 @@ def test_an_item_is_found_at_the_position_its_own_card_states():
 
 def test_no_item_is_found_for_a_fingerprint_the_queue_does_not_carry():
     assert queue_view.find_positioned_item(_page_of("fp0"), "fp9") is None
+
+
+def test_every_recorded_verdict_has_a_past_tense_label():
+    from app.models.stages.human_review_queue import ReviewVerdict
+    from app.web.queue_view import describe_verdict
+
+    # A verdict the page cannot name must raise, not render blank.
+    assert {v.value: describe_verdict(v.value) for v in ReviewVerdict} == {
+        "approve": "approved", "modify": "modified", "skipped": "skipped",
+    }
+    with pytest.raises(HTTPException) as caught:
+        describe_verdict("rejected")
+    assert "rejected" in str(caught.value.detail)

@@ -206,7 +206,7 @@ def test_happy_path_renders_items_with_fingerprint_prior_decision_and_counts(tmp
     assert f'data-input-fingerprint="{second_fp}"' in html
     # The decided row carries its prior decision; the other does not.
     assert html.count("decided-approve") == 1
-    assert "<strong>approve</strong>" in html
+    assert "<strong>approved</strong>" in html
     # reviewed_count/total: exactly one of two rows has a prior decision.
     assert '<strong id="reviewed-count">1</strong> of <strong>2</strong> reviewed' in html
     # One field per declared reviewed column, typed from the declared column and
@@ -980,11 +980,13 @@ def test_the_unreviewed_columns_are_labelled_as_what_the_review_is_judged_agains
         tmp_path, monkeypatch, "queue_route_context_label")
 
     card = _first_card(html)
-    block = card[card.index('<details class="queued-row"'):card.index("</details>")]
+    block = card[card.index('<div class="queued-row"'):card.index("Columns to review")]
     # These columns are not up for edit, but they ARE what the reviewer weighs the
-    # edit against — so the label must not read as "ignore this".
-    assert "<summary>Context for review</summary>" in block
+    # edit against — so the label must not read as "ignore this", and it carries the
+    # same heading as the columns below it rather than folding away behind a summary.
+    assert '<p class="review-section-heading">Context for review</p>' in block
     assert "not under review" not in card
+    assert "<details" not in card
 
 
 def test_a_reviewed_value_is_read_only_until_its_edit_button_is_pressed(tmp_path, monkeypatch):
@@ -1144,7 +1146,7 @@ def test_a_decided_card_disables_its_openers_and_offers_a_secondary_cta(tmp_path
     assert ">Change my review<" in decided
     submit = re.search(r'<button type="submit" class="btn primary"[^>]*>', decided)
     assert submit is not None and re.search(r"\bhidden\b", submit.group(0))
-    assert "Recorded: <strong>approve</strong>" in " ".join(decided.split())
+    assert "Recorded: <strong>approved</strong>" in " ".join(decided.split())
 
     stylesheet = _stylesheet()
     # Without this rule `.btn`'s own `display` beats the UA [hidden] rule.
@@ -1171,7 +1173,9 @@ def test_a_decided_card_states_its_verdict_in_a_word(tmp_path, monkeypatch):
 
     chip = re.search(r'<span class="verdict-chip verdict-approve">([^<]*)</span>',
                      _first_card(html))
-    assert chip is not None and "approve" in chip.group(1)
+    # Past tense: the chip names a decision already taken, not one on offer. The
+    # class keeps the stored value, so a substring check here would pass either way.
+    assert chip is not None and chip.group(1).strip() == "✓ approved"
     assert "verdict-chip" not in _undecided_card(html, fingerprints)
 
     stylesheet = _stylesheet()
@@ -1269,7 +1273,7 @@ def test_the_card_route_re_renders_the_decided_state_of_one_row(tmp_path, monkey
     assert r.status_code == 200
     card = _first_card(r.text)
     assert f'data-input-fingerprint="{fp}"' in card
-    assert "Recorded: <strong>approve</strong>" in " ".join(card.split())
+    assert "Recorded: <strong>approved</strong>" in " ".join(card.split())
     assert ">Change my review<" in card
     # The page loops over the same partial, so the swapped-in card is the card
     # the page would have rendered for that row — including its "Row 1 of 2".
