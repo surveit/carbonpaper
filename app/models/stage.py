@@ -19,8 +19,8 @@ from pydantic.json_schema import SkipJsonSchema
 
 from app.models.stages.stage_base import (  # noqa: F401  (re-exported: the stage vocabulary lives here)
     ReviewConfig,
-    StageBase,
-    StageCommon,
+    AbstractStage,
+    AuthoredStageFields,
     StageInput,
     StageType,
     is_grain_and_order_preserving,
@@ -73,7 +73,7 @@ Stage = Annotated[
 
 _STAGE_ADAPTER: TypeAdapter[Stage] = TypeAdapter(Stage)
 
-_MODEL_BY_TYPE: dict[StageType, type[StageBase]] = {
+_MODEL_BY_TYPE: dict[StageType, type[AbstractStage]] = {
     get_args(member.model_fields["type"].annotation)[0]: member
     for member in get_args(get_args(Stage)[0])
 }
@@ -126,7 +126,7 @@ SERVER_OWNED_STAGE_FIELDS = ("tests", "eval", "review", "source")
 # Add no cross-field validator: an invalid stage must parse here and be refused later.
 # (Above the class deliberately — a docstring here would be copied into the tool schema
 # and read by the authoring agent. See tests/arch/test_tool_schema_models_carry_no_docstring.py.)
-class StageDraft(StageCommon):
+class StageDraft(AuthoredStageFields):
     model_config = ConfigDict(json_schema_extra={"description": STAGE_DRAFT_DESCRIPTION})
 
     connector: Optional[Connector] = None

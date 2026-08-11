@@ -8,8 +8,8 @@ from typing import ClassVar, Literal
 from pydantic import Field
 
 from app.models.schema import StageConfig, TableSchema
-from app.models.stages.stage_base import StageBase, StageInput, StageType
-from app.models.stages.node_spec import NodeTypeSpec
+from app.models.stages.stage_base import AbstractStage, StageInput, StageType
+from app.models.stages.stage_type_spec import StageTypeSpec
 from app.models.stages.signature import ReplacesSignature
 
 
@@ -18,7 +18,7 @@ class UnionConfig(StageConfig):
     INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset()
 
 
-class UnionStage(StageBase):
+class UnionStage(AbstractStage):
     type: Literal[StageType.union]
     union: UnionConfig
     inputs: list[StageInput] = Field(default_factory=list, min_length=2)
@@ -62,9 +62,9 @@ def find_union_signature_issues(stage: "UnionStage") -> list[str]:
     )
     return issues
 
-# Authoring copy for this module's stage type(s); assembled into NODE_TYPES.
-NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
-    "union": NodeTypeSpec(
+# Authoring copy for this module's stage type(s); assembled into STAGE_TYPES.
+STAGE_TYPE_SPECS: dict[str, StageTypeSpec] = {
+    "union": StageTypeSpec(
         summary="Concatenate two or more upstream dataframes with an identical schema.",
         signature_form="replaces",
         blocks=["union"],

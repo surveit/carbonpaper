@@ -29,7 +29,7 @@ def _write_stage(compiled: Path, order: int, sid: str, stype: str, inputs: list[
     stage: dict = {"id": sid, "description": f"{sid} step", "type": stype}
     stage.update(_config_block_by_type(compiled.parent).get(stype, {}))
     # Every input declares the schema it expects and every stage declares a
-    # signature (app/models/stages/stage_base.py: StageBase._schemas_declared).
+    # signature (app/models/stages/stage_base.py: AbstractStage._schemas_declared).
     # llm_transform is additionally strictly 1:1, so it must add a column.
     stage["signature"] = (
         # An llm_transform's reads must match its template's placeholders exactly.

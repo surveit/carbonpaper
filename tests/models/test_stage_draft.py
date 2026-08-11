@@ -11,7 +11,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.models import StageDraft, parse_stage
-from app.models.stage import Stage, StageCommon
+from app.models.stage import Stage, AuthoredStageFields
 from app.seeds.seed import discover_workflow_files
 
 # Every member of the `Stage` union, read off the union itself so a new stage
@@ -112,7 +112,7 @@ def test_schema_omits_the_fields_no_authoring_client_writes():
 
 @pytest.mark.parametrize("stage_cls", _STAGE_CLASSES, ids=lambda c: c.__name__)
 def test_every_stage_class_shares_the_drafts_field_list(stage_cls):
-    assert issubclass(stage_cls, StageCommon) and issubclass(StageDraft, StageCommon)
+    assert issubclass(stage_cls, AuthoredStageFields) and issubclass(StageDraft, AuthoredStageFields)
     extra = set(stage_cls.model_fields) - set(StageDraft.model_fields)
     assert extra == set(DROPPED_FIELDS), stage_cls.__name__
 

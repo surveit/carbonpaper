@@ -14,8 +14,8 @@ from pydantic import ConfigDict, Field, model_validator
 
 from app.models.errors import StepRefused
 from app.models.schema import FunctionKind, StageConfig, _Base
-from app.models.stages.stage_base import StageBase, StageInput, StageType
-from app.models.stages.node_spec import NodeTypeSpec
+from app.models.stages.stage_base import AbstractStage, StageInput, StageType
+from app.models.stages.stage_type_spec import StageTypeSpec
 from app.models.stages.signature import ExtendsSignature, ReplacesSignature
 from app.models.stages.stage_tests import (
     PythonFrameFunctionStageTest,
@@ -212,7 +212,7 @@ def find_python_function_warnings(stage: "CarriesPythonFunctionStage"
     return []
 
 
-class CarriesPythonFunctionStage(StageBase):
+class CarriesPythonFunctionStage(AbstractStage):
     function: PythonFunction
 
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
@@ -246,9 +246,9 @@ class PythonFrameFunctionStage(CarriesPythonFunctionStage):
     tests: Optional[Sequence[PythonFrameFunctionStageTest]] = None
     signature: ReplacesSignature
 
-# Authoring copy for this module's stage type(s); assembled into NODE_TYPES.
-NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
-    "python_row_function": NodeTypeSpec(
+# Authoring copy for this module's stage type(s); assembled into STAGE_TYPES.
+STAGE_TYPE_SPECS: dict[str, StageTypeSpec] = {
+    "python_row_function": StageTypeSpec(
         summary="Python run once per row: one row in → one row out (cannot fan rows out/in or reorder).",
         signature_form="extends",
         blocks=["function"],
@@ -269,7 +269,7 @@ NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
             "neither the frame nor the row's position, so it cannot fan out, drop or reorder."
         ),
     ),
-    "python_frame_function": NodeTypeSpec(
+    "python_frame_function": StageTypeSpec(
         summary="Python over the whole dataframe(s); may reshape (dedup, pivot, multi-input merge).",
         signature_form="replaces",
         blocks=["function"],

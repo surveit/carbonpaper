@@ -12,7 +12,7 @@ import pytest
 import pydantic
 
 from app.core.errors import NoVersionToRunError, ReviewGuideValidationError
-from app.models import StageBase
+from app.models import AbstractStage
 from app.models.review_guide import ReviewGuideStep
 from app.core.persistence import get_store
 from app.services.loader import WorkflowLoadError
@@ -66,7 +66,7 @@ def test_create_version_returns_meta_and_round_trips(tmp_path):
     assert load_version(tmp_path, meta.version_id) == meta
 
     [stage] = load_version_stages(tmp_path, meta.version_id)
-    assert isinstance(stage, StageBase)
+    assert isinstance(stage, AbstractStage)
     assert stage.id == "load"
 
 
@@ -300,7 +300,7 @@ def test_create_version_from_stages_valid_is_loadable_and_unpublished(tmp_path):
     assert meta.reviewer == "ada"
 
     [stage] = load_version_stages(tmp_path, meta.version_id)
-    assert isinstance(stage, StageBase)
+    assert isinstance(stage, AbstractStage)
     assert stage.id == "load"
 
 

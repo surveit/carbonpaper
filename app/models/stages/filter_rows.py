@@ -10,7 +10,7 @@ from pydantic import Field, model_validator
 
 from app.models.errors import StepRefused
 from app.models.schema import StageConfig
-from app.models.stages.stage_base import StageBase, StageInput, StageType
+from app.models.stages.stage_base import AbstractStage, StageInput, StageType
 from app.models.stages.warnings import CompilerWarning, warn
 from app.models.stages.code import (
     CORNER_CASES_DESCRIPTION,
@@ -18,7 +18,7 @@ from app.models.stages.code import (
     CornerCase,
     validate_inline_function_code,
 )
-from app.models.stages.node_spec import NodeTypeSpec
+from app.models.stages.stage_type_spec import StageTypeSpec
 from app.models.stages.signature import ExtendsSignature
 from app.models.stages.stage_tests import FilterRowsStageTest
 
@@ -60,7 +60,7 @@ class FilterConfig(StageConfig):
         return self
 
 
-class FilterRowsStage(StageBase):
+class FilterRowsStage(AbstractStage):
     type: Literal[StageType.filter_rows]
     CARRIES_RUNNABLE_TESTS: ClassVar[bool] = True
     filter: FilterConfig
@@ -102,9 +102,9 @@ def find_filter_warnings(stage: "FilterRowsStage") -> list[CompilerWarning]:
                      "no plain-language description — reviewable only by reading its code")]
     return []
 
-# Authoring copy for this module's stage type(s); assembled into NODE_TYPES.
-NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
-    "filter_rows": NodeTypeSpec(
+# Authoring copy for this module's stage type(s); assembled into STAGE_TYPES.
+STAGE_TYPE_SPECS: dict[str, StageTypeSpec] = {
+    "filter_rows": StageTypeSpec(
         summary="Keep the rows an authored predicate returns True for.",
         signature_form="extends",
         blocks=["filter"],

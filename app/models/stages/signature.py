@@ -19,7 +19,7 @@ from app.models.tool_schema_prompts import (
 if TYPE_CHECKING:
     # Only under TYPE_CHECKING, mirroring app.models.stages.shared:
     # app.models.stages.stage_base imports this module at runtime.
-    from app.models.stages.stage_base import StageBase
+    from app.models.stages.stage_base import AbstractStage
 
 
 class InputReads(_Base):
@@ -115,7 +115,7 @@ def _refuse_duplicate_names(columns: list[Column], where: str) -> None:
 SIGNATURE_ISSUE = "stage '{sid}': signature {problem}"
 
 
-def find_signature_issues(stage: "StageBase") -> list[str]:
+def find_signature_issues(stage: "AbstractStage") -> list[str]:
     signature = stage.signature
     issues = _find_read_issues(stage, signature.reads)
     if isinstance(signature, ExtendsSignature):
@@ -123,7 +123,7 @@ def find_signature_issues(stage: "StageBase") -> list[str]:
     return issues
 
 
-def _find_read_issues(stage: "StageBase", reads: list[InputReads]) -> list[str]:
+def _find_read_issues(stage: "AbstractStage", reads: list[InputReads]) -> list[str]:
     edges ={ref.id: ref.table_schema for ref in stage.inputs}
     issues: list[str] = []
     seen: set[str] = set()
@@ -147,7 +147,7 @@ def _find_read_issues(stage: "StageBase", reads: list[InputReads]) -> list[str]:
     return issues
 
 
-def _find_extends_issues(stage: "StageBase", signature: ExtendsSignature) -> list[str]:
+def _find_extends_issues(stage: "AbstractStage", signature: ExtendsSignature) -> list[str]:
     if not stage.inputs:
         return [_issue(stage, "is extends-form, which needs an anchor: at least one input")]
     anchor = stage.inputs[0]
@@ -172,7 +172,7 @@ def _find_extends_issues(stage: "StageBase", signature: ExtendsSignature) -> lis
     return issues
 
 
-def promised_output_schema(stage: "StageBase") -> "TableSchema | None":
+def promised_output_schema(stage: "AbstractStage") -> "TableSchema | None":
     signature = stage.signature
     if isinstance(signature, ExtendsSignature):
         if not stage.inputs:
@@ -183,7 +183,7 @@ def promised_output_schema(stage: "StageBase") -> "TableSchema | None":
     return TableSchema(columns=signature.produces)
 
 
-def anchor_read_columns(stage: "StageBase") -> list[Column]:
+def anchor_read_columns(stage: "AbstractStage") -> list[Column]:
     """What the transform consumes from its anchor input; [] unless the form flows the rest."""
     signature = stage.signature
     if not stage.inputs or not isinstance(signature, ExtendsSignature):
@@ -197,7 +197,7 @@ def anchor_read_columns(stage: "StageBase") -> list[Column]:
     ]
 
 
-def transform_input_schemas(stage: "StageBase") -> dict[StageId, TableSchema]:
+def transform_input_schemas(stage: "AbstractStage") -> dict[StageId, TableSchema]:
     signature = stage.signature
     assert signature is not None, f"stage `{stage.id}`: no signature"
     reads = {entry.input: list(entry.columns) for entry in signature.reads}
@@ -206,7 +206,7 @@ def transform_input_schemas(stage: "StageBase") -> dict[StageId, TableSchema]:
     }
 
 
-def transform_output_schema(stage: "StageBase") -> TableSchema:
+def transform_output_schema(stage: "AbstractStage") -> TableSchema:
     signature = stage.signature
     assert signature is not None, f"stage `{stage.id}`: no signature"
     if isinstance(signature, ReplacesSignature):
@@ -215,7 +215,7 @@ def transform_output_schema(stage: "StageBase") -> TableSchema:
     return TableSchema(columns=[*signature.rewrites, *signature.adds])
 
 
-def _issue(stage: "StageBase", problem: str) -> str:
+def _issue(stage: "AbstractStage", problem: str) -> str:
     return SIGNATURE_ISSUE.format(sid=stage.id, problem=problem)
 
 

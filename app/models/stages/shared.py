@@ -1,7 +1,7 @@
 """Shared helpers for per-stage-type column validation, on both the input and
 output side.
 
-`StageBase` is imported only under `TYPE_CHECKING`: `app.models.stages.stage_base`
+`AbstractStage` is imported only under `TYPE_CHECKING`: `app.models.stages.stage_base`
 imports this module at runtime, so importing it back would be circular."""
 from __future__ import annotations
 
@@ -12,14 +12,14 @@ from app.core.predicate import parse_predicate
 
 if TYPE_CHECKING:
     from app.models.schema import TableSchema
-    from app.models.stages.stage_base import StageBase
+    from app.models.stages.stage_base import AbstractStage
 
 COLUMN_ISSUE = (
     "stage '{sid}': {field} references column '{col}' not in its input schema (declares {cols})"
 )
 
 
-def resolve_input_columns(stage: "StageBase", index: int) -> set[str]:
+def resolve_input_columns(stage: "AbstractStage", index: int) -> set[str]:
     """Edge-only by design: at construction time the upstream producer may not be present at all."""
     return {c.name for c in stage.inputs[index].table_schema.columns}
 
@@ -36,7 +36,7 @@ INTERNAL_NAMESPACE_ISSUE = (
 )
 
 
-def find_internal_namespace_column_issues(stage: "StageBase") -> list[str]:
+def find_internal_namespace_column_issues(stage: "AbstractStage") -> list[str]:
     issues = [
         f"input `{ref.id}` declares column {name!r}"
         for ref in stage.inputs
@@ -52,7 +52,7 @@ def find_internal_namespace_column_issues(stage: "StageBase") -> list[str]:
     return issues
 
 
-def _signature_column_names(stage: "StageBase") -> list[str]:
+def _signature_column_names(stage: "AbstractStage") -> list[str]:
     signature = stage.signature
     names = [
         column.name for entry in signature.reads for column in entry.columns

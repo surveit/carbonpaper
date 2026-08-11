@@ -11,9 +11,9 @@ from pydantic import AliasChoices, Field, model_validator
 from app.core.llm.options import LLMModel
 from app.core.prompt_template import find_template_fields
 from app.models.schema import StageConfig, TableSchema
-from app.models.stages.stage_base import StageBase, StageInput, StageType
+from app.models.stages.stage_base import AbstractStage, StageInput, StageType
 from app.models.stages.shared import COLUMN_ISSUE, resolve_input_columns
-from app.models.stages.node_spec import NodeTypeSpec
+from app.models.stages.stage_type_spec import StageTypeSpec
 from app.models.stages.signature import ExtendsSignature
 
 
@@ -121,7 +121,7 @@ class LLMConfig(StageConfig):
         return self
 
 
-class LLMTransformStage(StageBase):
+class LLMTransformStage(AbstractStage):
     type: Literal[StageType.llm_transform]
     llm: LLMConfig
     # Exactly one input, like every other row-mapped type: the runtime maps the
@@ -206,9 +206,9 @@ def find_double_braced_input_issues(
 
 
 
-# Authoring copy for this module's stage type(s); assembled into NODE_TYPES.
-NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
-    "llm_transform": NodeTypeSpec(
+# Authoring copy for this module's stage type(s); assembled into STAGE_TYPES.
+STAGE_TYPE_SPECS: dict[str, StageTypeSpec] = {
+    "llm_transform": StageTypeSpec(
         summary="Row-by-row LLM call producing structured output.",
         signature_form="extends",
         blocks=["llm"],

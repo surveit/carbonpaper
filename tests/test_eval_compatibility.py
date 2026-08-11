@@ -25,7 +25,7 @@ def _file_input(id_, tmp_path, cols=("k",)):
 def _input_refs(inputs):
     refs = []
     for upstream in inputs:
-        if isinstance(upstream, m.StageBase):
+        if isinstance(upstream, m.AbstractStage):
             refs.append({"id": upstream.id, "schema": upstream.resolve_output_schema()})
         else:
             id_, cols = upstream

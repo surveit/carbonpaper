@@ -13,14 +13,14 @@ from pydantic import Field, model_validator
 from app.core.errors import PredicateError
 from app.core.predicate import parse_predicate
 from app.models.schema import StageConfig, TableSchema, _Base
-from app.models.stages.stage_base import StageBase, StageInput, StageType
+from app.models.stages.stage_base import AbstractStage, StageInput, StageType
 from app.models.stages.shared import (
     COLUMN_ISSUE,
     find_declared_vs_computed_issues,
     find_predicate_column_issues,
     resolve_input_columns,
 )
-from app.models.stages.node_spec import NodeTypeSpec
+from app.models.stages.stage_type_spec import StageTypeSpec
 from app.models.stages.signature import ReplacesSignature
 
 
@@ -59,7 +59,7 @@ class AggregateConfig(StageConfig):
     aggregations: list[AggregationOp]
 
 
-class AggregateStage(StageBase):
+class AggregateStage(AbstractStage):
     type: Literal[StageType.aggregate]
     aggregate: AggregateConfig
     inputs: list[StageInput] = Field(default_factory=list, min_length=1, max_length=1)
@@ -183,9 +183,9 @@ def compute_aggregate_output_types(
             computed[op.output_column] = value_type
     return computed
 
-# Authoring copy for this module's stage type(s); assembled into NODE_TYPES.
-NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
-    "aggregate": NodeTypeSpec(
+# Authoring copy for this module's stage type(s); assembled into STAGE_TYPES.
+STAGE_TYPE_SPECS: dict[str, StageTypeSpec] = {
+    "aggregate": StageTypeSpec(
         summary="Structured group-by aggregation.",
         signature_form="replaces",
         blocks=["aggregate"],

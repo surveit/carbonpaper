@@ -143,7 +143,7 @@ STAGE_DESCRIPTION_DESCRIPTION = (
 
 
 # ── The shared field list ────────────────────────────────────────────────────
-class StageCommon(_Base):
+class AuthoredStageFields(_Base):
     id: str = Field(max_length=STAGE_ID_MAX_CHARS, description=STAGE_ID_DESCRIPTION)
     type: StageType
     description: str = Field(
@@ -189,8 +189,8 @@ class StageCommon(_Base):
 
 
 # ── The per-type stage base ──────────────────────────────────────────────────
-class StageBase(StageCommon):
-    # Narrowed from StageCommon's optional: a stored stage always has one.
+class AbstractStage(AuthoredStageFields):
+    # Narrowed from the optional on AuthoredStageFields: a stored stage always has one.
     signature: TransformSignature
 
     REQUIRES_OUTPUT_SCHEMA: ClassVar[bool] = True
@@ -282,7 +282,7 @@ class StageBase(StageCommon):
         return None if v == [] else v
 
     @model_validator(mode="after")
-    def _tests_shape(self) -> "StageBase":
+    def _tests_shape(self) -> "AbstractStage":
         if self.tests and not self.CARRIES_RUNNABLE_TESTS:
             raise ValueError(
                 f"tests are only supported on stage types whose handler can run "
@@ -292,7 +292,7 @@ class StageBase(StageCommon):
         return self
 
     @model_validator(mode="after")
-    def _schemas_declared(self) -> "StageBase":
+    def _schemas_declared(self) -> "AbstractStage":
         issues = [
             f"input `{ref.id}` declares a schema with no columns"
             for ref in self.inputs
@@ -310,14 +310,14 @@ class StageBase(StageCommon):
         return self
 
     @model_validator(mode="after")
-    def _config_columns_resolve(self) -> "StageBase":
+    def _config_columns_resolve(self) -> "AbstractStage":
         issues = self.find_config_column_issues()
         if issues:
             raise ValueError("; ".join(issues))
         return self
 
     @model_validator(mode="after")
-    def _signature_consistent(self) -> "StageBase":
+    def _signature_consistent(self) -> "AbstractStage":
         issues = find_signature_issues(self) + self.find_signature_config_issues()
         if issues:
             raise ValueError("; ".join(issues))
@@ -328,7 +328,7 @@ class StageBase(StageCommon):
         return is_grain_and_order_preserving(self.type)
 
 
-def find_stage_test_class(stage_cls: type[StageBase]) -> type[StageTest]:
+def find_stage_test_class(stage_cls: type[AbstractStage]) -> type[StageTest]:
     sequence_type, _none_type = get_args(stage_cls.model_fields["tests"].annotation)
     (test_class,) = get_args(sequence_type)
     assert issubclass(test_class, StageTest)  # __init_subclass__ admits nothing else

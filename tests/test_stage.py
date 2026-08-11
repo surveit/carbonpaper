@@ -1,4 +1,4 @@
-"""Tests for app/models/stage.py — node types, config blocks, the Stage union."""
+"""Tests for app/models/stage.py — stage types, config blocks, the Stage union."""
 from __future__ import annotations
 
 import pytest

@@ -11,7 +11,7 @@ from app.models.severity import UserFacingErrorSeverity
 from app.models.schema import _Base
 
 if TYPE_CHECKING:
-    from app.models.stages.stage_base import StageBase
+    from app.models.stages.stage_base import AbstractStage
 
 WarningKind = Literal[
     "undescribed",
@@ -52,5 +52,5 @@ class CompilerWarning(_Base):
         return SEVERITY[self.kind]
 
 
-def warn(stage: "StageBase", kind: WarningKind, detail: str) -> CompilerWarning:
+def warn(stage: "AbstractStage", kind: WarningKind, detail: str) -> CompilerWarning:
     return CompilerWarning(kind=kind, stage_id=stage.id, detail=detail)

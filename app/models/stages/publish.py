@@ -14,7 +14,7 @@ from app.models.stages.code import (
     CarriesPythonFunctionStage,
 )
 from app.models.stages.shared import COLUMN_ISSUE, resolve_input_columns
-from app.models.stages.node_spec import NodeTypeSpec
+from app.models.stages.stage_type_spec import StageTypeSpec
 from app.models.stages.signature import ReplacesSignature
 from app.models.tool_schema_prompts import PUBLISH_CONFIG_DESCRIPTION
 
@@ -78,9 +78,9 @@ def find_publish_column_issues(stage: "PublishStage") -> list[str]:
         )
     ]
 
-# Authoring copy for this module's stage type(s); assembled into NODE_TYPES.
-NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
-    "publish": NodeTypeSpec(
+# Authoring copy for this module's stage type(s); assembled into STAGE_TYPES.
+STAGE_TYPE_SPECS: dict[str, StageTypeSpec] = {
+    "publish": StageTypeSpec(
         summary="Render a final artifact (html, json, csv, cards).",
         signature_form="replaces",
         blocks=["publish", "function"],

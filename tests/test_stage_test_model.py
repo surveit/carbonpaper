@@ -5,7 +5,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.models import Stage, parse_stage, stage_to_spec_dict, TableSchema
-from app.models.stages.stage_base import StageBase, StageType, find_stage_test_class
+from app.models.stages.stage_base import AbstractStage, StageType, find_stage_test_class
 from app.models.stages.stage_tests import (
     FilterRowsStageTest,
     PythonFrameFunctionStageTest,
@@ -59,7 +59,7 @@ def test_every_testable_type_declares_its_own_stage_test_class(stage_cls):
 def test_a_testable_type_naming_no_stage_test_class_is_refused_at_definition():
     with pytest.raises(TypeError, match="StageTest subclass"):
 
-        class Untyped(StageBase):
+        class Untyped(AbstractStage):
             type: Literal[StageType.python_row_function]
             CARRIES_RUNNABLE_TESTS: ClassVar[bool] = True
 

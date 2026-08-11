@@ -11,15 +11,15 @@ from typing import Any, Sequence, TypeVar
 from pydantic import ValidationError, model_validator
 
 from app.models.schema import _Base
-from app.models.stage import Stage, StageCommon, StageType
+from app.models.stage import Stage, AuthoredStageFields, StageType
 from app.core.utils import format_errors
 
 # Ordering and cycle detection read only the shared fields, so they hold a
 # submitted draft and a stored stage alike, and hand back what they were given.
-_StageT = TypeVar("_StageT", bound=StageCommon)
+_StageT = TypeVar("_StageT", bound=AuthoredStageFields)
 
 
-def validate_unique_ids(stages: Sequence[StageCommon]) -> list[str]:
+def validate_unique_ids(stages: Sequence[AuthoredStageFields]) -> list[str]:
     ids = [s.id for s in stages]
     dupes = sorted({i for i in ids if ids.count(i) > 1})
     return [f"duplicate stage id `{d}`" for d in dupes]
@@ -35,7 +35,7 @@ def validate_inputs_resolve(stages: list[Stage]) -> list[str]:
     return issues
 
 
-def detect_cycle(stages: Sequence[StageCommon]) -> list[str]:
+def detect_cycle(stages: Sequence[AuthoredStageFields]) -> list[str]:
     edges = {s.id: list(s.input_ids) for s in stages}
     WHITE, GRAY, BLACK = 0, 1, 2
     color = {sid: WHITE for sid in edges}

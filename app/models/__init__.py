@@ -22,7 +22,7 @@ from app.models.schema import (
 from app.models.stage import (
     ReviewConfig as ReviewConfig,
     Stage as Stage,
-    StageBase as StageBase,
+    AbstractStage as AbstractStage,
     StageDraft as StageDraft,
     StageInput as StageInput,
     StageType as StageType,

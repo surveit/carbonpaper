@@ -1,4 +1,4 @@
-"""NodeTypeSpec: one stage type's authoring copy, typed."""
+"""StageTypeSpec: one stage type's authoring copy, typed."""
 from __future__ import annotations
 
 from typing import Literal
@@ -6,7 +6,7 @@ from typing import Literal
 from app.models.schema import _Base
 
 
-class NodeTypeSpec(_Base):
+class StageTypeSpec(_Base):
     summary: str
     signature_form: Literal["extends", "replaces"]
     blocks: list[str]

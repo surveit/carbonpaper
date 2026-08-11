@@ -14,7 +14,7 @@ import pandas as pd
 from app.models import Stage
 from app.models.run_manifest import RowError, StageContribution
 from app.models.stage import (
-    StageBase,
+    AbstractStage,
     StageType,
     is_grain_and_order_preserving,
     max_declared_inputs,
@@ -46,7 +46,7 @@ from .row_events import (
     emit_row_start,
 )
 
-_StageT = TypeVar("_StageT", bound=StageBase)
+_StageT = TypeVar("_StageT", bound=AbstractStage)
 
 
 def narrow_stage(stage: Stage, model: type[_StageT]) -> _StageT:

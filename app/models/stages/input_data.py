@@ -10,8 +10,8 @@ from typing import Any, ClassVar, Literal, Optional
 from pydantic import ConfigDict, Field, model_validator
 
 from app.models.schema import StageConfig, _Base
-from app.models.stages.stage_base import StageBase, StageType
-from app.models.stages.node_spec import NodeTypeSpec
+from app.models.stages.stage_base import AbstractStage, StageType
+from app.models.stages.stage_type_spec import StageTypeSpec
 from app.models.stages.signature import ReplacesSignature
 
 
@@ -83,7 +83,7 @@ class Connector(StageConfig):
         return self
 
 
-class InputDataStage(StageBase):
+class InputDataStage(AbstractStage):
     type: Literal[StageType.input_data]
     connector: Connector
     # The root of the schema graph: no inputs, so `produces` IS the declaration
@@ -103,9 +103,9 @@ class XlsxReadParams(_Base):
     first_column: int = 0
     source_row_column: str | None = None
 
-# Authoring copy for this module's stage type(s); assembled into NODE_TYPES.
-NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
-    "input_data": NodeTypeSpec(
+# Authoring copy for this module's stage type(s); assembled into STAGE_TYPES.
+STAGE_TYPE_SPECS: dict[str, StageTypeSpec] = {
+    "input_data": StageTypeSpec(
         summary="Declares a source dataset with a typed schema.",
         signature_form="replaces",
         blocks=["connector"],

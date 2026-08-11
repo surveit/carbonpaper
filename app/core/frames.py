@@ -28,7 +28,7 @@ PARQUET_SUFFIX = ".parquet"
 
 
 # ── Frame files THIS codebase wrote ──────────────────────────────────────────
-# Stage outputs, the frame cache, lineage sidecars, node decisions, the review
+# Stage outputs, the frame cache, lineage sidecars, stage decisions, the review
 # queue, eval results. The read is the exact inverse of the write: no schema, no
 # coercion, no dtype argument reaches these. A frame that needs coercion on the
 # way back in is a frame something already got wrong on the way out — see the

@@ -5,7 +5,7 @@ from pydantic import ValidationError
 
 from app.models.schema import Column, TableSchema
 from app.models.stages.stage_base import StageInput, StageType
-from app.models.stages.node_types import NODE_TYPES
+from app.models.stages.stage_types import STAGE_TYPES
 from app.models.stages.signature import ExtendsSignature
 from app.models.stages.starlark import StarlarkFunction, StarlarkRowFunctionStage
 
@@ -174,8 +174,8 @@ def _compilable_idioms_from(description: str) -> list[str]:
 
 @pytest.mark.parametrize("description", [
     StarlarkFunction.model_fields["code"].description,
-    NODE_TYPES["starlark_row_function"].notes,
-], ids=["StarlarkFunction.code field description", "NODE_TYPES notes"])
+    STAGE_TYPES["starlark_row_function"].notes,
+], ids=["StarlarkFunction.code field description", "STAGE_TYPES notes"])
 def test_authoring_guidance_teaches_a_row_merge_idiom_the_parser_accepts(description):
     for idiom in _compilable_idioms_from(description):
         code = f"def transform(row):\n    {idiom}\n"

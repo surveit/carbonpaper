@@ -6,13 +6,13 @@ from typing import TYPE_CHECKING, ClassVar, Literal
 from pydantic import Field, model_validator
 
 from app.models.schema import StageConfig, _Base
-from app.models.stages.stage_base import StageBase, StageInput, StageType
+from app.models.stages.stage_base import AbstractStage, StageInput, StageType
 from app.models.stages.shared import (
     COLUMN_ISSUE,
     INTERNAL_COLUMN_PREFIX,
     resolve_input_columns,
 )
-from app.models.stages.node_spec import NodeTypeSpec
+from app.models.stages.stage_type_spec import StageTypeSpec
 from app.models.stages.signature import ExtendsSignature
 
 if TYPE_CHECKING:
@@ -54,7 +54,7 @@ class JoinConfig(StageConfig):
         return self
 
 
-class JoinStage(StageBase):
+class JoinStage(AbstractStage):
     join: JoinConfig
     inputs: list[StageInput] = Field(default_factory=list, min_length=2, max_length=2)
     signature: ExtendsSignature
@@ -187,9 +187,9 @@ JOIN_SHARED_NOTE = (
     "new one (`score: score_r`). The signature adds exactly the landed columns."
 )
 
-# Authoring copy for this module's stage type(s); assembled into NODE_TYPES.
-NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
-    "enrich": NodeTypeSpec(
+# Authoring copy for this module's stage type(s); assembled into STAGE_TYPES.
+STAGE_TYPE_SPECS: dict[str, StageTypeSpec] = {
+    "enrich": StageTypeSpec(
         summary="Adds brought reference columns to each subject row; the reference must be unique on the key (many-to-one).",
         signature_form="extends",
         blocks=["join"],
@@ -203,7 +203,7 @@ NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
             f"fan-out. {JOIN_SHARED_NOTE}"
         ),
     ),
-    "expand": NodeTypeSpec(
+    "expand": StageTypeSpec(
         summary="Joins brought reference columns into each subject row, fanning one subject row out to several (many-to-many).",
         signature_form="extends",
         blocks=["join"],

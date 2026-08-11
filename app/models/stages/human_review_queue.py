@@ -18,9 +18,9 @@ from app.models.schema import (
     TableSchema,
     _Base,
 )
-from app.models.stages.stage_base import StageBase, StageInput, StageType
+from app.models.stages.stage_base import AbstractStage, StageInput, StageType
 from app.models.stages.shared import find_predicate_column_issues
-from app.models.stages.node_spec import NodeTypeSpec
+from app.models.stages.stage_type_spec import StageTypeSpec
 from app.models.stages.signature import ExtendsSignature
 
 
@@ -108,7 +108,7 @@ class QueueConfig(StageConfig):
         return v
 
 
-class HumanReviewQueueStage(StageBase):
+class HumanReviewQueueStage(AbstractStage):
     type: Literal[StageType.human_review_queue]
     queue: QueueConfig
     inputs: list[StageInput] = Field(default_factory=list, min_length=1, max_length=1)
@@ -160,7 +160,7 @@ class HumanReviewQueueStage(StageBase):
 
 
 
-def resolve_queue_config(stage: StageBase) -> Optional[QueueConfig]:
+def resolve_queue_config(stage: AbstractStage) -> Optional[QueueConfig]:
     """The only sanctioned access to `.queue` (tests/arch/test_handle_access_is_owned.py)."""
     return stage.queue if isinstance(stage, HumanReviewQueueStage) else None
 
@@ -350,9 +350,9 @@ def _find_review_record_target_issues(
             )
     return issues
 
-# Authoring copy for this module's stage type(s); assembled into NODE_TYPES.
-NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
-    "human_review_queue": NodeTypeSpec(
+# Authoring copy for this module's stage type(s); assembled into STAGE_TYPES.
+STAGE_TYPE_SPECS: dict[str, StageTypeSpec] = {
+    "human_review_queue": StageTypeSpec(
         summary="Pulls flagged rows for human decision; halts the run.",
         signature_form="extends",
         blocks=["queue"],
