@@ -124,9 +124,10 @@ def test_a_session_that_has_already_opened_will_not_greet_twice() -> None:
 def test_the_opening_turn_is_not_attributed_to_the_reader() -> None:
     """The prompt that makes the agent speak is the app's, so it is stored as nobody's."""
     from app.agents.tutorial.prompt import TUTORIAL_OPENING_PROMPT
+    from app.core.agent.store import TranscriptMessage
     from app.core.agent.turns import _drop_user_messages
 
-    engine_transcript = [
+    engine_transcript: list[TranscriptMessage] = [
         {"role": "user", "parts": [{"type": "text", "text": TUTORIAL_OPENING_PROMPT}]},
         {"role": "assistant", "parts": [{"type": "text", "text": "Hello."}]},
     ]

@@ -12,6 +12,8 @@ from typing import Any, Awaitable, Callable
 
 from claude_agent_sdk import ClaudeSDKError
 
+from app.core.agent.store import MessageRole, TranscriptMessage
+
 
 class Turn:
     def __init__(self, turn_id: str, session_id: str):
@@ -42,9 +44,9 @@ class Turn:
             self._waiters.remove(waiter)
 
 
-def _drop_user_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _drop_user_messages(messages: list[TranscriptMessage]) -> list[TranscriptMessage]:
     """An opening turn has no reader message, so the engine's echo of its prompt goes."""
-    return [m for m in messages if m.get("role") != "user"]
+    return [m for m in messages if m["role"] != MessageRole.user.value]
 
 
 class TurnManager:

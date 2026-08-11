@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import uuid
 from enum import Enum
-from typing import Any, ClassVar
+from typing import Any, ClassVar, TypedDict
 
 from pydantic import Field
 
@@ -25,6 +25,13 @@ class PartType(str, Enum):
     thinking = "thinking"
     tool_call = "tool_call"
     tool_result = "tool_result"
+
+
+class TranscriptMessage(TypedDict):
+    """One stored transcript message; `role` is a MessageRole value."""
+
+    role: str
+    parts: list[dict[str, Any]]
 
 
 class AgentSession(PersistedModel):
