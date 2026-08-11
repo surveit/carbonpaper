@@ -111,7 +111,7 @@ def test_seeding_and_running_are_one_turn_with_no_boundary_to_ask_at() -> None:
     beat = _flat(_beat(2))
 
     assert "ALL IN ONE TURN" in beat
-    assert "One message, four tool calls, no pause anywhere inside it" in beat
+    assert "One message, no pause anywhere inside it" in beat
     for tool in ("create_tutorial_project", "run_workflow", "sleep", "get_run_status"):
         assert tool in beat
     assert "Do not end your turn between them" in beat

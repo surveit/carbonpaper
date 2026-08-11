@@ -16,10 +16,10 @@ from app.tools.tool_specs import TOOL_SPECS
 
 _PROJECT_ID = Annotated[str, "The project's name."]
 
-# One sleep's ceiling. Bounded so a sleeping call always comes back: an unbounded one
-# would ride a stuck background job into the CLI's own tool-call timeout, which returns
-# nothing at all. Longer than this is more calls, which the caller can always make.
-MAX_SLEEP_SECONDS = 60
+# One sleep's ceiling, kept SHORT because a reader is watching the transcript: each call
+# is a row on their screen, so short sleeps read as a job in progress where one long one
+# reads as a hang. Waiting longer is more calls, which the caller can always make.
+MAX_SLEEP_SECONDS = 3
 
 
 def resolve_existing_project(project_id: str) -> Path:
@@ -90,7 +90,10 @@ _SCHEMAS: dict[str, ToolInputSchema] = {
         "run_id": Annotated[str, "The run id run_workflow returned."],
     },
     "sleep": {
-        "seconds": Annotated[int, f"How long to sleep, clamped to {MAX_SLEEP_SECONDS}."],
+        "seconds": Annotated[
+            int,
+            f"How long to sleep. Clamped to {MAX_SLEEP_SECONDS} — sleep again to wait longer.",
+        ],
     },
     "describe_workflow": {"project_id": _PROJECT_ID},
 }

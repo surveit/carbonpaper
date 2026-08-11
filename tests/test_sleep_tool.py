@@ -27,13 +27,13 @@ def slept(monkeypatch: pytest.MonkeyPatch) -> list[float]:
 
 
 def test_it_sleeps_what_it_was_asked_for(slept: list[float]) -> None:
-    assert asyncio.run(shared.sleep(15)) == {"slept_seconds": 15}
-    assert slept == [15]
+    assert asyncio.run(shared.sleep(2)) == {"slept_seconds": 2}
+    assert slept == [2]
 
 
 def test_a_longer_ask_is_clamped_and_says_so(slept: list[float]) -> None:
     """Clamped, not refused — but the answer reports the real duration, never the ask."""
-    assert asyncio.run(shared.sleep(600)) == {"slept_seconds": MAX_SLEEP_SECONDS}
+    assert asyncio.run(shared.sleep(30)) == {"slept_seconds": MAX_SLEEP_SECONDS}
     assert slept == [MAX_SLEEP_SECONDS]
 
 
