@@ -43,7 +43,7 @@ def make_tutorial_tools(context: BaseModel) -> list[BoundToolSpec]:
             input_schema={},
             label="Setting up the tutorial project",
         ),
-        *shared.bind("run_workflow", "get_run_status", "describe_workflow"),
+        *shared.bind("run_workflow", "get_run_status", "sleep", "describe_workflow"),
     ]
 
 

@@ -7,23 +7,19 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from time import monotonic
 from typing import Any, Annotated, Callable
 
 from app.core.agent.bound_tool import BoundToolSpec
-from app.core.run_status import RunStatus
 from app.tools.types import ToolInputSchema
 from app.services import project as project_service, run as run_service, workspace
 from app.tools.tool_specs import TOOL_SPECS
 
 _PROJECT_ID = Annotated[str, "The project's name."]
 
-# The longest one get_run_status call will sit on a `running` run, and how often it
-# re-reads the manifest while it does. Bounded so a wait always ends in a status the
-# caller can act on: an unbounded one would ride a stuck run into the CLI's own
-# tool-call timeout, which returns nothing at all.
-MAX_STATUS_WAIT_SECONDS = 60
-_STATUS_POLL_SECONDS = 2
+# One sleep's ceiling. Bounded so a sleeping call always comes back: an unbounded one
+# would ride a stuck background job into the CLI's own tool-call timeout, which returns
+# nothing at all. Longer than this is more calls, which the caller can always make.
+MAX_SLEEP_SECONDS = 60
 
 
 def resolve_existing_project(project_id: str) -> Path:
@@ -48,19 +44,17 @@ def run_workflow(
     return {"run_id": run_id, "status": status}
 
 
-async def get_run_status(
-    project_id: str, run_id: str, wait_seconds: int = 0
-) -> dict[str, Any]:
+def get_run_status(project_id: str, run_id: str) -> dict[str, Any]:
     resolve_existing_project(project_id)
-    status = run_service.read_run_status(project_id, run_id)
-    # An agent engine here runs with tools=[] (app.core.agent.sdk_engine), so the caller
-    # has no Bash and nothing else to sleep with: unwaited, it can only ask again at once.
-    # The run holds its own thread, so waiting here delays nothing but this answer.
-    deadline = monotonic() + min(max(wait_seconds, 0), MAX_STATUS_WAIT_SECONDS)
-    while status["status"] == RunStatus.RUNNING and monotonic() < deadline:
-        await asyncio.sleep(_STATUS_POLL_SECONDS)
-        status = run_service.read_run_status(project_id, run_id)
-    return status
+    return run_service.read_run_status(project_id, run_id)
+
+
+async def sleep(seconds: int) -> dict[str, int]:
+    """Reports what it slept, since the ask is clamped rather than refused."""
+    slept = min(max(seconds, 0), MAX_SLEEP_SECONDS)
+    # Async, so a caller waiting on a background thread blocks nothing but itself.
+    await asyncio.sleep(slept)
+    return {"slept_seconds": slept}
 
 
 def describe_workflow(project_id: str) -> dict[str, Any]:
@@ -73,6 +67,7 @@ def describe_workflow(project_id: str) -> dict[str, Any]:
 _FUNCTIONS: dict[str, Callable[..., Any]] = {
     "run_workflow": run_workflow,
     "get_run_status": get_run_status,
+    "sleep": sleep,
     "describe_workflow": describe_workflow,
 }
 
@@ -93,11 +88,9 @@ _SCHEMAS: dict[str, ToolInputSchema] = {
     "get_run_status": {
         "project_id": _PROJECT_ID,
         "run_id": Annotated[str, "The run id run_workflow returned."],
-        "wait_seconds": Annotated[
-            int,
-            f"Wait up to this long (max {MAX_STATUS_WAIT_SECONDS}) for the run to settle. "
-            "0 reads the manifest as it stands.",
-        ],
+    },
+    "sleep": {
+        "seconds": Annotated[int, f"How long to sleep, clamped to {MAX_SLEEP_SECONDS}."],
     },
     "describe_workflow": {"project_id": _PROJECT_ID},
 }
@@ -105,6 +98,7 @@ _SCHEMAS: dict[str, ToolInputSchema] = {
 _LABELS = {
     "run_workflow": "Running the workflow",
     "get_run_status": "Checking the run",
+    "sleep": "Waiting",
     "describe_workflow": "Reading the workflow",
 }
 
