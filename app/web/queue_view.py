@@ -13,7 +13,7 @@ from fastapi import HTTPException
 
 from app.core.stage_cache import StageCacheEntry
 from app.models import Column, Stage
-from app.models.stages.human_review_queue import QueueConfig
+from app.models.stages.human_review_queue import QueueConfig, ReviewVerdict
 from app.runtime.trace_links import RowTraceLinker
 from app.web.loading import QueueFingerprints, display_cell
 
@@ -53,6 +53,9 @@ class Lineage:
 @dataclass(frozen=True)
 class DecisionDisplay:
     verdict: str
+    # The verdict in the tense a reader meets it in: it names a decision already
+    # taken, not one on offer. `verdict` stays the stored value, for the class hook.
+    verdict_label: str
     # Each recorded value in the spelling its form control uses, so the page
     # never shows the same value two ways (a python `True` beside a "true"
     # option). None is a recorded null, which is NOT the string "None".
@@ -216,6 +219,26 @@ def resolve_notes_label(stage_def: Stage, column: str) -> str:
     if declared is not None and declared.description:
         return declared.description
     return column.replace("_", " ").capitalize()
+
+
+_VERDICT_LABELS = {
+    ReviewVerdict.approve: "approved",
+    ReviewVerdict.modify: "modified",
+    ReviewVerdict.skipped: "skipped",
+}
+
+
+def describe_verdict(verdict: str) -> str:
+    try:
+        return _VERDICT_LABELS[ReviewVerdict(verdict)]
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                f"recorded verdict '{verdict}' is not one of "
+                f"{sorted(v.value for v in ReviewVerdict)}"
+            ),
+        ) from exc
 
 
 # ── The reviewed fields ──────────────────────────────────────────────────────
@@ -391,8 +414,10 @@ def _display_decision(entry: StageCacheEntry, queue: QueueConfig) -> DecisionDis
     output = _require_recorded_output(entry, queue)
     notes_column = queue.review_notes_column
     notes = None if notes_column is None else output.get(notes_column)
+    verdict = str(output[queue.verdict_column])
     return DecisionDisplay(
-        verdict=str(output[queue.verdict_column]),
+        verdict=verdict,
+        verdict_label=describe_verdict(verdict),
         reviewed_values={
             target: (None if output[target] is None else _as_option_text(output[target]))
             for target in queue.reviewed_columns.values()
