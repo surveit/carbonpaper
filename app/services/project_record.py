@@ -1,5 +1,6 @@
-"""The project identity record. `id` is a minted surrogate that never changes; `name`
-is the label the directory carries and the reader types, and it may be changed.
+"""The project identity record. `id` is the project — it is also the name of its
+directory under the projects root — and it never changes. `name` is a display label
+that may change and is NOT unique: two projects may carry the same one.
 Lookup by name reads the whole collection, so nothing may call it in a loop.
 """
 
@@ -28,12 +29,12 @@ def mint_project_id() -> str:
     return mint_timestamp_id()
 
 
-def find_project_by_name(name: str) -> Project | None:
-    """Reads every record — the store indexes by id prefix, which the name no longer is."""
-    return next((record for record in Project.list() if record.name == name), None)
+def find_projects_by_name(name: str) -> list[Project]:
+    """Plural because `name` is not unique — reads every record, so never call it in a loop."""
+    return [record for record in Project.list() if record.name == name]
 
 
-def resolve_project_id(name: str) -> str | None:
-    """None means no record — which is a project the workspace holds only as a directory."""
-    record = find_project_by_name(name)
-    return None if record is None else record.id
+def describe_project(project_id: str) -> str:
+    """The label to SHOW for an id, falling back to the id — never a guessed name."""
+    record = Project.load_or_none(project_id)
+    return project_id if record is None else record.name

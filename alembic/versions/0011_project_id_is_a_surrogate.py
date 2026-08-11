@@ -9,22 +9,21 @@ import json
 
 from alembic import op
 
-from app.core.timestamp_ids import mint_timestamp_id
-
 revision = "0011"
 down_revision = "0010"
 branch_labels = None
 depends_on = None
 
-# Until now a project record's store id WAS its name, which made the name an
-# identifier: renaming was impossible, and a name could be held by a record whose
-# directory was gone. The record now carries a minted `id` and a `name` field, so
-# the name becomes a label.
+# A project record's id is the name of its directory under the projects root, and
+# that is all it has ever been. What changes is what a NEW project's directory is
+# called: a minted id rather than a slug of the title, so two projects may carry the
+# same `name` without colliding on disk.
 #
-# `name` is REQUIRED on the model, so every stored record must gain one or fail
-# PersistedModel.load's extra="forbid" validation — that is what this revision is
-# for. The value is never guessed: the old store id IS the name, so each record
-# supplies its own. A row that cannot supply one is refused, not filled.
+# Existing ids are therefore left exactly as they are — an older project's id is a
+# readable slug and stays one, because it is still the directory it names. Only the
+# new REQUIRED `name` field is added, and each record supplies its own value: the id
+# it already carries is the name it was created under. A row that cannot supply one
+# is refused, not filled.
 _COLLECTION = "project"
 
 
@@ -33,21 +32,20 @@ def upgrade() -> None:
     rows = connection.exec_driver_sql(
         "SELECT id, data FROM documents WHERE collection=?", (_COLLECTION,)
     ).fetchall()
-    for old_id, data in rows:
+    for doc_id, data in rows:
         document = json.loads(data)
-        _refuse_undeterminable(old_id, document)
-        document["name"] = str(old_id)
-        document["id"] = mint_timestamp_id()
+        _refuse_undeterminable(doc_id, document)
+        document["name"] = str(doc_id)
         connection.exec_driver_sql(
-            "UPDATE documents SET id=?, data=? WHERE collection=? AND id=?",
-            (document["id"], json.dumps(document), _COLLECTION, str(old_id)),
+            "UPDATE documents SET data=? WHERE collection=? AND id=?",
+            (json.dumps(document), _COLLECTION, str(doc_id)),
         )
 
 
 def downgrade() -> None:
     raise NotImplementedError(
-        "0011 is not reversible: restoring the name as the store id would re-merge "
-        "any two projects that have since been given the same name"
+        "0011 is not reversible: dropping `name` would lose the label of every "
+        "project renamed since, which is stored nowhere else"
     )
 
 

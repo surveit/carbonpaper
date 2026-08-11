@@ -34,7 +34,6 @@ from app.core.run_status import RunStatus
 from app.services import data_model, stage_edit, versioning, workspace
 from app.services.project_record import (
     Project as Project,
-    find_project_by_name,
     mint_project_id,
 )
 from app.services.loader import (
@@ -167,12 +166,16 @@ def _runs_summary(pdir: Path) -> RunsSummary:
 
 def project_meta(pdir: Path) -> ProjectMeta:
     pdir = Path(pdir)
-    name = pdir.name
-    record = find_project_by_name(name)
+    # The directory's name IS the project id. Older projects were created under a slug
+    # of their title and so read as one; a project created since carries a minted id.
+    project_id = pdir.name
+    record = Project.load_or_none(project_id)
     if record is None:
-        return ProjectMeta(name=name, title=None, created_at=None, model=None, source=None)
+        # No record: the id is the only name this project has, and it is not invented.
+        return ProjectMeta(name=project_id, title=None, created_at=None,
+                           model=None, source=None)
     return ProjectMeta(
-        name=name,
+        name=record.name,
         title=record.title,
         created_at=record.authored_at,
         model=record.model,
@@ -252,31 +255,28 @@ def create_project(
     model: str = "sonnet",
     source: str,
 ) -> str:
-    """A bare directory of the same name is not a clash — it is written into."""
-    safe_name = sanitize_project_name(name)
+    """Returns the project ID, which is not the name: the name is a label and may repeat."""
+    label = sanitize_project_name(name)
     doc = document.strip()
     if not doc:
         raise ValueError("The methodology document is empty.")
-    if find_project_by_name(safe_name) is not None:
-        raise ProjectExistsError(
-            f"project '{safe_name}' already exists — choose a different name."
-        )
-    project_dir = workspace.projects_dir() / safe_name
-    if (project_dir / "document.md").is_file():
-        raise ProjectExistsError(
-            f"{safe_name}/document.md already exists — choose a different name."
-        )
+    # The id is minted, so it cannot collide and there is nothing to refuse. A second
+    # project called `venezuela_lda_lobbying` is a legitimate thing to want — the
+    # first one's directory, versions and cached rows are addressed by id, not by
+    # what either of them is called.
+    project_id = mint_project_id()
+    project_dir = workspace.projects_dir() / project_id
     project_dir.mkdir(parents=True, exist_ok=True)
     (project_dir / "document.md").write_text(doc, encoding="utf-8")
     created_at = datetime.now().isoformat(timespec="seconds")
     write_project_meta(
-        project_dir, name=safe_name, title=None, created_at=created_at, model=model, source=source,
+        project_dir, name=label, title=None, created_at=created_at, model=model, source=source,
     )
     Project(
-        id=mint_project_id(), name=safe_name, title=None,
+        id=project_id, name=label, title=None,
         model=model, source=source, authored_at=created_at,
     ).save()
-    return safe_name
+    return project_id
 
 
 def project_exists(project_id: str) -> bool:
@@ -287,7 +287,8 @@ def project_exists(project_id: str) -> bool:
 
 
 def list_projects() -> list[str]:
-    return sorted(record.name for record in Project.list())
+    """Ids, not names — a name identifies nothing, and two projects may share one."""
+    return sorted(record.id for record in Project.list())
 
 
 def describe_workflow(name: str) -> dict[str, Any]:
@@ -459,9 +460,10 @@ def export_project(name: str) -> WorkflowFile:
 def import_project(
     wf: WorkflowFile, *, name: str | None = None,
 ) -> str:
-    target = sanitize_project_name(name or wf.name)
-    pdir = workspace.resolve_project_dir(target)
-    create_project(target, wf.document, model=wf.model, source=wf.source)
+    """Returns the project ID. Importing the same bundle twice makes two projects, not a clash."""
+    label = sanitize_project_name(name or wf.name)
+    project_id = create_project(label, wf.document, model=wf.model, source=wf.source)
+    pdir = workspace.resolve_project_dir(project_id)
     data_model.write_data_model(pdir, wf.data_model)
     for i, stage in enumerate(wf.stages, start=1):
         stage_path = pdir / "compiled" / f"{i:02d}_{stage.id}.json"
@@ -469,6 +471,6 @@ def import_project(
         write_stage(stage_path, stage)
     if wf.stages:
         save_working_copy_as_version(
-            pdir, message=f"Imported '{target}'", reviewer="import"
+            pdir, message=f"Imported '{label}'", reviewer="import"
         )
-    return target
+    return project_id
