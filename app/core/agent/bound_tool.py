@@ -1,6 +1,7 @@
 """A ToolSpec plus what an in-process SDK-MCP server needs to CALL it."""
 from __future__ import annotations
 
+import inspect
 import json
 from dataclasses import dataclass
 from typing import Any, Callable
@@ -20,7 +21,13 @@ class BoundToolSpec(ToolSpec):
     def as_sdk_tool(self) -> SdkMcpTool[Any]:
         async def handler(args: dict[str, Any]) -> dict[str, Any]:
             try:
-                return as_tool_content(self.fn(**args))
+                result = self.fn(**args)
+                # An async tool is one that WAITS (get_run_status holding open on a
+                # running run); awaiting it here is what keeps the app answering
+                # everything else meanwhile.
+                if inspect.isawaitable(result):
+                    result = await result
+                return as_tool_content(result)
             except Exception as exc:  # noqa: BLE001 — tool boundary: any tool failure is surfaced to the model as an error, never swallowed or faked
                 return {
                     "content": [{"type": "text", "text": f"ERROR: {exc}"}],

@@ -79,7 +79,7 @@ def test_user_text_is_not_rendered_as_markdown() -> None:
 def test_history_and_the_post_stream_swap_emit_the_same_html() -> None:
     text = "**bold**, a [link](http://127.0.0.1:8799/x) and `code`\n\n- one\n- two"
     sid = open_session_saying(text)
-    swap = client.get(f"/chat/{sid}/rendered-reply").json()
+    [swap] = client.get(f"/chat/{sid}/rendered-reply").json()["segments"]
     assert swap["text"] == text
     assert swap["html"] == str(render_markdown(text))
     assert swap["html"].strip() in client.get(f"/chat/{sid}").text
@@ -88,7 +88,26 @@ def test_history_and_the_post_stream_swap_emit_the_same_html() -> None:
 def test_the_swap_endpoint_reports_the_text_it_rendered() -> None:
     """The client compares this against what it streamed, so it must be verbatim."""
     sid = open_session_saying("line one\nline two")
-    assert client.get(f"/chat/{sid}/rendered-reply").json()["text"] == "line one\nline two"
+    segments = client.get(f"/chat/{sid}/rendered-reply").json()["segments"]
+    assert [s["text"] for s in segments] == ["line one\nline two"]
+
+
+def test_the_swap_renders_one_segment_per_text_block_the_reply_carries() -> None:
+    """A reply that spoke either side of a tool call is two regions, and both swap."""
+    sid = _store.create(title="Segments", agent_id=None, context={})
+    _store.save_messages(sid, [
+        {"role": "user", "parts": [{"type": "text", "text": "run it"}]},
+        {"role": "assistant", "parts": [
+            {"type": "text", "text": "Starting the run."},
+            {"type": "tool_call", "name": "run_workflow", "args": "{}"},
+            {"type": "text", "text": "Done: [the run](http://127.0.0.1:8799/r/1)"},
+        ]},
+    ])
+    segments = client.get(f"/chat/{sid}/rendered-reply").json()["segments"]
+    assert [s["text"] for s in segments] == [
+        "Starting the run.", "Done: [the run](http://127.0.0.1:8799/r/1)",
+    ]
+    assert '<a href="http://127.0.0.1:8799/r/1">the run</a>' in segments[1]["html"]
 
 
 def test_the_swap_endpoint_404s_on_an_unknown_session() -> None:

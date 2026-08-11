@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import uuid
 from enum import Enum
-from typing import Any, ClassVar, TypedDict
+from typing import Any, ClassVar, Literal, TypedDict
 
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from app.core.persistence import PersistedModel, PersistenceScope
 
@@ -32,6 +32,23 @@ class TranscriptMessage(TypedDict):
 
     role: str
     parts: list[dict[str, Any]]
+
+
+class ProseBlock(BaseModel):
+    kind: Literal["text", "thinking"]
+    text: str
+
+
+class ToolBlock(BaseModel):
+    kind: Literal["tool"] = "tool"
+    name: str
+    args: str
+    label: str
+
+
+class Bubble(BaseModel):
+    role: MessageRole
+    blocks: list[ProseBlock | ToolBlock]
 
 
 class AgentSession(PersistedModel):
@@ -112,32 +129,49 @@ class SessionStore:
             for s in newest_first
         ]
 
-    def history_view(self, sid: str) -> list[dict]:
+    def history_view(self, sid: str) -> list[Bubble]:
         return _render_history_bubbles(AgentSession.load(sid).messages)
 
-    def read_last_assistant_text(self, sid: str) -> str:
-        """Empty when the newest turn produced no text (tools only), or stored nothing."""
+    def read_last_reply_texts(self, sid: str) -> list[str]:
+        """The newest reply's text blocks in turn order; empty when it only called tools."""
         for bubble in reversed(self.history_view(sid)):
-            if bubble["role"] == "assistant":
-                return str(bubble["text"])
-        return ""
+            if bubble.role == MessageRole.assistant:
+                return [
+                    b.text for b in bubble.blocks
+                    if isinstance(b, ProseBlock) and b.kind == PartType.text
+                ]
+        return []
 
 
-def _render_history_bubbles(messages: list[dict]) -> list[dict]:
-    """Tool results have no bubble: they are dropped here and never rendered on reload."""
-    bubbles: list[dict] = []
-    for message in messages:
-        role = message.get("role")
-        parts = message.get("parts") or []
-        if role == MessageRole.user:
-            text = "".join(p.get("text", "") for p in parts if p.get("type") == PartType.text)
-            bubbles.append({"role": "user", "text": text})
-        elif role == MessageRole.assistant:
-            thinking = "".join(p.get("text", "") for p in parts if p.get("type") == PartType.thinking)
-            text = "".join(p.get("text", "") for p in parts if p.get("type") == PartType.text)
-            tools = [{"name": p.get("name", ""), "args": p.get("args", ""),
-                      "label": p.get("label") or p.get("name", "")}
-                     for p in parts if p.get("type") == PartType.tool_call]
-            bubbles.append({"role": "assistant", "thinking": thinking,
-                            "text": text, "tools": tools})
-    return bubbles
+def _render_history_bubbles(messages: list[dict]) -> list[Bubble]:
+    """Tool results have no block: they are dropped here and never rendered on reload."""
+    return [
+        Bubble(role=MessageRole(message["role"]), blocks=_blocks_in_turn_order(message))
+        for message in messages
+        if message.get("role") in (MessageRole.user, MessageRole.assistant)
+    ]
+
+
+def _blocks_in_turn_order(message: dict) -> list[ProseBlock | ToolBlock]:
+    """Reading order is the order the turn produced, so text after a tool call renders after it."""
+    blocks: list[ProseBlock | ToolBlock] = []
+    for part in message.get("parts") or []:
+        part_type = part.get("type")
+        if part_type == PartType.tool_call:
+            blocks.append(ToolBlock(name=part.get("name", ""), args=part.get("args", ""),
+                                    label=part.get("label") or part.get("name", "")))
+        elif part_type == PartType.text:
+            _append_prose(blocks, "text", part.get("text", ""))
+        elif part_type == PartType.thinking:
+            _append_prose(blocks, "thinking", part.get("text", ""))
+    return blocks
+
+
+def _append_prose(blocks: list[ProseBlock | ToolBlock], kind: Literal["text", "thinking"],
+                  text: str) -> None:
+    """One block per RUN of a kind: the split the live stream renders, and the swap compares."""
+    previous = blocks[-1] if blocks else None
+    if isinstance(previous, ProseBlock) and previous.kind == kind:
+        previous.text += text
+    else:
+        blocks.append(ProseBlock(kind=kind, text=text))

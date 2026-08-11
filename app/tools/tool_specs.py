@@ -125,9 +125,13 @@ the result land.""",
         name="get_run_status",
         description="""\
 The current manifest of one production run as a dict: its overall status
-(running / ok / errors / halted), per-stage statuses, and run metadata. Poll
-this after run_workflow to follow progress and see the outcome. An unknown or
-expired run_id returns {ok: False, error} rather than a fabricated status.""",
+(running / ok / errors / halted), per-stage statuses, and run metadata. Call
+this after run_workflow to follow progress and see the outcome. Follow a run
+with `wait_seconds`, not with repeated calls: the call holds open while the run
+is `running` and returns the moment it settles, so waiting costs one call, not
+one per check. A `running` status back means the wait ran out with the run
+still going — call again with another wait. An unknown or expired run_id
+returns {ok: False, error} rather than a fabricated status.""",
     ),
     "list_projects": ToolSpec(
         name="list_projects",
@@ -232,8 +236,8 @@ its `run_id` immediately — the run executes in the background. This is a run
 of record: it writes a manifest under the project's runs/ dir and produces the
 workflow's published artifacts. `version_id` pins a specific stored version,
 published or not (omit for the newest stored one); a missing version is a
-loud error, never a silent fallback. Poll get_run_status(project_id, run_id)
-for live progress and the final status. On a pre-run failure (no stored
+loud error, never a silent fallback. Follow it with get_run_status(project_id,
+run_id, wait_seconds) — one waiting call, not a burst of instant ones. On a pre-run failure (no stored
 version, an unbound input) returns {ok: False, error} and starts no run.
 
 `limits` caps how many rows a stage READS: {"<stage id>": N} gives that stage

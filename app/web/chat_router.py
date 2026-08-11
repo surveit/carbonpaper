@@ -160,18 +160,24 @@ async def stream_turn(sid: str, turn_id: str, request: Request):
     )
 
 
-class RenderedReply(BaseModel):
+class RenderedSegment(BaseModel):
     text: str
     html: str
 
 
+class RenderedReply(BaseModel):
+    segments: list[RenderedSegment]
+
+
 @router.get("/chat/{sid}/rendered-reply")
 async def get_rendered_reply(sid: str) -> RenderedReply:
-    """The client swaps only when `text` equals what it streamed — never a stale one."""
+    """One segment per text block of the reply, in order; the client swaps only on an exact match."""
     if not _store.exists(sid):
         raise HTTPException(status_code=404, detail="Session not found")
-    text = _store.read_last_assistant_text(sid)
-    return RenderedReply(text=text, html=str(render_markdown(text)))
+    return RenderedReply(segments=[
+        RenderedSegment(text=text, html=str(render_markdown(text)))
+        for text in _store.read_last_reply_texts(sid)
+    ])
 
 
 @router.get("/chat/{sid}/messages")

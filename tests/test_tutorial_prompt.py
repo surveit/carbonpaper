@@ -27,6 +27,14 @@ def _tour_tool_names() -> set[str]:
     }
 
 
+def _tour_tool_arguments() -> set[str]:
+    return {
+        argument
+        for spec in make_tutorial_tools(TutorialContext(base_url="http://x/"))
+        for argument in spec.input_schema
+    }
+
+
 def test_the_prompt_names_no_tool_the_tour_does_not_hold() -> None:
     known = set(TOOL_SPECS) | _tour_tool_names()
     # A retired tool still named in the script reads to the model as an instruction.
@@ -171,9 +179,10 @@ def _flat(text: str) -> str:
 
 
 # Every name the script quotes in backticks is something the code defines: a stage of the
-# fixture, a field of what create_tutorial_project returns, a tool, or a run status. A
-# renamed stage or field otherwise leaves the prompt pointing at nothing, silently.
-_RUN_STATUS_WORDS = {"running", "status", "error", "run_id", "path", "bindings"}
+# fixture, a field of what create_tutorial_project returns, a tool, an argument one of
+# those tools takes, or a run status. A renamed stage, field or argument otherwise leaves
+# the prompt pointing at nothing, silently.
+_RUN_STATUS_WORDS = {"running", "status", "error", "path"}
 
 
 def test_every_name_the_prompt_quotes_is_one_the_code_defines() -> None:
@@ -182,6 +191,7 @@ def test_every_name_the_prompt_quotes_is_one_the_code_defines() -> None:
         {stage.id for stage in fixture.stages}
         | set(TutorialProject.model_fields)
         | _tour_tool_names()
+        | _tour_tool_arguments()
         | _RUN_STATUS_WORDS
     )
     quoted = set(re.findall(r"`([a-z][a-z0-9_]{3,})`", TUTORIAL_SYSTEM_PROMPT))

@@ -255,9 +255,11 @@ def run_workflow(
 
 
 @mcp.tool(description=TOOL_SPECS["get_run_status"].description)
-def get_run_status(project_id: str, run_id: str) -> dict[str, Any]:
+async def get_run_status(
+    project_id: str, run_id: str, wait_seconds: int = 0
+) -> dict[str, Any]:
     try:
-        return shared.get_run_status(project_id, run_id)
+        return await shared.get_run_status(project_id, run_id, wait_seconds)
     except _RUN_TOOL_ERRORS as exc:
         return {"ok": False, "error": str(exc)}
 

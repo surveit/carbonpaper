@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 
 import pandas as pd
@@ -83,7 +84,9 @@ def test_run_workflow_starts_a_real_run_pollable_by_get_run_status(tmp_path, mon
 
     started = server.run_workflow(project_id="money_trail")
     assert "run_id" in started
-    status = server.get_run_status(project_id="money_trail", run_id=started["run_id"])
+    status = asyncio.run(
+        server.get_run_status(project_id="money_trail", run_id=started["run_id"])
+    )
     assert status["run_id"] == started["run_id"]
     assert status["status"] == "ok"
 
@@ -107,7 +110,9 @@ def test_get_run_status_missing_run_translates_to_error(tmp_path, monkeypatch):
     workspace.set_projects_dir(tmp_path)
     _make_run_project(tmp_path / "money_trail")
 
-    result = server.get_run_status(project_id="money_trail", run_id="20990101T000000")
+    result = asyncio.run(
+        server.get_run_status(project_id="money_trail", run_id="20990101T000000")
+    )
     assert result["ok"] is False
     assert result["error"]
 
@@ -127,7 +132,7 @@ def test_run_workflow_test_delegates_and_reports_verdict(tmp_path, monkeypatch):
     # get_run_status a production run uses — but marked a test run.
     manifest_path = tmp_path / "demo" / "runs" / result["run_id"] / "manifest.json"
     assert manifest_path.exists()
-    status = server.get_run_status(project_id="demo", run_id=result["run_id"])
+    status = asyncio.run(server.get_run_status(project_id="demo", run_id=result["run_id"]))
     assert status["parameters"]["is_test_run"] is True
 
 

@@ -13,17 +13,27 @@
 <div class="ac-log" id="log">
   {% for b in history %}
     {% if b.role == "user" %}
-      <div class="ac-msg user"><div class="ac-role">you</div><div class="ac-body">{{ b.text }}</div></div>
+      <div class="ac-msg user"><div class="ac-role">you</div>
+        {% for blk in b.blocks %}<div class="ac-body">{{ blk.text }}</div>{% endfor %}
+      </div>
     {% else %}
       <div class="ac-msg assistant">
         <div class="ac-role">assistant</div>
-        {% if b.thinking.strip() %}
-          <details class="ac-think"><summary>💭 thinking</summary><div class="ac-think-text">{{ b.thinking }}</div></details>
-        {% endif %}
-        {% for t in b.tools %}<details class="ac-tool"><summary title="{{ t.label or t.name }}">Called a tool: {{ t.name }}</summary><pre class="ac-tool-json">{{ t.args }}</pre></details>{% endfor %}
-        {# The markdown filter returns Markup from app.web.markdown_render — the only
-           thing on this page allowed past autoescape. User bubbles stay escaped text. #}
-        <div class="ac-body">{{ b.text | markdown }}</div>
+        {# Blocks in the order the turn produced them, so a reload reads the way the
+           live stream did: what it said before a tool call sits above that call. #}
+        {% for blk in b.blocks %}
+          {% if blk.kind == "tool" %}
+            <details class="ac-tool"><summary title="{{ blk.label or blk.name }}">Called a tool: {{ blk.name }}</summary><pre class="ac-tool-json">{{ blk.args }}</pre></details>
+          {% elif blk.kind == "thinking" %}
+            {% if blk.text.strip() %}
+              <details class="ac-think"><summary>💭 thinking</summary><div class="ac-think-text">{{ blk.text }}</div></details>
+            {% endif %}
+          {% else %}
+            {# The markdown filter returns Markup from app.web.markdown_render — the only
+               thing on this page allowed past autoescape. User bubbles stay escaped text. #}
+            <div class="ac-body">{{ blk.text | markdown }}</div>
+          {% endif %}
+        {% endfor %}
       </div>
     {% endif %}
   {% endfor %}
@@ -65,7 +75,9 @@ function addUser(text) {
   log.appendChild(b); scroll();
 }
 
-// Build an assistant bubble with lazily-created thinking / text / tool regions.
+// Build an assistant bubble whose regions are appended in arrival order: a chunk
+// joins the region already open, and any other kind of event closes it, so the
+// next chunk of its kind opens a new one further down.
 function newAssistant() {
   const b = el("ac-msg assistant");
   b.appendChild(el("ac-role", "assistant"));
@@ -75,9 +87,11 @@ function newAssistant() {
     '<span class="ac-dot"></span><span class="ac-dot"></span><span class="ac-dot"></span><span class="ac-sp-label">thinking…</span>');
   b.appendChild(spinner);
   let think = null, thinkText = null, body = null;
+  const bodies = [];  // every text region opened, in order — what the swap renders
   const pendingTools = [];  // tool_call disclosures awaiting their tool_result (FIFO)
   log.appendChild(b); scroll();
   function stop() { if (spinner.parentNode) spinner.remove(); }
+  function closeRegions() { think = null; thinkText = null; body = null; }
   return {
     thinking(t) {
       stop();
@@ -86,6 +100,7 @@ function newAssistant() {
       // every chunk lands, so interior blank lines are kept.
       if (!think && !t.trim()) return;
       if (!think) {
+        closeRegions();
         think = document.createElement("details"); think.className = "ac-think"; think.open = true;
         const s = document.createElement("summary"); s.textContent = "💭 thinking"; think.appendChild(s);
         thinkText = el("ac-think-text"); think.appendChild(thinkText);
@@ -97,11 +112,11 @@ function newAssistant() {
       stop();
       // Plain text while the turn is in flight: a half-arrived "[run](htt" would
       // render as broken markup and flicker on every chunk.
-      if (!body) { body = el("ac-body ac-streaming"); b.appendChild(body); }
+      if (!body) { closeRegions(); body = el("ac-body ac-streaming"); bodies.push(body); b.appendChild(body); }
       body.textContent += t; scroll();
     },
     tool(name, args, label) {
-      stop();
+      stop(); closeRegions();
       const d = document.createElement("details"); d.className = "ac-tool";
       // The bare name, not the friendly label: the row is furniture, and every
       // row opening the same way is what lets the eye skip the lot. The label
@@ -124,19 +139,21 @@ function newAssistant() {
       }
       scroll();
     },
-    error(t) { stop(); const e = el("ac-err"); e.textContent = "⚠ " + t; b.appendChild(e); scroll(); },
+    error(t) { stop(); closeRegions(); const e = el("ac-err"); e.textContent = "⚠ " + t; b.appendChild(e); scroll(); },
     // Turn over: swap the plain text for the server's markdown of the SAME text, so
     // this bubble matches what a page reload renders. Any mismatch leaves it as text.
     async renderStoredMarkdown() {
-      if (!body) return;
-      const streamed = body.textContent;
-      if (!streamed) return;
+      if (!bodies.length) return;
       const r = await fetch(`/chat/${SID}/rendered-reply`);
       if (!r.ok) return;
       const stored = await r.json();
-      if (stored.text !== streamed) return;
-      body.innerHTML = stored.html;
-      body.classList.remove("ac-streaming");
+      const segments = stored.segments || [];
+      // All or nothing: a stored reply split differently from the streamed one is a
+      // different reply, and swapping the segments that happen to line up would
+      // reorder the bubble.
+      if (segments.length !== bodies.length) return;
+      if (!bodies.every((d, i) => d.textContent === segments[i].text)) return;
+      bodies.forEach((d, i) => { d.innerHTML = segments[i].html; d.classList.remove("ac-streaming"); });
       scroll();
     },
     stop

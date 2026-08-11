@@ -5,15 +5,24 @@ these: it belongs to the agent owning that context.
 """
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
+from time import monotonic
 from typing import Any, Annotated, Callable
 
 from app.core.agent.bound_tool import BoundToolSpec
+from app.core.run_status import RunStatus
 from app.tools.types import ToolInputSchema
 from app.services import project as project_service, run as run_service, workspace
 from app.tools.tool_specs import TOOL_SPECS
 
 _PROJECT_ID = Annotated[str, "The project's name."]
+
+# The longest one get_run_status call will sit on a `running` run, and how often it
+# re-reads the manifest while it does. The ceiling is under the CLI's own tool-call
+# timeout, so a wait ends in a status rather than in a dead tool call.
+MAX_STATUS_WAIT_SECONDS = 60
+_STATUS_POLL_SECONDS = 2
 
 
 def resolve_existing_project(project_id: str) -> Path:
@@ -38,9 +47,19 @@ def run_workflow(
     return {"run_id": run_id, "status": status}
 
 
-def get_run_status(project_id: str, run_id: str) -> dict[str, Any]:
+async def get_run_status(
+    project_id: str, run_id: str, wait_seconds: int = 0
+) -> dict[str, Any]:
     resolve_existing_project(project_id)
-    return run_service.read_run_status(project_id, run_id)
+    status = run_service.read_run_status(project_id, run_id)
+    # The caller has no clock: without a wait it can only ask again immediately, and a
+    # run of any length is answered `running` by a burst of identical calls. The run
+    # executes on its own thread, so sleeping here holds nothing up but this answer.
+    deadline = monotonic() + min(max(wait_seconds, 0), MAX_STATUS_WAIT_SECONDS)
+    while status["status"] == RunStatus.RUNNING and monotonic() < deadline:
+        await asyncio.sleep(_STATUS_POLL_SECONDS)
+        status = run_service.read_run_status(project_id, run_id)
+    return status
 
 
 def describe_workflow(project_id: str) -> dict[str, Any]:
@@ -73,6 +92,12 @@ _SCHEMAS: dict[str, ToolInputSchema] = {
     "get_run_status": {
         "project_id": _PROJECT_ID,
         "run_id": Annotated[str, "The run id run_workflow returned."],
+        "wait_seconds": Annotated[
+            int,
+            "Seconds to hold the call open while the run is still `running`, capped at "
+            f"{MAX_STATUS_WAIT_SECONDS}. It returns the moment the run settles. 0 reads "
+            "the manifest and returns straight away.",
+        ],
     },
     "describe_workflow": {"project_id": _PROJECT_ID},
 }
