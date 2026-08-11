@@ -14,7 +14,7 @@ from pydantic import BaseModel
 from app.core.agent.tool_spec import ToolSpec
 from app.models import StageType
 from app.models.review_guide import ReviewGuideDraft
-from app.services import project as project_service, run as run_service
+from app.services import project as project_service, run as run_service, workspace
 from app.services.project import Project, WorkflowFile, import_project
 
 _FIXTURE_STEM = "tutorial_lobbying_triage"
@@ -61,11 +61,8 @@ class TutorialProject(BaseModel):
 
 def seed_tutorial_project(ctx: TutorialContext) -> TutorialProject:
     workflow_file = _read_fixture_bound_to(CSV_BY_STAGE_ID, _TEMPLATE_PATH)
-    # A second tour reuses the project the first one seeded rather than minting
-    # tutorial_lobbying_triage_2: the workspace is not the tour's to fill up, and
-    # re-importing would discard whatever the reader did to it.
-    name = project_service.sanitize_project_name(workflow_file.name)
-    if not Project.exists(name):
+    name = _tutorial_project_name(project_service.sanitize_project_name(workflow_file.name))
+    if not _is_on_disk(name):
         name = import_project(workflow_file, name=name)
     version_id = _write_bundled_review_guide(name)
     return TutorialProject(
@@ -87,6 +84,25 @@ def seed_tutorial_project(ctx: TutorialContext) -> TutorialProject:
         runs_url_prefix=f"{ctx.base_url}project/{name}/runs/",
         mcp_command=f"claude mcp add --transport http carbonpaper {ctx.base_url}mcp",
     )
+
+
+def _is_on_disk(name: str) -> bool:
+    """A project the workspace can actually run — not merely a name the store knows."""
+    return (workspace.projects_dir() / name / "document.md").is_file()
+
+
+def _tutorial_project_name(base: str) -> str:
+    """`base` unless a DELETED project still holds it; then base_2, base_3 …"""
+    candidate, suffix = base, 1
+    # A second tour reuses the project the first one seeded — the workspace is not the
+    # tour's to fill up, and re-importing would discard what the reader did to it. But
+    # `delete_project` rmtree's the directory and leaves the store record, and
+    # `create_project` refuses a name whose record exists: that name finds no workflow
+    # when reused and is refused when imported over, so it is stepped over instead.
+    while not _is_on_disk(candidate) and Project.exists(candidate):
+        suffix += 1
+        candidate = f"{base}_{suffix}"
+    return candidate
 
 
 def _write_bundled_review_guide(project_name: str) -> str:

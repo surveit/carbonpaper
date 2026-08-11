@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -104,6 +105,23 @@ def test_a_second_tour_reuses_the_project_the_first_one_seeded(projects_root: Pa
     assert project_service.list_projects() == [first["name"]]
     # Reused, not re-imported: whatever the reader did to it is still there.
     assert (projects_root / first["name"] / "MINE.txt").is_file()
+
+
+def test_a_tour_after_the_project_was_deleted_still_seeds(projects_root: Path) -> None:
+    """The path that broke it live: delete the tutorial project, then tour again."""
+    first = _seed_a_tour()
+    # What delete_project does: rmtree the directory, KEEP the store record. And
+    # create_project refuses any name whose record exists — so the name is left held by
+    # a tombstone: reusing it finds no workflow, importing over it is refused.
+    shutil.rmtree(projects_root / first["name"])
+    assert project_service.Project.exists(first["name"]), "the record should outlive it"
+
+    second = _seed_a_tour()
+
+    # Whatever it is called, it must be a project that actually loads and can run.
+    assert (projects_root / second["name"] / "document.md").is_file()
+    assert load_workflow(projects_root / second["name"])
+    assert run_service.resolve_version(second["name"], None) == second["version_id"]
 
 
 def test_the_handoff_command_is_built_from_this_workspaces_base_url() -> None:
