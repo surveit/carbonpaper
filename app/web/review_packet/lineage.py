@@ -8,8 +8,8 @@ from pathlib import Path
 from pydantic import BaseModel
 
 from app.models import Stage
-from app.models.stage import StageType
 from app.runtime.trace import RunFrames, trace_row_from, trace_to_dict
+from app.runtime.trace_links import read_issued_traces
 from app.services.review_packet.views import RunView
 from app.web.breadcrumbs import Crumb
 from app.web.config import templates
@@ -37,12 +37,12 @@ class LineageReport(BaseModel):
 def write_packet_lineage(
     root: Path, run_dir: Path, view: RunView, stages_by_id: dict[str, Stage]
 ) -> LineageReport:
-    """Traces every terminal row and, transitively, the rows feeding it."""
+    """Traces every row the run PUBLISHED a link to, and the rows feeding those."""
     frames = RunFrames(run_dir)
-    closure = _find_closure(frames, view)
+    closure = _find_closure(frames, run_dir)
     if len(closure) > PACKET_MAX_LINEAGE_PAGES:
         return LineageReport(written=[], traced=set(), refused=(
-            f"{len(closure):,} rows feed this run's results, over the "
+            f"{len(closure):,} rows feed the rows this run published, over the "
             f"{PACKET_MAX_LINEAGE_PAGES:,}-page limit — no lineage page was written, "
             "because a partial set would leave some rows looking unsourced"
         ))
@@ -54,9 +54,9 @@ def write_packet_lineage(
     return LineageReport(written=written, traced=set(closure), refused=None)
 
 
-def _find_closure(frames: RunFrames, view: RunView) -> set[tuple[str, int]]:
-    """Every row reachable from a terminal row, following the branches a trace names."""
-    pending = _terminal_rows(view)
+def _find_closure(frames: RunFrames, run_dir: Path) -> set[tuple[str, int]]:
+    """Every row reachable from a published link, following the branches a trace names."""
+    pending = _published_rows(run_dir)
     seen: set[tuple[str, int]] = set()
     while pending:
         row = pending.pop()
@@ -104,20 +104,6 @@ def _write_page(
     return relative
 
 
-def _terminal_rows(view: RunView) -> list[tuple[str, int]]:
-    """A stage nothing downstream reads is what the run was for, so its rows are the seeds."""
-    consumed = {
-        input_id
-        for stage in view.stages
-        # publish is transparent: it emits files rather than a table, so it is every
-        # run's last stage and seeding off it would seed nothing. The reader checks
-        # the rows it published FROM.
-        if stage.definition is not None and stage.type != StageType.publish
-        for input_id in stage.definition.input_ids
-    }
-    return [
-        (stage.stage_id, row)
-        for stage in view.stages
-        if stage.stage_id not in consumed and stage.row_count
-        for row in range(stage.row_count)
-    ]
+def _published_rows(run_dir: Path) -> list[tuple[str, int]]:
+    """The rows a publish stage LINKED, recorded by the linker it was handed."""
+    return [(t.stage_id, t.row_ordinal) for t in read_issued_traces(run_dir)]

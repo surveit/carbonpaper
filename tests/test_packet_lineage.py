@@ -6,7 +6,6 @@ import json
 import re
 
 import pandas as pd
-import pytest
 
 from app.web.panel_links import PacketPanelLinks
 
@@ -62,15 +61,25 @@ def test_a_stage_id_carrying_a_slash_cannot_widen_the_path():
     assert links.row_trace("a/../../etc", 0) == "../lineage/a%2F..%2F..%2Fetc/0.html"
 
 
-@pytest.mark.parametrize("published_rows", [3, 1])
-def test_publish_is_transparent_so_its_inputs_are_the_seeds(tmp_path, published_rows):
-    from app.web.review_packet.lineage import _terminal_rows
+def test_the_seeds_are_the_rows_the_publish_stage_linked(tmp_path):
+    from app.runtime.trace_links import RowTraceLinker, write_issued_traces
+    from app.web.review_packet.lineage import _published_rows
 
-    view = _run_view(published_rows)
-    seeds = _terminal_rows(view)
-    # publish carries no rows, so seeding off it directly would seed nothing at all.
-    assert {stage_id for stage_id, _ in seeds} == {"totals"}
-    assert sorted(row for _, row in seeds) == list(range(published_rows))
+    run_dir = tmp_path / "run"
+    (run_dir / "outputs").mkdir(parents=True)
+    linker = RowTraceLinker(project="p", run_id="r")
+    linker.build_row_trace_url("totals", 2)
+    linker.build_row_trace_url("totals", 0)
+    write_issued_traces(run_dir, "report", linker)
+    assert _published_rows(run_dir) == [("totals", 2), ("totals", 0)]
+
+
+def test_a_run_that_published_no_links_gets_no_pages(tmp_path):
+    """Not a failure: a publish stage that declares no `trace_links` promises nothing."""
+    from app.web.review_packet.lineage import _published_rows
+
+    (tmp_path / "outputs").mkdir(parents=True)
+    assert _published_rows(tmp_path) == []
 
 
 def _run_view(rows: int):
@@ -131,6 +140,7 @@ def test_a_lineage_page_reaches_the_rest_of_the_packet_by_relative_path(tmp_path
 
 def _export_demo_packet(tmp_path):
     from app.runtime.lineage import RowLineage, RowParent
+    from app.runtime.trace_links import RowTraceLinker, write_issued_traces
     from app.web.review_packet.lineage import write_packet_lineage
     from test_trace_helpers import write_run
 
@@ -146,6 +156,11 @@ def _export_demo_packet(tmp_path):
              [RowParent("source", 1, kind="contribution")],
          ])},
     ])
+    linker = RowTraceLinker(project="p", run_id="r")
+    for row in range(2):
+        linker.build_row_trace_url("totals", row)
+    write_issued_traces(run_dir, "report", linker)
+
     root = tmp_path / "packet"
     root.mkdir()
     write_packet_lineage(root, run_dir, _run_view(2), {})
