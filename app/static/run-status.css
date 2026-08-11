@@ -142,9 +142,13 @@ table.data-preview th, table.data-preview td {
     overflow: hidden;
     text-overflow: ellipsis;
 }
-/* URL cells: never clip — show the full link, wrapping if needed. */
+/* URL cells: never clip — show the full link, wrapping if needed. The min-width
+   is what keeps a wide table honest: every other cell holds one nowrap line, so
+   the layout is free to squeeze this one to a stub that breaks every few
+   characters, and the tallest cell sets the height of every row in the table. */
 table.data-preview td.cell-url {
     white-space: normal;
+    min-width: 240px;
     max-width: 560px;
     overflow: visible;
     text-overflow: clip;

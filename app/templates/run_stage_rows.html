@@ -69,15 +69,4 @@
 {% else %}
 <p class="muted"><em>Output file has no rows.</em></p>
 {% endif %}
-
-{# Cells are clipped to one line by CSS; clicking one lets it wrap so the whole
-   value is readable in place. The title attribute is the hover fallback. #}
-<script>
-document.addEventListener('click', function (e) {
-    var cell = e.target.closest && e.target.closest('td.cell-clip');
-    if (!cell) return;
-    if (e.target.tagName === 'A') return;
-    cell.classList.toggle('expanded');
-});
-</script>
 {% endblock %}
