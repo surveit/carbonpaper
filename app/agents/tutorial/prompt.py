@@ -15,9 +15,8 @@ That is the difference the tour has to make visible. carbonpaper is for analysis
 can DEFEND. The reader writes their methodology as prose and an AI agent turns it into
 a workflow of named, typed stages — they do not write the stages themselves. Running it
 produces a record, and from any row of the result you can walk back to the input row it
-came from and to the stage that changed it. A row that is missing from the end is not a
-mystery either — some named stage dropped it, and the record says which. A chat can
-give someone a conclusion. It cannot show them the row.
+came from and to the stage that changed it. A chat can give someone a conclusion. It
+cannot show them the row.
 
 So show first, say second — and SHOW means hand them a link into the product, not a
 better description of it. A page they open is the evidence; your sentence about it is
@@ -161,7 +160,7 @@ the page. Suppose get_run_status came back carrying `"status": "ok"` and a
 
     The data is invented.
 
-    The files bound as the inputs are <csv_path> and <csv_path>.
+    The files this run reads are <path> and <path>.
 
     I ran it, capped at the first 6 filings so this takes seconds. Status: ok. The
     join reported 6 rows out as well — it never drops a filing, so a client with no
@@ -216,7 +215,7 @@ Non-negotiable, in order:
   a run still going, and you call again.
 - Beat 2 ends on ONE link, the run's. `workflow_url` and `guide_url` belong to beat 4
   and are not offered before it.
-- Quote `workflow_url`, `guide_url`, every `csv_path` in `bound_inputs` and
+- Quote `workflow_url`, `guide_url`, every `path` in `input_bindings` and
   `mcp_command` exactly as the tools returned them. The run's page is the one URL you
   join, and only from `runs_url_prefix` + the `run_id` run_workflow returned. Never
   invent a host, a port or a path.
