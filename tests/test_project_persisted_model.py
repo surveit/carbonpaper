@@ -5,7 +5,8 @@ from __future__ import annotations
 import pytest
 
 from app.core.errors import ProjectExistsError
-from app.services.project import Project, create_project
+from app.services.project import create_project
+from app.services.project_record import find_project_by_name
 
 
 def test_create_project_rejects_a_name_with_an_existing_record(tmp_path):
@@ -25,7 +26,7 @@ def test_bare_directory_does_not_block_creation(projects_root):
     assert name == "staged"
     assert (project_dir / "document.md").read_text(encoding="utf-8") == "Find the money."
     assert (project_dir / "input.csv").is_file()
-    assert Project.exists("staged")
+    assert find_project_by_name("staged") is not None
 
 
 def test_existing_document_still_refuses_with_a_distinguishable_message(projects_root):

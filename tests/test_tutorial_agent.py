@@ -15,6 +15,7 @@ from claude_agent_sdk import SdkMcpTool
 
 import app.agents.tutorial.config  # noqa: F401 — registers the "tutorial" agent
 import app.services.run as run_service
+from app.services.project_record import find_project_by_name
 from app.core.agent.registry import build_engine, build_mcp_server
 from app.models.stages.input_data import InputDataStage
 from app.services import project as project_service
@@ -109,7 +110,7 @@ def test_a_tour_after_the_project_was_deleted_still_seeds(projects_root: Path) -
     # create_project refuses any name whose record exists — so the name is left held by
     # a tombstone: reusing it finds no workflow, importing over it is refused.
     shutil.rmtree(projects_root / first["name"])
-    assert project_service.Project.exists(first["name"]), "the record should outlive it"
+    assert find_project_by_name(first["name"]) is not None, "the record should outlive it"
 
     second = _seed_a_tour()
 

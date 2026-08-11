@@ -13,7 +13,8 @@ from pydantic import BaseModel
 from app.core.agent.tool_spec import ToolSpec
 from app.models.review_guide import ReviewGuideDraft
 from app.services import project as project_service, run as run_service, workspace
-from app.services.project import Project, WorkflowFile, import_project
+from app.services.project import WorkflowFile, import_project
+from app.services.project_record import find_project_by_name
 
 _FIXTURE_STEM = "tutorial_lobbying_triage"
 _DATA_DIR = Path(__file__).resolve().parents[1] / "seeds" / "data"
@@ -82,7 +83,7 @@ def _tutorial_project_name() -> str:
     # delete_project rmtree's the directory and leaves the store record, and
     # create_project refuses a name whose record exists, so a deleted project's name is
     # reusable by neither route. Stepping over it is a workaround for #544.
-    while not _is_on_disk(candidate) and Project.exists(candidate):
+    while not _is_on_disk(candidate) and find_project_by_name(candidate) is not None:
         suffix += 1
         candidate = f"{base}_{suffix}"
     return candidate

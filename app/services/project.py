@@ -1,8 +1,8 @@
-"""The project lifecycle service. A project's identity is the Project record (see
-below), not its examples/<name>/ working-copy directory — a directory may exist
-without a name clash. project_meta degrades TRUTHFULLY when no record can be
-found or built — it never invents a model or a creation date. import_project is
-import-if-absent: a name clash raises rather than replacing.
+"""The project lifecycle service. A project's identity is the Project record's minted
+id (app.services.project_record), never its name or its examples/<name>/ directory —
+a directory may exist without a name clash. project_meta degrades TRUTHFULLY when no
+record can be found or built — it never invents a model or a creation date.
+import_project is import-if-absent: a name clash raises rather than replacing.
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ import json
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Any, ClassVar, Sequence
+from typing import Any, Sequence
 
 from pydantic import BaseModel, field_validator
 
@@ -30,9 +30,13 @@ from app.models.run_manifest import (
     records_a_test_run,
 )
 from app.services.versioning import ReviewGuide
-from app.core.persistence import PersistedModel, PersistenceScope
 from app.core.run_status import RunStatus
 from app.services import data_model, stage_edit, versioning, workspace
+from app.services.project_record import (
+    Project as Project,
+    find_project_by_name,
+    mint_project_id,
+)
 from app.services.loader import (
     load_compiled_dir,
     load_workflow,
@@ -40,21 +44,6 @@ from app.services.loader import (
 )
 from app.services.errors import WorkflowLoadError
 from app.services.stage_edit import AddStagesResult, EditStageResult
-
-
-# ─── Project identity record ───────────────────────────────────────────────────
-
-
-class Project(PersistedModel):
-    """`authored_at` is the project's own date; `created_at` stamps when this RECORD was written."""
-
-    collection: ClassVar[str] = "project"
-    SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
-
-    title: str | None = None
-    model: str | None = None
-    source: str | None = None
-    authored_at: str | None = None
 
 
 # ─── Status models ────────────────────────────────────────────────────────────
@@ -179,7 +168,7 @@ def _runs_summary(pdir: Path) -> RunsSummary:
 def project_meta(pdir: Path) -> ProjectMeta:
     pdir = Path(pdir)
     name = pdir.name
-    record = Project.load_or_none(name)
+    record = find_project_by_name(name)
     if record is None:
         return ProjectMeta(name=name, title=None, created_at=None, model=None, source=None)
     return ProjectMeta(
@@ -268,7 +257,7 @@ def create_project(
     doc = document.strip()
     if not doc:
         raise ValueError("The methodology document is empty.")
-    if Project.exists(safe_name):
+    if find_project_by_name(safe_name) is not None:
         raise ProjectExistsError(
             f"project '{safe_name}' already exists — choose a different name."
         )
@@ -283,7 +272,10 @@ def create_project(
     write_project_meta(
         project_dir, name=safe_name, title=None, created_at=created_at, model=model, source=source,
     )
-    Project(id=safe_name, title=None, model=model, source=source, authored_at=created_at).save()
+    Project(
+        id=mint_project_id(), name=safe_name, title=None,
+        model=model, source=source, authored_at=created_at,
+    ).save()
     return safe_name
 
 
@@ -295,7 +287,7 @@ def project_exists(project_id: str) -> bool:
 
 
 def list_projects() -> list[str]:
-    return sorted(record.id for record in Project.list())
+    return sorted(record.name for record in Project.list())
 
 
 def describe_workflow(name: str) -> dict[str, Any]:
