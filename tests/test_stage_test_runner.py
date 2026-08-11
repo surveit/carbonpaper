@@ -421,3 +421,52 @@ def test_stage_without_tests_contributes_no_failures():
         "signature": {"form": "replaces", "produces": _IN_SCHEMA["columns"]},
     })
     assert find_failing_stage_tests([plain]) == []
+
+
+# ── a case is stated in the SIGNATURE's vocabulary, not the input edge's ─────
+_WIDE_IN_SCHEMA = {"columns": [
+    {"name": "amount", "type": "float", "nullable": False},
+    {"name": "memo", "type": "str", "nullable": False},
+]}
+
+
+def _narrow_reads_stage(tests: list[dict]) -> Stage:
+    """Reads one of its input's two columns; `memo` only ever flows past it."""
+    return parse_stage({
+        "id": "double", "description": "Double", "type": "python_row_function",
+        "inputs": [{"id": "load", "schema": _WIDE_IN_SCHEMA}],
+        "signature": {
+            "form": "extends",
+            "reads": [{"input": "load", "columns": _IN_SCHEMA["columns"]}],
+            "adds": [{"name": "doubled", "type": "float", "nullable": True}],
+        },
+        "function": {"kind": "inline", "code": _DOUBLE},
+        "tests": tests,
+    })
+
+
+def test_a_case_supplies_only_the_columns_the_stage_reads():
+    # Stated off the input schema, this case was malformed on both sides at once.
+    stage = _narrow_reads_stage([{
+        "name": "doubles_two", "inputs": {"load": [{"amount": 2.0}]},
+        "expected": [{"amount": 2.0, "doubled": 4.0}],
+    }])
+    [result] = run_tests_for_stage(stage)
+    assert result.status == "passed" and not result.diffs
+    # `memo` is non-nullable on the edge and on the promised output either way —
+    # it just flows past the transform, so no case has to invent a value for it.
+    output_schema = stage.resolve_output_schema()
+    assert [column.name for column in output_schema.columns] == [
+        "amount", "memo", "doubled"]
+
+
+def test_a_narrow_case_still_fails_on_the_columns_it_does_state():
+    # The freedom is about which columns a case owes, not about what it proves.
+    stage = _narrow_reads_stage([{
+        "name": "expects_wrong_value", "inputs": {"load": [{"amount": 2.0}]},
+        "expected": [{"amount": 2.0, "doubled": 5.0}],
+    }])
+    [result] = run_tests_for_stage(stage)
+    assert result.status == "mismatch"
+    [diff] = result.diffs
+    assert diff.column == "doubled" and diff.actual == 4.0

@@ -155,12 +155,7 @@ def _find_extends_issues(stage: "StageBase", signature: ExtendsSignature) -> lis
     anchor = stage.inputs[0]
     issues: list[str] = []
 
-    anchor_reads = {
-        column.name
-        for entry in signature.reads
-        if entry.input == anchor.id
-        for column in entry.columns
-    }
+    anchor_reads = {column.name for column in anchor_read_columns(stage)}
     issues.extend(
         _issue(stage, f"rewrites `{column.name}` without reading it from the anchor "
                       f"input `{anchor.id}`")
@@ -190,6 +185,38 @@ def promised_output_schema(stage: "StageBase") -> "TableSchema | None":
     if not signature.produces:
         return None
     return TableSchema(columns=signature.produces)
+
+
+def anchor_read_columns(stage: "StageBase") -> list[Column]:
+    """What the transform consumes from its anchor input; [] unless the form flows the rest."""
+    signature = stage.signature
+    if not stage.inputs or not isinstance(signature, ExtendsSignature):
+        return []
+    anchor = stage.inputs[0].id
+    return [
+        column
+        for entry in signature.reads
+        if entry.input == anchor
+        for column in entry.columns
+    ]
+
+
+def transform_input_schemas(stage: "StageBase") -> dict[StageId, TableSchema]:
+    signature = stage.signature
+    assert signature is not None, f"stage `{stage.id}`: no signature"
+    reads = {entry.input: list(entry.columns) for entry in signature.reads}
+    return {
+        ref.id: TableSchema(columns=reads.get(ref.id, [])) for ref in stage.inputs
+    }
+
+
+def transform_output_schema(stage: "StageBase") -> TableSchema:
+    signature = stage.signature
+    assert signature is not None, f"stage `{stage.id}`: no signature"
+    if isinstance(signature, ReplacesSignature):
+        assert signature.produces, f"stage `{stage.id}` ({stage.type}) writes no table"
+        return TableSchema(columns=signature.produces)
+    return TableSchema(columns=[*signature.rewrites, *signature.adds])
 
 
 def _issue(stage: "StageBase", problem: str) -> str:

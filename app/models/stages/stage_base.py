@@ -26,9 +26,9 @@ from app.models.schema import (
 )
 from app.models.stages.shared import find_internal_namespace_column_issues
 from app.models.stages.signature import (
-    ExtendsSignature,
     ReplacesSignature,
     TransformSignature,
+    anchor_read_columns,
     find_signature_issues,
     promised_output_schema,
 )
@@ -245,15 +245,7 @@ class StageBase(StageCommon):
         return promised_output_schema(self)
 
     def anchor_reads(self) -> frozenset[str]:
-        if not self.inputs or not isinstance(self.signature, ExtendsSignature):
-            return frozenset()
-        anchor = self.inputs[0].id
-        return frozenset(
-            column.name
-            for entry in self.signature.reads
-            if entry.input == anchor
-            for column in entry.columns
-        )
+        return frozenset(column.name for column in anchor_read_columns(self))
 
     def find_signature_config_issues(self) -> list[str]:
         return []
