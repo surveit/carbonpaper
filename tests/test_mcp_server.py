@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import time
 from pathlib import Path
 
 import pytest
@@ -393,7 +392,6 @@ def test_mcp_save_version_omitting_the_parent_records_none(tmp_path, monkeypatch
     _write_compiled_workflow(pdir)
 
     server.save_version(project_id="trail", message="first cut")
-    time.sleep(1)  # version ids are second-resolution timestamps
     second = server.save_version(project_id="trail", message="second cut")
 
     assert second["ok"] is True
@@ -409,7 +407,6 @@ def test_mcp_save_version_records_the_caller_supplied_parent(tmp_path, monkeypat
     _write_compiled_workflow(pdir)
 
     first = server.save_version(project_id="trail", message="first cut")
-    time.sleep(1)  # version ids are second-resolution timestamps
     second = server.save_version(
         project_id="trail", message="second cut", parent_version=first["version_id"])
 
@@ -428,7 +425,6 @@ def test_mcp_save_version_refuses_a_parent_that_does_not_exist(tmp_path, monkeyp
 
     server.save_version(project_id="trail", message="first cut")
     before = [v.version_id for v in versioning.list_versions(pdir)]
-    time.sleep(1)  # a second save would land a new id, so the list below would grow
 
     refused = server.save_version(
         project_id="trail", message="second cut", parent_version="20200101T000000")

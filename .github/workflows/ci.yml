@@ -63,14 +63,9 @@ jobs:
       # (test_roldugin.py etc.) that hit real APIs. tests/ and app/ are named
       # explicitly (not bare `pytest`) so the root probes stay uncollected while
       # the colocated app/**/_arch_tests/ architecture checks DO run in CI.
-      # -n: the suite is idle-bound, not CPU-bound — ~37s of a ~46s serial run is
-      # tests sleeping a whole second to let the second-resolution run/version id
-      # clock tick over (tests/test_run_cache_e2e.py and friends). Workers overlap
-      # those waits, so this cuts wall clock well past what the core count alone
-      # would suggest. Measured locally: 53s -> 22s, 2960 passed either way.
       - run: |
           if [ -d tests ]; then
-            uv run --frozen python -m pytest tests/ app/ -n 4
+            uv run --frozen python -m pytest tests/ app/
           else
             echo "::warning::No tests/ directory on this ref — pytest was NOT run."
           fi

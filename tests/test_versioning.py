@@ -112,23 +112,13 @@ def test_create_version_invalid_workflow_raises_and_writes_nothing(tmp_path):
     assert list_versions(tmp_path) == []
 
 
-def test_create_version_twice_within_a_second_overwrites(tmp_path, monkeypatch):
-    """An accepted clobber: version_id has 1-second resolution and there is no guard."""
+def test_create_version_twice_within_a_second_keeps_both(tmp_path):
     _seed(tmp_path)
-
-    class _FixedClock:
-        @staticmethod
-        def now():
-            return datetime(2026, 1, 1, 12, 0, 0)
-
-    import app.services.versioning as versioning_module
-    monkeypatch.setattr(versioning_module, "datetime", _FixedClock)
 
     save_working_copy_as_version(tmp_path, message="first", reviewer="test")
     save_working_copy_as_version(tmp_path, message="second", reviewer="test")
 
-    [only] = list_versions(tmp_path)
-    assert only.message == "second"
+    assert [v.message for v in list_versions(tmp_path)] == ["second", "first"]
 
 
 def test_versions_are_scoped_per_project(tmp_path):

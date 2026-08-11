@@ -6,7 +6,6 @@ body actually runs, so a cache hit leaves the probe untouched."""
 from __future__ import annotations
 
 import json
-import time
 from collections import Counter
 from pathlib import Path
 
@@ -105,7 +104,6 @@ def test_a_workflow_test_does_not_leak_its_computed_rows_into_the_production_cac
     assert result["ok"] is True
     assert _invocations(probe) == Counter({"clean": 3})  # only "c" recomputed
 
-    time.sleep(1.05)  # run ids are second-resolution
     manifest = execute_run(project, project, *pinned_stages(project))
     assert manifest["status"] == "ok"
     # "a"/"b" still replay from the FIRST production run's cache, but "c"

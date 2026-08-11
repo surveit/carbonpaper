@@ -5,13 +5,13 @@ read-only. It reaches the shared engine through app.runtime.executor (run_subset
 never app.runtime.runner."""
 from __future__ import annotations
 
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
 
 from app.core.errors import NoWorkflowTestSourceError, NoWorkflowTestVersionError, SubsetRunError
+from app.core.timestamp_ids import mint_timestamp_id
 from app.models import Stage, StageType, Workflow
 from app.runtime.context import RunContext, RunIdentity
 from app.runtime.executor import run_subset, topological_sort
@@ -38,7 +38,7 @@ def run_workflow_test(
     injected = _read_source_slices(stages, executing, limit=limit, offset=offset)
     workflow = Workflow(stages=stages)
 
-    run_id = _mint_run_id()
+    run_id = mint_timestamp_id()
     run_dir = resolve_run_dir(project, run_id)
 
     executed_ids = [stage.id for stage in executing]
@@ -141,8 +141,3 @@ def _read_source_slices(
         for source in sources
         if source.id not in executing_ids
     }
-
-
-def _mint_run_id() -> str:
-    """Must stay the format app.runtime.runner mints with, so test and real run ids sort together."""
-    return datetime.now().strftime("%Y%m%dT%H%M%S")

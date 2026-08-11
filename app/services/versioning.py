@@ -13,6 +13,7 @@ from typing import Any, ClassVar
 from pydantic import Field, ValidationError
 
 from app.core.errors import DocumentNotFound, NoVersionToRunError, ReviewGuideValidationError
+from app.core.timestamp_ids import mint_timestamp_id
 from app.models import STAGE_SPEC_SCHEMA_VERSION, Stage
 from app.models.review_guide import ReviewGuideStep
 from app.models.workflow import find_stages_reaching_publish, parse_workflow
@@ -73,12 +74,11 @@ def create_version_from_stages(
     reviewer: str,
     parent_version: str | None = None,
 ) -> WorkflowVersion:
-    """version_id has 1-second resolution: two versions minted in the same second collide, later wins."""
     project_dir = Path(project_dir)
     workflow = parse_workflow(stages)
     schemas = load_schemas(project_dir)
 
-    version_id = datetime.now().strftime("%Y%m%dT%H%M%S")
+    version_id = mint_timestamp_id()
     project = project_dir.name
     doc_id = f"{project}/{version_id}"
 

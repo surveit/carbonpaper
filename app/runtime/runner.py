@@ -15,6 +15,7 @@ import pyarrow.lib as pa_lib
 from pydantic import ValidationError as PydanticValidationError
 
 from app.core.errors import MissingInputBindingError
+from app.core.timestamp_ids import mint_timestamp_id
 from app.core.frames import read_frame_file
 from app.models import Stage, StageType
 from app.models.run_manifest import read_run_manifest
@@ -118,7 +119,7 @@ def prepare_run(
                 f"stages are {[s.id for s in ordered]}"
             )
 
-    run_id = datetime.now().strftime("%Y%m%dT%H%M%S")
+    run_id = mint_timestamp_id()
     run_dir = project_dir / "runs" / run_id
     (run_dir / "outputs").mkdir(parents=True, exist_ok=True)
     (run_dir / "artifacts").mkdir(parents=True, exist_ok=True)

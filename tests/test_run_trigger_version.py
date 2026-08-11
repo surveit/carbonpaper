@@ -3,7 +3,6 @@ form, defaulting to the latest version when the form omits version_id."""
 from __future__ import annotations
 
 import json
-import time
 
 import pandas as pd
 import pytest
@@ -35,9 +34,6 @@ def project_two_versions(tmp_path, monkeypatch):
                            "params": {"path": str(data), "format": "csv"}}}
     (proj / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
     save_working_copy_as_version(proj, message="v1", reviewer="test")
-    # version ids are second-resolution timestamps; without this the two versions
-    # can land in the same wall-clock second and collide.
-    time.sleep(1.1)
     save_working_copy_as_version(proj, message="v2", reviewer="test")
     workspace.set_projects_dir(tmp_path)
     monkeypatch.setattr(run_service, "_run_in_background",
@@ -94,7 +90,6 @@ def test_run_picker_offers_unpublished_versions_too(tmp_path, monkeypatch):
     proj = tmp_path / "demo"
     _seed_load_stage(proj)
     published = save_working_copy_as_version(proj, message="approved", reviewer="test").version_id
-    time.sleep(1.1)
     unpublished = save_working_copy_as_version(proj, message="draft", reviewer="test").version_id
     publish_version(proj, published, reviewer="test")  # only the older one
     workspace.set_projects_dir(tmp_path)
@@ -152,7 +147,6 @@ def project_versions_diff_paths(tmp_path, monkeypatch):
 
     _author(a)
     save_working_copy_as_version(proj, message="v1 reads a.csv", reviewer="test")
-    time.sleep(1.1)
     _author(b)
     save_working_copy_as_version(proj, message="v2 reads b.csv", reviewer="test")
     workspace.set_projects_dir(tmp_path)
