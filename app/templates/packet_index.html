@@ -39,18 +39,13 @@
 {% include "_run_issues.html" %}
 
 {# The files a publish stage wrote, the same section the run page leads its results
-   with — here as relative links into artifacts/, so they open from the folder. A
-   published page's own row-trace links point back at the app and do NOT resolve
-   offline; the note says so rather than letting the reader find out by clicking. #}
+   with — here as relative links into artifacts/, so they open from the folder. #}
 {% if artifacts %}
 <section>
   <h2>Run outputs</h2>
   <ul class="run-outputs">
     {% for path in artifacts %}<li><a href="{{ path }}">{{ path }}</a></li>{% endfor %}
   </ul>
-  <p class="muted packet-note">These are the files this run published. Where one links a row
-    back to its provenance, that link addresses the server that made it and will not open
-    from this folder — the step pages below carry the same rows.</p>
 </section>
 {% endif %}
 
@@ -79,10 +74,12 @@
     </div>
   </div>
   {% endif %}
-  {# Every step as a plain link, always. The diagram needs the network, and an
-     unreadable pinned version means no diagram at all — this is then the only
-     route to a step page. #}
-  <p class="packet-steps"><span class="muted">Steps:</span>
+  {# The FALLBACK route to the step pages, not a second index of them: the graph needs
+     the network and an unreadable pinned version draws none at all, either of which
+     would otherwise leave a reader no way through. Written every time so it is there
+     when nothing runs, and hidden by the script below once the graph has actually
+     drawn — the drawn graph is the same list, clickable. #}
+  <p class="packet-steps" id="packet-steps"><span class="muted">Steps:</span>
     {% for stage in run.stages %}<a href="{{ stages_dir }}/{{ stage.stage_id }}.html">{{ type_glyph.get(stage.type, "") }} <code>{{ stage.stage_id }}</code></a>{% if not loop.last %} · {% endif %}{% endfor %}
   </p>
 </section>
@@ -159,6 +156,25 @@
   }
 </script>
 <script src="{{ viewport_script }}"></script>
+<script>
+  // Drops the step list once the graph is on the page. mermaid renders async, and
+  // watching for the svg is what tells the two failures apart: a graph that drew
+  // (list goes) from a CDN that never answered (list stays, and is the only way in).
+  (function () {
+    var steps = document.getElementById("packet-steps");
+    var viewport = document.querySelector(".diagram-viewport");
+    if (!steps || !viewport) return;
+    function hideOnceDrawn() {
+      if (!viewport.querySelector("svg")) return false;
+      steps.hidden = true;
+      return true;
+    }
+    if (hideOnceDrawn()) return;
+    new MutationObserver(function (_records, self) {
+      if (hideOnceDrawn()) self.disconnect();
+    }).observe(viewport, { childList: true, subtree: true });
+  })();
+</script>
 {% endif %}
 
 {% endblock %}

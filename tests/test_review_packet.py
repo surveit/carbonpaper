@@ -364,6 +364,20 @@ def test_every_step_stays_reachable_when_no_diagram_is_drawn(project_dir, tmp_pa
     assert 'class="mermaid"' not in index
     assert 'href="stages/load.html"' in index
     assert 'href="stages/double.html"' in index
+    # No diagram means no viewport for the hide script to watch, so the list is not
+    # merely present in the markup — it is the visible route, and stays one.
+    assert 'id="packet-steps"' in index
+    assert "diagram-viewport" not in index
+
+
+def test_the_step_list_is_a_fallback_the_drawn_graph_replaces(exported):
+    # Written every time: whether the CDN answers is not knowable at export.
+    index = (exported.root / "index.html").read_text(encoding="utf-8")
+    # Hidden only once an svg exists, the drawn graph being this same list.
+    assert 'id="packet-steps"' in index
+    assert "diagram-viewport" in index
+    assert 'steps.hidden = true' in index
+    assert "MutationObserver" in index
 
 
 def test_missing_run_raises_rather_than_writing_an_empty_packet(project_dir, tmp_path):
@@ -590,8 +604,6 @@ def test_index_leads_with_the_published_files(project_dir, tmp_path):
     index = (packet.root / "index.html").read_text(encoding="utf-8")
     assert "Run outputs" in index
     assert 'href="artifacts/build/index.html"' in index
-    # The reader is told, not left to discover it by clicking a link that 404s.
-    assert "the server that made it and will not open" in index
 
 
 def test_an_os_dotfile_is_not_reported_as_a_published_output(project_dir, tmp_path):

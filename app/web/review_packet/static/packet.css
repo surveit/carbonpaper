@@ -17,16 +17,23 @@ body.packet .run-stage-panel,
 body.packet .stage-panel-full { max-height: none; overflow: visible; }
 body.packet .table-scroll { max-height: none; }
 
-/* The guide rail's grid and its collapse drawer come from _run_guide.html's own
-   <style>, so the index gets both by using the run view's structure. Only the
-   height model differs: the run view sizes the rail against a viewport-height
-   shell the packet has no equivalent of, so it sticks and caps itself instead. */
-body.packet .run-shell.with-guide { align-items: start; }
-body.packet .run-guide {
+/* The columns are the run view's (run-page.css); only the height model differs. The
+   run view scrolls each pane inside a viewport-height shell, which one ordinary
+   document has no equivalent of — so the rail STICKS: the body scrolls under it, and
+   a guide taller than the screen scrolls within itself rather than being clipped.
+   `align-self` because a stretched grid item fills the row and has nowhere to stick. */
+body.packet .run-nav {
   position: sticky;
   top: 16px;
-  height: auto;
+  align-self: start;
   max-height: calc(100vh - 32px);
+  overflow-y: auto;
+}
+
+/* One column at this width, so a rail pinned to the viewport would sit on top of the
+   body it is meant to sit beside. */
+@media (max-width: 1000px) {
+  body.packet .run-nav { position: static; max-height: none; overflow-y: visible; }
 }
 
 /* Every step as a plain link, under the diagram. With the network off the graph
