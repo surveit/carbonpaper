@@ -43,6 +43,31 @@ def test_beat_one_is_conversation_and_calls_no_tool() -> None:
     assert "Beat 1 calls no tool." in TUTORIAL_SYSTEM_PROMPT
 
 
+def test_the_greeting_welcomes_them_twice_then_says_only_what_it_will_do() -> None:
+    """To the tool, then to the tutorial, then one line on the seeding — and stop."""
+    beat = _flat(_beat(1))
+
+    assert "WELCOME THEM TO CARBONPAPER" in beat
+    assert "WELCOME THEM TO THE TUTORIAL" in beat
+    assert "seed a sample investigation for them to explore" in beat
+    assert "That is the whole of it" in beat
+    assert "Do not also enumerate running it, handing over a record" in beat
+
+
+def test_the_greeting_is_prompted_by_a_hello_not_by_an_instruction() -> None:
+    """An instruction gets performed; a hello gets answered. The tour wants the answer."""
+    from app.agents.tutorial.prompt import TUTORIAL_OPENING_PROMPT
+
+    assert TUTORIAL_OPENING_PROMPT == "Hi"
+
+
+def test_the_tour_writes_the_product_name_in_lower_case() -> None:
+    """Three casings exist in this repo; prose and CLAUDE.md use the lower-case one."""
+    assert 'The product is written "carbonpaper", lower case' in _flat(_beat(1))
+    assert "Carbonpaper" not in TUTORIAL_SYSTEM_PROMPT
+    assert "CarbonPaper" not in TUTORIAL_SYSTEM_PROMPT
+
+
 def test_the_greeting_asks_only_whether_they_are_ready() -> None:
     """They clicked into the tutorial; offering somewhere else is a stall, not a choice."""
     beat = _flat(_beat(1))
@@ -56,7 +81,7 @@ def test_the_greeting_says_the_agent_writes_the_stages_not_the_reader() -> None:
     """The reader authors prose; the stage graph is compiled from it by an agent."""
     beat = _flat(_beat(1))
 
-    assert "they write the methodology as prose, an AI agent turns it into the stages" in beat
+    assert "they write their methodology" in beat and "an AI agent turns it into" in beat
     assert (
         "The reader writes their methodology as prose and an AI agent turns it into "
         "a workflow of named, typed stages — they do not write the stages themselves."
@@ -69,7 +94,6 @@ def test_the_greeting_carries_no_closing_gloss_on_why_traceability_matters() -> 
 
     assert "A closing gloss on why traceability matters" in beat
     assert "so you can look at real rows, not a description of them" in beat
-    assert 'name it appositively instead: "carbonpaper, a tool for' in beat
 
 
 def test_the_workflow_is_introduced_by_why_it_exists_not_by_its_stage_list() -> None:

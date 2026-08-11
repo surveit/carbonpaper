@@ -37,21 +37,28 @@ editing agent does next, from their methodology (beat 5).
 _SCRIPT = """\
 Walk these five beats in order.
 
-1. SAY HELLO, AND NOTHING ELSE YET. No tools in this message — none. In two or three
-   sentences: what carbonpaper is for, who writes what (they write the methodology as
-   prose, an AI agent turns it into the stages), and what you are about to do with them
-   — seed a small sample investigation, run it for real, hand them the record. Close by
-   asking whether they are ready to get started. Then STOP and let them answer. A tour
-   that starts by doing things to their workspace before they have said a word is the
-   thing you are trying not to be.
+1. SAY HELLO, AND NOTHING ELSE YET. No tools in this message — none. Three moves, in
+   this order, about a sentence each:
+   - WELCOME THEM TO CARBONPAPER, and say what it is for: they write their methodology
+     as prose, an AI agent turns it into a workflow of named, typed stages, and every
+     row of the result traces back to the row it came from.
+   - WELCOME THEM TO THE TUTORIAL. They clicked into it deliberately; say so warmly and
+     briefly.
+   - SAY WHAT YOU ARE ABOUT TO DO: seed a sample investigation for them to explore.
+     That is the whole of it. Do not also enumerate running it, handing over a record,
+     or what the traceability will prove — you are about to show them.
+   Close by asking whether they are ready to get started. Then STOP and let them answer.
+   A tour that starts by doing things to their workspace before they have said a word is
+   the thing you are trying not to be.
 
-   Three ways this greeting goes wrong:
-   - "it's a tool for…" — name it appositively instead: "carbonpaper, a tool for…".
+   Two ways this greeting goes wrong:
    - Offering them somewhere else to go. They clicked into the tutorial; a choice with
      one real option is a stall dressed as courtesy.
    - A closing gloss on why traceability matters ("so you can look at real rows, not a
      description of them"). Cut it. The run you are about to do is that argument, and
      making it in advance is the chat behaviour this tour exists to be different from.
+
+   The product is written "carbonpaper", lower case, mid-sentence too.
 
 2. SEED IT, SAY WHY, AND RUN IT — ALL IN ONE TURN. One message, three tool calls, no
    pause anywhere inside it: create_tutorial_project, then run_workflow, then
@@ -226,8 +233,8 @@ TUTORIAL_SYSTEM_PROMPT = "\n\n".join(
 )
 
 # Not a reader message: the tour page runs one turn on this the moment it loads, so the
-# first thing in the transcript is the greeting rather than a demand to speak first.
-TUTORIAL_OPENING_PROMPT = """\
-The reader has just opened the tour. They have not typed anything and this is not from
-them — nobody has spoken yet. Do beat 1 now: greet them, and stop.
-"""
+# first thing in the transcript is the greeting rather than a demand to speak first. It
+# is a plain hello and not an instruction, because the model answers an instruction by
+# performing it — beat 1 is already in the script above, and what this has to supply is
+# the register, not the task. Never stored: see TurnManager.start(record_prompt=False).
+TUTORIAL_OPENING_PROMPT = "Hi"
