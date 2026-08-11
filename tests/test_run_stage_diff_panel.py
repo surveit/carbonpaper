@@ -38,8 +38,9 @@ _CLASSIFY_SCHEMA = {"columns": [{"name": "name", "type": "str", "nullable": True
                                 {"name": "junk", "type": "str", "nullable": True},
                                 {"name": "label", "type": "str", "nullable": True}]}
 
-# Uppercases `name` where val > 1 (a changed cell) and adds `label` (an added
-# column), so the classify diff has one of each to show. It carries `junk`
+# Uppercases `name` where val > 1 (a changed cell, so the signature rewrites it)
+# and adds `label` (an added column), so the classify diff has one of each to
+# show. It carries `junk`
 # through because it must: an `extends` signature flows every anchor column, so
 # a row-mapped stage cannot drop one — that is python_frame_function's job.
 _CLASSIFY_CODE = (
@@ -79,7 +80,8 @@ def _seed_compiled(pdir: Path, data_path: Path, routes_path: Path) -> None:
             "function": {"kind": "inline", "code": _CLASSIFY_CODE},
             "signature": {"form": "extends",
                           "reads": reads_of(LOAD_ID, _LOAD_SCHEMA["columns"]),
-                          "adds": [{"name": "label", "type": "str", "nullable": True}]},
+                          "adds": [{"name": "label", "type": "str", "nullable": True}],
+                          "rewrites": [{"name": "name", "type": "str", "nullable": True}]},
         }),
         ("03_keep.json", {
             "id": KEEP_ID, "description": "Keep the small ones", "type": "filter_rows",

@@ -31,6 +31,7 @@ from app.models.stages.signature import (
     anchor_read_columns,
     find_signature_issues,
     promised_output_schema,
+    written_columns,
 )
 from app.models.stages.stage_tests import StageTest, validate_stage_tests
 from app.models.stages.warnings import CompilerWarning
@@ -249,6 +250,9 @@ class StageBase(StageCommon):
 
     def anchor_reads(self) -> frozenset[str]:
         return frozenset(column.name for column in anchor_read_columns(self))
+
+    def declared_writes(self) -> frozenset[str]:
+        return frozenset(column.name for column in written_columns(self))
 
     def find_signature_config_issues(self) -> list[str]:
         return []

@@ -197,6 +197,16 @@ def anchor_read_columns(stage: "StageBase") -> list[Column]:
     ]
 
 
+def written_columns(stage: "StageBase") -> list[Column]:
+    """The write set. Disjoint under extends: an add colliding with the anchor is already refused."""
+    signature = stage.signature
+    if signature is None:
+        return []
+    if isinstance(signature, ExtendsSignature):
+        return [*signature.adds, *signature.rewrites]
+    return list(signature.produces)
+
+
 def transform_input_schemas(stage: "StageBase") -> dict[StageId, TableSchema]:
     signature = stage.signature
     assert signature is not None, f"stage `{stage.id}`: no signature"
