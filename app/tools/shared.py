@@ -19,8 +19,9 @@ from app.tools.tool_specs import TOOL_SPECS
 _PROJECT_ID = Annotated[str, "The project's name."]
 
 # The longest one get_run_status call will sit on a `running` run, and how often it
-# re-reads the manifest while it does. The ceiling is under the CLI's own tool-call
-# timeout, so a wait ends in a status rather than in a dead tool call.
+# re-reads the manifest while it does. Bounded so a wait always ends in a status the
+# caller can act on: an unbounded one would ride a stuck run into the CLI's own
+# tool-call timeout, which returns nothing at all.
 MAX_STATUS_WAIT_SECONDS = 60
 _STATUS_POLL_SECONDS = 2
 
