@@ -53,9 +53,9 @@ async def get_run_status(
 ) -> dict[str, Any]:
     resolve_existing_project(project_id)
     status = run_service.read_run_status(project_id, run_id)
-    # The caller has no clock: without a wait it can only ask again immediately, and a
-    # run of any length is answered `running` by a burst of identical calls. The run
-    # executes on its own thread, so sleeping here holds nothing up but this answer.
+    # An agent engine here runs with tools=[] (app.core.agent.sdk_engine), so the caller
+    # has no Bash and nothing else to sleep with: unwaited, it can only ask again at once.
+    # The run holds its own thread, so waiting here delays nothing but this answer.
     deadline = monotonic() + min(max(wait_seconds, 0), MAX_STATUS_WAIT_SECONDS)
     while status["status"] == RunStatus.RUNNING and monotonic() < deadline:
         await asyncio.sleep(_STATUS_POLL_SECONDS)
@@ -95,9 +95,8 @@ _SCHEMAS: dict[str, ToolInputSchema] = {
         "run_id": Annotated[str, "The run id run_workflow returned."],
         "wait_seconds": Annotated[
             int,
-            "Seconds to hold the call open while the run is still `running`, capped at "
-            f"{MAX_STATUS_WAIT_SECONDS}. It returns the moment the run settles. 0 reads "
-            "the manifest and returns straight away.",
+            f"Wait up to this long (max {MAX_STATUS_WAIT_SECONDS}) for the run to settle. "
+            "0 reads the manifest as it stands.",
         ],
     },
     "describe_workflow": {"project_id": _PROJECT_ID},
