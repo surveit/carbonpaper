@@ -1,8 +1,7 @@
-"""The project lifecycle service. A project's identity is the Project record's minted
-id (app.services.project_record), never its name or its examples/<name>/ directory —
-a directory may exist without a name clash. project_meta degrades TRUTHFULLY when no
-record can be found or built — it never invents a model or a creation date.
-import_project is import-if-absent: a name clash raises rather than replacing.
+"""The project lifecycle service. A project IS its id, which is also the name of its
+directory under the projects root; `name` is a label two projects may share, so
+nothing is ever refused for repeating one. project_meta degrades TRUTHFULLY when no
+record is found — it never invents a model, a creation date, or a label.
 """
 
 from __future__ import annotations
@@ -15,7 +14,7 @@ from typing import Any, Sequence
 
 from pydantic import BaseModel, field_validator
 
-from app.core.errors import ProjectExistsError, RunManifestNotJson
+from app.core.errors import RunManifestNotJson
 from app.models import (
     SchemaLibrary,
     Stage,
@@ -34,6 +33,8 @@ from app.core.run_status import RunStatus
 from app.services import data_model, stage_edit, versioning, workspace
 from app.services.project_record import (
     Project as Project,
+    describe_project as describe_project,
+    find_projects_by_name as find_projects_by_name,
     mint_project_id,
 )
 from app.services.loader import (
@@ -65,6 +66,13 @@ class RunsSummary(BaseModel):
     n: int
     awaiting_review: int
     latest_status: str | None
+
+
+class ProjectListing(BaseModel):
+    """What a tool hands back: `id` is what every other call takes, `name` is only shown."""
+
+    id: str
+    name: str
 
 
 class ProjectMeta(BaseModel):
@@ -291,6 +299,14 @@ def list_projects() -> list[str]:
     return sorted(record.id for record in Project.list())
 
 
+def list_project_listings() -> list[ProjectListing]:
+    """Both halves: the id to pass back, and the label to say it by."""
+    return [
+        ProjectListing(id=record.id, name=record.label())
+        for record in sorted(Project.list(), key=lambda r: r.id)
+    ]
+
+
 def describe_workflow(name: str) -> dict[str, Any]:
     return workspace.project_workflow_summary(workspace.resolve_project_dir(name))
 
@@ -435,20 +451,21 @@ class WorkflowFile(BaseModel):
         return self.model_dump_json(indent=2, exclude_none=True)
 
 
-def export_project(name: str) -> WorkflowFile:
-    pdir = workspace.resolve_project_dir(name)
+def export_project(project_id: str) -> WorkflowFile:
+    """The bundle carries the LABEL, not the id: importing it elsewhere mints a fresh id."""
+    pdir = workspace.resolve_project_dir(project_id)
     meta = project_meta(pdir)
     if meta.model is None or meta.source is None:
         raise ValueError(
-            f"project '{name}' has no recorded model/source in project.json — cannot export"
+            f"project '{project_id}' has no recorded model/source — cannot export"
         )
     document_path = project_state(pdir).document_path
     if document_path is None:
-        raise ValueError(f"project '{name}' has no document — cannot export")
+        raise ValueError(f"project '{project_id}' has no document — cannot export")
     library = data_model.load_data_model(pdir) or SchemaLibrary(schemas=[])
     stages = [c.stage for c in load_compiled_dir(pdir / "compiled") if c.stage is not None]
     return WorkflowFile(
-        name=name,
+        name=meta.name,
         document=Path(document_path).read_text(encoding="utf-8"),
         model=meta.model,
         source=meta.source,

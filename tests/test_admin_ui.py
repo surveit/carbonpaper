@@ -30,28 +30,36 @@ def test_admin_page_lists_the_seed_bundle():
     assert _BUNDLE in r.text
 
 
+def _loaded_project_id() -> str:
+    """The bundle's label is not its id, so ask the store which project it became."""
+    [record] = project.find_projects_by_name(_BUNDLE)
+    return record.id
+
+
 def test_load_bundle_redirects_and_the_project_appears(workspace_root):
     r = client.post(f"/admin/load/{_BUNDLE}", follow_redirects=False)
 
     assert r.status_code == 303
     assert r.headers["location"].startswith("/admin")
-    assert _BUNDLE in project.list_projects()
+    assert _loaded_project_id() in project.list_projects()
     assert _BUNDLE in client.get("/admin").text
 
 
-def test_loading_the_same_bundle_twice_does_not_crash(workspace_root):
+def test_loading_the_same_bundle_twice_makes_two_projects(workspace_root):
+    """A label is not unique, so the second load is a second project, not a refusal."""
     first = client.post(f"/admin/load/{_BUNDLE}", follow_redirects=False)
     second = client.post(f"/admin/load/{_BUNDLE}", follow_redirects=False)
 
     assert first.status_code == 303
     assert second.status_code == 303
-    assert _BUNDLE in project.list_projects()
+    assert len(project.find_projects_by_name(_BUNDLE)) == 2
+    assert len(project.list_projects()) == 2
 
 
 def test_download_returns_the_workflow_file_as_an_attachment(workspace_root):
     client.post(f"/admin/load/{_BUNDLE}", follow_redirects=False)
 
-    r = client.get(f"/admin/export/{_BUNDLE}")
+    r = client.get(f"/admin/export/{_loaded_project_id()}")
 
     assert r.status_code == 200
     assert r.headers["content-disposition"] == f'attachment; filename="{_BUNDLE}.json"'
@@ -86,24 +94,28 @@ def _upload(payload: bytes, filename: str = "bundle.json"):
 
 def test_a_downloaded_bundle_uploads_back_into_an_empty_workspace(workspace_root):
     client.post(f"/admin/load/{_BUNDLE}", follow_redirects=False)
-    downloaded = client.get(f"/admin/export/{_BUNDLE}").content
+    downloaded = client.get(f"/admin/export/{_loaded_project_id()}").content
     _empty_workspace(workspace_root.parent / "second")
 
     r = _upload(downloaded)
 
     assert r.status_code == 303
-    assert _BUNDLE in project.list_projects()
-    assert client.get(f"/admin/export/{_BUNDLE}").content == downloaded
+    # A fresh workspace mints a NEW id for it, and the bundle round-trips unchanged.
+    reimported = _loaded_project_id()
+    assert client.get(f"/admin/export/{reimported}").content == downloaded
 
 
-def test_uploading_a_bundle_whose_project_exists_leaves_it_alone(workspace_root):
+def test_uploading_a_bundle_whose_label_is_taken_leaves_the_first_alone(workspace_root):
     client.post(f"/admin/load/{_BUNDLE}", follow_redirects=False)
-    downloaded = client.get(f"/admin/export/{_BUNDLE}").content
+    first_id = _loaded_project_id()
+    downloaded = client.get(f"/admin/export/{first_id}").content
 
     r = _upload(downloaded)
 
     assert r.status_code == 303
-    assert "already+exists" in r.headers["location"]
+    # A second project, and the first is untouched — nothing was overwritten to make room.
+    assert len(project.find_projects_by_name(_BUNDLE)) == 2
+    assert client.get(f"/admin/export/{first_id}").content == downloaded
 
 
 def _empty_workspace(root):

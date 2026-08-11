@@ -16,16 +16,17 @@ client = TestClient(app)
 
 def test_invalid_working_copy_versions_as_400_with_issues(tmp_path, monkeypatch):
     _point_examples_dir_at(tmp_path)
-    create_project("relpath", "Load a file.", source="test")
+    project_id = create_project("relpath", "Load a file.", source="test")
     stage = {"id": "load", "description": "Load", "type": "input_data",
              "connector": {"kind": "file",
                            "params": {"path": "data/things.csv", "format": "csv"}}}
-    project_dir = tmp_path / "relpath"
+    project_dir = tmp_path / project_id
     (project_dir / "compiled").mkdir()
     (project_dir / "compiled" / "01_load.json").write_text(
         json.dumps(stage), encoding="utf-8")
 
-    resp = client.post("/project/relpath/version", data={"message": "should fail loudly"})
+    resp = client.post(f"/project/{project_id}/version",
+                       data={"message": "should fail loudly"})
 
     assert resp.status_code == 400, resp.text
     body = resp.json()

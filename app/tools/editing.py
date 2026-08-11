@@ -19,6 +19,7 @@ from app.services import drafts, project as project_service
 from app.tools import shared
 from app.tools.tool_specs import SAVE_VERSION_FROM_DRAFT, TOOL_SPECS
 from app.services.drafts import DraftDetail, DraftEdit, DraftView, SaveResult
+from app.services.project import ProjectListing
 
 
 class EditingContext(BaseModel):
@@ -26,8 +27,8 @@ class EditingContext(BaseModel):
 
 
 def make_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
-    def list_projects() -> list[str]:
-        return project_service.list_projects()
+    def list_projects() -> list[ProjectListing]:
+        return project_service.list_project_listings()
 
     def get_current_project() -> str | None:
         return ctx.project_id

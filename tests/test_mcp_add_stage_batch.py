@@ -78,17 +78,17 @@ _REPORT = {
 }
 
 
-def _call_add_stage(stages):
+def _call_add_stage(project_id, stages):
     from app.mcp import server
 
     _content, result = asyncio.run(
-        server.mcp.call_tool("add_stage", {"project_id": "trail", "stages": stages})
+        server.mcp.call_tool("add_stage", {"project_id": project_id, "stages": stages})
     )
     return result
 
 
-def _list_stored_stage_ids(tmp_path) -> set[str]:
-    return {p.stem for p in (tmp_path / "trail" / "compiled").glob("*.json")}
+def _list_stored_stage_ids(project_id) -> set[str]:
+    return {p.stem for p in (workspace.projects_dir() / project_id / "compiled").glob("*.json")}
 
 
 @pytest.fixture
@@ -96,12 +96,12 @@ def project(tmp_path, monkeypatch):
     from app.mcp import server
 
     workspace.set_projects_dir(tmp_path)
-    server.create_project(name="trail", document="Follow the filings.")
-    return tmp_path
+    created = server.create_project(name="trail", document="Follow the filings.")
+    return created["project_id"]
 
 
 def test_a_batch_submitted_in_reverse_dependency_order_is_sorted_and_stored(project):
-    result = _call_add_stage([_CLEAN, _LOAD])
+    result = _call_add_stage(project, [_CLEAN, _LOAD])
 
     assert result["ok"] is True, result["issues"]
     assert result["added"] == ["load", "clean"], "stored in dependency order"
@@ -109,7 +109,7 @@ def test_a_batch_submitted_in_reverse_dependency_order_is_sorted_and_stored(proj
 
 
 def test_one_failure_keeps_the_independents_and_skips_only_its_dependency_cone(project):
-    result = _call_add_stage([_REPORT, _RANK, _SCORE_UNADDITIVE, _CLEAN, _LOAD])
+    result = _call_add_stage(project, [_REPORT, _RANK, _SCORE_UNADDITIVE, _CLEAN, _LOAD])
 
     assert result["ok"] is False
     assert result["added"] == ["load", "clean"]
@@ -125,7 +125,7 @@ def test_one_failure_keeps_the_independents_and_skips_only_its_dependency_cone(p
 
 
 def test_the_flattened_issues_still_carry_every_failure(project):
-    result = _call_add_stage([_LOAD, _CLEAN, _SCORE_UNADDITIVE])
+    result = _call_add_stage(project, [_LOAD, _CLEAN, _SCORE_UNADDITIVE])
 
     assert result["issues"] == result["failed"][0]["issues"]
 
@@ -134,7 +134,7 @@ def test_a_cycle_among_the_submitted_stages_refuses_the_whole_batch(project):
     a = {**_CLEAN, "id": "a", "inputs": [{"id": "b", "schema": _CLAIM}]}
     b = {**_CLEAN, "id": "b", "inputs": [{"id": "a", "schema": _CLAIM}]}
 
-    result = _call_add_stage([_LOAD, a, b])
+    result = _call_add_stage(project, [_LOAD, a, b])
 
     assert result["ok"] is False
     assert result["added"] == [] and result["failed"] == [] and result["skipped"] == []
@@ -145,7 +145,7 @@ def test_a_cycle_among_the_submitted_stages_refuses_the_whole_batch(project):
 
 def test_two_stages_sharing_an_id_refuse_the_whole_batch(project):
     """Which of the two `clean` inputs from has no answer, so writing either picks arbitrarily."""
-    result = _call_add_stage([_LOAD, {**_LOAD, "description": "Load again"}])
+    result = _call_add_stage(project, [_LOAD, {**_LOAD, "description": "Load again"}])
 
     assert result["ok"] is False and result["added"] == []
     assert any("duplicate" in issue for issue in result["issues"])
@@ -153,9 +153,9 @@ def test_two_stages_sharing_an_id_refuse_the_whole_batch(project):
 
 
 def test_a_one_element_list_refuses_exactly_as_the_singular_call_did(project):
-    _call_add_stage([_LOAD, _CLEAN])
+    _call_add_stage(project, [_LOAD, _CLEAN])
 
-    result = _call_add_stage([_SCORE_UNADDITIVE])
+    result = _call_add_stage(project, [_SCORE_UNADDITIVE])
 
     assert result["ok"] is False
     assert any("does not read it" in issue for issue in result["issues"])
@@ -163,7 +163,7 @@ def test_a_one_element_list_refuses_exactly_as_the_singular_call_did(project):
 
 
 def test_a_stage_added_earlier_in_the_batch_satisfies_a_later_stage_edge(project):
-    result = _call_add_stage([_LOAD, _CLEAN, _RANK])
+    result = _call_add_stage(project, [_LOAD, _CLEAN, _RANK])
 
     assert result["added"] == ["load", "clean"]
     [failure] = result["failed"]
@@ -174,7 +174,7 @@ def test_a_json_string_is_still_accepted_for_the_list(project):
     """FastMCP's pre_parse_json decodes a string sent for a non-str parameter."""
     import json
 
-    result = _call_add_stage(json.dumps([_LOAD, _CLEAN]))
+    result = _call_add_stage(project, json.dumps([_LOAD, _CLEAN]))
 
     assert result["added"] == ["load", "clean"]
     assert _list_stored_stage_ids(project) == {"load", "clean"}

@@ -43,19 +43,19 @@ def assert_run_ok(status: dict, project_dir, run_id: str) -> None:
 
 def test_offline_journey_reaches_a_published_artifact(journey_project, tmp_path):
     # Version the working copy through the web endpoint.
-    resp = client.post(f"/project/{PROJECT}/version", data={"message": "first version"})
+    resp = client.post(f"/project/{journey_project.name}/version", data={"message": "first version"})
     assert resp.status_code == 200, resp.text
     assert resp.json()["ok"] is True, resp.text
 
     # Publish it — the human-approval signal. A run no longer requires it, but it
     # stays in the journey: author -> version -> publish -> run -> artifact.
     version_id = list_versions(journey_project)[0].version_id
-    resp = client.post(f"/project/{PROJECT}/versions/{version_id}/publish",
+    resp = client.post(f"/project/{journey_project.name}/versions/{version_id}/publish",
                        follow_redirects=False)
     assert resp.status_code == 303, resp.text
 
     # The run form offers a binding field for the file input stage.
-    resp = client.get(f"/project/{PROJECT}/runs/new")
+    resp = client.get(f"/project/{journey_project.name}/runs/new")
     assert resp.status_code == 200
     assert 'name="binding__load"' in resp.text
 
@@ -63,7 +63,7 @@ def test_offline_journey_reaches_a_published_artifact(journey_project, tmp_path)
     bound = tmp_path / "this_week.csv"
     pd.DataFrame({"name": ["a", "b", "c"], "val": [1, 2, 5]}).to_csv(bound, index=False)
     resp = client.post(
-        f"/project/{PROJECT}/run",
+        f"/project/{journey_project.name}/run",
         data={"binding__load": str(bound)},
         follow_redirects=False,
     )
@@ -71,7 +71,7 @@ def test_offline_journey_reaches_a_published_artifact(journey_project, tmp_path)
     run_id = resp.headers["location"].rstrip("/").rsplit("/", 1)[-1]
 
     # The run completed: every stage ok.
-    status = client.get(f"/project/{PROJECT}/runs/{run_id}/status").json()
+    status = client.get(f"/project/{journey_project.name}/runs/{run_id}/status").json()
     assert_run_ok(status, journey_project, run_id)
     assert status["terminal"] is True
 
@@ -86,7 +86,7 @@ def test_offline_journey_reaches_a_published_artifact(journey_project, tmp_path)
     # The published artifact exists on disk and the artifact route serves it.
     artifact = journey_project / "runs" / run_id / "artifacts" / "report" / "totals.csv"
     assert artifact.is_file(), f"publish stage wrote no artifact at {artifact}"
-    served = client.get(f"/project/{PROJECT}/runs/{run_id}/artifact/report/totals.csv")
+    served = client.get(f"/project/{journey_project.name}/runs/{run_id}/artifact/report/totals.csv")
     assert served.status_code == 200
 
     # The served numbers come from the BOUND file: flagged = val > 1,
@@ -97,16 +97,16 @@ def test_offline_journey_reaches_a_published_artifact(journey_project, tmp_path)
 
 
 def test_publish_stage_records_no_output_validation_issue(journey_project):
-    client.post(f"/project/{PROJECT}/version", data={"message": "first version"})
+    client.post(f"/project/{journey_project.name}/version", data={"message": "first version"})
     version_id = list_versions(journey_project)[0].version_id
-    resp = client.post(f"/project/{PROJECT}/versions/{version_id}/publish",
+    resp = client.post(f"/project/{journey_project.name}/versions/{version_id}/publish",
                        follow_redirects=False)
     assert resp.status_code == 303, resp.text
 
-    resp = client.post(f"/project/{PROJECT}/run", follow_redirects=False)
+    resp = client.post(f"/project/{journey_project.name}/run", follow_redirects=False)
     assert resp.status_code == 303, resp.text
     run_id = resp.headers["location"].rstrip("/").rsplit("/", 1)[-1]
-    status = client.get(f"/project/{PROJECT}/runs/{run_id}/status").json()
+    status = client.get(f"/project/{journey_project.name}/runs/{run_id}/status").json()
     assert_run_ok(status, journey_project, run_id)
 
     manifest = json.loads(
@@ -129,9 +129,9 @@ def journey_project(tmp_path, monkeypatch):
     authored = tmp_path / "authored.csv"
     pd.DataFrame({"name": ["a", "b"], "val": [1, 2]}).to_csv(authored, index=False)
 
-    create_project(PROJECT, "Flag rows over the threshold and publish totals.",
-                   source="smoke test")
-    project_dir = tmp_path / PROJECT
+    project_id = create_project(PROJECT, "Flag rows over the threshold and publish totals.",
+                                source="smoke test")
+    project_dir = tmp_path / project_id
     (project_dir / "compiled").mkdir()
     for position, stage in enumerate(_workflow_stages(str(authored)), start=1):
         path = project_dir / "compiled" / f"{position:02d}_{stage['id']}.json"

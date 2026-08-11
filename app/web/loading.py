@@ -21,6 +21,7 @@ from app.runtime.manifest import resolve_output_path
 from app.services.run import resolve_version
 from app.services.loader import CompiledStageFile, load_compiled_dir
 from app.services.versioning import list_versions, load_version_stages
+from app.services.project import describe_project
 from app.services.workspace import load_schemas, resolve_project_dir
 from app.web.config import projects_dir
 from app.web.project_cards import ProjectCard, tally_runs
@@ -53,7 +54,8 @@ def _build_project_card(p: Path) -> ProjectCard | None:
     if not (has_workflow or has_schemas or has_document):
         return None
     return ProjectCard(
-        name=p.name,
+        id=p.name,
+        label=describe_project(p.name),
         has_document=has_document,
         has_workflow=has_workflow,
         has_schemas=has_schemas,

@@ -33,6 +33,7 @@ from app.services import generation
 from app.services import loader
 from app.services import frame_profile
 from app.services import project as project_service
+from app.services.project import ProjectListing
 from app.services import versioning
 from app.services import workflow_test as workflow_test_service
 from app.services import workspace
@@ -113,8 +114,8 @@ async def run_session_manager() -> AsyncIterator[None]:
 
 
 @mcp.tool(description=TOOL_SPECS["list_projects"].description)
-def list_projects() -> list[str]:
-    return project_service.list_projects()
+def list_projects() -> list[ProjectListing]:
+    return project_service.list_project_listings()
 
 
 @mcp.tool(description=TOOL_SPECS["create_project"].description)

@@ -14,7 +14,6 @@ from fastapi.responses import (
     RedirectResponse,
 )
 
-from app.core.errors import ProjectExistsError
 from app.models import (
     find_workflow_compiler_warnings,
     stage_to_json,
@@ -124,10 +123,11 @@ async def new_project_submit(
     model: str = Form("sonnet"),
 ):
     try:
-        safe_name = project.create_project(name, doc_text, model=model, source="pasted document")
-    except (ValueError, ProjectExistsError) as exc:
+        project_id = project.create_project(
+            name, doc_text, model=model, source="pasted document")
+    except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    project_dir = projects_dir() / safe_name
+    project_dir = projects_dir() / project_id
     doc = (project_dir / "document.md").read_text(encoding="utf-8")
     # Kick off data-model generation. It runs as a LIVE chat turn; land the user on it
     # so they watch the model being authored (it streams while it runs, then persists

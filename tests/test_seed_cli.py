@@ -8,6 +8,7 @@ from pathlib import Path
 
 from app.seeds.seed import discover_workflow_files, seed_all, seed_demo_data_if_enabled
 from app.services import project
+from app.services.project import describe_project
 from app.services.stage_edit import find_description_issues
 
 _TUTORIAL = "tutorial_lobbying_triage"
@@ -35,7 +36,8 @@ def test_seed_cli_subprocess_bootstraps_the_store_and_seeds(tmp_path):
         f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     )
     assert f"imported: {_TUTORIAL}" in result.stdout
-    assert (examples_dir / _TUTORIAL / "compiled").is_dir()
+    # The directory is named by the minted id, so find it by what it contains.
+    assert [d.name for d in examples_dir.iterdir() if (d / "compiled").is_dir()]
 
 
 def test_seed_all_imports_every_committed_bundle_into_an_empty_workspace(tmp_path):
@@ -44,20 +46,20 @@ def test_seed_all_imports_every_committed_bundle_into_an_empty_workspace(tmp_pat
 
     imported = seed_all()
 
-    assert imported == _ALL_BUNDLES
-    assert set(_ALL_BUNDLES) <= set(project.list_projects())
+    assert [describe_project(project_id) for project_id in imported] == _ALL_BUNDLES
+    assert set(imported) <= set(project.list_projects())
 
 
 def test_seed_all_skips_a_bundle_whose_project_already_exists(tmp_path):
     examples_dir = tmp_path / "examples"
     examples_dir.mkdir()
     first = seed_all()
-    assert first == _ALL_BUNDLES
+    assert [describe_project(project_id) for project_id in first] == _ALL_BUNDLES
 
     second = seed_all()
 
     assert second == []
-    assert set(_ALL_BUNDLES) <= set(project.list_projects())
+    assert set(first) == set(project.list_projects())
 
 
 def test_discover_workflow_files_finds_the_committed_tutorial_fixture():
@@ -102,8 +104,8 @@ def test_seed_demo_data_if_enabled_seeds_when_env_var_is_1(tmp_path, monkeypatch
 
     imported = seed_demo_data_if_enabled()
 
-    assert imported == _ALL_BUNDLES
-    assert set(_ALL_BUNDLES) <= set(project.list_projects())
+    assert [describe_project(project_id) for project_id in imported] == _ALL_BUNDLES
+    assert set(imported) <= set(project.list_projects())
 
 
 def test_the_retired_lobbying_issue_triage_bundle_is_gone_whole():

@@ -9,6 +9,7 @@ import argparse
 from app.core.store_config import refuse_renamed_env_vars
 from app.seeds.bootstrap import configure_projects_dir_from_env, ensure_store_configured
 from app.seeds.seed import discover_workflow_files, seed_all
+from app.services.project import describe_project
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -24,12 +25,13 @@ def main(argv: list[str] | None = None) -> None:
     refuse_renamed_env_vars()
     configure_projects_dir_from_env()
     ensure_store_configured()
-    imported = set(seed_all())
-    # Each fixture file is named after the project it imports as (see
-    # app/seeds/__init__.py) — its stem doubles as this status line's label.
+    # seed_all returns project IDs; the status line speaks in the labels the fixture
+    # files are named after (see app/seeds/__init__.py), so map each id back.
+    imported = {describe_project(project_id) for project_id in seed_all()}
     for wf_path in discover_workflow_files():
-        name = wf_path.stem
-        print(f"imported: {name}" if name in imported else f"skipped (already exists): {name}")
+        label = wf_path.stem
+        print(f"imported: {label}" if label in imported
+              else f"skipped (already seeded): {label}")
 
 
 if __name__ == "__main__":

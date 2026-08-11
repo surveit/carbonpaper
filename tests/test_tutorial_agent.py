@@ -15,7 +15,7 @@ from claude_agent_sdk import SdkMcpTool
 
 import app.agents.tutorial.config  # noqa: F401 — registers the "tutorial" agent
 import app.services.run as run_service
-from app.services.project_record import find_projects_by_name
+from app.services.project_record import Project
 from app.core.agent.registry import build_engine, build_mcp_server
 from app.models.stages.input_data import InputDataStage
 from app.services import project as project_service
@@ -106,15 +106,15 @@ def test_a_second_tour_reuses_the_project_the_first_one_seeded(projects_root: Pa
 def test_a_tour_after_the_project_was_deleted_still_seeds(projects_root: Path) -> None:
     """The path that broke it live: delete the tutorial project, then tour again."""
     first = _seed_a_tour()
-    # What delete_project does: rmtree the directory, KEEP the store record. And
-    # create_project refuses any name whose record exists — so the name is left held by
-    # a tombstone: reusing it finds no workflow, importing over it is refused.
+    # The store record outlives the rmtree, so the tour must not reuse a project it
+    # can no longer load — it seeds a fresh one instead of resolving the dead record.
     shutil.rmtree(projects_root / first["name"])
-    assert find_projects_by_name(first["name"]), "the record should outlive it"
+    assert Project.load_or_none(first["name"]) is not None, "the record should outlive it"
 
     second = _seed_a_tour()
 
     # Whatever it is called, it must be a project that actually loads and can run.
+    assert second["name"] != first["name"]
     assert (projects_root / second["name"] / "document.md").is_file()
     assert load_workflow(projects_root / second["name"])
     assert run_service.resolve_version(second["name"], None) == second["version_id"]

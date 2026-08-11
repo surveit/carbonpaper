@@ -132,10 +132,12 @@ expired run_id returns {ok: False, error} rather than a fabricated status.""",
     "list_projects": ToolSpec(
         name="list_projects",
         description="""\
-List the names of every project in the workspace that has an authored
-workflow. A just-created project appears here only once its first stage has
-been added, so a name missing from this list is a project with no stages
-yet, not a project that does not exist.""",
+List every project in the workspace that has an authored workflow, as
+{id, name} pairs. Pass the `id` to every other tool — `name` is a label the
+author chose, it may be shared by two projects, and it identifies nothing. A
+just-created project appears here only once its first stage has been added, so
+a project missing from this list is one with no stages yet, not one that does
+not exist.""",
     ),
     "profile_stage_output_data_range": ToolSpec(
         name="profile_stage_output_data_range",
