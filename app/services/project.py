@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import Any, ClassVar, Sequence
@@ -32,7 +33,7 @@ from app.models.run_manifest import (
 from app.services.versioning import ReviewGuide
 from app.core.persistence import PersistedModel, PersistenceScope
 from app.core.run_status import RunStatus
-from app.services import data_model, stage_edit, versioning, workspace
+from app.services import data_model, drafts, stage_edit, versioning, workspace
 from app.services.loader import (
     load_compiled_dir,
     load_workflow,
@@ -268,11 +269,9 @@ def create_project(
     doc = document.strip()
     if not doc:
         raise ValueError("The methodology document is empty.")
-    if Project.exists(safe_name):
-        raise ProjectExistsError(
-            f"project '{safe_name}' already exists — choose a different name."
-        )
     project_dir = workspace.projects_dir() / safe_name
+    if Project.exists(safe_name):
+        raise ProjectExistsError(_describe_taken_name(safe_name, project_dir))
     if (project_dir / "document.md").is_file():
         raise ProjectExistsError(
             f"{safe_name}/document.md already exists — choose a different name."
@@ -287,6 +286,42 @@ def create_project(
     return safe_name
 
 
+def delete_project(name: str) -> None:
+    """Deletes the record, versions, guides and drafts with the directory — a delete leaves nothing."""
+    project_dir = _resolve_project_dir_to_delete(name)
+    if project_dir.is_dir():
+        shutil.rmtree(project_dir)
+    # The identity goes LAST, so a failure part-way leaves the record naming what is
+    # still there rather than orphaning it — the state this delete exists to avoid.
+    versioning.delete_project_versions(name)
+    drafts.delete_project_drafts(name)
+    Project.delete(name)
+    # The stage cache is deliberately left: an entry is keyed by the stage's and the
+    # row's own fingerprints, so it is reused only by a computation identical to the
+    # one that filled it, and dropping it throws away paid LLM calls.
+
+
+def _resolve_project_dir_to_delete(name: str) -> Path:
+    """Direct-child-of-the-root is the traversal guard the rmtree rests on."""
+    project_dir = workspace.resolve_project_dir(name)
+    if project_dir.parent != workspace.projects_dir().resolve():
+        raise ValueError(f"invalid project id '{name}'")
+    return project_dir
+
+
+def _describe_taken_name(safe_name: str, project_dir: Path) -> str:
+    if project_dir.is_dir():
+        return f"project '{safe_name}' already exists — choose a different name."
+    # A record with no directory is a leftover — the project it named is gone. Say what
+    # is still stored and how to free the name; never adopt the record silently, which
+    # would hand a fresh methodology the versions authored from a different one.
+    return (
+        f"project '{safe_name}' has a stored record but no working copy on disk — its "
+        f"versions and drafts are still stored. Delete the project to remove them and "
+        f"free the name."
+    )
+
+
 def project_exists(project_id: str) -> bool:
     try:
         return workspace.resolve_project_dir(project_id).is_dir()
@@ -294,8 +329,15 @@ def project_exists(project_id: str) -> bool:
         return False
 
 
+# Two project listings exist and they answer different questions. This one is
+# record-backed and names the projects the agent tools, the switcher and the admin
+# page can act on — all of which need the directory, so a record without one is
+# excluded. The home page's (app.web.loading.list_projects) is disk-backed and builds
+# a status card per directory, so it also shows a directory carrying no record: one
+# copied into the workspace by hand, which the module docstring above admits.
 def list_projects() -> list[str]:
-    return sorted(record.id for record in Project.list())
+    """Record AND directory: a record with no working copy opens no page, so it is not listed."""
+    return sorted(record.id for record in Project.list() if project_exists(record.id))
 
 
 def describe_workflow(name: str) -> dict[str, Any]:

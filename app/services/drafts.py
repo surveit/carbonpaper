@@ -20,7 +20,7 @@ from app.models import (
     stage_to_spec_dict,
     validate_workflow,
 )
-from app.core.persistence import PersistedModel, PersistenceScope
+from app.core.persistence import PersistedModel, PersistenceScope, get_store
 from app.core.utils import format_errors, generate_word_triplet_id
 from app.services import versioning, workspace
 
@@ -146,6 +146,13 @@ def save_version(
     d.parent_version = meta.version_id
     d.save()
     return SaveResult(ok=True, version_id=meta.version_id)
+
+
+def delete_project_drafts(project_id: str) -> None:
+    """Takes the project id, not a project_dir: a deleted project has no directory left to resolve."""
+    store = get_store()
+    for doc_id in store.list_ids("draft", f"{project_id}/"):
+        store.delete("draft", doc_id)
 
 
 # ─── internals ───────────────────────────────────────────────────────────────

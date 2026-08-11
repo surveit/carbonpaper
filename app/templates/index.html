@@ -20,7 +20,7 @@
     {% else %}{% set open_url = "/project/" ~ m.name ~ "/data_model" %}{% endif %}
     <div class="project-card">
         <form class="project-delete" method="post" action="/project/{{ m.name }}/delete"
-              onsubmit="return confirm('Delete project &#39;{{ m.name }}&#39; and all its runs? This cannot be undone.');">
+              onsubmit="return confirm('Delete project &#39;{{ m.name }}&#39; — its runs, its saved versions and their review guides? This cannot be undone.');">
             <button type="submit" class="delete-btn" title="Delete project &quot;{{ m.name }}&quot;" aria-label="Delete project {{ m.name }}">
                 {# trash-2: the lid and its handle, the can, two tines. #}
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
