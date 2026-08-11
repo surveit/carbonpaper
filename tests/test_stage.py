@@ -105,7 +105,7 @@ def test_missing_config_block_is_a_structured_missing_error():
 
 # ── llm_transform's 1:1 contract (_llm_transform_one_to_one) ──────────────────
 def test_llm_transform_rejects_more_than_one_input():
-    with pytest.raises(ValidationError, match="exactly one input, has 2"):
+    with pytest.raises(ValidationError, match="at most 1 item"):
         m.parse_stage(S(
             id="extract", type="llm_transform",
             inputs=[{"id": "a", "schema": _PK_ID_SCHEMA}, {"id": "b", "schema": _PK_ID_SCHEMA}],

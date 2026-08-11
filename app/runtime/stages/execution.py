@@ -13,7 +13,12 @@ import pandas as pd
 
 from app.models import Stage
 from app.models.run_manifest import RowError, StageContribution
-from app.models.stage import StageBase, StageType, is_grain_and_order_preserving
+from app.models.stage import (
+    StageBase,
+    StageType,
+    is_grain_and_order_preserving,
+    max_declared_inputs,
+)
 from app.models.stages.llm_transform import LLMTransformStage
 
 from app.core.agent.usage import LlmUsage
@@ -252,6 +257,16 @@ def validate_registry_matches_model(handlers: dict[StageType, StageHandler]) -> 
                 f"model declares grain-and-order-preserving="
                 f"{is_grain_and_order_preserving(stage_type)}"
             )
+        # The arity rule lives on the model's `inputs` field and is checked here
+        # rather than per execution: a row-mapped handler maps ONE frame's rows,
+        # so a type that admits a second input names no rows to map.
+        if isinstance(handler, RowMapHandler) and max_declared_inputs(stage_type) != 1:
+            raise RuntimeError(
+                f"stage type {stage_type.value!r} is registered as "
+                f"{type(handler).__name__}, which maps one frame's rows, but its "
+                f"model caps `inputs` at {max_declared_inputs(stage_type)} — declare "
+                f"max_length=1"
+            )
 
 
 def _run_row_mapper(
@@ -260,11 +275,6 @@ def _run_row_mapper(
     inputs: dict[str, pd.DataFrame],
     ctx: RunContext,
 ) -> pd.DataFrame:
-    if len(stage.inputs) != 1:
-        raise ValueError(
-            f"stage {stage.id}: a row-mapped stage takes exactly one input, "
-            f"got {len(stage.inputs)}"
-        )
     src = inputs[stage.inputs[0].id]
     reads = stage.anchor_reads()
     map_row = handler.make_mapper(stage, ctx, src)

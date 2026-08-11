@@ -124,7 +124,9 @@ class LLMConfig(StageConfig):
 class LLMTransformStage(StageBase):
     type: Literal[StageType.llm_transform]
     llm: LLMConfig
-    inputs: list[StageInput] = Field(default_factory=list, min_length=1)
+    # Exactly one input, like every other row-mapped type: the runtime maps the
+    # prompt over ONE frame's rows, so a second input names no rows to map.
+    inputs: list[StageInput] = Field(default_factory=list, min_length=1, max_length=1)
     signature: ExtendsSignature
 
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
@@ -141,9 +143,6 @@ class LLMTransformStage(StageBase):
 def find_llm_signature_issues(stage: "LLMTransformStage") -> list[str]:
     signature = stage.signature
     assert signature is not None  # find_signature_config_issues runs only with one
-    if len(stage.inputs) != 1:
-        return [f"stage '{stage.id}': llm_transform takes exactly one input, "
-                f"has {len(stage.inputs)}"]
     anchor_id = stage.inputs[0].id
     declared = {
         column.name
