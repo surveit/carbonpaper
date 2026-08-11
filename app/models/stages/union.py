@@ -5,18 +5,15 @@ from __future__ import annotations
 
 from typing import ClassVar, Literal
 
-from pydantic import ConfigDict, Field
+from pydantic import Field
 
 from app.models.schema import StageConfig, TableSchema
 from app.models.stages.stage_base import StageBase, StageInput, StageType
 from app.models.stages.node_spec import NodeTypeSpec
 from app.models.stages.signature import ReplacesSignature
-from app.models.tool_schema_prompts import UNION_CONFIG_DESCRIPTION
 
 
 class UnionConfig(StageConfig):
-    model_config = ConfigDict(json_schema_extra={"description": UNION_CONFIG_DESCRIPTION})
-
     FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset()
     INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset()
 

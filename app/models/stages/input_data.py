@@ -13,7 +13,6 @@ from app.models.schema import StageConfig, _Base
 from app.models.stages.stage_base import StageBase, StageType
 from app.models.stages.node_spec import NodeTypeSpec
 from app.models.stages.signature import ReplacesSignature
-from app.models.tool_schema_prompts import CONNECTOR_DESCRIPTION
 
 
 class ConnectorKind(str, Enum):
@@ -52,8 +51,6 @@ def resolve_file_format(path: str) -> FileFormat:
 
 
 class Connector(StageConfig):
-    model_config = ConfigDict(json_schema_extra={"description": CONNECTOR_DESCRIPTION})
-
     FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({"kind", "params", "refresh", "notes"})
     INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset()
 

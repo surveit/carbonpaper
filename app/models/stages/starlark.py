@@ -8,7 +8,7 @@ from collections.abc import Sequence
 from typing import ClassVar, Literal, Optional
 
 import starlark
-from pydantic import ConfigDict, Field, model_validator
+from pydantic import Field, model_validator
 
 from app.core.starlark_source import (
     DEFAULT_FUNCTION_NAME,
@@ -23,7 +23,6 @@ from app.models.stages.node_spec import NodeTypeSpec
 from app.models.stages.signature import ExtendsSignature
 from app.models.stages.stage_tests import StarlarkRowFunctionStageTest
 from app.models.stages.warnings import CompilerWarning, warn
-from app.models.tool_schema_prompts import STARLARK_FUNCTION_DESCRIPTION
 
 # REFUSE_BUILTIN is registered so write-time validation compiles source in the
 # same shape execution does: Starlark resolves free variables STATICALLY at
@@ -83,8 +82,6 @@ def validate_starlark_function_code(code: str, function: str | None) -> None:
 
 
 class StarlarkFunction(StageConfig):
-    model_config = ConfigDict(json_schema_extra={"description": STARLARK_FUNCTION_DESCRIPTION})
-
     FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({"code", "function"})
     INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset({"summary", "corner_cases"})
 

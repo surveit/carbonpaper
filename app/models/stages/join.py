@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, ClassVar, Literal
 
-from pydantic import ConfigDict, Field, model_validator
+from pydantic import Field, model_validator
 
 from app.models.schema import StageConfig, _Base
 from app.models.stages.stage_base import StageBase, StageInput, StageType
@@ -14,7 +14,6 @@ from app.models.stages.shared import (
 )
 from app.models.stages.node_spec import NodeTypeSpec
 from app.models.stages.signature import ExtendsSignature
-from app.models.tool_schema_prompts import JOIN_CONFIG_DESCRIPTION
 
 if TYPE_CHECKING:
     from app.models.schema import TableSchema
@@ -26,8 +25,6 @@ class JoinKey(_Base):
 
 
 class JoinConfig(StageConfig):
-    model_config = ConfigDict(json_schema_extra={"description": JOIN_CONFIG_DESCRIPTION})
-
     FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({"keys", "enrich_with"})
     INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset()
 
