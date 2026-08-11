@@ -229,3 +229,32 @@ def test_an_enum_prefill_keeps_a_declared_value_and_drops_an_undeclared_one():
     assert field.control == "select" and field.options == ["yes", "no", "unclear"]
     assert queue_view._resolve_prefill(field, "unclear") == "unclear"
     assert queue_view._resolve_prefill(field, "retired") is None
+
+
+# ── Finding the item behind one card, by the fingerprint the card carries ────
+
+
+def _page_of(*input_fingerprints: str) -> queue_view.QueuePage:
+    return queue_view.QueuePage(
+        reviewed_fields=[], review_notes_label=None, context_columns=[],
+        schema_note=None, lineage_note=None,
+        items=[
+            queue_view.ReviewItem(
+                input_fingerprint=fingerprint, row={}, lineage_url=None,
+                prior_decision=None, prefill={}, upstream_text={},
+            )
+            for fingerprint in input_fingerprints
+        ],
+        reviewed_count=0, total=len(input_fingerprints), all_reviewed=False,
+    )
+
+
+def test_an_item_is_found_at_the_position_its_own_card_states():
+    found = queue_view.find_positioned_item(_page_of("fp0", "fp1", "fp2"), "fp1")
+
+    assert found is not None and found.item.input_fingerprint == "fp1"
+    assert found.row_position == 2  # 1-based: the card reads "Row 2 of 3"
+
+
+def test_no_item_is_found_for_a_fingerprint_the_queue_does_not_carry():
+    assert queue_view.find_positioned_item(_page_of("fp0"), "fp9") is None

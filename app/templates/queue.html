@@ -1,8 +1,10 @@
 {% extends "base.html" %}
-{% from "_kv_table.html" import kv_table %}
 {% block title %}Review queue · {{ stage_id }} · {{ run_id }}{% endblock %}
 
 {% block breadcrumbs %}{% include "_breadcrumbs.html" %}{% endblock %}
+
+{# In the head, so the pager is defined before the script at the foot of this page. #}
+{% block head_extra %}<script src="/static/queue-paginate.js"></script>{% endblock %}
 
 {% block content %}
 <div class="stage-header">
@@ -18,13 +20,14 @@
 </div>
 
 <div class="queue-progress">
-    <div class="bar"><div class="fill" style="width: {{ (100 * page.reviewed_count / page.total) | round if page.total else 0 }}%"></div></div>
-    <p><strong>{{ page.reviewed_count }}</strong> of <strong>{{ page.total }}</strong> reviewed</p>
-    {% if page.all_reviewed %}
-    <form action="/project/{{ project }}/runs/{{ run_id }}/resume" method="post" style="display:inline">
+    <div class="bar"><div class="fill" id="progress-fill" style="width: {{ (100 * page.reviewed_count / page.total) | round if page.total else 0 }}%"></div></div>
+    <p><strong id="reviewed-count">{{ page.reviewed_count }}</strong> of <strong>{{ page.total }}</strong> reviewed</p>
+    {# Always rendered so the script can reveal it on the decision that completes
+       the queue; no inline `display`, which would outrank the hidden attribute. #}
+    <form id="resume-run" action="/project/{{ project }}/runs/{{ run_id }}/resume" method="post"
+          {% if not page.all_reviewed %}hidden{% endif %}>
         <button type="submit" class="btn primary">▶ Resume run</button>
     </form>
-    {% endif %}
 </div>
 
 {% if stage_def.queue and stage_def.queue.reviewer_instructions %}
@@ -43,111 +46,20 @@
 <p class="muted"><em>No items to review.</em></p>
 {% endif %}
 
-<div class="queue-items" id="queue-items" hidden>
+{% include "_queue_pager.html" %}
+<div class="queue-items" id="queue-items" hidden></div>
+{% include "_queue_pager.html" %}
+
+{# Every queued card, in review order and numbered absolutely — but inside a
+   <template>, whose content is parsed and never laid out. The script attaches
+   one page of these at a time to the list above, which is what keeps the layout
+   cost of a several-thousand-row queue off the page. It does not keep the bytes
+   off it: the whole queue is still shipped and parsed here. #}
+<template id="queue-cards">
 {% for item in page.items %}
-<article class="queue-card {% if item.prior_decision %}decided decided-{{ item.prior_decision.verdict }}{% endif %}"
-         data-input-fingerprint="{{ item.input_fingerprint }}">
-    <header>
-        <span class="row-position">Row {{ loop.index }} of {{ page.total }}</span>
-        {% if item.lineage_url %}
-        <a class="lineage-link" href="{{ item.lineage_url }}">lineage of the upstream row →</a>
-        {% endif %}
-    </header>
-    {% if item.prior_decision %}
-    <p class="prior-decision">
-        Recorded: <strong>{{ item.prior_decision.verdict }}</strong>
-        {% for column, value in item.prior_decision.reviewed_values.items() %}
-          · {{ column }} = {% if value is none %}<em>no value</em>{% else %}<code>{{ value }}</code>{% endif %}
-        {% endfor %}
-        {% if item.prior_decision.review_notes %}
-        · notes: <em>{{ item.prior_decision.review_notes }}</em>
-        {% endif %}
-        <span class="muted">by {{ item.prior_decision.reviewer }} at {{ item.prior_decision.reviewed_at | friendly_time }}</span>
-    </p>
-    {% endif %}
-
-    {% if page.context_columns %}
-    <details class="queued-row" open>
-        <summary>Background for this row — not under review</summary>
-        {{ kv_table(page.context_columns, item.row) }}
-    </details>
-    {% endif %}
-
-    <form class="review-form">
-        <p class="review-section-heading">Columns to review</p>
-        <div class="reviewed-fields">
-        {% for field in page.reviewed_fields %}
-        {% set field_id = 'rf-' ~ item.input_fingerprint ~ '-' ~ field.target %}
-        {# The upstream value is what this stage received for the column; `prefill`
-           is what the field opens with — the reviewer's own recorded value once this
-           row has been decided — and is also what the closed field displays, so an
-           untouched submit records exactly the value the reviewer was shown. #}
-        {% set upstream_text = item.upstream_text.get(field.target) %}
-        {% set prefill = item.prefill.get(field.target) %}
-        {% set prefill_text = '' if prefill is none else prefill %}
-        {% set recorded = item.prior_decision.reviewed_values.get(field.target) if item.prior_decision else none %}
-        <div class="reviewed-field">
-            <label for="{{ field_id }}"
-                   {% if field.description %}title="{{ field.description }}"{% endif %}>{{ field.target }}</label>
-            <span class="upstream-value">received <code>{{ field.source }}</code>:
-                <strong>{% if upstream_text is none or upstream_text == '' %}<em>no value</em>{% else %}{{ upstream_text }}{% endif %}</strong>
-                {% if item.prior_decision %}
-                <span class="recorded-value">· you recorded
-                    <strong>{% if recorded is none %}<em>no value</em>{% else %}{{ recorded }}{% endif %}</strong></span>
-                {% endif %}
-            </span>
-            <div class="field-control">
-                {# A decided card is not asking for input: its openers are really
-                   disabled (not merely styled so) until "Change my review" unlocks them. #}
-                <button type="button" class="value-display" data-edit-for="{{ field_id }}"
-                        aria-controls="{{ field_id }}"
-                        {% if item.prior_decision %}disabled{% endif %}>
-                    <span class="current-value">{% if prefill is none %}<em>unset</em>{% else %}{{ prefill }}{% endif %}</span>
-                    <span class="edit-hint">change</span>
-                </button>
-                <span class="field-editor" hidden>
-                {% if field.control == 'select' %}
-                <select id="{{ field_id }}" data-target="{{ field.target }}"
-                        data-prefill="{{ prefill_text }}">
-                    {% if field.nullable or prefill is none %}
-                    <option value="" {% if prefill is none %}selected{% endif %}>— unset —</option>
-                    {% endif %}
-                    {% for option in field.options %}
-                    <option value="{{ option }}" {% if option == prefill %}selected{% endif %}>{{ option }}</option>
-                    {% endfor %}
-                </select>
-                {% else %}
-                <input type="{{ field.control }}" id="{{ field_id }}" data-target="{{ field.target }}"
-                       data-prefill="{{ prefill_text }}"
-                       value="{{ prefill_text }}"
-                       {% if field.step %}step="{{ field.step }}"{% endif %}
-                       {% if field.minimum is not none %}min="{{ field.minimum }}"{% endif %}
-                       {% if field.maximum is not none %}max="{{ field.maximum }}"{% endif %}>
-                {% endif %}
-                <button type="button" class="revert-edit" data-revert-for="{{ field_id }}">revert</button>
-                </span>
-            </div>
-        </div>
-        {% endfor %}
-        </div>
-        {% if review_notes_column %}
-        <label class="review-notes">
-            <span>{{ page.review_notes_label }}</span>
-            <textarea rows="2" data-role="notes"
-                      placeholder="Include any reasoning or citations for your decision">{{ item.prior_decision.review_notes if item.prior_decision and item.prior_decision.review_notes else '' }}</textarea>
-        </label>
-        {% endif %}
-        <div class="decision-controls">
-            {% if item.prior_decision %}
-            <button type="button" class="btn unlock-review" data-unlock>Change my review</button>
-            {% endif %}
-            <button type="submit" class="btn primary"
-                    {% if item.prior_decision %}hidden{% endif %}>Submit</button>
-        </div>
-    </form>
-</article>
+{% with row_position = loop.index %}{% include "_queue_card.html" %}{% endwith %}
 {% endfor %}
-</div>
+</template>
 
 <script>
 (function () {
@@ -155,11 +67,53 @@
   const RUN_ID = {{ run_id | tojson }};
   const STAGE_ID = {{ stage_id | tojson }};
   const DECIDE_URL = `/project/${PROJECT}/runs/${RUN_ID}/queue/${STAGE_ID}/decide`;
+  const CARD_URL = `/project/${PROJECT}/runs/${RUN_ID}/queue/${STAGE_ID}/card`;
+  const TOTAL = {{ page.total | tojson }};
   const REVIEWER_KEY = 'carbon_paper.reviewer';
 
   const nameInput = document.getElementById('reviewer-name');
   const hint = document.getElementById('reviewer-hint');
   const queueItems = document.getElementById('queue-items');
+  const reviewedCountEl = document.getElementById('reviewed-count');
+  const progressFill = document.getElementById('progress-fill');
+  const resumeForm = document.getElementById('resume-run');
+  const pagers = document.querySelectorAll('.queue-pager');
+
+  // The tally of recorded decisions, seeded from the server's count. Not read off
+  // the cards: only the card just decided is re-rendered, so the DOM holds the
+  // state the page opened on for every other row.
+  let reviewedCount = {{ page.reviewed_count | tojson }};
+
+  // Every card, held out of layout until its page is asked for. The pager, not
+  // the list, is what a card's current state is read from and written to.
+  const pager = createQueuePager(
+    Array.from(document.getElementById('queue-cards').content.querySelectorAll('.queue-card'))
+      .map((card) => ({ fingerprint: card.dataset.inputFingerprint, card: card })),
+    QUEUE_PAGE_SIZE
+  );
+  let currentPage = 0;
+
+  function showPage(index, { scroll = false } = {}) {
+    currentPage = pager.clampPage(index);
+    queueItems.replaceChildren(...pager.cardsOnPage(currentPage));
+    renderPager();
+    // The reviewer works a page top-down, so a page change lands them at its top.
+    if (scroll && pagers.length) pagers[0].scrollIntoView({ block: 'start' });
+  }
+
+  // The controls describe the WHOLE queue and appear only when it runs past one
+  // page — and never over a list the reviewer gate is still holding shut.
+  function renderPager() {
+    const described = pager.describePage(currentPage);
+    const shown = pager.pageCount() > 1 && !queueItems.hidden;
+    pagers.forEach(function (el) {
+      el.hidden = !shown;
+      el.querySelector('.pager-readout').textContent =
+        `${described.label} · showing ${described.range}`;
+      el.querySelector('[data-page-step="-1"]').disabled = described.page === 1;
+      el.querySelector('[data-page-step="1"]').disabled = described.page === described.pages;
+    });
+  }
 
   function reviewerName() {
     return (nameInput.value || '').trim();
@@ -168,6 +122,7 @@
   function syncReviewerGate() {
     const name = reviewerName();
     queueItems.hidden = !name;
+    renderPager();
     hint.textContent = name
       ? 'Decisions are recorded against this name.'
       : 'Enter your name to see the queue — no decision is recorded unattributed.';
@@ -178,6 +133,7 @@
     }
   }
 
+  showPage(0);
   nameInput.value = localStorage.getItem(REVIEWER_KEY) || '';
   syncReviewerGate();
   // Reveal as soon as there is a name, but hide (and forget) only once the
@@ -210,13 +166,45 @@
     fd.append('prefilled_values', JSON.stringify(readValues(card, 'prefill')));
     const notes = card.querySelector('[data-role="notes"]');
     if (notes) fd.append('review_notes', notes.value);
+    const wasDecided = card.classList.contains('decided');
     const r = await fetch(DECIDE_URL, { method: 'POST', body: fd });
     if (!r.ok) {
       alert(`Failed: ${r.status} ${await r.text()}`);
       return;
     }
-    // Reload to update progress and reveal Resume button when complete.
-    window.location.reload();
+    // A reviewer changing their own recorded decision reviews no new row.
+    if (!wasDecided) {
+      reviewedCount += 1;
+      renderProgress();
+    }
+    await replaceCard(card);
+  }
+
+  function renderProgress() {
+    reviewedCountEl.textContent = reviewedCount;
+    progressFill.style.width = TOTAL ? `${Math.round(100 * reviewedCount / TOTAL)}%` : '0%';
+    resumeForm.hidden = !(TOTAL > 0 && reviewedCount >= TOTAL);
+  }
+
+  async function replaceCard(card) {
+    const url = `${CARD_URL}/${encodeURIComponent(card.dataset.inputFingerprint)}`;
+    const r = await fetch(url);
+    if (!r.ok) {
+      alert(`Recorded, but this card could not be redrawn: ${r.status} ${await r.text()}`);
+      return;
+    }
+    const holder = document.createElement('div');
+    holder.innerHTML = await r.text();
+    const fresh = holder.querySelector('.queue-card');
+    if (!fresh) {
+      alert('Recorded, but this card could not be redrawn: the reply carried no card.');
+      return;
+    }
+    // The pager first: it, not this element, is what the reviewer sees on
+    // coming back to this page, and a card decided here must not read as
+    // undecided then.
+    pager.replaceCard(card.dataset.inputFingerprint, fresh);
+    card.replaceWith(fresh);
   }
 
   // A field is read-only until the reviewer opens it, so an untouched field
@@ -251,6 +239,8 @@
   }
 
   document.addEventListener('click', function (ev) {
+    const step = ev.target.closest('[data-page-step]');
+    if (step) { showPage(currentPage + Number(step.dataset.pageStep), { scroll: true }); return; }
     const unlock = ev.target.closest('[data-unlock]');
     if (unlock) { unlockCard(unlock); return; }
     const opener = ev.target.closest('[data-edit-for]');

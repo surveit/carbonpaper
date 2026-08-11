@@ -1,0 +1,8 @@
+{#- Prev/Next over the client-side pages of the queue, rendered once above the
+    list and once below it. Hidden until the script has a page to report and the
+    reviewer gate is open, and left hidden for a queue that fits on one page. -#}
+<nav class="queue-pager" hidden aria-label="Queue pages">
+    <button type="button" class="btn sm" data-page-step="-1">← Prev</button>
+    <p class="pager-readout"></p>
+    <button type="button" class="btn sm" data-page-step="1">Next →</button>
+</nav>
