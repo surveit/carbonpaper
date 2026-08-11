@@ -114,9 +114,10 @@
        Five states every run surface speaks in — the status pill, the alert
        strip, run badges, per-stage borders, the progress bar, and the per-node
        stroke in build_mermaid_graph (app/web/diagrams.py _STATUS_STROKE).
-       Seven stage statuses map onto them: running and validation_warnings both
-       take warn, cancelled and pending both take idle; the node glyph is what
-       separates each pair. */
+       Seven stage statuses map onto them: running, cancelled and pending all take
+       idle, and the node glyph separates them (⟳ / ✖ / …). Running holds no hue on
+       purpose — it is the one status that is not a verdict, and the strip says it
+       with motion instead (run-page.css `strip-sweep`). */
     --state-done: var(--good-bd);   --state-done-bg: var(--good-bg);   --state-done-ink: var(--good-ink);
     --state-warn: var(--warn-bd);   --state-warn-bg: var(--warn-bg);   --state-warn-ink: var(--warn-ink);
     --state-failed: var(--bad-bd);  --state-failed-bg: var(--bad-bg);  --state-failed-ink: var(--bad-ink);

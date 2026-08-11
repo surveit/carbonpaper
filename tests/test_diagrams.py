@@ -12,6 +12,19 @@ def test_cancelled_stage_gets_glyph_and_grey_stroke() -> None:
     assert "stroke:#787d86" in graph
 
 
+def test_running_stage_gets_glyph_and_a_dashed_grey_stroke() -> None:
+    stages = [{"id": "s1", "description": "Stage One", "type": "input_data"}]
+    graph = build_mermaid_graph(stages, "demo", status_by_id={"s1": "running"})
+    assert "⟳" in graph
+    assert "stroke:#787d86,stroke-width:3px,stroke-dasharray:6 4" in graph
+
+
+def test_a_stage_that_reached_a_verdict_takes_no_dashes() -> None:
+    stages = [{"id": "s1", "description": "Stage One", "type": "input_data"}]
+    graph = build_mermaid_graph(stages, "demo", status_by_id={"s1": "ok"})
+    assert "stroke-dasharray" not in graph
+
+
 def test_plain_stage_with_no_status_renders_the_bare_node() -> None:
     stages = [{"id": "s1", "description": "Stage One", "type": "input_data"}]
     graph = build_mermaid_graph(stages, "demo")

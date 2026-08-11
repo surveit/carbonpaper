@@ -12,10 +12,12 @@
 }
 .run-status.status-ok { background: var(--state-done-bg); color: var(--state-done-ink); border-color: var(--state-done); }
 .run-status.status-warnings,
-.run-status.status-validation_warnings,
-.run-status.status-running { background: var(--state-warn-bg); color: var(--state-warn-ink); border-color: var(--state-warn); }
+.run-status.status-validation_warnings { background: var(--state-warn-bg); color: var(--state-warn-ink); border-color: var(--state-warn); }
 .run-status.status-errors,
 .run-status.status-error { background: var(--state-failed-bg); color: var(--state-failed-ink); border-color: var(--state-failed); }
+/* Running is not a verdict — it takes the idle tint the strip's running square does,
+   and the word in the pill is what separates it from a run that was cancelled. */
+.run-status.status-running,
 .run-status.status-cancelled { background: var(--state-idle-bg); color: var(--state-idle-ink); border-color: var(--state-idle); }
 .run-status.status-corrupt,
 .run-status.status-unknown { background: var(--sunk-deep); color: var(--muted); border-color: var(--border); }
