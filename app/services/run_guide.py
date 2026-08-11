@@ -25,8 +25,9 @@ class GuideStageView:
     executed: bool
     # The two halves of the output frame's shape, both measured off what THIS RUN wrote
     # — the rows off its manifest record, the columns off the footer of the frame file
-    # that record names. Neither is the version's DECLARED schema, which states only
-    # the columns a stage reads and adds and so is narrower than the frame it wrote.
+    # that record names. Neither is what the version's signatures promise: an input edge
+    # only has to be SATISFIABLE by its upstream, so that promise runs narrower than the
+    # frame the stage wrote.
     #
     # They are read separately and either can be None on its own, so a reader must
     # state the half it has rather than pair a measured number with a missing one.

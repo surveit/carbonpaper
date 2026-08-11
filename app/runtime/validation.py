@@ -1,7 +1,7 @@
 """Schema validation for stage I/O: column presence, type coercion, enum
 vocabularies, range constraints, nullability, and primary-key uniqueness against
-a stage's declared output_schema. Results are returned as structured records,
-not raised.
+the output schema a stage's signature resolves to. Results are returned as
+structured records, not raised.
 """
 
 from __future__ import annotations

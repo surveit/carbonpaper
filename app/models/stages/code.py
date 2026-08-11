@@ -235,8 +235,7 @@ class PythonRowFunctionStage(CarriesPythonFunctionStage):
     # The code is opaque to load-time validation, so unlike the config-driven
     # types nothing here cross-checks the block. The function is held to its
     # claimed writes at run time instead: the stage's output frame is validated
-    # against output_schema, which find_signature_issues pins to this
-    # signature.
+    # against what this signature promises (resolve_output_schema).
     signature: ExtendsSignature
 
 
