@@ -179,6 +179,40 @@ def test_stored_version_missing_published_reads_as_unpublished(tmp_path):
     assert meta.published is False
 
 
+def test_a_stored_queue_stage_written_before_queue_sort_still_loads(tmp_path):
+    """A queue block with no `sort` key is every such document written before the field."""
+    vid = "20260101T000000"
+    reviewed = [
+        {"name": "human_score", "type": "int", "nullable": True},
+        {"name": "decision", "type": "str", "nullable": True},
+        {"name": "reviewer_id", "type": "str", "nullable": True},
+        {"name": "reviewed_at", "type": "str", "nullable": True},
+    ]
+    scored = [
+        {"name": "doc_id", "type": "str", "nullable": False},
+        {"name": "score", "type": "int", "nullable": True},
+    ]
+    stage = {
+        "id": "review", "description": "Review", "type": "human_review_queue",
+        "inputs": [{"id": "load", "schema": {"columns": scored}}],
+        "signature": {"form": "extends", "adds": reviewed,
+                      "reads": [{"input": "load", "columns": scored}]},
+        "queue": {
+            "reviewed_columns": {"score": "human_score"}, "verdict_column": "decision",
+            "reviewer_column": "reviewer_id", "reviewed_at_column": "reviewed_at",
+        },
+    }
+    get_store().write("workflow_version", f"{tmp_path.name}/{vid}", {
+        "id": f"{tmp_path.name}/{vid}", "version_id": vid,
+        "created_at": "2026-01-01T00:00:00", "parent_version": None,
+        "message": "legacy", "reviewer": "human",
+        "stages": [stage], "schemas": [],
+    })
+
+    [loaded] = load_version_stages(tmp_path, vid)
+    assert loaded.queue.sort == []
+
+
 # ── publish_version ──────────────────────────────────────────────────────────
 
 def test_publish_version_stamps_and_is_idempotent(tmp_path):

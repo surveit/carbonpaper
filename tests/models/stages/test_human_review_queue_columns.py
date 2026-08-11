@@ -78,6 +78,60 @@ def test_a_filter_over_a_column_the_signature_does_not_read_is_rejected():
         parse_stage(spec)
 
 
+# ── 1b. the declared review order ────────────────────────────────────────────
+
+
+def test_a_sort_over_read_input_columns_is_clean():
+    stage = parse_stage(_stage_spec(queue={"sort": [
+        {"column": "score", "direction": "descending"},
+        {"column": "claim_id", "direction": "ascending"},
+    ]}))
+    assert find_queue_column_issues(stage) == []
+
+
+def test_a_sort_naming_a_column_the_input_lacks_is_rejected():
+    with pytest.raises(ValidationError, match="queue.sort orders by column 'income_usd'"):
+        parse_stage(_stage_spec(
+            queue={"sort": [{"column": "income_usd", "direction": "descending"}]}))
+
+
+def test_a_sort_over_a_column_the_signature_does_not_read_is_rejected():
+    # The queued row carries only the reads, so there would be nothing to sort on.
+    spec = _stage_spec(queue={"sort": [{"column": "confidence", "direction": "ascending"}]})
+    spec["signature"]["reads"] = reads_of(
+        "src", [c for c in _INPUT_COLUMNS if c["name"] != "confidence"])
+    with pytest.raises(ValidationError, match="queue.sort orders by `confidence`"):
+        parse_stage(spec)
+
+
+def test_a_sort_over_a_non_scalar_column_is_rejected():
+    input_columns = _INPUT_COLUMNS + [
+        {"name": "evidence", "type": "json", "value_type": "str", "nullable": True},
+    ]
+    output_columns = _OUTPUT_COLUMNS + [
+        {"name": "evidence", "type": "json", "value_type": "str", "nullable": True},
+    ]
+    with pytest.raises(ValidationError, match="has no order to put the queue in"):
+        parse_stage(_stage_spec(
+            queue={"sort": [{"column": "evidence", "direction": "descending"}]},
+            input_columns=input_columns, output_columns=output_columns,
+        ))
+
+
+def test_the_same_column_named_twice_in_one_sort_is_rejected():
+    with pytest.raises(ValidationError, match="names column 'score' more than once"):
+        parse_stage(_stage_spec(queue={"sort": [
+            {"column": "score", "direction": "descending"},
+            {"column": "score", "direction": "ascending"},
+        ]}))
+
+
+def test_a_sort_key_without_a_direction_is_rejected():
+    # Which end of the queue the largest value goes is the whole decision.
+    with pytest.raises(ValidationError, match="direction"):
+        parse_stage(_stage_spec(queue={"sort": [{"column": "score"}]}))
+
+
 # ── the read set ─────────────────────────────────────────────────────────────
 
 

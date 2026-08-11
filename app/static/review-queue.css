@@ -23,6 +23,20 @@
     background: var(--sunk); border-left: 3px solid var(--border-strong); border-radius: 0 4px 4px 0;
 }
 
+/* Prev/Next over the client-side pages of the queue, above and below the list. */
+.queue-pager {
+    display: flex; align-items: center; justify-content: center; gap: 14px;
+    margin: 14px 0; padding: 8px 14px;
+    background: var(--sunk); border: 1px solid var(--border); border-radius: 6px;
+}
+/* Companion to the display rule above, which would otherwise beat the UA's
+   [hidden] rule and show a pager over a one-page queue. */
+.queue-pager[hidden] { display: none; }
+.queue-pager .pager-readout { margin: 0; font-size: 13px; color: var(--muted); }
+/* At an end of the queue the control stays put and stops working, so the pair
+   never moves under the pointer mid-review. */
+.queue-pager .btn:disabled { opacity: 0.5; cursor: default; }
+
 .queue-items { display: flex; flex-direction: column; gap: 14px; }
 /* Companion to the display rule above: without it, `display: flex` beats the UA's
    [hidden] rule and the reviewer-name gate renders the rows anyway. */

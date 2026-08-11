@@ -208,7 +208,7 @@ def test_happy_path_renders_items_with_fingerprint_prior_decision_and_counts(tmp
     assert html.count("decided-approve") == 1
     assert "<strong>approve</strong>" in html
     # reviewed_count/total: exactly one of two rows has a prior decision.
-    assert "<strong>1</strong> of <strong>2</strong> reviewed" in html
+    assert '<strong id="reviewed-count">1</strong> of <strong>2</strong> reviewed' in html
     # One field per declared reviewed column, typed from the declared column and
     # pre-filled with the value the reviewer is being asked to confirm or change.
     assert 'data-target="human_score"' in html
@@ -1170,3 +1170,209 @@ def test_unlocking_a_decided_card_records_a_new_verdict_on_resubmit(tmp_path, mo
         PROJECT, "review", fingerprints["stage_fingerprint"], fp)
     assert entry is not None and entry.output_row is not None
     assert entry.output_row["human_score"] == 7
+
+
+# ── 12. Re-rendering one card, and the Resume run form ──────────────────────
+
+
+def test_the_card_route_re_renders_the_decided_state_of_one_row(tmp_path, monkeypatch):
+    _project_dir, run_id, fingerprints, html = _decided_queue_html(tmp_path, monkeypatch)
+    fp = fingerprints["input_fingerprints"][0]
+
+    r = TestClient(app).get(f"/project/{PROJECT}/runs/{run_id}/queue/review/card/{fp}")
+
+    assert r.status_code == 200
+    card = _first_card(r.text)
+    assert f'data-input-fingerprint="{fp}"' in card
+    assert "Recorded: <strong>approve</strong>" in " ".join(card.split())
+    assert ">Change my review<" in card
+    # The page loops over the same partial, so the swapped-in card is the card
+    # the page would have rendered for that row — including its "Row 1 of 2".
+    assert card == _first_card(html)
+    assert "Row 1 of 2" in " ".join(card.split())
+    # The recorded block sits AFTER the controls: a decision then adds nothing
+    # above the button the reviewer just pressed, so the swap moves nothing they
+    # are looking at. Everything the swap adds is below that point.
+    assert card.index('class="decision-controls"') < card.index('class="prior-decision"')
+
+
+def test_the_card_route_404s_on_a_fingerprint_this_queue_does_not_carry(tmp_path, monkeypatch):
+    _project_dir, run_id, _run_dir, _snapshot, _fingerprints = _build_and_halt(tmp_path, monkeypatch)
+
+    r = TestClient(app).get(f"/project/{PROJECT}/runs/{run_id}/queue/review/card/nosuchfingerprint")
+
+    assert r.status_code == 404
+    assert "nosuchfingerprint" in r.json()["detail"]
+
+
+def _resume_form(html):
+    return re.search(r"<form id=\"resume-run\"[^>]*>", html, re.DOTALL)
+
+
+def test_the_resume_form_is_rendered_hidden_until_every_row_is_decided(tmp_path, monkeypatch):
+    _project_dir, run_id, _run_dir, snapshot, fingerprints = _build_and_halt(tmp_path, monkeypatch)
+    client = TestClient(app)
+    url = f"/project/{PROJECT}/runs/{run_id}/queue/review"
+
+    # The script reveals the form on the decision that completes the queue, so it
+    # is in the page from the start — carrying `hidden`, and no inline `display`
+    # that would outrank it.
+    with_none_decided = _resume_form(client.get(url).text)
+    assert with_none_decided is not None
+    assert re.search(r"\bhidden\b", with_none_decided.group(0))
+    assert "display" not in with_none_decided.group(0)
+
+    for fp, (_position, row) in zip(fingerprints["input_fingerprints"], snapshot.iterrows()):
+        _put_cached_decision(
+            PROJECT, "review", fingerprints["stage_fingerprint"], fp, row,
+            ReviewVerdict.approve,
+        )
+
+    with_all_decided = _resume_form(client.get(url).text)
+    assert with_all_decided is not None
+    assert not re.search(r"\bhidden\b", with_all_decided.group(0))
+
+
+# ── 13. Paging the queue on the client: what the server must ship for it ────
+#
+# The pager itself is exercised in tests/test_queue_paginate_client.py; these
+# cover the half of it the server owns — where the cards are put, and that the
+# numbers on them describe the whole queue rather than a page of it.
+
+
+PAGED_PROJECT = "queue_route_paged"
+
+
+def _scaled_load_stage(root, rows):
+    (root / "data").mkdir(parents=True, exist_ok=True)
+    csv_path = root / "data" / "items.csv"
+    pd.DataFrame({
+        "id": [f"row-{i:03d}" for i in range(rows)],
+        "score": list(range(rows)),
+    }).to_csv(csv_path, index=False)
+    return {"id": "load", "description": "Load items", "type": "input_data",
+            "connector": {"kind": "file", "params": {"path": str(csv_path), "format": "csv"}},
+            "signature": {"form": "replaces", "produces": [
+                {"name": "id", "type": "str", "nullable": True},
+                {"name": "score", "type": "int", "nullable": True}]}}
+
+
+def _build_and_halt_a_queue_of(tmp_path, monkeypatch, rows, *, sort=None):
+    review_stage = _e2e_review_stage()
+    if sort is not None:
+        review_stage["queue"] = {**review_stage["queue"], "sort": sort}
+    return _build_and_halt_queue_over(
+        tmp_path, monkeypatch, PAGED_PROJECT,
+        [_scaled_load_stage(tmp_path / PAGED_PROJECT, rows), review_stage],
+    )
+
+
+def _queue_html(tmp_path, monkeypatch, rows, *, sort=None):
+    run_id, fingerprints = _build_and_halt_a_queue_of(tmp_path, monkeypatch, rows, sort=sort)
+    html = TestClient(app).get(f"/project/{PAGED_PROJECT}/runs/{run_id}/queue/review").text
+    return run_id, fingerprints, html
+
+
+def _template_content(html):
+    body = html[html.index('<template id="queue-cards">'):]
+    return body[:body.index("</template>")]
+
+
+def test_the_queue_ships_every_card_inside_a_template_and_an_empty_live_list(
+    tmp_path, monkeypatch
+):
+    """Content of a <template> is parsed but never laid out — that is the whole fix."""
+    _run_id, fingerprints, html = _queue_html(tmp_path, monkeypatch, 30)
+
+    live_list = re.search(r"<div[^>]*id=\"queue-items\"[^>]*>\s*</div>", html)
+    assert live_list is not None, "the list the page opens on must be empty of cards"
+    cards = _template_content(html)
+    assert cards.count('<article class="queue-card') == 30
+    # Every card, in the queue's review order: the client pages over this list
+    # from the front, so page 1 is the first 25 rows of it.
+    assert re.findall(r'data-input-fingerprint="([^"]+)"', cards) == (
+        fingerprints["input_fingerprints"]
+    )
+
+
+def test_a_declared_review_order_decides_which_rows_land_on_page_one(tmp_path, monkeypatch):
+    """queue.sort exists so the rows worth reading first are the first ones shipped."""
+    _run_id, _fingerprints, html = _queue_html(
+        tmp_path, monkeypatch, 30,
+        sort=[{"column": "score", "direction": "descending"}],
+    )
+
+    cards = _template_content(html)
+    ids = re.findall(r"<td[^>]*>(row-\d+)</td>", cards)
+    assert len(ids) == 30
+    assert ids[:25] == [f"row-{i:03d}" for i in range(29, 4, -1)]
+
+
+def test_row_numbers_are_absolute_over_the_queue_not_over_a_page(tmp_path, monkeypatch):
+    _run_id, _fingerprints, html = _queue_html(tmp_path, monkeypatch, 30)
+
+    positions = re.findall(r'class="row-position">Row (\d+) of (\d+)<', html)
+    assert positions == [(str(n), "30") for n in range(1, 31)]
+    # The 26th row — first on page 2 — is numbered 26, not 1.
+    assert ("26", "30") in positions
+
+
+def test_the_pager_is_rendered_above_and_below_the_list_and_starts_hidden(
+    tmp_path, monkeypatch
+):
+    _run_id, _fingerprints, html = _queue_html(tmp_path, monkeypatch, 30)
+
+    pagers = re.findall(r"<nav class=\"queue-pager\".*?</nav>", html, re.DOTALL)
+    assert len(pagers) == 2
+    assert all(re.search(r"\bhidden\b", nav[:nav.index(">")]) for nav in pagers)
+    # Above the list and below it, so neither end of a page is a dead end.
+    list_at = html.index('id="queue-items"')
+    assert html.index('class="queue-pager"') < list_at < html.rindex('class="queue-pager"')
+    # Both ends of the queue keep their control, disabled rather than removed.
+    for nav in pagers:
+        assert 'data-page-step="-1"' in nav and 'data-page-step="1"' in nav
+        assert 'class="pager-readout"' in nav
+
+    stylesheet = "\n".join(
+        sheet.read_text(encoding="utf-8")
+        for sheet in sorted((Path(app_package.__file__).parent / "static").glob("*.css"))
+    )
+    # Without this rule the nav's own `display: flex` beats the UA [hidden] rule
+    # and a one-page queue is offered controls that do nothing.
+    assert re.search(r"\.queue-pager\[hidden\]\s*\{[^}]*display:\s*none", stylesheet)
+
+
+def test_progress_and_resume_are_seeded_from_the_whole_queue_not_a_page(tmp_path, monkeypatch):
+    run_id, fingerprints, _html = _queue_html(tmp_path, monkeypatch, 30)
+    snapshot = pd.read_parquet(
+        tmp_path / PAGED_PROJECT / "runs" / run_id / "queue" / "review.parquet"
+    )
+    # Decide three rows on page 2, which the page never has in its live list at load.
+    for position in (25, 26, 27):
+        row = snapshot.iloc[position]
+        review.record_decision(
+            project=PAGED_PROJECT, stage=parse_stage(_e2e_review_stage()),
+            stage_fingerprint=fingerprints["stage_fingerprint"],
+            input_fingerprint=fingerprints["input_fingerprints"][position],
+            frozen_row={"id": row["id"], "score": int(row["score"])},
+            verdict=ReviewVerdict.approve,
+            reviewed_values={"human_score": int(row["score"])},
+            review_notes=None, reviewer="local", reviewed_at="2026-07-01T00:00:00",
+        )
+
+    html = TestClient(app).get(f"/project/{PAGED_PROJECT}/runs/{run_id}/queue/review").text
+
+    assert '<strong id="reviewed-count">3</strong> of <strong>30</strong> reviewed' in html
+    # The counter is a seeded number, never a count of the cards on the page —
+    # which is why paging cannot corrupt it.
+    assert "let reviewedCount = 3;" in html
+    assert ".decided" not in html.split("<script>")[-1]
+
+
+def test_the_page_size_is_named_once_in_the_module_the_page_reads_it_from(tmp_path):
+    source = (
+        Path(app_package.__file__).parent / "templates" / "queue.html"
+    ).read_text(encoding="utf-8")
+
+    assert re.search(r"createQueuePager\([^;]*QUEUE_PAGE_SIZE", source, re.DOTALL)
+    assert "/static/queue-paginate.js" in source

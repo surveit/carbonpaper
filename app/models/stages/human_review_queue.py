@@ -16,6 +16,7 @@ from app.models.schema import (
     Column,
     StageConfig,
     TableSchema,
+    _Base,
 )
 from app.models.stages.stage_base import StageBase, StageInput, StageType
 from app.models.stages.shared import find_predicate_column_issues
@@ -30,13 +31,34 @@ class ReviewVerdict(str, Enum):
     skipped = "skipped"
 
 
+class SortDirection(str, Enum):
+    ascending = "ascending"
+    descending = "descending"
+
+
+# The queued row carries only the signature's reads, so an unread column cannot order it.
+class QueueSortKey(_Base):
+    column: str = Field(
+        description=(
+            "An input column to order the queue by. The signature must also read it, "
+            "and its declared type must be scalar — a list or json column has no order."
+        ),
+    )
+    direction: SortDirection = Field(
+        description=(
+            "`descending` puts the largest value (latest date, `true`) first. A row "
+            "whose value is null sorts last whichever direction this is."
+        ),
+    )
+
+
 class QueueConfig(StageConfig):
     FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({
         "filter", "reviewer_instructions", "reviewed_columns",
         "verdict_column", "reviewer_column", "reviewed_at_column", "review_notes_column",
     })
     INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset({
-        "routing", "conflict_resolution", "estimated_volume_per_week",
+        "routing", "conflict_resolution", "estimated_volume_per_week", "sort",
     })
 
     filter: Optional[str] = None
@@ -55,6 +77,18 @@ class QueueConfig(StageConfig):
         description=(
             "Optional: name the column a reviewer's free-text note lands in. Omit it and "
             "the stage neither offers a notes box nor adds a notes column."
+        ),
+    )
+    sort: list[QueueSortKey] = Field(
+        default_factory=list,
+        description=(
+            "Optional: the order a human works this queue in, most significant key "
+            "first. Declare it when some rows deserve the reviewer's attention before "
+            "the rest — largest `amount_usd` first, so the costliest errors are caught "
+            "while the reviewer is fresh. Leave it empty and rows are reviewed in "
+            "whatever order the upstream stage happened to produce. This orders the "
+            "review, not the stage's output, and it never changes WHAT is reviewed, so "
+            "editing it leaves decisions already recorded intact."
         ),
     )
     routing: Optional[str] = None
@@ -87,6 +121,7 @@ class HumanReviewQueueStage(StageBase):
         return (
             _find_duplicate_added_names(sid, queue)
             + _find_filter_issues(sid, queue, input_schema)
+            + _find_sort_issues(sid, queue, input_schema)
             + _find_reviewed_source_issues(sid, queue, input_schema)
             + _find_added_column_collisions(sid, queue, input_schema)
         )
@@ -170,6 +205,11 @@ def _find_unread_column_issues(
     return [
         f"stage '{sid}': queue.filter tests `{name}` but the signature does not read it"
         for name in sorted(tested - read)
+    ] + [
+        f"stage '{sid}': queue.sort orders by `{key.column}` but the signature does "
+        f"not read it, so the queued row does not carry it"
+        for key in queue.sort
+        if key.column not in read
     ]
 
 
@@ -181,6 +221,32 @@ def _find_filter_issues(sid: str, queue: QueueConfig, input_schema: TableSchema)
         queue.filter, stage_id=sid, field="queue.filter",
         cols={c.name for c in input_schema.columns},
     )
+
+
+def _find_sort_issues(sid: str, queue: QueueConfig, input_schema: TableSchema) -> list[str]:
+    issues: list[str] = []
+    seen: set[str] = set()
+    for key in queue.sort:
+        column = input_schema.column_for_name(key.column)
+        if column is None:
+            issues.append(
+                f"stage '{sid}': queue.sort orders by column '{key.column}' not in its "
+                f"input schema "
+                f"(declares {sorted(c.name for c in input_schema.columns)})"
+            )
+        elif column.type not in SCALAR_COLUMN_TYPES:
+            issues.append(
+                f"stage '{sid}': queue.sort orders by column '{key.column}', which is "
+                f"type '{column.type}' — that has no order to put the queue in "
+                f"(orderable types: {sorted(SCALAR_COLUMN_TYPES)})"
+            )
+        if key.column in seen:
+            issues.append(
+                f"stage '{sid}': queue.sort names column '{key.column}' more than "
+                f"once — a column places a row in the queue once"
+            )
+        seen.add(key.column)
+    return issues
 
 
 def _find_reviewed_source_issues(
@@ -292,7 +358,7 @@ NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
         min_inputs=1,
         required=["reviewed_columns", "verdict_column", "reviewer_column",
                      "reviewed_at_column"],
-        optional=["filter", "reviewer_instructions", "review_notes_column",
+        optional=["filter", "reviewer_instructions", "review_notes_column", "sort",
                      "routing", "conflict_resolution", "estimated_volume_per_week"],
         notes=(
             "Output columns are the input columns PLUS exactly what its `queue` block names: "
@@ -309,7 +375,9 @@ NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
             "tests, and may never be empty. The verdict column holds "
             "\"approve\", \"modify\", or \"skipped\" (the filter did not select the row), so "
             "a downstream stage wanting only human-sanctioned values filters on != "
-            "\"skipped\". Rows match a cached decision by fingerprinting the row itself; "
+            "\"skipped\". `queue.sort` declares the order a human works the queue in; "
+            "like `queue.filter` it may name INPUT columns only, each one scalar and read "
+            "by the signature. Rows match a cached decision by fingerprinting the row itself; "
             "editing any queue field, `filter` or `reviewer_instructions` changes the "
             "stage fingerprint and every row is asked again."
         ),

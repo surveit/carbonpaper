@@ -84,9 +84,12 @@ after injection — without that, the panel's JS (the tab strip, the run log) is
   view, and any stage whose alignment can't be verified (missing frame,
   row-count mismatch, absent sidecar) falls back to it.
 
-## Review queue (`queue.html`)
+## Review queue (`queue.html`, `_queue_card.html`)
 
-`GET /project/{p}/runs/{run_id}/queue/{stage_id}`.
+`GET /project/{p}/runs/{run_id}/queue/{stage_id}` renders the page;
+`GET …/queue/{stage_id}/card/{input_fingerprint}` re-renders one card
+(`_queue_card.html`, the same partial the page loops over) and 404s on a
+fingerprint this queue does not carry.
 
 A `human_review_queue` can follow **any** stage type, so the page assumes
 nothing about the upstream stage or its column names. The queued row itself is
@@ -101,6 +104,32 @@ edge, but a `primary_key` on it is optional, so where one is missing the page
 states that rather than guessing which columns identify a row. Each card's header
 states its **position in the queue** (`Row 1 of 3`) — an opaque key identifies
 nothing to a human, and the key column is already in the table, flagged.
+
+**Review order** is authored, not chosen here: the page shows the snapshot's rows
+in the order they are stored, and `queue.sort` (a list of column/direction keys on
+the stage) is applied by the runtime, which permutes the snapshot, its
+`input_fingerprints` and its `row_ordinals` together before writing them. So
+`Row 1` is the first row the stage says to review, and no view code sorts
+anything. An empty `queue.sort` leaves the upstream order. `sort` is an
+INCIDENTAL config field, so re-ordering a queue does not change the stage
+fingerprint and decisions already recorded still match.
+
+**Paging** (`app/static/queue-paginate.js`, `_queue_pager.html`) is entirely on
+the client — one route, one response, no reload. The server renders every card,
+but inside a `<template>`, whose content is parsed and never laid out;
+`createQueuePager` holds those cards and attaches `QUEUE_PAGE_SIZE` (25) of them
+at a time to `#queue-items`. So layout costs a page, not a queue — including the
+re-layout when one card grows, which is what recording a decision does. It bounds
+LAYOUT ONLY: the whole queue is still transferred and parsed, at roughly 5.5 KB
+of HTML per card, and nothing here compresses that.
+
+The pager, not the live list, is a card's current state: `replaceCard` swaps the
+re-rendered card into it as well as into the page, so paging away and back shows
+a decision rather than the card the page loaded with. Everything else stays
+whole-queue: `Row N of TOTAL` is server-rendered and absolute, the progress
+count is seeded from `page.reviewed_count` rather than counted off the cards, and
+the Prev/Next controls appear only when the queue runs past one page and only
+once the reviewer gate is open.
 
 **Lineage**: each card links to
 `…/stage/{upstream_stage_id}/row/{row_ordinal}/trace/view`, where the ordinal
@@ -133,8 +162,14 @@ review**, which records nothing and only re-enables the controls; the re-submit
 that follows settles its verdict against the recorded value the card opens on.
 Decisions are keyed by a hash of the
 row (`app.core.stage_cache`)
-so they survive re-runs and LLM non-determinism. When all items are decided, a
-**Resume run** button appears.
+so they survive re-runs and LLM non-determinism. Recording a decision fetches
+that row's card partial and swaps it in place. The recorded block a decided card
+gains is rendered BELOW `.decision-controls`, so everything the swap adds falls
+under the button just pressed and nothing above it moves — which is what lets
+the swap happen under the reviewer without moving their place in a long queue.
+The page counts the decisions it has recorded on top of
+`page.reviewed_count` to move the progress bar, and reveals the **Resume run**
+button (rendered `hidden`) once that count reaches the total.
 
 ## The node panel + workflow versioning (`_node_panel.html`, `versions.html`)
 
