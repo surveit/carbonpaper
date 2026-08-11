@@ -153,9 +153,19 @@ def test_stage_page_leads_with_the_summary_and_shows_the_code(exported):
     assert "row[&#39;val&#39;] * 2" in page
 
 
-def test_stage_page_renders_the_output_rows(exported):
+def test_stage_page_renders_the_output_rows_as_a_diff(exported):
+    # `double` is 1:1 by position, so the packet diffs it as the run page does.
     page = (exported.root / "stages" / "double.html").read_text(encoding="utf-8")
-    assert "<td>4</td>" in page
+    assert '<td class="diff-cell-changed">' in page
+    assert ">2</span>4</td>" in page, "the doubled value should sit beside the 2 it replaced"
+    assert "2 cells changed" in page
+
+
+def test_a_diffed_stage_page_links_the_packets_own_csv(exported):
+    # In the app these frame units link `?raw=1` rows views; a folder serves none.
+    page = (exported.root / "stages" / "double.html").read_text(encoding="utf-8")
+    assert 'href="../data/load.csv"' in page
+    assert "/project/" not in page, "the packet must emit no link back to a server"
 
 
 # The panel ships an inline <script> whose JS contains href="${...}" template
@@ -495,3 +505,103 @@ def test_the_index_names_what_the_run_flagged_and_the_stage_page_does_not(
     # The clean-run packet never renders this index, so its link check never sees
     # these rows — they resolve from index.html, one directory above the pages.
     _assert_every_href_resolves(packet.root)
+
+
+# ── what the run published ────────────────────────────────────────────────────
+
+# Writes a nested tree, which is the shape that matters: a publish function picks
+# its own layout and links across it, so anything but a verbatim copy breaks it.
+_PUBLISH_CODE = """
+import pathlib
+
+def transform(df, output_dir):
+    root = pathlib.Path(output_dir)
+    (root / "assets").mkdir(parents=True, exist_ok=True)
+    (root / "index.html").write_text(
+        "<link rel='stylesheet' href='assets/report.css'><p>" + str(len(df)) + " rows</p>",
+        encoding="utf-8",
+    )
+    (root / "assets" / "report.css").write_text("p { color: red }", encoding="utf-8")
+    return pd.DataFrame({"path": [str(root / "index.html")]})
+"""
+
+_PUBLISH_NOTHING_CODE = """
+import pandas as pd
+
+def transform(df, output_dir):
+    return pd.DataFrame({"path": []})
+"""
+
+
+def _publish_stage(code):
+    return {
+        "id": "report",
+        "description": "Publish the report",
+        "type": "publish",
+        "inputs": [{"id": "double", "schema": {"columns": _COLUMNS}}],
+        "publish": {"format": "html_report", "destination": "build/"},
+        "signature": {"form": "replaces"},
+        "function": {
+            "kind": "inline",
+            "summary": "Writes the report and its stylesheet.",
+            "code": "import pandas as pd\n" + code,
+        },
+    }
+
+
+def _run_publishing_project(project_dir, tmp_path, code):
+    _make_project(project_dir)
+    stages = [_load_stage(project_dir), _double_stage(), _publish_stage(code)]
+    _write_stage(project_dir, "03_report.json", stages[2])
+    vid = versioning.create_version_from_stages(
+        project_dir, stages, message="seed", reviewer="test"
+    ).version_id
+    versioning.publish_version(project_dir, vid, reviewer="human")
+    run_id = run_service.start_run(_PROJECT)
+    return export_review_packet(_PROJECT, run_id, tmp_path / "packets")
+
+
+def test_packet_carries_the_files_the_run_published(project_dir, tmp_path):
+    packet = _run_publishing_project(project_dir, tmp_path, _PUBLISH_CODE)
+
+    published = packet.root / "artifacts" / "build" / "index.html"
+    assert published.is_file()
+    assert "2 rows" in published.read_text(encoding="utf-8")
+    # The nested file too, at the path the report's own stylesheet link expects.
+    assert (packet.root / "artifacts" / "build" / "assets" / "report.css").is_file()
+    assert packet.omitted == []
+
+
+def test_index_leads_with_the_published_files(project_dir, tmp_path):
+    packet = _run_publishing_project(project_dir, tmp_path, _PUBLISH_CODE)
+
+    index = (packet.root / "index.html").read_text(encoding="utf-8")
+    assert "Run outputs" in index
+    assert 'href="artifacts/build/index.html"' in index
+    # The reader is told, not left to discover it by clicking a link that 404s.
+    assert "the server that made it and will not open" in index
+
+
+def test_an_os_dotfile_is_not_reported_as_a_published_output(project_dir, tmp_path):
+    _make_project(project_dir)
+    stages = [_load_stage(project_dir), _double_stage(), _publish_stage(_PUBLISH_CODE)]
+    _write_stage(project_dir, "03_report.json", stages[2])
+    vid = versioning.create_version_from_stages(
+        project_dir, stages, message="seed", reviewer="test"
+    ).version_id
+    versioning.publish_version(project_dir, vid, reviewer="human")
+    run_id = run_service.start_run(_PROJECT)
+    (project_dir / "runs" / run_id / "artifacts" / "build" / ".DS_Store").write_bytes(b"\x00")
+
+    packet = export_review_packet(_PROJECT, run_id, tmp_path / "packets")
+
+    assert not (packet.root / "artifacts" / "build" / ".DS_Store").exists()
+    assert ".DS_Store" not in (packet.root / "index.html").read_text(encoding="utf-8")
+
+
+def test_a_publish_stage_that_wrote_nothing_is_reported_not_skipped(project_dir, tmp_path):
+    packet = _run_publishing_project(project_dir, tmp_path, _PUBLISH_NOTHING_CODE)
+
+    assert [o.path for o in packet.omitted] == ["artifacts/"]
+    assert "report finished, but wrote no file" in packet.omitted[0].reason
+    assert "wrote no file" in (packet.root / "index.html").read_text(encoding="utf-8")

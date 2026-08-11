@@ -274,24 +274,38 @@ def _shape_input_column(in_text: pd.DataFrame, out_text: pd.DataFrame, name: str
 def _shape_aligned_rows(
     in_text: pd.DataFrame, out_text: pd.DataFrame, columns: list[DiffColumn], rows_shown: int
 ) -> list[list[DiffCell]]:
+    rows = min(len(out_text), rows_shown)
+    # Column-major, once per frame: reading each cell back as frame[name].iat[i] inside
+    # the loop re-resolved its column every time — ~18µs a cell, and a 5,000-row export
+    # shapes half a million of them.
+    in_values = _take_column_lists(in_text, rows)
+    out_values = _take_column_lists(out_text, rows)
     return [
-        [_shape_aligned_cell(in_text, out_text, column, i) for column in columns]
-        for i in range(min(len(out_text), rows_shown))
+        [_shape_aligned_cell(in_values, out_values, column, i) for column in columns]
+        for i in range(rows)
     ]
 
 
+def _take_column_lists(text: pd.DataFrame, rows: int) -> dict[str, list[str]]:
+    """Values, not cells: `text` is already all-string, so `_text_frame` did the str()."""
+    return {name: text[name].head(rows).tolist() for name in text.columns}
+
+
 def _shape_aligned_cell(
-    in_text: pd.DataFrame, out_text: pd.DataFrame, column: DiffColumn, i: int
+    in_values: dict[str, list[str]],
+    out_values: dict[str, list[str]],
+    column: DiffColumn,
+    i: int,
 ) -> DiffCell:
     if column.state is ColumnDiffState.dropped:
         # No output value exists, so the cell shows what the stage discarded —
         # the whole point of drawing the column at all.
-        return DiffCell(text=str(in_text[column.name].iat[i]), was=None,
+        return DiffCell(text=in_values[column.name][i], was=None,
                         state=CellDiffState.dropped)
-    text = str(out_text[column.name].iat[i])
+    text = out_values[column.name][i]
     if column.state is ColumnDiffState.added:
         return DiffCell(text=text, was=None, state=CellDiffState.added)
-    was = str(in_text[column.name].iat[i])
+    was = in_values[column.name][i]
     if was == text:
         return DiffCell(text=text, was=None, state=CellDiffState.carried)
     return DiffCell(text=text, was=was, state=CellDiffState.changed)
@@ -332,14 +346,23 @@ def _shape_filter_rows(
     output_ordinal_by_input = {
         input_ordinal: output_ordinal for output_ordinal, input_ordinal in enumerate(kept)
     }
+    window = min(len(in_text), rows_shown)
+    in_values = _take_column_lists(in_text, window)
+    # The whole output, not the window: a kept row's ordinal indexes the output
+    # frame, and the last row of an input window can sit anywhere in it.
+    out_values = _take_column_lists(out_text, len(out_text))
+    names = list(in_text.columns)
     rows: list[FilterRow] = []
-    for i in range(min(len(in_text), rows_shown)):
+    for i in range(window):
         output_ordinal = output_ordinal_by_input.get(i)
         # A kept row's cells come from the persisted OUTPUT row — the thing this
         # pane shows — not from the input copy the pass-through contract implies.
-        source, at = (in_text, i) if output_ordinal is None else (out_text, output_ordinal)
-        cells = [str(source[name].iat[at]) for name in source.columns]
-        rows.append(FilterRow(input_ordinal=i, output_ordinal=output_ordinal, cells=cells))
+        source, at = (in_values, i) if output_ordinal is None else (out_values, output_ordinal)
+        rows.append(FilterRow(
+            input_ordinal=i,
+            output_ordinal=output_ordinal,
+            cells=[source[name][at] for name in names],
+        ))
     return rows
 
 

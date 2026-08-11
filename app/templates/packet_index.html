@@ -29,13 +29,46 @@
    its rows and its transform, not a verdict on them. #}
 {% include "_run_issues.html" %}
 
+{# The files a publish stage wrote, the same section the run page leads its results
+   with — here as relative links into artifacts/, so they open from the folder. A
+   published page's own row-trace links point back at the app and do NOT resolve
+   offline; the note says so rather than letting the reader find out by clicking. #}
+{% if artifacts %}
+<section>
+  <h2>Run outputs</h2>
+  <ul class="run-outputs">
+    {% for path in artifacts %}<li><a href="{{ path }}">{{ path }}</a></li>{% endfor %}
+  </ul>
+  <p class="muted packet-note">These are the files this run published. Where one links a row
+    back to its provenance, that link addresses the server that made it and will not open
+    from this folder — the step pages below carry the same rows.</p>
+</section>
+{% endif %}
+
 {% if run.stages %}
 <section>
   <h2>The workflow this run executed</h2>
+  {# Zoom, pan and fullscreen through the app's own diagram_viewport.js. NOT the run
+     page's minimap band: there the graph is navigation beside the work, here it is the
+     map of the whole run and gets the height, fitted to width with no zoom floor. #}
   {% if mermaid %}
-  <pre class="mermaid">
+  <p class="lede muted">Click a node to open that step. Drag to pan · ⌘/Ctrl-scroll to zoom.</p>
+  {# .workflow-full for the width: diagram_viewport.js collapses the svg to measure
+     the viewport, so a block with no width of its own measures 0 and fits to nothing. #}
+  <div class="workflow-full diagram-block">
+    <div class="diagram-tools">
+      <button type="button" data-zoom="in" title="Zoom in" aria-label="Zoom in">+</button>
+      <button type="button" data-zoom="out" title="Zoom out" aria-label="Zoom out">−</button>
+      <button type="button" data-zoom="reset" title="Fit to width" aria-label="Fit to width">↔</button>
+      <button type="button" class="diagram-fs" title="Fullscreen"
+              aria-label="Show the whole workflow fullscreen">⛶</button>
+    </div>
+    <div class="diagram-viewport">
+      <pre class="mermaid">
 {{ mermaid }}
-  </pre>
+      </pre>
+    </div>
+  </div>
   {% endif %}
   {# Every step as a plain link, always. The diagram needs the network, and an
      unreadable pinned version means no diagram at all — this is then the only
@@ -105,8 +138,12 @@
   // mermaid resolves the graph's `click … call dvNode(…)` binding by name at click
   // time; diagram_nodes.js re-broadcasts it, and subscribing is what makes the node
   // clickable. In the packet a click navigates, there being no panel to load into.
+  //
+  // startOnLoad false because diagram_viewport.js, loaded next, renders the diagram
+  // itself and then measures the svg to fit it — mermaid rendering on its own would
+  // race that, and the viewport would size against a diagram that is not there yet.
   if (window.mermaid) {
-    mermaid.initialize({ startOnLoad: true, theme: "default", securityLevel: "loose" });
+    mermaid.initialize({ startOnLoad: false, theme: "default", securityLevel: "loose" });
   }
   if (window.onDiagramNode) {
     onDiagramNode(function (stageId) {
@@ -114,6 +151,7 @@
     });
   }
 </script>
+<script src="{{ viewport_script }}"></script>
 {% endif %}
 
 {% endblock %}

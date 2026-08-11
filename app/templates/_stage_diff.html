@@ -1,5 +1,4 @@
-{# The stage diff (context: diff, project, run_id, stage — see
-   app.web.stage_diff). Two shapes:
+{# The stage diff (context: diff, stage, links — see app.web.stage_diff). Two shapes:
      row_aligned  — the stage's INPUT frame as the base, with what the stage
                     did to it painted over, row by row. This table REPLACES the
                     plain output preview. Every input column holds its input
@@ -18,38 +17,39 @@
    lengthens the stack without moving the output. Each frame unit names its part
    in words (base input / reference input / output, so the base reads without
    colour), carries the row count of the frame it names, and links that frame's
-   RAW full-rows view (?raw=1 — this same partial serves the full-rows page, so
-   a link into it has to ask for raw) and CSV download; a frame the diff could
-   not read carries no count. The route passes diff=None wherever no honest diff
-   exists; this file is then never included and the caller falls back to the
-   plain output view.
+   raw full-rows view and CSV download through `links` — so the review packet,
+   which has no server to serve rows, drops the first and points the second at
+   its own data/<id>.csv. A frame the diff could not read carries no count. The
+   caller passes diff=None wherever no honest diff exists; this file is then
+   never included and the caller falls back to the plain output view.
 
    `full_rows` (absent, so false, in the stage panel) switches on the full-rows
    page's own treatments: a # row-number column, cells clipped to one line with
    click-to-expand and a title hover, truncated at 4000 characters rather than
    240, and the tall sticky-header scroll box. #}
-{% set rows_base = "/project/" ~ project ~ "/runs/" ~ run_id ~ "/stage/" %}
-{% macro frame_unit(base_url, role, frame_id, rows_total, klass) -%}
+{% macro frame_unit(role, frame_id, rows_total, klass) -%}
 <span class="diff-frame {{ klass }}"><span class="diff-frame-head"><span class="diff-frame-role">{{ role }}</span>
     <code class="diff-frame-id">{{ frame_id }}</code></span>
     <span class="diff-frame-meta">
     {%- if rows_total is not none %}{{ "{:,}".format(rows_total) }} row{% if rows_total != 1 %}s{% endif %} · {% endif -%}
-    <a href="{{ base_url }}{{ frame_id }}/rows?raw=1" title="every row of this frame, raw">all rows</a>
-    · <a href="{{ base_url }}{{ frame_id }}/rows.csv">⬇ CSV</a></span></span>
+    {%- set raw_href = links.stage_rows_raw(frame_id) %}
+    {%- if raw_href %}<a href="{{ raw_href }}" title="every row of this frame, raw">all rows</a>
+    · {% endif -%}
+    <a href="{{ links.stage_csv(frame_id) }}">⬇ CSV</a></span></span>
 {%- endmacro %}
 {# The axis: the input stack → the rail → the output. `tally` is the list of
    things the stage did that its own shape measured, in one vocabulary — the
    template renders it the same way whichever shape produced it. #}
-{% macro diff_head(base_url, inputs, output_id, output_rows, tally) -%}
+{% macro diff_head(inputs, output_id, output_rows, tally) -%}
 <div class="preview-head diff-head"><span class="diff-flow">
     <span class="diff-inputs">
-    {%- for frame in inputs %}{{ frame_unit(base_url, frame.role, frame.stage_id, frame.rows_total,
+    {%- for frame in inputs %}{{ frame_unit(frame.role, frame.stage_id, frame.rows_total,
         'diff-frame-base' if loop.first else 'diff-frame-ref') }}
     {%- endfor %}</span>
     {%- if inputs | length > 1 %}<span class="diff-brace" aria-hidden="true"></span>{% endif %}
     <span class="diff-rail"><span class="diff-tally">{{ tally | join(' · ') }}</span>
     <span class="diff-arrow" aria-hidden="true">→</span></span>
-    <span class="diff-outputs">{{ frame_unit(base_url, 'output', output_id, output_rows, 'diff-frame-out') }}</span>
+    <span class="diff-outputs">{{ frame_unit('output', output_id, output_rows, 'diff-frame-out') }}</span>
 </span></div>
 {%- endmacro %}
 {% macro data_cell(text, klass, was, full) -%}
@@ -60,7 +60,7 @@
 {%- else %}{{ text | truncate(240) }}{% endif %}</td>
 {%- endmacro %}
 <div class="preview-block stage-diff">
-  {{ diff_head(rows_base, diff.inputs, stage.stage_id, diff.output_rows, diff.tally) }}
+  {{ diff_head(diff.inputs, stage.stage_id, diff.output_rows, diff.tally) }}
 {% if diff.kind == 'filter_rows' %}
   {% if diff.input_total > diff.rows | length %}
   <p class="muted">showing the first {{ diff.rows | length }} of {{ "{:,}".format(diff.input_total) }} input rows{% if diff.dropped_beyond_window %} — {{ "{:,}".format(diff.dropped_beyond_window) }} dropped row{% if diff.dropped_beyond_window != 1 %}s{% endif %} fall{% if diff.dropped_beyond_window == 1 %}s{% endif %} beyond them{% endif %}</p>
