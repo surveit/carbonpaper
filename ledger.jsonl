@@ -54,3 +54,4 @@
 {"run_id":"31611562375","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31611562375","created":"2026-08-12T15:19:49Z","branch":"feat/content-addressed-uploads","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"31611960607","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31611960607","created":"2026-08-12T15:23:22Z","branch":"fly/name-the-trial-cap","event":"pull_request","contracts_kept":14,"findings":[]}
 {"run_id":"31611960607","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31611960607","created":"2026-08-12T15:24:13Z","branch":"fly/name-the-trial-cap","event":"pull_request","contracts_kept":null,"findings":[]}
+{"run_id":"31612144231","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31612144231","created":"2026-08-12T15:25:23Z","branch":"master","event":"push","contracts_kept":14,"findings":[]}
