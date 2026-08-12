@@ -12,7 +12,7 @@ from app.main import app
 from app.services import workspace
 from app.services.errors import FileNotStoredError
 from app.services.project import create_project
-from app.services.uploads import UploadedFile, list_project_files, list_unclaimed_files
+from app.services.uploads import UploadedFile, list_project_files
 from app.tools import shared
 
 client = TestClient(app)
@@ -56,7 +56,7 @@ def test_a_file_named_for_a_project_is_claimed_by_it(session_id, project_id):
 def test_a_file_with_no_project_stays_unclaimed(session_id):
     body = attach(session_id).json()
     assert body["project_id"] is None
-    assert [r.sha256 for r in list_unclaimed_files()] == [CSV_SHA]
+    assert [r.sha256 for r in list_project_files(None)] == [CSV_SHA]
 
 
 def test_the_line_says_where_the_file_went(session_id, project_id):
@@ -121,20 +121,20 @@ def test_the_picker_names_the_project_it_offers(session_id, project_id):
 
 def test_the_agent_can_see_what_has_no_home(session_id):
     attach(session_id)
-    assert [f.sha256 for f in shared.list_unclaimed_files()] == [CSV_SHA]
+    assert [f.sha256 for f in shared.list_files(None, "http://x/files").files] == [CSV_SHA]
 
 
 def test_adopting_gives_it_one_and_moves_no_bytes(session_id, project_id):
     attach(session_id)
     before = client.get(f"/chat/{session_id}")  # the page still renders mid-flight
     assert before.status_code == 200
-    adopted = shared.adopt_file(project_id, CSV_SHA)
+    adopted = shared.move_file_to_project(project_id, CSV_SHA)
     assert adopted.filename == "posts.csv"
-    assert list_unclaimed_files() == []
+    assert list_project_files(None) == []
     assert [r.filename for r in list_project_files(project_id)] == ["posts.csv"]
 
 
 def test_adopting_something_already_owned_fails_loudly(session_id, project_id):
     attach(session_id, project_id=project_id)
-    with pytest.raises(FileNotStoredError, match="no unclaimed file"):
-        shared.adopt_file(project_id, CSV_SHA)
+    with pytest.raises(FileNotStoredError, match="outside a project"):
+        shared.move_file_to_project(project_id, CSV_SHA)

@@ -83,33 +83,29 @@ class ProjectFilesView(BaseModel):
     files: list[StoredFileView]
 
 
-def list_files(project_id: str, file_upload_url: str) -> ProjectFilesView:
-    """`file_upload_url` is the caller's — only it knows the address it was reached on."""
-    resolve_existing_project(project_id)
+def list_files(project_id: str | None, file_upload_url: str) -> ProjectFilesView:
+    """`project_id` None lists the files that are in no project yet."""
+    if project_id is not None:
+        resolve_existing_project(project_id)
+    # file_upload_url is the caller's: only it knows the address it was reached on.
     used = uploads.measure_files_used_bytes()
     return ProjectFilesView(
         file_upload_url=file_upload_url,
         max_bytes=uploads.max_upload_bytes(),
         remaining_bytes=max(uploads.files_quota_bytes() - used, 0),
-        files=[StoredFileView(sha256=f.sha256, filename=f.filename,
-                              bytes=f.byte_count, added=f.created_at)
-               for f in uploads.list_project_files(project_id)],
+        files=[_view(record) for record in uploads.list_project_files(project_id)],
     )
 
 
-def list_unclaimed_files() -> list[StoredFileView]:
-    """Files dropped into a conversation before any project owned them."""
-    return [StoredFileView(sha256=f.sha256, filename=f.filename,
-                           bytes=f.byte_count, added=f.created_at)
-            for f in uploads.list_unclaimed_files()]
-
-
-def adopt_file(project_id: str, sha256: str) -> StoredFileView:
-    """Give an unclaimed file to a project. Moves no bytes."""
-    resolve_existing_project(project_id)
-    record = uploads.claim_file(sha256, project_id)
+def _view(record: uploads.UploadedFile) -> StoredFileView:
     return StoredFileView(sha256=record.sha256, filename=record.filename,
                           bytes=record.byte_count, added=record.created_at)
+
+
+def move_file_to_project(project_id: str, sha256: str) -> StoredFileView:
+    """Move a file that is in no project into one. Moves no bytes."""
+    resolve_existing_project(project_id)
+    return _view(uploads.move_file_to_project(sha256, project_id))
 
 
 def run_workflow(

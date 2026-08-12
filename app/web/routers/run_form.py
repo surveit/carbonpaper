@@ -8,8 +8,9 @@ from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse
 from starlette.concurrency import run_in_threadpool
 
-from app.services.errors import UploadTooLargeError
+from app.services.errors import FileOverCeiling, StoreOverQuota
 from app.services.uploads import max_upload_bytes, resolve_stored_path, save_upload
+from app.web.file_sizes import describe_refusal
 from app.services.versioning import list_project_versions
 from app.web.breadcrumbs import build_runs_child_crumbs
 from app.services.project import project_exists
@@ -73,9 +74,9 @@ async def upload_file(project: str, file: UploadFile = File(...)):
     # Off the event loop: the copy streams a file of any size to disk and hashes it.
     try:
         record = await run_in_threadpool(save_upload, file.filename, file.file, project)
-    except UploadTooLargeError as exc:
-        # The message names the limit and what to do; run_controls.js shows it verbatim.
-        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    except (FileOverCeiling, StoreOverQuota) as exc:
+        # The wording names the limit and what to do; run_controls.js shows it verbatim.
+        return JSONResponse({"ok": False, "error": describe_refusal(exc)}, status_code=400)
     # `sha256` is what a caller keeps — it names the file for a later run and is the
     # integrity check on the bytes it just sent. `path` is here for the run form,
     # whose field still submits a path.

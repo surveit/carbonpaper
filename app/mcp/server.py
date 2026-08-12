@@ -272,29 +272,17 @@ def run_workflow(
         return {"ok": False, "error": str(exc)}
 
 
-@mcp.tool(description=TOOL_SPECS["list_unclaimed_files"].description)
-def list_unclaimed_files() -> list[dict[str, Any]]:
-    return [f.model_dump() for f in shared.list_unclaimed_files()]
-
-
-@mcp.tool(description=TOOL_SPECS["adopt_file"].description)
-def adopt_file(project_id: str, sha256: str) -> dict[str, Any]:
-    try:
-        return shared.adopt_file(project_id, sha256).model_dump()
-    except _RUN_TOOL_ERRORS as exc:
-        return {"ok": False, "error": str(exc)}
+@mcp.tool(description=TOOL_SPECS["move_file_to_project"].description)
+def move_file_to_project(project_id: str, sha256: str) -> shared.StoredFileView:
+    return shared.move_file_to_project(project_id, sha256)
 
 
 @mcp.tool(description=TOOL_SPECS["list_files"].description)
-def list_files(project_id: str) -> dict[str, Any]:
-    try:
-        view = shared.list_files(project_id, _resolve_file_upload_url(project_id))
-    except _RUN_TOOL_ERRORS as exc:
-        return {"ok": False, "error": str(exc)}
-    return view.model_dump()
+def list_files(project_id: str | None = None) -> shared.ProjectFilesView:
+    return shared.list_files(project_id, _resolve_file_upload_url(project_id))
 
 
-def _resolve_file_upload_url(project_id: str) -> str:
+def _resolve_file_upload_url(project_id: str | None) -> str:
     """The address THIS call arrived on, so the link handed back is one that resolves."""
     request = mcp.get_context().request_context.request
     # Refusing beats composing a plausible URL from a configured guess: a link that
@@ -309,6 +297,10 @@ def _resolve_file_upload_url(project_id: str) -> str:
     # The header is trusted for this one string, not for the app's own request handling.
     scheme = request.headers.get("x-forwarded-proto") or request.url.scheme
     host = request.headers.get("host") or request.url.netloc
+    # No project: the upload has nowhere to go through a project route, so the URL is
+    # the one a conversation posts to, which stores a file against no project.
+    if project_id is None:
+        return f"{scheme}://{host}/files"
     return f"{scheme}://{host}/project/{project_id}/files"
 
 

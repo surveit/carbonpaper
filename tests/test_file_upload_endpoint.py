@@ -16,10 +16,9 @@ from app.services import workspace
 from app.services.errors import FileNotStoredError
 from app.services.uploads import (
     UploadedFile,
-    claim_file,
+    move_file_to_project,
     files_root,
     list_project_files,
-    list_unclaimed_files,
     max_upload_bytes,
     resolve_file_binding,
     resolve_stored_path,
@@ -199,7 +198,7 @@ def test_unknown_project_404(project):
 def test_an_upload_through_a_project_route_is_claimed_by_that_project(project):
     upload("posts.csv", CSV)
     assert [r.filename for r in list_project_files("demo")] == ["posts.csv"]
-    assert list_unclaimed_files() == []
+    assert list_project_files(None) == []
 
 
 def test_two_projects_sending_the_same_bytes_share_one_copy_and_hold_two_claims(project):
@@ -212,24 +211,24 @@ def test_two_projects_sending_the_same_bytes_share_one_copy_and_hold_two_claims(
 def test_a_file_can_arrive_before_any_project_owns_it(project):
     record = save_upload("posts.csv", io.BytesIO(CSV))
     assert record.project_id is None
-    assert [r.sha256 for r in list_unclaimed_files()] == [CSV_SHA]
+    assert [r.sha256 for r in list_project_files(None)] == [CSV_SHA]
     assert list_project_files("demo") == []
 
 
 def test_claiming_moves_no_bytes(project):
     record = save_upload("posts.csv", io.BytesIO(CSV))
     before = resolve_stored_path(record)
-    claimed = claim_file(CSV_SHA, "demo")
+    claimed = move_file_to_project(CSV_SHA, "demo")
     assert claimed.project_id == "demo"
     assert resolve_stored_path(claimed) == before  # the path never depended on the project
-    assert list_unclaimed_files() == []
+    assert list_project_files(None) == []
     assert [r.filename for r in list_project_files("demo")] == ["posts.csv"]
 
 
 def test_claiming_a_file_no_project_is_missing_fails_loudly(project):
     upload("posts.csv", CSV)  # already claimed by demo
-    with pytest.raises(FileNotStoredError, match="no unclaimed file"):
-        claim_file(CSV_SHA, "other")
+    with pytest.raises(FileNotStoredError, match="outside a project"):
+        move_file_to_project(CSV_SHA, "other")
 
 
 def test_a_run_cannot_bind_a_file_another_project_holds(project):

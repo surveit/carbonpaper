@@ -91,16 +91,11 @@ it. A run executes a stored version, and run_workflow(project_id, version_id?) i
 full one — get_run_status(project_id, run_id) follows it to its outcome. Publishing is a
 human's mark that they have looked at a version; it does not gate what a run may execute.
 
-An input step reads a file the project holds. list_files(project_id) is what it holds and
-where to add one; run_workflow's `files` binds one to a step by the sha256 that listing
-gives. You cannot put a file there through this conversation — no tool here moves bytes —
-so unless you can run `curl` against the `file_upload_url` it returns, hand that URL to
-the person, say what to drop there, and list again when they say it is in.
-
-A file dropped into a conversation before any project existed belongs to no project yet.
-list_unclaimed_files() is those; read what one holds, work out what the investigation is,
-create_project, then adopt_file(project_id, sha256) gives it a home — which moves no
-bytes. Nothing runs on an unclaimed file: a run binds a file its own project holds.
+An input step reads a file the project holds. list_files(project_id) is what it holds,
+and run_workflow's `files` binds one to a step by the sha256 it gives; no tool here moves
+bytes, so a file arrives by a POST to the `file_upload_url` that listing returns — which
+you make yourself, or hand to the person. list_files(null) is the files in no project,
+and move_file_to_project puts one in.
 
 {REVIEW_GUIDE_NOTE}
 

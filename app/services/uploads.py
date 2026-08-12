@@ -1,5 +1,5 @@
 """Data files a run reads: one content-addressed store for the whole workspace, the
-record that says which project claims each one, and the two size limits that keep a
+record that says which project holds each one, and the two size limits that keep a
 run loadable and the volume from filling."""
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from app.core.persistence import PersistedModel, PersistenceScope
 from app.core.store_config import resolve_db_path
 from app.models.schema import TypeUnsafeUserStageConfigOverride
 from app.models.stages.input_data import resolve_file_format
-from app.services.errors import FileNotStoredError, UploadTooLargeError
+from app.services.errors import FileNotStoredError, FileOverCeiling, StoreOverQuota
 
 # How much of an upload is held in memory at once while it is written and hashed.
 _CHUNK_BYTES = 1024 * 1024
@@ -39,12 +39,12 @@ _DEFAULT_MAX_UPLOAD_BYTES = 512 * _MEGABYTE
 _DEFAULT_FILES_QUOTA_BYTES = 4 * _GIGABYTE
 
 
-# `sha256` addresses the BYTES and `project_id` says who claims them, so the two are
-# separate: one blob serves however many projects uploaded it, each with its own record
-# and its own filename for it. `project_id` is None for a file that arrived before any
-# project owned it — `claim_file` fills it in, moving nothing on disk.
+# `sha256` addresses the BYTES and `project_id` says which project holds them, so the two
+# are separate: one blob serves however many projects uploaded it, each with its own
+# record and its own filename for it. `project_id` is None for a file that arrived before
+# any project existed — `move_file_to_project` fills it in, moving nothing on disk.
 class UploadedFile(PersistedModel):
-    """One project's claim on one stored file; `id` is incidental, (sha256, project) is the key."""
+    """One project's hold on one stored file; `id` is incidental, (sha256, project) is the key."""
 
     collection: ClassVar[str] = "uploaded_file"
     SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
@@ -70,7 +70,7 @@ def files_quota_bytes() -> int:
 
 
 def save_upload(filename: str, src: BinaryIO, project_id: str | None = None) -> UploadedFile:
-    """Store an uploaded file and return the record of it; `project_id` None leaves it unclaimed."""
+    """Store an uploaded file and return its record; `project_id` None puts it in no project."""
     root = files_root()
     # Content-addressed, so the destination is not known until the last byte is read:
     # the stream is written to a temp file in the same dir and moved into
@@ -93,14 +93,14 @@ def save_upload(filename: str, src: BinaryIO, project_id: str | None = None) -> 
     return _record_upload(digest, safe_name, byte_count, project_id)
 
 
-def claim_file(sha256: str, project_id: str) -> UploadedFile:
-    """Give an unclaimed file to a project. Moves no bytes — the store is shared."""
-    unclaimed = _find_records(sha256=sha256, project_id=None)
-    if not unclaimed:
+def move_file_to_project(sha256: str, project_id: str) -> UploadedFile:
+    """Move a file with no project into one. Moves no bytes — the store is shared."""
+    without_project = _find_records(sha256=sha256, project_id=None)
+    if not without_project:
         raise FileNotStoredError(
-            f"no unclaimed file {sha256!r} — it is either already in a project, or was "
+            f"no file {sha256!r} outside a project — it is either already in one, or was "
             "never uploaded")
-    record = unclaimed[0]
+    record = without_project[0]
     record.project_id = project_id
     record.save()
     return record
@@ -111,14 +111,9 @@ def resolve_stored_path(record: UploadedFile) -> Path:
     return (files_root() / record.sha256 / record.filename).resolve()
 
 
-def list_project_files(project_id: str) -> list[UploadedFile]:
-    """One project's files, newest arrival first."""
+def list_project_files(project_id: str | None) -> list[UploadedFile]:
+    """One project's files, or those in no project when `project_id` is None."""
     return _sorted_newest_first(_find_records(project_id=project_id))
-
-
-def list_unclaimed_files() -> list[UploadedFile]:
-    """Files no project has taken yet, newest arrival first."""
-    return _sorted_newest_first(_find_records(project_id=None))
 
 
 def resolve_file_binding(project_id: str, sha256: str) -> TypeUnsafeUserStageConfigOverride:
@@ -127,7 +122,7 @@ def resolve_file_binding(project_id: str, sha256: str) -> TypeUnsafeUserStageCon
     if not records:
         raise FileNotStoredError(
             f"project '{project_id}' has no file {sha256!r} — list its files, upload this "
-            "one, or claim it if it is not in a project yet")
+            "one, or move it in if it is not in a project yet")
     path = resolve_stored_path(records[0])
     # A record whose bytes are gone is worse than no record: the run would bind a path
     # and fail at preflight, naming a file the caller was just told it had.
@@ -143,7 +138,7 @@ def measure_files_used_bytes() -> int:
     root = files_root()
     if not root.is_dir():
         return 0
-    # Off the disk, not by summing byte_count: two projects claiming one blob are two
+    # Off the disk, not by summing byte_count: two projects holding one blob are two
     # records over one copy, so the records would double-count the bytes this bounds.
     return sum(f.stat().st_size for f in root.rglob("*") if f.is_file())
 
@@ -177,12 +172,7 @@ def _write_to_temp_file(root: Path, src: BinaryIO, ceiling: int) -> tuple[Path, 
                 # Unlinking an open file is safe here: the fd stays valid until the
                 # `with` closes it, and nothing is left behind to sweep up later.
                 temp.unlink()
-                raise UploadTooLargeError(
-                    f"this file is over the {describe_bytes(ceiling)} limit for a single "
-                    "input. That ceiling is what a run on this machine can load into "
-                    "memory, so a larger file would upload and then fail every run that "
-                    "read it. Cut the file down, or convert it to parquet."
-                )
+                raise FileOverCeiling(ceiling=ceiling)
             digest.update(chunk)
             out.write(chunk)
     return temp, digest.hexdigest(), byte_count
@@ -194,12 +184,7 @@ def _refuse_upload_over_quota(root: Path, staged: Path, byte_count: int) -> None
     # `used` counts the staged copy too — it is on the disk this bounds.
     if used > quota:
         staged.unlink()
-        raise UploadTooLargeError(
-            f"stored files would reach {describe_bytes(used)}, over the "
-            f"{describe_bytes(quota)} limit — the {describe_bytes(byte_count)} just sent "
-            f"was not kept. Every file before it was, and nothing in the app deletes one: "
-            f"clear {root} on the server, or raise CARBON_PAPER_FILES_QUOTA_BYTES."
-        )
+        raise StoreOverQuota(used=used, quota=quota, sent=byte_count, root=root)
 
 
 def _record_upload(digest: str, filename: str, byte_count: int,
@@ -222,28 +207,6 @@ def _safe_filename(raw: str) -> str:
     name = Path(raw).name
     # Path('../..').name is '..', not '' — a basename is not on its own a safe component.
     return _FALLBACK_FILENAME if name in ("", ".", "..") else name
-
-
-def describe_attachment(record: UploadedFile, project_name: str = "") -> str:
-    """The one sentence a chat shows for an attached file AND sends to the agent."""
-    home = ("not in a project yet" if not record.project_id
-            else f"in project {project_name or record.project_id} ({record.project_id})")
-    # One sentence for both: the agent reads the turn's text and never the page, so a
-    # card saying one thing while the model is told another is two records of one
-    # event. sha256 is in it because that is what run_workflow's `files` takes.
-    return (f"[file] {record.filename} · {describe_bytes(record.byte_count)} · "
-            f"{home} · sha256 {record.sha256}")
-
-
-def describe_bytes(count: int) -> str:
-    """A size for a person reading a refusal, so 512MB is not shown as 536870912."""
-    if count >= _GIGABYTE:
-        return f"{count / _GIGABYTE:.3g}GB"
-    if count >= _MEGABYTE:
-        return f"{count / _MEGABYTE:.3g}MB"
-    if count >= _KILOBYTE:
-        return f"{count / _KILOBYTE:.3g}KB"
-    return f"{count}B"
 
 
 def _read_byte_limit(variable: str, fallback: int) -> int:

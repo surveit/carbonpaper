@@ -17,8 +17,20 @@ class FileNotStoredError(Exception):
     """A file id the project has no stored bytes for."""
 
 
-class UploadTooLargeError(Exception):
-    """Over the per-file ceiling or the project's upload quota; the message says which."""
+class FileOverCeiling(Exception):
+    """Carries the numbers, not a sentence — a surface writes the sentence."""
+
+    def __init__(self, *, ceiling: int) -> None:
+        self.ceiling = ceiling
+        super().__init__(f"file over the {ceiling}-byte ceiling")
+
+
+class StoreOverQuota(Exception):
+    """Carries the numbers, not a sentence — a surface writes the sentence."""
+
+    def __init__(self, *, used: int, quota: int, sent: int, root: Path) -> None:
+        self.used, self.quota, self.sent, self.root = used, quota, sent, root
+        super().__init__(f"store would reach {used} bytes, over the {quota}-byte limit")
 
 
 class SpecMigrationRefused(ValueError):

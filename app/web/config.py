@@ -21,7 +21,7 @@ from starlette.types import Scope
 # router its own stale copy, which is exactly what set_projects_dir() exists to
 # avoid.
 from app.core.utils import abbreviate_count
-from app.services.uploads import describe_bytes
+from app.web.file_sizes import describe_bytes
 from app.services.workspace import (
     configure_projects_dir_from_env as configure_projects_dir_from_env,
     projects_dir as projects_dir,
