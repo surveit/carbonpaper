@@ -1,7 +1,7 @@
 {
  "accessors": 33,
- "functions": 1337,
- "types": 166,
+ "functions": 1355,
+ "types": 172,
  "words": {
   "a": {
    "accessor": 0,
@@ -372,7 +372,7 @@
    "field": 0,
    "noun": 0,
    "noun_led": false,
-   "verb": 89
+   "verb": 91
   },
   "bundle": {
    "accessor": 0,
@@ -614,7 +614,7 @@
   },
   "columns": {
    "accessor": 0,
-   "field": 15,
+   "field": 17,
    "noun": 1,
    "noun_led": false,
    "verb": 2
@@ -789,7 +789,7 @@
   },
   "count": {
    "accessor": 0,
-   "field": 10,
+   "field": 11,
    "noun": 1,
    "noun_led": false,
    "verb": 9
@@ -798,6 +798,13 @@
    "accessor": 0,
    "field": 2,
    "noun": 0,
+   "noun_led": false,
+   "verb": 0
+  },
+  "coverage": {
+   "accessor": 0,
+   "field": 0,
+   "noun": 1,
    "noun_led": false,
    "verb": 0
   },
@@ -936,7 +943,7 @@
   },
   "description": {
    "accessor": 0,
-   "field": 5,
+   "field": 6,
    "noun": 0,
    "noun_led": false,
    "verb": 0
@@ -1181,8 +1188,8 @@
   },
   "eval": {
    "accessor": 0,
-   "field": 0,
-   "noun": 3,
+   "field": 1,
+   "noun": 4,
    "noun_led": false,
    "verb": 5
   },
@@ -1324,7 +1331,7 @@
    "field": 0,
    "noun": 0,
    "noun_led": false,
-   "verb": 126
+   "verb": 129
   },
   "fingerprint": {
    "accessor": 0,
@@ -1594,7 +1601,7 @@
   },
   "href": {
    "accessor": 0,
-   "field": 5,
+   "field": 6,
    "noun": 0,
    "noun_led": false,
    "verb": 0
@@ -1615,7 +1622,7 @@
   },
   "id": {
    "accessor": 1,
-   "field": 48,
+   "field": 50,
    "noun": 0,
    "noun_led": false,
    "verb": 0
@@ -1692,7 +1699,7 @@
   },
   "inputs": {
    "accessor": 0,
-   "field": 5,
+   "field": 6,
    "noun": 0,
    "noun_led": false,
    "verb": 0
@@ -1734,7 +1741,7 @@
   },
   "issues": {
    "accessor": 0,
-   "field": 14,
+   "field": 15,
    "noun": 1,
    "noun_led": false,
    "verb": 0
@@ -1772,7 +1779,7 @@
    "field": 0,
    "noun": 0,
    "noun_led": false,
-   "verb": 1
+   "verb": 2
   },
   "keep": {
    "accessor": 0,
@@ -1842,7 +1849,7 @@
    "field": 1,
    "noun": 0,
    "noun_led": false,
-   "verb": 1
+   "verb": 2
   },
   "lifespan": {
    "accessor": 0,
@@ -1858,6 +1865,13 @@
    "noun_led": false,
    "verb": 1
   },
+  "limit": {
+   "accessor": 0,
+   "field": 1,
+   "noun": 0,
+   "noun_led": false,
+   "verb": 0
+  },
   "limits": {
    "accessor": 0,
    "field": 1,
@@ -1867,7 +1881,7 @@
   },
   "lineage": {
    "accessor": 0,
-   "field": 2,
+   "field": 3,
    "noun": 2,
    "noun_led": false,
    "verb": 2
@@ -1905,7 +1919,7 @@
    "field": 0,
    "noun": 0,
    "noun_led": false,
-   "verb": 23
+   "verb": 25
   },
   "listing": {
    "accessor": 0,
@@ -2161,7 +2175,7 @@
   },
   "name": {
    "accessor": 0,
-   "field": 14,
+   "field": 16,
    "noun": 0,
    "noun_led": false,
    "verb": 0
@@ -2299,6 +2313,13 @@
    "noun_led": false,
    "verb": 1
   },
+  "offset": {
+   "accessor": 0,
+   "field": 1,
+   "noun": 0,
+   "noun_led": false,
+   "verb": 0
+  },
   "offsets": {
    "accessor": 0,
    "field": 1,
@@ -2346,7 +2367,7 @@
    "field": 0,
    "noun": 0,
    "noun_led": false,
-   "verb": 6
+   "verb": 7
   },
   "opening": {
    "accessor": 0,
@@ -2378,7 +2399,7 @@
   },
   "ordinal": {
    "accessor": 0,
-   "field": 6,
+   "field": 7,
    "noun": 0,
    "noun_led": false,
    "verb": 0
@@ -2407,7 +2428,7 @@
   "output": {
    "accessor": 2,
    "field": 10,
-   "noun": 1,
+   "noun": 3,
    "noun_led": false,
    "verb": 0
   },
@@ -2504,7 +2525,7 @@
   },
   "passed": {
    "accessor": 0,
-   "field": 3,
+   "field": 5,
    "noun": 0,
    "noun_led": false,
    "verb": 0
@@ -2808,7 +2829,7 @@
    "field": 0,
    "noun": 0,
    "noun_led": false,
-   "verb": 75
+   "verb": 78
   },
   "reader": {
    "accessor": 0,
@@ -2885,7 +2906,7 @@
    "field": 0,
    "noun": 0,
    "noun_led": false,
-   "verb": 6
+   "verb": 7
   },
   "register": {
    "accessor": 0,
@@ -3078,15 +3099,15 @@
   },
   "row": {
    "accessor": 0,
-   "field": 19,
-   "noun": 16,
+   "field": 20,
+   "noun": 17,
    "noun_led": true,
    "verb": 4
   },
   "rows": {
    "accessor": 0,
-   "field": 14,
-   "noun": 2,
+   "field": 17,
+   "noun": 3,
    "noun_led": false,
    "verb": 1
   },
@@ -3144,7 +3165,7 @@
    "field": 10,
    "noun": 1,
    "noun_led": false,
-   "verb": 3
+   "verb": 4
   },
   "schemas": {
    "accessor": 0,
@@ -3163,13 +3184,13 @@
   "score": {
    "accessor": 0,
    "field": 0,
-   "noun": 1,
+   "noun": 2,
    "noun_led": false,
    "verb": 2
   },
   "scored": {
    "accessor": 0,
-   "field": 0,
+   "field": 1,
    "noun": 2,
    "noun_led": false,
    "verb": 0
@@ -3407,14 +3428,14 @@
   },
   "stage": {
    "accessor": 0,
-   "field": 33,
-   "noun": 31,
+   "field": 34,
+   "noun": 34,
    "noun_led": true,
    "verb": 15
   },
   "stages": {
    "accessor": 0,
-   "field": 12,
+   "field": 13,
    "noun": 1,
    "noun_led": false,
    "verb": 2
@@ -3456,7 +3477,7 @@
   },
   "status": {
    "accessor": 1,
-   "field": 12,
+   "field": 13,
    "noun": 3,
    "noun_led": false,
    "verb": 0
@@ -3569,7 +3590,7 @@
   "summary": {
    "accessor": 0,
    "field": 3,
-   "noun": 2,
+   "noun": 4,
    "noun_led": false,
    "verb": 1
   },
@@ -3632,9 +3653,9 @@
   "tally": {
    "accessor": 2,
    "field": 0,
-   "noun": 3,
+   "noun": 4,
    "noun_led": false,
-   "verb": 2
+   "verb": 3
   },
   "target": {
    "accessor": 0,
@@ -3725,7 +3746,7 @@
    "field": 0,
    "noun": 0,
    "noun_led": false,
-   "verb": 8
+   "verb": 10
   },
   "tokens": {
    "accessor": 0,
@@ -3764,7 +3785,7 @@
   },
   "total": {
    "accessor": 0,
-   "field": 12,
+   "field": 14,
    "noun": 0,
    "noun_led": false,
    "verb": 0
@@ -3841,7 +3862,7 @@
   },
   "type": {
    "accessor": 0,
-   "field": 6,
+   "field": 7,
    "noun": 2,
    "noun_led": false,
    "verb": 1
@@ -3904,7 +3925,7 @@
   },
   "url": {
    "accessor": 0,
-   "field": 7,
+   "field": 8,
    "noun": 0,
    "noun_led": false,
    "verb": 0
@@ -3960,7 +3981,7 @@
   },
   "values": {
    "accessor": 0,
-   "field": 2,
+   "field": 3,
    "noun": 0,
    "noun_led": false,
    "verb": 1
@@ -3981,7 +4002,7 @@
   },
   "version": {
    "accessor": 0,
-   "field": 17,
+   "field": 18,
    "noun": 2,
    "noun_led": false,
    "verb": 2
@@ -4093,8 +4114,8 @@
   },
   "workflow": {
    "accessor": 0,
-   "field": 8,
-   "noun": 6,
+   "field": 9,
+   "noun": 7,
    "noun_led": false,
    "verb": 2
   },

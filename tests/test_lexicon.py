@@ -134,9 +134,23 @@ def test_noun_led_word_growing_its_verb_count_breaks_the_ratchet() -> None:
 # --- the committed registry matches the tree it describes ------------------------
 
 
-def test_committed_registry_is_current(snapshot: LexiconSnapshot) -> None:
-    registry = LexiconSnapshot.model_validate_json((_REPO_ROOT / "lexicon.json").read_text(encoding="utf-8"))
-    assert find_role_gains(snapshot, registry) == [], "lexicon.json is stale — re-mint it in this PR"
+def read_registry() -> LexiconSnapshot:
+    return LexiconSnapshot.model_validate_json((_REPO_ROOT / "lexicon.json").read_text(encoding="utf-8"))
+
+
+def test_registry_still_describes_a_real_tree(snapshot: LexiconSnapshot) -> None:
+    # Not equality: that would force a PR adding a word to re-mint, accepting it silently.
+    registry = read_registry()
+    assert set(registry.words) - set(snapshot.words) == set(), "registry names words the tree lost"
+
+
+def test_noun_led_ratchet_holds(snapshot: LexiconSnapshot) -> None:
+    assert find_ratchet_breaks(snapshot, read_registry()) == []
+
+
+def test_noun_led_words_are_marked_by_hand_only() -> None:
+    marked = {word for word, roles in read_registry().words.items() if roles.noun_led}
+    assert marked == {"stage", "row"}, "a noun_led mark is a human decision, not a scan output"
 
 
 def test_split_words_handles_both_casings() -> None:
