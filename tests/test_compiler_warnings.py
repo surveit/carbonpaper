@@ -162,11 +162,24 @@ def test_errors_sort_before_warnings():
 
 
 # ── examples that do not pass ────────────────────────────────────────────────
-def test_failing_examples_are_an_error():
+def test_failing_examples_are_a_warning_recommending_review():
     warnings = find_stage_compiler_warnings(_stage(tests=[_PASSING_EXAMPLE]), failing_examples=1)
     assert [w.kind for w in warnings] == ["examples_failing"]
-    assert warnings[0].severity == "error"
-    assert "1 of its 1 examples" in warnings[0].detail
+    # Not an error: the agent may have read the description a different way, so a
+    # human deciding the code is right resolves it with no edit to the stage.
+    assert warnings[0].severity == "warning"
+    assert warnings[0].detail == (
+        "1 of its 1 examples mismatches what an independent AI agent expected. "
+        "Further review recommended"
+    )
+
+
+def test_the_count_agrees_with_its_verb():
+    [warning] = find_stage_compiler_warnings(
+        _stage(tests=[_PASSING_EXAMPLE, {**_PASSING_EXAMPLE, "name": "also_passes"}]),
+        failing_examples=2,
+    )
+    assert "2 of its 2 examples mismatch what" in warning.detail
 
 
 def test_examples_are_judged_statically_when_the_caller_ran_nothing():
@@ -177,12 +190,14 @@ def test_missing_examples_outranks_failing_ones():
     assert _kinds(_stage(), ) == ["unexemplified"]
 
 
-def test_a_workflow_with_a_failing_example_is_not_clean():
+def test_a_workflow_with_a_failing_example_is_still_clean():
     report = find_workflow_compiler_warnings(
         [_stage(stage_id="ok", tests=[_PASSING_EXAMPLE]),
          _stage(stage_id="broken", tests=[_PASSING_EXAMPLE])],
         {"broken": 2},
     )
-    assert not report.is_clean
-    assert [(w.stage_id, w.kind) for w in report.errors] == [("broken", "examples_failing")]
+    # `is_clean` means nothing is OWED an edit. A mismatch is owed a human read,
+    # which the warning asks for; version creation gates on it separately.
+    assert report.is_clean
+    assert [(w.stage_id, w.kind) for w in report.warnings] == [("broken", "examples_failing")]
 

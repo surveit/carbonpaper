@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Literal
 
 import pandas as pd
@@ -42,10 +42,24 @@ class CellDiff:
     actual: Any
 
 
+MAX_OUTCOME_ROWS = 50
+
+# What the step DID, which `status` (the verdict on it) does not imply: a `passed`
+# case may have returned a table OR refused, and the panel leads with which.
+Outcome = Literal["rows", "refused", "failed"]
+
+
 @dataclass
 class StageTestResult:
     name: str
     status: Status
+    # None only for `malformed`: the example never reached the step.
+    outcome: Outcome | None = None
+    # The refusal reason its author wrote, or how it failed.
+    outcome_detail: str | None = None
+    returned_columns: list[str] = field(default_factory=list)
+    returned_rows: list[dict[str, Any]] = field(default_factory=list)
+    returned_total: int = 0
     diffs: list[CellDiff] = field(default_factory=list)
     message: str | None = None
 
@@ -171,16 +185,32 @@ def _run_one_test(stage: Stage, test: StageTest) -> StageTestResult:
     except Exception as exc:  # noqa: BLE001 — the function is authored code; any raise IS the result
         return _judge_raise(test, exc)
     if test.expected is None:
-        return StageTestResult(
+        verdict = StageTestResult(
             test.name, "mismatch",
             message=f"expected the step to fail, got {_describe_output(actual)}",
         )
+        return _record_what_it_returned(verdict, actual)
     if not isinstance(actual, pd.DataFrame):
-        return StageTestResult(
-            test.name, "error",
-            message=f"function returned {type(actual).__name__}, expected a DataFrame",
+        return _record_what_it_returned(
+            StageTestResult(
+                test.name, "error",
+                message=f"function returned {type(actual).__name__}, expected a DataFrame",
+            ),
+            actual,
         )
-    return _compare(stage, test, actual)
+    return _record_what_it_returned(_compare(stage, test, actual), actual)
+
+
+def _record_what_it_returned(verdict: StageTestResult, actual: Any) -> StageTestResult:
+    if not isinstance(actual, pd.DataFrame):
+        return replace(verdict, outcome="failed",
+                       outcome_detail=f"returned {type(actual).__name__}, not a table")
+    return replace(
+        verdict, outcome="rows",
+        returned_columns=[str(label) for label in actual.columns],
+        returned_rows=list_rows(actual.head(MAX_OUTCOME_ROWS)),
+        returned_total=len(actual),
+    )
 
 
 def _place_against_its_signature(stage: Stage) -> WorkflowStage:
@@ -203,9 +233,18 @@ def _describe_output(actual: Any) -> str:
 
 
 def _judge_raise(test: StageTest, exc: Exception) -> StageTestResult:
-    if test.expected is None and isinstance(exc, StepRefused):
-        return StageTestResult(test.name, "passed")
-    return StageTestResult(test.name, "error", message=f"{type(exc).__name__}: {exc}")
+    detail = f"{type(exc).__name__}: {exc}"
+    if isinstance(exc, StepRefused):
+        status: Status = "passed" if test.expected is None else "error"
+        return StageTestResult(
+            test.name, status, outcome="refused", outcome_detail=str(exc),
+            message=None if test.expected is None else detail,
+        )
+    # `outcome_detail` reads after "the step …" in the panel, so it is verb-first.
+    return StageTestResult(
+        test.name, "error", outcome="failed",
+        outcome_detail=f"raised {detail}", message=detail,
+    )
 
 
 def _build_frame(rows: list[dict[str, Any]], schema: TableSchema) -> pd.DataFrame:

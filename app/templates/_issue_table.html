@@ -1,3 +1,4 @@
+{% from "_severity_icon.html" import severity_icon %}
 {#
   THE ISSUE TABLE — one line per issue, each one a link into the stage panel on
   the page that renders it. Two pages index issues this way, and they are read by
@@ -44,7 +45,7 @@
    line per issue; this is that line's small print. #}
 {% macro issue_row(severity, stage_id, message, subject=none, tab=none, tags=(), href="#") %}
 <tr class="sev-{{ severity }}">
-  <td class="issue-sev">{{ severity }}</td>
+  <td class="issue-sev">{{ severity_icon(severity) }}{{ severity }}</td>
   <td class="issue-stage">{% if stage_id %}<a href="{{ href }}" data-stage-link="{{ stage_id }}"
         {%- if tab %} data-stage-tab="{{ tab }}"{% endif %}><code>{{ stage_id }}</code></a>{% endif %}</td>
   <td class="issue-subject">{% if subject %}<code>{{ subject }}</code>{% endif %}</td>

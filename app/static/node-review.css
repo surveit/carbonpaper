@@ -21,15 +21,11 @@
    next case's heading. The gap belongs to the case, so only an open one pays for it. */
 .test-case[open] { margin-bottom: 1.6rem; }
 .test-case summary { cursor: pointer; }
-.test-status {
-    display: inline-block; font-size: 11px; font-weight: 600; text-transform: uppercase;
-    letter-spacing: 0.4px; padding: 3px 10px; border-radius: 3px; margin-right: 8px;
-    border: 1px solid;
-}
-.test-status-passed { background: var(--verdict-pass-bg); color: var(--good-ink); border-color: var(--verdict-pass-bd); }
-.test-status-mismatch,
-.test-status-error { background: var(--verdict-fail-bg); color: var(--bad-ink); border-color: var(--verdict-fail-bd); }
-.test-status-malformed { background: var(--verdict-warn-bg); color: var(--warn-ink); border-color: var(--verdict-warn-bd); }
+/* A case that matches carries no mark at all — the triangle is the whole signal, and
+   it only means anything while it is rare. It is the same shape the issue table gives
+   a warning, which is the severity the compiler grades a mismatched example: an agent
+   reading the description a different way is not the code being broken. */
+.test-case > summary .sev-ico { width: 12px; height: 12px; margin-right: 7px; }
 /* A row states every column, so a step over a wide table has a table wider than the panel.
    It scrolls inside this box; without one the page itself scrolls sideways, and the shaded
    column — the last one on an extends step — is the part that ends up off the edge. */
@@ -44,5 +40,10 @@
 .test-rows td.test-col-written { background: var(--state-review-bg); }
 .test-rows caption { caption-side: top; text-align: left; font-size: 0.78rem; color: var(--muted); padding-bottom: 2px; }
 .test-message { color: var(--bad-ink); }
+/* A refusal is the step working, so it is not tinted like a failure — a case may
+   claim the step must refuse, and there it is the outcome the description asked for. */
+.test-outcome-refused { color: var(--muted); }
+/* Carries no heading of its own — the top margin is what separates it from the outcome. */
+.test-verdict { margin: 0.9rem 0 0.2rem; }
 .node-review-full .nr-edit-hint { margin: 0 0 10px; }
 

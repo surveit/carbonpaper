@@ -1,3 +1,4 @@
+{% from "_sparkle.html" import sparkle %}
 {# The certification badge that sits directly under an authored-code stage's
    plain-language summary: has that summary been checked against the code, and on
    how many cases. Context: certification (app.web.stage_test_views.StageCertification).
@@ -7,24 +8,28 @@
    that trust and exactly what it does not cover — the tests are authored from the
    methodology, never by running the code, so passing means the description and
    the code AGREE ON THESE CASES. It is not a correctness proof, and a green badge
-   must not read like one. #}
+   must not read like one.
+
+   The agent mark leads the two states an agent actually produced. The three
+   remaining states report the ABSENCE of such a claim, so they carry none: a mark
+   spent on work no model did stops meaning anything. #}
 {% macro stage_certification(certification) %}
 {% if certification %}
 <div class="stage-cert stage-cert-{{ certification.status }}">
   {% if certification.status == "certified" %}
-  <p class="stage-cert-line"><span class="stage-cert-badge">✓ Tested by independent AI agent</span></p>
+  <p class="stage-cert-line"><span class="stage-cert-badge">{{ sparkle() }} ✓ Tested by independent AI agent</span></p>
   <p class="stage-cert-why muted">An agent with knowledge only of this description
     independently generated {{ certification.total }}
     example{% if certification.total != 1 %}s{% endif %} and verified they all pass.</p>
   {% elif certification.status == "failing" %}
-  <p class="stage-cert-line"><span class="stage-cert-badge">⚠ Violations found by independent AI agent</span></p>
-  <p class="stage-cert-why muted">An agent with knowledge only of this description generated
+  <p class="stage-cert-line"><span class="stage-cert-badge">{{ sparkle() }} ⚠ Unexpected outputs found by independent AI review</span></p>
+  <p class="stage-cert-why muted">An agent with knowledge only of the description generated
     examples and found disagreements. This likely means expert guidance is needed to resolve
-    nuanced decisions. Review the failing examples below.</p>
+    nuanced decisions. Review the mismatched examples below.</p>
   {% elif certification.status == "untested" %}
   <p class="stage-cert-line"><span class="stage-cert-badge">— Not yet tested</span></p>
   <p class="stage-cert-why muted">No agent has checked this description against the code. It may
-    be accurate; nothing has verified it. Use <em>Generate examples</em> below to write them
+    be accurate; nothing has verified it. Use <em>{{ sparkle() }} Generate examples</em> below to write them
     from the description.</p>
   {% elif certification.status == "untestable" %}
   <p class="stage-cert-line"><span class="stage-cert-badge">— Cannot be tested</span></p>

@@ -1,0 +1,15 @@
+{# The shape that says WHICH severity, so colour is left to say how loud.
+
+   Carbon's rule is that two states need at least three of {symbol, shape, colour,
+   type} between them; severity had the word and a hue, so the shape is what was
+   missing — and adding it is what let the warning's amber go. A filled disc reads
+   as a stop, an outlined triangle as a caution, and neither needs its colour to be
+   told apart. Every member of UserFacingErrorSeverity owes a branch here, held by
+   tests/arch/test_severity_is_not_colour_alone.py. #}
+{% macro severity_icon(severity) %}
+{%- if severity == "error" -%}
+<svg class="sev-ico sev-ico-error" viewBox="0 0 12 12" aria-hidden="true"><circle class="disc" cx="6" cy="6" r="5.4"/><path class="knockout" d="M3.9 3.9 8.1 8.1M8.1 3.9 3.9 8.1"/></svg>
+{%- elif severity == "warning" -%}
+<svg class="sev-ico sev-ico-warning" viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1.3 11.2 10.5H0.8Z" stroke-linejoin="round"/><path d="M6 4.9V7.2M6 8.85v.05" stroke-linecap="round"/></svg>
+{%- endif -%}
+{% endmacro %}

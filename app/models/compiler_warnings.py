@@ -73,8 +73,9 @@ def _find_failing_example_warning(
         return []
     total = len(stage.tests or [])
     return [warn(stage, "examples_failing",
-                 f"{failing_examples} of its {total} examples do not pass, so its "
-                 f"description and its code disagree — one of them is wrong")]
+                 f"{failing_examples} of its {total} examples "
+                 f"{'mismatches' if failing_examples == 1 else 'mismatch'} what an "
+                 f"independent AI agent expected. Further review recommended")]
 
 
 def _find_deliberate_choice_warnings(stage: Stage) -> list[CompilerWarning]:
