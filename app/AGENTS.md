@@ -170,6 +170,26 @@ head — name, status badge, blurb, then a facts line — over ONE tab strip:
   `…/evals/<id>/runs/<run>/events`. A vetoed run executed nothing, so it has no log and the
   panel is absent rather than empty.
 
+## Does an eval vouch for this step? (`app.web.eval_coverage` → `_stage_eval_check.html`)
+A badge in the stage panel's HEAD — above the tab strip on both the run panel and the
+workflow page's node panel, because it is a verdict on the step and not on any one tab.
+Coverage attaches to an eval's **target** stage alone; the rest of the pathway executed,
+but nothing compared what it produced to anything.
+
+It borrows `.stage-cert`'s markup and makes a different claim. Certification asks whether a
+step's DESCRIPTION matches its CODE, and `build_certification` returns None without an
+authored code block — so an `llm_transform` carries no certification at all. This asks
+whether its OUTPUT matches rows a person labelled by hand, which is the only check that
+reaches a model's answers.
+
+Three states, and **staleness outranks the score**: a result about code that has moved is
+not a verdict on this code, however it came out. A stale badge therefore states no number
+in its badge line — only in the explanation, beside the version it was about. The version
+compared against differs by surface: a run panel uses the version THAT RUN pinned (exact),
+the node panel the latest stored version (the same test `eval_status` applies, since a
+working copy is not a version). A step no eval targets renders nothing — a grey "nothing
+checked this" on every other step states no fact and has no form to send anyone to.
+
 ## Live progress + the stage simulator
 `POST /project/<m>/run` → `prepare_run` (initial `running` manifest) → background thread →
 redirect; `run_detail.html` polls `…/status` every 2s and updates the graph in place, reloading

@@ -260,7 +260,11 @@ def list_project_versions(project_id: str) -> list[WorkflowVersion]:
 
 
 def find_latest_version_id(project_dir: Path) -> str | None:
-    versions = list_versions(project_dir)  # newest-first
+    return find_latest_project_version_id(project_dir.name)
+
+
+def find_latest_project_version_id(project_id: str) -> str | None:
+    versions = list_project_versions(project_id)  # newest-first
     return versions[0].version_id if versions else None
 
 

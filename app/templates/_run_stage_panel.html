@@ -6,6 +6,7 @@
 {% from "_schema_table.html" import schema_table %}
 {% from "_stage_code.html" import stage_code %}
 {% from "_run_log_panel.html" import run_log_panel %}
+{% from "_stage_eval_check.html" import stage_eval_check %}
 
 <div class="run-stage-panel"
      data-project="{{ project }}" data-run="{{ run_id }}" data-stage="{{ stage.stage_id }}">
@@ -22,6 +23,9 @@
     {# The description comes from the pinned definition, so a run whose version
        no longer resolves shows no line rather than a guessed one. #}
     {% if stage_def %}<p class="stage-blurb">{{ stage_def.description }}</p>{% endif %}
+    {# Above the tab strip, because it is a verdict on the step and not on any one of
+       Data / Schema / Transform — and behind a tab nobody would meet it. #}
+    {{ stage_eval_check(eval_coverage) }}
     <p class="stage-facts">
         <span class="run-status status-{{ stage.status }}">{{ stage.status }}</span>
         <span>{{ stage.elapsed_ms | friendly_duration }} · {{ "{:,}".format(stage.output_row_count or 0) }} row{% if (stage.output_row_count or 0) != 1 %}s{% endif %}

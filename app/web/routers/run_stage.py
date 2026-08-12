@@ -19,6 +19,7 @@ from app.runtime.preview import PREVIEWABLE_TYPES, run_stage_preview
 from app.web import loading
 from app.web.breadcrumbs import build_run_child_crumbs
 from app.web.config import EVENT_TAIL, REPO_ROOT, templates
+from app.web.eval_coverage import find_eval_coverage
 from app.web.stage_test_views import build_certification, shape_test_views
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH
 from app.web.loading import (
@@ -102,6 +103,10 @@ async def run_stage_partial(
             "llm_example": llm_example,
             "test_views": (views := shape_test_views(pinned.workflow_stage)),
             "certification": build_certification(pinned.workflow_stage, views),
+            # Judged against the version THIS run pinned, so the verdict is about the
+            # code that produced the rows above it. None where no eval targets the stage.
+            "eval_coverage": find_eval_coverage(
+                project, stage_id, manifest.get("workflow_version")),
             "previewable": stage_def is not None and stage_def.type in PREVIEWABLE_TYPES,
             "links": resolve_panel_links(project, run_id),
             "event_tail": EVENT_TAIL,

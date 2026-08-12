@@ -124,6 +124,28 @@ def build_eval_rows(result_path: Path, dataset: TableRef | None, repo_root: Path
     return _assemble_view(result, checks, inputs, input_error)
 
 
+class ScoreTally(BaseModel):
+    """What the badge needs off a result table, without building every row."""
+
+    passed: int
+    total: int
+    columns: list[str]
+
+
+def tally_scored_rows(result_path: Path) -> ScoreTally | None:
+    """None where the table will not read or scored no check — the caller then states nothing."""
+    try:
+        result = read_frame_file(result_path)
+    except (OSError, ValueError):
+        return None
+    checks = find_scored_checks(result)
+    if not checks:
+        return None
+    verdicts = _read_row_verdicts(result, checks)
+    return ScoreTally(passed=sum(1 for verdict in verdicts if verdict),
+                      total=len(verdicts), columns=checks)
+
+
 def find_scored_checks(result: pd.DataFrame) -> list[str]:
     """A check is scored only where all three of its columns are present."""
     names = set(result.columns)

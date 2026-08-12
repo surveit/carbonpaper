@@ -17,6 +17,7 @@
 #}
 {% from "_schema_table.html" import schema_table %}
 {% from "_stage_code.html" import stage_code %}
+{% from "_stage_eval_check.html" import stage_eval_check %}
 <div class="node-review-full" id="node-review-panel" data-stage-id="{{ stage.id }}">
 
   <div class="nr-bar">
@@ -25,6 +26,8 @@
       <div class="nr-bar-name"><h2><code>{{ stage.id }}</code></h2><p>{{ stage.description }}</p></div>
     </div>
   </div>
+
+  {{ stage_eval_check(eval_coverage) }}
 
   {# ── Input → Transform → Output → Spec (schema view, like the runs Schema layer) ── #}
   <div class="stage-tabs nr-tabs">
