@@ -4,6 +4,7 @@
 {% block content %}
 <div class="ac-head">
   <span class="ac-backend" title="which model backend answers">backend: {{ backend }}</span>
+  {% include "_new_chat_button.html" %}
 </div>
 
 {% if backend_error %}
