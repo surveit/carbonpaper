@@ -4,10 +4,11 @@
 .spinner { width: 18px; height: 18px; border: 3px solid var(--border); border-top-color: var(--accent);
     border-radius: 50%; animation: spin .8s linear infinite; display: inline-block; flex: none; }
 .spinner[hidden] { display: none; }
-/* Beside a button rather than alone on a panel, so it matches the text it waits on. */
-.spinner.sm { width: 13px; height: 13px; border-width: 2px; vertical-align: -1px; margin-left: .45rem; }
-/* The link still works — this says the last click was heard, not that it is disabled. */
-.is-busy { opacity: .6; }
+/* Sized to a button's own text, since it stands where that button's glyph was. */
+.spinner.sm { width: 12px; height: 12px; border-width: 2px; vertical-align: -1px; }
+/* A link cannot carry `disabled`, so the second click is refused in script and the
+   state is said here and in aria-disabled, which is what a screen reader reads. */
+.btn[aria-disabled="true"] { opacity: .6; cursor: default; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ── The run header: grounding line → CTA → stage strip (app/web/run_header.py).
