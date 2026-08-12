@@ -160,3 +160,4 @@
 {"run_id":"31649293616","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31649293616","created":"2026-08-12T23:02:46Z","branch":"feat/profile-stored-file","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"31649515826","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31649515826","created":"2026-08-12T23:05:11Z","branch":"fix/eval-repo-root","event":"pull_request","contracts_kept":14,"findings":[]}
 {"run_id":"31649515826","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31649515826","created":"2026-08-12T23:06:17Z","branch":"fix/eval-repo-root","event":"pull_request","contracts_kept":null,"findings":[]}
+{"run_id":"31650455231","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31650455231","created":"2026-08-12T23:20:03Z","branch":"feat/join-key-coverage","event":"pull_request","contracts_kept":14,"findings":[]}
