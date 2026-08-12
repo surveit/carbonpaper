@@ -8,6 +8,7 @@ from pathlib import Path
 
 import app
 from app.agents.tutorial.prompt import TUTORIAL_SYSTEM_PROMPT
+from app.web.breadcrumbs import _HOME_LABEL
 from app.tools.tool_specs import TOOL_SPECS
 from app.agents.tutorial.config import make_tutorial_tools
 from app.services.project import WorkflowFile
@@ -24,6 +25,14 @@ def _tour_tool_names() -> set[str]:
     return {
         spec.name
         for spec in make_tutorial_tools(TutorialContext(base_url="http://x/"))
+    }
+
+
+def _tour_tool_arguments() -> set[str]:
+    return {
+        argument
+        for spec in make_tutorial_tools(TutorialContext(base_url="http://x/"))
+        for argument in spec.input_schema
     }
 
 
@@ -51,11 +60,11 @@ def test_the_greeting_is_prompted_by_a_hello_not_by_an_instruction() -> None:
     assert TUTORIAL_OPENING_PROMPT == "Hi"
 
 
-def test_the_tour_writes_the_product_name_in_lower_case() -> None:
-    """Three casings exist in this repo; prose and CLAUDE.md use the lower-case one."""
-    assert 'The product is written "carbonpaper", lower case' in _flat(_beat(1))
-    assert "Carbonpaper" not in TUTORIAL_SYSTEM_PROMPT
-    assert "CarbonPaper" not in TUTORIAL_SYSTEM_PROMPT
+def test_the_tour_writes_the_product_name_the_page_around_it_writes() -> None:
+    """Read off the breadcrumb: the header names the product while the tour is speaking."""
+    assert f'The product is written "{_HOME_LABEL}"' in _flat(_beat(1))
+    for wrong in ("carbonpaper", "Carbonpaper", "CarbonPaper"):
+        assert wrong not in TUTORIAL_SYSTEM_PROMPT
 
 
 def test_the_greeting_says_the_agent_writes_the_stages_not_the_reader() -> None:
@@ -73,9 +82,9 @@ def test_the_workflow_is_introduced_by_why_it_exists_not_by_its_stage_list() -> 
     beat = _flat(_beat(2))
 
     assert "ONE sentence" in beat and "what this EXAMPLE workflow is for" in beat
-    assert "The mechanics are not the point; the LEAD is" in beat
-    assert "what the client said in public against what the same client paid to ask" in beat
-    assert "Do NOT list the six stages in the chat" in beat
+    assert "what a company committed to in public against what the same company" in beat
+    assert "Do NOT list the stages in the chat" in beat
+    assert "Nor the files it reads" in beat
 
 
 def test_the_invented_data_admission_is_a_hard_rule_too() -> None:
@@ -89,7 +98,7 @@ def test_the_run_beat_hands_over_exactly_one_link() -> None:
     """Three links at the end of a turn is three decisions; the run is the one to make."""
     beat = _flat(_beat(2))
 
-    assert "That link is the ONLY one this beat hands over" in beat
+    # Stated once, in the hard rules — the beat used to repeat the argument.
     assert "Beat 2 ends on ONE link, the run's." in _flat(TUTORIAL_SYSTEM_PROMPT)
     # The one URL the tour joins, and only from two things a tool returned.
     assert "`runs_url_prefix` with that `run_id` on the end" in beat
@@ -103,13 +112,13 @@ def test_seeding_and_running_are_one_turn_with_no_boundary_to_ask_at() -> None:
     beat = _flat(_beat(2))
 
     assert "ALL IN ONE TURN" in beat
-    assert "One message, three tool calls, no pause anywhere inside it" in beat
-    for tool in ("create_tutorial_project", "run_workflow", "get_run_status"):
+    assert "One message, no pause anywhere inside it" in beat
+    for tool in ("create_tutorial_project", "run_workflow", "sleep", "get_run_status"):
         assert tool in beat
     assert "Do not end your turn between them" in beat
     assert (
-        "Beat 2 is ONE turn. create_tutorial_project, run_workflow and the "
-        "get_run_status polling happen with no message between them"
+        "Beat 2 is ONE turn. create_tutorial_project, run_workflow, sleep and "
+        "get_run_status happen with no message between them"
     ) in _flat(TUTORIAL_SYSTEM_PROMPT)
 
 
@@ -128,7 +137,7 @@ def test_the_seed_and_run_beat_puts_no_question_to_the_reader() -> None:
 def test_the_run_beat_ends_by_handing_over_rather_than_offering_a_menu() -> None:
     beat = _flat(_beat(2))
 
-    assert "asking them to explore the run and come back when they are done" in beat
+    assert "sending them to the run and offering to answer questions" in beat
     assert "No menu" in beat and "no question" in beat
     assert "The page is the thing now, not you." in beat
 
@@ -171,9 +180,10 @@ def _flat(text: str) -> str:
 
 
 # Every name the script quotes in backticks is something the code defines: a stage of the
-# fixture, a field of what create_tutorial_project returns, a tool, or a run status. A
-# renamed stage or field otherwise leaves the prompt pointing at nothing, silently.
-_RUN_STATUS_WORDS = {"running", "status", "error", "run_id", "path", "bindings"}
+# fixture, a field of what create_tutorial_project returns, a tool, an argument one of
+# those tools takes, or a run status. A renamed stage, field or argument otherwise leaves
+# the prompt pointing at nothing, silently.
+_RUN_STATUS_WORDS = {"running", "status", "error"}
 
 
 def test_every_name_the_prompt_quotes_is_one_the_code_defines() -> None:
@@ -182,6 +192,7 @@ def test_every_name_the_prompt_quotes_is_one_the_code_defines() -> None:
         {stage.id for stage in fixture.stages}
         | set(TutorialProject.model_fields)
         | _tour_tool_names()
+        | _tour_tool_arguments()
         | _RUN_STATUS_WORDS
     )
     quoted = set(re.findall(r"`([a-z][a-z0-9_]{3,})`", TUTORIAL_SYSTEM_PROMPT))

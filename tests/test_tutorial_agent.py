@@ -29,6 +29,7 @@ _EXPECTED_TOOLS = {
     "create_tutorial_project",
     "run_workflow",
     "get_run_status",
+    "sleep",
     "describe_workflow",
 }
 
@@ -55,7 +56,7 @@ def _seed_a_tour() -> dict[str, Any]:
     return parsed
 
 
-def test_build_engine_resolves_tutorial_with_only_the_four_tour_tools() -> None:
+def test_build_engine_resolves_tutorial_with_only_the_tour_tools() -> None:
     engine = build_engine("tutorial", {"base_url": _BASE_URL})
     bare = {name.rsplit("__", 1)[-1] for name in engine._allowed_tools}
     assert bare == _EXPECTED_TOOLS

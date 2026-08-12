@@ -74,9 +74,12 @@ def test_mcp_descriptions_cover_exactly_the_registered_tools() -> None:
     # save_version is described per-surface (see app.tools.tool_specs); every other
     # MCP tool reads the shared registry.
     assert registered - set(TOOL_SPECS) == {"save_version"}
+    # Spec entries another surface owns and this one deliberately lacks: the draft tools
+    # are the editing agent's, and `sleep` exists for in-process agents, which run with
+    # the CLI's built-ins disabled — the CLI client connecting HERE brings its own.
     assert set(TOOL_SPECS) - registered <= {"get_current_project", "create_draft",
                                             "read_draft", "set_draft_stage",
-                                            "remove_draft_stage"}
+                                            "remove_draft_stage", "sleep"}
 
 
 def test_no_editing_tool_carries_a_docstring() -> None:

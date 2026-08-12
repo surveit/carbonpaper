@@ -14,9 +14,11 @@ def test_project_session_roundtrips_neutral_transcript():
     store.save_messages(sid, msgs)
     # stateless: no history fed back into the next turn
     assert store.load_messages(sid) == []
-    # but the transcript is renderable on page reload
-    view = store.history_view(sid)
-    assert any(b.get("text") == "done" or "done" in str(b) for b in view)
+    # but the transcript is renderable on page reload, in the order the turn ran
+    reply = store.history_view(sid)[-1]
+    assert [b.kind for b in reply.blocks] == ["tool", "text"]
+    assert reply.blocks[0].name == "edit_stage"
+    assert reply.blocks[1].text == "done"
 
 
 def test_list_sessions_returns_newest_first():

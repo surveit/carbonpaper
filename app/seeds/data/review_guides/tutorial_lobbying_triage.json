@@ -1,32 +1,32 @@
 {
   "steps": [
     {
-      "title": "Load the quarter's filings",
-      "prose": "One row per filing: client, registrant, reported spend, and one line on what the filing asked for. Invented data; no real filing.",
+      "title": "Load the quarter's lobbying filings",
+      "prose": "What each client paid to ask government for, as filed. After this: one row per lobbying filing, and every count downstream is a count of these. Invented data; no real filing.",
       "stage_ids": [
         "raw_filings"
       ],
       "data_description": "Every filing in the sample, as the CSV records it."
     },
     {
-      "title": "Load what each client said in public",
-      "prose": "One row per organisation: one line of what it committed to publicly, and where it said it. Also invented. Check it really is one row per organisation — the join fails on a repeat.",
+      "title": "Load each client's public commitment",
+      "prose": "What each client told everyone else it would do — the promise its filings get read against. After this: one row per client, and a repeat fails the run rather than quietly multiplying filings. Also invented.",
       "stage_ids": [
         "public_commitments"
       ],
       "data_description": "Every organisation with a public commitment on record."
     },
     {
-      "title": "Join each filing to its client's commitment",
-      "prose": "A left join on client name, so no filing is dropped. A filing with no matching commitment survives with the field blank — that blank is the join's record of a non-match, not missing data.",
+      "title": "Join each filing to its client's public commitment",
+      "prose": "Puts the promise beside the ask, dropping no filing. After this: every lobbying filing is still here, and a blank `public_commitment` means the client has none on record — the absence IS the record.",
       "stage_ids": [
         "matched_commitments"
       ],
       "data_description": "Every filing, plus its client's commitment where one matched."
     },
     {
-      "title": "Read the two texts against each other",
-      "prose": "A model reads the commitment and the ask together and answers Contradicts, Matches, Unclear or No commitment given. Check each against both texts; it is the weakest link.",
+      "title": "Judge the filing against the commitment",
+      "prose": "Whether an ask contradicts the client's promise is a reading, made here. After this: every filing carries `alignment` and the sentence behind it. Trust this step least — read both texts yourself.",
       "stage_ids": [
         "judge_alignment"
       ],
@@ -34,7 +34,7 @@
     },
     {
       "title": "Flag the contradictions",
-      "prose": "Flags a filing only where a commitment was joined onto it and the model said Contradicts. Plain code, so a wrong flag traces to a wrong judgment, and a blank commitment never becomes one.",
+      "prose": "Turns that reading into something countable. After this: `contradicts_commitment` is true only where a commitment was joined AND `alignment` reads Contradicts, so a client with none on record is never flagged.",
       "stage_ids": [
         "flag_contradiction"
       ],
@@ -42,7 +42,7 @@
     },
     {
       "title": "Publish the report",
-      "prose": "One HTML page: the ask, the commitment or that none is on record, and for a flagged filing both texts together. Open it under Published, below; every row links back to its own lineage.",
+      "prose": "What you hand to someone who was not here — open it under Published, below. After this: one page listing every filing, each row linked back to its own lineage.",
       "stage_ids": [
         "publish_report"
       ],

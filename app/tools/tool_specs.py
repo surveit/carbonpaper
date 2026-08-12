@@ -129,6 +129,17 @@ The current manifest of one production run as a dict: its overall status
 this after run_workflow to follow progress and see the outcome. An unknown or
 expired run_id returns {ok: False, error} rather than a fabricated status.""",
     ),
+    "sleep": ToolSpec(
+        name="sleep",
+        description="""\
+Let a few seconds pass, then return: nothing else happens while you wait, and
+background work carries on. This is how you wait for a run or a generation —
+sleep, read its status, sleep again while it is still going — rather than
+reading the same status over and over as fast as you can call it. Sleeps are
+deliberately short: a reader watching this conversation sees each call, so a
+short one reads as work in progress where a long one reads as a hang. Returns
+the seconds it slept, which is your ask clamped to the ceiling.""",
+    ),
     "list_projects": ToolSpec(
         name="list_projects",
         description="""\
