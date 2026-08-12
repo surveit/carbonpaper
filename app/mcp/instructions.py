@@ -91,6 +91,12 @@ it. A run executes a stored version, and run_workflow(project_id, version_id?) i
 full one — get_run_status(project_id, run_id) follows it to its outcome. Publishing is a
 human's mark that they have looked at a version; it does not gate what a run may execute.
 
+An input step reads a file the project holds. list_files(project_id) is what it holds and
+where to add one; run_workflow's `files` binds one to a step by the sha256 that listing
+gives. You cannot put a file there through this conversation — no tool here moves bytes —
+so unless you can run `curl` against the `file_upload_url` it returns, hand that URL to
+the person, say what to drop there, and list again when they say it is in.
+
 {REVIEW_GUIDE_NOTE}
 
 {HANDOVER_BARS_NOTE}

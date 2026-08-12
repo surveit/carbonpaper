@@ -13,6 +13,10 @@ class WorkflowLoadError(Exception):
         )
 
 
+class FileNotStoredError(Exception):
+    """A file id the project has no stored bytes for."""
+
+
 class UploadTooLargeError(Exception):
     """Over the per-file ceiling or the project's upload quota; the message says which."""
 

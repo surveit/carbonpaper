@@ -86,7 +86,7 @@ Walk these five beats in order.
    Do NOT list the stages in the chat: a list of names is what a page is for. Nor the
    files it reads — those are on the server, not on the reader's machine.
 
-   run_workflow takes `bindings` — create_tutorial_project's `input_bindings` passed
+   run_workflow takes `files` — create_tutorial_project's `input_files` passed
    straight through, without which the run reads nothing — and limits
    {"raw_filings": 6}, which caps the source stage at 6 rows so this is quick and cheap.
    The run takes about fifteen seconds, in the background: sleep(3), then

@@ -297,7 +297,31 @@ version, an unbound input) returns {ok: False, error} and starts no run.
 `limits` caps how many rows a stage READS: {"<stage id>": N} gives that stage
 its first N rows and leaves every other stage whole. It bounds the WORK, not
 the spend of a stage that already ran — a cap on a stage downstream of a model
-step does not stop that model step reading everything. Omit it for a full run.""",
+step does not stop that model step reading everything. Omit it for a full run.
+
+`files` binds a stored file to an input step for this run only:
+{"<input stage id>": "<sha256 from list_files>"}. A sha256 the project does not
+hold is a loud error naming itself, not a silent unbound input. Omit it where
+the workflow already names the file it reads.""",
+    ),
+    "list_files": ToolSpec(
+        name="list_files",
+        description="""What data files this project holds, and where to add one. Returns
+`file_upload_url`, the per-file `max_bytes` ceiling, the project's
+`remaining_bytes` of quota, and `files` — each with the `sha256` that names it
+to run_workflow, its filename, size and arrival time.
+
+Call this BEFORE asking a human for a file: the one they mean is often already
+here, and re-uploading it costs nothing but their time.
+
+You cannot put a file here yourself unless you can run code. A file has to be
+POSTed to `file_upload_url` as multipart form data — `curl -F file=@<path>
+<file_upload_url>` — and nothing about this conversation moves bytes, so a file
+described to you in words is a file you do not have. When you cannot run that
+command, give the person `file_upload_url` as a link, say what to drop there,
+and call this tool again when they say it is in.
+
+Never guess a sha256 and never invent a filename: bind only what this returns.""",
     ),
     "run_workflow_test": ToolSpec(
         name="run_workflow_test",

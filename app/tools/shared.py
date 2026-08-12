@@ -20,6 +20,7 @@ from app.services import (
     project as project_service,
     run as run_service,
     terms as terms_service,
+    uploads,
     workspace,
 )
 from app.services.project import Project
@@ -64,15 +65,53 @@ def write_terms(project_id: str, terms: Terms) -> Terms:
     return terms_service.load_terms(project_id)
 
 
+class StoredFileView(BaseModel):
+    """One file a project holds; `sha256` is what names it to run_workflow."""
+
+    sha256: str
+    filename: str
+    bytes: int
+    added: str
+
+
+class ProjectFilesView(BaseModel):
+    """What a project holds and how to add to it."""
+
+    file_upload_url: str
+    max_bytes: int
+    remaining_bytes: int
+    files: list[StoredFileView]
+
+
+def list_files(project_id: str, file_upload_url: str) -> ProjectFilesView:
+    """`file_upload_url` is the caller's — only it knows the address it was reached on."""
+    resolve_existing_project(project_id)
+    used = uploads.measure_files_used_bytes(project_id)
+    return ProjectFilesView(
+        file_upload_url=file_upload_url,
+        max_bytes=uploads.max_upload_bytes(),
+        remaining_bytes=max(uploads.project_quota_bytes() - used, 0),
+        files=[StoredFileView(sha256=f.sha256, filename=f.filename,
+                              bytes=f.byte_count, added=f.created_at)
+               for f in uploads.list_project_files(project_id)],
+    )
+
+
 def run_workflow(
     project_id: str,
     version_id: str | None = None,
     limits: dict[str, int] | None = None,
-    bindings: dict[str, dict[str, str]] | None = None,
+    files: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     resolve_existing_project(project_id)
+    # A stage id -> sha256 map, resolved here to the path-and-format params a run
+    # binds. Resolving it before start_run means an unknown file id fails naming
+    # itself, rather than as a missing-input refusal from preflight.
+    bindings = {stage_id: uploads.resolve_file_binding(project_id, sha256)
+                for stage_id, sha256 in (files or {}).items()}
     run_id = run_service.start_run(
-        project_id, version_id=version_id or None, limits=limits, bindings=bindings
+        project_id, version_id=version_id or None, limits=limits,
+        bindings=bindings or None
     )
     status = run_service.read_run_status(project_id, run_id)["status"]
     return {"run_id": run_id, "status": status}
@@ -217,10 +256,10 @@ _SCHEMAS: dict[str, ToolInputSchema] = {
             dict[str, int] | None,
             'Caps how many rows a stage READS: {"<stage id>": N}.',
         ],
-        "bindings": Annotated[
-            dict[str, dict[str, str]] | None,
-            'The file each input stage reads for THIS run, merged over what the stage '
-            'was authored with: {"<stage id>": {"path": "...", "format": "csv"}}.',
+        "files": Annotated[
+            dict[str, str] | None,
+            'The stored file each input stage reads for THIS run: '
+            '{"<stage id>": "<sha256 from list_files>"}.',
         ],
     },
     "get_run_status": {

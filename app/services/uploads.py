@@ -10,7 +10,9 @@ from pathlib import Path
 from typing import BinaryIO, ClassVar
 
 from app.core.persistence import PersistedModel, PersistenceScope
-from app.services.errors import UploadTooLargeError
+from app.models.schema import TypeUnsafeUserStageConfigOverride
+from app.models.stages.input_data import resolve_file_format
+from app.services.errors import FileNotStoredError, UploadTooLargeError
 from app.services.workspace import resolve_project_dir
 
 # How much of an upload is held in memory at once while it is written and hashed.
@@ -89,6 +91,37 @@ def resolve_stored_path(record: UploadedFile) -> Path:
     """Where a stored file sits, read back off its record alone."""
     project = record.id.split("/", 1)[0]
     return (resolve_project_dir(project) / "files" / record.sha256 / record.filename).resolve()
+
+
+def list_project_files(project: str) -> list[UploadedFile]:
+    """Newest arrival first."""
+    return sorted(UploadedFile.list(f"{project}/"),
+                  key=lambda record: record.created_at, reverse=True)
+
+
+def resolve_file_binding(project: str, sha256: str) -> TypeUnsafeUserStageConfigOverride:
+    """The connector params a run binds for one stored file."""
+    record = UploadedFile.load_or_none(f"{project}/{sha256}")
+    if record is None:
+        raise FileNotStoredError(
+            f"project '{project}' holds no file {sha256!r} — list its files, or upload "
+            "this one first")
+    path = resolve_stored_path(record)
+    # A record whose bytes are gone is worse than no record: the run would bind a
+    # path and fail at preflight, naming a file the caller was just told it had.
+    if not path.is_file():
+        raise FileNotStoredError(
+            f"'{record.filename}' is recorded for project '{project}' but its bytes are "
+            f"not on disk at {path} — upload it again")
+    return {"path": str(path), "format": resolve_file_format(str(path)).value}
+
+
+def measure_files_used_bytes(project: str) -> int:
+    """What this project's stored files weigh, counted off the disk they occupy."""
+    files_dir = resolve_project_dir(project) / "files"
+    if not files_dir.is_dir():
+        return 0
+    return sum(f.stat().st_size for f in files_dir.rglob("*") if f.is_file())
 
 
 def _write_to_temp_file(files_dir: Path, src: BinaryIO, ceiling: int) -> tuple[Path, str, int]:
