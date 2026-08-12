@@ -431,6 +431,7 @@
         "temperature": 0.0,
         "max_retries": 8,
         "response_format": "json",
+        "model": "claude-haiku-4-5",
         "batch_size": 12
       }
     },

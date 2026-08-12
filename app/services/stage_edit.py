@@ -13,6 +13,7 @@ from pathlib import Path
 
 from typing import Sequence
 
+from app.core.llm import LLMModel
 from app.models import StageDraft, parse_stage, stage_to_spec_dict
 from app.models.stages.code import SUMMARY_MAX_CHARS
 from app.models.workflow import (
@@ -116,6 +117,18 @@ def find_description_issues(candidate: dict) -> list[str]:
     return []
 
 
+def find_unnamed_model_issues(candidate: dict) -> list[str]:
+    """Enforced on write, not on the model — on load it would refuse every llm stage stored before."""
+    llm = candidate.get("llm")
+    if not isinstance(llm, dict) or llm.get("model"):
+        return []
+    return [
+        "`llm.model` is required: a run records which model answered its rows, and a "
+        "stage that names none is answered by whatever the deployment defaults to on "
+        f"the day it runs. Name one of {[member.value for member in LLMModel]}."
+    ]
+
+
 def _strip_bookkeeping_keys(spec: dict) -> dict:
     return {k: v for k, v in spec.items() if k not in LOADER_BOOKKEEPING_KEYS}
 
@@ -131,6 +144,7 @@ def _apply(project_dir: Path, specs: dict[str, dict], stage_id: str, candidate: 
     resulting = {**specs, stage_id: candidate}
     issues = validate_workflow_draft(list(resulting.values()))
     issues += find_description_issues(candidate)
+    issues += find_unnamed_model_issues(candidate)
     if issues:
         return EditStageResult(ok=False, issues=issues)
 
