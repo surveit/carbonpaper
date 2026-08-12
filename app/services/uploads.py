@@ -60,8 +60,8 @@ def project_quota_bytes() -> int:
                             _DEFAULT_PROJECT_QUOTA_BYTES)
 
 
-def save_upload(project: str, filename: str, src: BinaryIO) -> Path:
-    """Store an uploaded run-input file; returns the absolute path a run binds to."""
+def save_upload(project: str, filename: str, src: BinaryIO) -> UploadedFile:
+    """Store an uploaded run-input file and return the record of it."""
     files_dir = resolve_project_dir(project) / "files"
     # Content-addressed, so the destination is not known until the last byte is
     # read: the stream is written to a temp file in the same dir and moved into
@@ -82,8 +82,13 @@ def save_upload(project: str, filename: str, src: BinaryIO) -> Path:
         _refuse_upload_over_quota(files_dir, staged, byte_count)
         dest.parent.mkdir(parents=True, exist_ok=True)
         staged.replace(dest)
-    _record_upload(project, digest, safe_name, byte_count)
-    return dest.resolve()
+    return _record_upload(project, digest, safe_name, byte_count)
+
+
+def resolve_stored_path(record: UploadedFile) -> Path:
+    """Where a stored file sits, read back off its record alone."""
+    project = record.id.split("/", 1)[0]
+    return (resolve_project_dir(project) / "files" / record.sha256 / record.filename).resolve()
 
 
 def _write_to_temp_file(files_dir: Path, src: BinaryIO, ceiling: int) -> tuple[Path, str, int]:
@@ -127,16 +132,17 @@ def _refuse_upload_over_quota(files_dir: Path, staged: Path, byte_count: int) ->
         )
 
 
-def _record_upload(project: str, digest: str, filename: str, byte_count: int) -> None:
+def _record_upload(project: str, digest: str, filename: str, byte_count: int) -> UploadedFile:
     stored = UploadedFile.load_or_none(f"{project}/{digest}")
     # Re-saving a stored record rather than replacing it keeps `created_at` at the
     # first arrival of these bytes; only the name of the latest pick can differ.
     if stored is None:
-        UploadedFile(id=f"{project}/{digest}", sha256=digest,
-                     filename=filename, byte_count=byte_count).save()
-        return
-    stored.filename = filename
+        stored = UploadedFile(id=f"{project}/{digest}", sha256=digest,
+                              filename=filename, byte_count=byte_count)
+    else:
+        stored.filename = filename
     stored.save()
+    return stored
 
 
 def _safe_filename(raw: str) -> str:

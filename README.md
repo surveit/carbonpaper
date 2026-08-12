@@ -22,6 +22,27 @@ and `examples/` (the project working copies) — so every checkout and worktree
 reads and writes the one store. `CARBON_PAPER_DB_PATH` and
 `CARBON_PAPER_PROJECTS_DIR` repoint it, which is how the deploy below pins `/data`.
 
+## Getting a data file in
+
+A run reads its inputs off the server's disk by absolute path. A browser hands over
+bytes and never a path, so the run form's Browse… posts the file to the server, which
+stores it under the hash of its own contents and hands the path back. That endpoint is
+plain multipart and takes any caller — an agent that can run `curl` needs no browser:
+
+```
+curl -F file=@2026-lobbying.csv http://localhost:8765/project/<project>/files
+{"ok":true,"sha256":"a3f9…","filename":"2026-lobbying.csv","bytes":9470974,
+ "path":"~/.carbonpaper/examples/<project>/files/a3f9…/2026-lobbying.csv"}
+```
+
+The same bytes sent twice are one copy. One file may be up to 512MB and a project's
+files up to 2GB in total; `CARBON_PAPER_MAX_UPLOAD_BYTES` and
+`CARBON_PAPER_PROJECT_UPLOAD_QUOTA_BYTES` raise those on a bigger machine. The ceiling
+is what a run can load into memory, not what the disk holds — `input_data` hands a
+csv/json/xlsx source to pandas whole.
+
+Nothing authenticates this endpoint, so a hosted instance is one tester's instance.
+
 ## Deploying to Fly.io
 
 `Dockerfile` + `fly.toml` describe a single machine with one volume mounted at

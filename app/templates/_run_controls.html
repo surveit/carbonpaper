@@ -38,7 +38,7 @@
 
   The path field is display-only — Browse… is the only way to change it, because a
   browser hands over bytes and never a path: run_controls.js uploads the pick to
-  POST /project/<name>/upload-input and puts the saved copy's absolute path here. A
+  POST /project/<name>/files and puts the saved copy's absolute path here. A
   workflow-authored path is still read in place, so a row that has one is not required.
 
   The row cap (limit__<stage_id>) is blank for the whole file, or a number N that caps

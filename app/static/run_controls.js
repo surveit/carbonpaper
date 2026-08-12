@@ -13,7 +13,7 @@
 //  2. File picker — a run reads its input files off the server's disk by absolute
 //     path, but a browser <input type=file> hands over only bytes, never a path
 //     (every OS hides it). So Browse… opens the native file dialog, then uploads
-//     the chosen file to POST /project/<name>/upload-input, which saves it under
+//     the chosen file to POST /project/<name>/files, which saves it under
 //     its own content hash and returns that copy's absolute path — which goes
 //     into the (read-only) field. Browse is the only way to set it; the field
 //     itself isn't typeable.
@@ -90,7 +90,7 @@
       var fd = new FormData();
       fd.append("file", file);
       var resp = await fetch(
-        "/project/" + encodeURIComponent(project) + "/upload-input",
+        "/project/" + encodeURIComponent(project) + "/files",
         { method: "POST", body: fd }
       );
       var data = {};

@@ -1,7 +1,7 @@
-"""POST /project/{name}/upload-input — the browser-native file picker behind the
-run form's Browse… button. The browser hands over bytes (no path), so the server
-saves them under files/<sha256>/<filename> and returns that copy's absolute
-path, which the run then reads in place like any other input."""
+"""POST /project/{name}/files — one multipart endpoint behind the run form's Browse…
+button and reachable by any HTTP caller. The browser hands over bytes and never a
+path, so the server saves them under files/<sha256>/<filename> and answers with the
+record: the sha256 that names the file, and the path a run reads it from."""
 from __future__ import annotations
 
 import hashlib
@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.services import workspace
-from app.services.uploads import UploadedFile, max_upload_bytes
+from app.services.uploads import UploadedFile, max_upload_bytes, resolve_stored_path
 
 client = TestClient(app)
 
@@ -30,7 +30,7 @@ def project(tmp_path, monkeypatch):
 
 def upload(name: str, body: bytes, project_name: str = "demo"):
     return client.post(
-        f"/project/{project_name}/upload-input",
+        f"/project/{project_name}/files",
         files={"file": (name, body, "text/csv")},
     )
 
@@ -41,6 +41,21 @@ def test_upload_saves_under_the_content_hash_and_returns_the_path(project):
     saved = Path(body["path"])
     assert saved == (project / "files" / CSV_SHA / "posts.csv").resolve()
     assert saved.read_bytes() == CSV  # bytes landed intact
+
+
+def test_the_response_names_the_file_for_a_caller_that_is_not_the_browser(project):
+    body = upload("posts.csv", CSV).json()
+    # An agent that can run curl gets what it needs to name the file later, and the
+    # hash to check the bytes it just sent against — no HTML, no path parsing.
+    assert body["sha256"] == CSV_SHA
+    assert body["filename"] == "posts.csv"
+    assert body["bytes"] == len(CSV)
+
+
+def test_the_returned_path_is_read_back_off_the_record_alone(project):
+    upload("posts.csv", CSV)
+    record = UploadedFile.load(f"demo/{CSV_SHA}")
+    assert resolve_stored_path(record) == (project / "files" / CSV_SHA / "posts.csv").resolve()
 
 
 def test_the_stored_filename_keeps_the_extension_a_binding_reads_the_format_from(project):
@@ -143,7 +158,7 @@ def test_a_limit_that_is_not_a_positive_number_fails_loudly(project, monkeypatch
 
 def test_missing_file_is_422(project):
     # FastAPI rejects a missing required File before the handler runs.
-    assert client.post("/project/demo/upload-input").status_code == 422
+    assert client.post("/project/demo/files").status_code == 422
 
 
 def test_unknown_project_404(project):

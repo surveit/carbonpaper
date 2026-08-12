@@ -33,7 +33,7 @@ from app.services.errors import UploadTooLargeError, WorkflowLoadError
 from app.services.versioning import list_versions
 from app.services import run as run_service
 from app.services.run_guide import build_run_guide_view
-from app.services.uploads import max_upload_bytes, save_upload
+from app.services.uploads import max_upload_bytes, resolve_stored_path, save_upload
 from app.runtime.cancellation import request_cancel
 from app.web.breadcrumbs import build_run_crumbs, build_runs_child_crumbs
 from app.web.config import EVENT_TAIL, projects_dir, templates
@@ -138,19 +138,25 @@ async def run_inputs(project: str, version_id: str | None = None):
     return JSONResponse(list_file_inputs(project, version_id))
 
 
-@router.post("/project/{project}/upload-input")
-async def upload_input(project: str, file: UploadFile = File(...)):
+@router.post("/project/{project}/files")
+async def upload_file(project: str, file: UploadFile = File(...)):
+    """One multipart endpoint for the run form's Browse… and for `curl -F file=@…`."""
     if not (projects_dir() / project).is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
     if not file.filename:
         return JSONResponse({"ok": False, "error": "no file provided"}, status_code=400)
     # Off the event loop: the copy streams a file of any size to disk and hashes it.
     try:
-        path = await run_in_threadpool(save_upload, project, file.filename, file.file)
+        record = await run_in_threadpool(save_upload, project, file.filename, file.file)
     except UploadTooLargeError as exc:
         # The message names the limit and what to do; run_controls.js shows it verbatim.
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
-    return JSONResponse({"ok": True, "path": str(path)})
+    # `sha256` is what a caller keeps — it names the file for a later run and is the
+    # integrity check on the bytes it just sent. `path` is here for the run form,
+    # whose field still submits a path.
+    return JSONResponse({"ok": True, "sha256": record.sha256, "filename": record.filename,
+                         "bytes": record.byte_count,
+                         "path": str(resolve_stored_path(record))})
 
 
 @router.get("/project/{project}/runs", response_class=HTMLResponse)
