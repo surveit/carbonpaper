@@ -68,7 +68,7 @@ def test_the_seeds_are_the_rows_the_publish_stage_linked(tmp_path):
 
     run_dir = tmp_path / "run"
     (run_dir / "outputs").mkdir(parents=True)
-    linker = RowTraceLinker(project="p", run_id="r")
+    linker = RowTraceLinker(project="p", run_id="r", frames={})
     linker.build_row_trace_url("totals", 2)
     linker.build_row_trace_url("totals", 0)
     write_issued_traces(run_dir, "report", linker)
@@ -162,7 +162,7 @@ def _export_demo_packet(tmp_path):
     from app.web.review_packet.lineage import write_packet_lineage
 
     run_dir = _demo_run(tmp_path)
-    linker = RowTraceLinker(project="p", run_id="r")
+    linker = RowTraceLinker(project="p", run_id="r", frames={})
     for row in range(2):
         linker.build_row_trace_url("totals", row)
     write_issued_traces(run_dir, "report", linker)
