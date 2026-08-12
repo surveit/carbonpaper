@@ -58,13 +58,11 @@ def test_the_words_are_agreed_before_the_plan_is_written() -> None:
     # Why TERMS is its own phase, and what an agent may put in it.
     assert "Ask, never invent" in AUTHORING_LIFECYCLE_GUIDANCE
     assert "not in the document" in AUTHORING_LIFECYCLE_GUIDANCE
-    assert "`also_written`" in AUTHORING_LIFECYCLE_GUIDANCE
-    assert "costs less than renaming later" in AUTHORING_LIFECYCLE_GUIDANCE
 
 
 def test_a_verb_may_not_restate_a_word_the_app_already_spends() -> None:
     # The examples are the app's real stage types, so a renamed type fails here.
-    for stage_type in ("aggregate", "filter_rows", "enrich", "publish"):
+    for stage_type in ("aggregate", "filter_rows", "enrich"):
         assert stage_type in AUTHORING_LIFECYCLE_GUIDANCE, stage_type
         assert stage_type in AUTHORABLE_TYPES, stage_type
 

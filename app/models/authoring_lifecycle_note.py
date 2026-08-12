@@ -39,7 +39,7 @@ TEST_RUN_REVIEW.
    uses for the things in its data, and the verbs for the decisions it makes.
    Ask, never invent: a word that is not in the document is a word to ask about.
    A noun or verb earns a place only where this app has no word for it already —
-   aggregate, filter, enrich, etc. mean the same in every project, so do not include them.
+   aggregate, filter_rows, enrich, etc. mean the same in every project, so leave them out.
    The plan and everything after it is written in these words. Prefer more specific
    words, e.g. "resolve entities" or "dedupe" instead of "merge".
 3. PLANNING — PLAN, AND ASK QUESTIONS. Ask what research left open rather than guess.
