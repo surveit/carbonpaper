@@ -137,7 +137,7 @@ def test_the_seed_and_run_beat_puts_no_question_to_the_reader() -> None:
 def test_the_run_beat_ends_by_handing_over_rather_than_offering_a_menu() -> None:
     beat = _flat(_beat(2))
 
-    assert "asking them to explore the run and come back when they are done" in beat
+    assert "sending them to the run and offering to answer questions" in beat
     assert "No menu" in beat and "no question" in beat
     assert "The page is the thing now, not you." in beat
 
