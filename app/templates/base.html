@@ -25,6 +25,10 @@
     </main>
     {# Delegated from the document, so any page holding a data-preview table gets
        click-to-expand without wiring it. #}
+    {# Loaded for every page rather than the stage pages alone, on the same reasoning
+       as diagram_nodes.js above: a page holding a code block cannot then miss it. #}
+    <script src="/static/highlight.min.js"></script>
+    <script src="/static/code-highlight.js"></script>
     <script src="/static/cell-expand.js"></script>
     <script src="/static/friendly-time.js"></script>
     <script src="/static/breadcrumbs.js"></script>

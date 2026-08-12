@@ -10,6 +10,12 @@
 <link rel="stylesheet" href="/static/review-queue.css">
 <link rel="stylesheet" href="/static/workflow-section.css">
 <link rel="stylesheet" href="/static/stage-detail.css">
+{# Vendored highlight.js theme, unedited — the only sheet here that does not spend
+   palette tokens, exempted in tests/arch/test_palette_owns_colour.py and pinned to
+   its upstream hash by tests/arch/test_vendored_assets_are_pinned.py. Nothing else
+   here writes a .hljs rule, so its position is free; stage-detail.css takes back the
+   ground and padding on specificity, leaving this the token colours only. #}
+<link rel="stylesheet" href="/static/hljs-github-dark.css">
 <link rel="stylesheet" href="/static/split-view.css">
 <link rel="stylesheet" href="/static/data-model.css">
 <link rel="stylesheet" href="/static/controls.css">
