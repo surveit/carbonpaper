@@ -106,13 +106,6 @@ STAGE_TYPE_SPECS: dict[str, StageTypeSpec] = {
             "AS RECEIVED. Iterate the frame in order (enumerate it) and do not sort, "
             "filter, or dedup before reading the ordinal — position is the only key the "
             "trace has. Omit the keyword for a format that cannot carry a link (csv, json). "
-            "PUBLISH COPIES, NEVER COMPUTES. Take a headline figure and its trace in one "
-            "call — `f = trace_links.read_figure(\"count_filings\", 0, \"filings\", "
-            "label=\"Filings in scope\")` — then print `f.value` and link `f.url`; `label` "
-            "is what the artifact calls the figure, and the run records it under that name. "
-            "A figure whose printed value is in no cell of the row it traces is REFUSED, so "
-            "a total that adds two cells belongs in an aggregate or starlark step ahead of "
-            "publish, where it gets a lineage record of its own. "
             "The one type whose signature produces nothing: it emits files, not a table."
         ),
     ),

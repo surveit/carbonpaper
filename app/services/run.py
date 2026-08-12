@@ -19,7 +19,7 @@ from app.models.run_manifest import read_run_bindings, read_run_manifest
 from app.models.schema import StageId, TypeUnsafeUserStageConfigOverride
 from app.runtime.manifest import read_stage_output_frame, resolve_output_path
 from app.runtime.runner import prepare_run, resume_run, run_prepared
-from app.runtime.trace_links import build_row_trace_url as build_row_trace_url
+from app.runtime.trace_links import RowTraceLinker
 from app.services.errors import WorkflowLoadError
 from app.services.versioning import (
     WorkflowVersion,
@@ -109,6 +109,12 @@ def read_stage_output(project: str, run_id: str, stage_id: str) -> pd.DataFrame:
     run_dir = resolve_run_dir(project, run_id)
     _validate_run_exists(run_dir, project, run_id)
     return read_stage_output_frame(run_dir, stage_id)
+
+
+def build_row_trace_url(project: str, run_id: str, stage_id: str, row: int) -> str:
+    """Root-relative — a caller above this layer joins it onto its own base URL."""
+    linker = RowTraceLinker(project=project, run_id=run_id)
+    return linker.build_row_trace_url(stage_id, row)
 
 
 def read_output_column_counts(project: str, manifest: Mapping[str, Any]) -> dict[str, int]:

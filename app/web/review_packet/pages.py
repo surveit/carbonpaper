@@ -13,12 +13,7 @@ from app.services.loader import resolve_function_code
 from app.services.review_packet.checksums import CHECKSUMS_FILE
 from app.services.review_packet.data import DataReport
 from app.models import WorkflowStage
-from app.services.review_packet.views import (
-    LINEAGE_DIR,
-    LineageReport,
-    RunView,
-    StageView,
-)
+from app.services.review_packet.views import RunView, StageView
 from app.services.run_guide import RunGuideView
 from app.web.config import templates
 from app.web.loading import load_output_preview, load_output_table
@@ -61,12 +56,7 @@ DIAGRAM_SCRIPTS = (NODE_SCRIPT, VIEWPORT_SCRIPT)
 # The tokenizer and its caller, vendored so a stage page colours its code offline.
 # The theme rides in the concatenated stylesheet, which already follows the app's
 # cascade order, so it needs no entry here.
-# NOT shipped: highlight.js is 124 KB of third-party code whose only job is
-# colouring tokens, and the packet is an artifact a reader opens from a stranger.
-# The code blocks keep their ground and padding from stage-detail.css, so they
-# read the same — unhighlighted, not unstyled. HLJS_STYLESHEET goes with it: with
-# nothing adding the classes, its rules can never match.
-HLJS_STYLESHEET = "hljs-github-dark.css"
+CODE_SCRIPTS = ("highlight.min.js", "code-highlight.js")
 
 # The diagram renderer is the packet's ONE external request; the index says so.
 # Version-pinned rather than `mermaid@11`, so the URL and the hash cannot drift
@@ -81,7 +71,6 @@ def write_packet_pages(
     run_dir: Path,
     view: RunView,
     data: DataReport,
-    lineage: LineageReport,
     guide: RunGuideView | None,
     diagram: str,
     issues: RunIssues,
@@ -89,13 +78,13 @@ def write_packet_pages(
 ) -> list[str]:
     written = _write_stylesheets(root)
     written.extend(_write_diagram_scripts(root))
+    written.extend(_write_asset(root, name) for name in CODE_SCRIPTS)
     written.append(_write_diagram_source(root, diagram))
-    written.append(_write_index(root, view, data, lineage, guide, diagram, issues))
+    written.append(_write_index(root, view, data, guide, diagram, issues))
     for stage in view.stages:
         written.append(
             _write_stage_page(
-                root, run_dir, view, stage,
-                workflow_stages_by_id.get(stage.stage_id), frozenset(lineage.traced))
+                root, run_dir, view, stage, workflow_stages_by_id.get(stage.stage_id))
         )
     return written
 
@@ -115,7 +104,6 @@ def _write_index(
     root: Path,
     view: RunView,
     data: DataReport,
-    lineage: LineageReport,
     guide: RunGuideView | None,
     diagram: str,
     issues: RunIssues,
@@ -123,8 +111,6 @@ def _write_index(
     html = _render(
         "packet_index.html",
         run=view,
-        lineage=lineage,
-        lineage_dir_href=f"{LINEAGE_DIR}/index.html",
         guide=guide,
         omitted=data.omitted,
         artifacts=data.artifacts,
@@ -164,22 +150,21 @@ def _write_asset(root: Path, name: str) -> str:
 def _write_stage_page(
     root: Path, run_dir: Path, view: RunView, stage: StageView,
     workflow_stage: WorkflowStage | None,
-    traced: frozenset[tuple[str, int]],
 ) -> str:
     relative = f"{STAGES_DIR}/{stage.stage_id}.html"
     html = _render(
         "packet_stage.html",
         run=view,
         assets=[f"../{ASSETS_DIR}/{name}" for name in STYLESHEETS],
+        code_scripts=[f"../{ASSETS_DIR}/{name}" for name in CODE_SCRIPTS],
         index_href="../index.html",
-        **_build_panel_context(run_dir, view, stage, workflow_stage, traced),
+        **_build_panel_context(run_dir, view, stage, workflow_stage),
     )
     return _write(root / relative, html, relative)
 
 
 def _build_panel_context(
-    run_dir: Path, view: RunView, stage: StageView,
-    workflow_stage: WorkflowStage | None, traced: frozenset[tuple[str, int]],
+    run_dir: Path, view: RunView, stage: StageView, workflow_stage: WorkflowStage | None
 ) -> dict[str, Any]:
     # The False/empty entries below are what make the packet's panel inert.
     stage_def = None if workflow_stage is None else workflow_stage.stage
@@ -209,7 +194,7 @@ def _build_panel_context(
         "can_generate_tests": False,
         "certification": None,
         "previewable": False,
-        "links": PacketPanelLinks(traced=traced),
+        "links": PacketPanelLinks(),
         "type_glyph": TYPE_GLYPH,
         "type_class": TYPE_CLASS,
     }
@@ -260,10 +245,7 @@ def _write_stylesheets(root: Path) -> list[str]:
     order = read_app_cascade_order()
     text = {
         PALETTE_STYLESHEET: (_APP_STATIC / PALETTE_STYLESHEET).read_text(encoding="utf-8"),
-        APP_STYLESHEET: _join_sheets(
-            name for name in order
-            if name not in (PALETTE_STYLESHEET, HLJS_STYLESHEET)
-        ),
+        APP_STYLESHEET: _join_sheets(name for name in order if name != PALETTE_STYLESHEET),
         PACKET_STYLESHEET: (_PACKET_STATIC / PACKET_STYLESHEET).read_text(encoding="utf-8"),
     }
     return [_write_text(root / f"{ASSETS_DIR}/{name}", text[name], f"{ASSETS_DIR}/{name}")

@@ -89,35 +89,25 @@ class RowLineage:
     @classmethod
     def from_frame(cls, df: pd.DataFrame) -> "RowLineage":
         """The absent columns are pre-multi-parent sidecars; old runs stay readable unmigrated."""
-        stage_cells = _column_cells(df, TRACE_SOURCE_STAGE_KEY)  # once, not per row:
-        # indexing `df[col]` inside the loop re-boxes the whole column every time,
-        # which on a 45k-row sidecar costs seconds.
-        row_cells = _column_cells(df, TRACE_SOURCE_ROW_KEY)
-        kind_cells = _column_cells(df, TRACE_EDGE_KIND_KEY)
-        column_cells = _column_cells(df, TRACE_SOURCE_COLUMNS_KEY)
-        return cls([
-            _read_parents(stage_cells[i], row_cells[i], kind_cells[i], column_cells[i])
-            for i in range(len(df))
-        ])
-
-
-def _read_parents(stages: Any, rows: Any, kinds: Any, columns: Any) -> list[RowParent]:
-    stage_ids, row_ordinals = _as_list(stages), _as_list(rows)
-    kind_names, column_names = _as_list(kinds), _as_list(columns)
-    return [
-        RowParent(
-            stage_id=str(stage_ids[k]),
-            row_ordinal=int(row_ordinals[k]),
-            kind=str(kind_names[k]) if k < len(kind_names) else EdgeKind.direct.value,
-            columns=_columns_or_none(column_names[k]) if k < len(column_names) else None,
-        )
-        for k in range(min(len(stage_ids), len(row_ordinals)))
-    ]
-
-
-def _column_cells(df: pd.DataFrame, name: str) -> list[Any]:
-    """[] for every row when the column is absent, so a pre-multi-parent sidecar still reads."""
-    return df[name].tolist() if name in df.columns else [[]] * len(df)
+        has_kind = TRACE_EDGE_KIND_KEY in df.columns
+        has_columns = TRACE_SOURCE_COLUMNS_KEY in df.columns
+        parents: list[list[RowParent]] = []
+        for i in range(len(df)):
+            stages = _as_list(df[TRACE_SOURCE_STAGE_KEY].iloc[i])
+            rows = _as_list(df[TRACE_SOURCE_ROW_KEY].iloc[i])
+            kinds = _as_list(df[TRACE_EDGE_KIND_KEY].iloc[i]) if has_kind else []
+            columns = _as_list(df[TRACE_SOURCE_COLUMNS_KEY].iloc[i]) if has_columns else []
+            entry = [
+                RowParent(
+                    stage_id=str(stages[k]),
+                    row_ordinal=int(rows[k]),
+                    kind=str(kinds[k]) if k < len(kinds) else EdgeKind.direct.value,
+                    columns=_columns_or_none(columns[k]) if k < len(columns) else None,
+                )
+                for k in range(min(len(stages), len(rows)))
+            ]
+            parents.append(entry)
+        return cls(parents)
 
 
 def _columns_or_none(cell: Any) -> tuple[str, ...] | None:

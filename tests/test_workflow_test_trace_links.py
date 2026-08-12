@@ -33,7 +33,7 @@ _PUBLISH = {
     "function": {"kind": "inline", "code":
                  "def transform(df, output_dir, trace_links=None):\n"
                  "    import json, os\n"
-                 "    urls = [trace_links.build_row_trace_url('load', i)\n"
+                 "    urls = [trace_links.build_row_trace_url('publish_report', i)\n"
                  "            for i in range(len(df))]\n"
                  "    with open(os.path.join(output_dir, 'urls.json'), 'w') as f:\n"
                  "        json.dump(urls, f)\n"
@@ -69,8 +69,8 @@ def test_publish_stage_trace_links_works_in_a_workflow_test(demo):
         (demo / "runs" / run_id / "artifacts" / "build" / "urls.json")
         .read_text(encoding="utf-8"))
     assert urls == [
-        f"/project/demo/runs/{run_id}/stage/load/row/0/trace/view",
-        f"/project/demo/runs/{run_id}/stage/load/row/1/trace/view",
+        f"/project/demo/runs/{run_id}/stage/publish_report/row/0/trace/view",
+        f"/project/demo/runs/{run_id}/stage/publish_report/row/1/trace/view",
     ]
 
     # The URL resolves through the SAME route a production run's trace links use

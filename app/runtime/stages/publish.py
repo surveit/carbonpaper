@@ -13,8 +13,7 @@ from app.models import WorkflowStage
 from app.models.stages.publish import PublishStage
 
 from ..context import RunContext
-from ..published_figures import validate_published_figures
-from ..trace_links import RowTraceLinker, write_issued_traces
+from ..trace_links import RowTraceLinker
 from .execution import narrow_stage
 from .python_functions import _load_python_function
 
@@ -28,19 +27,11 @@ def handle_publish(
     output_dir = _prepare_output_dir(publish_stage, ctx)
     fn = _load_python_function(publish_stage)
     args = [inputs[ref.id] for ref in workflow_stage.inputs]
-    frames = {ref.id: inputs[ref.id] for ref in workflow_stage.inputs}
 
-    linker = _resolve_trace_linker(fn, publish_stage, ctx, frames)
+    linker = _resolve_trace_linker(fn, publish_stage, ctx)
     if linker is None:
         return fn(*args, output_dir=str(output_dir))
-    result = fn(*args, output_dir=str(output_dir), trace_links=linker)
-    # Both after the call, so they see what the artifact actually claims rather than
-    # what the stage could have claimed. Checked before recorded: a refused stage
-    # leaves no page list behind. The review packet renders exactly this set — a row
-    # nothing published points at needs no page.
-    validate_published_figures(publish_stage.id, linker.issued, frames)
-    write_issued_traces(ctx.require_run_dir(), publish_stage.id, linker)
-    return result
+    return fn(*args, output_dir=str(output_dir), trace_links=linker)
 
 
 def _prepare_output_dir(stage: PublishStage, ctx: RunContext) -> Path:
@@ -53,8 +44,7 @@ def _prepare_output_dir(stage: PublishStage, ctx: RunContext) -> Path:
 
 
 def _resolve_trace_linker(
-    fn: Callable[..., Any], stage: PublishStage, ctx: RunContext,
-    frames: dict[str, pd.DataFrame],
+    fn: Callable[..., Any], stage: PublishStage, ctx: RunContext
 ) -> RowTraceLinker | None:
     if not _accepts_trace_links(fn):
         return None
@@ -64,9 +54,7 @@ def _resolve_trace_linker(
             "this run has no project scope (a preview, subset, or authored-test run), so "
             "no row-trace URL can be built"
         )
-    return RowTraceLinker(
-        project=ctx.identity.project, run_id=ctx.identity.run_id, frames=frames
-    )
+    return RowTraceLinker(project=ctx.identity.project, run_id=ctx.identity.run_id)
 
 
 def _accepts_trace_links(fn: Callable[..., Any]) -> bool:

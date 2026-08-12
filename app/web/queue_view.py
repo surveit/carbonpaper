@@ -14,7 +14,7 @@ from fastapi import HTTPException
 from app.core.stage_cache import StageCacheEntry
 from app.models import Column, WorkflowStage
 from app.models.stages.human_review_queue import QueueConfig, ReviewVerdict
-from app.runtime.trace_links import build_row_trace_url
+from app.runtime.trace_links import RowTraceLinker
 from app.web.loading import QueueFingerprints, display_cell
 
 @dataclass(frozen=True)
@@ -213,9 +213,8 @@ def build_lineage_urls(
     ordinals = fingerprints.row_ordinals
     if lineage.upstream_stage_id is None or ordinals is None:
         return [None] * len(fingerprints.input_fingerprints)
-    return [
-        build_row_trace_url(project, run_id, lineage.upstream_stage_id, o) for o in ordinals
-    ]
+    linker = RowTraceLinker(project=project, run_id=run_id)
+    return [linker.build_row_trace_url(lineage.upstream_stage_id, o) for o in ordinals]
 
 
 def resolve_notes_label(stage_def: WorkflowStage, column: str) -> str:

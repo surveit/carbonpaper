@@ -49,27 +49,6 @@
 </section>
 {% endif %}
 
-{# The figures the published files printed, in the words the publish stage gave
-   them, each opening the rows behind it. #}
-{% if lineage.figures %}
-<section>
-  <h2>Row provenance</h2>
-  <p class="muted">Every figure the published files print, and the rows it was counted from.</p>
-  <table class="schema">
-    <thead><tr><th>Figure</th><th class="num">Value</th><th></th></tr></thead>
-    <tbody>
-    {% for figure in lineage.figures %}
-      <tr>
-        <td>{{ figure.label }}</td>
-        <td class="num">{{ figure.value if figure.value is not none else "" }}</td>
-        <td class="lk">{% if figure.href %}<a href="{{ figure.href }}">View lineage</a>{% else %}<span class="muted">no lineage published</span>{% endif %}</td>
-      </tr>
-    {% endfor %}
-    </tbody>
-  </table>
-</section>
-{% endif %}
-
 {% if run.stages %}
 <section>
   <h2>The workflow this run executed</h2>
@@ -147,7 +126,6 @@
       <tr><td><a href="workflow.json">workflow.json</a></td><td>the frozen step definitions this run executed</td></tr>
       <tr><td><a href="manifest.json">manifest.json</a></td><td>the run's own record: timings, statuses, checks, input bindings</td></tr>
       <tr><td><a href="events.jsonl">events.jsonl</a></td><td>the run event log, including the prompt text sent to the model</td></tr>
-      {% if lineage.traced %}<tr><td><a href="{{ lineage_dir_href }}"><code>lineage/</code></a></td><td>one page per traceable row, and the rows each figure was counted from</td></tr>{% endif %}
       <tr><td><code>data/</code></td><td>one CSV per step, uncapped; <code>data/raw/</code> holds the files the run actually wrote</td></tr>
       {# The command rides on the row: it was the one thing the page footer carried
          that is written nowhere else, and a hash nobody can check is not evidence. #}
