@@ -58,10 +58,10 @@ def test_a_workflow_with_a_warning_lists_it_instead(tmp_path):
     load = _make_load_stage(str(tmp_path / "things.csv"))
     page = _workflow_page(tmp_path, "dirty", [load, _UNDESCRIBED])
     assert _CLEAN_LINE not in page
-    # The one warning an edit can clear is counted as an error, in the words the
-    # clean line answers in; the count it does not have goes unwritten.
-    assert "1 error" in page
-    assert "0 warnings" not in page
+    # A missing description is a warning, so the panel counts it as one; the count
+    # it does not have goes unwritten.
+    assert "1 warning" in page
+    assert "0 errors" not in page
 
 
 def test_a_workflow_that_does_not_load_claims_nothing(tmp_path):

@@ -21,21 +21,16 @@ WarningKind = Literal[
     "nondeterministic",
 ]
 
-# Each kind's severity, and the order the list is read in (errors first).
-#
-# `error` = an edit to this stage clears it, so it is owed one before anyone signs
-# the workflow off.
-#
-# `examples_failing` is a warning: it reports that an agent reading only the
-# description predicted something the code did not do. The agent may simply have
-# read the description a different way, so a human deciding the code is right
-# resolves it with no edit owed. `nondeterministic` is a deliberate authoring
-# choice. Both are wrong to refuse and still worth telling a reviewer about: a
-# `warning` is not thereby unimportant.
+# The order the list is read in. Every kind is a `warning`: nothing here refuses an
+# action, a version snapshots whatever the author has, and each of these is something
+# an author may knowingly leave standing — a stage described in code alone, one no
+# example checks, a model call that re-rolls every run. `error` is the RUNTIME's
+# word, for a stage that actually stopped (app/web/run_issues.py), and a compiler
+# note borrowing it claimed a severity it could not act on.
 SEVERITY: dict[str, UserFacingErrorSeverity] = {
-    "undescribed": UserFacingErrorSeverity.error,
-    "unexemplified": UserFacingErrorSeverity.error,
-    "unreviewable_code": UserFacingErrorSeverity.error,
+    "undescribed": UserFacingErrorSeverity.warning,
+    "unexemplified": UserFacingErrorSeverity.warning,
+    "unreviewable_code": UserFacingErrorSeverity.warning,
     "examples_failing": UserFacingErrorSeverity.warning,
     "nondeterministic": UserFacingErrorSeverity.warning,
 }

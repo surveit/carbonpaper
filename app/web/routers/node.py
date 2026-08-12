@@ -14,7 +14,6 @@ from app.services import project as project_service
 from app.services.errors import WorkflowLoadError
 from app.services.loader import find_parsed_stage, list_parsed_stages, resolve_function_code
 from app.models import stage_to_json
-from app.runtime.stage_tests import find_failing_stage_tests
 from app.web.config import projects_dir, templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
 from app.web.loading import find_workflow_stage, load_stages
@@ -135,18 +134,11 @@ async def create_version_route(project: str, message: str = Form(...)):
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
 
-    # Tests are the stage's behavior contract: a version is a committable
-    # snapshot, so it must not immortalise a python transform that fails its
-    # own tests. Absent tests don't block — the gate holds existing
-    # tests to green, it does not require them. The gate only applies when a
-    # compiled workflow exists; without one, save_working_copy_as_version's own
-    # FileNotFoundError reports the missing workflow as a 400 below.
-    if (project_dir / "compiled").is_dir():
-        failing = find_failing_stage_tests(
-            list_parsed_stages(load_stages(project).entries))
-        if failing:
-            return JSONResponse({"ok": False, "issues": failing}, status_code=400)
-
+    # No compiler gate: a version is a snapshot of what the author has, and the
+    # Workflow page already tells them what is wrong with it. A workflow that
+    # published an artifact is one someone may want to pin whatever it is owed. The
+    # only refusal left is a working copy that does not LOAD, which
+    # save_working_copy_as_version raises below.
     try:
         version = project_service.save_working_copy_as_version(
             project_dir,
