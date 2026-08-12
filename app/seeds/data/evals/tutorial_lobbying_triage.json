@@ -1,7 +1,7 @@
 {
   "id": "alignment_hard_cases",
   "name": "Hard alignment judgments",
-  "description": "Twenty-four invented filings chosen to be hard: a supportive-sounding ask that pushes a coal retirement past the promised date, negations stacked two and three deep, an ask buried in a list of bill numbers, a promise whose carve-out the ask sits outside of, an ask that shares a subject with the commitment but pulls in no direction, and three filings whose client matched no commitment row at all — one of them named almost exactly like a client that did. Each expected label was read off Step 3's four definitions before the workflow was run, and none was changed afterwards, so a disagreement here is a finding rather than a mislabel.",
+  "description": "Twenty-four invented filings, most of them ambiguous rather than merely hard to read: a broad aspirational promise met by an ask that is arguably in service of it and arguably beside it, a promise about the client's own operations met by an ask about what everyone else should be required to do, an ask sitting just inside a promise's carve-out and another sitting just outside it, an ask that would cut emissions on one timescale and raise them on another, and one that asks government for exactly what the promise says while backing the later of two effective dates. Beside them a handful of plain cases — a supportive-sounding ask that pushes a coal retirement past the promised date, a negation stacked two deep, an ask buried in a list of bill numbers — and three filings whose client matched no commitment row at all, one of them naming a climate plan of its own. Each expected label was read off Step 3's four definitions before the workflow was run, and none was changed afterwards, so a disagreement here is a finding rather than a mislabel.",
   "override_stage": "matched_commitments",
   "target_stage": "judge_alignment",
   "expected_outputs": [
@@ -23,7 +23,7 @@
         {
           "name": "alignment",
           "type": "str",
-          "nullable": true,
+          "nullable": false,
           "description": "The label Step 3's definitions give this filing, written before the stage ran.",
           "enum": ["Contradicts", "Matches", "Unclear", "No commitment given"]
         }
