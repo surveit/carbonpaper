@@ -131,3 +131,4 @@
 {"run_id":"31622376544","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31622376544","created":"2026-08-12T17:24:10Z","branch":"feat/tour-eval-tool","event":"pull_request","contracts_kept":14,"findings":[]}
 {"run_id":"31622376544","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31622376544","created":"2026-08-12T17:25:02Z","branch":"feat/tour-eval-tool","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"31623656806","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31623656806","created":"2026-08-12T17:39:20Z","branch":"master","event":"push","contracts_kept":14,"findings":[]}
+{"run_id":"31623716045","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31623716045","created":"2026-08-12T17:39:58Z","branch":"test/fingerprint-stability-goldens","event":"pull_request","contracts_kept":14,"findings":[]}
