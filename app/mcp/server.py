@@ -19,11 +19,9 @@ from app.core.errors import (
     NoWorkflowTestVersionError,
     RunNotFoundError,
 )
-from app.models import (
-    StageDraft,
-    find_workflow_compiler_warnings,
-)
+from app.models import find_workflow_compiler_warnings
 from app.tools import shared
+from app.tools.submitted_stage import SubmittedStage, add_stages_reporting_drops
 from app.tools.tool_specs import SAVE_VERSION_FROM_WORKING_COPY, TOOL_SPECS
 from app.mcp.instructions import INSTRUCTIONS
 from app.models.review_guide import ReviewGuideDraft
@@ -195,8 +193,8 @@ def edit_stage(project_id: str, stage_id: str, changes_json: str) -> dict[str, A
 
 
 @mcp.tool(description=TOOL_SPECS["add_stage"].description)
-def add_stage(project_id: str, stages: list[StageDraft]) -> dict[str, Any]:
-    return project_service.add_stages_reporting_drops(project_id, stages)
+def add_stage(project_id: str, stages: list[SubmittedStage]) -> dict[str, Any]:
+    return add_stages_reporting_drops(project_id, stages)
 
 
 @mcp.tool(description=TOOL_SPECS["remove_stage"].description)

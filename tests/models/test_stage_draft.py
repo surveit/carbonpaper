@@ -11,18 +11,18 @@ import pytest
 from pydantic import ValidationError
 
 from app.models import StageDraft, parse_stage
-from app.models.stage import Stage, AuthoredStageFields
+from app.models.stage import SERVER_OWNED_STAGE_FIELDS, Stage, AuthoredStageFields
 from app.seeds.seed import discover_workflow_files
 
 # Every member of the `Stage` union, read off the union itself so a new stage
 # type cannot be added without these structural checks covering it.
 _STAGE_CLASSES = get_args(get_args(Stage)[0])
 
-# The four Stage fields StageDraft does not take: `tests` is written by
-# generate_stage_tests, `eval`/`review` are human-authored, `source` is
-# provenance the client does not set. A committed fixture dumps every Stage
-# field, so a stage read out of one carries them.
-DROPPED_FIELDS = ("tests", "eval", "review", "source")
+# SERVER_OWNED_STAGE_FIELDS are the four Stage fields StageDraft does not take:
+# `tests` is written by generate_stage_tests, `eval`/`review` are human-authored,
+# `source` is provenance the client does not set. A committed fixture dumps every
+# Stage field, so a stage read out of one carries them; dropping those from a
+# submission is the tool boundary's job (tests/tools/test_submitted_stage.py).
 
 
 def _read_committed_example_stages() -> list[dict]:
@@ -37,12 +37,12 @@ def test_every_committed_example_stage_round_trips_through_a_draft():
     assert len(stages) > 1, "no committed example stages to round-trip"
 
     for raw in stages:
-        submitted = {k: v for k, v in raw.items() if k not in DROPPED_FIELDS}
+        submitted = {k: v for k, v in raw.items() if k not in SERVER_OWNED_STAGE_FIELDS}
         rebuilt = parse_stage(StageDraft.model_validate(submitted).to_stage_spec())
         original = parse_stage(raw)
         expected = {
             k: v for k, v in original.model_dump(exclude_none=True).items()
-            if k not in DROPPED_FIELDS
+            if k not in SERVER_OWNED_STAGE_FIELDS
         }
         assert rebuilt.model_dump(exclude_none=True) == expected, raw["id"]
 
@@ -102,7 +102,7 @@ def test_a_stage_that_breaks_a_cross_field_rule_parses_as_a_draft_and_is_refused
 
 def test_schema_omits_the_fields_no_authoring_client_writes():
     properties = StageDraft.model_json_schema()["properties"]
-    assert not set(DROPPED_FIELDS) & set(properties)
+    assert not set(SERVER_OWNED_STAGE_FIELDS) & set(properties)
     assert "compiler_notes" in properties, "the authoring agent does set this one"
 
 
@@ -110,24 +110,14 @@ def test_schema_omits_the_fields_no_authoring_client_writes():
 def test_every_stage_class_shares_the_drafts_field_list(stage_cls):
     assert issubclass(stage_cls, AuthoredStageFields) and issubclass(StageDraft, AuthoredStageFields)
     extra = set(stage_cls.model_fields) - set(StageDraft.model_fields)
-    assert extra == set(DROPPED_FIELDS), stage_cls.__name__
+    assert extra == set(SERVER_OWNED_STAGE_FIELDS), stage_cls.__name__
 
 
 def test_the_draft_carries_no_cross_field_validator_of_its_own():
     """FastMCP binds before the handler runs, so a rule firing here surfaces as isError, not {ok, issues}."""
-    after_validators = StageDraft.__pydantic_decorators__.model_validators
-    assert {name for name, dec in after_validators.items() if dec.info.mode == "after"} == set()
-
-
-def test_a_draft_that_echoes_back_server_owned_fields_parses_and_records_them():
-    draft = StageDraft.model_validate({
-        "id": "load", "type": "input_data", "description": "Load",
-        "connector": {"kind": "file"},
-        "tests": [], "source": {"section": "para 3"},
-    })
-
-    assert draft.dropped_server_owned_fields == ["tests", "source"]
-    assert not set(DROPPED_FIELDS) & set(draft.to_stage_spec())
+    validators = StageDraft.__pydantic_decorators__.model_validators
+    assert {name for name, dec in validators.items() if dec.info.mode == "after"} == set()
+    assert set(validators) == set(), "and no before-validator either: the draft is a plain shape"
 
 
 def test_an_unknown_field_is_still_refused():
@@ -138,7 +128,7 @@ def test_an_unknown_field_is_still_refused():
         })
 
 
-def test_stage_keeps_the_server_owned_fields_the_draft_drops():
+def test_stage_keeps_the_server_owned_fields_the_draft_never_declares():
     stage = parse_stage({
         "id": "load", "type": "input_data", "description": "Load",
         "connector": {"kind": "file"}, "source": {"section": "para 3"},
@@ -150,3 +140,4 @@ def test_stage_keeps_the_server_owned_fields_the_draft_drops():
 
     assert stage.source is not None
     assert "dropped_server_owned_fields" not in type(stage).model_fields
+    assert "dropped_server_owned_fields" not in StageDraft.model_fields

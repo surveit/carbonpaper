@@ -389,41 +389,20 @@ def save_working_copy_as_version(
     )
 
 
-def add_stages_reporting_drops(
+def add_stages_reporting_outcome(
     name: str, stages: Sequence[StageDraft]
 ) -> dict[str, Any]:
     try:
         outcome = add_stages(name, stages)
     except (WorkflowLoadError, FileNotFoundError) as exc:
         outcome = AddStagesResult(batch_issues=[str(exc)])
-    result: dict[str, Any] = {
+    return {
         "ok": not (outcome.failed or outcome.batch_issues),
         "added": outcome.added,
         "failed": [{"id": f.id, "issues": f.issues} for f in outcome.failed],
         "skipped": [{"id": s.id, "because": s.because} for s in outcome.skipped],
         "issues": outcome.batch_issues + [i for f in outcome.failed for i in f.issues],
     }
-    warnings = _find_dropped_field_warnings(stages, outcome.added)
-    if warnings:
-        result["warnings"] = warnings
-    return result
-
-
-def _find_dropped_field_warnings(
-    stages: Sequence[StageDraft], added: list[str]
-) -> list[str]:
-    stored = set(added)
-    named = [
-        f"`{s.id}`: ignored server-owned fields: {', '.join(s.dropped_server_owned_fields)}"
-        for s in stages
-        if s.id in stored and s.dropped_server_owned_fields
-    ]
-    if not named:
-        return []
-    return named + [
-        "only the server writes these: tests come from generate_stage_tests, "
-        "review is human-only."
-    ]
 
 
 def add_stages(
