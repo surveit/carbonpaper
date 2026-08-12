@@ -47,7 +47,7 @@ def export_review_packet(project: str, run_id: str, dest_root: Path) -> ReviewPa
     # Before the pages: a stage table only offers "View lineage" on a row the
     # packet actually holds a page for, so the traced set has to exist first.
     with log_elapsed(_log, f"{project}/{run_id} lineage"):
-        lineage = write_packet_lineage(root, run_dir, view, {s.id: s for s in stages})
+        lineage = write_packet_lineage(root, run_dir, view, workflow_stages_by_id)
     with log_elapsed(_log, f"{project}/{run_id} pages"):
         pages = write_packet_pages(
             root,

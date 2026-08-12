@@ -6,7 +6,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from app.models import Stage
+from app.models import WorkflowStage
 from app.core.frames import write_frame_file
 from app.runtime.trace import RunFrames, trace_row_from, trace_to_dict
 from app.runtime.trace_links import read_issued_traces
@@ -37,7 +37,7 @@ PACKET_MAX_LINEAGE_PAGES = 20_000
 
 
 def write_packet_lineage(
-    root: Path, run_dir: Path, view: RunView, stages_by_id: dict[str, Stage]
+    root: Path, run_dir: Path, view: RunView, stages_by_id: dict[str, WorkflowStage]
 ) -> LineageReport:
     """Traces every row the run PUBLISHED a link to, and the rows feeding those."""
     frames = RunFrames(run_dir)
@@ -125,7 +125,7 @@ def _branches_of(frames: RunFrames, stage_id: str, row: int) -> list[tuple[str, 
 
 
 def _write_page(
-    root: Path, frames: RunFrames, view: RunView, stages_by_id: dict[str, Stage],
+    root: Path, frames: RunFrames, view: RunView, stages_by_id: dict[str, WorkflowStage],
     stage_id: str, row: int, traced: frozenset[tuple[str, int]],
 ) -> list[str]:
     trace = trace_to_dict(trace_row_from(frames, stage_id, row))

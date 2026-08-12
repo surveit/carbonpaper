@@ -11,12 +11,12 @@
   <p class="muted">{{ total }} rows in this run can be traced back to the data they came from.
   Each opens the stages that produced it, in order, ending at the source file.</p>
   {% for stage in stages %}
-  <section class="lin-dir" id="{{ stage.stage_id }}">
+  <section id="{{ stage.stage_id }}">
     <h2><code>{{ stage.stage_id }}</code>
       <span class="muted">{{ stage.rows | length }} row{{ '' if stage.rows | length == 1 else 's' }}{%
         if stage.published < stage.rows | length %} · {{ stage.published }} linked by the run, {{
         stage.rows | length - stage.published }} reached through a contributor{% endif %}</span></h2>
-    <p class="lin-dir-rows">{% for row in stage.rows %}<a href="../{{ stage.hrefs[loop.index0] }}">{{ row }}</a>{% if not loop.last %} {% endif %}{% endfor %}</p>
+    <p class="muted">{% for row in stage.rows %}<a href="../{{ stage.hrefs[loop.index0] }}">{{ row }}</a>{% if not loop.last %} {% endif %}{% endfor %}</p>
   </section>
   {% endfor %}
 </main></body></html>

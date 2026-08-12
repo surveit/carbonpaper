@@ -56,7 +56,7 @@
   <h2>Row provenance</h2>
   <p class="muted">Every figure the published files print, and the rows it was
     counted from. <a href="{{ lineage_dir_href }}">All {{ lineage.traced | length }} traceable rows &rsaquo;</a></p>
-  <table class="packet-figures">
+  <table class="schema">
     <thead><tr><th>Figure</th><th class="num">Value</th><th></th></tr></thead>
     <tbody>
     {% for figure in lineage.figures %}

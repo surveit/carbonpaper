@@ -84,7 +84,6 @@ def test_a_run_that_published_no_links_gets_no_pages(tmp_path):
 
 
 def _run_view(rows: int):
-    from app.models.stage import parse_stage
     from app.services.review_packet.views import RunView, StageView
 
     def stage(stage_id: str, stage_type: str, row_count: int, inputs: list[str]):
@@ -98,11 +97,6 @@ def _run_view(rows: int):
             row_count=row_count, elapsed_ms=0, error=None, notes=[],
             output_path=f"outputs/{stage_id}.parquet", validations=[],
             data_file=f"data/{stage_id}.csv",
-            definition=parse_stage({
-                "id": stage_id, "description": stage_id, "type": stage_type,
-                "inputs": [{"id": i, "schema": {"columns": _COLUMNS}} for i in inputs],
-                **_TYPE_EXTRAS[stage_type],
-            }),
             definition_error=None,
         )
 
@@ -236,7 +230,7 @@ def test_the_index_links_land_on_a_section_the_directory_defines(tmp_path):
     """An anchor with no target scrolls nowhere and reads as a broken page."""
     packet = _export_demo_packet(tmp_path)
     directory = (packet / "lineage/index.html").read_text(encoding="utf-8")
-    ids = set(re.findall(r'<section class="lin-dir" id="([^"]+)"', directory))
+    ids = set(re.findall(r'<section id="([^"]+)"', directory))
     assert ids == {"totals", "source"}, "every stage listed gets an anchor"
 
 
