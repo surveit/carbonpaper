@@ -223,9 +223,9 @@ jobs:
       # `app/` source, and this (head) checkout's script reads both. Report-only for
       # now — the job never blocks, so two weeks of real firings can price the noise
       # before anyone decides whether it should.
-      - run: uv run --frozen python scripts/lexicon.py > head-lexicon.json
-      - run: uv run --frozen python scripts/lexicon.py --root base > base-lexicon.json
-      - run: uv run --frozen python scripts/lexicon.py --markdown head-lexicon.json base-lexicon.json > lexicon-body.md
+      - run: uv run --frozen python -m scripts.lexicon > head-lexicon.json
+      - run: uv run --frozen python -m scripts.lexicon --root base > base-lexicon.json
+      - run: uv run --frozen python -m scripts.lexicon --markdown head-lexicon.json base-lexicon.json > lexicon-body.md
       - name: Upload raw lexicon JSON
         uses: actions/upload-artifact@v4
         with:
@@ -241,6 +241,73 @@ jobs:
             const fs = require('fs');
             const body = fs.readFileSync('lexicon-body.md', 'utf8');
             const marker = '<!-- lexicon-report -->';
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find((comment) => comment.body.startsWith(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+  vocabulary-report:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v4
+      - name: Checkout PR base
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base
+      - uses: astral-sh/setup-uv@v9.0.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --frozen
+      # Wider and noisier than vocabulary-report's sibling by design: comment prose is
+      # ~2,900 of the ~3,400 words here, and a new word in a sentence is usually just
+      # a sentence. Kept separate precisely so the two firing rates can be compared
+      # before either is trusted enough to block.
+      - run: uv run --frozen python -m scripts.vocabulary > head-vocabulary.json
+      - run: uv run --frozen python -m scripts.vocabulary --root base > base-vocabulary.json
+      - run: uv run --frozen python -m scripts.vocabulary --markdown head-vocabulary.json base-vocabulary.json > vocabulary-body.md
+      - name: Upload raw vocabulary JSON
+        uses: actions/upload-artifact@v4
+        with:
+          name: vocabulary-snapshots
+          path: |
+            head-vocabulary.json
+            base-vocabulary.json
+          retention-days: 14
+      - name: Upsert PR comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('vocabulary-body.md', 'utf8');
+            const marker = '<!-- vocabulary-report -->';
 
             const comments = await github.paginate(github.rest.issues.listComments, {
               owner: context.repo.owner,
