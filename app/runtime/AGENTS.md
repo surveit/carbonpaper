@@ -119,6 +119,14 @@ stage: the record is `error` with an `OutputSchemaViolation` and downstream stag
 An out-of-`range` number is the deliberate exception, still a warning: a range bounds the
 expected, an enum the possible.
 
+`key_coverage.py` — the one COVERAGE check, on `enrich` and `expand`. Everything in
+`validation.py` asks whether the values present are allowed; this asks which key values
+are missing, in both directions: a reference key no output row carries, and a subject key
+the reference never lists. Its findings are appended to the stage's OUTPUT report as
+warnings, so they reach the run issue index and the review packet by the same path every
+other issue takes. Warning only — an absent key may be a real gap or an open universe,
+and nothing in a workflow declares which.
+
 ## Run / debug
 ```
 python -m app.cli <project>

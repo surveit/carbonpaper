@@ -45,6 +45,7 @@ from .lineage import (
     read_row_lineage,
 )
 from app.models.severity import UserFacingErrorSeverity
+from .key_coverage import find_key_coverage_issues
 from .validation import Issue, ValidationReport, validate_dataframe
 
 
@@ -390,6 +391,7 @@ def _finalize_stage_output(
 
     out_rep = validate_dataframe(
         output, workflow_stage.output_schema, stage_id=sid, phase="output")
+    out_rep.issues.extend(find_key_coverage_issues(workflow_stage, inputs_for_stage))
     if row_errors:
         out_rep.issues[0:0] = [
             Issue("error", None,
