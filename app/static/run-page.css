@@ -270,3 +270,30 @@ td.row-num, th.row-num { text-align: right; color: var(--idle-bd); font-variant-
 .nr-issues[hidden] { display: none; }
 .nr-issues li { color: var(--bad-ink); font-family: "SFMono-Regular", "Consolas", monospace; font-size: 12px; margin: 2px 0; }
 
+
+
+/* An eval run's outcome, in the same cell of the same table as a production run's
+   — so its two unhappy states get the tints the production statuses already have. */
+.runs-table .run-outcome.status-error { color: var(--state-failed-ink); }
+.runs-table .run-outcome.status-vetoed { color: var(--state-warn-ink); }
+
+/* ── One eval run's scored rows (eval_run.html) ──
+   The verdict leads, the compared pair follows it, and the dataset columns the
+   model was given trail behind — the order the reader consults them in. A
+   mismatched pair is tinted AND its verdict says `fail` in words, so the column
+   reads without colour. */
+.eval-rows td.col-expected, .eval-rows th.col-expected { border-left: 1px solid var(--border-strong); }
+.eval-rows td.cell-mismatch { background: var(--verdict-fail-bg); }
+.eval-rows tr.row-failed td.row-num { color: var(--bad-ink); font-weight: 600; }
+.verdict {
+    display: inline-block; padding: 1px 7px; border-radius: 3px;
+    font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px;
+    border: 1px solid;
+}
+.verdict-pass { background: var(--verdict-pass-bg); border-color: var(--verdict-pass-bd); color: var(--good-ink); }
+.verdict-fail { background: var(--verdict-fail-bg); border-color: var(--verdict-fail-bd); color: var(--bad-ink); }
+/* A control, not a link: it sits in .preview-actions, whose other children are. */
+.rows-filter { font-size: .85rem; color: var(--muted); cursor: pointer; }
+.rows-filter input { vertical-align: middle; margin-right: 3px; }
+/* The version picker and its verb on one line (eval_detail.html). */
+.eval-run-form { display: flex; align-items: center; gap: .5rem; margin: 0 0 1rem; }

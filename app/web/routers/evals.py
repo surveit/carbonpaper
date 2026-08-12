@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 
 from app.core.errors import EvalNotScorableError
 from app.core.frames import list_rows
@@ -26,8 +26,20 @@ from app.services.versioning import list_versions
 from app.web.breadcrumbs import build_eval_crumbs, build_eval_run_crumbs
 from app.web.config import projects_dir, REPO_ROOT, templates
 from app.core.frames import read_frame_file
+from app.web.config import EVENT_TAIL
+from app.web.eval_run_view import (
+    build_eval_rows,
+    build_eval_run_rows,
+    describe_eval_run_duration,
+)
 from app.web.loading import StageListing, load_stages_or_empty, render_frame_as_text
 from app.web.project_view import shell_state
+from app.web.run_events import (
+    EVENT_PAGE_MAX,
+    page_events_before,
+    stream_events,
+    tail_start_seq,
+)
 
 router = APIRouter()
 
@@ -94,13 +106,17 @@ def _render_eval_detail(
         request,
         "eval_detail.html",
         {
+            # One eval reads inside the project shell like one run does, with the
+            # Evals nav entry still lit while looking at a config below it.
+            "state": shell_state(project_dir, "evals"),
+            "section": "evals",
             "project": project,
             "crumbs": build_eval_crumbs(project, config_name=config.name),
             "config": config,
             "report": report,
             "status": status,
             "executing": executing,
-            "runs": runs,
+            "runs": build_eval_run_rows(project, runs),
             "runs_error": runs_error,
             "versions": list_versions(project_dir),
             **_read_eval_dataset_preview(config),
@@ -148,14 +164,80 @@ async def eval_run_detail(request: Request, project: str, eval_id: str, run_id: 
         request,
         "eval_run.html",
         {
+            "state": shell_state(project_dir, "evals"),
+            "section": "evals",
             "project": project,
             "crumbs": build_eval_run_crumbs(
                 project, config_name=config.name, config_id=config.id, run_id=run_id
             ),
             "config": config,
             "run": run,
+            "elapsed": describe_eval_run_duration(run),
+            # What the run compared, row by row. `result_ref` is absent on a
+            # vetoed run and on one that errored before scoring; the pane then
+            # states which of those it was rather than showing an empty table.
+            "rows": (
+                build_eval_rows(project_dir / run.result_ref, config.table, REPO_ROOT)
+                if run.result_ref else None
+            ),
+            "event_tail": EVENT_TAIL,
+            # The subset run's own events.jsonl, tailed by the same panel the run
+            # page uses. Absent where the run wrote no log — a vetoed run executed
+            # nothing.
+            "log_href": (
+                _eval_run_href(project, config.id, run_id)
+                if (project_dir / "eval_run" / run_id / "events.jsonl").exists() else None
+            ),
         },
     )
+
+
+# ─── That run's log, served to the same panel the run page uses ──────────────
+
+@router.get("/project/{project}/evals/{eval_id}/runs/{run_id}/events")
+async def stream_eval_run_events(
+    project: str,
+    eval_id: str,
+    run_id: str,
+    request: Request,
+    from_seq: int | None = None,
+    tail: int = EVENT_TAIL,
+    stage: str | None = None,
+):
+    events_path = _resolve_eval_events_path(project, run_id)
+    start = (tail_start_seq(events_path, tail, stage) if from_seq is None
+             else max(from_seq, 0))
+    return StreamingResponse(
+        stream_events(events_path.parent, request, start, stage),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.get("/project/{project}/evals/{eval_id}/runs/{run_id}/events/page")
+async def eval_run_events_page(
+    project: str,
+    eval_id: str,
+    run_id: str,
+    before_seq: int,
+    limit: int = EVENT_TAIL,
+    stage: str | None = None,
+):
+    events_path = _resolve_eval_events_path(project, run_id)
+    return page_events_before(
+        events_path, before_seq, max(1, min(limit, EVENT_PAGE_MAX)), stage)
+
+
+def _resolve_eval_events_path(project: str, run_id: str) -> Path:
+    events_path = _resolve_project_dir(project) / "eval_run" / run_id / "events.jsonl"
+    if not events_path.is_file():
+        raise HTTPException(status_code=404, detail=f"no log for eval run {run_id!r}")
+    return events_path
+
+
+def _eval_run_href(project: str, eval_id: str, run_id: str) -> str:
+    return f"/project/{project}/evals/{eval_id}/runs/{run_id}"
+
 
 
 # ─── Trigger a run ───────────────────────────────────────────────────────────

@@ -5,12 +5,9 @@ the scratch re-run are app.web.routers.run_stage."""
 
 from __future__ import annotations
 
-import asyncio
-import json
 import mimetypes
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Any, AsyncIterator
+from typing import Any
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.datastructures import FormData
@@ -37,7 +34,6 @@ from app.services.versioning import list_versions
 from app.services import run as run_service
 from app.services.run_guide import build_run_guide_view
 from app.runtime.cancellation import request_cancel
-from app.runtime.run_log import RUN_DONE, read_events_since
 from app.web.breadcrumbs import build_run_crumbs, build_runs_child_crumbs
 from app.web.config import EVENT_TAIL, projects_dir, templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
@@ -48,23 +44,18 @@ from app.web.loading import (
     runs_dir,
 )
 from app.web.project_view import shell_state
+from app.web.run_events import (
+    EVENT_PAGE_MAX,
+    page_events_before,
+    stream_events,
+    tail_start_seq,
+)
 from app.web.run_header import build_live_view, build_run_header
 from app.web.run_index import build_run_index_rows
 from app.web.run_issues import build_run_issues
 from app.web.run_stage_panel import resolve_panel_links
 
 router = APIRouter()
-
-# How the run-log SSE tail polls events.jsonl, and how many empty polls it
-# tolerates after the manifest has settled before it stops a stream whose
-# run_done marker never arrived.
-_EVENT_POLL_INTERVAL_S = 0.5
-_IDLE_POLLS_BEFORE_TERMINAL_STOP = 2
-
-# A ceiling on what one "load older" fetch may ask for; the default page size is
-# EVENT_TAIL, in app.web.config, because the stage panel's log is sized by it too.
-EVENT_PAGE_MAX = 5000
-
 
 @router.post("/project/{project}/run")
 async def trigger_run(request: Request, project: str):
@@ -281,39 +272,15 @@ async def stream_run_events(
     run_dir = runs_dir(project) / run_id
     load_manifest(run_dir)  # 404s if the run doesn't exist
     start = (
-        _tail_start_seq(run_dir / "events.jsonl", tail, stage)
+        tail_start_seq(run_dir / "events.jsonl", tail, stage)
         if from_seq is None
         else max(from_seq, 0)
     )
     return StreamingResponse(
-        _tail_run_events(run_dir, request, start, stage),
+        stream_events(run_dir, request, start, stage),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
-
-
-def select_stage_events(
-    events: list[dict[str, Any]], stage: str | None
-) -> list[dict[str, Any]]:
-    if stage is None:
-        return events
-    # RUN_DONE rides through the filter: it is what ends an SSE stream, so a
-    # scoped feed that dropped it would tail a finished run forever.
-    return [
-        event
-        for event in events
-        if event.get("stage") == stage or event.get("kind") == RUN_DONE
-    ]
-
-
-def _tail_start_seq(events_path: Path, tail: int, stage: str | None = None) -> int:
-    """Counts parsed events rather than `highest - tail`: seq is not guaranteed gap-free."""
-    events = select_stage_events(read_events_since(events_path, 0), stage)
-    if not events:
-        return 0
-    if tail <= 0:
-        return int(events[-1]["seq"]) + 1      # start past the end: nothing old
-    return 0 if len(events) <= tail else int(events[-tail]["seq"])
 
 
 @router.get("/project/{project}/runs/{run_id}/events/page")
@@ -327,63 +294,7 @@ async def run_events_page(
     run_dir = runs_dir(project) / run_id
     load_manifest(run_dir)  # 404s if the run doesn't exist
     limit = max(1, min(limit, EVENT_PAGE_MAX))
-    return _page_before(run_dir / "events.jsonl", before_seq, limit, stage)
-
-
-def _page_before(
-    events_path: Path, before_seq: int, limit: int, stage: str | None
-) -> dict[str, Any]:
-    older = [
-        event
-        for event in select_stage_events(read_events_since(events_path, 0), stage)
-        if int(event["seq"]) < before_seq
-    ]
-    # The window is cut AFTER filtering, not from `before_seq - limit`: a stage
-    # holding a handful of events inside a 5000-seq span would otherwise hand
-    # back a nearly empty page and report the rest as already loaded.
-    page = older[-limit:]
-    first_seq = int(page[0]["seq"]) if page else 0
-    return {
-        "events": page,
-        "first_seq": first_seq,
-        "has_more": len(older) > len(page),
-    }
-
-
-async def _tail_run_events(
-    run_dir: Path, request: Request, from_seq: int, stage: str | None = None
-) -> AsyncIterator[str]:
-    """Polls the file: the run executes on worker threads with no access to this loop."""
-    events_path = run_dir / "events.jsonl"
-    cursor = from_seq
-    idle_polls = 0
-    while True:
-        if await request.is_disconnected():
-            return
-        new = read_events_since(events_path, cursor)
-        # The cursor clears the whole batch that was READ, not the subset the
-        # stage filter yields: an event the filter drops must not come back on
-        # the next poll.
-        if new:
-            cursor = int(new[-1]["seq"]) + 1
-        for event in select_stage_events(new, stage):
-            yield f"data: {json.dumps(event)}\n\n"
-            if event.get("kind") == RUN_DONE:
-                return
-        # Fallback stop: if the writer never wrote run_done (a crash mid-run),
-        # end once the manifest has settled AND a couple of polls added nothing,
-        # so a client never hangs on an interrupted run.
-        if _find_terminal_status(run_dir) is not None:
-            idle_polls = 0 if new else idle_polls + 1
-            if idle_polls >= _IDLE_POLLS_BEFORE_TERMINAL_STOP:
-                yield "event: done\ndata: {}\n\n"
-                return
-        await asyncio.sleep(_EVENT_POLL_INTERVAL_S)
-
-
-def _find_terminal_status(run_dir: Path) -> str | None:
-    status = load_manifest(run_dir).get("status")
-    return None if status == RunStatus.RUNNING else status
+    return page_events_before(run_dir / "events.jsonl", before_seq, limit, stage)
 
 
 @router.get("/project/{project}/runs/{run_id}", response_class=HTMLResponse)

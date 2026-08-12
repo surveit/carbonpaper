@@ -139,10 +139,36 @@ stage's log through the handle `initRunLog` returns). Every hook the client bind
 class, not an id — the two instances share a document.
 
 `GET …/events?stage=<id>` and `…/events/page?stage=<id>` filter server-side
-(`select_stage_events`): the stage's own events plus `run_done`, which is what ends a
-stream. Both the opening tail and "load older" count over the FILTERED events, so a stage
+(`app.web.run_events.select_stage_events`): the stage's own events plus `run_done`, which
+is what ends a stream. `run_events` is written against a run DIRECTORY, so the same three
+functions serve a production run under `runs/` and an eval's subset run under `eval_run/`;
+`initRunLog` takes the run's URL prefix as `base` rather than building one. Both the opening tail and "load older" count over the FILTERED events, so a stage
 holding a handful of them inside a 270k-event log still opens full. `links.run_log` is None
 in the review packet — a folder has no server to tail — and the panel then renders no log.
+
+## One eval, one eval run (`eval_detail.html`, `eval_run.html`)
+Both sit in the project shell with **Evals** lit, and both open with the stage panel's own
+head — name, status badge, blurb, then a facts line — over ONE tab strip:
+- **An eval** is *Runs │ Definition │ Dataset*. Runs leads because it is what the eval has
+  actually said, and it draws the **runs index's own table** (`.stages.runs-table`, four
+  columns, the run id demoted to the row's link target, the whole row clickable through
+  `static/row-link.js` — delegated from the document, so the two pages share one handler).
+  What differs is the result cell: an eval run's outcome is its score, so the stored
+  accuracy sits where the stage strip does, and a run that stored none shows its status
+  badge rather than a percentage nobody measured. Definition opens on compatibility, since
+  a broken eval makes every number under it a claim about a workflow that no longer exists.
+- **A run** is *Rows │ Scoring │ Pathway*, under a `stat-strip` of rows scored / passed /
+  failed / accuracy — all four COUNTED off the run's own `result.parquet`, never off the
+  stored metrics, so the tiles and the table cannot disagree. Rows is the comparison
+  itself (`app.web.eval_run_view`): the verdict, then each check's expected/actual pair
+  with a mismatch tinted, then the eval-dataset columns the model was given. Those columns
+  are position-aligned, so a dataset whose length no longer matches the run is dropped with
+  the reason stated rather than lined up wrongly. The scored checks are read off the result
+  table, not the config — the config may have moved since. `failures only` hides the passing
+  rows client-side; the counts above stay the run's.
+- The run's own **events.jsonl** is the run page's log panel, unchanged, over
+  `…/evals/<id>/runs/<run>/events`. A vetoed run executed nothing, so it has no log and the
+  panel is absent rather than empty.
 
 ## Live progress + the stage simulator
 `POST /project/<m>/run` → `prepare_run` (initial `running` manifest) → background thread →

@@ -21,6 +21,7 @@ from app.models import (
 )
 from app.models.schema import TableSchema
 from app.models.stages.input_data import FileFormat
+from app.core.frames import write_frame_file
 from app.core.persistence import get_store
 from app.evals.store import save_eval_config, save_eval_run
 from app.services.versioning import WorkflowVersion
@@ -187,3 +188,137 @@ def test_eval_detail_offers_a_version_select_newest_first_marking_unpublished():
     assert v2_pos < v1_pos          # newest (v2-draft) listed first
     assert "v2-draft · unpublished" in r.text
     assert "v1 · unpublished" not in r.text
+
+
+# ── The run page's scored rows, its log, and what it says when it has neither ──
+
+def _save_scored_run(tmp_path, per_row: pd.DataFrame, *, run_id: str = "scored1") -> None:
+    demo = tmp_path / "demo"
+    result = demo / "eval_run" / run_id / "result.parquet"
+    result.parent.mkdir(parents=True, exist_ok=True)
+    write_frame_file(per_row, result)
+    save_eval_run(demo, EvalRun(
+        id=run_id, config="label_check", project="demo",
+        workflow_version="v1", status="scored",
+        settings=EvalRunSettings(can_score_declaratively=True,
+                                 frontier=["classify"], blocking_stages=[]),
+        metrics={"accuracy": 0.5}, result_ref=f"eval_run/{run_id}/result.parquet",
+        started_at="2026-08-12T10:00:00", finished_at="2026-08-12T10:00:20",
+    ))
+
+
+_ONE_PASS_ONE_FAIL = pd.DataFrame({
+    "label__expected": ["x", "y"],
+    "label__actual": ["x", "z"],
+    "label__match": [True, False],
+    "row_passed": [True, False],
+})
+
+
+def test_run_page_shows_each_scored_row_and_marks_the_mismatch(tmp_path):
+    _save_scored_run(tmp_path, _ONE_PASS_ONE_FAIL)
+
+    r = client.get("/project/demo/evals/label_check/runs/scored1")
+
+    assert r.status_code == 200
+    assert r.text.count("verdict-pass") == 1 and r.text.count("verdict-fail") == 1
+    # Both cells of the failing pair are marked, so the pair reads as one comparison.
+    assert r.text.count("cell-mismatch") == 2
+    assert "50.0%" in r.text                      # counted off these rows, not the metric
+    assert ">1</dd>" in r.text                    # the failed tile
+
+
+def test_run_page_shows_the_dataset_columns_beside_the_verdicts(tmp_path):
+    _save_scored_run(tmp_path, _ONE_PASS_ONE_FAIL)
+
+    r = client.get("/project/demo/evals/label_check/runs/scored1")
+
+    assert ">doc_id</th>" in r.text and ">text</th>" in r.text
+    # The expected column is already in the compared pair, so it is not repeated.
+    assert ">label</th>" not in r.text
+
+
+def test_run_page_refuses_to_line_up_a_dataset_that_changed_since_the_run(tmp_path):
+    _save_scored_run(tmp_path, _ONE_PASS_ONE_FAIL)
+    pd.DataFrame({"doc_id": ["d1"], "text": ["a"], "label": ["x"]}).to_csv(
+        tmp_path / "demo" / "eval_data" / "cases.csv", index=False)
+
+    r = client.get("/project/demo/evals/label_check/runs/scored1")
+
+    assert "changed since" in r.text
+    assert ">doc_id</th>" not in r.text            # no borrowed row beside a verdict
+    assert r.text.count("verdict-pass") == 1       # the verdicts still stand
+
+
+def test_run_page_states_why_a_vetoed_run_has_no_rows(tmp_path):
+    save_eval_run(tmp_path / "demo", EvalRun(
+        id="vetoed1", config="label_check", project="demo",
+        workflow_version="v1", status="vetoed",
+        settings=EvalRunSettings(can_score_declaratively=False, frontier=["classify"],
+                                 blocking_stages=["aggregate_it"]),
+        notes=["path is not grain-preserving, so it can't be scored row-by-row"],
+    ))
+
+    r = client.get("/project/demo/evals/label_check/runs/vetoed1")
+
+    assert r.status_code == 200
+    assert "not grain-preserving" in r.text
+    assert "no result table" in r.text
+    assert "aggregate_it" in r.text
+
+
+def test_run_page_serves_the_subset_runs_own_events(tmp_path):
+    _save_scored_run(tmp_path, _ONE_PASS_ONE_FAIL, run_id="logged1")
+    events = tmp_path / "demo" / "eval_run" / "logged1" / "events.jsonl"
+    events.write_text(
+        '{"seq": 0, "ts": "2026-08-12T10:00:00", "kind": "run_start", "level": 0}\n'
+        '{"seq": 1, "ts": "2026-08-12T10:00:01", "kind": "stage_start", '
+        '"stage": "classify", "level": 0}\n',
+        encoding="utf-8")
+
+    page = client.get("/project/demo/evals/label_check/runs/logged1")
+    older = client.get(
+        "/project/demo/evals/label_check/runs/logged1/events/page?before_seq=99")
+
+    assert 'data-base="/project/demo/evals/label_check/runs/logged1"' in page.text
+    assert [e["kind"] for e in older.json()["events"]] == ["run_start", "stage_start"]
+
+
+def test_run_page_offers_no_log_where_the_run_wrote_none(tmp_path):
+    _save_scored_run(tmp_path, _ONE_PASS_ONE_FAIL, run_id="quiet1")
+
+    r = client.get("/project/demo/evals/label_check/runs/quiet1")
+
+    assert 'class="eval-run-log"' not in r.text
+    assert client.get(
+        "/project/demo/evals/label_check/runs/quiet1/events/page?before_seq=9"
+    ).status_code == 404
+
+
+def test_eval_lists_its_runs_in_the_runs_index_table(tmp_path):
+    _save_scored_run(tmp_path, _ONE_PASS_ONE_FAIL, run_id="listed1")
+
+    r = client.get("/project/demo/evals/label_check")
+
+    # The same table the Runs section draws — four columns, the run id demoted to
+    # the row's link target, the whole row clickable through the shared handler.
+    assert 'class="stages runs-table"' in r.text
+    assert ">date</th>" in r.text and ">duration</th>" in r.text
+    assert 'data-href="/project/demo/evals/label_check/runs/listed1"' in r.text
+    assert ">run id</th>" not in r.text
+    assert "20s" in r.text                       # measured off started_at/finished_at
+    assert "50.0%" in r.text and "Scored" in r.text
+
+
+def test_a_run_that_stored_no_accuracy_is_not_given_one(tmp_path):
+    save_eval_run(tmp_path / "demo", EvalRun(
+        id="vetoed2", config="label_check", project="demo",
+        workflow_version="v1", status="vetoed",
+        settings=EvalRunSettings(can_score_declaratively=False, frontier=["classify"],
+                                 blocking_stages=["aggregate_it"]),
+    ))
+
+    r = client.get("/project/demo/evals/label_check")
+
+    assert "Not scorable" in r.text
+    assert "%" not in r.text.split('class="stages runs-table"')[1].split("</table>")[0]

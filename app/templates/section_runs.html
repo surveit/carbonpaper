@@ -82,18 +82,8 @@
     {% endfor %}
   </tbody>
 </table>
-<script>
-  // The whole row opens the run, so no one cell has to look like the handle.
-  // A click that landed on a link (the version's ↗, the date) is that link's.
-  document.querySelectorAll('.js-run-row').forEach(function (row) {
-    row.addEventListener('click', function (event) {
-      if (event.target.closest('a')) return;
-      var href = row.dataset.href;
-      if (event.metaKey || event.ctrlKey) window.open(href, '_blank', 'noopener');
-      else location.href = href;
-    });
-  });
-</script>
+{# The whole row opens the run, so no one cell has to look like the handle —
+   static/row-link.js, delegated from the document for every page drawing this table. #}
 {% else %}
 <div class="empty-state">
   <h2>No runs yet</h2>

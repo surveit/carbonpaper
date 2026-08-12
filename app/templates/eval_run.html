@@ -1,44 +1,229 @@
-{% extends "base.html" %}
+{% extends "project_shell.html" %}
+{#
+  ONE EVAL RUN — what it scored, row by row, and what it logged doing so.
+
+  Framed and worded like the run page's stage panel, because it answers the same
+  question about a smaller thing: a head naming what ran, a strip of the figures it
+  measured, one tab strip over the evidence, and the run's own log folded at the foot.
+
+  Context the route passes: config, run (EvalRun), rows (EvalRowsView | None — None
+  where the run recorded no result table), log_href (None where it wrote no log).
+#}
 {% block title %}Run {{ run.id }} · {{ config.name }}{% endblock %}
 
 {% block breadcrumbs %}{% include "_breadcrumbs.html" %}{% endblock %}
 
-{% set status_badge = {"scored": "ok", "error": "err", "vetoed": "err"} %}
+{% set badge_class = {"scored": "ok", "vetoed": "warn", "error": "err"} %}
 
-{% block content %}
-<h1>Run <code>{{ run.id }}</code> <span class="badge {{ status_badge.get(run.status, 'pending') }}">{{ run.status }}</span></h1>
-<ul>
-  <li><strong>eval:</strong> <a href="/project/{{ project }}/evals/{{ config.id }}">{{ config.name }}</a></li>
-  <li><strong>workflow version:</strong> <code>{{ run.workflow_version }}</code></li>
-  <li><strong>started:</strong> {% if run.started_at %}{{ run.started_at | friendly_time }}{% else %}—{% endif %}</li>
-  <li><strong>finished:</strong> {% if run.finished_at %}{{ run.finished_at | friendly_time }}{% else %}—{% endif %}</li>
-</ul>
+{% block section %}
+{% from "_run_log_panel.html" import run_log_panel %}
 
-<h2>Executing stages</h2>
-<p class="lede">{% for s in run.settings.frontier %}<code>{{ s }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</p>
-{% if run.settings.blocking_stages %}
-<div class="load-issues">
-  <strong>Blocking stages (needed a code scorer):</strong>
-  <ul>{% for b in run.settings.blocking_stages %}<li><code>{{ b }}</code></li>{% endfor %}</ul>
+<div class="stage-panel-head">
+  <div class="head-line">
+    <h2><code>{{ run.id }}</code></h2>
+    <span class="badge {{ badge_class.get(run.status, 'pending') }}">{{ run.status }}</span>
+  </div>
+  <p class="stage-blurb"><a href="/project/{{ project }}/evals/{{ config.id }}">{{ config.name }}</a>{% if config.description %} — {{ config.description }}{% endif %}</p>
+  <p class="stage-facts">
+    <span>{% if elapsed %}ran {{ elapsed }} · {% endif %}
+      {%- if rows and not rows.error %}{{ "{:,}".format(rows.rows_total) }} row{% if rows.rows_total != 1 %}s{% endif %} scored · {% endif %}
+      version <code>{{ run.workflow_version }}</code>
+      {%- if run.finished_at %} · finished {{ run.finished_at | friendly_time }}{% endif %}</span>
+  </p>
+</div>
+
+{# Every note the run recorded. On a vetoed or errored run this is the whole
+   result — the reason it could not be scored — so it is stated before anything
+   else, not folded into a tab. #}
+{% if run.notes %}
+<p class="banner {{ 'banner-error' if run.status == 'error' else 'banner-warn' }}">
+  {% for note in run.notes %}{{ note }}{% if not loop.last %}<br>{% endif %}{% endfor %}
+</p>
+{% endif %}
+
+{% if rows and not rows.error %}
+{% set passed = rows.rows_total - rows.rows_failed %}
+<dl class="stat-strip">
+  <div><dt>rows scored</dt><dd>{{ "{:,}".format(rows.rows_total) }}</dd></div>
+  <div><dt>passed</dt><dd>{{ "{:,}".format(passed) }}</dd></div>
+  <div><dt>failed</dt><dd>{{ "{:,}".format(rows.rows_failed) }}</dd></div>
+  {# Counted off the same table the rows below come from, so the tile and the
+     table can never disagree. The stored rollup metrics are in Scoring. #}
+  <div><dt>accuracy</dt><dd>{% if rows.rows_total %}{{ "%.1f"|format(100 * passed / rows.rows_total) }}%{% else %}—{% endif %}</dd></div>
+</dl>
+{% endif %}
+
+<div class="stage-tabs">
+  <div class="tabs">
+    <button data-tab="rows" class="active">Rows</button>
+    <button data-tab="scoring">Scoring</button>
+    <button data-tab="pathway">Pathway</button>
+  </div>
+</div>
+
+<div class="panes">
+
+  {# ─────────── ROWS — the comparison this run actually made ─────────── #}
+  <div class="pane" data-pane="rows">
+  {% if rows is none %}
+    <p class="muted"><em>This run recorded no result table, so there is nothing to
+      compare row by row. The reason is the note above.</em></p>
+  {% elif rows.error %}
+    <div class="load-issues">{{ rows.error }}</div>
+  {% else %}
+    <div class="preview-block">
+      <div class="preview-head">scored rows
+        <span class="muted">· {% if rows.capped %}first {{ rows.rows | length }} of {% endif %}{{ "{:,}".format(rows.rows_total) }} row{% if rows.rows_total != 1 %}s{% endif %}</span>
+        <span class="preview-actions">
+          <label class="rows-filter"><input type="checkbox" id="failures-only"
+            {% if not rows.rows_failed %}disabled{% endif %}> failures only</label>
+        </span>
+      </div>
+      {% if rows.input_error %}<p class="muted"><em>{{ rows.input_error }}</em></p>{% endif %}
+      <p class="muted">Click any clipped cell to expand it (hover shows the full value).</p>
+      <div class="table-scroll">
+      <table class="data-preview eval-rows">
+        <thead>
+          <tr>
+            <th class="row-num">#</th>
+            <th>verdict</th>
+            {% for check in rows.checks %}
+            <th class="col-expected">{{ check.column }} expected</th>
+            <th class="col-actual">{{ check.column }} actual</th>
+            {% endfor %}
+            {% for column in rows.input_columns %}<th>{{ column }}</th>{% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows.rows %}
+          <tr class="{{ 'row-passed' if row.passed else 'row-failed' }}">
+            <td class="row-num muted">{{ row.ordinal }}</td>
+            <td><span class="verdict {{ 'verdict-pass' if row.passed else 'verdict-fail' }}">{{ 'pass' if row.passed else 'fail' }}</span></td>
+            {%- for cell in row.cells %}
+            <td class="cell-clip col-expected{{ '' if cell.matched else ' cell-mismatch' }}" title="{{ cell.expected }}">{{ cell.expected }}</td>
+            <td class="cell-clip col-actual{{ '' if cell.matched else ' cell-mismatch' }}" title="{{ cell.actual }}">{{ cell.actual }}</td>
+            {%- endfor %}
+            {%- for value in row.inputs %}{% if value[:4] == 'http' %}<td class="cell-url"><a href="{{ value }}" target="_blank" rel="noopener">{{ value }}</a></td>{% else %}<td class="cell-clip" title="{{ value }}">{{ value }}</td>{% endif %}{% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+    </div>
+  {% endif %}
+  </div>
+
+  {# ─────────── SCORING — the rules, then the rollup they produced ─────────── #}
+  <div class="pane" data-pane="scoring" hidden>
+    <h3>Rules</h3>
+    <table class="schema">
+      <thead><tr><th>target column</th><th>metric</th><th>tolerance</th><th>matched</th></tr></thead>
+      <tbody>
+        {% for check in config.expected_outputs %}
+        <tr>
+          <td><code>{{ check.output_column }}</code></td>
+          <td>{{ check.metric }}</td>
+          <td>{{ check.tolerance if check.tolerance is not none else '—' }}</td>
+          {# Off this run's own result table. A rule the run did not score — the
+             config changed since — gets a dash, never a borrowed count. #}
+          <td>{% set tally = (rows.checks if rows else []) | selectattr('column', 'equalto', check.output_column) | first %}
+            {%- if tally %}{{ "{:,}".format(tally.matched) }} / {{ "{:,}".format(rows.rows_total) }}{% else %}<span class="muted">not scored in this run</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <h3>Recorded metrics</h3>
+    {% if run.metrics %}
+    <table class="schema">
+      <thead><tr><th>metric</th><th>value</th></tr></thead>
+      <tbody>
+        {% for key, value in run.metrics.items() %}
+        <tr><td><code>{{ key }}</code></td><td>{{ value }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted"><em>No metrics recorded for this run.</em></p>
+    {% endif %}
+
+    {% if config.code %}
+    <p><strong>code scorer:</strong> <code>{{ config.code.module }}.{{ config.code.function }}</code></p>
+    {% endif %}
+  </div>
+
+  {# ─────────── PATHWAY — which stretch of the workflow this run executed ─────────── #}
+  <div class="pane" data-pane="pathway" hidden>
+    <dl class="kv">
+      <dt>override → target</dt>
+      <dd><code>{{ config.override_stage }}</code> → <code>{{ config.target_stage }}</code></dd>
+      <dt>executed</dt>
+      <dd>{% for stage in run.settings.frontier %}<code>{{ stage }}</code>{% if not loop.last %}, {% endif %}{% else %}<span class="muted">none</span>{% endfor %}</dd>
+      <dt>workflow version</dt>
+      <dd><a href="/project/{{ project }}/versions/{{ run.workflow_version }}"><code>{{ run.workflow_version }}</code></a></dd>
+      <dt>started</dt>
+      <dd>{% if run.started_at %}{{ run.started_at | friendly_time }}{% else %}—{% endif %}</dd>
+      <dt>finished</dt>
+      <dd>{% if run.finished_at %}{{ run.finished_at | friendly_time }}{% else %}—{% endif %}</dd>
+    </dl>
+    {% if run.settings.blocking_stages %}
+    <div class="load-issues">
+      <strong>Blocking stages (these needed a code scorer):</strong>
+      <ul>{% for stage in run.settings.blocking_stages %}<li><code>{{ stage }}</code></li>{% endfor %}</ul>
+    </div>
+    {% endif %}
+  </div>
+
+</div>{# /panes #}
+
+{# The subset run's own events — the same panel, formatting and paging the run
+   page uses, over eval_run/<id>/events.jsonl. Folded: it connects on first open. #}
+{% if log_href %}
+<div class="eval-run-log" data-base="{{ log_href }}" data-tail="{{ event_tail }}">
+  {{ run_log_panel("Run log · this eval run's events", event_tail) }}
 </div>
 {% endif %}
 
-<h2>Metrics</h2>
-{% if run.metrics %}
-<table class="table">
-  <thead><tr><th>metric</th><th>value</th></tr></thead>
-  <tbody>
-    {% for key, value in run.metrics.items() %}
-    <tr><td><code>{{ key }}</code></td><td>{{ value }}</td></tr>
-    {% endfor %}
-  </tbody>
-</table>
-{% else %}
-<p class="lede">No metrics recorded for this run.</p>
-{% endif %}
+{# The log panel's behaviour — filtering, paging, the SSE tail. Not in base.html:
+   only a run surface renders a log. #}
+<script src="/static/run_log.js"></script>
+<script>
+(function () {
+  const tabs = document.querySelector('.stage-tabs');
+  const panes = document.querySelectorAll('.pane');
+  tabs.querySelectorAll('[data-tab]').forEach(function (button) {
+    button.addEventListener('click', function () {
+      tabs.querySelectorAll('[data-tab]').forEach(function (b) {
+        b.classList.toggle('active', b === button);
+      });
+      panes.forEach(function (p) { p.hidden = p.dataset.pane !== button.dataset.tab; });
+    });
+  });
 
-{% if run.notes %}
-<h2>Notes</h2>
-<ul>{% for n in run.notes %}<li>{{ n }}</li>{% endfor %}</ul>
-{% endif %}
+  // Hides the rows that matched. A client-side filter, not a second fetch: the
+  // whole rendered table is already here and the counts above it stay the run's.
+  const failuresOnly = document.getElementById('failures-only');
+  if (failuresOnly) {
+    failuresOnly.addEventListener('change', function () {
+      document.querySelectorAll('tr.row-passed').forEach(function (row) {
+        row.hidden = failuresOnly.checked;
+      });
+    });
+  }
+
+  const holder = document.querySelector('.eval-run-log');
+  if (holder && window.initRunLog) {
+    const panel = holder.querySelector('details');
+    panel.addEventListener('toggle', function start() {
+      if (!panel.open) return;
+      panel.removeEventListener('toggle', start);
+      // rowTrace:false — an eval run has no per-row lineage page to link to.
+      initRunLog({
+        root: holder, base: holder.dataset.base, rowTrace: false,
+        pageSize: parseInt(holder.dataset.tail, 10),
+      });
+    });
+  }
+})();
+</script>
 {% endblock %}
