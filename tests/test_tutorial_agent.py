@@ -320,7 +320,7 @@ def test_a_stage_that_did_not_finish_is_refused_rather_than_read(
 
 
 def test_the_seeding_tool_hands_back_the_stages_it_seeded(projects_root: Path) -> None:
-    """Beat 4 picks its stages by TYPE off this, so the script names none of them itself."""
+    """Beats 3 and 4 pick their stages by TYPE off this, so the script names none itself."""
     workflow = _seed_a_tour()["workflow"]
 
     by_type = {stage["type"]: stage["id"] for stage in workflow["stages"]}
@@ -328,9 +328,10 @@ def test_the_seeding_tool_hands_back_the_stages_it_seeded(projects_root: Path) -
     assert [stage["id"] for stage in workflow["stages"]] == [
         s.id for s in load_workflow(projects_root / workflow["name"])
     ]
-    # The two rules the script states: the last stage before the publish stage, and the
-    # one stage whose behaviour is code.
+    # The three rules the script states: the last stage before the publish stage, the
+    # one stage whose behaviour is code, and the queue beat 3 links to.
     assert by_type["publish"] == "publish_report"
     assert by_type["python_row_function"] == "check_filings"
+    assert by_type["human_review_queue"] == "review_contradictions"
     feeds_publish = next(s for s in workflow["stages"] if s["id"] == by_type["publish"])
-    assert feeds_publish["inputs"] == ["judge_alignment"]
+    assert feeds_publish["inputs"] == ["review_contradictions"]
