@@ -12,11 +12,14 @@ from typing import Any
 
 import pytest
 from claude_agent_sdk import SdkMcpTool
+from fastapi.testclient import TestClient
 
 import app.agents.tutorial.config  # noqa: F401 — registers the "tutorial" agent
 import app.services.run as run_service
 from app.services.project import Project
 from app.core.agent.registry import build_engine, build_mcp_server
+from app.core.agent.store import open_session_store
+from app.main import app as fastapi_app
 from app.models.stages.input_data import InputDataStage
 from app.services import project as project_service
 from app.services.loader import load_workflow
@@ -28,6 +31,7 @@ from app.tools.tutorial import TutorialContext
 _BASE_URL = "http://127.0.0.1:8788/"
 _EXPECTED_TOOLS = {
     "create_tutorial_project",
+    "open_editing_chat",
     "read_stage_output_rows",
     "run_eval",
     "run_workflow",
@@ -125,11 +129,67 @@ def test_a_tour_after_the_project_was_deleted_still_seeds(projects_root: Path) -
     assert run_service.resolve_version(second["name"], None) == second["version_id"]
 
 
-def test_the_handoff_command_is_built_from_this_workspaces_base_url() -> None:
+def test_the_handoff_is_built_from_this_workspaces_base_url() -> None:
+    """All three forms name the endpoint this workspace actually serves MCP on."""
     seeded = _seed_a_tour()
+
+    assert seeded["mcp_url"] == f"{_BASE_URL}mcp"
+    assert seeded["mcp_url"] in seeded["mcp_ask_your_assistant"]
     assert seeded["mcp_command"] == (
         f"claude mcp add --transport http carbonpaper {_BASE_URL}mcp"
     )
+
+
+def test_the_headline_handoff_asks_for_no_terminal() -> None:
+    """The objection this answers: a reader who has an assistant open needs no CLI."""
+    asked = _seed_a_tour()["mcp_ask_your_assistant"]
+
+    assert "claude mcp add" not in asked and "install" not in asked
+    assert asked.startswith("Add the MCP server at")
+
+
+def _open_the_editing_chat(project: str) -> dict[str, Any]:
+    out = _call(
+        next(t for t in _tools() if t.name == "open_editing_chat"),
+        {"project_id": project},
+    )
+    assert out.get("is_error") is not True, out["content"][0]["text"]
+    chat: dict[str, Any] = json.loads(out["content"][0]["text"])
+    return chat
+
+
+def test_the_editing_chat_is_opened_only_when_asked_for_and_is_live_on_return() -> None:
+    """A link the reader clicks, not a button they hunt for: the session is already there."""
+    seeded = _seed_a_tour()
+    store = open_session_store()
+    before = {s["session_id"] for s in store.list_sessions()}
+
+    chat = _open_the_editing_chat(seeded["name"])
+
+    minted = {s["session_id"] for s in store.list_sessions()} - before
+    assert len(minted) == 1, "one call, one session"
+    sid = minted.pop()
+    assert chat["edit_chat_url"] == f"{_BASE_URL}chat/{sid}"
+    assert chat["project"] == seeded["name"]
+    # The claim the tour makes when it hands the URL over: it opens.
+    assert TestClient(fastapi_app).get(f"/chat/{sid}").status_code == 200
+
+
+def test_the_link_and_the_button_open_the_same_conversation() -> None:
+    """Two doors, one room: the tour's link is not a second, different offer."""
+    seeded = _seed_a_tour()
+    store = open_session_store()
+
+    linked = store.load(_open_the_editing_chat(seeded["name"])["edit_chat_url"]
+                        .rsplit("/", 1)[-1])
+    clicked = store.load(
+        TestClient(fastapi_app)
+        .post(f"/project/{seeded['name']}/edit-agent", follow_redirects=False)
+        .headers["location"].rsplit("/", 1)[-1])
+
+    assert linked["agent_id"] == clicked["agent_id"] == "editing"
+    assert linked["context"] == clicked["context"] == {"project_id": seeded["name"]}
+    assert linked["title"] == clicked["title"]
 
 
 def test_run_workflow_passes_limits_through_to_the_run_service(
