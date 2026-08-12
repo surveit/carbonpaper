@@ -4,3 +4,4 @@
 {"run_id":"31593733022","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31593733022","created":"2026-08-12T11:52:55Z","branch":"arch-failure-ledger","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"31603876179","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31603876179","created":"2026-08-12T13:54:52Z","branch":"master","event":"push","contracts_kept":14,"findings":[]}
 {"run_id":"31603876179","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31603876179","created":"2026-08-12T13:55:55Z","branch":"master","event":"push","contracts_kept":null,"findings":[]}
+{"run_id":"31604170179","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31604170179","created":"2026-08-12T13:58:10Z","branch":"feat/content-addressed-uploads","event":"pull_request","contracts_kept":14,"findings":[]}
