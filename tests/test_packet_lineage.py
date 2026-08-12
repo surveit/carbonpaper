@@ -245,3 +245,26 @@ def test_a_fan_in_ships_the_rows_it_summarized_as_a_table_and_a_csv(tmp_path):
     page = (packet / "lineage/totals/0.from-source.html").read_text(encoding="utf-8")
     assert "0.from-source.csv" in page, "the table offers its own download"
     assert "../source/0.html" in page, "and each row opens its own lineage"
+
+
+def test_a_moved_project_still_ships_the_inputs_its_run_read(tmp_path):
+    """Bindings hold absolute paths, so relocating a project stales every one."""
+    from app.services.review_packet.checksums import compute_sha256
+    from app.services.review_packet.data import _locate_input
+    from app.services.review_packet.views import InputBindingView
+
+    project = tmp_path / "new_home" / "demo"
+    (project / "data").mkdir(parents=True)
+    moved = project / "data" / "aliases.csv"
+    moved.write_text("name,stands_for\na,A\n", encoding="utf-8")
+
+    def binding(sha: str | None) -> InputBindingView:
+        return InputBindingView(
+            stage_id="input_aliases", path="/gone/demo/data/aliases.csv",
+            filename="aliases.csv", sha256=sha, bytes=moved.stat().st_size, source="workflow",
+        )
+
+    assert _locate_input(binding(compute_sha256(moved)), project) == moved
+    # A same-named file is not the same file, and an unhashed binding cannot say.
+    assert _locate_input(binding("0" * 64), project) is None
+    assert _locate_input(binding(None), project) is None
