@@ -14,6 +14,9 @@ Applied here, matching the revisions that do the same to the store:
   0010 — a filter_rows/human_review_queue signature reading nothing no longer
          loads; its reads become the whole anchor edge.
   0011 — an input's stored `schema` left; the graph resolves it.
+  0012 — a publish stage's `template` left; what it said is kept as a
+         compiler_note, since the markup it was named for now lives in
+         `function.code`.
 
 Usage:  python -m scripts.migrate_compiled_stage_files [--apply] [--projects-dir PATH]
 Without --apply it is a dry run and writes nothing.
@@ -30,6 +33,10 @@ from app.core.paths import repo_root
 from scripts.stage_description import (
     DescriptionUndeterminable,
     rename_name_to_description,
+)
+from scripts.publish_template import (
+    PublishTemplateUnreadable,
+    move_publish_template_to_notes,
 )
 from scripts.stage_input_schemas import (
     InputRefUnreadable,
@@ -77,7 +84,7 @@ def find_stale_stage_files(projects_dir: Path) -> tuple[list[Path], list[tuple[P
             if _migrate(_read(path)):
                 stale.append(path)
         except (SignatureUndeterminable, DescriptionUndeterminable,
-                InputRefUnreadable) as exc:
+                InputRefUnreadable, PublishTemplateUnreadable) as exc:
             refused.append((path, str(exc)))
     return stale, refused
 
@@ -103,6 +110,7 @@ def _migrate(spec: Any) -> bool:
         | add_signature(spec)
         | backfill_anchor_reads(spec)
         | drop_stored_input_schemas(spec)
+        | move_publish_template_to_notes(spec)
         | changed
     )
 
