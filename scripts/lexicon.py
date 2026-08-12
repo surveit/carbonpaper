@@ -45,11 +45,23 @@ class WordRoles(BaseModel):
         return {role for role in Role if getattr(self, role.value) > 0}
 
 
+class Sighting(BaseModel):
+    """Where a word first took a role. In the CI artifact only — line numbers churn."""
+
+    path: str
+    line: int
+    source: str
+
+
 class LexiconSnapshot(BaseModel):
     words: dict[str, WordRoles]
     functions: int
     accessors: int
     types: int
+    sightings: dict[str, Sighting] = {}
+
+    def sighting(self, word: str, role: Role) -> Sighting | None:
+        return self.sightings.get(f"{word}:{role.value}")
 
 
 class RoleGain(BaseModel):
@@ -60,13 +72,16 @@ class RoleGain(BaseModel):
 
 def build_snapshot(root: Path) -> LexiconSnapshot:
     seen: dict[str, Counter[Role]] = defaultdict(Counter)
+    sightings: dict[str, Sighting] = {}
     functions = accessors = types = 0
     for path in find_scanned_files(root):
-        for node in ast.walk(parse_source(path)):
+        source = path.read_text(encoding="utf-8")
+        site = _Recorder(sightings, path.relative_to(root).as_posix(), source.splitlines())
+        for node in ast.walk(ast.parse(source, filename=str(path))):
             if isinstance(node, ast.ClassDef):
-                types += _record_type(node, seen)
+                types += _record_type(node, seen, site)
             elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                role = _record_function(node, seen)
+                role = _record_function(node, seen, site)
                 functions += role is not None
                 accessors += role is Role.ACCESSOR
     words = {
@@ -79,7 +94,11 @@ def build_snapshot(root: Path) -> LexiconSnapshot:
         for word, counts in seen.items()
     }
     return LexiconSnapshot(
-        words=dict(sorted(words.items())), functions=functions, accessors=accessors, types=types
+        words=dict(sorted(words.items())),
+        functions=functions,
+        accessors=accessors,
+        types=types,
+        sightings=dict(sorted(sightings.items())),
     )
 
 
@@ -125,9 +144,9 @@ def render_markdown(head: LexiconSnapshot, base: LexiconSnapshot) -> str:
         lines += [
             "Each row is one question: **a new concept, or one you already have, respelled?**",
             "",
-            "| word | gains role | held before |",
-            "|---|---|---|",
-            *[_render_gain(gain, base) for gain in gains],
+            "| word | gains role | held before | where |",
+            "|---|---|---|---|",
+            *[_render_gain(gain, base, head) for gain in gains],
             "",
         ]
     if breaks:
@@ -165,19 +184,37 @@ def _is_scanned(relative: Path) -> bool:
     return not any(part.startswith(".") or part in _EXEMPT_PARTS for part in relative.parts)
 
 
-def _record_type(node: ast.ClassDef, seen: dict[str, Counter[Role]]) -> bool:
+class _Recorder:
+    """Keeps the first place each (word, role) was seen while a file is walked."""
+
+    def __init__(self, sightings: dict[str, Sighting], path: str, lines: list[str]) -> None:
+        self._sightings, self._path, self._lines = sightings, path, lines
+
+    def note(self, word: str, role: Role, lineno: int) -> None:
+        key = f"{word}:{role.value}"
+        if key in self._sightings:
+            return
+        text = self._lines[lineno - 1].strip() if 0 < lineno <= len(self._lines) else ""
+        self._sightings[key] = Sighting(path=self._path, line=lineno, source=text[:110])
+
+
+def _record_type(node: ast.ClassDef, seen: dict[str, Counter[Role]], site: _Recorder) -> bool:
     if not _is_declared_type(node):
         return False
     for word in split_words(node.name):
         seen[word][Role.NOUN] += 1
+        site.note(word, Role.NOUN, node.lineno)
     for statement in node.body:
         if isinstance(statement, ast.AnnAssign) and isinstance(statement.target, ast.Name):
             for word in split_words(statement.target.id):
                 seen[word][Role.FIELD] += 1
+                site.note(word, Role.FIELD, statement.lineno)
     return True
 
 
-def _record_function(node: ast.FunctionDef | ast.AsyncFunctionDef, seen: dict[str, Counter[Role]]) -> Role | None:
+def _record_function(
+    node: ast.FunctionDef | ast.AsyncFunctionDef, seen: dict[str, Counter[Role]], site: _Recorder
+) -> Role | None:
     if node.name.startswith("__"):
         return None
     token = node.name.lstrip("_").split("_")[0]
@@ -185,6 +222,7 @@ def _record_function(node: ast.FunctionDef | ast.AsyncFunctionDef, seen: dict[st
         return None
     role = Role.ACCESSOR if is_accessor(node) else Role.VERB
     seen[token][role] += 1
+    site.note(token, role, node.lineno)
     return role
 
 
@@ -204,10 +242,19 @@ def _is_docstring(statement: ast.stmt) -> bool:
     return isinstance(statement, ast.Expr) and isinstance(statement.value, ast.Constant)
 
 
-def _render_gain(gain: RoleGain, base: LexiconSnapshot) -> str:
+def _render_gain(gain: RoleGain, base: LexiconSnapshot, head: LexiconSnapshot) -> str:
     held = base.words.get(gain.word, WordRoles()).held()
     before = "**new word**" if gain.is_new_word else ", ".join(sorted(r.value for r in held))
-    return f"| `{gain.word}` | `{gain.role.value}` | {before} |"
+    return f"| `{gain.word}` | `{gain.role.value}` | {before} | {_render_sighting(gain, head)} |"
+
+
+def _render_sighting(gain: RoleGain, head: LexiconSnapshot) -> str:
+    seen = head.sighting(gain.word, gain.role)
+    if seen is None:
+        return "—"
+    # `X | None` is everywhere here, and a bare pipe splits the markdown cell.
+    source = seen.source.replace("|", "\\|")
+    return f"`{source}`<br><sub>{seen.path}:{seen.line}</sub>"
 
 
 def _render_registry_hint() -> str:
@@ -233,12 +280,18 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=_REPO_ROOT)
     parser.add_argument("--markdown", nargs=2, metavar=("HEAD_JSON", "BASE_JSON"))
+    parser.add_argument(
+        "--registry", action="store_true", help="drop sightings: line numbers churn the committed file"
+    )
     args = parser.parse_args(argv)
     if args.markdown:
         head, base = (LexiconSnapshot.model_validate_json(Path(p).read_text(encoding="utf-8")) for p in args.markdown)
         print(render_markdown(head, base))
         return 0
-    print(json.dumps(build_snapshot(args.root).model_dump(), indent=1, sort_keys=True))
+    snapshot = build_snapshot(args.root)
+    if args.registry:
+        snapshot = snapshot.model_copy(update={"sightings": {}})
+    print(json.dumps(snapshot.model_dump(), indent=1, sort_keys=True))
     return 0
 
 

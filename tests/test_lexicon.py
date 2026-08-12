@@ -6,12 +6,14 @@ test rather than a green one.
 from __future__ import annotations
 
 import ast
+import json
 from pathlib import Path
 
 import pytest
 
 from scripts.lexicon import (
     LexiconSnapshot,
+    Sighting,
     Role,
     WordRoles,
     build_snapshot,
@@ -19,6 +21,8 @@ from scripts.lexicon import (
     find_role_gains,
     find_scanned_files,
     is_accessor,
+    main,
+    render_markdown,
     split_words,
 )
 
@@ -156,3 +160,65 @@ def test_noun_led_words_are_marked_by_hand_only() -> None:
 def test_split_words_handles_both_casings() -> None:
     assert split_words("WorkflowStageInput") == ["workflow", "stage", "input"]
     assert split_words("output_schema") == ["output", "schema"]
+
+
+# --- sightings: the snippet the report prints -----------------------------------
+
+
+def test_sighting_points_at_real_source(snapshot: LexiconSnapshot) -> None:
+    seen = snapshot.sighting("find", Role.VERB)
+    assert seen is not None
+    assert seen.path.startswith("app/") and seen.line > 0
+    assert seen.source.lstrip().startswith(("def ", "async def "))
+
+
+def test_every_gain_the_report_prints_can_be_located(snapshot: LexiconSnapshot) -> None:
+    """A row with no snippet is a row the reader has to go hunt for by hand."""
+    missing = [
+        f"{word}:{role.value}"
+        for word, roles in snapshot.words.items()
+        for role in roles.held()
+        if snapshot.sighting(word, role) is None
+    ]
+    assert missing == [], f"{len(missing)} word-roles have no sighting"
+
+
+def test_sighting_source_is_bounded() -> None:
+    """A long line would blow out the table; 110 chars keeps a row readable."""
+    seen = Sighting(path="app/x.py", line=1, source="x" * 110)
+    assert len(seen.source) <= 110
+
+
+def test_rendered_row_carries_the_snippet() -> None:
+    base = LexiconSnapshot(words={}, functions=0, accessors=0, types=0)
+    head = LexiconSnapshot(
+        words={"sidecar": WordRoles(verb=1)},
+        functions=1,
+        accessors=0,
+        types=0,
+        sightings={"sidecar:verb": Sighting(path="app/runtime/trace.py", line=222, source="def _sidecar(self):")},
+    )
+    body = render_markdown(head, base)
+    assert "def _sidecar(self):" in body
+    assert "app/runtime/trace.py:222" in body
+
+
+def test_registry_flag_drops_sightings(capsys: pytest.CaptureFixture[str]) -> None:
+    """Committing line numbers would double the file and churn it on every edit."""
+    main(["--registry"])
+    assert json.loads(capsys.readouterr().out)["sightings"] == {}
+
+
+def test_a_union_type_does_not_split_the_table_cell() -> None:
+    """`X | None` is the commonest annotation here; a bare pipe silently breaks the row."""
+    base = LexiconSnapshot(words={}, functions=0, accessors=0, types=0)
+    head = LexiconSnapshot(
+        words={"refused": WordRoles(field=1)},
+        functions=0,
+        accessors=0,
+        types=1,
+        sightings={"refused:field": Sighting(path="app/x.py", line=9, source="refused: str | None")},
+    )
+    row = next(line for line in render_markdown(head, base).split("\n") if "refused" in line)
+    assert row.count("|") - row.count("\\|") == 5, f"cell count wrong: {row}"
+    assert "app/x.py:9" in row
