@@ -37,7 +37,10 @@
    never moves under the pointer mid-review. */
 .queue-pager .btn:disabled { opacity: 0.5; cursor: default; }
 
-.queue-items { display: flex; flex-direction: column; gap: 14px; }
+/* Recording a decision grows its card BELOW the button just pressed. Scroll
+   anchoring reads that as the page shifting and scrolls to compensate, which is
+   the one thing that still moved the controls out from under the pointer. */
+.queue-items { display: flex; flex-direction: column; gap: 14px; overflow-anchor: none; }
 /* Companion to the display rule above: without it, `display: flex` beats the UA's
    [hidden] rule and the reviewer-name gate renders the rows anyway. */
 .queue-items[hidden] { display: none; }
@@ -45,20 +48,40 @@
     border: 1px solid var(--border); border-left: 4px solid var(--border); border-radius: 5px;
     padding: 14px 18px; background: var(--raised);
 }
-.queue-card.decided-approve { border-left-color: var(--good-bd); background: var(--good-bg); }
-.queue-card.decided-modify  { border-left-color: var(--warn-bd); background: var(--warn-bg); }
+/* Done-ness is the rail plus the header chip; the body stays --raised so the
+   white controls standing on it never read as holes punched in a tint. */
+.queue-card.decided-approve { border-left-color: var(--good-bd); }
+.queue-card.decided-modify  { border-left-color: var(--warn-bd); }
 
+/* The chip is taller than the text beside it, so the height is reserved whether
+   or not a decision has been recorded — otherwise recording one grows the header
+   and pushes down everything the reviewer is looking at. */
 .queue-card header {
     display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
-    font-size: 13px; color: var(--muted); margin-bottom: 8px;
+    font-size: 13px; color: var(--muted); margin-bottom: 8px; min-height: 23px;
 }
 .queue-card header .row-position { font-size: 13px; font-weight: 600; }
 .queue-card header .lineage-link { font-size: 13px; margin-left: auto; }
 
-.queue-card .prior-decision {
-    font-size: 13px; margin: 8px 0; padding: 8px 12px;
-    background: var(--info-bg); border-radius: 3px; color: var(--info-ink);
+/* Names the recorded verdict in a word, so the rail's hue is never the only
+   thing saying which one it was. */
+.verdict-chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+    padding: 2px 8px; border-radius: 10px; border: 1px solid;
 }
+.verdict-chip.verdict-approve {
+    border-color: var(--good-bd); color: var(--good-ink); background: var(--good-bg);
+}
+.verdict-chip.verdict-modify {
+    border-color: var(--warn-bd); color: var(--warn-ink); background: var(--warn-bg);
+}
+
+.queue-card .prior-decision {
+    font-size: 12.5px; color: var(--muted);
+    margin: 10px 0 0; padding-top: 9px; border-top: 1px dashed var(--border);
+}
+.queue-card .prior-decision strong { color: var(--fg); }
 
 .decision-controls {
     display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
@@ -93,19 +116,31 @@
     letter-spacing: .04em; color: var(--muted);
 }
 
-/* One row per reviewed column: name, the value the stage received, the field. */
+/* One row per reviewed column: the column under review, the value the stage
+   received for it, the reviewer's field. The dashed rule above separates the
+   section from the context table. */
 .reviewed-fields {
     display: grid; grid-template-columns: max-content 1fr minmax(140px, 18rem);
-    gap: 8px 14px; align-items: center;
-    margin-top: 8px;
+    gap: 6px 14px; align-items: center;
+    margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border);
 }
+.reviewed-fields .field-column-heading {
+    margin: 0; padding-bottom: 6px; border-bottom: 1px dashed var(--border);
+    font-size: 12px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: .04em; color: var(--muted);
+}
+/* Spans the name and the received value: one heading over both, because both
+   are what came in. */
+.reviewed-fields .field-column-heading.under-review { grid-column: 1 / 3; }
 .reviewed-field { display: contents; }
-.reviewed-field label { font-weight: 600; font-size: 13px; }
-.reviewed-field .upstream-value { font-size: 12px; color: var(--muted); }
+.reviewed-field label {
+    font-weight: 600; font-size: 13px;
+    font-family: "SFMono-Regular", "Consolas", "Liberation Mono", Menlo, monospace;
+}
+.reviewed-field .upstream-value { font-size: 13px; }
 .reviewed-field input, .reviewed-field select {
     padding: 5px 8px; border: 1px solid var(--border); border-radius: 3px; font: inherit; font-size: 14px;
 }
-.reviewed-field .recorded-value { font-size: 12px; color: var(--info-ink); }
 
 /* A reviewed value is read-only until its `change` button swaps in the control. */
 .field-control { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -138,6 +173,12 @@
 .review-notes textarea {
     padding: 6px 8px; border: 1px solid var(--border); border-radius: 3px;
     font: inherit; font-size: 13px; resize: vertical;
+}
+/* A recorded note reads as text, not as a field asking to be filled — but stays
+   a textarea, so it is still selectable and still what the submit posts. */
+.review-notes textarea[readonly] {
+    padding-left: 0; border-color: transparent; background: none;
+    color: var(--muted); resize: none;
 }
 
 .queue-card .queued-row { margin: 8px 0; }

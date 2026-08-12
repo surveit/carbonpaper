@@ -6,21 +6,28 @@
          data-input-fingerprint="{{ item.input_fingerprint }}">
     <header>
         <span class="row-position">Row {{ row_position }} of {{ page.total }}</span>
+        {% if item.prior_decision %}
+        <span class="verdict-chip verdict-{{ item.prior_decision.verdict }}">✓ {{ item.prior_decision.verdict_label }}</span>
+        {% endif %}
         {% if item.lineage_url %}
         <a class="lineage-link" href="{{ item.lineage_url }}">lineage of the upstream row →</a>
         {% endif %}
     </header>
 
     {% if page.context_columns %}
-    <details class="queued-row" open>
-        <summary>Background for this row — not under review</summary>
+    <div class="queued-row">
+        <p class="review-section-heading">Context for review</p>
         {{ kv_table(page.context_columns, item.row) }}
-    </details>
+    </div>
     {% endif %}
 
     <form class="review-form">
-        <p class="review-section-heading">Columns to review</p>
+        {# Two named halves: the column under review and the value it arrived with,
+           then the reviewer's own answer. The stored column each answer lands in is
+           named once, on the decided card's recorded line at the foot. #}
         <div class="reviewed-fields">
+        <p class="field-column-heading under-review">Columns to review</p>
+        <p class="field-column-heading">Your review</p>
         {% for field in page.reviewed_fields %}
         {% set field_id = 'rf-' ~ item.input_fingerprint ~ '-' ~ field.target %}
         {# The upstream value is what this stage received for the column; `prefill`
@@ -30,17 +37,10 @@
         {% set upstream_text = item.upstream_text.get(field.target) %}
         {% set prefill = item.prefill.get(field.target) %}
         {% set prefill_text = '' if prefill is none else prefill %}
-        {% set recorded = item.prior_decision.reviewed_values.get(field.target) if item.prior_decision else none %}
         <div class="reviewed-field">
             <label for="{{ field_id }}"
-                   {% if field.description %}title="{{ field.description }}"{% endif %}>{{ field.target }}</label>
-            <span class="upstream-value">received <code>{{ field.source }}</code>:
-                <strong>{% if upstream_text is none or upstream_text == '' %}<em>no value</em>{% else %}{{ upstream_text }}{% endif %}</strong>
-                {% if item.prior_decision %}
-                <span class="recorded-value">· you recorded
-                    <strong>{% if recorded is none %}<em>no value</em>{% else %}{{ recorded }}{% endif %}</strong></span>
-                {% endif %}
-            </span>
+                   {% if field.description %}title="{{ field.description }}"{% endif %}>{{ field.source }}</label>
+            <span class="upstream-value">{% if upstream_text is none or upstream_text == '' %}<em>no value</em>{% else %}{{ upstream_text }}{% endif %}</span>
             <div class="field-control">
                 {# A decided card is not asking for input: its openers are really
                    disabled (not merely styled so) until "Change my review" unlocks them. #}
@@ -78,7 +78,10 @@
         {% if review_notes_column %}
         <label class="review-notes">
             <span>{{ page.review_notes_label }}</span>
-            <textarea rows="2" data-role="notes"
+            {# `readonly`, never `disabled`: the reviewer must still be able to select
+               and copy the note they recorded, and a decided card's box is frozen only
+               until "Change my review" lifts it. #}
+            <textarea rows="2" data-role="notes" {% if item.prior_decision %}readonly{% endif %}
                       placeholder="Include any reasoning or citations for your decision">{{ item.prior_decision.review_notes if item.prior_decision and item.prior_decision.review_notes else '' }}</textarea>
         </label>
         {% endif %}
@@ -94,7 +97,7 @@
        the reviewer just clicked. #}
     {% if item.prior_decision %}
     <p class="prior-decision">
-        Recorded: <strong>{{ item.prior_decision.verdict }}</strong>
+        Recorded: <strong>{{ item.prior_decision.verdict_label }}</strong>
         {% for column, value in item.prior_decision.reviewed_values.items() %}
           · {{ column }} = {% if value is none %}<em>no value</em>{% else %}<code>{{ value }}</code>{% endif %}
         {% endfor %}

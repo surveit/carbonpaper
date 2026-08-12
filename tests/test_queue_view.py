@@ -5,6 +5,8 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
+from fastapi import HTTPException
+
 from app.models import Stage, parse_stage
 from app.web import queue_view
 from app.web.loading import QueueFingerprints
@@ -118,15 +120,15 @@ def test_the_context_table_omits_the_columns_under_review():
 
 
 @pytest.mark.parametrize(
+    # The card names the SOURCE column, so its tooltip describes that column —
+    # the target's description is about where the reviewer's own value lands.
     "target_spec, expected",
     [
-        ({"description": "the label after review"}, "the label after review"),  # the TARGET's
-        ({}, "high when the score exceeds one"),                     # else the SOURCE column's
+        ({"description": "the label after review"}, "high when the score exceeds one"),
+        ({}, "high when the score exceeds one"),
     ],
 )
-def test_a_reviewed_field_describes_itself_from_the_target_then_the_source(
-    target_spec, expected
-):
+def test_a_reviewed_field_describes_the_column_under_review(target_spec, expected):
     stage = _queue_stage(_LABEL_COLUMNS, target_spec=target_spec)
 
     field, = queue_view.build_reviewed_fields(stage, stage.queue)
@@ -174,8 +176,10 @@ def test_a_declared_range_becomes_the_fields_bounds():
 
 def test_the_notes_label_prefers_the_declared_description():
     stage = _queue_stage(_LABEL_COLUMNS)
-    assert queue_view.resolve_notes_label(stage, "review_notes") == "Review notes"
-    assert queue_view.resolve_notes_label(stage, "reviewer_notes") == "Reviewer notes"
+    # No description declared: the box is labelled for what it is, not for the
+    # column name the note happens to be stored under.
+    assert queue_view.resolve_notes_label(stage, "review_notes") == "Notes"
+    assert queue_view.resolve_notes_label(stage, "reviewer_notes") == "Notes"
 
     described = stage.model_copy(update={"signature": stage.signature.model_copy(
         update={"adds": [
@@ -258,3 +262,16 @@ def test_an_item_is_found_at_the_position_its_own_card_states():
 
 def test_no_item_is_found_for_a_fingerprint_the_queue_does_not_carry():
     assert queue_view.find_positioned_item(_page_of("fp0"), "fp9") is None
+
+
+def test_every_recorded_verdict_has_a_past_tense_label():
+    from app.models.stages.human_review_queue import ReviewVerdict
+    from app.web.queue_view import describe_verdict
+
+    # A verdict the page cannot name must raise, not render blank.
+    assert {v.value: describe_verdict(v.value) for v in ReviewVerdict} == {
+        "approve": "approved", "modify": "modified", "skipped": "skipped",
+    }
+    with pytest.raises(HTTPException) as caught:
+        describe_verdict("rejected")
+    assert "rejected" in str(caught.value.detail)

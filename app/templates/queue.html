@@ -234,6 +234,8 @@
     card.querySelectorAll('[data-edit-for]').forEach(function (opener) {
       opener.disabled = false;
     });
+    const notes = card.querySelector('[data-role="notes"]');
+    if (notes) notes.readOnly = false;
     button.hidden = true;
     card.querySelector('button[type="submit"]').hidden = false;
   }
