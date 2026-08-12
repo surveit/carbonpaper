@@ -28,7 +28,7 @@
 #}
 {% from "_issue_table.html" import issue_panel, issue_row %}
 {# The section key stays 'workflow' (internal); the VISIBLE tab title says Workflow. #}
-{% block title %}{{ state.meta.title or state.meta.name }} · Workflow{% endblock %}
+{% block title %}{{ state.meta.display_name }} · Workflow{% endblock %}
 
 {% block section_head %}
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>

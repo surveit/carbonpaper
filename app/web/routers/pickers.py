@@ -11,7 +11,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
 from app.core.run_status import RunStatus
-from app.services.project import list_projects, project_exists
+from app.services.project import list_project_listings, project_exists
 from app.services.versioning import WorkflowVersion, list_project_versions
 from app.web.breadcrumbs import Picker, PickerRow
 from app.web.config import templates
@@ -29,11 +29,12 @@ async def projects_picker(request: Request, current: str = ""):
     return _render(request, Picker(
         heading="Projects",
         rows=[
-            PickerRow(label=name, href=f"/project/{name}", is_current=name == current)
+            PickerRow(label=listing.name, href=f"/project/{listing.id}",
+                      is_current=listing.id == current)
             # Names only, never the home page's ProjectCard: a card computes each
             # project's whole status (every stored version loaded), so one unreadable
             # version would take the switcher down on every page that draws it.
-            for name in list_projects()
+            for listing in list_project_listings()
         ],
     ))
 

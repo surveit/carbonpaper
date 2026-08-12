@@ -91,3 +91,18 @@ def test_a_run_child_page_does_not_switch_the_run_it_hangs_off(project: Path) ->
 
     assert [crumb.label for crumb in trail if crumb.picker] == ["demo"]
     assert trail[-1].label == "Review queue" and trail[-1].href is None
+
+
+def test_the_project_rung_reads_as_the_name_and_switches_on_the_id(project: Path) -> None:
+    """Two projects may share a name, so the popover marks the current one by id."""
+    project_service.Project(id="demo", name="demo", title="Congress roster").save()
+    trail = breadcrumbs.build_section_crumbs("demo", label="Runs")
+    rung = trail[1]
+
+    assert rung.label == "Congress roster"
+    assert rung.picker_current == "demo"
+
+    body = client.get(rung.picker, params={"current": rung.picker_current}).text
+
+    assert "Congress roster" in body
+    assert 'aria-current="true"' in body

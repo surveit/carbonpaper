@@ -3,6 +3,7 @@ label: it addresses nothing, it may change, and two projects may share one.
 """
 from __future__ import annotations
 
+import json
 import shutil
 from pathlib import Path
 
@@ -108,3 +109,38 @@ def test_a_record_from_before_labels_existed_still_loads(workspace_root: Path) -
     assert record.label() == "venezuela_lda_lobbying"
     assert find_projects_by_name("venezuela_lda_lobbying") == [record]
     assert describe_project("venezuela_lda_lobbying") == "venezuela_lda_lobbying"
+
+
+def test_the_shown_name_is_the_title_where_one_is_authored(workspace_root: Path) -> None:
+    """The trail, the sidebar and the home card all read this one resolution."""
+    project_id = create_project("dsa_evidence_capture", "prose", source="test")
+    record = Project.load(project_id)
+    record.title = "DSA takedown evidence capture"
+    record.save()
+
+    assert describe_project(project_id) == "DSA takedown evidence capture"
+    assert project_meta(workspace_root / project_id).display_name == (
+        "DSA takedown evidence capture")
+    # The slug survives it: a bundle exports under that, and it is what a name lookup takes.
+    assert project_meta(workspace_root / project_id).name == "dsa_evidence_capture"
+    assert find_projects_by_name("dsa_evidence_capture") == [Project.load(project_id)]
+
+
+def test_a_project_json_with_no_record_is_still_read_by_name(workspace_root: Path) -> None:
+    """A project copied onto disk has a name in project.json and nothing in the store."""
+    pdir = workspace_root / "congress_roster_diff"
+    pdir.mkdir()
+    (pdir / "project.json").write_text(json.dumps({
+        "name": "congress_roster_diff",
+        "title": "Congress roster — diffing two CSV snapshots",
+        "created_at": "2026-08-06T11:30:00",
+        "model": None,
+        "source": "manual",
+    }), encoding="utf-8")
+
+    assert describe_project("congress_roster_diff") == (
+        "Congress roster — diffing two CSV snapshots")
+    meta = project_meta(pdir)
+    assert meta.display_name == "Congress roster — diffing two CSV snapshots"
+    assert meta.created_at == "2026-08-06T11:30:00"
+    assert meta.source == "manual"

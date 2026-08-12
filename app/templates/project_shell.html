@@ -24,7 +24,7 @@
   The nav carries NO status marks. It is a table of contents; every section's own
   page states what is there, what is wrong with it, and what is waiting, in words.
 #}
-{% block title %}{{ state.meta.title or state.meta.name }} · {{ section|replace('_',' ')|capitalize }}{% endblock %}
+{% block title %}{{ state.meta.display_name }} · {{ section|replace('_',' ')|capitalize }}{% endblock %}
 
 {% block head_extra %}
   {{ super() }}
@@ -75,10 +75,11 @@
   </button>
   <aside class="app-side" id="app-side">
     <div class="app-side-head">
-      <a class="app-side-brand" href="/project/{{ state.id }}" title="{{ state.meta.title or state.id }}">
+      <a class="app-side-brand" href="/project/{{ state.id }}" title="{{ state.meta.display_name }}">
         <span class="app-side-kicker">project</span>
-        <span class="app-side-name">{{ state.meta.title or state.meta.name }}</span>
-        {% if state.meta.title %}<span class="app-side-slug"><code>{{ state.id }}</code></span>{% endif %}
+        <span class="app-side-name">{{ state.meta.display_name }}</span>
+        {# The id, under the name, only where it is not already the name being shown. #}
+        {% if state.meta.display_name != state.id %}<span class="app-side-slug"><code>{{ state.id }}</code></span>{% endif %}
       </a>
       <button type="button" class="drawer-btn app-side-collapse" id="app-side-collapse"
               title="Hide the project sidebar" aria-label="Hide the project sidebar">

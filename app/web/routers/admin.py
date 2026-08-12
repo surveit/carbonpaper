@@ -77,13 +77,12 @@ async def load_bundle(bundle: str):
 @router.get("/admin/export/{project_name}")
 async def download_project(project_name: str) -> Response:
     project_id = _known_project(project_name)
+    bundle = export_project(project_id)
+    # The bundle's own name, which is the slug — a shown name may carry spaces and dashes.
     return Response(
-        content=export_project(project_id).to_json(),
+        content=bundle.to_json(),
         media_type="application/json",
-        headers={
-            "content-disposition":
-                f'attachment; filename="{describe_project(project_id)}.json"'
-        },
+        headers={"content-disposition": f'attachment; filename="{bundle.name}.json"'},
     )
 
 
