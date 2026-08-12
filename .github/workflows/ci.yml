@@ -5,6 +5,19 @@ on:
     branches: [master]
   pull_request:
 
+# THE GATE TALLY RUNS INSIDE THESE JOBS, and that is a deliberate trade.
+# Recording which architecture gates failed means appending to the `ci-metrics`
+# branch and rewriting the tally issue, which needs `contents: write` and
+# `issues: write` — held here by jobs that also execute pull-request code. The
+# alternative, a `workflow_run` workflow in the base repository's context, keeps
+# the write token away from contributor code but costs a whole billed minute per
+# run for about fifteen seconds of work. This repository is private with trusted
+# contributors, so the minute was judged the greater cost.
+#
+# What that buys an attacker with a merge-able pull request: a token that can
+# push to any branch and edit issues. The fork guard on the recording steps
+# keeps it away from unmerged outside contributors, and nothing else.
+
 jobs:
   # ruff, import-linter and mypy share one job because each takes seconds and
   # Actions bills every job a whole minute: as separate jobs they cost three
@@ -18,6 +31,9 @@ jobs:
   # longer reports.
   lint:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
     steps:
       - uses: actions/checkout@v4
       # uv project mode: `uv sync --frozen` installs the exact pins in uv.lock
@@ -40,7 +56,7 @@ jobs:
       # Architecture boundaries: contracts live in pyproject [tool.importlinter].
       # PYTHONPATH=. lets grimp import the `app` package (run from source, not installed).
       # `tee` keeps the human-readable output in the log while saving the
-      # contract-by-contract verdicts for the arch-metrics workflow to tally.
+      # contract-by-contract verdicts for the recording step below to tally.
       # pipefail so the step still fails on a broken contract despite the pipe.
       - id: imports
         if: always() && steps.ruff.conclusion != 'skipped'
@@ -50,16 +66,26 @@ jobs:
       - id: types
         if: always() && steps.ruff.conclusion != 'skipped'
         run: uv run --frozen mypy
-      - name: Upload contract verdicts
-        if: always() && steps.imports.conclusion != 'skipped'
-        uses: actions/upload-artifact@v4
+      # Tally which contracts broke. Same-repository refs only: a fork's
+      # GITHUB_TOKEN is read-only, so the append would fail the job over a
+      # metric, and a fork's code must not reach a write-scoped token at all.
+      - name: Record contract outcomes
+        if: >
+          always() && steps.imports.conclusion != 'skipped'
+          && (github.event_name != 'pull_request'
+              || github.event.pull_request.head.repo.full_name == github.repository)
+        continue-on-error: true
+        uses: ./.github/actions/record-gates
         with:
-          name: gate-contracts
-          path: lint-imports.txt
-          retention-days: 7
+          imports: lint-imports.txt
+          may-create-issue: "true"
+          token: ${{ github.token }}
 
   test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v9.0.0
@@ -75,7 +101,7 @@ jobs:
       # (test_roldugin.py etc.) that hit real APIs. tests/ and app/ are named
       # explicitly (not bare `pytest`) so the root probes stay uncollected while
       # the colocated app/**/_arch_tests/ architecture checks DO run in CI.
-      # --junitxml records which tests failed in a form the arch-metrics workflow
+      # --junitxml records which tests failed in a form the recording step below
       # can read; the log itself is not a stable machine-readable record.
       - run: |
           if [ -d tests ]; then
@@ -83,13 +109,16 @@ jobs:
           else
             echo "::warning::No tests/ directory on this ref — pytest was NOT run."
           fi
-      - name: Upload test outcomes
-        if: always() && hashFiles('junit.xml') != ''
-        uses: actions/upload-artifact@v4
+      - name: Record test outcomes
+        if: >
+          always() && hashFiles('junit.xml') != ''
+          && (github.event_name != 'pull_request'
+              || github.event.pull_request.head.repo.full_name == github.repository)
+        continue-on-error: true
+        uses: ./.github/actions/record-gates
         with:
-          name: gate-tests
-          path: junit.xml
-          retention-days: 7
+          junit: junit.xml
+          token: ${{ github.token }}
 
   # Informational-only import-graph coupling report, upserted as one PR
   # comment (marker-tagged, edited in place on later pushes rather than

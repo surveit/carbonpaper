@@ -88,6 +88,43 @@ def test_the_tally_counts_each_run_once_per_gate(tmp_path: Path) -> None:
     assert "| `app.models stays pure — never imports the store` | 1 |" in body
 
 
+def test_the_two_jobs_of_one_run_are_counted_as_one_run(tmp_path: Path) -> None:
+    # One CI run leaves two lines sharing a run id.
+    from_lint = RunRecord(
+        run_id="77", run_url="", created=_now(), branch="x", event="pull_request",
+        contracts_kept=13,
+        findings=list(find_broken_contracts(_IMPORTS_BROKEN)),
+    )
+    from_test = RunRecord(
+        run_id="77", run_url="", created=_now(), branch="x", event="pull_request",
+        findings=list(find_failed_arch_tests(_JUNIT)),
+    )
+    ledger = tmp_path / "ledger.jsonl"
+    ledger.write_text(
+        f"{from_lint.model_dump_json()}\n{from_test.model_dump_json()}\n", encoding="utf-8"
+    )
+    body = render_markdown(read_ledger(ledger))
+    assert "| Runs recorded | 1 | 1 |" in body
+    assert "| Runs with a gate failure | 1 | 1 |" in body
+    assert "| Runs fully clean | 0% |" in body
+    # Both halves survive the merge.
+    assert "| `tests/arch/test_file_io_declares_encoding.py` | 1 |" in body
+    assert "| `app.models stays pure — never imports the store` | 1 |" in body
+    assert "13 contracts are" in body
+
+
+def test_a_run_recorded_by_one_job_only_is_still_one_clean_run(tmp_path: Path) -> None:
+    # A job that never reached its gate appends nothing.
+    lone = RunRecord(
+        run_id="88", run_url="", created=_now(), branch="x", event="push", contracts_kept=14
+    )
+    ledger = tmp_path / "ledger.jsonl"
+    ledger.write_text(lone.model_dump_json(), encoding="utf-8")
+    body = render_markdown(read_ledger(ledger))
+    assert "| Runs recorded | 1 | 1 |" in body
+    assert "| Runs fully clean | 100% |" in body
+
+
 def test_a_gate_failing_twice_in_one_run_still_counts_that_run_once(tmp_path: Path) -> None:
     repeated = RunRecord(
         run_id="9", run_url="", created=_now(), branch="x", event="push",

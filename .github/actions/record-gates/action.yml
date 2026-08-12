@@ -1,0 +1,131 @@
+name: Record architecture gate outcomes
+description: >
+  Append this run's gate verdicts to the ci-metrics ledger branch and rewrite the tally
+  issue. Used by the lint and test jobs, which each report only the gate they run.
+
+inputs:
+  junit:
+    description: Path to pytest's JUnit XML, if this job ran the tests.
+    required: false
+    default: ""
+  imports:
+    description: Path to captured lint-imports output, if this job ran the contracts.
+    required: false
+    default: ""
+  may-create-issue:
+    description: >
+      Whether this job may CREATE the tally issue when none exists. Exactly one caller
+      sets this. Both jobs race to append, and if both could create, the first ever run
+      would open two issues and one would silently stop being updated.
+    required: false
+    default: "false"
+  token:
+    description: GITHUB_TOKEN with contents:write and issues:write.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Build this run's record
+      shell: bash
+      run: |
+        set -euo pipefail
+        # `if`, not `[ … ] && …`: under `set -e` a false test as the last command of an
+        # && list exits the step, so the caller that passes only one of the two artifacts
+        # would die here rather than record its half.
+        args=()
+        if [ -n "${{ inputs.junit }}" ] && [ -f "${{ inputs.junit }}" ]; then
+          args+=(--junit "${{ inputs.junit }}")
+        fi
+        if [ -n "${{ inputs.imports }}" ] && [ -f "${{ inputs.imports }}" ]; then
+          args+=(--imports "${{ inputs.imports }}")
+        fi
+        uv run --frozen python scripts/arch_failure_ledger.py record "${args[@]}" \
+          --run-id "$GITHUB_RUN_ID" \
+          --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+          --created "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+          --branch "${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}" \
+          --event "$GITHUB_EVENT_NAME" \
+          > "$RUNNER_TEMP/record.json"
+        cat "$RUNNER_TEMP/record.json"
+
+    # The ledger is an orphan branch: data this repository accumulates, never source, and
+    # it must not appear in a diff under review. Cloned into its own directory so this
+    # checkout keeps scripts/ available for the render below.
+    - name: Append to the ledger branch
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+      run: |
+        set -euo pipefail
+        remote="https://x-access-token:${{ inputs.token }}@github.com/$GITHUB_REPOSITORY.git"
+        rm -rf "$RUNNER_TEMP/ledger"
+        git clone --quiet --depth 1 --branch ci-metrics "$remote" "$RUNNER_TEMP/ledger" 2>/dev/null || {
+          git clone --quiet --depth 1 "$remote" "$RUNNER_TEMP/ledger"
+          git -C "$RUNNER_TEMP/ledger" checkout --quiet --orphan ci-metrics
+          git -C "$RUNNER_TEMP/ledger" rm -rqf . 2>/dev/null || true
+          : > "$RUNNER_TEMP/ledger/ledger.jsonl"
+        }
+        cd "$RUNNER_TEMP/ledger"
+        git config user.name 'github-actions[bot]'
+        git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+        # The lint and test jobs of the same run push to this branch concurrently, so a
+        # rejected push means the sibling job won the race, not that anything is wrong.
+        # Re-clone and re-append rather than rebasing: the record is one line and the
+        # branch has no other writer.
+        for attempt in 1 2 3 4 5; do
+          cat "$RUNNER_TEMP/record.json" >> ledger.jsonl
+          git add ledger.jsonl
+          git commit --quiet -m "record gate outcomes for run $GITHUB_RUN_ID"
+          if git push --quiet origin HEAD:ci-metrics 2>/dev/null; then
+            break
+          fi
+          if [ "$attempt" = "5" ]; then
+            echo "::error::could not append to ci-metrics after 5 attempts"
+            exit 1
+          fi
+          echo "push rejected (attempt $attempt) — sibling job won the race, retrying"
+          git fetch --quiet origin ci-metrics
+          git reset --quiet --hard origin/ci-metrics
+          sleep $(( attempt * 3 ))
+        done
+
+    - name: Render the tally
+      shell: bash
+      run: uv run --frozen python scripts/arch_failure_ledger.py render "$RUNNER_TEMP/ledger/ledger.jsonl" > "$RUNNER_TEMP/body.md"
+
+    - name: Upsert the tally issue
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ inputs.token }}
+        script: |
+          const fs = require('fs');
+          const body = fs.readFileSync(`${process.env.RUNNER_TEMP}/body.md`, 'utf8');
+          const mayCreate = '${{ inputs.may-create-issue }}' === 'true';
+          const label = 'arch-tally';
+          const { owner, repo } = context.repo;
+
+          // Found by label, not by title search: the search index is eventually
+          // consistent and would open a duplicate on a fast second run.
+          await github.rest.issues.createLabel({
+            owner, repo, name: label, color: '0e8a16',
+            description: 'The running architecture gate tally',
+          }).catch(() => {});
+
+          const open = await github.rest.issues.listForRepo({
+            owner, repo, labels: label, state: 'open', per_page: 5,
+          });
+
+          if (open.data.length) {
+            const number = open.data[0].number;
+            await github.rest.issues.update({ owner, repo, issue_number: number, body });
+            core.notice(`Updated tally issue #${number}`);
+          } else if (mayCreate) {
+            const created = await github.rest.issues.create({
+              owner, repo, title: 'Architecture gate tally', body, labels: [label],
+            });
+            core.notice(`Created tally issue #${created.data.number}`);
+          } else {
+            core.notice('No tally issue yet; the lint job opens it.');
+          }
