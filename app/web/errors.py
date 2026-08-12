@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from http import HTTPStatus
 
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import FastAPI, Request, Response
 from fastapi.exception_handlers import http_exception_handler
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -17,13 +17,6 @@ from app.web.config import templates
 # Asked for by a browser navigating, and by nothing else here: the app's own fetch()
 # calls send */* and read `detail`.
 _PAGE_MEDIA_TYPE = "text/html"
-
-
-class NoSuchProject(HTTPException):
-    """Its own type so the page can say the project is gone rather than the address wrong."""
-
-    def __init__(self, project: str) -> None:
-        super().__init__(status_code=404, detail=f"No project '{project}'")
 
 
 def install_error_pages(app: FastAPI) -> None:
@@ -43,7 +36,6 @@ async def render_error(request: Request, exc: Exception) -> Response:
             "status": exc.status_code,
             "headline": _headline(exc.status_code),
             "detail": _detail(exc),
-            "project_may_be_deleted": isinstance(exc, NoSuchProject),
         },
         status_code=exc.status_code,
     )

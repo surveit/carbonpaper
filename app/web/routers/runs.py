@@ -54,7 +54,6 @@ from app.web.run_header import build_live_view, build_run_header
 from app.web.run_index import build_run_index_rows
 from app.web.run_issues import build_run_issues
 from app.web.run_stage_panel import resolve_panel_links
-from app.web.errors import NoSuchProject
 
 router = APIRouter()
 
@@ -62,7 +61,7 @@ router = APIRouter()
 async def trigger_run(request: Request, project: str):
     project_dir = projects_dir() / project
     if not project_dir.is_dir():
-        raise NoSuchProject(project)
+        raise HTTPException(status_code=404, detail=f"No project '{project}'")
     # Set up the run (writes an initial `running` manifest), kick off execution
     # in a background thread, and redirect immediately. The run page polls.
     # _collect_bindings itself loads the version's stages (list_file_inputs), so
@@ -135,7 +134,7 @@ def _read_bust_cache(form: FormData) -> bool:
 async def run_inputs(project: str, version_id: str | None = None):
     project_dir = projects_dir() / project
     if not project_dir.is_dir():
-        raise NoSuchProject(project)
+        raise HTTPException(status_code=404, detail=f"No project '{project}'")
     return JSONResponse(list_file_inputs(project, version_id))
 
 
@@ -147,7 +146,7 @@ async def upload_input(
 ):
     project_dir = projects_dir() / project
     if not project_dir.is_dir():
-        raise NoSuchProject(project)
+        raise HTTPException(status_code=404, detail=f"No project '{project}'")
     if not file.filename:
         return JSONResponse({"ok": False, "error": "no file provided"}, status_code=400)
     path = await run_in_threadpool(
@@ -160,7 +159,7 @@ async def upload_input(
 async def runs_index(request: Request, project: str):
     pdir = projects_dir() / project
     if not pdir.is_dir():
-        raise NoSuchProject(project)
+        raise HTTPException(status_code=404, detail=f"No project '{project}'")
     # A stored version that no longer validates raises WorkflowLoadError from
     # any listing/load (shell_state's version count included) and fails this
     # page loudly — the remedy is a store migration, not a tolerant render.
@@ -179,7 +178,7 @@ async def runs_index(request: Request, project: str):
 async def run_new(request: Request, project: str, version_id: str | None = None):
     pdir = projects_dir() / project
     if not pdir.is_dir():
-        raise NoSuchProject(project)
+        raise HTTPException(status_code=404, detail=f"No project '{project}'")
     # Every stored version is runnable (resolve_version_id reads no publication
     # state), so the picker offers all of them newest-first. Registered ahead of
     # /runs/{run_id}, which would otherwise match "new" as a run id.
@@ -357,7 +356,7 @@ async def run_artifact(project: str, run_id: str, filename: str):
 async def resume_run_route(project: str, run_id: str):
     project_dir = projects_dir() / project
     if not project_dir.is_dir():
-        raise NoSuchProject(project)
+        raise HTTPException(status_code=404, detail=f"No project '{project}'")
     run_dir = runs_dir(project) / run_id
     if not (run_dir / "manifest.json").exists():
         raise HTTPException(status_code=404, detail="Run not found")

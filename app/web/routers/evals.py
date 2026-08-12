@@ -34,7 +34,6 @@ from app.web.eval_run_view import (
 )
 from app.web.loading import StageListing, load_stages_or_empty, render_frame_as_text
 from app.web.project_view import shell_state
-from app.web.errors import NoSuchProject
 from app.web.run_events import (
     EVENT_PAGE_MAX,
     page_events_before,
@@ -266,7 +265,7 @@ async def trigger_eval_run(request: Request, project: str, eval_id: str):
 def _resolve_project_dir(project: str) -> Path:
     project_dir = projects_dir() / project
     if not project_dir.is_dir():
-        raise NoSuchProject(project)
+        raise HTTPException(status_code=404, detail=f"No project '{project}'")
     return project_dir
 
 

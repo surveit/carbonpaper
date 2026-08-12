@@ -48,7 +48,6 @@ from app.web.loading import (
     load_stages_or_empty,
 )
 from app.web.project_view import shell_state
-from app.web.errors import NoSuchProject
 
 router = APIRouter()
 
@@ -59,7 +58,7 @@ def _project_dir(project_name: str) -> Path:
     """Direct-child-of-examples/ is the traversal guard delete_project's rmtree rests on."""
     target = (projects_dir() / project_name).resolve()
     if target.parent != projects_dir().resolve() or not target.is_dir():
-        raise NoSuchProject(project_name)
+        raise HTTPException(status_code=404, detail=f"No project '{project_name}'")
     return projects_dir() / project_name
 
 

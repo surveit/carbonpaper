@@ -19,7 +19,6 @@ from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
 from app.web.loading import find_workflow_stage, load_stages
 from app.web.eval_coverage import find_eval_coverages
 from app.web.stage_test_views import build_certification, shape_test_views
-from app.web.errors import NoSuchProject
 
 router = APIRouter()
 
@@ -67,7 +66,7 @@ async def node_edit(
 ):
     project_dir = projects_dir() / project
     if not project_dir.is_dir():
-        raise NoSuchProject(project)
+        raise HTTPException(status_code=404, detail=f"No project '{project}'")
 
     # The parse/validate/write core is `stage_edit.edit_stage_spec`, shared with the
     # editing agent's `edit_stage` tool; this route only maps its result onto HTTP.
@@ -87,7 +86,7 @@ async def node_generate_tests(project: str, stage_id: str):
     """Replaces the stage's existing tests."""
     project_dir = projects_dir() / project
     if not project_dir.is_dir():
-        raise NoSuchProject(project)
+        raise HTTPException(status_code=404, detail=f"No project '{project}'")
     model = project_service.project_meta(project_dir).model or "sonnet"
     try:
         session_id = generation.start_stage_test_generation(
@@ -133,7 +132,7 @@ def _find_generation_failure(messages: list[dict]) -> str | None:
 async def create_version_route(project: str, message: str = Form(...)):
     project_dir = projects_dir() / project
     if not project_dir.is_dir():
-        raise NoSuchProject(project)
+        raise HTTPException(status_code=404, detail=f"No project '{project}'")
 
     # No compiler gate: a version is a snapshot of what the author has, and the
     # Workflow page already tells them what is wrong with it. A workflow that
@@ -168,7 +167,7 @@ async def create_version_route(project: str, message: str = Form(...)):
 async def publish_version_route(project: str, version_id: str):
     project_dir = projects_dir() / project
     if not project_dir.is_dir():
-        raise NoSuchProject(project)
+        raise HTTPException(status_code=404, detail=f"No project '{project}'")
     try:
         versioning.publish_version(project_dir, version_id, reviewer="local")
     except FileNotFoundError as exc:
