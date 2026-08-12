@@ -4,6 +4,10 @@
 .spinner { width: 18px; height: 18px; border: 3px solid var(--border); border-top-color: var(--accent);
     border-radius: 50%; animation: spin .8s linear infinite; display: inline-block; flex: none; }
 .spinner[hidden] { display: none; }
+/* Beside a button rather than alone on a panel, so it matches the text it waits on. */
+.spinner.sm { width: 13px; height: 13px; border-width: 2px; vertical-align: -1px; margin-left: .45rem; }
+/* The link still works — this says the last click was heard, not that it is disabled. */
+.is-busy { opacity: .6; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ── The run header: grounding line → CTA → stage strip (app/web/run_header.py).
