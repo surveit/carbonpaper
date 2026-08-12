@@ -9,7 +9,7 @@ from app.services.project import create_project
 
 
 def test_create_project_writes_document_and_meta(projects_root):
-    project_id = create_project("My Probe!", "Find the money.", source="test")
+    project_id = create_project("My Probe!", "Find the money.", source="test").id
 
     pdir = projects_root / project_id
     assert (pdir / "document.md").read_text(encoding="utf-8") == "Find the money."
@@ -27,9 +27,9 @@ def test_create_project_rejects_empty_document(projects_root):
 
 
 def test_a_repeated_name_makes_a_second_project_and_clobbers_nothing(projects_root):
-    first = create_project("dupe", "doc", source="test")
+    first = create_project("dupe", "doc", source="test").id
 
-    second = create_project("dupe", "other doc", source="test")
+    second = create_project("dupe", "other doc", source="test").id
 
     assert first != second
     assert (projects_root / first / "document.md").read_text(encoding="utf-8") == "doc"

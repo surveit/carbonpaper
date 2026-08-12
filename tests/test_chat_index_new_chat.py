@@ -33,7 +33,7 @@ def open_session(url: str) -> str:
 
 
 def test_the_index_offers_a_new_chat_without_naming_a_project() -> None:
-    create_project("trail", "Follow the filings.", source="test")
+    create_project("trail", "Follow the filings.", source="test").id
     body = client.get("/chat").text
     assert 'action="/chat/new"' in body
     assert "New chat" in body
@@ -61,7 +61,7 @@ def test_a_projectless_session_reports_no_current_project() -> None:
 
 
 def test_a_session_opened_from_a_project_still_reports_that_project() -> None:
-    name = create_project("trail", "Follow the filings.", source="test")
+    name = create_project("trail", "Follow the filings.", source="test").id
     assert read_current_project(open_session(f"/project/{name}/edit-agent")) == name
 
 

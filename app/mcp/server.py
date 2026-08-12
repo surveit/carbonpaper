@@ -29,7 +29,6 @@ from app.tools.submitted_stage import (
 )
 from app.tools.tool_specs import SAVE_VERSION_FROM_WORKING_COPY, TOOL_SPECS
 from app.mcp.instructions import INSTRUCTIONS
-from app.models.authoring_lifecycle_note import CompilerPhase
 from app.models.review_guide import ReviewGuideDraft
 from app.services.versioning import ReviewGuide
 from app.runtime import stage_tests
@@ -37,7 +36,7 @@ from app.services import generation
 from app.services import loader
 from app.services import frame_profile
 from app.services import project as project_service
-from app.services.project import ProjectListing
+from app.services.project import Project, ProjectListing
 from app.services import terms as terms_service
 from app.services import versioning
 from app.services import workflow_test as workflow_test_service
@@ -123,13 +122,8 @@ def list_projects() -> list[ProjectListing]:
 
 
 @mcp.tool(description=TOOL_SPECS["create_project"].description)
-def create_project(name: str, document: str) -> dict[str, Any]:
-    project_id = project_service.create_project(name, document, source="mcp")
-    return {
-        "project_id": project_id,
-        "phase": CompilerPhase.TERMS.value,
-        "next": "write_terms",
-    }
+def create_project(name: str, document: str) -> Project:
+    return shared.create_project(name, document, source="mcp")
 
 
 @mcp.tool(description=TOOL_SPECS["get_project_status"].description)
@@ -186,16 +180,12 @@ def read_data_model(project_id: str) -> list[dict[str, Any]]:
 
 @mcp.tool(description=TOOL_SPECS["read_terms"].description)
 def read_terms(project_id: str) -> Terms:
-    _resolve_existing_project(project_id)
-    return terms_service.load_terms(project_id)
+    return shared.read_terms(project_id)
 
 
 @mcp.tool(description=TOOL_SPECS["write_terms"].description)
 def write_terms(project_id: str, terms: Terms) -> Terms:
-    _resolve_existing_project(project_id)
-    terms_service.write_terms(project_id, terms)
-    # Read back rather than echoed: what the project now says, not what was sent.
-    return terms_service.load_terms(project_id)
+    return shared.write_terms(project_id, terms)
 
 
 @mcp.tool(description=TOOL_SPECS["describe_workflow"].description)

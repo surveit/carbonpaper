@@ -344,8 +344,8 @@ def create_project(
     *,
     model: str = "sonnet",
     source: str,
-) -> str:
-    """Returns the project ID, which is not the name: the name is a label and may repeat."""
+) -> Project:
+    """The record's `id` is the project, and it is not the name: a name is a label and may repeat."""
     label = sanitize_project_name(name)
     doc = document.strip()
     if not doc:
@@ -362,11 +362,12 @@ def create_project(
     write_project_meta(
         project_dir, name=label, title=None, created_at=created_at, model=model, source=source,
     )
-    Project(
+    record = Project(
         id=project_id, name=label, title=None,
         model=model, source=source, authored_at=created_at,
-    ).save()
-    return project_id
+    )
+    record.save()
+    return record
 
 
 def project_exists(project_id: str) -> bool:
@@ -555,7 +556,7 @@ def import_project(
 ) -> str:
     """Returns the project ID. Importing the same bundle twice makes two projects, not a clash."""
     label = sanitize_project_name(name or wf.name)
-    project_id = create_project(label, wf.document, model=wf.model, source=wf.source)
+    project_id = create_project(label, wf.document, model=wf.model, source=wf.source).id
     pdir = workspace.resolve_project_dir(project_id)
     terms.write_terms(project_id, Terms(nouns=wf.data_model, verbs=wf.verbs))
     for i, stage in enumerate(wf.stages, start=1):

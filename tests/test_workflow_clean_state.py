@@ -36,7 +36,7 @@ def _make_load_stage(path):
 
 def _workflow_page(tmp_path, name, stages):
     _point_examples_dir_at(tmp_path)
-    project_id = create_project(name, "A workflow.", source="test")
+    project_id = create_project(name, "A workflow.", source="test").id
     compiled = tmp_path / project_id / "compiled"
     compiled.mkdir()
     for position, stage in enumerate(stages, start=1):

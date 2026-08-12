@@ -43,7 +43,7 @@ def test_round_trip_through_json_reproduces_the_source_and_mints_a_version(tmp_p
     workspace.set_projects_dir(source_examples)
 
     name = project.create_project(
-        "Round Trip Source", "Trace the shell companies.", source="test")
+        "Round Trip Source", "Trace the shell companies.", source="test").id
     pdir = source_examples / name
 
     terms.write_terms(name, Terms(nouns=_TINY_LIBRARY, verbs=[]))
@@ -143,7 +143,7 @@ def test_a_bundle_carries_the_verbs_across_and_import_writes_them(tmp_path):
     target_examples.mkdir()
     workspace.set_projects_dir(source_examples)
 
-    name = project.create_project("Verbs Source", "Flag the filings.", source="test")
+    name = project.create_project("Verbs Source", "Flag the filings.", source="test").id
     terms.write_terms(name, Terms(nouns=_TINY_LIBRARY, verbs=[_FLAG]))
 
     wf = WorkflowFile.model_validate_json(export_project(name).to_json())

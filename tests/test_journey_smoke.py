@@ -130,7 +130,7 @@ def journey_project(tmp_path, monkeypatch):
     pd.DataFrame({"name": ["a", "b"], "val": [1, 2]}).to_csv(authored, index=False)
 
     project_id = create_project(PROJECT, "Flag rows over the threshold and publish totals.",
-                                source="smoke test")
+                                source="smoke test").id
     project_dir = tmp_path / project_id
     (project_dir / "compiled").mkdir()
     for position, stage in enumerate(_workflow_stages(str(authored)), start=1):

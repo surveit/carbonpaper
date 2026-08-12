@@ -113,7 +113,7 @@ async def new_project_submit(
 ):
     try:
         project_id = project.create_project(
-            name, doc_text, model=model, source="pasted document")
+            name, doc_text, model=model, source="pasted document").id
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     project_dir = projects_dir() / project_id
