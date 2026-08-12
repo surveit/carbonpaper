@@ -9,6 +9,7 @@ from app.models import Stage, StageType
 from app.models.errors import StepRefused
 from app.models.review_guide import ReviewGuideDraft
 from app.runtime.context import RunContext
+from app.runtime.stage_tests import run_stage_tests
 from app.runtime.stages import HANDLERS
 from app.services import project, versioning
 from app.services.loader import load_workflow
@@ -43,6 +44,8 @@ _UNMATCHED = 8
 _BATCH_SIZE = 12
 # The cap the tour's first run passes as limits {"raw_filings": N}.
 _TOUR_LIMIT = 6
+# Authored on check_filings, the one stage of this workflow that may carry them.
+_SEEDED_EXAMPLES = 5
 
 _CONTRADICTS = "Contradicts"
 _ALIGNMENT_VALUES = ["Contradicts", "Matches", "Unclear", "No commitment given"]
@@ -246,6 +249,28 @@ def test_check_filings_is_grain_preserving_and_touches_nothing_else():
     for column in filings.columns:
         if column != "amount_usd":
             assert list(checked[column]) == list(filings[column])
+
+
+def test_the_seeded_examples_pass_before_anything_has_been_run():
+    """Beat 3 sends the reader to this panel; a failing case there is the tour's first impression."""
+    report = run_stage_tests(list(_load_fixture().stages))
+
+    assert report.summary.stages_run == 1
+    assert report.summary.tests_total == _SEEDED_EXAMPLES
+    assert report.count_failing_by_stage() == {}
+    # Every stage that could carry examples does.
+    assert report.untested_stages == []
+
+
+def test_every_seeded_example_is_one_of_the_bundled_filings():
+    """An invented row reads as fabrication; each case names a filing in the committed CSV."""
+    tests = _stage(_load_fixture(), "check_filings").tests or []
+    filing_ids = set(_all_filings()["filing_id"])
+
+    assert len(tests) == _SEEDED_EXAMPLES
+    for test in tests:
+        row = test.inputs["raw_filings"][0]
+        assert row["filing_id"] in filing_ids, test.name
 
 
 @pytest.mark.parametrize("spend", ["n/a", "", "one hundred thousand", "$1,0 00.50"])

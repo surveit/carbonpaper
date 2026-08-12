@@ -190,7 +190,91 @@
         ],
         "code": "import pandas as pd\n\nCURRENCY = \"$\"\nTHOUSANDS = \",\"\n\n\ndef transform(row):\n    filing_id = row[\"filing_id\"]\n    spend = _digits(row[\"amount_usd\"])\n    if spend is None:\n        raise StepRefused(\n            f\"filing {filing_id} reports its spend as {row['amount_usd']!r}, which is \"\n            f\"not a whole dollar figure — a filing whose spend cannot be read is not \"\n            f\"one this workflow can weigh against a public commitment\"\n        )\n    if not _present(row[\"specific_issues\"]):\n        raise StepRefused(\n            f\"filing {filing_id} says nothing about what it asked government for, so \"\n            f\"there is no ask to judge against its client's commitment\"\n        )\n    return {**row, \"amount_usd\": spend}\n\n\ndef _digits(value):\n    text = _present(value)\n    if text is None:\n        return None\n    stripped = text.replace(CURRENCY, \"\").replace(THOUSANDS, \"\").strip()\n    if not stripped.isdigit():\n        return None\n    return int(stripped)\n\n\ndef _present(value):\n    if value is None or bool(pd.isna(value)):\n        return None\n    text = str(value).strip()\n    return text or None\n",
         "requirements": []
-      }
+      },
+      "tests": [
+        {
+          "name": "a spend written with a currency mark and separators",
+          "description": "The bundled filing TUT-2024-0001 as it stands: '$185,000' is the number 185,000.",
+          "inputs": {
+            "raw_filings": [
+              {
+                "filing_id": "TUT-2024-0001",
+                "amount_usd": "$185,000",
+                "specific_issues": "Opposing the federal $35 monthly cap on out-of-pocket insulin costs."
+              }
+            ]
+          },
+          "expected": [
+            {
+              "filing_id": "TUT-2024-0001",
+              "amount_usd": 185000,
+              "specific_issues": "Opposing the federal $35 monthly cap on out-of-pocket insulin costs."
+            }
+          ]
+        },
+        {
+          "name": "a spend written as bare digits",
+          "description": "Filing TUT-2024-0004, its spend rewritten '38500' — the same figure, no currency mark, no separators.",
+          "inputs": {
+            "raw_filings": [
+              {
+                "filing_id": "TUT-2024-0004",
+                "amount_usd": "38500",
+                "specific_issues": "Seeking federal workforce grants for shipyard apprenticeships."
+              }
+            ]
+          },
+          "expected": [
+            {
+              "filing_id": "TUT-2024-0004",
+              "amount_usd": 38500,
+              "specific_issues": "Seeking federal workforce grants for shipyard apprenticeships."
+            }
+          ]
+        },
+        {
+          "name": "a filing whose spend is blank",
+          "description": "Filing TUT-2024-0009 with its spend emptied: a blank is not a figure, so the step must stop the run rather than pass one on.",
+          "inputs": {
+            "raw_filings": [
+              {
+                "filing_id": "TUT-2024-0009",
+                "amount_usd": "",
+                "specific_issues": "Seeking revolving fund money to replace lead service lines."
+              }
+            ]
+          },
+          "expected": null
+        },
+        {
+          "name": "a filing whose spend reads n/a",
+          "description": "Filing TUT-2024-0017 with its spend rewritten 'n/a': text nobody can read as dollars, so the step must stop the run.",
+          "inputs": {
+            "raw_filings": [
+              {
+                "filing_id": "TUT-2024-0017",
+                "amount_usd": "n/a",
+                "specific_issues": "Seeking more flexibility on annual catch limits."
+              }
+            ]
+          },
+          "expected": null
+        },
+        {
+          "name": "a filing with no account of what it asked for",
+          "description": "Filing TUT-2024-0020 with its issues line emptied: there is no ask to weigh against a commitment, so the step must stop the run.",
+          "inputs": {
+            "raw_filings": [
+              {
+                "filing_id": "TUT-2024-0020",
+                "amount_usd": "$156,000",
+                "specific_issues": ""
+              }
+            ]
+          },
+          "expected": null
+        }
+      ]
     },
     {
       "id": "matched_commitments",
