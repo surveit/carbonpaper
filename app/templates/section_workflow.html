@@ -19,7 +19,7 @@
   Context the route passes:
     state       = project.project_state(mdir); section = "workflow"
     stages      = the compiled/ stages (list of dicts; [] when none)
-    mermaid     = build_mermaid_graph(stages, state.name) | None
+    mermaid     = build_mermaid_graph(stages, state.id) | None
     type_class  = TYPE_CLASS
     type_glyph  = TYPE_GLYPH
 
@@ -28,7 +28,7 @@
 #}
 {% from "_issue_table.html" import issue_panel, issue_row %}
 {# The section key stays 'workflow' (internal); the VISIBLE tab title says Workflow. #}
-{% block title %}{{ state.meta.title or state.name }} · Workflow{% endblock %}
+{% block title %}{{ state.meta.title or state.meta.name }} · Workflow{% endblock %}
 
 {% block section_head %}
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
@@ -63,10 +63,10 @@
     {% if stages %}
     {# Running is configured on the New run page (pick version + set input paths), so
        version and inputs are never split across two surfaces. #}
-    <a href="/project/{{ state.name }}/runs/new" class="btn primary">▶ Run workflow</a>
+    <a href="/project/{{ state.id }}/runs/new" class="btn primary">▶ Run workflow</a>
     <button type="button" class="btn" id="create-version-btn">Create version</button>
     {% endif %}
-    <a href="/project/{{ state.name }}/runs" class="btn">All runs</a>
+    <a href="/project/{{ state.id }}/runs" class="btn">All runs</a>
   </div>
 </div>
 
@@ -151,7 +151,7 @@
     {# The version list lives on its own Versions tab (a child of Workflow); the
        "Create version" button above snapshots the working copy into a new one. #}
     <p class="wf-versions-link muted">Snapshots of this workflow live on the
-      <a href="/project/{{ state.name }}/workflow/versions">Versions</a> tab.</p>
+      <a href="/project/{{ state.id }}/workflow/versions">Versions</a> tab.</p>
     {% endif %}
   </div>{# /.wf-stack #}
 
@@ -160,7 +160,7 @@
   // ════ Node-click → node panel. Clicking a graph node (or an upstream-input link in
   //      the open panel) fetches its detail/edit partial (_node_panel.html) and swaps
   //      it into #stage-panel, docking it full-width below the graph. ════
-  const METHODOLOGY = {{ state.name | tojson }};
+  const METHODOLOGY = {{ state.id | tojson }};
   const panel = document.getElementById('stage-panel');
   const wfDetail = document.getElementById('wf-detail');
 

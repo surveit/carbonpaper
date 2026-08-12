@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
+from app.services.project import describe_project
+
 
 class Crumb(BaseModel):
     label: str
@@ -113,7 +115,8 @@ _PROJECTS_PICKER = "/pickers/projects"
 
 
 def _project_trail(project: str) -> list[Crumb]:
-    return [_home(), _switcher(project, _PROJECTS_PICKER)]
+    """Every caller passes an ID; the crumb READS as the label, which may repeat."""
+    return [_home(), _switcher(describe_project(project), _PROJECTS_PICKER)]
 
 
 def _runs_trail(project: str) -> list[Crumb]:

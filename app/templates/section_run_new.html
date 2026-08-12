@@ -29,7 +29,7 @@
       so it is reproducible against the exact workflow it executed.</p>
   </div>
   <div class="actions wf-actions">
-    <a href="/project/{{ state.name }}/runs" class="btn">All runs</a>
+    <a href="/project/{{ state.id }}/runs" class="btn">All runs</a>
   </div>
 </div>
 
@@ -39,7 +39,7 @@
 <div class="empty-state">
   <h2>No workflow to run</h2>
   <p>A run executes a workflow, and this project does not have one yet.</p>
-  <a href="/project/{{ state.name }}/workflow" class="btn primary">Build the workflow</a>
+  <a href="/project/{{ state.id }}/workflow" class="btn primary">Build the workflow</a>
 </div>
 {% endif %}
 {% endblock %}

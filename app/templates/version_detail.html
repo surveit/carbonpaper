@@ -8,7 +8,7 @@
            WorkflowVersion, `published` among its own attributes); mermaid
            (frozen graph string).
 #}
-{% block title %}{{ state.meta.title or state.name }} · Version {{ version.version_id }}{% endblock %}
+{% block title %}{{ state.meta.title or state.meta.name }} · Version {{ version.version_id }}{% endblock %}
 
 {# Its own trail, not the shell's: the last rung is THIS version, and it switches. #}
 {% block breadcrumbs %}{% include "_breadcrumbs.html" %}{% endblock %}
@@ -36,7 +36,7 @@
        sentence, which read the authored half as chrome. #}
     <p class="vd-meta">Read-only snapshot
       {%- if version.parent_version %}<span class="sep">·</span>cut from
-        <a href="/project/{{ state.name }}/workflow/version/{{ version.parent_version }}"><code>{{ version.parent_version }}</code></a>
+        <a href="/project/{{ state.id }}/workflow/version/{{ version.parent_version }}"><code>{{ version.parent_version }}</code></a>
       {%- else %}<span class="sep">·</span>first version{% endif %}
       <span class="sep">·</span>{{ version.stages | length }} stage{{ '' if version.stages | length == 1 else 's' }}</p>
   </div>
@@ -44,7 +44,7 @@
     {% if version.published %}
     <span class="muted">✓ published {{ version.published_at | friendly_time }}</span>
     {% else %}
-    <form action="/project/{{ state.name }}/versions/{{ version.version_id }}/publish" method="post" style="display:inline">
+    <form action="/project/{{ state.id }}/versions/{{ version.version_id }}/publish" method="post" style="display:inline">
       <button type="submit" class="btn">Publish</button>
     </form>
     <span class="muted">unpublished</span>
@@ -52,7 +52,7 @@
     {# To the run form with this version pre-picked, not straight into a run: which
        file each input reads and how many rows it takes are decisions of the run, and
        this page cannot make them. #}
-    <a href="/project/{{ state.name }}/runs/new?version_id={{ version.version_id | urlencode }}"
+    <a href="/project/{{ state.id }}/runs/new?version_id={{ version.version_id | urlencode }}"
        class="btn primary">▶ Run this version</a>
   </div>
 </div>
@@ -99,7 +99,7 @@
 
 <script>
 (function () {
-  const PROJECT = {{ state.name | tojson }};
+  const PROJECT = {{ state.id | tojson }};
   const VERSION = {{ version.version_id | tojson }};
   const panel = document.getElementById('stage-panel');
   const wfDetail = document.getElementById('wf-detail');

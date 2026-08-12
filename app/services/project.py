@@ -118,7 +118,9 @@ class ProjectMeta(BaseModel):
 
 
 class ProjectState(BaseModel):
-    name: str
+    """`id` addresses the project and every link is built from it; SHOW `meta.name`."""
+
+    id: str
     meta: ProjectMeta
     has_document: bool
     document_path: str | None
@@ -247,7 +249,7 @@ def write_project_meta(pdir: Path, **fields: Any) -> dict[str, Any]:
 
 def project_state(pdir: Path) -> ProjectState:
     pdir = Path(pdir)
-    name = pdir.name
+    project_id = pdir.name
     meta = project_meta(pdir)
 
     # ── Document ──
@@ -267,7 +269,7 @@ def project_state(pdir: Path) -> ProjectState:
     runs = _runs_summary(pdir)
 
     return ProjectState(
-        name=name,
+        id=project_id,
         meta=meta,
         has_document=has_document,
         # Absolute path string (or None) — a link target, never fabricated.

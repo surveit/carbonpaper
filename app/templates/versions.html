@@ -19,8 +19,8 @@
       workflow it executed.</p>
   </div>
   <div class="actions wf-actions">
-    <a href="/project/{{ state.name }}/workflow" class="btn">Current working copy</a>
-    <a href="/project/{{ state.name }}/runs" class="btn">Runs</a>
+    <a href="/project/{{ state.id }}/workflow" class="btn">Current working copy</a>
+    <a href="/project/{{ state.id }}/runs" class="btn">Runs</a>
   </div>
 </div>
 
@@ -32,7 +32,7 @@
     <tbody>
         {% for v in versions %}
         <tr>
-            <td><a href="/project/{{ state.name }}/workflow/version/{{ v.version_id }}"><code>{{ v.version_id }}</code></a></td>
+            <td><a href="/project/{{ state.id }}/workflow/version/{{ v.version_id }}"><code>{{ v.version_id }}</code></a></td>
             <td>{{ v.created_at | friendly_time }}</td>
             <td>{{ v.message or '' }}{% if v.reviewer %} <span class="muted">— {{ v.reviewer }}</span>{% endif %}</td>
             <td>{% if v.parent_version %}<code>{{ v.parent_version }}</code>{% else %}<span class="muted">—</span>{% endif %}</td>
@@ -52,7 +52,7 @@
   <h2>No versions yet</h2>
   <p>A version is an immutable snapshot of the current workflow, and a run pins to one —
     so there is nothing to run until you cut the first.</p>
-  <a href="/project/{{ state.name }}/workflow" class="btn primary">Create version</a>
+  <a href="/project/{{ state.id }}/workflow" class="btn primary">Create version</a>
 </div>
 {% endif %}
 {% endblock %}

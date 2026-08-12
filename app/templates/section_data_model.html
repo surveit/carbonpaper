@@ -191,9 +191,9 @@
     <div class="empty-state dm-empty-state" id="dm-empty">
       <h2>No data model yet</h2>
       <p class="muted">The data model is generated from
-        <code>examples/{{ state.name }}/document.md</code>. If you just created this
+        <code>examples/{{ state.id }}/document.md</code>. If you just created this
         project it may still be generating — reload in a moment — or (re)generate it now.</p>
-      <form method="post" action="/project/{{ state.name }}/generate">
+      <form method="post" action="/project/{{ state.id }}/generate">
         <button type="submit" class="btn primary">Generate data model</button>
       </form>
     </div>
@@ -234,7 +234,7 @@ window.focusSchema = function (name) {
   }
 
   // ════ Per-schema edit (rehomed onto /project) ══
-  const METHODOLOGY = {{ state.name | tojson }};
+  const METHODOLOGY = {{ state.id | tojson }};
 
   // ── Save an edited schema — POST json_text; on 400 render validate_named_schema
   //    issues (file untouched); on ok reload to re-render the data model. ──

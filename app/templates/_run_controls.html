@@ -23,7 +23,7 @@
   for both, so a row the script builds cannot drift from a row the server rendered.
 
   Context (inherited from the including template):
-    state       = shell_state(pdir)         — state.name for the form action
+    state       = shell_state(pdir)         — state.id for the form action
     versions    = the project's stored versions, newest-first (may be empty)
     selected_version_id = which of them the picker opens on (None with no versions)
     file_inputs = loading.list_file_inputs(pdir, selected_version_id) — [{stage_id, path}]
@@ -70,8 +70,8 @@
 {% endmacro %}
 
 {% if versions %}
-<form action="/project/{{ state.name }}/run" method="post" class="run-controls"
-      data-project="{{ state.name }}">
+<form action="/project/{{ state.id }}/run" method="post" class="run-controls"
+      data-project="{{ state.id }}">
   <label class="run-version">version
     <select name="version_id">
       {% for v in versions %}
@@ -101,6 +101,6 @@
   <h2>No version to run</h2>
   <p>A run pins to a version and reads its snapshot, so there is nothing for it to
     execute until the workflow has been snapshotted once.</p>
-  <a href="/project/{{ state.name }}/workflow" class="btn primary">Create version</a>
+  <a href="/project/{{ state.id }}/workflow" class="btn primary">Create version</a>
 </div>
 {% endif %}

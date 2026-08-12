@@ -42,25 +42,25 @@ def shell_state(pdir: Path, section: str) -> ShellState:
     return ShellState(
         **state.model_dump(),
         nav=nav,
-        crumbs=build_shell_crumbs(nav, section, state.name),
+        crumbs=build_shell_crumbs(nav, section, state.id),
         next_action=_next_action(state),
     )
 
 
-def build_shell_crumbs(nav: list[NavItem], section: str, project_name: str) -> list[Crumb]:
+def build_shell_crumbs(nav: list[NavItem], section: str, project_id: str) -> list[Crumb]:
     for item in nav:
         if item.key == section:
-            return build_section_crumbs(project_name, label=item.label)
+            return build_section_crumbs(project_id, label=item.label)
         for child in item.children:
             if child.key == section:
                 return build_section_crumbs(
-                    project_name, label=child.label, parent=(item.label, item.href)
+                    project_id, label=child.label, parent=(item.label, item.href)
                 )
     raise ValueError(f"no nav item for section '{section}' — the trail would be unlabelled")
 
 
 def build_nav(state: project.ProjectState) -> list[NavItem]:
-    base = f"/project/{state.name}"
+    base = f"/project/{state.id}"
     return [
         _nav_leaf("overview", "Overview", base),
         _nav_leaf("document", "Document", f"{base}/document"),
@@ -75,11 +75,11 @@ def build_nav(state: project.ProjectState) -> list[NavItem]:
 
 
 def _next_action(state: project.ProjectState) -> NextAction:
-    name = state.name
+    project_id = state.id
     data_model = state.data_model
     workflow = state.workflow
     runs = state.runs
-    base = f"/project/{name}"
+    base = f"/project/{project_id}"
 
     # 1. No data model → author it.
     if not data_model.present:
