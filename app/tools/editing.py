@@ -38,6 +38,9 @@ def make_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
     def get_current_project() -> str | None:
         return ctx.project_id
 
+    def create_project(name: str, document: str) -> shared.CreatedProject:
+        return shared.create_project(name, document, source="editing agent")
+
     def read_stage(project_id: str, stage_id: str) -> str:
         return project_service.read_stage(project_id, stage_id)
 
@@ -77,6 +80,7 @@ def make_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
     tools: list[Callable[..., Any]] = [
         list_projects,
         get_current_project,
+        create_project,
         read_stage,
         edit_stage,
         add_stage,
@@ -98,7 +102,9 @@ def make_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
             label=TOOL_LABELS[fn.__name__],
         )
         for fn in tools
-    ] + shared.bind("describe_workflow", "read_stage_output_rows")
+    ] + shared.bind(
+        "describe_workflow", "read_stage_output_rows", "read_terms", "write_terms"
+    )
 
 
 # ── tool input schemas + display labels ──────────────────────────────────────
@@ -111,6 +117,7 @@ def make_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
 TOOL_SCHEMAS: dict[str, ToolInputSchema] = {
     "list_projects": {},
     "get_current_project": {},
+    "create_project": shared.schema_of("create_project"),
     "read_stage": {
         "project_id": Annotated[str, "The project id (call get_current_project first)."],
         "stage_id": Annotated[str, "The stage's id, as shown by describe_workflow."],
@@ -220,6 +227,7 @@ _DESCRIPTIONS = TOOL_SPECS | {"save_version": SAVE_VERSION_FROM_DRAFT}
 TOOL_LABELS: dict[str, str] = {
     "list_projects": "Listing projects",
     "get_current_project": "Checking the current project",
+    "create_project": "Creating the project",
     "read_stage": "Reading a stage",
     "edit_stage": "Editing a stage",
     "add_stage": "Adding a stage",

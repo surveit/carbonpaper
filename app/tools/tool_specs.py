@@ -60,8 +60,15 @@ expendable — if one is lost, start a new one.""",
         description="""\
 Create a NEW project from a methodology document (prose describing how the
 investigation finds, verifies, and surfaces its claims). Writes the document
-as the project's source of record. Returns the project_id (the sanitized
-name). Fails loudly if the name is taken — never overwrites. Next: agree the
+as the project's source of record and returns the project_id every other tool
+takes.
+
+That id is MINTED, and it is not the name: `name` is a label, two projects may
+carry the same one, and a repeated name is never refused. So a project is only
+ever addressed by the id this call returns — a name you were given by a human,
+or read off a page, identifies nothing.
+
+An empty document is refused and no project is written. Next: agree the
 project's terms — the words its methodology already uses — with the user, and
 store them with write_terms.""",
     ),
@@ -110,9 +117,16 @@ has no output schema.""",
         description="""\
 Return the id of the project this session is editing, or nothing if this
 session was opened without one. Call this FIRST. If it returns an id, pass
-that id as `project_id` to the other tools. If it returns nothing, no project
-is bound: call list_projects and ask the user which one to work on — never
-guess, and never pick one for them.""",
+that id as `project_id` to the other tools.
+
+If it returns nothing, no project is bound, and there are two ways on: an
+EXISTING project, which list_projects names and the user picks — never guess,
+and never pick one for them — or a NEW one, which create_project starts from
+the methodology the user gives you.
+
+What it reports is the binding this session was OPENED with, so it keeps
+returning nothing after create_project. That is not a failure: carry the id
+create_project returned and pass it yourself.""",
     ),
     "get_project_status": ToolSpec(
         name="get_project_status",

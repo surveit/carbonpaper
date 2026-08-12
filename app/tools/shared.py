@@ -14,8 +14,15 @@ from pydantic import BaseModel
 from app.core.agent.bound_tool import BoundToolSpec
 from app.core.frames import collapse_null_forms, convert_cell_to_json_native, list_rows
 from app.core.run_status import StageStatus
+from app.models.authoring_lifecycle_note import CompilerPhase
+from app.models.terms import Terms
 from app.tools.types import ToolInputSchema
-from app.services import project as project_service, run as run_service, workspace
+from app.services import (
+    project as project_service,
+    run as run_service,
+    terms as terms_service,
+    workspace,
+)
 from app.tools.tool_specs import TOOL_SPECS
 
 _PROJECT_ID = Annotated[str, "The project's name."]
@@ -38,6 +45,32 @@ def resolve_existing_project(project_id: str) -> Path:
     if not pdir.is_dir():
         raise ValueError(f"no project '{project_id}' in the workspace")
     return pdir
+
+
+class CreatedProject(BaseModel):
+    project_id: str
+    phase: CompilerPhase
+    next: str
+
+
+def create_project(name: str, document: str, *, source: str) -> CreatedProject:
+    """`source` records WHICH surface authored the project, so it is the surface's to state."""
+    project_id = project_service.create_project(name, document, source=source)
+    return CreatedProject(
+        project_id=project_id, phase=CompilerPhase.TERMS, next="write_terms"
+    )
+
+
+def read_terms(project_id: str) -> Terms:
+    resolve_existing_project(project_id)
+    return terms_service.load_terms(project_id)
+
+
+def write_terms(project_id: str, terms: Terms) -> Terms:
+    resolve_existing_project(project_id)
+    terms_service.write_terms(project_id, terms)
+    # Read back rather than echoed: what the project now says, not what was sent.
+    return terms_service.load_terms(project_id)
 
 
 def run_workflow(
@@ -150,7 +183,11 @@ def _to_json_cell(value: object) -> object:
 
 # ── binding them onto an agent ───────────────────────────────────────────────
 
+# create_project is absent: both surfaces WRAP it to stamp their own `source`, so
+# neither binds the body. Its schema is here because both wrappers advertise it.
 _FUNCTIONS: dict[str, Callable[..., Any]] = {
+    "read_terms": read_terms,
+    "write_terms": write_terms,
     "run_workflow": run_workflow,
     "get_run_status": get_run_status,
     "sleep": sleep,
@@ -159,6 +196,29 @@ _FUNCTIONS: dict[str, Callable[..., Any]] = {
 }
 
 _SCHEMAS: dict[str, ToolInputSchema] = {
+    "create_project": {
+        "name": Annotated[
+            str,
+            "What to CALL the project — a label, shown to the human. Two projects may "
+            "share one; the id you work with comes back from this call.",
+        ],
+        "document": Annotated[
+            str,
+            "The methodology prose, whole. It becomes the project's source of record, "
+            "which every later generation reads — so send what the user wrote, never a "
+            "summary of it.",
+        ],
+    },
+    "read_terms": {"project_id": _PROJECT_ID},
+    "write_terms": {
+        "project_id": _PROJECT_ID,
+        "terms": Annotated[
+            Terms,
+            "The WHOLE vocabulary — `nouns` and `verbs` both, every time. What you send "
+            "replaces what is stored, so read_terms first and send that back with your "
+            "additions.",
+        ],
+    },
     "run_workflow": {
         "project_id": _PROJECT_ID,
         "version_id": Annotated[str, "Omit for the project's newest stored version."],
@@ -197,6 +257,9 @@ _SCHEMAS: dict[str, ToolInputSchema] = {
 }
 
 _LABELS = {
+    "create_project": "Creating the project",
+    "read_terms": "Reading the project's words",
+    "write_terms": "Storing the project's words",
     "run_workflow": "Running the workflow",
     "get_run_status": "Checking the run",
     "sleep": "Waiting",
