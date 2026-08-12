@@ -32,14 +32,16 @@
     {% for input in view.inputs %}
     <h3>input <code>{{ input.stage_id }}</code></h3>
     {% if input.rows %}
-    <table class="test-rows">
-      <thead><tr>{% for column in input.columns %}<th>{{ column }}</th>{% endfor %}</tr></thead>
-      <tbody>
-        {% for row in input.rows %}
-        <tr>{% for column in input.columns %}<td>{{ row.get(column) }}</td>{% endfor %}</tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    <div class="test-rows-scroll">
+      <table class="test-rows">
+        <thead><tr>{% for column in input.columns %}<th>{{ column }}</th>{% endfor %}</tr></thead>
+        <tbody>
+          {% for row in input.rows %}
+          <tr>{% for column in input.columns %}<td>{{ row.get(column) }}</td>{% endfor %}</tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
     {% else %}<p class="muted">no rows (empty input)</p>{% endif %}
     {% endfor %}
     {% if view.expected is none %}
@@ -48,14 +50,28 @@
     {% else %}
     <h3>expected output</h3>
     {% if view.expected.rows %}
-    <table class="test-rows">
-      <thead><tr>{% for column in view.expected.columns %}<th>{{ column }}</th>{% endfor %}</tr></thead>
-      <tbody>
-        {% for row in view.expected.rows %}
-        <tr>{% for column in view.expected.columns %}<td>{{ row.get(column) }}</td>{% endfor %}</tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    {# A shaded column is one the signature says this step WRITES; the rest are carried
+       through, standing where they stand in the input table above. The caption names them
+       too, so the mark survives without colour. Same list on every case: it is a fact
+       about the stage, not the case. #}
+    <div class="test-rows-scroll">
+      <table class="test-rows">
+        {% if view.expected.written_columns %}
+        <caption>shaded — written by this step:
+          {% for name in view.expected.written_columns %}<code>{{ name }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</caption>
+        {% endif %}
+        <thead><tr>{% for column in view.expected.columns %}
+          <th{% if column in view.expected.written_columns %} class="test-col-written"{% endif %}>{{ column }}</th>
+          {%- endfor %}</tr></thead>
+        <tbody>
+          {% for row in view.expected.rows %}
+          <tr>{% for column in view.expected.columns %}
+            <td{% if column in view.expected.written_columns %} class="test-col-written"{% endif %}>{{ row.get(column) }}</td>
+            {%- endfor %}</tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
     {% else %}<p class="muted">no rows (empty output)</p>{% endif %}
     {% endif %}
     {% if view.message %}<p class="test-message">{{ view.message }}</p>{% endif %}

@@ -30,8 +30,19 @@
 .test-status-mismatch,
 .test-status-error { background: var(--verdict-fail-bg); color: var(--bad-ink); border-color: var(--verdict-fail-bd); }
 .test-status-malformed { background: var(--verdict-warn-bg); color: var(--warn-ink); border-color: var(--verdict-warn-bd); }
+/* A row states every column, so a step over a wide table has a table wider than the panel.
+   It scrolls inside this box; without one the page itself scrolls sideways, and the shaded
+   column — the last one on an extends step — is the part that ends up off the edge. */
+.test-rows-scroll { overflow-x: auto; }
 .test-rows { border-collapse: collapse; margin: 0.3rem 0 0.6rem; }
 .test-rows th, .test-rows td { border: 1px solid var(--border); padding: 0.15rem 0.5rem; font-size: 0.85rem; }
+/* A column the step WRITES, against the ones it carries through: one flat tint the full
+   height of the column, so the eye separates the two in a pass. The caption names the same
+   columns in words, so the mark does not rest on colour. --state-review-bg is the palette's
+   blue tint — the only one that stays legible on --exec-bg, which the block around it fills. */
+.test-rows th.test-col-written,
+.test-rows td.test-col-written { background: var(--state-review-bg); }
+.test-rows caption { caption-side: top; text-align: left; font-size: 0.78rem; color: var(--muted); padding-bottom: 2px; }
 .test-message { color: var(--bad-ink); }
 .node-review-full .nr-edit-hint { margin: 0 0 10px; }
 
