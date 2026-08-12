@@ -31,14 +31,25 @@ def open_session_saying(text: str) -> str:
 def test_a_markdown_link_renders_as_an_anchor() -> None:
     sid = open_session_saying("Open the run: [run 7](http://127.0.0.1:8799/p/demo/runs/7)")
     body = client.get(f"/chat/{sid}").text
-    assert '<a href="http://127.0.0.1:8799/p/demo/runs/7">run 7</a>' in body
+    assert ('<a href="http://127.0.0.1:8799/p/demo/runs/7" target="_blank" '
+            'rel="noopener noreferrer">run 7</a>') in body
 
 
 def test_a_bare_url_renders_as_an_anchor() -> None:
     """The tutorial agent quotes run/workflow URLs verbatim, not as [text](url)."""
     sid = open_session_saying("The five stages: http://127.0.0.1:8799/p/demo/workflow")
     body = client.get(f"/chat/{sid}").text
-    assert '<a href="http://127.0.0.1:8799/p/demo/workflow">' in body
+    assert '<a href="http://127.0.0.1:8799/p/demo/workflow" target="_blank"' in body
+
+
+def test_every_link_opens_in_a_new_tab_so_the_conversation_survives_the_click() -> None:
+    """An in-app link too: the run page is where the reader goes, the chat is what they lose."""
+    rendered = str(render_markdown(
+        "[the run](/project/demo/runs/7) and [the guide](https://example.org/g)"
+    ))
+
+    assert rendered.count('target="_blank"') == 2
+    assert rendered.count('rel="noopener noreferrer"') == 2
 
 
 def test_raw_html_in_assistant_text_is_escaped_not_executed() -> None:
@@ -107,7 +118,7 @@ def test_the_swap_renders_one_segment_per_text_block_the_reply_carries() -> None
     assert [s["text"] for s in segments] == [
         "Starting the run.", "Done: [the run](http://127.0.0.1:8799/r/1)",
     ]
-    assert '<a href="http://127.0.0.1:8799/r/1">the run</a>' in segments[1]["html"]
+    assert '<a href="http://127.0.0.1:8799/r/1" target="_blank"' in segments[1]["html"]
 
 
 def test_the_swap_endpoint_404s_on_an_unknown_session() -> None:
