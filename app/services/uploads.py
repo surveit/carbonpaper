@@ -224,10 +224,10 @@ def _safe_filename(raw: str) -> str:
     return _FALLBACK_FILENAME if name in ("", ".", "..") else name
 
 
-def describe_attachment(record: UploadedFile) -> str:
+def describe_attachment(record: UploadedFile, project_name: str = "") -> str:
     """The one sentence a chat shows for an attached file AND sends to the agent."""
-    home = (f"in project {record.project_id}" if record.project_id
-            else "not in a project yet")
+    home = ("not in a project yet" if not record.project_id
+            else f"in project {project_name or record.project_id} ({record.project_id})")
     # One sentence for both: the agent reads the turn's text and never the page, so a
     # card saying one thing while the model is told another is two records of one
     # event. sha256 is in it because that is what run_workflow's `files` takes.

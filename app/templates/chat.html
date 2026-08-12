@@ -213,16 +213,33 @@ function describeBytes(n) {
 
 function showAttached(line) {
   attached = line;
-  attachedBox.textContent = line;
+  attachedBox.replaceChildren();
   attachedBox.hidden = !line;
+  if (!line) return;
+  const text = document.createElement("span");
+  text.textContent = line;
+  const drop = document.createElement("button");
+  drop.type = "button";
+  drop.className = "ac-unattach";
+  drop.textContent = "×";
+  // The bytes are already stored by now, and nothing in the app deletes a file — so
+  // this takes the file off the message, and says so rather than implying a delete.
+  drop.title = "Take this off the message. The file stays in the store.";
+  drop.addEventListener("click", () => showAttached(""));
+  attachedBox.append(text, drop);
 }
 
 function openProjectPop() {
   const box = document.getElementById("project-choices");
   box.replaceChildren();
-  PROJECTS.forEach((id) => {
+  PROJECTS.forEach((project) => {
     const b = document.createElement("button");
-    b.type = "button"; b.className = "ac-choice"; b.dataset.project = id; b.textContent = id;
+    b.type = "button"; b.className = "ac-choice"; b.dataset.project = project.id;
+    const name = document.createElement("strong");
+    name.textContent = project.name;
+    const id = document.createElement("span");
+    id.className = "ac-muted"; id.textContent = " · " + project.id;
+    b.append(name, id);
     box.appendChild(b);
   });
   projectPop.hidden = false;

@@ -61,7 +61,9 @@ def test_a_file_with_no_project_stays_unclaimed(session_id):
 
 def test_the_line_says_where_the_file_went(session_id, project_id):
     claimed = attach(session_id, project_id=project_id).json()["line"]
-    assert claimed == (f"[file] posts.csv · 13B · in project {project_id} · "
+    # The name is for whoever reads the conversation; the id is what run_workflow takes,
+    # so the line carries both rather than making one of them guess.
+    assert claimed == (f"[file] posts.csv · 13B · in project demo ({project_id}) · "
                        f"sha256 {CSV_SHA}")
 
 
@@ -91,7 +93,14 @@ def test_the_page_carries_what_an_attachment_needs(session_id, project_id):
     page = client.get(f"/chat/{session_id}").text
     assert 'id="clip"' in page          # the attach control
     assert 'id="project-pop"' in page   # and the question, for a session with no project
-    assert project_id in page           # the project it could be given to
+
+
+def test_the_picker_names_the_project_it_offers(session_id, project_id):
+    page = client.get(f"/chat/{session_id}").text
+    # A generated id says nothing to a reader deciding where their file goes, so the
+    # choice carries the name and the id rides along to identify it.
+    assert '"name": "demo"' in page or '"name":"demo"' in page
+    assert project_id in page
 
 
 # ─── The agent's side: adopting a file that arrived before any project ───────

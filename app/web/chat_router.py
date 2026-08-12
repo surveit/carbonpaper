@@ -108,7 +108,7 @@ async def chat_page(request: Request, sid: str):
         # project this session works on (None until the agent settles one), and the
         # projects it could be given to.
         "session_project": (data.get("context") or {}).get("project_id"),
-        "projects": [p.id for p in project_service.list_project_listings()],
+        "projects": [p.model_dump() for p in project_service.list_project_listings()],
         "max_upload_bytes": max_upload_bytes(),
     })
 
@@ -131,7 +131,9 @@ async def upload_chat_file(sid: str, file: UploadFile = File(...),
     # agent is told have to be the same sentence.
     return JSONResponse({"ok": True, "sha256": record.sha256, "filename": record.filename,
                          "bytes": record.byte_count, "project_id": record.project_id,
-                         "line": describe_attachment(record)})
+                         "line": describe_attachment(
+                             record, project_service.describe_project(record.project_id)
+                             if record.project_id else "")})
 
 
 def _has_unspoken_opening(data: dict) -> bool:

@@ -156,3 +156,7 @@
 .ac-choice:hover { border-color: var(--accent); }
 .ac-choice-new { border-style: dashed; }
 .ac-muted { color: var(--muted); }
+.ac-attached { display: flex; align-items: center; gap: 8px; }
+.ac-unattach { font: inherit; font-size: 15px; line-height: 1; border: 0; background: none;
+    cursor: pointer; color: var(--muted); padding: 0 4px; }
+.ac-unattach:hover { color: var(--fg); }
