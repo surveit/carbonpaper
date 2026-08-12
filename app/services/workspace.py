@@ -13,7 +13,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from app.core.paths import REPO_ROOT, repo_root as repo_root
+from app.core.paths import CARBON_PAPER_HOME, repo_root as repo_root
 from app.models import StageType
 from app.services.loader import load_compiled_dir
 # The projects storage root: <root>/<name>/ working copies live here. There is
@@ -36,7 +36,7 @@ def set_projects_dir(path: Path) -> None:
 
 
 def projects_dir() -> Path:
-    return _projects_dir if _projects_dir is not None else REPO_ROOT / "examples"
+    return _projects_dir if _projects_dir is not None else CARBON_PAPER_HOME / "examples"
 
 
 def configure_projects_dir_from_env() -> None:

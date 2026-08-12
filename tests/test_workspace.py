@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+from app.core.paths import CARBON_PAPER_HOME
 from app.services import workspace
 
 
@@ -61,3 +62,8 @@ def test_workflow_summary_reports_ids_types_and_inputs(tmp_path: Path) -> None:
     assert by_id["score"].type == "llm_transform"
     assert by_id["score"].inputs == ["load"]
     assert summary.issues == []
+
+
+def test_the_projects_root_defaults_to_the_machine_global_home(monkeypatch) -> None:
+    monkeypatch.setattr(workspace, "_projects_dir", None)
+    assert workspace.projects_dir() == CARBON_PAPER_HOME / "examples"

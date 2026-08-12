@@ -17,6 +17,11 @@ uv run python -m uvicorn app.main:app --port 8765   # web UI
 uv run python -m app.cli <project>                  # run a project's workflow from the CLI
 ```
 
+Local state lives in `~/.carbonpaper/` — `app.db` (the document store), `frames/`
+and `examples/` (the project working copies) — so every checkout and worktree
+reads and writes the one store. `CARBON_PAPER_DB_PATH` and
+`CARBON_PAPER_PROJECTS_DIR` repoint it, which is how the deploy below pins `/data`.
+
 ## Deploying to Fly.io
 
 `Dockerfile` + `fly.toml` describe a single machine with one volume mounted at

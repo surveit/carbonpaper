@@ -7,7 +7,7 @@ from __future__ import annotations
 import argparse
 
 from app.core.store_config import refuse_renamed_env_vars
-from app.seeds.bootstrap import configure_projects_dir_from_env, ensure_store_configured
+from app.seeds.bootstrap import configure_default_document_store, configure_projects_dir_from_env
 from app.seeds.seed import discover_workflow_files, seed_all
 from app.services.project import describe_project
 
@@ -24,7 +24,7 @@ def main(argv: list[str] | None = None) -> None:
     _parse_args(argv)
     refuse_renamed_env_vars()
     configure_projects_dir_from_env()
-    ensure_store_configured()
+    configure_default_document_store()
     # seed_all returns project IDs; the status line speaks in the labels the fixture
     # files are named after (see app/seeds/__init__.py), so map each id back.
     imported = {describe_project(project_id) for project_id in seed_all()}
