@@ -158,10 +158,14 @@
   // How long arriving events are pooled before one batched append.
   var FLUSH_INTERVAL_MS = 32;
 
-  // config: {root, project, runId, pageSize, stage}. `root` is the panel element
+  // config: {root, base, pageSize, stage, rowTrace}. `root` is the panel element
   // holding this log's controls — the page carries more than one (the whole run
   // at the bottom, the selected stage inside its own panel), so nothing here may
-  // reach for a document-wide id. `stage` scopes the feed server-side.
+  // reach for a document-wide id. `stage` scopes the feed server-side. `base` is
+  // the run's URL prefix, which serves /events and /events/page under it — a
+  // production run and an eval's subset run live at different prefixes and are
+  // otherwise the same log. `rowTrace` false drops the per-row lineage links,
+  // for a run whose prefix serves no trace page.
   function initRunLog(config) {
     var root = config.root;
     var find = function (cls) { return root.querySelector("." + cls); };
@@ -178,8 +182,7 @@
     var loadingOlder = false;
     var moreAvailable = true;      // until a page fetch says otherwise
     var pageSize = config.pageSize || 500;
-    var base = "/project/" + encodeURIComponent(config.project)
-      + "/runs/" + encodeURIComponent(config.runId);
+    var base = config.base;
 
     // Both feeds carry the same scope: the SSE tail and the "load older" page
     // must agree on which events exist, or paging back would widen the view.
@@ -195,7 +198,7 @@
     function options() {
       return {
         errorsOnly: errorsOnly.checked, detail: detail.checked,
-        traceUrl: traceUrl,
+        traceUrl: config.rowTrace === false ? null : traceUrl,
       };
     }
 

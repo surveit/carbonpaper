@@ -13,17 +13,10 @@ from typing import Any, Literal
 import pandas as pd
 
 from app.core.errors import EvalGrainViolationError, EvalNotScorableError, SubsetRunError
-from app.core.frames import (
-    read_frame_file,
-    read_source_csv,
-    read_source_json_lines,
-    write_frame_file,
-)
+from app.core.frames import write_frame_file
+from app.evals.dataset import read_table_ref
 from app.evals.scoring import score_expected_outputs
-from app.models import (
-    EvalConfig, EvalRun, EvalRunSettings, TableRef, Workflow, WorkflowStage,
-)
-from app.models.stages.input_data import FileFormat
+from app.models import EvalConfig, EvalRun, EvalRunSettings, Workflow, WorkflowStage
 from app.runtime.executor import run_subset
 from app.evals.compatibility import CompatibilityReport, validate_eval_compatibility
 from app.evals.dataset_columns import (
@@ -67,7 +60,7 @@ def _score_run(
     by_id = workflow.index_workflow_stages_by_id()
     override, target = by_id[config.override_stage], by_id[config.target_stage]
     assert config.table is not None  # _require_runnable checked this
-    dataset = _read_table_ref(repo_root, config.table)
+    dataset = read_table_ref(repo_root, config.table)
     run_id = _mint_run_id()
     run_dir = project_dir / "eval_run" / run_id
     started = _now()
@@ -92,7 +85,7 @@ def _build_injected_outputs(
 ) -> dict[str, pd.DataFrame]:
     outputs = {config.override_stage: _compute_override_output(override, target, config, dataset)}
     for ref in config.reference_overrides:
-        outputs[ref.stage_id] = _read_table_ref(repo_root, ref.table)
+        outputs[ref.stage_id] = read_table_ref(repo_root, ref.table)
     return outputs
 
 
@@ -151,17 +144,6 @@ def _resolve_version(project_dir: Path, version_id: str | None) -> str:
         raise EvalNotScorableError(
             "project has no workflow version to run the eval against")
     return version
-
-
-def _read_table_ref(repo_root: Path, table: TableRef) -> pd.DataFrame:
-    path = repo_root / table.path
-    if table.format == FileFormat.csv:
-        return read_source_csv(path)
-    if table.format == FileFormat.parquet:
-        return read_frame_file(path)
-    if table.format == FileFormat.json:
-        return read_source_json_lines(path)
-    raise EvalNotScorableError(f"unsupported eval dataset format: {table.format}")
 
 
 def _mint_run_id() -> str:

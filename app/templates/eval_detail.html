@@ -1,4 +1,11 @@
-{% extends "base.html" %}
+{% extends "project_shell.html" %}
+{#
+  ONE EVAL — what it checks, whether it still fits the workflow, and every run of it.
+
+  Framed like the run page's stage panel: a head naming the thing, then one tab strip
+  over the evidence. Compatibility comes FIRST inside Definition, because a broken eval
+  makes every number under it a statement about a workflow that no longer exists.
+#}
 {% block title %}{{ config.name }} · evals{% endblock %}
 
 {% block breadcrumbs %}{% include "_breadcrumbs.html" %}{% endblock %}
@@ -7,14 +14,25 @@
      "run succeeded": "ok", "stale": "warn", "never run": "pending",
      "no eval dataset yet": "pending", "run errored": "err", "broken": "err",
    } %}
+{% set run_badge = {"scored": "ok", "vetoed": "warn", "error": "err"} %}
 
-{% block content %}
-<h1>{{ config.name }} <span class="badge {{ badge_class.get(status, 'pending') }}">{{ status }}</span></h1>
-{% if config.description %}<p class="lede">{{ config.description }}</p>{% endif %}
+{% block section %}
+<div class="stage-panel-head">
+  <div class="head-line">
+    <h2>{{ config.name }}</h2>
+    <span class="badge {{ badge_class.get(status, 'pending') }}">{{ status }}</span>
+  </div>
+  {% if config.description %}<p class="stage-blurb">{{ config.description }}</p>{% endif %}
+  <p class="stage-facts">
+    <span><code>{{ config.override_stage }}</code> → <code>{{ config.target_stage }}</code>
+      · {{ config.expected_outputs | length }} check{% if config.expected_outputs | length != 1 %}s{% endif %}
+      {%- if runs %} · {{ runs | length }} run{% if runs | length != 1 %}s{% endif %}{% endif %}</span>
+  </p>
+</div>
 
 {% if has_eval_dataset and report.ok %}
 {% if versions %}
-<form action="/project/{{ project }}/evals/{{ config.id }}/run" method="post" style="display:inline;">
+<form action="/project/{{ project }}/evals/{{ config.id }}/run" method="post" class="eval-run-form">
   <select name="version_id">
     {% for v in versions %}
     <option value="{{ v.version_id }}">{{ v.version_id }}{% if not v.published %} · unpublished{% endif %}</option>
@@ -27,103 +45,138 @@
 {% endif %}
 {% endif %}
 
-<h2>Pathway</h2>
-<ul>
-  <li><strong>override → target:</strong>
-    <code>{{ config.override_stage }}</code> → <code>{{ config.target_stage }}</code></li>
-  {% if config.reference_overrides %}
-  <li><strong>reference overrides:</strong>
-    {% for ov in config.reference_overrides %}<code>{{ ov.stage_id }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</li>
+<div class="stage-tabs">
+  <div class="tabs">
+    <button data-tab="runs" class="active">Runs</button>
+    <button data-tab="definition">Definition</button>
+    <button data-tab="dataset">Dataset</button>
+  </div>
+</div>
+
+<div class="panes">
+
+  {# ─────────── RUNS — what this eval has actually said ─────────── #}
+  <div class="pane" data-pane="runs">
+  {% if runs_error %}
+    <div class="load-issues">{{ runs_error }}</div>
+  {% elif runs %}
+    <table class="table">
+      <thead><tr><th>run id</th><th>started</th><th>version</th><th>status</th><th>accuracy</th></tr></thead>
+      <tbody>
+        {% for r in runs %}
+        <tr>
+          <td><a href="/project/{{ project }}/evals/{{ config.id }}/runs/{{ r.id }}"><code>{{ r.id }}</code></a></td>
+          <td>{% if r.started_at %}{{ r.started_at | friendly_time }}{% else %}—{% endif %}</td>
+          <td><code>{{ r.workflow_version }}</code></td>
+          <td><span class="badge {{ run_badge.get(r.status, 'pending') }}">{{ r.status }}</span></td>
+          {# Only what the run stored. A run that recorded no accuracy gets a dash. #}
+          <td>{% if r.metrics.get('accuracy') is not none %}{{ "%.1f"|format(100 * r.metrics['accuracy']) }}%{% else %}—{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <div class="empty-state">
+      <h2>Never run</h2>
+      <p class="muted">This eval has no recorded runs.</p>
+    </div>
   {% endif %}
-  {% if executing %}
-  <li><strong>executing stages:</strong>
-    {% for s in executing %}<code>{{ s }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</li>
+  </div>
+
+  {# ─────────── DEFINITION — whether it still fits, then what it checks ─────────── #}
+  <div class="pane" data-pane="definition" hidden>
+    {% if report.ok %}
+    <p><span class="badge ok">ok</span> This eval fits the workflow as it stands now.</p>
+    {% else %}
+    <div class="load-issues">
+      <strong>{{ report.problems|length }} problem(s):</strong>
+      <ul>{% for p in report.problems %}<li>{{ p }}</li>{% endfor %}</ul>
+    </div>
+    {% endif %}
+
+    <h3>Scoring rules</h3>
+    <table class="table">
+      <thead><tr><th>target column</th><th>metric</th><th>tolerance</th></tr></thead>
+      <tbody>
+        {% for check in config.expected_outputs %}
+        <tr>
+          <td><code>{{ check.output_column }}</code></td>
+          <td>{{ check.metric }}</td>
+          <td>{{ check.tolerance if check.tolerance is not none else '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% if config.metrics %}
+    <p><strong>rollup metrics:</strong>
+      {% for m in config.metrics %}<code>{{ m }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</p>
+    {% endif %}
+    {% if config.code %}
+    <p><strong>code scorer:</strong> <code>{{ config.code.module }}.{{ config.code.function }}</code></p>
+    {% endif %}
+
+    <h3>Pathway</h3>
+    <dl class="kv">
+      <dt>override → target</dt>
+      <dd><code>{{ config.override_stage }}</code> → <code>{{ config.target_stage }}</code></dd>
+      {% if config.reference_overrides %}
+      <dt>reference overrides</dt>
+      <dd>{% for ov in config.reference_overrides %}<code>{{ ov.stage_id }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</dd>
+      {% endif %}
+      {% if executing %}
+      <dt>executing stages</dt>
+      <dd>{% for s in executing %}<code>{{ s }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</dd>
+      {% endif %}
+    </dl>
+  </div>
+
+  {# ─────────── DATASET — the fixed rows every run scores against ─────────── #}
+  <div class="pane" data-pane="dataset" hidden>
+  {% if has_eval_dataset %}
+    <p class="lede"><code>{{ config.table.path }}</code> ({{ config.table.format }})</p>
+    {% if dataset_error %}
+    <div class="load-issues">{{ dataset_error }}</div>
+    {% else %}
+    {% if dataset_capped %}<p class="lede">Showing the first {{ dataset_cap }} rows.</p>{% endif %}
+    <p class="muted">Click any clipped cell to expand it (hover shows the full value).</p>
+    {# The row-holding cells are never truncated: this page offers no download, so a
+       cut value would be unreachable. Clipping is CSS, and static/cell-expand.js
+       takes the click. #}
+    <div class="table-scroll">
+    <table class="data-preview">
+      <thead><tr><th class="row-num">#</th>{% for c in dataset_columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+      <tbody>
+        {% for row in dataset_rows %}
+        <tr><td class="row-num muted">{{ loop.index }}</td>
+          {%- for c in dataset_columns %}{% set v = row.get(c, '') | string %}{% if v[:4] == 'http' %}<td class="cell-url"><a href="{{ v }}" target="_blank" rel="noopener">{{ v }}</a></td>{% else %}<td class="cell-clip" title="{{ v }}">{{ v }}</td>{% endif %}{% endfor %}</tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% endif %}
+  {% else %}
+    <div class="empty-state">
+      <h2>No eval dataset yet</h2>
+      <p class="muted">This eval can't run until a dataset is attached. Attaching happens in
+        the authoring form (coming in a later change).</p>
+    </div>
   {% endif %}
-</ul>
+  </div>
 
-<h2>Compatibility</h2>
-{% if report.ok %}
-<p><span class="badge ok">ok</span> This eval fits the workflow as it stands now.</p>
-{% else %}
-<div class="load-issues">
-  <strong>{{ report.problems|length }} problem(s):</strong>
-  <ul>{% for p in report.problems %}<li>{{ p }}</li>{% endfor %}</ul>
-</div>
-{% endif %}
+</div>{# /panes #}
 
-<h2>Eval dataset</h2>
-{% if has_eval_dataset %}
-<p class="lede"><code>{{ config.table.path }}</code> ({{ config.table.format }})</p>
-{% if dataset_error %}
-<div class="load-issues">{{ dataset_error }}</div>
-{% else %}
-{% if dataset_capped %}<p class="lede">Showing the first {{ dataset_cap }} rows.</p>{% endif %}
-<p class="muted">Click any clipped cell to expand it (hover shows the full value).</p>
-{# The row-holding cells are never truncated: this page offers no download, so a
-   cut value would be unreachable. Clipping is CSS, and static/cell-expand.js
-   takes the click. #}
-<div class="table-scroll">
-<table class="data-preview">
-  <thead><tr><th class="row-num">#</th>{% for c in dataset_columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
-  <tbody>
-    {% for row in dataset_rows %}
-    <tr><td class="row-num muted">{{ loop.index }}</td>
-      {%- for c in dataset_columns %}{% set v = row.get(c, '') | string %}{% if v[:4] == 'http' %}<td class="cell-url"><a href="{{ v }}" target="_blank" rel="noopener">{{ v }}</a></td>{% else %}<td class="cell-clip" title="{{ v }}">{{ v }}</td>{% endif %}{% endfor %}</tr>
-    {% endfor %}
-  </tbody>
-</table>
-</div>
-{% endif %}
-{% else %}
-<div class="empty-state">
-  <h2>No eval dataset yet</h2>
-  <p class="muted">This eval can't run until a dataset is attached. Attaching happens in
-    the authoring form (coming in a later change).</p>
-</div>
-{% endif %}
-
-<h2>Scoring rules</h2>
-<table class="table">
-  <thead><tr><th>target column</th><th>metric</th><th>tolerance</th></tr></thead>
-  <tbody>
-    {% for check in config.expected_outputs %}
-    <tr>
-      <td><code>{{ check.output_column }}</code></td>
-      <td>{{ check.metric }}</td>
-      <td>{{ check.tolerance if check.tolerance is not none else '—' }}</td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
-{% if config.metrics %}
-<p><strong>rollup metrics:</strong>
-  {% for m in config.metrics %}<code>{{ m }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</p>
-{% endif %}
-{% if config.code %}
-<p><strong>code scorer:</strong> <code>{{ config.code.module }}.{{ config.code.function }}</code></p>
-{% endif %}
-
-<h2>Run history</h2>
-{% if runs_error %}
-<div class="load-issues">{{ runs_error }}</div>
-{% elif runs %}
-<table class="table">
-  <thead><tr><th>run id</th><th>started</th><th>version</th><th>status</th></tr></thead>
-  <tbody>
-    {% for r in runs %}
-    <tr>
-      <td><a href="/project/{{ project }}/evals/{{ config.id }}/runs/{{ r.id }}"><code>{{ r.id }}</code></a></td>
-      <td>{% if r.started_at %}{{ r.started_at | friendly_time }}{% else %}—{% endif %}</td>
-      <td><code>{{ r.workflow_version }}</code></td>
-      <td>{{ r.status }}</td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
-{% else %}
-<div class="empty-state">
-  <h2>Never run</h2>
-  <p class="muted">This eval has no recorded runs.</p>
-</div>
-{% endif %}
+<script>
+(function () {
+  const tabs = document.querySelector('.stage-tabs');
+  const panes = document.querySelectorAll('.pane');
+  tabs.querySelectorAll('[data-tab]').forEach(function (button) {
+    button.addEventListener('click', function () {
+      tabs.querySelectorAll('[data-tab]').forEach(function (b) {
+        b.classList.toggle('active', b === button);
+      });
+      panes.forEach(function (p) { p.hidden = p.dataset.pane !== button.dataset.tab; });
+    });
+  });
+})();
+</script>
 {% endblock %}

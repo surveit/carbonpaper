@@ -1,4 +1,4 @@
-"""The Data pane's `llm-stats` block over two runs of one llm_transform, model
+"""The Data pane's `stat-strip` block over two runs of one llm_transform, model
 stubbed: the first pays, the second is answered entirely by the row cache and so
 writes no `llm_usage` at all. A block keyed off usage renders nothing for the
 second, which is exactly what a stage with no model looks like."""
@@ -82,7 +82,7 @@ def _panel(run_id: str) -> str:
 
 def test_the_paying_run_still_reports_its_calls_and_cost(project: Path) -> None:
     html = _panel(_run(project))
-    assert "llm-stats" in html
+    assert "stat-strip" in html
     assert "$0.50" in html  # two rows at the stub's $0.25 each
     assert "Reused, not recomputed" not in html
 
@@ -90,7 +90,7 @@ def test_the_paying_run_still_reports_its_calls_and_cost(project: Path) -> None:
 def test_the_replayed_run_says_so_where_the_cost_would_be(project: Path) -> None:
     _run(project)
     replayed = _panel(_run(project))
-    assert "llm-stats" in replayed
+    assert "stat-strip" in replayed
     assert "Reused, not recomputed" in replayed
     assert "2 of 2 rows" in replayed
     assert "the model was not called in this run" in replayed

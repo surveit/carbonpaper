@@ -1,0 +1,167 @@
+"""The eval run page's per-row view: what each dataset row expected, what the
+target stage produced, and whether the two matched.
+
+The scored checks are read off the RESULT table, not the config: the config may
+have moved since, and the run is the record of what was actually compared.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pandas as pd
+from pydantic import BaseModel
+
+from app.core.errors import EvalNotScorableError
+from app.core.frames import read_frame_file
+from app.evals.dataset import read_table_ref
+from app.models import TableRef
+from app.web.loading import render_frame_as_text
+
+# The per-check column triple app.evals.scoring writes into result.parquet.
+_EXPECTED, _ACTUAL, _MATCH = "__expected", "__actual", "__match"
+
+# Rows rendered in the per-row table; the run may have scored more.
+MAX_SCORED_ROWS = 500
+
+
+class CheckTally(BaseModel):
+    """`matched` counts every scored row, not only the ones the table below shows."""
+
+    column: str
+    matched: int
+
+
+class ScoredCell(BaseModel):
+    expected: str
+    actual: str
+    matched: bool
+
+
+class ScoredRow(BaseModel):
+    ordinal: int
+    passed: bool
+    cells: list[ScoredCell]
+    inputs: list[str]
+
+
+class EvalRowsView(BaseModel):
+    """`rows` is empty whenever `error` is set — an unreadable table scores nothing."""
+
+    checks: list[CheckTally]
+    input_columns: list[str]
+    rows: list[ScoredRow]
+    rows_total: int
+    rows_failed: int
+    capped: bool
+    error: str | None = None
+    # Why the dataset columns are absent, where the result table itself read fine.
+    input_error: str | None = None
+
+
+def build_eval_rows(result_path: Path, dataset: TableRef | None, repo_root: Path) -> EvalRowsView:
+    try:
+        result = read_frame_file(result_path)
+    except (OSError, ValueError) as exc:
+        return _empty_view(str(exc))
+    checks = find_scored_checks(result)
+    if not checks:
+        return _empty_view(
+            f"{result_path.name} holds no scored check columns — nothing to show row by row")
+    inputs, input_error = _read_dataset_inputs(dataset, repo_root, checks, len(result))
+    return _assemble_view(result, checks, inputs, input_error)
+
+
+def find_scored_checks(result: pd.DataFrame) -> list[str]:
+    """A check is scored only where all three of its columns are present."""
+    names = set(result.columns)
+    return [
+        str(column)[: -len(_MATCH)]
+        for column in result.columns
+        if str(column).endswith(_MATCH)
+        and {f"{str(column)[: -len(_MATCH)]}{_EXPECTED}",
+             f"{str(column)[: -len(_MATCH)]}{_ACTUAL}"} <= names
+    ]
+
+
+# ── The scored rows ──────────────────────────────────────────────────────────
+
+def _assemble_view(
+    result: pd.DataFrame, checks: list[str],
+    inputs: pd.DataFrame | None, input_error: str | None,
+) -> EvalRowsView:
+    passed = _read_row_verdicts(result, checks)
+    shown = min(len(result), MAX_SCORED_ROWS)
+    text = render_frame_as_text(result.head(shown))
+    input_text = None if inputs is None else render_frame_as_text(inputs.head(shown))
+    return EvalRowsView(
+        checks=[CheckTally(column=check, matched=int(result[f"{check}{_MATCH}"].sum()))
+                for check in checks],
+        input_columns=[] if input_text is None else [str(c) for c in input_text.columns],
+        rows=[
+            ScoredRow(
+                ordinal=position + 1,
+                passed=passed[position],
+                cells=[_build_cell(text, result, check, position) for check in checks],
+                inputs=([] if input_text is None
+                        else [str(v) for v in input_text.iloc[position]]),
+            )
+            for position in range(shown)
+        ],
+        rows_total=len(result),
+        rows_failed=sum(1 for verdict in passed if not verdict),
+        capped=len(result) > shown,
+        input_error=input_error,
+    )
+
+
+def _build_cell(
+    text: pd.DataFrame, result: pd.DataFrame, check: str, position: int
+) -> ScoredCell:
+    return ScoredCell(
+        expected=str(text[f"{check}{_EXPECTED}"].iloc[position]),
+        actual=str(text[f"{check}{_ACTUAL}"].iloc[position]),
+        matched=bool(result[f"{check}{_MATCH}"].iloc[position]),
+    )
+
+
+def _read_row_verdicts(result: pd.DataFrame, checks: list[str]) -> list[bool]:
+    """Falls back to the checks: `row_passed` is what scoring writes, and it means all of them."""
+    if "row_passed" in result.columns:
+        return [bool(v) for v in result["row_passed"]]
+    return [
+        all(bool(result[f"{check}{_MATCH}"].iloc[position]) for check in checks)
+        for position in range(len(result))
+    ]
+
+
+# ── The dataset columns the model was given ──────────────────────────────────
+
+def _read_dataset_inputs(
+    dataset: TableRef | None, repo_root: Path, checks: list[str], scored_rows: int
+) -> tuple[pd.DataFrame | None, str | None]:
+    if dataset is None:
+        return None, "this eval has no dataset attached, so the scored inputs can't be shown"
+    try:
+        frame = read_table_ref(repo_root, dataset)
+    except (OSError, ValueError, EvalNotScorableError) as exc:
+        return None, f"could not read {dataset.path}: {exc}"
+    if len(frame) != scored_rows:
+        # Alignment is by position, so a dataset edited since the run would put a
+        # different row's text beside this run's verdict.
+        return None, (
+            f"{dataset.path} now holds {len(frame)} row(s) but this run scored "
+            f"{scored_rows} — it changed since, so its rows can't be lined up with these")
+    return frame.drop(columns=_find_expected_columns(frame, checks)), None
+
+
+def _find_expected_columns(frame: pd.DataFrame, checks: list[str]) -> list[str]:
+    """The dataset's expected columns, which the scored cells already carry."""
+    names = {str(c) for c in frame.columns}
+    return [name for check in checks
+            for name in (check, f"output.{check}") if name in names]
+
+
+def _empty_view(error: str) -> EvalRowsView:
+    return EvalRowsView(checks=[], input_columns=[], rows=[], rows_total=0,
+                        rows_failed=0, capped=False, error=error)

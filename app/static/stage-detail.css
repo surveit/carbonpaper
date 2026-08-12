@@ -38,8 +38,9 @@
     font-size: .85rem;
 }
 
-/* What a stage's model calls cost, at the head of the run panel's Data pane. */
-dl.llm-stats {
+/* A row of measured figures at the head of a pane — what a stage's model calls
+   cost, what an eval run scored. Whatever it holds is COUNTED, never estimated. */
+dl.stat-strip {
     display: flex;
     flex-wrap: wrap;
     gap: 0;
@@ -48,27 +49,27 @@ dl.llm-stats {
     border-radius: 7px;
     overflow: hidden;
 }
-dl.llm-stats > div {
+dl.stat-strip > div {
     flex: 1 1 auto;
     min-width: 104px;
     padding: 8px 12px;
     border-right: 1px solid var(--border);
 }
-dl.llm-stats > div:last-child { border-right: 0; }
-dl.llm-stats dt {
+dl.stat-strip > div:last-child { border-right: 0; }
+dl.stat-strip dt {
     font-size: 10px;
     letter-spacing: 0.1em;
     text-transform: uppercase;
     color: var(--muted);
     margin-bottom: 3px;
 }
-dl.llm-stats dd {
+dl.stat-strip dd {
     margin: 0;
     font-size: 15px;
     font-weight: 600;
     font-variant-numeric: tabular-nums;
 }
-dl.llm-stats dd code { font-size: 13px; font-weight: 500; }
+dl.stat-strip dd code { font-size: 13px; font-weight: 500; }
 
 .notes-block {
     background: var(--warn-bg);

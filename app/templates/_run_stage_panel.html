@@ -107,7 +107,7 @@
     {% set llm = stage_def.llm if stage_def else None %}
     {% if llm or (u and u.calls) %}
     {% set batch = llm.batch_size if llm else None %}
-    <dl class="llm-stats">
+    <dl class="stat-strip">
         {% if llm %}
         <div><dt>model</dt><dd><code>{{ llm.model }}</code></dd></div>
         {% endif %}
