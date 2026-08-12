@@ -736,9 +736,9 @@ def test_the_report_step_refuses_a_contradiction_it_cannot_print_both_sides_of(t
         _publish_a_report(tmp_path, df)
 
 
-def test_the_report_step_refuses_a_reviewed_judgment_nobody_signed(tmp_path):
+def test_the_report_step_refuses_a_reviewed_judgment_nobody_reviewed(tmp_path):
     """A verdict with no reviewer on it is the model's, and is not published as a person's."""
     df = _three_filings().iloc[[0]].assign(reviewer=None)
 
-    with pytest.raises(StepRefused, match="cannot say who signed it"):
+    with pytest.raises(StepRefused, match="cannot say who reviewed it"):
         _publish_a_report(tmp_path, df)

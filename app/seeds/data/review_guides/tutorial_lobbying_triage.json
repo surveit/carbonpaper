@@ -50,7 +50,7 @@
     },
     {
       "title": "Publish the report",
-      "prose": "What you hand to someone who was not here — open it under Published, below. After this: one page per filing, each row linked back to its own lineage, each printed contradiction signed by whoever kept it.",
+      "prose": "What you hand to someone who was not here — open it under Published, below. After this: one page per filing, each row linked back to its own lineage, each printed contradiction naming whoever reviewed it.",
       "stage_ids": [
         "publish_report"
       ],
