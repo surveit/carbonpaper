@@ -5,14 +5,6 @@
 <div class="empty-state">
     <h2>{{ status }} — {{ headline }}</h2>
     <p class="muted">{{ detail }}</p>
-    {% if project_may_be_deleted %}
-    {# Deleting a project removes its working copy and keeps its store documents, so a
-       link to a deleted one still resolves to a name the store knows. The address is
-       not the problem, and saying so stops the reader hunting for a typo. #}
-    <p class="muted">A project is deleted by removing its files, and its links outlive
-        it. This address is intact; the project it names is gone, or was never in this
-        workspace.</p>
-    {% endif %}
     <a class="btn" href="/">All projects</a>
 </div>
 {% endblock %}

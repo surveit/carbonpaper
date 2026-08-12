@@ -13,7 +13,7 @@ from starlette.requests import Request
 
 from app.main import app
 from app.services import workspace
-from app.web.errors import NoSuchProject, render_error
+from app.web.errors import render_error
 
 client = TestClient(app)
 
@@ -43,12 +43,6 @@ def test_a_browser_gets_a_page_naming_what_was_not_found() -> None:
     assert 'href="/"' in r.text
 
 
-def test_the_page_says_a_deleted_project_is_gone_rather_than_the_link_wrong() -> None:
-    r = client.get(f"/project/{_GONE}", headers=_BROWSER)
-
-    assert "This address is intact; the project it names is gone" in r.text
-
-
 def test_a_404_for_no_route_at_all_is_a_page_too() -> None:
     """The dead link in a deck is usually a path no router claims, not a missing project."""
     r = client.get("/no/such/place", headers=_BROWSER)
@@ -56,7 +50,6 @@ def test_a_404_for_no_route_at_all_is_a_page_too() -> None:
     assert r.status_code == 404
     assert r.headers["content-type"].startswith("text/html")
     assert "There is no page at this address." in r.text
-    assert "project it names is gone" not in r.text
 
 
 def test_the_apps_own_fetch_still_reads_detail() -> None:
@@ -103,13 +96,6 @@ async def test_an_exception_that_is_not_an_http_one_is_re_raised_untouched() -> 
     """Swallowing it here would turn a traceback into a tidy page and lose the fault."""
     with pytest.raises(RuntimeError, match="the actual fault"):
         await render_error(_browser_request("/"), RuntimeError("the actual fault"))
-
-
-def test_the_project_404_carries_its_own_type_everywhere_it_is_raised() -> None:
-    """The page's 'it is gone' paragraph is keyed off the type, not off the detail text."""
-    assert isinstance(NoSuchProject("x"), HTTPException)
-    assert NoSuchProject("x").status_code == 404
-    assert NoSuchProject("x").detail == "No project 'x'"
 
 
 def _browser_request(path: str) -> Request:
