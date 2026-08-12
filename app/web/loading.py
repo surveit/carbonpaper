@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import shutil
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
@@ -32,7 +31,7 @@ from app.services.loader import (
     load_compiled_dir,
 )
 from app.services.versioning import list_versions, load_version_stages
-from app.services.project import describe_project
+from app.services.project import read_project_name
 from app.services.terms import count_nouns
 from app.services.workspace import resolve_project_dir
 from app.web.config import projects_dir
@@ -66,7 +65,7 @@ def _build_project_card(p: Path) -> ProjectCard | None:
         return None
     return ProjectCard(
         id=p.name,
-        label=describe_project(p.name),
+        label=read_project_name(p.name),
         has_document=has_document,
         has_workflow=has_workflow,
         has_schemas=has_schemas,
@@ -146,25 +145,6 @@ def list_file_inputs(project: str, version_id: str | None = None) -> list[dict[s
         for s in stages
         if s.type == StageType.input_data and s.connector.kind == "file"
     ]
-
-
-# ─── Uploaded run-input files ────────────────────────────────────────────────
-
-def _safe_component(raw: str, fallback: str) -> str:
-    """Path('../..').name is '..', not '' — hence the explicit specials check."""
-    name = Path(raw).name
-    return fallback if name in ("", ".", "..") else name
-
-
-def save_uploaded_input(project_dir: Path, stage_id: str, filename: str, src) -> Path:
-    safe_stage = _safe_component(stage_id, "input")
-    safe_name = _safe_component(filename, "upload.dat")
-    dest_dir = project_dir / "uploads" / safe_stage
-    dest_dir.mkdir(parents=True, exist_ok=True)
-    dest = dest_dir / safe_name
-    with dest.open("wb") as out:
-        shutil.copyfileobj(src, out)
-    return dest.resolve()
 
 
 # ─── Runs & manifests ────────────────────────────────────────────────────────

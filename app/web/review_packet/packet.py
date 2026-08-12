@@ -99,7 +99,7 @@ def _load_pinned_workflow(
 
 def _dump_workflow(workflow_stages: list[WorkflowStage]) -> str:
     return json.dumps(
-        [_describe_workflow_stage(resolved) for resolved in workflow_stages],
+        [_read_workflow_summary_stage(resolved) for resolved in workflow_stages],
         indent=2,
         sort_keys=True,
     )
@@ -108,7 +108,7 @@ def _dump_workflow(workflow_stages: list[WorkflowStage]) -> str:
 # The packet is read with no application behind it, so each stage carries the
 # schemas the app would otherwise resolve for its reader: what each input supplied
 # and what the stage emitted.
-def _describe_workflow_stage(workflow_stage: WorkflowStage) -> dict[str, Any]:
+def _read_workflow_summary_stage(workflow_stage: WorkflowStage) -> dict[str, Any]:
     spec = stage_to_spec_dict(workflow_stage.stage)
     spec["inputs"] = [
         {

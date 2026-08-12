@@ -22,6 +22,7 @@ from app.core.agent.store import open_session_store
 from app.main import app as fastapi_app
 from app.models.stages.input_data import InputDataStage
 from app.services import project as project_service
+from app.services.uploads import resolve_file_binding
 from app.services.loader import load_workflow
 from app.runtime.trace import trace_row, trace_to_dict
 from app.tools.editing import EditingContext, make_editing_tools
@@ -36,7 +37,7 @@ _EXPECTED_TOOLS = {
     "run_workflow",
     "get_run_status",
     "sleep",
-    "describe_workflow",
+    "read_workflow_summary",
 }
 
 
@@ -77,7 +78,7 @@ def test_the_tutorial_agent_gets_none_of_the_editing_tools() -> None:
 
     assert "add_stage" in editing and "save_version" in editing  # the list is real
     # The overlap is the shared READ tools; nothing that writes.
-    assert bare & editing == {"describe_workflow", "read_stage_output_rows"}
+    assert bare & editing == {"read_workflow_summary", "read_stage_output_rows"}
     for editing_only in ("add_stage", "edit_stage", "remove_stage", "save_version",
                          "create_draft", "set_draft_stage", "write_review_guide"):
         assert editing_only not in bare
@@ -88,10 +89,11 @@ def test_the_seeded_project_keeps_no_path_of_its_own(projects_root: Path) -> Non
     seeded = _seed_a_tour()
 
     assert seeded["project"]["id"] in project_service.list_projects()
-    bindings = seeded["input_bindings"]
-    assert set(bindings) == {"raw_filings", "public_commitments"}
-    assert all(Path(b["path"]).is_absolute() and Path(b["path"]).is_file()
-               for b in bindings.values())
+    files = seeded["input_files"]
+    assert set(files) == {"raw_filings", "public_commitments"}
+    # A sha256 the project holds, not a path baked into the workflow.
+    assert all(resolve_file_binding(seeded["project"]["id"], sha)["path"]
+               for sha in files.values())
 
     sources = [s for s in load_workflow(projects_root / seeded["project"]["id"])
                if isinstance(s, InputDataStage)]
@@ -195,7 +197,7 @@ def test_run_workflow_passes_limits_through_to_the_run_service(
 
     tool = next(t for t in _tools() if t.name == "run_workflow")
     out = _call(tool, {"project_id": seeded["project"]["id"], "limits": {"raw_filings": 6},
-                       "bindings": seeded["input_bindings"]})
+                       "files": seeded["input_files"]})
     started = json.loads(out["content"][0]["text"])
 
     assert seen["project"] == seeded["project"]["id"]
@@ -226,7 +228,7 @@ def test_a_real_run_resolves_the_bound_csv_and_honours_the_row_cap(
 
     tool = next(t for t in _tools() if t.name == "run_workflow")
     out = _call(tool, {"project_id": seeded["project"]["id"], "limits": {"raw_filings": 6},
-                       "bindings": seeded["input_bindings"]})
+                       "files": seeded["input_files"]})
     started = json.loads(out["content"][0]["text"])
 
     status = run_service.read_run_status(seeded["project"]["id"], started["run_id"])
@@ -281,7 +283,7 @@ def _run_the_tour_capped(monkeypatch: pytest.MonkeyPatch) -> tuple[dict[str, Any
     out = _call(
         next(t for t in _tools() if t.name == "run_workflow"),
         {"project_id": seeded["project"]["id"], "limits": {"raw_filings": 6},
-         "bindings": seeded["input_bindings"]},
+         "files": seeded["input_files"]},
     )
     return seeded, json.loads(out["content"][0]["text"])["run_id"]
 

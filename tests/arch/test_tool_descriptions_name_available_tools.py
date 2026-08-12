@@ -73,5 +73,5 @@ def test_the_detector_sees_the_cross_references_the_descriptions_carry() -> None
     for surface in (find_mcp_descriptions(), find_editing_descriptions()):
         named = find_names_a_description_uses(surface["add_stage"], known)
         assert {"edit_stage", "read_stage"} <= named
-        described = find_names_a_description_uses(surface["describe_workflow"], known)
+        described = find_names_a_description_uses(surface["read_workflow_summary"], known)
         assert "read_stage" in described

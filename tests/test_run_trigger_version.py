@@ -178,7 +178,7 @@ def test_posting_the_selected_versions_own_authored_path_is_not_a_binding(
     proj = project_versions_diff_paths
     older = list_versions(proj)[-1].version_id  # v1, authored a.csv
     resp = client.post("/project/demo/run",
-                       data={"version_id": older, "binding__load": str(proj / "a.csv")},
+                       data={"version_id": older, "binding__load": ""},
                        follow_redirects=False)
     assert resp.status_code == 303
     assert _manifest(proj)["input_bindings"]["load"]["source"] == "workflow"
@@ -192,8 +192,10 @@ def test_new_run_page_binds_the_named_versions_own_input_paths(
 
     resp = client.get(f"/project/demo/runs/new?version_id={older}")
 
+    # The authored path is the picker's blank option, so the page names v1's file
+    # and not v2's — the fields describe whichever version is selected.
     authored, other = str(proj / "a.csv"), str(proj / "b.csv")
-    assert f'value="{authored}"' in resp.text
+    assert authored in resp.text
     assert other not in resp.text
 
 
@@ -204,7 +206,10 @@ def test_run_inputs_endpoint_returns_the_selected_versions_inputs(
     versions = list_versions(proj)  # newest-first: v2 (b.csv), v1 (a.csv)
     latest, older = versions[0].version_id, versions[-1].version_id
 
-    latest_inputs = client.get(f"/project/demo/run-inputs?version_id={latest}").json()
-    assert latest_inputs == [{"stage_id": "load", "path": str(proj / "b.csv")}]
-    older_inputs = client.get(f"/project/demo/run-inputs?version_id={older}").json()
-    assert older_inputs[0]["path"] == str(proj / "a.csv")
+    latest = client.get(f"/project/demo/run-inputs?version_id={latest}").json()
+    assert latest["inputs"] == [
+        {"stage_id": "load", "authored_path": str(proj / "b.csv")}]
+    older = client.get(f"/project/demo/run-inputs?version_id={older}").json()
+    assert older["inputs"][0]["authored_path"] == str(proj / "a.csv")
+    # The files are project-wide, so both answers carry the same list.
+    assert latest["files"] == older["files"]

@@ -103,7 +103,7 @@ def make_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
         )
         for fn in tools
     ] + shared.bind(
-        "describe_workflow", "read_stage_output_rows", "read_terms", "write_terms"
+        "read_workflow_summary", "read_stage_output_rows", "read_terms", "write_terms"
     )
 
 
@@ -120,7 +120,7 @@ TOOL_SCHEMAS: dict[str, ToolInputSchema] = {
     "create_project": shared.schema_of("create_project"),
     "read_stage": {
         "project_id": Annotated[str, "The project id (call get_current_project first)."],
-        "stage_id": Annotated[str, "The stage's id, as shown by describe_workflow."],
+        "stage_id": Annotated[str, "The stage's id, as shown by read_workflow_summary."],
     },
     "edit_stage": {
         "project_id": Annotated[str, "The project id (call get_current_project first)."],

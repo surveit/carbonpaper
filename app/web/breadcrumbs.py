@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from app.services.project import describe_project
+from app.services.project import read_project_name
 
 
 class Crumb(BaseModel):
@@ -121,7 +121,7 @@ def _project_trail(project: str) -> list[Crumb]:
     """Every caller passes an ID; the crumb READS as the name, which may repeat."""
     return [
         _home(),
-        _switcher(describe_project(project), _PROJECTS_PICKER, picker_current=project),
+        _switcher(read_project_name(project), _PROJECTS_PICKER, picker_current=project),
     ]
 
 

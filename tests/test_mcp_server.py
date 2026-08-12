@@ -66,7 +66,7 @@ def test_mcp_lists_the_authoring_tools(client):
         "get_project_status",
         "generate_data_model",
         "read_data_model",
-        "describe_workflow",
+        "read_workflow_summary",
         "read_stage",
         "edit_stage",
         "add_stage",
@@ -381,7 +381,7 @@ def test_mcp_add_stage_creates_the_first_stage_of_a_new_project(tmp_path, monkey
     assert added == {
         "ok": True, "issues": [], "added": ["load"], "failed": [], "skipped": [],
     }, "a clean draft warns about nothing"
-    assert server.describe_workflow(project_id=project_id).stages[0].id == "load"
+    assert server.read_workflow_summary(project_id=project_id).stages[0].id == "load"
 
 
 def test_mcp_add_stage_drops_server_owned_fields_and_names_them(tmp_path, monkeypatch):
@@ -628,4 +628,4 @@ def test_read_tools_reject_unknown_project(tmp_path, monkeypatch):
     with pytest.raises(ValueError):
         server.read_data_model(project_id="no_such_project")
     with pytest.raises(ValueError):
-        server.describe_workflow(project_id="no_such_project")
+        server.read_workflow_summary(project_id="no_such_project")

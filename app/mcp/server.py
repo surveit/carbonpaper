@@ -40,13 +40,14 @@ from app.services.project import Project, ProjectListing
 from app.services import terms as terms_service
 from app.services import versioning
 from app.services import workflow_test as workflow_test_service
-from app.services.errors import WorkflowLoadError
+from app.services.errors import FileNotStoredError, WorkflowLoadError
 from app.services.stage_edit import EditStageResult
 
 # Domain failures a run/workflow-test tool turns into {ok: False, error: str(exc)} — a
 # loud, honest verdict rather than a traceback or a fabricated run id/status.
 # Anything outside this set propagates as a genuine internal fault.
 _RUN_TOOL_ERRORS = (
+    FileNotStoredError,
     NoVersionToRunError,
     MissingInputBindingError,
     WorkflowLoadError,
@@ -188,9 +189,9 @@ def write_terms(project_id: str, terms: Terms) -> Terms:
     return shared.write_terms(project_id, terms)
 
 
-@mcp.tool(description=TOOL_SPECS["describe_workflow"].description)
-def describe_workflow(project_id: str) -> shared.workspace.WorkflowSummary:
-    return shared.describe_workflow(project_id)
+@mcp.tool(description=TOOL_SPECS["read_workflow_summary"].description)
+def read_workflow_summary(project_id: str) -> shared.workspace.WorkflowSummary:
+    return shared.read_workflow_summary(project_id)
 
 
 @mcp.tool(description=TOOL_SPECS["read_stage"].description)
@@ -263,11 +264,44 @@ def run_workflow(
     project_id: str,
     version_id: str | None = None,
     limits: dict[str, int] | None = None,
+    files: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     try:
-        return shared.run_workflow(project_id, version_id, limits)
+        return shared.run_workflow(project_id, version_id, limits, files)
     except _RUN_TOOL_ERRORS as exc:
         return {"ok": False, "error": str(exc)}
+
+
+@mcp.tool(description=TOOL_SPECS["move_file_to_project"].description)
+def move_file_to_project(project_id: str, sha256: str) -> shared.StoredFileView:
+    return shared.move_file_to_project(project_id, sha256)
+
+
+@mcp.tool(description=TOOL_SPECS["list_files"].description)
+def list_files(project_id: str | None = None) -> shared.ProjectFilesView:
+    return shared.list_files(project_id, _resolve_file_upload_url(project_id))
+
+
+def _resolve_file_upload_url(project_id: str | None) -> str:
+    """The address THIS call arrived on, so the link handed back is one that resolves."""
+    request = mcp.get_context().request_context.request
+    # Refusing beats composing a plausible URL from a configured guess: a link that
+    # resolves nowhere costs the person it is handed to more than an error costs us.
+    if request is None:
+        raise ValueError(
+            "list_files cannot tell what address this server is reached on — no HTTP "
+            "request is attached to this tool call, so there is no upload URL to give")
+    # X-Forwarded-Proto ahead of the scheme uvicorn reports: uvicorn honours forwarded
+    # headers only from `forwarded_allow_ips` (127.0.0.1 by default), and a proxy in
+    # front of this app is not on that list — so an https request reads back as http.
+    # The header is trusted for this one string, not for the app's own request handling.
+    scheme = request.headers.get("x-forwarded-proto") or request.url.scheme
+    host = request.headers.get("host") or request.url.netloc
+    # No project: the upload has nowhere to go through a project route, so the URL is
+    # the one a conversation posts to, which stores a file against no project.
+    if project_id is None:
+        return f"{scheme}://{host}/files"
+    return f"{scheme}://{host}/project/{project_id}/files"
 
 
 @mcp.tool(description=TOOL_SPECS["get_run_status"].description)

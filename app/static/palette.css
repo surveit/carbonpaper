@@ -107,6 +107,9 @@
     --accent-deep: #00458c;
     --focus: #8a2f78;
     --shadow: color-mix(in srgb, var(--fg) 9%, transparent);
+    /* What a modal dims the page behind it with. Tied to --fg for the same reason
+       --shadow is: a black of its own would not follow the theme. */
+    --scrim: color-mix(in srgb, var(--fg) 35%, transparent);
     --focus-glow: color-mix(in srgb, var(--focus) 55%, transparent);
     --focus-halo: color-mix(in srgb, var(--focus) 20%, transparent);
 

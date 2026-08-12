@@ -51,7 +51,7 @@
 
 /* The path field pairs a read-only text input with Browse…, which run_controls.js
    has open the browser's native file dialog and upload the pick to
-   POST /project/<name>/upload-input, which returns the saved copy's path. */
+   POST /project/<name>/files, which returns the saved copy's path. */
 /* stretch, not center: the field, its button and the row cap beside them are one
    line of controls, so all three take the row's height rather than three near-misses. */
 .path-field {

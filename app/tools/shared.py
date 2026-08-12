@@ -20,6 +20,7 @@ from app.services import (
     project as project_service,
     run as run_service,
     terms as terms_service,
+    uploads,
     workspace,
 )
 from app.services.project import Project
@@ -64,15 +65,64 @@ def write_terms(project_id: str, terms: Terms) -> Terms:
     return terms_service.load_terms(project_id)
 
 
+class StoredFileView(BaseModel):
+    """One file a project holds; `sha256` is what names it to run_workflow."""
+
+    sha256: str
+    filename: str
+    bytes: int
+    added: str
+
+
+class ProjectFilesView(BaseModel):
+    """What a project holds and how to add to it."""
+
+    file_upload_url: str
+    max_bytes: int
+    remaining_bytes: int
+    files: list[StoredFileView]
+
+
+def list_files(project_id: str | None, file_upload_url: str) -> ProjectFilesView:
+    """`project_id` None lists the files that are in no project yet."""
+    if project_id is not None:
+        resolve_existing_project(project_id)
+    # file_upload_url is the caller's: only it knows the address it was reached on.
+    used = uploads.measure_files_used_bytes()
+    return ProjectFilesView(
+        file_upload_url=file_upload_url,
+        max_bytes=uploads.max_upload_bytes(),
+        remaining_bytes=max(uploads.files_quota_bytes() - used, 0),
+        files=[_view(record) for record in uploads.list_project_files(project_id)],
+    )
+
+
+def _view(record: uploads.UploadedFile) -> StoredFileView:
+    return StoredFileView(sha256=record.sha256, filename=record.filename,
+                          bytes=record.byte_count, added=record.created_at)
+
+
+def move_file_to_project(project_id: str, sha256: str) -> StoredFileView:
+    """Move a file that is in no project into one. Moves no bytes."""
+    resolve_existing_project(project_id)
+    return _view(uploads.move_file_to_project(sha256, project_id))
+
+
 def run_workflow(
     project_id: str,
     version_id: str | None = None,
     limits: dict[str, int] | None = None,
-    bindings: dict[str, dict[str, str]] | None = None,
+    files: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     resolve_existing_project(project_id)
+    # A stage id -> sha256 map, resolved here to the path-and-format params a run
+    # binds. Resolving it before start_run means an unknown file id fails naming
+    # itself, rather than as a missing-input refusal from preflight.
+    bindings = {stage_id: uploads.resolve_file_binding(project_id, sha256)
+                for stage_id, sha256 in (files or {}).items()}
     run_id = run_service.start_run(
-        project_id, version_id=version_id or None, limits=limits, bindings=bindings
+        project_id, version_id=version_id or None, limits=limits,
+        bindings=bindings or None
     )
     status = run_service.read_run_status(project_id, run_id)["status"]
     return {"run_id": run_id, "status": status}
@@ -91,9 +141,9 @@ async def sleep(seconds: int) -> dict[str, int]:
     return {"slept_seconds": slept}
 
 
-def describe_workflow(project_id: str) -> workspace.WorkflowSummary:
+def read_workflow_summary(project_id: str) -> workspace.WorkflowSummary:
     resolve_existing_project(project_id)
-    return project_service.describe_workflow(project_id)
+    return project_service.read_workflow_summary(project_id)
 
 
 class StageOutputRow(BaseModel):
@@ -182,7 +232,7 @@ _FUNCTIONS: dict[str, Callable[..., Any]] = {
     "run_workflow": run_workflow,
     "get_run_status": get_run_status,
     "sleep": sleep,
-    "describe_workflow": describe_workflow,
+    "read_workflow_summary": read_workflow_summary,
     "read_stage_output_rows": read_stage_output_rows,
 }
 
@@ -217,10 +267,10 @@ _SCHEMAS: dict[str, ToolInputSchema] = {
             dict[str, int] | None,
             'Caps how many rows a stage READS: {"<stage id>": N}.',
         ],
-        "bindings": Annotated[
-            dict[str, dict[str, str]] | None,
-            'The file each input stage reads for THIS run, merged over what the stage '
-            'was authored with: {"<stage id>": {"path": "...", "format": "csv"}}.',
+        "files": Annotated[
+            dict[str, str] | None,
+            'The stored file each input stage reads for THIS run: '
+            '{"<stage id>": "<sha256 from list_files>"}.',
         ],
     },
     "get_run_status": {
@@ -233,7 +283,7 @@ _SCHEMAS: dict[str, ToolInputSchema] = {
             f"How long to sleep. Clamped to {MAX_SLEEP_SECONDS} — sleep again to wait longer.",
         ],
     },
-    "describe_workflow": {"project_id": _PROJECT_ID},
+    "read_workflow_summary": {"project_id": _PROJECT_ID},
     "read_stage_output_rows": {
         "project_id": _PROJECT_ID,
         "run_id": Annotated[str, "The run whose stored output you want to read."],
@@ -254,7 +304,7 @@ _LABELS = {
     "run_workflow": "Running the workflow",
     "get_run_status": "Checking the run",
     "sleep": "Waiting",
-    "describe_workflow": "Reading the workflow",
+    "read_workflow_summary": "Reading the workflow",
     "read_stage_output_rows": "Reading the stage's rows",
 }
 

@@ -18,11 +18,11 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 # id-taking entry point (see services.versioning.list_project_versions) and calling that.
 # The burn-down, with the per-module breakdown and the order: issue #505.
 _NOT_YET_MIGRATED: dict[str, int] = {
-    "app/web/routers/runs.py": 13,
+    "app/web/routers/runs.py": 7,
     "app/web/routers/project.py": 12,
     "app/web/routers/evals.py": 11,
     "app/web/routers/node.py": 8,
-    "app/web/loading.py": 4,
+    "app/web/loading.py": 3,
     "app/web/routers/guide.py": 2,
     "app/web/project_view.py": 1,
     "app/web/review_packet/packet.py": 1,

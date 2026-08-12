@@ -16,7 +16,7 @@ from pydantic import ValidationError
 from app.seeds.seed import discover_workflow_files
 from app.services import project
 from app.services.project import (
-    WorkflowFile, describe_project, export_project, import_project,
+    WorkflowFile, read_project_name, export_project, import_project,
 )
 from app.web.config import templates
 
@@ -70,7 +70,7 @@ async def load_bundle(bundle: str):
     # message names the id, which is the only half that tells the two of them apart.
     project_id = import_project(wf)
     return _redirect_to_admin(
-        f"Loaded '{describe_project(project_id)}' ({project_id}) from bundle '{bundle}'."
+        f"Loaded '{read_project_name(project_id)}' ({project_id}) from bundle '{bundle}'."
     )
 
 
@@ -91,7 +91,7 @@ async def upload_project(file: UploadFile = File(...)):
     wf = _parse_workflow_file(await file.read(), file.filename)
     project_id = import_project(wf)
     return _redirect_to_admin(
-        f"Imported '{describe_project(project_id)}' ({project_id}) from an uploaded file."
+        f"Imported '{read_project_name(project_id)}' ({project_id}) from an uploaded file."
     )
 
 

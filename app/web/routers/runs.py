@@ -1,7 +1,7 @@
-"""Run lifecycle: trigger a run (against the latest stored version, or a
-specific pinned version), list runs, poll live status, render a run's detail,
-serve its artifacts, resume and cancel. The per-stage panel, its row views and
-the scratch re-run are app.web.routers.run_stage."""
+"""Run lifecycle: trigger a run, list runs, poll live status, render a run's detail,
+serve its artifacts, resume and cancel. Configuring one — the form, its pickers and the
+file endpoint they post to — is app.web.routers.run_form; the per-stage panel, its row
+views and the scratch re-run are app.web.routers.run_stage."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import mimetypes
 from dataclasses import dataclass
 from typing import Any
 
-from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.datastructures import FormData
 from fastapi.responses import (
     FileResponse,
@@ -18,7 +18,6 @@ from fastapi.responses import (
     RedirectResponse,
     StreamingResponse,
 )
-from starlette.concurrency import run_in_threadpool
 
 from app.core.errors import (
     MissingInputBindingError,
@@ -28,18 +27,15 @@ from app.core.errors import (
 from app.core.run_status import RunStatus, StageStatus
 from app.models import WorkflowStage
 from app.models.schema import StageId, TypeUnsafeUserStageConfigOverride
-from app.models.stages.input_data import resolve_file_format
-from app.services.errors import WorkflowLoadError
-from app.services.versioning import list_versions
+from app.services.errors import FileNotStoredError, WorkflowLoadError
 from app.services import run as run_service
 from app.services.run_guide import build_run_guide_view
+from app.services.uploads import resolve_file_binding
 from app.runtime.cancellation import request_cancel
-from app.web.breadcrumbs import build_run_crumbs, build_runs_child_crumbs
+from app.web.breadcrumbs import build_run_crumbs
 from app.web.config import EVENT_TAIL, projects_dir, templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
 from app.web.loading import (
-    list_file_inputs,
-    save_uploaded_input,
     load_manifest,
     runs_dir,
 )
@@ -64,21 +60,18 @@ async def trigger_run(request: Request, project: str):
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
     # Set up the run (writes an initial `running` manifest), kick off execution
     # in a background thread, and redirect immediately. The run page polls.
-    # _collect_bindings itself loads the version's stages (list_file_inputs), so
-    # it can raise WorkflowLoadError for an unloadable snapshot just like
-    # prepare_run below — both must land in the same 400 handling.
     try:
         form = await request.form()
         version_id = str(form.get("version_id") or "").strip() or None
-        bindings = _collect_bindings(form, project, version_id)
+        bindings = _collect_bindings(form, project)
         limits = _collect_limits(form)
         run_id = run_service.start_run(project, version_id=version_id,
                                        bindings=bindings, limits=limits,
                                        bust_cache=_read_bust_cache(form))
-    except (NoVersionToRunError, MissingInputBindingError, ValueError) as exc:
-        # ValueError here is binding/limit/offset validation failures raised by
-        # _collect_bindings (an unreadable file extension), apply_run_bindings or
-        # prepare_run — not a catch-all for other bugs.
+    except (FileNotStoredError, NoVersionToRunError, MissingInputBindingError,
+            ValueError) as exc:
+        # ValueError here is limit/offset validation failures raised by _collect_limits,
+        # apply_run_bindings or prepare_run — not a catch-all for other bugs.
         return JSONResponse({"detail": str(exc)}, status_code=400)
     except WorkflowLoadError as exc:
         return JSONResponse({"detail": "compiled workflow failed validation",
@@ -89,22 +82,16 @@ async def trigger_run(request: Request, project: str):
     )
 
 
-def _collect_bindings(
-    form: FormData, project: str, version_id: str | None = None
-) -> dict[StageId, TypeUnsafeUserStageConfigOverride]:
-    """A binding merges OVER the authored params, so a path without its format keeps the
-    wrong reader."""
-    authored = {fi["stage_id"]: fi["path"]
-                for fi in list_file_inputs(project, version_id)}
+def _collect_bindings(form: FormData, project: str) -> dict[StageId, TypeUnsafeUserStageConfigOverride]:
+    """`binding__<stage>` carries a stored file's sha256; blank means run what the
+    workflow authored."""
     bindings: dict[StageId, TypeUnsafeUserStageConfigOverride] = {}
     for key, value in form.items():
         if not key.startswith("binding__"):
             continue
-        stage_id = key[len("binding__"):]
-        path = str(value).strip()
-        if path and path != authored.get(stage_id, ""):
-            bindings[stage_id] = {"path": path,
-                                  "format": resolve_file_format(path).value}
+        sha256 = str(value).strip()
+        if sha256:
+            bindings[key[len("binding__"):]] = resolve_file_binding(project, sha256)
     return bindings
 
 
@@ -130,31 +117,6 @@ def _read_bust_cache(form: FormData) -> bool:
     return "bust_cache" in form
 
 
-@router.get("/project/{project}/run-inputs")
-async def run_inputs(project: str, version_id: str | None = None):
-    project_dir = projects_dir() / project
-    if not project_dir.is_dir():
-        raise HTTPException(status_code=404, detail=f"No project '{project}'")
-    return JSONResponse(list_file_inputs(project, version_id))
-
-
-@router.post("/project/{project}/upload-input")
-async def upload_input(
-    project: str,
-    stage_id: str = Form(...),
-    file: UploadFile = File(...),
-):
-    project_dir = projects_dir() / project
-    if not project_dir.is_dir():
-        raise HTTPException(status_code=404, detail=f"No project '{project}'")
-    if not file.filename:
-        return JSONResponse({"ok": False, "error": "no file provided"}, status_code=400)
-    path = await run_in_threadpool(
-        save_uploaded_input, project_dir, stage_id, file.filename, file.file
-    )
-    return JSONResponse({"ok": True, "path": str(path)})
-
-
 @router.get("/project/{project}/runs", response_class=HTMLResponse)
 async def runs_index(request: Request, project: str):
     pdir = projects_dir() / project
@@ -170,36 +132,6 @@ async def runs_index(request: Request, project: str):
             "state": shell_state(pdir, "runs"),
             "section": "runs",
             "runs": build_run_index_rows(project),
-        },
-    )
-
-
-@router.get("/project/{project}/runs/new", response_class=HTMLResponse)
-async def run_new(request: Request, project: str, version_id: str | None = None):
-    pdir = projects_dir() / project
-    if not pdir.is_dir():
-        raise HTTPException(status_code=404, detail=f"No project '{project}'")
-    # Every stored version is runnable (resolve_version_id reads no publication
-    # state), so the picker offers all of them newest-first. Registered ahead of
-    # /runs/{run_id}, which would otherwise match "new" as a run id.
-    versions = list_versions(pdir)
-    # ?version_id= pre-picks one (the version page's "Run this version" sends it).
-    # An id no version carries 404s rather than falling back to the latest, which
-    # would launch a different workflow than the link named.
-    if version_id is not None and not any(v.version_id == version_id for v in versions):
-        raise HTTPException(status_code=404,
-                            detail=f"No version '{version_id}' in project '{project}'")
-    selected = version_id or (versions[0].version_id if versions else None)
-    return templates.TemplateResponse(
-        request,
-        "section_run_new.html",
-        {
-            "state": shell_state(pdir, "runs"),
-            "section": "runs",
-            "crumbs": build_runs_child_crumbs(project, label="New run"),
-            "versions": versions,
-            "selected_version_id": selected,
-            "file_inputs": list_file_inputs(project, selected),
         },
     )
 

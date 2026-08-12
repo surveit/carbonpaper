@@ -4,6 +4,7 @@
 {% block content %}
 <div class="ac-head">
   <span class="ac-backend" title="which model backend answers">backend: {{ backend }}</span>
+  {% include "_new_chat_button.html" %}
 </div>
 
 {% if backend_error %}
@@ -46,7 +47,23 @@
 {% if view_only %}
   <div class="ac-composer ac-view-only">Read-only generation view — watch it run; there's no agent here to reply to.</div>
 {% else %}
+  {# The attached file, before it is sent. Empty until something is picked or dropped. #}
+  <div class="ac-attached" id="attached" hidden></div>
+  {# A <dialog>, not a panel: it blocks, so the question cannot be answered by
+     ignoring it, and Escape or the scrim cancels the attach. Native gives us the focus
+     trap and the Escape key. Only opens when the session has no project and the
+     workspace has one — with no project anywhere there is nothing to ask. #}
+  <dialog class="ac-modal" id="project-modal">
+    <h2>Where should this file go?</h2>
+    <p class="ac-modal-lede">Files belong to a project, not to a conversation. This also
+      sets the project this session works on.</p>
+    <div id="project-choices"></div>
+    <button type="button" class="ac-choice ac-choice-new" data-project="">New project
+      <span class="ac-muted">· the agent reads the file and sets one up</span></button>
+  </dialog>
   <div class="ac-composer">
+    <button type="button" class="ac-clip" id="clip" title="Attach a data file">📎</button>
+    <input type="file" id="file" hidden />
     <input class="ac-input" id="input" placeholder="Message… (Enter to send)" autocomplete="off" />
     <button class="ac-send" id="send">Send</button>
   </div>
@@ -55,6 +72,9 @@
 
 <script>
 const SID = {{ session_id | tojson }};
+const SESSION_PROJECT = {{ session_project | tojson }};
+const PROJECTS = {{ projects | tojson }};
+const MAX_UPLOAD_BYTES = {{ max_upload_bytes | tojson }};
 const ACTIVE_TURN = {{ active_turn | tojson }};
 const OPENS_ITSELF = {{ opens_itself | default(false) | tojson }};
 const MESSAGE_URL = `/chat/${SID}/message`;
@@ -176,10 +196,120 @@ function connect(turnId, fromIndex) {
   es.onerror = () => { bubble.stop(); es.close(); streaming = false; if (sendBtn) sendBtn.disabled = false; };
 }
 
+// ── Attaching a file ────────────────────────────────────────────────────────
+// The bytes go straight to the server and never through a message, so a 9MB export
+// costs the conversation one line of text. `attached` holds that line until Send.
+const clip = document.getElementById("clip");
+const filePicker = document.getElementById("file");
+const attachedBox = document.getElementById("attached");
+const projectModal = document.getElementById("project-modal");
+let attached = null;   // the line the next Send carries
+let pendingFile = null;  // picked, waiting on a project answer
+
+function describeBytes(n) {
+  const mb = 1024 * 1024;
+  if (n >= 1024 * mb) return +(n / (1024 * mb)).toPrecision(3) + "GB";
+  if (n >= mb) return +(n / mb).toPrecision(3) + "MB";
+  if (n >= 1024) return +(n / 1024).toPrecision(3) + "KB";
+  return n + "B";
+}
+
+function showAttached(line) {
+  attached = line;
+  attachedBox.replaceChildren();
+  attachedBox.hidden = !line;
+  if (!line) return;
+  const text = document.createElement("span");
+  text.textContent = line;
+  const drop = document.createElement("button");
+  drop.type = "button";
+  drop.className = "ac-unattach";
+  drop.textContent = "×";
+  // The bytes are already stored by now, and nothing in the app deletes a file — so
+  // this takes the file off the message, and says so rather than implying a delete.
+  drop.title = "Take this off the message. The file stays in the store.";
+  drop.addEventListener("click", () => showAttached(""));
+  attachedBox.append(text, drop);
+}
+
+function askWhereItGoes() {
+  const box = document.getElementById("project-choices");
+  box.replaceChildren();
+  PROJECTS.forEach((project) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "ac-choice"; b.dataset.project = project.id;
+    const name = document.createElement("strong");
+    name.textContent = project.name;
+    const id = document.createElement("span");
+    id.className = "ac-muted"; id.textContent = " · " + project.id;
+    b.append(name, id);
+    box.appendChild(b);
+  });
+  projectModal.showModal();
+}
+
+async function storeFile(file, projectId) {
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("project_id", projectId || "");
+  const r = await fetch(`/chat/${SID}/files`, {method: "POST", body: fd});
+  let data = {};
+  try { data = await r.json(); } catch (e) { /* leave empty */ }
+  if (r.ok && data.ok) { showAttached(data.line); return; }
+  const b = newAssistant();
+  b.error(data.error || `upload failed (HTTP ${r.status})`);
+}
+
+function attach(file) {
+  if (!file) return;
+  if (file.size > MAX_UPLOAD_BYTES) {
+    const b = newAssistant();
+    b.error(`"${file.name}" is ${describeBytes(file.size)}, over the ` +
+            `${describeBytes(MAX_UPLOAD_BYTES)} limit for a single input. That ceiling is ` +
+            `what a run on this machine can load into memory. Convert it to parquet, or ` +
+            `cut it down.`);
+    return;
+  }
+  // A project the session already works on takes the file with no question asked.
+  if (SESSION_PROJECT) { storeFile(file, SESSION_PROJECT); return; }
+  if (!PROJECTS.length) { storeFile(file, ""); return; }
+  pendingFile = file;
+  askWhereItGoes();
+}
+
+if (clip && filePicker) {
+  clip.addEventListener("click", () => filePicker.click());
+  filePicker.addEventListener("change", () => {
+    attach(filePicker.files[0]);
+    filePicker.value = "";   // let the same file be re-picked later
+  });
+  projectModal.addEventListener("click", (e) => {
+    const choice = e.target.closest(".ac-choice");
+    if (!choice) return;
+    projectModal.close();
+    const file = pendingFile; pendingFile = null;
+    // A blank project is "New project": the file goes in unclaimed and the agent
+    // creates one and adopts it. Nothing here can create a project — that needs a
+    // name and a methodology document, which is a form and not a question.
+    if (file) storeFile(file, choice.dataset.project);
+  });
+  // Escape, or the scrim: the file was never sent, so cancelling costs nothing.
+  projectModal.addEventListener("close", () => { pendingFile = null; });
+  // Drop anywhere on the conversation, which is the whole reason the clip is not enough.
+  document.addEventListener("dragover", (e) => { e.preventDefault(); });
+  document.addEventListener("drop", (e) => {
+    e.preventDefault();
+    if (e.dataTransfer && e.dataTransfer.files.length) attach(e.dataTransfer.files[0]);
+  });
+}
+
 async function send() {
-  const text = input.value.trim();
+  const typed = input.value.trim();
+  // The attachment IS the message when nothing was typed: the file arriving is the turn.
+  const text = attached ? (typed ? `${attached}\n\n${typed}` : attached) : typed;
   if (!text || streaming) return;
   input.value = "";
+  showAttached("");
   addUser(text);
   const r = await fetch(MESSAGE_URL, {
     method: "POST", headers: {"Content-Type": "application/json"},

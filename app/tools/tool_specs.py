@@ -72,8 +72,8 @@ An empty document is refused and no project is written. Next: agree the
 project's terms — the words its methodology already uses — with the user, and
 store them with write_terms.""",
     ),
-    "describe_workflow": ToolSpec(
-        name="describe_workflow",
+    "read_workflow_summary": ToolSpec(
+        name="read_workflow_summary",
         description="""\
 Summarize a project's workflow: each stage's id, type, description, upstream
 input ids, and review state. Read this before editing so you know the current
@@ -297,7 +297,26 @@ version, an unbound input) returns {ok: False, error} and starts no run.
 `limits` caps how many rows a stage READS: {"<stage id>": N} gives that stage
 its first N rows and leaves every other stage whole. It bounds the WORK, not
 the spend of a stage that already ran — a cap on a stage downstream of a model
-step does not stop that model step reading everything. Omit it for a full run.""",
+step does not stop that model step reading everything. Omit it for a full run.
+
+`files` binds a stored file to an input step for this run only:
+{"<input stage id>": "<sha256 from list_files>"}. A sha256 the project does not
+hold is a loud error naming itself, not a silent unbound input. Omit it where
+the workflow already names the file it reads.""",
+    ),
+    "move_file_to_project": ToolSpec(
+        name="move_file_to_project",
+        description="""\
+Put a file that is in no project into one. Moves no bytes.""",
+    ),
+    "list_files": ToolSpec(
+        name="list_files",
+        description="""\
+The files a project holds, each with the `sha256` run_workflow's `files` binds.
+`project_id` null lists the files that are in no project yet.
+
+Also returns `file_upload_url`: POST a file there as multipart form data to add
+one. Nothing in this conversation moves bytes.""",
     ),
     "run_workflow_test": ToolSpec(
         name="run_workflow_test",

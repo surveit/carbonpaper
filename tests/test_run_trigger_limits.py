@@ -30,7 +30,7 @@ def test_blank_limit_is_skipped_not_recorded_as_zero():
 
 
 def test_ignores_form_fields_that_are_not_limit_fields():
-    form = FormData([("version_id", "v1"), ("binding__load", "/a.csv"), ("limit__load", "3")])
+    form = FormData([("version_id", "v1"), ("binding__load", ""), ("limit__load", "3")])
     assert _collect_limits(form) == {"load": 3}
 
 
@@ -89,7 +89,7 @@ def _manifest(proj):
 def test_run_form_limit_field_becomes_a_manifest_limit_override(project):
     resp = client.post(
         "/project/demo/run",
-        data={"binding__load": str(project / "a.csv"), "limit__load": "2"},
+        data={"binding__load": "", "limit__load": "2"},
         follow_redirects=False,
     )
     assert resp.status_code == 303
@@ -99,7 +99,7 @@ def test_run_form_limit_field_becomes_a_manifest_limit_override(project):
 def test_blank_limit_field_records_no_override(project):
     resp = client.post(
         "/project/demo/run",
-        data={"binding__load": str(project / "a.csv"), "limit__load": ""},
+        data={"binding__load": "", "limit__load": ""},
         follow_redirects=False,
     )
     assert resp.status_code == 303
@@ -109,7 +109,7 @@ def test_blank_limit_field_records_no_override(project):
 def test_non_integer_limit_returns_400_and_creates_no_run(project):
     resp = client.post(
         "/project/demo/run",
-        data={"binding__load": str(project / "a.csv"), "limit__load": "abc"},
+        data={"binding__load": "", "limit__load": "abc"},
         follow_redirects=False,
     )
     assert resp.status_code == 400
@@ -120,7 +120,7 @@ def test_non_integer_limit_returns_400_and_creates_no_run(project):
 def test_negative_limit_returns_400_and_creates_no_run(project):
     resp = client.post(
         "/project/demo/run",
-        data={"binding__load": str(project / "a.csv"), "limit__load": "-1"},
+        data={"binding__load": "", "limit__load": "-1"},
         follow_redirects=False,
     )
     assert resp.status_code == 400
