@@ -29,11 +29,11 @@ from app.core.run_status import RunStatus, StageStatus
 from app.models import WorkflowStage
 from app.models.schema import StageId, TypeUnsafeUserStageConfigOverride
 from app.models.stages.input_data import resolve_file_format
-from app.services.errors import WorkflowLoadError
+from app.services.errors import UploadTooLargeError, WorkflowLoadError
 from app.services.versioning import list_versions
 from app.services import run as run_service
 from app.services.run_guide import build_run_guide_view
-from app.services.uploads import save_upload
+from app.services.uploads import max_upload_bytes, save_upload
 from app.runtime.cancellation import request_cancel
 from app.web.breadcrumbs import build_run_crumbs, build_runs_child_crumbs
 from app.web.config import EVENT_TAIL, projects_dir, templates
@@ -145,7 +145,11 @@ async def upload_input(project: str, file: UploadFile = File(...)):
     if not file.filename:
         return JSONResponse({"ok": False, "error": "no file provided"}, status_code=400)
     # Off the event loop: the copy streams a file of any size to disk and hashes it.
-    path = await run_in_threadpool(save_upload, project, file.filename, file.file)
+    try:
+        path = await run_in_threadpool(save_upload, project, file.filename, file.file)
+    except UploadTooLargeError as exc:
+        # The message names the limit and what to do; run_controls.js shows it verbatim.
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
     return JSONResponse({"ok": True, "path": str(path)})
 
 
@@ -194,6 +198,8 @@ async def run_new(request: Request, project: str, version_id: str | None = None)
             "versions": versions,
             "selected_version_id": selected,
             "file_inputs": list_file_inputs(project, selected),
+            # So Browse… can refuse an oversized pick before spending the upload on it.
+            "max_upload_bytes": max_upload_bytes(),
         },
     )
 

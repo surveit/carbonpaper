@@ -27,6 +27,8 @@
     versions    = the project's stored versions, newest-first (may be empty)
     selected_version_id = which of them the picker opens on (None with no versions)
     file_inputs = loading.list_file_inputs(pdir, selected_version_id) — [{stage_id, path}]
+    max_upload_bytes = uploads.max_upload_bytes() — the ceiling Browse… checks a pick
+                       against before uploading it; the server refuses the same size
 #}
 
 {#
@@ -71,7 +73,7 @@
 
 {% if versions %}
 <form action="/project/{{ state.id }}/run" method="post" class="run-controls"
-      data-project="{{ state.id }}">
+      data-project="{{ state.id }}" data-max-upload-bytes="{{ max_upload_bytes }}">
   <label class="run-version">version
     <select name="version_id">
       {% for v in versions %}

@@ -61,6 +61,25 @@
   }
 
   // ─── Upload a browser-picked file, then fill the path field ─────────────
+  function describeBytes(count) {
+    var mb = 1024 * 1024;
+    if (count >= 1024 * mb) return +(count / (1024 * mb)).toPrecision(3) + "GB";
+    if (count >= mb) return +(count / mb).toPrecision(3) + "MB";
+    return count + "B";
+  }
+
+  // The server refuses the same size; this only saves the reader from watching a
+  // file upload for minutes before being told it was never going to be accepted.
+  function tooLarge(file, form) {
+    var ceiling = parseInt(form.getAttribute("data-max-upload-bytes"), 10);
+    if (!ceiling || file.size <= ceiling) return false;
+    alert('"' + file.name + '" is ' + describeBytes(file.size) + ", over the " +
+          describeBytes(ceiling) + " limit for a single input.\n\nThat ceiling is " +
+          "what a run on this machine can load into memory. Cut the file down, or " +
+          "convert it to parquet.");
+    return true;
+  }
+
   async function uploadFile(file, input, project, btn) {
     var label = btn.textContent;
     btn.disabled = true;
@@ -113,7 +132,8 @@
       var row = picker.closest(".run-input-row");
       var input = row && row.querySelector('input[name^="binding__"]');
       var btn = row && row.querySelector(".browse-btn");
-      if (input && btn) uploadFile(picker.files[0], input, project, btn);
+      var file = picker.files[0];
+      if (input && btn && !tooLarge(file, form)) uploadFile(file, input, project, btn);
       picker.value = "";  // let the same file be re-picked later
     });
   });

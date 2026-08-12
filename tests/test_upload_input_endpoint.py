@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.services import workspace
-from app.services.uploads import UploadedFile
+from app.services.uploads import UploadedFile, max_upload_bytes
 
 client = TestClient(app)
 
@@ -101,6 +101,44 @@ def test_a_nameless_upload_still_stores(project):
     saved = Path(upload("..", b"x").json()["path"])
     assert saved.name == "upload.dat"
     assert saved.parent.parent == (project / "uploads").resolve()
+
+
+def test_a_file_over_the_ceiling_is_refused_and_leaves_nothing_behind(project, monkeypatch):
+    monkeypatch.setenv("CARBON_PAPER_MAX_UPLOAD_BYTES", "64")
+    resp = upload("big.csv", b"x" * 65)
+    assert resp.status_code == 400
+    assert "over the 64B limit for a single input" in resp.json()["error"]
+    assert list((project / "uploads").iterdir()) == []  # no partial, no temp file
+
+
+def test_a_file_exactly_at_the_ceiling_is_kept(project, monkeypatch):
+    monkeypatch.setenv("CARBON_PAPER_MAX_UPLOAD_BYTES", "64")
+    assert upload("fits.csv", b"x" * 64).status_code == 200
+
+
+def test_the_project_quota_refuses_the_upload_that_would_cross_it(project, monkeypatch):
+    monkeypatch.setenv("CARBON_PAPER_PROJECT_UPLOAD_QUOTA_BYTES", "100")
+    assert upload("a.csv", b"a" * 80).status_code == 200
+    resp = upload("b.csv", b"b" * 80)
+    assert resp.status_code == 400
+    assert "over its 100B limit" in resp.json()["error"]
+    stored = [p.name for p in (project / "uploads").rglob("*") if p.is_file()]
+    assert stored == ["a.csv"]  # the refused one is not kept, and neither is a temp file
+
+
+def test_re_picking_a_file_the_project_already_holds_is_allowed_at_quota(project, monkeypatch):
+    monkeypatch.setenv("CARBON_PAPER_PROJECT_UPLOAD_QUOTA_BYTES", "100")
+    first = upload("a.csv", b"a" * 80).json()["path"]
+    # Same bytes: content addressing means this costs no disk, so the quota must not
+    # refuse it — the reader would be told to delete a file to re-pick what is there.
+    again = upload("a.csv", b"a" * 80)
+    assert again.status_code == 200 and again.json()["path"] == first
+
+
+def test_a_limit_that_is_not_a_positive_number_fails_loudly(project, monkeypatch):
+    monkeypatch.setenv("CARBON_PAPER_MAX_UPLOAD_BYTES", "0")
+    with pytest.raises(ValueError, match="must be a positive whole number"):
+        max_upload_bytes()
 
 
 def test_missing_file_is_422(project):

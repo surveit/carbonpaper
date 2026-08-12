@@ -13,5 +13,9 @@ class WorkflowLoadError(Exception):
         )
 
 
+class UploadTooLargeError(Exception):
+    """Over the per-file ceiling or the project's upload quota; the message says which."""
+
+
 class SpecMigrationRefused(ValueError):
     """A stored stage payload whose signature the read-side upgrade cannot determine."""
