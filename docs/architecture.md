@@ -17,7 +17,9 @@ runtime or web — keep it pure.** Checks the *spec*, distinct from RUNTIME data
 (`app/runtime/validation.py`, which checks dataframes).
 - `stage.py` — `Stage`, the pydantic discriminated union over the per-type models keyed on
   `type` (parse a stage dict with `parse_stage`; `Stage` is an annotation, not a class), and
-  `StageDraft`, the flat all-optional shape an authoring client submits.
+  `StageDraft`, the flat all-optional shape an authoring client submits. What the
+  `add_stage` tools actually bind is `SubmittedStage` (`app/tools/submitted_stage.py`),
+  which trims the server-owned fields a client echoes back before the draft sees them.
 - `stages/stage_base.py` — the stage types, and `AbstractStage`: the fields and rules every
   stored stage satisfies whatever its type, plus `is_grain_and_order_preserving` (1:1 row
   correspondence in order — the eval gate depends on it).

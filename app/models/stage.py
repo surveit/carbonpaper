@@ -13,9 +13,7 @@ from pydantic import (
     Field,
     TypeAdapter,
     ValidationError,
-    model_validator,
 )
-from pydantic.json_schema import SkipJsonSchema
 
 from app.models.stages.stage_base import (  # noqa: F401  (re-exported: the stage vocabulary lives here)
     ReviewConfig,
@@ -120,7 +118,8 @@ def stage_to_json(stage: Stage) -> str:
 # ── StageDraft ───────────────────────────────────────────────────────────────
 # Stage fields an authoring client never writes, so StageDraft does not declare
 # them. A client that echoes back a stage it read from the server carries them
-# anyway; the draft drops those rather than refusing the whole stage.
+# anyway; trimming those is a tool-boundary accommodation, and lives there
+# (`SubmittedStage`, app/tools/submitted_stage.py).
 SERVER_OWNED_STAGE_FIELDS = ("tests", "eval", "review", "source")
 
 
@@ -140,23 +139,6 @@ class StageDraft(AuthoredStageFields):
     union: Optional[UnionConfig] = None
     filter: Optional[FilterConfig] = None
     starlark: Optional[StarlarkFunction] = None
-
-    # Which SERVER_OWNED_STAGE_FIELDS the submitted draft carried, for the caller
-    # to warn about. Bookkeeping about one submission, not part of a stage: kept
-    # out of the JSON schema a client is handed and out of every dump.
-    dropped_server_owned_fields: SkipJsonSchema[list[str]] = Field(
-        default_factory=list, exclude=True
-    )
-
-    @model_validator(mode="before")
-    @classmethod
-    def _drop_server_owned_fields(cls, data: Any) -> Any:
-        if not isinstance(data, dict):
-            return data
-        present = [name for name in SERVER_OWNED_STAGE_FIELDS if name in data]
-        remaining = {k: v for k, v in data.items() if k not in SERVER_OWNED_STAGE_FIELDS}
-        remaining["dropped_server_owned_fields"] = present
-        return remaining
 
     def to_stage_spec(self) -> dict[str, Any]:
         return self.model_dump(exclude_unset=True, by_alias=True)

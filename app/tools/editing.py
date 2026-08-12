@@ -12,11 +12,11 @@ from pydantic import BaseModel
 
 from app.core.agent.bound_tool import BoundToolSpec
 from app.tools.types import ToolInputSchema
-from app.models import StageDraft
 from app.models.review_guide import ReviewGuideDraft
 from app.services.versioning import ReviewGuide
 from app.services import drafts, project as project_service
 from app.tools import shared
+from app.tools.submitted_stage import SubmittedStage, add_stages_reporting_drops
 from app.tools.tool_specs import SAVE_VERSION_FROM_DRAFT, TOOL_SPECS
 from app.services.drafts import DraftDetail, DraftEdit, DraftView, SaveResult
 from app.services.project import ProjectListing
@@ -40,8 +40,8 @@ def make_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
         result = project_service.edit_stage(project_id, stage_id, changes_json)
         return {"ok": result.ok, "issues": result.issues}
 
-    def add_stage(project_id: str, stages: list[StageDraft]) -> dict[str, Any]:
-        return project_service.add_stages_reporting_drops(project_id, stages)
+    def add_stage(project_id: str, stages: list[SubmittedStage]) -> dict[str, Any]:
+        return add_stages_reporting_drops(project_id, stages)
 
     def remove_stage(project_id: str, stage_id: str) -> dict[str, Any]:
         result = project_service.remove_stage(project_id, stage_id)
@@ -126,7 +126,7 @@ TOOL_SCHEMAS: dict[str, ToolInputSchema] = {
     "add_stage": {
         "project_id": Annotated[str, "The project id (call get_current_project first)."],
         "stages": Annotated[
-            list[StageDraft],
+            list[SubmittedStage],
             "The complete NEW stages: each with id (new and unique — the stage's only "
             "name), description, type, the "
             "config block(s) its type requires (connector / llm / function / ...; "

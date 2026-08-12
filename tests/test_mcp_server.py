@@ -10,7 +10,8 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from app.models import parse_stage, StageDraft
+from app.models import parse_stage
+from app.tools.submitted_stage import SubmittedStage
 from app.services import workspace
 from app.services.project import ProjectListing
 
@@ -123,7 +124,7 @@ _OUT_SCHEMA = {"columns": [
     {"name": "doubled", "type": "float", "nullable": True},
 ]}
 _DOUBLE = "def transform(row):\n    return {**row, 'doubled': row['amount'] * 2}\n"
-_LOAD_STAGE = StageDraft.model_validate({
+_LOAD_STAGE = SubmittedStage.model_validate({
     "id": "load", "description": "Load", "type": "input_data", "connector": {"kind": "file"},
     "signature": {
         "form": "replaces",
@@ -374,7 +375,7 @@ def test_add_stage_input_schema_omits_the_server_owned_fields(tmp_path, monkeypa
     [tool] = [t for t in asyncio.run(server.mcp.list_tools()) if t.name == "add_stage"]
     defs = tool.inputSchema["$defs"]
 
-    assert not {"tests", "eval", "review", "source"} & set(defs["StageDraft"]["properties"])
+    assert not {"tests", "eval", "review", "source"} & set(defs["SubmittedStage"]["properties"])
 
 
 def test_mcp_save_version_snapshots_the_working_copy_unpublished(tmp_path, monkeypatch):
