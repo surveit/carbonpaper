@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from app.services import generation
 from app.services import project as project_service
 from app.web.config import projects_dir
+from app.web.errors import NoSuchProject
 
 router = APIRouter()
 
@@ -18,7 +19,7 @@ router = APIRouter()
 async def generate_version_guide(project: str, version_id: str):
     project_dir = projects_dir() / project
     if not project_dir.is_dir():
-        raise HTTPException(status_code=404, detail=f"No project '{project}'")
+        raise NoSuchProject(project)
     model = project_service.project_meta(project_dir).model or "sonnet"
     try:
         session_id = generation.start_review_guide_generation(

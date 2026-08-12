@@ -7,7 +7,7 @@ by `/project/{project}/runs/{run_id}`, which matched it as a run named "picker".
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
 from app.core.run_status import RunStatus
@@ -16,6 +16,7 @@ from app.services.versioning import WorkflowVersion, list_project_versions
 from app.web.breadcrumbs import Picker, PickerRow
 from app.web.config import templates
 from app.web.run_index import RunIndexRow, build_run_index_rows
+from app.web.errors import NoSuchProject
 
 router = APIRouter()
 
@@ -73,7 +74,7 @@ _NO_DESCRIPTION = "No description"
 def _refuse_unknown_project(project: str) -> None:
     # Also refuses an id escaping the workspace, which `projects_dir() / project` accepted.
     if not project_exists(project):
-        raise HTTPException(status_code=404, detail=f"No project '{project}'")
+        raise NoSuchProject(project)
 
 
 def _version_row(project: str, version: WorkflowVersion, current: str) -> PickerRow:

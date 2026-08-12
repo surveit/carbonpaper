@@ -55,6 +55,8 @@
 }
 .empty-state h2 { color: var(--muted); font-weight: 500; margin-bottom: 6px; }
 .empty-state p { margin: 0 auto; max-width: 56ch; }
+/* Two paragraphs at the same weight otherwise set as one block of prose. */
+.empty-state p + p { margin-top: 10px; }
 /* The gap under the line belongs to the button, so a zero state with no action
    does not carry a trailing hole where one would have been. */
 .empty-state .btn,
