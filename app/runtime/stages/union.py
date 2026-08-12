@@ -7,11 +7,13 @@ from __future__ import annotations
 
 import pandas as pd
 
-from app.models import Stage
+from app.models import WorkflowStage
 
 from ..context import RunContext
 
 
-def handle_union(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext) -> pd.DataFrame:
-    frames = [inputs[ref.id] for ref in stage.inputs]
+def handle_union(
+    workflow_stage: WorkflowStage, inputs: dict[str, pd.DataFrame], ctx: RunContext
+) -> pd.DataFrame:
+    frames = [inputs[ref.id] for ref in workflow_stage.inputs]
     return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()

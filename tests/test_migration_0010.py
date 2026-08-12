@@ -11,6 +11,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.models import parse_stage
+from conftest import drop_input_schemas
 from scripts import migrate_compiled_stage_files
 
 _REVISION = (Path(__file__).resolve().parents[1]
@@ -96,11 +97,11 @@ def test_a_compiled_filter_file_is_migrated_and_then_parses(tmp_path, monkeypatc
     # Before: the file parsed clean under the old model and produced nothing;
     # under today's it does not parse at all.
     with pytest.raises(ValidationError, match="reads nothing"):
-        parse_stage(json.loads(path.read_text(encoding="utf-8")))
+        parse_stage(drop_input_schemas(json.loads(path.read_text(encoding="utf-8"))))
 
     monkeypatch.setattr(sys, "argv", [
         "migrate", "--apply", "--projects-dir", str(tmp_path)])
     migrate_compiled_stage_files.main()
 
-    after = parse_stage(json.loads(path.read_text(encoding="utf-8")))
+    after = parse_stage(drop_input_schemas(json.loads(path.read_text(encoding="utf-8"))))
     assert after.anchor_reads() == {"id", "score"}

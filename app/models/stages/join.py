@@ -1,22 +1,23 @@
 """enrich/expand stage: the join handle config and its column checks."""
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, ClassVar, Literal
+from typing import TYPE_CHECKING, ClassVar, Literal, Sequence
 
 from pydantic import Field, model_validator
 
 from app.models.schema import StageConfig, _Base
-from app.models.stages.stage_base import StageBase, StageInput, StageType
+from app.models.stages.stage_base import AbstractStage, StageInput, StageType
 from app.models.stages.shared import (
     COLUMN_ISSUE,
     INTERNAL_COLUMN_PREFIX,
     resolve_input_columns,
 )
-from app.models.stages.node_spec import NodeTypeSpec
+from app.models.stages.stage_type_spec import StageTypeSpec
 from app.models.stages.signature import ExtendsSignature
 
 if TYPE_CHECKING:
     from app.models.schema import TableSchema
+    from app.models.workflow_stage import WorkflowStageInput
 
 
 class JoinKey(_Base):
@@ -54,7 +55,7 @@ class JoinConfig(StageConfig):
         return self
 
 
-class JoinStage(StageBase):
+class JoinStage(AbstractStage):
     join: JoinConfig
     inputs: list[StageInput] = Field(default_factory=list, min_length=2, max_length=2)
     signature: ExtendsSignature
@@ -62,11 +63,15 @@ class JoinStage(StageBase):
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
         return {"join": self.join}
 
-    def find_config_column_issues(self) -> list[str]:
-        return find_join_column_issues(self)
+    def find_config_column_issues(
+        self, inputs: Sequence["WorkflowStageInput"]
+    ) -> list[str]:
+        return find_join_column_issues(self, inputs)
 
-    def find_signature_config_issues(self) -> list[str]:
-        return find_join_signature_issues(self)
+    def find_signature_schema_issues(
+        self, inputs: Sequence["WorkflowStageInput"]
+    ) -> list[str]:
+        return find_join_signature_issues(self, inputs)
 
 
 class EnrichStage(JoinStage):
@@ -90,10 +95,12 @@ ENRICH_WITH_SHADOWS_KEY_ISSUE = (
 )
 
 
-def find_join_column_issues(stage: "JoinStage") -> list[str]:
+def find_join_column_issues(
+    stage: "JoinStage", inputs: Sequence["WorkflowStageInput"]
+) -> list[str]:
     join = stage.join
-    left = resolve_input_columns(stage, 0)
-    right = resolve_input_columns(stage, 1)
+    left = resolve_input_columns(inputs, 0)
+    right = resolve_input_columns(inputs, 1)
     right_keys = {key.right for key in join.keys}
     issues: list[str] = []
     for key in join.keys:
@@ -112,7 +119,7 @@ def find_join_column_issues(stage: "JoinStage") -> list[str]:
             )
         if landed in left:
             issues.append(ENRICH_WITH_REWRITE_ISSUE.format(
-                sid=stage.id, landed=landed, subject=stage.inputs[0].id, src=src
+                sid=stage.id, landed=landed, subject=inputs[0].id, src=src
             ))
         elif landed in right_keys and landed != src:
             issues.append(ENRICH_WITH_SHADOWS_KEY_ISSUE.format(
@@ -121,9 +128,11 @@ def find_join_column_issues(stage: "JoinStage") -> list[str]:
     return issues
 
 
-def find_join_signature_issues(stage: "JoinStage") -> list[str]:
+def find_join_signature_issues(
+    stage: "JoinStage", inputs: Sequence["WorkflowStageInput"]
+) -> list[str]:
     signature = stage.signature
-    subject, reference = stage.inputs[0], stage.inputs[1]
+    subject, reference = inputs[0], inputs[1]
     reads_by_input = {
         entry.input: {column.name for column in entry.columns}
         for entry in signature.reads
@@ -187,9 +196,9 @@ JOIN_SHARED_NOTE = (
     "new one (`score: score_r`). The signature adds exactly the landed columns."
 )
 
-# Authoring copy for this module's stage type(s); assembled into NODE_TYPES.
-NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
-    "enrich": NodeTypeSpec(
+# Authoring copy for this module's stage type(s); assembled into STAGE_TYPES.
+STAGE_TYPE_SPECS: dict[str, StageTypeSpec] = {
+    "enrich": StageTypeSpec(
         summary="Adds brought reference columns to each subject row; the reference must be unique on the key (many-to-one).",
         signature_form="extends",
         blocks=["join"],
@@ -203,7 +212,7 @@ NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
             f"fan-out. {JOIN_SHARED_NOTE}"
         ),
     ),
-    "expand": NodeTypeSpec(
+    "expand": StageTypeSpec(
         summary="Joins brought reference columns into each subject row, fanning one subject row out to several (many-to-many).",
         signature_form="extends",
         blocks=["join"],

@@ -7,25 +7,24 @@ expected output `output.<name>`. Missing preconditions raise ValueError.
 from __future__ import annotations
 
 from app.models.schema import Column
-from app.models.stage import Stage
+from app.models.workflow_stage import WorkflowStage
 
 
-def get_output_columns_from_stage(stage: Stage) -> list[Column]:
-    output_schema = stage.resolve_output_schema()
-    if output_schema is None:
+def get_output_columns_from_stage(stage: WorkflowStage) -> list[Column]:
+    if stage.output_schema is None:
         raise ValueError(f"stage {stage.id!r} declares no output schema")
-    return list(output_schema.columns)
+    return list(stage.output_schema.columns)
 
 
 def get_injected_columns(
-    override: Stage, target: Stage, check_output_columns: list[str],
+    override: WorkflowStage, target: WorkflowStage, check_output_columns: list[str],
 ) -> list[Column]:
     injected, _ = _deconflicted_columns(override, target, check_output_columns)
     return injected
 
 
 def _deconflicted_columns(
-    override: Stage, target: Stage, check_output_columns: list[str],
+    override: WorkflowStage, target: WorkflowStage, check_output_columns: list[str],
 ) -> tuple[list[Column], list[Column]]:
     override_columns = get_output_columns_from_stage(override)
     target_by_name = {c.name: c for c in get_output_columns_from_stage(target)}

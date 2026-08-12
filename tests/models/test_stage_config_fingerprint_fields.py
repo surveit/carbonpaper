@@ -6,7 +6,7 @@ import pytest
 from typing import get_args
 
 from app.models.stage import PythonFunction, Stage
-from app.models.stages.stage_base import StageBase
+from app.models.stages.stage_base import AbstractStage
 from app.models.stages.aggregate import AggregateConfig
 from app.models.stages.human_review_queue import QueueConfig
 from app.models.stages.input_data import Connector
@@ -43,7 +43,7 @@ def test_fingerprint_and_incidental_fields_cover_every_model_field(config_cls):
 
 
 def _config_block_fields(stage_cls) -> set[str]:
-    own = set(stage_cls.model_fields) - set(StageBase.model_fields)
+    own = set(stage_cls.model_fields) - set(AbstractStage.model_fields)
     return {
         name for name in own
         if isinstance(stage_cls.model_fields[name].annotation, type)

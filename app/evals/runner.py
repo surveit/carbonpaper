@@ -21,7 +21,7 @@ from app.core.frames import (
 )
 from app.evals.scoring import score_expected_outputs
 from app.models import (
-    EvalConfig, EvalRun, EvalRunSettings, Stage, TableRef, Workflow,
+    EvalConfig, EvalRun, EvalRunSettings, TableRef, Workflow, WorkflowStage,
 )
 from app.models.stages.input_data import FileFormat
 from app.runtime.executor import run_subset
@@ -64,7 +64,7 @@ def _score_run(
     project_dir: Path, repo_root: Path, config: EvalConfig, version: str,
     settings: EvalRunSettings, workflow: Workflow,
 ) -> EvalRun:
-    by_id = workflow.index_stages_by_id()
+    by_id = workflow.index_workflow_stages_by_id()
     override, target = by_id[config.override_stage], by_id[config.target_stage]
     assert config.table is not None  # _require_runnable checked this
     dataset = _read_table_ref(repo_root, config.table)
@@ -87,7 +87,8 @@ def _score_run(
 
 
 def _build_injected_outputs(
-    repo_root: Path, config: EvalConfig, override: Stage, target: Stage, dataset: pd.DataFrame,
+    repo_root: Path, config: EvalConfig, override: WorkflowStage, target: WorkflowStage,
+    dataset: pd.DataFrame,
 ) -> dict[str, pd.DataFrame]:
     outputs = {config.override_stage: _compute_override_output(override, target, config, dataset)}
     for ref in config.reference_overrides:
@@ -96,7 +97,8 @@ def _build_injected_outputs(
 
 
 def _compute_override_output(
-    override: Stage, target: Stage, config: EvalConfig, dataset: pd.DataFrame,
+    override: WorkflowStage, target: WorkflowStage, config: EvalConfig,
+    dataset: pd.DataFrame,
 ) -> pd.DataFrame:
     override_columns = get_output_columns_from_stage(override)
     expected_source = [

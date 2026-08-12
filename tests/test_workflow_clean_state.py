@@ -20,7 +20,7 @@ _CLEAN_LINE = "0 errors, 0 warnings"
 
 _UNDESCRIBED = {
     "id": "shape", "description": "Shape", "type": "python_row_function",
-    "inputs": [{"id": "load", "schema": _SCHEMA}],
+    "inputs": [{"id": "load"}],
     "signature": {"form": "extends", "reads": [{"input": "load", "columns": _SCHEMA["columns"]}]},
     "function": {"kind": "inline", "code": "def transform(row):\n    return row"},
 }

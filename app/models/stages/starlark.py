@@ -17,9 +17,9 @@ from app.core.starlark_source import (
     find_bound_function,
 )
 from app.models.schema import StageConfig
-from app.models.stages.stage_base import StageBase, StageInput, StageType
+from app.models.stages.stage_base import AbstractStage, StageInput, StageType
 from app.models.stages.code import CORNER_CASES_DESCRIPTION, SUMMARY_DESCRIPTION, CornerCase
-from app.models.stages.node_spec import NodeTypeSpec
+from app.models.stages.stage_type_spec import StageTypeSpec
 from app.models.stages.signature import ExtendsSignature
 from app.models.stages.stage_tests import StarlarkRowFunctionStageTest
 from app.models.stages.warnings import CompilerWarning, warn
@@ -98,7 +98,7 @@ class StarlarkFunction(StageConfig):
         return block
 
 
-class StarlarkRowFunctionStage(StageBase):
+class StarlarkRowFunctionStage(AbstractStage):
     type: Literal[StageType.starlark_row_function]
     CARRIES_RUNNABLE_TESTS: ClassVar[bool] = True
     starlark: StarlarkFunction
@@ -108,7 +108,7 @@ class StarlarkRowFunctionStage(StageBase):
     # The code is opaque to load-time validation, so unlike the config-driven
     # types nothing here cross-checks the block. The function is held to its
     # claimed writes at run time instead: the stage's output frame is validated
-    # against what this signature promises (resolve_output_schema).
+    # against the output schema this signature resolves to.
     signature: ExtendsSignature
 
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
@@ -128,9 +128,9 @@ def find_starlark_warnings(stage: "StarlarkRowFunctionStage") -> list[CompilerWa
     return []
 
 # Authoring notes for this module's stage type(s), as the plain-data shape the
-# authoring prompts render. Assembled into NODE_TYPES by app.models.stages.
-NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
-    "starlark_row_function": NodeTypeSpec(
+# authoring prompts render. Assembled into STAGE_TYPES by app.models.stages.
+STAGE_TYPE_SPECS: dict[str, StageTypeSpec] = {
+    "starlark_row_function": StageTypeSpec(
         summary="Sandboxed Starlark run once per row: one row in → one row out.",
         signature_form="extends",
         blocks=["starlark"],

@@ -82,7 +82,7 @@ def _double_stage():
         "id": "double",
         "description": "Double the value",
         "type": "python_row_function",
-        "inputs": [{"id": "load", "schema": {"columns": _COLUMNS}}],
+        "inputs": [{"id": "load"}],
         "function": {
             "kind": "inline",
             "summary": "Doubles val and keeps the name unchanged.",
@@ -576,7 +576,7 @@ def _publish_stage(code):
         "id": "report",
         "description": "Publish the report",
         "type": "publish",
-        "inputs": [{"id": "double", "schema": {"columns": _COLUMNS}}],
+        "inputs": [{"id": "double"}],
         "publish": {"format": "html_report", "destination": "build/"},
         "signature": {"form": "replaces"},
         "function": {

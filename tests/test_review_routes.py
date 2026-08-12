@@ -20,7 +20,7 @@ from app.runtime.stages import llm_transform as lt
 from app.services import review, versioning
 from app.core.stage_cache import StageCacheEntry
 from app.services.project import save_working_copy_as_version
-from app.models import Stage, parse_stage
+from app.models import WorkflowStage, parse_stage
 from app.models.stages.human_review_queue import ReviewVerdict
 from conftest import (
     QUEUE_COLUMNS, pinned_stages, queue_added_columns, queue_columns, reads_of,
@@ -35,12 +35,9 @@ def _seed_version(root):
     versioning.publish_version(root, vid, reviewer="human")
 
 
-def _with_queue_signature(stage):
-    input_schema = stage["inputs"][0]["schema"]
-    # `stage` plus the signature its `queue` block implies: each reviewed source
-    # repeated under its target name and spec, then the review-record columns.
-    # For the fixtures whose subject is something other than the signature.
-    by_name = {column["name"]: column for column in input_schema["columns"]}
+def _with_queue_signature(stage, input_columns):
+    """`stage` plus the signature its `queue` block implies, for fixtures about something else."""
+    by_name = {column["name"]: column for column in input_columns}
     queue = stage["queue"]
     added = [{**by_name[source], "name": target}
              for source, target in queue["reviewed_columns"].items()]
@@ -50,7 +47,7 @@ def _with_queue_signature(stage):
               if queue.get(field) is not None]
     return {**stage, "signature": {
         "form": "extends",
-        "reads": reads_of(stage["inputs"][0]["id"], input_schema["columns"]),
+        "reads": reads_of(stage["inputs"][0]["id"], input_columns),
         "adds": added,
     }}
 
@@ -89,8 +86,7 @@ _REVIEW_COLUMNS = queue_added_columns()
 
 def _score_stage():
     return {"id": "score", "description": "Score quotes", "type": "llm_transform",
-            "inputs": [{"id": "load", "schema": {
-                "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "quote", "type": "str", "nullable": True}]}}],
+            "inputs": [{"id": "load"}],
             "signature": {
                 "form": "extends",
                 "reads": [
@@ -107,9 +103,7 @@ def _score_stage():
 
 def _review_stage():
     return {"id": "review", "description": "Review scores", "type": "human_review_queue",
-            "inputs": [{"id": "score", "schema": {
-                "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "quote", "type": "str", "nullable": True},
-                            {"name": "score", "type": "int", "nullable": True}]}}],
+            "inputs": [{"id": "score"}],
             "signature": {
                 "form": "extends",
                 "reads": reads_of("score", [
@@ -126,10 +120,10 @@ def _read_fingerprints(run_dir, stage_id: str = "review") -> dict:
     return parsed
 
 
-def _find_stage_def(project: str, stage_id: str) -> Stage:
-    stage_def = loading.find_stage(loading.load_stages(project).stages, stage_id)
-    assert stage_def is not None
-    return stage_def
+def _find_stage_def(project: str, stage_id: str) -> WorkflowStage:
+    placed = loading.index_workflow_stages(loading.load_stages(project).stages)
+    assert stage_id in placed
+    return placed[stage_id]
 
 
 def _decide_data(fp, reviewed, prefilled=None, reviewer="Ada", **extra):
@@ -337,15 +331,16 @@ def _e2e_load_stage(root):
                 "form": "replaces",
                 "produces": [
                     {"name": "id", "type": "str", "nullable": True},
-                    {"name": "score", "type": "int", "nullable": True},
+                    {"name": "score", "type": "int",
+                     "description": "the score this row was labelled from",
+                     "nullable": True},
                 ],
             }}
 
 
 def _e2e_review_stage():
     return {"id": "review", "description": "Review items", "type": "human_review_queue",
-            "inputs": [{"id": "load", "schema": {
-                "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True}]}}],
+            "inputs": [{"id": "load"}],
             "signature": {
                 "form": "extends",
                 "reads": reads_of("load", [
@@ -442,9 +437,10 @@ def _no_notes_review_stage():
     queue = {k: v for k, v in QUEUE_COLUMNS.items() if k != "review_notes_column"}
     return _with_queue_signature({
             "id": "review", "description": "Review items", "type": "human_review_queue",
-            "inputs": [{"id": "load", "schema": {
-                "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True}]}}],
-            "queue": queue})
+            "inputs": [{"id": "load"}],
+            "queue": queue}, [
+        {"name": "id", "type": "str", "nullable": True},
+        {"name": "score", "type": "int", "nullable": True}])
 
 
 def test_decide_400_on_notes_when_the_stage_declares_no_notes_column(tmp_path, monkeypatch):
@@ -553,10 +549,10 @@ def test_queue_page_prefills_a_decided_row_from_the_recorded_value(tmp_path, mon
 def _bool_review_stage(nullable):
     return _with_queue_signature({
         "id": "review", "description": "Review flags", "type": "human_review_queue",
-        "inputs": [{"id": "load", "schema": {
-            "columns": [{"name": "id", "type": "str", "nullable": True},
-                        {"name": "flag", "type": "bool", "nullable": nullable}]}}],
-        "queue": {**queue_columns(source="flag", target="human_flag")}})
+        "inputs": [{"id": "load"}],
+        "queue": {**queue_columns(source="flag", target="human_flag")}}, [
+        {"name": "id", "type": "str", "nullable": True},
+        {"name": "flag", "type": "bool", "nullable": nullable}])
 
 
 def _build_and_halt_bool_queue(tmp_path, monkeypatch, project, *, ai_value, nullable=True):
@@ -652,10 +648,10 @@ def test_a_non_nullable_bool_select_opens_on_the_ai_value(tmp_path, monkeypatch)
 def _temporal_review_stage(column_type):
     return _with_queue_signature({
         "id": "review", "description": "Review times", "type": "human_review_queue",
-        "inputs": [{"id": "load", "schema": {
-            "columns": [{"name": "id", "type": "str", "nullable": True},
-                        {"name": "seen_at", "type": column_type, "nullable": True}]}}],
-        "queue": {**queue_columns(source="seen_at", target="human_seen_at")}})
+        "inputs": [{"id": "load"}],
+        "queue": {**queue_columns(source="seen_at", target="human_seen_at")}}, [
+        {"name": "id", "type": "str", "nullable": True},
+        {"name": "seen_at", "type": column_type, "nullable": True}])
 
 
 def _decide_a_temporal_row(tmp_path, monkeypatch, project, column_type, recorded):
@@ -712,10 +708,7 @@ def test_a_temporal_control_opens_on_the_recorded_value_of_a_decided_row(
 
 def _declared_range_review_stage():
     return {"id": "review", "description": "Review items", "type": "human_review_queue",
-            "inputs": [{"id": "load", "schema": {
-                "columns": [{"name": "id", "type": "str", "nullable": True},
-                            {"name": "score", "type": "int", "nullable": False,
-                             "range": [0, 5]}]}}],
+            "inputs": [{"id": "load"}],
             "signature": {
                 "form": "extends",
                 "reads": reads_of("load", [
@@ -832,8 +825,7 @@ def _labelled_row_function_stage():
         "            'label': 'high' if row['score'] > 1 else 'low'}"
     )
     return {"id": "label", "description": "Label items", "type": "python_row_function",
-            "inputs": [{"id": "load", "schema": {
-                "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True}]}}],
+            "inputs": [{"id": "load"}],
             "function": {"kind": "inline", "code": code},
             "signature": {
                 "form": "extends",
@@ -846,20 +838,20 @@ def _labelled_row_function_stage():
                         ],
                     },
                 ],
-                "adds": [{"name": "label", "type": "str", "nullable": True}],
+                "adds": [{"name": "label", "type": "str",
+                          "description": "high when the score exceeds one",
+                          "nullable": True}],
             }}
 
 
 def _review_labels_stage():
     return _with_queue_signature({
         "id": "review", "description": "Review labels", "type": "human_review_queue",
-        "inputs": [{"id": "label", "schema": {
-            "columns": [
-                {"name": "id", "type": "str", "nullable": True},
-                {"name": "score", "type": "int", "nullable": True},
-                {"name": "label", "type": "str",
-                 "description": "high when the score exceeds one", "nullable": True}]}}],
-        "queue": {**queue_columns(source="label", target="human_label")}})
+        "inputs": [{"id": "label"}],
+        "queue": {**queue_columns(source="label", target="human_label")}}, [
+        {"name": "id", "type": "str", "nullable": True},
+        {"name": "score", "type": "int", "nullable": True},
+        {"name": "label", "type": "str", "nullable": True}])
 
 
 def test_a_queue_whose_upstream_is_not_an_llm_transform_renders_and_links(tmp_path, monkeypatch):
@@ -885,13 +877,7 @@ def test_a_queue_whose_upstream_is_not_an_llm_transform_renders_and_links(tmp_pa
 
 def _described_review_stage():
     return {"id": "review", "description": "Review labels", "type": "human_review_queue",
-            "inputs": [{"id": "label", "schema": {
-                "columns": [
-                    {"name": "id", "type": "str", "nullable": True},
-                    {"name": "score", "type": "int",
-                     "description": "the score this row was labelled from", "nullable": True},
-                    {"name": "label", "type": "str",
-                     "description": "high when the score exceeds one", "nullable": True}]}}],
+            "inputs": [{"id": "label"}],
             "signature": {
                 "form": "extends",
                 "reads": reads_of("label", [
@@ -1080,8 +1066,7 @@ def _empty_string_row_function_stage():
             "    return {'id': row['id'], 'flag': row['flag'],\n"
             "            'note': '' if row['id'] == 'e' else None}")
     return {"id": "note", "description": "Add notes", "type": "python_row_function",
-            "inputs": [{"id": "load", "schema": {
-                "columns": _EMPTY_STRING_COLUMNS[:2]}}],
+            "inputs": [{"id": "load"}],
             "function": {"kind": "inline", "code": code},
             "signature": {
                 "form": "extends",
@@ -1101,9 +1086,11 @@ def _empty_string_row_function_stage():
 def _empty_string_review_stage():
     return _with_queue_signature({
         "id": "review", "description": "Review notes", "type": "human_review_queue",
-        "inputs": [{"id": "note", "schema": {
-            "columns": _EMPTY_STRING_COLUMNS}}],
-        "queue": {**queue_columns(source="flag", target="human_flag")}})
+        "inputs": [{"id": "note"}],
+        "queue": {**queue_columns(source="flag", target="human_flag")}}, [
+        {"name": "id", "type": "str", "nullable": True},
+        {"name": "flag", "type": "bool", "nullable": True},
+        {"name": "note", "type": "str", "nullable": True}])
 
 
 def test_an_empty_string_cell_is_not_printed_as_a_null(tmp_path, monkeypatch):
@@ -1128,9 +1115,9 @@ def test_an_empty_string_cell_is_not_printed_as_a_null(tmp_path, monkeypatch):
 def _every_column_reviewed_stage():
     return _with_queue_signature({
         "id": "review", "description": "Review scores", "type": "human_review_queue",
-        "inputs": [{"id": "load", "schema": {
-            "columns": [{"name": "score", "type": "int", "nullable": True}]}}],
-        "queue": dict(QUEUE_COLUMNS)})
+        "inputs": [{"id": "load"}],
+        "queue": dict(QUEUE_COLUMNS)}, [
+        {"name": "score", "type": "int", "nullable": True}])
 
 
 def test_no_context_table_is_rendered_when_every_column_is_under_review(tmp_path, monkeypatch):

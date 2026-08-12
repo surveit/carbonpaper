@@ -18,7 +18,7 @@ runtime or web — keep it pure.** Checks the *spec*, distinct from RUNTIME data
 - `stage.py` — `Stage`, the pydantic discriminated union over the per-type models keyed on
   `type` (parse a stage dict with `parse_stage`; `Stage` is an annotation, not a class), and
   `StageDraft`, the flat all-optional shape an authoring client submits.
-- `stages/stage_base.py` — the stage types, and `StageBase`: the fields and rules every
+- `stages/stage_base.py` — the stage types, and `AbstractStage`: the fields and rules every
   stored stage satisfies whatever its type, plus `is_grain_and_order_preserving` (1:1 row
   correspondence in order — the eval gate depends on it).
 - `stages/signature.py` — `TransformSignature`, the contract every stored stage declares
@@ -26,16 +26,22 @@ runtime or web — keep it pure.** Checks the *spec*, distinct from RUNTIME data
   `rewrites` (revised in place) and `adds` (new columns), every other anchor column
   flowing through untouched. Form `replaces`: nothing flows, output is exactly
   `produces`. `reads` names what the transform consumes per input — a column that merely
-  passes through is not a read. `StageBase.resolve_output_schema()` computes the output
-  from the signature; nothing stores one.
+  passes through is not a read. A stage may be TOLD a schema and never holds one:
+  `promised_output_schema(stage, inputs)` computes the output from the signature and the
+  input schemas `Workflow` resolved.
 - `stages/` — one module per stage type alongside `stage_base.py`, holding that type's
-  config class, its `StageBase` subclass (which declares the blocks that type REQUIRES and
+  config class, its `AbstractStage` subclass (which declares the blocks that type REQUIRES and
   its input arity), and its own validation helpers. `PythonFunction` and both
   python-transform stage models live in `stages/code.py`; `StarlarkFunction` and
   `StarlarkRowFunctionStage` live in `stages/starlark.py`.
 - `schema.py` — `Column`, `TableSchema`, column-type vocab. `workflow.py` — graph checks
-  (unique ids, inputs resolve, cycles). `named_schemas.py` — named schemas + FK `references`.
-  `eval.py` — `EvalConfig` + grain-preservation gate. `table.py` — `TableRef`.
+  (unique ids, inputs resolve, cycles) and schema RESOLUTION: a stage's input and output
+  schemas are a function of the whole graph, so `Workflow` walks it in dependency order
+  and hands out `WorkflowStage` (`workflow_stage.py`) — the authored `Stage` plus what
+  each input supplies and what the stage emits. Every consumer that needs a schema takes
+  a `WorkflowStage`; the read/write seam (loader, stage_edit, drafts, versioning, seeds,
+  tools, mcp, agents, compiler) still names `Stage`. `named_schemas.py` — named schemas +
+  FK `references`. `eval.py` — `EvalConfig` + grain-preservation gate. `table.py` — `TableRef`.
 
 **Loading is normalizing + strict.** Stages persist as JSON (`compiled/<NN>_<stage_id>.json`,
 a validated `Stage`); `app/services/loader.py` is the one loader — the runner refuses a

@@ -1,10 +1,10 @@
 """human_review_queue stage: the config block naming the columns the stage ADDS,
 the reviewer's verdict vocabulary, and the checks that every named column
-resolves — sources against the input edge, added names against the signature."""
+resolves — sources against what the input supplies, added names against the signature."""
 from __future__ import annotations
 
 from enum import Enum
-from typing import ClassVar, Literal, Mapping, Optional
+from typing import TYPE_CHECKING, ClassVar, Literal, Mapping, Optional, Sequence
 
 from pydantic import Field, field_validator
 
@@ -18,10 +18,13 @@ from app.models.schema import (
     TableSchema,
     _Base,
 )
-from app.models.stages.stage_base import StageBase, StageInput, StageType
+from app.models.stages.stage_base import AbstractStage, StageInput, StageType
 from app.models.stages.shared import find_predicate_column_issues
-from app.models.stages.node_spec import NodeTypeSpec
+from app.models.stages.stage_type_spec import StageTypeSpec
 from app.models.stages.signature import ExtendsSignature
+
+if TYPE_CHECKING:
+    from app.models.workflow_stage import WorkflowStageInput
 
 
 class ReviewVerdict(str, Enum):
@@ -108,7 +111,7 @@ class QueueConfig(StageConfig):
         return v
 
 
-class HumanReviewQueueStage(StageBase):
+class HumanReviewQueueStage(AbstractStage):
     type: Literal[StageType.human_review_queue]
     queue: QueueConfig
     inputs: list[StageInput] = Field(default_factory=list, min_length=1, max_length=1)
@@ -117,9 +120,11 @@ class HumanReviewQueueStage(StageBase):
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
         return {"queue": self.queue}
 
-    def find_config_column_issues(self) -> list[str]:
+    def find_config_column_issues(
+        self, inputs: Sequence["WorkflowStageInput"]
+    ) -> list[str]:
         sid, queue = self.id, self.queue
-        input_schema = self.inputs[0].table_schema
+        input_schema = inputs[0].table_schema
         return (
             _find_duplicate_added_names(sid, queue)
             + _find_filter_issues(sid, queue, input_schema)
@@ -136,6 +141,15 @@ class HumanReviewQueueStage(StageBase):
     # claimable. Given that, the signature's own anchor-collision check
     # (signature._find_extends_issues) can only ever restate the config check's verdict.
     def find_signature_config_issues(self) -> list[str]:
+        return _find_unread_column_issues(self.id, self.queue, self.signature)
+
+    # The rest of the queue-vs-signature cross-check runs together, beside the
+    # collision check in find_config_column_issues: they are one verdict on one
+    # question — whether the signature adds exactly what the queue block names —
+    # and half of it needs the input schema, so a reader sees all of it or none.
+    def find_signature_schema_issues(
+        self, inputs: Sequence["WorkflowStageInput"]
+    ) -> list[str]:
         declared = {name for _, name in find_added_columns(self.queue)}
         issues = [
             f"stage '{self.id}': signature adds `{column.name}`, which the review "
@@ -149,24 +163,33 @@ class HumanReviewQueueStage(StageBase):
                 f"stage '{self.id}': human_review_queue never revises an input "
                 f"column; rewrites are not supported"
             )
-        adds_by_name = {column.name: column for column in self.signature.adds}
-        input_schema = self.inputs[0].table_schema
+        adds_by_name = _index_adds_by_name(self.signature)
         return (
             issues
-            + _find_unread_column_issues(self.id, self.queue, self.signature)
-            + _find_reviewed_target_issues(self.id, self.queue, input_schema, adds_by_name)
+            + _find_reviewed_target_issues(
+                self.id, self.queue, inputs[0].table_schema, adds_by_name)
             + _find_review_record_target_issues(self.id, self.queue, adds_by_name)
         )
 
 
+def _index_adds_by_name(signature: ExtendsSignature) -> dict[str, Column]:
+    return {column.name: column for column in signature.adds}
 
-def resolve_queue_config(stage: StageBase) -> Optional[QueueConfig]:
+
+
+def resolve_queue_config(stage: AbstractStage) -> Optional[QueueConfig]:
     """The only sanctioned access to `.queue` (tests/arch/test_handle_access_is_owned.py)."""
     return stage.queue if isinstance(stage, HumanReviewQueueStage) else None
 
 
-def find_queue_column_issues(stage: HumanReviewQueueStage) -> list[str]:
-    return stage.find_config_column_issues() + stage.find_signature_config_issues()
+def find_queue_column_issues(
+    stage: HumanReviewQueueStage, inputs: Sequence["WorkflowStageInput"]
+) -> list[str]:
+    return (
+        stage.find_config_column_issues(inputs)
+        + stage.find_signature_config_issues()
+        + stage.find_signature_schema_issues(inputs)
+    )
 
 
 def find_added_columns(queue: QueueConfig) -> list[tuple[str, str]]:
@@ -350,9 +373,9 @@ def _find_review_record_target_issues(
             )
     return issues
 
-# Authoring copy for this module's stage type(s); assembled into NODE_TYPES.
-NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
-    "human_review_queue": NodeTypeSpec(
+# Authoring copy for this module's stage type(s); assembled into STAGE_TYPES.
+STAGE_TYPE_SPECS: dict[str, StageTypeSpec] = {
+    "human_review_queue": StageTypeSpec(
         summary="Pulls flagged rows for human decision; halts the run.",
         signature_form="extends",
         blocks=["queue"],

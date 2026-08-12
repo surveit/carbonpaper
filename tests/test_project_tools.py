@@ -61,7 +61,7 @@ def _stage(sid: str, name: str, stype: str, inputs: list[str] | None = None) -> 
     if stype in _SIGNATURE_BY_TYPE:
         stage["signature"] = _SIGNATURE_BY_TYPE[stype]
     if inputs:
-        stage["inputs"] = [{"id": dep, "schema": _LOAD_SCHEMA} for dep in inputs]
+        stage["inputs"] = [{"id": dep} for dep in inputs]
     return stage
 
 

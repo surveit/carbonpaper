@@ -35,7 +35,7 @@ def _load_stage(data_path: Path) -> dict:
 def _judge_stage() -> dict:
     return {
         "id": "judge", "description": "Judge each row", "type": "llm_transform",
-        "inputs": [{"id": "load", "schema": {"columns": _COLUMNS}}],
+        "inputs": [{"id": "load"}],
         "signature": {
             "form": "extends",
             "reads": [{"input": "load", "columns": _COLUMNS}],

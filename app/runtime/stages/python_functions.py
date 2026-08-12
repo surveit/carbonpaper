@@ -10,7 +10,7 @@ from typing import Any, Callable
 
 import pandas as pd
 
-from app.models import FunctionKind, Stage
+from app.models import FunctionKind, WorkflowStage
 from app.models.stages.code import (
     PythonFrameFunctionStage,
     PythonRowFunctionStage,
@@ -42,15 +42,20 @@ def _load_python_function(stage: CodeCarryingStage) -> Callable[..., Any]:
     raise ValueError(f"Unknown function kind for stage {stage.id}: {fn_spec.kind}")
 
 
-def handle_python_frame_function(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext) -> pd.DataFrame:
-    fn = _load_python_function(narrow_stage(stage, PythonFrameFunctionStage))
+def handle_python_frame_function(
+    workflow_stage: WorkflowStage, inputs: dict[str, pd.DataFrame], ctx: RunContext
+) -> pd.DataFrame:
+    fn = _load_python_function(narrow_stage(workflow_stage, PythonFrameFunctionStage))
     # Pass dataframes positionally in declared input order.
-    args = [inputs[ref.id] for ref in stage.inputs]
+    args = [inputs[ref.id] for ref in workflow_stage.inputs]
     return fn(*args)
 
 
-def make_python_row_mapper(stage: Stage, ctx: RunContext, src: pd.DataFrame) -> RowMapper:
-    fn = _load_python_function(narrow_stage(stage, PythonRowFunctionStage))
+def make_python_row_mapper(
+    workflow_stage: WorkflowStage, ctx: RunContext, src: pd.DataFrame
+) -> RowMapper:
+    stage = narrow_stage(workflow_stage, PythonRowFunctionStage)
+    fn = _load_python_function(stage)
 
     def map_row(row: Row, index: int) -> Row:
         result = fn(row)

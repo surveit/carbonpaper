@@ -13,6 +13,7 @@ from app.runtime.stages import HANDLERS
 from app.services import project, versioning
 from app.services.loader import load_workflow
 from app.services.project import WorkflowFile, import_project
+from conftest import place_stage
 
 _FIXTURE_PATH = (
     Path(__file__).resolve().parents[1]
@@ -58,7 +59,7 @@ def _stage(wf: WorkflowFile, stage_id: str) -> Stage:
 def _execute(stage: Stage, inputs: dict[str, pd.DataFrame]) -> pd.DataFrame:
     # The same ephemeral, run-dir-less context authored stage tests execute under.
     ctx = RunContext.for_stages_outside_a_run(None, None)
-    result = HANDLERS[StageType(stage.type)].execute(stage, inputs, ctx)
+    result = HANDLERS[StageType(stage.type)].execute(place_stage(stage), inputs, ctx)
     assert result is not None
     return result
 
@@ -361,7 +362,7 @@ def _publish_a_report(tmp_path, df: pd.DataFrame) -> str:
     # A project-scoped context, because the step declares `trace_links` — the run's
     # (project, run_id) is what a row-trace URL is built from.
     ctx = RunContext.for_workflow_test_run(tmp_path, tmp_path, "tutorial", "R-1")
-    out = HANDLERS[StageType(stage.type)].execute(stage, {"flag_contradiction": df}, ctx)
+    out = HANDLERS[StageType(stage.type)].execute(place_stage(stage), {"flag_contradiction": df}, ctx)
     assert out is not None
     return Path(out.iloc[0]["report_path"]).read_text(encoding="utf-8")
 

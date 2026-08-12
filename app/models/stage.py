@@ -19,8 +19,8 @@ from pydantic.json_schema import SkipJsonSchema
 
 from app.models.stages.stage_base import (  # noqa: F401  (re-exported: the stage vocabulary lives here)
     ReviewConfig,
-    StageBase,
-    StageCommon,
+    AbstractStage,
+    AuthoredStageFields,
     StageInput,
     StageType,
     is_grain_and_order_preserving,
@@ -73,7 +73,7 @@ Stage = Annotated[
 
 _STAGE_ADAPTER: TypeAdapter[Stage] = TypeAdapter(Stage)
 
-_MODEL_BY_TYPE: dict[StageType, type[StageBase]] = {
+_MODEL_BY_TYPE: dict[StageType, type[AbstractStage]] = {
     get_args(member.model_fields["type"].annotation)[0]: member
     for member in get_args(get_args(Stage)[0])
 }
@@ -105,7 +105,8 @@ def validate_stage(spec: Any) -> list[str]:
 # schema_version column, and what an alembic revision rewrites a payload up to.
 # v2: primary_key left the stage vocabulary (the data model keeps its own).
 # v3: `name` became `description` — a stage has one name, its id.
-STAGE_SPEC_SCHEMA_VERSION = 3
+# v4: an input's stored schema left — the graph resolves it (app.models.workflow).
+STAGE_SPEC_SCHEMA_VERSION = 4
 
 
 def stage_to_spec_dict(stage: Stage) -> dict[str, Any]:
@@ -126,7 +127,7 @@ SERVER_OWNED_STAGE_FIELDS = ("tests", "eval", "review", "source")
 # Add no cross-field validator: an invalid stage must parse here and be refused later.
 # (Above the class deliberately — a docstring here would be copied into the tool schema
 # and read by the authoring agent. See tests/arch/test_tool_schema_models_carry_no_docstring.py.)
-class StageDraft(StageCommon):
+class StageDraft(AuthoredStageFields):
     model_config = ConfigDict(json_schema_extra={"description": STAGE_DRAFT_DESCRIPTION})
 
     connector: Optional[Connector] = None

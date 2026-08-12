@@ -11,7 +11,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.models import StageDraft, parse_stage
-from app.models.stage import Stage, StageCommon
+from app.models.stage import Stage, AuthoredStageFields
 from app.seeds.seed import discover_workflow_files
 
 # Every member of the `Stage` union, read off the union itself so a new stage
@@ -52,15 +52,12 @@ def test_round_trip_covers_more_than_one_stage_type():
     assert len(types) > 1, types
 
 
-def test_an_input_schema_round_trips_under_the_key_a_compiled_stage_spells():
-    """`schema:` on the wire is `table_schema` in python (pydantic reserves `schema`): dump by alias."""
+def test_an_input_round_trips_as_the_upstream_id_alone():
     draft = StageDraft.model_validate({
         "id": "flag_rows",
         "type": "python_row_function",
         "description": "Flag rows",
-        "inputs": [{"id": "raw", "schema": {
-            "columns": [{"name": "filing_id", "type": "str", "nullable": True}],
-        }}],
+        "inputs": [{"id": "raw"}],
         "function": {"kind": "inline", "code": "def transform(row):\n    return row\n"},
         "signature": {
             "form": "extends",
@@ -74,11 +71,10 @@ def test_an_input_schema_round_trips_under_the_key_a_compiled_stage_spells():
     })
 
     spec = draft.to_stage_spec()
-    assert set(spec["inputs"][0]) == {"id", "schema"}
+    assert set(spec["inputs"][0]) == {"id"}
 
     rebuilt = parse_stage(spec)
-    assert rebuilt.inputs[0].table_schema is not None
-    assert [c.name for c in rebuilt.inputs[0].table_schema.columns] == ["filing_id"]
+    assert rebuilt.input_ids == ["raw"]
 
 
 def test_a_stage_that_breaks_a_cross_field_rule_parses_as_a_draft_and_is_refused_by_stage():
@@ -88,7 +84,7 @@ def test_a_stage_that_breaks_a_cross_field_rule_parses_as_a_draft_and_is_refused
         "description": "Score rows",
         # the signature reads `text`, which the prompt never injects -> the
         # signature-vs-config rule fails
-        "inputs": [{"id": "raw", "schema": {"columns": [{"name": "text", "type": "str", "nullable": True}]}}],
+        "inputs": [{"id": "raw"}],
         "signature": {
             "form": "extends",
             "reads": [{"input": "raw",
@@ -112,7 +108,7 @@ def test_schema_omits_the_fields_no_authoring_client_writes():
 
 @pytest.mark.parametrize("stage_cls", _STAGE_CLASSES, ids=lambda c: c.__name__)
 def test_every_stage_class_shares_the_drafts_field_list(stage_cls):
-    assert issubclass(stage_cls, StageCommon) and issubclass(StageDraft, StageCommon)
+    assert issubclass(stage_cls, AuthoredStageFields) and issubclass(StageDraft, AuthoredStageFields)
     extra = set(stage_cls.model_fields) - set(StageDraft.model_fields)
     assert extra == set(DROPPED_FIELDS), stage_cls.__name__
 

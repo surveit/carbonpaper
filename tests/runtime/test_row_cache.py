@@ -25,7 +25,7 @@ from app.runtime.stages.execution import (
     _order_by_input_position,
 )
 from app.runtime.stages.llm_transform import run_llm_batches
-from conftest import make_run_context
+from conftest import make_run_context, place_stage
 
 PROJECT = "row-cache-tests"
 
@@ -35,7 +35,7 @@ _DOUBLING_CODE = "def transform(row):\n    return {**row, 'y': row['x'] * 2}\n"
 def _row_stage(code: str = _DOUBLING_CODE, *, cache: bool = True) -> Stage:
     return parse_stage({
         "id": "double", "description": "Double", "type": "python_row_function",
-        "inputs": [{"id": "src", "schema": {"columns": [{"name": "x", "type": "int", "nullable": True}]}}],
+        "inputs": [{"id": "src"}],
         "cache": cache,
         "signature": {
             "form": "extends",
@@ -54,8 +54,7 @@ def _row_stage(code: str = _DOUBLING_CODE, *, cache: bool = True) -> Stage:
 def _llm_stage(*, batch_size: int = 1, instructions: str = "score it") -> Stage:
     return parse_stage({
         "id": "score", "description": "Score", "type": "llm_transform",
-        "inputs": [{"id": "src", "schema": {
-            "columns": [{"name": "x", "type": "int", "nullable": True}]}}],
+        "inputs": [{"id": "src"}],
         "signature": {
             "form": "extends",
             "reads": [{"input": "src",
@@ -79,7 +78,7 @@ def _src(values: list[int]) -> pd.DataFrame:
 
 
 def _run(stage: Stage, src: pd.DataFrame, ctx) -> pd.DataFrame:
-    out = HANDLERS[StageType(stage.type)].execute(stage, {"src": src}, ctx)
+    out = HANDLERS[StageType(stage.type)].execute(place_stage(stage), {"src": src}, ctx)
     assert out is not None
     return out
 
@@ -108,11 +107,11 @@ def test_second_run_reuses_the_cache_and_never_calls_the_mapper():
     calls: list[int] = []
     handler = _counting_row_handler(calls)
 
-    first = handler.execute(stage, {"src": src}, _ctx(run_id="run1"))
+    first = handler.execute(place_stage(stage), {"src": src}, _ctx(run_id="run1"))
     assert list(first["y"]) == [2, 4]
     assert calls == [1, 2]
 
-    second = handler.execute(stage, {"src": src.copy()}, _ctx(run_id="run2"))
+    second = handler.execute(place_stage(stage), {"src": src.copy()}, _ctx(run_id="run2"))
     assert list(second["y"]) == [2, 4]
     assert calls == [1, 2]  # the mapper was not called again
 
@@ -133,19 +132,19 @@ def test_registered_python_row_function_replays_a_recorded_row_over_its_own_code
 def test_changing_the_stage_definition_invalidates_every_row():
     src = _src([1, 2])
     calls: list[int] = []
-    _counting_row_handler(calls).execute(_row_stage(), {"src": src}, _ctx(run_id="run1"))
+    _counting_row_handler(calls).execute(place_stage(_row_stage()), {"src": src}, _ctx(run_id="run1"))
 
     changed = _row_stage("def transform(row):\n    return {**row, 'y': row['x'] * 3}\n")
-    _counting_row_handler(calls).execute(changed, {"src": src.copy()}, _ctx(run_id="run2"))
+    _counting_row_handler(calls).execute(place_stage(changed), {"src": src.copy()}, _ctx(run_id="run2"))
     assert calls == [1, 2, 1, 2]  # a new definition fingerprint: every row recomputed
 
 
 def test_changing_one_row_invalidates_only_that_row():
     stage = _row_stage()
     calls: list[int] = []
-    _counting_row_handler(calls).execute(stage, {"src": _src([1, 2])}, _ctx(run_id="run1"))
+    _counting_row_handler(calls).execute(place_stage(stage), {"src": _src([1, 2])}, _ctx(run_id="run1"))
 
-    _counting_row_handler(calls).execute(stage, {"src": _src([1, 9])}, _ctx(run_id="run2"))
+    _counting_row_handler(calls).execute(place_stage(stage), {"src": _src([1, 9])}, _ctx(run_id="run2"))
     assert calls == [1, 2, 9]  # row x=1 replayed; only the changed row recomputed
 
 
@@ -159,7 +158,7 @@ def test_a_failed_row_is_never_recorded():
 
     stage = _row_stage()
     handler = RowMapTransformHandler(make_mapper=make_mapper)
-    handler.execute(stage, {"src": _src([1, 2])}, _ctx(run_id="run1"))
+    handler.execute(place_stage(stage), {"src": _src([1, 2])}, _ctx(run_id="run1"))
 
     recorded = {entry.input_fingerprint for entry in _entries(stage)}
     failed = compute_row_fingerprint({"x": 2})
@@ -170,21 +169,19 @@ def test_a_failed_row_is_never_recorded():
 def test_cache_false_writes_nothing():
     stage = _row_stage(cache=False)
     calls: list[int] = []
-    _counting_row_handler(calls).execute(stage, {"src": _src([1])}, _ctx(run_id="run1"))
+    _counting_row_handler(calls).execute(place_stage(stage), {"src": _src([1])}, _ctx(run_id="run1"))
     assert _entries(stage) == []
 
-    _counting_row_handler(calls).execute(stage, {"src": _src([1])}, _ctx(run_id="run2"))
+    _counting_row_handler(calls).execute(place_stage(stage), {"src": _src([1])}, _ctx(run_id="run2"))
     assert calls == [1, 1]  # so the second run has nothing to replay
 
 
 def test_cache_false_reads_nothing_that_is_already_pinned():
     calls: list[int] = []
-    _counting_row_handler(calls).execute(
-        _row_stage(cache=True), {"src": _src([1])}, _ctx(run_id="seed"))
+    _counting_row_handler(calls).execute(place_stage(_row_stage(cache=True)), {"src": _src([1])}, _ctx(run_id="seed"))
     assert len(_entries(_row_stage())) == 1
 
-    _counting_row_handler(calls).execute(
-        _row_stage(cache=False), {"src": _src([1])}, _ctx(run_id="uncached"))
+    _counting_row_handler(calls).execute(place_stage(_row_stage(cache=False)), {"src": _src([1])}, _ctx(run_id="uncached"))
     assert calls == [1, 1]  # the pinned row was there to be had, and was not taken
 
 
@@ -198,15 +195,13 @@ def test_cache_false_does_not_change_the_definition_fingerprint():
 def test_bust_cache_skips_the_read_but_still_re_pins_the_entry():
     stage = _row_stage()
     calls: list[int] = []
-    _counting_row_handler(calls).execute(stage, {"src": _src([1])}, _ctx(run_id="run1"))
+    _counting_row_handler(calls).execute(place_stage(stage), {"src": _src([1])}, _ctx(run_id="run1"))
     assert calls == [1]
 
-    _counting_row_handler(calls).execute(
-        stage, {"src": _src([1, 5])}, _ctx(run_id="run2", bust_cache=True))
+    _counting_row_handler(calls).execute(place_stage(stage), {"src": _src([1, 5])}, _ctx(run_id="run2", bust_cache=True))
     assert calls == [1, 1, 5]  # read skipped: x=1 recomputed despite its entry
 
-    _counting_row_handler(calls).execute(
-        stage, {"src": _src([1, 5])}, _ctx(run_id="run3"))
+    _counting_row_handler(calls).execute(place_stage(stage), {"src": _src([1, 5])}, _ctx(run_id="run3"))
     # x=5 was computed by the busted run and by nothing else, so replaying it
     # here is the evidence that a busted run records.
     assert calls == [1, 1, 5]
@@ -215,13 +210,13 @@ def test_bust_cache_skips_the_read_but_still_re_pins_the_entry():
 def test_a_run_without_project_scope_neither_reads_nor_writes_the_cache():
     stage = _row_stage()
     calls: list[int] = []
-    _counting_row_handler(calls).execute(stage, {"src": _src([1])}, _ctx(run_id="seed"))
+    _counting_row_handler(calls).execute(place_stage(stage), {"src": _src([1])}, _ctx(run_id="seed"))
     assert len(_entries(stage)) == 1
 
     ctx = make_run_context()  # identity=None, stage_cache=None
-    _counting_row_handler(calls).execute(stage, {"src": _src([1])}, ctx)
+    _counting_row_handler(calls).execute(place_stage(stage), {"src": _src([1])}, ctx)
     assert calls == [1, 1]              # the pinned row was not read
-    _counting_row_handler(calls).execute(stage, {"src": _src([5])}, ctx)
+    _counting_row_handler(calls).execute(place_stage(stage), {"src": _src([5])}, ctx)
     assert calls == [1, 1, 5]
     assert len(_entries(stage)) == 1    # and x=5 was not written
 
@@ -229,11 +224,11 @@ def test_a_run_without_project_scope_neither_reads_nor_writes_the_cache():
 def test_a_read_only_accessor_reuses_a_hit_but_records_nothing():
     stage = _row_stage()
     calls: list[int] = []
-    _counting_row_handler(calls).execute(stage, {"src": _src([1])}, _ctx(run_id="seed"))
+    _counting_row_handler(calls).execute(place_stage(stage), {"src": _src([1])}, _ctx(run_id="seed"))
     assert len(_entries(stage)) == 1
 
     read_only = _ctx(run_id="reader", cache=ReadOnlyStageCache())
-    _counting_row_handler(calls).execute(stage, {"src": _src([1, 5])}, read_only)
+    _counting_row_handler(calls).execute(place_stage(stage), {"src": _src([1, 5])}, read_only)
     assert calls == [1, 5]                 # x=1 replayed, x=5 computed
     assert len(_entries(stage)) == 1       # and x=5 was NOT recorded
 
@@ -248,8 +243,7 @@ def test_the_cache_is_read_once_per_execution(monkeypatch):
         return find_entries(project, stage_id, stage_fingerprint)
 
     monkeypatch.setattr(cache, "find_entries", counting_find_entries)
-    _counting_row_handler([]).execute(
-        _row_stage(), {"src": _src([1, 2, 3])}, _ctx(run_id="once", cache=cache))
+    _counting_row_handler([]).execute(place_stage(_row_stage()), {"src": _src([1, 2, 3])}, _ctx(run_id="once", cache=cache))
     assert len(calls) == 1
 
 
@@ -265,7 +259,7 @@ def test_a_post_map_mapper_still_gets_its_post_map_step():
             seen.append(len(df))
 
     handler = RowMapTransformHandler(make_mapper=lambda stage, ctx, src: _Mapper())
-    handler.execute(_row_stage(), {"src": _src([1, 2])}, _ctx(run_id="postmap"))
+    handler.execute(place_stage(_row_stage()), {"src": _src([1, 2])}, _ctx(run_id="postmap"))
     assert seen == [2]
 
 
@@ -442,7 +436,7 @@ def test_run_llm_batches_computes_every_row_it_is_given(monkeypatch):
     _run(stage, _src([1, 2]), _ctx(run_id="seed"))
     batches.clear()
 
-    rows = run_llm_batches(stage, {"src": _src([1, 2])}, _ctx(run_id="direct"), 1, [0, 1])
+    rows = run_llm_batches(place_stage(stage), {"src": _src([1, 2])}, _ctx(run_id="direct"), 1, [0, 1])
 
     assert batches == [[1, 2]]
     assert [row["verdict"] for row in rows] == ["v1", "v2"]
@@ -526,8 +520,7 @@ _READS_X = [{"input": "src", "columns": [{"name": "x", "type": "int", "nullable"
 def _two_column_stage(*, reads=None, code: str = _DOUBLING_CODE) -> Stage:
     return parse_stage({
         "id": "double", "description": "Double", "type": "python_row_function",
-        "inputs": [{"id": "src", "schema": {"columns": [
-            {"name": "x", "type": "int", "nullable": True}, _NOISE_COLUMN]}}],
+        "inputs": [{"id": "src"}],
         "signature": {
             "form": "extends",
             "reads": _READS_X if reads is None else reads,
@@ -554,7 +547,7 @@ def test_the_mapper_is_handed_only_the_columns_the_signature_reads():
     seen: list[Row] = []
     handler = _seen_rows_handler(seen)
 
-    handler.execute(_two_column_stage(), {"src": _noisy_src(["a", "b"])}, _ctx())
+    handler.execute(place_stage(_two_column_stage()), {"src": _noisy_src(["a", "b"])}, _ctx())
 
     assert seen == [{"x": 1}, {"x": 2}]  # `noise` never reached it
 
@@ -562,7 +555,7 @@ def test_the_mapper_is_handed_only_the_columns_the_signature_reads():
 def test_an_unread_column_still_flows_to_the_output():
     handler = _seen_rows_handler([])
 
-    out = handler.execute(_two_column_stage(), {"src": _noisy_src(["a", "b"])}, _ctx())
+    out = handler.execute(place_stage(_two_column_stage()), {"src": _noisy_src(["a", "b"])}, _ctx())
 
     assert list(out["noise"]) == ["a", "b"]
     assert list(out["y"]) == [2, 4]
@@ -573,19 +566,18 @@ def test_a_column_the_stage_never_reads_stops_invalidating_its_cache():
     calls: list[Row] = []
     handler = _seen_rows_handler(calls)
 
-    handler.execute(stage, {"src": _noisy_src(["a", "b"])}, _ctx(run_id="run1"))
+    handler.execute(place_stage(stage), {"src": _noisy_src(["a", "b"])}, _ctx(run_id="run1"))
     assert len(calls) == 2
 
     # Same `x` values, different `noise` — every row is a hit.
-    handler.execute(stage, {"src": _noisy_src(["CHANGED", "ALSO"])}, _ctx(run_id="run2"))
+    handler.execute(place_stage(stage), {"src": _noisy_src(["CHANGED", "ALSO"])}, _ctx(run_id="run2"))
     assert len(calls) == 2
 
 
 def test_a_signature_declaring_no_anchor_reads_is_handed_empty_rows():
     seen: list[Row] = []
     with pytest.raises(KeyError, match="x"):
-        _seen_rows_handler(seen).execute(
-            _two_column_stage(reads=[]), {"src": _noisy_src(["a", "b"])}, _ctx())
+        _seen_rows_handler(seen).execute(place_stage(_two_column_stage(reads=[])), {"src": _noisy_src(["a", "b"])}, _ctx())
     # So a row-mapped stage that reads its input must say so. The synthesis in
     # scripts/stage_signatures.py and migration 0010 leave no stored stage without
     # reads; this is what an under-declared one now gets.

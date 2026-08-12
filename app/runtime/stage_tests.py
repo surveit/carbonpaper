@@ -15,7 +15,7 @@ import pandas as pd
 from pydantic import BaseModel
 
 from app.core.frames import list_rows
-from app.models import Stage, TableSchema
+from app.models import Stage, TableSchema, WorkflowStage, WorkflowStageInput
 from app.models.errors import StepRefused
 from app.models.stage import StageType
 from app.models.stages.signature import transform_input_schemas, transform_output_schema
@@ -166,7 +166,8 @@ def _run_one_test(stage: Stage, test: StageTest) -> StageTestResult:
     # require_run_dir rather than touching a fabricated path.
     ctx = RunContext.for_stages_outside_a_run(None, None)
     try:
-        actual = HANDLERS[StageType(stage.type)].execute(stage, input_frames, ctx)
+        actual = HANDLERS[StageType(stage.type)].execute(
+            _place_against_its_signature(stage), input_frames, ctx)
     except Exception as exc:  # noqa: BLE001 — the function is authored code; any raise IS the result
         return _judge_raise(test, exc)
     if test.expected is None:
@@ -180,6 +181,19 @@ def _run_one_test(stage: Stage, test: StageTest) -> StageTestResult:
             message=f"function returned {type(actual).__name__}, expected a DataFrame",
         )
     return _compare(stage, test, actual)
+
+
+def _place_against_its_signature(stage: Stage) -> WorkflowStage:
+    """An authored test states what the stage does given exactly what it declares reading."""
+    input_schemas = transform_input_schemas(stage)
+    return WorkflowStage(
+        stage=stage,
+        inputs=[
+            WorkflowStageInput(id=ref.id, table_schema=input_schemas[ref.id])
+            for ref in stage.inputs
+        ],
+        output_schema=transform_output_schema(stage),
+    )
 
 
 def _describe_output(actual: Any) -> str:

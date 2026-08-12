@@ -38,7 +38,7 @@ prompt never hand-writes — and never drifts from — an output shape.
   signature flows every anchor column, so keeping the input intact comes for
   free — the output cannot drop a column. `find_llm_signature_issues`
   (`app/models/stages/llm_transform.py`), reached through
-  `StageBase._signature_consistent` like every other type's config check,
+  `AbstractStage._signature_consistent` like every other type's config check,
   requires exactly one input and at least one entry in `adds` (a signature that
   adds nothing asks the model for nothing), refuses `rewrites`, and holds the
   reads and the prompt's `{placeholder}`s to naming the same columns. An

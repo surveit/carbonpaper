@@ -47,9 +47,7 @@ def _classify_stage(marker: str) -> dict:
     return {
         "id": CLASSIFY_ID, "description": f"Classify ({marker})",
         "type": "python_row_function",
-        "inputs": [{"id": LOAD_ID,
-                    "schema": {"columns": [{"name": "name", "type": "str", "nullable": True},
-                                           {"name": "val", "type": "int", "nullable": True}]}}],
+        "inputs": [{"id": LOAD_ID}],
         "function": {"kind": "inline",
                      "code": f'def transform(row):\n    return {{**row, "label": "{marker}"}}\n'},
         "signature": {

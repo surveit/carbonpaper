@@ -9,7 +9,7 @@ from typing import Any, Callable
 import pandas as pd
 
 from app.core.errors import TraceLinksUnavailableError
-from app.models import Stage
+from app.models import WorkflowStage
 from app.models.stages.publish import PublishStage
 
 from ..context import RunContext
@@ -20,11 +20,13 @@ from .python_functions import _load_python_function
 TRACE_LINKS_KWARG = "trace_links"
 
 
-def handle_publish(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext) -> pd.DataFrame:
-    publish_stage = narrow_stage(stage, PublishStage)
+def handle_publish(
+    workflow_stage: WorkflowStage, inputs: dict[str, pd.DataFrame], ctx: RunContext
+) -> pd.DataFrame:
+    publish_stage = narrow_stage(workflow_stage, PublishStage)
     output_dir = _prepare_output_dir(publish_stage, ctx)
     fn = _load_python_function(publish_stage)
-    args = [inputs[ref.id] for ref in stage.inputs]
+    args = [inputs[ref.id] for ref in workflow_stage.inputs]
 
     linker = _resolve_trace_linker(fn, publish_stage, ctx)
     if linker is None:

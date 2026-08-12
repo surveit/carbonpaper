@@ -12,6 +12,7 @@ from typing import Any
 import pytest
 
 from app.models.workflow import parse_workflow
+from conftest import drop_input_schemas
 from scripts.stage_signatures import add_signature
 
 _REVISION = (Path(__file__).resolve().parents[1]
@@ -65,7 +66,7 @@ def test_a_v1_document_validates_under_todays_model_after_upgrading():
     # of the way, as a store crossing both revisions would be.
     for stage in document["stages"]:
         add_signature(stage)
-    parse_workflow(document["stages"])  # raises if the upgraded shape is still invalid
+    parse_workflow([drop_input_schemas(s) for s in document["stages"]])
 
     queue = document["stages"][3]["queue"]
     assert queue["verdict_column"] == "decision"

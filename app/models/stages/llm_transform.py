@@ -1,20 +1,23 @@
 """llm_transform stage: the config block, the prompt-wiring checks (every
-`{placeholder}` resolves against the input edge, and no input column is
+`{placeholder}` resolves against what the input supplies, and no input column is
 double-braced), and the 1:1 additive contract its signature must meet."""
 from __future__ import annotations
 
 import re
-from typing import Any, ClassVar, Literal, Optional
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, Optional, Sequence
 
 from pydantic import AliasChoices, Field, model_validator
 
 from app.core.llm.options import LLMModel
 from app.core.prompt_template import find_template_fields
 from app.models.schema import StageConfig, TableSchema
-from app.models.stages.stage_base import StageBase, StageInput, StageType
+from app.models.stages.stage_base import AbstractStage, StageInput, StageType
 from app.models.stages.shared import COLUMN_ISSUE, resolve_input_columns
-from app.models.stages.node_spec import NodeTypeSpec
+from app.models.stages.stage_type_spec import StageTypeSpec
 from app.models.stages.signature import ExtendsSignature
+
+if TYPE_CHECKING:
+    from app.models.workflow_stage import WorkflowStageInput
 
 
 # Tool names an `llm_transform` stage may be granted, so a stage can RESEARCH — look
@@ -121,7 +124,7 @@ class LLMConfig(StageConfig):
         return self
 
 
-class LLMTransformStage(StageBase):
+class LLMTransformStage(AbstractStage):
     type: Literal[StageType.llm_transform]
     llm: LLMConfig
     # Exactly one input, like every other row-mapped type: the runtime maps the
@@ -132,8 +135,10 @@ class LLMTransformStage(StageBase):
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
         return {"llm": self.llm}
 
-    def find_config_column_issues(self) -> list[str]:
-        return find_llm_prompt_column_issues(self)
+    def find_config_column_issues(
+        self, inputs: Sequence["WorkflowStageInput"]
+    ) -> list[str]:
+        return find_llm_prompt_column_issues(self, inputs)
 
     def find_signature_config_issues(self) -> list[str]:
         return find_llm_signature_issues(self)
@@ -172,9 +177,11 @@ def find_llm_signature_issues(stage: "LLMTransformStage") -> list[str]:
     return issues
 
 
-def find_llm_prompt_column_issues(stage: "LLMTransformStage") -> list[str]:
+def find_llm_prompt_column_issues(
+    stage: "LLMTransformStage", inputs: Sequence["WorkflowStageInput"]
+) -> list[str]:
     llm = stage.llm
-    cols = resolve_input_columns(stage, 0)
+    cols = resolve_input_columns(inputs, 0)
     injected = find_template_fields(llm.prompt_data_template)
     issues = [
         COLUMN_ISSUE.format(sid=stage.id, field=f"llm prompt {{{field}}}", col=field, cols=sorted(cols))
@@ -182,7 +189,9 @@ def find_llm_prompt_column_issues(stage: "LLMTransformStage") -> list[str]:
         if field not in cols
     ]
     issues.extend(
-        find_double_braced_input_issues(llm.prompt_data_template, injected, stage.inputs[0].table_schema)
+        find_double_braced_input_issues(
+            llm.prompt_data_template, injected, inputs[0].table_schema
+        )
     )
     return issues
 
@@ -206,9 +215,9 @@ def find_double_braced_input_issues(
 
 
 
-# Authoring copy for this module's stage type(s); assembled into NODE_TYPES.
-NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
-    "llm_transform": NodeTypeSpec(
+# Authoring copy for this module's stage type(s); assembled into STAGE_TYPES.
+STAGE_TYPE_SPECS: dict[str, StageTypeSpec] = {
+    "llm_transform": StageTypeSpec(
         summary="Row-by-row LLM call producing structured output.",
         signature_form="extends",
         blocks=["llm"],

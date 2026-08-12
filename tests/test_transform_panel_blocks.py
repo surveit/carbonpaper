@@ -36,15 +36,15 @@ def _seed_project(root: Path) -> None:
     }), encoding="utf-8")
     (compiled / "03_all_filings.json").write_text(json.dumps({
         "id": "all_filings", "description": "Every filing", "type": "union",
-        "inputs": [{"id": "load", "schema": _SCHEMA},
-                   {"id": "load_more", "schema": _SCHEMA}],
+        "inputs": [{"id": "load"},
+                   {"id": "load_more"}],
         "signature": {"form": "replaces", "produces": _SCHEMA["columns"]},
         "union": {},
     }), encoding="utf-8")
     (compiled / "04_incidental.json").write_text(json.dumps({
         "id": "select_incidental_filings", "description": "The incidental mentions",
         "type": "filter_rows",
-        "inputs": [{"id": "all_filings", "schema": _SCHEMA}],
+        "inputs": [{"id": "all_filings"}],
         "signature": {"form": "extends",
                       "reads": [{"input": "all_filings", "columns": _SCHEMA["columns"]}]},
         "filter": {"code": _PREDICATE},

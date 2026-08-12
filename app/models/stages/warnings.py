@@ -11,7 +11,7 @@ from app.models.severity import UserFacingErrorSeverity
 from app.models.schema import _Base
 
 if TYPE_CHECKING:
-    from app.models.stages.stage_base import StageBase
+    from app.models.stages.stage_base import AbstractStage
 
 WarningKind = Literal[
     "undescribed",
@@ -19,7 +19,6 @@ WarningKind = Literal[
     "examples_failing",
     "unreviewable_code",
     "nondeterministic",
-    "row_limit",
 ]
 
 # Each kind's severity, and the order the list is read in (errors first).
@@ -30,7 +29,7 @@ WarningKind = Literal[
 # them and hands the result in; either the code or the description is wrong, and
 # both are edits to this stage.
 #
-# The last two are deliberate authoring choices, wrong to refuse and still worth
+# The last is a deliberate authoring choice, wrong to refuse and still worth
 # telling a reviewer about: a `warning` is not thereby unimportant.
 SEVERITY: dict[str, UserFacingErrorSeverity] = {
     "undescribed": UserFacingErrorSeverity.error,
@@ -38,7 +37,6 @@ SEVERITY: dict[str, UserFacingErrorSeverity] = {
     "examples_failing": UserFacingErrorSeverity.error,
     "unreviewable_code": UserFacingErrorSeverity.error,
     "nondeterministic": UserFacingErrorSeverity.warning,
-    "row_limit": UserFacingErrorSeverity.warning,
 }
 
 
@@ -52,5 +50,5 @@ class CompilerWarning(_Base):
         return SEVERITY[self.kind]
 
 
-def warn(stage: "StageBase", kind: WarningKind, detail: str) -> CompilerWarning:
+def warn(stage: "AbstractStage", kind: WarningKind, detail: str) -> CompilerWarning:
     return CompilerWarning(kind=kind, stage_id=stage.id, detail=detail)

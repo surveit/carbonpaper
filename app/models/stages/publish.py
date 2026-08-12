@@ -1,10 +1,10 @@
 """publish stage: the config block, its artifact-format vocabulary, and
-config-column validation — `one_file_per`, when set, must resolve against the
-stage's input edge."""
+config-column validation — `one_file_per`, when set, must resolve against what
+the stage's input supplies."""
 from __future__ import annotations
 
 from enum import Enum
-from typing import ClassVar, Literal, Optional
+from typing import TYPE_CHECKING, ClassVar, Literal, Optional, Sequence
 
 from pydantic import ConfigDict, Field
 
@@ -14,9 +14,12 @@ from app.models.stages.code import (
     CarriesPythonFunctionStage,
 )
 from app.models.stages.shared import COLUMN_ISSUE, resolve_input_columns
-from app.models.stages.node_spec import NodeTypeSpec
+from app.models.stages.stage_type_spec import StageTypeSpec
 from app.models.stages.signature import ReplacesSignature
 from app.models.tool_schema_prompts import PUBLISH_CONFIG_DESCRIPTION
+
+if TYPE_CHECKING:
+    from app.models.workflow_stage import WorkflowStageInput
 
 
 class PublishFormat(str, Enum):
@@ -52,8 +55,10 @@ class PublishStage(CarriesPythonFunctionStage):
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
         return {"publish": self.publish, **super().fingerprint_blocks()}
 
-    def find_config_column_issues(self) -> list[str]:
-        return find_publish_column_issues(self)
+    def find_config_column_issues(
+        self, inputs: Sequence["WorkflowStageInput"]
+    ) -> list[str]:
+        return find_publish_column_issues(self, inputs)
 
     def find_signature_config_issues(self) -> list[str]:
         signature = self.signature
@@ -65,11 +70,13 @@ class PublishStage(CarriesPythonFunctionStage):
         return []
 
 
-def find_publish_column_issues(stage: "PublishStage") -> list[str]:
+def find_publish_column_issues(
+    stage: "PublishStage", inputs: Sequence["WorkflowStageInput"]
+) -> list[str]:
     publish = stage.publish
     if not publish.one_file_per:
         return []
-    cols = resolve_input_columns(stage, 0)
+    cols = resolve_input_columns(inputs, 0)
     if publish.one_file_per in cols:
         return []
     return [
@@ -78,9 +85,9 @@ def find_publish_column_issues(stage: "PublishStage") -> list[str]:
         )
     ]
 
-# Authoring copy for this module's stage type(s); assembled into NODE_TYPES.
-NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
-    "publish": NodeTypeSpec(
+# Authoring copy for this module's stage type(s); assembled into STAGE_TYPES.
+STAGE_TYPE_SPECS: dict[str, StageTypeSpec] = {
+    "publish": StageTypeSpec(
         summary="Render a final artifact (html, json, csv, cards).",
         signature_form="replaces",
         blocks=["publish", "function"],

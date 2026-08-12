@@ -3,8 +3,10 @@
 
    Context (GET /project/{project}/node/{id}/panel):
      project      — str
-     stage        — the loaded Stage (.id .type .name .inputs[].table_schema
-                    .resolve_output_schema() + the transform config block: llm/function/join/…)
+     stage        — the loaded Stage (.id .type .description + the transform config
+                    block: llm/function/join/…)
+     workflow_stage — the same stage placed in the workflow (.inputs[].table_schema,
+                    .output_schema), or None where the graph does not resolve
      raw_json     — stage_to_json(stage) for the Spec editor
      function_code — python source for a function stage (may be None)
      type_class / type_glyph — the type-tag maps
@@ -37,8 +39,9 @@
   <div class="panes nr-panes">
     {# ── Inputs: the schema of each upstream output this stage consumes ── #}
     <div class="pane" data-pane="inputs" hidden>
-      {% if stage.inputs %}
-        {% for inp in stage.inputs %}
+      {% if workflow_stage is none %}<p class="muted"><em>Input schemas unavailable — the workflow graph does not resolve.</em></p>
+      {% elif workflow_stage.inputs %}
+        {% for inp in workflow_stage.inputs %}
         <div class="schema-card">
           <h4><a href="#" data-stage-link="{{ inp.id }}"><code>{{ inp.id }}</code></a> <span class="muted">— upstream output → this input</span></h4>
           {{ schema_table(inp.table_schema) }}
@@ -77,8 +80,8 @@
 
     {# ── Outputs: the schema this stage produces ── #}
     <div class="pane" data-pane="outputs" hidden>
-      {% if stage.resolve_output_schema() %}
-      <div class="schema-card"><h4>output schema</h4>{{ schema_table(stage.resolve_output_schema()) }}</div>
+      {% if workflow_stage and workflow_stage.output_schema %}
+      <div class="schema-card"><h4>output schema</h4>{{ schema_table(workflow_stage.output_schema) }}</div>
       {% else %}<p class="muted"><em>No output schema declared.</em></p>{% endif %}
     </div>
 

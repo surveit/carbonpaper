@@ -42,7 +42,7 @@ def _seed_project(root: Path) -> Path:
     }), encoding="utf-8")
     (compiled / "02_double.json").write_text(json.dumps({
         "id": "double", "description": "Double", "type": "python_row_function",
-        "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
+        "inputs": [{"id": "load"}],
         "signature": {
             "form": "extends",
             "reads": [{"input": "load", "columns": _IN_SCHEMA["columns"]}],
@@ -53,7 +53,7 @@ def _seed_project(root: Path) -> Path:
     }), encoding="utf-8")
     (compiled / "03_publish.json").write_text(json.dumps({
         "id": "publish", "description": "Publish", "type": "publish",
-        "inputs": [{"id": "double", "schema": _OUT_SCHEMA}],
+        "inputs": [{"id": "double"}],
         "function": {"kind": "inline", "summary": "Test fixture step.", "corner_cases": [], "code": "def transform(df, output_dir):\n    return df\n"},
         "publish": {}, "signature": {"form": "replaces"},
     }), encoding="utf-8")
@@ -191,7 +191,7 @@ def test_generate_tests_rejects_python_stage_without_a_signature(client: TestCli
     project_dir = _seed_project(tmp_path)
     (project_dir / "compiled" / "02_double.json").write_text(json.dumps({
         "id": "double", "description": "Double", "type": "python_row_function",
-        "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
+        "inputs": [{"id": "load"}],
         "function": {"kind": "inline", "summary": "Test fixture step.", "corner_cases": [],
                      "code": "def transform(row):\n    return {**row, 'doubled': row['amount'] * 2}\n"},
     }), encoding="utf-8")

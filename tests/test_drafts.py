@@ -52,7 +52,7 @@ def test_create_draft_seeded_from_version(examples: Path) -> None:
 # input never resolves.
 _DANGLING_INPUT_STAGE = dict(
     _STAGE, id="later", type="python_row_function",
-    inputs=[{"id": "missing", "schema": _ROWS_SCHEMA}],
+    inputs=[{"id": "missing"}],
     function={"kind": "inline", "code": "def transform(row): return row"},
     signature={"form": "extends"},  # a row function extends; it never replaces
 )

@@ -17,7 +17,7 @@ from app.models import stage_to_json
 from app.runtime.stage_tests import find_failing_stage_tests
 from app.web.config import projects_dir, templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
-from app.web.loading import find_stage, load_stages
+from app.web.loading import find_stage, index_workflow_stages, load_stages
 from app.web.stage_test_views import build_certification, shape_test_views
 
 router = APIRouter()
@@ -41,11 +41,12 @@ async def node_panel(request: Request, project: str, stage_id: str):
         {
             "project": project,
             "stage": stage,
+            "workflow_stage": (workflow_stage := index_workflow_stages(stages).get(stage_id)),
             "raw_json": stage_to_json(stage),
             "function_code": resolve_function_code(stage),
             "type_class": TYPE_CLASS,
             "type_glyph": TYPE_GLYPH,
-            "test_views": (views := shape_test_views(stage)),
+            "test_views": (views := shape_test_views(workflow_stage)),
             "certification": build_certification(stage, views),
             "can_generate_tests": stage.CARRIES_RUNNABLE_TESTS,
         },

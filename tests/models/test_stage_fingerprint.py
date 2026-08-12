@@ -8,10 +8,7 @@ def _row_function_stage(input_id="src", **overrides):
         "id": "step",
         "type": "python_row_function",
         "description": "Step",
-        "inputs": [{
-            "id": input_id,
-            "schema": {"columns": [{"name": "a", "type": "str", "nullable": False}]},
-        }],
+        "inputs": [{"id": input_id}],
         "signature": {"form": "extends"},
         "function": {"kind": "inline", "code": "def transform(row):\n    return row\n"},
     }
@@ -36,13 +33,7 @@ def _queue_stage(**queue_overrides):
         "id": "review",
         "type": "human_review_queue",
         "description": "review",
-        "inputs": [{
-            "id": "src",
-            "schema": {"columns": [
-                {"name": "id", "type": "str", "nullable": False},
-                {"name": "score", "type": "float", "nullable": False},
-            ]},
-        }],
+        "inputs": [{"id": "src"}],
         # Every column the queue adds, since the signature must declare them all,
         # over the whole anchor edge, since a queue reads the row it shows.
         "signature": {"form": "extends", "reads": [{"input": "src", "columns": [
@@ -63,10 +54,7 @@ def _publish_stage(code="def transform(df, output_dir, trace_links):\n    return
         "id": "report",
         "type": "publish",
         "description": "report",
-        "inputs": [{
-            "id": "src",
-            "schema": {"columns": [{"name": "a", "type": "str", "nullable": False}]},
-        }],
+        "inputs": [{"id": "src"}],
         "publish": {"format": "html_report", "destination": "out/"},
         "function": {"kind": "inline", "code": code},
         "signature": {"form": "replaces"},

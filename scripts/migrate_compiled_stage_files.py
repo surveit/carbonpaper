@@ -13,6 +13,7 @@ Applied here, matching the revisions that do the same to the store:
   0008 — `name` became `description`: a stage has one name, its id.
   0010 — a filter_rows/human_review_queue signature reading nothing no longer
          loads; its reads become the whole anchor edge.
+  0011 — an input's stored `schema` left; the graph resolves it.
 
 Usage:  python -m scripts.migrate_compiled_stage_files [--apply] [--projects-dir PATH]
 Without --apply it is a dry run and writes nothing.
@@ -29,6 +30,10 @@ from app.core.paths import repo_root
 from scripts.stage_description import (
     DescriptionUndeterminable,
     rename_name_to_description,
+)
+from scripts.stage_input_schemas import (
+    InputRefUnreadable,
+    drop_stored_input_schemas,
 )
 from scripts.stage_signatures import (
     SignatureUndeterminable,
@@ -71,7 +76,8 @@ def find_stale_stage_files(projects_dir: Path) -> tuple[list[Path], list[tuple[P
         try:
             if _migrate(_read(path)):
                 stale.append(path)
-        except (SignatureUndeterminable, DescriptionUndeterminable) as exc:
+        except (SignatureUndeterminable, DescriptionUndeterminable,
+                InputRefUnreadable) as exc:
             refused.append((path, str(exc)))
     return stale, refused
 
@@ -90,10 +96,13 @@ def _migrate(spec: Any) -> bool:
     changed = _drop_primary_keys(spec)
     if not isinstance(spec, dict):
         return changed
+    # `|` evaluates left to right, and the stored input schemas are what 0006 and
+    # 0010 read to synthesize a signature from, so dropping them comes last.
     return (
         rename_name_to_description(spec)
         | add_signature(spec)
         | backfill_anchor_reads(spec)
+        | drop_stored_input_schemas(spec)
         | changed
     )
 
@@ -107,7 +116,12 @@ def _rewrite(path: Path) -> None:
 
 
 def _read(path: Path) -> Any:
-    return json.loads(path.read_text(encoding="utf-8"))
+    # Raised out of the survey, which runs to completion before the first write, so
+    # one unreadable file leaves every other project's compiled/ untouched.
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{path} is not JSON: {exc}") from exc
 
 
 def _drop_primary_keys(node: Any) -> bool:

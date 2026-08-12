@@ -8,7 +8,7 @@ from pydantic import ValidationError
 
 from app.models import parse_stage
 from app.runtime.stages import HANDLERS
-from conftest import make_run_context, reads_of
+from conftest import make_run_context, place_stage, reads_of
 
 
 # Every frame below is a single int column `x`; `output_columns` names what the
@@ -19,7 +19,7 @@ _X_COLUMN = [{"name": "x", "type": "int", "nullable": True}]
 def _stage(code, inputs=("src",), output_columns=_X_COLUMN):
     return parse_stage({
         "id": "t", "description": "t", "type": "python_row_function",
-        "inputs": [{"id": i, "schema": {"columns": _X_COLUMN}} for i in inputs],
+        "inputs": [{"id": i} for i in inputs],
         "signature": {"form": "extends", "reads": reads_of(inputs[0], _X_COLUMN),
                       "adds": [c for c in output_columns
                                if c["name"] not in {i["name"] for i in _X_COLUMN}]},
@@ -28,7 +28,7 @@ def _stage(code, inputs=("src",), output_columns=_X_COLUMN):
 
 
 def _run(stage, frames):
-    return HANDLERS[stage.type].execute(stage, frames, make_run_context())
+    return HANDLERS[stage.type].execute(place_stage(stage), frames, make_run_context())
 
 
 def test_row_function_maps_per_row():

@@ -141,7 +141,7 @@ def _write_compiled_workflow(pdir: Path) -> None:
         {"id": "load", "description": "Load", "type": "input_data", "connector": {"kind": "file"},
          "signature": {"form": "replaces", "produces": _IN_SCHEMA["columns"]}},
         {"id": "double", "description": "Double", "type": "python_row_function",
-         "inputs": [{"id": "load", "schema": _IN_SCHEMA}], "signature": {
+         "inputs": [{"id": "load"}], "signature": {
              "form": "extends",
              "reads": [{"input": "load", "columns": _IN_SCHEMA["columns"]}],
              "adds": [{"name": "doubled", "type": "float", "nullable": True}],
@@ -154,7 +154,7 @@ def _write_compiled_workflow(pdir: Path) -> None:
               "expected": [{"amount": 2.0, "doubled": 5.0}]},
          ]},
         {"id": "untested", "description": "Untested", "type": "python_row_function",
-         "inputs": [{"id": "load", "schema": _IN_SCHEMA}], "signature": {
+         "inputs": [{"id": "load"}], "signature": {
              "form": "extends",
              "reads": [{"input": "load", "columns": _IN_SCHEMA["columns"]}],
              "adds": [{"name": "doubled", "type": "float", "nullable": True}],
@@ -242,7 +242,7 @@ def test_mcp_stage_tools_report_an_unknown_stage_id_as_issues(tmp_path, monkeypa
     removed = server.remove_stage(project_id=project_id, stage_id="ghost")
     assert removed["ok"] is False and any("ghost" in i for i in removed["issues"])
 
-    edited = server.edit_stage(project_id=project_id, stage_id="ghost", changes_json='{"limit": 1}')
+    edited = server.edit_stage(project_id=project_id, stage_id="ghost", changes_json='{"cache": false}')
     assert edited["ok"] is False and any("ghost" in i for i in edited["issues"])
 
 
@@ -339,7 +339,7 @@ def test_mcp_add_stage_still_refuses_an_unknown_field(tmp_path, monkeypatch):
 
 _UNADDITIVE_LLM_STAGE = {
     "id": "score", "description": "Score", "type": "llm_transform",
-    "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
+    "inputs": [{"id": "load"}],
     # The signature must read exactly what the template injects; reading `id`
     # instead of `amount` breaks that, and `Stage` is where that rule lives.
     "signature": {

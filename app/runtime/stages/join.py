@@ -10,7 +10,7 @@ from typing import Literal, Optional
 import numpy as np
 import pandas as pd
 
-from app.models import Stage
+from app.models import WorkflowStage
 from app.models.stages.join import JoinStage
 
 from ..context import RunContext
@@ -25,24 +25,28 @@ JOIN_SUBJECT_ORD_KEY = "_trace_join_subject_ord"
 JOIN_REFERENCE_ORD_KEY = "_trace_join_reference_ord"
 
 
-def handle_enrich(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext) -> pd.DataFrame:
+def handle_enrich(
+    workflow_stage: WorkflowStage, inputs: dict[str, pd.DataFrame], ctx: RunContext
+) -> pd.DataFrame:
     # validate="m:1" verifies the reference is unique; a duplicate would silently fan out.
-    return _join_reference_into_subject(stage, inputs, validate="m:1")
+    return _join_reference_into_subject(workflow_stage, inputs, validate="m:1")
 
 
-def handle_expand(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext) -> pd.DataFrame:
-    return _join_reference_into_subject(stage, inputs, validate=None)
+def handle_expand(
+    workflow_stage: WorkflowStage, inputs: dict[str, pd.DataFrame], ctx: RunContext
+) -> pd.DataFrame:
+    return _join_reference_into_subject(workflow_stage, inputs, validate=None)
 
 
 def _join_reference_into_subject(
-    stage: Stage,
+    workflow_stage: WorkflowStage,
     inputs: dict[str, pd.DataFrame],
     validate: Optional[Literal["m:1"]],
 ) -> pd.DataFrame:
-    join_stage = narrow_stage(stage, JoinStage)
+    join_stage = narrow_stage(workflow_stage, JoinStage)
     join_cfg = join_stage.join
-    subject_id = join_stage.inputs[0].id
-    reference_id = join_stage.inputs[1].id
+    subject_id = workflow_stage.inputs[0].id
+    reference_id = workflow_stage.inputs[1].id
     keys = join_cfg.keys
 
     # Carry each side's row ordinal through the merge so the pairing can be read

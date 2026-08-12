@@ -6,7 +6,7 @@ the two surfaces that render it — so a fragment cannot leak into a lower layer
 """
 from __future__ import annotations
 
-from app.models.stages.node_types import AUTHORABLE_TYPES, CODE_CARRYING_TYPES
+from app.models.stages.stage_types import AUTHORABLE_TYPES, CODE_CARRYING_TYPES
 from app.models.stages.stage_base import StageType, is_grain_and_order_preserving
 
 
@@ -154,10 +154,7 @@ WORKED_STAGE_EXAMPLE = """\
   "id": "normalize_spend",
   "description": "Normalize spend",
   "type": "starlark_row_function",
-  "inputs": [{"id": "filings", "schema": {"columns": [
-    {"name": "filing_id", "type": "str", "nullable": false},
-    {"name": "reported_amount", "type": "str", "nullable": true}
-  ]}}],
+  "inputs": [{"id": "filings"}],
   "signature": {
     "form": "extends",
     "reads": [{"input": "filings", "columns": [

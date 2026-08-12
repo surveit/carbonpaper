@@ -8,14 +8,18 @@ from app.runtime.context import RunContext, RunIdentity
 from app.runtime.stages import HANDLERS
 from app.runtime.stages import llm_transform as lt
 from app.core.stage_cache import StageCacheEntry
-from conftest import contribution_of, make_run_context, queue_columns, reads_of
+from conftest import contribution_of, make_run_context, place_stage, queue_columns, reads_of
+
+
+def _place(stage, upstream_id, input_columns):
+    return place_stage(stage, **{upstream_id: {"columns": input_columns}})
 
 
 def _llm_stage(input_columns, output_columns, pk=("id",)):
     flowing = {c["name"] for c in input_columns}
     return parse_stage({
         "id": "evidence_extraction", "description": "Extract evidence", "type": "llm_transform",
-        "inputs": [{"id": "load", "schema": {"columns": input_columns}}],
+        "inputs": [{"id": "load"}],
         "signature": {
             "form": "extends",
             "reads": [{"input": "load", "columns": [
@@ -35,7 +39,9 @@ def test_llm_transform_drops_undeclared_columns_including_former_hardcoded_ids(m
                         lambda *a, **k: {"score": 5, "benchmark_id": "B1", "query_id": "Q5"})
     ctx = make_run_context()
     out = HANDLERS[StageType.llm_transform].execute(
-        stage, {"load": pd.DataFrame({"id": ["r1"], "text": ["hi"]})}, ctx)
+        _place(stage, "load", [{"name": "id", "type": "str", "nullable": True},
+                               {"name": "text", "type": "str", "nullable": True}]),
+        {"load": pd.DataFrame({"id": ["r1"], "text": ["hi"]})}, ctx)
 
     assert list(out.columns) == ["id", "text", "score"]
     dropped = contribution_of(out).dropped_columns
@@ -53,7 +59,11 @@ def test_llm_transform_declared_input_column_rides_through(monkeypatch):
     monkeypatch.setattr(lt, "call_llm", lambda *a, **k: {"score": 5})
     ctx = make_run_context()
     src = pd.DataFrame({"id": ["r1"], "text": ["hi"], "entity_id": ["C:acme"]})
-    out = HANDLERS[StageType.llm_transform].execute(stage, {"load": src}, ctx)
+    out = HANDLERS[StageType.llm_transform].execute(
+        _place(stage, "load", [{"name": "id", "type": "str", "nullable": True},
+                               {"name": "text", "type": "str", "nullable": True},
+                               {"name": "entity_id", "type": "str", "nullable": True}]),
+        {"load": src}, ctx)
 
     assert list(out.columns) == ["id", "text", "entity_id", "score"]
     assert out.loc[0, "entity_id"] == "C:acme"                # rode through from input
@@ -87,7 +97,7 @@ def _queue_stage(output_schema, flt=None):
     outputs = output_schema["columns"] + _REVIEW_RECORD_COLUMNS
     return parse_stage({
         "id": "review", "description": "Human review", "type": "human_review_queue",
-        "inputs": [{"id": "scored", "schema": {"columns": _SCORED_COLUMNS}}],
+        "inputs": [{"id": "scored"}],
         "signature": {"form": "extends",
                       "reads": reads_of("scored", _SCORED_COLUMNS),
                       "adds": [c for c in outputs if c["name"] not in flowing]},
@@ -118,7 +128,8 @@ def test_human_review_queue_carries_every_input_column_through(tmp_path):
         flt="entity_id == 'nope'",  # matches no row, so nothing halts
     )
     ctx = _queue_test_ctx(tmp_path, "keeps-declared-columns")
-    out = HANDLERS[StageType.human_review_queue].execute(stage, {"scored": _src_scored()}, ctx)
+    out = HANDLERS[StageType.human_review_queue].execute(
+        _place(stage, "scored", _SCORED_COLUMNS), {"scored": _src_scored()}, ctx)
 
     assert list(out.columns) == [c["name"] for c in _SCORED_COLUMNS] + [
         "final_score"] + _REVIEW_RECORD

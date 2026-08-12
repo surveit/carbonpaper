@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 
 from app.core.predicate import parse_predicate
-from app.models import Stage
+from app.models import WorkflowStage
 from app.models.stages.aggregate import (
     AGG_FORMULA_COUNT,
     AGG_FORMULA_COUNT_DISTINCT,
@@ -28,9 +28,11 @@ from .execution import narrow_stage
 ORDINAL_KEY = "_trace_aggregate_ord"
 
 
-def handle_aggregate(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext) -> pd.DataFrame:
-    agg_cfg = narrow_stage(stage, AggregateStage).aggregate
-    input_id = stage.inputs[0].id
+def handle_aggregate(
+    workflow_stage: WorkflowStage, inputs: dict[str, pd.DataFrame], ctx: RunContext
+) -> pd.DataFrame:
+    agg_cfg = narrow_stage(workflow_stage, AggregateStage).aggregate
+    input_id = workflow_stage.inputs[0].id
     df = inputs[input_id]
     if not agg_cfg.aggregations:
         return pd.DataFrame(columns=agg_cfg.group_by)

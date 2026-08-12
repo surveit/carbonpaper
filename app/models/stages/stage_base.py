@@ -20,7 +20,7 @@ from pydantic import (
 from app.models.schema import (
     SourceRef,
     StageConfig,
-    TableSchema,
+    StageId,
     _Base,
     _SNAKE_RE,
 )
@@ -29,8 +29,6 @@ from app.models.stages.signature import (
     ReplacesSignature,
     TransformSignature,
     anchor_read_columns,
-    find_signature_issues,
-    promised_output_schema,
 )
 from app.models.stages.stage_tests import StageTest, validate_stage_tests
 from app.models.stages.warnings import CompilerWarning
@@ -39,6 +37,7 @@ from app.core.utils import compute_short_hash
 if TYPE_CHECKING:
     # app.models.stages.code imports this module, so the reference stays lazy.
     from app.models.stages.code import AuthoredCode
+    from app.models.workflow_stage import WorkflowStageInput
 
 
 # ── Enumerated vocabularies ──────────────────────────────────────────────────
@@ -108,8 +107,7 @@ class ReviewConfig(_Base):
 
 
 class StageInput(_Base):
-    id: str
-    table_schema: TableSchema = Field(alias="schema")
+    id: StageId
 
 
 # ── The one name, and the line under it ──────────────────────────────────────
@@ -143,7 +141,7 @@ STAGE_DESCRIPTION_DESCRIPTION = (
 
 
 # ── The shared field list ────────────────────────────────────────────────────
-class StageCommon(_Base):
+class AuthoredStageFields(_Base):
     id: str = Field(max_length=STAGE_ID_MAX_CHARS, description=STAGE_ID_DESCRIPTION)
     type: StageType
     description: str = Field(
@@ -158,10 +156,6 @@ class StageCommon(_Base):
     # not WHAT the stage computes, so flipping it must never invalidate an
     # entry already recorded.
     cache: bool = True
-    # Caps the rows this stage READS: the runtime cuts the window off every input
-    # frame before the handler runs, so a limited stage never fans out over the
-    # rows past it. A stage with no inputs caps the frame it loads instead.
-    limit: Optional[int] = None
     compiler_notes: list[str] = Field(default_factory=list)
 
     # The authored contract of what this stage reads and writes, per input —
@@ -172,8 +166,8 @@ class StageCommon(_Base):
     # reshaping family — app.models.stages.signature) and REQUIRES it: a stage's
     # output schema resolves from the signature and nothing else. The draft
     # keeps the permissive optional union, per the StageDraft philosophy. It is
-    # checked against the config (find_signature_config_issues) and the edges
-    # (find_signature_issues).
+    # checked against the config (find_signature_config_issues) and against what
+    # the inputs supply (find_signature_issues).
     signature: Optional[TransformSignature] = None
 
     @field_validator("inputs", mode="before")
@@ -189,8 +183,8 @@ class StageCommon(_Base):
 
 
 # ── The per-type stage base ──────────────────────────────────────────────────
-class StageBase(StageCommon):
-    # Narrowed from StageCommon's optional: a stored stage always has one.
+class AbstractStage(AuthoredStageFields):
+    # Narrowed from the optional on AuthoredStageFields: a stored stage always has one.
     signature: TransformSignature
 
     REQUIRES_OUTPUT_SCHEMA: ClassVar[bool] = True
@@ -213,9 +207,9 @@ class StageBase(StageCommon):
     inputs: list[StageInput] = Field(
         default_factory=list,
         description=(
-            "Upstream dependencies: each is an upstream stage id plus the REQUIRED schema "
-            "this stage expects that input to satisfy — which is just the upstream stage's "
-            "output schema."
+            "Upstream dependencies, each naming one upstream stage id. What that input "
+            "supplies is the upstream stage's own output schema, so it is never restated "
+            "here."
         ),
     )
     source: Optional[SourceRef] = None
@@ -235,22 +229,29 @@ class StageBase(StageCommon):
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
         raise NotImplementedError
 
-    def find_config_column_issues(self) -> list[str]:
-        return []
-
     def find_authored_code_block(self) -> Optional["AuthoredCode"]:
         return None
 
     def find_handle_compiler_warnings(self) -> list["CompilerWarning"]:
         return []
 
-    def resolve_output_schema(self) -> Optional[TableSchema]:
-        return promised_output_schema(self)
-
     def anchor_reads(self) -> frozenset[str]:
         return frozenset(column.name for column in anchor_read_columns(self))
 
+    # Answerable from the stage alone, so it runs at construction (below).
     def find_signature_config_issues(self) -> list[str]:
+        return []
+
+    # Told its resolved input schemas rather than holding them: both are run by
+    # app.models.workflow, which is what can resolve them.
+    def find_config_column_issues(
+        self, inputs: Sequence["WorkflowStageInput"]
+    ) -> list[str]:
+        return []
+
+    def find_signature_schema_issues(
+        self, inputs: Sequence["WorkflowStageInput"]
+    ) -> list[str]:
         return []
 
     # ── the fingerprint ──────────────────────────────────────────────────────
@@ -282,7 +283,7 @@ class StageBase(StageCommon):
         return None if v == [] else v
 
     @model_validator(mode="after")
-    def _tests_shape(self) -> "StageBase":
+    def _tests_shape(self) -> "AbstractStage":
         if self.tests and not self.CARRIES_RUNNABLE_TESTS:
             raise ValueError(
                 f"tests are only supported on stage types whose handler can run "
@@ -292,12 +293,8 @@ class StageBase(StageCommon):
         return self
 
     @model_validator(mode="after")
-    def _schemas_declared(self) -> "StageBase":
-        issues = [
-            f"input `{ref.id}` declares a schema with no columns"
-            for ref in self.inputs
-            if not ref.table_schema.columns
-        ]
+    def _schemas_declared(self) -> "AbstractStage":
+        issues: list[str] = []
         if self.REQUIRES_OUTPUT_SCHEMA and isinstance(
             self.signature, ReplacesSignature
         ) and not self.signature.produces:
@@ -310,15 +307,8 @@ class StageBase(StageCommon):
         return self
 
     @model_validator(mode="after")
-    def _config_columns_resolve(self) -> "StageBase":
-        issues = self.find_config_column_issues()
-        if issues:
-            raise ValueError("; ".join(issues))
-        return self
-
-    @model_validator(mode="after")
-    def _signature_consistent(self) -> "StageBase":
-        issues = find_signature_issues(self) + self.find_signature_config_issues()
+    def _signature_consistent(self) -> "AbstractStage":
+        issues = self.find_signature_config_issues()
         if issues:
             raise ValueError("; ".join(issues))
         return self
@@ -328,7 +318,7 @@ class StageBase(StageCommon):
         return is_grain_and_order_preserving(self.type)
 
 
-def find_stage_test_class(stage_cls: type[StageBase]) -> type[StageTest]:
+def find_stage_test_class(stage_cls: type[AbstractStage]) -> type[StageTest]:
     sequence_type, _none_type = get_args(stage_cls.model_fields["tests"].annotation)
     (test_class,) = get_args(sequence_type)
     assert issubclass(test_class, StageTest)  # __init_subclass__ admits nothing else

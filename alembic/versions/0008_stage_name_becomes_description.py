@@ -21,7 +21,7 @@ branch_labels = None
 depends_on = None
 
 # A stage now has ONE name — its id — shown on every surface, and `description` is
-# the line under it. The stored key moves with the model: StageCommon forbids
+# the line under it. The stored key moves with the model: AuthoredStageFields forbids
 # extras, so a payload still spelling it `name` loads nowhere.
 #
 # The compiled stage files under <project>/compiled/ hold the same specs and no

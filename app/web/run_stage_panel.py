@@ -40,6 +40,7 @@ def not_executed_panel(
             "project": project,
             "run_id": run_id,
             "stage": pinned.stage,
+            "workflow_stage": pinned.workflow_stage,
             "is_test_run": bool(manifest.get("parameters", {}).get("is_test_run")),
             "function_code": resolve_function_code(pinned.stage),
             "type_glyph": TYPE_GLYPH,

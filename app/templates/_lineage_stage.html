@@ -17,7 +17,7 @@
   {% elif stage_def_error %}<p class="banner banner-warn" id="stage-def-error">⚠ Stage definition unavailable — {{ stage_def_error }}</p>
   {% else %}<p class="muted"><em>No stage definition available.</em></p>{% endif %}
 
-  {% if stage_def and stage_def.resolve_output_schema() %}
-  <details class="lin-disc" data-disc="schema"><summary class="disclosure">Output schema</summary>{{ schema_table(stage_def.resolve_output_schema()) }}</details>
+  {% if workflow_stage and workflow_stage.output_schema %}
+  <details class="lin-disc" data-disc="schema"><summary class="disclosure">Output schema</summary>{{ schema_table(workflow_stage.output_schema) }}</details>
   {% endif %}
 </div>

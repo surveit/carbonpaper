@@ -121,63 +121,10 @@
       "description": "Join Each Filing to its Client's Public Commitment",
       "inputs": [
         {
-          "id": "raw_filings",
-          "table_schema": {
-            "columns": [
-              {
-                "name": "filing_id",
-                "type": "str",
-                "nullable": false
-              },
-              {
-                "name": "client",
-                "type": "str",
-                "nullable": false
-              },
-              {
-                "name": "registrant",
-                "type": "str",
-                "nullable": false
-              },
-              {
-                "name": "amount_usd",
-                "type": "int",
-                "nullable": false
-              },
-              {
-                "name": "filing_period",
-                "type": "str",
-                "nullable": false
-              },
-              {
-                "name": "specific_issues",
-                "type": "str",
-                "nullable": false
-              }
-            ]
-          }
+          "id": "raw_filings"
         },
         {
-          "id": "public_commitments",
-          "table_schema": {
-            "columns": [
-              {
-                "name": "client",
-                "type": "str",
-                "nullable": false
-              },
-              {
-                "name": "public_commitment",
-                "type": "str",
-                "nullable": false
-              },
-              {
-                "name": "commitment_source",
-                "type": "str",
-                "nullable": false
-              }
-            ]
-          }
+          "id": "public_commitments"
         }
       ],
       "cache": true,
@@ -258,51 +205,7 @@
       "description": "Judge the Filing's Ask Against the Public Commitment",
       "inputs": [
         {
-          "id": "matched_commitments",
-          "table_schema": {
-            "columns": [
-              {
-                "name": "filing_id",
-                "type": "str",
-                "nullable": false
-              },
-              {
-                "name": "client",
-                "type": "str",
-                "nullable": false
-              },
-              {
-                "name": "registrant",
-                "type": "str",
-                "nullable": false
-              },
-              {
-                "name": "amount_usd",
-                "type": "int",
-                "nullable": false
-              },
-              {
-                "name": "filing_period",
-                "type": "str",
-                "nullable": false
-              },
-              {
-                "name": "specific_issues",
-                "type": "str",
-                "nullable": false
-              },
-              {
-                "name": "public_commitment",
-                "type": "str",
-                "nullable": true
-              },
-              {
-                "name": "commitment_source",
-                "type": "str",
-                "nullable": true
-              }
-            ]
-          }
+          "id": "matched_commitments"
         }
       ],
       "cache": true,
@@ -376,67 +279,7 @@
       "description": "Flag filings that contradict their client's public commitment",
       "inputs": [
         {
-          "id": "judge_alignment",
-          "table_schema": {
-            "columns": [
-              {
-                "name": "filing_id",
-                "type": "str",
-                "nullable": false
-              },
-              {
-                "name": "client",
-                "type": "str",
-                "nullable": false
-              },
-              {
-                "name": "registrant",
-                "type": "str",
-                "nullable": false
-              },
-              {
-                "name": "amount_usd",
-                "type": "int",
-                "nullable": false
-              },
-              {
-                "name": "filing_period",
-                "type": "str",
-                "nullable": false
-              },
-              {
-                "name": "specific_issues",
-                "type": "str",
-                "nullable": false
-              },
-              {
-                "name": "public_commitment",
-                "type": "str",
-                "nullable": true
-              },
-              {
-                "name": "commitment_source",
-                "type": "str",
-                "nullable": true
-              },
-              {
-                "name": "alignment",
-                "type": "str",
-                "nullable": true,
-                "enum": [
-                  "Contradicts",
-                  "Matches",
-                  "Unclear",
-                  "No commitment given"
-                ]
-              },
-              {
-                "name": "alignment_note",
-                "type": "str",
-                "nullable": true
-              }
-            ]
-          }
+          "id": "judge_alignment"
         }
       ],
       "cache": true,
@@ -518,72 +361,7 @@
       "description": "Publish HTML Say-versus-Do Report",
       "inputs": [
         {
-          "id": "flag_contradiction",
-          "table_schema": {
-            "columns": [
-              {
-                "name": "filing_id",
-                "type": "str",
-                "nullable": false
-              },
-              {
-                "name": "client",
-                "type": "str",
-                "nullable": false
-              },
-              {
-                "name": "registrant",
-                "type": "str",
-                "nullable": false
-              },
-              {
-                "name": "amount_usd",
-                "type": "int",
-                "nullable": false
-              },
-              {
-                "name": "filing_period",
-                "type": "str",
-                "nullable": false
-              },
-              {
-                "name": "specific_issues",
-                "type": "str",
-                "nullable": false
-              },
-              {
-                "name": "public_commitment",
-                "type": "str",
-                "nullable": true
-              },
-              {
-                "name": "commitment_source",
-                "type": "str",
-                "nullable": true
-              },
-              {
-                "name": "alignment",
-                "type": "str",
-                "nullable": true,
-                "enum": [
-                  "Contradicts",
-                  "Matches",
-                  "Unclear",
-                  "No commitment given"
-                ]
-              },
-              {
-                "name": "alignment_note",
-                "type": "str",
-                "nullable": true
-              },
-              {
-                "name": "contradicts_commitment",
-                "type": "bool",
-                "nullable": false
-              }
-            ]
-          }
+          "id": "flag_contradiction"
         }
       ],
       "cache": true,

@@ -14,7 +14,7 @@ number or unsourced claim defeats the purpose. Two rules recur in the code:
 - **project** — the container directory holding everything below.
 - **methodology** — the authored prose method (`methodology_raw.md`).
 - **workflow** — the executable stage graph it compiles into (`compiled/*.json`, one
-  validated `Stage` per file; a DAG of typed stages, every edge schema-validated).
+  validated `Stage` per file; a DAG of typed stages whose schemas resolve from the graph).
 
 A project dir also holds `code/`, `data/`, `runs/<id>/` (outputs + `manifest.json`) —
 runtime data, not source. Review decisions are documents in the store

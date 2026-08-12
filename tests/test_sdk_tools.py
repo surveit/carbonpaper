@@ -169,16 +169,14 @@ def test_set_draft_stage_rejects_malformed_stage_as_tool_error(examples_root: Pa
     assert read_result["stages"] == []
 
 
-def test_draft_stage_input_schema_round_trips_in_alias_form(examples_root: Path) -> None:
-    """`schema` is the wire alias of Pydantic's StageInput.table_schema field."""
+def test_a_draft_stage_input_round_trips_as_the_upstream_id_alone(examples_root: Path) -> None:
     _server, _allowed, tools = _build("congresswatch")
     by_name = {t.name: t for t in tools}
-    upstream_schema = {"columns": [{"name": "id", "type": "str", "nullable": True}]}
     downstream = {
         "id": "transform",
         "description": "Transform rows",
         "type": "python_row_function",
-        "inputs": [{"id": "load", "schema": upstream_schema}],
+        "inputs": [{"id": "load"}],
         "signature": {"form": "extends"},
         "function": {"kind": "inline", "code": "def transform(row): return row"},
     }
@@ -200,9 +198,7 @@ def test_draft_stage_input_schema_round_trips_in_alias_form(examples_root: Path)
     )
     read_result = json.loads(read_back["content"][0]["text"])
     stage = next(s for s in read_result["stages"] if s["id"] == "transform")
-    assert "schema" in stage["inputs"][0]
-    assert "table_schema" not in stage["inputs"][0]
-    assert "primary_key" not in stage["inputs"][0]["schema"]
+    assert stage["inputs"] == [{"id": "load"}]
 
 
 def test_unknown_draft_id_surfaces_as_tool_error(examples_root: Path) -> None:

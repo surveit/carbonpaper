@@ -1,25 +1,36 @@
-"""Workflow contract: validated stages plus the cross-stage checks (unique ids, inputs
-resolve, acyclic). A check answerable from one stage alone belongs on `Stage`, not here.
-
-Each check returns a list of issue strings ([] means it found nothing), and the whole
-batch is collected so one call surfaces every problem, not just the first.
-"""
+"""Workflow contract: validated stages, the cross-stage checks (unique ids, inputs
+resolve, acyclic), and schema resolution — a stage's input and output schemas are a
+function of the whole graph, so they are computed here and handed out as
+`WorkflowStage`. A check answerable from one stage alone belongs on `Stage`, and
+each returns a list of issue strings, [] meaning it found nothing."""
 from __future__ import annotations
 
-from typing import Any, Sequence, TypeVar
+from functools import cached_property
+from typing import Any, Optional, Protocol, Sequence, TypeVar
 
 from pydantic import ValidationError, model_validator
 
-from app.models.schema import _Base
-from app.models.stage import Stage, StageCommon, StageType
+from app.models.schema import TableSchema, _Base
+from app.models.stage import Stage, StageType
+from app.models.stages.signature import find_signature_issues, promised_output_schema
+from app.models.workflow_stage import WorkflowStage, WorkflowStageInput
 from app.core.utils import format_errors
 
-# Ordering and cycle detection read only the shared fields, so they hold a
-# submitted draft and a stored stage alike, and hand back what they were given.
-_StageT = TypeVar("_StageT", bound=StageCommon)
+
+# Ordering and cycle detection read a stage's id and its upstream ids and nothing
+# else, so they hold a submitted draft and a stored stage alike, and hand back what
+# they were given.
+class StageInGraph(Protocol):
+    id: str
+
+    @property
+    def input_ids(self) -> list[str]: ...
 
 
-def validate_unique_ids(stages: Sequence[StageCommon]) -> list[str]:
+_StageT = TypeVar("_StageT", bound=StageInGraph)
+
+
+def validate_unique_ids(stages: Sequence[StageInGraph]) -> list[str]:
     ids = [s.id for s in stages]
     dupes = sorted({i for i in ids if ids.count(i) > 1})
     return [f"duplicate stage id `{d}`" for d in dupes]
@@ -35,7 +46,7 @@ def validate_inputs_resolve(stages: list[Stage]) -> list[str]:
     return issues
 
 
-def detect_cycle(stages: Sequence[StageCommon]) -> list[str]:
+def detect_cycle(stages: Sequence[StageInGraph]) -> list[str]:
     edges = {s.id: list(s.input_ids) for s in stages}
     WHITE, GRAY, BLACK = 0, 1, 2
     color = {sid: WHITE for sid in edges}
@@ -74,31 +85,6 @@ def sort_stages_by_dependency(stages: Sequence[_StageT]) -> list[_StageT]:
         ready_ids = {s.id for s in ready}
         pending = [s for s in pending if s.id not in ready_ids]
     return ordered
-
-
-def validate_edge_schemas(stages: list[Stage]) -> list[str]:
-    """Raises unless `validate_inputs_resolve` and `validate_publish_is_terminal` ran and passed."""
-    by_id = {s.id: s for s in stages}
-    issues: list[str] = []
-    for stage in stages:
-        for ref in stage.inputs:
-            input_table_schema = ref.table_schema
-            upstream = by_id.get(ref.id)
-            if upstream is None:
-                raise ValueError(
-                    f"`{stage.id}`: input `{ref.id}` references no stage — "
-                    "validate_inputs_resolve must run, and pass, before this check"
-                )
-            upstream_output = upstream.resolve_output_schema()
-            if upstream_output is None:
-                raise ValueError(
-                    f"`{stage.id}`: input `{ref.id}` resolves no output schema — "
-                    "publish is the only type exempt, and "
-                    "validate_publish_is_terminal must run, and pass, before this check"
-                )
-            for reason in input_table_schema.find_unsatisfied_columns(upstream_output):
-                issues.append(f"`{stage.id}`: input from `{ref.id}` — {reason}")
-    return issues
 
 
 def validate_publish_is_terminal(stages: list[Stage]) -> list[str]:
@@ -140,17 +126,82 @@ def find_stages_reaching_publish(stages: Sequence[Stage]) -> set[str]:
 
 
 def graph_issues(stages: list[Stage]) -> list[str]:
-    edge_check_prerequisites = (
-        validate_inputs_resolve(stages) + validate_publish_is_terminal(stages)
+    # Resolution RAISES on anything these report, so it runs only once they come
+    # back clean.
+    structural = (
+        validate_unique_ids(stages) + detect_cycle(stages)
+        + validate_inputs_resolve(stages) + validate_publish_is_terminal(stages)
     )
-    issues = (
-        validate_unique_ids(stages) + detect_cycle(stages) + edge_check_prerequisites
+    if structural:
+        return structural
+    return _find_resolution_issues(stages)
+
+
+def resolve_workflow_stages(stages: list[Stage]) -> list[WorkflowStage]:
+    """Raises unless `graph_issues` ran and came back clean."""
+    outputs: dict[str, Optional[TableSchema]] = {}
+    resolved: dict[str, WorkflowStage] = {}
+    for stage in sort_stages_by_dependency(stages):
+        inputs = _resolve_inputs(stage, outputs)
+        output_schema = promised_output_schema(stage, inputs)
+        outputs[stage.id] = output_schema
+        resolved[stage.id] = WorkflowStage(
+            stage=stage, inputs=inputs, output_schema=output_schema
+        )
+    return [resolved[stage.id] for stage in stages]
+
+
+def _find_resolution_issues(stages: list[Stage]) -> list[str]:
+    outputs: dict[str, Optional[TableSchema]] = {}
+    for stage in sort_stages_by_dependency(stages):
+        inputs = _resolve_inputs(stage, outputs)
+        issues = _find_workflow_stage_issues(stage, inputs)
+        if issues:
+            # Its output is in doubt, and every stage downstream resolves through
+            # it — so the walk stops here rather than reporting what follows from
+            # a schema this stage may not actually emit.
+            return issues
+        outputs[stage.id] = promised_output_schema(stage, inputs)
+    return []
+
+
+def _find_workflow_stage_issues(
+    stage: Stage, inputs: list[WorkflowStageInput]
+) -> list[str]:
+    return (
+        find_signature_issues(stage, inputs)
+        + stage.find_config_column_issues(inputs)
+        + stage.find_signature_schema_issues(inputs)
     )
-    # validate_edge_schemas RAISES on an edge these two report on, so it runs only once
-    # they come back clean.
-    if edge_check_prerequisites:
-        return issues
-    return issues + validate_edge_schemas(stages)
+
+
+def _resolve_inputs(
+    stage: Stage, outputs: dict[str, Optional[TableSchema]]
+) -> list[WorkflowStageInput]:
+    return [
+        WorkflowStageInput(
+            id=ref.id, table_schema=_require_upstream_output(stage, ref.id, outputs)
+        )
+        for ref in stage.inputs
+    ]
+
+
+def _require_upstream_output(
+    stage: Stage, upstream_id: str, outputs: dict[str, Optional[TableSchema]]
+) -> TableSchema:
+    if upstream_id not in outputs:
+        raise ValueError(
+            f"`{stage.id}`: input `{upstream_id}` references no stage — "
+            "validate_inputs_resolve must run, and pass, before resolution"
+        )
+    output_schema = outputs[upstream_id]
+    if output_schema is None:
+        raise ValueError(
+            f"`{stage.id}`: input `{upstream_id}` resolves no output schema — "
+            "publish is the only type exempt, and validate_publish_is_terminal "
+            "must run, and pass, before resolution"
+        )
+    return output_schema
 
 
 class Workflow(_Base):
@@ -163,8 +214,24 @@ class Workflow(_Base):
             raise ValueError("; ".join(issues))
         return self
 
+    def list_workflow_stages(self) -> list[WorkflowStage]:
+        return self._resolved_stages
+
+    def find_workflow_stage(self, stage_id: str) -> WorkflowStage:
+        workflow_stage = self.index_workflow_stages_by_id().get(stage_id)
+        if workflow_stage is None:
+            raise KeyError(f"no stage `{stage_id}` in this workflow")
+        return workflow_stage
+
+    def index_workflow_stages_by_id(self) -> dict[str, WorkflowStage]:
+        return {workflow_stage.id: workflow_stage for workflow_stage in self._resolved_stages}
+
     def index_stages_by_id(self) -> dict[str, Stage]:
         return {stage.id: stage for stage in self.stages}
+
+    @cached_property
+    def _resolved_stages(self) -> list[WorkflowStage]:
+        return resolve_workflow_stages(self.stages)
 
 
 def parse_workflow(stages: list[dict[str, Any]]) -> Workflow:

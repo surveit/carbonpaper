@@ -15,14 +15,13 @@ from app.models.schema import TableSchema
 from app.models.stage import StageType
 from app.runtime.stages import HANDLERS
 from app.runtime.stages import llm_transform as lt
-from conftest import contribution_of, make_run_context
+from conftest import contribution_of, make_run_context, place_stage
 
 
 def _stage():
     return parse_stage({
         "id": "score", "description": "score", "type": "llm_transform",
-        "inputs": [{"id": "load", "schema": {
-            "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}]}}],
+        "inputs": [{"id": "load"}],
         "signature": {
             "form": "extends",
             "reads": [
@@ -38,8 +37,11 @@ def _stage():
 
 
 def _run(stage, frames, ctx=None):
+    placed = place_stage(stage, load={"columns": [
+        {"name": "id", "type": "str", "nullable": True},
+        {"name": "text", "type": "str", "nullable": True}]})
     return HANDLERS[StageType.llm_transform].execute(
-        stage, frames, ctx if ctx is not None else make_run_context())
+        placed, frames, ctx if ctx is not None else make_run_context())
 
 
 def test_reply_model_is_the_subtracted_spec(monkeypatch):

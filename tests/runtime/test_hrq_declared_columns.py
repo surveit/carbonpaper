@@ -10,7 +10,7 @@ from app.models.stage import StageType
 from app.runtime.context import RunContext, RunIdentity
 from app.runtime.stages import HANDLERS
 from app.core.stage_cache import StageCache
-from conftest import make_run_context, queue_columns, reads_of
+from conftest import make_run_context, place_stage, queue_columns, reads_of
 
 PROJECT = "hrq-declared-columns"
 
@@ -36,7 +36,7 @@ def _stage(queue: dict[str, object], flt: str | None = None) -> Stage:
               if queue.get(field) is not None]
     return parse_stage({
         "id": "review", "description": "Review", "type": "human_review_queue",
-        "inputs": [{"id": "scored", "schema": {"columns": input_columns}}],
+        "inputs": [{"id": "scored"}],
         "signature": {"form": "extends", "reads": reads_of("scored", input_columns),
                       "adds": added},
         "queue": queue,
@@ -58,8 +58,7 @@ def _production_ctx(tmp_path: Path) -> RunContext:
 
 
 def _run(stage: Stage, ctx: RunContext, src: pd.DataFrame | None = None) -> pd.DataFrame:
-    out = HANDLERS[StageType.human_review_queue].execute(
-        stage, {"scored": src if src is not None else _src()}, ctx)
+    out = HANDLERS[StageType.human_review_queue].execute(place_stage(stage), {"scored": src if src is not None else _src()}, ctx)
     assert out is not None  # a row-mapped stage always produces a frame
     return out
 

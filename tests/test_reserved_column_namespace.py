@@ -20,7 +20,7 @@ def _row_function(output_schema: dict, input_columns: list[dict] | None = None) 
         "id": "t",
         "description": "t",
         "type": "python_row_function",
-        "inputs": [{"id": "up", "schema": {"columns": edge}}],
+        "inputs": [{"id": "up"}],
         "signature": {"form": "extends",
                       "adds": [c for c in output_schema["columns"]
                                if c["name"] not in flowing]},
@@ -41,18 +41,6 @@ def test_output_schema_column_with_a_leading_underscore_is_refused():
     assert "reserved" in str(err.value)
 
 
-def test_an_input_edge_column_with_a_leading_underscore_is_refused():
-    with pytest.raises(ValidationError) as err:
-        m.parse_stage(
-            _row_function(
-                {"columns": [{"name": "id", "type": "str", "nullable": True}]},
-                input_columns=[{"name": "id", "type": "str", "nullable": True}, {"name": "_usage", "type": "str", "nullable": True}],
-            )
-        )
-    assert "input `up`" in str(err.value)
-    assert "_usage" in str(err.value)
-
-
 def test_a_column_named_only_with_an_underscore_is_refused():
     with pytest.raises(ValidationError):
         m.parse_stage(
@@ -64,7 +52,7 @@ def test_an_underscore_inside_a_column_name_is_fine():
     stage = m.parse_stage(
         _row_function({"columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "issue_area", "type": "str", "nullable": True}]})
     )
-    assert [c.name for c in stage.resolve_output_schema().columns] == ["id", "issue_area"]
+    assert [c.name for c in stage.signature.adds] == ["issue_area"]
 
 
 def test_an_underscore_prefixed_key_nested_in_a_json_column_is_fine():
@@ -82,7 +70,7 @@ def test_an_underscore_prefixed_key_nested_in_a_json_column_is_fine():
             }
         )
     )
-    assert stage.resolve_output_schema().columns[1].fields[0].name == "_raw"
+    assert stage.signature.adds[0].fields[0].name == "_raw"
 
 
 def test_validate_stage_reports_it_as_a_non_fatal_issue():

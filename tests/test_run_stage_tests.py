@@ -15,7 +15,7 @@ _DOUBLE = "def transform(row):\n    return {**row, 'doubled': row['amount'] * 2}
 def _row_stage(stage_id: str, tests: list[dict]) -> Stage:
     return parse_stage({
         "id": stage_id, "description": stage_id, "type": "python_row_function",
-        "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
+        "inputs": [{"id": "load"}],
         "signature": {
             "form": "extends",
             "reads": [{"input": "load", "columns": _IN_SCHEMA["columns"]}],
@@ -29,7 +29,7 @@ def _row_stage(stage_id: str, tests: list[dict]) -> Stage:
 def _frame_stage(stage_id: str, tests: list[dict]) -> Stage:
     return parse_stage({
         "id": stage_id, "description": stage_id, "type": "python_frame_function",
-        "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
+        "inputs": [{"id": "load"}],
         "signature": {
             "form": "replaces",
             "reads": [{"input": "load", "columns": _IN_SCHEMA["columns"]}],

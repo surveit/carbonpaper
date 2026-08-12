@@ -15,7 +15,7 @@ import pandas as pd
 
 from app.core.frames import write_frame_file_with_csv_fallback
 from app.core.predicate import parse_predicate
-from app.models import Stage
+from app.models import Stage, WorkflowStage
 from app.models.run_manifest import QueueStats, StageContribution
 from app.models.stages.human_review_queue import (
     HumanReviewQueueStage,
@@ -41,12 +41,15 @@ class PendingReview:
     row_ordinal: int
 
 
-def make_human_review_mapper(stage: Stage, ctx: RunContext, src: pd.DataFrame) -> RowMapper:
-    queue = narrow_stage(stage, HumanReviewQueueStage).queue
-    validate_reviewed_sources_present(queue, src, stage.id)
+def make_human_review_mapper(
+    workflow_stage: WorkflowStage, ctx: RunContext, src: pd.DataFrame
+) -> RowMapper:
+    queue_stage = narrow_stage(workflow_stage, HumanReviewQueueStage)
+    queue = queue_stage.queue
+    validate_reviewed_sources_present(queue, src, queue_stage.id)
     if ctx.params.queue_auto_approve:
         return partial(_approve_row, queue)
-    return _QueueRowMapper(stage, queue, ctx, src)
+    return _QueueRowMapper(queue_stage, queue, ctx, src)
 
 
 def validate_reviewed_sources_present(
@@ -65,11 +68,12 @@ def validate_reviewed_sources_present(
 
 class _QueueRowMapper:
     def __init__(
-        self, stage: Stage, queue: QueueConfig, ctx: RunContext, src: pd.DataFrame
+        self, queue_stage: HumanReviewQueueStage, queue: QueueConfig, ctx: RunContext,
+        src: pd.DataFrame,
     ) -> None:
         self._queue = queue
-        _require_project_scope(ctx, stage.id)
-        self._queueable = _compute_queueable_mask(src, queue.filter, stage.id)
+        _require_project_scope(ctx, queue_stage.id)
+        self._queueable = _compute_queueable_mask(src, queue.filter, queue_stage.id)
 
     def __call__(self, row: Row, index: int) -> Row:
         if not self._queueable[index]:
@@ -78,11 +82,12 @@ class _QueueRowMapper:
 
     def finish_mapped_rows(
         self,
-        stage: Stage,
+        workflow_stage: WorkflowStage,
         df: pd.DataFrame,
         ctx: RunContext,
         contribution: StageContribution,
     ) -> None:
+        stage = workflow_stage.stage
         contribution.human_review_queue_stats = _compute_queue_stats(self._queue, df)
         pending = _order_pending_reviews(self._queue.sort, _find_pending_reviews(df), stage.id)
         if not pending:

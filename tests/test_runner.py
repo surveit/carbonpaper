@@ -45,7 +45,6 @@ def _make_project(root):
         "connector": {"kind": "file",
                       "params": {"path": str(root / "data" / "items.csv"), "format": "csv"}},
         "signature": {"form": "replaces", "produces": _NAME_VAL_SCHEMA["columns"]},
-        "limit": 2,
     }
     (root / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
 
@@ -53,7 +52,8 @@ def _make_project(root):
 def test_limit_on_a_source_stage_caps_the_rows_it_loads(tmp_path):
     _make_project(tmp_path)
     _seed_version(tmp_path)
-    manifest = execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path))
+    manifest = execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path),
+                           limits={"load": 2})
 
     assert manifest["status"] == "ok"
     [rec] = manifest["stage_records"]
@@ -78,7 +78,7 @@ def test_per_run_limit_and_offset_slice_and_are_recorded(tmp_path):
                            limits={"load": 3}, offsets={"load": 1})
 
     [rec] = manifest["stage_records"]
-    assert rec["output_row_count"] == 3                                   # not the static 2
+    assert rec["output_row_count"] == 3
     out = pd.read_parquet(
         tmp_path / "runs" / manifest["run_id"] / "outputs" / "load.parquet")
     assert list(out["val"]) == [1, 2, 3]
@@ -161,7 +161,7 @@ def _row_mapped_project(root, rows: list[dict], code: str):
     }
     keep = {
         "id": "keep", "description": "Keep items", "type": "python_row_function",
-        "inputs": [{"id": "load", "schema": _NAME_VAL_SCHEMA}],
+        "inputs": [{"id": "load"}],
         "signature": {
             "form": "extends",
             "reads": [{"input": "load", "columns": _NAME_VAL_SCHEMA["columns"]}],
@@ -218,7 +218,7 @@ def _two_stage_project(root, rows: list[dict]):
     }
     consume = {
         "id": "consume", "description": "Consume items", "type": "python_frame_function",
-        "inputs": [{"id": "load", "schema": _NAME_VAL_SCHEMA}],
+        "inputs": [{"id": "load"}],
         "signature": {
             "form": "replaces",
             "reads": [{"input": "load", "columns": _NAME_VAL_SCHEMA["columns"]}],
@@ -280,7 +280,7 @@ def _output_schema_violation_project(root, transform_code: str):
     }
     shape = {
         "id": "shape", "description": "Shape items", "type": "python_frame_function",
-        "inputs": [{"id": "load", "schema": _NAME_VAL_SCHEMA}],
+        "inputs": [{"id": "load"}],
         "signature": {
             "form": "replaces",
             "reads": [{"input": "load", "columns": _NAME_VAL_SCHEMA["columns"]}],
@@ -290,7 +290,7 @@ def _output_schema_violation_project(root, transform_code: str):
     }
     tail = {
         "id": "tail", "description": "Tail", "type": "python_frame_function",
-        "inputs": [{"id": "shape", "schema": _NAME_VAL_SCHEMA}],
+        "inputs": [{"id": "shape"}],
         "signature": {
             "form": "replaces",
             "reads": [{"input": "shape", "columns": _NAME_VAL_SCHEMA["columns"]}],
@@ -352,7 +352,7 @@ def test_output_validation_error_other_than_a_missing_column_also_errors_the_sta
     }
     blank = {
         "id": "blank", "description": "Blank the value", "type": "python_frame_function",
-        "inputs": [{"id": "load", "schema": _NAME_VAL_SCHEMA}],
+        "inputs": [{"id": "load"}],
         "signature": {
             "form": "replaces",
             "reads": [{"input": "load", "columns": _NAME_VAL_SCHEMA["columns"]}],
@@ -393,7 +393,7 @@ def test_value_outside_a_declared_enum_errors_the_stage_and_blocks_downstream(tm
     }
     label = {
         "id": "label", "description": "Label items", "type": "python_frame_function",
-        "inputs": [{"id": "load", "schema": _NAME_VAL_SCHEMA}],
+        "inputs": [{"id": "load"}],
         "signature": {"form": "replaces", "produces": labelled_schema["columns"]},
         "function": {"kind": "inline",
                      "code": "def transform(df):\n"
@@ -401,7 +401,7 @@ def test_value_outside_a_declared_enum_errors_the_stage_and_blocks_downstream(tm
     }
     tail = {
         "id": "tail", "description": "Tail", "type": "python_frame_function",
-        "inputs": [{"id": "label", "schema": labelled_schema}],
+        "inputs": [{"id": "label"}],
         "signature": {"form": "replaces", "produces": labelled_schema["columns"]},
         "function": {"kind": "inline", "code": "def transform(df):\n    return df\n"},
     }
@@ -433,7 +433,7 @@ def _llm_transform_project(root):
     }
     score = {
         "id": "score", "description": "Score items", "type": "llm_transform",
-        "inputs": [{"id": "load", "schema": _ID_TEXT_SCHEMA}],
+        "inputs": [{"id": "load"}],
         "signature": {
             "form": "extends",
             "reads": [
@@ -488,7 +488,7 @@ def test_run_subset_surfaces_the_real_row_failure_message(tmp_path, monkeypatch)
     })
     score = parse_stage({
         "id": "score", "description": "Score items", "type": "llm_transform",
-        "inputs": [{"id": "load", "schema": _ID_TEXT_SCHEMA}],
+        "inputs": [{"id": "load"}],
         "signature": {
             "form": "extends",
             "reads": [
@@ -524,8 +524,7 @@ def test_run_subset_preserves_partial_work_in_the_manifest_on_a_mid_frontier_err
     })
     clean = parse_stage({
         "id": "clean", "description": "Clean rows", "type": "python_row_function",
-        "inputs": [{"id": "load", "schema": {
-            "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}]}}],
+        "inputs": [{"id": "load"}],
         "signature": {
             "form": "extends",
             "reads": [{"input": "load", "columns": _ID_TEXT_SCHEMA["columns"]}],
@@ -534,8 +533,7 @@ def test_run_subset_preserves_partial_work_in_the_manifest_on_a_mid_frontier_err
     })
     boom = parse_stage({
         "id": "score", "description": "Score rows", "type": "python_row_function",
-        "inputs": [{"id": "clean", "schema": {
-            "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}]}}],
+        "inputs": [{"id": "clean"}],
         "signature": {"form": "extends",
                       "adds": [{"name": "score", "type": "int", "nullable": True}]},
         "function": {"kind": "inline",
@@ -750,7 +748,7 @@ _FRAME_STAGE_CODE = "def transform(df):\n    return df.assign(double=df['val'] *
 def _add_frame_stage(root):
     (root / "compiled" / "02_totals.json").write_text(json.dumps({
         "id": "totals", "description": "Totals", "type": "python_frame_function",
-        "inputs": [{"id": "load", "schema": _NAME_VAL_SCHEMA}],
+        "inputs": [{"id": "load"}],
         "signature": {
             "form": "replaces",
             "reads": [{"input": "load", "columns": _NAME_VAL_SCHEMA["columns"]}],
@@ -777,5 +775,5 @@ def test_a_frame_stage_succeeds_with_no_frame_store_configured(tmp_path, monkeyp
     assert manifest["status"] == "ok"
     record = next(r for r in manifest["stage_records"] if r["stage_id"] == "totals")
     assert record["status"] == "ok"
-    assert record["output_row_count"] == 2
+    assert record["output_row_count"] == 5
     assert any("no frame store" in note for note in record["notes"])

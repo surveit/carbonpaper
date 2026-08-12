@@ -12,7 +12,7 @@ import pandas as pd
 
 from app.core.errors import NoWorkflowTestSourceError, NoWorkflowTestVersionError, SubsetRunError
 from app.core.timestamp_ids import mint_timestamp_id
-from app.models import Stage, StageType, Workflow
+from app.models import Stage, StageType, Workflow, WorkflowStage
 from app.runtime.context import RunContext, RunIdentity
 from app.runtime.executor import run_subset, topological_sort
 from app.models.run_parameters import RunParameters
@@ -32,11 +32,13 @@ def run_workflow_test(
     project_dir = resolve_project_dir(project)
     version = _resolve_workflow_test_version(project_dir, version_id)
     stages = load_version_stages(project_dir, version)
-    executing = topological_sort(_stages_to_execute(stages, stage_ids))
-    # Read the source(s) before building the Workflow, so a sourceless workflow
-    # fails on the missing source rather than on downstream graph validation.
-    injected = _read_source_slices(stages, executing, limit=limit, offset=offset)
+    # Refused before the Workflow is built, so a sourceless workflow fails on the
+    # missing source rather than on downstream graph validation.
+    _require_a_source(stages)
     workflow = Workflow(stages=stages)
+    workflow_stage = workflow.list_workflow_stages()
+    executing = topological_sort(_stages_to_execute(workflow_stage, stage_ids))
+    injected = _read_source_slices(workflow_stage, executing, limit=limit, offset=offset)
 
     run_id = mint_timestamp_id()
     run_dir = resolve_run_dir(project, run_id)
@@ -95,7 +97,9 @@ def _run_frontier(
     return True, None
 
 
-def _stages_to_execute(stages: list[Stage], stage_ids: list[str] | None) -> list[Stage]:
+def _stages_to_execute(
+    stages: list[WorkflowStage], stage_ids: list[str] | None
+) -> list[WorkflowStage]:
     if stage_ids is None:
         return _frontier_stages(stages)
     by_id = {stage.id: stage for stage in stages}
@@ -107,28 +111,35 @@ def _stages_to_execute(stages: list[Stage], stage_ids: list[str] | None) -> list
     return [by_id[sid] for sid in stage_ids]
 
 
-def _frontier_stages(stages: list[Stage]) -> list[Stage]:
-    return [stage for stage in stages if stage.type != StageType.input_data.value]
+def _frontier_stages(stages: list[WorkflowStage]) -> list[WorkflowStage]:
+    return [stage for stage in stages if not _is_source(stage)]
+
+
+def _is_source(stage: WorkflowStage) -> bool:
+    return stage.stage.type == StageType.input_data.value
+
+
+def _require_a_source(stages: list[Stage]) -> None:
+    if any(stage.type == StageType.input_data.value for stage in stages):
+        return
+    raise NoWorkflowTestSourceError(
+        "workflow has no input_data stage to read a workflow-test slice from")
 
 
 def _source_row_windows(
-    executing: list[Stage], limit: int | None, offset: int,
+    executing: list[WorkflowStage], limit: int | None, offset: int,
 ) -> tuple[dict[str, int], dict[str, int]]:
-    sources = [
-        stage.id for stage in executing if stage.type == StageType.input_data.value
-    ]
+    sources = [stage.id for stage in executing if _is_source(stage)]
     limits = {} if limit is None else {sid: limit for sid in sources}
     offsets = {} if offset == 0 else {sid: offset for sid in sources}
     return limits, offsets
 
 
 def _read_source_slices(
-    stages: list[Stage], executing: list[Stage], *, limit: int | None, offset: int,
+    stages: list[WorkflowStage], executing: list[WorkflowStage], *,
+    limit: int | None, offset: int,
 ) -> dict[str, pd.DataFrame]:
-    sources = [stage for stage in stages if stage.type == StageType.input_data.value]
-    if not sources:
-        raise NoWorkflowTestSourceError(
-            "workflow has no input_data stage to read a workflow-test slice from")
+    sources = [stage for stage in stages if _is_source(stage)]
     # Ephemeral context: read_input_data reads only the stage's connector params
     # (an absolute bound path), never repo_root/run_dir or project scope — so this
     # source read carries the real repo_root and no run_dir (None, the read

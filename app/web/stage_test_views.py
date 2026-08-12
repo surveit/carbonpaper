@@ -8,7 +8,7 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel
 
-from app.models import Stage
+from app.models import Stage, WorkflowStage
 from app.models.stages.stage_tests import StageTest
 from app.runtime.stage_tests import STATUS_PASSED, StageTestResult, run_tests_for_stage
 
@@ -57,26 +57,31 @@ def _summary_of(stage: Stage) -> Optional[str]:
     return block.summary if block is not None else None
 
 
-def shape_test_views(stage: Optional[Stage]) -> list[dict[str, Any]]:
-    if stage is None or not stage.tests:
+def shape_test_views(
+    workflow_stage: Optional[WorkflowStage]
+) -> list[dict[str, Any]]:
+    if workflow_stage is None:
         return []
-    results = run_tests_for_stage(stage)
-    new_columns = _find_new_output_columns(stage)
+    tests = workflow_stage.stage.tests
+    if not tests:
+        return []
+    results = run_tests_for_stage(workflow_stage.stage)
+    new_columns = _find_new_output_columns(workflow_stage)
     return [
         _shape_one_test(test, result, new_columns)
-        for test, result in zip(stage.tests, results)
+        for test, result in zip(tests, results)
     ]
 
 
-def _find_new_output_columns(stage: Stage) -> list[str]:
+def _find_new_output_columns(workflow_stage: WorkflowStage) -> list[str]:
     # Off the declared schemas, not the example rows: an empty input would read as
     # adding every column.
     upstream = {
         column.name
-        for stage_input in stage.inputs
+        for stage_input in workflow_stage.inputs
         for column in stage_input.table_schema.columns
     }
-    output_schema = stage.resolve_output_schema()
+    output_schema = workflow_stage.output_schema
     declared = output_schema.columns if output_schema else []
     return [column.name for column in declared if column.name not in upstream]
 

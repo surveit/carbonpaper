@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import pytest
+from conftest import reads_of, source_stage
 from pydantic import ValidationError
 
-from conftest import reads_of
-
-from app.models import parse_stage
-from app.models.stages.human_review_queue import find_queue_column_issues
+from app.models import parse_stage, validate_workflow_draft
 
 _INPUT_COLUMNS = [
     {"name": "claim_id", "type": "str", "nullable": False},
@@ -40,7 +38,7 @@ def _stage_spec(*, queue=None, input_columns=None, output_columns=None):
     flowing = {c["name"] for c in edge}
     return {
         "id": "wc", "type": "human_review_queue", "description": "wc",
-        "inputs": [{"id": "src", "schema": {"columns": edge}}],
+        "inputs": [{"id": "src"}],
         "signature": {"form": "extends",
                       "reads": reads_of("src", edge),
                       "adds": [c for c in outputs if c["name"] not in flowing]},
@@ -48,25 +46,33 @@ def _stage_spec(*, queue=None, input_columns=None, output_columns=None):
     }
 
 
+def _issues(**kwargs) -> str:
+    return "; ".join(_issue_list(**kwargs))
+
+
+def _issue_list(*, spec=None, input_columns=None, **kwargs) -> list[str]:
+    stage = spec if spec is not None else _stage_spec(input_columns=input_columns, **kwargs)
+    return validate_workflow_draft([
+        source_stage("src", input_columns or _INPUT_COLUMNS), stage,
+    ])
+
+
 # ── the valid config ────────────────────────────────────────────────────────
 
 
 def test_a_fully_valid_config_reports_nothing():
-    stage = parse_stage(_stage_spec())
-    assert find_queue_column_issues(stage) == []
+    assert _issue_list() == []
 
 
 # ── 1. the filter predicate ──────────────────────────────────────────────────
 
 
 def test_filter_naming_a_column_the_input_lacks_is_rejected():
-    with pytest.raises(ValidationError, match="writer_confirmed"):
-        parse_stage(_stage_spec(queue={"filter": "writer_confirmed == True"}))
+    assert "writer_confirmed" in _issues(queue={"filter": "writer_confirmed == True"})
 
 
 def test_a_filter_over_input_columns_is_clean():
-    stage = parse_stage(_stage_spec(queue={"filter": "assertion_text IS NOT NULL"}))
-    assert find_queue_column_issues(stage) == []
+    assert _issue_list(queue={"filter": "assertion_text IS NOT NULL"}) == []
 
 
 def test_a_filter_over_a_column_the_signature_does_not_read_is_rejected():
@@ -74,25 +80,23 @@ def test_a_filter_over_a_column_the_signature_does_not_read_is_rejected():
     spec = _stage_spec(queue={"filter": "confidence > 3"})
     spec["signature"]["reads"] = reads_of(
         "src", [c for c in _INPUT_COLUMNS if c["name"] != "confidence"])
-    with pytest.raises(ValidationError, match="queue.filter tests `confidence`"):
-        parse_stage(spec)
+    assert "queue.filter tests `confidence`" in _issues(spec=spec)
 
 
 # ── 1b. the declared review order ────────────────────────────────────────────
 
 
 def test_a_sort_over_read_input_columns_is_clean():
-    stage = parse_stage(_stage_spec(queue={"sort": [
+    assert _issue_list(queue={"sort": [
         {"column": "score", "direction": "descending"},
         {"column": "claim_id", "direction": "ascending"},
-    ]}))
-    assert find_queue_column_issues(stage) == []
+    ]}) == []
 
 
-def test_a_sort_naming_a_column_the_input_lacks_is_rejected():
-    with pytest.raises(ValidationError, match="queue.sort orders by column 'income_usd'"):
-        parse_stage(_stage_spec(
-            queue={"sort": [{"column": "income_usd", "direction": "descending"}]}))
+def test_a_sort_naming_a_column_nothing_supplies_is_rejected():
+    # The reads rule answers first: a column the input never had is not read either.
+    assert "queue.sort orders by `income_usd`" in _issues(
+        queue={"sort": [{"column": "income_usd", "direction": "descending"}]})
 
 
 def test_a_sort_over_a_column_the_signature_does_not_read_is_rejected():
@@ -100,30 +104,23 @@ def test_a_sort_over_a_column_the_signature_does_not_read_is_rejected():
     spec = _stage_spec(queue={"sort": [{"column": "confidence", "direction": "ascending"}]})
     spec["signature"]["reads"] = reads_of(
         "src", [c for c in _INPUT_COLUMNS if c["name"] != "confidence"])
-    with pytest.raises(ValidationError, match="queue.sort orders by `confidence`"):
-        parse_stage(spec)
+    assert "queue.sort orders by `confidence`" in _issues(spec=spec)
 
 
 def test_a_sort_over_a_non_scalar_column_is_rejected():
-    input_columns = _INPUT_COLUMNS + [
-        {"name": "evidence", "type": "json", "value_type": "str", "nullable": True},
-    ]
-    output_columns = _OUTPUT_COLUMNS + [
-        {"name": "evidence", "type": "json", "value_type": "str", "nullable": True},
-    ]
-    with pytest.raises(ValidationError, match="has no order to put the queue in"):
-        parse_stage(_stage_spec(
-            queue={"sort": [{"column": "evidence", "direction": "descending"}]},
-            input_columns=input_columns, output_columns=output_columns,
-        ))
+    evidence = {"name": "evidence", "type": "json", "value_type": "str", "nullable": True}
+    assert "has no order to put the queue in" in _issues(
+        queue={"sort": [{"column": "evidence", "direction": "descending"}]},
+        input_columns=_INPUT_COLUMNS + [evidence],
+        output_columns=_OUTPUT_COLUMNS + [evidence],
+    )
 
 
 def test_the_same_column_named_twice_in_one_sort_is_rejected():
-    with pytest.raises(ValidationError, match="names column 'score' more than once"):
-        parse_stage(_stage_spec(queue={"sort": [
-            {"column": "score", "direction": "descending"},
-            {"column": "score", "direction": "ascending"},
-        ]}))
+    assert "names column 'score' more than once" in _issues(queue={"sort": [
+        {"column": "score", "direction": "descending"},
+        {"column": "score", "direction": "ascending"},
+    ]})
 
 
 def test_a_sort_key_without_a_direction_is_rejected():
@@ -138,16 +135,14 @@ def test_a_sort_key_without_a_direction_is_rejected():
 def test_a_signature_reading_nothing_is_rejected():
     spec = _stage_spec()
     spec["signature"]["reads"] = []
-    with pytest.raises(ValidationError, match="reads nothing"):
-        parse_stage(spec)
+    assert "reads nothing" in _issues(spec=spec)
 
 
 # ── 2. reviewed source columns ───────────────────────────────────────────────
 
 
 def test_a_reviewed_source_absent_from_the_input_is_rejected():
-    with pytest.raises(ValidationError, match="ghost"):
-        parse_stage(_stage_spec(queue={"reviewed_columns": {"ghost": "human_ghost"}}))
+    assert "ghost" in _issues(queue={"reviewed_columns": {"ghost": "human_ghost"}})
 
 
 def test_a_non_scalar_reviewed_source_is_rejected():
@@ -159,20 +154,16 @@ def test_a_non_scalar_reviewed_source_is_rejected():
         {"name": "evidence", "type": "json", "value_type": "str", "nullable": True},
         {"name": "human_evidence", "type": "json", "value_type": "str", "nullable": True},
     ]
-    with pytest.raises(ValidationError, match="evidence"):
-        parse_stage(_stage_spec(
-            queue={"reviewed_columns": {"score": "human_score", "evidence": "human_evidence"}},
-            input_columns=input_columns, output_columns=output_columns,
-        ))
+    assert "evidence" in _issues(
+        queue={"reviewed_columns": {"score": "human_score", "evidence": "human_evidence"}},
+        input_columns=input_columns, output_columns=output_columns)
 
 
 # ── 3. reviewed target columns on the signature ──────────────────────────────
 
 
 def test_a_reviewed_target_missing_from_the_signature_is_rejected():
-    with pytest.raises(ValidationError, match="human_verdict_score"):
-        parse_stage(_stage_spec(
-            queue={"reviewed_columns": {"score": "human_verdict_score"}}))
+    assert "human_verdict_score" in _issues(queue={"reviewed_columns": {"score": "human_verdict_score"}})
 
 
 def test_a_reviewed_target_of_the_wrong_type_is_rejected():
@@ -180,8 +171,7 @@ def test_a_reviewed_target_of_the_wrong_type_is_rejected():
         c if c["name"] != "human_score" else {"name": "human_score", "type": "str", "nullable": True}
         for c in _OUTPUT_COLUMNS
     ]
-    with pytest.raises(ValidationError, match="human_score"):
-        parse_stage(_stage_spec(output_columns=output_columns))
+    assert "human_score" in _issues(output_columns=output_columns)
 
 
 def test_a_reviewed_target_less_permissive_than_its_source_is_rejected():
@@ -190,8 +180,7 @@ def test_a_reviewed_target_less_permissive_than_its_source_is_rejected():
         else {"name": "human_score", "type": "int", "nullable": False}
         for c in _OUTPUT_COLUMNS
     ]
-    with pytest.raises(ValidationError, match="human_score"):
-        parse_stage(_stage_spec(output_columns=output_columns))
+    assert "human_score" in _issues(output_columns=output_columns)
 
 
 def test_a_reviewed_target_more_permissive_than_its_source_is_clean():
@@ -199,16 +188,14 @@ def test_a_reviewed_target_more_permissive_than_its_source_is_clean():
         c if c["name"] != "score" else {"name": "score", "type": "int", "nullable": False}
         for c in _INPUT_COLUMNS
     ]
-    stage = parse_stage(_stage_spec(input_columns=input_columns))
-    assert find_queue_column_issues(stage) == []
+    assert _issue_list(input_columns=input_columns) == []
 
 
 # ── 4. the review-record columns on the signature ────────────────────────────
 
 
 def test_a_review_record_column_missing_from_the_signature_is_rejected():
-    with pytest.raises(ValidationError, match="who_reviewed"):
-        parse_stage(_stage_spec(queue={"reviewer_column": "who_reviewed"}))
+    assert "who_reviewed" in _issues(queue={"reviewer_column": "who_reviewed"})
 
 
 def test_a_review_record_column_declared_non_str_is_rejected():
@@ -216,21 +203,16 @@ def test_a_review_record_column_declared_non_str_is_rejected():
         c if c["name"] != "decision" else {"name": "decision", "type": "int", "nullable": True}
         for c in _OUTPUT_COLUMNS
     ]
-    with pytest.raises(ValidationError, match="decision"):
-        parse_stage(_stage_spec(output_columns=output_columns))
+    assert "decision" in _issues(output_columns=output_columns)
 
 
 def test_a_declared_notes_column_must_be_added_by_the_signature():
-    with pytest.raises(ValidationError, match="review_notes"):
-        parse_stage(_stage_spec(queue={"review_notes_column": "review_notes"}))
+    assert "review_notes" in _issues(queue={"review_notes_column": "review_notes"})
 
 
 def test_a_declared_notes_column_present_on_the_signature_is_clean():
-    stage = parse_stage(_stage_spec(
-        queue={"review_notes_column": "review_notes"},
-        output_columns=_OUTPUT_COLUMNS + [{"name": "review_notes", "type": "str", "nullable": True}],
-    ))
-    assert find_queue_column_issues(stage) == []
+    assert _issue_list(queue={"review_notes_column": "review_notes"},
+        output_columns=_OUTPUT_COLUMNS + [{"name": "review_notes", "type": "str", "nullable": True}]) == []
 
 
 def test_a_non_nullable_review_record_column_is_rejected():
@@ -240,8 +222,7 @@ def test_a_non_nullable_review_record_column_is_rejected():
         else {"name": "reviewer_id", "type": "str", "nullable": False}
         for c in _OUTPUT_COLUMNS
     ]
-    with pytest.raises(ValidationError, match="non-nullable"):
-        parse_stage(_stage_spec(output_columns=output_columns))
+    assert "non-nullable" in _issues(output_columns=output_columns)
 
 
 def test_a_non_nullable_verdict_column_is_clean_because_every_row_gets_one():
@@ -250,44 +231,35 @@ def test_a_non_nullable_verdict_column_is_clean_because_every_row_gets_one():
         else {"name": "decision", "type": "str", "nullable": False}
         for c in _OUTPUT_COLUMNS
     ]
-    stage = parse_stage(_stage_spec(output_columns=output_columns))
-    assert find_queue_column_issues(stage) == []
+    assert _issue_list(output_columns=output_columns) == []
 
 
 # ── 5. no added column may collide with an input column ──────────────────────
 
 
 def test_an_added_column_that_the_input_already_declares_is_rejected():
-    with pytest.raises(ValidationError, match="already declares"):
-        parse_stage(_stage_spec(
-            queue={"reviewed_columns": {"assertion_text": "claim_id"}}))
+    assert "already declares" in _issues(queue={"reviewed_columns": {"assertion_text": "claim_id"}})
 
 
 def test_a_review_record_column_that_the_input_already_declares_is_rejected():
     input_columns = _INPUT_COLUMNS + [{"name": "decision", "type": "str", "nullable": True}]
-    with pytest.raises(ValidationError, match="already declares"):
-        parse_stage(_stage_spec(input_columns=input_columns))
+    assert "already declares" in _issues(input_columns=input_columns)
 
 
 # ── 6. no added column name is used twice ────────────────────────────────────
 
 
 def test_two_sources_mapping_to_the_same_target_are_rejected():
-    with pytest.raises(ValidationError, match="named more than once"):
-        parse_stage(_stage_spec(
-            queue={"reviewed_columns": {"score": "human_score",
-                                        "confidence": "human_score"}}))
+    assert "named more than once" in _issues(queue={
+        "reviewed_columns": {"score": "human_score", "confidence": "human_score"}})
 
 
 def test_a_review_record_name_reused_as_a_reviewed_target_is_rejected():
-    with pytest.raises(ValidationError, match="named more than once"):
-        parse_stage(_stage_spec(
-            queue={"reviewed_columns": {"assertion_text": "decision"}}))
+    assert "named more than once" in _issues(queue={"reviewed_columns": {"assertion_text": "decision"}})
 
 
 # ── the config's own shape ───────────────────────────────────────────────────
 
 
 def test_an_empty_reviewed_columns_is_rejected():
-    with pytest.raises(ValidationError, match="at least one column"):
-        parse_stage(_stage_spec(queue={"reviewed_columns": {}}))
+    assert "at least one column" in _issues(queue={"reviewed_columns": {}})

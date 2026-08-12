@@ -4,9 +4,9 @@ A join only ever ADDS — every subject column flows through untouched."""
 from __future__ import annotations
 
 import pytest
-from pydantic import ValidationError
 
-from app.models.stage import parse_stage
+from app.models.workflow import parse_workflow, validate_workflow_draft
+from conftest import source_stage
 
 _LEFT = {
     "columns": [
@@ -39,8 +39,8 @@ def _join_stage(*, adds=None, enrich_with=None, left=_LEFT, right=_RIGHT,
         "description": "Enrich facilities with filings",
         "type": stage_type,
         "inputs": [
-            {"id": "facilities", "schema": left},
-            {"id": "filings", "schema": right},
+            {"id": "facilities"},
+            {"id": "filings"},
         ],
         "join": {
             "keys": keys or [{"left": "facility_id", "right": "facility_id"}],
@@ -54,10 +54,16 @@ def _join_stage(*, adds=None, enrich_with=None, left=_LEFT, right=_RIGHT,
     }
 
 
-def _issues(stage_dict) -> str:
-    with pytest.raises(ValidationError) as err:
-        parse_stage(stage_dict)
-    return str(err.value)
+def _workflow(stage_dict, left=_LEFT, right=_RIGHT):
+    return [
+        source_stage("facilities", left["columns"]),
+        source_stage("filings", right["columns"]),
+        stage_dict,
+    ]
+
+
+def _issues(stage_dict, left=_LEFT, right=_RIGHT) -> str:
+    return "; ".join(validate_workflow_draft(_workflow(stage_dict, left, right)))
 
 
 def test_enrich_with_source_not_producible_rejected():
@@ -84,11 +90,10 @@ def test_landing_on_a_subject_column_is_a_refused_rewrite():
 
 def test_a_landed_name_carries_its_sources_type():
     # Landed as an authored `name_r`, never a silent suffix — and it takes the SOURCE type.
-    stage = parse_stage(_join_stage(
+    assert _issues(_join_stage(
         enrich_with={"name": "name_r"},
         adds=[{"name": "name_r", "type": "int", "nullable": True}],
-    ))
-    assert stage.id == "add_filings"
+    )) == ""
     msg = _issues(_join_stage(
         enrich_with={"name": "name_r"},
         adds=[{"name": "name_r", "type": "str", "nullable": True}],
@@ -123,11 +128,11 @@ def test_declared_type_mismatch_rejected():
 
 @pytest.mark.parametrize("stage_type", ["enrich", "expand"])
 def test_valid_join_passes(stage_type):
-    stage = parse_stage(_join_stage(
+    workflow = parse_workflow(_workflow(_join_stage(
         stage_type=stage_type,
         enrich_with={"amount": "amount", "kind": "kind"},
         adds=[_AMOUNT, {"name": "kind", "type": "str", "nullable": True}],
-    ))
-    assert stage.id == "add_filings"
-    assert [c.name for c in stage.resolve_output_schema().columns] == [
+    )))
+    placed = workflow.find_workflow_stage("add_filings")
+    assert [c.name for c in placed.output_schema.columns] == [
         "facility_id", "name", "score", "amount", "kind"]

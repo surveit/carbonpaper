@@ -6,15 +6,15 @@ from app.models.stages.code import (
     CODE_CORNER_CASES_CONTRACT_NOTE,
     CODE_SUMMARY_CONTRACT_NOTE,
 )
-from app.models.stages.node_types import (
+from app.models.stages.stage_types import (
     AUTHORABLE_CODE_CARRYING_TYPES,
-    NODE_TYPES,
+    STAGE_TYPES,
     RETIRED_TYPES,
 )
 
 
 def test_human_review_queue_note_states_the_fingerprint_matching():
-    note = NODE_TYPES["human_review_queue"].notes
+    note = STAGE_TYPES["human_review_queue"].notes
     assert note, "human_review_queue must carry a `notes` explanation"
     # the authoring agent needs to know editing filter/reviewer_instructions
     # invalidates every decision cached for this stage
@@ -25,14 +25,14 @@ def test_human_review_queue_note_states_the_fingerprint_matching():
 def test_note_reaches_the_editing_agent_prompt():
     from app.agents.compiler.prompt import EDITING_SYSTEM_PROMPT
 
-    note = NODE_TYPES["human_review_queue"].notes
+    note = STAGE_TYPES["human_review_queue"].notes
     assert note in EDITING_SYSTEM_PROMPT
 
 
 def test_hrq_note_names_the_decision_values_the_runtime_actually_emits():
     from app.models.stages.human_review_queue import ReviewVerdict
 
-    quoted = set(re.findall(r'"([a-z_]+)"', NODE_TYPES["human_review_queue"].notes))
+    quoted = set(re.findall(r'"([a-z_]+)"', STAGE_TYPES["human_review_queue"].notes))
     assert quoted == {verdict.value for verdict in ReviewVerdict}
 
 
@@ -48,7 +48,7 @@ def test_hrq_note_names_every_queue_field_that_adds_a_column():
     # the field itself is the part before the subscript.
     adding_fields = {field.split("[")[0] for field, _ in find_added_columns(queue)}
     mentioned = {f"queue.{name}" for name in re.findall(
-        r"queue\.(\w+)", NODE_TYPES["human_review_queue"].notes)}
+        r"queue\.(\w+)", STAGE_TYPES["human_review_queue"].notes)}
 
     assert adding_fields <= mentioned, adding_fields - mentioned
     assert mentioned <= {f"queue.{name}" for name in QueueConfig.model_fields}, mentioned
@@ -84,7 +84,7 @@ def test_a_retired_type_is_offered_by_neither_prompt():
 
 def test_no_type_note_still_carries_the_shared_text():
     # Guards the hoist: a note that re-absorbs the paragraph duplicates it again.
-    for stage_type, spec in NODE_TYPES.items():
+    for stage_type, spec in STAGE_TYPES.items():
         assert CODE_SUMMARY_CONTRACT_NOTE not in spec.notes, stage_type
         assert CODE_CORNER_CASES_CONTRACT_NOTE not in spec.notes, stage_type
 
@@ -101,7 +101,7 @@ def _flat(text: str) -> str:
 
 
 def test_publish_note_names_the_trace_link_helper():
-    note = NODE_TYPES["publish"].notes
+    note = STAGE_TYPES["publish"].notes
     assert note, "publish must carry a `notes` explanation"
     # the authoring agent has to know the keyword to declare and the call to make
     assert "trace_links" in note
@@ -111,5 +111,5 @@ def test_publish_note_names_the_trace_link_helper():
 def test_publish_note_reaches_the_editing_agent_prompt():
     from app.agents.compiler.prompt import EDITING_SYSTEM_PROMPT
 
-    note = NODE_TYPES["publish"].notes
+    note = STAGE_TYPES["publish"].notes
     assert note in EDITING_SYSTEM_PROMPT

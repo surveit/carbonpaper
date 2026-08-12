@@ -49,7 +49,7 @@ def _write_project(root: Path) -> Path:
     }), encoding="utf-8")
     (root / "compiled" / "02_clean.json").write_text(json.dumps({
         "id": "clean", "description": "Clean", "type": "python_row_function",
-        "inputs": [{"id": "load", "schema": {"columns": _LOADED}}],
+        "inputs": [{"id": "load"}],
         "signature": {
             "form": "extends",
             "reads": [{"input": "load", "columns": _LOADED}],

@@ -3,8 +3,8 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from app.models import parse_stage
-from conftest import reads_of
+from app.models import parse_stage, parse_workflow
+from conftest import reads_of, source_stage
 
 _AB_SCHEMA = {"columns": [{"name": "a", "type": "str", "nullable": True}, {"name": "b", "type": "int", "nullable": True}]}
 
@@ -12,7 +12,7 @@ _AB_SCHEMA = {"columns": [{"name": "a", "type": "str", "nullable": True}, {"name
 def _filter_stage(*, signature=None, filter_cfg=None):
     return {
         "id": "f", "type": "filter_rows", "description": "f",
-        "inputs": [{"id": "src", "schema": _AB_SCHEMA}],
+        "inputs": [{"id": "src"}],
         "signature": signature or {
             "form": "extends", "reads": reads_of("src", _AB_SCHEMA["columns"]),
         },
@@ -21,8 +21,11 @@ def _filter_stage(*, signature=None, filter_cfg=None):
 
 
 def test_a_reads_only_signature_ok():
-    stage = parse_stage(_filter_stage())
-    assert [c.name for c in stage.resolve_output_schema().columns] == ["a", "b"]
+    workflow = parse_workflow([
+        source_stage("src", _AB_SCHEMA["columns"]), _filter_stage()
+    ])
+    kept = workflow.find_workflow_stage("f")
+    assert [c.name for c in kept.output_schema.columns] == ["a", "b"]
 
 
 def test_a_signature_reading_nothing_is_rejected():
@@ -56,7 +59,7 @@ def test_inline_code_must_define_should_include():
 
 def test_takes_exactly_one_input():
     stage = _filter_stage()
-    stage["inputs"].append({"id": "src2", "schema": _AB_SCHEMA})
+    stage["inputs"].append({"id": "src2"})
     with pytest.raises(ValidationError):
         parse_stage(stage)
 

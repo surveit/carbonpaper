@@ -39,7 +39,7 @@ def _seed_project(root: Path) -> None:
     (compiled / "02_flag.json").write_text(json.dumps({
         "id": "flag_withdrawn", "description": "Flag withdrawn bills",
         "type": "python_row_function",
-        "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
+        "inputs": [{"id": "load"}],
         "signature": {
             "form": "extends",
             "reads": [{"input": "load", "columns": _IN_SCHEMA["columns"]}],
@@ -55,7 +55,7 @@ def _seed_project(root: Path) -> None:
     (compiled / "03_unsummarized.json").write_text(json.dumps({
         "id": "no_summary", "description": "Unsummarized step",
         "type": "python_row_function",
-        "inputs": [{"id": "flag_withdrawn", "schema": _OUT_SCHEMA}],
+        "inputs": [{"id": "flag_withdrawn"}],
         "signature": {
             "form": "extends",
             "reads": [{"input": "flag_withdrawn", "columns": _OUT_SCHEMA["columns"]}],
@@ -89,7 +89,7 @@ def test_a_summary_does_not_change_what_the_stage_computes() -> None:
     function = {"kind": "inline", "summary": _SUMMARY, "code": _CODE}
     spec = {
         "id": "flag", "description": "Flag", "type": "python_row_function",
-        "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
+        "inputs": [{"id": "load"}],
         "signature": {
             "form": "extends",
             "reads": [{"input": "load", "columns": _IN_SCHEMA["columns"]}],

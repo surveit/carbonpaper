@@ -9,7 +9,7 @@ from typing import Any, Callable
 
 import pandas as pd
 
-from app.models import Stage
+from app.models import WorkflowStage
 from app.models.stages.filter_rows import FilterRowsStage
 
 from ..code import load_function
@@ -17,23 +17,30 @@ from ..context import RunContext
 from .execution import Row, RowMapper, narrow_stage
 
 
-def _load_predicate(stage: Stage) -> Callable[[dict[str, Any]], object]:
-    cfg = narrow_stage(stage, FilterRowsStage).filter
+def _load_predicate(
+    filter_stage: FilterRowsStage,
+) -> Callable[[dict[str, Any]], object]:
+    cfg = filter_stage.filter
     fn_name = cfg.function or "should_include"
     fn = load_function(cfg.code, fn_name, "should_include")
     if fn is None:
-        raise ValueError(f"inline 'should_include' not defined for stage {stage.id}")
+        raise ValueError(
+            f"inline 'should_include' not defined for stage {filter_stage.id}")
     return fn
 
 
-def make_filter_mapper(stage: Stage, ctx: RunContext, src: pd.DataFrame) -> RowMapper:
-    predicate = _load_predicate(stage)
+def make_filter_mapper(
+    workflow_stage: WorkflowStage, ctx: RunContext, src: pd.DataFrame
+) -> RowMapper:
+    filter_stage = narrow_stage(workflow_stage, FilterRowsStage)
+    predicate = _load_predicate(filter_stage)
+    sid = filter_stage.id
 
     def keep_or_drop(row: Row, index: int) -> Row | None:
         result = predicate(row)
         if not isinstance(result, bool):
             raise ValueError(
-                f"stage {stage.id}: should_include must return bool, got "
+                f"stage {sid}: should_include must return bool, got "
                 f"{type(result).__name__} for row {index}"
             )
         return row if result else None

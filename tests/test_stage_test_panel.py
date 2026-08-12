@@ -24,7 +24,7 @@ def _seed_project(root: Path) -> None:
     }), encoding="utf-8")
     (compiled / "02_double.json").write_text(json.dumps({
         "id": "double", "description": "Double", "type": "python_row_function",
-        "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
+        "inputs": [{"id": "load"}],
         "signature": {
             "form": "extends",
             "reads": [{"input": "load", "columns": _IN_SCHEMA["columns"]}],

@@ -37,7 +37,7 @@ _LOAD = {
 }
 _DOUBLE = {
     "id": "double", "description": "Double", "type": "python_row_function",
-    "inputs": [{"id": "load", "schema": _ROWS}], "signature": {
+    "inputs": [{"id": "load"}], "signature": {
         "form": "extends",
         "reads": [{"input": "load", "columns": _ROWS["columns"]}],
         "adds": [{"name": "doubled", "type": "float", "nullable": False}],
@@ -49,7 +49,7 @@ _DOUBLE = {
 # a guide naming it would be describing a workflow the version does not contain.
 _TRIPLE = {
     "id": "triple", "description": "Triple", "type": "python_row_function",
-    "inputs": [{"id": "load", "schema": _ROWS}], "signature": {
+    "inputs": [{"id": "load"}], "signature": {
         "form": "extends",
         "reads": [{"input": "load", "columns": _ROWS["columns"]}],
         "adds": [{"name": "doubled", "type": "float", "nullable": False}],
@@ -201,7 +201,7 @@ def _published_stages() -> list:
     audit = {**_TRIPLE, "id": "audit", "description": "Audit"}
     publish = {
         "id": "pub", "description": "Publish", "type": "publish",
-        "inputs": [{"id": "double", "schema": _DOUBLED}],
+        "inputs": [{"id": "double"}],
         "publish": {"format": "csv"}, "signature": {"form": "replaces"},
         "function": {"kind": "inline",
                      "code": "def transform(df, output_dir, trace_links): return df"},

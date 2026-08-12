@@ -50,9 +50,10 @@ async def run_stage_lineage_panel(
             "run_id": run_id,
             "stage": stage_record,
             "stage_def": pinned.stage,
+            "workflow_stage": pinned.workflow_stage,
             "stage_def_error": pinned.error,
             "function_code": resolve_function_code(pinned.stage),
-            "test_views": (lineage_views := shape_test_views(pinned.stage)),
+            "test_views": (lineage_views := shape_test_views(pinned.workflow_stage)),
             "certification": (
                 build_certification(pinned.stage, lineage_views) if pinned.stage else None
             ),

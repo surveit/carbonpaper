@@ -12,7 +12,7 @@ from typing import Any
 import pandas as pd
 
 from app.core.errors import EvalGrainViolationError
-from app.models import EvalConfig, ScoringMetric, Stage
+from app.models import EvalConfig, ScoringMetric, WorkflowStage
 from app.evals.dataset_columns import (
     deconflict_column_names,
     get_output_columns_from_stage,
@@ -26,7 +26,7 @@ class ScoreResult:
 
 
 def score_expected_outputs(
-    config: EvalConfig, override: Stage, target: Stage,
+    config: EvalConfig, override: WorkflowStage, target: WorkflowStage,
     dataset_df: pd.DataFrame, target_df: pd.DataFrame,
 ) -> ScoreResult:
     if len(dataset_df) != len(target_df):
@@ -47,7 +47,9 @@ class _Check:
     tolerance: float | None
 
 
-def _resolve_checks(config: EvalConfig, override: Stage, target: Stage) -> list[_Check]:
+def _resolve_checks(
+    config: EvalConfig, override: WorkflowStage, target: WorkflowStage
+) -> list[_Check]:
     target_by_name = {c.name: c for c in get_output_columns_from_stage(target)}
     expected_source = [target_by_name[c.output_column] for c in config.expected_outputs]
     _, expected_columns = deconflict_column_names(

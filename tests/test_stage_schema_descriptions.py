@@ -8,9 +8,9 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from app.models.stages.node_types import NODE_TYPES
+from app.models.stages.stage_types import STAGE_TYPES
 from app.models.schema import Column
-from app.models.stage import PythonFunction, StageBase
+from app.models.stage import PythonFunction, AbstractStage
 from app.models.stages.input_data import Connector
 
 
@@ -30,13 +30,13 @@ def test_connector_params_documents_optional_absolute_path_and_bans_invention():
 
 
 def test_llm_transform_notes_document_the_additive_rule():
-    notes = NODE_TYPES["llm_transform"].notes.lower()
+    notes = STAGE_TYPES["llm_transform"].notes.lower()
     assert "additive" in notes
 
 
-def test_inputs_document_what_flows_down_an_edge():
-    d = _desc(StageBase, "inputs")
-    assert "required schema" in d and "upstream stage's output schema" in d
+def test_inputs_document_what_an_upstream_supplies():
+    d = _desc(AbstractStage, "inputs")
+    assert "upstream stage id" in d and "upstream stage's own output schema" in d
 
 
 def test_function_code_documents_the_three_signatures():

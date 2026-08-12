@@ -31,7 +31,7 @@ def _signature_for(type_, schema):
 def _stage(*, summary=None, type_="python_row_function", handle="function"):
     spec = {
         "id": "s", "description": "S", "type": type_,
-        "inputs": [{"id": "up", "schema": _SCHEMA}],
+        "inputs": [{"id": "up"}],
         "signature": _signature_for(type_, _SCHEMA),
     }
     if handle == "function":
@@ -79,9 +79,8 @@ def test_no_summary_is_unsummarised():
 def test_a_stage_whose_behaviour_is_not_code_gets_no_badge():
     stage = m.parse_stage({
         "id": "j", "description": "J", "type": "enrich",
-        "inputs": [{"id": "a", "schema": _SCHEMA},
-                   {"id": "b", "schema": {"columns": [{"name": "id", "type": "str", "nullable": True},
-                                                      {"name": "v", "type": "str", "nullable": True}]}}],
+        "inputs": [{"id": "a"},
+                   {"id": "b"}],
         "signature": {
             "form": "extends",
             "reads": [
@@ -104,7 +103,7 @@ def test_a_code_carrying_type_that_cannot_run_examples_is_untestable():
     stage = m.parse_stage({
         "id": "pub", "description": "Pub", "type": "publish",
         "signature": {"form": "replaces"},
-        "inputs": [{"id": "up", "schema": _SCHEMA}],
+        "inputs": [{"id": "up"}],
         "publish": {"format": "csv"},
         "function": {"kind": "inline", "summary": "Writes one file per row.",
                      "code": "def transform(df, output_dir, trace_links):\n    return df"},
@@ -131,7 +130,7 @@ def test_publish_carries_a_function_so_it_still_gets_a_badge():
     stage = m.parse_stage({
         "id": "pub", "description": "Pub", "type": "publish",
         "signature": {"form": "replaces"},
-        "inputs": [{"id": "up", "schema": _SCHEMA}],
+        "inputs": [{"id": "up"}],
         "publish": {"format": "csv"},
         "function": {"kind": "inline",
                      "code": "def transform(df, output_dir, trace_links):\n    return df"},

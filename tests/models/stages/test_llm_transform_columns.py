@@ -17,7 +17,7 @@ def _llm_stage(prompt_template):
     injected = find_template_fields(prompt_template)
     return {
         "id": "ask", "type": "llm_transform", "description": "ask",
-        "inputs": [{"id": "src", "schema": {"columns": _EDGE_COLUMNS}}],
+        "inputs": [{"id": "src"}],
         "signature": {
             "form": "extends",
             # An InputReads entry needs at least one column, so a template that

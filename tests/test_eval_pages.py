@@ -43,8 +43,7 @@ def _override(tmp_path):
     }
 _TARGET = {
     "id": "classify", "type": "python_row_function", "description": "Classify each row",
-    "inputs": [{"id": "load", "schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": True},
-                                                     {"name": "text", "type": "str", "nullable": True}]}}],
+    "inputs": [{"id": "load"}],
     "function": {"kind": "inline", "code": "def transform(row): return row"},
     "signature": {
         "form": "extends",

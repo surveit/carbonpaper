@@ -10,13 +10,13 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import ValidationError
 
 from app.core.errors import ReviewValidationError
-from app.models import Stage, TableSchema
+from app.models import Stage, TableSchema, WorkflowStage
 from app.models.stages.human_review_queue import QueueConfig, resolve_queue_config
 from app.services import review
 from app.web.breadcrumbs import build_run_child_crumbs
 from app.web.config import templates
 from app.web.loading import (
-    find_stage,
+    index_workflow_stages,
     load_manifest,
     load_queue_fingerprints,
     load_stages,
@@ -49,7 +49,7 @@ async def queue_page(request: Request, project: str, run_id: str, stage_id: str)
             "crumbs": build_run_child_crumbs(project, run_id, label="Review queue"),
             "run_id": run_id,
             "stage_id": stage_id,
-            "stage_def": stage_def,
+            "stage_def": stage_def.stage,
             "definition_drift": drift,
             "review_notes_column": queue.review_notes_column,
             "page": page,
@@ -110,7 +110,7 @@ async def queue_decide(
     try:
         verdict = review.resolve_verdict(supplied, prefilled)
         review.record_decision(
-            project=project, stage=stage_def,
+            project=project, stage=stage_def.stage,
             stage_fingerprint=stage_fingerprint, input_fingerprint=input_fingerprint,
             frozen_row={str(k): v for k, v in row.items()},
             verdict=verdict,
@@ -131,13 +131,13 @@ async def queue_decide(
 
 
 def _build_page(
-    project: str, run_id: str, stage_id: str, stage_def: Stage, queue: QueueConfig
+    project: str, run_id: str, stage_id: str, stage_def: WorkflowStage, queue: QueueConfig
 ) -> tuple[str | None, QueuePage]:
     """Returns the drift message beside the page: a drifted queue renders no items."""
     fingerprints = load_queue_fingerprints(project, run_id, stage_id)
     drift = (
         None if fingerprints is None
-        else find_definition_drift(stage_def, fingerprints.stage_fingerprint)
+        else find_definition_drift(stage_def.stage, fingerprints.stage_fingerprint)
     )
     page = build_queue_page(
         project, run_id, stage_def, queue,
@@ -149,21 +149,23 @@ def _build_page(
 # --- stage lookup, shared by every route ---------------------------------------
 
 
-def _require_queue_stage(stages: list[Stage], stage_id: str) -> Stage:
-    stage_def = find_stage(stages, stage_id)
-    if stage_def is None or stage_def.type != "human_review_queue":
+def _require_queue_stage(stages: list[Stage], stage_id: str) -> WorkflowStage:
+    workflow_stage = index_workflow_stages(stages).get(stage_id)
+    if workflow_stage is None or workflow_stage.stage.type != "human_review_queue":
         raise HTTPException(status_code=404, detail=f"No queue stage '{stage_id}'")
-    return stage_def
+    return workflow_stage
 
 
-def _require_queue_config(stage_def: Stage) -> QueueConfig:
-    queue = resolve_queue_config(stage_def)
+def _require_queue_config(stage_def: WorkflowStage) -> QueueConfig:
+    queue = resolve_queue_config(stage_def.stage)
     assert queue is not None  # _require_queue_stage admits only human_review_queue
     return queue
 
 
-def _validate_stage_definition_unchanged(stage_def: Stage, halted_fingerprint: str) -> None:
-    drift = find_definition_drift(stage_def, halted_fingerprint)
+def _validate_stage_definition_unchanged(
+    stage_def: WorkflowStage, halted_fingerprint: str
+) -> None:
+    drift = find_definition_drift(stage_def.stage, halted_fingerprint)
     if drift is not None:
         raise HTTPException(status_code=409, detail=drift)
 
@@ -220,7 +222,7 @@ def _normalise_review_notes(review_notes: str | None) -> str | None:
 
 
 def _validate_reviewed_values(
-    stage_def: Stage, queue: QueueConfig, supplied: Mapping[str, str | None]
+    stage_def: WorkflowStage, queue: QueueConfig, supplied: Mapping[str, str | None]
 ) -> dict[str, object]:
     """A key the stage does not declare passes through untouched — the review service owns that."""
     declared = {

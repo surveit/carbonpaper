@@ -5,17 +5,20 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from app.models import parse_stage, validate_workflow
+from app.models import parse_stage, parse_workflow, validate_workflow
 from app.models.stage import Stage
+from conftest import source_stage
+
+_BILLS = [
+    {"name": "price", "type": "str", "nullable": True},
+    {"name": "title", "type": "str", "nullable": True},
+]
 
 
 def _row_stage(**overrides) -> dict:
     spec = {
         "id": "clean", "description": "Clean", "type": "python_row_function",
-        "inputs": [{"id": "bills", "schema": {"columns": [
-            {"name": "price", "type": "str", "nullable": True},
-            {"name": "title", "type": "str", "nullable": True},
-        ]}}],
+        "inputs": [{"id": "bills"}],
         "function": {"kind": "inline", "code": "def transform(row):\n    return row"},
         "signature": {
             "form": "extends",
@@ -29,25 +32,24 @@ def _row_stage(**overrides) -> dict:
 
 
 def test_an_extends_signature_resolves_the_outer():
-    stage = parse_stage(_row_stage())
-    resolved = stage.resolve_output_schema()
+    workflow = parse_workflow([source_stage("bills", _BILLS), _row_stage()])
+    resolved = workflow.find_workflow_stage("clean").output_schema
     assert [(c.name, c.type) for c in resolved.columns] == [
         ("price", "float"), ("title", "str"), ("note", "str")]
 
 
 def test_a_replaces_signature_resolves_to_exactly_produces():
-    stage = parse_stage({
+    shape = parse_workflow([source_stage("bills", _BILLS), {
         "id": "shape", "description": "Shape", "type": "python_frame_function",
-        "inputs": [{"id": "bills", "schema": {"columns": [
-            {"name": "price", "type": "str", "nullable": True}]}}],
+        "inputs": [{"id": "bills"}],
         "function": {"kind": "inline", "code": "def transform(df):\n    return df"},
         "signature": {
             "form": "replaces",
             "reads": [{"input": "bills", "columns": [{"name": "price", "type": "str", "nullable": True}]}],
             "produces": [{"name": "n", "type": "int", "nullable": True}],
         },
-    })
-    resolved = stage.resolve_output_schema()
+    }]).find_workflow_stage("shape")
+    resolved = shape.output_schema
     assert [(c.name, c.type) for c in resolved.columns] == [("n", "int")]
 
 
@@ -83,11 +85,7 @@ def test_an_edge_is_satisfied_by_the_upstream_resolved_outer():
     upstream = parse_stage(_row_stage())
     downstream = parse_stage({
         "id": "keep", "description": "Keep", "type": "filter_rows",
-        "inputs": [{"id": "clean", "schema": {"columns": [
-            {"name": "price", "type": "float", "nullable": True},
-            {"name": "title", "type": "str", "nullable": True},
-            {"name": "note", "type": "str", "nullable": True},
-        ]}}],
+        "inputs": [{"id": "clean"}],
         "filter": {"code": "def should_include(row):\n    return row['price'] is not None"},
         "signature": {"form": "extends", "reads": [{"input": "clean", "columns": [
             {"name": "price", "type": "float", "nullable": True},
@@ -99,8 +97,7 @@ def test_an_edge_is_satisfied_by_the_upstream_resolved_outer():
 def test_a_signature_only_llm_stage_resolves_its_reply_schema():
     stage: Stage = parse_stage({
         "id": "score", "description": "Score", "type": "llm_transform",
-        "inputs": [{"id": "bills", "schema": {"columns": [
-            {"name": "title", "type": "str", "nullable": True}]}}],
+        "inputs": [{"id": "bills"}],
         "llm": {"prompt_data_template": "Title: {title}"},
         "signature": {
             "form": "extends",
@@ -112,14 +109,11 @@ def test_a_signature_only_llm_stage_resolves_its_reply_schema():
 
 
 def test_a_signature_only_enrich_resolves_from_bring_and_anchor():
-    stage = parse_stage({
+    spec = {
         "id": "add_region", "description": "Add region", "type": "enrich",
         "inputs": [
-            {"id": "bills", "schema": {"columns": [
-                {"name": "state", "type": "str", "nullable": True}]}},
-            {"id": "states", "schema": {"columns": [
-                {"name": "code", "type": "str", "nullable": True},
-                {"name": "region", "type": "str", "nullable": True}]}},
+            {"id": "bills"},
+            {"id": "states"},
         ],
         "join": {"keys": [{"left": "state", "right": "code"}],
                  "enrich_with": {"region": "region"}},
@@ -131,7 +125,15 @@ def test_a_signature_only_enrich_resolves_from_bring_and_anchor():
             ],
             "adds": [{"name": "region", "type": "str", "nullable": True}],
         },
-    })
-    resolved = stage.resolve_output_schema()
+    }
+    workflow = parse_workflow([
+        source_stage("bills", [{"name": "state", "type": "str", "nullable": True}]),
+        source_stage("states", [
+            {"name": "code", "type": "str", "nullable": True},
+            {"name": "region", "type": "str", "nullable": True},
+        ]),
+        spec,
+    ])
+    resolved = workflow.find_workflow_stage("add_region").output_schema
     assert [(c.name, c.type) for c in resolved.columns] == [
         ("state", "str"), ("region", "str")]

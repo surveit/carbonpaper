@@ -41,7 +41,7 @@ def _stage(stage_id="s", type_="python_row_function", handle="function", **kw):
             block.pop("code")
     spec = {
         "id": stage_id, "description": stage_id.replace("_", " ").title(), "type": type_,
-        "inputs": [{"id": "up", "schema": _SCHEMA}],
+        "inputs": [{"id": "up"}],
         "signature": _signature_for(type_, _SCHEMA),
         handle: block,
         **kw,
@@ -61,9 +61,8 @@ def test_a_described_and_exemplified_stage_warns_about_nothing():
 def test_a_config_only_stage_warns_about_nothing():
     enrich = m.parse_stage({
         "id": "j", "description": "J", "type": "enrich",
-        "inputs": [{"id": "a", "schema": _SCHEMA},
-                   {"id": "b", "schema": {"columns": [{"name": "id", "type": "str", "nullable": True},
-                                                      {"name": "v", "type": "str", "nullable": True}]}}],
+        "inputs": [{"id": "a"},
+                   {"id": "b"}],
         "signature": {
             "form": "extends",
             "reads": [
@@ -104,7 +103,7 @@ def _publish_stage(stage_id="pub"):
     return m.parse_stage({
         "id": stage_id, "description": "Pub", "type": "publish",
         "signature": {"form": "replaces"},
-        "inputs": [{"id": "up", "schema": _SCHEMA}],
+        "inputs": [{"id": "up"}],
         "publish": {"format": "csv"},
         "function": {"kind": "inline", "summary": "Writes one file per row.",
                      "code": "def transform(df, output_dir, trace_links):\n    return df"},
@@ -128,10 +127,10 @@ def test_a_filter_with_no_examples_is_unexemplified():
     assert [w.kind for w in warnings] == ["unexemplified"]
 
 
-def test_cache_off_and_a_row_limit_are_notes_not_blockers():
+def test_cache_off_is_a_note_not_a_blocker():
     warnings = find_stage_compiler_warnings(
-        _stage(cache=False, limit=100, tests=[_PASSING_EXAMPLE]))
-    assert sorted(w.kind for w in warnings) == ["nondeterministic", "row_limit"]
+        _stage(cache=False, tests=[_PASSING_EXAMPLE]))
+    assert [w.kind for w in warnings] == ["nondeterministic"]
     assert all(w.severity == "warning" for w in warnings)
 
 

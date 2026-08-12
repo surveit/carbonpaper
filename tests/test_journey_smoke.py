@@ -147,10 +147,6 @@ def _workflow_stages(authored_path: str) -> list[dict]:
     load_schema = {
         "columns": [{"name": "name", "type": "str", "nullable": True}, {"name": "val", "type": "int", "nullable": True}],
     }
-    flag_schema = {
-        "columns": [{"name": "name", "type": "str", "nullable": True}, {"name": "val", "type": "int", "nullable": True},
-                    {"name": "flagged", "type": "bool", "nullable": True}],
-    }
     # groupby("flagged", as_index=False)["val"].sum() — one row per flag value,
     # in that column order.
     totals_schema = {
@@ -165,7 +161,7 @@ def _workflow_stages(authored_path: str) -> list[dict]:
         },
         {
             "id": "flag", "description": "Flag rows over threshold", "type": "python_row_function",
-            "inputs": [{"id": "load", "schema": load_schema}],
+            "inputs": [{"id": "load"}],
             "function": {"kind": "inline", "code": (
                 "def transform(row):\n"
                 "    row[\"flagged\"] = row[\"val\"] > 1\n"
@@ -177,7 +173,7 @@ def _workflow_stages(authored_path: str) -> list[dict]:
         },
         {
             "id": "totals", "description": "Total per flag", "type": "python_frame_function",
-            "inputs": [{"id": "flag", "schema": flag_schema}],
+            "inputs": [{"id": "flag"}],
             "function": {"kind": "inline", "code": (
                 "def transform(df):\n"
                 "    return df.groupby(\"flagged\", as_index=False)[\"val\"].sum()\n"
@@ -186,7 +182,7 @@ def _workflow_stages(authored_path: str) -> list[dict]:
         },
         {
             "id": "report", "description": "Publish totals", "type": "publish",
-            "inputs": [{"id": "totals", "schema": totals_schema}],
+            "inputs": [{"id": "totals"}],
             "publish": {"format": "csv", "destination": "report/"},
             "signature": {"form": "replaces"},
             "function": {"kind": "inline", "code": (

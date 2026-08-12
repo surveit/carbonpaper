@@ -10,6 +10,7 @@ import pytest
 
 from app.models import parse_stage
 from app.tools.prompt_fragments import WORKED_STAGE_EXAMPLE
+from conftest import place_stage
 
 
 @pytest.fixture(scope="module")
@@ -43,12 +44,12 @@ def test_the_example_code_matches_its_stated_corner_cases(spec: dict) -> None:
     stage = parse_stage(spec)
     handler = HANDLERS[StageType.starlark_row_function]
     blank = pd.DataFrame([{"filing_id": "F1", "reported_amount": None}])
-    out = handler.execute(stage, {"filings": blank}, make_run_context())
+    out = handler.execute(place_stage(stage), {"filings": blank}, make_run_context())
     assert out is not None and out["amount_usd"].isna().all()
 
     euros = pd.DataFrame([{"filing_id": "F2", "reported_amount": "\u20ac45,00"}])
     with pytest.raises(StepRefused):
-        handler.execute(stage, {"filings": euros}, make_run_context())
+        handler.execute(place_stage(stage), {"filings": euros}, make_run_context())
 
 
 def test_the_example_reaches_both_authoring_prompts() -> None:

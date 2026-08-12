@@ -36,7 +36,7 @@ def _stages(data_path: Path) -> list[dict]:
         },
         {
             "id": "classify", "description": "Classify", "type": "python_row_function",
-            "inputs": [{"id": "load", "schema": {"columns": _COLUMNS}}],
+            "inputs": [{"id": "load"}],
             "function": {"kind": "inline",
                          "code": 'def transform(row):\n    return {**row, "label": "x"}\n'},
             "signature": {

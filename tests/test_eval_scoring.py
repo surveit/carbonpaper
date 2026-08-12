@@ -13,11 +13,13 @@ from app.evals.scoring import score_expected_outputs
 
 
 def _stage(id_, output_cols, tmp_path):
-    return m.parse_stage({
+    """Scoring reads only a stage's OUTPUT columns, so each is placed on its own."""
+    workflow = m.parse_workflow([{
         "id": id_, "type": "input_data", "description": id_,
         "connector": {"kind": "file", "params": {"path": str(tmp_path / f"{id_}.csv")}},
         "signature": {"form": "replaces", "produces": output_cols},
-    })
+    }])
+    return workflow.find_workflow_stage(id_)
 
 
 def _config(checks):

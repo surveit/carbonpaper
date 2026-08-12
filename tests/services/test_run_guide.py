@@ -13,6 +13,8 @@ from app.models import parse_stage
 from app.models.review_guide import ReviewGuideStep
 from app.services.versioning import ReviewGuide
 from app.services import workspace
+from app.models.workflow import parse_workflow
+from app.models.workflow_stage import WorkflowStage
 from app.services.run_guide import build_run_guide_view, list_written_columns
 from app.services.versioning import (
     create_version_from_stages,
@@ -41,20 +43,20 @@ _STAGES: list[dict[str, Any]] = [
     {"id": "load_sources", "description": "Load sources", "type": "input_data",
      "connector": {"kind": "file"}, "signature": {"form": "replaces", "produces": _SOURCES["columns"]}},
     {"id": "add_flag", "description": "Flag rows", "type": "python_row_function",
-     "inputs": [{"id": "load_rows", "schema": _ROWS}],
+     "inputs": [{"id": "load_rows"}],
      "function": _ROW_FUNCTION, "signature": {
          "form": "extends",
          "reads": [{"input": "load_rows", "columns": _ROWS["columns"]}],
          "adds": [_FLAG],
      }},
     {"id": "keep_flagged", "description": "Keep the flagged rows", "type": "filter_rows",
-     "inputs": [{"id": "add_flag", "schema": _FLAGGED}],
+     "inputs": [{"id": "add_flag"}],
      "filter": {"code": "def should_include(row):\n    return row['flag']\n"},
      "signature": {"form": "extends",
                    "reads": [{"input": "add_flag", "columns": [_FLAG]}]}},
     {"id": "attach_source", "description": "Attach the source", "type": "enrich",
-     "inputs": [{"id": "keep_flagged", "schema": _FLAGGED},
-                {"id": "load_sources", "schema": _SOURCES}],
+     "inputs": [{"id": "keep_flagged"},
+                {"id": "load_sources"}],
      "join": {"keys": [{"left": "doc_id", "right": "doc_id"}], "enrich_with": {"source": "source"}},
      "signature": {
          "form": "extends",
@@ -306,8 +308,8 @@ def test_the_column_count_is_the_frames_width_not_the_declared_schemas(project_d
     view = build_run_guide_view("demo", _manifest(version_id))
 
     kept = _stages_by_id(view)["keep_flagged"]
-    declared = len(kept.stage.resolve_output_schema().columns)
-    assert declared == 2
+    placed = parse_workflow(_STAGES).find_workflow_stage("keep_flagged")
+    assert len(placed.output_schema.columns) == 2
     assert kept.column_count == 3
 
 
@@ -473,10 +475,11 @@ def test_a_step_of_input_stages_alone_still_reports_its_output(project_dir):
 def test_a_publish_stage_producing_nothing_writes_no_columns():
     publish = parse_stage({
         "id": "write_it", "description": "Write it", "type": "publish",
-        "inputs": [{"id": "attach_source", "schema": _ATTACHED}],
+        "inputs": [{"id": "attach_source"}],
         "publish": {"format": "csv", "destination": "out/"},
         "signature": {"form": "replaces"},
         "function": {"kind": "inline",
                      "code": "def transform(df, output_dir):\n    return df\n"},
     })
-    assert list_written_columns(publish) == []
+    assert list_written_columns(
+        WorkflowStage(stage=publish, inputs=[], output_schema=None)) == []

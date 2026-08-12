@@ -14,7 +14,7 @@ from fastapi import HTTPException
 
 from app.core.errors import NoVersionToRunError, StageOutputMissing
 from app.core.frames import list_rows, read_frame_file, render_frame_as_csv_text
-from app.models import Stage, StageType
+from app.models import Stage, StageType, WorkflowStage, resolve_workflow_stages
 from app.models.stages.llm_transform import LLMTransformStage
 from app.models.run_manifest import read_run_manifest
 from app.runtime.manifest import resolve_output_path
@@ -103,6 +103,14 @@ def load_stages_or_empty(project: str) -> StageListing:
 
 def find_stage(stages: list[Stage], stage_id: str) -> Stage | None:
     return next((s for s in stages if s.id == stage_id), None)
+
+
+def index_workflow_stages(stages: list[Stage]) -> dict[str, WorkflowStage]:
+    """Empty where the graph does not resolve — a working copy mid-edit has none, and none are invented."""
+    try:
+        return {resolved.id: resolved for resolved in resolve_workflow_stages(stages)}
+    except ValueError:
+        return {}
 
 
 def list_file_inputs(project: str, version_id: str | None = None) -> list[dict[str, Any]]:

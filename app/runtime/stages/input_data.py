@@ -25,6 +25,7 @@ from app.models import (
     STR_COLUMN_TYPE,
     Stage,
     TableSchema,
+    WorkflowStage,
 )
 from app.models.stages.input_data import FileFormat, InputDataStage, XlsxReadParams
 
@@ -51,7 +52,10 @@ _INFERRING_FORMATS = frozenset({FileFormat.csv, FileFormat.json, FileFormat.xlsx
 
 
 def preflight_input_data(stage: Stage) -> tuple[list[str], dict[str, Any] | None]:
-    connector = narrow_stage(stage, InputDataStage).connector
+    if not isinstance(stage, InputDataStage):
+        raise TypeError(
+            f"stage {stage.id}: the input_data preflight got a {type(stage).__name__}")
+    connector = stage.connector
     path_param = connector.params.get("path")
     if not path_param:
         return ([f"`{stage.id}`: no file bound — supply a run binding, or author "
@@ -65,19 +69,19 @@ def preflight_input_data(stage: Stage) -> tuple[list[str], dict[str, Any] | None
                 "bytes": path.stat().st_size}
 
 
-def read_input_data(stage: Stage, ctx: RunContext) -> pd.DataFrame:
-    input_stage = narrow_stage(stage, InputDataStage)
+def read_input_data(workflow_stage: WorkflowStage, ctx: RunContext) -> pd.DataFrame:
+    input_stage = narrow_stage(workflow_stage, InputDataStage)
     params = input_stage.connector.params
 
     if "path" not in params:
         raise ValueError(
-            f"input stage '{stage.id}' has no file bound (connector params carry "
+            f"input stage '{input_stage.id}' has no file bound (connector params carry "
             "no 'path'); runs bind one at prepare_run — subset/eval runs need the "
             "workflow to author it or a reference override to inject it"
         )
     path = Path(params["path"])   # absolute: the model rejects a relative path when present
     fmt = params.get("format", FileFormat.csv)
-    schema = input_stage.resolve_output_schema()  # input_data's produces is non-empty by validation
+    schema = workflow_stage.output_schema  # input_data's produces is non-empty by validation
     if fmt == FileFormat.csv:
         df = read_source_csv(path, dtype=_read_dtype(schema, fmt, params))
     elif fmt == FileFormat.parquet:

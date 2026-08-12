@@ -10,6 +10,7 @@ from app.runtime.lineage import LINEAGE_ATTR, EdgeKind, read_row_lineage
 from app.runtime.stages.aggregate import handle_aggregate
 from app.runtime.trace import trace_row
 from test_trace_helpers import write_run
+from conftest import place_stage
 
 # A repeated firm, a missing one, and amounts either side of the `where` below.
 FILINGS = pd.DataFrame({
@@ -56,7 +57,7 @@ def _reads(aggregations):
 def _stage(aggregations, produces):
     return parse_stage({
         "id": "agg", "type": "aggregate", "description": "agg",
-        "inputs": [{"id": "filings", "schema": _IN_SCHEMA}],
+        "inputs": [{"id": "filings"}],
         "signature": {
             "form": "replaces",
             "reads": [{"input": "filings", "columns": _reads(aggregations)}],
@@ -67,7 +68,7 @@ def _stage(aggregations, produces):
 
 def _run(aggregations, produces, frame=FILINGS) -> pd.DataFrame:
     ctx = RunContext.for_stages_outside_a_run(repo_root=None, run_dir=None)
-    return handle_aggregate(_stage(aggregations, produces), {"filings": frame}, ctx)
+    return handle_aggregate(place_stage(_stage(aggregations, produces)), {"filings": frame}, ctx)
 
 
 def _all_formulas(frame=FILINGS) -> dict:
@@ -150,7 +151,7 @@ def test_an_empty_slice_matches_what_the_grouped_path_emits_for_that_group():
     key = {"name": "k", "type": "str", "nullable": False}
     grouped = parse_stage({
         "id": "agg", "type": "aggregate", "description": "agg",
-        "inputs": [{"id": "filings", "schema": {"columns": [*_IN_SCHEMA["columns"], key]}}],
+        "inputs": [{"id": "filings"}],
         "signature": {
             "form": "replaces",
             "reads": [{"input": "filings", "columns": [*amt, key]}],
@@ -158,7 +159,7 @@ def test_an_empty_slice_matches_what_the_grouped_path_emits_for_that_group():
         "aggregate": {"group_by": ["k"], "aggregations": [total, none_pass]},
     })
     ctx = RunContext.for_stages_outside_a_run(repo_root=None, run_dir=None)
-    by_group = handle_aggregate(grouped, {"filings": FILINGS.assign(k="all")}, ctx).iloc[0]
+    by_group = handle_aggregate(place_stage(grouped), {"filings": FILINGS.assign(k="all")}, ctx).iloc[0]
 
     assert whole["total"] == by_group["total"]
     assert pd.isna(whole["big_n"]) and pd.isna(by_group["big_n"])

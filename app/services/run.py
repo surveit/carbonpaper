@@ -13,7 +13,7 @@ import pandas as pd
 
 from app.core.errors import RunNotFoundError, RunVersionUnresolvableError
 from app.core.frames import read_frame_column_names
-from app.models import Stage
+from app.models import Stage, WorkflowStage, resolve_workflow_stages
 from app.models.run_manifest import read_run_bindings, read_run_manifest
 from app.runtime.manifest import read_stage_output_frame, resolve_output_path
 from app.runtime.runner import apply_run_bindings, prepare_run, resume_run, run_prepared
@@ -113,11 +113,10 @@ def read_output_column_counts(project: str, manifest: Mapping[str, Any]) -> dict
     if not run_id:
         return {}
     run_dir = resolve_run_dir(project, str(run_id))
-    # Off the frames the run wrote, never off what the version's signatures promise: an
-    # input edge only has to be SATISFIABLE by its upstream, so it may name fewer columns
-    # than that upstream really produces, and an extends output is that edge plus its
-    # adds. The promise therefore runs narrower than the frame by an unbounded margin.
-    # A frame that cannot be read has no count here at all.
+    # Off the frames the run wrote, never off what the version's signatures promise:
+    # most stage types do not trim their output frame to the schema they declared, so
+    # the frame may carry columns the promise never named. A frame that cannot be read
+    # has no count here at all.
     counted = {
         str(record["stage_id"]): _count_output_columns(run_dir, record.get("output_path"))
         for record in manifest.get("stage_records", [])
@@ -193,6 +192,9 @@ class RunStageDef:
     """`stage` is None both for an unreadable version and for no such stage; `error` tells them apart."""
 
     stage: Stage | None
+    # The same stage seen in its pinned version, carrying the schemas that are a
+    # function of the whole graph. None wherever `stage` is.
+    workflow_stage: WorkflowStage | None
     error: str | None
 
 
@@ -202,9 +204,14 @@ def load_pinned_stage_def(
     try:
         stages = load_run_stages(project, manifest)
     except RunVersionUnresolvableError as exc:
-        return RunStageDef(stage=None, error=str(exc))
+        return RunStageDef(stage=None, workflow_stage=None, error=str(exc))
+    workflow_stage = next(
+        (p for p in resolve_workflow_stages(stages) if p.id == stage_id), None
+    )
     return RunStageDef(
-        stage=next((s for s in stages if s.id == stage_id), None), error=None
+        stage=None if workflow_stage is None else workflow_stage.stage,
+        workflow_stage=workflow_stage,
+        error=None,
     )
 
 

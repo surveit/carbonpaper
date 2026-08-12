@@ -20,7 +20,7 @@ _CODE = "def transform(row):\n    return row\n"
 def _spec(stage_id="tag", **function_extra):
     return {
         "id": stage_id, "description": "Tag", "type": "python_row_function",
-        "inputs": [{"id": "src", "schema": _SCHEMA}],
+        "inputs": [{"id": "src"}],
         "signature": {"form": "extends", "reads": [{"input": "src", "columns": _SCHEMA["columns"]}]},
         "function": {"kind": "inline", "code": _CODE,
                      "corner_cases": [], **function_extra},
@@ -69,9 +69,8 @@ def test_editing_a_summary_away_is_refused(project):
 def test_a_config_only_stage_needs_no_summary(project):
     result = add_stage_spec(project, json.dumps({
         "id": "j", "description": "J", "type": "enrich",
-        "inputs": [{"id": "src", "schema": _SCHEMA},
-                   {"id": "src2", "schema": {"columns": [{"name": "id", "type": "str", "nullable": True},
-                                                         {"name": "v", "type": "str", "nullable": True}]}}],
+        "inputs": [{"id": "src"},
+                   {"id": "src2"}],
         "signature": {
             "form": "extends",
             "reads": [
