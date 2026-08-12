@@ -32,36 +32,37 @@ def offline_llm():
     yield
 
 
-def test_live_llm_journey_reaches_a_published_artifact(live_project, tmp_path):
+def test_live_llm_journey_reaches_a_published_artifact(live_project):
     from app.runtime.options import agent_available
     assert agent_available(), (
         "live_llm tier needs claude-agent-sdk + the claude CLI. Install both "
         "(and set ANTHROPIC_API_KEY in CI) — this tier fails rather than skips."
     )
+    project = live_project.name
 
-    resp = client.post(f"/project/{PROJECT}/version", data={"message": "live smoke"})
+    resp = client.post(f"/project/{project}/version", data={"message": "live smoke"})
     assert resp.status_code == 200, resp.text
     assert resp.json()["ok"] is True, resp.text
 
     # Publish it — the human-approval signal. A run no longer requires it, but it
     # stays in the journey: author -> version -> publish -> run -> artifact.
-    version_id = list_versions(tmp_path / PROJECT)[0].version_id
-    resp = client.post(f"/project/{PROJECT}/versions/{version_id}/publish",
+    version_id = list_versions(live_project)[0].version_id
+    resp = client.post(f"/project/{project}/versions/{version_id}/publish",
                        follow_redirects=False)
     assert resp.status_code == 303, resp.text
 
-    resp = client.post(f"/project/{PROJECT}/run", data={}, follow_redirects=False)
+    resp = client.post(f"/project/{project}/run", data={}, follow_redirects=False)
     assert resp.status_code == 303, resp.text
     run_id = resp.headers["location"].rstrip("/").rsplit("/", 1)[-1]
 
-    status = client.get(f"/project/{PROJECT}/runs/{run_id}/status").json()
+    status = client.get(f"/project/{project}/runs/{run_id}/status").json()
     assert_run_ok(status, live_project, run_id)
 
     # The live signal: a real reply arrived for EVERY row. The column is
     # nullable, so a blanked row would still leave the run `ok` — count the
     # answers, don't trust the status. Values are the model's judgment and are
     # deliberately not asserted; conformance (present, boolean) is the contract.
-    served = client.get(f"/project/{PROJECT}/runs/{run_id}/artifact/report/classified.csv")
+    served = client.get(f"/project/{project}/runs/{run_id}/artifact/report/classified.csv")
     assert served.status_code == 200
     table = pd.read_csv(io.StringIO(served.text))
     assert len(table) == ROWS
@@ -86,8 +87,9 @@ def live_project(tmp_path, monkeypatch):
     assert len(frame) == ROWS  # budget bound: one model call per row per attempt
     frame.to_csv(source, index=False)
 
-    create_project(PROJECT, "Classify claims and publish the table.", source="live smoke test")
-    project_dir = tmp_path / PROJECT
+    project_id = create_project(PROJECT, "Classify claims and publish the table.",
+                                source="live smoke test")
+    project_dir = tmp_path / project_id
     (project_dir / "compiled").mkdir()
     for position, stage in enumerate(_workflow_stages(str(source)), start=1):
         path = project_dir / "compiled" / f"{position:02d}_{stage['id']}.json"
