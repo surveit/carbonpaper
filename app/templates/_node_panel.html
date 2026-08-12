@@ -165,10 +165,14 @@
     return `/project/${encodeURIComponent(PROJECT)}/generation-session/${encodeURIComponent(sid)}/status`;
   }
 
+  // Saved, not retyped: the label carries the agent mark as inline SVG, and a
+  // second copy of it here is a second thing to keep in step with _sparkle.html.
+  const genBtnLabel = genBtn ? genBtn.innerHTML : '';
+
   function resetGenerateTestsButton() {
     if (!genBtn) return;
     genBtn.disabled = false;
-    genBtn.textContent = 'Generate tests';
+    genBtn.innerHTML = genBtnLabel;
   }
 
   async function pollGenerateTestsStatus(sid) {

@@ -39,6 +39,9 @@ def _seed_project(root: Path) -> None:
             {"name": "expects_wrong_value",
              "inputs": {"load": [{"note": "closing balance", "amount": 3.0}]},
              "expected": [{"doubled": 7.0, "note": "closing balance", "amount": 3.0}]},
+            {"name": "expects_refusal",
+             "inputs": {"load": [{"note": "any balance", "amount": 5.0}]},
+             "expected": None},
         ],
     }), encoding="utf-8")
 
@@ -57,10 +60,63 @@ def test_panel_shows_each_test_with_status(client: TestClient, tmp_path: Path) -
     assert "Tests" in html
     assert "doubles_two" in html and "The basic doubling contract." in html
     assert "expects_wrong_value" in html
-    assert "passed" in html and "mismatch" in html
 
 
-def test_expected_output_marks_the_columns_the_step_writes(
+def test_only_a_case_needing_review_is_marked(client: TestClient, tmp_path: Path) -> None:
+    _seed_project(tmp_path)
+    html = client.get("/project/alpha/node/double/panel").text
+    # Two of the three seeded cases do not match; the third carries nothing, because a
+    # mark on every case is a mark that means nothing.
+    assert html.count("sev-ico-warning") == 2
+    assert ">passed<" not in html and ">failed<" not in html
+
+
+def test_the_verdict_is_one_line_naming_who_expected(
+    client: TestClient, tmp_path: Path
+) -> None:
+    _seed_project(tmp_path)
+    html = " ".join(client.get("/project/alpha/node/double/panel").text.split())
+    assert 'class="sparkle"' in html  # the agent mark, drawn by _sparkle.html
+    assert "✓ This matches what an independent agent expected from the " \
+           "description alone." in html
+    assert "✗ This outcome is different from what an independent agent expected " \
+           "from the description alone. Further review is recommended." in html
+    # It carries no heading; the outcome above it is the last thing headed.
+    assert "against the description" not in html
+
+
+def test_only_a_differing_case_shows_what_the_agent_expected(
+    client: TestClient, tmp_path: Path
+) -> None:
+    _seed_project(tmp_path)
+    html = client.get("/project/alpha/node/double/panel").text
+    assert html.count("The agent expected the step to return:") == 1
+    assert "The agent expected the step to refuse this input" in html
+
+
+def test_a_case_leads_with_what_the_step_actually_returned(
+    client: TestClient, tmp_path: Path
+) -> None:
+    _seed_project(tmp_path)
+    html = client.get("/project/alpha/node/double/panel").text
+    assert html.index("actual outcome") < html.index("independent agent expected")
+    # `expects_refusal` returned a row instead of refusing; the row itself is on the
+    # page, not only the count that used to stand in for it.
+    assert '<td class="test-col-written">10.0</td>' in html
+    assert "got 1 row(s)" not in html
+
+
+def test_a_matching_case_does_not_repeat_the_rows_as_an_expectation(
+    client: TestClient, tmp_path: Path
+) -> None:
+    _seed_project(tmp_path)
+    html = client.get("/project/alpha/node/double/panel").text
+    assert html.count('<td class="test-col-written">4.0</td>') == 1
+    # The disagreeing case still states what the description asked for.
+    assert '<td class="test-col-written">7.0</td>' in html
+
+
+def test_the_actual_table_marks_the_columns_the_step_writes(
     client: TestClient, tmp_path: Path
 ) -> None:
     _seed_project(tmp_path)
@@ -77,15 +133,17 @@ def test_a_carried_through_column_sits_where_the_schema_puts_it(
 ) -> None:
     _seed_project(tmp_path)
     html = client.get("/project/alpha/node/double/panel").text
-    # Both rows were authored `note` before `amount`; both tables show the schema's order,
-    # so a carried-through column is under the same heading in each.
+    # Both rows were authored `note` before `amount`; every table shows the schema's
+    # order, so a carried-through column is under the same heading in each.
     input_table = html.split("<h3>input")[1].split("<h3>")[0]
     assert input_table.index("<th>amount</th>") < input_table.index("<th>note</th>")
-    expected_table = html.split("<h3>expected output</h3>")[1].split("</table>")[0]
-    assert expected_table.index("<th>amount</th>") < expected_table.index("<th>note</th>")
-    assert expected_table.index("<th>note</th>") < expected_table.index(
+    outcome_table = html.split("<h3>actual outcome</h3>")[1].split("</table>")[0]
+    assert outcome_table.index("<th>amount</th>") < outcome_table.index("<th>note</th>")
+    assert outcome_table.index("<th>note</th>") < outcome_table.index(
         '<th class="test-col-written">doubled</th>'
     )
+    expected_table = html.split("The agent expected the step to return:")[1].split("</table>")[0]
+    assert expected_table.index("<th>amount</th>") < expected_table.index("<th>note</th>")
 
 
 def test_panel_without_tests_has_no_tests_section(client: TestClient, tmp_path: Path) -> None:

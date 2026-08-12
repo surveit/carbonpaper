@@ -1,7 +1,11 @@
 """run_tests_for_stage: execution through the real handlers + normalized comparison."""
 from app.models import parse_stage, Stage
 from app.models.stages.signature import transform_output_schema
-from app.runtime.stage_tests import find_failing_stage_tests, run_tests_for_stage
+from app.runtime.stage_tests import (
+    MAX_OUTCOME_ROWS,
+    find_failing_stage_tests,
+    run_tests_for_stage,
+)
 
 _IN_SCHEMA = {"columns": [{"name": "amount", "type": "float", "nullable": False}]}
 _OUT_SCHEMA = {"columns": [
@@ -470,3 +474,78 @@ def test_a_narrow_case_still_fails_on_the_columns_it_does_state():
     assert result.status == "mismatch"
     [diff] = result.diffs
     assert diff.column == "doubled" and diff.actual == 4.0
+
+
+# ── The outcome: what the step DID, held apart from the verdict on it ────────
+# A row-count in a message is not reviewable. Every result that reached the step
+# carries the rows or the refusal reason, so the panel can lead with them.
+
+
+def test_failure_case_that_returns_rows_carries_those_rows():
+    stage = _row_stage(_DOUBLE, [{
+        "name": "expects_refusal", "inputs": {"load": [{"amount": 2.0}]},
+        "expected": None,
+    }])
+    [result] = run_tests_for_stage(stage)
+    assert result.status == "mismatch"
+    assert result.outcome == "rows"
+    assert result.returned_columns == ["amount", "doubled"]
+    assert result.returned_rows == [{"amount": 2.0, "doubled": 4.0}]
+    assert result.returned_total == 1
+
+
+def test_refusal_outcome_carries_the_reason_the_step_gave():
+    stage = _row_stage(_REFUSES, [{
+        "name": "refuses_foreign_currency", "inputs": {"load": [{"amount": 1.0}]},
+        "expected": None,
+    }])
+    [result] = run_tests_for_stage(stage)
+    assert result.status == "passed"
+    assert result.outcome == "refused"
+    assert result.outcome_detail == "not a dollar amount: 45000 EUR"
+    assert result.returned_rows == []
+
+
+def test_raise_outcome_reads_as_a_verb_phrase():
+    stage = _row_stage(
+        "def transform(row):\n    raise KeyError('missing_column')\n",
+        [{"name": "raises", "inputs": {"load": [{"amount": 1.0}]},
+          "expected": [{"amount": 1.0, "doubled": 2.0}]}],
+    )
+    [result] = run_tests_for_stage(stage)
+    assert result.outcome == "failed"
+    assert (result.outcome_detail or "").startswith("raised KeyError")
+
+
+def test_non_frame_return_is_an_outcome_not_a_row_count():
+    stage = _frame_stage(
+        "def transform(df):\n    return 7\n",
+        [{"name": "expects_refusal", "inputs": {"load": [{"amount": 2.0}]},
+          "expected": None}],
+    )
+    [result] = run_tests_for_stage(stage)
+    assert result.outcome == "failed"
+    assert result.outcome_detail == "returned int, not a table"
+
+
+def test_a_malformed_case_has_no_outcome_because_nothing_ran():
+    stage = _row_stage(_DOUBLE, [{
+        "name": "wrong_input_type", "inputs": {"load": [{"amount": "not a number"}]},
+        "expected": [{"amount": 2.0, "doubled": 4.0}],
+    }])
+    [result] = run_tests_for_stage(stage)
+    assert result.status == "malformed"
+    assert result.outcome is None
+
+
+def test_a_long_output_is_capped_and_says_so_through_the_total():
+    stage = _frame_stage(
+        "def transform(df):\n"
+        "    wide = df.loc[df.index.repeat(60)].reset_index(drop=True)\n"
+        "    return wide.assign(doubled=1.0)\n",
+        [{"name": "expects_refusal", "inputs": {"load": [{"amount": 2.0}]},
+          "expected": None}],
+    )
+    [result] = run_tests_for_stage(stage)
+    assert len(result.returned_rows) == MAX_OUTCOME_ROWS
+    assert result.returned_total == 60

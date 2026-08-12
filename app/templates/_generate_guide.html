@@ -1,3 +1,4 @@
+{% from "_sparkle.html" import sparkle %}
 {# The Generate-guide control: the run view's guide rail, where the version that run
    pinned carries no guide. It kicks the authoring turn, polls the shared
    generation-session status, and reloads the page on success — the guide is stored
@@ -20,7 +21,7 @@
   <p class="guide-cta-lead">No review guide for the version this run pinned
     (<code>{{ guide_version_id }}</code>) — the walkthrough a reviewer reads beside
     these stages to judge whether the run did what the methodology says.</p>
-  <button type="button" class="btn" data-role="generate-guide">Generate guide</button>
+  <button type="button" class="btn" data-role="generate-guide">{{ sparkle() }} Generate guide</button>
   <p class="nr-edit-msg" data-role="generate-guide-msg"></p>
 </div>
 
@@ -32,6 +33,8 @@
   const PROJECT = {{ project | tojson }};
   const VERSION = {{ guide_version_id | tojson }};
   const START_URL = `/project/${encodeURIComponent(PROJECT)}/workflow/version/${encodeURIComponent(VERSION)}/guide`;
+  // Saved, not retyped: the label carries the agent mark as inline SVG.
+  const BTN_LABEL = btn.innerHTML;
 
   function statusUrl(sid) {
     return `/project/${encodeURIComponent(PROJECT)}/generation-session/${encodeURIComponent(sid)}/status`;
@@ -43,7 +46,7 @@
     msg.textContent = text;
     msg.className = 'nr-edit-msg err';
     btn.disabled = false;
-    btn.textContent = 'Generate guide';
+    btn.innerHTML = BTN_LABEL;
   }
 
   async function poll(sid) {

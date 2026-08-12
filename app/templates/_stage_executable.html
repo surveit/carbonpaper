@@ -1,3 +1,4 @@
+{% from "_sparkle.html" import sparkle %}
 {# The transform config block for a stage — connector / llm / function / filter / join /
    union / aggregate / queue / publish. Used on both the static stage page and
    the run-detail right panel.
@@ -33,7 +34,7 @@
 
 {% if stage.llm %}
 <section class="exec-block">
-    <h2>✨ LLM call</h2>
+    <h2>{{ sparkle() }} LLM call</h2>
     {# One model call, read in the order it happens: what it is asked, what it is shown,
        what shape must come back, what that produced on rows a person labelled, and only
        then the dials. #}

@@ -144,6 +144,20 @@ pre {
 
 a { color: var(--accent); }
 
+/* The agent mark (_sparkle.html). Sized in em so it tracks whatever it sits in —
+   an 11px uppercase badge and a 15px verdict line both get a mark in proportion —
+   and filled with the transfer ink, which is the point of drawing it rather than
+   spending the ✨ character the font would paint in its own colours. */
+.sparkle { width: 1em; height: 1em; vertical-align: -0.125em; fill: var(--accent); }
+/* The severity shapes (_severity_icon.html). The shape says WHICH, so colour is left
+   to say how loud: the disc keeps the failed ink it has always had, and the triangle
+   goes --muted, because a caution nobody owes an edit for should not be the second
+   most saturated thing on the page. The disc's cross is knocked out in the paper
+   colour rather than drawn, so it stays legible on the tinted row underneath. */
+.sev-ico { width: 11px; height: 11px; vertical-align: -1px; margin-right: 5px; flex: none; }
+.sev-ico-error .disc { fill: var(--state-failed-ink); }
+.sev-ico-error .knockout { fill: none; stroke: var(--raised); stroke-width: 1.5; stroke-linecap: round; }
+.sev-ico-warning { fill: none; stroke: var(--muted); stroke-width: 1.6; }
 .muted { color: var(--muted); }
 .strong { color: var(--fg); font-weight: 500; }
 

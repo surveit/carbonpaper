@@ -81,6 +81,11 @@ def _shape_one_test(
         "description": test.description,
         "status": result.status,
         "message": result.message,
+        # What the step DID, which `status` does not imply: a passed case may have
+        # returned a table or refused, and the panel leads with which.
+        "outcome": result.outcome,
+        "outcome_detail": result.outcome_detail,
+        "returned": _shape_returned(result, workflow_stage),
         "inputs": [
             {"stage_id": stage_id,
              "columns": _order_columns(rows, input_schemas.get(stage_id)),
@@ -97,6 +102,20 @@ def _shape_one_test(
              "expected": diff.expected, "actual": diff.actual}
             for diff in result.diffs
         ],
+    }
+
+
+def _shape_returned(
+    result: StageTestResult, workflow_stage: WorkflowStage
+) -> dict[str, Any]:
+    columns = _order_columns(result.returned_rows, workflow_stage.output_schema)
+    # Declared order and the same shading as the expected table: the reader compares
+    # the two, so a carried-through column must stand in the same place in both.
+    return {
+        "columns": columns or result.returned_columns,
+        "rows": result.returned_rows,
+        "total": result.returned_total,
+        "written_columns": _find_written_columns(workflow_stage, columns),
     }
 
 

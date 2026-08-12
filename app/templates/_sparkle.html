@@ -1,0 +1,9 @@
+{# The app's one mark for work a model did or is about to do — the certification
+   badge, each example's verdict, and every control that spends an agent turn.
+
+   Inline SVG rather than the ✨ character: an emoji is painted by the font in its
+   own colours and ignores `color`, so it cannot be the transfer ink. It is
+   aria-hidden because the sentence beside it always names the agent in words —
+   the mark never carries the meaning alone. The mermaid graph still spends the
+   character, since a node label there holds no markup. #}
+{% macro sparkle() %}<svg class="sparkle" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.1 9.35 6.65 14.9 8 9.35 9.35 8 14.9 6.65 9.35 1.1 8 6.65 6.65Z"/></svg>{% endmacro %}

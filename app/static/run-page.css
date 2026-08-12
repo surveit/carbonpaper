@@ -107,7 +107,7 @@
 .issue-panel > summary::before { content: "▸"; color: var(--muted); }
 .issue-panel[open] > summary::before { content: "▾"; }
 .issue-panel-title { font-size: 12px; font-weight: 700; text-transform: uppercase;
-    letter-spacing: .06em; color: var(--state-warn-ink); }
+    letter-spacing: .06em; color: var(--muted); }
 /* The panel's own tone, set by the page: a list someone must clear before signing
    off reads in the failed ink its rows already use. */
 .issue-panel-error .issue-panel-title { color: var(--state-failed-ink); }
@@ -119,12 +119,13 @@ table.issue-table { width: 100%; border-collapse: collapse; font-size: .79rem; }
 .issue-table td { padding: 5px 10px; border-bottom: 1px solid var(--border);
     vertical-align: top; }
 .issue-table tr:last-child td { border-bottom: 0; }
-/* Severity is a WORD, not a tint: the tint is a second signal on top of it, never
-   the only one carrying the difference. */
+/* Severity is a WORD and a SHAPE before it is a colour: the disc/triangle and the
+   word each tell the two apart on their own, so the tint is a third signal and the
+   warning needs no hue of its own to be found. */
 .issue-sev { width: 1%; white-space: nowrap; font-size: 10px; font-weight: 700;
     letter-spacing: .06em; text-transform: uppercase; }
 .issue-table tr.sev-error .issue-sev { color: var(--state-failed-ink); }
-.issue-table tr.sev-warning .issue-sev { color: var(--state-warn-ink); }
+.issue-table tr.sev-warning .issue-sev { color: var(--muted); }
 .issue-table tr.sev-error { background: var(--state-failed-bg); }
 .issue-stage, .issue-subject { width: 1%; white-space: nowrap; }
 .issue-stage a { text-decoration: none; font-weight: 600; }

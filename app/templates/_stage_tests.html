@@ -1,18 +1,55 @@
-{# Tests — the stage's authored input/output cases, one skimmable section per
-   test. Context: test_views (see app.web.stage_test_views; [] when the stage
-   has no tests) and can_generate_tests (stage.CARRIES_RUNNABLE_TESTS). The section
-   renders when there are cases to show OR the stage is one that could grow some
-   via the Generate tests button — otherwise it's hidden, same as
-   before this button existed. Reads like a report: the headings alone give the
-   case coverage; expanding a section shows the data. Non-passing sections start
-   open. #}
+{% from "_severity_icon.html" import severity_icon %}
+{% from "_sparkle.html" import sparkle %}
 {% from "_stage_certification.html" import stage_certification %}
+{# Examples — one skimmable section per case. Context: test_views (see
+   app.web.stage_test_views; [] when the stage has no tests) and
+   can_generate_tests (stage.CARRIES_RUNNABLE_TESTS). The section renders when
+   there are cases to show OR the stage is one that could grow some via the
+   Generate examples button.
+
+   Each case reads input → ACTUAL OUTCOME → one verdict line, in that order. The
+   outcome leads because it is the thing being offered: a real run of this step on
+   rows the reader can see. The verdict is third, carries no heading of its own,
+   and is a comparison rather than a grade — the examples were written by an agent
+   reading only the description, so agreement means the description and the code
+   say the same thing on this case. That is why no label here reads "passed":
+   matching a description nobody has questioned is not evidence the step is right.
+   Only a differing case goes on to show what the agent expected instead.
+
+   A case that matches is marked with NOTHING. Thirteen agreeing cases each
+   wearing a green pill is thirteen invitations to read a list where nothing is
+   owed; the warning triangle appears on the few that are, and those sections
+   start open. #}
+{% macro rows_table(columns, rows, written_columns=[]) %}
+{# A shaded column is one the signature says this step WRITES; the rest are carried
+   through, standing where they stand in the input table above. The caption names them
+   too, so the mark survives without colour. Same list on every case: it is a fact
+   about the stage, not the case. #}
+<div class="test-rows-scroll">
+  <table class="test-rows">
+    {% if written_columns %}
+    <caption>shaded — written by this step:
+      {% for name in written_columns %}<code>{{ name }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</caption>
+    {% endif %}
+    <thead><tr>{% for column in columns %}
+      <th{% if column in written_columns %} class="test-col-written"{% endif %}>{{ column }}</th>
+      {%- endfor %}</tr></thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>{% for column in columns %}
+        <td{% if column in written_columns %} class="test-col-written"{% endif %}>{{ row.get(column) }}</td>
+        {%- endfor %}</tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endmacro %}
 {% if test_views or can_generate_tests %}
 <section class="exec-block test-report">
   <h2>🧪 Example behavior
     {% if can_generate_tests %}
     <button type="button" class="btn" data-role="generate-tests"
-            title="Replaces this stage's examples with a fresh suite generated from the methodology">Generate examples</button>
+            title="Replaces this stage's examples with a fresh suite generated from the methodology">{{ sparkle() }} Generate examples</button>
     <span class="nr-edit-msg" data-role="generate-tests-msg"></span>
     {% endif %}
   </h2>
@@ -25,58 +62,53 @@
   {% for view in test_views %}
   <details class="test-case" {% if view.status != "passed" %}open{% endif %}>
     <summary>
-      <span class="test-status test-status-{{ view.status }}">{{ view.status }}</span>
-      <strong>{{ view.name }}</strong>
+      {% if view.status != "passed" %}{{ severity_icon("warning") }}{% endif %}<strong>{{ view.name }}</strong>
     </summary>
     {% if view.description %}<p class="muted">{{ view.description }}</p>{% endif %}
+
     {% for input in view.inputs %}
     <h3>input <code>{{ input.stage_id }}</code></h3>
     {% if input.rows %}
-    <div class="test-rows-scroll">
-      <table class="test-rows">
-        <thead><tr>{% for column in input.columns %}<th>{{ column }}</th>{% endfor %}</tr></thead>
-        <tbody>
-          {% for row in input.rows %}
-          <tr>{% for column in input.columns %}<td>{{ row.get(column) }}</td>{% endfor %}</tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
+    {{ rows_table(input.columns, input.rows) }}
     {% else %}<p class="muted">no rows (empty input)</p>{% endif %}
     {% endfor %}
-    {% if view.expected is none %}
-    <h3>expected outcome</h3>
-    <p class="muted">the step refuses this input rather than returning a value</p>
-    {% else %}
-    <h3>expected output</h3>
-    {% if view.expected.rows %}
-    {# A shaded column is one the signature says this step WRITES; the rest are carried
-       through, standing where they stand in the input table above. The caption names them
-       too, so the mark survives without colour. Same list on every case: it is a fact
-       about the stage, not the case. #}
-    <div class="test-rows-scroll">
-      <table class="test-rows">
-        {% if view.expected.written_columns %}
-        <caption>shaded — written by this step:
-          {% for name in view.expected.written_columns %}<code>{{ name }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</caption>
-        {% endif %}
-        <thead><tr>{% for column in view.expected.columns %}
-          <th{% if column in view.expected.written_columns %} class="test-col-written"{% endif %}>{{ column }}</th>
-          {%- endfor %}</tr></thead>
-        <tbody>
-          {% for row in view.expected.rows %}
-          <tr>{% for column in view.expected.columns %}
-            <td{% if column in view.expected.written_columns %} class="test-col-written"{% endif %}>{{ row.get(column) }}</td>
-            {%- endfor %}</tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    {% else %}<p class="muted">no rows (empty output)</p>{% endif %}
+
+    <h3>actual outcome</h3>
+    {% if view.outcome is none %}
+    <p class="test-message">the step was never run — this example does not fit the
+      declared schemas: {{ view.message }}</p>
+    {% elif view.outcome == "refused" %}
+    <p class="test-outcome-refused">the step refused this input rather than returning a
+      value{% if view.outcome_detail %}: {{ view.outcome_detail }}{% endif %}</p>
+    {% elif view.outcome == "failed" %}
+    <p class="test-message">the step {{ view.outcome_detail }}</p>
+    {% elif view.returned.rows %}
+    {{ rows_table(view.returned.columns, view.returned.rows, view.returned.written_columns) }}
+    {% if view.returned.total > view.returned.rows | length %}
+    <p class="muted">showing the first {{ view.returned.rows | length }} of
+      {{ view.returned.total }} rows the step returned</p>
     {% endif %}
-    {% if view.message %}<p class="test-message">{{ view.message }}</p>{% endif %}
+    {% else %}
+    <p class="muted">the step returned no rows</p>
+    {% endif %}
+
+    {% if view.outcome is not none %}
+    {% if view.status == "passed" %}
+    <p class="test-verdict">{{ sparkle() }} ✓ This matches what an independent agent expected from the
+      description alone.</p>
+    {% else %}
+    <p class="test-verdict test-message">{{ sparkle() }} ✗ This outcome is different from what an
+      independent agent expected from the description alone. Further review is recommended.</p>
+    {% if view.expected is none %}
+    <p class="muted">The agent expected the step to refuse this input rather than return a value.</p>
+    {% elif view.expected.rows %}
+    <p class="muted">The agent expected the step to return:</p>
+    {{ rows_table(view.expected.columns, view.expected.rows, view.expected.written_columns) }}
+    {% else %}
+    <p class="muted">The agent expected the step to return no rows.</p>
+    {% endif %}
     {% if view.diffs %}
-    <h3>differing cells</h3>
+    <p class="muted">Differing cells:</p>
     <table class="test-rows test-diffs">
       <thead><tr><th>row</th><th>column</th><th>expected</th><th>actual</th></tr></thead>
       <tbody>
@@ -86,6 +118,8 @@
         {% endfor %}
       </tbody>
     </table>
+    {% endif %}
+    {% endif %}
     {% endif %}
   </details>
   {% endfor %}
