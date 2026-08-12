@@ -8,7 +8,8 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel
 
-from app.models import WorkflowStage
+from app.models import TableSchema, WorkflowStage
+from app.models.stages.signature import transform_output_schema
 from app.models.stages.stage_tests import StageTest
 from app.runtime.stage_tests import STATUS_PASSED, StageTestResult, run_tests_for_stage
 
@@ -66,32 +67,71 @@ def shape_test_views(
         return []
     results = run_tests_for_stage(workflow_stage.stage)
     return [
-        _shape_one_test(test, result)
+        _shape_one_test(test, result, workflow_stage)
         for test, result in zip(tests, results)
     ]
 
 
-def _shape_one_test(test: StageTest, result: StageTestResult) -> dict[str, Any]:
+def _shape_one_test(
+    test: StageTest, result: StageTestResult, workflow_stage: WorkflowStage
+) -> dict[str, Any]:
+    input_schemas = {ref.id: ref.table_schema for ref in workflow_stage.inputs}
     return {
         "name": test.name,
         "description": test.description,
         "status": result.status,
         "message": result.message,
         "inputs": [
-            {"stage_id": stage_id, "columns": _list_row_columns(rows), "rows": rows}
+            {"stage_id": stage_id,
+             "columns": _order_columns(rows, input_schemas.get(stage_id)),
+             "rows": rows}
             for stage_id, rows in test.inputs.items()
         ],
         # None, not an empty table: a failure case claims the step must fail, which
         # the template must not render as "succeeded, returned nothing".
-        "expected": None if test.expected is None else {
-            "columns": _list_row_columns(test.expected), "rows": test.expected,
-        },
+        "expected": None if test.expected is None else _shape_expected(
+            test.expected, workflow_stage
+        ),
         "diffs": [
             {"row": diff.row, "column": diff.column,
              "expected": diff.expected, "actual": diff.actual}
             for diff in result.diffs
         ],
     }
+
+
+def _shape_expected(
+    rows: list[dict[str, Any]], workflow_stage: WorkflowStage
+) -> dict[str, Any]:
+    columns = _order_columns(rows, workflow_stage.output_schema)
+    return {
+        "columns": columns,
+        "rows": rows,
+        "written_columns": _find_written_columns(workflow_stage, columns),
+    }
+
+
+def _order_columns(
+    rows: list[dict[str, Any]], schema: Optional[TableSchema]
+) -> list[str]:
+    # Declared order, so a carried-through column stands in the same place in both tables.
+    stated = _list_row_columns(rows)
+    declared = [column.name for column in schema.columns] if schema else []
+    return [name for name in declared if name in stated] + [
+        # A key the schema does not name still shows, after the ones it does.
+        name for name in stated if name not in set(declared)
+    ]
+
+
+def _find_written_columns(
+    workflow_stage: WorkflowStage, columns: list[str]
+) -> list[str]:
+    schema = transform_output_schema(workflow_stage.stage)
+    written = {column.name for column in schema.columns}
+    marked = [name for name in columns if name in written]
+    # A mark every column carries separates nothing — a replaces-form step writes the
+    # whole row, so there is no carried-through column to tell it from.
+    return [] if len(marked) == len(columns) else marked
 
 
 def _list_row_columns(rows: list[dict[str, Any]]) -> list[str]:
