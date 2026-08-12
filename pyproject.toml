@@ -162,34 +162,6 @@ allowed_importers = ["app.web"]
 # inversion — e.g. runtime.run_subset must stay eval-agnostic.
 
 [[tool.importlinter.contracts]]
-name = "app.core.persistence sits at the bottom — imports no app layer but core.errors"
-type = "forbidden"
-source_modules = ["app.core.persistence"]
-forbidden_modules = [
-    "app.models", "app.core.llm", "app.core.sqlite_store",
-    "app.services", "app.runtime", "app.web", "app.core.agent", "app.compiler", "app.evals",
-]
-# The record base is the lowest layer: it may lean on app.core.errors (where
-# DocumentNotFound lives) and nothing else first-party. If it imported the contracts
-# (app.models) or any upper layer, "records depend on the store, never the
-# reverse" would be a lie and the backend would stop being swappable in isolation.
-# It may not import the engine either: reaching app.core.sqlite_store from here would put
-# sqlite back behind every import of PersistedModel — the import the contract two below
-# permits app.models to make.
-
-[[tool.importlinter.contracts]]
-name = "app.core.sqlite_store sits at the bottom — imports core.errors and the record base"
-type = "forbidden"
-source_modules = ["app.core.sqlite_store"]
-forbidden_modules = [
-    "app.models", "app.core.llm",
-    "app.services", "app.runtime", "app.web", "app.core.agent", "app.compiler", "app.evals",
-]
-# The SQLite engine sits beside the record base and below everything else: it may read
-# app.core.errors and app.core.persistence (the protocol it satisfies, and JsonDict) and
-# nothing more.
-
-[[tool.importlinter.contracts]]
 name = "app.core.sqlite_store imported only by the store wiring"
 type = "protected"
 protected_modules = ["app.core.sqlite_store"]
@@ -205,13 +177,21 @@ allowed_importers = ["app.core.store_config"]
 # module is what makes that distinction expressible.
 
 [[tool.importlinter.contracts]]
-name = "app.core does not import the domain models"
-type = "forbidden"
-source_modules = ["app.core"]
-forbidden_modules = ["app.models"]
-# app.core (llm, agent, persistence, errors, frames, utils) is generic infrastructure
-# and must sit below the domain layer. app.models (Stage, TableSchema, Workflow, …)
-# sits above it, so a dependency from app.core back onto app.models would be a cycle.
+name = "app.core sits below the domain contracts"
+type = "layers"
+layers = ["app.models", "app.core"]
+# Position, not a list of things not to import: a module added to app.core inherits the
+# ordering instead of needing an entry somewhere. app.core is generic infrastructure
+# (llm, agent, persistence, errors, frames, utils); the contracts sit above it.
+
+[[tool.importlinter.contracts]]
+name = "inside app.core, the store sits below the rest"
+type = "layers"
+containers = ["app.core"]
+layers = ["agent | llm", "sqlite_store", "persistence"]
+# The engine sits below the rest of core and above the record base whose protocol it
+# satisfies, which is what makes "records depend on the store, never the reverse" true by
+# construction rather than by a list someone has to keep current.
 
 [[tool.importlinter.contracts]]
 name = "app.mcp imported only by the entrypoint"
