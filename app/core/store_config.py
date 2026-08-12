@@ -10,7 +10,8 @@ from pathlib import Path
 
 from app.core.frames import FrameStore, configure_frame_store, is_frame_store_configured
 from app.core.paths import CARBON_PAPER_HOME
-from app.core.persistence import SqliteKvStore, configure_store, is_store_configured
+from app.core.persistence import configure_store, is_store_configured
+from app.core.sqlite_store import SqliteKvStore
 
 _RENAMED_ENV_PREFIX = "CARBONPAPER_"
 _ENV_PREFIX = "CARBON_PAPER_"

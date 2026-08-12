@@ -720,7 +720,8 @@ def test_the_documented_cli_runs_a_project_with_nothing_configured(
     """Drops both process-wide stores: no server lifespan wires storage for the CLI."""
     from app.core import frames as frames_module
     from app.core import persistence as persistence_module
-    from app.core.persistence import SqliteKvStore, configure_store
+    from app.core.persistence import configure_store
+    from app.core.sqlite_store import SqliteKvStore
 
     db_path = tmp_path / "db" / "app.db"
     db_path.parent.mkdir(parents=True)
