@@ -88,3 +88,4 @@
 {"run_id":"31616629738","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31616629738","created":"2026-08-12T16:15:45Z","branch":"revert/publish-figures-and-packet-lineage","event":"pull_request","contracts_kept":14,"findings":[]}
 {"run_id":"31616613757","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31616613757","created":"2026-08-12T16:16:20Z","branch":"feat/deploy-chat-memory","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"31616629738","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31616629738","created":"2026-08-12T16:16:29Z","branch":"revert/publish-figures-and-packet-lineage","event":"pull_request","contracts_kept":null,"findings":[]}
+{"run_id":"31616706759","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31616706759","created":"2026-08-12T16:16:45Z","branch":"fix/version-gate-blocks-on-errors","event":"pull_request","contracts_kept":14,"findings":[]}
