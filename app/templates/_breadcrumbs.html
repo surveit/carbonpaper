@@ -16,7 +16,7 @@
   {%- if crumb.picker %}
   <span class="crumb-anchor">
     <button type="button" class="crumb-switch{% if loop.last %} here{% endif %}"
-            data-crumb-picker="{{ crumb.picker }}" data-crumb-current="{{ crumb.label }}"
+            data-crumb-picker="{{ crumb.picker }}" data-crumb-current="{{ crumb.picker_current or crumb.label }}"
             aria-expanded="false" aria-haspopup="true">{{ crumb_text(crumb) }}<span
             class="crumb-caret" aria-hidden="true">▾</span></button>
   </span>

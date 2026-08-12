@@ -12,10 +12,13 @@ from app.services.project import describe_project
 
 
 class Crumb(BaseModel):
+    """`picker_current` is the id the popover marks as current, where that is not the label."""
+
     label: str
     href: str | None = None
     is_code: bool = False
     picker: str | None = None
+    picker_current: str | None = None
 
 
 class PickerRow(BaseModel):
@@ -115,8 +118,11 @@ _PROJECTS_PICKER = "/pickers/projects"
 
 
 def _project_trail(project: str) -> list[Crumb]:
-    """Every caller passes an ID; the crumb READS as the label, which may repeat."""
-    return [_home(), _switcher(describe_project(project), _PROJECTS_PICKER)]
+    """Every caller passes an ID; the crumb READS as the name, which may repeat."""
+    return [
+        _home(),
+        _switcher(describe_project(project), _PROJECTS_PICKER, picker_current=project),
+    ]
 
 
 def _runs_trail(project: str) -> list[Crumb]:
@@ -139,8 +145,9 @@ def _here(label: str, *, is_code: bool = False) -> Crumb:
     return Crumb(label=label, is_code=is_code)
 
 
-def _switcher(label: str, picker: str, *, is_code: bool = False) -> Crumb:
-    return Crumb(label=label, picker=picker, is_code=is_code)
+def _switcher(label: str, picker: str, *, is_code: bool = False,
+              picker_current: str | None = None) -> Crumb:
+    return Crumb(label=label, picker=picker, is_code=is_code, picker_current=picker_current)
 
 
 def _project_href(project: str) -> str:

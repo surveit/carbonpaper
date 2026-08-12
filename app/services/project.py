@@ -64,6 +64,10 @@ class Project(PersistedModel):
     def label(self) -> str:
         return self.name or self.id
 
+    def display_name(self) -> str:
+        """What every surface SHOWS. `label` stays the slug callers look a project up by."""
+        return self.title or self.label()
+
 
 def mint_project_id() -> str:
     return mint_timestamp_id()
@@ -75,9 +79,43 @@ def find_projects_by_name(name: str) -> list[Project]:
 
 
 def describe_project(project_id: str) -> str:
-    """The label to SHOW for an id, falling back to the id — never a guessed name."""
+    """The name to SHOW for an id, falling back to the id — never a guessed name."""
+    record = read_project_record(project_id)
+    return project_id if record is None else record.display_name()
+
+
+def read_project_record(project_id: str) -> Project | None:
+    """Falls back to project.json: a project imported onto disk has no record to load."""
     record = Project.load_or_none(project_id)
-    return project_id if record is None else record.label()
+    if record is not None:
+        return record
+    try:
+        pdir = workspace.resolve_project_dir(project_id)
+    except ValueError:
+        return None
+    return _read_project_json(pdir)
+
+
+def _read_project_json(pdir: Path) -> Project | None:
+    pj = Path(pdir) / "project.json"
+    if not pj.is_file():
+        return None
+    try:
+        stored = json.loads(pj.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+    if not isinstance(stored, dict):
+        return None
+    # project.json's `created_at` is the date the PROJECT was authored, which the record
+    # calls `authored_at` — its own `created_at` stamps when the record was written.
+    return Project(
+        id=Path(pdir).name,
+        name=stored.get("name"),
+        title=stored.get("title"),
+        model=stored.get("model"),
+        source=stored.get("source"),
+        authored_at=stored.get("created_at"),
+    )
 
 
 # ─── Status models ────────────────────────────────────────────────────────────
@@ -110,7 +148,10 @@ class ProjectListing(BaseModel):
 
 
 class ProjectMeta(BaseModel):
+    """`name` is the slug a bundle exports under; `display_name` is what a screen shows."""
+
     name: str
+    display_name: str
     title: str | None
     created_at: str | None
     model: str | None
@@ -213,13 +254,14 @@ def project_meta(pdir: Path) -> ProjectMeta:
     # The directory's name IS the project id. Older projects were created under a slug
     # of their title and so read as one; a project created since carries a minted id.
     project_id = pdir.name
-    record = Project.load_or_none(project_id)
+    record = Project.load_or_none(project_id) or _read_project_json(pdir)
     if record is None:
         # No record: the id is the only name this project has, and it is not invented.
-        return ProjectMeta(name=project_id, title=None, created_at=None,
-                           model=None, source=None)
+        return ProjectMeta(name=project_id, display_name=project_id, title=None,
+                           created_at=None, model=None, source=None)
     return ProjectMeta(
         name=record.label(),
+        display_name=record.display_name(),
         title=record.title,
         created_at=record.authored_at,
         model=record.model,
@@ -338,7 +380,7 @@ def list_projects() -> list[str]:
 def list_project_listings() -> list[ProjectListing]:
     """Both halves: the id to pass back, and the label to say it by."""
     return [
-        ProjectListing(id=record.id, name=record.label())
+        ProjectListing(id=record.id, name=record.display_name())
         for record in sorted(Project.list(), key=lambda r: r.id)
     ]
 

@@ -8,7 +8,7 @@
            WorkflowVersion, `published` among its own attributes); mermaid
            (frozen graph string).
 #}
-{% block title %}{{ state.meta.title or state.meta.name }} · Version {{ version.version_id }}{% endblock %}
+{% block title %}{{ state.meta.display_name }} · Version {{ version.version_id }}{% endblock %}
 
 {# Its own trail, not the shell's: the last rung is THIS version, and it switches. #}
 {% block breadcrumbs %}{% include "_breadcrumbs.html" %}{% endblock %}

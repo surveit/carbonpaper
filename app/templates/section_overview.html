@@ -12,14 +12,14 @@
 
 <div class="ov-head">
   <div class="ov-title">
-    <h1>{{ s.meta.title or s.name }}</h1>
+    <h1>{{ s.meta.display_name }}</h1>
     <p class="ov-meta">
       <span><b>model</b> {{ s.meta.model or 'unknown' }}</span>
       <span class="ov-dot">·</span>
       <span><b>created</b> {% if s.meta.created_at %}{{ s.meta.created_at | friendly_time }}{% else %}unknown{% endif %}</span>
       {% if s.meta.source %}<span class="ov-dot">·</span><span><b>source</b> {{ s.meta.source }}</span>{% endif %}
       <span class="ov-dot">·</span>
-      <span><b>dir</b> <code>examples/{{ s.name }}/</code></span>
+      <span><b>dir</b> <code>examples/{{ s.id }}/</code></span>
     </p>
   </div>
 </div>
