@@ -9,7 +9,7 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-from arch._helpers import parse_module
+from arch._helpers import find_annotation_name_linenos, parse_module
 from arch.scope import find_source_files_under
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -21,7 +21,7 @@ def find_annotated_uses(tree: ast.Module, name: str) -> list[int]:
     linenos: set[int] = set()
     for node in ast.walk(tree):
         for expression in _annotation_expressions(node):
-            linenos.update(_name_linenos(expression, name))
+            linenos.update(find_annotation_name_linenos(expression, frozenset({name})))
     return sorted(linenos)
 
 
@@ -50,19 +50,6 @@ def _is_typevar_call(node: ast.Call) -> bool:
     if isinstance(func, ast.Name):
         return func.id == "TypeVar"
     return isinstance(func, ast.Attribute) and func.attr == "TypeVar"
-
-
-def _name_linenos(expression: ast.expr, name: str) -> set[int]:
-    """Walks the whole expression, so a nested `Sequence[X]` or `Optional[list[X]]` counts."""
-    linenos: set[int] = set()
-    for node in ast.walk(expression):
-        if isinstance(node, ast.Name) and node.id == name:
-            linenos.add(node.lineno)
-        elif isinstance(node, ast.Attribute) and node.attr == name:
-            linenos.add(node.lineno)
-        elif isinstance(node, ast.Constant) and isinstance(node.value, str) and name in node.value:
-            linenos.add(node.lineno)
-    return linenos
 
 
 def test_authored_stage_fields_is_never_annotated() -> None:
