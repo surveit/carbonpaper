@@ -49,15 +49,18 @@
 {% else %}
   {# The attached file, before it is sent. Empty until something is picked or dropped. #}
   <div class="ac-attached" id="attached" hidden></div>
-  {# Opens on attach when the session has no project and the workspace has one, so the
-     question cannot be missed. With no project anywhere the file goes in unclaimed and
-     the agent gives it a home. #}
-  <div class="ac-pop" id="project-pop" hidden>
-    <div class="ac-pop-head">Put this file in:</div>
+  {# A <dialog>, not a panel: it blocks, so the question cannot be answered by
+     ignoring it, and Escape or the scrim cancels the attach. Native gives us the focus
+     trap and the Escape key. Only opens when the session has no project and the
+     workspace has one — with no project anywhere there is nothing to ask. #}
+  <dialog class="ac-modal" id="project-modal">
+    <h2>Where should this file go?</h2>
+    <p class="ac-modal-lede">Files belong to a project, not to a conversation. This also
+      sets the project this session works on.</p>
     <div id="project-choices"></div>
-    <button type="button" class="ac-choice ac-choice-new" data-project="">Not sure yet
-      <span class="ac-muted">· keep it here and decide later</span></button>
-  </div>
+    <button type="button" class="ac-choice ac-choice-new" data-project="">New project
+      <span class="ac-muted">· the agent reads the file and sets one up</span></button>
+  </dialog>
   <div class="ac-composer">
     <button type="button" class="ac-clip" id="clip" title="Attach a data file">📎</button>
     <input type="file" id="file" hidden />
@@ -199,7 +202,7 @@ function connect(turnId, fromIndex) {
 const clip = document.getElementById("clip");
 const filePicker = document.getElementById("file");
 const attachedBox = document.getElementById("attached");
-const projectPop = document.getElementById("project-pop");
+const projectModal = document.getElementById("project-modal");
 let attached = null;   // the line the next Send carries
 let pendingFile = null;  // picked, waiting on a project answer
 
@@ -229,7 +232,7 @@ function showAttached(line) {
   attachedBox.append(text, drop);
 }
 
-function openProjectPop() {
+function askWhereItGoes() {
   const box = document.getElementById("project-choices");
   box.replaceChildren();
   PROJECTS.forEach((project) => {
@@ -242,7 +245,7 @@ function openProjectPop() {
     b.append(name, id);
     box.appendChild(b);
   });
-  projectPop.hidden = false;
+  projectModal.showModal();
 }
 
 async function storeFile(file, projectId) {
@@ -271,7 +274,7 @@ function attach(file) {
   if (SESSION_PROJECT) { storeFile(file, SESSION_PROJECT); return; }
   if (!PROJECTS.length) { storeFile(file, ""); return; }
   pendingFile = file;
-  openProjectPop();
+  askWhereItGoes();
 }
 
 if (clip && filePicker) {
@@ -280,13 +283,18 @@ if (clip && filePicker) {
     attach(filePicker.files[0]);
     filePicker.value = "";   // let the same file be re-picked later
   });
-  projectPop.addEventListener("click", (e) => {
+  projectModal.addEventListener("click", (e) => {
     const choice = e.target.closest(".ac-choice");
     if (!choice) return;
-    projectPop.hidden = true;
+    projectModal.close();
     const file = pendingFile; pendingFile = null;
+    // A blank project is "New project": the file goes in unclaimed and the agent
+    // creates one and adopts it. Nothing here can create a project — that needs a
+    // name and a methodology document, which is a form and not a question.
     if (file) storeFile(file, choice.dataset.project);
   });
+  // Escape, or the scrim: the file was never sent, so cancelling costs nothing.
+  projectModal.addEventListener("close", () => { pendingFile = null; });
   // Drop anywhere on the conversation, which is the whole reason the clip is not enough.
   document.addEventListener("dragover", (e) => { e.preventDefault(); });
   document.addEventListener("drop", (e) => {
