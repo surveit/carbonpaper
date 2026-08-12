@@ -468,6 +468,8 @@ def test_the_tour_seeds_the_eval_beside_the_review_guide(projects_root):
     assert (stored.override_stage, stored.target_stage) == (_OVERRIDE_STAGE, _TARGET_STAGE)
     assert [check.output_column for check in stored.expected_outputs] == [_JUDGED_COLUMN]
     assert seeded.eval_url == f"{_BASE_URL}project/{seeded.name}/evals/{_EVAL_ID}"
+    # run_eval takes the id, so the tour is handed it rather than slicing the URL.
+    assert seeded.eval_id == _EVAL_ID
 
 
 def test_the_committed_eval_names_no_project_of_its_own():

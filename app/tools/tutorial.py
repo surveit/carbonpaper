@@ -56,7 +56,10 @@ class TutorialProject(BaseModel):
     workflow_url: str
     guide_url: str
     runs_url_prefix: str
+    # Both halves: the page to hand over, and the id run_eval takes. Slicing the id
+    # off the URL is a guess, and the seeded eval is the only one that answers here.
     eval_url: str
+    eval_id: str
     # The three ways to say the same handoff, headline first: this workspace speaks MCP
     # at `mcp_url`, so an assistant the reader ALREADY has open can be told to connect
     # to it — `mcp_ask_your_assistant` is what they say. `mcp_command` is the same thing
@@ -103,6 +106,7 @@ def seed_tutorial_project(ctx: TutorialContext) -> TutorialProject:
         guide_url=f"{ctx.base_url}project/{name}/workflow/version/{version_id}",
         runs_url_prefix=f"{ctx.base_url}project/{name}/runs/",
         eval_url=f"{ctx.base_url}project/{name}/evals/{eval_config.id}",
+        eval_id=eval_config.id,
         mcp_url=f"{ctx.base_url}mcp",
         mcp_ask_your_assistant=(
             f"Add the MCP server at {ctx.base_url}mcp over streamable HTTP, then use "
