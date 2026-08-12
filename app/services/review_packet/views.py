@@ -217,6 +217,7 @@ class LineageReport(BaseModel):
     traced: set[tuple[str, int]]
     refused: str | None
     stages: list[StageTraces] = []
+    figures: list[PublishedFigure] = []
 
 
 class PublishInputRows(BaseModel):
@@ -231,3 +232,13 @@ class PublishInputRows(BaseModel):
     trace_hrefs: list[str | None]
     rows_total: int
     traced: int
+
+
+class PublishedFigure(BaseModel):
+    """A figure the artifact printed, as the publish stage named it."""
+
+    label: str
+    value: str | None
+    stage_id: str
+    row_ordinal: int
+    href: str | None

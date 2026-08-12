@@ -55,6 +55,24 @@
 {% if publish_inputs %}
 <section>
   <h2>Row provenance</h2>
+  {# Where the publish stage named its figures, they lead: this is the list the
+     reader just read in the published file, in its own words. The input frames
+     below are what those figures were drawn from. #}
+  {% if lineage.figures %}
+  <table class="packet-figures">
+    <thead><tr><th>Figure</th><th class="num">Value</th><th></th></tr></thead>
+    <tbody>
+    {% for figure in lineage.figures %}
+      <tr>
+        <td>{{ figure.label }}</td>
+        <td class="num">{{ figure.value if figure.value is not none else "" }}</td>
+        <td class="lk">{% if figure.href %}<a href="{{ figure.href }}">View lineage</a>{% else %}<span class="muted">no lineage published</span>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <h3 class="rp-sub">What those figures were drawn from</h3>
+  {% endif %}
   <p class="muted">The {{ publish_inputs | length }} table{{ '' if publish_inputs | length == 1 else 's' }}
     the published files were built from. A row with a lineage link traces back to the data it
     came from. <a href="{{ lineage_dir_href }}">All {{ lineage.traced | length }} traced rows &rsaquo;</a></p>

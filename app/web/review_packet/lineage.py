@@ -11,6 +11,7 @@ from app.runtime.trace_links import read_issued_traces
 from app.services.review_packet.views import (
     LINEAGE_DIR,
     LineageReport,
+    PublishedFigure,
     RunView,
     StageTraces,
 )
@@ -48,13 +49,32 @@ def write_packet_lineage(
         for stage_id, row in sorted(closure)
     ]
     stages = _group_by_stage(sorted(closure), published)
+    figures = _named_figures(run_dir, closure)
     if written:
         # No directory where there is nothing to list: a run that published no
         # links promises no provenance, and an empty page implies otherwise.
         written.append(_write_directory(root, stages, len(closure)))
     return LineageReport(
-        written=written, traced=set(closure), refused=None, stages=stages
+        written=written, traced=set(closure), refused=None,
+        stages=stages, figures=figures,
     )
+
+
+def _named_figures(run_dir: Path, closure: set[tuple[str, int]]) -> list[PublishedFigure]:
+    """Only targets the publish stage named; an unnamed one is a row, not a figure."""
+    return [
+        PublishedFigure(
+            label=target.label,
+            value=target.value,
+            stage_id=target.stage_id,
+            row_ordinal=target.row_ordinal,
+            href=(
+                packet_lineage_href("", target.stage_id, target.row_ordinal)
+                if (target.stage_id, target.row_ordinal) in closure else None
+            ),
+        )
+        for target in read_issued_traces(run_dir) if target.label
+    ]
 
 
 def _group_by_stage(
