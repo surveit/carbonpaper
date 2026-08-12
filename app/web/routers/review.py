@@ -10,7 +10,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import ValidationError
 
 from app.core.errors import ReviewValidationError
-from app.models import TableSchema, Workflow, WorkflowStage
+from app.models import TableSchema, Workflow, WorkflowNotFormed, WorkflowStage
 from app.models.stages.human_review_queue import QueueConfig, resolve_queue_config
 from app.services import review
 from app.web.breadcrumbs import build_run_child_crumbs
@@ -149,7 +149,9 @@ def _build_page(
 # --- stage lookup, shared by every route ---------------------------------------
 
 
-def _require_queue_stage(workflow: Workflow | None, stage_id: str) -> WorkflowStage:
+def _require_queue_stage(
+    workflow: Workflow | WorkflowNotFormed, stage_id: str
+) -> WorkflowStage:
     workflow_stage = find_workflow_stage(workflow, stage_id)
     if workflow_stage is None or workflow_stage.stage.type != "human_review_queue":
         raise HTTPException(status_code=404, detail=f"No queue stage '{stage_id}'")

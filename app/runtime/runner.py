@@ -19,7 +19,7 @@ from app.core.frames import read_frame_file
 from app.models import StageType, Workflow, WorkflowStage
 from app.models.run_manifest import read_run_manifest
 from app.models.run_parameters import RunParameters
-from app.models.schema import StageId
+from app.models.schema import StageId, TypeUnsafeUserStageConfigOverride
 from app.core.run_status import StageStatus
 
 from .context import RunContext
@@ -57,7 +57,7 @@ def prepare_run(
     workflow_version: str,
     limits: dict[str, int] | None = None,
     offsets: dict[str, int] | None = None,
-    bindings: Mapping[StageId, Mapping[str, Any]] | None = None,
+    bindings: Mapping[StageId, TypeUnsafeUserStageConfigOverride] | None = None,
     bust_cache: bool = False,
 ) -> dict[str, Any]:
     """`limits`/`offsets` window each named stage's INPUT rows, not its output; offset applies first."""
@@ -124,7 +124,7 @@ def execute_run(
     workflow_version: str,
     limits: dict[str, int] | None = None,
     offsets: dict[str, int] | None = None,
-    bindings: Mapping[StageId, Mapping[str, Any]] | None = None,
+    bindings: Mapping[StageId, TypeUnsafeUserStageConfigOverride] | None = None,
     bust_cache: bool = False,
 ) -> dict[str, Any]:
     return run_prepared(

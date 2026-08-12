@@ -35,6 +35,20 @@ Also `app/AGENTS.md` (web layer), `app/runtime/AGENTS.md` (the Runner), `README.
   there, parse into a model at the first point the shape is known.
 
   As a follow-up here, try to reuse existing types instead of defining new ones.
+
+  Where a dynamic bundle is genuinely unavoidable, ALIAS it rather than spelling
+  `dict[str, Any]` inline. The alias name says what the bundle is, who supplies it, and that it
+  is unchecked — `TypeUnsafeUserStageConfigOverride` — so a reader meets those three facts at
+  every use site instead of inferring them.
+- **A function takes the type it needs. Validate where the failure happens.** A parameter typed
+  `X | None` with a companion argument explaining the None (`workflow: Workflow | None,
+  workflow_issues: Sequence[str]`) is a failure the caller declined to handle, pushed downstream
+  and re-described in prose. It also states an invariant the type system cannot check — that the
+  two agree — so nothing catches them disagreeing. Resolve it at the boundary that can act: load
+  the workflow there, fail there, hand the reason to whoever asked. By the time the value reaches
+  the function it is a `Workflow`, and the function has one path. Optional and fallback shapes are
+  for TRUE data unknowns — a column a source may not carry — never for deferring a decision to a
+  layer with less context.
 - **Banned words keep vocabulary limited** `tests/arch/test_no_banned_words.py` fails on any
   word in its `BANNED_WORDS` set across `.py`/`.md`/`.html`/`.js`/`.css` — read that set for the
   current list and the replacement each word owes you. This exists to reduce the number of nouns and verbs, which confuses both developers and users. Add inaccurate synonyms you find yourself using to the BANNED_WORDS list.

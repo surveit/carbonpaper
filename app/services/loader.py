@@ -37,6 +37,10 @@ def list_parsed_stages(entries: list[CompiledStageFile]) -> list[Stage]:
     return [entry.stage for entry in entries if entry.stage is not None]
 
 
+def find_file_issues(entries: list[CompiledStageFile]) -> list[str]:
+    return [f"{entry.filename}: {issue}" for entry in entries for issue in entry.issues]
+
+
 def find_parsed_stage(entries: list[CompiledStageFile], stage_id: str) -> Stage | None:
     return next((s for s in list_parsed_stages(entries) if s.id == stage_id), None)
 
@@ -68,7 +72,7 @@ def load_compiled_dir(compiled_dir: Path) -> list[CompiledStageFile]:
 def load_workflow_object(project_dir: Path) -> Workflow:
     compiled_dir = project_dir / "compiled"
     entries = load_compiled_dir(compiled_dir)
-    issues = [f"{e.filename}: {i}" for e in entries for i in e.issues]
+    issues = find_file_issues(entries)
     if not entries:
         issues.append(f"no compiled stage files found in {compiled_dir}")
     stages = [e.stage for e in entries if e.stage is not None]

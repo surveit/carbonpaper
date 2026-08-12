@@ -5,12 +5,18 @@ function of the whole graph, so they are computed here and handed out as
 each returns a list of issue strings, [] meaning it found nothing."""
 from __future__ import annotations
 
+from dataclasses import dataclass
 from functools import cached_property
 from typing import Any, Mapping, Optional, Protocol, Sequence, TypeVar
 
 from pydantic import ValidationError, model_validator
 
-from app.models.schema import StageId, TableSchema, _Base
+from app.models.schema import (
+    StageId,
+    TableSchema,
+    TypeUnsafeUserStageConfigOverride,
+    _Base,
+)
 from app.models.stage import Stage, StageType
 from app.models.stages.input_data import Connector, InputDataStage
 from app.models.stages.signature import find_signature_issues, promised_output_schema
@@ -216,7 +222,7 @@ class Workflow(_Base):
         return self
 
     def apply_run_bindings(
-        self, bindings: Mapping[StageId, Mapping[str, Any]] | None
+        self, bindings: Mapping[StageId, TypeUnsafeUserStageConfigOverride] | None
     ) -> tuple["Workflow", dict[StageId, str]]:
         """A binding reaches `connector.params` only, so every resolved schema survives it."""
         given = dict(bindings or {})
@@ -254,7 +260,7 @@ class Workflow(_Base):
 
 
 def _refuse_unbindable_stage_ids(
-    given: Mapping[StageId, Mapping[str, Any]], connector_ids: set[StageId]
+    given: Mapping[StageId, TypeUnsafeUserStageConfigOverride], connector_ids: set[StageId]
 ) -> None:
     unbindable = sorted(set(given) - connector_ids)
     if unbindable:
@@ -264,7 +270,7 @@ def _refuse_unbindable_stage_ids(
 
 
 def _merge_connector_params(
-    stage: InputDataStage, binding: Mapping[str, Any]
+    stage: InputDataStage, binding: TypeUnsafeUserStageConfigOverride
 ) -> InputDataStage:
     if not isinstance(binding, Mapping):
         raise ValueError(
@@ -284,12 +290,21 @@ def parse_workflow(stages: list[dict[str, Any]]) -> Workflow:
     return Workflow.model_validate({"stages": list(stages)})
 
 
-def build_workflow(stages: list[Stage]) -> Optional[Workflow]:
-    """None where the stages form no workflow — a working copy mid-edit often does not."""
+@dataclass(frozen=True)
+class WorkflowNotFormed:
+    """Never empty: a stage list that forms no workflow carries why it did not."""
+    issues: list[str]
+
+    def __post_init__(self) -> None:
+        if not self.issues:
+            raise ValueError("a workflow that did not form must say why; `issues` is empty")
+
+
+def build_workflow(stages: list[Stage]) -> Workflow | WorkflowNotFormed:
     try:
         return Workflow(stages=stages)
-    except ValidationError:
-        return None
+    except ValidationError as err:
+        return WorkflowNotFormed(issues=graph_issues(stages) or format_errors(err))
 
 
 def validate_workflow(stages: list[Stage]) -> list[str]:

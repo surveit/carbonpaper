@@ -13,9 +13,7 @@ from app.models.workflow_stage import WorkflowStage
 
 def validate_eval_compatibility(config, stages) -> CompatibilityReport:
     """Test shim: the app builds the workflow at its caller; these cases author stage lists."""
-    issues = m.validate_workflow(list(stages))
-    workflow = None if issues else m.Workflow(stages=list(stages))
-    return compatibility.validate_eval_compatibility(config, workflow, issues)
+    return compatibility.validate_eval_compatibility(config, m.Workflow(stages=list(stages)))
 
 
 def S(**kw):
@@ -254,16 +252,16 @@ def test_a_reference_override_on_the_target_stage_is_reported_not_crashed_on(tmp
     assert report.settings is None
 
 
-def test_a_dangling_input_elsewhere_surfaces_as_a_problem_string(tmp_path):
+def test_a_dangling_input_elsewhere_means_no_workflow_reaches_this_check(tmp_path):
     src = _file_input("src", tmp_path, cols=["k", "v", "quote"])
     tgt = _row("tgt", [src], output_schema={
         "columns": [{"name": "k", "type": "str", "nullable": True}, {"name": "score", "type": "float", "nullable": True}]})
     dangling = _row("dangling", [("missing_input", ["k"])],
                     output_schema={"columns": [{"name": "k", "type": "str", "nullable": True}]})
-    report = validate_eval_compatibility(_config(), [src, tgt, dangling])
-    assert report.ok is False
-    assert any("structural problems" in p for p in report.problems)
-    assert report.settings is None
+    not_formed = m.build_workflow([src, tgt, dangling])
+    assert isinstance(not_formed, m.WorkflowNotFormed)
+    assert any("input `missing_input` references no stage" in issue
+               for issue in not_formed.issues)
 
 
 def test_target_not_reachable_from_override_is_broken(tmp_path):

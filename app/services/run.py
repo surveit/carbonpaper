@@ -16,7 +16,7 @@ from app.core.errors import RunNotFoundError, RunVersionUnresolvableError
 from app.core.frames import read_frame_column_names
 from app.models import Workflow, WorkflowStage
 from app.models.run_manifest import read_run_bindings, read_run_manifest
-from app.models.schema import StageId
+from app.models.schema import StageId, TypeUnsafeUserStageConfigOverride
 from app.runtime.manifest import read_stage_output_frame, resolve_output_path
 from app.runtime.runner import prepare_run, resume_run, run_prepared
 from app.services.errors import WorkflowLoadError
@@ -33,7 +33,7 @@ def start_run(
     project: str,
     *,
     version_id: str | None = None,
-    bindings: Mapping[StageId, Mapping[str, Any]] | None = None,
+    bindings: Mapping[StageId, TypeUnsafeUserStageConfigOverride] | None = None,
     limits: dict[str, int] | None = None,
     offsets: dict[str, int] | None = None,
     bust_cache: bool = False,
@@ -47,7 +47,7 @@ def execute(
     project: str,
     *,
     version_id: str | None = None,
-    bindings: Mapping[StageId, Mapping[str, Any]] | None = None,
+    bindings: Mapping[StageId, TypeUnsafeUserStageConfigOverride] | None = None,
     limits: dict[str, int] | None = None,
     offsets: dict[str, int] | None = None,
     bust_cache: bool = False,
@@ -60,7 +60,7 @@ def execute(
 def _prepare(
     project: str,
     version_id: str | None,
-    bindings: Mapping[StageId, Mapping[str, Any]] | None,
+    bindings: Mapping[StageId, TypeUnsafeUserStageConfigOverride] | None,
     limits: dict[str, int] | None,
     offsets: dict[str, int] | None,
     bust_cache: bool,

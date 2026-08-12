@@ -39,7 +39,7 @@ def run_eval(
 ) -> EvalRun:
     version = _resolve_version(project_dir, version_id)
     workflow = Workflow(stages=load_version_stages(project_dir, version))
-    report = validate_eval_compatibility(config, workflow, [])
+    report = validate_eval_compatibility(config, workflow)
     _require_runnable(config, report)
     settings = report.settings
     assert settings is not None  # report.ok (checked above) guarantees settings

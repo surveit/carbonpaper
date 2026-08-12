@@ -30,6 +30,7 @@ from app.core.errors import (
 )
 from app.core.run_status import RunStatus, StageStatus
 from app.models import WorkflowStage
+from app.models.schema import StageId, TypeUnsafeUserStageConfigOverride
 from app.models.stages.input_data import resolve_file_format
 from app.services.errors import WorkflowLoadError
 from app.services.versioning import list_versions
@@ -99,12 +100,12 @@ async def trigger_run(request: Request, project: str):
 
 def _collect_bindings(
     form: FormData, project: str, version_id: str | None = None
-) -> dict[str, dict[str, str]]:
+) -> dict[StageId, TypeUnsafeUserStageConfigOverride]:
     """A binding merges OVER the authored params, so a path without its format keeps the
     wrong reader."""
     authored = {fi["stage_id"]: fi["path"]
                 for fi in list_file_inputs(project, version_id)}
-    bindings: dict[str, dict[str, str]] = {}
+    bindings: dict[StageId, TypeUnsafeUserStageConfigOverride] = {}
     for key, value in form.items():
         if not key.startswith("binding__"):
             continue

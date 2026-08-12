@@ -17,15 +17,20 @@ from app.core.frames import list_rows, read_frame_file, render_frame_as_csv_text
 from app.models import (
     StageType,
     Workflow,
+    WorkflowNotFormed,
     WorkflowStage,
     build_workflow,
-    validate_workflow,
 )
 from app.models.stages.llm_transform import LLMTransformStage
 from app.models.run_manifest import read_run_manifest
 from app.runtime.manifest import resolve_output_path
 from app.services.run import resolve_version
-from app.services.loader import CompiledStageFile, list_parsed_stages, load_compiled_dir
+from app.services.loader import (
+    CompiledStageFile,
+    find_file_issues,
+    list_parsed_stages,
+    load_compiled_dir,
+)
 from app.services.versioning import list_versions, load_version_stages
 from app.services.project import describe_project
 from app.services.workspace import load_schemas, resolve_project_dir
@@ -78,10 +83,9 @@ def _build_project_card(p: Path) -> ProjectCard | None:
 class StageListing:
     """All-or-nothing: one invalid file empties `entries`, and `issues` names the broken ones."""
     entries: list[CompiledStageFile]
-    # None where a file failed to parse or the parsed stages form no workflow — a
-    # working copy mid-edit often forms none, and none is invented.
-    workflow: Workflow | None
-    workflow_issues: list[str]
+    # A working copy mid-edit often forms no workflow; `WorkflowNotFormed` says why,
+    # so no reader has to hold a reason beside a missing one.
+    workflow: Workflow | WorkflowNotFormed
     issues: list[CompiledStageFile]
     order: dict[str, str]
 
@@ -93,19 +97,19 @@ def load_stages(project: str) -> StageListing:
     entries = load_compiled_dir(compiled_dir)
     issues = [e for e in entries if e.issues]
     if issues:
-        # One invalid file breaks the whole workflow — its edges no longer
+        # One invalid file breaks the whole workflow — its inputs no longer
         # resolve, so the surviving stages form a workflow with holes. Rendering that
         # is "unusable but lies." Return no stages, only the issues, so the
         # viewer shows what's broken instead of a false graph.
         return StageListing(
-            entries=[], workflow=None, workflow_issues=[], issues=issues, order={})
+            entries=[], workflow=WorkflowNotFormed(issues=find_file_issues(issues)),
+            issues=issues, order={})
     stages = list_parsed_stages(entries)
     order = {e.stage.id: e.filename.split("_", 1)[0]
              for e in entries if e.stage is not None}
     return StageListing(
         entries=entries,
         workflow=build_workflow(stages),
-        workflow_issues=validate_workflow(stages),
         issues=[],
         order=order,
     )
@@ -115,13 +119,17 @@ def load_stages_or_empty(project: str) -> StageListing:
     compiled_dir = projects_dir() / project / "compiled"
     if not compiled_dir.is_dir():
         return StageListing(
-            entries=[], workflow=None, workflow_issues=[], issues=[], order={})
+            entries=[],
+            workflow=WorkflowNotFormed(issues=["the project has no compiled stages yet"]),
+            issues=[], order={})
     return load_stages(project)
 
 
-def find_workflow_stage(workflow: Workflow | None, stage_id: str) -> WorkflowStage | None:
-    """None where the graph does not resolve, exactly as for a stage id it does not define."""
-    if workflow is None:
+def find_workflow_stage(
+    workflow: Workflow | WorkflowNotFormed, stage_id: str
+) -> WorkflowStage | None:
+    """None where the stages form no workflow, exactly as for a stage id it does not define."""
+    if isinstance(workflow, WorkflowNotFormed):
         return None
     return workflow.index_workflow_stages_by_id().get(stage_id)
 

@@ -6,7 +6,6 @@ from the stages it describes.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Sequence
 
 from app.models import (EvalConfig, EvalRunSettings, ScoringMetric,
                         TableSchema, Workflow, WorkflowStage)
@@ -24,13 +23,8 @@ class CompatibilityReport:
 
 
 def validate_eval_compatibility(
-    config: EvalConfig, workflow: Workflow | None, workflow_issues: Sequence[str]
+    config: EvalConfig, workflow: Workflow
 ) -> CompatibilityReport:
-    """`workflow_issues` is non-empty exactly when `workflow` is None — it says why."""
-    if workflow is None:
-        return CompatibilityReport(
-            ok=False, problems=_describe_broken_workflow(workflow_issues), settings=None)
-
     by_id = workflow.index_workflow_stages_by_id()
     missing = _validate_stages_exist(config, by_id)
     if missing:
@@ -159,12 +153,6 @@ def _validate_target_emits_checked_columns(
 def _validate_no_reference_override_on_target(config: EvalConfig) -> list[str]:
     return [f"reference override `{ov.stage_id}` cannot be the target stage"
            for ov in config.reference_overrides if ov.stage_id == config.target_stage]
-
-
-# ── Structural: the stage list itself must be a valid workflow ───────────────
-def _describe_broken_workflow(issues: Sequence[str]) -> list[str]:
-    return ["cannot verify the path: the workflow has structural problems: "
-           + "; ".join(issues)]
 
 
 # ── Condition 5: the path must preserve grain (or fall back to a code scorer) ─

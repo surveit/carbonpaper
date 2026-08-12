@@ -118,6 +118,31 @@ def test_eval_detail_shows_pathway_compatibility_and_dataset():
     assert "label" in r.text                                   # the checked column
 
 
+def test_eval_pages_render_a_working_copy_whose_stages_form_no_workflow(demo_project):
+    spare = {**_TARGET, "id": "spare", "inputs": [{"id": "missing"}]}
+    spare["signature"] = {**_TARGET["signature"],
+                          "reads": [{"input": "missing",
+                                     "columns": [{"name": "doc_id", "type": "str",
+                                                  "nullable": True}]}]}
+    (demo_project / "demo" / "compiled" / "03_spare.json").write_text(
+        json.dumps(spare), encoding="utf-8")
+
+    detail = client.get("/project/demo/evals/label_check")
+    assert detail.status_code == 200
+    assert "structural problems" in detail.text
+    assert "input `missing` references no stage" in detail.text
+    assert client.get("/project/demo/evals").status_code == 200
+
+
+def test_eval_detail_names_the_stage_file_that_would_not_parse(demo_project):
+    (demo_project / "demo" / "compiled" / "02_classify.json").write_text("{", encoding="utf-8")
+
+    r = client.get("/project/demo/evals/label_check")
+    assert r.status_code == 200
+    assert "structural problems" in r.text
+    assert "02_classify.json" in r.text
+
+
 def test_eval_detail_404_for_unknown_config():
     assert client.get("/project/demo/evals/nope").status_code == 404
 

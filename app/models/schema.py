@@ -46,6 +46,12 @@ _SNAKE_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 # dicts parse unchanged.
 StageId: TypeAlias = str
 
+# One stage's connector params for one run, as the caller supplied them. Nothing
+# type-checks the keys or the values against the stage's config: the caller is
+# responsible for knowing what that config makes available and overriding it correctly,
+# and a wrong key surfaces only when the stage validates its connector.
+TypeUnsafeUserStageConfigOverride: TypeAlias = dict[str, Any]
+
 
 # Shared by every authored-code block (python_row_function/python_frame_function,
 # publish's function block, filter_rows) — lives here, below `stage.py`, so a
