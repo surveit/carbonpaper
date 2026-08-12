@@ -60,16 +60,15 @@ def test_panel_shows_each_test_with_status(client: TestClient, tmp_path: Path) -
     assert "passed" in html and "mismatch" in html
 
 
-def test_expected_output_marks_the_columns_the_step_adds(
+def test_expected_output_renders_its_columns_unadorned(
     client: TestClient, tmp_path: Path
 ) -> None:
     _seed_project(tmp_path)
     html = client.get("/project/alpha/node/double/panel").text
-    # `doubled` is in the output schema and in no input's; `amount` is carried in.
-    assert '<th class="test-col-new">doubled</th>' in html
-    assert "<th>amount</th>" in html
-    assert '<td class="test-col-new">4.0</td>' in html
-    assert "<code>doubled</code>" in html  # named in the caption, not colour alone
+    assert "<th>doubled</th>" in html and "<td>4.0</td>" in html
+    # The expected row now carries only what the step writes, so nothing in the table
+    # marks one column out from another.
+    assert "test-col-new" not in html and "<caption>" not in html
 
 
 def test_panel_without_tests_has_no_tests_section(client: TestClient, tmp_path: Path) -> None:

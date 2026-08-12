@@ -66,29 +66,13 @@ def shape_test_views(
     if not tests:
         return []
     results = run_tests_for_stage(workflow_stage.stage)
-    new_columns = _find_new_output_columns(workflow_stage)
     return [
-        _shape_one_test(test, result, new_columns)
+        _shape_one_test(test, result)
         for test, result in zip(tests, results)
     ]
 
 
-def _find_new_output_columns(workflow_stage: WorkflowStage) -> list[str]:
-    # Off the declared schemas, not the example rows: an empty input would read as
-    # adding every column.
-    upstream = {
-        column.name
-        for stage_input in workflow_stage.inputs
-        for column in stage_input.table_schema.columns
-    }
-    output_schema = workflow_stage.output_schema
-    declared = output_schema.columns if output_schema else []
-    return [column.name for column in declared if column.name not in upstream]
-
-
-def _shape_one_test(
-    test: StageTest, result: StageTestResult, new_columns: list[str]
-) -> dict[str, Any]:
+def _shape_one_test(test: StageTest, result: StageTestResult) -> dict[str, Any]:
     return {
         "name": test.name,
         "description": test.description,
@@ -102,7 +86,6 @@ def _shape_one_test(
         # the template must not render as "succeeded, returned nothing".
         "expected": None if test.expected is None else {
             "columns": _list_row_columns(test.expected), "rows": test.expected,
-            "new_columns": new_columns,
         },
         "diffs": [
             {"row": diff.row, "column": diff.column,
