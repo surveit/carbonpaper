@@ -1,6 +1,6 @@
 {
  "accessors": 33,
- "functions": 1355,
+ "functions": 1368,
  "sightings": {},
  "types": 172,
  "words": {
@@ -198,7 +198,7 @@
    "field": 0,
    "noun": 0,
    "noun_led": false,
-   "verb": 7
+   "verb": 8
   },
   "aside": {
    "accessor": 0,
@@ -933,7 +933,7 @@
    "field": 0,
    "noun": 0,
    "noun_led": false,
-   "verb": 25
+   "verb": 26
   },
   "described": {
    "accessor": 0,
@@ -1059,7 +1059,7 @@
    "field": 0,
    "noun": 0,
    "noun_led": false,
-   "verb": 3
+   "verb": 4
   },
   "dropped": {
    "accessor": 1,
@@ -1101,7 +1101,7 @@
    "field": 0,
    "noun": 2,
    "noun_led": false,
-   "verb": 5
+   "verb": 6
   },
   "editing": {
    "accessor": 0,
@@ -1145,13 +1145,6 @@
    "noun_led": false,
    "verb": 0
   },
-  "ensure": {
-   "accessor": 0,
-   "field": 0,
-   "noun": 0,
-   "noun_led": false,
-   "verb": 1
-  },
   "entries": {
    "accessor": 0,
    "field": 1,
@@ -1189,7 +1182,7 @@
   },
   "eval": {
    "accessor": 0,
-   "field": 1,
+   "field": 2,
    "noun": 4,
    "noun_led": false,
    "verb": 5
@@ -1332,7 +1325,7 @@
    "field": 0,
    "noun": 0,
    "noun_led": false,
-   "verb": 129
+   "verb": 130
   },
   "fingerprint": {
    "accessor": 0,
@@ -2396,7 +2389,7 @@
    "field": 1,
    "noun": 0,
    "noun_led": false,
-   "verb": 2
+   "verb": 3
   },
   "ordinal": {
    "accessor": 0,
@@ -2501,7 +2494,7 @@
    "field": 0,
    "noun": 0,
    "noun_led": false,
-   "verb": 14
+   "verb": 15
   },
   "parsed": {
    "accessor": 0,
@@ -2830,7 +2823,7 @@
    "field": 0,
    "noun": 0,
    "noun_led": false,
-   "verb": 78
+   "verb": 80
   },
   "reader": {
    "accessor": 0,
@@ -3019,7 +3012,7 @@
    "field": 0,
    "noun": 0,
    "noun_led": false,
-   "verb": 36
+   "verb": 38
   },
   "resolved": {
    "accessor": 1,
@@ -3271,7 +3264,7 @@
    "field": 0,
    "noun": 0,
    "noun_led": false,
-   "verb": 6
+   "verb": 7
   },
   "settings": {
    "accessor": 0,
@@ -3306,7 +3299,7 @@
    "field": 0,
    "noun": 0,
    "noun_led": false,
-   "verb": 9
+   "verb": 10
   },
   "shell": {
    "accessor": 0,
@@ -3926,7 +3919,7 @@
   },
   "url": {
    "accessor": 0,
-   "field": 8,
+   "field": 9,
    "noun": 0,
    "noun_led": false,
    "verb": 0
@@ -4132,7 +4125,7 @@
    "field": 0,
    "noun": 1,
    "noun_led": false,
-   "verb": 31
+   "verb": 32
   },
   "writer": {
    "accessor": 0,

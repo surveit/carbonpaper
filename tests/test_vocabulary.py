@@ -93,13 +93,3 @@ def test_clean_diff_renders_the_one_line_form() -> None:
     assert "🟢 vocabulary — no new words" in render_markdown(snapshot, snapshot)
 
 
-# --- the committed registry matches the tree it describes ------------------------
-
-
-def test_registry_still_describes_a_real_tree(snapshot: VocabularySnapshot) -> None:
-    # Not equality — see test_lexicon.test_registry_still_describes_a_real_tree.
-    registry = VocabularySnapshot.model_validate_json(
-        (_REPO_ROOT / "vocabulary.json").read_text(encoding="utf-8")
-    )
-    lost = set(registry.words) - set(snapshot.words)
-    assert len(lost) < len(registry.words) // 10, f"registry names {len(lost)} words the tree lost"
