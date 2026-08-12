@@ -70,13 +70,22 @@ def test_a_word_growing_on_a_surface_it_already_holds_is_silent() -> None:
     assert find_surface_gains(head, base) == []
 
 
-def test_long_gain_lists_say_how_many_were_dropped() -> None:
+def test_long_variable_lists_say_how_many_were_dropped() -> None:
     base = VocabularySnapshot(words={}, comment_lines=0)
     head = VocabularySnapshot(
-        words={f"word{n}": WordSurfaces(comment=1) for n in range(20)}, comment_lines=1
+        words={f"word{n}": WordSurfaces(variable=1) for n in range(20)}, comment_lines=1
     )
     body = render_markdown(head, base)
     assert "8 more" in body, "a truncated list must say what it dropped"
+
+
+def test_prose_surfaces_are_counted_not_listed() -> None:
+    """89% of rows and none of the signal, so listing them buries the variable rows."""
+    base = VocabularySnapshot(words={}, comment_lines=0)
+    head = VocabularySnapshot(words={"gerrymander": WordSurfaces(comment=1)}, comment_lines=1)
+    body = render_markdown(head, base)
+    assert "gerrymander" not in body
+    assert "1 new words, not listed (prose)" in body
 
 
 def test_clean_diff_renders_the_one_line_form() -> None:

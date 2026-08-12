@@ -1,9 +1,9 @@
 """Per-PR vocabulary report: the words `app` uses outside its declared names.
 
 `lexicon.py` covers what the code *declares* — types, fields, function tokens. This
-covers what it *says*: local variable names, docstring prose, comment prose. Scope is
-`app` only, which is why no content words appear: the world's proper nouns live in
-examples and seed data, never here. Report-only, and a word it cannot place raises.
+covers what it *says*: local variable names, docstring prose, comment prose. Scoping to
+`app` makes the world's proper nouns rare, not absent — `venezuela` is here once, in a
+comment. Report-only, and a word it cannot place raises.
 """
 from __future__ import annotations
 
@@ -91,8 +91,8 @@ def render_markdown(head: VocabularySnapshot, base: VocabularySnapshot) -> str:
     for surface in Surface:
         lines += _render_surface(surface, [gain for gain in gains if gain.surface is surface])
     lines += [
-        "<sub>Report-only, and noisier by design than `lexicon-report` — a comment is prose, "
-        "so a new word there is often just a sentence. Watch which surfaces earn their keep.</sub>",
+        "<sub>Report-only. Prose surfaces are counted, not listed — measured across 8 open PRs "
+        "they were 89% of the rows and none of the signal.</sub>",
         "",
         _render_totals(head, base),
     ]
@@ -132,8 +132,11 @@ def _count(seen: dict[str, Counter[Surface]], surface: Surface, words: list[str]
 
 
 def _render_surface(surface: Surface, gains: list[SurfaceGain]) -> list[str]:
+    """Prose is counted, not listed: 89% of rows over 8 open PRs, none of the signal."""
     if not gains:
         return []
+    if surface is not Surface.VARIABLE:
+        return [f"**{surface.value}** — {len(gains)} new words, not listed (prose). Full set in the uploaded JSON.", ""]
     shown = gains[:_LISTED_PER_SURFACE]
     words = " ".join(f"`{gain.word}`" for gain in shown)
     dropped = len(gains) - len(shown)
