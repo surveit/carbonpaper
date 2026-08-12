@@ -116,7 +116,7 @@
   {# ─────────── SCORING — the rules, then the rollup they produced ─────────── #}
   <div class="pane" data-pane="scoring" hidden>
     <h3>Rules</h3>
-    <table class="table">
+    <table class="schema">
       <thead><tr><th>target column</th><th>metric</th><th>tolerance</th><th>matched</th></tr></thead>
       <tbody>
         {% for check in config.expected_outputs %}
@@ -135,7 +135,7 @@
 
     <h3>Recorded metrics</h3>
     {% if run.metrics %}
-    <table class="table">
+    <table class="schema">
       <thead><tr><th>metric</th><th>value</th></tr></thead>
       <tbody>
         {% for key, value in run.metrics.items() %}
