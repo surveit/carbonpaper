@@ -13,7 +13,7 @@ from app.main import app
 from app.models import parse_stage, Stage
 from app.runtime.context import RunContext
 from app.runtime.stages.publish import handle_publish
-from app.runtime.trace_links import build_row_trace_url
+from app.runtime.trace_links import RowTraceLinker
 from conftest import place_stage
 from test_trace_helpers import write_run
 
@@ -21,19 +21,22 @@ from test_trace_helpers import write_run
 # ── the link shape ────────────────────────────────────────────────────────────
 
 def test_build_row_trace_url_matches_the_trace_view_route():
-    assert build_row_trace_url("palm", "20260723T101500", "score_rows", 4) == (
+    linker = RowTraceLinker(project="palm", run_id="20260723T101500")
+    assert linker.build_row_trace_url("score_rows", 4) == (
         "/project/palm/runs/20260723T101500/stage/score_rows/row/4/trace/view"
     )
 
 
 def test_build_row_trace_url_percent_encodes_each_segment():
-    url = build_row_trace_url("my project", "a/b", "stage one", 0)
+    linker = RowTraceLinker(project="my project", run_id="a/b")
+    url = linker.build_row_trace_url("stage one", 0)
     assert url == "/project/my%20project/runs/a%2Fb/stage/stage%20one/row/0/trace/view"
 
 
 def test_build_row_trace_url_rejects_a_negative_ordinal():
+    linker = RowTraceLinker(project="palm", run_id="R1")
     with pytest.raises(ValueError):
-        build_row_trace_url("palm", "R1", "score_rows", -1)
+        linker.build_row_trace_url("score_rows", -1)
 
 
 # ── what the publish handler passes ───────────────────────────────────────────
