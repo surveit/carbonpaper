@@ -1,43 +1,41 @@
-{# What labelled data says about this step, as a section of the Transform pane —
-   beside the examples, which is where a reader already goes to see how a step is
-   checked. Context: coverages (list[app.web.eval_coverage.EvalCoverage]).
+{# What labelled data says about this step, as a SUBSECTION of the transform block it
+   belongs to — an `h3` beside the block's other headings, not a section of its own.
+   Context: coverages (list[app.web.eval_coverage.EvalCoverage]).
 
-   ONE row per eval, because two evals score different datasets: their row counts
-   do not add up and their accuracies do not average. Any single figure over both
-   would be a number nobody measured. The caveat is the section's, stated once,
+   ONE row per eval, because two evals score different datasets: their row counts do
+   not add up and their accuracies do not average, so any single figure over both is a
+   number nobody measured. Worst first. The caveat is stated once, above the table,
    rather than repeated under every row.
 
-   Renders nothing for a step no eval targets — the app has no eval-authoring form,
-   so a "nothing checked this" row would state no fact and offer no next step. #}
+   Renders nothing for a step no eval targets — the app has no eval-authoring form, so
+   a "nothing checked this" row would state no fact and offer no next step. #}
 {% macro stage_eval_check(coverages) %}
 {% if coverages %}
-<section class="exec-block">
-  <h2>🎯 Checked against labelled data</h2>
-  <p class="muted">Each row below compares what this step produced with rows a person
-    labelled by hand. Nothing here speaks for rows outside those sets, nor for the
-    columns it does not name.</p>
-  <table class="schema eval-checks">
-    <thead>
-      <tr><th>result</th><th>eval</th><th>columns compared</th><th>version scored</th></tr>
-    </thead>
-    <tbody>
-      {% for coverage in coverages %}
-      <tr>
-        <td>
-          {%- if coverage.status == "checked" %}<span class="verdict verdict-pass">{{ coverage.rows_passed }} / {{ coverage.rows_total }}</span>
-          {%- elif coverage.status == "mismatches" %}<span class="verdict verdict-fail">{{ coverage.rows_passed }} / {{ coverage.rows_total }}</span>
-          {# The score is left off a stale row on purpose: it is a verdict on code that
-             has moved, and a green figure here would read as one on the code above. #}
-          {%- else %}<span class="verdict verdict-stale">stale</span>{% endif %}
-        </td>
-        <td><a href="{{ coverage.href }}">{{ coverage.eval_name }}</a></td>
-        <td>{% for column in coverage.columns %}<code>{{ column }}</code>{% if not loop.last %} {% endif %}{% endfor %}</td>
-        <td><code>{{ coverage.scored_version }}</code>
-          {%- if coverage.status == "stale" %} <span class="muted">— this step has moved since</span>{% endif %}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</section>
+<h3>worked examples (evals)</h3>
+<p class="muted">Each row compares what this step produced with rows a person labelled by
+  hand. Nothing here speaks for rows outside those sets, nor for the columns it does not
+  name.</p>
+<table class="schema eval-checks">
+  <thead>
+    <tr><th>result</th><th>eval</th><th>columns compared</th><th>version scored</th></tr>
+  </thead>
+  <tbody>
+    {% for coverage in coverages %}
+    <tr>
+      <td>
+        {%- if coverage.status == "checked" %}<span class="verdict verdict-pass">{{ coverage.rows_passed }} / {{ coverage.rows_total }}</span>
+        {%- elif coverage.status == "mismatches" %}<span class="verdict verdict-fail">{{ coverage.rows_passed }} / {{ coverage.rows_total }}</span>
+        {# The score is left off a stale row on purpose: it is a verdict on code that has
+           moved, and a figure here would read as one on the prompt above. #}
+        {%- else %}<span class="verdict verdict-stale">stale</span>{% endif %}
+      </td>
+      <td><a href="{{ coverage.href }}">{{ coverage.eval_name }}</a></td>
+      <td>{% for column in coverage.columns %}<code>{{ column }}</code>{% if not loop.last %} {% endif %}{% endfor %}</td>
+      <td><code>{{ coverage.scored_version }}</code>
+        {%- if coverage.status == "stale" %} <span class="muted">— this step has moved since</span>{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
 {% endif %}
 {% endmacro %}

@@ -160,7 +160,8 @@ def _stored_version(version_id: str) -> None:
 
 
 def _eval_section(html: str) -> str:
-    return html.split("Checked against labelled data")[1].split("</section>")[0]
+    """The subsection alone: an h3 inside a transform block, not a section of its own."""
+    return html.split("worked examples (evals)")[1].split("</table>")[0]
 
 
 def test_the_pane_reports_a_checked_stage_with_its_score(tmp_path):
@@ -214,5 +215,39 @@ def test_two_evals_on_one_stage_get_a_row_each_worst_first(tmp_path):
 def test_a_stage_no_eval_targets_gets_no_section(tmp_path):
     _save_run(tmp_path, _BOTH_MATCHED)
 
-    assert "Checked against labelled data" not in client.get(
+    assert "worked examples (evals)" not in client.get(
         "/project/demo/node/load/panel").text
+
+
+def test_the_llm_block_reads_in_the_order_one_call_happens(tmp_path):
+    """Ask → what it sees → what shape comes back → what that scored → the dials."""
+    llm = {
+        "id": "arbiter", "type": "llm_transform", "description": "Judge each row",
+        "inputs": [{"id": "load"}],
+        "llm": {"prompt_instructions": "Decide.", "prompt_data_template": "{text}",
+                "model": "claude-sonnet-5"},
+        "signature": {"form": "extends", "reads": [{"input": "load", "columns": [
+            {"name": "text", "type": "str", "nullable": True}]}],
+            "adds": [{"name": "label", "type": "str", "nullable": True}]},
+    }
+    (tmp_path / "demo" / "compiled" / "03_arbiter.json").write_text(
+        json.dumps(llm), encoding="utf-8")
+    save_eval_config(tmp_path / "demo", EvalConfig(
+        id="arbiter_check", project="demo", name="Arbiter check",
+        override_stage="load", target_stage="arbiter",
+        expected_outputs=[ExpectedOutput(output_column="label", metric="exact")]))
+    _stored_version("v1")
+    save_eval_run(tmp_path / "demo", EvalRun(
+        id="ar1", config="arbiter_check", project="demo", workflow_version="v1",
+        status="scored",
+        settings=EvalRunSettings(can_score_declaratively=True, frontier=["arbiter"],
+                                 blocking_stages=[]),
+        result_ref="eval_run/r1/result.parquet"))
+    _save_run(tmp_path, _BOTH_MATCHED)
+
+    html = client.get("/project/demo/node/arbiter/panel").text
+
+    headings = ["what the model is asked", "what it sees, per row",
+                "expected answer shape", "worked examples (evals)", "settings"]
+    positions = [html.index(f"<h3>{h}</h3>") for h in headings]
+    assert positions == sorted(positions), dict(zip(headings, positions))

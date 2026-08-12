@@ -171,19 +171,25 @@ head — name, status badge, blurb, then a facts line — over ONE tab strip:
   panel is absent rather than empty.
 
 ## How a step was checked — both statements live in Transform
-Beside the thing each one is a verdict on, not under the step's description:
+Beside the thing each one is a verdict on, and never as a section of its own:
 - **`_stage_certification.html`** opens **🧪 Example behavior**, because what it claims is
   about those examples. It used to sit under the summary, a section above the cases it
   was talking about.
-- **🎯 Checked against labelled data** (`app.web.eval_coverage` → `_stage_eval_check.html`)
-  is the block directly before it — a step's evals, which is the only check that reaches
-  an `llm_transform`'s answers (`build_certification` returns None without an authored
-  code block, so those stages carry no certification at all).
+- **`worked examples (evals)`** (`app.web.eval_coverage` → `_stage_eval_check.html`) is an
+  `h3` INSIDE whichever transform block the stage has — a peer of that block's other
+  headings, not a fifth `.exec-block` competing with them. An eval may target any stage,
+  so the LLM block and all three authored-code blocks carry it.
+
+The **LLM block reads in the order one call happens**: what the model is asked → what it
+sees, per row → expected answer shape → worked examples (evals) → settings. The dials come
+last because they are the least of what a reviewer is judging. An eval is the only check
+that reaches an `llm_transform`'s answers at all — `build_certification` returns None
+without an authored code block, so those stages carry no certification.
 
 **ONE ROW PER EVAL**, because two evals score different datasets: their row counts do not
 add up and their accuracies do not average, so any single figure over both would be a
-number nobody measured. Worst first. The caveat — that nothing here speaks for rows
-outside those sets — is the section's, said once, not repeated under every row.
+number nobody measured. Worst first. The caveat — that nothing here speaks for rows outside
+those sets — is stated once above the table, not repeated under every row.
 
 Coverage attaches to an eval's **target** stage alone; the rest of the pathway executed,
 but nothing compared what it produced to anything. **Staleness outranks the score**: a
@@ -191,7 +197,7 @@ stale row's result cell reads `stale` and carries no figure, since the figure is
 on code that has moved — the version it did score is its own column. Which version counts
 as current differs by surface: a run panel uses the version THAT RUN pinned (exact), the
 node panel the latest stored version (the test `eval_status` already applies, since a
-working copy is not a version). A step no eval targets renders no section.
+working copy is not a version). A step no eval targets renders nothing.
 
 ## Live progress + the stage simulator
 `POST /project/<m>/run` → `prepare_run` (initial `running` manifest) → background thread →
