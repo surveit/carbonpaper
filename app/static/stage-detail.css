@@ -333,6 +333,21 @@ pre.code, pre.prompt, pre.instructions {
 pre.prompt { background: var(--code-deep); }
 pre.instructions { background: var(--code-deep); }
 
+/* The <code> highlight.js needs to mark is otherwise an inline chip (base.css) and,
+   once marked, a whole block the vendored theme repaints. Both bring a ground and a
+   padding of their own; the theme adds a second scroll. Strip all of it so the block
+   keeps pre.code's surface and the theme is left carrying token colours only. Listed
+   as two selectors, not one: the .hljs form has to outweigh the theme's own
+   `pre code.hljs`, and the bare form has to hold before the script runs, or without
+   it. */
+pre.code > code,
+pre.code > code.hljs {
+    background: none;
+    padding: 0;
+    overflow: visible;
+    font-size: inherit;
+}
+
 .yaml-block {
     background: var(--sunk-deep);
     max-height: 320px;

@@ -53,6 +53,11 @@ NODE_SCRIPT = "diagram_nodes.js"
 VIEWPORT_SCRIPT = "diagram_viewport.js"
 DIAGRAM_SCRIPTS = (NODE_SCRIPT, VIEWPORT_SCRIPT)
 
+# The tokenizer and its caller, vendored so a stage page colours its code offline.
+# The theme rides in the concatenated stylesheet, which already follows the app's
+# cascade order, so it needs no entry here.
+CODE_SCRIPTS = ("highlight.min.js", "code-highlight.js")
+
 # The diagram renderer is the packet's ONE external request; the index says so.
 # Version-pinned rather than `mermaid@11`, so the URL and the hash cannot drift
 # apart: a floating tag would start failing SRI the day jsDelivr serves 11.17.
@@ -73,6 +78,7 @@ def write_packet_pages(
 ) -> list[str]:
     written = _write_stylesheets(root)
     written.extend(_write_diagram_scripts(root))
+    written.extend(_write_asset(root, name) for name in CODE_SCRIPTS)
     written.append(_write_diagram_source(root, diagram))
     written.append(_write_index(root, view, data, guide, diagram, issues))
     for stage in view.stages:
@@ -150,6 +156,7 @@ def _write_stage_page(
         "packet_stage.html",
         run=view,
         assets=[f"../{ASSETS_DIR}/{name}" for name in STYLESHEETS],
+        code_scripts=[f"../{ASSETS_DIR}/{name}" for name in CODE_SCRIPTS],
         index_href="../index.html",
         **_build_panel_context(run_dir, view, stage, workflow_stage),
     )

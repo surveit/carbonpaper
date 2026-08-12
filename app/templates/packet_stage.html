@@ -12,3 +12,10 @@
 </div>
 
 {% endblock %}
+
+{# Vendored, not the CDN the index reaches for: a stage page has to colour its code
+   with the packet sitting on a disconnected laptop. #}
+{% block scripts %}
+{% for src in code_scripts %}<script src="{{ src }}"></script>
+{% endfor %}
+{% endblock %}

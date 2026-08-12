@@ -9,6 +9,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from arch.vendored import VENDORED_SRI
+
 _APP = Path(__file__).resolve().parents[2] / "app"
 _PALETTE = _APP / "static" / "palette.css"
 
@@ -17,6 +19,11 @@ _PALETTE = _APP / "static" / "palette.css"
 # property it copies by tests/arch/test_status_colour_contract.py, which is the price
 # of the exemption — do not add a file here that no rule pins.
 _PINNED_ELSEWHERE = {"web/diagrams.py"}
+
+# A vendored stylesheet carries colours nobody here decided, which is the thing this
+# test is actually about. arch.vendored pins each to its upstream hash, so a colour
+# cannot be smuggled in by editing one. Human-approved (2026-08-12), not inferred.
+_VENDORED = {f"static/{name}" for name in VENDORED_SRI}
 
 _MARKUP_SUFFIXES = {".css", ".html", ".js"}
 _LITERAL = re.compile(r"#[0-9a-fA-F]{3,8}\b|\brgba?\([^)]*\)|\bhsla?\([^)]*\)")
@@ -35,7 +42,7 @@ def find_colour_literals() -> dict[str, list[str]]:
     found: dict[str, list[str]] = {}
     for path in sorted(_APP.rglob("*")):
         rel = path.relative_to(_APP).as_posix()
-        if not path.is_file() or path == _PALETTE or rel in _PINNED_ELSEWHERE:
+        if not path.is_file() or path == _PALETTE or rel in _PINNED_ELSEWHERE | _VENDORED:
             continue
         text = _read_scannable(path)
         if text is None:

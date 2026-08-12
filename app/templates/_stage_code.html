@@ -60,7 +60,7 @@
     <details open>
         <summary><h2>💻 Code</h2><span class="muted">the implementation of the summary above</span></summary>
         {% if function_code %}
-        <pre class="code">{{ function_code }}</pre>
+        <pre class="code"><code class="language-python">{{ function_code }}</code></pre>
         {% else %}
         <p class="muted"><em>(function source not found on disk)</em></p>
         {% endif %}
@@ -71,7 +71,7 @@
 <section class="exec-block code-block">
     <details open>
         <summary><h2>💻 Code</h2><span class="muted">the predicate behind the summary above</span></summary>
-        <pre class="code">{{ stage.filter.code }}</pre>
+        <pre class="code"><code class="language-python">{{ stage.filter.code }}</code></pre>
     </details>
 </section>
 {% endif %}
@@ -79,7 +79,7 @@
 <section class="exec-block code-block">
     <details open>
         <summary><h2>💻 Code</h2><span class="muted">the implementation of the summary above</span></summary>
-        <pre class="code">{{ stage.starlark.code }}</pre>
+        <pre class="code"><code class="language-python">{{ stage.starlark.code }}</code></pre>
     </details>
 </section>
 {% endif %}

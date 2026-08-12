@@ -9,6 +9,8 @@ import re
 from pathlib import Path
 from typing import NamedTuple
 
+from arch.vendored import is_vendored
+
 _ROOT = Path(__file__).resolve().parents[2]
 _TEMPLATES = _ROOT / "app" / "templates"
 _STATIC = _ROOT / "app" / "static"
@@ -80,6 +82,11 @@ def find_jinja_references() -> list[Reference]:
 def find_script_references() -> list[Reference]:
     references = []
     for path in sorted(_STATIC.rglob("*.js")):
+        # A vendored tokenizer carries other languages' keyword lists — highlight.js
+        # spells SQL's READS — and nobody here wrote them, so they teach a reviewer
+        # nothing. arch.vendored pins the bytes, which is what makes the skip safe.
+        if is_vendored(path):
+            continue
         source = _JS_COMMENT.sub("", path.read_text(encoding="utf-8"))
         for name in _TRANSFORM_LEVEL_NAMES:
             # Property access or a JSON key — `stage.reads`, `stage["reads"]`. A bare
