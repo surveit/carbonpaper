@@ -21,7 +21,11 @@ from app.core.errors import (
 )
 from app.models import find_workflow_compiler_warnings
 from app.tools import shared
-from app.tools.submitted_stage import SubmittedStage, add_stages_reporting_drops
+from app.tools.submitted_stage import (
+    SubmittedStage,
+    add_stages_reporting_drops,
+    edit_stage_reporting_drops,
+)
 from app.tools.tool_specs import SAVE_VERSION_FROM_WORKING_COPY, TOOL_SPECS
 from app.mcp.instructions import INSTRUCTIONS
 from app.models.review_guide import ReviewGuideDraft
@@ -189,7 +193,9 @@ def read_stage(project_id: str, stage_id: str) -> str:
 
 @mcp.tool(description=TOOL_SPECS["edit_stage"].description)
 def edit_stage(project_id: str, stage_id: str, changes_json: str) -> dict[str, Any]:
-    return catch_stage_edit_refusals(lambda: project_service.edit_stage(project_id, stage_id, changes_json))
+    return catch_stage_edit_refusals(
+        lambda: edit_stage_reporting_drops(project_id, stage_id, changes_json)
+    )
 
 
 @mcp.tool(description=TOOL_SPECS["add_stage"].description)
@@ -199,14 +205,19 @@ def add_stage(project_id: str, stages: list[SubmittedStage]) -> dict[str, Any]:
 
 @mcp.tool(description=TOOL_SPECS["remove_stage"].description)
 def remove_stage(project_id: str, stage_id: str) -> dict[str, Any]:
-    return catch_stage_edit_refusals(lambda: project_service.remove_stage(project_id, stage_id))
+    return catch_stage_edit_refusals(
+        lambda: _as_tool_result(project_service.remove_stage(project_id, stage_id))
+    )
 
 
-def catch_stage_edit_refusals(edit: Callable[[], EditStageResult]) -> dict[str, Any]:
+def catch_stage_edit_refusals(edit: Callable[[], dict[str, Any]]) -> dict[str, Any]:
     try:
-        result = edit()
+        return edit()
     except _STAGE_TOOL_ERRORS as exc:
         return {"ok": False, "issues": [str(exc)]}
+
+
+def _as_tool_result(result: EditStageResult) -> dict[str, Any]:
     return {"ok": result.ok, "issues": result.issues}
 
 
