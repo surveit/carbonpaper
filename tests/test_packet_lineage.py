@@ -268,3 +268,13 @@ def test_a_moved_project_still_ships_the_inputs_its_run_read(tmp_path):
     # A same-named file is not the same file, and an unhashed binding cannot say.
     assert _locate_input(binding("0" * 64), project) is None
     assert _locate_input(binding(None), project) is None
+
+
+def test_the_packet_ships_no_syntax_highlighter():
+    """124 KB of third-party code to colour tokens, in an artifact opened from a stranger."""
+    from app.web.review_packet.pages import HLJS_STYLESHEET, read_app_cascade_order
+
+    assert HLJS_STYLESHEET in read_app_cascade_order(), (
+        "the app still links it; this test guards the packet's exclusion, "
+        "and would otherwise pass by the sheet simply having been deleted"
+    )

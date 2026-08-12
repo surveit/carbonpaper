@@ -61,7 +61,12 @@ DIAGRAM_SCRIPTS = (NODE_SCRIPT, VIEWPORT_SCRIPT)
 # The tokenizer and its caller, vendored so a stage page colours its code offline.
 # The theme rides in the concatenated stylesheet, which already follows the app's
 # cascade order, so it needs no entry here.
-CODE_SCRIPTS = ("highlight.min.js", "code-highlight.js")
+# NOT shipped: highlight.js is 124 KB of third-party code whose only job is
+# colouring tokens, and the packet is an artifact a reader opens from a stranger.
+# The code blocks keep their ground and padding from stage-detail.css, so they
+# read the same — unhighlighted, not unstyled. HLJS_STYLESHEET goes with it: with
+# nothing adding the classes, its rules can never match.
+HLJS_STYLESHEET = "hljs-github-dark.css"
 
 # The diagram renderer is the packet's ONE external request; the index says so.
 # Version-pinned rather than `mermaid@11`, so the URL and the hash cannot drift
@@ -84,7 +89,6 @@ def write_packet_pages(
 ) -> list[str]:
     written = _write_stylesheets(root)
     written.extend(_write_diagram_scripts(root))
-    written.extend(_write_asset(root, name) for name in CODE_SCRIPTS)
     written.append(_write_diagram_source(root, diagram))
     written.append(_write_index(root, view, data, lineage, guide, diagram, issues))
     for stage in view.stages:
@@ -167,7 +171,6 @@ def _write_stage_page(
         "packet_stage.html",
         run=view,
         assets=[f"../{ASSETS_DIR}/{name}" for name in STYLESHEETS],
-        code_scripts=[f"../{ASSETS_DIR}/{name}" for name in CODE_SCRIPTS],
         index_href="../index.html",
         **_build_panel_context(run_dir, view, stage, workflow_stage, traced),
     )
@@ -257,7 +260,10 @@ def _write_stylesheets(root: Path) -> list[str]:
     order = read_app_cascade_order()
     text = {
         PALETTE_STYLESHEET: (_APP_STATIC / PALETTE_STYLESHEET).read_text(encoding="utf-8"),
-        APP_STYLESHEET: _join_sheets(name for name in order if name != PALETTE_STYLESHEET),
+        APP_STYLESHEET: _join_sheets(
+            name for name in order
+            if name not in (PALETTE_STYLESHEET, HLJS_STYLESHEET)
+        ),
         PACKET_STYLESHEET: (_PACKET_STATIC / PACKET_STYLESHEET).read_text(encoding="utf-8"),
     }
     return [_write_text(root / f"{ASSETS_DIR}/{name}", text[name], f"{ASSETS_DIR}/{name}")
