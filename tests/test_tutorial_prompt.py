@@ -20,8 +20,14 @@ from app.tools.tutorial import _FIXTURE, TutorialContext, TutorialProject
 _IDENTIFIER = re.compile(r"[a-z_][a-z0-9_]*")
 _TEMPLATES = Path(app.__file__).resolve().parent / "templates"
 
-# Labels beat 4 sends the reader to click. Each must be a string the app renders.
-_NAMED_CONTROLS = ("View lineage", "Export review packet", "Generate examples")
+# Labels beat 3 sends the reader to click. Each must be a string the app renders.
+_NAMED_CONTROLS = (
+    "View lineage",
+    "Export review packet",
+    "Example behavior",
+    "Generate examples",
+    "Edit with agent",
+)
 
 
 def _tour_tool_names() -> set[str]:
@@ -105,9 +111,9 @@ def test_the_run_beat_hands_over_exactly_one_link() -> None:
     assert "Beat 2 ends on ONE link, the run's." in _flat(TUTORIAL_SYSTEM_PROMPT)
     # The one URL the tour joins, and only from two things a tool returned.
     assert "`runs_url_prefix` with that `run_id` on the end" in beat
-    # The other two pages are not lost — beat 4 is where they are offered.
-    assert "the first beat that may hand over `workflow_url`" in _flat(_beat(4))
-    assert "guide_url" in _flat(_beat(4))
+    # The other two pages are not lost — beat 3 is where they are offered.
+    assert "the first beat that may hand over `workflow_url`" in _flat(_beat(3))
+    assert "guide_url" in _flat(_beat(3))
 
 
 def test_seeding_and_running_are_one_turn_with_no_boundary_to_ask_at() -> None:
@@ -150,11 +156,38 @@ def test_every_control_the_tour_sends_them_to_click_is_one_the_app_renders() -> 
     rendered = "\n".join(
         path.read_text(encoding="utf-8") for path in sorted(_TEMPLATES.glob("*.html"))
     )
-    beat = _flat(_beat(4))
+    beat = _flat(_beat(3))
 
     for label in _NAMED_CONTROLS:
         assert label in beat, label
         assert label in rendered, f"{label} is named in the tour but rendered nowhere"
+
+
+def test_the_script_walks_four_beats() -> None:
+    """The look-around question was a beat of its own; its list is now beat 3 itself."""
+    numbered = [int(n) for n in re.findall(r"\n(\d+)\. [A-Z]", TUTORIAL_SYSTEM_PROMPT)]
+
+    assert numbered == [1, 2, 3, 4]
+    assert "Walk these four beats in order." in TUTORIAL_SYSTEM_PROMPT
+
+
+def test_the_beat_after_the_run_hands_the_list_over_rather_than_offering_to() -> None:
+    """The round trip this fixes: a reader told to look around had to ask again for the list."""
+    beat = _flat(_beat(3))
+
+    assert "Not two doors and a question" in beat
+    assert "these, and only these, a line each" in beat
+    # Their own workflow is one line at the end of the list, not a door competing with it.
+    assert "Close on their own workflow, one line" in beat
+
+
+def test_editing_is_offered_in_the_app_as_well_as_from_an_mcp_client() -> None:
+    """The in-app control exists (see _NAMED_CONTROLS), so the tour no longer denies it."""
+    beat = _flat(_beat(4))
+
+    assert '"Edit with agent" on `workflow_url`' in beat
+    assert "`mcp_command`" in beat
+    assert "There is no button for this in the app" not in _flat(TUTORIAL_SYSTEM_PROMPT)
 
 
 def test_the_no_fabrication_rules_survive_the_rewrite() -> None:

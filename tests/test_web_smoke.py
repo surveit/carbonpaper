@@ -82,6 +82,13 @@ def test_project_shell_has_no_manual_edit_with_agent_control():
     assert "Edit with agent" not in r.text
 
 
+def test_workflow_section_offers_the_editing_agent():
+    """Authoring has a way in from the app: the POST opens a chat bound to this project."""
+    r = client.get("/project/demo/workflow")
+    assert 'action="/project/demo/edit-agent"' in r.text
+    assert "Edit with agent" in r.text
+
+
 def test_workflow_section_renders_the_graph():
     r = client.get("/project/demo/workflow")
     assert r.status_code == 200

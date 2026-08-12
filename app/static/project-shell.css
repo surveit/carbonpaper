@@ -201,6 +201,9 @@
 .wf-head .lede { margin-bottom: 0; }
 
 .wf-actions { flex: none; align-items: center; flex-wrap: wrap; }
+/* One control posts rather than links, and a form carries its own block margin —
+   without this it sits a few pixels below the buttons beside it. */
+.wf-actions form { margin: 0; }
 
 /* ═══ VERSION detail — the app's words, then the author's ═══
    .vd-meta is what the app knows about any version (snapshot, parent, size); .vd-desc
