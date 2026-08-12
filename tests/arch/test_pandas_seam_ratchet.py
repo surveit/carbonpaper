@@ -45,7 +45,7 @@ _ALLOWLIST: Mapping[str, int] = {
     "app/runtime/stages/frame_caching.py": 2,
     "app/runtime/stages/human_review_queue.py": 6,
     "app/runtime/stages/input_data.py": 5,
-    "app/runtime/stages/join.py": 2,
+    "app/runtime/stages/join.py": 1,
     "app/runtime/stages/python_functions.py": 1,
     "app/runtime/trace.py": 5,
     "app/runtime/validation.py": 7,

@@ -30,6 +30,7 @@ from app.runtime.run_log import (
     read_events_since,
     unbind_detail_sink,
 )
+from app.runtime.stage_output import StageOutput
 from app.runtime.stages import HANDLERS
 from app.runtime.stages.llm_transform import run_llm_batches
 from conftest import as_inputs, make_run_context
@@ -87,7 +88,7 @@ def _events(path: Path, log: RunLog) -> list[dict[str, Any]]:
     return read_events_since(path, 0)
 
 
-def _run(stage: Stage, values: list[int], ctx: RunContext) -> pd.DataFrame:
+def _run(stage: Stage, values: list[int], ctx: RunContext) -> StageOutput:
     out = HANDLERS[StageType(stage.type)].execute(
         stage, as_inputs({"src": pd.DataFrame({"x": values})}), ctx
     )

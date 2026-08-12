@@ -8,6 +8,7 @@ import pytest
 from app.models import Stage, parse_stage
 from app.models.stage import StageType
 from app.runtime.context import RunContext, RunIdentity
+from app.runtime.stage_output import StageOutput
 from app.runtime.stages import HANDLERS
 from app.core.stage_cache import StageCache
 from conftest import rows_of, as_inputs, make_run_context, queue_columns, reads_of
@@ -60,7 +61,7 @@ def _production_ctx(tmp_path: Path) -> RunContext:
     )
 
 
-def _run(stage: Stage, ctx: RunContext, src: pd.DataFrame | None = None) -> pd.DataFrame:
+def _run(stage: Stage, ctx: RunContext, src: pd.DataFrame | None = None) -> StageOutput:
     out = HANDLERS[StageType.human_review_queue].execute(
         stage, as_inputs({"scored": src if src is not None else _src()}), ctx)
     assert out is not None  # a row-mapped stage always produces a frame

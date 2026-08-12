@@ -15,7 +15,7 @@ import pandas as pd
 from pydantic import BaseModel
 
 from app.core.frames import frame_to_table, table_to_frame, list_rows
-from app.core.errors import AuthoredFrameExpected
+from .errors import AuthoredFrameExpected
 from app.models import Stage, TableSchema
 from app.models.errors import StepRefused
 from app.models.stage import StageType

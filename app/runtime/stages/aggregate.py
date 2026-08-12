@@ -36,7 +36,7 @@ def handle_aggregate(stage: Stage, inputs: dict[str, pa.Table], ctx: RunContext)
     input_id = stage.inputs[0].id
     df = table_to_frame(inputs[input_id])
     if not agg_cfg.aggregations:
-        return StageOutput.of_frame(pd.DataFrame(columns=agg_cfg.group_by))
+        return StageOutput.from_frame(pd.DataFrame(columns=agg_cfg.group_by))
 
     rows = df.copy()
     rows[ORDINAL_KEY] = np.arange(len(df))
@@ -44,7 +44,7 @@ def handle_aggregate(stage: Stage, inputs: dict[str, pa.Table], ctx: RunContext)
         results, contributors = _aggregate_by_group(rows, agg_cfg.group_by, agg_cfg.aggregations)
     else:
         results, contributors = _reduce_whole_frame(rows, agg_cfg.aggregations)
-    return StageOutput.of_frame(
+    return StageOutput.from_frame(
         results, lineage=grouped_contributions_lineage(input_id, contributors))
 
 

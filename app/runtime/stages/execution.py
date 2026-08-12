@@ -288,7 +288,7 @@ class SourceHandler(StageHandler):
     def execute(
         self, stage: Stage, inputs: dict[str, pa.Table], ctx: RunContext
     ) -> StageOutput:
-        return StageOutput.of_frame(self.read(stage, ctx))
+        return StageOutput.from_frame(self.read(stage, ctx))
 
     @property
     def preserves_grain_and_order(self) -> bool:
@@ -328,7 +328,7 @@ class FrameHandler(StageHandler):
         cached = find_cached_frame(caching, input_frames)
         if cached is not None:
             # A replayed frame carries no contribution: nothing ran to report.
-            return StageOutput.of_frame(cached)
+            return StageOutput.from_frame(cached)
         return record_frame_output(caching, input_frames, self.apply(stage, inputs, ctx))
 
     @property
@@ -432,7 +432,7 @@ def _run_row_mapper(
     lineage = (
         kept_rows_lineage(stage.inputs[0].id, kept_indices) if handler.drops_rows else None
     )
-    return StageOutput.of_frame(
+    return StageOutput.from_frame(
         _finish_empty_result(mapped.frame, src, stage), mapped.contribution, lineage
     )
 
@@ -604,7 +604,7 @@ def _run_batched(
         ctx.run_log, stage.id, misses, [row.get(ROW_ERROR_KEY) for row in computed]
     )
     batched = _finish_batched_frame(rows, handler, stage)
-    return StageOutput.of_frame(
+    return StageOutput.from_frame(
         _finish_empty_result(batched.frame, src, stage), batched.contribution
     )
 

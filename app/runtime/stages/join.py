@@ -43,7 +43,7 @@ def _join_reference_into_subject(
     stage: Stage,
     inputs: dict[str, pa.Table],
     validate: Optional[Literal["m:1"]],
-) -> pd.DataFrame:
+) -> StageOutput:
     join_stage = narrow_stage(stage, JoinStage)
     join_cfg = join_stage.join
     subject_id = join_stage.inputs[0].id
@@ -91,10 +91,9 @@ def _join_reference_into_subject(
         (subject_id, joined[JOIN_SUBJECT_ORD_KEY].tolist()),
         (reference_id, joined[JOIN_REFERENCE_ORD_KEY].tolist()),
     ])
-    # The projection drops both ordinal carriers. Attach LAST: the projection
-    # rebuilds the frame and `.attrs` would not survive it.
+    # The projection drops both ordinal carriers.
     projected = joined[[*subject_frame.columns, *join_cfg.enrich_with.values()]]
-    return StageOutput.of_frame(projected, lineage=lineage)
+    return StageOutput.from_frame(projected, lineage=lineage)
 
 
 def _describe_cardinality_failure(

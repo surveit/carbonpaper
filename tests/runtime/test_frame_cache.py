@@ -55,7 +55,7 @@ def _counting_frame_handler(calls: list[int], **kwargs) -> FrameHandler:
     def apply(stage, inputs, ctx):
         src = table_to_frame(inputs[stage.inputs[0].id])
         calls.append(len(src))
-        return StageOutput.of_frame(src.assign(y=src["x"] * 2))
+        return StageOutput.from_frame(src.assign(y=src["x"] * 2))
 
     return FrameHandler(apply=apply, **kwargs)
 
@@ -383,7 +383,7 @@ def test_a_frame_arrow_cannot_type_fails_its_stage_rather_than_flowing_on():
 
     def apply(stage, inputs, ctx):
         # A column mixing a dict-of-ndarray with an int has no single arrow type.
-        return StageOutput.of_frame(pd.DataFrame({"x": [{"nested": np.array([1, 2])}, 3]}))
+        return StageOutput.from_frame(pd.DataFrame({"x": [{"nested": np.array([1, 2])}, 3]}))
 
     with pytest.raises(pa_lib.ArrowException):
         FrameHandler(apply=apply).execute(stage, as_inputs({"src": _src([1])}), _ctx())

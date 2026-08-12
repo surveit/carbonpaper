@@ -34,8 +34,8 @@ def handle_publish(stage: Stage, inputs: dict[str, pa.Table], ctx: RunContext) -
 
     linker = _resolve_trace_linker(fn, publish_stage, ctx)
     if linker is None:
-        return StageOutput.of_frame(fn(*args, output_dir=str(output_dir)))
-    return StageOutput.of_frame(fn(*args, output_dir=str(output_dir), trace_links=linker))
+        return StageOutput.from_frame(fn(*args, output_dir=str(output_dir)))
+    return StageOutput.from_frame(fn(*args, output_dir=str(output_dir), trace_links=linker))
 
 
 def _prepare_output_dir(stage: PublishStage, ctx: RunContext) -> Path:

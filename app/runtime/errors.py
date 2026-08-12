@@ -45,3 +45,10 @@ class RunCancelled(Exception):
     (project, run_id); caught by the runner to stop the run. An internal
     control signal — sibling in spirit to HaltForReview
     (app/runtime/errors.py) — never surfaced to a user as an error."""
+
+
+# Raised BEFORE the frame is coerced to arrow, so the caller can tell an authored
+# function that returned the wrong thing from one that refused: a refusal raises
+# StepRefused and satisfies an expected-failure test, this does not.
+class AuthoredFrameExpected(TypeError):
+    """An authored `transform`/publish function returned something other than a DataFrame."""

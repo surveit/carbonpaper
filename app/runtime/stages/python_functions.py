@@ -12,7 +12,7 @@ import pandas as pd
 import pyarrow as pa
 
 from app.core.frames import table_to_frame
-from app.core.errors import AuthoredFrameExpected
+from ..errors import AuthoredFrameExpected
 from app.models import FunctionKind, Stage
 from app.models.stages.code import (
     PythonFrameFunctionStage,
@@ -53,7 +53,7 @@ def handle_python_frame_function(stage: Stage, inputs: dict[str, pa.Table], ctx:
     fn = _load_python_function(narrow_stage(stage, PythonFrameFunctionStage))
     # Pass dataframes positionally in declared input order.
     args = [table_to_frame(inputs[ref.id]) for ref in stage.inputs]
-    return StageOutput.of_frame(_require_frame(fn(*args), stage))
+    return StageOutput.from_frame(_require_frame(fn(*args), stage))
 
 
 def make_python_row_mapper(stage: Stage, ctx: RunContext, src: pa.Table) -> RowMapper:

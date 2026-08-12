@@ -28,7 +28,7 @@ class StageOutput:
     lineage: RowLineage | None = None
 
     @classmethod
-    def of_frame(
+    def from_frame(
         cls,
         frame: pd.DataFrame,
         contribution: StageContribution | None = None,

@@ -367,7 +367,7 @@ def test_frame_handler_receives_frames():
 
 
 def _registry(llm_shape):
-    frame = FrameHandler(apply=lambda stage, inputs, ctx: StageOutput.of_frame(pd.DataFrame()))
+    frame = FrameHandler(apply=lambda stage, inputs, ctx: StageOutput.from_frame(pd.DataFrame()))
     return {
         StageType.input_data: SourceHandler(read=lambda stage, ctx: pd.DataFrame()),
         StageType.python_row_function: RowMapHandler(make_mapper=lambda s, c, src: lambda r, i: r),
