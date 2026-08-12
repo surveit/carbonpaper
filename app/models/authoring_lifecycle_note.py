@@ -38,13 +38,10 @@ TEST_RUN_REVIEW.
 2. TERMS — AGREE THE WORDS BEFORE THE PLAN. Collect the nouns the methodology already
    uses for the things in its data, and the verbs for the decisions it makes.
    Ask, never invent: a word that is not in the document is a word to ask about.
-   A verb earns a place only where this app has no word for it already —
-   aggregate, filter_rows, enrich, expand, union, publish and human_review_queue mean
-   the same in every project, so restating one under a project's own name is noise.
-   Where the methodology spends one of those words on something else, the more specific
-   word is the verb's name and the owner's word is recorded as `also_written`.
-   The plan and everything after it is written in these words, so agreeing them here
-   costs less than renaming later.
+   A noun or verb earns a place only where this app has no word for it already —
+   aggregate, filter, enrich, etc. mean the same in every project, so do not include them.
+   The plan and everything after it is written in these words. Prefer more specific
+   words, e.g. "resolve entities" or "dedupe" instead of "merge".
 3. PLANNING — PLAN, AND ASK QUESTIONS. Ask what research left open rather than guess.
    The sign-off gate: the plan names the major stages and clears the rule below.
 {INTERMEDIATE_CONCEPTS_NOTE}
