@@ -17,3 +17,4 @@
 {"run_id":"31605641645","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31605641645","created":"2026-08-12T14:14:30Z","branch":"feat/content-addressed-uploads","event":"pull_request","contracts_kept":14,"findings":[]}
 {"run_id":"31605641645","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31605641645","created":"2026-08-12T14:15:16Z","branch":"feat/content-addressed-uploads","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"31605715599","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31605715599","created":"2026-08-12T14:15:23Z","branch":"feat/lexicon-registry","event":"pull_request","contracts_kept":14,"findings":[]}
+{"run_id":"31605715599","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31605715599","created":"2026-08-12T14:16:13Z","branch":"feat/lexicon-registry","event":"pull_request","contracts_kept":null,"findings":[]}
