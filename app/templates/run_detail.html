@@ -168,8 +168,11 @@
 <h2>Run overview</h2>
 <div class="run-toolbar">
   {% if not is_running %}
-  <a class="btn secondary sm" href="/project/{{ project }}/runs/{{ run_id }}/packet.zip"
-     title="This run's data, records, workflow and methodology as an offline folder someone outside can fact-check without this app.">📦 Export review packet</a>
+  <a class="btn secondary sm js-packet-export"
+     href="/project/{{ project }}/runs/{{ run_id }}/packet.zip"
+     data-href="/project/{{ project }}/runs/{{ run_id }}/packet.zip"
+     title="This run's data, records, workflow and methodology as an offline folder someone outside can fact-check without this app."><span
+       class="btn-icon js-packet-icon" aria-hidden="true">📦</span> Export review packet</a>
   {% endif %}
   <button type="button" class="drawer-btn" id="audit-menu-btn" aria-expanded="false"
           aria-controls="audit-menu" title="Raw manifest and run log"
@@ -278,6 +281,7 @@
    are the parts with tests (tests/test_run_log_client.py), which needs them
    loadable outside a page. #}
 <script src="/static/run_log.js"></script>
+<script src="/static/packet_export.js"></script>
 <script>
 (function () {
   // ── The toolbar menu, and the whole-run log inside it. The log's feed is deferred

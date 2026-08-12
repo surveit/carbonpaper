@@ -10,7 +10,8 @@ from pydantic import BaseModel
 from app.core.frames import read_frame_file, write_frame_file
 from app.core.run_status import StageStatus
 from app.services.project import find_document_path
-from app.services.review_packet.views import RunView, StageView
+from app.services.review_packet.checksums import compute_sha256
+from app.services.review_packet.views import InputBindingView, RunView, StageView
 
 DATA_DIR = "data"
 RAW_DIR = "data/raw"
@@ -61,7 +62,7 @@ def write_packet_data(
         # app.runtime.manifest's alone, and this layer may not import it.
         _write_stage_output(root, stage, stage_sources.get(stage.stage_id), report)
     for index, binding in enumerate(view.inputs):
-        _copy_input_file(root, binding.path, binding.stage_id, index, report)
+        _copy_input_file(root, binding, project_dir, index, report)
     return report
 
 
@@ -178,19 +179,40 @@ def _write_csv(root: Path, source: Path, stage_id: str, report: DataReport) -> N
 
 
 def _copy_input_file(
-    root: Path, path: str, stage_id: str, index: int, report: DataReport
+    root: Path, binding: InputBindingView, project_dir: Path, index: int, report: DataReport
 ) -> None:
-    source = Path(path)
-    relative = f"{INPUTS_DIR}/{index:02d}-{stage_id}{source.suffix}"
-    if not path or not source.is_file():
+    recorded = Path(binding.path)
+    relative = f"{INPUTS_DIR}/{index:02d}-{binding.stage_id}{recorded.suffix}"
+    source = _locate_input(binding, project_dir)
+    if source is None:
         report.omitted.append(
             OmittedFile(
                 path=relative,
-                reason=f"input bound by stage {stage_id!r} is no longer at {path!r}",
+                reason=(
+                    f"input bound by stage {binding.stage_id!r} is no longer at "
+                    f"{binding.path!r}"
+                ),
             )
         )
         return
     _copy_file(source, root / relative, relative, report)
+
+
+def _locate_input(binding: InputBindingView, project_dir: Path) -> Path | None:
+    """Where the run read it, or where the project moved it to — never a same-named guess."""
+    recorded = Path(binding.path)
+    if recorded.is_file():
+        return recorded
+    # Bindings hold absolute paths, so relocating a project staled every one of
+    # them. The run recorded what it hashed, and only that hash can say a file
+    # under the project's new root is the file the run actually read.
+    parts = recorded.parts
+    if not binding.sha256 or project_dir.name not in parts:
+        return None
+    moved = project_dir.joinpath(*parts[parts.index(project_dir.name) + 1:])
+    if not moved.is_file() or compute_sha256(moved) != binding.sha256:
+        return None
+    return moved
 
 
 def _copy_file(source: Path, dest: Path, relative: str, report: DataReport) -> str | None:
