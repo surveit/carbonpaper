@@ -21,7 +21,7 @@ _CHAT_TEMPLATE = Path(__file__).resolve().parents[1] / "app/templates/chat.html"
 def open_session_saying(text: str) -> str:
     """A session whose one stored assistant message is `text`."""
     sid = _store.create(title="Markdown", agent_id=None, context={})
-    _store.save_messages(sid, [
+    _store.append_messages(sid, [
         {"role": "user", "parts": [{"type": "text", "text": "hello"}]},
         {"role": "assistant", "parts": [{"type": "text", "text": text}]},
     ])
@@ -79,7 +79,7 @@ def test_an_unsafe_link_scheme_does_not_survive_as_an_href(scheme: str) -> None:
 def test_user_text_is_not_rendered_as_markdown() -> None:
     """User text stays autoescaped plain text — this change must not loosen it."""
     sid = _store.create(title="User", agent_id=None, context={})
-    _store.save_messages(sid, [
+    _store.append_messages(sid, [
         {"role": "user", "parts": [{"type": "text", "text": "<b>bold</b> and [x](http://a.example)"}]},
     ])
     body = client.get(f"/chat/{sid}").text
@@ -106,7 +106,7 @@ def test_the_swap_endpoint_reports_the_text_it_rendered() -> None:
 def test_the_swap_renders_one_segment_per_text_block_the_reply_carries() -> None:
     """A reply that spoke either side of a tool call is two regions, and both swap."""
     sid = _store.create(title="Segments", agent_id=None, context={})
-    _store.save_messages(sid, [
+    _store.append_messages(sid, [
         {"role": "user", "parts": [{"type": "text", "text": "run it"}]},
         {"role": "assistant", "parts": [
             {"type": "text", "text": "Starting the run."},

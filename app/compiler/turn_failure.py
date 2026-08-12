@@ -13,9 +13,7 @@ GENERATION_FAILURE_PREFIX = "generation failed: "
 def persist_generation_failure(
     store: SessionStore, session_id: str, error: Exception
 ) -> None:
-    messages = list(store.load(session_id)["messages"])
-    messages.append({
+    store.append_messages(session_id, [{
         "role": "assistant",
         "parts": [{"type": "text", "text": f"{GENERATION_FAILURE_PREFIX}{error}"}],
-    })
-    store.save_messages(session_id, messages)
+    }])

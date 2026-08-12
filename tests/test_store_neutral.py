@@ -11,7 +11,7 @@ def test_project_session_roundtrips_neutral_transcript():
             {"type": "text", "text": "done"},
         ]},
     ]
-    store.save_messages(sid, msgs)
+    store.append_messages(sid, msgs)
     # stateless: no history fed back into the next turn
     assert store.load_messages(sid) == []
     # but the transcript is renderable on page reload, in the order the turn ran

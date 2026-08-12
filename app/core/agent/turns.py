@@ -76,7 +76,7 @@ class TurnManager:
             messages, resume_token = await engine.stream_turn(
                 prompt, message_history=history, emit=turn.emit, resume=resume
             )
-            store.save_messages(
+            store.append_messages(
                 session_id, messages if record_prompt else _drop_user_messages(messages)
             )
             if resume_token:

@@ -19,7 +19,7 @@ _CHAT_TEMPLATE = Path(__file__).resolve().parents[1] / "app/templates/chat.html"
 
 def _session_replying(parts: list[dict]) -> str:
     sid = _store.create(title="Order", agent_id=None, context={})
-    _store.save_messages(sid, [
+    _store.append_messages(sid, [
         {"role": "user", "parts": [{"type": "text", "text": "run it"}]},
         {"role": "assistant", "parts": parts},
     ])
