@@ -59,12 +59,17 @@ def test_offline_journey_reaches_a_published_artifact(journey_project, tmp_path)
     assert resp.status_code == 200
     assert 'name="binding__load"' in resp.text
 
-    # Trigger a run bound to a run-time input file (not the authored one).
+    # Upload this week's file the way the form's Upload… does, then run bound to it
+    # rather than to the path the workflow authored.
     bound = tmp_path / "this_week.csv"
     pd.DataFrame({"name": ["a", "b", "c"], "val": [1, 2, 5]}).to_csv(bound, index=False)
+    with bound.open("rb") as handle:
+        uploaded = client.post(f"/project/{journey_project.name}/files",
+                               files={"file": ("this_week.csv", handle.read(), "text/csv")})
+    assert uploaded.status_code == 200, uploaded.text
     resp = client.post(
         f"/project/{journey_project.name}/run",
-        data={"binding__load": str(bound)},
+        data={"binding__load": uploaded.json()["sha256"]},
         follow_redirects=False,
     )
     assert resp.status_code == 303, resp.text

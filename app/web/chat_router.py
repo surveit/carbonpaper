@@ -6,11 +6,20 @@ from __future__ import annotations
 
 import json
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from pydantic import BaseModel
 
+from starlette.concurrency import run_in_threadpool
+
 from app.core.llm_sdk import CLI_PATH
+from app.services import project as project_service
+from app.services.errors import UploadTooLargeError
+from app.services.uploads import (
+    describe_attachment,
+    max_upload_bytes,
+    save_upload,
+)
 
 from app.core.agent.registry import build_engine, opening_prompt
 from app.core.agent.sdk_engine import CLI_MODEL
@@ -95,7 +104,34 @@ async def chat_page(request: Request, sid: str):
         "backend": _backend_label(),
         "backend_error": _backend_error(),
         "crumbs": build_chat_crumbs(data.get("title")),
+        # What an attached file needs to know before it is sent: the ceiling, the
+        # project this session works on (None until the agent settles one), and the
+        # projects it could be given to.
+        "session_project": (data.get("context") or {}).get("project_id"),
+        "projects": [p.id for p in project_service.list_project_listings()],
+        "max_upload_bytes": max_upload_bytes(),
     })
+
+
+@router.post("/chat/{sid}/files")
+async def upload_chat_file(sid: str, file: UploadFile = File(...),
+                           project_id: str = Form("")):
+    """Blank `project_id` leaves the file unclaimed; the agent gives it a home later."""
+    if not _store.exists(sid):
+        raise HTTPException(status_code=404, detail="Session not found")
+    if not file.filename:
+        return JSONResponse({"ok": False, "error": "no file provided"}, status_code=400)
+    try:
+        record = await run_in_threadpool(
+            save_upload, file.filename, file.file, project_id.strip() or None)
+    except UploadTooLargeError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    # The line the conversation carries. The agent never sees the bytes and never sees
+    # this page — it sees the next turn's text, so what the reader is shown and what the
+    # agent is told have to be the same sentence.
+    return JSONResponse({"ok": True, "sha256": record.sha256, "filename": record.filename,
+                         "bytes": record.byte_count, "project_id": record.project_id,
+                         "line": describe_attachment(record)})
 
 
 def _has_unspoken_opening(data: dict) -> bool:

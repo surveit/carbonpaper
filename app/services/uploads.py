@@ -21,7 +21,8 @@ _CHUNK_BYTES = 1024 * 1024
 # The name a file with no usable one of its own is stored under.
 _FALLBACK_FILENAME = "upload.dat"
 
-_MEGABYTE = 1024 * 1024
+_KILOBYTE = 1024
+_MEGABYTE = 1024 * _KILOBYTE
 _GIGABYTE = 1024 * _MEGABYTE
 
 # What one input file may weigh. The upload itself is not what this protects — it
@@ -223,12 +224,25 @@ def _safe_filename(raw: str) -> str:
     return _FALLBACK_FILENAME if name in ("", ".", "..") else name
 
 
+def describe_attachment(record: UploadedFile) -> str:
+    """The one sentence a chat shows for an attached file AND sends to the agent."""
+    home = (f"in project {record.project_id}" if record.project_id
+            else "not in a project yet")
+    # One sentence for both: the agent reads the turn's text and never the page, so a
+    # card saying one thing while the model is told another is two records of one
+    # event. sha256 is in it because that is what run_workflow's `files` takes.
+    return (f"[file] {record.filename} · {describe_bytes(record.byte_count)} · "
+            f"{home} · sha256 {record.sha256}")
+
+
 def describe_bytes(count: int) -> str:
     """A size for a person reading a refusal, so 512MB is not shown as 536870912."""
     if count >= _GIGABYTE:
         return f"{count / _GIGABYTE:.3g}GB"
     if count >= _MEGABYTE:
         return f"{count / _MEGABYTE:.3g}MB"
+    if count >= _KILOBYTE:
+        return f"{count / _KILOBYTE:.3g}KB"
     return f"{count}B"
 
 

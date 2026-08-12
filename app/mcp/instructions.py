@@ -97,6 +97,11 @@ gives. You cannot put a file there through this conversation — no tool here mo
 so unless you can run `curl` against the `file_upload_url` it returns, hand that URL to
 the person, say what to drop there, and list again when they say it is in.
 
+A file dropped into a conversation before any project existed belongs to no project yet.
+list_unclaimed_files() is those; read what one holds, work out what the investigation is,
+create_project, then adopt_file(project_id, sha256) gives it a home — which moves no
+bytes. Nothing runs on an unclaimed file: a run binds a file its own project holds.
+
 {REVIEW_GUIDE_NOTE}
 
 {HANDOVER_BARS_NOTE}

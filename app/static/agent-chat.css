@@ -135,3 +135,24 @@
     background: var(--accent); color: var(--on-dark); cursor: pointer; }
 .ac-send:hover { background: var(--accent-deep); border-color: var(--accent-deep); }
 .ac-send:disabled { opacity: .5; cursor: default; }
+
+/* ═══ Attaching a data file ═══ */
+/* The bytes go straight to the server; the conversation carries one line naming the
+   file, which is also exactly what the agent is told. See app.services.uploads
+   .describe_attachment — the reader and the model must not be given two stories. */
+.ac-clip { font: inherit; font-size: 16px; line-height: 1; padding: 8px 10px;
+    border: 1px solid var(--border); border-radius: 8px; background: var(--sunk-deep);
+    cursor: pointer; }
+.ac-clip:hover { border-color: var(--border-strong); }
+.ac-attached { max-width: 1080px; margin: 0 auto; padding: 8px 28px 0; font-size: 12.5px;
+    color: var(--muted); font-family: ui-monospace, monospace; }
+/* Above the composer rather than over the log: it belongs to what is being composed,
+   and a question the reader can scroll away from is one they can miss. */
+.ac-pop { max-width: 1080px; margin: 0 auto; padding: 10px 28px; }
+.ac-pop-head { font-size: 12.5px; color: var(--muted); margin-bottom: 6px; }
+.ac-choice { display: block; width: 100%; text-align: left; font: inherit; font-size: 13px;
+    padding: 8px 11px; margin-bottom: 5px; cursor: pointer; border: 1px solid var(--border);
+    border-radius: 6px; background: var(--raised); }
+.ac-choice:hover { border-color: var(--accent); }
+.ac-choice-new { border-style: dashed; }
+.ac-muted { color: var(--muted); }

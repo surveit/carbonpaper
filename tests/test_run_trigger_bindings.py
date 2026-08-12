@@ -1,5 +1,6 @@
-"""POST /project/{name}/run with input-binding form fields, and the runs page
-rendering one path field per file-kind input stage."""
+"""POST /project/{name}/run with input-binding form fields, and the runs page rendering
+one file PICKER per file-kind input stage. A field carries a stored file's sha256, never
+a path; blank means run whatever the workflow authored."""
 from __future__ import annotations
 
 import json
@@ -13,6 +14,7 @@ from app.main import app
 from app.services import versioning
 from app.services import workspace
 from app.services.project import save_working_copy_as_version
+from app.services.uploads import save_upload
 
 client = TestClient(app)
 
@@ -39,9 +41,21 @@ def project(tmp_path, monkeypatch):
     vid = save_working_copy_as_version(proj, message="seed", reviewer="test").version_id
     versioning.publish_version(proj, vid, reviewer="human")
     workspace.set_projects_dir(tmp_path)
+    monkeypatch.setenv("CARBON_PAPER_FILES_ROOT", str(tmp_path / "files"))
     monkeypatch.setattr(run_service, "_run_in_background",
                         lambda target, *args: target(*args))
     return proj
+
+
+def _store(name: str, frame: pd.DataFrame, tmp_path) -> str:
+    """Put a file in the project's store the way the run form's Upload… does."""
+    path = tmp_path / name
+    if name.endswith(".parquet"):
+        frame.to_parquet(path, index=False)
+    else:
+        frame.to_csv(path, index=False)
+    with path.open("rb") as handle:
+        return save_upload(name, handle, "demo").sha256
 
 
 def _manifest(proj):
@@ -49,20 +63,18 @@ def _manifest(proj):
     return json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
 
 
-def test_changed_field_becomes_run_binding(project, tmp_path):
-    other = tmp_path / "b.csv"
-    pd.DataFrame({"name": ["z"], "val": [9]}).to_csv(other, index=False)
+def test_a_picked_file_becomes_run_binding(project, tmp_path):
+    sha = _store("b.csv", pd.DataFrame({"name": ["z"], "val": [9]}), tmp_path)
     resp = client.post("/project/demo/run",
-                       data={"binding__load": str(other)}, follow_redirects=False)
+                       data={"binding__load": sha}, follow_redirects=False)
     assert resp.status_code == 303
     assert _manifest(project)["input_bindings"]["load"]["source"] == "run"
 
 
 def test_binding_carries_the_bound_files_own_format(project, tmp_path):
-    other = tmp_path / "b.parquet"
-    pd.DataFrame({"name": ["z"], "val": [9]}).to_parquet(other, index=False)
+    sha = _store("b.parquet", pd.DataFrame({"name": ["z"], "val": [9]}), tmp_path)
     resp = client.post("/project/demo/run",
-                       data={"binding__load": str(other)}, follow_redirects=False)
+                       data={"binding__load": sha}, follow_redirects=False)
     assert resp.status_code == 303
     manifest = _manifest(project)
     assert manifest["parameters"]["run_bindings"]["load"]["format"] == "parquet"
@@ -70,19 +82,29 @@ def test_binding_carries_the_bound_files_own_format(project, tmp_path):
 
 
 def test_binding_a_file_with_an_unreadable_extension_returns_400(project, tmp_path):
-    other = tmp_path / "b.rtf"
-    other.write_text("not a table", encoding="utf-8")
+    path = tmp_path / "b.rtf"
+    path.write_text("not a table", encoding="utf-8")
+    with path.open("rb") as handle:
+        sha = save_upload("b.rtf", handle, "demo").sha256
     resp = client.post("/project/demo/run",
-                       data={"binding__load": str(other)}, follow_redirects=False)
+                       data={"binding__load": sha}, follow_redirects=False)
     assert resp.status_code == 400
     assert ".rtf" in resp.json()["detail"]
     assert not (project / "runs").exists()
 
 
-def test_untouched_prefill_stays_workflow_source(project):
-    authored = str(project / "a.csv")
+def test_a_sha256_this_project_does_not_hold_returns_400(project):
     resp = client.post("/project/demo/run",
-                       data={"binding__load": authored}, follow_redirects=False)
+                       data={"binding__load": "0" * 64}, follow_redirects=False)
+    assert resp.status_code == 400
+    assert "has no file" in resp.json()["detail"]
+    assert not (project / "runs").exists()
+
+
+def test_picking_nothing_stays_workflow_source(project):
+    # Blank is the picker's first option — "the path this workflow names".
+    resp = client.post("/project/demo/run",
+                       data={"binding__load": ""}, follow_redirects=False)
     assert resp.status_code == 303
     assert _manifest(project)["input_bindings"]["load"]["source"] == "workflow"
 
@@ -102,11 +124,13 @@ def test_unbound_input_returns_400(project):
     assert not (project / "runs").exists()
 
 
-def test_new_run_page_shows_one_field_per_file_input(project):
+def test_new_run_page_shows_one_picker_per_file_input(project, tmp_path):
+    _store("b.csv", pd.DataFrame({"name": ["z"], "val": [9]}), tmp_path)
     resp = client.get("/project/demo/runs/new")
     assert resp.status_code == 200
     assert 'name="binding__load"' in resp.text
-    assert str(project / "a.csv") in resp.text
+    assert str(project / "a.csv") in resp.text   # the authored path, as the blank option
+    assert "b.csv" in resp.text                  # and the project's stored file
 
 
 # ─── The run form is its own page, not a block on the run history ────────────

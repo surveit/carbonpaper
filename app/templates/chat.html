@@ -47,7 +47,20 @@
 {% if view_only %}
   <div class="ac-composer ac-view-only">Read-only generation view — watch it run; there's no agent here to reply to.</div>
 {% else %}
+  {# The attached file, before it is sent. Empty until something is picked or dropped. #}
+  <div class="ac-attached" id="attached" hidden></div>
+  {# Opens on attach when the session has no project and the workspace has one, so the
+     question cannot be missed. With no project anywhere the file goes in unclaimed and
+     the agent gives it a home. #}
+  <div class="ac-pop" id="project-pop" hidden>
+    <div class="ac-pop-head">Put this file in:</div>
+    <div id="project-choices"></div>
+    <button type="button" class="ac-choice ac-choice-new" data-project="">Not sure yet
+      <span class="ac-muted">· keep it here and decide later</span></button>
+  </div>
   <div class="ac-composer">
+    <button type="button" class="ac-clip" id="clip" title="Attach a data file">📎</button>
+    <input type="file" id="file" hidden />
     <input class="ac-input" id="input" placeholder="Message… (Enter to send)" autocomplete="off" />
     <button class="ac-send" id="send">Send</button>
   </div>
@@ -56,6 +69,9 @@
 
 <script>
 const SID = {{ session_id | tojson }};
+const SESSION_PROJECT = {{ session_project | tojson }};
+const PROJECTS = {{ projects | tojson }};
+const MAX_UPLOAD_BYTES = {{ max_upload_bytes | tojson }};
 const ACTIVE_TURN = {{ active_turn | tojson }};
 const OPENS_ITSELF = {{ opens_itself | default(false) | tojson }};
 const MESSAGE_URL = `/chat/${SID}/message`;
@@ -177,10 +193,98 @@ function connect(turnId, fromIndex) {
   es.onerror = () => { bubble.stop(); es.close(); streaming = false; if (sendBtn) sendBtn.disabled = false; };
 }
 
+// ── Attaching a file ────────────────────────────────────────────────────────
+// The bytes go straight to the server and never through a message, so a 9MB export
+// costs the conversation one line of text. `attached` holds that line until Send.
+const clip = document.getElementById("clip");
+const filePicker = document.getElementById("file");
+const attachedBox = document.getElementById("attached");
+const projectPop = document.getElementById("project-pop");
+let attached = null;   // the line the next Send carries
+let pendingFile = null;  // picked, waiting on a project answer
+
+function describeBytes(n) {
+  const mb = 1024 * 1024;
+  if (n >= 1024 * mb) return +(n / (1024 * mb)).toPrecision(3) + "GB";
+  if (n >= mb) return +(n / mb).toPrecision(3) + "MB";
+  if (n >= 1024) return +(n / 1024).toPrecision(3) + "KB";
+  return n + "B";
+}
+
+function showAttached(line) {
+  attached = line;
+  attachedBox.textContent = line;
+  attachedBox.hidden = !line;
+}
+
+function openProjectPop() {
+  const box = document.getElementById("project-choices");
+  box.replaceChildren();
+  PROJECTS.forEach((id) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "ac-choice"; b.dataset.project = id; b.textContent = id;
+    box.appendChild(b);
+  });
+  projectPop.hidden = false;
+}
+
+async function storeFile(file, projectId) {
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("project_id", projectId || "");
+  const r = await fetch(`/chat/${SID}/files`, {method: "POST", body: fd});
+  let data = {};
+  try { data = await r.json(); } catch (e) { /* leave empty */ }
+  if (r.ok && data.ok) { showAttached(data.line); return; }
+  const b = newAssistant();
+  b.error(data.error || `upload failed (HTTP ${r.status})`);
+}
+
+function attach(file) {
+  if (!file) return;
+  if (file.size > MAX_UPLOAD_BYTES) {
+    const b = newAssistant();
+    b.error(`"${file.name}" is ${describeBytes(file.size)}, over the ` +
+            `${describeBytes(MAX_UPLOAD_BYTES)} limit for a single input. That ceiling is ` +
+            `what a run on this machine can load into memory. Convert it to parquet, or ` +
+            `cut it down.`);
+    return;
+  }
+  // A project the session already works on takes the file with no question asked.
+  if (SESSION_PROJECT) { storeFile(file, SESSION_PROJECT); return; }
+  if (!PROJECTS.length) { storeFile(file, ""); return; }
+  pendingFile = file;
+  openProjectPop();
+}
+
+if (clip && filePicker) {
+  clip.addEventListener("click", () => filePicker.click());
+  filePicker.addEventListener("change", () => {
+    attach(filePicker.files[0]);
+    filePicker.value = "";   // let the same file be re-picked later
+  });
+  projectPop.addEventListener("click", (e) => {
+    const choice = e.target.closest(".ac-choice");
+    if (!choice) return;
+    projectPop.hidden = true;
+    const file = pendingFile; pendingFile = null;
+    if (file) storeFile(file, choice.dataset.project);
+  });
+  // Drop anywhere on the conversation, which is the whole reason the clip is not enough.
+  document.addEventListener("dragover", (e) => { e.preventDefault(); });
+  document.addEventListener("drop", (e) => {
+    e.preventDefault();
+    if (e.dataTransfer && e.dataTransfer.files.length) attach(e.dataTransfer.files[0]);
+  });
+}
+
 async function send() {
-  const text = input.value.trim();
+  const typed = input.value.trim();
+  // The attachment IS the message when nothing was typed: the file arriving is the turn.
+  const text = attached ? (typed ? `${attached}\n\n${typed}` : attached) : typed;
   if (!text || streaming) return;
   input.value = "";
+  showAttached("");
   addUser(text);
   const r = await fetch(MESSAGE_URL, {
     method: "POST", headers: {"Content-Type": "application/json"},

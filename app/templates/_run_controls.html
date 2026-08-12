@@ -26,9 +26,10 @@
     state       = shell_state(pdir)         — state.id for the form action
     versions    = the project's stored versions, newest-first (may be empty)
     selected_version_id = which of them the picker opens on (None with no versions)
-    file_inputs = loading.list_file_inputs(pdir, selected_version_id) — [{stage_id, path}]
-    max_upload_bytes = uploads.max_upload_bytes() — the ceiling Browse… checks a pick
-                       against before uploading it; the server refuses the same size
+    choices = run_inputs.build_run_input_choices(state.id, selected_version_id) —
+              .inputs (one row per file input) and .files (what every row may pick from)
+    max_upload_bytes = uploads.max_upload_bytes() — the ceiling Upload… checks a pick
+                       against before sending it; the server refuses the same size
 #}
 
 {#
@@ -36,10 +37,10 @@
   three attributes at once (binding__, limit__, and the label's `for`); the template
   clone passes an empty one and run_controls.js sets all three.
 
-  The path field is display-only — Browse… is the only way to change it, because a
-  browser hands over bytes and never a path: run_controls.js uploads the pick to
-  POST /project/<name>/files and puts the saved copy's absolute path here. A
-  workflow-authored path is still read in place, so a row that has one is not required.
+  The field is a PICKER over the files this project already holds, and its value is a
+  file's sha256 — not a path. Blank means "run whatever the workflow authored", which is
+  why a row with an authored path is not required. Upload… is for a file the project does
+  not hold yet: run_controls.js POSTs it to /project/<name>/files and selects it here.
 
   The row cap (limit__<stage_id>) is blank for the whole file, or a number N that caps
   this input stage at the first N rows it READS for this run only (prepare_run's
@@ -48,18 +49,26 @@
   the number is bordered — "first" and "rows" sit outside the field, because a word
   inside a field's frame reads as something the reader may type over.
 #}
-{% macro input_row(stage_id, path) %}
+{% macro input_row(stage_id, authored_path, files) %}
 <div class="run-input-row">
   <label class="run-input-name" for="binding__{{ stage_id }}">
     <code>{{ stage_id }}</code> — data file
   </label>
   <div class="run-input-controls">
     <span class="path-field">
-      <input type="text" id="binding__{{ stage_id }}" name="binding__{{ stage_id }}"
-             value="{{ path }}" placeholder="no file chosen — click Browse…"
-             readonly {% if not path %}required{% endif %}>
+      <select id="binding__{{ stage_id }}" name="binding__{{ stage_id }}"
+              class="file-pick" {% if not authored_path %}required{% endif %}>
+        {% if authored_path %}
+        <option value="">{{ authored_path }} — the path this workflow names</option>
+        {% else %}
+        <option value="">Choose a file…</option>
+        {% endif %}
+        {% for f in files %}
+        <option value="{{ f.sha256 }}">{{ f.filename }} — {{ f.bytes | filesize }}</option>
+        {% endfor %}
+      </select>
       <input type="file" class="file-input" hidden>
-      <button type="button" class="btn browse-btn">Browse…</button>
+      <button type="button" class="btn browse-btn">Upload…</button>
     </span>
     <label class="run-limit" title="read only the first N rows of this file, for this run">
       <span>first</span>
@@ -82,7 +91,7 @@
     </select>
   </label>
   <div class="run-inputs">
-    {% for fi in file_inputs %}{{ input_row(fi.stage_id, fi.path) }}{% endfor %}
+    {% for row in choices.inputs %}{{ input_row(row.stage_id, row.authored_path, choices.files) }}{% endfor %}
   </div>
   <details class="run-advanced">
     <summary>Advanced</summary>
@@ -95,7 +104,7 @@
   <button type="submit" class="btn primary">▶ Run workflow</button>
   {# Inert until run_controls.js clones it; a <template>'s fields are not part of
      the form, so the empty stage_id below is never submitted. #}
-  <template class="run-input-template">{{ input_row("", "") }}</template>
+  <template class="run-input-template">{{ input_row("", "", []) }}</template>
 </form>
 <script src="/static/run_controls.js"></script>
 {% else %}

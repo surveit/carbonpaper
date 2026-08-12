@@ -272,6 +272,19 @@ def run_workflow(
         return {"ok": False, "error": str(exc)}
 
 
+@mcp.tool(description=TOOL_SPECS["list_unclaimed_files"].description)
+def list_unclaimed_files() -> list[dict[str, Any]]:
+    return [f.model_dump() for f in shared.list_unclaimed_files()]
+
+
+@mcp.tool(description=TOOL_SPECS["adopt_file"].description)
+def adopt_file(project_id: str, sha256: str) -> dict[str, Any]:
+    try:
+        return shared.adopt_file(project_id, sha256).model_dump()
+    except _RUN_TOOL_ERRORS as exc:
+        return {"ok": False, "error": str(exc)}
+
+
 @mcp.tool(description=TOOL_SPECS["list_files"].description)
 def list_files(project_id: str) -> dict[str, Any]:
     try:

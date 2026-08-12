@@ -10,30 +10,48 @@
 //     That is what makes the run form "one page": the version you pick and the
 //     input paths/caps you set always describe the same version.
 //
-//  2. File picker — a run reads its input files off the server's disk by absolute
-//     path, but a browser <input type=file> hands over only bytes, never a path
-//     (every OS hides it). So Browse… opens the native file dialog, then uploads
-//     the chosen file to POST /project/<name>/files, which saves it under
-//     its own content hash and returns that copy's absolute path — which goes
-//     into the (read-only) field. Browse is the only way to set it; the field
-//     itself isn't typeable.
+//  2. File picker — each row picks from the files the project already holds, and its
+//     value is a file's sha256. Upload… is the way in for one it does not: the native
+//     dialog, then POST /project/<name>/files, then the new file is added to EVERY
+//     row's list (a file belongs to the project, not to the step it arrived for) and
+//     selected in the row that sent it.
 (function () {
   // A rebuilt row is a clone of the form's <template>, which _run_controls.html
   // renders from the same macro as the server-rendered rows — so there is no
   // second copy of the markup here to drift. Only the three attributes that carry
   // the stage's identity, and the path's value, are set.
-  function buildRow(template, fileInput) {
-    var row = template.content.firstElementChild.cloneNode(true);
-    var stageId = fileInput.stage_id;
-    var path = row.querySelector('input[type="text"]');
-    path.id = "binding__" + stageId;
-    path.name = path.id;
-    path.value = fileInput.path || "";
-    path.required = !fileInput.path;
-    row.querySelector(".run-input-name").htmlFor = path.id;
-    row.querySelector(".run-input-name code").textContent = stageId;
-    row.querySelector('input[type="number"]').name = "limit__" + stageId;
-    return row;
+  function describeBytes(count) {
+    var mb = 1024 * 1024;
+    if (count >= 1024 * mb) return +(count / (1024 * mb)).toPrecision(3) + "GB";
+    if (count >= mb) return +(count / mb).toPrecision(3) + "MB";
+    if (count >= 1024) return +(count / 1024).toPrecision(3) + "KB";
+    return count + "B";
+  }
+
+  function fileOption(file) {
+    var option = document.createElement("option");
+    option.value = file.sha256;
+    option.textContent = file.filename + " — " + describeBytes(file.bytes);
+    return option;
+  }
+
+  function buildRow(template, row, files) {
+    var node = template.content.firstElementChild.cloneNode(true);
+    var stageId = row.stage_id;
+    var pick = node.querySelector("select.file-pick");
+    pick.id = "binding__" + stageId;
+    pick.name = pick.id;
+    pick.required = !row.authored_path;
+    // Blank is "run what the workflow authored", so the first option says which path
+    // that is — a row with none cannot run until something here is chosen.
+    pick.options[0].textContent = row.authored_path
+      ? row.authored_path + " — the path this workflow names"
+      : "Choose a file…";
+    files.forEach(function (file) { pick.appendChild(fileOption(file)); });
+    node.querySelector(".run-input-name").htmlFor = pick.id;
+    node.querySelector(".run-input-name code").textContent = stageId;
+    node.querySelector('input[type="number"]').name = "limit__" + stageId;
+    return node;
   }
 
   async function refreshInputs(form) {
@@ -49,10 +67,10 @@
         { cache: "no-store" }
       );
       if (!resp.ok) return; // leave the current fields in place on error
-      var inputs = await resp.json();
+      var choices = await resp.json();
       var rows = document.createDocumentFragment();
-      inputs.forEach(function (fileInput) {
-        rows.appendChild(buildRow(template, fileInput));
+      choices.inputs.forEach(function (row) {
+        rows.appendChild(buildRow(template, row, choices.files));
       });
       box.replaceChildren(rows);
     } catch (e) {
@@ -60,14 +78,7 @@
     }
   }
 
-  // ─── Upload a browser-picked file, then fill the path field ─────────────
-  function describeBytes(count) {
-    var mb = 1024 * 1024;
-    if (count >= 1024 * mb) return +(count / (1024 * mb)).toPrecision(3) + "GB";
-    if (count >= mb) return +(count / mb).toPrecision(3) + "MB";
-    return count + "B";
-  }
-
+  // ─── Upload a browser-picked file, then select it ───────────────────────
   // The server refuses the same size; this only saves the reader from watching a
   // file upload for minutes before being told it was never going to be accepted.
   function tooLarge(file, form) {
@@ -80,7 +91,20 @@
     return true;
   }
 
-  async function uploadFile(file, input, project, btn) {
+  // A file belongs to the project, so a new one joins EVERY row's list — then the row
+  // that sent it selects it. Adding it only where it was uploaded would hide it from
+  // the next step that wants the same file.
+  function offerEverywhere(form, file, pick) {
+    form.querySelectorAll("select.file-pick").forEach(function (select) {
+      if (!select.querySelector('option[value="' + file.sha256 + '"]')) {
+        select.appendChild(fileOption(file));
+      }
+    });
+    pick.value = file.sha256;
+    pick.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  async function uploadFile(file, pick, form, project, btn) {
     var label = btn.textContent;
     btn.disabled = true;
     btn.textContent = "Uploading…";
@@ -95,9 +119,8 @@
       );
       var data = {};
       try { data = await resp.json(); } catch (e) { /* leave data empty */ }
-      if (resp.ok && data.ok && data.path) {
-        input.value = data.path;
-        input.dispatchEvent(new Event("change", { bubbles: true }));
+      if (resp.ok && data.ok && data.sha256) {
+        offerEverywhere(form, data, pick);
       } else {
         alert("Upload failed: " + (data.error || ("HTTP " + resp.status)) +
               "\nPlease try again.");
@@ -130,10 +153,10 @@
       var picker = e.target.closest("input.file-input");
       if (!picker || !form.contains(picker) || !picker.files.length) return;
       var row = picker.closest(".run-input-row");
-      var input = row && row.querySelector('input[name^="binding__"]');
+      var pick = row && row.querySelector("select.file-pick");
       var btn = row && row.querySelector(".browse-btn");
       var file = picker.files[0];
-      if (input && btn && !tooLarge(file, form)) uploadFile(file, input, project, btn);
+      if (pick && btn && !tooLarge(file, form)) uploadFile(file, pick, form, project, btn);
       picker.value = "";  // let the same file be re-picked later
     });
   });

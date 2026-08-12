@@ -28,18 +28,25 @@ from app.core.errors import (
 from app.core.run_status import RunStatus, StageStatus
 from app.models import WorkflowStage
 from app.models.schema import StageId, TypeUnsafeUserStageConfigOverride
-from app.models.stages.input_data import resolve_file_format
-from app.services.errors import UploadTooLargeError, WorkflowLoadError
+from app.services.errors import (
+    FileNotStoredError,
+    UploadTooLargeError,
+    WorkflowLoadError,
+)
 from app.services.versioning import list_versions
 from app.services import run as run_service
 from app.services.run_guide import build_run_guide_view
-from app.services.uploads import max_upload_bytes, resolve_stored_path, save_upload
+from app.services.uploads import (
+    max_upload_bytes,
+    resolve_file_binding,
+    resolve_stored_path,
+    save_upload,
+)
 from app.runtime.cancellation import request_cancel
 from app.web.breadcrumbs import build_run_crumbs, build_runs_child_crumbs
 from app.web.config import EVENT_TAIL, projects_dir, templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
 from app.web.loading import (
-    list_file_inputs,
     load_manifest,
     runs_dir,
 )
@@ -52,6 +59,7 @@ from app.web.run_events import (
 )
 from app.web.run_header import build_live_view, build_run_header
 from app.web.run_index import build_run_index_rows
+from app.web.run_inputs import build_run_input_choices
 from app.web.run_issues import build_run_issues
 from app.web.run_stage_panel import resolve_panel_links
 
@@ -64,21 +72,18 @@ async def trigger_run(request: Request, project: str):
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
     # Set up the run (writes an initial `running` manifest), kick off execution
     # in a background thread, and redirect immediately. The run page polls.
-    # _collect_bindings itself loads the version's stages (list_file_inputs), so
-    # it can raise WorkflowLoadError for an unloadable snapshot just like
-    # prepare_run below — both must land in the same 400 handling.
     try:
         form = await request.form()
         version_id = str(form.get("version_id") or "").strip() or None
-        bindings = _collect_bindings(form, project, version_id)
+        bindings = _collect_bindings(form, project)
         limits = _collect_limits(form)
         run_id = run_service.start_run(project, version_id=version_id,
                                        bindings=bindings, limits=limits,
                                        bust_cache=_read_bust_cache(form))
-    except (NoVersionToRunError, MissingInputBindingError, ValueError) as exc:
-        # ValueError here is binding/limit/offset validation failures raised by
-        # _collect_bindings (an unreadable file extension), apply_run_bindings or
-        # prepare_run — not a catch-all for other bugs.
+    except (FileNotStoredError, NoVersionToRunError, MissingInputBindingError,
+            ValueError) as exc:
+        # ValueError here is limit/offset validation failures raised by _collect_limits,
+        # apply_run_bindings or prepare_run — not a catch-all for other bugs.
         return JSONResponse({"detail": str(exc)}, status_code=400)
     except WorkflowLoadError as exc:
         return JSONResponse({"detail": "compiled workflow failed validation",
@@ -89,22 +94,16 @@ async def trigger_run(request: Request, project: str):
     )
 
 
-def _collect_bindings(
-    form: FormData, project: str, version_id: str | None = None
-) -> dict[StageId, TypeUnsafeUserStageConfigOverride]:
-    """A binding merges OVER the authored params, so a path without its format keeps the
-    wrong reader."""
-    authored = {fi["stage_id"]: fi["path"]
-                for fi in list_file_inputs(project, version_id)}
+def _collect_bindings(form: FormData, project: str) -> dict[StageId, TypeUnsafeUserStageConfigOverride]:
+    """`binding__<stage>` carries a stored file's sha256; blank means run what the
+    workflow authored."""
     bindings: dict[StageId, TypeUnsafeUserStageConfigOverride] = {}
     for key, value in form.items():
         if not key.startswith("binding__"):
             continue
-        stage_id = key[len("binding__"):]
-        path = str(value).strip()
-        if path and path != authored.get(stage_id, ""):
-            bindings[stage_id] = {"path": path,
-                                  "format": resolve_file_format(path).value}
+        sha256 = str(value).strip()
+        if sha256:
+            bindings[key[len("binding__"):]] = resolve_file_binding(project, sha256)
     return bindings
 
 
@@ -132,10 +131,11 @@ def _read_bust_cache(form: FormData) -> bool:
 
 @router.get("/project/{project}/run-inputs")
 async def run_inputs(project: str, version_id: str | None = None):
-    project_dir = projects_dir() / project
-    if not project_dir.is_dir():
+    """The chosen version's file inputs AND the project's files, so one fetch rebuilds
+    every picker."""
+    if not (projects_dir() / project).is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
-    return JSONResponse(list_file_inputs(project, version_id))
+    return JSONResponse(build_run_input_choices(project, version_id).model_dump())
 
 
 @router.post("/project/{project}/files")
@@ -203,7 +203,7 @@ async def run_new(request: Request, project: str, version_id: str | None = None)
             "crumbs": build_runs_child_crumbs(project, label="New run"),
             "versions": versions,
             "selected_version_id": selected,
-            "file_inputs": list_file_inputs(project, selected),
+            "choices": build_run_input_choices(project, selected),
             # So Browse… can refuse an oversized pick before spending the upload on it.
             "max_upload_bytes": max_upload_bytes(),
         },

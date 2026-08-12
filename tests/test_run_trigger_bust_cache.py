@@ -58,7 +58,7 @@ def _manifest(proj):
 def test_checked_box_becomes_a_busted_run(project):
     resp = client.post(
         "/project/demo/run",
-        data={"binding__load": str(project / "a.csv"), "bust_cache": "on"},
+        data={"binding__load": "", "bust_cache": "on"},
         follow_redirects=False,
     )
     assert resp.status_code == 303
@@ -68,7 +68,7 @@ def test_checked_box_becomes_a_busted_run(project):
 def test_an_unchecked_box_submits_nothing_and_the_run_is_not_busted(project):
     resp = client.post(
         "/project/demo/run",
-        data={"binding__load": str(project / "a.csv")},
+        data={"binding__load": ""},
         follow_redirects=False,
     )
     assert resp.status_code == 303

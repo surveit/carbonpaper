@@ -97,6 +97,21 @@ def list_files(project_id: str, file_upload_url: str) -> ProjectFilesView:
     )
 
 
+def list_unclaimed_files() -> list[StoredFileView]:
+    """Files dropped into a conversation before any project owned them."""
+    return [StoredFileView(sha256=f.sha256, filename=f.filename,
+                           bytes=f.byte_count, added=f.created_at)
+            for f in uploads.list_unclaimed_files()]
+
+
+def adopt_file(project_id: str, sha256: str) -> StoredFileView:
+    """Give an unclaimed file to a project. Moves no bytes."""
+    resolve_existing_project(project_id)
+    record = uploads.claim_file(sha256, project_id)
+    return StoredFileView(sha256=record.sha256, filename=record.filename,
+                          bytes=record.byte_count, added=record.created_at)
+
+
 def run_workflow(
     project_id: str,
     version_id: str | None = None,

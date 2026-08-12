@@ -304,6 +304,27 @@ step does not stop that model step reading everything. Omit it for a full run.
 hold is a loud error naming itself, not a silent unbound input. Omit it where
 the workflow already names the file it reads.""",
     ),
+    "list_unclaimed_files": ToolSpec(
+        name="list_unclaimed_files",
+        description="""\
+Files someone dropped into a conversation before any project owned them. Each
+carries the `sha256` adopt_file takes.
+
+A file arrives unclaimed when the workspace had no project to put it in — often
+the very first thing someone does. Read what it holds, work out what the
+investigation is, then create a project and adopt_file it. Leaving one unclaimed
+is not an error, but nothing can run on it: a run binds a file its own project
+holds.""",
+    ),
+    "adopt_file": ToolSpec(
+        name="adopt_file",
+        description="""\
+Give an unclaimed file to a project. Moves no bytes — the store is shared and
+addressed by content hash, so this writes the claim and nothing else.
+
+Adopt only what list_unclaimed_files returned. A sha256 that is already in a
+project, or was never uploaded, is a loud error rather than a silent no-op.""",
+    ),
     "list_files": ToolSpec(
         name="list_files",
         description="""What data files this project holds, and where to add one. Returns
