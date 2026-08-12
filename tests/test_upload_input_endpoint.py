@@ -1,6 +1,6 @@
 """POST /project/{name}/upload-input — the browser-native file picker behind the
 run form's Browse… button. The browser hands over bytes (no path), so the server
-saves them under uploads/<sha256>/<filename> and returns that copy's absolute
+saves them under files/<sha256>/<filename> and returns that copy's absolute
 path, which the run then reads in place like any other input."""
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ def test_upload_saves_under_the_content_hash_and_returns_the_path(project):
     body = upload("posts.csv", CSV).json()
     assert body["ok"] is True
     saved = Path(body["path"])
-    assert saved == (project / "uploads" / CSV_SHA / "posts.csv").resolve()
+    assert saved == (project / "files" / CSV_SHA / "posts.csv").resolve()
     assert saved.read_bytes() == CSV  # bytes landed intact
 
 
@@ -55,7 +55,7 @@ def test_same_bytes_twice_is_one_copy(project):
     first = upload("posts.csv", CSV).json()["path"]
     second = upload("posts.csv", CSV).json()["path"]
     assert first == second
-    assert [p.name for p in (project / "uploads" / CSV_SHA).iterdir()] == ["posts.csv"]
+    assert [p.name for p in (project / "files" / CSV_SHA).iterdir()] == ["posts.csv"]
 
 
 def test_different_bytes_do_not_overwrite_each_other(project):
@@ -67,7 +67,7 @@ def test_different_bytes_do_not_overwrite_each_other(project):
 
 def test_no_temp_file_is_left_behind(project):
     upload("posts.csv", CSV)
-    leftovers = [p.name for p in (project / "uploads").iterdir() if p.name.startswith(".")]
+    leftovers = [p.name for p in (project / "files").iterdir() if p.name.startswith(".")]
     assert leftovers == []
 
 
@@ -92,7 +92,7 @@ def test_re_picking_the_same_bytes_keeps_the_first_arrival_time(project):
 def test_filename_is_basename_sanitized(project):
     # A crafted name must not escape the hash dir it is written to.
     saved = Path(upload("../../etc/evil.csv", b"x").json()["path"])
-    assert saved.parent.parent == (project / "uploads").resolve()
+    assert saved.parent.parent == (project / "files").resolve()
     assert saved.name == "evil.csv"
 
 
@@ -100,7 +100,7 @@ def test_a_nameless_upload_still_stores(project):
     # Path("..").name is "..", which would climb out of the hash dir.
     saved = Path(upload("..", b"x").json()["path"])
     assert saved.name == "upload.dat"
-    assert saved.parent.parent == (project / "uploads").resolve()
+    assert saved.parent.parent == (project / "files").resolve()
 
 
 def test_a_file_over_the_ceiling_is_refused_and_leaves_nothing_behind(project, monkeypatch):
@@ -108,7 +108,7 @@ def test_a_file_over_the_ceiling_is_refused_and_leaves_nothing_behind(project, m
     resp = upload("big.csv", b"x" * 65)
     assert resp.status_code == 400
     assert "over the 64B limit for a single input" in resp.json()["error"]
-    assert list((project / "uploads").iterdir()) == []  # no partial, no temp file
+    assert list((project / "files").iterdir()) == []  # no partial, no temp file
 
 
 def test_a_file_exactly_at_the_ceiling_is_kept(project, monkeypatch):
@@ -122,7 +122,7 @@ def test_the_project_quota_refuses_the_upload_that_would_cross_it(project, monke
     resp = upload("b.csv", b"b" * 80)
     assert resp.status_code == 400
     assert "over its 100B limit" in resp.json()["error"]
-    stored = [p.name for p in (project / "uploads").rglob("*") if p.is_file()]
+    stored = [p.name for p in (project / "files").rglob("*") if p.is_file()]
     assert stored == ["a.csv"]  # the refused one is not kept, and neither is a temp file
 
 

@@ -1,5 +1,5 @@
 """Run-input files uploaded through the browser: a content-addressed store under
-a project's `uploads/` dir, the record of what that store holds, and the two
+a project's `files/` dir, the record of what that store holds, and the two
 size limits that keep a run loadable and the volume from filling."""
 from __future__ import annotations
 
@@ -36,7 +36,7 @@ _DEFAULT_PROJECT_QUOTA_BYTES = 2 * _GIGABYTE
 
 
 # A record exists only once the bytes are fully written and hashed, so it is the
-# one signal that a copy under uploads/ is complete rather than half streamed.
+# one signal that a copy under files/ is complete rather than half streamed.
 # `created_at` is when these bytes first arrived and `updated_at` when they were
 # last picked; `filename` is the name of the most recent pick, which is what the
 # run form and the review packet show the reader.
@@ -62,37 +62,37 @@ def project_quota_bytes() -> int:
 
 def save_upload(project: str, filename: str, src: BinaryIO) -> Path:
     """Store an uploaded run-input file; returns the absolute path a run binds to."""
-    uploads = resolve_project_dir(project) / "uploads"
+    files_dir = resolve_project_dir(project) / "files"
     # Content-addressed, so the destination is not known until the last byte is
     # read: the stream is written to a temp file in the same dir and moved into
-    # uploads/<sha256>/<filename> once its hash is. Picking the same file twice
+    # files/<sha256>/<filename> once its hash is. Picking the same file twice
     # lands on one copy and one record. The sha256 owns the directory rather than
     # the file name so the name a human chose survives into every path we show
     # them — the run form's field, and the review packet's "inputs this run read".
-    uploads.mkdir(parents=True, exist_ok=True)
+    files_dir.mkdir(parents=True, exist_ok=True)
     safe_name = _safe_filename(filename)
-    staged, digest, byte_count = _write_to_temp_file(uploads, src, max_upload_bytes())
-    dest = uploads / digest / safe_name
+    staged, digest, byte_count = _write_to_temp_file(files_dir, src, max_upload_bytes())
+    dest = files_dir / digest / safe_name
     # The quota is checked here rather than before the read, so that re-picking a
     # file the project already holds costs nothing and is allowed at quota. The
     # overshoot while deciding is one file's worth, bounded by the ceiling above.
     if dest.exists():
         staged.unlink()
     else:
-        _refuse_upload_over_quota(uploads, staged, byte_count)
+        _refuse_upload_over_quota(files_dir, staged, byte_count)
         dest.parent.mkdir(parents=True, exist_ok=True)
         staged.replace(dest)
     _record_upload(project, digest, safe_name, byte_count)
     return dest.resolve()
 
 
-def _write_to_temp_file(uploads: Path, src: BinaryIO, ceiling: int) -> tuple[Path, str, int]:
+def _write_to_temp_file(files_dir: Path, src: BinaryIO, ceiling: int) -> tuple[Path, str, int]:
     """Stream `src` to a temp file beside its destination; returns (path, sha256, bytes)."""
     digest = hashlib.sha256()
     byte_count = 0
-    # mkstemp in `uploads` itself, so the move into place is a rename within one
+    # mkstemp in `files_dir` itself, so the move into place is a rename within one
     # filesystem and a reader never sees a partly written file at the real path.
-    handle, temp_name = tempfile.mkstemp(dir=uploads, prefix=".incoming-")
+    handle, temp_name = tempfile.mkstemp(dir=files_dir, prefix=".incoming-")
     temp = Path(temp_name)
     with os.fdopen(handle, "wb") as out:
         while chunk := src.read(_CHUNK_BYTES):
@@ -112,16 +112,18 @@ def _write_to_temp_file(uploads: Path, src: BinaryIO, ceiling: int) -> tuple[Pat
     return temp, digest.hexdigest(), byte_count
 
 
-def _refuse_upload_over_quota(uploads: Path, staged: Path, byte_count: int) -> None:
+def _refuse_upload_over_quota(files_dir: Path, staged: Path, byte_count: int) -> None:
     quota = project_quota_bytes()
-    used = sum(f.stat().st_size for f in uploads.rglob("*") if f.is_file())
+    used = sum(f.stat().st_size for f in files_dir.rglob("*") if f.is_file())
     # `used` counts the staged copy too — it is on the disk this bounds.
     if used > quota:
         staged.unlink()
         raise UploadTooLargeError(
-            f"this project's uploaded files would reach {describe_bytes(used)}, over its "
-            f"{describe_bytes(quota)} limit. Delete a file it no longer runs on — every "
-            f"upload is kept, including the {describe_bytes(byte_count)} just sent."
+            f"this project's stored files would reach {describe_bytes(used)}, over its "
+            f"{describe_bytes(quota)} limit — the {describe_bytes(byte_count)} just sent "
+            "was not kept. Every upload before it was, and nothing in the app deletes "
+            f"one: clear {files_dir} on the server, or raise "
+            "CARBON_PAPER_PROJECT_UPLOAD_QUOTA_BYTES."
         )
 
 
