@@ -75,13 +75,13 @@
    and the rail is a walkthrough — the Schema tab is where a reader goes for them. #}
 {% macro stage_row_title(s) %}
 {%- if not s.executed %}This run has no record for this stage — {% endif -%}
-{{ s.stage.type }}
+{{ s.workflow_stage.stage.type }}
 {%- if s.written_columns %} · declares it adds {{ s.written_columns | join(", ") }}{% endif -%}
 {% endmacro %}
 
 {% macro guide_stage(s) %}
 <li>
-  {% if s.stage is none %}
+  {% if s.workflow_stage is none %}
   {# The guide names an id this version defines no stage for. It is written about in
      the prose above, so say it is unresolved rather than quietly dropping it. #}
   <span class="guide-stage-row unresolved"

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from conftest import reads_of
+from conftest import place_stage, reads_of
 
 from app import models as m
 from app.web.stage_test_views import build_certification
@@ -44,7 +44,7 @@ def _stage(*, summary=None, type_="python_row_function", handle="function"):
             "summary": summary,
             "code": "def should_include(row):\n    return True",
         }
-    return m.parse_stage(spec)
+    return place_stage(m.parse_stage(spec))
 
 
 def _views(*statuses):
@@ -91,7 +91,7 @@ def test_a_stage_whose_behaviour_is_not_code_gets_no_badge():
         },
         "join": {"keys": [{"left": "id", "right": "id"}], "enrich_with": {"v": "v"}},
     })
-    assert build_certification(stage, []) is None
+    assert build_certification(place_stage(stage), []) is None
 
 
 def test_a_frame_function_is_certifiable_too():
@@ -108,7 +108,7 @@ def test_a_code_carrying_type_that_cannot_run_examples_is_untestable():
         "function": {"kind": "inline", "summary": "Writes one file per row.",
                      "code": "def transform(df, output_dir, trace_links):\n    return df"},
     })
-    assert build_certification(stage, []).status == "untestable"
+    assert build_certification(place_stage(stage), []).status == "untestable"
 
 
 def test_filter_rows_with_a_description_and_no_examples_is_untested():
@@ -135,4 +135,4 @@ def test_publish_carries_a_function_so_it_still_gets_a_badge():
         "function": {"kind": "inline",
                      "code": "def transform(df, output_dir, trace_links):\n    return df"},
     })
-    assert build_certification(stage, []).status == "unsummarised"
+    assert build_certification(place_stage(stage), []).status == "unsummarised"

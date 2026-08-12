@@ -40,8 +40,12 @@ def _manifest(vid: str, bindings: dict[str, Any], *, nested: bool = True) -> dic
         else {**base, "run_bindings": bindings}
 
 
-def _connector_path(stages: list[Any]) -> str:
-    return next(s for s in stages if s.id == "load").connector.params["path"]
+def _load_stage(workflow) -> Any:
+    return next(s for s in workflow.stages if s.id == "load")
+
+
+def _connector_path(workflow) -> str:
+    return _load_stage(workflow).connector.params["path"]
 
 
 def test_a_bound_path_is_what_the_panel_shows(project, tmp_path):
@@ -50,10 +54,10 @@ def test_a_bound_path_is_what_the_panel_shows(project, tmp_path):
     pd.DataFrame({"name": ["z"], "val": [9]}).to_parquet(bound, index=False)
     manifest = _manifest(vid, {"load": {"path": str(bound), "format": "parquet"}})
 
-    stages = run_service.load_run_stages("demo", manifest)
+    workflow = run_service.load_run_workflow("demo", manifest)
 
-    assert _connector_path(stages) == str(bound)
-    assert next(s for s in stages if s.id == "load").connector.params["format"] == "parquet"
+    assert _connector_path(workflow) == str(bound)
+    assert _load_stage(workflow).connector.params["format"] == "parquet"
 
 
 def test_the_pinned_stage_def_carries_the_binding_too(project, tmp_path):
@@ -65,7 +69,7 @@ def test_the_pinned_stage_def_carries_the_binding_too(project, tmp_path):
     pinned = run_service.load_pinned_stage_def("demo", manifest, "load")
 
     assert pinned.error is None
-    assert pinned.stage.connector.params["path"] == str(bound)
+    assert pinned.workflow_stage.stage.connector.params["path"] == str(bound)
 
 
 def test_a_legacy_flat_manifest_is_read_the_same_way(project, tmp_path):
@@ -75,17 +79,17 @@ def test_a_legacy_flat_manifest_is_read_the_same_way(project, tmp_path):
     manifest = _manifest(vid, {"load": {"path": str(bound), "format": "parquet"}},
                          nested=False)
 
-    assert _connector_path(run_service.load_run_stages("demo", manifest)) == str(bound)
+    assert _connector_path(run_service.load_run_workflow("demo", manifest)) == str(bound)
 
 
 def test_an_unbound_run_still_shows_the_authored_path(project):
     proj, vid = project
-    stages = run_service.load_run_stages("demo", _manifest(vid, {}))
-    assert _connector_path(stages) == str(proj / "authored.csv")
+    workflow = run_service.load_run_workflow("demo", _manifest(vid, {}))
+    assert _connector_path(workflow) == str(proj / "authored.csv")
 
 
 def test_bindings_that_do_not_fit_the_pinned_version_fail_loudly(project):
     proj, vid = project
     manifest = _manifest(vid, {"no_such_stage": {"path": "/tmp/x.csv"}})
     with pytest.raises(RunVersionUnresolvableError, match="do not fit its pinned version"):
-        run_service.load_run_stages("demo", manifest)
+        run_service.load_run_workflow("demo", manifest)

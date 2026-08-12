@@ -12,7 +12,7 @@ import pandas as pd
 from fastapi import HTTPException
 
 from app.core.stage_cache import StageCacheEntry
-from app.models import Column, Stage, WorkflowStage
+from app.models import Column, WorkflowStage
 from app.models.stages.human_review_queue import QueueConfig, ReviewVerdict
 from app.runtime.trace_links import RowTraceLinker
 from app.web.loading import QueueFingerprints, display_cell
@@ -139,9 +139,9 @@ def find_positioned_item(page: QueuePage, input_fingerprint: str) -> PositionedI
     )
 
 
-def find_definition_drift(stage_def: Stage, halted_fingerprint: str) -> str | None:
+def find_definition_drift(stage_def: WorkflowStage, halted_fingerprint: str) -> str | None:
     # Decisions are keyed by the halted fingerprint but read through the LIVE columns.
-    live_fingerprint = stage_def.compute_definition_fingerprint()
+    live_fingerprint = stage_def.stage.compute_definition_fingerprint()
     if live_fingerprint == halted_fingerprint:
         return None
     return (

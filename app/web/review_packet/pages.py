@@ -160,11 +160,12 @@ def _build_panel_context(
     run_dir: Path, view: RunView, stage: StageView, workflow_stage: WorkflowStage | None
 ) -> dict[str, Any]:
     # The False/empty entries below are what make the packet's panel inert.
+    stage_def = None if workflow_stage is None else workflow_stage.stage
     return {
         "project": view.project,
         "run_id": view.run_id,
         "stage": stage.record,
-        "stage_def": stage.definition,
+        "stage_def": stage_def,
         "workflow_stage": workflow_stage,
         "stage_def_error": stage.definition_error,
         "preview": _load_full_table(run_dir, stage),
@@ -173,14 +174,14 @@ def _build_panel_context(
         # table does not already cost: the types it covers are grain-and-order
         # preserving, so its row i IS the output's row i.
         "diff": build_stage_diff(
-            stage.definition,
+            workflow_stage,
             run_dir,
             stage.output_path,
             {s.stage_id: s.output_path for s in view.stages},
             rows_shown=PACKET_MAX_TABLE_ROWS,
         ),
-        "input_previews": _build_input_previews(run_dir, view, stage),
-        "function_code": resolve_function_code(stage.definition),
+        "input_previews": _build_input_previews(run_dir, view, workflow_stage),
+        "function_code": resolve_function_code(stage_def),
         "llm_example": None,
         "test_views": [],
         "can_generate_tests": False,
@@ -207,14 +208,14 @@ def _load_full_table(run_dir: Path, stage: StageView) -> dict[str, Any] | None:
 
 
 def _build_input_previews(
-    run_dir: Path, view: RunView, stage: StageView
+    run_dir: Path, view: RunView, workflow_stage: WorkflowStage | None
 ) -> list[dict[str, Any]]:
-    if stage.definition is None:
+    if workflow_stage is None:
         return []
     outputs = {s.stage_id: s.output_path for s in view.stages}
     return [
-        {"id": input_id, "preview": load_output_preview(run_dir, outputs.get(input_id))}
-        for input_id in stage.definition.input_ids
+        {"id": source.id, "preview": load_output_preview(run_dir, outputs.get(source.id))}
+        for source in workflow_stage.inputs
     ]
 
 

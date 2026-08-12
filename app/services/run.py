@@ -10,13 +10,15 @@ from pathlib import Path
 from typing import Any, Mapping
 
 import pandas as pd
+from pydantic import ValidationError
 
 from app.core.errors import RunNotFoundError, RunVersionUnresolvableError
 from app.core.frames import read_frame_column_names
-from app.models import Stage, WorkflowStage, resolve_workflow_stages
+from app.models import Workflow, WorkflowStage
 from app.models.run_manifest import read_run_bindings, read_run_manifest
+from app.models.schema import StageId
 from app.runtime.manifest import read_stage_output_frame, resolve_output_path
-from app.runtime.runner import apply_run_bindings, prepare_run, resume_run, run_prepared
+from app.runtime.runner import prepare_run, resume_run, run_prepared
 from app.services.errors import WorkflowLoadError
 from app.services.versioning import (
     WorkflowVersion,
@@ -31,7 +33,7 @@ def start_run(
     project: str,
     *,
     version_id: str | None = None,
-    bindings: Mapping[str, Mapping[str, Any]] | None = None,
+    bindings: Mapping[StageId, Mapping[str, Any]] | None = None,
     limits: dict[str, int] | None = None,
     offsets: dict[str, int] | None = None,
     bust_cache: bool = False,
@@ -45,7 +47,7 @@ def execute(
     project: str,
     *,
     version_id: str | None = None,
-    bindings: Mapping[str, Mapping[str, Any]] | None = None,
+    bindings: Mapping[StageId, Mapping[str, Any]] | None = None,
     limits: dict[str, int] | None = None,
     offsets: dict[str, int] | None = None,
     bust_cache: bool = False,
@@ -58,7 +60,7 @@ def execute(
 def _prepare(
     project: str,
     version_id: str | None,
-    bindings: Mapping[str, Mapping[str, Any]] | None,
+    bindings: Mapping[StageId, Mapping[str, Any]] | None,
     limits: dict[str, int] | None,
     offsets: dict[str, int] | None,
     bust_cache: bool,
@@ -68,7 +70,7 @@ def _prepare(
     return prepare_run(
         project_dir,
         repo_root(),
-        load_version_stages(project_dir, workflow_version),
+        Workflow(stages=load_version_stages(project_dir, workflow_version)),
         workflow_version,
         limits=limits,
         offsets=offsets,
@@ -85,7 +87,7 @@ def resume(project: str, run_id: str) -> None:
         project_dir,
         run_id,
         repo_root(),
-        load_version_stages(project_dir, workflow_version),
+        Workflow(stages=load_version_stages(project_dir, workflow_version)),
         workflow_version,
     )
 
@@ -170,13 +172,13 @@ def load_run_version(project: str, manifest: dict[str, Any]) -> WorkflowVersion:
         ) from exc
 
 
-def load_run_stages(project: str, manifest: dict[str, Any]) -> list[Stage]:
-    stages = load_run_version(project, manifest).stages
+def load_run_workflow(project: str, manifest: dict[str, Any]) -> Workflow:
+    pinned = _build_pinned_workflow(project, manifest)
     # The snapshot alone is not what ran — the manifest carries the binding as a
     # separate delta, and resume_run replays it. So must every reader, or a panel
     # shows a file the run never opened.
     try:
-        bound, _ = apply_run_bindings(stages, read_run_bindings(manifest))
+        bound, _ = pinned.apply_run_bindings(read_run_bindings(manifest))
     except ValueError as exc:
         # The bindings and the pinned version disagree — the run cannot be
         # reconstituted, which is what this error already means to every caller.
@@ -187,13 +189,21 @@ def load_run_stages(project: str, manifest: dict[str, Any]) -> list[Stage]:
     return bound
 
 
+def _build_pinned_workflow(project: str, manifest: dict[str, Any]) -> Workflow:
+    try:
+        return Workflow(stages=load_run_version(project, manifest).stages)
+    except ValidationError as exc:
+        raise RunVersionUnresolvableError(
+            f"run {manifest.get('run_id')} pinned workflow version "
+            f"{manifest.get('workflow_version')}, whose stages no longer form a "
+            f"workflow: {exc}"
+        ) from exc
+
+
 @dataclass(frozen=True)
 class RunStageDef:
-    """`stage` is None both for an unreadable version and for no such stage; `error` tells them apart."""
+    """None both for an unreadable version and for no such stage; `error` tells them apart."""
 
-    stage: Stage | None
-    # The same stage seen in its pinned version, carrying the schemas that are a
-    # function of the whole graph. None wherever `stage` is.
     workflow_stage: WorkflowStage | None
     error: str | None
 
@@ -202,15 +212,11 @@ def load_pinned_stage_def(
     project: str, manifest: dict[str, Any], stage_id: str
 ) -> RunStageDef:
     try:
-        stages = load_run_stages(project, manifest)
+        workflow = load_run_workflow(project, manifest)
     except RunVersionUnresolvableError as exc:
-        return RunStageDef(stage=None, workflow_stage=None, error=str(exc))
-    workflow_stage = next(
-        (p for p in resolve_workflow_stages(stages) if p.id == stage_id), None
-    )
+        return RunStageDef(workflow_stage=None, error=str(exc))
     return RunStageDef(
-        stage=None if workflow_stage is None else workflow_stage.stage,
-        workflow_stage=workflow_stage,
+        workflow_stage=workflow.index_workflow_stages_by_id().get(stage_id),
         error=None,
     )
 

@@ -9,7 +9,7 @@ from app.core.stage_cache import StageCacheEntry
 from app.models import Stage, parse_stage
 from app.models.stages.human_review_queue import ReviewVerdict
 from app.services import review
-from conftest import queue_columns, reads_of
+from conftest import place_stage, queue_columns, reads_of
 
 FROZEN_ROW = {"id": "a", "score": 1}
 
@@ -58,7 +58,7 @@ def _record(
     review_notes: str | None = None,
 ) -> None:
     review.record_decision(
-        project="proj", stage=stage if stage is not None else _stage(),
+        project="proj", stage=place_stage(stage if stage is not None else _stage()),
         stage_fingerprint="sf1", input_fingerprint=input_fingerprint,
         frozen_row=frozen_row, verdict=verdict,
         reviewed_values={"human_score": 1} if reviewed_values is None else reviewed_values,

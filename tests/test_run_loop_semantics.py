@@ -501,8 +501,8 @@ def test_resume_reads_the_pinned_version_not_the_working_copy(tmp_path):
     with pytest.raises(WorkflowLoadError):
         load_workflow(project_dir)
 
-    stages, workflow_version = resumed_stages(project_dir, halted["run_id"])
-    assert [s.id for s in stages] == ["load", "review"]
+    workflow, workflow_version = resumed_stages(project_dir, halted["run_id"])
+    assert [s.id for s in workflow.stages] == ["load", "review"]
     assert workflow_version == halted["workflow_version"]
 
     response = TestClient(app).post(

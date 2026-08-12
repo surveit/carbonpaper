@@ -15,13 +15,18 @@ from fastapi.responses import (
 )
 
 from app.models import (
+    build_workflow,
     find_workflow_compiler_warnings,
     stage_to_json,
     validate_named_schema,
     validate_schema_library,
 )
 from app.services import generation, project, versioning
-from app.services.loader import LOADER_BOOKKEEPING_KEYS, resolve_function_code
+from app.services.loader import (
+    LOADER_BOOKKEEPING_KEYS,
+    list_parsed_stages,
+    resolve_function_code,
+)
 from app.web.breadcrumbs import build_home_crumbs, build_version_crumbs
 from app.web.config import projects_dir, templates
 from app.runtime.stage_tests import run_stage_tests
@@ -37,7 +42,7 @@ from app.web.diagrams import (
     build_schema_table_graph,
 )
 from app.web.loading import (
-    index_workflow_stages,
+    find_workflow_stage,
     list_projects,
     load_schemas,
     load_stages_or_empty,
@@ -216,11 +221,10 @@ async def project_data_model(request: Request, project_name: str):
 async def project_workflow(request: Request, project_name: str):
     pdir = _project_dir(project_name)
     listing = load_stages_or_empty(project_name)
+    parsed = list_parsed_stages(listing.entries)
     # A valid workflow draws off typed Stages; a broken/partial one falls back to the
     # raw draft dicts so its graph still renders with the holes visible.
-    stages: list[Any] = (
-        list(listing.stages) if listing.stages else project._load_compiled_stages(pdir)
-    )
+    stages: list[Any] = parsed if parsed else project._load_compiled_stages(pdir)
     mermaid = build_mermaid_graph(stages, project_name) if stages else None
     return templates.TemplateResponse(
         request,
@@ -238,9 +242,8 @@ async def project_workflow(request: Request, project_name: str):
             # renders an empty report as "nothing is wrong", which zero stages have
             # not earned.
             "compiler_warnings": find_workflow_compiler_warnings(
-                listing.stages,
-                run_stage_tests(listing.stages).count_failing_by_stage(),
-            ) if listing.stages else None,
+                parsed, run_stage_tests(parsed).count_failing_by_stage(),
+            ) if parsed else None,
             "type_class": TYPE_CLASS,
             "type_glyph": TYPE_GLYPH,
         },
@@ -311,12 +314,13 @@ async def version_stage_partial(
             "version_id": version_id,
             "stage": stage,
             "workflow_stage": (
-                workflow_stage := index_workflow_stages(version.stages).get(stage_id)
+                workflow_stage := find_workflow_stage(
+                    build_workflow(version.stages), stage_id)
             ),
             "raw_json": stage_to_json(stage),
             "function_code": resolve_function_code(stage),
             "test_views": (views := shape_test_views(workflow_stage)),
-            "certification": build_certification(stage, views),
+            "certification": build_certification(workflow_stage, views),
             "type_class": TYPE_CLASS,
             "type_glyph": TYPE_GLYPH,
         },

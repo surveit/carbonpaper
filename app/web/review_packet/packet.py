@@ -9,12 +9,7 @@ from typing import Any
 
 from app.core.errors import RunNotFoundError, RunVersionUnresolvableError
 from app.core.logging_config import log_elapsed
-from app.models import (
-    Stage,
-    WorkflowStage,
-    resolve_workflow_stages,
-    stage_to_spec_dict,
-)
+from app.models import WorkflowStage, stage_to_spec_dict
 from app.runtime.manifest import resolve_output_path
 from app.web.run_issues import build_run_issues
 from app.services import run as run_service
@@ -37,8 +32,7 @@ def export_review_packet(project: str, run_id: str, dest_root: Path) -> ReviewPa
     manifest = run_service.read_run_status(project, run_id)
     workflow_stages, workflow, definition_error = _load_pinned_workflow(project, manifest)
     workflow_stages_by_id = {resolved.id: resolved for resolved in workflow_stages}
-    stages = [resolved.stage for resolved in workflow_stages]
-    view = build_run_view(manifest, {s.id: s for s in stages}, definition_error)
+    view = build_run_view(manifest, definition_error)
 
     root = dest_root / f"{project}-{run_id}"
     root.mkdir(parents=True, exist_ok=True)
@@ -56,10 +50,10 @@ def export_review_packet(project: str, run_id: str, dest_root: Path) -> ReviewPa
             view,
             data,
             _load_guide(project, manifest),
-            _build_diagram(stages, project, view),
-            # `stages or None` is the difference between "nothing blocked" and
-            # "no edges to say what was blocked" — build_run_issues reads it.
-            build_run_issues(manifest, stages or None),
+            _build_diagram(workflow_stages, project, view),
+            # `workflow_stages or None` is the difference between "nothing blocked"
+            # and "no edges to say what was blocked" — build_run_issues reads it.
+            build_run_issues(manifest, workflow_stages or None),
             workflow_stages_by_id,
         )
     with log_elapsed(_log, f"{project}/{run_id} checksums"):
@@ -74,12 +68,15 @@ def export_review_packet(project: str, run_id: str, dest_root: Path) -> ReviewPa
     )
 
 
-def _build_diagram(stages: list[Stage], project: str, view: RunView) -> str:
+def _build_diagram(
+    workflow_stages: list[WorkflowStage], project: str, view: RunView
+) -> str:
     # Empty when the pinned version was unreadable; the index then draws no graph.
-    if not stages:
+    if not workflow_stages:
         return ""
     statuses = {s.stage_id: s.status for s in view.stages}
-    return build_mermaid_graph(stages, project, status_by_id=statuses)
+    return build_mermaid_graph(
+        [resolved.stage for resolved in workflow_stages], project, status_by_id=statuses)
 
 
 def _load_guide(project: str, manifest: dict[str, Any]) -> RunGuideView | None:
@@ -93,10 +90,10 @@ def _load_pinned_workflow(
     project: str, manifest: dict[str, Any]
 ) -> tuple[list[WorkflowStage], str | None, str | None]:
     try:
-        stages = run_service.load_run_stages(project, manifest)
+        workflow = run_service.load_run_workflow(project, manifest)
     except (RunVersionUnresolvableError, RunNotFoundError) as exc:
         return [], None, str(exc)
-    workflow_stages = resolve_workflow_stages(stages)
+    workflow_stages = workflow.list_workflow_stages()
     return workflow_stages, _dump_workflow(workflow_stages), None
 
 

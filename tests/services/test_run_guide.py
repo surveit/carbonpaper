@@ -196,8 +196,8 @@ def test_each_stage_carries_its_definition_from_the_pinned_version(project_dir):
     view = build_run_guide_view("demo", _manifest(_version_with_guide(project_dir)))
 
     [loaded] = view.steps[0].stages
-    assert loaded.stage.description == "Load rows"
-    assert loaded.stage.type == "input_data"
+    assert loaded.workflow_stage.stage.description == "Load rows"
+    assert loaded.workflow_stage.stage.type == "input_data"
 
 
 def test_written_columns_are_read_off_each_stage(project_dir):
@@ -246,9 +246,9 @@ def test_a_stage_id_the_version_does_not_define_is_kept_unresolved(project_dir):
     view = build_run_guide_view("demo", _manifest(version_id))
 
     [known, unresolved] = view.steps[0].stages
-    assert known.stage_id == "load_rows" and known.stage is not None
+    assert known.stage_id == "load_rows" and known.workflow_stage is not None
     assert unresolved.stage_id == "renamed_away"
-    assert unresolved.stage is None
+    assert unresolved.workflow_stage is None
     assert unresolved.written_columns == []
 
 

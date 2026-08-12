@@ -29,20 +29,21 @@ def not_executed_panel(
     stage_id: str,
     pinned: RunStageDef,
 ) -> HTMLResponse:
-    if pinned.stage is None:
+    if pinned.workflow_stage is None:
         raise HTTPException(
             status_code=404, detail=pinned.error or f"No stage '{stage_id}' in run"
         )
+    stage = pinned.workflow_stage.stage
     return templates.TemplateResponse(
         request,
         "_run_stage_not_executed.html",
         {
             "project": project,
             "run_id": run_id,
-            "stage": pinned.stage,
+            "stage": stage,
             "workflow_stage": pinned.workflow_stage,
             "is_test_run": bool(manifest.get("parameters", {}).get("is_test_run")),
-            "function_code": resolve_function_code(pinned.stage),
+            "function_code": resolve_function_code(stage),
             "type_glyph": TYPE_GLYPH,
             "type_class": TYPE_CLASS,
         },

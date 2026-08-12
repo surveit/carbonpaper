@@ -8,7 +8,7 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel
 
-from app.models import Stage, WorkflowStage
+from app.models import WorkflowStage
 from app.models.stages.stage_tests import StageTest
 from app.runtime.stage_tests import STATUS_PASSED, StageTestResult, run_tests_for_stage
 
@@ -30,11 +30,14 @@ class StageCertification(BaseModel):
 
 
 def build_certification(
-    stage: Stage, test_views: list[dict[str, Any]]
+    workflow_stage: Optional[WorkflowStage], test_views: list[dict[str, Any]]
 ) -> Optional[StageCertification]:
-    if not _carries_authored_code(stage):
+    if workflow_stage is None:
         return None
-    if not _summary_of(stage):
+    stage = workflow_stage.stage
+    if stage.find_authored_code_block() is None:
+        return None
+    if not _summary_of(workflow_stage):
         return StageCertification(status="unsummarised", total=len(test_views))
     if not stage.CARRIES_RUNNABLE_TESTS:
         return StageCertification(status="untestable")
@@ -48,12 +51,8 @@ def build_certification(
     )
 
 
-def _carries_authored_code(stage: Stage) -> bool:
-    return stage.find_authored_code_block() is not None
-
-
-def _summary_of(stage: Stage) -> Optional[str]:
-    block = stage.find_authored_code_block()
+def _summary_of(workflow_stage: WorkflowStage) -> Optional[str]:
+    block = workflow_stage.stage.find_authored_code_block()
     return block.summary if block is not None else None
 
 

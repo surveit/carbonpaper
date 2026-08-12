@@ -29,7 +29,7 @@ from app.core.errors import (
     RunVersionUnresolvableError,
 )
 from app.core.run_status import RunStatus, StageStatus
-from app.models import Stage
+from app.models import WorkflowStage
 from app.models.stages.input_data import resolve_file_format
 from app.services.errors import WorkflowLoadError
 from app.services.versioning import list_versions
@@ -246,7 +246,7 @@ async def run_status(project: str, run_id: str):
 class RunGraph:
     """Either stages plus mermaid, or error with stages None — never both."""
 
-    stages: list[Stage] | None
+    stages: list[WorkflowStage] | None
     mermaid: str
     error: str | None
 
@@ -255,12 +255,15 @@ def build_run_graph(
     project: str, manifest: dict[str, Any], status_by_id: dict[str, str]
 ) -> RunGraph:
     try:
-        stages = run_service.load_run_stages(project, manifest)
+        workflow = run_service.load_run_workflow(project, manifest)
     except RunVersionUnresolvableError as exc:
         return RunGraph(stages=None, mermaid="", error=str(exc))
+    workflow_stages = workflow.list_workflow_stages()
     return RunGraph(
-        stages=stages,
-        mermaid=build_mermaid_graph(stages, project, status_by_id=status_by_id),
+        stages=workflow_stages,
+        mermaid=build_mermaid_graph(
+            [resolved.stage for resolved in workflow_stages],
+            project, status_by_id=status_by_id),
         error=None,
     )
 

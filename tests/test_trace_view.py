@@ -2,7 +2,7 @@
 chronological story/graph payload the template renders."""
 from __future__ import annotations
 
-from app.models import parse_stage, Stage
+from app.models import Workflow, WorkflowStage, parse_stage, Stage
 from app.web.panel_links import AppPanelLinks
 from app.web.trace_view import build_trace_view
 
@@ -11,7 +11,7 @@ def _stage(data: dict) -> Stage:
     return parse_stage(data)
 
 
-def _view(trace: dict, stages: dict[str, Stage]) -> dict:
+def _view(trace: dict, stages: dict[str, WorkflowStage]) -> dict:
     return build_trace_view(trace, stages, AppPanelLinks("proj", "R1"))
 
 
@@ -23,7 +23,11 @@ _ENRICH_SCHEMA = {"columns": [{"name": "facility_id", "type": "str", "nullable":
                               {"name": "score", "type": "int", "nullable": True}]}
 
 
-def _stages() -> dict[str, Stage]:
+def _stages() -> dict[str, WorkflowStage]:
+    return Workflow(stages=list(_authored_stages().values())).index_workflow_stages_by_id()
+
+
+def _authored_stages() -> dict[str, Stage]:
     return {
         "seeds": _stage({"id": "seeds", "type": "input_data", "description": "Load seeds",
                          "connector": {"kind": "file"},
@@ -91,8 +95,8 @@ def test_edges_connect_consecutive_and_carry_the_source_row():
 
 
 def test_trace_shows_instructions_and_data():
-    stages = _stages()
-    stages["score"] = _stage({
+    authored = _authored_stages()
+    authored["score"] = _stage({
         "id": "score", "type": "llm_transform", "description": "Score",
         "inputs": [{"id": "enrich"}],
         "signature": {
@@ -108,6 +112,7 @@ def test_trace_shows_instructions_and_data():
         "llm": {"prompt_instructions": "Rate for relevance.",
                 "prompt_data_template": "Score: {score}"},
     })
+    stages = Workflow(stages=list(authored.values())).index_workflow_stages_by_id()
     trace = _trace()
     trace["steps"].insert(0, {
         "stage_id": "score", "stage_type": "llm_transform", "row_ordinal": 0,

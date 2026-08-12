@@ -6,8 +6,16 @@ import pytest
 
 from app import models as m
 from app.evals.dataset_columns import get_injected_columns, get_output_columns_from_stage
-from app.evals.compatibility import CompatibilityReport, validate_eval_compatibility
+from app.evals import compatibility
+from app.evals.compatibility import CompatibilityReport
 from app.models.workflow_stage import WorkflowStage
+
+
+def validate_eval_compatibility(config, stages) -> CompatibilityReport:
+    """Test shim: the app builds the workflow at its caller; these cases author stage lists."""
+    issues = m.validate_workflow(list(stages))
+    workflow = None if issues else m.Workflow(stages=list(stages))
+    return compatibility.validate_eval_compatibility(config, workflow, issues)
 
 
 def S(**kw):

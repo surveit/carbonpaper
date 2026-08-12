@@ -7,7 +7,7 @@ from typing import NamedTuple
 
 import pandas as pd
 
-from app.models import Stage
+from app.models import WorkflowStage
 from app.models.run_manifest import StageContribution
 
 from app.core.errors import FrameNotSerializableError
@@ -32,9 +32,10 @@ class FrameCaching(NamedTuple):
 
 
 def open_frame_caching(
-    stage: Stage, ctx: RunContext, caches_frames: bool
+    workflow_stage: WorkflowStage, ctx: RunContext, caches_frames: bool
 ) -> FrameCaching:
     """A process with no frame store skips caching with a note: a cache MISS must never fail a stage."""
+    stage = workflow_stage.stage
     if not caches_frames or not stage.cache:
         return FrameCaching()
     if ctx.identity is None or ctx.stage_cache is None:

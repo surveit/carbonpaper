@@ -6,7 +6,7 @@ from collections.abc import Mapping
 
 from app.core.errors import ReviewValidationError
 from app.core.stage_cache import StageCacheEntry
-from app.models import Stage
+from app.models import WorkflowStage
 from app.models.stages.human_review_queue import (
     QueueConfig,
     ReviewVerdict,
@@ -30,7 +30,7 @@ def resolve_verdict(
 
 
 def record_decision(
-    *, project: str, stage: Stage,
+    *, project: str, stage: WorkflowStage,
     stage_fingerprint: str, input_fingerprint: str,
     frozen_row: Mapping[str, object],
     verdict: ReviewVerdict, reviewed_values: Mapping[str, object],
@@ -52,7 +52,8 @@ def record_decision(
     )
 
 
-def _require_queue_config(stage: Stage) -> QueueConfig:
+def _require_queue_config(workflow_stage: WorkflowStage) -> QueueConfig:
+    stage = workflow_stage.stage
     queue = resolve_queue_config(stage)
     if queue is None:
         raise ReviewValidationError(

@@ -18,7 +18,7 @@ import pandas as pd
 from app.core.errors import SubsetRunError
 from app.core.frame_checks import find_duplicate_row_violations
 from app.core.frames import write_frame_file, write_frame_file_with_csv_fallback
-from app.models import Stage, StageType, Workflow, WorkflowStage
+from app.models import StageType, Workflow, WorkflowStage
 from app.models.run_manifest import (
     RowError,
     RunManifest,
@@ -246,7 +246,7 @@ def _gather_stage_inputs(
 ) -> tuple[dict[str, pd.DataFrame], _RowWindow]:
     """Cuts the row window BEFORE the duplicate/schema checks, so a limit of 3 isn't failed by row 4,000."""
     sid = workflow_stage.id
-    window = _resolve_row_window(workflow_stage.stage, ctx)
+    window = _resolve_row_window(workflow_stage, ctx)
     inputs_for_stage: dict[str, pd.DataFrame] = {}
     for ref in workflow_stage.inputs:
         if ref.id not in outputs_so_far:
@@ -293,9 +293,9 @@ class _RowWindow(NamedTuple):
     cap: int | None
 
 
-def _resolve_row_window(stage: Stage, ctx: RunContext) -> _RowWindow:
-    offset = ctx.params.offsets.get(stage.id)
-    cap = ctx.params.limits.get(stage.id)
+def _resolve_row_window(workflow_stage: WorkflowStage, ctx: RunContext) -> _RowWindow:
+    offset = ctx.params.offsets.get(workflow_stage.id)
+    cap = ctx.params.limits.get(workflow_stage.id)
     return _RowWindow(
         offset if isinstance(offset, int) and offset > 0 else 0,
         cap if isinstance(cap, int) and cap >= 0 else None,

@@ -1,7 +1,7 @@
-"""Production run-lifecycle entry points, executing the version-pinned stages a caller
-hands them - the only functions that create a production run record. The engine they
-call and the non-production subset executor live in `app.runtime.executor`; contracts
-enforce that split, and that this module never imports `app.services`.
+"""Production run-lifecycle entry points, executing the version-pinned `Workflow` a
+caller hands them - the only functions that create a production run record. The engine
+they call and the non-production subset executor live in `app.runtime.executor`;
+contracts enforce that split, and that this module never imports `app.services`.
 """
 
 from __future__ import annotations
@@ -12,15 +12,14 @@ from typing import Any, Mapping
 
 import pandas as pd
 import pyarrow.lib as pa_lib
-from pydantic import ValidationError as PydanticValidationError
 
 from app.core.errors import MissingInputBindingError
 from app.core.timestamp_ids import mint_timestamp_id
 from app.core.frames import read_frame_file
-from app.models import Stage, StageType, resolve_workflow_stages
+from app.models import StageType, Workflow, WorkflowStage
 from app.models.run_manifest import read_run_manifest
 from app.models.run_parameters import RunParameters
-from app.models.stages.input_data import Connector, InputDataStage
+from app.models.schema import StageId
 from app.core.run_status import StageStatus
 
 from .context import RunContext
@@ -33,61 +32,19 @@ from .manifest import (
 from .stages import PREFLIGHTS
 
 
-def apply_run_bindings(
-    stages: list[Stage], bindings: Mapping[str, Mapping[str, Any]] | None
-) -> tuple[list[Stage], dict[str, str]]:
-    connector_ids = {s.id for s in stages if isinstance(s, InputDataStage)}
-    given = dict(bindings or {})
-    unbindable = sorted(set(given) - connector_ids)
-    if unbindable:
-        raise ValueError(
-            f"bindings target stage id(s) with no connector to bind: {unbindable}; "
-            f"bindable stages are {sorted(connector_ids)}")
-
-    rebound: list[Stage] = [
-        _merge_connector_params(stage, given[stage.id])
-        # `given`'s keys were just checked to be connector_ids, which is exactly
-        # the input_data stages — so the isinstance never rejects a bound stage.
-        if isinstance(stage, InputDataStage) and stage.id in given
-        else stage
-        for stage in stages
-    ]
-    param_sources = {
-        sid: "run" if sid in given else "workflow" for sid in connector_ids
-    }
-    return rebound, param_sources
-
-
-def _merge_connector_params(
-    stage: InputDataStage, binding: Mapping[str, Any]
-) -> InputDataStage:
-    if not isinstance(binding, Mapping):
-        raise ValueError(
-            f"binding for `{stage.id}` must be a dict of connector params, "
-            f"got {type(binding).__name__}: {binding!r}")
-    try:
-        connector = Connector.model_validate({
-            **stage.connector.model_dump(),
-            "params": {**stage.connector.params, **binding},
-        })
-    except PydanticValidationError as err:
-        raise ValueError(f"binding for `{stage.id}` is invalid: {err}") from err
-    return stage.model_copy(update={"connector": connector})
-
-
 def validate_stages_ready(
-    stages: list[Stage], param_sources: dict[str, str]
+    stages: list[WorkflowStage], param_sources: dict[StageId, str]
 ) -> dict[str, dict[str, Any]]:
     issues: list[str] = []
     records: dict[str, dict[str, Any]] = {}
-    for stage in stages:
-        preflight = PREFLIGHTS.get(StageType(stage.type))
+    for workflow_stage in stages:
+        preflight = PREFLIGHTS.get(StageType(workflow_stage.stage.type))
         if preflight is None:
             continue
-        stage_issues, record = preflight(stage)
+        stage_issues, record = preflight(workflow_stage)
         issues.extend(stage_issues)
         if record is not None:
-            records[stage.id] = {**record, "source": param_sources[stage.id]}
+            records[workflow_stage.id] = {**record, "source": param_sources[workflow_stage.id]}
     if issues:
         raise MissingInputBindingError("; ".join(issues))
     return records
@@ -96,17 +53,18 @@ def validate_stages_ready(
 def prepare_run(
     project_dir: Path,
     repo_root: Path,
-    stages: list[Stage],
+    workflow: Workflow,
     workflow_version: str,
     limits: dict[str, int] | None = None,
     offsets: dict[str, int] | None = None,
-    bindings: Mapping[str, Mapping[str, Any]] | None = None,
+    bindings: Mapping[StageId, Mapping[str, Any]] | None = None,
     bust_cache: bool = False,
 ) -> dict[str, Any]:
     """`limits`/`offsets` window each named stage's INPUT rows, not its output; offset applies first."""
-    stages, param_sources = apply_run_bindings(stages, bindings)
-    input_records = validate_stages_ready(stages, param_sources)
-    ordered = topological_sort(resolve_workflow_stages(stages))
+    bound, param_sources = workflow.apply_run_bindings(bindings)
+    workflow_stages = bound.list_workflow_stages()
+    input_records = validate_stages_ready(workflow_stages, param_sources)
+    ordered = topological_sort(workflow_stages)
 
     limits = dict(limits or {})
     offsets = dict(offsets or {})
@@ -162,15 +120,15 @@ def run_prepared(prep: dict[str, Any]) -> dict[str, Any]:
 def execute_run(
     project_dir: Path,
     repo_root: Path,
-    stages: list[Stage],
+    workflow: Workflow,
     workflow_version: str,
     limits: dict[str, int] | None = None,
     offsets: dict[str, int] | None = None,
-    bindings: Mapping[str, Mapping[str, Any]] | None = None,
+    bindings: Mapping[StageId, Mapping[str, Any]] | None = None,
     bust_cache: bool = False,
 ) -> dict[str, Any]:
     return run_prepared(
-        prepare_run(project_dir, repo_root, stages, workflow_version,
+        prepare_run(project_dir, repo_root, workflow, workflow_version,
                     limits=limits, offsets=offsets, bindings=bindings,
                     bust_cache=bust_cache)
     )
@@ -180,7 +138,7 @@ def resume_run(
     project_dir: Path,
     run_id: str,
     repo_root: Path,
-    stages: list[Stage],
+    workflow: Workflow,
     workflow_version: str,
 ) -> dict[str, Any]:
     run_dir = project_dir / "runs" / run_id
@@ -197,8 +155,8 @@ def resume_run(
     # when the run halted would resume on its workflow-authored params (or fail
     # if it authors none) while the manifest still claims `source: "run"` — a
     # false provenance record.
-    stages, _ = apply_run_bindings(stages, manifest.parameters.run_bindings)
-    ordered = topological_sort(resolve_workflow_stages(stages))
+    bound, _ = workflow.apply_run_bindings(manifest.parameters.run_bindings)
+    ordered = topological_sort(bound.list_workflow_stages())
 
     # Reload outputs from disk for stages that completed successfully.
     outputs_so_far: dict[str, pd.DataFrame] = {}

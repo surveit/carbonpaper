@@ -14,12 +14,18 @@ from fastapi import HTTPException
 
 from app.core.errors import NoVersionToRunError, StageOutputMissing
 from app.core.frames import list_rows, read_frame_file, render_frame_as_csv_text
-from app.models import Stage, StageType, WorkflowStage, resolve_workflow_stages
+from app.models import (
+    StageType,
+    Workflow,
+    WorkflowStage,
+    build_workflow,
+    validate_workflow,
+)
 from app.models.stages.llm_transform import LLMTransformStage
 from app.models.run_manifest import read_run_manifest
 from app.runtime.manifest import resolve_output_path
 from app.services.run import resolve_version
-from app.services.loader import CompiledStageFile, load_compiled_dir
+from app.services.loader import CompiledStageFile, list_parsed_stages, load_compiled_dir
 from app.services.versioning import list_versions, load_version_stages
 from app.services.project import describe_project
 from app.services.workspace import load_schemas, resolve_project_dir
@@ -70,8 +76,12 @@ def _build_project_card(p: Path) -> ProjectCard | None:
 
 @dataclass
 class StageListing:
-    """All-or-nothing: one invalid file empties `stages`, and `issues` names the broken ones."""
-    stages: list[Stage]
+    """All-or-nothing: one invalid file empties `entries`, and `issues` names the broken ones."""
+    entries: list[CompiledStageFile]
+    # None where a file failed to parse or the parsed stages form no workflow — a
+    # working copy mid-edit often forms none, and none is invented.
+    workflow: Workflow | None
+    workflow_issues: list[str]
     issues: list[CompiledStageFile]
     order: dict[str, str]
 
@@ -87,30 +97,33 @@ def load_stages(project: str) -> StageListing:
         # resolve, so the surviving stages form a workflow with holes. Rendering that
         # is "unusable but lies." Return no stages, only the issues, so the
         # viewer shows what's broken instead of a false graph.
-        return StageListing(stages=[], issues=issues, order={})
-    stages = [e.stage for e in entries if e.stage is not None]
+        return StageListing(
+            entries=[], workflow=None, workflow_issues=[], issues=issues, order={})
+    stages = list_parsed_stages(entries)
     order = {e.stage.id: e.filename.split("_", 1)[0]
              for e in entries if e.stage is not None}
-    return StageListing(stages=stages, issues=[], order=order)
+    return StageListing(
+        entries=entries,
+        workflow=build_workflow(stages),
+        workflow_issues=validate_workflow(stages),
+        issues=[],
+        order=order,
+    )
 
 
 def load_stages_or_empty(project: str) -> StageListing:
     compiled_dir = projects_dir() / project / "compiled"
     if not compiled_dir.is_dir():
-        return StageListing(stages=[], issues=[], order={})
+        return StageListing(
+            entries=[], workflow=None, workflow_issues=[], issues=[], order={})
     return load_stages(project)
 
 
-def find_stage(stages: list[Stage], stage_id: str) -> Stage | None:
-    return next((s for s in stages if s.id == stage_id), None)
-
-
-def index_workflow_stages(stages: list[Stage]) -> dict[str, WorkflowStage]:
-    """Empty where the graph does not resolve — a working copy mid-edit has none, and none are invented."""
-    try:
-        return {resolved.id: resolved for resolved in resolve_workflow_stages(stages)}
-    except ValueError:
-        return {}
+def find_workflow_stage(workflow: Workflow | None, stage_id: str) -> WorkflowStage | None:
+    """None where the graph does not resolve, exactly as for a stage id it does not define."""
+    if workflow is None:
+        return None
+    return workflow.index_workflow_stages_by_id().get(stage_id)
 
 
 def list_file_inputs(project: str, version_id: str | None = None) -> list[dict[str, Any]]:
@@ -383,8 +396,9 @@ def display_cell(v: Any) -> Any:
 # ─── LLM prompt example ──────────────────────────────────────────────────────
 
 def build_llm_example(
-    stage_def: Stage | None, input_previews: list[dict[str, Any]]
+    workflow_stage: WorkflowStage | None, input_previews: list[dict[str, Any]]
 ) -> dict[str, Any] | None:
+    stage_def = None if workflow_stage is None else workflow_stage.stage
     template = (
         stage_def.llm.prompt_data_template
         if isinstance(stage_def, LLMTransformStage) else None

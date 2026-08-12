@@ -8,6 +8,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
+from app.models.schema import StageId
+
 
 class RunParameters(BaseModel):
     model_config = ConfigDict(frozen=True)
@@ -25,7 +27,7 @@ class RunParameters(BaseModel):
     is_test_run: bool = False
     # Per-run connector params, keyed by stage id, merged over a stage's authored
     # params for this run only.
-    run_bindings: dict[str, dict[str, Any]] = {}
+    run_bindings: dict[StageId, dict[str, Any]] = {}
 
     @model_validator(mode="after")
     def _only_a_test_run_may_auto_approve(self) -> RunParameters:

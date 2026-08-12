@@ -33,6 +33,14 @@ class CompiledStageFile:
     issues: list[str] = field(default_factory=list)
 
 
+def list_parsed_stages(entries: list[CompiledStageFile]) -> list[Stage]:
+    return [entry.stage for entry in entries if entry.stage is not None]
+
+
+def find_parsed_stage(entries: list[CompiledStageFile], stage_id: str) -> Stage | None:
+    return next((s for s in list_parsed_stages(entries) if s.id == stage_id), None)
+
+
 def list_stage_files(compiled_dir: Path) -> list[Path]:
     return sorted(compiled_dir.glob("*.json"))
 

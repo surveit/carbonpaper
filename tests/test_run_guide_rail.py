@@ -11,6 +11,7 @@ from app.models import Stage, parse_stage
 from app.services.run_guide import GuideStageView, GuideStepView, RunGuideView
 from app.web.config import templates
 from app.web.panel_links import AppPanelLinks
+from conftest import place_stage
 
 _ROWS = [{"name": "doc_id", "type": "str", "nullable": False}]
 
@@ -29,7 +30,7 @@ def _stage_view(
 ) -> GuideStageView:
     return GuideStageView(
         stage_id=stage_id,
-        stage=_stage(stage_id, description),
+        workflow_stage=place_stage(_stage(stage_id, description)),
         written_columns=["doc_id"],
         executed=executed,
         output_row_count=rows,

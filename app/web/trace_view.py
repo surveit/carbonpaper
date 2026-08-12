@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from typing import Any
 
-from app.models import Stage
+from app.models import WorkflowStage
 from app.models.stages.code import PythonFrameFunctionStage, PythonRowFunctionStage
 from app.models.stages.input_data import InputDataStage
 from app.models.stages.join import EnrichStage, ExpandStage
@@ -48,9 +48,10 @@ class ContributorGroup:
     rows_link: str | None
 
 
-def _transform_of(stage: Stage | None) -> dict[str, Any]:
-    if stage is None:
+def _transform_of(workflow_stage: WorkflowStage | None) -> dict[str, Any]:
+    if workflow_stage is None:
         return {"kind": "unknown", "detail": None}
+    stage = workflow_stage.stage
     if isinstance(stage, InputDataStage):
         path = stage.connector.params.get("path")
         src = path or (stage.source.doc if stage.source else None)
@@ -75,7 +76,7 @@ def _transform_of(stage: Stage | None) -> dict[str, Any]:
 
 
 def build_trace_view(
-    trace: dict[str, Any], stages: dict[str, Stage], links: AppPanelLinks
+    trace: dict[str, Any], stages: dict[str, WorkflowStage], links: AppPanelLinks
 ) -> dict[str, Any]:
     chrono = list(reversed(trace["steps"]))
     end = trace["end"]
@@ -104,7 +105,7 @@ def build_trace_view(
 
 
 def _build_node(
-    i: int, chrono: list[dict[str, Any]], stages: dict[str, Stage],
+    i: int, chrono: list[dict[str, Any]], stages: dict[str, WorkflowStage],
     links: AppPanelLinks, truncated: bool,
 ) -> dict[str, Any]:
     step = chrono[i]

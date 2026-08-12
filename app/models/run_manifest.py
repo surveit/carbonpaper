@@ -18,6 +18,7 @@ from app.core.agent.usage import LlmUsage
 from app.core.errors import RunManifestNotJson
 from app.core.run_status import RunStatus, StageStatus
 from app.models.run_parameters import RunParameters
+from app.models.schema import StageId
 from app.models.stage import Stage
 from app.models.stages.stage_base import StageType
 
@@ -202,7 +203,7 @@ def records_a_test_run(raw: dict[str, Any]) -> bool:
     return bool(raw.get("is_test_run", False))
 
 
-def read_run_bindings(raw: dict[str, Any]) -> dict[str, dict[str, Any]]:
+def read_run_bindings(raw: dict[str, Any]) -> dict[StageId, dict[str, Any]]:
     nested = raw.get("parameters")
     if isinstance(nested, dict) and "run_bindings" in nested:
         return dict(nested["run_bindings"] or {})

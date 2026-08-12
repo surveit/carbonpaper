@@ -3,12 +3,13 @@ for an llm_transform stage — rendered from prompt_data_template (the
 per-row part), not the row-invariant prompt_instructions."""
 from __future__ import annotations
 
-from app.models import parse_stage, Stage
+from app.models import WorkflowStage, parse_stage
 from app.web.loading import build_llm_example
+from conftest import place_stage
 
 
-def _llm_stage() -> Stage:
-    return parse_stage({
+def _llm_stage() -> WorkflowStage:
+    return place_stage(parse_stage({
         "id": "score", "type": "llm_transform", "description": "Score",
         "inputs": [{"id": "load"}],
         "signature": {
@@ -23,7 +24,7 @@ def _llm_stage() -> Stage:
         },
         "llm": {"prompt_instructions": "Score for relevance.",
                 "prompt_data_template": "Rate this: {quote}"},
-    })
+    }))
 
 
 def test_renders_from_prompt_data_template_not_instructions():
@@ -38,12 +39,12 @@ def test_no_input_rows_reports_error():
 
 
 def test_non_llm_stage_returns_none():
-    stage = parse_stage({
+    stage = place_stage(parse_stage({
         "id": "load", "description": "Load", "type": "input_data",
         "signature": {
             "form": "replaces",
             "produces": [{"name": "quote", "type": "str", "nullable": True}],
         },
         "connector": {"kind": "file"},
-    })
+    }))
     assert build_llm_example(stage, [{"id": "load", "preview": {"preview": [{"quote": "x"}]}}]) is None

@@ -23,8 +23,8 @@ from app.services.project import save_working_copy_as_version
 from app.models import WorkflowStage, parse_stage
 from app.models.stages.human_review_queue import ReviewVerdict
 from conftest import (
-    QUEUE_COLUMNS, pinned_stages, queue_added_columns, queue_columns, reads_of,
-    resumed_stages,
+    QUEUE_COLUMNS, pinned_stages, place_stage, queue_added_columns, queue_columns,
+    reads_of, resumed_stages,
 )
 
 PROJECT = "queue_route_journey"
@@ -121,9 +121,10 @@ def _read_fingerprints(run_dir, stage_id: str = "review") -> dict:
 
 
 def _find_stage_def(project: str, stage_id: str) -> WorkflowStage:
-    placed = loading.index_workflow_stages(loading.load_stages(project).stages)
-    assert stage_id in placed
-    return placed[stage_id]
+    workflow_stage = loading.find_workflow_stage(
+        loading.load_stages(project).workflow, stage_id)
+    assert workflow_stage is not None
+    return workflow_stage
 
 
 def _decide_data(fp, reviewed, prefilled=None, reviewer="Ada", **extra):
@@ -166,7 +167,7 @@ def _put_cached_decision(
     decision: ReviewVerdict, reviewed_score: float | None = None,
 ) -> None:
     review.record_decision(
-        project=project, stage=parse_stage(_review_stage()),
+        project=project, stage=place_stage(parse_stage(_review_stage())),
         stage_fingerprint=stage_fingerprint, input_fingerprint=input_fingerprint,
         frozen_row={"id": row["id"], "quote": row["quote"], "score": int(row["score"])},
         verdict=decision,
@@ -602,7 +603,7 @@ def test_a_bool_select_opens_on_the_recorded_value_of_a_decided_row(tmp_path, mo
     run_id, fingerprints, snapshot = _build_and_halt_bool_queue(
         tmp_path, monkeypatch, project, ai_value=False)
     review.record_decision(
-        project=project, stage=parse_stage(_bool_review_stage(True)),
+        project=project, stage=place_stage(parse_stage(_bool_review_stage(True))),
         stage_fingerprint=fingerprints["stage_fingerprint"],
         input_fingerprint=fingerprints["input_fingerprints"][0],
         frozen_row={"id": snapshot.iloc[0]["id"], "flag": bool(snapshot.iloc[0]["flag"])},
@@ -1467,7 +1468,7 @@ def test_progress_and_resume_are_seeded_from_the_whole_queue_not_a_page(tmp_path
     for position in (25, 26, 27):
         row = snapshot.iloc[position]
         review.record_decision(
-            project=PAGED_PROJECT, stage=parse_stage(_e2e_review_stage()),
+            project=PAGED_PROJECT, stage=place_stage(parse_stage(_e2e_review_stage())),
             stage_fingerprint=fingerprints["stage_fingerprint"],
             input_fingerprint=fingerprints["input_fingerprints"][position],
             frozen_row={"id": row["id"], "score": int(row["score"])},

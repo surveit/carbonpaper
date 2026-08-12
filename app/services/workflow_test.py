@@ -12,7 +12,7 @@ import pandas as pd
 
 from app.core.errors import NoWorkflowTestSourceError, NoWorkflowTestVersionError, SubsetRunError
 from app.core.timestamp_ids import mint_timestamp_id
-from app.models import Stage, StageType, Workflow, WorkflowStage
+from app.models import StageType, Workflow, WorkflowStage
 from app.runtime.context import RunContext, RunIdentity
 from app.runtime.executor import run_subset, topological_sort
 from app.models.run_parameters import RunParameters
@@ -34,7 +34,7 @@ def run_workflow_test(
     stages = load_version_stages(project_dir, version)
     # Refused before the Workflow is built, so a sourceless workflow fails on the
     # missing source rather than on downstream graph validation.
-    _require_a_source(stages)
+    _require_a_source([stage.type for stage in stages])
     workflow = Workflow(stages=stages)
     workflow_stage = workflow.list_workflow_stages()
     executing = topological_sort(_stages_to_execute(workflow_stage, stage_ids))
@@ -119,8 +119,8 @@ def _is_source(stage: WorkflowStage) -> bool:
     return stage.stage.type == StageType.input_data.value
 
 
-def _require_a_source(stages: list[Stage]) -> None:
-    if any(stage.type == StageType.input_data.value for stage in stages):
+def _require_a_source(stage_types: list[StageType]) -> None:
+    if any(stage_type == StageType.input_data.value for stage_type in stage_types):
         return
     raise NoWorkflowTestSourceError(
         "workflow has no input_data stage to read a workflow-test slice from")
