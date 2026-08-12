@@ -126,6 +126,23 @@ def find_class_body_function(
     return None
 
 
+def find_annotation_name_linenos(expression: ast.expr, names: frozenset[str]) -> set[int]:
+    """Walks the whole expression, so a nested `Sequence[X]` or `Optional[list[X]]` counts."""
+    linenos: set[int] = set()
+    for node in ast.walk(expression):
+        if isinstance(node, ast.Name) and node.id in names:
+            linenos.add(node.lineno)
+        elif isinstance(node, ast.Attribute) and node.attr in names:
+            linenos.add(node.lineno)
+        elif (
+            isinstance(node, ast.Constant)
+            and isinstance(node.value, str)
+            and any(name in node.value for name in names)
+        ):
+            linenos.add(node.lineno)
+    return linenos
+
+
 def find_numeric_get_defaults(tree: ast.Module) -> list[tuple[int, int]]:
     spans: list[tuple[int, int]] = []
     for node in ast.walk(tree):
