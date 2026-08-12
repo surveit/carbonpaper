@@ -20,6 +20,7 @@ from app.core.agent.registry import build_engine, build_mcp_server
 from app.models.stages.input_data import InputDataStage
 from app.services import project as project_service
 from app.services.loader import load_workflow
+from app.runtime.trace import trace_row, trace_to_dict
 from app.tools.editing import EditingContext, make_editing_tools
 from app.agents.tutorial.config import make_tutorial_tools
 from app.tools.tutorial import TutorialContext
@@ -27,6 +28,7 @@ from app.tools.tutorial import TutorialContext
 _BASE_URL = "http://127.0.0.1:8788/"
 _EXPECTED_TOOLS = {
     "create_tutorial_project",
+    "read_row_lineage_links",
     "run_workflow",
     "get_run_status",
     "sleep",
@@ -220,3 +222,90 @@ def test_get_run_status_reads_the_manifest_back_without_waiting(
     assert out.get("is_error") is not True
     assert status["status"] == "running"
     assert status["stage_records"][0]["stage_id"] == "judge_alignment"
+
+
+def _run_the_tour_capped(monkeypatch: pytest.MonkeyPatch) -> tuple[dict[str, Any], str]:
+    monkeypatch.setattr(
+        run_service, "_run_in_background", lambda target, *args: target(*args)
+    )
+    seeded = _seed_a_tour()
+    out = _call(
+        next(t for t in _tools() if t.name == "run_workflow"),
+        {"project_id": seeded["name"], "limits": {"raw_filings": 6},
+         "bindings": seeded["input_bindings"]},
+    )
+    return seeded, json.loads(out["content"][0]["text"])["run_id"]
+
+
+def _read_lineage_links(project: str, run_id: str, stage_id: str) -> dict[str, Any]:
+    out = _call(
+        next(t for t in _tools() if t.name == "read_row_lineage_links"),
+        {"project_id": project, "run_id": run_id, "stage_id": stage_id},
+    )
+    assert out.get("is_error") is not True, out["content"][0]["text"]
+    links: dict[str, Any] = json.loads(out["content"][0]["text"])
+    return links
+
+
+def test_each_row_comes_back_with_the_whole_link_to_its_own_lineage(
+    projects_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Nothing is left for the tour to join: an ordinal it guessed would link a wrong row."""
+    seeded, run_id = _run_the_tour_capped(monkeypatch)
+
+    links = _read_lineage_links(seeded["name"], run_id, "matched_commitments")
+
+    assert links["row_count"] == 6
+    assert [row["ordinal"] for row in links["rows"]] == list(range(6))
+    for row in links["rows"]:
+        assert row["lineage_url"] == (
+            f"{seeded['runs_url_prefix']}{run_id}"
+            f"/stage/matched_commitments/row/{row['ordinal']}/trace/view"
+        )
+
+
+def test_a_blank_cell_reaches_the_tour_blank(
+    projects_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The tour picks its absence row off these values — "None" as text would read as one."""
+    seeded, run_id = _run_the_tour_capped(monkeypatch)
+
+    rows = _read_lineage_links(seeded["name"], run_id, "matched_commitments")["rows"]
+
+    blank = [row for row in rows if row["values"]["public_commitment"] is None]
+    filled = [row for row in rows if row["values"]["public_commitment"] is not None]
+    assert blank and filled
+    assert all(row["values"]["client"] for row in rows)
+
+
+def test_the_row_the_tour_calls_an_absence_is_the_one_with_no_second_parent(
+    projects_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Beat 4's claim, checked against the trace the link opens."""
+    seeded, run_id = _run_the_tour_capped(monkeypatch)
+    run_dir = projects_root / seeded["name"] / "runs" / run_id
+
+    rows = _read_lineage_links(seeded["name"], run_id, "matched_commitments")["rows"]
+
+    for row in rows:
+        trace = trace_to_dict(trace_row(run_dir, "matched_commitments", row["ordinal"]))
+        matched = row["values"]["public_commitment"] is not None
+        assert bool(trace["steps"][0]["branches"]) is matched, row["values"]["client"]
+
+
+def test_a_stage_that_did_not_finish_is_refused_rather_than_read(
+    projects_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An errored stage still wrote a frame — of nulls it never filled in."""
+    seeded, run_id = _run_the_tour_capped(monkeypatch)
+
+    out = _call(
+        next(t for t in _tools() if t.name == "read_row_lineage_links"),
+        {"project_id": seeded["name"], "run_id": run_id, "stage_id": "judge_alignment"},
+    )
+
+    assert out["is_error"] is True
+    assert "is 'error'" in out["content"][0]["text"]
+    assert run_service.read_stage_output(seeded["name"], run_id, "judge_alignment")[
+        "alignment"
+    ].isna().all(), "the frame the refusal is protecting the tour from"
