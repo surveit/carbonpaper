@@ -7,7 +7,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from app.core.agent.store import SessionStore
+from app.core.agent.store import ProseBlock, SessionStore
 from app.core.agent.turns import TurnManager
 
 
@@ -43,6 +43,30 @@ def test_start_invokes_on_done_after_the_turn() -> None:
 
     asyncio.run(_drive())
     assert calls == ["done"]
+
+
+def test_a_second_turn_leaves_the_first_one_on_the_page() -> None:
+    """The engine reports only the turn it just ran, so a store that replaced lost the rest."""
+    store = SessionStore()
+    sid = store.create()
+
+    def _turn(asked: str, answered: str) -> _FakeEngine:
+        return _FakeEngine([
+            {"role": "user", "parts": [{"type": "text", "text": asked}]},
+            {"role": "assistant", "parts": [{"type": "text", "text": answered}]},
+        ])
+
+    async def _drive() -> None:
+        tm = TurnManager()
+        for asked, answered in [("first", "one"), ("second", "two")]:
+            turn_id = tm.start(engine=_turn(asked, answered), store=store,
+                               session_id=sid, prompt=asked)
+            await tm._tasks[turn_id]
+
+    asyncio.run(_drive())
+    spoken = [block.text for bubble in store.history_view(sid)
+              for block in bubble.blocks if isinstance(block, ProseBlock)]
+    assert spoken == ["first", "one", "second", "two"]
 
 
 def test_on_done_runs_even_when_the_turn_errors() -> None:

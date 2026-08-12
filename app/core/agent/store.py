@@ -96,9 +96,10 @@ class SessionStore:
         del sid
         return []
 
-    def save_messages(self, sid: str, messages: list[dict[str, Any]]) -> None:
+    def append_messages(self, sid: str, messages: list[dict[str, Any]]) -> None:
+        """A turn contributes its own messages; the earlier turns stay on the page."""
         session = AgentSession.load(sid)
-        session.messages = messages
+        session.messages = [*session.messages, *messages]
         session.pending_user = None
         session.save()
 

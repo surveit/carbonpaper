@@ -114,7 +114,7 @@ def test_the_tour_page_opens_the_conversation_itself() -> None:
 def test_a_session_that_has_already_opened_will_not_greet_twice() -> None:
     """A reload must replay the transcript, not start a second opening turn."""
     sid = _start_the_tour()
-    _store.save_messages(sid, [{"role": "assistant", "parts": [{"type": "text",
+    _store.append_messages(sid, [{"role": "assistant", "parts": [{"type": "text",
                                                                 "text": "Hello."}]}])
 
     assert "const OPENS_ITSELF = false" in client.get(f"/chat/{sid}").text
