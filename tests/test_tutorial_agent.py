@@ -289,8 +289,13 @@ def test_the_row_the_tour_calls_an_absence_is_the_one_with_no_second_parent(
 
     for row in rows:
         trace = trace_to_dict(trace_row(run_dir, "matched_commitments", row["ordinal"]))
+        joined = next(s for s in trace["steps"] if s["stage_id"] == "matched_commitments")
         matched = row["values"]["public_commitment"] is not None
-        assert bool(trace["steps"][0]["branches"]) is matched, row["values"]["client"]
+        assert bool(joined["branches"]) is matched, row["values"]["client"]
+        # The chain the reader walks: back through the check to the filing as filed.
+        assert [step["stage_id"] for step in trace["steps"]] == [
+            "matched_commitments", "check_filings", "raw_filings"
+        ]
 
 
 def test_a_stage_that_did_not_finish_is_refused_rather_than_read(

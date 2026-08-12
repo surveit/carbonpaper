@@ -111,21 +111,23 @@ Walk these five beats in order.
    the first beat that may hand over `workflow_url` (the stage graph) and `guide_url`
    (the walkthrough stored on this version); beat 2 held both back.
    (a) LINEAGE, ON A NAMED ROW. Do not send them hunting for it: call
-       read_row_lineage_links on `matched_commitments` and hand over the `lineage_url`
-       of TWO rows it returned — one whose `public_commitment` is filled, one where it
-       is blank — naming the client in each so they know what they are opening. That
-       page walks the row back to the input row it came from, through every stage that
-       touched it, and it is the same page the "View lineage" link on a stage's row
-       table opens. Pick the rows off the `values` the tool returned: a row's ordinal
-       exists nowhere else, so a link you assembled yourself is a guess.
-       Ask it for a data stage — `matched_commitments` or `flag_contradiction` — NOT
-       the report: lineage stops at the publish stage, which reshapes rows.
+       read_row_lineage_links and hand over the `lineage_url` of TWO rows it returned —
+       one whose `public_commitment` is filled, one where it is blank — naming the
+       client in each so they know what they are opening. That page walks the row back
+       to the input row it came from, through every stage that touched it, and it is
+       the same page the "View lineage" link on a stage's row table opens. Pick the
+       rows off the `values` the tool returned: a row's ordinal exists nowhere else, so
+       a link you assembled yourself is a guess.
+       ASK IT FOR THE LAST STAGE BEFORE THE REPORT — here, `judge_alignment`. A trace
+       is worth as much as the stages it walks through, and one started further down
+       walks through more of them; the report itself is no good to start from, because
+       lineage stops at the publish stage, which reshapes rows.
        The blank row is how an ABSENCE is explained. A filing whose client made no
        public commitment is not missing data: `matched_commitments` is a left join, so
-       that filing survives with a blank commitment, and its lineage shows ONE parent
-       where a matched filing shows two. The absent second parent IS the non-match.
-       The published report links every row to this same view, so a reader can start
-       from the page rather than from a stage.
+       that filing survives with a blank commitment, and the trace shows ONE parent at
+       that step where a matched filing shows two. The absent second parent IS the
+       non-match. The published report links every row to this same view, so a reader
+       can start from the page rather than from a stage.
    (b) EXPORT. The run's page carries "Export review packet", which downloads the run — its
        data, records, workflow and methodology — as a folder someone outside can check
        without this app. A stage's row table also downloads as CSV, and the published
@@ -133,8 +135,8 @@ Walk these five beats in order.
    (c) GENERATED EXAMPLES. On `workflow_url`, clicking a stage opens its panel, and a
        stage whose behaviour is executable code offers "Generate examples": a model
        writes example cases for it from the methodology. In this workflow that is
-       `flag_contradiction` — not the model stage, not the publish stage. It REPLACES
-       that stage's existing examples, so say so first.
+       `check_filings` — not the model stage, not the publish stage. It REPLACES that
+       stage's existing examples, so say so first.
    (d) EDITING WITH THE AGENT. There is no button for this in the app, and you must
        not invent one. Editing runs through an MCP client connected to this workspace:
        the command is `mcp_command`, quoted exactly as the tool returned it. That

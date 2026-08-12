@@ -210,9 +210,15 @@ def test_every_name_the_prompt_quotes_is_one_the_code_defines() -> None:
 
 
 def _fixture_column_names(fixture: WorkflowFile) -> set[str]:
+    """Off the signatures, which is where a stage's columns are declared."""
+    signatures = [stage.signature for stage in fixture.stages]
     return {
         column.name
-        for stage in fixture.stages
-        for edge in stage.inputs
-        for column in edge.table_schema.columns
+        for signature in signatures
+        for column in [
+            *(c for entry in signature.reads for c in entry.columns),
+            *getattr(signature, "adds", []),
+            *getattr(signature, "rewrites", []),
+            *getattr(signature, "produces", []),
+        ]
     }

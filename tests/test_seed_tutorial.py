@@ -29,9 +29,9 @@ _GUIDE_PROSE_CEILING = 210
 _EXPECTED_STAGE_IDS = [
     "raw_filings",
     "public_commitments",
+    "check_filings",
     "matched_commitments",
     "judge_alignment",
-    "flag_contradiction",
     "publish_report",
 ]
 
@@ -68,11 +68,18 @@ def _all_filings() -> pd.DataFrame:
     return pd.read_csv(_CSV_PATH)
 
 
+def _checked(filings: pd.DataFrame | None = None) -> pd.DataFrame:
+    return _execute(
+        _stage(_load_fixture(), "check_filings"),
+        {"raw_filings": _all_filings() if filings is None else filings},
+    )
+
+
 def _joined() -> pd.DataFrame:
     return _execute(
         _stage(_load_fixture(), "matched_commitments"),
         {
-            "raw_filings": _all_filings(),
+            "check_filings": _checked(),
             "public_commitments": pd.read_csv(_COMMITMENTS_PATH),
         },
     )
@@ -161,7 +168,8 @@ def test_the_tours_first_six_filings_cover_a_contradiction_an_alignment_and_a_no
 
     joined = _execute(
         _stage(wf, "matched_commitments"),
-        {"raw_filings": first_six, "public_commitments": pd.read_csv(_COMMITMENTS_PATH)},
+        {"check_filings": _checked(first_six),
+         "public_commitments": pd.read_csv(_COMMITMENTS_PATH)},
     )
 
     assert len(joined) == _TOUR_LIMIT
@@ -176,7 +184,7 @@ def test_the_tours_first_six_filings_cover_a_contradiction_an_alignment_and_a_no
 
 def test_the_join_is_many_to_one_and_drops_no_filing():
     joined = _joined()
-    filings = _all_filings()
+    filings = _checked()
 
     assert len(joined) == len(filings) == _ROWS_IN_CSV
     assert list(joined["filing_id"]) == list(filings["filing_id"])
@@ -212,61 +220,50 @@ def test_a_repeated_commitment_row_fails_the_run_rather_than_multiplying_filings
     doubled = pd.concat([commitments, commitments.head(1)], ignore_index=True)
 
     with pytest.raises(ValueError, match="public_commitments"):
-        _execute(
-            stage,
-            {"raw_filings": _all_filings(), "public_commitments": doubled},
-        )
+        _execute(stage, {"check_filings": _checked(), "public_commitments": doubled})
 
 
-# ── the flag ─────────────────────────────────────────────────────────────────
+# ── the check ────────────────────────────────────────────────────────────────
 
 
-def test_flag_contradiction_is_grain_preserving():
-    stage = _stage(_load_fixture(), "flag_contradiction")
-    judged = _stand_in_for_the_model(_joined())
+def test_every_committed_filing_carries_a_spend_the_check_can_read():
+    """If one could not be read the tour's own run would stop, which is not the demo."""
+    checked = _checked()
+    filings = _all_filings()
 
-    flagged = _execute(stage, {"judge_alignment": judged})
-
-    assert len(flagged) == len(judged) == _ROWS_IN_CSV
-    assert list(flagged["filing_id"]) == list(judged["filing_id"])
-    assert flagged["contradicts_commitment"].notna().all()
-    assert set(flagged["contradicts_commitment"].map(type)) == {bool}
-
-
-def test_flag_contradiction_flags_only_a_judged_contradiction_of_a_matched_commitment():
-    stage = _stage(_load_fixture(), "flag_contradiction")
-    judged = _stand_in_for_the_model(_joined())
-
-    flagged = _execute(stage, {"judge_alignment": judged})
-
-    expected = [
-        (not pd.isna(said)) and alignment == _CONTRADICTS
-        for said, alignment in zip(judged["public_commitment"], judged["alignment"])
+    assert set(checked["amount_usd"].map(type)) == {int}
+    assert list(checked["amount_usd"]) == [
+        int(text.replace("$", "").replace(",", "")) for text in filings["amount_usd"]
     ]
-    assert list(flagged["contradicts_commitment"]) == expected
-    assert any(expected)
 
 
-def test_a_filing_with_no_commitment_on_record_is_never_flagged():
-    """Code decides this, not the model — whatever the model answered for that row."""
-    stage = _stage(_load_fixture(), "flag_contradiction")
-    judged = _stand_in_for_the_model(_joined())
-    judged.loc[judged["public_commitment"].isna(), "alignment"] = _CONTRADICTS
+def test_check_filings_is_grain_preserving_and_touches_nothing_else():
+    checked = _checked()
+    filings = _all_filings()
 
-    flagged = _execute(stage, {"judge_alignment": judged})
-
-    unmatched = flagged[flagged["public_commitment"].isna()]
-    assert len(unmatched) == _UNMATCHED
-    assert not unmatched["contradicts_commitment"].any()
+    assert len(checked) == len(filings) == _ROWS_IN_CSV
+    assert list(checked.columns) == list(filings.columns)
+    for column in filings.columns:
+        if column != "amount_usd":
+            assert list(checked[column]) == list(filings[column])
 
 
-def test_flag_contradiction_refuses_a_matched_filing_the_model_left_unjudged():
-    stage = _stage(_load_fixture(), "flag_contradiction")
-    judged = _stand_in_for_the_model(_joined())
-    judged.loc[judged["public_commitment"].notna(), "alignment"] = None
+@pytest.mark.parametrize("spend", ["n/a", "", "one hundred thousand", "$1,0 00.50"])
+def test_a_spend_the_step_cannot_read_stops_the_run(spend):
+    """The cardinal case: a figure nobody can read never becomes a blank downstream."""
+    filings = _all_filings()
+    filings.loc[0, "amount_usd"] = spend
 
-    with pytest.raises(StepRefused, match="no judgment"):
-        _execute(stage, {"judge_alignment": judged})
+    with pytest.raises(StepRefused, match=filings.loc[0, "filing_id"]):
+        _checked(filings)
+
+
+def test_a_filing_with_no_account_of_its_ask_stops_the_run():
+    filings = _all_filings()
+    filings.loc[0, "specific_issues"] = "   "
+
+    with pytest.raises(StepRefused, match="no ask to judge"):
+        _checked(filings)
 
 
 # ── the model step ───────────────────────────────────────────────────────────
@@ -346,7 +343,7 @@ def test_the_review_guide_keeps_every_check_without_the_padding():
         "a repeat fails the run",
         "the absence IS the record",
         "Trust this step least",
-        "only where a commitment was joined",
+        "stopped the run rather than travelling as a blank",
         # The guide ends where the run does: on the file it published.
         "open it under Published",
         "linked back to its own lineage",
@@ -362,7 +359,7 @@ def _publish_a_report(tmp_path, df: pd.DataFrame) -> str:
     # A project-scoped context, because the step declares `trace_links` — the run's
     # (project, run_id) is what a row-trace URL is built from.
     ctx = RunContext.for_workflow_test_run(tmp_path, tmp_path, "tutorial", "R-1")
-    out = HANDLERS[StageType(stage.type)].execute(place_stage(stage), {"flag_contradiction": df}, ctx)
+    out = HANDLERS[StageType(stage.type)].execute(place_stage(stage), {"judge_alignment": df}, ctx)
     assert out is not None
     return Path(out.iloc[0]["report_path"]).read_text(encoding="utf-8")
 
@@ -384,7 +381,6 @@ def _three_filings() -> pd.DataFrame:
                 "commitment_source": "2023 climate pledge",
                 "alignment": "Contradicts",
                 "alignment_note": "Said it backed the standard; this filing opposes it.",
-                "contradicts_commitment": True,
             },
             {
                 "filing_id": "F-2", "client": "Consistent Cooperative", "registrant": "Firm B",
@@ -394,7 +390,6 @@ def _three_filings() -> pd.DataFrame:
                 "commitment_source": "2024 investor letter",
                 "alignment": "Matches",
                 "alignment_note": "Said it would build offshore wind; this filing asks for that.",
-                "contradicts_commitment": False,
             },
             {
                 "filing_id": "F-3", "client": "Silent Holdings", "registrant": "Firm C",
@@ -402,7 +397,6 @@ def _three_filings() -> pd.DataFrame:
                 "specific_issues": "Seeking shorter permitting timelines.",
                 "public_commitment": None, "commitment_source": None,
                 "alignment": "No commitment given", "alignment_note": None,
-                "contradicts_commitment": False,
             },
         ]
     )
@@ -458,19 +452,17 @@ def test_every_report_row_links_back_to_the_row_it_came_from(tmp_path):
     page = _publish_a_report(tmp_path, _three_filings())
 
     for ordinal in range(len(_three_filings())):
-        assert f'href="/project/tutorial/runs/R-1/stage/flag_contradiction/row/{ordinal}' \
+        assert f'href="/project/tutorial/runs/R-1/stage/judge_alignment/row/{ordinal}' \
                '/trace/view">Lineage</a>' in page
 
 
-def test_the_report_step_refuses_a_flag_it_cannot_print_both_sides_of(tmp_path):
-    """Flagged yet carrying no commitment: there is no other side to show."""
-    df = _three_filings().iloc[[2]].assign(contradicts_commitment=True)
+def test_the_report_step_refuses_a_contradiction_it_cannot_print_both_sides_of(tmp_path):
+    """Judged to contradict yet carrying no commitment: there is no other side to show."""
+    df = _three_filings().iloc[[2]].assign(alignment=_CONTRADICTS)
 
     with pytest.raises(StepRefused, match="cannot say what it contradicts"):
         _publish_a_report(tmp_path, df)
 
-
-# ── the template is a file, not a string in the code ─────────────────────────
 
 
 
