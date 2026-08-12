@@ -150,9 +150,13 @@ in the review packet — a folder has no server to tail — and the panel then r
 Both sit in the project shell with **Evals** lit, and both open with the stage panel's own
 head — name, status badge, blurb, then a facts line — over ONE tab strip:
 - **An eval** is *Runs │ Definition │ Dataset*. Runs leads because it is what the eval has
-  actually said; each row carries the accuracy the run STORED, and a run that recorded none
-  gets a dash. Definition opens on compatibility, since a broken eval makes every number
-  under it a claim about a workflow that no longer exists.
+  actually said, and it draws the **runs index's own table** (`.stages.runs-table`, four
+  columns, the run id demoted to the row's link target, the whole row clickable through
+  `static/row-link.js` — delegated from the document, so the two pages share one handler).
+  What differs is the result cell: an eval run's outcome is its score, so the stored
+  accuracy sits where the stage strip does, and a run that stored none shows its status
+  badge rather than a percentage nobody measured. Definition opens on compatibility, since
+  a broken eval makes every number under it a claim about a workflow that no longer exists.
 - **A run** is *Rows │ Scoring │ Pathway*, under a `stat-strip` of rows scored / passed /
   failed / accuracy — all four COUNTED off the run's own `result.parquet`, never off the
   stored metrics, so the tiles and the table cannot disagree. Rows is the comparison

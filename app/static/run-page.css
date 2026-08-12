@@ -272,6 +272,11 @@ td.row-num, th.row-num { text-align: right; color: var(--idle-bd); font-variant-
 
 
 
+/* An eval run's outcome, in the same cell of the same table as a production run's
+   — so its two unhappy states get the tints the production statuses already have. */
+.runs-table .run-outcome.status-error { color: var(--state-failed-ink); }
+.runs-table .run-outcome.status-vetoed { color: var(--state-warn-ink); }
+
 /* ── One eval run's scored rows (eval_run.html) ──
    The verdict leads, the compared pair follows it, and the dataset columns the
    model was given trail behind — the order the reader consults them in. A

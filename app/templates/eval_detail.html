@@ -60,17 +60,43 @@
   {% if runs_error %}
     <div class="load-issues">{{ runs_error }}</div>
   {% elif runs %}
-    <table class="table">
-      <thead><tr><th>run id</th><th>started</th><th>version</th><th>status</th><th>accuracy</th></tr></thead>
+    {# The runs index's own four columns (section_runs.html), so a run history reads
+       the same wherever it is met. The run id is not one of them: an eval run id IS
+       its start instant, so it survives as the row's link target and on hover. What
+       differs is the result cell — an eval run's outcome is its score, not a strip. #}
+    <table class="stages runs-table">
+      <thead>
+        <tr><th>date</th><th>workflow version</th><th>duration</th><th>result</th></tr>
+      </thead>
       <tbody>
         {% for r in runs %}
-        <tr>
-          <td><a href="/project/{{ project }}/evals/{{ config.id }}/runs/{{ r.id }}"><code>{{ r.id }}</code></a></td>
-          <td>{% if r.started_at %}{{ r.started_at | friendly_time }}{% else %}—{% endif %}</td>
-          <td><code>{{ r.workflow_version }}</code></td>
-          <td><span class="badge {{ run_badge.get(r.status, 'pending') }}">{{ r.status }}</span></td>
-          {# Only what the run stored. A run that recorded no accuracy gets a dash. #}
-          <td>{% if r.metrics.get('accuracy') is not none %}{{ "%.1f"|format(100 * r.metrics['accuracy']) }}%{% else %}—{% endif %}</td>
+        <tr class="js-run-row" data-href="/project/{{ project }}/evals/{{ config.id }}/runs/{{ r.run_id }}">
+          <td class="run-date">
+            <a href="/project/{{ project }}/evals/{{ config.id }}/runs/{{ r.run_id }}"
+               title="run {{ r.run_id }}">
+              {%- if r.started_at %}{{ r.started_at | friendly_time }}{% else %}<code>{{ r.run_id }}</code>{% endif -%}
+            </a>
+          </td>
+          <td>
+            {%- if r.version.error %}<span class="unresolved" title="{{ r.version.error }}">version
+              {% if r.version.version_id %}<code>{{ r.version.version_id }}</code>{% endif %} could not be read</span>
+            {%- elif r.version.version_id %}
+              {%- if r.version.message %}“{{ r.version.message }}”
+              {%- else %}<code>{{ r.version.version_id }}</code> <span class="muted">(no message)</span>{% endif %}
+              <a class="open-away" target="_blank" rel="noopener"
+                 href="/project/{{ project }}/workflow/version/{{ r.version.version_id }}"
+                 title="open version {{ r.version.version_id }} in a new tab">↗</a>
+            {%- else %}<span class="unresolved">no workflow version recorded</span>
+            {%- endif %}
+          </td>
+          <td class="run-duration">{% if r.duration %}{{ r.duration }}{% endif %}</td>
+          {# Only what the run stored. A run that recorded no accuracy gets its
+             status badge alone, never a percentage nobody measured. #}
+          <td>
+            {%- if r.accuracy is not none %}{{ "%.1f"|format(100 * r.accuracy) }}%
+            {%- else %}<span class="badge {{ run_badge.get(r.status, 'pending') }}">{{ r.status }}</span>{% endif %}
+            <span class="run-outcome status-{{ r.status }}">{{ r.outcome }}</span>
+          </td>
         </tr>
         {% endfor %}
       </tbody>

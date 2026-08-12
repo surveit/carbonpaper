@@ -27,7 +27,11 @@ from app.web.breadcrumbs import build_eval_crumbs, build_eval_run_crumbs
 from app.web.config import projects_dir, REPO_ROOT, templates
 from app.core.frames import read_frame_file
 from app.web.config import EVENT_TAIL
-from app.web.eval_run_view import build_eval_rows
+from app.web.eval_run_view import (
+    build_eval_rows,
+    build_eval_run_rows,
+    describe_eval_run_duration,
+)
 from app.web.loading import StageListing, load_stages_or_empty, render_frame_as_text
 from app.web.project_view import shell_state
 from app.web.run_events import (
@@ -36,7 +40,6 @@ from app.web.run_events import (
     stream_events,
     tail_start_seq,
 )
-from app.web.run_header import format_duration, measure_elapsed_seconds
 
 router = APIRouter()
 
@@ -113,7 +116,7 @@ def _render_eval_detail(
             "report": report,
             "status": status,
             "executing": executing,
-            "runs": runs,
+            "runs": build_eval_run_rows(project, runs),
             "runs_error": runs_error,
             "versions": list_versions(project_dir),
             **_read_eval_dataset_preview(config),
@@ -169,7 +172,7 @@ async def eval_run_detail(request: Request, project: str, eval_id: str, run_id: 
             ),
             "config": config,
             "run": run,
-            "elapsed": _describe_elapsed(run),
+            "elapsed": describe_eval_run_duration(run),
             # What the run compared, row by row. `result_ref` is absent on a
             # vetoed run and on one that errored before scoring; the pane then
             # states which of those it was rather than showing an empty table.
@@ -235,10 +238,6 @@ def _resolve_eval_events_path(project: str, run_id: str) -> Path:
 def _eval_run_href(project: str, eval_id: str, run_id: str) -> str:
     return f"/project/{project}/evals/{eval_id}/runs/{run_id}"
 
-
-def _describe_elapsed(run: EvalRun) -> str | None:
-    seconds = measure_elapsed_seconds(run.started_at, run.finished_at, still_running=False)
-    return None if seconds is None else format_duration(seconds)
 
 
 # ─── Trigger a run ───────────────────────────────────────────────────────────

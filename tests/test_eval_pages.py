@@ -293,3 +293,32 @@ def test_run_page_offers_no_log_where_the_run_wrote_none(tmp_path):
     assert client.get(
         "/project/demo/evals/label_check/runs/quiet1/events/page?before_seq=9"
     ).status_code == 404
+
+
+def test_eval_lists_its_runs_in_the_runs_index_table(tmp_path):
+    _save_scored_run(tmp_path, _ONE_PASS_ONE_FAIL, run_id="listed1")
+
+    r = client.get("/project/demo/evals/label_check")
+
+    # The same table the Runs section draws — four columns, the run id demoted to
+    # the row's link target, the whole row clickable through the shared handler.
+    assert 'class="stages runs-table"' in r.text
+    assert ">date</th>" in r.text and ">duration</th>" in r.text
+    assert 'data-href="/project/demo/evals/label_check/runs/listed1"' in r.text
+    assert ">run id</th>" not in r.text
+    assert "20s" in r.text                       # measured off started_at/finished_at
+    assert "50.0%" in r.text and "Scored" in r.text
+
+
+def test_a_run_that_stored_no_accuracy_is_not_given_one(tmp_path):
+    save_eval_run(tmp_path / "demo", EvalRun(
+        id="vetoed2", config="label_check", project="demo",
+        workflow_version="v1", status="vetoed",
+        settings=EvalRunSettings(can_score_declaratively=False, frontier=["classify"],
+                                 blocking_stages=["aggregate_it"]),
+    ))
+
+    r = client.get("/project/demo/evals/label_check")
+
+    assert "Not scorable" in r.text
+    assert "%" not in r.text.split('class="stages runs-table"')[1].split("</table>")[0]
