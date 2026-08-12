@@ -2,11 +2,13 @@
 that configures nothing itself ends up reading and writing."""
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 import app.core.store_config as store_config
 from app.core.frames import get_frame_store
-from app.core.paths import CARBON_PAPER_HOME
+from app.core.paths import CARBON_PAPER_HOME, resolve_windows_home
 from app.core.store_config import configure_default_stores, resolve_db_path
 
 
@@ -54,3 +56,14 @@ def test_the_default_db_path_is_the_machine_global_home(monkeypatch):
     monkeypatch.delenv("CARBON_PAPER_DB_PATH", raising=False)
 
     assert resolve_db_path() == CARBON_PAPER_HOME / "app.db"
+
+
+# The `os.name == "nt"` dispatch cannot run here: `Path` binds to WindowsPath at
+# construction, so a posix machine (this laptop, and CI) raises rather than branching.
+# What it dispatches TO is the real decision, and that is testable anywhere.
+def test_the_windows_home_sits_under_local_app_data() -> None:
+    assert resolve_windows_home("/LocalAppData", Path("/Users/x")) == Path("/LocalAppData/carbonpaper")
+
+
+def test_the_windows_home_falls_back_to_the_profile_when_local_app_data_is_unset() -> None:
+    assert resolve_windows_home(None, Path("/Users/x")) == Path("/Users/x/AppData/Local/carbonpaper")
