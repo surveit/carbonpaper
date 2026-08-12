@@ -16,7 +16,12 @@ from app.models.review_guide import ReviewGuideDraft
 from app.services.versioning import ReviewGuide
 from app.services import drafts, project as project_service
 from app.tools import shared
-from app.tools.submitted_stage import SubmittedStage, add_stages_reporting_drops
+from app.tools.submitted_stage import (
+    SubmittedStage,
+    add_stages_reporting_drops,
+    edit_stage_reporting_drops,
+    set_draft_stage_reporting_drops,
+)
 from app.tools.tool_specs import SAVE_VERSION_FROM_DRAFT, TOOL_SPECS
 from app.services.drafts import DraftDetail, DraftEdit, DraftView, SaveResult
 from app.services.project import ProjectListing
@@ -37,8 +42,7 @@ def make_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
         return project_service.read_stage(project_id, stage_id)
 
     def edit_stage(project_id: str, stage_id: str, changes_json: str) -> dict[str, Any]:
-        result = project_service.edit_stage(project_id, stage_id, changes_json)
-        return {"ok": result.ok, "issues": result.issues}
+        return edit_stage_reporting_drops(project_id, stage_id, changes_json)
 
     def add_stage(project_id: str, stages: list[SubmittedStage]) -> dict[str, Any]:
         return add_stages_reporting_drops(project_id, stages)
@@ -54,7 +58,7 @@ def make_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
         return drafts.read_draft(project_id, draft_id)
 
     def set_draft_stage(project_id: str, draft_id: str, stage_json: str) -> DraftEdit:
-        return drafts.set_draft_stage(project_id, draft_id, stage_json)
+        return set_draft_stage_reporting_drops(project_id, draft_id, stage_json)
 
     def remove_draft_stage(project_id: str, draft_id: str, stage_id: str) -> DraftEdit:
         return drafts.remove_draft_stage(project_id, draft_id, stage_id)
