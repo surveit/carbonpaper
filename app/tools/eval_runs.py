@@ -1,6 +1,6 @@
 """Running one of a project's evals, as a tool: the score, and the page it is read on.
 
-app.tools cannot import app.evals, so the run goes through app.services.eval_run.
+The same three calls the eval page's Run button makes.
 """
 from __future__ import annotations
 
@@ -9,8 +9,10 @@ from typing import Annotated
 from pydantic import BaseModel
 
 from app.core.agent.tool_spec import ToolSpec
+from app.evals.runner import run_eval as run_project_eval
+from app.evals.store import load_eval_config
 from app.models import EvalRun
-from app.services.eval_run import run_project_eval
+from app.services.workspace import repo_root
 from app.tools.shared import resolve_existing_project
 from app.tools.types import ToolInputSchema
 
@@ -30,8 +32,11 @@ def run_eval(
     base_url: str = "",
 ) -> EvalRunResult:
     """`base_url` is for a caller whose reader clicks the link; without it it is root-relative."""
-    resolve_existing_project(project_id)
-    run = run_project_eval(project_id, eval_id, version_id=version_id)
+    project_dir = resolve_existing_project(project_id)
+    run = run_project_eval(
+        project_dir, load_eval_config(project_dir, eval_id), repo_root(),
+        version_id=version_id,
+    )
     return EvalRunResult(
         run=run,
         run_url=f"{base_url}/project/{project_id}/evals/{eval_id}/runs/{run.id}",
@@ -41,30 +46,11 @@ def run_eval(
 RUN_EVAL = ToolSpec(
     name="run_eval",
     description="""\
-Run one of the project's evals now and return what it scored. An eval replays the
-workflow over rows whose right answers were written down first: it injects that
-dataset at the eval's override stage, executes only the stages from there to its
-target stage, and compares the target's output against the expected column. Nothing
-upstream runs again, and no production run is recorded.
-
-This BLOCKS until the score is in — there is no run id to poll, unlike run_workflow —
-and an eval whose target is a model stage spends real calls and real minutes doing it.
-
-Returns the stored run plus `run_url`: the page laying every expected value beside
-what the workflow actually produced, row by row. Hand that URL to the reader. It is
-the evidence for anything you say about the score, and the only place they can see
-WHICH rows disagreed.
-
-`run.status` says what happened, never whether it is good:
-  scored — the comparison ran. `run.metrics` carries rows_scored, rows_passed,
-           accuracy, and an accuracy per compared column.
-  vetoed — the path from override to target does not hold one row in, one row out,
-           so it cannot be scored row by row; `run.notes` names the stages.
-  error  — a stage failed; `run.notes` carries the failure. No score is invented.
-
-There is no pass mark, so do not announce one. Report the metrics, then read the
-disagreeing rows and say what the workflow answered instead — whether that is good
-enough is the reader's judgment, and it is the disagreements they learn from.""",
+Score one of the project's evals: it replays the workflow over rows whose right answers
+were written down first. Blocks, and a model stage costs real money. Returns the run and
+`run_url` — each expected value beside what the workflow produced, the only place the
+reader sees WHICH rows disagreed. Hand it over. No pass mark exists: report the metrics
+and the disagreements, never a verdict.""",
 )
 
 RUN_EVAL_SCHEMA: ToolInputSchema = {

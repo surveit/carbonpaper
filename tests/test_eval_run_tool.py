@@ -7,13 +7,9 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-# Importing the eval router is what fills the seam app.tools calls: app.web is the one
-# package allowed to import app.evals.
-import app.web.routers.evals  # noqa: F401
 from app.models import EvalConfig, ExpectedOutput, ScoringMetric, TableRef, parse_stage
 from app.models.schema import TableSchema
 from app.models.stages.input_data import FileFormat
-from app.services import eval_run as eval_run_service
 from app.services.project import write_eval_config
 from app.services.versioning import WorkflowVersion
 from app.tools.eval_runs import run_eval
@@ -91,12 +87,3 @@ def test_an_eval_the_project_does_not_have_is_refused(demo: str) -> None:
     with pytest.raises(FileNotFoundError):
         run_eval(demo, "no_such_eval")
 
-
-def test_a_process_with_no_runner_wired_in_refuses_rather_than_scoring_nothing(
-    demo: str, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """The seam is filled by importing app.web; unfilled, it must not read as a bad score."""
-    monkeypatch.setattr(eval_run_service, "_run_one_project_eval", None)
-
-    with pytest.raises(RuntimeError, match="no eval runner is configured"):
-        run_eval(demo, "label_check")

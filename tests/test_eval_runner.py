@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
-import app.evals.runner as eval_runner
+import app.web.routers.evals as evals_router
 from app.core.errors import EvalNotScorableError
 from app.main import app
 from app.models import parse_stage, EvalConfig, ExpectedOutput, TableRef
@@ -212,9 +212,7 @@ def test_trigger_route_runs_and_redirects_to_the_run(project, monkeypatch):
     repo_root, demo, config = project
     save_eval_config(demo, config)
     workspace.set_projects_dir(repo_root)
-    # The route runs the eval through app.evals.runner.run_project_eval, which resolves
-    # the repo root itself rather than taking the router's.
-    monkeypatch.setattr(eval_runner, "repo_root", lambda: repo_root)
+    monkeypatch.setattr(evals_router, "REPO_ROOT", repo_root)
 
     r = TestClient(app).post("/project/demo/evals/label_check/run", follow_redirects=False)
     assert r.status_code == 303
@@ -225,9 +223,7 @@ def test_trigger_route_400s_when_not_runnable(project, monkeypatch):
     repo_root, demo, config = project
     save_eval_config(demo, config.model_copy(update={"table": None}))
     workspace.set_projects_dir(repo_root)
-    # The route runs the eval through app.evals.runner.run_project_eval, which resolves
-    # the repo root itself rather than taking the router's.
-    monkeypatch.setattr(eval_runner, "repo_root", lambda: repo_root)
+    monkeypatch.setattr(evals_router, "REPO_ROOT", repo_root)
 
     r = TestClient(app).post("/project/demo/evals/label_check/run", follow_redirects=False)
     assert r.status_code == 400
@@ -244,9 +240,7 @@ def test_trigger_route_scores_an_explicitly_selected_unpublished_version(project
         published=False,
     ).save()
     workspace.set_projects_dir(repo_root)
-    # The route runs the eval through app.evals.runner.run_project_eval, which resolves
-    # the repo root itself rather than taking the router's.
-    monkeypatch.setattr(eval_runner, "repo_root", lambda: repo_root)
+    monkeypatch.setattr(evals_router, "REPO_ROOT", repo_root)
 
     r = TestClient(app).post(
         "/project/demo/evals/label_check/run",
@@ -260,9 +254,7 @@ def test_trigger_route_404s_when_selected_version_does_not_exist(project, monkey
     repo_root, demo, config = project
     save_eval_config(demo, config)
     workspace.set_projects_dir(repo_root)
-    # The route runs the eval through app.evals.runner.run_project_eval, which resolves
-    # the repo root itself rather than taking the router's.
-    monkeypatch.setattr(eval_runner, "repo_root", lambda: repo_root)
+    monkeypatch.setattr(evals_router, "REPO_ROOT", repo_root)
 
     r = TestClient(app).post(
         "/project/demo/evals/label_check/run",

@@ -462,13 +462,12 @@ def test_scoring_the_eval_costs_two_model_calls():
 def test_the_tour_seeds_the_eval_beside_the_review_guide(projects_root):
     seeded = seed_tutorial_project(TutorialContext(base_url=_BASE_URL))
 
-    stored = load_eval_config(projects_root / seeded.name, _EVAL_ID)
+    stored = load_eval_config(projects_root / seeded.project.id, _EVAL_ID)
 
-    assert stored.project == seeded.name
+    assert stored.project == seeded.project.id
     assert (stored.override_stage, stored.target_stage) == (_OVERRIDE_STAGE, _TARGET_STAGE)
     assert [check.output_column for check in stored.expected_outputs] == [_JUDGED_COLUMN]
-    assert seeded.eval_url == f"{_BASE_URL}project/{seeded.name}/evals/{_EVAL_ID}"
-    # run_eval takes the id, so the tour is handed it rather than slicing the URL.
+    # run_eval takes the id, so the tour is handed it rather than slicing it off a URL.
     assert seeded.eval_id == _EVAL_ID
 
 

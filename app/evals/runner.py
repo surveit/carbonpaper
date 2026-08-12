@@ -23,20 +23,8 @@ from app.evals.dataset_columns import (
     deconflict_column_names,
     get_output_columns_from_stage,
 )
-from app.evals.store import latest_version_id, load_eval_config, save_eval_run
+from app.evals.store import latest_version_id, save_eval_run
 from app.services.versioning import load_version, load_version_stages
-from app.services.workspace import repo_root, resolve_project_dir
-
-
-def run_project_eval(
-    project: str, eval_id: str, *, version_id: str | None = None,
-) -> EvalRun:
-    """The id-taking twin: a caller outside this package holds a project id, not a directory."""
-    project_dir = resolve_project_dir(project)
-    if not project_dir.is_dir():
-        raise FileNotFoundError(f"no project '{project}' in the workspace")
-    return run_eval(project_dir, load_eval_config(project_dir, eval_id), repo_root(),
-                    version_id=version_id)
 
 
 def run_eval(
