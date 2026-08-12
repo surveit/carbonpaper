@@ -28,16 +28,21 @@ primary_region = "iad"
   source = "carbonpaper_data"
   destination = "/data"
 
-# The machine is never idled out, because waking it is too slow to hide. Boot is
-# ~20s — 1.3s of `alembic upgrade head`, 2.5s importing app.main, and ~12s reading
-# the 649MB venv's native extensions off a cold page cache — while the Fly proxy
-# gives up waiting after ~8s, so the first request after an idle period 502s.
+# The machine is meant never to idle out, because waking it is too slow to hide.
+# Boot is ~20s — 1.3s of `alembic upgrade head`, 2.5s importing app.main, and ~12s
+# reading the 649MB venv's native extensions off a cold page cache — and the proxy
+# logs "instance refused connection" while that runs, which the caller sees as a
+# 502. Staying up costs $11.81/mo at this machine's shared-cpu-2x rate.
 #
-# auto_stop_machines = "suspend" was the free version of this fix and did not hold.
-# A snapshot does resume in 0.9s, but the proxy stopped the machine outright on
-# both observed idle timeouts (2026-08-12), and Fly exposes no knob to force
-# suspension. Staying up costs $11.81/mo at this machine's shared-cpu-2x rate;
-# auto_start_machines still covers a restart after a deploy or a crash.
+# NONE OF THESE SETTINGS BIND WHILE THE FLY ORG IS ON A TRIAL. A trial machine is
+# stopped after 5m0s of runtime whatever its service config says — flyd emits
+# "Trial machine stopping. To run for longer than 5m0s, add a credit card", and it
+# fired on all three stops observed on 2026-08-12 with min_machines_running = 1 and
+# autostop off already live. That cap, not autostop, is also why the earlier
+# auto_stop_machines = "suspend" never once produced a suspended machine: a manual
+# `fly machine suspend` on this machine resumes in 0.9s, so it is eligible; the
+# trial killer simply stops rather than suspends. A payment method on the org is
+# the precondition for any of this working.
 [http_service]
   internal_port = 8080
   force_https = true
