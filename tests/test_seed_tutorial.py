@@ -342,13 +342,13 @@ def test_the_review_guide_keeps_every_check_without_the_padding():
     prose = " ".join(step.prose for step in guide.steps)
     for check in (
         "Invented",
-        "the join fails on a repeat",
-        "not missing data",
-        "the weakest link",
-        "a wrong flag traces to a wrong judgment",
+        "every filing for it doubles at the join",
+        "an answer, not a gap",
+        "Trust this step least",
+        "only where a promise was on record",
         # The guide ends where the run does: on the file it published.
-        "Open it under Published",
-        "every row links back to its own lineage",
+        "open it under Published",
+        "linked back to the filing it came from",
     ):
         assert check in prose, check
 

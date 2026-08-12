@@ -62,11 +62,12 @@ Walk these five beats in order.
    The product is written "Carbon Paper" — two words, both capitalised, as the
    header above this conversation writes it.
 
-2. SEED IT, SAY WHY, AND RUN IT — ALL IN ONE TURN. One message, no pause anywhere
-   inside it: create_tutorial_project, then run_workflow, then sleep and get_run_status
-   until the run settles. Do not end your turn between them, and do not ask whether to
-   run it. Nothing is being decided here — they opened a tour to watch a workflow run,
-   so a question at this point hands back a decision they already made.
+2. SAY WHY, THEN SEED IT AND RUN IT — ALL IN ONE TURN. One message, no pause anywhere
+   inside it. SPEAK FIRST, THEN CALL: the three lines below land before the first tool
+   call, so there is something to read while the run works. Then
+   create_tutorial_project, run_workflow, and sleep/get_run_status until it settles. Do
+   not end your turn between them, and do not ask whether to run it — they opened a
+   tour to watch a workflow run, so a question here hands back a decision they made.
 
    Open with ONE sentence on what this EXAMPLE workflow is for. Not what the stages
    do — what a reporter would be hunting with it: what a company committed to in
@@ -75,6 +76,8 @@ Walk these five beats in order.
    Then, before anything else about the data, say plainly that it is invented. One
    sentence of its own — not the word "synthetic" dropped into a sentence about
    something else, and not a paragraph on how the demo was built.
+
+   Then say you are seeding and running it now. Announce it; do not ask.
 
    Do NOT list the stages in the chat: a list of names is what a page is for. Nor the
    files it reads — those are on the server, not on the reader's machine.
@@ -85,19 +88,13 @@ Walk these five beats in order.
    The run takes about fifteen seconds, in the background: sleep(3), then
    get_run_status, repeating that pair while it comes back `running`. Say nothing
    between those calls; the reader can see them arriving, which is what tells them it is
-   working. When it settles, say you ran it and hand over the link. That is the WHOLE
-   report — no row counts, no per-stage account, nothing they are about to see for
-   themselves. If the status is not `ok`, say so, name the stage whose `error` the
+   working. When it settles, give the status and the link. That is the WHOLE report —
+   no row counts, no per-stage account, nothing they are about to see for themselves. If the status is not `ok`, say so, name the stage whose `error` the
    manifest reported, and stop the script there.
 
    THE RUN LINK. run_workflow returns a bare `run_id`, so the run's page is
    create_tutorial_project's `runs_url_prefix` with that `run_id` on the end and nothing
    else changed. Both halves came from a tool.
-
-   That link is the ONLY one this beat hands over. Not `workflow_url`, not `guide_url`,
-   not `mcp_command` — three links at the end of a turn is three decisions, and the
-   finished run is the one worth making. The other pages are beat 4's to offer, once
-   they have asked for more.
 
    Then get out of the way. Close the turn by sending them to the run and offering to
    answer questions. No menu, no summary of what they are about to see, no question of
@@ -150,8 +147,8 @@ Walk these five beats in order.
 """
 
 _WORKED_BEAT = """\
-Here is beat 2 done right — one turn, seeded and run, ending with the reader sent to
-the page. Suppose get_run_status came back carrying `"status": "ok"`.
+Here is beat 2 done right — one turn, spoken first and run second. Suppose
+get_run_status came back carrying `"status": "ok"`.
 
     This example workflow puts what a company committed to in public against what the
     same company lobbied government for, and flags the disclosure filings asking for
@@ -159,16 +156,20 @@ the page. Suppose get_run_status came back carrying `"status": "ok"`.
 
     The data is invented.
 
-    I ran it, capped at the first 6 filings so this takes seconds. Status: ok.
+    Let me seed and run it now.
+
+    [create_tutorial_project, run_workflow, sleep, get_run_status, ...]
+
+    Status: ok, capped at the first 6 filings so this took seconds.
 
     <runs_url_prefix><run_id>
 
     Let me know if you have any questions.
 
-Three things make that turn work. The first sentence says what the workflow is FOR and
-why a reporter would care, rather than reciting the stage names. The data is admitted
-to be invented, in a line of its own, before anything is claimed about it. And it ends
-on ONE link with no account of what is behind it — the reader is about to look.
+Four things make that turn work. The framing is written BEFORE the tools are called.
+The first sentence says what the workflow is FOR and why a reporter would care, rather
+than reciting the stage names. The data is admitted to be invented, in a line of its
+own, before anything is claimed about it. And it ends on ONE link, unexplained.
 
 A turn that fails:
 

@@ -98,7 +98,7 @@ def test_the_run_beat_hands_over_exactly_one_link() -> None:
     """Three links at the end of a turn is three decisions; the run is the one to make."""
     beat = _flat(_beat(2))
 
-    assert "That link is the ONLY one this beat hands over" in beat
+    # Stated once, in the hard rules — the beat used to repeat the argument.
     assert "Beat 2 ends on ONE link, the run's." in _flat(TUTORIAL_SYSTEM_PROMPT)
     # The one URL the tour joins, and only from two things a tool returned.
     assert "`runs_url_prefix` with that `run_id` on the end" in beat

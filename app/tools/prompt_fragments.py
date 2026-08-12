@@ -44,12 +44,13 @@ prevented."""
 REVIEW_GUIDE_NOTE = """\
 A workflow does not explain itself, so a version the human has to understand before
 acting on it needs write_review_guide: an ordered walkthrough, in the methodology's own
-terms, saying what each part does and what a reviewer should check. Write it in
+terms, saying why each part is there and what is TRUE once it has run. Write it in
 TEST_RUN_REVIEW — after the smoke run, never straight off save_version.
 
 Write it FOR the methodology's owner, not a programmer: use the document's terms of art,
-wrap column names in `backticks`, and say what could be quietly wrong rather than
-restating the stage names and order the page already shows."""
+wrap column names in `backticks`, and say what could be quietly wrong. A line or two a
+step, and not the mechanism — the kind of join, the shape of the code, the stage names
+and their order are all on the page already."""
 
 HANDOVER_BARS_NOTE = """\
 Two different things you can ask a human for, with different bars:
