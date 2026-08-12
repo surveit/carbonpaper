@@ -44,3 +44,4 @@
 {"run_id":"31610349619","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31610349619","created":"2026-08-12T15:05:30Z","branch":"refactor/split-persistence","event":"pull_request","contracts_kept":14,"findings":[]}
 {"run_id":"31610330639","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31610330639","created":"2026-08-12T15:06:12Z","branch":"fix/show-actual-rows-on-must-fail","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"31610349619","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31610349619","created":"2026-08-12T15:06:29Z","branch":"refactor/split-persistence","event":"pull_request","contracts_kept":null,"findings":[]}
+{"run_id":"31610480722","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31610480722","created":"2026-08-12T15:07:01Z","branch":"master","event":"push","contracts_kept":14,"findings":[]}
