@@ -61,8 +61,9 @@ expendable — if one is lost, start a new one.""",
 Create a NEW project from a methodology document (prose describing how the
 investigation finds, verifies, and surfaces its claims). Writes the document
 as the project's source of record. Returns the project_id (the sanitized
-name). Fails loudly if the name is taken — never overwrites. Next step: agree
-the project's terms, the words its methodology already uses, with the user.""",
+name). Fails loudly if the name is taken — never overwrites. Next: agree the
+project's terms — the words its methodology already uses — with the user, and
+store them with write_terms.""",
     ),
     "describe_workflow": ToolSpec(
         name="describe_workflow",
@@ -217,6 +218,19 @@ before writing so you amend it rather than replace someone's work.""",
         description="""\
 Return the JSON of one stage from the workflow. Read before editing.""",
     ),
+    "read_terms": ToolSpec(
+        name="read_terms",
+        description="""\
+The project's agreed vocabulary: its NOUNS (the things its data is about,
+each with the columns it has if it has any) and its VERBS (the acts the
+methodology performs), plus the other spellings its owner writes each one
+as. These words are handed to every agent that writes prose about this
+project — stage descriptions, generated examples, the review guide — and
+the human reads them on the project's Terms page, so what you read here is
+what your writing has to match. A word not in this list is a word to agree
+with the user, never one to coin. An empty result means the words have not
+been agreed yet, not that the project has none.""",
+    ),
     "remove_draft_stage": ToolSpec(
         name="remove_draft_stage",
         description="""\
@@ -328,6 +342,31 @@ workflow does. Replaces any guide already on that version, whole.
 
 Written in TEST_RUN_REVIEW — after this version's smoke run, not off the back
 of save_version.""",
+    ),
+    "write_terms": ToolSpec(
+        name="write_terms",
+        description="""\
+Store the words this project is written in — the WHOLE vocabulary, both
+halves, every time. What you send REPLACES what is stored: a noun or verb
+you leave out is one the project stops using, so read_terms first and send
+that back with your additions rather than sending only what is new.
+
+A noun is a named schema. One that is nothing but a word — a thing the
+methodology talks about with no table behind it — carries a `name` and a
+`title` and no columns and no `kind`; that is the ordinary case, not a
+half-finished one. Add columns only where you know the fields. A verb
+carries its name and what it means. Either may list `also_written`: the
+other spellings the owner uses for that same thing.
+
+REFUSED WHOLE, with nothing written, where one word carries two meanings —
+a noun and a verb of the same name, or two words sharing a spelling. The
+refusal names the repeated word. It is not a formality: a stage
+description written in an ambiguous word leaves the reader unable to tell
+which thing it meant.
+
+What is stored reaches every agent that writes prose about this project and
+is shown to the human on the project's Terms page. Agree the words with the
+user before you store them — never invent one to fill the list out.""",
     ),
 }
 

@@ -40,9 +40,6 @@ def start_generation(project_dir: Path, *, document: str, model: str) -> str:
 
 def start_stage_test_generation(project_dir: Path, *, stage_id: str, model: str) -> str:
     """Every check runs before the turn starts, so a rejected stage leaves no orphaned session."""
-    doc_path = find_document_path(project_dir)
-    if doc_path is None:
-        raise ValueError(f"{project_dir.name} has no document to generate tests from")
     stages = {stage.id: stage for stage in load_workflow(project_dir)}
     stage = stages.get(stage_id)
     if stage is None:
@@ -62,7 +59,7 @@ def start_stage_test_generation(project_dir: Path, *, stage_id: str, model: str)
             f"suite could not be saved: " + "; ".join(unwritable)
         )
     return start_stage_test_generation_agent(
-        document=doc_path.read_text(encoding="utf-8"),
+        terms=terms.load_terms(project_dir.name),
         stage=stage,
         project_id=project_dir.name,
         model=model,
@@ -88,6 +85,7 @@ def start_review_guide_generation(
         version_id=version.version_id,
         project_id=project_dir.name,
         document=doc_path.read_text(encoding="utf-8"),
+        terms=terms.load_terms(project_dir.name),
         model=model,
         on_answer=lambda draft: _finish_review_guide(project_dir, version_id, draft),
     )

@@ -67,13 +67,15 @@ the schema afterwards.)
 # Your tools, by phase
 Each tool's own description says how it behaves; this says WHEN. Start by calling
 create_project(name, document) — the methodology prose becomes the project's source of
-record, and it returns the project_id every other tool takes.
+record, and it returns the project_id every other tool takes, plus the tool the phase
+after it wants.
 
   RESEARCH   read_data_model, describe_workflow, read_stage, get_project_status
              run_workflow_test over a few rows, then
              profile_stage_output_data_range, to see what the data really holds,
              and read_stage_output_rows when the question is about a ROW
-  TERMS      (no tools — this is where you agree the project's words with the user)
+  TERMS      read_terms to see what is agreed, then write_terms once the user has
+             agreed the rest. Every later phase writes in those words.
   PLANNING   (no tools — this is where you ask the user)
   BUILD      add_stage, edit_stage, remove_stage, then generate_stage_tests and
              loop edit_stage -> run_stage_tests until they pass. Still BUILD.

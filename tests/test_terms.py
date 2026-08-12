@@ -10,11 +10,11 @@ import pytest
 from pydantic import ValidationError
 
 from app.models import NamedSchema, SchemaLibrary, Terms, Verb
+from app.models.terms import render_terms
 from app.services import terms
 from app.services.terms import StoredTerms
-from app.tools.prompt_fragments import render_terms
 from app.web.config import templates
-from app.web.diagrams import SCHEMA_KIND_CLASS, SCHEMA_KIND_GLYPH, SCHEMA_KIND_ORDER
+from app.web.diagrams import SCHEMA_KIND_CLASS, SCHEMA_KIND_GLYPH
 
 _FLAG = Verb(
     name="flag",
@@ -182,28 +182,93 @@ def test_a_noun_that_is_only_a_word_is_rendered_under_its_title():
     assert "- issue_text — Issue text" in block
 
 
-# ── the data-model section, rendered over both kinded and kindless schemas ───
-def _render_data_model_section(schemas: list[dict[str, object]]) -> str:
-    template = templates.env.get_template("section_data_model.html")
+# ── the Terms section, rendered over a word with a table and a word without ──
+def _render_terms_section(stored: Terms | None, unreadable: str = "") -> str:
+    template = templates.env.get_template("section_terms.html")
     context = template.new_context({
         "state": {"id": _PROJECT},
-        "schemas": schemas,
-        "issues": [],
-        "er_diagram": None,
-        "table_graph": None,
-        "schema_json": {},
-        "kind_order": SCHEMA_KIND_ORDER,
+        "terms": stored,
+        "unreadable": unreadable,
         "kind_class": SCHEMA_KIND_CLASS,
         "kind_glyph": SCHEMA_KIND_GLYPH,
     })
     return "".join(template.blocks["section"](context))
 
 
-def test_the_section_groups_a_schema_that_declares_no_kind_as_itself():
-    html = _render_data_model_section([
-        {"name": "filing", "kind": "input", "title": "Filing", "columns": []},
-        {"name": "issue_text", "title": "Issue text", "columns": []},
-    ])
-    assert "issue_text" in html            # never dropped for having no kind
-    assert "no kind" in html
-    assert html.count("type-tag") == 3     # two group chips, one kinded schema's summary chip
+def test_the_section_shows_a_noun_with_no_columns_without_marking_it_short_of_any():
+    html = _render_terms_section(
+        Terms(nouns=SchemaLibrary(schemas=[_ISSUE_TEXT]), verbs=[])
+    )
+    assert "issue_text" in html          # never dropped for having no table
+    assert "0 column" not in html        # a count would read as data missing
+    assert "Columns" not in html         # nor a reference section over nothing
+
+
+def test_the_section_shows_a_nouns_columns_and_the_spellings_of_both_halves():
+    firm = NamedSchema(
+        name="firm",
+        title="Firm",
+        kind="input",
+        also_written=["registrant"],
+        columns=[{"name": "firm_id", "type": "str", "nullable": False}],
+    )
+    html = _render_terms_section(Terms(nouns=SchemaLibrary(schemas=[firm]), verbs=[_FLAG]))
+
+    assert "1 column" in html
+    assert "firm_id" in html                      # the column table, not just the count
+    assert "input" in html                        # the kind it declared
+    assert html.count("also written: registrant") == 1
+    assert html.count("also written: flagged") == 1
+    assert "Mark a row for a human to decide on." in html
+
+
+def test_the_section_tells_a_project_with_no_words_what_to_do():
+    html = _render_terms_section(Terms(nouns=SchemaLibrary(schemas=[]), verbs=[]))
+    assert "empty-state" in html
+    assert "assistant" in html      # who agrees them with you
+    assert "dm-card" not in html
+
+
+def test_the_section_says_why_terms_it_could_not_read_are_not_shown():
+    html = _render_terms_section(None, unreadable="word(s) carrying more than one meaning: ['flag']")
+    assert "flag" in html
+    assert "empty-state" not in html   # unreadable is not the same as unagreed
+
+
+# ── the route, over a project with words and one without ────────────────────
+def _get_terms_page(tmp_path, stored: Terms | None):
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+    from app.services import workspace
+
+    workspace.set_projects_dir(tmp_path)
+    project_dir = tmp_path / "vocab"
+    project_dir.mkdir()
+    (project_dir / "document.md").write_text("Follow the filings.", encoding="utf-8")
+    if stored is not None:
+        terms.write_terms("vocab", stored)
+    return TestClient(app).get("/project/vocab/terms")
+
+
+def test_the_route_renders_both_halves_of_what_the_project_stored(tmp_path):
+    firm = NamedSchema(
+        name="firm", title="Firm", description="A company that filed.",
+        columns=[{"name": "firm_id", "type": "str", "nullable": False}],
+    )
+    response = _get_terms_page(
+        tmp_path, Terms(nouns=SchemaLibrary(schemas=[firm]), verbs=[_FLAG])
+    )
+
+    assert response.status_code == 200
+    assert "A company that filed." in response.text            # the noun
+    assert "Mark a row for a human to decide on." in response.text   # the verb
+    assert "firm_id" in response.text                          # the noun's columns
+    assert 'href="/project/vocab/terms"' in response.text      # its own nav entry
+
+
+def test_the_route_renders_a_project_that_has_agreed_no_words(tmp_path):
+    response = _get_terms_page(tmp_path, None)
+
+    assert response.status_code == 200
+    assert "No terms agreed yet" in response.text

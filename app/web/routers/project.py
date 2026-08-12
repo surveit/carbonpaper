@@ -8,12 +8,12 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Form, HTTPException, Request
+from pydantic import ValidationError
 from fastapi.responses import (
     HTMLResponse,
     JSONResponse,
     RedirectResponse,
 )
-from pydantic import ValidationError
 
 from app.core.utils import format_errors
 from app.models import (
@@ -38,12 +38,9 @@ from app.web.stage_test_views import build_certification, shape_test_views
 from app.web.diagrams import (
     SCHEMA_KIND_CLASS,
     SCHEMA_KIND_GLYPH,
-    SCHEMA_KIND_ORDER,
     TYPE_CLASS,
     TYPE_GLYPH,
     build_mermaid_graph,
-    build_schema_er_diagram,
-    build_schema_table_graph,
 )
 from app.web.loading import (
     find_workflow_stage,
@@ -63,24 +60,6 @@ def _project_dir(project_name: str) -> Path:
     if target.parent != projects_dir().resolve() or not target.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project_name}'")
     return projects_dir() / project_name
-
-
-# ─── Per-schema edit seed ─────────────────────────────────────────────────────
-
-def _render_nouns(project_name: str) -> tuple[list[dict[str, Any]], list[str]]:
-    """The stored nouns as the section's dicts, or what refused to load — never both."""
-    try:
-        nouns = terms.load_terms(project_name).nouns
-    except ValidationError as exc:
-        return [], format_errors(exc)
-    return [noun.model_dump(mode="json", exclude_none=True) for noun in nouns.schemas], []
-
-
-def _schema_json_map(schemas: list[dict[str, Any]]) -> dict[str, str]:
-    return {
-        s["name"]: json.dumps(s, indent=2, ensure_ascii=False)
-        for s in schemas if s.get("name")
-    }
 
 
 # ─── Home dashboard ──────────────────────────────────────────────────────────
@@ -164,7 +143,7 @@ async def generate_project(project_name: str):
 
 # ─── Unified PROJECT sections ────────────────────────────────────────────────
 # One project (examples/<name>/) is framed by a left-sidebar shell (project_shell)
-# with five sections — Overview / Document / Data model / Workflow / Runs. Each
+# with five sections — Overview / Document / Terms / Workflow / Runs. Each
 # section route passes the SAME status snapshot (project_view.shell_state) plus its
 # section name and the section-specific extras the matching section_*.html needs. The
 # shell reads ONLY from `state`.
@@ -199,22 +178,25 @@ async def project_document(request: Request, project_name: str):
     )
 
 
-@router.get("/project/{project_name}/data_model", response_class=HTMLResponse)
-async def project_data_model(request: Request, project_name: str):
+@router.get("/project/{project_name}/terms", response_class=HTMLResponse)
+async def project_terms(request: Request, project_name: str):
     pdir = _project_dir(project_name)
-    schemas, issues = _render_nouns(project_name)
+    # write_terms refuses a word carrying two meanings, so stored terms that will not
+    # load were hand-edited — say which word, rather than 500 on the page that shows them.
+    try:
+        stored = terms.load_terms(project_name)
+    except ValidationError as exc:
+        stored, unreadable = None, format_errors(exc)
+    else:
+        unreadable = []
     return templates.TemplateResponse(
         request,
-        "section_data_model.html",
+        "section_terms.html",
         {
-            "state": shell_state(pdir, "data_model"),
-            "section": "data_model",
-            "schemas": schemas,
-            "er_diagram": build_schema_er_diagram(schemas) if schemas else None,
-            "table_graph": build_schema_table_graph(schemas) if schemas else None,
-            "issues": issues,
-            "schema_json": _schema_json_map(schemas),
-            "kind_order": SCHEMA_KIND_ORDER,
+            "state": shell_state(pdir, "terms"),
+            "section": "terms",
+            "terms": stored,
+            "unreadable": "; ".join(unreadable),
             "kind_class": SCHEMA_KIND_CLASS,
             "kind_glyph": SCHEMA_KIND_GLYPH,
         },

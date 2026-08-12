@@ -28,6 +28,7 @@ from app.core.agent.agent import Agent
 from app.core.agent.bound_tool import BoundToolSpec
 from app.core.agent.registry import build_mcp_server
 from app.core.agent.sdk_engine import MCP_SERVER_NAME
+from app.models import SchemaLibrary, Terms
 from app.runtime.llm import SYSTEM_PROMPT as RUNTIME_SYSTEM_PROMPT
 from app.tools.editing import EditingContext, make_editing_tools
 from app.agents.tutorial.config import make_tutorial_tools
@@ -37,6 +38,7 @@ from app.tools.tutorial import TutorialContext
 # prompt, so any value builds the same prompt and the same submit_answer schema. The
 # task itself is per-run and is not dumped.
 _UNUSED_DOCUMENT = "(placeholder — the task is per-run and not dumped)"
+_UNUSED_TERMS = Terms(nouns=SchemaLibrary(schemas=[]), verbs=[])
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -71,7 +73,10 @@ def render_editing_agent() -> str:
         model=EDITING_CONFIG.model,
         note=(
             "Mounted as an in-process MCP server, so the model sees each tool as "
-            f"`mcp__{MCP_SERVER_NAME}__<name>`. No built-in tools are on offer."
+            f"`mcp__{MCP_SERVER_NAME}__<name>`. No built-in tools are on offer. A "
+            "session bound to a project appends that project's terms to the prompt "
+            "below (`AgentConfig.render_session_prompt`); no project has terms here, "
+            "so nothing is appended."
         ),
         system_prompt=EDITING_CONFIG.system_prompt,
         tools=read_bound_tools(make_editing_tools(EditingContext(project_id="<project_id>"))),
@@ -130,7 +135,7 @@ def render_review_guide_agent() -> str:
         note=_STRUCTURED_OUTPUT_NOTE,
         system_prompt=REVIEW_GUIDE_SYSTEM_PROMPT,
         tools=read_agent_tools(
-            build_review_guide_author([], "<version_id>", _UNUSED_DOCUMENT)
+            build_review_guide_author([], "<version_id>", _UNUSED_DOCUMENT, _UNUSED_TERMS)
         ),
     )
 

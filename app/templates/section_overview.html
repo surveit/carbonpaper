@@ -49,15 +49,15 @@
     {% endif %}
   </a>
 
-  {# Data model #}
-  <a class="ov-tile" href="/project/{{ s.name }}/data_model">
-    <span class="ov-tile-k">Data model</span>
+  {# Terms — counted over the nouns, which are where a project's words are stored. #}
+  <a class="ov-tile" href="/project/{{ s.name }}/terms">
+    <span class="ov-tile-k">Terms</span>
     {% set dm = s.data_model %}
     {% if not dm.present %}
       <span class="ov-tile-v none">none</span>
-      <span class="ov-tile-sub">no schemas authored yet</span>
+      <span class="ov-tile-sub">no words agreed yet</span>
     {% else %}
-      <span class="ov-tile-v">{{ dm.n_schemas }} schema{% if dm.n_schemas != 1 %}s{% endif %}</span>
+      <span class="ov-tile-v">{{ dm.n_schemas }} noun{% if dm.n_schemas != 1 %}s{% endif %}</span>
     {% endif %}
   </a>
 

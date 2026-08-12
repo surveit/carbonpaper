@@ -10,7 +10,9 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from app.models import parse_stage
+from pydantic import ValidationError
+
+from app.models import Terms, parse_stage
 from app.tools.submitted_stage import SubmittedStage
 from app.services import workspace
 from app.services.project import ProjectListing
@@ -74,6 +76,8 @@ def test_mcp_lists_the_authoring_tools(client):
         "save_version",
         "read_review_guide",
         "write_review_guide",
+        "read_terms",
+        "write_terms",
     } <= names
 
 
@@ -88,6 +92,95 @@ def test_create_project_tool_and_status(tmp_path, monkeypatch):
     assert server.list_projects() == [ProjectListing(id=project_id, name="money_trail")]
     status = server.get_project_status(project_id=project_id)
     assert status["has_document"] is True
+    # The phase after create is TERMS, and it now names the tool that serves it.
+    assert created["next"] == "write_terms"
+    assert created["phase"] == "terms"
+
+
+# ── the two terms tools ──────────────────────────────────────────────────────
+
+_FILING = {"name": "filing", "title": "Filing", "also_written": ["disclosure"]}
+_FLAG = {"name": "flag", "definition": "Mark a row for a human to decide on."}
+
+
+def test_a_project_that_has_agreed_no_words_reads_back_empty(tmp_path):
+    from app.mcp import server
+
+    workspace.set_projects_dir(tmp_path)
+    project_id = server.create_project(name="wordless", document="doc")["project_id"]
+
+    stored = server.read_terms(project_id=project_id)
+    assert stored.nouns.schemas == []
+    assert stored.verbs == []
+
+
+def test_written_terms_read_back_whole(tmp_path):
+    from app.mcp import server
+
+    workspace.set_projects_dir(tmp_path)
+    project_id = server.create_project(name="vocab", document="doc")["project_id"]
+
+    written = server.write_terms(
+        project_id=project_id,
+        terms=Terms.model_validate({"nouns": {"schemas": [_FILING]}, "verbs": [_FLAG]}),
+    )
+
+    assert [n.name for n in written.nouns.schemas] == ["filing"]
+    assert written.nouns.schemas[0].also_written == ["disclosure"]
+    assert [v.name for v in written.verbs] == ["flag"]
+    # Read back off disk, not echoed: what the project now says.
+    assert server.read_terms(project_id=project_id) == written
+
+
+def test_writing_terms_replaces_rather_than_merges_into_what_is_stored(tmp_path):
+    from app.mcp import server
+
+    workspace.set_projects_dir(tmp_path)
+    project_id = server.create_project(name="replaced", document="doc")["project_id"]
+    server.write_terms(
+        project_id=project_id,
+        terms=Terms.model_validate({"nouns": {"schemas": [_FILING]}, "verbs": [_FLAG]}),
+    )
+
+    later = server.write_terms(
+        project_id=project_id,
+        terms=Terms.model_validate({"nouns": {"schemas": [
+            {"name": "registrant", "title": "Registrant"}]}, "verbs": []}),
+    )
+
+    assert [n.name for n in later.nouns.schemas] == ["registrant"]
+    assert later.verbs == []
+
+
+def test_a_word_carrying_two_meanings_is_refused_before_anything_is_written(tmp_path):
+    from app.mcp import server
+
+    workspace.set_projects_dir(tmp_path)
+    project_id = server.create_project(name="clash", document="doc")["project_id"]
+    server.write_terms(
+        project_id=project_id,
+        terms=Terms.model_validate({"nouns": {"schemas": [_FILING]}, "verbs": []}),
+    )
+
+    with pytest.raises(ValidationError, match="flag"):
+        server.write_terms(
+            project_id=project_id,
+            terms=Terms.model_validate({
+                "nouns": {"schemas": [{"name": "flag", "title": "Flag"}]},
+                "verbs": [_FLAG],
+            }),
+        )
+
+    # Refused at the door, so the project still says what it said before.
+    assert [n.name for n in server.read_terms(project_id=project_id).nouns.schemas] == ["filing"]
+
+
+def test_the_terms_tools_refuse_a_project_that_is_not_in_the_workspace(tmp_path):
+    from app.mcp import server
+
+    workspace.set_projects_dir(tmp_path)
+    with pytest.raises(ValueError, match="no project"):
+        server.read_terms(project_id="never_created")
 
 
 def test_generate_data_model_kicks_the_live_turn(tmp_path, monkeypatch):

@@ -1,14 +1,20 @@
 """The generator bridge: task assembly is code-blind, document-blind, and grounded
-in the step's own description."""
+in the step's own description and the project's own words."""
 import pytest
 from pydantic import ValidationError
 
 from app.compiler.stage_tests import build_stage_test_generator, render_generation_task
-from app.models import parse_stage, Stage
+from app.models import NamedSchema, SchemaLibrary, Terms, Verb, parse_stage, Stage
 
 _CODE = "def transform(row):\n    return {**row, 'doubled': row['amount'] * 2}\n"
 _SUMMARY = "Doubles the reported `amount` into `doubled`."
-_DOC = "----doc text----"
+_NO_TERMS = Terms(nouns=SchemaLibrary(schemas=[]), verbs=[])
+_TERMS = Terms(
+    nouns=SchemaLibrary(schemas=[NamedSchema(
+        name="filing", title="Filing", description="One disclosure a firm sent in.",
+        also_written=["disclosure"])]),
+    verbs=[Verb(name="flag", definition="Mark a row for a human to decide on.")],
+)
 
 
 def _python_stage(*, summary=_SUMMARY, corner_cases=None) -> Stage:
@@ -33,7 +39,7 @@ def _python_stage(*, summary=_SUMMARY, corner_cases=None) -> Stage:
 
 
 def test_task_contains_the_description_schemas_and_stage_meta():
-    task = render_generation_task(_DOC, _python_stage())
+    task = render_generation_task(_NO_TERMS, _python_stage())
     assert _SUMMARY in task
     assert "Double" in task            # stage name rendered
     assert "double" in task            # stage id rendered
@@ -43,13 +49,22 @@ def test_task_contains_the_description_schemas_and_stage_meta():
 
 def test_task_never_contains_the_methodology_document():
     """An agent that had read the methodology would certify the methodology, not the code."""
-    task = render_generation_task(_DOC, _python_stage())
-    assert _DOC not in task
+    task = render_generation_task(_NO_TERMS, _python_stage())
     assert "METHODOLOGY" not in task
 
 
+def test_the_task_is_written_in_the_projects_own_words():
+    task = render_generation_task(_TERMS, _python_stage())
+    assert "- filing — One disclosure a firm sent in. Also written: disclosure." in task
+    assert "- flag — Mark a row for a human to decide on." in task
+
+
+def test_a_project_with_no_words_gets_no_terms_heading():
+    assert "# Terms" not in render_generation_task(_NO_TERMS, _python_stage())
+
+
 def test_task_never_contains_the_stage_code():
-    task = render_generation_task(_DOC, _python_stage())
+    task = render_generation_task(_NO_TERMS, _python_stage())
     assert "def transform" not in task
     assert _CODE not in task
 
@@ -60,12 +75,12 @@ def test_task_never_contains_existing_tests():
         "tests": [{"name": "stale_case",
                    "inputs": {"load": [{"amount": 1.0}]},
                    "expected": [{"amount": 1.0, "doubled": 2.0}]}]})
-    task = render_generation_task(_DOC, stage)
+    task = render_generation_task(_NO_TERMS, stage)
     assert "stale_case" not in task
 
 
 def test_stated_corner_cases_are_rendered_with_their_expected_outcome():
-    task = render_generation_task(_DOC, _python_stage(corner_cases=[
+    task = render_generation_task(_NO_TERMS, _python_stage(corner_cases=[
         {"case": "`amount` is blank", "expected": "the step fails"},
         {"case": "`amount` is negative", "expected": "the row is kept unchanged"},
     ]))
@@ -76,14 +91,14 @@ def test_stated_corner_cases_are_rendered_with_their_expected_outcome():
 
 
 def test_no_corner_cases_still_renders_a_task():
-    task = render_generation_task(_DOC, _python_stage(corner_cases=[]))
+    task = render_generation_task(_NO_TERMS, _python_stage(corner_cases=[]))
     assert _SUMMARY in task
     assert "corner case" not in task.lower()
 
 
 def test_a_stage_with_no_summary_cannot_generate_examples():
     with pytest.raises(ValueError, match="has no summary"):
-        render_generation_task(_DOC, _python_stage(summary=None))
+        render_generation_task(_NO_TERMS, _python_stage(summary=None))
 
 
 def test_generator_rejects_non_python_stages():
@@ -95,11 +110,11 @@ def test_generator_rejects_non_python_stages():
         "publish": {},
     })
     with pytest.raises(ValueError, match="can run them"):
-        build_stage_test_generator(_DOC, bad)
+        build_stage_test_generator(_NO_TERMS, bad)
 
 
 def test_generator_target_schema_is_stage_bound():
-    agent = build_stage_test_generator(_DOC, _python_stage())
+    agent = build_stage_test_generator(_NO_TERMS, _python_stage())
     with pytest.raises(Exception, match="declared inputs"):
         agent._target_schema.model_validate({"tests": [{
             "name": "x", "inputs": {"ghost": [{"amount": 1.0}]},
@@ -123,13 +138,13 @@ def _narrow_reads_stage() -> Stage:
 
 def test_task_shows_each_input_as_what_the_step_reads_from_it():
     # Showing the whole edge would ask for fixture columns the gate then refuses.
-    task = render_generation_task(_DOC, _narrow_reads_stage())
+    task = render_generation_task(_NO_TERMS, _narrow_reads_stage())
     assert "amount" in task and "doubled" in task
     assert "memo" not in task
 
 
 def test_target_schema_binds_the_case_to_the_reads_not_the_input_edge():
-    agent = build_stage_test_generator(_DOC, _narrow_reads_stage())
+    agent = build_stage_test_generator(_NO_TERMS, _narrow_reads_stage())
     suite = agent._target_schema.model_validate({"tests": [{
         "name": "doubles_two", "inputs": {"load": [{"amount": 2.0}]},
         "expected": [{"doubled": 4.0}]}]})

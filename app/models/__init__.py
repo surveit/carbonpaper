@@ -61,6 +61,7 @@ from app.models.named_schemas import (
 from app.models.terms import (
     Terms as Terms,
     Verb as Verb,
+    render_terms as render_terms,
     validate_one_meaning_per_word as validate_one_meaning_per_word,
 )
 from app.models.workflow_stage import (

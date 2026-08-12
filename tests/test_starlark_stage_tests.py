@@ -5,6 +5,8 @@ from __future__ import annotations
 import pytest
 
 from app.compiler.stage_tests import build_stage_test_generator, render_generation_task
+from app.models.named_schemas import SchemaLibrary
+from app.models.terms import Terms
 from app.models import Stage, parse_stage
 from app.models.stages.stage_base import find_stage_test_class
 from app.models.stages.stage_tests import StarlarkRowFunctionStageTest
@@ -16,6 +18,7 @@ from app.runtime.stage_tests import (
     run_tests_for_stage,
 )
 
+_NO_TERMS = Terms(nouns=SchemaLibrary(schemas=[]), verbs=[])
 _IN_SCHEMA = {"columns": [
     {"name": "filing_id", "type": "str", "nullable": False},
     {"name": "reported_amount", "type": "str", "nullable": True},
@@ -200,14 +203,14 @@ def test_find_stage_test_class_binds_the_starlark_suite_model():
 
 
 def test_the_generator_builds_for_a_starlark_stage_without_showing_it_the_code():
-    agent = build_stage_test_generator("----doc text----", _starlark_stage(_PARSE_DOLLARS, []))
+    agent = build_stage_test_generator(_NO_TERMS, _starlark_stage(_PARSE_DOLLARS, []))
     assert _SUMMARY in agent.task
     assert "starlark_row_function" in agent.task
     assert "def transform" not in agent.task
 
 
 def test_the_generators_target_schema_is_bound_to_the_starlark_stages_inputs():
-    agent = build_stage_test_generator("----doc text----", _starlark_stage(_PARSE_DOLLARS, []))
+    agent = build_stage_test_generator(_NO_TERMS, _starlark_stage(_PARSE_DOLLARS, []))
     with pytest.raises(Exception, match="declared inputs"):
         agent._target_schema.model_validate({"tests": [{
             "name": "x", "inputs": {"ghost": [_dollar_row()]},
@@ -217,4 +220,4 @@ def test_the_generators_target_schema_is_bound_to_the_starlark_stages_inputs():
 def test_a_starlark_stage_with_no_summary_cannot_generate_examples():
     stage = _starlark_stage(_PARSE_DOLLARS, [], summary=None)
     with pytest.raises(ValueError, match="has no summary"):
-        render_generation_task("----doc text----", stage)
+        render_generation_task(_NO_TERMS, stage)

@@ -20,6 +20,7 @@ from app.core.errors import (
     RunNotFoundError,
 )
 from app.models import find_workflow_compiler_warnings
+from app.models.terms import Terms
 from app.tools import shared
 from app.tools.submitted_stage import SubmittedStage, add_stages_reporting_drops
 from app.tools.tool_specs import SAVE_VERSION_FROM_WORKING_COPY, TOOL_SPECS
@@ -120,9 +121,11 @@ def list_projects() -> list[ProjectListing]:
 @mcp.tool(description=TOOL_SPECS["create_project"].description)
 def create_project(name: str, document: str) -> dict[str, Any]:
     project_id = project_service.create_project(name, document, source="mcp")
-    # A phase, not a tool call: no tool stores terms yet, and naming one that does
-    # not exist sends the client after a tool it cannot call.
-    return {"project_id": project_id, "next": CompilerPhase.TERMS.value}
+    return {
+        "project_id": project_id,
+        "phase": CompilerPhase.TERMS.value,
+        "next": "write_terms",
+    }
 
 
 @mcp.tool(description=TOOL_SPECS["get_project_status"].description)
@@ -179,6 +182,20 @@ def read_data_model(project_id: str) -> list[dict[str, Any]]:
     _resolve_existing_project(project_id)
     return [noun.model_dump(mode="json", exclude_none=True)
             for noun in terms_service.load_terms(project_id).nouns.schemas]
+
+
+@mcp.tool(description=TOOL_SPECS["read_terms"].description)
+def read_terms(project_id: str) -> Terms:
+    _resolve_existing_project(project_id)
+    return terms_service.load_terms(project_id)
+
+
+@mcp.tool(description=TOOL_SPECS["write_terms"].description)
+def write_terms(project_id: str, terms: Terms) -> Terms:
+    _resolve_existing_project(project_id)
+    terms_service.write_terms(project_id, terms)
+    # Read back rather than echoed: what the project now says, not what was sent.
+    return terms_service.load_terms(project_id)
 
 
 @mcp.tool(description=TOOL_SPECS["describe_workflow"].description)
