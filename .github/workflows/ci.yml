@@ -39,12 +39,24 @@ jobs:
         run: uv run --frozen ruff check .
       # Architecture boundaries: contracts live in pyproject [tool.importlinter].
       # PYTHONPATH=. lets grimp import the `app` package (run from source, not installed).
+      # `tee` keeps the human-readable output in the log while saving the
+      # contract-by-contract verdicts for the arch-metrics workflow to tally.
+      # pipefail so the step still fails on a broken contract despite the pipe.
       - id: imports
         if: always() && steps.ruff.conclusion != 'skipped'
-        run: PYTHONPATH=. uv run --frozen lint-imports
+        run: |
+          set -o pipefail
+          PYTHONPATH=. uv run --frozen lint-imports | tee lint-imports.txt
       - id: types
         if: always() && steps.ruff.conclusion != 'skipped'
         run: uv run --frozen mypy
+      - name: Upload contract verdicts
+        if: always() && steps.imports.conclusion != 'skipped'
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate-contracts
+          path: lint-imports.txt
+          retention-days: 7
 
   test:
     runs-on: ubuntu-latest
@@ -63,12 +75,21 @@ jobs:
       # (test_roldugin.py etc.) that hit real APIs. tests/ and app/ are named
       # explicitly (not bare `pytest`) so the root probes stay uncollected while
       # the colocated app/**/_arch_tests/ architecture checks DO run in CI.
+      # --junitxml records which tests failed in a form the arch-metrics workflow
+      # can read; the log itself is not a stable machine-readable record.
       - run: |
           if [ -d tests ]; then
-            uv run --frozen python -m pytest tests/ app/
+            uv run --frozen python -m pytest tests/ app/ --junitxml=junit.xml
           else
             echo "::warning::No tests/ directory on this ref — pytest was NOT run."
           fi
+      - name: Upload test outcomes
+        if: always() && hashFiles('junit.xml') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate-tests
+          path: junit.xml
+          retention-days: 7
 
   # Informational-only import-graph coupling report, upserted as one PR
   # comment (marker-tagged, edited in place on later pushes rather than
