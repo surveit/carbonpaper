@@ -187,19 +187,22 @@ forbidden_modules = [
 ]
 # The SQLite engine sits beside the record base and below everything else: it may read
 # app.core.errors and app.core.persistence (the protocol it satisfies, and JsonDict) and
-# nothing more. Who may import IT is a default-deny allowlist held file by file —
-# app/_arch_tests/test_storage_engine_sealed.py seals sqlite3 to this module.
+# nothing more.
 
 [[tool.importlinter.contracts]]
-name = "app.models stays pure — never imports the storage engine"
-type = "forbidden"
-source_modules = ["app.models"]
-forbidden_modules = ["app.core.sqlite_store"]
-# The pure contracts (Stage, TableSchema, …) are validation-only and side-effect-free, so
-# they may not name a storage engine. app.core.persistence is NOT forbidden: it is the
-# record base and the store handle, pydantic and an indirection, no engine behind it — so
-# a record may sit beside the contract it embeds without dragging sqlite into the type
-# layer. Splitting the old fused module is what makes that distinction expressible.
+name = "app.core.sqlite_store imported only by the store wiring"
+type = "protected"
+protected_modules = ["app.core.sqlite_store"]
+allowed_importers = ["app.core.store_config"]
+# Which database backs the app is chosen in ONE place: store_config hands the engine to
+# configure_store and every other module reaches storage through the DocumentStore
+# protocol. Whitelisted, like every other boundary here, so a second module reaching for
+# sqlite is denied by default rather than allowed until someone remembers to forbid it —
+# which is also what keeps app.models off the engine, without naming app.models.
+# app.core.persistence is NOT protected: it is the record base and the store handle,
+# pydantic and an indirection with no engine behind it, so a record may sit beside the
+# contract it embeds without dragging sqlite into the type layer. Splitting the old fused
+# module is what makes that distinction expressible.
 
 [[tool.importlinter.contracts]]
 name = "app.core does not import the domain models"
