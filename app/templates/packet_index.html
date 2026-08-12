@@ -49,6 +49,30 @@
 </section>
 {% endif %}
 
+{# The rows the published files link back to, one line per stage the publish stage
+   reads. A stage reached only through a contributor is listed under the directory,
+   not here — nothing published points at it directly. #}
+{% if lineage.stages %}
+<section>
+  <h2>Row provenance</h2>
+  <p class="muted">Every row the published files link back to, traced to the data it
+    came from. <a href="{{ lineage_dir_href }}">All {{ lineage.traced | length }} rows &rsaquo;</a></p>
+  <table class="packet-lineage">
+    <thead><tr><th>Step</th><th class="num">Rows linked</th><th></th></tr></thead>
+    <tbody>
+    {% for stage in lineage.stages if stage.is_publish_input() %}
+      <tr>
+        <td><a href="{{ lineage_dir_href }}#{{ stage.stage_id }}"><code>{{ stage.stage_id }}</code></a></td>
+        <td class="num">{{ stage.published }}</td>
+        <td class="muted">{% if stage.rows | length > stage.published %}+{{
+          stage.rows | length - stage.published }} reached through a contributor{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
 {% if run.stages %}
 <section>
   <h2>The workflow this run executed</h2>

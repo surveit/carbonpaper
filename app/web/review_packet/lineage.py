@@ -5,12 +5,15 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from pydantic import BaseModel
-
 from app.models import Stage
 from app.runtime.trace import RunFrames, trace_row_from, trace_to_dict
 from app.runtime.trace_links import read_issued_traces
-from app.services.review_packet.views import RunView
+from app.services.review_packet.views import (
+    LINEAGE_DIR,
+    LineageReport,
+    RunView,
+    StageTraces,
+)
 from app.web.breadcrumbs import Crumb
 from app.web.config import templates
 from app.web.panel_links import PacketPanelLinks, packet_lineage_href
@@ -19,19 +22,11 @@ from app.web.trace_view import build_trace_view
 
 _log = logging.getLogger(__name__)
 
-LINEAGE_DIR = "lineage"
-
 # A page per traced row. Reached only by a run whose terminal stages are very wide;
 # past it the packet writes NO lineage at all rather than a partial set, because a
 # row linking to a page that was never written is the one failure this whole surface
 # exists to avoid — a dead link reads as "checked" until the reader clicks it.
 PACKET_MAX_LINEAGE_PAGES = 20_000
-
-
-class LineageReport(BaseModel):
-    written: list[str]
-    traced: set[tuple[str, int]]
-    refused: str | None
 
 
 def write_packet_lineage(
@@ -52,11 +47,31 @@ def write_packet_lineage(
         _write_page(root, frames, view, stages_by_id, stage_id, row, traced)
         for stage_id, row in sorted(closure)
     ]
+    stages = _group_by_stage(sorted(closure), published)
     if written:
         # No directory where there is nothing to list: a run that published no
         # links promises no provenance, and an empty page implies otherwise.
-        written.append(_write_directory(root, sorted(closure), published))
-    return LineageReport(written=written, traced=set(closure), refused=None)
+        written.append(_write_directory(root, stages, len(closure)))
+    return LineageReport(
+        written=written, traced=set(closure), refused=None, stages=stages
+    )
+
+
+def _group_by_stage(
+    traced: list[tuple[str, int]], published: set[tuple[str, int]]
+) -> list[StageTraces]:
+    by_stage: dict[str, list[int]] = {}
+    for stage_id, row in traced:
+        by_stage.setdefault(stage_id, []).append(row)
+    return [
+        StageTraces(
+            stage_id=stage_id,
+            rows=rows,
+            published=sum(1 for r in rows if (stage_id, r) in published),
+            hrefs=[packet_lineage_href("", stage_id, r) for r in rows],
+        )
+        for stage_id, rows in by_stage.items()
+    ]
 
 
 def _find_closure(frames: RunFrames, run_dir: Path) -> set[tuple[str, int]]:
@@ -114,24 +129,11 @@ def _published_rows(run_dir: Path) -> list[tuple[str, int]]:
     return [(t.stage_id, t.row_ordinal) for t in read_issued_traces(run_dir)]
 
 
-def _write_directory(root: Path, traced: list[tuple[str, int]], published: set[tuple[str, int]]) -> str:
+def _write_directory(root: Path, stages: list[StageTraces], total: int) -> str:
     relative = f"{LINEAGE_DIR}/index.html"
-    by_stage: dict[str, list[int]] = {}
-    for stage_id, row in sorted(traced):
-        by_stage.setdefault(stage_id, []).append(row)
     html = templates.env.get_template("packet_lineage_index.html").render(
-        stages=[
-            StageTraces(
-                stage_id=stage_id,
-                rows=rows,
-                # Rows the run itself linked, vs rows pulled in because a linked
-                # row's trace named them. The reader is told which is which.
-                published=sum(1 for r in rows if (stage_id, r) in published),
-                hrefs=[packet_lineage_href("", stage_id, r) for r in rows],
-            )
-            for stage_id, rows in by_stage.items()
-        ],
-        total=len(traced),
+        stages=stages,
+        total=total,
         assets=[f"../{ASSETS_DIR}/{name}" for name in STYLESHEETS],
         index_href="../index.html",
     )
@@ -139,10 +141,3 @@ def _write_directory(root: Path, traced: list[tuple[str, int]], published: set[t
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(html, encoding="utf-8")
     return relative
-
-
-class StageTraces(BaseModel):
-    stage_id: str
-    rows: list[int]
-    published: int
-    hrefs: list[str]

@@ -13,7 +13,12 @@ from app.services.loader import resolve_function_code
 from app.services.review_packet.checksums import CHECKSUMS_FILE
 from app.services.review_packet.data import DataReport
 from app.models import WorkflowStage
-from app.services.review_packet.views import RunView, StageView
+from app.services.review_packet.views import (
+    LINEAGE_DIR,
+    LineageReport,
+    RunView,
+    StageView,
+)
 from app.services.run_guide import RunGuideView
 from app.web.config import templates
 from app.web.loading import load_output_preview, load_output_table
@@ -71,7 +76,7 @@ def write_packet_pages(
     run_dir: Path,
     view: RunView,
     data: DataReport,
-    traced: frozenset[tuple[str, int]],
+    lineage: LineageReport,
     guide: RunGuideView | None,
     diagram: str,
     issues: RunIssues,
@@ -81,12 +86,12 @@ def write_packet_pages(
     written.extend(_write_diagram_scripts(root))
     written.extend(_write_asset(root, name) for name in CODE_SCRIPTS)
     written.append(_write_diagram_source(root, diagram))
-    written.append(_write_index(root, view, data, guide, diagram, issues))
+    written.append(_write_index(root, view, data, lineage, guide, diagram, issues))
     for stage in view.stages:
         written.append(
             _write_stage_page(
                 root, run_dir, view, stage,
-                workflow_stages_by_id.get(stage.stage_id), traced)
+                workflow_stages_by_id.get(stage.stage_id), frozenset(lineage.traced))
         )
     return written
 
@@ -106,6 +111,7 @@ def _write_index(
     root: Path,
     view: RunView,
     data: DataReport,
+    lineage: LineageReport,
     guide: RunGuideView | None,
     diagram: str,
     issues: RunIssues,
@@ -113,6 +119,8 @@ def _write_index(
     html = _render(
         "packet_index.html",
         run=view,
+        lineage=lineage,
+        lineage_dir_href=f"{LINEAGE_DIR}/index.html",
         guide=guide,
         omitted=data.omitted,
         artifacts=data.artifacts,

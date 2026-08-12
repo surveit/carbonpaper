@@ -219,3 +219,11 @@ def _aggregate_trace(contributors: int):
         "end": {"reached_origin": False, "at_stage": "totals",
                 "message": "this row summarizes its inputs"},
     }
+
+
+def test_the_index_links_land_on_a_section_the_directory_defines(tmp_path):
+    """An anchor with no target scrolls nowhere and reads as a broken page."""
+    packet = _export_demo_packet(tmp_path)
+    directory = (packet / "lineage/index.html").read_text(encoding="utf-8")
+    ids = set(re.findall(r'<section class="lin-dir" id="([^"]+)"', directory))
+    assert ids == {"totals", "source"}, "every stage listed gets an anchor"

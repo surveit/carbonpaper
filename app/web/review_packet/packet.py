@@ -54,7 +54,7 @@ def export_review_packet(project: str, run_id: str, dest_root: Path) -> ReviewPa
             run_dir,
             view,
             data,
-            frozenset(lineage.traced),
+            lineage,
             _load_guide(project, manifest),
             _build_diagram(workflow_stages, project, view),
             # `workflow_stages or None` is the difference between "nothing blocked"
