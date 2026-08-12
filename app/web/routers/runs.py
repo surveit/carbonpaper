@@ -147,7 +147,7 @@ async def upload_file(project: str, file: UploadFile = File(...)):
         return JSONResponse({"ok": False, "error": "no file provided"}, status_code=400)
     # Off the event loop: the copy streams a file of any size to disk and hashes it.
     try:
-        record = await run_in_threadpool(save_upload, project, file.filename, file.file)
+        record = await run_in_threadpool(save_upload, file.filename, file.file, project)
     except UploadTooLargeError as exc:
         # The message names the limit and what to do; run_controls.js shows it verbatim.
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)

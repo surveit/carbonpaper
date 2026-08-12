@@ -35,11 +35,13 @@ curl -F file=@2026-lobbying.csv http://localhost:8765/project/<project>/files
  "path":"~/.carbonpaper/examples/<project>/files/a3f9…/2026-lobbying.csv"}
 ```
 
-The same bytes sent twice are one copy. One file may be up to 512MB and a project's
-files up to 2GB in total; `CARBON_PAPER_MAX_UPLOAD_BYTES` and
-`CARBON_PAPER_PROJECT_UPLOAD_QUOTA_BYTES` raise those on a bigger machine. The ceiling
-is what a run can load into memory, not what the disk holds — `input_data` hands a
-csv/json/xlsx source to pandas whole.
+The same bytes sent twice are one copy — one store serves the workspace, beside the
+document store and the frames, and a record says which project claims each file. One
+file may be up to 512MB and the store 4GB in total; `CARBON_PAPER_MAX_UPLOAD_BYTES` and
+`CARBON_PAPER_FILES_QUOTA_BYTES` raise those on a bigger machine, and
+`CARBON_PAPER_FILES_ROOT` repoints the store. The per-file ceiling is what a run can
+load into memory, not what the disk holds — `input_data` hands a csv/json/xlsx source
+to pandas whole.
 
 Nothing authenticates this endpoint, so a hosted instance is one tester's instance.
 

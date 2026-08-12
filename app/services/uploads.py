@@ -1,6 +1,6 @@
-"""Run-input files uploaded through the browser: a content-addressed store under
-a project's `files/` dir, the record of what that store holds, and the two
-size limits that keep a run loadable and the volume from filling."""
+"""Data files a run reads: one content-addressed store for the whole workspace, the
+record that says which project claims each one, and the two size limits that keep a
+run loadable and the volume from filling."""
 from __future__ import annotations
 
 import hashlib
@@ -10,10 +10,10 @@ from pathlib import Path
 from typing import BinaryIO, ClassVar
 
 from app.core.persistence import PersistedModel, PersistenceScope
+from app.core.store_config import resolve_db_path
 from app.models.schema import TypeUnsafeUserStageConfigOverride
 from app.models.stages.input_data import resolve_file_format
 from app.services.errors import FileNotStoredError, UploadTooLargeError
-from app.services.workspace import resolve_project_dir
 
 # How much of an upload is held in memory at once while it is written and hashed.
 _CHUNK_BYTES = 1024 * 1024
@@ -32,18 +32,18 @@ _GIGABYTE = 1024 * _MEGABYTE
 # than refusing it. Raise it with the machine, not on its own.
 _DEFAULT_MAX_UPLOAD_BYTES = 512 * _MEGABYTE
 
-# What one project's uploads may weigh in total. Bounds the volume the projects
-# tree, the frame store and every run's outputs also live on.
-_DEFAULT_PROJECT_QUOTA_BYTES = 2 * _GIGABYTE
+# What every stored file may weigh together. One store serves the workspace, so this
+# bounds the disk the document store, the frames and every run's outputs share — which
+# a per-project number could not, since several projects at their own limit exceed it.
+_DEFAULT_FILES_QUOTA_BYTES = 4 * _GIGABYTE
 
 
-# A record exists only once the bytes are fully written and hashed, so it is the
-# one signal that a copy under files/ is complete rather than half streamed.
-# `created_at` is when these bytes first arrived and `updated_at` when they were
-# last picked; `filename` is the name of the most recent pick, which is what the
-# run form and the review packet show the reader.
+# `sha256` addresses the BYTES and `project_id` says who claims them, so the two are
+# separate: one blob serves however many projects uploaded it, each with its own record
+# and its own filename for it. `project_id` is None for a file that arrived before any
+# project owned it — `claim_file` fills it in, moving nothing on disk.
 class UploadedFile(PersistedModel):
-    """One stored upload, keyed `f"{project}/{sha256}"`."""
+    """One project's claim on one stored file; `id` is incidental, (sha256, project) is the key."""
 
     collection: ClassVar[str] = "uploaded_file"
     SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
@@ -51,86 +51,123 @@ class UploadedFile(PersistedModel):
     sha256: str
     filename: str
     byte_count: int
+    project_id: str | None = None
+
+
+def files_root() -> Path:
+    """Beside the document store and the frames, so pinning the DB path carries it too."""
+    override = os.environ.get("CARBON_PAPER_FILES_ROOT")
+    return Path(override) if override is not None else resolve_db_path().parent / "files"
 
 
 def max_upload_bytes() -> int:
     return _read_byte_limit("CARBON_PAPER_MAX_UPLOAD_BYTES", _DEFAULT_MAX_UPLOAD_BYTES)
 
 
-def project_quota_bytes() -> int:
-    return _read_byte_limit("CARBON_PAPER_PROJECT_UPLOAD_QUOTA_BYTES",
-                            _DEFAULT_PROJECT_QUOTA_BYTES)
+def files_quota_bytes() -> int:
+    return _read_byte_limit("CARBON_PAPER_FILES_QUOTA_BYTES", _DEFAULT_FILES_QUOTA_BYTES)
 
 
-def save_upload(project: str, filename: str, src: BinaryIO) -> UploadedFile:
-    """Store an uploaded run-input file and return the record of it."""
-    files_dir = resolve_project_dir(project) / "files"
-    # Content-addressed, so the destination is not known until the last byte is
-    # read: the stream is written to a temp file in the same dir and moved into
-    # files/<sha256>/<filename> once its hash is. Picking the same file twice
-    # lands on one copy and one record. The sha256 owns the directory rather than
-    # the file name so the name a human chose survives into every path we show
-    # them — the run form's field, and the review packet's "inputs this run read".
-    files_dir.mkdir(parents=True, exist_ok=True)
+def save_upload(filename: str, src: BinaryIO, project_id: str | None = None) -> UploadedFile:
+    """Store an uploaded file and return the record of it; `project_id` None leaves it unclaimed."""
+    root = files_root()
+    # Content-addressed, so the destination is not known until the last byte is read:
+    # the stream is written to a temp file in the same dir and moved into
+    # <root>/<sha256>/<filename> once its hash is. The sha256 owns the directory
+    # rather than the file name so the name a human chose survives into every path we
+    # show them — the run form's field, and the packet's "inputs this run read".
+    root.mkdir(parents=True, exist_ok=True)
     safe_name = _safe_filename(filename)
-    staged, digest, byte_count = _write_to_temp_file(files_dir, src, max_upload_bytes())
-    dest = files_dir / digest / safe_name
-    # The quota is checked here rather than before the read, so that re-picking a
-    # file the project already holds costs nothing and is allowed at quota. The
-    # overshoot while deciding is one file's worth, bounded by the ceiling above.
+    staged, digest, byte_count = _write_to_temp_file(root, src, max_upload_bytes())
+    dest = root / digest / safe_name
+    # The quota is checked here rather than before the read, so re-sending bytes the
+    # store already holds costs nothing and is allowed at quota. The overshoot while
+    # deciding is one file's worth, bounded by the ceiling above.
     if dest.exists():
         staged.unlink()
     else:
-        _refuse_upload_over_quota(files_dir, staged, byte_count)
+        _refuse_upload_over_quota(root, staged, byte_count)
         dest.parent.mkdir(parents=True, exist_ok=True)
         staged.replace(dest)
-    return _record_upload(project, digest, safe_name, byte_count)
+    return _record_upload(digest, safe_name, byte_count, project_id)
+
+
+def claim_file(sha256: str, project_id: str) -> UploadedFile:
+    """Give an unclaimed file to a project. Moves no bytes — the store is shared."""
+    unclaimed = _find_records(sha256=sha256, project_id=None)
+    if not unclaimed:
+        raise FileNotStoredError(
+            f"no unclaimed file {sha256!r} — it is either already in a project, or was "
+            "never uploaded")
+    record = unclaimed[0]
+    record.project_id = project_id
+    record.save()
+    return record
 
 
 def resolve_stored_path(record: UploadedFile) -> Path:
     """Where a stored file sits, read back off its record alone."""
-    project = record.id.split("/", 1)[0]
-    return (resolve_project_dir(project) / "files" / record.sha256 / record.filename).resolve()
+    return (files_root() / record.sha256 / record.filename).resolve()
 
 
-def list_project_files(project: str) -> list[UploadedFile]:
-    """Newest arrival first."""
-    return sorted(UploadedFile.list(f"{project}/"),
-                  key=lambda record: record.created_at, reverse=True)
+def list_project_files(project_id: str) -> list[UploadedFile]:
+    """One project's files, newest arrival first."""
+    return _sorted_newest_first(_find_records(project_id=project_id))
 
 
-def resolve_file_binding(project: str, sha256: str) -> TypeUnsafeUserStageConfigOverride:
-    """The connector params a run binds for one stored file."""
-    record = UploadedFile.load_or_none(f"{project}/{sha256}")
-    if record is None:
+def list_unclaimed_files() -> list[UploadedFile]:
+    """Files no project has taken yet, newest arrival first."""
+    return _sorted_newest_first(_find_records(project_id=None))
+
+
+def resolve_file_binding(project_id: str, sha256: str) -> TypeUnsafeUserStageConfigOverride:
+    """The connector params a run of `project_id` binds for one of its files."""
+    records = _find_records(sha256=sha256, project_id=project_id)
+    if not records:
         raise FileNotStoredError(
-            f"project '{project}' holds no file {sha256!r} — list its files, or upload "
-            "this one first")
-    path = resolve_stored_path(record)
-    # A record whose bytes are gone is worse than no record: the run would bind a
-    # path and fail at preflight, naming a file the caller was just told it had.
+            f"project '{project_id}' has no file {sha256!r} — list its files, upload this "
+            "one, or claim it if it is not in a project yet")
+    path = resolve_stored_path(records[0])
+    # A record whose bytes are gone is worse than no record: the run would bind a path
+    # and fail at preflight, naming a file the caller was just told it had.
     if not path.is_file():
         raise FileNotStoredError(
-            f"'{record.filename}' is recorded for project '{project}' but its bytes are "
-            f"not on disk at {path} — upload it again")
+            f"'{records[0].filename}' is recorded for project '{project_id}' but its bytes "
+            f"are not on disk at {path} — upload it again")
     return {"path": str(path), "format": resolve_file_format(str(path)).value}
 
 
-def measure_files_used_bytes(project: str) -> int:
-    """What this project's stored files weigh, counted off the disk they occupy."""
-    files_dir = resolve_project_dir(project) / "files"
-    if not files_dir.is_dir():
+def measure_files_used_bytes() -> int:
+    """What the store weighs, counted off the disk it occupies rather than off the records."""
+    root = files_root()
+    if not root.is_dir():
         return 0
-    return sum(f.stat().st_size for f in files_dir.rglob("*") if f.is_file())
+    # Off the disk, not by summing byte_count: two projects claiming one blob are two
+    # records over one copy, so the records would double-count the bytes this bounds.
+    return sum(f.stat().st_size for f in root.rglob("*") if f.is_file())
 
 
-def _write_to_temp_file(files_dir: Path, src: BinaryIO, ceiling: int) -> tuple[Path, str, int]:
+def _find_records(*, sha256: str | None = None,
+                  project_id: str | None = None) -> list[UploadedFile]:
+    records = UploadedFile.list()
+    # A full scan: the store selects by id prefix only, and the key here is
+    # (sha256, project_id). Fine at a workspace's worth of files, not at thousands.
+    return [record for record in records
+            if (sha256 is None or record.sha256 == sha256)
+            and record.project_id == project_id]
+
+
+def _sorted_newest_first(records: list[UploadedFile]) -> list[UploadedFile]:
+    return sorted(records, key=lambda record: record.created_at, reverse=True)
+
+
+def _write_to_temp_file(root: Path, src: BinaryIO, ceiling: int) -> tuple[Path, str, int]:
     """Stream `src` to a temp file beside its destination; returns (path, sha256, bytes)."""
     digest = hashlib.sha256()
     byte_count = 0
-    # mkstemp in `files_dir` itself, so the move into place is a rename within one
+    # mkstemp in `root` itself, so the move into place is a rename within one
     # filesystem and a reader never sees a partly written file at the real path.
-    handle, temp_name = tempfile.mkstemp(dir=files_dir, prefix=".incoming-")
+    handle, temp_name = tempfile.mkstemp(dir=root, prefix=".incoming-")
     temp = Path(temp_name)
     with os.fdopen(handle, "wb") as out:
         while chunk := src.read(_CHUNK_BYTES):
@@ -150,32 +187,33 @@ def _write_to_temp_file(files_dir: Path, src: BinaryIO, ceiling: int) -> tuple[P
     return temp, digest.hexdigest(), byte_count
 
 
-def _refuse_upload_over_quota(files_dir: Path, staged: Path, byte_count: int) -> None:
-    quota = project_quota_bytes()
-    used = sum(f.stat().st_size for f in files_dir.rglob("*") if f.is_file())
+def _refuse_upload_over_quota(root: Path, staged: Path, byte_count: int) -> None:
+    quota = files_quota_bytes()
+    used = sum(f.stat().st_size for f in root.rglob("*") if f.is_file())
     # `used` counts the staged copy too — it is on the disk this bounds.
     if used > quota:
         staged.unlink()
         raise UploadTooLargeError(
-            f"this project's stored files would reach {describe_bytes(used)}, over its "
+            f"stored files would reach {describe_bytes(used)}, over the "
             f"{describe_bytes(quota)} limit — the {describe_bytes(byte_count)} just sent "
-            "was not kept. Every upload before it was, and nothing in the app deletes "
-            f"one: clear {files_dir} on the server, or raise "
-            "CARBON_PAPER_PROJECT_UPLOAD_QUOTA_BYTES."
+            f"was not kept. Every file before it was, and nothing in the app deletes one: "
+            f"clear {root} on the server, or raise CARBON_PAPER_FILES_QUOTA_BYTES."
         )
 
 
-def _record_upload(project: str, digest: str, filename: str, byte_count: int) -> UploadedFile:
-    stored = UploadedFile.load_or_none(f"{project}/{digest}")
-    # Re-saving a stored record rather than replacing it keeps `created_at` at the
-    # first arrival of these bytes; only the name of the latest pick can differ.
-    if stored is None:
-        stored = UploadedFile(id=f"{project}/{digest}", sha256=digest,
-                              filename=filename, byte_count=byte_count)
+def _record_upload(digest: str, filename: str, byte_count: int,
+                   project_id: str | None) -> UploadedFile:
+    stored = _find_records(sha256=digest, project_id=project_id)
+    # Re-saving a stored record rather than replacing it keeps `created_at` at the first
+    # arrival of these bytes for this project; only the name of the latest send differs.
+    if not stored:
+        record = UploadedFile(sha256=digest, filename=filename,
+                              byte_count=byte_count, project_id=project_id)
     else:
-        stored.filename = filename
-    stored.save()
-    return stored
+        record = stored[0]
+        record.filename = filename
+    record.save()
+    return record
 
 
 def _safe_filename(raw: str) -> str:

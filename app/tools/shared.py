@@ -86,11 +86,11 @@ class ProjectFilesView(BaseModel):
 def list_files(project_id: str, file_upload_url: str) -> ProjectFilesView:
     """`file_upload_url` is the caller's — only it knows the address it was reached on."""
     resolve_existing_project(project_id)
-    used = uploads.measure_files_used_bytes(project_id)
+    used = uploads.measure_files_used_bytes()
     return ProjectFilesView(
         file_upload_url=file_upload_url,
         max_bytes=uploads.max_upload_bytes(),
-        remaining_bytes=max(uploads.project_quota_bytes() - used, 0),
+        remaining_bytes=max(uploads.files_quota_bytes() - used, 0),
         files=[StoredFileView(sha256=f.sha256, filename=f.filename,
                               bytes=f.byte_count, added=f.created_at)
                for f in uploads.list_project_files(project_id)],

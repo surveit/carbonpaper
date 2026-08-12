@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.services import workspace
 from app.services.errors import FileNotStoredError
-from app.services.uploads import resolve_file_binding, save_upload
+from app.services.uploads import files_root, resolve_file_binding, save_upload
 from app.tools import shared
 
 client = TestClient(app)
@@ -23,14 +23,15 @@ URL = "https://carbonpaper.fly.dev/project/demo/files"
 
 
 @pytest.fixture
-def project(tmp_path):
+def project(tmp_path, monkeypatch):
     (tmp_path / "demo").mkdir(parents=True)
     workspace.set_projects_dir(tmp_path)
+    monkeypatch.setenv("CARBON_PAPER_FILES_ROOT", str(tmp_path / "files"))
     return tmp_path / "demo"
 
 
 def store(name: str, body: bytes = CSV):
-    return save_upload("demo", name, io.BytesIO(body))
+    return save_upload(name, io.BytesIO(body), "demo")
 
 
 def test_an_empty_project_still_says_where_to_put_a_file(project):
@@ -59,7 +60,7 @@ def test_newest_arrival_comes_first(project):
 
 def test_the_limits_ride_along_so_a_caller_knows_before_it_sends(project, monkeypatch):
     monkeypatch.setenv("CARBON_PAPER_MAX_UPLOAD_BYTES", "1000")
-    monkeypatch.setenv("CARBON_PAPER_PROJECT_UPLOAD_QUOTA_BYTES", "5000")
+    monkeypatch.setenv("CARBON_PAPER_FILES_QUOTA_BYTES", "5000")
     store("posts.csv")
     view = shared.list_files("demo", URL)
     assert view.max_bytes == 1000
@@ -68,7 +69,7 @@ def test_the_limits_ride_along_so_a_caller_knows_before_it_sends(project, monkey
 
 def test_remaining_bytes_floors_at_zero(project, monkeypatch):
     store("posts.csv")
-    monkeypatch.setenv("CARBON_PAPER_PROJECT_UPLOAD_QUOTA_BYTES", "1")
+    monkeypatch.setenv("CARBON_PAPER_FILES_QUOTA_BYTES", "1")
     # Over quota reads as nothing left, never as a negative allowance to spend.
     assert shared.list_files("demo", URL).remaining_bytes == 0
 
@@ -77,7 +78,7 @@ def test_a_stored_file_resolves_to_the_params_a_run_binds(project):
     record = store("posts.csv")
     binding = resolve_file_binding("demo", CSV_SHA)
     assert binding["path"] == str(
-        (project / "files" / CSV_SHA / "posts.csv").resolve())
+        (files_root() / CSV_SHA / "posts.csv").resolve())
     # The format comes off the stored name's extension, so a binding cannot leave a
     # csv to be read by whatever format the workflow authored.
     assert binding["format"] == "csv"
@@ -85,13 +86,13 @@ def test_a_stored_file_resolves_to_the_params_a_run_binds(project):
 
 
 def test_an_unknown_file_id_fails_naming_itself(project):
-    with pytest.raises(FileNotStoredError, match="holds no file"):
+    with pytest.raises(FileNotStoredError, match="has no file"):
         resolve_file_binding("demo", "0" * 64)
 
 
 def test_a_record_whose_bytes_are_gone_fails_before_the_run_starts(project):
     store("posts.csv")
-    (project / "files" / CSV_SHA / "posts.csv").unlink()
+    (files_root() / CSV_SHA / "posts.csv").unlink()
     # Worse than no record: the run would bind a path and fail at preflight, naming a
     # file the caller was just told the project had.
     with pytest.raises(FileNotStoredError, match="bytes are not on disk"):
