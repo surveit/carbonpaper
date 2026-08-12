@@ -225,7 +225,13 @@ jobs:
       # before anyone decides whether it should.
       - run: uv run --frozen python -m scripts.lexicon > head-lexicon.json
       - run: uv run --frozen python -m scripts.lexicon --root base > base-lexicon.json
-      - run: uv run --frozen python -m scripts.lexicon --markdown head-lexicon.json base-lexicon.json > lexicon-body.md
+      # --repo/--sha turn each sighting into a blob link. The PR HEAD sha, not
+      # github.sha: that is the merge commit, whose blob URLs 404 once the merge
+      # ref is gone. Both flags or neither — half of them raises rather than
+      # building a URL that points somewhere wrong.
+      - run: |
+          uv run --frozen python -m scripts.lexicon --markdown head-lexicon.json base-lexicon.json \
+            --repo ${{ github.repository }} --sha ${{ github.event.pull_request.head.sha }} > lexicon-body.md
       - name: Upload raw lexicon JSON
         uses: actions/upload-artifact@v4
         with:

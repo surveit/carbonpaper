@@ -131,7 +131,17 @@ def find_ratchet_breaks(head: LexiconSnapshot, registry: LexiconSnapshot) -> lis
     ]
 
 
-def render_markdown(head: LexiconSnapshot, base: LexiconSnapshot) -> str:
+class SourceLinks(BaseModel):
+    """Where to point a sighting. Absent means render plain text — never a guessed URL."""
+
+    repo: str
+    sha: str
+
+    def url(self, path: str, line: int) -> str:
+        return f"https://github.com/{self.repo}/blob/{self.sha}/{path}#L{line}"
+
+
+def render_markdown(head: LexiconSnapshot, base: LexiconSnapshot, links: SourceLinks | None = None) -> str:
     gains = find_role_gains(head, base)
     breaks = find_ratchet_breaks(head, base)
     if not gains and not breaks:
@@ -146,7 +156,7 @@ def render_markdown(head: LexiconSnapshot, base: LexiconSnapshot) -> str:
             "",
             "| word | gains role | held before | where |",
             "|---|---|---|---|",
-            *[_render_gain(gain, base, head) for gain in gains],
+            *[_render_gain(gain, base, head, links) for gain in gains],
             "",
         ]
     if breaks:
@@ -242,19 +252,23 @@ def _is_docstring(statement: ast.stmt) -> bool:
     return isinstance(statement, ast.Expr) and isinstance(statement.value, ast.Constant)
 
 
-def _render_gain(gain: RoleGain, base: LexiconSnapshot, head: LexiconSnapshot) -> str:
+def _render_gain(
+    gain: RoleGain, base: LexiconSnapshot, head: LexiconSnapshot, links: SourceLinks | None
+) -> str:
     held = base.words.get(gain.word, WordRoles()).held()
     before = "**new word**" if gain.is_new_word else ", ".join(sorted(r.value for r in held))
-    return f"| `{gain.word}` | `{gain.role.value}` | {before} | {_render_sighting(gain, head)} |"
+    return f"| `{gain.word}` | `{gain.role.value}` | {before} | {_render_sighting(gain, head, links)} |"
 
 
-def _render_sighting(gain: RoleGain, head: LexiconSnapshot) -> str:
+def _render_sighting(gain: RoleGain, head: LexiconSnapshot, links: SourceLinks | None) -> str:
     seen = head.sighting(gain.word, gain.role)
     if seen is None:
         return "—"
     # `X | None` is everywhere here, and a bare pipe splits the markdown cell.
     source = seen.source.replace("|", "\\|")
-    return f"`{source}`<br><sub>{seen.path}:{seen.line}</sub>"
+    where = f"{seen.path}:{seen.line}"
+    located = where if links is None else f"[{where}]({links.url(seen.path, seen.line)})"
+    return f"`{source}`<br><sub>{located}</sub>"
 
 
 def _render_registry_hint() -> str:
@@ -276,6 +290,14 @@ def _render_totals(head: LexiconSnapshot, base: LexiconSnapshot) -> str:
     )
 
 
+def _read_links(repo: str | None, sha: str | None) -> SourceLinks | None:
+    if repo and sha:
+        return SourceLinks(repo=repo, sha=sha)
+    if repo or sha:
+        raise ValueError("--repo and --sha go together: half of them would build a wrong URL")
+    return None
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=_REPO_ROOT)
@@ -283,10 +305,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--registry", action="store_true", help="drop sightings: line numbers churn the committed file"
     )
+    parser.add_argument("--repo", help="OWNER/NAME, to link each sighting at --sha")
+    parser.add_argument("--sha", help="commit the links resolve against; both or neither")
     args = parser.parse_args(argv)
     if args.markdown:
+        links = _read_links(args.repo, args.sha)  # bad arguments fail before any file is read
         head, base = (LexiconSnapshot.model_validate_json(Path(p).read_text(encoding="utf-8")) for p in args.markdown)
-        print(render_markdown(head, base))
+        print(render_markdown(head, base, links))
         return 0
     snapshot = build_snapshot(args.root)
     if args.registry:

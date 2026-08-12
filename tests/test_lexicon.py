@@ -14,6 +14,7 @@ import pytest
 from scripts.lexicon import (
     LexiconSnapshot,
     Sighting,
+    SourceLinks,
     Role,
     WordRoles,
     build_snapshot,
@@ -216,3 +217,35 @@ def test_a_union_type_does_not_split_the_table_cell() -> None:
     row = next(line for line in render_markdown(head, base).split("\n") if "refused" in line)
     assert row.count("|") - row.count("\\|") == 5, f"cell count wrong: {row}"
     assert "app/x.py:9" in row
+
+
+def test_sighting_links_to_the_blob_at_a_sha() -> None:
+    head = LexiconSnapshot(
+        words={"figure": WordRoles(noun=1)},
+        functions=0,
+        accessors=0,
+        types=1,
+        sightings={"figure:noun": Sighting(path="app/x/views.py", line=223, source="class PublishedFigure:")},
+    )
+    base = LexiconSnapshot(words={}, functions=0, accessors=0, types=0)
+    body = render_markdown(head, base, SourceLinks(repo="surveit/carbonpaper", sha="abc1234"))
+    assert "[app/x/views.py:223](https://github.com/surveit/carbonpaper/blob/abc1234/app/x/views.py#L223)" in body
+
+
+def test_without_links_the_location_stays_plain_text() -> None:
+    """A guessed URL is worse than none, so the flags are all-or-nothing."""
+    head = LexiconSnapshot(
+        words={"figure": WordRoles(noun=1)},
+        functions=0,
+        accessors=0,
+        types=1,
+        sightings={"figure:noun": Sighting(path="app/x/views.py", line=223, source="class PublishedFigure:")},
+    )
+    body = render_markdown(head, LexiconSnapshot(words={}, functions=0, accessors=0, types=0))
+    assert "app/x/views.py:223" in body
+    assert "https://" not in body
+
+
+def test_half_the_link_arguments_is_refused() -> None:
+    with pytest.raises(ValueError, match="go together"):
+        main(["--markdown", "a.json", "b.json", "--repo", "surveit/carbonpaper"])
