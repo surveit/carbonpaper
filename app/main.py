@@ -19,12 +19,8 @@ from app.seeds.seed import seed_demo_data_if_enabled
 from app.web.config import (
     STATIC_DIR, RevalidatedStaticFiles, configure_projects_dir_from_env,
 )
-from app.web.routers import (
-    admin, editing, evals, guide, pickers, project, node, review, review_packet,
-    run_lineage, run_stage, runs, tutorial,
-)
-
-from app.web.chat_router import router as chat_router
+from app.web.errors import install_error_pages
+from app.web.routers import include_routers
 from app.mcp.server import handle_streamable_http, run_session_manager
 
 # Importing the editing agent's config registers the "editing" agent with the
@@ -65,28 +61,11 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(title="Workflow", lifespan=lifespan)
 app.mount("/static", RevalidatedStaticFiles(directory=str(STATIC_DIR)), name="static")
 
-app.include_router(project.router)
-app.include_router(runs.router)
-app.include_router(run_stage.router)
-app.include_router(run_lineage.router)
-app.include_router(review_packet.router)
-app.include_router(evals.router)
-app.include_router(review.router)
-app.include_router(node.router)
-app.include_router(guide.router)
-app.include_router(pickers.router)
-app.include_router(admin.router)
+# Registered on the Starlette exception so it also catches the 404 routing raises for
+# an address no router claims — the dead link in a deck never reaches a handler of ours.
+install_error_pages(app)
 
-# The compiler's chat-driven editing entry ('Edit with agent' -> a chat session).
-app.include_router(editing.router)
-
-# The home zero state's tour entry ('Take a guided tour' -> a chat session).
-app.include_router(tutorial.router)
-
-# Interactive, multi-turn chat surface (streaming + persistence). Separate from
-# the row-mapped llm_transform path; HTTP routes in app/web/chat_router.py, the
-# engine (session store, turn manager, agent registry) in app/core/agent.
-app.include_router(chat_router)
+include_routers(app)
 
 # The MCP authoring surface: an exact-path ASGI route, not a Mount —
 # a Mount never matches its own bare path and would 307-redirect POST /mcp to

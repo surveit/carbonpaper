@@ -46,8 +46,14 @@ RUN chmod +x docker-entrypoint.sh
 # The volume Fly mounts at /data holds both: app.core.store_config computes the
 # frames root from the database path's own directory, so pinning the database
 # carries the frames with it and CARBON_PAPER_FRAMES_ROOT stays unset.
+#
+# CLAUDE_CONFIG_DIR joins them because the CLI keeps each chat's transcript under
+# it, and a chat resumed by id against a config dir the last deploy discarded
+# fails permanently. fly.toml sets the same value; it is repeated here so the
+# entrypoint's mkdir has a path under plain `docker run` too.
 ENV CARBON_PAPER_DB_PATH=/data/app.db \
     CARBON_PAPER_PROJECTS_DIR=/data/projects \
+    CLAUDE_CONFIG_DIR=/data/claude \
     PYTHONUNBUFFERED=1
 
 EXPOSE 8080

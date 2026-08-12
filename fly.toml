@@ -17,9 +17,24 @@ primary_region = "iad"
 
 [build]
 
+# CLAUDE_CONFIG_DIR is on the volume because a chat's memory is split across two
+# stores and only one of them was durable. The resume token (AgentSession.
+# sdk_session_id) is a document in /data/app.db; the conversation it names is a
+# transcript file the Claude Code CLI writes under its own config dir, at
+# <config dir>/projects/<cwd slug>/<session id>.jsonl. At the container default
+# that is /root/.claude, which is image, not volume — so every deploy kept the
+# tokens and threw away the transcripts, and each pre-existing chat then resumed
+# a session the CLI no longer had. That is not a degraded turn: `--resume` on a
+# missing id exits 1, so the chat was bricked for good, not just amnesiac.
+#
+# Verified against CLI 2.1.215 that the variable moves both halves: with it set
+# to a scratch dir the transcript appeared there and nothing under ~/.claude,
+# and `--resume <id>` for that session resolved with the variable set while the
+# default dir answered "No conversation found with session ID".
 [env]
   CARBON_PAPER_DB_PATH = "/data/app.db"
   CARBON_PAPER_PROJECTS_DIR = "/data/projects"
+  CLAUDE_CONFIG_DIR = "/data/claude"
 
 # One machine, one volume. The document store is SQLite on this volume and the
 # projects/frames trees are plain files beside it, so a second machine would be a

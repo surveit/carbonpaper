@@ -31,7 +31,11 @@ carries no deploy workflow and no token.
 State lives on the volume: `CARBON_PAPER_DB_PATH=/data/app.db` (the document
 store) and `CARBON_PAPER_PROJECTS_DIR=/data/projects`. The frame store follows the
 database path's own directory, so `CARBON_PAPER_FRAMES_ROOT` stays unset.
-`docker-entrypoint.sh` creates both directories, runs `alembic upgrade head`, then
+`CLAUDE_CONFIG_DIR=/data/claude` puts a third store there: the Claude Code CLI
+writes each chat's transcript under its config dir, and a chat resumes by an id
+the document store holds, so leaving the transcripts in the image ended every
+deploy with resume tokens naming sessions the CLI had thrown away.
+`docker-entrypoint.sh` creates the directories, runs `alembic upgrade head`, then
 execs uvicorn on port 8080 — the migration is in the entrypoint rather than a
 `release_command` because a release machine has no volume attached.
 
