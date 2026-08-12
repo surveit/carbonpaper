@@ -20,7 +20,7 @@ from app.models.workflow import find_stages_reaching_publish, parse_workflow
 from app.core.persistence import PersistedModel, PersistenceScope, get_store
 from app.core.utils import format_errors
 from app.services.errors import WorkflowLoadError
-from app.services.workspace import load_schemas
+from app.services.terms import load_terms
 
 
 class WorkflowVersion(PersistedModel):
@@ -76,10 +76,11 @@ def create_version_from_stages(
 ) -> WorkflowVersion:
     project_dir = Path(project_dir)
     workflow = parse_workflow(stages)
-    schemas = load_schemas(project_dir)
 
     version_id = mint_timestamp_id()
     project = project_dir.name
+    schemas = [noun.model_dump(mode="json", exclude_none=True)
+               for noun in load_terms(project).nouns.schemas]
     doc_id = f"{project}/{version_id}"
 
     v = WorkflowVersion(

@@ -21,7 +21,9 @@ The contract, in `app/models/named_schemas.py`:
 
 - A **`NamedSchema`** is a `TableSchema` (columns + primary key) plus:
   - `name` — snake_case identity.
-  - `kind` (`SchemaKind`) — where the table sits in the pipeline:
+  - `kind` (`SchemaKind`, optional) — where the table sits in the pipeline. A
+    kind is a claim about where the rows come from, so a name that is vocabulary
+    alone (see Terms below) carries none:
     - `reference` — dimension / lookup / benchmark data we must SOURCE, not
       compute (the "missing intermediate databases" of the forcing example).
     - `input` — raw data fetched into the pipeline.
@@ -32,6 +34,29 @@ The contract, in `app/models/named_schemas.py`:
   PK-name-collision guessing. `validate_references_resolve` validates the graph.
 - A **`SchemaLibrary`** is the set of a project's named schemas;
   `parse_schema_library` / `validate_schema_library` are the entry points.
+
+## Terms — the nouns and the verbs
+
+`app/models/terms.py` composes the two halves of a project's vocabulary: `Terms`
+is a `SchemaLibrary` (the nouns — a noun that is only a word carries no `kind`
+and no columns) plus `list[Verb]` (`name`, `definition`, `also_written`).
+Constructing it refuses a word carried twice across either half, since a word
+meaning two things is what the artifact exists to catch.
+
+Storage is `app/services/terms.py`, the sole reader and writer of both halves:
+one `StoredTerms` document per project in the `terms` collection of the document
+store, keyed `<project_id>/terms`. The halves are stored apart and `load_terms`
+composes them, which is where a word carrying two meanings raises; a project that
+stored nothing loads empty Terms. `count_nouns` is the tolerant count the project
+card and the status snapshot use, so one unreadable noun does not blank a listing.
+
+Projects authored before that collection existed hold their nouns as one file per
+schema under `<project>/schemas/`. Those files are still READ, by `load_terms`
+alone and only where the store holds no document for the project; nothing writes
+them, so the first `write_terms` moves that project into the store for good.
+
+A project export (`WorkflowFile`) carries `data_model` and `verbs` as separate
+fields, so a bundle written before verbs existed still imports.
 
 **What is NOT here (yet):** no `schemas/` directory ships in any project;
 workflow stages do not structurally import named schemas (an import mechanism

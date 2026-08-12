@@ -21,7 +21,7 @@ from app.core.errors import GenerationError
 from app.models.review_guide import ReviewGuideDraft
 from app.models.named_schemas import SchemaLibrary
 from app.models.stage import stage_to_spec_dict
-from app.services import data_model, versioning
+from app.services import terms, versioning
 from app.services.loader import load_workflow
 from app.services.project import find_document_path
 from app.services.stage_edit import find_description_issues, patch_stage_spec
@@ -96,7 +96,7 @@ def start_review_guide_generation(
 def _finish_data_model(project_dir: Path, answer: SchemaLibrary | None) -> None:
     if answer is None:
         return
-    data_model.write_data_model(project_dir, answer)
+    terms.write_nouns(project_dir.name, answer)
 
 
 def _finish_review_guide(

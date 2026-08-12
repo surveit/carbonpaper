@@ -1,7 +1,7 @@
 """Named schemas — the data model, authored before the workflow.
 A NamedSchema is a TableSchema promoted to an addressable artifact: it adds a `name`, a
-`kind`, and explicit foreign keys (`references` on its columns). A SchemaLibrary is the
-whole data model: it checks names are unique and every reference resolves.
+`kind` where the data has a source to claim, and explicit foreign keys (`references` on
+its columns). A SchemaLibrary checks names are unique and every reference resolves.
 """
 from __future__ import annotations
 
@@ -49,7 +49,9 @@ class NamedSchema(TableSchema):
     model_config = ConfigDict(json_schema_extra={"description": NAMED_SCHEMA_DESCRIPTION})
 
     name: str
-    kind: SchemaKind
+    # Absent where the name is vocabulary and nothing more: a kind claims where the
+    # rows come from, and a word with no table behind it makes no such claim.
+    kind: Optional[SchemaKind] = None
     title: str
     columns: list[NamedColumn] = Field(default_factory=list)
     # The data model documents source identity for the journalist; the stage

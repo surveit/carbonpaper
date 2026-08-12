@@ -84,14 +84,27 @@
         "computed": "Produced by a workflow stage.",
         "ground_truth": "External truth used only by eval; mirrors a computed schema."
     } %}
+    {# A kind says where the rows come from, so a schema that declares none is
+       grouped under itself rather than under a kind nobody chose. Both tiers read
+       `groups`, so neither can leave a kindless schema off the page. #}
+    {% set no_kind_blurb = "A word the methodology uses. It claims no source for its rows, and may have no table at all." %}
+    {% set groups = [] %}
     {% for kind in kind_order %}
-      {% set group = schemas | selectattr("kind", "equalto", kind) | list %}
+      {% set _ = groups.append((kind, schemas | selectattr("kind", "equalto", kind) | list)) %}
+    {% endfor %}
+    {% set _ = groups.append((none, schemas | rejectattr("kind") | list)) %}
+
+    {% for kind, group in groups %}
       {% if group %}
       <h3 class="dm-group-heading">
+        {% if kind %}
         <span class="type-tag {{ kind_class.get(kind, 'custom') }}">{{ kind_glyph.get(kind, '') }} {{ kind }}</span>
+        {% else %}
+        <span class="type-tag">no kind</span>
+        {% endif %}
         <span class="muted">— {{ group|length }} schema{% if group|length != 1 %}s{% endif %}</span>
       </h3>
-      <p class="lede">{{ kind_blurb.get(kind, '') }}</p>
+      <p class="lede">{{ kind_blurb.get(kind, no_kind_blurb) }}</p>
       <div class="dm-cards">
         {% for sch in group %}
         <article class="dm-card" id="card-{{ sch.name }}">
@@ -142,13 +155,13 @@
     </details>
     {% endif %}
 
-    {% for kind in kind_order %}
-      {% for sch in schemas | selectattr("kind", "equalto", kind) %}
+    {% for kind, group in groups %}
+      {% for sch in group %}
       <details class="dm-table" id="schema-{{ sch.name }}">
         <summary>
           <code>{{ sch.name }}</code>
           <span class="muted">— {{ sch.title or sch.name }}</span>
-          <span class="type-tag {{ kind_class.get(sch.kind, 'custom') }}">{{ sch.kind }}</span>
+          {% if sch.kind %}<span class="type-tag {{ kind_class.get(sch.kind, 'custom') }}">{{ sch.kind }}</span>{% endif %}
           {% if sch.estimated_rows %}<span class="dm-rows">est {{ "{:,}".format(sch.estimated_rows) }} rows</span>{% endif %}
         </summary>
         {% if sch.source and sch.source.ref %}<p class="schema-meta"><span><b>source:</b> <a href="{{ sch.source.ref }}" target="_blank" rel="noopener">{{ sch.source.ref }}</a></span></p>{% endif %}

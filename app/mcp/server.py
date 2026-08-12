@@ -36,9 +36,9 @@ from app.services import loader
 from app.services import frame_profile
 from app.services import project as project_service
 from app.services.project import ProjectListing
+from app.services import terms as terms_service
 from app.services import versioning
 from app.services import workflow_test as workflow_test_service
-from app.services import workspace
 from app.services.errors import WorkflowLoadError
 from app.services.stage_edit import EditStageResult
 
@@ -177,8 +177,9 @@ def report_compiler_warnings(project_id: str) -> dict[str, Any]:
 
 @mcp.tool(description=TOOL_SPECS["read_data_model"].description)
 def read_data_model(project_id: str) -> list[dict[str, Any]]:
-    pdir = _resolve_existing_project(project_id)
-    return workspace.load_schemas(pdir)
+    _resolve_existing_project(project_id)
+    return [noun.model_dump(mode="json", exclude_none=True)
+            for noun in terms_service.load_terms(project_id).nouns.schemas]
 
 
 @mcp.tool(description=TOOL_SPECS["describe_workflow"].description)

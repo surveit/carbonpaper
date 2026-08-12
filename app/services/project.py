@@ -12,7 +12,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, ClassVar, Sequence
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.core.errors import RunManifestNotJson
 from app.core.persistence import PersistedModel, PersistenceScope, get_store
@@ -22,8 +22,11 @@ from app.models import (
     SchemaLibrary,
     Stage,
     StageDraft,
+    Terms,
+    Verb,
     stage_to_json,
     stage_to_spec_dict,
+    validate_one_meaning_per_word,
 )
 from app.models.review_guide import ReviewGuideDraft
 from app.models.run_manifest import (
@@ -33,7 +36,7 @@ from app.models.run_manifest import (
 )
 from app.services.versioning import ReviewGuide
 from app.core.run_status import RunStatus
-from app.services import data_model, stage_edit, versioning, workspace
+from app.services import stage_edit, terms, versioning, workspace
 from app.services.loader import (
     load_compiled_dir,
     load_workflow,
@@ -299,9 +302,9 @@ def project_state(pdir: Path) -> ProjectState:
     doc_path = find_document_path(pdir)
     has_document = doc_path is not None
 
-    # ── Data model (named schemas) ──
-    schemas = workspace.load_schemas(pdir)
-    data_model = DataModelStatus(present=bool(schemas), n_schemas=len(schemas))
+    # ── Data model (the noun half of the project's terms) ──
+    n_nouns = terms.count_nouns(project_id)
+    data_model = DataModelStatus(present=bool(n_nouns), n_schemas=n_nouns)
 
     # ── Workflow (compiled stages) ──
     stages = _load_compiled_stages(pdir)
@@ -496,7 +499,15 @@ class WorkflowFile(BaseModel):
     model: str
     source: str
     data_model: SchemaLibrary
+    # The two halves ride as separate fields, not as one `Terms`: a bundle written
+    # before verbs existed carries no key for them, and defaulting is what lets it in.
+    verbs: list[Verb] = Field(default_factory=list)
     stages: list[Stage]
+
+    @model_validator(mode="after")
+    def _one_meaning_per_word(self) -> "WorkflowFile":
+        validate_one_meaning_per_word(self.data_model, self.verbs)
+        return self
 
     @field_validator("stages", mode="before")
     @classmethod
@@ -526,14 +537,15 @@ def export_project(project_id: str) -> WorkflowFile:
     document_path = project_state(pdir).document_path
     if document_path is None:
         raise ValueError(f"project '{project_id}' has no document — cannot export")
-    library = data_model.load_data_model(pdir) or SchemaLibrary(schemas=[])
+    project_terms = terms.load_terms(project_id)
     stages = [c.stage for c in load_compiled_dir(pdir / "compiled") if c.stage is not None]
     return WorkflowFile(
         name=meta.name,
         document=Path(document_path).read_text(encoding="utf-8"),
         model=meta.model,
         source=meta.source,
-        data_model=library,
+        data_model=project_terms.nouns,
+        verbs=project_terms.verbs,
         stages=stages,
     )
 
@@ -545,7 +557,7 @@ def import_project(
     label = sanitize_project_name(name or wf.name)
     project_id = create_project(label, wf.document, model=wf.model, source=wf.source)
     pdir = workspace.resolve_project_dir(project_id)
-    data_model.write_data_model(pdir, wf.data_model)
+    terms.write_terms(project_id, Terms(nouns=wf.data_model, verbs=wf.verbs))
     for i, stage in enumerate(wf.stages, start=1):
         stage_path = pdir / "compiled" / f"{i:02d}_{stage.id}.json"
         stage_path.parent.mkdir(parents=True, exist_ok=True)

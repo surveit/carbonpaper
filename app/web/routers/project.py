@@ -13,15 +13,19 @@ from fastapi.responses import (
     JSONResponse,
     RedirectResponse,
 )
+from pydantic import ValidationError
 
+from app.core.utils import format_errors
 from app.models import (
+    NamedSchema,
+    SchemaLibrary,
+    Terms,
     build_workflow,
     find_workflow_compiler_warnings,
     stage_to_json,
     validate_named_schema,
-    validate_schema_library,
 )
-from app.services import generation, project, versioning
+from app.services import generation, project, terms, versioning
 from app.services.loader import (
     LOADER_BOOKKEEPING_KEYS,
     list_parsed_stages,
@@ -44,7 +48,6 @@ from app.web.diagrams import (
 from app.web.loading import (
     find_workflow_stage,
     list_projects,
-    load_schemas,
     load_stages_or_empty,
 )
 from app.web.project_view import shell_state
@@ -64,19 +67,20 @@ def _project_dir(project_name: str) -> Path:
 
 # ─── Per-schema edit seed ─────────────────────────────────────────────────────
 
-def _schema_spec(schema: dict[str, Any]) -> dict[str, Any]:
-    """The schema model is `extra="forbid"`, so bookkeeping keys would fail validation."""
-    return {k: v for k, v in schema.items() if k not in LOADER_BOOKKEEPING_KEYS}
+def _render_nouns(project_name: str) -> tuple[list[dict[str, Any]], list[str]]:
+    """The stored nouns as the section's dicts, or what refused to load — never both."""
+    try:
+        nouns = terms.load_terms(project_name).nouns
+    except ValidationError as exc:
+        return [], format_errors(exc)
+    return [noun.model_dump(mode="json", exclude_none=True) for noun in nouns.schemas], []
 
 
 def _schema_json_map(schemas: list[dict[str, Any]]) -> dict[str, str]:
-    out: dict[str, str] = {}
-    for s in schemas:
-        name = s.get("name")
-        if not name:
-            continue
-        out[name] = json.dumps(_schema_spec(s), indent=2, ensure_ascii=False)
-    return out
+    return {
+        s["name"]: json.dumps(s, indent=2, ensure_ascii=False)
+        for s in schemas if s.get("name")
+    }
 
 
 # ─── Home dashboard ──────────────────────────────────────────────────────────
@@ -198,7 +202,7 @@ async def project_document(request: Request, project_name: str):
 @router.get("/project/{project_name}/data_model", response_class=HTMLResponse)
 async def project_data_model(request: Request, project_name: str):
     pdir = _project_dir(project_name)
-    schemas = load_schemas(pdir)
+    schemas, issues = _render_nouns(project_name)
     return templates.TemplateResponse(
         request,
         "section_data_model.html",
@@ -208,7 +212,7 @@ async def project_data_model(request: Request, project_name: str):
             "schemas": schemas,
             "er_diagram": build_schema_er_diagram(schemas) if schemas else None,
             "table_graph": build_schema_table_graph(schemas) if schemas else None,
-            "issues": validate_schema_library([_schema_spec(s) for s in schemas]) if schemas else [],
+            "issues": issues,
             "schema_json": _schema_json_map(schemas),
             "kind_order": SCHEMA_KIND_ORDER,
             "kind_class": SCHEMA_KIND_CLASS,
@@ -335,7 +339,7 @@ async def version_stage_partial(
 
 @router.post("/project/{project_name}/schema/{schema_name}/edit")
 async def edit_schema(project_name: str, schema_name: str, json_text: str = Form(...)):
-    pdir = _project_dir(project_name)
+    _project_dir(project_name)
 
     # Parse — a parse error is the reviewer's, surfaced as a 400 issue, file untouched.
     try:
@@ -366,23 +370,19 @@ async def edit_schema(project_name: str, schema_name: str, json_text: str = Form
         # Refused — the write never happens, the file is unchanged.
         return JSONResponse({"ok": False, "issues": issues}, status_code=400)
 
-    # Guard: the target file must ALREADY exist (edit revises; it does not create —
-    # that's the compiler's job). Find it via the same loader convention.
-    schemas_dir = pdir / "schemas"
-    target: Path | None = None
-    for schema_file in sorted(schemas_dir.glob("*.json")):
-        try:
-            doc = json.loads(schema_file.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
-            continue
-        if isinstance(doc, dict) and doc.get("name") == schema_name:
-            target = schema_file
-            break
-    if target is None:
+    # Guard: the noun must ALREADY be one of the project's (edit revises; it does not
+    # create — that's the compiler's job).
+    stored = terms.load_terms(project_name)
+    if schema_name not in {noun.name for noun in stored.nouns.schemas}:
         raise HTTPException(
             status_code=404,
-            detail=f"No existing schema file for '{schema_name}' in examples/{project_name}/schemas/",
+            detail=f"'{project_name}' has no schema named '{schema_name}'",
         )
-
-    target.write_text(json.dumps(schema, indent=2, ensure_ascii=False), encoding="utf-8")
+    terms.write_terms(project_name, Terms(
+        nouns=SchemaLibrary(schemas=[
+            NamedSchema.model_validate(schema) if noun.name == schema_name else noun
+            for noun in stored.nouns.schemas
+        ]),
+        verbs=stored.verbs,
+    ))
     return JSONResponse({"ok": True})

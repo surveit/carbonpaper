@@ -93,3 +93,11 @@ def test_no_fabricated_edges_without_references():
     ]
     src = build_schema_table_graph(schemas)
     assert "-->" not in src
+
+
+def test_a_schema_with_no_kind_takes_no_node_class():
+    schemas = [{"name": "issue_text", "title": "Issue text", "columns": []}]
+    # `custom` is where an unrecognised kind lands — never where a missing one does.
+    src = build_schema_table_graph(schemas)
+    node_line = [ln for ln in src.splitlines() if ln.strip().startswith("issue_text[")][0]
+    assert ":::" not in node_line
