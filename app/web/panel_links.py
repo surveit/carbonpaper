@@ -64,6 +64,16 @@ def packet_lineage_href(to_root: str, stage_id: str, row: int) -> str:
     return f"{to_root}lineage/{_segment(stage_id)}/{row}.html"
 
 
+def packet_contributors_href(
+    to_root: str, stage_id: str, row: int, source_id: str, suffix: str = "html"
+) -> str:
+    """The rows of `source_id` that fed `stage_id` row `row` — the fan-in, filtered."""
+    return (
+        f"{to_root}lineage/{_segment(stage_id)}/"
+        f"{row}.from-{_segment(source_id)}.{suffix}"
+    )
+
+
 class PacketPanelLinks:
     """`None` from a method means the template omits that link, not that it is broken."""
 
@@ -72,8 +82,10 @@ class PacketPanelLinks:
     # table to read, not a list of links.
 
     def __init__(
-        self, to_root: str = "../", traced: frozenset[tuple[str, int]] | None = None
+        self, to_root: str = "../", traced: frozenset[tuple[str, int]] | None = None,
+        owner: tuple[str, int] | None = None,
     ) -> None:
+        self._owner = owner  # a cohort table is named after the row it fed
         self._root = to_root  # "" from index.html, "../" from a page in stages/
         # Which rows the packet holds a lineage page for. None means every row it
         # is asked about — the lineage pages link each other, and a page is only
@@ -87,7 +99,10 @@ class PacketPanelLinks:
         return None
 
     def contributor_rows(self, stage_id: str, ordinals: list[int] | None = None) -> str:
-        return self.stage_csv(stage_id)
+        """The cohort's own table where the packet wrote one; else the whole CSV."""
+        if self._owner is None:
+            return self.stage_csv(stage_id)
+        return f"{self._root}{packet_contributors_href('', *self._owner, stage_id)}"
 
     def rows_link_covers(self, total: int) -> int:
         return total  # the CSV the packet writes is uncapped

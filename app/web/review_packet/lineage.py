@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import Any
 
 from app.models import Stage
+from app.core.frames import write_frame_file
 from app.runtime.trace import RunFrames, trace_row_from, trace_to_dict
 from app.runtime.trace_links import read_issued_traces
 from app.services.review_packet.views import (
@@ -17,7 +19,11 @@ from app.services.review_packet.views import (
 )
 from app.web.breadcrumbs import Crumb
 from app.web.config import templates
-from app.web.panel_links import PacketPanelLinks, packet_lineage_href
+from app.web.panel_links import (
+    PacketPanelLinks,
+    packet_contributors_href,
+    packet_lineage_href,
+)
 from app.web.review_packet.pages import ASSETS_DIR, STYLESHEETS
 from app.web.trace_view import build_trace_view
 
@@ -45,8 +51,9 @@ def write_packet_lineage(
         ))
     traced = frozenset(closure)
     written = [
-        _write_page(root, frames, view, stages_by_id, stage_id, row, traced)
+        path
         for stage_id, row in sorted(closure)
+        for path in _write_page(root, frames, view, stages_by_id, stage_id, row, traced)
     ]
     stages = _group_by_stage(sorted(closure), published)
     figures = _named_figures(run_dir, closure)
@@ -120,13 +127,15 @@ def _branches_of(frames: RunFrames, stage_id: str, row: int) -> list[tuple[str, 
 def _write_page(
     root: Path, frames: RunFrames, view: RunView, stages_by_id: dict[str, Stage],
     stage_id: str, row: int, traced: frozenset[tuple[str, int]],
-) -> str:
+) -> list[str]:
     trace = trace_to_dict(trace_row_from(frames, stage_id, row))
     relative = packet_lineage_href("", stage_id, row)
+    written = _write_contributor_tables(root, frames, view, trace, stage_id, row)
     html = templates.env.get_template("lineage.html").render(
         title=f"{stage_id} · row {row}",
         view=build_trace_view(
-            trace, stages_by_id, PacketPanelLinks(to_root="../../", traced=traced)
+            trace, stages_by_id,
+            PacketPanelLinks(to_root="../../", traced=traced, owner=(stage_id, row)),
         ),
         project=view.project,
         crumbs=[
@@ -141,7 +150,7 @@ def _write_page(
     path = root / relative
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(html, encoding="utf-8")
-    return relative
+    return [relative, *written]
 
 
 def _published_rows(run_dir: Path) -> list[tuple[str, int]]:
@@ -161,3 +170,56 @@ def _write_directory(root: Path, stages: list[StageTraces], total: int) -> str:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(html, encoding="utf-8")
     return relative
+
+
+def _write_contributor_tables(
+    root: Path, frames: RunFrames, view: RunView, trace: dict[str, Any],
+    stage_id: str, row: int,
+) -> list[str]:
+    """One table per fan-in: exactly the rows that fed this one, as HTML and CSV."""
+    return [
+        path
+        for source_id, ordinals in _contributions(trace).items()
+        for path in _write_one_cohort(root, frames, view, stage_id, row, source_id, ordinals)
+    ]
+
+
+def _contributions(trace: dict[str, Any]) -> dict[str, list[int]]:
+    groups: dict[str, list[int]] = {}
+    for step in trace["steps"]:
+        for branch in step["branches"]:
+            groups.setdefault(branch["stage_id"], []).append(branch["row_ordinal"])
+    return groups
+
+
+def _write_one_cohort(
+    root: Path, frames: RunFrames, view: RunView,
+    stage_id: str, row: int, source_id: str, ordinals: list[int],
+) -> list[str]:
+    record = next((s.record for s in view.stages if s.stage_id == source_id), None)
+    frame = frames.output(record) if record else None
+    if frame is None:
+        return []
+    cohort = frame.iloc[[o for o in ordinals if 0 <= o < len(frame)]]
+    csv_rel = packet_contributors_href("", stage_id, row, source_id, suffix="csv")
+    html_rel = packet_contributors_href("", stage_id, row, source_id)
+    (root / csv_rel).parent.mkdir(parents=True, exist_ok=True)
+    write_frame_file(cohort, root / csv_rel)
+    (root / html_rel).write_text(
+        templates.env.get_template("packet_contributors.html").render(
+            source_id=source_id, owner_stage=stage_id, owner_row=row,
+            columns=[str(c) for c in cohort.columns],
+            rows=[{str(k): _cell(v) for k, v in r.items()} for _, r in cohort.iterrows()],
+            ordinals=list(cohort.index),
+            csv_href=Path(csv_rel).name,
+            owner_href=f"{row}.html",
+            assets=[f"../../{ASSETS_DIR}/{name}" for name in STYLESHEETS],
+            index_href="../../index.html",
+        ),
+        encoding="utf-8",
+    )
+    return [html_rel, csv_rel]
+
+
+def _cell(value: Any) -> str:
+    return "" if value is None else str(value)

@@ -2,6 +2,7 @@
 that was never written."""
 from __future__ import annotations
 
+import csv
 import json
 import re
 
@@ -88,7 +89,12 @@ def _run_view(rows: int):
 
     def stage(stage_id: str, stage_type: str, row_count: int, inputs: list[str]):
         return StageView(
-            record={}, stage_id=stage_id, type=stage_type, status="ok",
+            # The cohort writer reads the frame through this record, as the packet does.
+            record={"stage_id": stage_id, "type": stage_type,
+                    "output_path": f"outputs/{stage_id}.parquet",
+                    "input_validation_report": [
+                        {"phase": f"input:{i}", "ok": True} for i in inputs]},
+            stage_id=stage_id, type=stage_type, status="ok",
             row_count=row_count, elapsed_ms=0, error=None, notes=[],
             output_path=f"outputs/{stage_id}.parquet", validations=[],
             data_file=f"data/{stage_id}.csv",
@@ -116,7 +122,7 @@ def _run_view(rows: int):
 def test_no_lineage_page_links_a_lineage_page_that_was_not_written(tmp_path):
     """The whole point of the surface: a dead link reads as checked until it is clicked."""
     packet = _export_demo_packet(tmp_path)
-    pages = sorted(p for p in packet.glob("lineage/**/*.html") if p.name != "index.html")
+    pages = sorted(p for p in packet.glob("lineage/*/*.html") if ".from-" not in p.name)
     assert len(pages) == 4, "two published rows, each naming one contributor"
     followed = [
         (page, href)
@@ -250,3 +256,16 @@ def test_a_publish_input_row_with_no_page_is_offered_no_link(tmp_path):
     assert built.trace_hrefs == ["lineage/totals/0.html", None], (
         "row 1 has no page, so it gets no link"
     )
+
+
+def test_a_fan_in_ships_the_rows_it_summarized_as_a_table_and_a_csv(tmp_path):
+    """The reader checks the arithmetic, so the cohort has to be the cohort — not the stage."""
+    packet = _export_demo_packet(tmp_path)
+    csv_path = packet / "lineage/totals/0.from-source.csv"
+    assert csv_path.exists(), "the fan-in's own rows, downloadable"
+    rows = list(csv.DictReader(csv_path.open(encoding="utf-8")))
+    assert [r["client"] for r in rows] == ["a"], "row 0 of totals was fed by source row 0 alone"
+
+    page = (packet / "lineage/totals/0.from-source.html").read_text(encoding="utf-8")
+    assert "0.from-source.csv" in page, "the table offers its own download"
+    assert "../source/0.html" in page, "and each row opens its own lineage"
