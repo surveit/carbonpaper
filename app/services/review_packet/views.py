@@ -195,36 +195,3 @@ def _read_plain_str(value: Any) -> str:
 def _read_optional_str(source: dict[str, Any], key: str) -> str | None:
     value = source.get(key)
     return None if value is None else _read_plain_str(value)
-
-
-LINEAGE_DIR = "lineage"
-
-
-class StageTraces(BaseModel):
-    stage_id: str
-    rows: list[int]
-    # Rows the publish stage linked, against rows reached because a linked row's
-    # trace named them. Only the first mean the publish stage reads this step.
-    published: int
-    hrefs: list[str]
-
-    def is_publish_input(self) -> bool:
-        return self.published > 0
-
-
-class LineageReport(BaseModel):
-    written: list[str]
-    traced: set[tuple[str, int]]
-    refused: str | None
-    stages: list[StageTraces] = []
-    figures: list[PublishedFigure] = []
-
-
-class PublishedFigure(BaseModel):
-    """A figure the artifact printed, as the publish stage named it."""
-
-    label: str
-    value: str | None
-    stage_id: str
-    row_ordinal: int
-    href: str | None

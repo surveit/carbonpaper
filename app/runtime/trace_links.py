@@ -1,11 +1,9 @@
-"""URL shape of the show-your-work view a published row links back to, the
-accessor a publish stage reads a figure through — one call yields the cell AND
-the trace for the row it came from — and the record of what it linked."""
+"""URL shape of the show-your-work view a published row links back to, and the
+accessor a publish stage reads a figure through: one call yields the cell AND the
+trace for the row it came from, so a number cannot reach the artifact unnamed."""
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any, Mapping
 from urllib.parse import quote
 
@@ -14,23 +12,15 @@ from pydantic import BaseModel
 
 from app.models.errors import StepRefused
 
-ISSUED_SUFFIX = ".trace_links.json"
-
 
 class RowTraceTarget(BaseModel):
     stage_id: str
     row_ordinal: int
     # What the published artifact calls this row, and what it printed for it.
     # Only the publish function knows either; the runtime records what it is told,
-    # and `validate_published_figures` holds the value to the row named here.
+    # and `check_published_figures` holds the value to the row named here.
     label: str | None = None
     value: str | None = None
-
-
-class IssuedRowTraces(BaseModel):
-    """What a publish stage linked, in the order it asked — the packet's page list."""
-
-    targets: list[RowTraceTarget] = []
 
 
 @dataclass(frozen=True)
@@ -118,30 +108,6 @@ def render_cell(cell: Any) -> str:
     if cell is None or (isinstance(cell, float) and pd.isna(cell)):
         return ""
     return str(cell)
-
-
-def issued_traces_path(run_dir: Path, stage_id: str) -> Path:
-    return Path(run_dir) / "outputs" / f"{stage_id}{ISSUED_SUFFIX}"
-
-
-def write_issued_traces(run_dir: Path, stage_id: str, linker: RowTraceLinker) -> None:
-    path = issued_traces_path(run_dir, stage_id)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        IssuedRowTraces(targets=linker.issued).model_dump_json(indent=2), encoding="utf-8"
-    )
-
-
-def read_issued_traces(run_dir: Path) -> list[RowTraceTarget]:
-    """Every row this run's publish stages linked. [] where none declared `trace_links`."""
-    outputs = Path(run_dir) / "outputs"
-    return [
-        target
-        for path in sorted(outputs.glob(f"*{ISSUED_SUFFIX}"))
-        for target in IssuedRowTraces.model_validate(
-            json.loads(path.read_text(encoding="utf-8"))
-        ).targets
-    ]
 
 
 def _path_segment(value: str) -> str:

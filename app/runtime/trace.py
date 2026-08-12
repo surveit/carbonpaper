@@ -115,6 +115,17 @@ def _row_dict(df: pd.DataFrame, r: int) -> dict[str, Any]:
     return {str(k): _scalar(v) for k, v in df.iloc[r].items()}
 
 
+def _lineage_hops(run_dir: Path, stage_id: str, row_ordinal: int) -> list[RowParent] | None:
+    """None and [] differ: [] is a recorded no-parents fact; None means nothing was recorded."""
+    path = lineage_sidecar_path(run_dir, stage_id)
+    if not path.exists():
+        return None
+    lineage = RowLineage.from_frame(read_frame_file(path))
+    if row_ordinal < 0 or row_ordinal >= len(lineage):
+        return None
+    return list(lineage.parents[row_ordinal])
+
+
 def _split_spine(hops: list[RowParent]) -> tuple[RowParent | None, list[RowParent]]:
     spine = next((p for p in hops if p.kind == EdgeKind.direct.value), None)
     return spine, [p for p in hops if p is not spine]
@@ -140,11 +151,11 @@ def _columns_parent_id(parents: list[str], spine: RowParent | None) -> str | Non
 
 
 def _advance_via_lineage(
-    frames: RunFrames, by_id: dict[str, dict[str, Any]], sid: str, spine: RowParent,
+    run_dir: Path, by_id: dict[str, dict[str, Any]], sid: str, spine: RowParent,
 ) -> tuple[str, int] | TraceEnd:
     if spine.stage_id not in by_id:
         return TraceEnd(False, sid, "the parent named in lineage is not in the run")
-    parent_output = frames.output(by_id[spine.stage_id])
+    parent_output = _read_output(run_dir, by_id[spine.stage_id])
     if parent_output is None:
         return TraceEnd(False, spine.stage_id, "this stage's output file is missing from the run")
     if spine.row_ordinal < 0 or spine.row_ordinal >= len(parent_output):
@@ -153,12 +164,12 @@ def _advance_via_lineage(
 
 
 def _advance_positionally(
-    frames: RunFrames, by_id: dict[str, dict[str, Any]], sid: str,
+    run_dir: Path, by_id: dict[str, dict[str, Any]], sid: str,
     parent_id: str, r: int, df: pd.DataFrame,
 ) -> tuple[str, int] | TraceEnd:
     if parent_id not in by_id:
         return TraceEnd(False, sid, "the parent named in the manifest is not in the run")
-    parent_df = frames.output(by_id[parent_id])
+    parent_df = _read_output(run_dir, by_id[parent_id])
     if parent_df is None:
         return TraceEnd(False, parent_id, "this stage's output file is missing from the run")
     if len(parent_df) != len(df):
@@ -177,14 +188,14 @@ def _summarizes_message(contributors: int) -> str:
 
 
 def _advance(
-    frames: RunFrames, by_id: dict[str, dict[str, Any]], sid: str, stage_type: str, r: int,
+    run_dir: Path, by_id: dict[str, dict[str, Any]], sid: str, stage_type: str, r: int,
     df: pd.DataFrame, parents: list[str], spine: RowParent | None,
     hops: list[RowParent] | None = None,
 ) -> tuple[str, int] | TraceEnd:
     if stage_type == StageType.input_data:
         return TraceEnd(True, sid, "input_data stage — the rows originate here")
     if spine is not None:
-        return _advance_via_lineage(frames, by_id, sid, spine)
+        return _advance_via_lineage(run_dir, by_id, sid, spine)
     if hops is not None:
         return TraceEnd(False, sid, _summarizes_message(len(hops)))
     if not parents:
@@ -195,49 +206,12 @@ def _advance(
     # recorded lineage stops here, and re-running it is what makes it traceable.
     if not _is_row_preserving(stage_type) or len(parents) != 1:
         return TraceEnd(False, sid, _not_preserving_message(stage_type))
-    return _advance_positionally(frames, by_id, sid, parents[0], r, df)
-
-
-class RunFrames:
-    """One run's outputs and parsed lineage sidecars, each read at most once."""
-
-    def __init__(self, run_dir: Path) -> None:
-        self.run_dir = Path(run_dir)
-        self._outputs: dict[str, pd.DataFrame | None] = {}
-        self._sidecars: dict[str, RowLineage | None] = {}
-
-    def output(self, stage_record: dict[str, Any]) -> pd.DataFrame | None:
-        stage_id = str(stage_record.get("stage_id", ""))
-        if stage_id not in self._outputs:
-            self._outputs[stage_id] = _read_output(self.run_dir, stage_record)
-        return self._outputs[stage_id]
-
-    def lineage_hops(self, stage_id: str, row_ordinal: int) -> list[RowParent] | None:
-        """None and [] differ: [] is a recorded no-parents fact; None means none was recorded."""
-        lineage = self._sidecar(stage_id)
-        if lineage is None or not 0 <= row_ordinal < len(lineage):
-            return None
-        return list(lineage.parents[row_ordinal])
-
-    def _sidecar(self, stage_id: str) -> RowLineage | None:
-        if stage_id not in self._sidecars:
-            # Parsing a 45k-row sidecar to read one row is the whole cost of a
-            # trace, so a run traced row by row must not pay it per row.
-            path = lineage_sidecar_path(self.run_dir, stage_id)
-            self._sidecars[stage_id] = (
-                RowLineage.from_frame(read_frame_file(path)) if path.exists() else None
-            )
-        return self._sidecars[stage_id]
+    return _advance_positionally(run_dir, by_id, sid, parents[0], r, df)
 
 
 def trace_row(run_dir: Path, stage_id: str, row_ordinal: int) -> Trace:
     """Raises only for caller errors (bad stage id/ordinal); a describable state is a TraceEnd."""
-    return trace_row_from(RunFrames(run_dir), stage_id, row_ordinal)
-
-
-def trace_row_from(frames: RunFrames, stage_id: str, row_ordinal: int) -> Trace:
-    """As `trace_row`, over a reader many rows of one run share."""
-    run_dir = frames.run_dir
+    run_dir = Path(run_dir)
     manifest = _load_manifest(run_dir)
     by_id = _stages_by_id(manifest)
     if stage_id not in by_id:
@@ -250,7 +224,7 @@ def trace_row_from(frames: RunFrames, stage_id: str, row_ordinal: int) -> Trace:
     while end is None:
         record = by_id[sid]
         stage_type = record.get("type", "")
-        df = frames.output(record)
+        df = _read_output(run_dir, record)
         if df is None:
             end = TraceEnd(False, sid, "this stage's output file is missing from the run")
             break
@@ -258,11 +232,11 @@ def trace_row_from(frames: RunFrames, stage_id: str, row_ordinal: int) -> Trace:
             raise RowOutOfRange(f"row {r} out of range for stage {sid!r} ({len(df)} rows)")
 
         parents = _parents(record)
-        hops = frames.lineage_hops(sid, r)
+        hops = _lineage_hops(run_dir, sid, r)
         spine, branches = _split_spine(hops or [])
         columns_parent_id = _columns_parent_id(parents, spine)
         parent_df = (
-            frames.output(by_id[columns_parent_id])
+            _read_output(run_dir, by_id[columns_parent_id])
             if columns_parent_id in by_id else None
         )
 
@@ -277,7 +251,7 @@ def trace_row_from(frames: RunFrames, stage_id: str, row_ordinal: int) -> Trace:
         ))
 
         next_hop = _advance(
-            frames, by_id, sid, stage_type, r, df, parents, spine, hops
+            run_dir, by_id, sid, stage_type, r, df, parents, spine, hops
         )
         if isinstance(next_hop, TraceEnd):
             end = next_hop

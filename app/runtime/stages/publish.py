@@ -14,7 +14,7 @@ from app.models.stages.publish import PublishStage
 
 from ..context import RunContext
 from ..published_figures import validate_published_figures
-from ..trace_links import RowTraceLinker, write_issued_traces
+from ..trace_links import RowTraceLinker
 from .execution import narrow_stage
 from .python_functions import _load_python_function
 
@@ -34,12 +34,9 @@ def handle_publish(
     if linker is None:
         return fn(*args, output_dir=str(output_dir))
     result = fn(*args, output_dir=str(output_dir), trace_links=linker)
-    # Both after the call, so they see what the artifact actually claims rather than
-    # what the stage could have claimed. Checked before recorded: a refused stage
-    # leaves no page list behind. The review packet renders exactly this set — a row
-    # nothing published points at needs no page.
+    # After the call, so it checks what the artifact actually claims rather than
+    # what the stage could have claimed.
     validate_published_figures(publish_stage.id, linker.issued, frames)
-    write_issued_traces(ctx.require_run_dir(), publish_stage.id, linker)
     return result
 
 
