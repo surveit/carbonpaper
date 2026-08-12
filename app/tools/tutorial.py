@@ -1,4 +1,4 @@
-"""The tour's fixture, and the two tools it holds alone because they need its context.
+"""The tour's fixture, and the one tool it holds alone because it needs its context.
 
 Importing is app.services.project.import_project — the same call admin's load-bundle
 makes. The fixture's CSVs are supplied per run as bindings, so nothing is rewritten
@@ -7,13 +7,9 @@ into the stored workflow and the project stays portable."""
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
-
 from pydantic import BaseModel
 
 from app.core.agent.tool_spec import ToolSpec
-from app.core.frames import collapse_null_forms, convert_cell_to_json_native, list_rows
-from app.core.run_status import StageStatus
 from app.models.review_guide import ReviewGuideDraft
 from app.services import project as project_service, run as run_service, workspace
 from app.services.project import WorkflowFile, import_project
@@ -29,11 +25,6 @@ _CSV_BY_STAGE_ID = {
     "raw_filings": _DATA_DIR / f"{_FIXTURE_STEM}.csv",
     "public_commitments": _DATA_DIR / "tutorial_public_commitments.csv",
 }
-# Enough of a stage's output for the tour to find a row worth linking, and few enough
-# that the whole of it can be read in the chat.
-_MAX_LINKED_ROWS = 20
-# Both wrote the output they promised; warnings are reported on the run's own page.
-_FINISHED_STATUSES = (StageStatus.OK, StageStatus.VALIDATION_WARNINGS)
 
 
 class TutorialContext(BaseModel):
@@ -44,6 +35,9 @@ class TutorialContext(BaseModel):
 class TutorialProject(BaseModel):
     name: str
     version_id: str
+    # The stages as seeded: the tour reads its stage ids and types off this rather than
+    # off a name written into its prompt.
+    workflow: workspace.WorkflowSummary
     # Pass straight to run_workflow's `bindings`: which file each input stage reads.
     input_bindings: dict[str, dict[str, str]]
     workflow_url: str
@@ -72,6 +66,7 @@ def seed_tutorial_project(ctx: TutorialContext) -> TutorialProject:
     return TutorialProject(
         name=name,
         version_id=version_id,
+        workflow=project_service.describe_workflow(name),
         input_bindings={
             stage_id: {"path": str(path), "format": "csv"}
             for stage_id, path in _CSV_BY_STAGE_ID.items()
@@ -97,90 +92,14 @@ def _is_on_disk(project_id: str) -> bool:
     return (workspace.projects_dir() / project_id / "document.md").is_file()
 
 
-class RowLineageLink(BaseModel):
-    ordinal: int
-    values: dict[str, Any]
-    lineage_url: str
-
-
-class StageRowLineage(BaseModel):
-    stage_id: str
-    # The stage's whole output, so a reader of `rows` knows what it is a prefix of.
-    row_count: int
-    rows: list[RowLineageLink]
-
-
-def read_row_lineage_links(
-    ctx: TutorialContext, project_id: str, run_id: str, stage_id: str
-) -> StageRowLineage:
-    _refuse_a_stage_that_did_not_finish(project_id, run_id, stage_id)
-    frame = run_service.read_stage_output(project_id, run_id, stage_id)
-    return StageRowLineage(
-        stage_id=stage_id,
-        row_count=len(frame),
-        rows=[
-            RowLineageLink(
-                ordinal=ordinal,
-                values=_to_json_cells(row),
-                lineage_url=_absolute(
-                    ctx, run_service.build_row_trace_url(project_id, run_id, stage_id, ordinal)
-                ),
-            )
-            for ordinal, row in enumerate(list_rows(frame.head(_MAX_LINKED_ROWS)))
-        ],
-    )
-
-
-def _refuse_a_stage_that_did_not_finish(project_id: str, run_id: str, stage_id: str) -> None:
-    """A stage that errored still wrote a frame: its untouched columns are nulls, not results."""
-    records = run_service.read_run_status(project_id, run_id).get("stage_records", [])
-    status = next(
-        (record["status"] for record in records if record["stage_id"] == stage_id), None
-    )
-    # None: the stage is not in this run at all, which read_stage_output names better.
-    if status is not None and status not in _FINISHED_STATUSES:
-        raise ValueError(
-            f"stage '{stage_id}' of run '{run_id}' is '{status}', so the rows it holds are "
-            "not a result to show anyone — read a stage that finished"
-        )
-
-
-def _to_json_cells(row: dict[str, Any]) -> dict[str, Any]:
-    return {name: _to_json_cell(value) for name, value in row.items()}
-
-
-def _to_json_cell(value: object) -> object:
-    """A null stays null: a blank cell the tour reads as blank must not arrive as "None"."""
-    cell = collapse_null_forms(value)
-    if cell is None or isinstance(cell, (bool, int, float, str)):
-        return cell
-    return convert_cell_to_json_native(cell)
-
-
-def _absolute(ctx: TutorialContext, root_relative: str) -> str:
-    return f"{ctx.base_url}{root_relative.lstrip('/')}"
-
-
 CREATE_TUTORIAL_PROJECT = ToolSpec(
     name="create_tutorial_project",
     description=(
         "Seed the committed tutorial project into this workspace and return it: its "
-        "name, the stored version, the `input_bindings` its run needs, and the URLs of "
-        "its workflow, review guide and runs. Takes no arguments — the "
+        "name, the stored version, its `workflow` (every stage's id, type and inputs), "
+        "the `input_bindings` its run needs, and the URLs of its workflow, review guide "
+        "and runs. Takes no arguments — the "
         "fixture is fixed. If the tutorial project is already in this workspace it is "
         "returned as it stands, not replaced, so a second tour never overwrites the first."
-    ),
-)
-
-READ_ROW_LINEAGE_LINKS = ToolSpec(
-    name="read_row_lineage_links",
-    description=(
-        f"The first {_MAX_LINKED_ROWS} rows one stage of a run produced, each carrying its "
-        "`ordinal`, its cell `values`, and the `lineage_url` of that row's lineage page — "
-        "a whole link, to hand over as it stands. `row_count` is the stage's entire "
-        "output, so you can see what these rows are a prefix of. Read the values to "
-        "choose WHICH row is worth showing: a row's ordinal is recorded nowhere else, so "
-        "a lineage link you did not get here is a guess. A stage that wrote no output "
-        "(it errored, or never ran) is an error here, never an empty list."
     ),
 )

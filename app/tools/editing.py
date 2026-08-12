@@ -94,7 +94,7 @@ def make_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
             label=TOOL_LABELS[fn.__name__],
         )
         for fn in tools
-    ] + shared.bind("describe_workflow")
+    ] + shared.bind("describe_workflow", "read_stage_output_rows")
 
 
 # ── tool input schemas + display labels ──────────────────────────────────────

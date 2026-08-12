@@ -11,7 +11,10 @@ import os
 from pathlib import Path
 from typing import Any
 
+from pydantic import BaseModel
+
 from app.core.paths import REPO_ROOT, repo_root as repo_root
+from app.models import StageType
 from app.services.loader import load_compiled_dir
 # The projects storage root: <root>/<name>/ working copies live here. There is
 # exactly ONE in a running process — the app does not serve multiple
@@ -91,20 +94,35 @@ def list_project_names() -> list[str]:
     )
 
 
-def project_workflow_summary(project_dir: Path) -> dict[str, Any]:
+class StageSummary(BaseModel):
+    id: str
+    type: StageType
+    description: str
+    inputs: list[str]
+
+
+class WorkflowSummary(BaseModel):
+    name: str
+    stages: list[StageSummary]
+    # One per compiled file that would not parse — the stage is absent from `stages`
+    # rather than standing in the list as a half-read one.
+    issues: list[str]
+
+
+def project_workflow_summary(project_dir: Path) -> WorkflowSummary:
     compiled = load_compiled_dir(project_dir / "compiled")
 
-    stages: list[dict[str, Any]] = []
+    stages: list[StageSummary] = []
     issues: list[str] = []
     for compiled_file in compiled:
         if compiled_file.stage is None:
             issues.append(f"{compiled_file.filename}: {'; '.join(compiled_file.issues)}")
             continue
         stage = compiled_file.stage
-        stages.append({
-            "id": stage.id,
-            "type": stage.type,
-            "description": stage.description,
-            "inputs": [ref.id for ref in stage.inputs],
-        })
-    return {"name": project_dir.name, "stages": stages, "issues": issues}
+        stages.append(StageSummary(
+            id=stage.id,
+            type=stage.type,
+            description=stage.description,
+            inputs=[ref.id for ref in stage.inputs],
+        ))
+    return WorkflowSummary(name=project_dir.name, stages=stages, issues=issues)

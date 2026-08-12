@@ -28,7 +28,7 @@ from app.tools.tutorial import TutorialContext
 _BASE_URL = "http://127.0.0.1:8788/"
 _EXPECTED_TOOLS = {
     "create_tutorial_project",
-    "read_row_lineage_links",
+    "read_stage_output_rows",
     "run_workflow",
     "get_run_status",
     "sleep",
@@ -72,7 +72,8 @@ def test_the_tutorial_agent_gets_none_of_the_editing_tools() -> None:
     bare = {name.rsplit("__", 1)[-1] for name in engine._allowed_tools}
 
     assert "add_stage" in editing and "save_version" in editing  # the list is real
-    assert bare & editing == {"describe_workflow"}
+    # The overlap is the shared READ tools; nothing that writes.
+    assert bare & editing == {"describe_workflow", "read_stage_output_rows"}
     for editing_only in ("add_stage", "edit_stage", "remove_stage", "save_version",
                          "create_draft", "set_draft_stage", "write_review_guide"):
         assert editing_only not in bare
@@ -237,10 +238,12 @@ def _run_the_tour_capped(monkeypatch: pytest.MonkeyPatch) -> tuple[dict[str, Any
     return seeded, json.loads(out["content"][0]["text"])["run_id"]
 
 
-def _read_lineage_links(project: str, run_id: str, stage_id: str) -> dict[str, Any]:
+def _read_lineage_links(
+    project: str, run_id: str, stage_id: str, **window: int
+) -> dict[str, Any]:
     out = _call(
-        next(t for t in _tools() if t.name == "read_row_lineage_links"),
-        {"project_id": project, "run_id": run_id, "stage_id": stage_id},
+        next(t for t in _tools() if t.name == "read_stage_output_rows"),
+        {"project_id": project, "run_id": run_id, "stage_id": stage_id, **window},
     )
     assert out.get("is_error") is not True, out["content"][0]["text"]
     links: dict[str, Any] = json.loads(out["content"][0]["text"])
@@ -305,7 +308,7 @@ def test_a_stage_that_did_not_finish_is_refused_rather_than_read(
     seeded, run_id = _run_the_tour_capped(monkeypatch)
 
     out = _call(
-        next(t for t in _tools() if t.name == "read_row_lineage_links"),
+        next(t for t in _tools() if t.name == "read_stage_output_rows"),
         {"project_id": seeded["name"], "run_id": run_id, "stage_id": "judge_alignment"},
     )
 
@@ -314,3 +317,20 @@ def test_a_stage_that_did_not_finish_is_refused_rather_than_read(
     assert run_service.read_stage_output(seeded["name"], run_id, "judge_alignment")[
         "alignment"
     ].isna().all(), "the frame the refusal is protecting the tour from"
+
+
+def test_the_seeding_tool_hands_back_the_stages_it_seeded(projects_root: Path) -> None:
+    """Beat 4 picks its stages by TYPE off this, so the script names none of them itself."""
+    workflow = _seed_a_tour()["workflow"]
+
+    by_type = {stage["type"]: stage["id"] for stage in workflow["stages"]}
+    assert workflow["issues"] == []
+    assert [stage["id"] for stage in workflow["stages"]] == [
+        s.id for s in load_workflow(projects_root / workflow["name"])
+    ]
+    # The two rules the script states: the last stage before the publish stage, and the
+    # one stage whose behaviour is code.
+    assert by_type["publish"] == "publish_report"
+    assert by_type["python_row_function"] == "check_filings"
+    feeds_publish = next(s for s in workflow["stages"] if s["id"] == by_type["publish"])
+    assert feeds_publish["inputs"] == ["judge_alignment"]

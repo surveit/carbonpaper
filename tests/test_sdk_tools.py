@@ -57,7 +57,7 @@ def test_allowed_names_cover_every_tool(examples_root: Path) -> None:
     _server, allowed, _tools = _build("congresswatch")
     specs = make_editing_tools(EditingContext(project_id="congresswatch"))
     assert set(allowed) == {f"mcp__tools__{spec.name}" for spec in specs}
-    assert len(allowed) == 14
+    assert len(allowed) == 15
 
 
 def test_read_stage_handler_returns_text_content(examples_root: Path) -> None:
@@ -67,7 +67,7 @@ def test_read_stage_handler_returns_text_content(examples_root: Path) -> None:
 
     from app.services.workspace import project_workflow_summary
 
-    stage_id = project_workflow_summary(pdir)["stages"][0]["id"]
+    stage_id = project_workflow_summary(pdir).stages[0].id
     out = _call(tool, {"project_id": "congresswatch", "stage_id": stage_id})
     assert out["content"][0]["type"] == "text"
     assert stage_id in out["content"][0]["text"]

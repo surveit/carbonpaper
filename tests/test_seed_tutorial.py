@@ -106,8 +106,8 @@ def test_committed_tutorial_fixture_imports_and_validates_cleanly(tmp_path):
     assert imported_name in project.list_projects()
 
     summary = project.describe_workflow(imported_name)
-    assert summary["issues"] == []
-    assert [stage["id"] for stage in summary["stages"]] == _EXPECTED_STAGE_IDS
+    assert summary.issues == []
+    assert [stage.id for stage in summary.stages] == _EXPECTED_STAGE_IDS
 
     project_dir = tmp_path / "examples" / imported_name
     loaded_stages = load_workflow(project_dir)

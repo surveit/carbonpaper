@@ -5,21 +5,18 @@ work; app.main imports it at startup."""
 
 from __future__ import annotations
 
-from typing import Annotated
-
 from pydantic import BaseModel
 
 from app.agents.tutorial.prompt import TUTORIAL_OPENING_PROMPT, TUTORIAL_SYSTEM_PROMPT
 from app.core.agent.bound_tool import BoundToolSpec
 from app.core.agent.registry import AgentConfig, register
 from app.tools import shared
+from app.tools.shared import StageOutputRows
+from app.tools.tool_specs import TOOL_SPECS
 from app.tools.tutorial import (
     CREATE_TUTORIAL_PROJECT,
-    READ_ROW_LINEAGE_LINKS,
-    StageRowLineage,
     TutorialContext,
     TutorialProject,
-    read_row_lineage_links,
     seed_tutorial_project,
 )
 
@@ -38,12 +35,16 @@ def make_tutorial_tools(context: BaseModel) -> list[BoundToolSpec]:
     def create_tutorial_project() -> TutorialProject:
         return seed_tutorial_project(context)
 
-    def read_lineage_links(project_id: str, run_id: str, stage_id: str) -> StageRowLineage:
-        return read_row_lineage_links(context, project_id, run_id, stage_id)
+    def read_stage_output_rows(
+        project_id: str, run_id: str, stage_id: str, limit: int | None = None, offset: int = 0
+    ) -> StageOutputRows:
+        return shared.read_stage_output_rows(
+            project_id, run_id, stage_id, limit, offset, base_url=context.base_url.rstrip("/")
+        )
 
-    # Two new tools, both because they close over this session's base_url — seeding builds
-    # the tour's links from it, and a lineage link is handed over whole rather than joined
-    # by the model. The rest it REFERENCES.
+    # One new tool. Seeding is the only thing the tour does that no other surface does.
+    # The row reader is the shared one, wrapped only because the tour's reader CLICKS the
+    # lineage links, so they carry this session's base_url rather than being root-relative.
     return [
         BoundToolSpec(
             name="create_tutorial_project",
@@ -53,15 +54,11 @@ def make_tutorial_tools(context: BaseModel) -> list[BoundToolSpec]:
             label="Setting up the tutorial project",
         ),
         BoundToolSpec(
-            name="read_row_lineage_links",
-            description=READ_ROW_LINEAGE_LINKS.description,
-            fn=read_lineage_links,
-            input_schema={
-                "project_id": Annotated[str, "The project the run belongs to."],
-                "run_id": Annotated[str, "The run id run_workflow returned."],
-                "stage_id": Annotated[str, "The stage whose output rows you want."],
-            },
-            label="Finding rows to trace",
+            name="read_stage_output_rows",
+            description=TOOL_SPECS["read_stage_output_rows"].description,
+            fn=read_stage_output_rows,
+            input_schema=shared.schema_of("read_stage_output_rows"),
+            label="Reading the stage's rows",
         ),
         *shared.bind("run_workflow", "get_run_status", "sleep", "describe_workflow"),
     ]

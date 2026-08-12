@@ -12,13 +12,10 @@ from app.web.breadcrumbs import _HOME_LABEL
 from app.tools.tool_specs import TOOL_SPECS
 from app.agents.tutorial.config import make_tutorial_tools
 from app.services.project import WorkflowFile
-from app.tools.tutorial import (
-    _FIXTURE,
-    RowLineageLink,
-    StageRowLineage,
-    TutorialContext,
-    TutorialProject,
-)
+from app.models import StageType
+from app.services.workspace import StageSummary
+from app.tools.shared import StageOutputRow, StageOutputRows
+from app.tools.tutorial import _FIXTURE, TutorialContext, TutorialProject
 
 _IDENTIFIER = re.compile(r"[a-z_][a-z0-9_]*")
 _TEMPLATES = Path(app.__file__).resolve().parent / "templates"
@@ -186,8 +183,8 @@ def _flat(text: str) -> str:
 
 
 # Every name the script quotes in backticks is something the code defines: a stage of the
-# fixture, a column of one of its schemas, a field of what a tour tool returns, a tool, an
-# argument one of those tools takes, or a run status. A renamed stage, column, field or
+# fixture, a column of one of its schemas, a field of what a tour tool returns, a stage
+# type, a tool, an argument one of those tools takes, or a run status. A renamed stage, column, field or
 # argument otherwise leaves the prompt pointing at nothing, silently.
 _RUN_STATUS_WORDS = {"running", "status", "error"}
 
@@ -198,8 +195,11 @@ def test_every_name_the_prompt_quotes_is_one_the_code_defines() -> None:
         {stage.id for stage in fixture.stages}
         | _fixture_column_names(fixture)
         | set(TutorialProject.model_fields)
-        | set(RowLineageLink.model_fields)
-        | set(StageRowLineage.model_fields)
+        | set(StageOutputRow.model_fields)
+        | set(StageOutputRows.model_fields)
+        # The script names stages by what `workflow` calls them: a field, and a type.
+        | set(StageSummary.model_fields)
+        | {stage_type.value for stage_type in StageType}
         | _tour_tool_names()
         | _tour_tool_arguments()
         | _RUN_STATUS_WORDS

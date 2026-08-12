@@ -11,6 +11,7 @@ _EXPECTED_TOOL_NAMES = {
     "list_projects",
     "get_current_project",
     "describe_workflow",
+    "read_stage_output_rows",
     "read_stage",
     "edit_stage",
     "add_stage",

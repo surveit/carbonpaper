@@ -385,7 +385,7 @@ def list_project_listings() -> list[ProjectListing]:
     ]
 
 
-def describe_workflow(name: str) -> dict[str, Any]:
+def describe_workflow(name: str) -> workspace.WorkflowSummary:
     return workspace.project_workflow_summary(workspace.resolve_project_dir(name))
 
 

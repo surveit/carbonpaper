@@ -172,6 +172,26 @@ Reading the source file yourself answers a different question: the input stage
 pins the declared dtypes (a zero-padded "002" declared `str` stays "002"; a plain
 CSV read makes it 2), and a computed column is in no file at all.""",
     ),
+    "read_stage_output_rows": ToolSpec(
+        name="read_stage_output_rows",
+        description="""\
+The ROWS one stage of a run produced, as stored: a window of at most 50, from
+`offset`, each carrying its `ordinal`, its cell `values`, and the `lineage_url`
+of that row's lineage page — a whole link, to hand on as it stands. `row_count`
+is the stage's entire output and `limit` is the window actually applied, which
+is smaller than you asked for when you asked for more than the cap.
+
+This is the tool for a QUESTION ABOUT A ROW — what a stage did to a given
+filing, which rows carry a blank, what a model actually answered. A question
+about what a COLUMN holds across the whole output — its vocabulary, its range,
+how many nulls — is a profile, and paging through rows answers it slowly and
+partially.
+
+A row's ordinal is recorded nowhere else, so a lineage link not read from here
+is a guess. A stage that did not finish is refused rather than read: an errored
+stage still wrote a frame, and the columns it never reached are nulls, not
+results.""",
+    ),
     "read_data_model": ToolSpec(
         name="read_data_model",
         description="""\
