@@ -5,7 +5,7 @@ rewrites/adds, every other anchor column flowing through untouched. Replaces =
 the reshaping family: nothing flows, output is exactly `produces`."""
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Annotated, Literal, Union
+from typing import TYPE_CHECKING, Annotated, Literal, Sequence, Union
 
 from pydantic import ConfigDict, Field, model_validator
 
@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     # Only under TYPE_CHECKING, mirroring app.models.stages.shared:
     # app.models.stages.stage_base imports this module at runtime.
     from app.models.stages.stage_base import AbstractStage
+    from app.models.workflow_stage import WorkflowStageInput
 
 
 class InputReads(_Base):
@@ -115,16 +116,22 @@ def _refuse_duplicate_names(columns: list[Column], where: str) -> None:
 SIGNATURE_ISSUE = "stage '{sid}': signature {problem}"
 
 
-def find_signature_issues(stage: "AbstractStage") -> list[str]:
+def find_signature_issues(
+    stage: "AbstractStage", inputs: Sequence["WorkflowStageInput"]
+) -> list[str]:
     signature = stage.signature
-    issues = _find_read_issues(stage, signature.reads)
+    issues = _find_read_issues(stage, inputs, signature.reads)
     if isinstance(signature, ExtendsSignature):
-        issues.extend(_find_extends_issues(stage, signature))
+        issues.extend(_find_extends_issues(stage, inputs, signature))
     return issues
 
 
-def _find_read_issues(stage: "AbstractStage", reads: list[InputReads]) -> list[str]:
-    edges ={ref.id: ref.table_schema for ref in stage.inputs}
+def _find_read_issues(
+    stage: "AbstractStage",
+    inputs: Sequence["WorkflowStageInput"],
+    reads: list[InputReads],
+) -> list[str]:
+    supplied = {ref.id: ref.table_schema for ref in inputs}
     issues: list[str] = []
     seen: set[str] = set()
     for entry in reads:
@@ -132,25 +139,27 @@ def _find_read_issues(stage: "AbstractStage", reads: list[InputReads]) -> list[s
             issues.append(_issue(stage, f"declares reads for input `{entry.input}` twice"))
             continue
         seen.add(entry.input)
-        edge = edges.get(entry.input)
-        if edge is None:
+        upstream = supplied.get(entry.input)
+        if upstream is None:
             issues.append(_issue(
                 stage,
                 f"reads from `{entry.input}`, which is not one of this stage's inputs "
-                f"({sorted(edges)})",
+                f"({sorted(supplied)})",
             ))
             continue
         issues.extend(
             _issue(stage, f"reads from `{entry.input}`: {reason}")
-            for reason in TableSchema(columns=entry.columns).find_unsatisfied_columns(edge)
+            for reason in TableSchema(columns=entry.columns).find_unsatisfied_columns(upstream)
         )
     return issues
 
 
-def _find_extends_issues(stage: "AbstractStage", signature: ExtendsSignature) -> list[str]:
-    if not stage.inputs:
-        return [_issue(stage, "is extends-form, which needs an anchor: at least one input")]
-    anchor = stage.inputs[0]
+def _find_extends_issues(
+    stage: "AbstractStage",
+    inputs: Sequence["WorkflowStageInput"],
+    signature: ExtendsSignature,
+) -> list[str]:
+    anchor = inputs[0]
     issues: list[str] = []
 
     anchor_reads = {column.name for column in anchor_read_columns(stage)}
@@ -172,12 +181,17 @@ def _find_extends_issues(stage: "AbstractStage", signature: ExtendsSignature) ->
     return issues
 
 
-def promised_output_schema(stage: "AbstractStage") -> "TableSchema | None":
+def promised_output_schema(
+    stage: "AbstractStage", inputs: Sequence["WorkflowStageInput"]
+) -> "TableSchema | None":
     signature = stage.signature
     if isinstance(signature, ExtendsSignature):
-        if not stage.inputs:
-            return None
-        return stage.inputs[0].table_schema.extend(signature.rewrites, signature.adds)
+        if not inputs:
+            raise ValueError(
+                f"stage `{stage.id}`: extends-form output resolves off an anchor input, "
+                f"and this stage declares none"
+            )
+        return inputs[0].table_schema.extend(signature.rewrites, signature.adds)
     if not signature.produces:
         return None
     return TableSchema(columns=signature.produces)
@@ -222,7 +236,7 @@ def _issue(stage: "AbstractStage", problem: str) -> str:
 # Rendered once above the stage-type catalog; each type's line names only its form.
 SIGNATURE_CONTRACT_NOTE = (
     "Every stage MUST declare `signature` — what its transform reads and "
-    "writes, checked against its edges and config at save. Form `extends`: "
+    "writes, checked against its inputs and config at save. Form `extends`: "
     "output = the first input's rows plus `rewrites` (revised in place) and "
     "`adds` (new columns); every other column flows through untouched. Form "
     "`replaces`: nothing flows; output is exactly `produces`. `reads` lists "

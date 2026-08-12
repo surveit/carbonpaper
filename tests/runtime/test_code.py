@@ -47,7 +47,7 @@ _BINDS_NOTHING_CALLABLE = "should_include = None\n"
 def _filter_stage(code: str) -> Stage:
     return parse_stage({
         "id": "keep_active", "description": "Keep active", "type": "filter_rows",
-        "inputs": [{"id": "load", "schema": _SCHEMA}],
+        "inputs": [{"id": "load"}],
         "signature": {"form": "extends", "reads": reads_of("load", _SCHEMA["columns"])},
         "filter": {"summary": "Keeps the rows marked active.", "code": code},
         "tests": [{"name": "keeps_an_active_row", "inputs": {"load": [{"status": "active"}]},
@@ -58,7 +58,7 @@ def _filter_stage(code: str) -> Stage:
 def _row_stage(code: str) -> Stage:
     return parse_stage({
         "id": "tag", "description": "Tag", "type": "python_row_function",
-        "inputs": [{"id": "load", "schema": _SCHEMA}],
+        "inputs": [{"id": "load"}],
         "signature": {"form": "extends", "reads": [{"input": "load", "columns": _SCHEMA["columns"]}]},
         "function": {"kind": "inline", "summary": "Passes the row through.", "code": code},
         "tests": [{"name": "passes_a_row_through", "inputs": {"load": [{"status": "active"}]},

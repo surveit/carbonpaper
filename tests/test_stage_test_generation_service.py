@@ -48,7 +48,7 @@ def _seed_project(project_dir: Path, *, existing_tests: list[dict] | None = None
     }), encoding="utf-8")
     double_spec: dict[str, Any] = {
         "id": "double", "description": "Double", "type": "python_row_function",
-        "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
+        "inputs": [{"id": "load"}],
         "signature": {
             "form": "extends",
             "reads": [{"input": "load", "columns": _IN_SCHEMA["columns"]}],
@@ -146,7 +146,7 @@ def test_finish_stage_tests_preserves_null_cells(tmp_path: Path):
     }), encoding="utf-8")
     (compiled / "02_double.json").write_text(json.dumps({
         "id": "double", "description": "Double", "type": "python_row_function",
-        "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
+        "inputs": [{"id": "load"}],
         "signature": {"form": "extends", "adds": [
             c for c in out_schema["columns"] if c not in _IN_SCHEMA["columns"]]},
         "function": {"kind": "inline", "summary": "Test fixture step.", "corner_cases": [],

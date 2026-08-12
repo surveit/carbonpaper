@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from app.services.drafts import Draft
+from conftest import drop_input_schemas
 from scripts.stage_signatures import add_signature
 
 _REVISION = (Path(__file__).resolve().parents[1]
@@ -40,6 +41,9 @@ def test_a_v1_draft_validates_under_todays_model_after_upgrading():
     for stage in document["stages"]:
         add_signature(stage)
 
-    draft = Draft.model_validate(document)
+    draft = Draft.model_validate({
+        **document,
+        "stages": [drop_input_schemas(stage) for stage in document["stages"]],
+    })
 
     assert [s.id for s in draft.stages] == ["tag"]

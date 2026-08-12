@@ -12,6 +12,7 @@ from app.runtime.manifest import resolve_output_path
 from app.services.loader import resolve_function_code
 from app.services.review_packet.checksums import CHECKSUMS_FILE
 from app.services.review_packet.data import DataReport
+from app.models import WorkflowStage
 from app.services.review_packet.views import RunView, StageView
 from app.services.run_guide import RunGuideView
 from app.web.config import templates
@@ -68,13 +69,17 @@ def write_packet_pages(
     guide: RunGuideView | None,
     diagram: str,
     issues: RunIssues,
+    workflow_stages_by_id: dict[str, WorkflowStage],
 ) -> list[str]:
     written = _write_stylesheets(root)
     written.extend(_write_diagram_scripts(root))
     written.append(_write_diagram_source(root, diagram))
     written.append(_write_index(root, view, data, guide, diagram, issues))
     for stage in view.stages:
-        written.append(_write_stage_page(root, run_dir, view, stage))
+        written.append(
+            _write_stage_page(
+                root, run_dir, view, stage, workflow_stages_by_id.get(stage.stage_id))
+        )
     return written
 
 
@@ -136,25 +141,31 @@ def _write_asset(root: Path, name: str) -> str:
     )
 
 
-def _write_stage_page(root: Path, run_dir: Path, view: RunView, stage: StageView) -> str:
+def _write_stage_page(
+    root: Path, run_dir: Path, view: RunView, stage: StageView,
+    workflow_stage: WorkflowStage | None,
+) -> str:
     relative = f"{STAGES_DIR}/{stage.stage_id}.html"
     html = _render(
         "packet_stage.html",
         run=view,
         assets=[f"../{ASSETS_DIR}/{name}" for name in STYLESHEETS],
         index_href="../index.html",
-        **_build_panel_context(run_dir, view, stage),
+        **_build_panel_context(run_dir, view, stage, workflow_stage),
     )
     return _write(root / relative, html, relative)
 
 
-def _build_panel_context(run_dir: Path, view: RunView, stage: StageView) -> dict[str, Any]:
+def _build_panel_context(
+    run_dir: Path, view: RunView, stage: StageView, workflow_stage: WorkflowStage | None
+) -> dict[str, Any]:
     # The False/empty entries below are what make the packet's panel inert.
     return {
         "project": view.project,
         "run_id": view.run_id,
         "stage": stage.record,
         "stage_def": stage.definition,
+        "workflow_stage": workflow_stage,
         "stage_def_error": stage.definition_error,
         "preview": _load_full_table(run_dir, stage),
         # Same window as the plain table it replaces, so a diffed step and an

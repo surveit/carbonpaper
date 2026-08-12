@@ -35,9 +35,7 @@ def _stage(stage_id: str, inputs: list[str]) -> dict[str, Any]:
     return {
         "id": stage_id, "description": stage_id, "type": "python_row_function",
         "inputs": [
-            {"id": producer,
-             "schema": {"columns": [{"name": "issue_type", "type": "str",
-                                     "nullable": False}]}}
+            {"id": producer}
             for producer in inputs
         ],
         "function": {"kind": "inline",

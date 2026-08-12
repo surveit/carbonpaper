@@ -14,7 +14,7 @@ import pandas as pd
 import pyarrow
 
 from app.core.frames import read_frame_file
-from app.models import Stage
+from app.models import WorkflowStage
 
 from .context import RunContext
 from .errors import PreviewError
@@ -35,12 +35,12 @@ PREVIEWABLE_TYPES: set[str] = {
 
 
 def _load_upstream_inputs(
-    stage_def: Stage,
+    workflow_stage: WorkflowStage,
     run_dir: Path,
     output_by_id: dict[str, str | None],
 ) -> dict[str, pd.DataFrame]:
     inputs: dict[str, pd.DataFrame] = {}
-    for ref in stage_def.inputs:
+    for ref in workflow_stage.inputs:
         iid = ref.id
         rel = output_by_id.get(iid)
         if not rel:
@@ -66,14 +66,14 @@ class StagePreview:
 
 def run_stage_preview(
     *,
-    stage_def: Stage,
+    workflow_stage: WorkflowStage,
     run_dir: Path,
     repo_root: Path,
     output_by_id: dict[str, str | None],
     selected_indices: list[int],
 ) -> StagePreview:
     """`selected_indices` are 0-based positional; upstream inputs after the first pass through whole."""
-    stype = stage_def.type
+    stype = workflow_stage.stage.type
     if stype not in PREVIEWABLE_TYPES:
         raise PreviewError(
             f"stage type '{stype}' can't be previewed in memory "
@@ -83,9 +83,9 @@ def run_stage_preview(
     if handler is None:
         raise PreviewError(f"no handler registered for type '{stype}'")
 
-    inputs = _load_upstream_inputs(stage_def, run_dir, output_by_id)
+    inputs = _load_upstream_inputs(workflow_stage, run_dir, output_by_id)
 
-    declared_inputs = stage_def.inputs
+    declared_inputs = workflow_stage.inputs
     if not declared_inputs:
         raise PreviewError("stage has no declared inputs to subset")
     first_id = declared_inputs[0].id
@@ -111,7 +111,7 @@ def run_stage_preview(
     # never call the runner, so no manifest/output is touched.
     ctx = RunContext.for_stages_outside_a_run(repo_root, run_dir)
 
-    output = handler.execute(stage_def, inputs, ctx)
+    output = handler.execute(workflow_stage, inputs, ctx)
     if output is None:
         output = pd.DataFrame()
 

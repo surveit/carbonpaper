@@ -41,7 +41,7 @@ def _stage(stage_id="s", type_="python_row_function", handle="function", **kw):
             block.pop("code")
     spec = {
         "id": stage_id, "description": stage_id.replace("_", " ").title(), "type": type_,
-        "inputs": [{"id": "up", "schema": _SCHEMA}],
+        "inputs": [{"id": "up"}],
         "signature": _signature_for(type_, _SCHEMA),
         handle: block,
         **kw,
@@ -61,9 +61,8 @@ def test_a_described_and_exemplified_stage_warns_about_nothing():
 def test_a_config_only_stage_warns_about_nothing():
     enrich = m.parse_stage({
         "id": "j", "description": "J", "type": "enrich",
-        "inputs": [{"id": "a", "schema": _SCHEMA},
-                   {"id": "b", "schema": {"columns": [{"name": "id", "type": "str", "nullable": True},
-                                                      {"name": "v", "type": "str", "nullable": True}]}}],
+        "inputs": [{"id": "a"},
+                   {"id": "b"}],
         "signature": {
             "form": "extends",
             "reads": [
@@ -104,7 +103,7 @@ def _publish_stage(stage_id="pub"):
     return m.parse_stage({
         "id": stage_id, "description": "Pub", "type": "publish",
         "signature": {"form": "replaces"},
-        "inputs": [{"id": "up", "schema": _SCHEMA}],
+        "inputs": [{"id": "up"}],
         "publish": {"format": "csv"},
         "function": {"kind": "inline", "summary": "Writes one file per row.",
                      "code": "def transform(df, output_dir, trace_links):\n    return df"},

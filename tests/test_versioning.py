@@ -31,8 +31,8 @@ from app.services.versioning import (
     save_version_guide,
 )
 
-# Every input declares the schema it expects and every non-publish stage declares
-# its output_schema (app/models/stage.py: Stage._schemas_declared).
+# Every non-publish stage's signature must say what it outputs
+# (app/models/stages/stage_base.py: AbstractStage._schemas_declared).
 _ROWS_SCHEMA = {"columns": [{"name": "doc_id", "type": "str", "nullable": False}]}
 
 _LOAD_STAGE = {
@@ -194,7 +194,7 @@ def test_a_stored_queue_stage_written_before_queue_sort_still_loads(tmp_path):
     ]
     stage = {
         "id": "review", "description": "Review", "type": "human_review_queue",
-        "inputs": [{"id": "load", "schema": {"columns": scored}}],
+        "inputs": [{"id": "load"}],
         "signature": {"form": "extends", "adds": reviewed,
                       "reads": [{"input": "load", "columns": scored}]},
         "queue": {
@@ -307,7 +307,7 @@ def test_create_version_from_stages_valid_is_loadable_and_unpublished(tmp_path):
 def test_create_version_from_stages_invalid_raises_and_writes_nothing(tmp_path):
     dangling_input = {
         "id": "consume", "description": "Consume", "type": "python_frame_function",
-        "inputs": [{"id": "no-such-stage", "schema": _ROWS_SCHEMA}],
+        "inputs": [{"id": "no-such-stage"}],
         "signature": {
             "form": "replaces",
             "reads": [{"input": "no-such-stage", "columns": _ROWS_SCHEMA["columns"]}],
@@ -467,15 +467,15 @@ def _published_version(project_dir: Path, publish_reads: str) -> str:
     stages: list[dict] = [
         _LOAD_STAGE,
         {"id": "mid", "description": "Middle", "type": "python_frame_function",
-         "inputs": [{"id": "load", "schema": _ROWS_SCHEMA}],
+         "inputs": [{"id": "load"}],
          "function": {"kind": "inline", "code": "def transform(df): return df"},
          "signature": {"form": "replaces", "produces": _ROWS_SCHEMA["columns"]}},
         {"id": "checked", "description": "Assert something", "type": "python_frame_function",
-         "inputs": [{"id": "mid", "schema": _ROWS_SCHEMA}],
+         "inputs": [{"id": "mid"}],
          "function": {"kind": "inline", "code": "def transform(df): return df"},
          "signature": {"form": "replaces", "produces": _ROWS_SCHEMA["columns"]}},
         {"id": "pub", "description": "Publish", "type": "publish",
-         "inputs": [{"id": publish_reads, "schema": _ROWS_SCHEMA}],
+         "inputs": [{"id": publish_reads}],
          "publish": {"format": "csv"},
          "function": {"kind": "inline",
                       "code": "def transform(df, output_dir, trace_links): return df"},

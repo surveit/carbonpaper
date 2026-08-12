@@ -58,7 +58,7 @@ def _load_items_stage(root, *, stage_id="load"):
 
 def _raising_stage(stage_id, input_id, name="Boom", schema=_ID_VAL_SCHEMA):
     return {"id": stage_id, "description": name, "type": "python_frame_function",
-            "inputs": [{"id": input_id, "schema": schema}],
+            "inputs": [{"id": input_id}],
             "signature": {"form": "replaces", "produces": schema["columns"]},
             "function": {"kind": "inline",
                          "code": "def transform(df):\n    raise ValueError('boom')\n"}}
@@ -66,7 +66,7 @@ def _raising_stage(stage_id, input_id, name="Boom", schema=_ID_VAL_SCHEMA):
 
 def _passthrough_stage(stage_id, input_id, name="Passthrough", schema=_ID_VAL_SCHEMA):
     return {"id": stage_id, "description": name, "type": "python_frame_function",
-            "inputs": [{"id": input_id, "schema": schema}],
+            "inputs": [{"id": input_id}],
             "signature": {"form": "replaces", "produces": schema["columns"]},
             "function": {"kind": "inline",
                          "code": "def transform(df):\n    return df\n"}}
@@ -84,7 +84,7 @@ def _score_load_stage(root):
 
 def _score_stage(stage_id, input_id, name="Score"):
     return {"id": stage_id, "description": name, "type": "llm_transform",
-            "inputs": [{"id": input_id, "schema": _ID_TEXT_SCHEMA}],
+            "inputs": [{"id": input_id}],
             "signature": {
                 "form": "extends",
                 "reads": [{"input": input_id, "columns": [
@@ -95,7 +95,7 @@ def _score_stage(stage_id, input_id, name="Score"):
 
 def _queue_stage(stage_id, input_id, name="Review"):
     return {"id": stage_id, "description": name, "type": "human_review_queue",
-            "inputs": [{"id": input_id, "schema": _ID_VAL_SCHEMA}],
+            "inputs": [{"id": input_id}],
             "signature": {"form": "extends",
                           "reads": [{"input": input_id, "columns": _ID_VAL_SCHEMA["columns"]}],
                           "adds": queue_added_columns("human_val")},
@@ -114,7 +114,7 @@ def _five_item_load_stage(root):
 
 def _filtered_queue_stage(stage_id, input_id, flt, name="Review"):
     return {"id": stage_id, "description": name, "type": "human_review_queue",
-            "inputs": [{"id": input_id, "schema": _ID_VAL_SCHEMA}],
+            "inputs": [{"id": input_id}],
             "signature": {"form": "extends",
                           "reads": [{"input": input_id, "columns": _ID_VAL_SCHEMA["columns"]}],
                           "adds": queue_added_columns("human_val")},

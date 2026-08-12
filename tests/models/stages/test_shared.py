@@ -1,27 +1,28 @@
 from __future__ import annotations
 
 from app.models import parse_stage
+from app.models.schema import TableSchema
 from app.models.stages.shared import (
     COLUMN_ISSUE,
     find_predicate_column_issues,
     resolve_input_columns,
 )
+from app.models.workflow_stage import WorkflowStageInput
 
 
-def _stage_with_edge_schema(columns):
-    return parse_stage({
-        "id": "agg", "type": "aggregate", "description": "agg",
-        "inputs": [{"id": "src", "schema": {
-            "columns": [{"name": c, "type": "str", "nullable": False} for c in columns],
-        }}],
-        "signature": {"form": "replaces",
-                      "produces": [{"name": "n", "type": "int", "nullable": False}]},
-        "aggregate": {"group_by": [], "aggregations": [{"output_column": "n", "formula": "count"}]},
-    })
+def _inputs(columns):
+    return [
+        WorkflowStageInput(
+            id="src",
+            table_schema=TableSchema(
+                columns=[{"name": c, "type": "str", "nullable": True} for c in columns]
+            ),
+        )
+    ]
 
 
-def test_resolve_input_columns_reads_the_edge_schema():
-    assert resolve_input_columns(_stage_with_edge_schema(["a", "b"]), 0) == {"a", "b"}
+def test_resolve_input_columns_reads_what_the_upstream_supplies():
+    assert resolve_input_columns(_inputs(["a", "b"]), 0) == {"a", "b"}
 
 
 def test_find_predicate_column_issues_reports_missing_column():
@@ -48,4 +49,4 @@ def test_find_config_column_issues_is_empty_for_a_type_that_names_no_column():
             "produces": [{"name": "a", "type": "str", "nullable": False}],
         },
     })
-    assert load.find_config_column_issues() == []
+    assert load.find_config_column_issues([]) == []

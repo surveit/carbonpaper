@@ -2,15 +2,18 @@
 # HTTP round-trip. The route-level surface lives in tests/test_review_routes.py.
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pandas as pd
 import pytest
 
 from fastapi import HTTPException
 
-from app.models import Stage, parse_stage
+from app.models import WorkflowStage, parse_workflow
+from app.models.stages.signature import promised_output_schema
 from app.web import queue_view
 from app.web.loading import QueueFingerprints
-from conftest import queue_added_columns, queue_columns, reads_of
+from conftest import queue_added_columns, queue_columns, reads_of, source_stage
 
 
 def _queue_stage(
@@ -22,12 +25,12 @@ def _queue_stage(
     target_spec: dict[str, object] | None = None,
     input_ids: list[str] | None = None,
     reads: list[str] | None = None,
-) -> Stage:
+) -> WorkflowStage:
     added: list[dict[str, object]] = queue_added_columns(target, target_type)
     added[0] = {**added[0], **(target_spec or {})}
     upstream_ids = input_ids or ["upstream"]
     inputs = [
-        {"id": upstream, "schema": {"columns": input_columns}}
+        {"id": upstream}
         for upstream in upstream_ids
     ]
     read_columns = (input_columns if reads is None
@@ -36,12 +39,16 @@ def _queue_stage(
         "form": "extends", "adds": added,
         "reads": reads_of(upstream_ids[0], read_columns),
     }
-    return parse_stage({
-        "id": "review", "description": "Review", "type": "human_review_queue",
-        "inputs": inputs,
-        "signature": signature,
-        "queue": queue_columns(source=source, target=target),
-    })
+    workflow = parse_workflow([
+        *(source_stage(upstream, input_columns) for upstream in upstream_ids),
+        {
+            "id": "review", "description": "Review", "type": "human_review_queue",
+            "inputs": inputs,
+            "signature": signature,
+            "queue": queue_columns(source=source, target=target),
+        },
+    ])
+    return workflow.find_workflow_stage("review")
 
 
 _LABEL_COLUMNS: list[dict[str, object]] = [
@@ -111,7 +118,7 @@ def test_the_context_table_omits_the_columns_under_review():
     stage = _queue_stage(_LABEL_COLUMNS)
     snapshot = pd.DataFrame({"id": ["a"], "score": [2], "label": ["high"]})
 
-    page = queue_view.build_queue_page("p", "r", stage, stage.queue, snapshot, None, None)
+    page = queue_view.build_queue_page("p", "r", stage, stage.stage.queue, snapshot, None, None)
 
     assert [column.name for column in page.context_columns] == ["id", "score"]
 
@@ -131,7 +138,7 @@ def test_the_context_table_omits_the_columns_under_review():
 def test_a_reviewed_field_describes_the_column_under_review(target_spec, expected):
     stage = _queue_stage(_LABEL_COLUMNS, target_spec=target_spec)
 
-    field, = queue_view.build_reviewed_fields(stage, stage.queue)
+    field, = queue_view.build_reviewed_fields(stage, stage.stage.queue)
 
     assert (field.source, field.target) == ("label", "human_label")
     assert field.description == expected
@@ -158,7 +165,7 @@ def test_a_reviewed_field_takes_its_control_from_the_declared_type(
         target_type=target_type,
     )
 
-    field, = queue_view.build_reviewed_fields(stage, stage.queue)
+    field, = queue_view.build_reviewed_fields(stage, stage.stage.queue)
 
     assert (field.control, field.options, field.step) == (control, options, step)
 
@@ -169,7 +176,7 @@ def test_a_declared_range_becomes_the_fields_bounds():
         target_type="int", target_spec={"range": [0, 5]},
     )
 
-    field, = queue_view.build_reviewed_fields(stage, stage.queue)
+    field, = queue_view.build_reviewed_fields(stage, stage.stage.queue)
 
     assert (field.minimum, field.maximum) == (0, 5)
 
@@ -181,11 +188,15 @@ def test_the_notes_label_prefers_the_declared_description():
     assert queue_view.resolve_notes_label(stage, "review_notes") == "Notes"
     assert queue_view.resolve_notes_label(stage, "reviewer_notes") == "Notes"
 
-    described = stage.model_copy(update={"signature": stage.signature.model_copy(
+    signature = stage.stage.signature
+    redescribed = stage.stage.model_copy(update={"signature": signature.model_copy(
         update={"adds": [
             column.model_copy(update={"description": "Why you decided as you did"})
             if column.name == "review_notes" else column
-            for column in stage.signature.adds]})})
+            for column in signature.adds]})})
+    described = replace(
+        stage, stage=redescribed,
+        output_schema=promised_output_schema(redescribed, stage.inputs))
     assert queue_view.resolve_notes_label(described, "review_notes") == (
         "Why you decided as you did")
 
@@ -216,7 +227,7 @@ def test_a_control_opens_on_the_value_in_its_own_spelling(target_type, value, ex
          {"name": "label", "type": target_type, "nullable": True}],
         target_type=target_type, target_spec={"nullable": True},
     )
-    field, = queue_view.build_reviewed_fields(stage, stage.queue)
+    field, = queue_view.build_reviewed_fields(stage, stage.stage.queue)
 
     assert queue_view._resolve_prefill(field, value) == expected
 
@@ -228,7 +239,7 @@ def test_an_enum_prefill_keeps_a_declared_value_and_drops_an_undeclared_one():
         target_spec={"enum": ["yes", "no", "unclear"]},
     )
 
-    field, = queue_view.build_reviewed_fields(stage, stage.queue)
+    field, = queue_view.build_reviewed_fields(stage, stage.stage.queue)
 
     assert field.control == "select" and field.options == ["yes", "no", "unclear"]
     assert queue_view._resolve_prefill(field, "unclear") == "unclear"

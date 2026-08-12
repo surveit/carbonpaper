@@ -29,7 +29,7 @@ _LOAD_SCHEMA = {"columns": [{"name": "doc_id", "type": "str", "nullable": True},
 
 _CLASSIFY = {
     "id": "classify", "type": "python_row_function", "description": "Label by sign",
-    "inputs": [{"id": "load", "schema": _LOAD_SCHEMA}],
+    "inputs": [{"id": "load"}],
     # Carries `score` through: an `extends` signature flows every anchor column,
     # so a row function cannot drop one.
     "function": {"kind": "inline", "code":

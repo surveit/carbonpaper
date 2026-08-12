@@ -18,7 +18,7 @@ import pandas as pd
 from app.core.errors import SubsetRunError
 from app.core.frame_checks import find_duplicate_row_violations
 from app.core.frames import write_frame_file, write_frame_file_with_csv_fallback
-from app.models import Stage, StageType, Workflow
+from app.models import Stage, StageType, Workflow, WorkflowStage
 from app.models.run_manifest import (
     RowError,
     RunManifest,
@@ -48,17 +48,17 @@ from app.models.severity import UserFacingErrorSeverity
 from .validation import Issue, ValidationReport, validate_dataframe
 
 
-def topological_sort(stages: list[Stage]) -> list[Stage]:
+def topological_sort(stages: list[WorkflowStage]) -> list[WorkflowStage]:
     by_id = {s.id: s for s in stages}
     visited: set[str] = set()
-    order: list[Stage] = []
+    order: list[WorkflowStage] = []
 
     def visit(sid: str, path: list[str]) -> None:
         if sid in visited:
             return
         if sid in path:
             raise ValueError(f"Cycle detected: {' → '.join(path + [sid])}")
-        for iid in by_id[sid].input_ids:
+        for iid in by_id[sid].stage.input_ids:
             if iid in by_id:
                 visit(iid, path + [sid])
         visited.add(sid)
@@ -82,7 +82,7 @@ def run_subset(
     identity: RunIdentity | None = None,
 ) -> dict[str, pd.DataFrame]:
     """Raises SubsetRunError on any stage error or halt — callers get a full output set or none."""
-    by_id = workflow.index_stages_by_id()
+    by_id = workflow.index_workflow_stages_by_id()
     missing = [sid for sid in stage_ids if sid not in by_id]
     if missing:
         raise SubsetRunError(f"subset names stage(s) not in the workflow: {missing}")
@@ -123,7 +123,7 @@ def _raise_if_run_failed(manifest: RunManifest) -> None:
 
 
 def _execute_stages(
-    ordered: list[Stage],
+    ordered: list[WorkflowStage],
     ctx: RunContext,
     manifest: RunManifest,
     run_dir: Path,
@@ -145,7 +145,7 @@ def _execute_stages(
 
 
 def _run_ordered_stages(
-    ordered: list[Stage],
+    ordered: list[WorkflowStage],
     ctx: RunContext,
     manifest: RunManifest,
     run_dir: Path,
@@ -181,7 +181,8 @@ def _run_ordered_stages(
         # so a resume cannot reuse it. Checked before the resume-skip so a
         # newly-blocked upstream overrides a prior `ok` output on disk.
         if _find_blocking_upstream(stage, blocked):
-            records_by_id[sid] = StageRecord.record_with_status(stage, StageStatus.PENDING)
+            records_by_id[sid] = StageRecord.record_with_status(
+                stage.stage, StageStatus.PENDING)
             blocked.add(sid)
             outputs_so_far.pop(sid, None)
             _flush_manifest(manifest, records_by_id, ordered, run_dir, RunStatus.RUNNING)
@@ -220,14 +221,14 @@ class _StageOutcome(enum.Enum):
 def _flush_manifest(
     manifest: RunManifest,
     records_by_id: dict[str, StageRecord],
-    ordered: list[Stage],
+    ordered: list[WorkflowStage],
     run_dir: Path,
     status: RunStatus,
 ) -> None:
     snapshot = manifest.model_copy(update={
         "stage_records": [
             records_by_id.get(s.id)
-            or StageRecord.record_with_status(s, StageStatus.PENDING)
+            or StageRecord.record_with_status(s.stage, StageStatus.PENDING)
             for s in ordered
         ],
         "status": status,
@@ -240,25 +241,24 @@ def _flush_manifest(
 
 
 def _gather_stage_inputs(
-    stage: Stage, outputs_so_far: dict[str, pd.DataFrame], ctx: RunContext,
-    record: StageRecord,
+    workflow_stage: WorkflowStage, outputs_so_far: dict[str, pd.DataFrame],
+    ctx: RunContext, record: StageRecord,
 ) -> tuple[dict[str, pd.DataFrame], _RowWindow]:
     """Cuts the row window BEFORE the duplicate/schema checks, so a limit of 3 isn't failed by row 4,000."""
-    sid = stage.id
-    window = _resolve_row_window(stage, ctx)
+    sid = workflow_stage.id
+    window = _resolve_row_window(workflow_stage.stage, ctx)
     inputs_for_stage: dict[str, pd.DataFrame] = {}
-    for ref in stage.inputs:
+    for ref in workflow_stage.inputs:
         if ref.id not in outputs_so_far:
             raise RuntimeError(f"Upstream stage '{ref.id}' has no output yet")
         df = _take_row_window(
             outputs_so_far[ref.id], window, f"from input '{ref.id}'", record)
         _reject_duplicate_input_rows(df, ref.id, sid)
         inputs_for_stage[ref.id] = df
-        if ref.table_schema is not None:
-            rep = validate_dataframe(
-                df, ref.table_schema, stage_id=sid, phase=f"input:{ref.id}",
-            )
-            record.input_validation_report.append(rep.to_dict())
+        report = validate_dataframe(
+            df, ref.table_schema, stage_id=sid, phase=f"input:{ref.id}",
+        )
+        record.input_validation_report.append(report.to_dict())
     return inputs_for_stage, window
 
 
@@ -322,28 +322,29 @@ def _persist_row_lineage(lineage: RowLineage, sid: str, run_dir: Path) -> None:
 
 
 def _stage_row_lineage(
-    stage: Stage, output: pd.DataFrame | None, inputs: dict[str, pd.DataFrame],
-    window: _RowWindow,
+    workflow_stage: WorkflowStage, output: pd.DataFrame | None,
+    inputs: dict[str, pd.DataFrame], window: _RowWindow,
 ) -> RowLineage | None:
     """None means output row i is input row i, so the trace needs no help crossing this stage."""
     driven = read_row_lineage(output)
     if driven is not None:
         return driven.shifted(window.start)
-    if stage.type == StageType.union:
-        return concatenated_inputs_lineage(stage, inputs, window.start)
-    return _sliced_input_lineage(stage, output, window)
+    if workflow_stage.stage.type == StageType.union:
+        return concatenated_inputs_lineage(workflow_stage, inputs, window.start)
+    return _sliced_input_lineage(workflow_stage, output, window)
 
 
 def _sliced_input_lineage(
-    stage: Stage, output: pd.DataFrame | None, window: _RowWindow
+    workflow_stage: WorkflowStage, output: pd.DataFrame | None, window: _RowWindow
 ) -> RowLineage | None:
     if window.start == 0 and window.cap is None:
         return None
-    if not stage.is_grain_and_order_preserving or len(stage.inputs) != 1:
+    stage = workflow_stage.stage
+    if not stage.is_grain_and_order_preserving or len(workflow_stage.inputs) != 1:
         return None
     rows = 0 if output is None else len(output)
     return kept_rows_lineage(
-        stage.inputs[0].id, list(range(window.start, window.start + rows)))
+        workflow_stage.inputs[0].id, list(range(window.start, window.start + rows)))
 
 
 def _persist_stage_output(output: pd.DataFrame, sid: str, run_dir: Path, record: StageRecord) -> Path:
@@ -356,7 +357,7 @@ def _persist_stage_output(output: pd.DataFrame, sid: str, run_dir: Path, record:
 
 
 def _finalize_stage_output(
-    stage: Stage,
+    workflow_stage: WorkflowStage,
     window: _RowWindow,
     record: StageRecord,
     output: pd.DataFrame | None,
@@ -365,7 +366,7 @@ def _finalize_stage_output(
     run_dir: Path,
     manifest: RunManifest,
 ) -> bool:
-    sid = stage.id
+    sid = workflow_stage.id
     # Read the contribution off `.attrs` BEFORE any frame is rebuilt — that drops `.attrs`.
     contribution = _read_stage_contribution(output)
     row_errors = _merge_stage_contribution(contribution, sid, manifest, record)
@@ -375,11 +376,11 @@ def _finalize_stage_output(
     # Drop the contribution channel so it never reaches the persisted parquet
     # (its metadata isn't JSON-serializable) — it has been merged above.
     output.attrs.pop(CONTRIBUTION_ATTR, None)
-    lineage = _stage_row_lineage(stage, output, inputs_for_stage, window)
+    lineage = _stage_row_lineage(workflow_stage, output, inputs_for_stage, window)
     # Drop the lineage channel for the same reason as the contribution one
     # above: `.attrs` is not JSON-serializable and must not reach the parquet.
     output.attrs.pop(LINEAGE_ATTR, None)
-    if not stage.inputs:
+    if not workflow_stage.inputs:
         # A stage with no inputs originates its rows outside the run, so the
         # frame it just loaded is the runtime's only handle on them: its window
         # is taken here rather than on an input frame that does not exist.
@@ -387,7 +388,8 @@ def _finalize_stage_output(
     if lineage is not None:
         _persist_row_lineage(lineage, sid, run_dir)
 
-    out_rep = validate_dataframe(output, stage.resolve_output_schema(), stage_id=sid, phase="output")
+    out_rep = validate_dataframe(
+        output, workflow_stage.output_schema, stage_id=sid, phase="output")
     if row_errors:
         out_rep.issues[0:0] = [
             Issue("error", None,
@@ -454,27 +456,29 @@ def _merge_stage_contribution(
 
 
 def _run_stage(
-    stage: Stage,
+    workflow_stage: WorkflowStage,
     ctx: RunContext,
     outputs_so_far: dict[str, pd.DataFrame],
     records_by_id: dict[str, StageRecord],
     manifest: RunManifest,
-    ordered: list[Stage],
+    ordered: list[WorkflowStage],
     run_dir: Path,
 ) -> tuple[_StageOutcome, bool]:
+    stage = workflow_stage.stage
     sid = stage.id
     record = StageRecord.record_with_status(stage, StageStatus.RUNNING)
     t0 = time.perf_counter()
     records_by_id[sid] = record
     _flush_manifest(manifest, records_by_id, ordered, run_dir, RunStatus.RUNNING)
-    _emit_stage_start(ctx.run_log, stage)
+    _emit_stage_start(ctx.run_log, workflow_stage)
 
     joins_blocked = False
     try:
-        inputs_for_stage, window = _gather_stage_inputs(stage, outputs_so_far, ctx, record)
+        inputs_for_stage, window = _gather_stage_inputs(
+            workflow_stage, outputs_so_far, ctx, record)
         handler = _resolve_handler(stage.type)
         try:
-            output = handler.execute(stage, inputs_for_stage, ctx)
+            output = handler.execute(workflow_stage, inputs_for_stage, ctx)
         except HaltForReview as halt:
             # The halt fires before a frame is returned, so its contribution
             # (the stage's human_review_queue_stats) rides the exception; merge it into the
@@ -489,8 +493,8 @@ def _run_stage(
             record.status = StageStatus.CANCELLED
             return _StageOutcome.CANCELLED, False
         joins_blocked = _finalize_stage_output(
-            stage, window, record, output, inputs_for_stage, outputs_so_far, run_dir,
-            manifest)
+            workflow_stage, window, record, output, inputs_for_stage, outputs_so_far,
+            run_dir, manifest)
     except Exception as exc:  # noqa: BLE001 — the runner's contract is to
         # record ANY stage failure in the manifest and keep running
         # independent forks rather than crash the whole run.
@@ -509,9 +513,12 @@ def _run_stage(
     return _StageOutcome.RAN, joins_blocked
 
 
-def _emit_stage_start(log: RunLog | None, stage: Stage) -> None:
+def _emit_stage_start(log: RunLog | None, workflow_stage: WorkflowStage) -> None:
     if log is not None:
-        log.emit({"kind": STAGE_START, "stage": stage.id, "type": stage.type})
+        log.emit({
+            "kind": STAGE_START, "stage": workflow_stage.id,
+            "type": workflow_stage.stage.type,
+        })
 
 
 def _emit_stage_done(log: RunLog | None, record: StageRecord) -> None:
@@ -526,7 +533,7 @@ def _emit_stage_done(log: RunLog | None, record: StageRecord) -> None:
 def _finalize_run_manifest(
     manifest: RunManifest,
     records_by_id: dict[str, StageRecord],
-    ordered: list[Stage],
+    ordered: list[WorkflowStage],
     run_dir: Path,
     cancelled: bool,
     cancel_at_index: int,
@@ -581,9 +588,13 @@ def _consume_cancel(ctx: RunContext) -> bool:
     return identity is not None and consume_cancel(identity.project, identity.run_id)
 
 
-def _find_blocking_upstream(stage: Stage, blocked: set[str]) -> list[str]:
+def _find_blocking_upstream(
+    workflow_stage: WorkflowStage, blocked: set[str]
+) -> list[str]:
     """Only correct in topological order: every producer must already have been processed."""
-    return [input_id for input_id in stage.input_ids if input_id in blocked]
+    return [
+        ref.id for ref in workflow_stage.inputs if ref.id in blocked
+    ]
 
 
 def _stage_output_already_produced(

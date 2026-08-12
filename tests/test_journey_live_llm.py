@@ -99,10 +99,6 @@ def _workflow_stages(source_path: str) -> list[dict]:
     load_schema = {
         "columns": [{"name": "claim_id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}],
     }
-    classified_schema = {
-        "columns": [{"name": "claim_id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True},
-                    {"name": "about_money", "type": "bool", "nullable": True}],
-    }
     llm = {
         "prompt_template": (
             'Statement: "{text}"\n'
@@ -113,7 +109,7 @@ def _workflow_stages(source_path: str) -> list[dict]:
     assert llm["max_retries"] == MAX_RETRIES  # budget bound survives edits
     classify = {
         "id": "classify", "description": "Classify claims", "type": "llm_transform",
-        "inputs": [{"id": "load", "schema": load_schema}],
+        "inputs": [{"id": "load"}],
         # Reads must match the template's placeholders exactly: it injects {text}.
         "signature": {
             "form": "extends",
@@ -133,7 +129,7 @@ def _workflow_stages(source_path: str) -> list[dict]:
         classify,
         {
             "id": "report", "description": "Publish classified claims", "type": "publish",
-            "inputs": [{"id": "classify", "schema": classified_schema}],
+            "inputs": [{"id": "classify"}],
             "publish": {"format": "csv", "destination": "report/"},
             "signature": {"form": "replaces"},
             "function": {"kind": "inline", "code": (

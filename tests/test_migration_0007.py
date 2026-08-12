@@ -59,10 +59,16 @@ def test_a_dropping_stage_is_widened_and_reported():
     assert _load_revision("0007")._add_signatures(document, "proj/v1", widened) is True
     assert widened == ["proj/v1 :: gate (python_row_function) regains ['scratch']"]
 
-    from app.models import parse_stage
-    stage = parse_stage(document["stages"][0])
+    from app.models import parse_workflow
+    from conftest import drop_input_schemas, source_stage
+    migrated = document["stages"][0]
+    workflow = parse_workflow([
+        source_stage("src", migrated["inputs"][0]["schema"]["columns"]),
+        drop_input_schemas(migrated),
+    ])
     # The dropped column flows: it is back in the resolved output.
-    assert [c.name for c in stage.resolve_output_schema().columns] == ["id", "scratch"]
+    assert [c.name for c in workflow.find_workflow_stage("gate").output_schema.columns] == [
+        "id", "scratch"]
 
 
 def test_a_determinable_stage_is_not_reported_as_widened():

@@ -37,6 +37,7 @@ from app.web.diagrams import (
     build_schema_table_graph,
 )
 from app.web.loading import (
+    index_workflow_stages,
     list_projects,
     load_schemas,
     load_stages_or_empty,
@@ -309,9 +310,12 @@ async def version_stage_partial(
             "project": project_name,
             "version_id": version_id,
             "stage": stage,
+            "workflow_stage": (
+                workflow_stage := index_workflow_stages(version.stages).get(stage_id)
+            ),
             "raw_json": stage_to_json(stage),
             "function_code": resolve_function_code(stage),
-            "test_views": (views := shape_test_views(stage)),
+            "test_views": (views := shape_test_views(workflow_stage)),
             "certification": build_certification(stage, views),
             "type_class": TYPE_CLASS,
             "type_glyph": TYPE_GLYPH,

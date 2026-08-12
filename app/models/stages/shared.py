@@ -5,7 +5,7 @@ output side.
 imports this module at runtime, so importing it back would be circular."""
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Mapping
+from typing import TYPE_CHECKING, Mapping, Sequence
 
 from app.core.errors import PredicateError
 from app.core.predicate import parse_predicate
@@ -13,15 +13,15 @@ from app.core.predicate import parse_predicate
 if TYPE_CHECKING:
     from app.models.schema import TableSchema
     from app.models.stages.stage_base import AbstractStage
+    from app.models.workflow_stage import WorkflowStageInput
 
 COLUMN_ISSUE = (
     "stage '{sid}': {field} references column '{col}' not in its input schema (declares {cols})"
 )
 
 
-def resolve_input_columns(stage: "AbstractStage", index: int) -> set[str]:
-    """Edge-only by design: at construction time the upstream producer may not be present at all."""
-    return {c.name for c in stage.inputs[index].table_schema.columns}
+def resolve_input_columns(inputs: Sequence["WorkflowStageInput"], index: int) -> set[str]:
+    return {c.name for c in inputs[index].table_schema.columns}
 
 
 # The runtime spends this prefix on machinery — internal per-row columns, row
@@ -38,15 +38,10 @@ INTERNAL_NAMESPACE_ISSUE = (
 
 def find_internal_namespace_column_issues(stage: "AbstractStage") -> list[str]:
     issues = [
-        f"input `{ref.id}` declares column {name!r}"
-        for ref in stage.inputs
-        for name in _internal_namespace_columns(ref.table_schema)
-    ]
-    issues.extend(
         f"signature declares column {name!r}"
         for name in _signature_column_names(stage)
         if name.startswith(INTERNAL_COLUMN_PREFIX)
-    )
+    ]
     if issues:
         issues.append(INTERNAL_NAMESPACE_ISSUE.format(prefix=INTERNAL_COLUMN_PREFIX))
     return issues
@@ -60,10 +55,6 @@ def _signature_column_names(stage: "AbstractStage") -> list[str]:
     for field in ("adds", "rewrites", "produces"):
         names.extend(column.name for column in getattr(signature, field, []))
     return names
-
-
-def _internal_namespace_columns(schema: "TableSchema") -> list[str]:
-    return [c.name for c in schema.columns if c.name.startswith(INTERNAL_COLUMN_PREFIX)]
 
 
 def find_predicate_column_issues(

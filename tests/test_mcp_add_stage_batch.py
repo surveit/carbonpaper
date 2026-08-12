@@ -24,7 +24,7 @@ _LOAD = {
 }
 _CLEAN = {
     "id": "clean", "description": "Clean", "type": "python_row_function",
-    "inputs": [{"id": "load", "schema": _CLAIM}],
+    "inputs": [{"id": "load"}],
     "function": {"kind": "inline", "summary": "Test fixture step.", "corner_cases": [],
                  "code": "def transform(row):\n    return {**row, 'cleaned': True}\n"},
     "signature": {
@@ -37,15 +37,14 @@ _CLEAN = {
 # template injects, and this reads nothing. Real validation, not a fixture trick.
 _SCORE_UNADDITIVE = {
     "id": "score", "description": "Score", "type": "llm_transform",
-    "inputs": [{"id": "clean", "schema": _CLEANED}],
+    "inputs": [{"id": "clean"}],
     "signature": {"form": "extends",
                   "adds": [{"name": "verdict", "type": "str", "nullable": True}]},
     "llm": {"prompt_data_template": "judge {amount}"},
 }
 _RANK = {
     "id": "rank", "description": "Rank", "type": "python_row_function",
-    "inputs": [{"id": "score", "schema": {
-        "columns": [{"name": "verdict", "type": "str", "nullable": True}]}}],
+    "inputs": [{"id": "score"}],
     "function": {"kind": "inline", "summary": "Test fixture step.", "corner_cases": [],
                  "code": "def transform(row):\n    return {**row, 'rank': 1}\n"},
     "signature": {
@@ -61,8 +60,7 @@ _RANK = {
 }
 _REPORT = {
     "id": "report", "description": "Report", "type": "python_row_function",
-    "inputs": [{"id": "rank", "schema": {
-        "columns": [{"name": "rank", "type": "int", "nullable": False}]}}],
+    "inputs": [{"id": "rank"}],
     "function": {"kind": "inline", "summary": "Test fixture step.", "corner_cases": [],
                  "code": "def transform(row):\n    return {**row, 'note': 'x'}\n"},
     "signature": {
@@ -131,8 +129,8 @@ def test_the_flattened_issues_still_carry_every_failure(project):
 
 
 def test_a_cycle_among_the_submitted_stages_refuses_the_whole_batch(project):
-    a = {**_CLEAN, "id": "a", "inputs": [{"id": "b", "schema": _CLAIM}]}
-    b = {**_CLEAN, "id": "b", "inputs": [{"id": "a", "schema": _CLAIM}]}
+    a = {**_CLEAN, "id": "a", "inputs": [{"id": "b"}]}
+    b = {**_CLEAN, "id": "b", "inputs": [{"id": "a"}]}
 
     result = _call_add_stage(project, [_LOAD, a, b])
 

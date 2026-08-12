@@ -15,7 +15,7 @@ from pydantic import create_model
 
 from app.core.agent.usage import LlmUsage
 from app.core.frames import list_rows
-from app.models import Stage
+from app.models import Stage, WorkflowStage
 from app.models.schema import Column, TableSchema
 from app.models.stages.llm_transform import LLMTransformStage
 
@@ -32,12 +32,15 @@ _ROW_NUMBER_FIELD = "row_number"
 
 
 # ── batch_size == 1: per-row path (grain + order + independence by construction) ──
-def make_llm_row_mapper(stage: Stage, ctx: RunContext, src: pd.DataFrame) -> RowMapper:
-    llm = narrow_stage(stage, LLMTransformStage).llm
+def make_llm_row_mapper(
+    workflow_stage: WorkflowStage, ctx: RunContext, src: pd.DataFrame
+) -> RowMapper:
+    stage = narrow_stage(workflow_stage, LLMTransformStage)
+    llm = stage.llm
 
     # What the model is asked for: the columns the signature adds, compiled to the
     # model the agent must satisfy. Its input columns are rejoined by the driver.
-    reply_spec = TableSchema(columns=narrow_stage(stage, LLMTransformStage).signature.adds)
+    reply_spec = TableSchema(columns=stage.signature.adds)
     reply_model = reply_spec.to_pydantic_model(f"{stage.id}_reply")
 
     def map_row(row: Row, index: int) -> Row:
@@ -60,17 +63,17 @@ def make_llm_row_mapper(stage: Stage, ctx: RunContext, src: pd.DataFrame) -> Row
 
 # ── batch_size > 1: batched path (grain + order preserved and VERIFIED) ──
 def run_llm_batches(
-    stage: Stage,
+    workflow_stage: WorkflowStage,
     inputs: dict[str, pd.DataFrame],
     ctx: RunContext,
     parallelism: int,
     positions: list[int],
 ) -> list[Row]:
-    llm = narrow_stage(stage, LLMTransformStage).llm
-    assert stage.resolve_output_schema() is not None and stage.inputs[0].table_schema is not None
+    stage = narrow_stage(workflow_stage, LLMTransformStage)
+    llm = stage.llm
     batch_reply_schema = _build_batch_reply_schema(stage)
 
-    src = inputs[stage.inputs[0].id]
+    src = inputs[workflow_stage.inputs[0].id]
     records: list[Row] = list_rows(src)
 
     results: list[Row | None] = [None] * len(records)
@@ -92,7 +95,7 @@ def run_llm_batches(
 
 
 def _build_chunk_processor(
-    stage: Stage,
+    stage: LLMTransformStage,
     llm: Any,
     batch_reply_schema: type,
     positions: list[int],
@@ -132,8 +135,8 @@ def _run_chunks(
     return computed
 
 
-def _build_batch_reply_schema(stage: Stage) -> type:
-    reply_spec = TableSchema(columns=narrow_stage(stage, LLMTransformStage).signature.adds)
+def _build_batch_reply_schema(stage: LLMTransformStage) -> type:
+    reply_spec = TableSchema(columns=stage.signature.adds)
     number_column = Column(
         name=_ROW_NUMBER_FIELD, type="int", nullable=False,
         description=(

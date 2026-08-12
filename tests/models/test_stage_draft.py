@@ -52,15 +52,12 @@ def test_round_trip_covers_more_than_one_stage_type():
     assert len(types) > 1, types
 
 
-def test_an_input_schema_round_trips_under_the_key_a_compiled_stage_spells():
-    """`schema:` on the wire is `table_schema` in python (pydantic reserves `schema`): dump by alias."""
+def test_an_input_round_trips_as_the_upstream_id_alone():
     draft = StageDraft.model_validate({
         "id": "flag_rows",
         "type": "python_row_function",
         "description": "Flag rows",
-        "inputs": [{"id": "raw", "schema": {
-            "columns": [{"name": "filing_id", "type": "str", "nullable": True}],
-        }}],
+        "inputs": [{"id": "raw"}],
         "function": {"kind": "inline", "code": "def transform(row):\n    return row\n"},
         "signature": {
             "form": "extends",
@@ -74,11 +71,10 @@ def test_an_input_schema_round_trips_under_the_key_a_compiled_stage_spells():
     })
 
     spec = draft.to_stage_spec()
-    assert set(spec["inputs"][0]) == {"id", "schema"}
+    assert set(spec["inputs"][0]) == {"id"}
 
     rebuilt = parse_stage(spec)
-    assert rebuilt.inputs[0].table_schema is not None
-    assert [c.name for c in rebuilt.inputs[0].table_schema.columns] == ["filing_id"]
+    assert rebuilt.input_ids == ["raw"]
 
 
 def test_a_stage_that_breaks_a_cross_field_rule_parses_as_a_draft_and_is_refused_by_stage():
@@ -88,7 +84,7 @@ def test_a_stage_that_breaks_a_cross_field_rule_parses_as_a_draft_and_is_refused
         "description": "Score rows",
         # the signature reads `text`, which the prompt never injects -> the
         # signature-vs-config rule fails
-        "inputs": [{"id": "raw", "schema": {"columns": [{"name": "text", "type": "str", "nullable": True}]}}],
+        "inputs": [{"id": "raw"}],
         "signature": {
             "form": "extends",
             "reads": [{"input": "raw",

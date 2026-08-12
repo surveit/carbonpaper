@@ -19,14 +19,14 @@ from app.core.stage_cache import StageCache, compute_row_fingerprint
 from app.services.project import save_working_copy_as_version
 from conftest import (
     QUEUE_COLUMNS, contribution_of, make_run_context, pinned_stages,
-    queue_added_columns, reads_of, resumed_stages,
+    place_stage, queue_added_columns, reads_of, resumed_stages,
 )
 
 PROJECT = "hrq-cache-tests"
 
 
 def _run_queue_stage(stage: Stage, inputs: dict[str, pd.DataFrame], ctx) -> pd.DataFrame:
-    out = HANDLERS[StageType.human_review_queue].execute(stage, inputs, ctx)
+    out = HANDLERS[StageType.human_review_queue].execute(place_stage(stage), inputs, ctx)
     assert out is not None  # a row-mapped stage always produces a frame
     return out
 
@@ -54,7 +54,7 @@ def _stage(
         queue["filter"] = flt
     return parse_stage({
         "id": "review", "description": "Review", "type": "human_review_queue",
-        "inputs": [{"id": "scored", "schema": {"columns": input_columns}}],
+        "inputs": [{"id": "scored"}],
         "signature": {"form": "extends", "reads": reads_of("scored", input_columns),
                       "adds": _REVIEW_COLUMNS},
         "queue": queue,
@@ -395,7 +395,7 @@ def test_every_output_row_carries_a_verdict_covering_every_outcome(tmp_path):
 def test_every_decided_row_is_emitted_with_only_the_declared_columns(tmp_path):
     stage = parse_stage({
         "id": "review", "description": "Review", "type": "human_review_queue",
-        "inputs": [{"id": "scored", "schema": {"columns": _SCORED_COLUMNS}}],
+        "inputs": [{"id": "scored"}],
         "signature": {"form": "extends", "reads": reads_of("scored", _SCORED_COLUMNS),
                       "adds": _REVIEW_COLUMNS},
         "queue": dict(QUEUE_COLUMNS),
@@ -616,8 +616,7 @@ def _load_stage(root):
 
 def _review_stage_full():
     return {"id": "review", "description": "Review", "type": "human_review_queue",
-            "inputs": [{"id": "load", "schema": {
-                "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True}]}}],
+            "inputs": [{"id": "load"}],
             "signature": {"form": "extends",
                           "reads": reads_of("load", [
                               {"name": "id", "type": "str", "nullable": True},

@@ -28,7 +28,7 @@ _LOAD = {
 # (app.runtime.stages.publish._accepts_trace_links).
 _PUBLISH = {
     "id": "publish_report", "type": "publish", "description": "Publish",
-    "inputs": [{"id": "load", "schema": _LOAD_SCHEMA}],
+    "inputs": [{"id": "load"}],
     "signature": {"form": "replaces"},
     "function": {"kind": "inline", "code":
                  "def transform(df, output_dir, trace_links=None):\n"

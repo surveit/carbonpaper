@@ -37,7 +37,7 @@ from app.models.workflow import (
     detect_cycle as detect_cycle,
     find_stages_reaching_publish as find_stages_reaching_publish,
     parse_workflow as parse_workflow,
-    validate_edge_schemas as validate_edge_schemas,
+    resolve_workflow_stages as resolve_workflow_stages,
     validate_inputs_resolve as validate_inputs_resolve,
     validate_publish_is_terminal as validate_publish_is_terminal,
     validate_unique_ids as validate_unique_ids,
@@ -55,6 +55,10 @@ from app.models.named_schemas import (
     validate_references_resolve as validate_references_resolve,
     validate_schema_library as validate_schema_library,
     validate_unique_schema_names as validate_unique_schema_names,
+)
+from app.models.workflow_stage import (
+    WorkflowStage as WorkflowStage,
+    WorkflowStageInput as WorkflowStageInput,
 )
 from app.models.table import TableRef as TableRef
 from app.models.eval import (

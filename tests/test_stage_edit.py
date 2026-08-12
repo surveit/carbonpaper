@@ -20,7 +20,7 @@ _OUT_SCHEMA = {
 }
 _VALID = {
     "id": "score", "description": "Score rows", "type": "llm_transform",
-    "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
+    "inputs": [{"id": "load"}],
     "llm": {"model": "claude-sonnet-4-6", "prompt_template": "score {doc_id}"},
     "signature": {
         "form": "extends",
@@ -135,9 +135,14 @@ def test_edit_that_breaks_the_workflow_graph_is_rejected(tmp_path: Path) -> None
     # The stage is valid on its own; the resulting WORKFLOW is not.
     pdir = _seed(tmp_path)
     before = (pdir / "compiled" / "02_score.json").read_text(encoding="utf-8")
-    result = stage_edit.patch_stage_spec(
-        pdir, "score", json.dumps({"inputs": [{"id": "ghost", "schema": _IN_SCHEMA}]})
-    )
+    result = stage_edit.patch_stage_spec(pdir, "score", json.dumps({
+        "inputs": [{"id": "ghost"}],
+        "signature": {
+            "form": "extends",
+            "reads": [{"input": "ghost", "columns": _IN_SCHEMA["columns"]}],
+            "adds": [{"name": "score", "type": "float", "nullable": False}],
+        },
+    }))
     assert result.ok is False
     assert any("ghost" in i for i in result.issues)
     assert (pdir / "compiled" / "02_score.json").read_text(encoding="utf-8") == before
@@ -157,7 +162,7 @@ def _seed_load(tmp_path: Path) -> Path:
 def test_add_stage_creates_new_stage_referencing_existing_input(tmp_path: Path) -> None:
     pdir = _seed_load(tmp_path)
     new = {"id": "score", "description": "Score", "type": "llm_transform",
-           "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
+           "inputs": [{"id": "load"}],
            "llm": {"model": "claude-sonnet-4-6", "prompt_template": "score {doc_id}"},
            "signature": {
                "form": "extends",
@@ -175,7 +180,7 @@ def test_add_stage_rejects_dangling_input(tmp_path: Path) -> None:
     # otherwise-valid stage, but its input references a stage that doesn't exist —
     # so validation passes and the referential check is what rejects it
     new = {"id": "score", "description": "Score", "type": "llm_transform",
-           "inputs": [{"id": "does_not_exist", "schema": _IN_SCHEMA}],
+           "inputs": [{"id": "does_not_exist"}],
            "llm": {"model": "claude-sonnet-4-6", "prompt_template": "score {doc_id}"},
            "signature": {
                "form": "extends",
@@ -209,7 +214,7 @@ def test_remove_stage_rejected_when_a_downstream_depends_on_it(tmp_path: Path) -
 def test_remove_stage_deletes_the_stage_and_its_file(tmp_path: Path) -> None:
     pdir = _seed_load(tmp_path)
     new = {"id": "score", "description": "Score", "type": "llm_transform",
-           "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
+           "inputs": [{"id": "load"}],
            "llm": {"model": "claude-sonnet-4-6", "prompt_template": "score {doc_id}"},
            "signature": {
                "form": "extends",

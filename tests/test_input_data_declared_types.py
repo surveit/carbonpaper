@@ -13,7 +13,7 @@ import pytest
 from app.models import Stage
 from app.models.stage import parse_stage
 from app.runtime.stages.input_data import read_input_data
-from conftest import make_run_context
+from conftest import make_run_context, place_stage
 
 
 def _stage(path: Path, columns: list[dict], **params: object) -> Stage:
@@ -25,7 +25,7 @@ def _stage(path: Path, columns: list[dict], **params: object) -> Stage:
 
 
 def _read(path: Path, columns: list[dict], **params: object) -> pd.DataFrame:
-    return read_input_data(_stage(path, columns, **params), ctx=make_run_context())
+    return read_input_data(place_stage(_stage(path, columns, **params)), ctx=make_run_context())
 
 
 def _csv(tmp_path: Path, text: str) -> Path:
@@ -176,7 +176,7 @@ def test_missing_output_schema_falls_back_to_plain_inference(tmp_path):
     stage = _stage(path, [{"name": "id", "type": "str", "nullable": True}])
     stage = stage.model_copy(
         update={"signature": stage.signature.model_copy(update={"produces": []})})
-    df = read_input_data(stage, ctx=make_run_context())
+    df = read_input_data(place_stage(stage), ctx=make_run_context())
     assert list(df["id"]) == [2]
 
 

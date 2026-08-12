@@ -6,13 +6,14 @@ import pytest
 from app.models import parse_stage, Stage
 from app.models.run_manifest import StageContribution
 from app.runtime.stages.execution import _trim_to_declared_columns
+from conftest import place_stage
 
 
 def _rating_stage() -> Stage:
     """The stage id is distinct from every declared column, so `"rate" in message` cannot false-match."""
     return parse_stage({
         "id": "rate", "description": "Rate", "type": "python_row_function",
-        "inputs": [{"id": "load", "schema": {"columns": [{"name": "id", "type": "str", "nullable": True}]}}],
+        "inputs": [{"id": "load"}],
         "signature": {
             "form": "extends",
             "reads": [
@@ -34,7 +35,7 @@ def test_projection_raises_naming_the_stage_and_every_missing_column():
     frame = pd.DataFrame({"id": ["r1"], "leftover": [1]})
 
     with pytest.raises(ValueError) as excinfo:
-        _trim_to_declared_columns(frame, _rating_stage(), StageContribution())
+        _trim_to_declared_columns(place_stage(_rating_stage()), frame, StageContribution())
 
     message = str(excinfo.value)
     assert "rate" in message
@@ -45,7 +46,7 @@ def test_projection_keeps_declared_order_and_reports_what_it_dropped():
     frame = pd.DataFrame({"verdict": ["yes"], "leftover": [1], "id": ["r1"], "score": [3]})
     contribution = StageContribution()
 
-    projected = _trim_to_declared_columns(frame, _rating_stage(), contribution)
+    projected = _trim_to_declared_columns(place_stage(_rating_stage()), frame, contribution)
 
     assert list(projected.columns) == ["id", "score", "verdict"]
     assert contribution.dropped_columns == ["leftover"]

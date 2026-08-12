@@ -48,7 +48,7 @@ def _one_stage_project(root):
 def _two_stage_project(root):
     _one_stage_project(root)
     consume = {"id": "consume", "description": "Consume items", "type": "python_frame_function",
-               "inputs": [{"id": "load", "schema": _NAME_VAL_SCHEMA}],
+               "inputs": [{"id": "load"}],
                "signature": {
                    "form": "replaces",
                    "reads": [{"input": "load", "columns": _NAME_VAL_SCHEMA["columns"]}],
@@ -123,7 +123,7 @@ def _three_stage_llm_project(root):
     }
     score = {
         "id": "score", "description": "Score items", "type": "llm_transform",
-        "inputs": [{"id": "load", "schema": _ID_TEXT_SCHEMA}],
+        "inputs": [{"id": "load"}],
         "signature": {
             "form": "extends",
             "reads": [
@@ -138,7 +138,7 @@ def _three_stage_llm_project(root):
     }
     downstream = {
         "id": "downstream", "description": "Downstream", "type": "python_frame_function",
-        "inputs": [{"id": "score", "schema": _SCORED_SCHEMA}],
+        "inputs": [{"id": "score"}],
         "signature": {
             "form": "replaces",
             "reads": [{"input": "score", "columns": _SCORED_SCHEMA["columns"]}],

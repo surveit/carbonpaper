@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 
 if TYPE_CHECKING:
-    from app.models.stage import Stage
+    from app.models.workflow_stage import WorkflowStage
 
 TRACE_SOURCE_STAGE_KEY = "_trace_source_stage"
 TRACE_SOURCE_ROW_KEY = "_trace_source_row"
@@ -151,10 +151,11 @@ def kept_rows_lineage(source_stage_id: str, kept_indices: list[int]) -> RowLinea
 
 
 def concatenated_inputs_lineage(
-    stage: "Stage", inputs: dict[str, pd.DataFrame], first_row_ordinal: int = 0
+    workflow_stage: "WorkflowStage", inputs: dict[str, pd.DataFrame],
+    first_row_ordinal: int = 0,
 ) -> RowLineage:
     parents: list[list[RowParent]] = []
-    for ref in stage.inputs:
+    for ref in workflow_stage.inputs:
         rows = len(inputs[ref.id])
         parents.extend(
             [RowParent(ref.id, r)]

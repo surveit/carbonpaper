@@ -32,8 +32,7 @@ def _load(tmp_path):
 # label = "pos" iff score >= 0 — a deterministic classifier we can predict.
 _CLASSIFY = {
     "id": "classify", "type": "python_row_function", "description": "Label by sign",
-    "inputs": [{"id": "load", "schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": True},
-                                                     {"name": "score", "type": "int", "nullable": True}]}}],
+    "inputs": [{"id": "load"}],
     "function": {"kind": "inline", "code":
                  "def transform(row):\n"
                  "    return {'doc_id': row['doc_id'], 'score': row['score'],\n"
@@ -107,8 +106,7 @@ def test_run_eval_writes_a_per_row_result_table(project):
 # through it is row-alignable and no longer vetoed before it runs.
 _QUEUE_REVIEW = {
     "id": "review", "type": "human_review_queue", "description": "Review scores",
-    "inputs": [{"id": "load", "schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": True},
-                                                     {"name": "score", "type": "int", "nullable": True}]}}],
+    "inputs": [{"id": "load"}],
     "queue": dict(QUEUE_COLUMNS),
     "signature": {
         "form": "extends",

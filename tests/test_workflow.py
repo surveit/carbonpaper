@@ -16,7 +16,7 @@ def S(**kw):
 
 
 def _in(id_, schema=_K):
-    return {"id": id_, "schema": schema}
+    return {"id": id_}
 
 
 def test_workflow_clean(tmp_path):
@@ -156,11 +156,7 @@ def test_validate_workflow_reports_issues():
 # construct — these assert the rejection at model_validate / parse_workflow.
 def _llm_1to1_dict(**over):
     base = dict(
-        id="score", type="llm_transform", inputs=[{
-            "id": "load",
-            "schema": {"columns": [{"name": "id", "type": "str", "nullable": True},
-                                   {"name": "text", "type": "str", "nullable": True}]},
-        }],
+        id="score", type="llm_transform", inputs=[{"id": "load"}],
         signature={
             "form": "extends",
             "reads": [
@@ -211,10 +207,9 @@ def test_parse_workflow_rejects_ineligible_llm_transform():
         m.parse_workflow([bad])
 
 
-# ── Edge schema conformance (validate_edge_schemas) ───────────────────────────
-# A downstream stage's declared input schema (`inputs[i].schema`) is a REQUIREMENT
-# — possibly a projection — that the upstream stage's resolved output schema must
-# satisfy. Checked at save time as a cross-stage graph invariant.
+# ── What a stage reads must be satisfied by its upstream ─────────────────────
+# There is no stored input schema left to disagree with anything: a stage declares
+# what it READS, and the check is that the upstream's resolved output supplies it.
 def _producer(**over):
     base = dict(
         id="up", type="input_data",
@@ -232,98 +227,93 @@ def _producer(**over):
     return S(**base)
 
 
-def _consumer(input_schema, **over):
+def _consumer(read_columns, **over):
     base = dict(
         id="down", type="python_frame_function",
-        inputs=[{"id": "up", "schema": input_schema}],
+        inputs=[{"id": "up"}],
         function={"kind": "inline", "code": "def transform(df): return df"},
-        signature={"form": "replaces", "produces": input_schema["columns"]},
+        signature={
+            "form": "replaces",
+            "reads": [{"input": "up", "columns": read_columns["columns"]}],
+            "produces": read_columns["columns"],
+        },
     )
     base.update(over)
     return S(**base)
 
 
-def test_check_edge_schemas_clean_when_input_is_exact_copy():
-    stages = m.parse_workflow([
+def test_reads_are_clean_when_they_name_the_whole_upstream_output():
+    assert m.validate_workflow_draft([
         _producer(),
         _consumer({"columns": [{"name": "id", "type": "str", "nullable": True},
                                {"name": "text", "type": "str", "nullable": True},
                                {"name": "score", "type": "int", "nullable": True}]}),
-    ]).stages
-    assert m.validate_edge_schemas(stages) == []
+    ]) == []
 
 
-def test_check_edge_schemas_clean_when_input_is_a_projection():
-    stages = m.parse_workflow([
+def test_reads_are_clean_when_they_name_a_projection():
+    assert m.validate_workflow_draft([
         _producer(),
         _consumer({"columns": [{"name": "score", "type": "int", "nullable": True}]}),
-    ]).stages
-    assert m.validate_edge_schemas(stages) == []
+    ]) == []
 
 
-def test_check_edge_schemas_flags_phantom_column():
-    stages = [
-        parse_stage(_producer()),
-        parse_stage(_consumer({"columns": [{"name": "quote", "type": "str", "nullable": True}]})),
-    ]
-    issues = m.validate_edge_schemas(stages)
+def test_reading_a_column_the_upstream_does_not_supply_is_flagged():
+    issues = m.validate_workflow(
+        [parse_stage(_producer()),
+         parse_stage(_consumer({"columns": [{"name": "quote", "type": "str", "nullable": True}]}))])
     assert len(issues) == 1
     assert "down" in issues[0] and "up" in issues[0] and "quote" in issues[0]
 
 
-def test_check_edge_schemas_clean_when_producer_non_null_feeds_nullable_requirement():
-    stages = m.parse_workflow([
+def test_a_non_null_producer_satisfies_a_nullable_read():
+    assert m.validate_workflow_draft([
         _producer(signature={"form": "replaces", "produces": [
             {"name": "id", "type": "str", "nullable": True},
             {"name": "score", "type": "int", "nullable": False}]}),
         _consumer({"columns": [{"name": "score", "type": "int", "nullable": True}]}),
-    ]).stages
-    assert m.validate_edge_schemas(stages) == []
+    ]) == []
 
 
-def test_check_edge_schemas_flags_required_non_null_fed_by_nullable_producer():
-    stages = [
+def test_a_nullable_producer_does_not_satisfy_a_non_null_read():
+    issues = m.validate_workflow([
         parse_stage(_producer(signature={"form": "replaces", "produces": [
             {"name": "id", "type": "str", "nullable": True},
             {"name": "score", "type": "int", "nullable": True}]})),
         parse_stage(_consumer(
             {"columns": [{"name": "score", "type": "int", "nullable": False}]})),
-    ]
-    issues = m.validate_edge_schemas(stages)
+    ])
     assert len(issues) == 1
     assert "score" in issues[0] and "nullable" in issues[0]
 
 
-def test_check_edge_schemas_flags_type_disagreement():
-    stages = [
+def test_a_read_of_the_wrong_type_is_flagged():
+    issues = m.validate_workflow([
         parse_stage(_producer()),
-        parse_stage(_consumer({"columns": [{"name": "score", "type": "str", "nullable": True}]})),
-    ]
-    issues = m.validate_edge_schemas(stages)
+        parse_stage(_consumer({"columns": [{"name": "score", "type": "str", "nullable": True}]}))])
     assert len(issues) == 1
     assert "score" in issues[0] and "type" in issues[0]
 
 
 def _publish_upstream_stages():
-    """Built without the graph validator, which would reject the edge into `pub`."""
+    """Built without the graph validator, which would reject the input from `pub`."""
     return [
         parse_stage(_producer()),
         parse_stage(
             S(id="pub", type="publish",
-              inputs=[{"id": "up", "schema": {"columns": [{"name": "id", "type": "str", "nullable": True}]}}],
+              inputs=[{"id": "up"}],
               publish={"format": "json"}, signature={"form": "replaces"},
               function={"kind": "inline",
                         "code": "def transform(df, output_dir): return df"})),
         parse_stage(
             _consumer({"columns": [{"name": "anything", "type": "str", "nullable": True}]}, id="down",
-                      inputs=[{"id": "pub",
-                               "schema": {"columns": [{"name": "anything", "type": "str", "nullable": True}]}}])),
+                      inputs=[{"id": "pub"}])),
     ]
 
 
-def test_check_edge_schemas_raises_on_an_upstream_resolving_no_output():
+def test_resolution_raises_on_an_upstream_resolving_no_output():
     with pytest.raises(ValueError, match="resolves no output schema"):
-        m.validate_edge_schemas(_publish_upstream_stages())
+        m.resolve_workflow_stages(_publish_upstream_stages())
 
 
 def test_graph_issues_reports_a_publish_upstream_instead_of_raising():
@@ -332,10 +322,10 @@ def test_graph_issues_reports_a_publish_upstream_instead_of_raising():
     assert "down" in issues[0] and "pub" in issues[0] and "publish stage" in issues[0]
 
 
-def test_check_edge_schemas_raises_on_an_input_naming_no_stage():
+def test_resolution_raises_on_an_input_naming_no_stage():
     stages = [parse_stage(_consumer({"columns": [{"name": "id", "type": "str", "nullable": True}]}))]
     with pytest.raises(ValueError, match="references no stage"):
-        m.validate_edge_schemas(stages)
+        m.resolve_workflow_stages(stages)
 
 
 def test_graph_issues_reports_a_dangling_input_instead_of_raising():
@@ -347,8 +337,8 @@ def test_graph_issues_reports_a_dangling_input_instead_of_raising():
 # ── A publish stage may not be another stage's input (validate_publish_is_terminal) ─
 # A publish stage writes files instead of producing a table, so nothing downstream
 # can read from it. It is also the one type whose signature produces nothing,
-# so this check is what keeps validate_edge_schemas from meeting an upstream it
-# cannot check.
+# so this check is what keeps resolution from meeting an upstream that supplies
+# nothing.
 def _publish(stage_id="pub", inputs=("load",)):
     return S(id=stage_id, type="publish", inputs=[_in(i) for i in inputs],
              publish={"format": "json"}, signature={"form": "replaces"},

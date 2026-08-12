@@ -6,7 +6,7 @@ from app.runtime.stages import HANDLERS
 from app.models import parse_stage
 from app.models.stage import StageType
 from app.core.stage_cache import StageCacheEntry
-from conftest import QUEUE_COLUMNS, make_run_context, queue_added_columns, reads_of
+from conftest import QUEUE_COLUMNS, make_run_context, place_stage, queue_added_columns, reads_of
 
 
 def test_bad_filter_raises_instead_of_skipping_review(tmp_path):
@@ -20,7 +20,7 @@ def test_bad_filter_raises_instead_of_skipping_review(tmp_path):
         # The edge DECLARES `nonexistent` — otherwise the filter's column
         # reference would be rejected when the stage is built, and this test is
         # about the frame that actually arrives not having the column.
-        "inputs": [{"id": "a", "schema": {"columns": columns}}],
+        "inputs": [{"id": "a"}],
         "signature": {"form": "extends", "adds": queue_added_columns(),
                       "reads": reads_of("a", columns)},
         "queue": {**QUEUE_COLUMNS, "filter": "nonexistent == True"},
@@ -35,7 +35,7 @@ def test_bad_filter_raises_instead_of_skipping_review(tmp_path):
         stage_cache=StageCacheEntry.read_write(),
     )
     with pytest.raises(ValueError, match="filter could not be evaluated"):
-        HANDLERS[StageType.human_review_queue].execute(stage, inputs, ctx)
+        HANDLERS[StageType.human_review_queue].execute(place_stage(stage), inputs, ctx)
 
 
 def test_a_cell_the_filter_cannot_answer_names_the_stage_and_the_filter(tmp_path):
@@ -45,7 +45,7 @@ def test_a_cell_the_filter_cannot_answer_names_the_stage_and_the_filter(tmp_path
     ]
     stage = parse_stage({
         "id": "q", "type": "human_review_queue", "description": "q",
-        "inputs": [{"id": "a", "schema": {"columns": columns}}],
+        "inputs": [{"id": "a"}],
         "signature": {"form": "extends", "adds": queue_added_columns(),
                       "reads": reads_of("a", columns)},
         "queue": {**QUEUE_COLUMNS, "filter": "score > 1"},
@@ -59,7 +59,7 @@ def test_a_cell_the_filter_cannot_answer_names_the_stage_and_the_filter(tmp_path
         stage_cache=StageCacheEntry.read_write(),
     )
     with pytest.raises(ValueError) as excinfo:
-        HANDLERS[StageType.human_review_queue].execute(stage, inputs, ctx)
+        HANDLERS[StageType.human_review_queue].execute(place_stage(stage), inputs, ctx)
     message = str(excinfo.value)
     assert "human_review_queue 'q'" in message
     assert "score > 1" in message

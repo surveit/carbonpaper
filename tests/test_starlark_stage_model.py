@@ -12,7 +12,7 @@ from app.models.stages.starlark import StarlarkFunction, StarlarkRowFunctionStag
 GOOD = "def transform(row):\n    return {'n': row['n'] + 1}\n"
 
 _SCHEMA = TableSchema(columns=[Column(name="n", type="int", nullable=False)])
-_INPUT = StageInput(id="load", schema=_SCHEMA)
+_INPUT = StageInput(id="load")
 
 
 def _stage(**overrides):
@@ -135,7 +135,7 @@ def test_a_self_terminating_recursive_function_saves():
 
 def test_stage_requires_exactly_one_input():
     with pytest.raises(ValidationError):
-        _stage(inputs=[_INPUT, StageInput(id="load2", schema=_SCHEMA)])
+        _stage(inputs=[_INPUT, StageInput(id="load2")])
     with pytest.raises(ValidationError):
         _stage(inputs=[])
 

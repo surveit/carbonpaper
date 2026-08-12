@@ -28,7 +28,7 @@ def _load(tmp_path):
     }
 _EXTRACT = {
     "id": "extract", "type": "llm_transform", "description": "Extract evidence pieces",
-    "inputs": [{"id": "load", "schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": True}]}}],
+    "inputs": [{"id": "load"}],
     "llm": {"prompt_template": "You are reading a document {doc_id}. Extract evidence."},
     "signature": {
         "form": "extends",

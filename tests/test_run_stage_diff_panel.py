@@ -75,7 +75,7 @@ def _seed_compiled(pdir: Path, data_path: Path, routes_path: Path) -> None:
         }),
         ("02_classify.json", {
             "id": CLASSIFY_ID, "description": "Classify", "type": "python_row_function",
-            "inputs": [{"id": LOAD_ID, "schema": _LOAD_SCHEMA}],
+            "inputs": [{"id": LOAD_ID}],
             "function": {"kind": "inline", "code": _CLASSIFY_CODE},
             "signature": {"form": "extends",
                           "reads": reads_of(LOAD_ID, _LOAD_SCHEMA["columns"]),
@@ -83,7 +83,7 @@ def _seed_compiled(pdir: Path, data_path: Path, routes_path: Path) -> None:
         }),
         ("03_keep.json", {
             "id": KEEP_ID, "description": "Keep the small ones", "type": "filter_rows",
-            "inputs": [{"id": CLASSIFY_ID, "schema": _CLASSIFY_SCHEMA}],
+            "inputs": [{"id": CLASSIFY_ID}],
             "filter": {"code": _KEEP_CODE},
             "signature": {"form": "extends",
                           "reads": reads_of(CLASSIFY_ID, _CLASSIFY_SCHEMA["columns"])},
@@ -96,8 +96,8 @@ def _seed_compiled(pdir: Path, data_path: Path, routes_path: Path) -> None:
         }),
         ("05_route.json", {
             "id": ROUTE_ID, "description": "Attach the route", "type": "enrich",
-            "inputs": [{"id": CLASSIFY_ID, "schema": _CLASSIFY_SCHEMA},
-                       {"id": ROUTES_ID, "schema": _ROUTES_SCHEMA}],
+            "inputs": [{"id": CLASSIFY_ID},
+                       {"id": ROUTES_ID}],
             "join": {"keys": [{"left": "name", "right": "name"}],
                      "enrich_with": {"route": "route"}},
             "signature": {

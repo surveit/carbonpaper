@@ -28,7 +28,7 @@ _LOAD_SCHEMA = {"columns": [{"name": "doc_id", "type": "str", "nullable": True},
 _CLASSIFY_ADDS = [{"name": "label", "type": "str", "nullable": True}]
 _CLASSIFY = {
     "id": "classify", "type": "python_row_function", "description": "Label by sign",
-    "inputs": [{"id": "load", "schema": _LOAD_SCHEMA}],
+    "inputs": [{"id": "load"}],
     "function": {"kind": "inline", "code":
                  "def transform(row):\n"
                  "    return {'doc_id': row['doc_id'], 'score': row['score'],\n"
@@ -42,7 +42,7 @@ _CLASSIFY = {
 
 _BOOM = {
     "id": "boom", "type": "python_row_function", "description": "Always errors",
-    "inputs": [{"id": "load", "schema": _LOAD_SCHEMA}],
+    "inputs": [{"id": "load"}],
     "function": {"kind": "inline", "code":
                  "def transform(row):\n    raise ValueError('boom')"},
     "signature": {
@@ -55,7 +55,7 @@ _CLASSIFY_SCHEMA = {"columns": _LOAD_SCHEMA["columns"] + _CLASSIFY_ADDS}
 
 _PUBLISH = {
     "id": "publish_report", "type": "publish", "description": "Publish",
-    "inputs": [{"id": "classify", "schema": _CLASSIFY_SCHEMA}],
+    "inputs": [{"id": "classify"}],
     "function": {"kind": "inline", "code":
                  "def transform(df, output_dir):\n"
                  "    import os\n"
@@ -72,7 +72,7 @@ _LOAD_PK_COLUMNS = [{"name": "doc_id", "type": "str", "nullable": True},
 _LOAD_PK_SCHEMA = {"columns": _LOAD_PK_COLUMNS}
 _QUEUE = {
     "id": "review", "type": "human_review_queue", "description": "Review rows",
-    "inputs": [{"id": "load", "schema": _LOAD_PK_SCHEMA}],
+    "inputs": [{"id": "load"}],
     "signature": {
         "form": "extends",
         "reads": [{"input": "load", "columns": _LOAD_PK_COLUMNS}],
@@ -171,7 +171,7 @@ def test_workflow_test_auto_approves_a_queue_stage_in_memory(demo):
 def test_workflow_test_raises_when_no_source_stage(demo):
     standalone = {
         "id": "standalone", "type": "python_frame_function", "description": "No source",
-        "inputs": [{"id": "upstream", "schema": _LOAD_SCHEMA}],
+        "inputs": [{"id": "upstream"}],
         "signature": {
             "form": "replaces",
             "reads": [{"input": "upstream", "columns": _LOAD_SCHEMA["columns"]}],

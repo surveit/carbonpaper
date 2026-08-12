@@ -154,10 +154,7 @@ WORKED_STAGE_EXAMPLE = """\
   "id": "normalize_spend",
   "description": "Normalize spend",
   "type": "starlark_row_function",
-  "inputs": [{"id": "filings", "schema": {"columns": [
-    {"name": "filing_id", "type": "str", "nullable": false},
-    {"name": "reported_amount", "type": "str", "nullable": true}
-  ]}}],
+  "inputs": [{"id": "filings"}],
   "signature": {
     "form": "extends",
     "reads": [{"input": "filings", "columns": [

@@ -41,7 +41,7 @@ class StageConfig(_Base):
 # ── Identifiers ──────────────────────────────────────────────────────────────
 _SNAKE_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
-# A stage's id, as other stages reference it (an input edge, a stage-test's
+# A stage's id, as other stages reference it (an entry in `inputs`, a stage-test's
 # per-input rows, a signature's reads). An alias rather than a NewType so stage
 # dicts parse unchanged.
 StageId: TypeAlias = str

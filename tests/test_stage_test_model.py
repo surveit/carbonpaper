@@ -23,7 +23,7 @@ _OUT_SCHEMA = {"columns": [
 def _row_stage(tests=None) -> dict:
     stage = {
         "id": "double", "description": "Double the amount", "type": "python_row_function",
-        "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
+        "inputs": [{"id": "load"}],
         "signature": {
             "form": "extends",
             "reads": [{"input": "load", "columns": _IN_SCHEMA["columns"]}],
@@ -138,12 +138,11 @@ def test_test_inputs_must_match_declared_inputs():
 
 def test_multi_input_test_missing_one_input_is_rejected():
     left_schema = {"columns": [{"name": "id", "type": "str", "nullable": False}]}
-    right_schema = {"columns": [{"name": "id", "type": "str", "nullable": False}]}
     stage = {
         "id": "merge", "description": "Merge", "type": "python_frame_function",
         "inputs": [
-            {"id": "left", "schema": left_schema},
-            {"id": "right", "schema": right_schema},
+            {"id": "left"},
+            {"id": "right"},
         ],
         "signature": {"form": "replaces", "produces": left_schema["columns"]},
         "function": {"kind": "inline", "code": "def transform(a, b):\n    return a\n"},

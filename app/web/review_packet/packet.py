@@ -9,7 +9,12 @@ from typing import Any
 
 from app.core.errors import RunNotFoundError, RunVersionUnresolvableError
 from app.core.logging_config import log_elapsed
-from app.models import Stage, stage_to_spec_dict
+from app.models import (
+    Stage,
+    WorkflowStage,
+    resolve_workflow_stages,
+    stage_to_spec_dict,
+)
 from app.runtime.manifest import resolve_output_path
 from app.web.run_issues import build_run_issues
 from app.services import run as run_service
@@ -30,7 +35,9 @@ def export_review_packet(project: str, run_id: str, dest_root: Path) -> ReviewPa
     project_dir = resolve_project_dir(project)
     run_dir = project_dir / "runs" / run_id
     manifest = run_service.read_run_status(project, run_id)
-    stages, workflow, definition_error = _load_pinned_workflow(project, manifest)
+    workflow_stages, workflow, definition_error = _load_pinned_workflow(project, manifest)
+    workflow_stages_by_id = {resolved.id: resolved for resolved in workflow_stages}
+    stages = [resolved.stage for resolved in workflow_stages]
     view = build_run_view(manifest, {s.id: s for s in stages}, definition_error)
 
     root = dest_root / f"{project}-{run_id}"
@@ -53,6 +60,7 @@ def export_review_packet(project: str, run_id: str, dest_root: Path) -> ReviewPa
             # `stages or None` is the difference between "nothing blocked" and
             # "no edges to say what was blocked" — build_run_issues reads it.
             build_run_issues(manifest, stages or None),
+            workflow_stages_by_id,
         )
     with log_elapsed(_log, f"{project}/{run_id} checksums"):
         checksums = write_checksums(root)
@@ -83,13 +91,37 @@ def _load_guide(project: str, manifest: dict[str, Any]) -> RunGuideView | None:
 
 def _load_pinned_workflow(
     project: str, manifest: dict[str, Any]
-) -> tuple[list[Stage], str | None, str | None]:
+) -> tuple[list[WorkflowStage], str | None, str | None]:
     try:
         stages = run_service.load_run_stages(project, manifest)
     except (RunVersionUnresolvableError, RunNotFoundError) as exc:
         return [], None, str(exc)
-    return stages, _dump_workflow(stages), None
+    workflow_stages = resolve_workflow_stages(stages)
+    return workflow_stages, _dump_workflow(workflow_stages), None
 
 
-def _dump_workflow(stages: list[Stage]) -> str:
-    return json.dumps([stage_to_spec_dict(s) for s in stages], indent=2, sort_keys=True)
+def _dump_workflow(workflow_stages: list[WorkflowStage]) -> str:
+    return json.dumps(
+        [_describe_workflow_stage(resolved) for resolved in workflow_stages],
+        indent=2,
+        sort_keys=True,
+    )
+
+
+# The packet is read with no application behind it, so each stage carries the
+# schemas the app would otherwise resolve for its reader: what each input supplied
+# and what the stage emitted.
+def _describe_workflow_stage(workflow_stage: WorkflowStage) -> dict[str, Any]:
+    spec = stage_to_spec_dict(workflow_stage.stage)
+    spec["inputs"] = [
+        {
+            "id": ref.id,
+            "schema": ref.table_schema.model_dump(mode="json", exclude_none=True),
+        }
+        for ref in workflow_stage.inputs
+    ]
+    if workflow_stage.output_schema is not None:
+        spec["output_schema"] = workflow_stage.output_schema.model_dump(
+            mode="json", exclude_none=True
+        )
+    return spec

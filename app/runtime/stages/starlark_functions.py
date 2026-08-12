@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 import pandas as pd
 
 from app.core.starlark_source import DEFAULT_FUNCTION_NAME
-from app.models import Stage
+from app.models import WorkflowStage
 from app.models.stages.starlark import StarlarkRowFunctionStage
 
 from ..starlark_code import compile_starlark_function
@@ -21,13 +21,17 @@ if TYPE_CHECKING:
     from ..context import RunContext
 
 
-def make_starlark_row_mapper(stage: Stage, ctx: RunContext, src: pd.DataFrame) -> RowMapper:
-    block = narrow_stage(stage, StarlarkRowFunctionStage).starlark
+def make_starlark_row_mapper(
+    workflow_stage: WorkflowStage, ctx: RunContext, src: pd.DataFrame
+) -> RowMapper:
+    starlark_stage = narrow_stage(workflow_stage, StarlarkRowFunctionStage)
+    block = starlark_stage.starlark
+    sid = starlark_stage.id
     function_name = block.function or DEFAULT_FUNCTION_NAME
     handle = compile_starlark_function(block.code, function_name, DEFAULT_FUNCTION_NAME)
     if handle is None:
         raise ValueError(
-            f"starlark_row_function stage {stage.id}: code does not define "
+            f"starlark_row_function stage {sid}: code does not define "
             f"`{function_name}`"
         )
 
@@ -35,7 +39,7 @@ def make_starlark_row_mapper(stage: Stage, ctx: RunContext, src: pd.DataFrame) -
         result = handle(marshal_row_for_starlark(row))
         if not isinstance(result, dict):
             raise ValueError(
-                f"starlark_row_function stage {stage.id}: function must return a dict "
+                f"starlark_row_function stage {sid}: function must return a dict "
                 f"per row, got {type(result).__name__}"
             )
         return result

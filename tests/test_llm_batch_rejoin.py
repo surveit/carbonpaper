@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import pandas as pd
-from conftest import contribution_of, make_run_context
+from conftest import contribution_of, make_run_context, place_stage
 
 from app.models import parse_stage, Stage
 from app.models.stage import StageType
@@ -16,8 +16,7 @@ _SRC = pd.DataFrame({"post_id": ["a", "b", "c"], "text": ["ta", "tb", "tc"]})
 def _stage(batch_size: int = 3, max_retries: int = 0) -> Stage:
     return parse_stage({
         "id": "process", "description": "Process", "type": "llm_transform",
-        "inputs": [{"id": "load", "schema": {
-            "columns": [{"name": "post_id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}]}}],
+        "inputs": [{"id": "load"}],
         "signature": {
             "form": "extends",
             "reads": [{"input": "load", "columns": [
@@ -33,8 +32,9 @@ def _stage(batch_size: int = 3, max_retries: int = 0) -> Stage:
 def _run(monkeypatch, fake, *, batch_size=3, max_retries=0, src=_SRC):
     monkeypatch.setattr(lt, "call_llm_batch", fake)
     ctx = make_run_context()
-    out = HANDLERS[StageType.llm_transform].execute(
-        _stage(batch_size, max_retries), {"load": src.copy()}, ctx)
+    out = HANDLERS[StageType.llm_transform].execute(place_stage(_stage(batch_size, max_retries), load={"columns": [
+            {"name": "post_id", "type": "str", "nullable": True},
+            {"name": "text", "type": "str", "nullable": True}]}), {"load": src.copy()}, ctx)
     # When a whole chunk fails, no row produced `label`, so the declared column is
     # absent from output (same as the 1:1 path when every row errors) — treat that
     # as "no label" per row rather than a KeyError.

@@ -73,5 +73,5 @@ STAGE_TEST_DESCRIPTION = (
 STARLARK_ROW_FUNCTION_STAGE_TEST_DESCRIPTION = "One row in → that one row out, or a refusal."
 
 TABLE_SCHEMA_DESCRIPTION = (
-    "An anonymous schema — columns declared inline, e.g. on a stage's input edge."
+    "An anonymous schema — columns declared inline, e.g. an input_data stage's file."
 )

@@ -14,6 +14,7 @@ from app.models import parse_stage, Stage
 from app.runtime.context import RunContext
 from app.runtime.stages.publish import handle_publish
 from app.runtime.trace_links import RowTraceLinker
+from conftest import place_stage
 from test_trace_helpers import write_run
 
 
@@ -56,6 +57,7 @@ def transform(df, output_dir, trace_links):
 
 _PLAIN_PUBLISH_CODE = """
 import pathlib
+from conftest import place_stage
 
 def transform(df, output_dir):
     path = pathlib.Path(output_dir) / "index.html"
@@ -72,7 +74,7 @@ def _publish_stage(code: str, input_columns=_NAME_COLUMN) -> Stage:
         "id": "report",
         "type": "publish",
         "description": "Report",
-        "inputs": [{"id": "enrich", "schema": {"columns": input_columns}}],
+        "inputs": [{"id": "enrich"}],
         "publish": {"format": "html_report", "destination": "build/"},
         "signature": {"form": "replaces"},
         "function": {"kind": "inline", "code": "import pandas as pd\n" + code},
@@ -86,7 +88,7 @@ def test_handler_passes_a_linker_when_the_function_declares_it(tmp_path):
     ctx = RunContext.for_workflow_run(
         repo_root=tmp_path, run_dir=tmp_path / "run", project="palm", run_id="R1",
     )
-    result = handle_publish(_publish_stage(_LINKING_PUBLISH_CODE), {"enrich": _FRAME}, ctx)
+    result = handle_publish(place_stage(_publish_stage(_LINKING_PUBLISH_CODE)), {"enrich": _FRAME}, ctx)
     html = (tmp_path / "run" / "artifacts" / "build" / "index.html").read_text(encoding="utf-8")
     assert "/project/palm/runs/R1/stage/enrich/row/0/trace/view" in html
     assert "/project/palm/runs/R1/stage/enrich/row/1/trace/view" in html
@@ -97,7 +99,7 @@ def test_handler_leaves_a_function_without_the_keyword_untouched(tmp_path):
     ctx = RunContext.for_workflow_run(
         repo_root=tmp_path, run_dir=tmp_path / "run", project="palm", run_id="R1",
     )
-    handle_publish(_publish_stage(_PLAIN_PUBLISH_CODE), {"enrich": _FRAME}, ctx)
+    handle_publish(place_stage(_publish_stage(_PLAIN_PUBLISH_CODE)), {"enrich": _FRAME}, ctx)
     html = (tmp_path / "run" / "artifacts" / "build" / "index.html").read_text(encoding="utf-8")
     assert html == "<p>no links</p>"
 
@@ -105,7 +107,7 @@ def test_handler_leaves_a_function_without_the_keyword_untouched(tmp_path):
 def test_handler_fails_loudly_when_a_scopeless_run_cannot_address_a_trace(tmp_path):
     ctx = RunContext.for_stages_outside_a_run(repo_root=tmp_path, run_dir=tmp_path / "run")
     with pytest.raises(TraceLinksUnavailableError) as exc:
-        handle_publish(_publish_stage(_LINKING_PUBLISH_CODE), {"enrich": _FRAME}, ctx)
+        handle_publish(place_stage(_publish_stage(_LINKING_PUBLISH_CODE)), {"enrich": _FRAME}, ctx)
     assert "report" in str(exc.value)
 
 
@@ -126,8 +128,7 @@ def test_a_link_emitted_into_published_html_resolves(tmp_path, monkeypatch):
     )
     enrich_columns = [{"name": "facility_id", "type": "str", "nullable": True}, *_NAME_COLUMN,
                       {"name": "score", "type": "int", "nullable": True}]
-    handle_publish(
-        _publish_stage(_LINKING_PUBLISH_CODE, input_columns=enrich_columns),
+    handle_publish(place_stage(_publish_stage(_LINKING_PUBLISH_CODE, input_columns=enrich_columns)),
         {"enrich": enrich}, ctx)
     html = (run_dir / "artifacts" / "build" / "index.html").read_text(encoding="utf-8")
 

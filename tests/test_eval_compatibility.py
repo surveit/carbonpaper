@@ -7,6 +7,7 @@ import pytest
 from app import models as m
 from app.evals.dataset_columns import get_injected_columns, get_output_columns_from_stage
 from app.evals.compatibility import CompatibilityReport, validate_eval_compatibility
+from app.models.workflow_stage import WorkflowStage
 
 
 def S(**kw):
@@ -23,34 +24,34 @@ def _file_input(id_, tmp_path, cols=("k",)):
 
 
 def _input_refs(inputs):
-    refs = []
-    for upstream in inputs:
-        if isinstance(upstream, m.AbstractStage):
-            refs.append({"id": upstream.id, "schema": upstream.resolve_output_schema()})
-        else:
-            id_, cols = upstream
-            refs.append({"id": id_, "schema": {"columns": [{"name": c, "type": "str", "nullable": True} for c in cols]}})
-    return refs
+    return [
+        {"id": upstream.id if isinstance(upstream, m.AbstractStage) else upstream[0]}
+        for upstream in inputs
+    ]
 
 
-def _extends(refs, output_schema):
-    anchor = refs[0]["schema"] if refs else None
-    # A row function only adds, so the adds are whatever `output_schema` names
-    # beyond the anchor edge — letting each test keep saying what it OUTPUTS.
-    columns = getattr(anchor, "columns", None)
-    if columns is None:
-        columns = (anchor or {}).get("columns", [])
-    flowing = {c.name if hasattr(c, "name") else c["name"] for c in columns}
+def _anchor_columns(inputs):
+    """Every upstream these tests build is replaces-form, so its output IS `produces`."""
+    if not inputs:
+        return []
+    first = inputs[0]
+    if isinstance(first, m.AbstractStage):
+        return [c.model_dump() for c in first.signature.produces]
+    return [{"name": c, "type": "str", "nullable": True} for c in first[1]]
+
+
+def _extends(inputs, output_schema):
+    """A row function only adds, so the adds are what `output_schema` names beyond the anchor."""
+    flowing = {c["name"] for c in _anchor_columns(inputs)}
     added = [c for c in (output_schema or {}).get("columns", []) if c["name"] not in flowing]
     return {"form": "extends", "adds": added}
 
 
 def _row(id_, inputs, output_schema=None, **kw):
-    refs = _input_refs(inputs)
     return m.parse_stage(S(
-        id=id_, type="python_row_function", inputs=refs,
+        id=id_, type="python_row_function", inputs=_input_refs(inputs),
         function={"kind": "inline", "code": "def transform(row): return row"},
-        signature=_extends(refs, output_schema), **kw))
+        signature=_extends(inputs, output_schema), **kw))
 
 
 def _frame(id_, inputs, output_schema=None, **kw):
@@ -326,7 +327,8 @@ def test_get_injected_columns_no_conflict_named_after_target(tmp_path):
     override = _file_input("src", tmp_path, cols=["k", "v"])
     target = _row("tgt", [override], output_schema={
         "columns": [{"name": "k", "type": "str", "nullable": True}, {"name": "score", "type": "float", "nullable": True}]})
-    injected = get_injected_columns(override, target, ["score"])
+    placed = m.Workflow(stages=[override, target]).index_workflow_stages_by_id()
+    injected = get_injected_columns(placed["src"], placed["tgt"], ["score"])
     names = [c.name for c in injected]
     assert set(names) == {"k", "v"}
     assert len(names) == len(set(names))  # never a duplicate column name
@@ -336,7 +338,8 @@ def test_get_injected_columns_conflict_renames_override_side(tmp_path):
     override = _file_input("src", tmp_path, cols=["k", "score"])
     target = _row("tgt", [override], output_schema={
         "columns": [{"name": "k", "type": "str", "nullable": True}, {"name": "score", "type": "float", "nullable": True}]})
-    injected = get_injected_columns(override, target, ["score"])
+    placed = m.Workflow(stages=[override, target]).index_workflow_stages_by_id()
+    injected = get_injected_columns(placed["src"], placed["tgt"], ["score"])
     names = [c.name for c in injected]
     assert set(names) == {"k", "override.score"}
     assert len(names) == len(set(names))  # never a duplicate column name
@@ -346,21 +349,22 @@ def test_get_injected_columns_is_the_override_side_of_the_column_rule(tmp_path):
     override = _file_input("src", tmp_path, cols=["k", "score"])
     target = _row("tgt", [override], output_schema={
         "columns": [{"name": "k", "type": "str", "nullable": True}, {"name": "score", "type": "float", "nullable": True}]})
-    injected = get_injected_columns(override, target, ["score"])
+    placed = m.Workflow(stages=[override, target]).index_workflow_stages_by_id()
+    injected = get_injected_columns(placed["src"], placed["tgt"], ["score"])
     assert {c.name for c in injected} == {"k", "override.score"}
 
 
 # ── fail loud: no silent degradation on a missing schema or checked column ───
 def test_get_output_columns_from_stage_raises_when_stage_has_no_output_schema(tmp_path):
     stage = _file_input("src", tmp_path, cols=["k"])
-    stage = stage.model_copy(
-        update={"signature": stage.signature.model_copy(update={"produces": []})})
+    emits_nothing = WorkflowStage(stage=stage, inputs=[], output_schema=None)
     with pytest.raises(ValueError, match="declares no output schema"):
-        get_output_columns_from_stage(stage)
+        get_output_columns_from_stage(emits_nothing)
 
 
 def test_get_injected_columns_raises_for_checked_column_not_on_target(tmp_path):
     override = _file_input("src", tmp_path, cols=["k"])
     target = _row("tgt", [override], output_schema={"columns": [{"name": "k", "type": "str", "nullable": True}]})
+    placed = m.Workflow(stages=[override, target]).index_workflow_stages_by_id()
     with pytest.raises(ValueError, match="not_emitted"):
-        get_injected_columns(override, target, ["not_emitted"])
+        get_injected_columns(placed["src"], placed["tgt"], ["not_emitted"])

@@ -11,7 +11,7 @@ from typing import Any, Callable, NamedTuple, Protocol, TypeVar, runtime_checkab
 
 import pandas as pd
 
-from app.models import Stage
+from app.models import Stage, WorkflowStage
 from app.models.run_manifest import RowError, StageContribution
 from app.models.stage import (
     AbstractStage,
@@ -49,7 +49,8 @@ from .row_events import (
 _StageT = TypeVar("_StageT", bound=AbstractStage)
 
 
-def narrow_stage(stage: Stage, model: type[_StageT]) -> _StageT:
+def narrow_stage(workflow_stage: WorkflowStage, model: type[_StageT]) -> _StageT:
+    stage = workflow_stage.stage
     if isinstance(stage, model):
         return stage
     raise TypeError(
@@ -73,7 +74,7 @@ RowMapper = Callable[[Row, int], "Row | None"]
 # handed to the FACTORY, never to the mapper: work that is cheaper — or only
 # correct — done once over the whole input happens here, and the mapper it
 # returns still sees one row at a time.
-MakeRowMapper = Callable[[Stage, RunContext, pd.DataFrame], RowMapper]
+MakeRowMapper = Callable[[WorkflowStage, RunContext, pd.DataFrame], RowMapper]
 
 # An LLMTransformHandler's batched execution function: the stage's inputs, the
 # run, the driver's parallelism, and the INPUT POSITION of each row it is handed
@@ -83,7 +84,7 @@ MakeRowMapper = Callable[[Stage, RunContext, pd.DataFrame], RowMapper]
 # nothing about caching: which rows it is asked about is the shape's decision
 # (see `_run_batched`).
 RunBatches = Callable[
-    [Stage, dict[str, pd.DataFrame], RunContext, int, list[int]], list["Row"]
+    [WorkflowStage, dict[str, pd.DataFrame], RunContext, int, list[int]], list["Row"]
 ]
 
 # Internal column a row mapper attaches to a row it could not produce (e.g. an
@@ -142,7 +143,7 @@ class PostMapRowMapper(Protocol):
 
     def finish_mapped_rows(
         self,
-        stage: Stage,
+        workflow_stage: WorkflowStage,
         df: pd.DataFrame,
         ctx: RunContext,
         contribution: StageContribution,
@@ -152,7 +153,8 @@ class PostMapRowMapper(Protocol):
 class StageHandler(ABC):
     @abstractmethod
     def execute(
-        self, stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext
+        self, workflow_stage: WorkflowStage, inputs: dict[str, pd.DataFrame],
+        ctx: RunContext,
     ) -> pd.DataFrame | None: ...
 
     @property
@@ -176,9 +178,10 @@ class RowMapTransformHandler(StageHandler):
         self.caches_rows = caches_rows
 
     def execute(
-        self, stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext
+        self, workflow_stage: WorkflowStage, inputs: dict[str, pd.DataFrame],
+        ctx: RunContext,
     ) -> pd.DataFrame:
-        return _run_row_mapper(self, stage, inputs, ctx)
+        return _run_row_mapper(self, workflow_stage, inputs, ctx)
 
     @property
     def preserves_grain_and_order(self) -> bool:
@@ -199,21 +202,25 @@ class LLMTransformHandler(RowMapTransformHandler):
         self.run_batches = run_batches
 
     def execute(
-        self, stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext
+        self, workflow_stage: WorkflowStage, inputs: dict[str, pd.DataFrame],
+        ctx: RunContext,
     ) -> pd.DataFrame:
-        if narrow_stage(stage, LLMTransformStage).llm.batch_size > 1:
-            return _run_batched(self, stage, inputs, ctx)
-        return _run_row_mapper(self, stage, inputs, ctx)
+        if narrow_stage(workflow_stage, LLMTransformStage).llm.batch_size > 1:
+            return _run_batched(self, workflow_stage, inputs, ctx)
+        return _run_row_mapper(self, workflow_stage, inputs, ctx)
 
 
 class SourceHandler(StageHandler):
-    def __init__(self, read: Callable[[Stage, RunContext], pd.DataFrame]) -> None:
+    def __init__(
+        self, read: Callable[[WorkflowStage, RunContext], pd.DataFrame]
+    ) -> None:
         self.read = read
 
     def execute(
-        self, stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext
+        self, workflow_stage: WorkflowStage, inputs: dict[str, pd.DataFrame],
+        ctx: RunContext,
     ) -> pd.DataFrame:
-        return self.read(stage, ctx)
+        return self.read(workflow_stage, ctx)
 
     @property
     def preserves_grain_and_order(self) -> bool:
@@ -223,24 +230,29 @@ class SourceHandler(StageHandler):
 class FrameTransformHandler(StageHandler):
     def __init__(
         self,
-        apply: Callable[[Stage, dict[str, pd.DataFrame], RunContext], pd.DataFrame | None],
+        apply: Callable[
+            [WorkflowStage, dict[str, pd.DataFrame], RunContext], pd.DataFrame | None
+        ],
         caches_frames: bool = True,
     ) -> None:
         self.apply = apply
         self.caches_frames = caches_frames
 
     def execute(
-        self, stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext
+        self, workflow_stage: WorkflowStage, inputs: dict[str, pd.DataFrame],
+        ctx: RunContext,
     ) -> pd.DataFrame | None:
-        caching = open_frame_caching(stage, ctx, self.caches_frames)
+        caching = open_frame_caching(workflow_stage.stage, ctx, self.caches_frames)
         if caching.key is None:
-            output = self.apply(stage, inputs, ctx)
+            output = self.apply(workflow_stage, inputs, ctx)
             return note_skipped_caching(output, caching.skipped_note)
-        input_frames = [inputs[ref.id] for ref in stage.inputs]
+        input_frames = [inputs[ref.id] for ref in workflow_stage.inputs]
         cached = find_cached_frame(caching, input_frames)
         if cached is not None:
             return cached
-        return record_frame_output(caching, input_frames, self.apply(stage, inputs, ctx))
+        return record_frame_output(
+            caching, input_frames, self.apply(workflow_stage, inputs, ctx)
+        )
 
     @property
     def preserves_grain_and_order(self) -> bool:
@@ -271,13 +283,14 @@ def validate_registry_matches_model(handlers: dict[StageType, StageHandler]) -> 
 
 def _run_row_mapper(
     handler: RowMapTransformHandler,
-    stage: Stage,
+    workflow_stage: WorkflowStage,
     inputs: dict[str, pd.DataFrame],
     ctx: RunContext,
 ) -> pd.DataFrame:
-    src = inputs[stage.inputs[0].id]
+    stage = workflow_stage.stage
+    src = inputs[workflow_stage.inputs[0].id]
     reads = stage.anchor_reads()
-    map_row = handler.make_mapper(stage, ctx, src)
+    map_row = handler.make_mapper(workflow_stage, ctx, src)
     # The ONE line of per-row compute, optionally routed through the row cache
     # and the run log. Log outside cache, so a row the cache answers never
     # reaches the mapper's lifecycle wrapper and is logged as the replay it is.
@@ -327,11 +340,13 @@ def _run_row_mapper(
         # mapper's own keys win — that is what a rewrite or an add is.
         out_rows.append({**records[index], **result})
         kept_indices.append(index)
-    mapped = _finish_mapped_frame(pd.DataFrame(out_rows), handler, map_row, stage, ctx)
-    out = _finish_empty_result(mapped, src, stage)
+    mapped = _finish_mapped_frame(
+        pd.DataFrame(out_rows), handler, map_row, workflow_stage, ctx)
+    out = _finish_empty_result(mapped, src, workflow_stage)
     if handler.drops_rows:
         # The driver, not the stage, knows which input ordinals survived.
-        attach_row_lineage(out, kept_rows_lineage(stage.inputs[0].id, kept_indices))
+        attach_row_lineage(
+            out, kept_rows_lineage(workflow_stage.inputs[0].id, kept_indices))
     return out
 
 
@@ -459,17 +474,18 @@ def _log_row_lifecycle(map_row: RowMapper, log: RunLog | None, stage_id: str) ->
 
 def _run_batched(
     handler: "LLMTransformHandler",
-    stage: Stage,
+    workflow_stage: WorkflowStage,
     inputs: dict[str, pd.DataFrame],
     ctx: RunContext,
 ) -> pd.DataFrame:
-    src = inputs[stage.inputs[0].id]
+    stage = workflow_stage.stage
+    src = inputs[workflow_stage.inputs[0].id]
     records = list_rows(src)
     caching = _open_row_caching(stage, ctx)
     hits = {} if caching is None else _find_cached_rows_by_position(caching, records)
     misses = [index for index in range(len(records)) if index not in hits]
     emit_batched_row_starts(ctx.run_log, stage.id, hits, misses)
-    computed = _compute_batched_rows(handler, stage, src, misses, ctx)
+    computed = _compute_batched_rows(handler, workflow_stage, src, misses, ctx)
     # Ordered before recorded: the ordering step is what verifies one computed
     # row per miss, so nothing is pinned against a row it did not come from.
     rows = _order_by_input_position(stage, hits, misses, computed, len(records))
@@ -480,7 +496,7 @@ def _run_batched(
         ctx.run_log, stage.id, misses, [row.get(ROW_ERROR_KEY) for row in computed]
     )
     return _finish_empty_result(
-        _finish_batched_frame(rows, handler, stage), src, stage
+        _finish_batched_frame(rows, handler, workflow_stage), src, workflow_stage
     )
 
 
@@ -497,7 +513,7 @@ def _find_cached_rows_by_position(
 
 def _compute_batched_rows(
     handler: "LLMTransformHandler",
-    stage: Stage,
+    workflow_stage: WorkflowStage,
     src: pd.DataFrame,
     misses: list[int],
     ctx: RunContext,
@@ -505,7 +521,8 @@ def _compute_batched_rows(
     if not misses:
         return []
     return handler.run_batches(
-        stage, {stage.inputs[0].id: src.iloc[misses]}, ctx, handler.parallelism, misses
+        workflow_stage, {workflow_stage.inputs[0].id: src.iloc[misses]}, ctx,
+        handler.parallelism, misses,
     )
 
 
@@ -527,19 +544,19 @@ def _order_by_input_position(
 
 
 def _finish_batched_frame(
-    rows: list[Row], handler: RowMapTransformHandler, stage: Stage
+    rows: list[Row], handler: RowMapTransformHandler, workflow_stage: WorkflowStage
 ) -> pd.DataFrame:
     df = pd.DataFrame(rows)
-    return _strip_and_trim(df, _collect_internal_columns(df), handler, stage)
+    return _strip_and_trim(df, _collect_internal_columns(df), handler, workflow_stage)
 
 
 def _finish_empty_result(
-    mapped: pd.DataFrame, src: pd.DataFrame, stage: Stage
+    mapped: pd.DataFrame, src: pd.DataFrame, workflow_stage: WorkflowStage
 ) -> pd.DataFrame:
     if len(mapped.columns) > 0 or len(mapped) > 0:
         return mapped
     empty = src.iloc[0:0].copy()
-    promised = stage.resolve_output_schema()
+    promised = workflow_stage.output_schema
     if promised is not None:
         empty = empty.reindex(columns=[column.name for column in promised.columns])
     empty.attrs = dict(mapped.attrs)  # the StageContribution rides here
@@ -550,13 +567,13 @@ def _finish_mapped_frame(
     df: pd.DataFrame,
     handler: RowMapTransformHandler,
     map_row: RowMapper,
-    stage: Stage,
+    workflow_stage: WorkflowStage,
     ctx: RunContext,
 ) -> pd.DataFrame:
     contribution = _collect_internal_columns(df)
     if isinstance(map_row, PostMapRowMapper):
-        map_row.finish_mapped_rows(stage, df, ctx, contribution)
-    return _strip_and_trim(df, contribution, handler, stage)
+        map_row.finish_mapped_rows(workflow_stage, df, ctx, contribution)
+    return _strip_and_trim(df, contribution, handler, workflow_stage)
 
 
 def _collect_internal_columns(df: pd.DataFrame) -> StageContribution:
@@ -571,12 +588,12 @@ def _strip_and_trim(
     df: pd.DataFrame,
     contribution: StageContribution,
     handler: RowMapTransformHandler,
-    stage: Stage,
+    workflow_stage: WorkflowStage,
 ) -> pd.DataFrame:
     """Strip before trim: the trim reports what it drops as user columns, which an internal one is not."""
     df = _strip_internal_columns(df)
     if handler.trims_output_to_declared:
-        df = _trim_to_declared_columns(df, stage, contribution)
+        df = _trim_to_declared_columns(workflow_stage, df, contribution)
     df.attrs[CONTRIBUTION_ATTR] = contribution
     return df
 
@@ -623,9 +640,9 @@ def _collect_cached_rows(df: pd.DataFrame, contribution: StageContribution) -> N
 
 
 def _trim_to_declared_columns(
-    df: pd.DataFrame, stage: Stage, contribution: StageContribution
+    workflow_stage: WorkflowStage, df: pd.DataFrame, contribution: StageContribution
 ) -> pd.DataFrame:
-    output_schema = stage.resolve_output_schema()
+    output_schema = workflow_stage.output_schema
     declared = [c.name for c in output_schema.columns] if output_schema else []
     if not declared:
         return df
@@ -637,7 +654,7 @@ def _trim_to_declared_columns(
     missing = [name for name in declared if name not in df.columns]
     if missing and not contribution.row_errors:
         raise ValueError(
-            f"stage '{stage.id}' declares output column(s) {missing} that it did not "
+            f"stage '{workflow_stage.id}' declares output column(s) {missing} that it did not "
             f"produce; the frame carries {[str(c) for c in df.columns]}. A declared "
             "column is what downstream stages are entitled to read — it can be neither "
             "invented nor dropped from the projection."

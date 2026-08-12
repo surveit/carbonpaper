@@ -1,5 +1,6 @@
 """run_tests_for_stage: execution through the real handlers + normalized comparison."""
 from app.models import parse_stage, Stage
+from app.models.stages.signature import transform_output_schema
 from app.runtime.stage_tests import find_failing_stage_tests, run_tests_for_stage
 
 _IN_SCHEMA = {"columns": [{"name": "amount", "type": "float", "nullable": False}]}
@@ -12,7 +13,7 @@ _OUT_SCHEMA = {"columns": [
 def _row_stage(code: str, tests: list[dict]) -> Stage:
     return parse_stage({
         "id": "double", "description": "Double", "type": "python_row_function",
-        "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
+        "inputs": [{"id": "load"}],
         "signature": {
             "form": "extends",
             "reads": [{"input": "load", "columns": _IN_SCHEMA["columns"]}],
@@ -228,7 +229,7 @@ def test_find_failing_stage_tests_reports_a_failed_failure_case():
 def _frame_stage(code: str, tests: list[dict]) -> Stage:
     return parse_stage({
         "id": "reshape", "description": "Reshape", "type": "python_frame_function",
-        "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
+        "inputs": [{"id": "load"}],
         "signature": {
             "form": "replaces",
             "reads": [{"input": "load", "columns": _IN_SCHEMA["columns"]}],
@@ -258,7 +259,7 @@ def test_omitted_column_in_expected_row_claims_none():
     ]}
     stage = parse_stage({
         "id": "labelled", "description": "Labelled", "type": "python_frame_function",
-        "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
+        "inputs": [{"id": "load"}],
         "signature": {"form": "replaces", "produces": labelled_schema["columns"]},
         "function": {"kind": "inline", "code": (
             # dtype=object keeps the returned None a real None; pandas' default
@@ -344,8 +345,8 @@ def _multi_input_frame_stage(code: str, tests: list[dict]) -> Stage:
     return parse_stage({
         "id": "merge", "description": "Merge", "type": "python_frame_function",
         "inputs": [
-            {"id": "left", "schema": _LEFT_SCHEMA},
-            {"id": "right", "schema": _RIGHT_SCHEMA},
+            {"id": "left"},
+            {"id": "right"},
         ],
         "signature": {
             "form": "replaces",
@@ -382,8 +383,8 @@ def test_multi_input_frame_positional_order_is_declared_order():
     stage = parse_stage({
         "id": "first", "description": "First", "type": "python_frame_function",
         "inputs": [
-            {"id": "left", "schema": id_schema},
-            {"id": "right", "schema": id_schema},
+            {"id": "left"},
+            {"id": "right"},
         ],
         "signature": {"form": "replaces", "produces": id_schema["columns"]},
         "function": {"kind": "inline", "code": "def transform(a, b):\n    return a\n"},
@@ -434,7 +435,7 @@ def _narrow_reads_stage(tests: list[dict]) -> Stage:
     """Reads one of its input's two columns; `memo` only ever flows past it."""
     return parse_stage({
         "id": "double", "description": "Double", "type": "python_row_function",
-        "inputs": [{"id": "load", "schema": _WIDE_IN_SCHEMA}],
+        "inputs": [{"id": "load"}],
         "signature": {
             "form": "extends",
             "reads": [{"input": "load", "columns": _IN_SCHEMA["columns"]}],
@@ -455,9 +456,8 @@ def test_a_case_supplies_only_the_columns_the_stage_reads():
     assert result.status == "passed" and not result.diffs
     # `memo` is non-nullable on the edge and on the promised output either way —
     # it just flows past the transform, so no case has to invent a value for it.
-    output_schema = stage.resolve_output_schema()
-    assert [column.name for column in output_schema.columns] == [
-        "amount", "memo", "doubled"]
+    written = transform_output_schema(stage)
+    assert [column.name for column in written.columns] == ["doubled"]
 
 
 def test_a_narrow_case_still_fails_on_the_columns_it_does_state():

@@ -161,7 +161,7 @@ def _row_mapped_project(root, rows: list[dict], code: str):
     }
     keep = {
         "id": "keep", "description": "Keep items", "type": "python_row_function",
-        "inputs": [{"id": "load", "schema": _NAME_VAL_SCHEMA}],
+        "inputs": [{"id": "load"}],
         "signature": {
             "form": "extends",
             "reads": [{"input": "load", "columns": _NAME_VAL_SCHEMA["columns"]}],
@@ -218,7 +218,7 @@ def _two_stage_project(root, rows: list[dict]):
     }
     consume = {
         "id": "consume", "description": "Consume items", "type": "python_frame_function",
-        "inputs": [{"id": "load", "schema": _NAME_VAL_SCHEMA}],
+        "inputs": [{"id": "load"}],
         "signature": {
             "form": "replaces",
             "reads": [{"input": "load", "columns": _NAME_VAL_SCHEMA["columns"]}],
@@ -280,7 +280,7 @@ def _output_schema_violation_project(root, transform_code: str):
     }
     shape = {
         "id": "shape", "description": "Shape items", "type": "python_frame_function",
-        "inputs": [{"id": "load", "schema": _NAME_VAL_SCHEMA}],
+        "inputs": [{"id": "load"}],
         "signature": {
             "form": "replaces",
             "reads": [{"input": "load", "columns": _NAME_VAL_SCHEMA["columns"]}],
@@ -290,7 +290,7 @@ def _output_schema_violation_project(root, transform_code: str):
     }
     tail = {
         "id": "tail", "description": "Tail", "type": "python_frame_function",
-        "inputs": [{"id": "shape", "schema": _NAME_VAL_SCHEMA}],
+        "inputs": [{"id": "shape"}],
         "signature": {
             "form": "replaces",
             "reads": [{"input": "shape", "columns": _NAME_VAL_SCHEMA["columns"]}],
@@ -352,7 +352,7 @@ def test_output_validation_error_other_than_a_missing_column_also_errors_the_sta
     }
     blank = {
         "id": "blank", "description": "Blank the value", "type": "python_frame_function",
-        "inputs": [{"id": "load", "schema": _NAME_VAL_SCHEMA}],
+        "inputs": [{"id": "load"}],
         "signature": {
             "form": "replaces",
             "reads": [{"input": "load", "columns": _NAME_VAL_SCHEMA["columns"]}],
@@ -393,7 +393,7 @@ def test_value_outside_a_declared_enum_errors_the_stage_and_blocks_downstream(tm
     }
     label = {
         "id": "label", "description": "Label items", "type": "python_frame_function",
-        "inputs": [{"id": "load", "schema": _NAME_VAL_SCHEMA}],
+        "inputs": [{"id": "load"}],
         "signature": {"form": "replaces", "produces": labelled_schema["columns"]},
         "function": {"kind": "inline",
                      "code": "def transform(df):\n"
@@ -401,7 +401,7 @@ def test_value_outside_a_declared_enum_errors_the_stage_and_blocks_downstream(tm
     }
     tail = {
         "id": "tail", "description": "Tail", "type": "python_frame_function",
-        "inputs": [{"id": "label", "schema": labelled_schema}],
+        "inputs": [{"id": "label"}],
         "signature": {"form": "replaces", "produces": labelled_schema["columns"]},
         "function": {"kind": "inline", "code": "def transform(df):\n    return df\n"},
     }
@@ -433,7 +433,7 @@ def _llm_transform_project(root):
     }
     score = {
         "id": "score", "description": "Score items", "type": "llm_transform",
-        "inputs": [{"id": "load", "schema": _ID_TEXT_SCHEMA}],
+        "inputs": [{"id": "load"}],
         "signature": {
             "form": "extends",
             "reads": [
@@ -488,7 +488,7 @@ def test_run_subset_surfaces_the_real_row_failure_message(tmp_path, monkeypatch)
     })
     score = parse_stage({
         "id": "score", "description": "Score items", "type": "llm_transform",
-        "inputs": [{"id": "load", "schema": _ID_TEXT_SCHEMA}],
+        "inputs": [{"id": "load"}],
         "signature": {
             "form": "extends",
             "reads": [
@@ -524,8 +524,7 @@ def test_run_subset_preserves_partial_work_in_the_manifest_on_a_mid_frontier_err
     })
     clean = parse_stage({
         "id": "clean", "description": "Clean rows", "type": "python_row_function",
-        "inputs": [{"id": "load", "schema": {
-            "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}]}}],
+        "inputs": [{"id": "load"}],
         "signature": {
             "form": "extends",
             "reads": [{"input": "load", "columns": _ID_TEXT_SCHEMA["columns"]}],
@@ -534,8 +533,7 @@ def test_run_subset_preserves_partial_work_in_the_manifest_on_a_mid_frontier_err
     })
     boom = parse_stage({
         "id": "score", "description": "Score rows", "type": "python_row_function",
-        "inputs": [{"id": "clean", "schema": {
-            "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}]}}],
+        "inputs": [{"id": "clean"}],
         "signature": {"form": "extends",
                       "adds": [{"name": "score", "type": "int", "nullable": True}]},
         "function": {"kind": "inline",
@@ -750,7 +748,7 @@ _FRAME_STAGE_CODE = "def transform(df):\n    return df.assign(double=df['val'] *
 def _add_frame_stage(root):
     (root / "compiled" / "02_totals.json").write_text(json.dumps({
         "id": "totals", "description": "Totals", "type": "python_frame_function",
-        "inputs": [{"id": "load", "schema": _NAME_VAL_SCHEMA}],
+        "inputs": [{"id": "load"}],
         "signature": {
             "form": "replaces",
             "reads": [{"input": "load", "columns": _NAME_VAL_SCHEMA["columns"]}],

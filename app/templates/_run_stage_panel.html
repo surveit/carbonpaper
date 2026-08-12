@@ -65,16 +65,16 @@
 
   {# ─────────── SCHEMA (input schemas, then the output schema) ─────────── #}
   <div class="pane" data-pane="schema" hidden>
-    {% if stage_def and stage_def.inputs %}
-      {% for inp in stage_def.inputs %}
+    {% if workflow_stage and workflow_stage.inputs %}
+      {% for inp in workflow_stage.inputs %}
       <div class="schema-card">
         <h4>input <a href="{{ links.stage_anchor(inp.id) }}"><code>{{ inp.id }}</code></a> schema</h4>
         {{ schema_table(inp.table_schema) }}
       </div>
       {% endfor %}
     {% else %}<p class="muted"><em>No declared inputs.</em></p>{% endif %}
-    {% if stage_def and stage_def.resolve_output_schema() %}
-    <div class="schema-card"><h4>output schema</h4>{{ schema_table(stage_def.resolve_output_schema()) }}</div>
+    {% if workflow_stage and workflow_stage.output_schema %}
+    <div class="schema-card"><h4>output schema</h4>{{ schema_table(workflow_stage.output_schema) }}</div>
     {% else %}<p class="muted"><em>No output schema declared.</em></p>{% endif %}
   </div>
 

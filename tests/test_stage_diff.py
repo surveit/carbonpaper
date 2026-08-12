@@ -45,7 +45,7 @@ _OUT_COLUMNS = _IN_COLUMNS + [{"name": "label", "type": "str", "nullable": True}
 def _row_stage(output_columns: list[dict] | None = None) -> Stage:
     return parse_stage({
         "id": "classify", "description": "Classify", "type": "python_row_function",
-        "inputs": [{"id": LOAD_ID, "schema": {"columns": _IN_COLUMNS}}],
+        "inputs": [{"id": LOAD_ID}],
         "function": {"kind": "inline",
                      "code": "def transform(row):\n    return row\n"},
         "signature": {"form": "extends", "adds": _added(output_columns or _OUT_COLUMNS,
@@ -70,8 +70,8 @@ _REF_PATH = f"outputs/{REF_ID}.parquet"
 def _join_stage(stage_type: str, output_columns: list[dict] | None = None) -> Stage:
     return parse_stage({
         "id": "route", "description": "Route", "type": stage_type,
-        "inputs": [{"id": LOAD_ID, "schema": {"columns": _IN_COLUMNS}},
-                   {"id": REF_ID, "schema": {"columns": _REF_COLUMNS}}],
+        "inputs": [{"id": LOAD_ID},
+                   {"id": REF_ID}],
         "join": {"keys": [{"left": "name", "right": "name"}], "enrich_with": {"extra": "extra"}},
         "signature": {
             "form": "extends",
@@ -86,7 +86,7 @@ def _join_stage(stage_type: str, output_columns: list[dict] | None = None) -> St
 def _filter_stage() -> Stage:
     return parse_stage({
         "id": "keep", "description": "Keep", "type": "filter_rows",
-        "inputs": [{"id": LOAD_ID, "schema": {"columns": _IN_COLUMNS}}],
+        "inputs": [{"id": LOAD_ID}],
         "filter": {"code": "def should_include(row):\n    return row['val'] is not None\n"},
         "signature": {"form": "extends", "reads": reads_of(LOAD_ID, _IN_COLUMNS)},
     })
@@ -191,7 +191,7 @@ def test_the_column_spine_is_the_input_frame_with_the_added_columns_after_it(
 def test_an_llm_transform_is_admitted_to_the_row_aligned_diff(tmp_path: Path) -> None:
     stage = parse_stage({
         "id": "judge", "description": "Judge", "type": "llm_transform",
-        "inputs": [{"id": LOAD_ID, "schema": {"columns": _IN_COLUMNS}}],
+        "inputs": [{"id": LOAD_ID}],
         "llm": {"prompt_data_template": "{name}"},
         "signature": {
             "form": "extends",
@@ -217,7 +217,7 @@ def test_an_llm_transform_is_admitted_to_the_row_aligned_diff(tmp_path: Path) ->
 def test_a_starlark_row_function_is_admitted_to_the_row_aligned_diff(tmp_path: Path) -> None:
     stage = parse_stage({
         "id": "classify", "description": "Classify", "type": "starlark_row_function",
-        "inputs": [{"id": LOAD_ID, "schema": {"columns": _IN_COLUMNS}}],
+        "inputs": [{"id": LOAD_ID}],
         "starlark": {"code": "def transform(row):\n    return row"},
         "signature": {
             "form": "extends",
@@ -243,7 +243,7 @@ def test_a_starlark_row_function_is_admitted_to_the_row_aligned_diff(tmp_path: P
 def test_a_review_queue_shows_the_human_answer_beside_what_it_answered(tmp_path: Path) -> None:
     stage = parse_stage({
         "id": "gate", "description": "Gate", "type": "human_review_queue",
-        "inputs": [{"id": LOAD_ID, "schema": {"columns": _IN_COLUMNS}}],
+        "inputs": [{"id": LOAD_ID}],
         "queue": {
             "reviewed_columns": {"name": "reviewed_name"},
             "verdict_column": "verdict",
@@ -560,7 +560,7 @@ def test_a_frame_function_gets_no_diff_even_at_matching_row_counts(tmp_path: Pat
     # A frame function may reorder rows, so a positional diff would be fabricated.
     stage = parse_stage({
         "id": "reshape", "description": "Reshape", "type": "python_frame_function",
-        "inputs": [{"id": LOAD_ID, "schema": {"columns": _IN_COLUMNS}}],
+        "inputs": [{"id": LOAD_ID}],
         "function": {"kind": "inline",
                      "code": "def transform(df):\n    return df\n"},
         "signature": {
@@ -579,8 +579,8 @@ def test_a_frame_function_gets_no_diff_even_at_matching_row_counts(tmp_path: Pat
 def test_a_union_gets_no_diff(tmp_path: Path) -> None:
     stage = parse_stage({
         "id": "both", "description": "Both", "type": "union",
-        "inputs": [{"id": LOAD_ID, "schema": {"columns": _IN_COLUMNS}},
-                   {"id": "more", "schema": {"columns": _IN_COLUMNS}}],
+        "inputs": [{"id": LOAD_ID},
+                   {"id": "more"}],
         "union": {},
         "signature": {"form": "replaces", "produces": _IN_COLUMNS},
     })

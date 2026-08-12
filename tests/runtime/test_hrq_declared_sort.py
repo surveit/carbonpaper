@@ -12,7 +12,9 @@ from app.models.stage import StageType
 from app.runtime.context import RunIdentity
 from app.runtime.errors import HaltForReview
 from app.runtime.stages import HANDLERS
-from conftest import QUEUE_COLUMNS, make_run_context, queue_added_columns, reads_of
+from conftest import (
+    QUEUE_COLUMNS, make_run_context, place_stage, queue_added_columns, reads_of,
+)
 
 PROJECT = "hrq-sort-tests"
 
@@ -29,7 +31,7 @@ def _stage(sort: list[dict[str, str]] | None = None, columns=_COLUMNS) -> Stage:
         queue["sort"] = sort
     return parse_stage({
         "id": "review", "description": "Review", "type": "human_review_queue",
-        "inputs": [{"id": "scored", "schema": {"columns": columns}}],
+        "inputs": [{"id": "scored"}],
         "signature": {"form": "extends", "reads": reads_of("scored", columns),
                       "adds": queue_added_columns()},
         "queue": queue,
@@ -43,7 +45,9 @@ def _halt(stage: Stage, frame: pd.DataFrame, tmp_path, run_id: str):
         stage_cache=StageCache(),
     )
     with pytest.raises(HaltForReview) as exc_info:
-        HANDLERS[StageType.human_review_queue].execute(stage, {"scored": frame}, ctx)
+        HANDLERS[StageType.human_review_queue].execute(
+            place_stage(stage), {"scored": frame}, ctx
+        )
     queue_path = exc_info.value.queue_path
     sidecar = queue_path.parent / f"{queue_path.stem}.fingerprints.json"
     return pd.read_parquet(queue_path), json.loads(sidecar.read_text(encoding="utf-8"))

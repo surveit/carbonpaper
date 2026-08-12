@@ -17,7 +17,7 @@ from pydantic import ValidationError as PydanticValidationError
 from app.core.errors import MissingInputBindingError
 from app.core.timestamp_ids import mint_timestamp_id
 from app.core.frames import read_frame_file
-from app.models import Stage, StageType
+from app.models import Stage, StageType, resolve_workflow_stages
 from app.models.run_manifest import read_run_manifest
 from app.models.run_parameters import RunParameters
 from app.models.stages.input_data import Connector, InputDataStage
@@ -106,7 +106,7 @@ def prepare_run(
     """`limits`/`offsets` window each named stage's INPUT rows, not its output; offset applies first."""
     stages, param_sources = apply_run_bindings(stages, bindings)
     input_records = validate_stages_ready(stages, param_sources)
-    ordered = topological_sort(stages)
+    ordered = topological_sort(resolve_workflow_stages(stages))
 
     limits = dict(limits or {})
     offsets = dict(offsets or {})
@@ -198,7 +198,7 @@ def resume_run(
     # if it authors none) while the manifest still claims `source: "run"` — a
     # false provenance record.
     stages, _ = apply_run_bindings(stages, manifest.parameters.run_bindings)
-    ordered = topological_sort(stages)
+    ordered = topological_sort(resolve_workflow_stages(stages))
 
     # Reload outputs from disk for stages that completed successfully.
     outputs_so_far: dict[str, pd.DataFrame] = {}

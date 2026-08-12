@@ -12,7 +12,7 @@ from app.runtime.runner import apply_run_bindings, validate_stages_ready, execut
 from app.runtime.stages.input_data import read_input_data
 from app.services import versioning
 from app.services.project import save_working_copy_as_version
-from conftest import make_run_context, pinned_stages
+from conftest import make_run_context, pinned_stages, place_stage
 
 
 # Every input declares the schema it expects and every non-publish stage declares
@@ -34,7 +34,7 @@ def _input_stage(stage_id: str, path: str | None) -> Stage:
 def _connectorless_stage(stage_id: str, input_id: str) -> Stage:
     return parse_stage({
         "id": stage_id, "description": stage_id, "type": "python_row_function",
-        "inputs": [{"id": input_id, "schema": _X_SCHEMA}],
+        "inputs": [{"id": input_id}],
         "signature": {"form": "extends"},
         "function": {"kind": "inline", "code": "def transform(row):\n    return row\n"},
     })
@@ -209,4 +209,4 @@ def test_read_input_data_names_the_stage_when_no_path_is_bound(tmp_path):
     # The handler reached directly (run_subset), skipping prepare_run's preflight.
     stage = _input_stage("load_lobbying_filings", None)
     with pytest.raises(ValueError, match="load_lobbying_filings"):
-        read_input_data(stage, ctx=make_run_context())
+        read_input_data(place_stage(stage), ctx=make_run_context())

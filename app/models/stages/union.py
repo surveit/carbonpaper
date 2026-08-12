@@ -3,7 +3,7 @@ must share an identical schema (prose aside), and the signature's `produces`
 must be satisfied by every one of them."""
 from __future__ import annotations
 
-from typing import ClassVar, Literal
+from typing import TYPE_CHECKING, ClassVar, Literal, Sequence
 
 from pydantic import Field
 
@@ -11,6 +11,9 @@ from app.models.schema import StageConfig, TableSchema
 from app.models.stages.stage_base import AbstractStage, StageInput, StageType
 from app.models.stages.stage_type_spec import StageTypeSpec
 from app.models.stages.signature import ReplacesSignature
+
+if TYPE_CHECKING:
+    from app.models.workflow_stage import WorkflowStageInput
 
 
 class UnionConfig(StageConfig):
@@ -27,15 +30,29 @@ class UnionStage(AbstractStage):
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
         return {"union": self.union}
 
-    def find_config_column_issues(self) -> list[str]:
-        return find_union_column_issues(self)
+    def find_config_column_issues(
+        self, inputs: Sequence["WorkflowStageInput"]
+    ) -> list[str]:
+        return find_union_column_issues(self, inputs)
 
     def find_signature_config_issues(self) -> list[str]:
-        return find_union_signature_issues(self)
+        if not self.signature.reads:
+            return []
+        return [
+            f"stage '{self.id}': a union concatenates without consuming any column; "
+            f"signature reads must be empty"
+        ]
+
+    def find_signature_schema_issues(
+        self, inputs: Sequence["WorkflowStageInput"]
+    ) -> list[str]:
+        return find_union_signature_issues(self, inputs)
 
 
-def find_union_column_issues(stage: "UnionStage") -> list[str]:
-    schemas =[(ref.id, ref.table_schema) for ref in stage.inputs]
+def find_union_column_issues(
+    stage: "UnionStage", inputs: Sequence["WorkflowStageInput"]
+) -> list[str]:
+    schemas = [(ref.id, ref.table_schema) for ref in inputs]
     reference_id, reference = schemas[0]
     issues: list[str] = []
     for input_id, schema in schemas[1:]:
@@ -48,19 +65,15 @@ def find_union_column_issues(stage: "UnionStage") -> list[str]:
     return issues
 
 
-def find_union_signature_issues(stage: "UnionStage") -> list[str]:
-    signature = stage.signature
-    issues = [
-        f"stage '{stage.id}': a union concatenates without consuming any column; "
-        f"signature reads must be empty"
-    ] if signature.reads else []
-    produced = TableSchema(columns=signature.produces)
-    issues.extend(
+def find_union_signature_issues(
+    stage: "UnionStage", inputs: Sequence["WorkflowStageInput"]
+) -> list[str]:
+    produced = TableSchema(columns=stage.signature.produces)
+    return [
         f"stage '{stage.id}': signature produces vs input `{ref.id}` — {reason}"
-        for ref in stage.inputs
+        for ref in inputs
         for reason in produced.find_unsatisfied_columns(ref.table_schema)
-    )
-    return issues
+    ]
 
 # Authoring copy for this module's stage type(s); assembled into STAGE_TYPES.
 STAGE_TYPE_SPECS: dict[str, StageTypeSpec] = {

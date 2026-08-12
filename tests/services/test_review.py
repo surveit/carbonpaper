@@ -26,7 +26,7 @@ def _stage(queue: dict[str, object] | None = None) -> Stage:
     block = queue if queue is not None else queue_columns()
     return parse_stage({
         "id": "review", "description": "Review", "type": "human_review_queue",
-        "inputs": [{"id": "scored", "schema": {"columns": _INPUT_COLUMNS}}],
+        "inputs": [{"id": "scored"}],
         "signature": {"form": "extends", "reads": reads_of("scored", _INPUT_COLUMNS),
                       "adds": _added_columns(block)},
         "queue": block,

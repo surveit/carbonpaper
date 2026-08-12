@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from conftest import queue_added_columns, queue_columns, reads_of
+from conftest import queue_added_columns, queue_columns, reads_of, source_stage
 from pydantic import ValidationError
 
 from app import models as m
@@ -36,7 +36,7 @@ _KV_SCHEMA = {"columns": [{"name": "k", "type": "str", "nullable": True},
 
 def _build_enrich_on_k(*, join):
     return S(id="j", type="enrich",
-             inputs=[{"id": "a", "schema": _K_SCHEMA}, {"id": "b", "schema": _KV_SCHEMA}],
+             inputs=[{"id": "a"}, {"id": "b"}],
              signature={"form": "extends",
                         "reads": [{"input": "a", "columns": _K_SCHEMA["columns"]},
                                   {"input": "b", "columns": _K_SCHEMA["columns"]}],
@@ -84,7 +84,7 @@ def test_valid_input_data(tmp_path):
 def test_valid_llm_transform():
     s = m.parse_stage(S(
         id="extract", type="llm_transform",
-        inputs=[{"id": "load", "schema": {"columns": [{"name": "id", "type": "str", "nullable": True}]}}],
+        inputs=[{"id": "load"}],
         signature={
             "form": "extends",
             "reads": [{"input": "load", "columns": _PK_ID_SCHEMA["columns"]}],
@@ -108,18 +108,8 @@ def test_llm_transform_rejects_more_than_one_input():
     with pytest.raises(ValidationError, match="at most 1 item"):
         m.parse_stage(S(
             id="extract", type="llm_transform",
-            inputs=[{"id": "a", "schema": _PK_ID_SCHEMA}, {"id": "b", "schema": _PK_ID_SCHEMA}],
+            inputs=[{"id": "a"}, {"id": "b"}],
             signature={"form": "extends"},
-            llm={"prompt_template": "do it"}))
-
-
-def test_llm_transform_rejects_input_with_no_declared_schema():
-    # `schema` is required on StageInput, so this never reaches find_llm_signature_issues.
-    with pytest.raises(ValidationError, match="inputs.0.schema"):
-        m.parse_stage(S(
-            id="extract", type="llm_transform",
-            inputs=[{"id": "a"}],
-            signature={"form": "extends", "adds": _PK_ID_SCHEMA["columns"]},
             llm={"prompt_template": "do it"}))
 
 
@@ -127,7 +117,7 @@ def test_llm_transform_rejects_a_missing_signature():
     with pytest.raises(ValidationError, match="signature"):
         m.parse_stage(S(
             id="extract", type="llm_transform",
-            inputs=[{"id": "a", "schema": {"columns": [{"name": "id", "type": "str", "nullable": True}]}}],
+            inputs=[{"id": "a"}],
             llm={"prompt_template": "do it"}))
 
 
@@ -135,7 +125,7 @@ def test_llm_transform_rejects_output_that_adds_no_columns():
     with pytest.raises(ValidationError, match="adds no columns beyond the input"):
         m.parse_stage(S(
             id="extract", type="llm_transform",
-            inputs=[{"id": "a", "schema": {"columns": [{"name": "id", "type": "str", "nullable": True}]}}],
+            inputs=[{"id": "a"}],
             signature={
                 "form": "extends",
                 "reads": [{"input": "a", "columns": _PK_ID_SCHEMA["columns"]}],
@@ -154,7 +144,7 @@ def test_publish_requires_the_function_block_it_actually_runs():
 
 def test_publish_config_is_typed():
     s = m.parse_stage(S(
-        id="p", type="publish", inputs=[{"id": "a", "schema": _PK_ID_SCHEMA}],
+        id="p", type="publish", inputs=[{"id": "a"}],
         publish={"format": "json"}, signature={"form": "replaces"},
         function={"kind": "inline", "code": "def transform(row): return row"}))
     assert s.publish.format == PublishFormat.json
@@ -181,7 +171,7 @@ def test_python_function_inline_code_must_define_transform():
 
 def test_python_function_inline_valid_transform_ok():
     m.parse_stage(S(id="t", type="python_row_function",
-                             inputs=[{"id": "a", "schema": _PK_ID_SCHEMA}],
+                             inputs=[{"id": "a"}],
                              signature={
                                  "form": "extends",
                                  "reads": [{"input": "a", "columns": _PK_ID_SCHEMA["columns"]}],
@@ -212,8 +202,8 @@ def test_join_rejects_a_third_input(t):
     with pytest.raises(ValidationError) as err:
         m.parse_stage(S(
             id="j", type=t,
-            inputs=[{"id": "a", "schema": _K_SCHEMA}, {"id": "b", "schema": _KV_SCHEMA},
-                    {"id": "c", "schema": _K_SCHEMA}],
+            inputs=[{"id": "a"}, {"id": "b"},
+                    {"id": "c"}],
             signature={"form": "extends",
                        "adds": [{"name": "v", "type": "str", "nullable": True}]},
             join={"keys": [{"left": "k", "right": "k"}], "enrich_with": {"v": "v"}},
@@ -225,7 +215,7 @@ def test_aggregate_rejects_a_second_input():
     with pytest.raises(ValidationError) as err:
         m.parse_stage(S(
             id="agg", type="aggregate",
-            inputs=[{"id": "a", "schema": _K_SCHEMA}, {"id": "b", "schema": _K_SCHEMA}],
+            inputs=[{"id": "a"}, {"id": "b"}],
             aggregate={"group_by": ["k"],
                        "aggregations": [{"output_column": "n", "formula": "count"}]},
             signature={
@@ -244,7 +234,7 @@ def test_human_review_queue_rejects_a_second_input():
     with pytest.raises(ValidationError) as err:
         m.parse_stage(S(
             id="q", type="human_review_queue",
-            inputs=[{"id": "a", "schema": _QUEUE_IN_SCHEMA}, {"id": "b", "schema": _QUEUE_IN_SCHEMA}],
+            inputs=[{"id": "a"}, {"id": "b"}],
             queue={"reviewed_columns": {"score": "reviewed_score"}, "verdict_column": "v",
                    "reviewer_column": "r", "reviewed_at_column": "at"},
             signature={
@@ -288,7 +278,7 @@ def test_source_parses_as_sourceref(tmp_path):
 def test_queue_needs_no_hash_source_declared():
     # A queue row is matched to a cached decision by fingerprinting the row itself.
     s = m.parse_stage(S(
-        id="rev", type="human_review_queue", inputs=[{"id": "a", "schema": _QUEUE_IN_SCHEMA}],
+        id="rev", type="human_review_queue", inputs=[{"id": "a"}],
         signature={
             "form": "extends",
             "reads": reads_of("a", _QUEUE_IN_COLUMNS),
@@ -336,8 +326,7 @@ def test_aggregate_output_column_required():
 def test_aggregate_valid():
     m.parse_stage(S(
         id="agg", type="aggregate",
-        inputs=[{"id": "a", "schema": {"columns": [{"name": "g", "type": "str", "nullable": True},
-                                                   {"name": "x", "type": "int", "nullable": True}]}}],
+        inputs=[{"id": "a"}],
         signature={
             "form": "replaces",
             "reads": [
@@ -382,7 +371,7 @@ def test_unknown_file_format_rejected(tmp_path):
 def test_model_enum_accepts_known():
     s = m.parse_stage(S(
         id="e", type="llm_transform",
-        inputs=[{"id": "a", "schema": {"columns": [{"name": "id", "type": "str", "nullable": True}]}}],
+        inputs=[{"id": "a"}],
         signature={"form": "extends", "adds": [{"name": "out", "type": "str", "nullable": True}]},
         llm={"prompt_template": "p", "model": "claude-haiku-4-5"}))
     assert s.llm.model == LLMModel.claude_haiku_4_5
@@ -410,10 +399,10 @@ def test_validate_stage_helper(tmp_path):
 
 
 # ── PR: typed stage contract ─────────────────────────────────────────────────
-def test_inputs_are_refs_with_schema():
+def test_inputs_are_upstream_ids():
     s = m.parse_stage(S(
         id="x", type="python_frame_function",
-        inputs=[{"id": "a", "schema": {"columns": [{"name": "k", "type": "str", "nullable": True}]}}],
+        inputs=[{"id": "a"}],
         signature={
             "form": "replaces",
             "reads": [{"input": "a", "columns": _K_SCHEMA["columns"]}],
@@ -422,16 +411,15 @@ def test_inputs_are_refs_with_schema():
         function={"kind": "inline", "code": "def transform(row): return row"},
     ))
     assert s.input_ids == ["a"]
-    assert s.inputs[0].table_schema is not None
 
 
-def test_inputs_bare_id_shorthand_normalises_then_fails_on_the_missing_schema():
-    issues = m.validate_stage(S(
+def test_inputs_bare_id_shorthand_normalises_to_a_ref():
+    s = m.parse_stage(S(
         id="x", type="python_frame_function", inputs=["a"],
         signature={"form": "replaces", "produces": _K_SCHEMA["columns"]},
         function={"kind": "inline", "code": "def transform(row): return row"},
     ))
-    assert any("inputs.0.schema" in issue for issue in issues)
+    assert s.input_ids == ["a"]
 
 
 def test_file_connector_without_path_is_valid():
@@ -498,39 +486,32 @@ def test_stage_eval_block_is_kept(tmp_path):
 
 
 def test_llm_transform_rejects_double_braced_input_column():
-    # {{content}} is an escaped literal via str.format_map; the data never injects.
-    with pytest.raises(ValidationError, match="double-brace"):
-        m.parse_stage(S(
-            id="extract", type="llm_transform",
-            inputs=[{"id": "load", "schema": {
-                "columns": [{"name": "content", "type": "str", "nullable": True}]}}],
-            signature={
-                "form": "extends",
-                "adds": [{"name": "out", "type": "str", "nullable": True}],
-            },
-            llm={"prompt_template": "Analyze {{content}} now"}))
+    assert "double-brace" in "; ".join(m.validate_workflow_draft([
+        source_stage("load", [{"name": "content", "type": "str", "nullable": True}]),
+        S(id="extract", type="llm_transform",
+          inputs=[{"id": "load"}],
+          signature={"form": "extends",
+                     "adds": [{"name": "out", "type": "str", "nullable": True}]},
+          llm={"prompt_template": "Analyze {{content}} now"}),
+    ]))
 
 
 def test_llm_transform_rejects_spaced_double_braced_input_column():
-    # "{{ content }}" is an escaped literal under str.format_map, just like "{{content}}".
-    with pytest.raises(ValidationError, match="double-brace"):
-        m.parse_stage(S(
-            id="extract", type="llm_transform",
-            inputs=[{"id": "load", "schema": {
-                "columns": [{"name": "content", "type": "str", "nullable": True}]}}],
-            signature={
-                "form": "extends",
-                "adds": [{"name": "out", "type": "str", "nullable": True}],
-            },
-            llm={"prompt_template": "Analyze {{ content }} now"}))
+    assert "double-brace" in "; ".join(m.validate_workflow_draft([
+        source_stage("load", [{"name": "content", "type": "str", "nullable": True}]),
+        S(id="extract", type="llm_transform",
+          inputs=[{"id": "load"}],
+          signature={"form": "extends",
+                     "adds": [{"name": "out", "type": "str", "nullable": True}]},
+          llm={"prompt_template": "Analyze {{ content }} now"}),
+    ]))
 
 
 def test_llm_transform_allows_prompt_that_injects_nothing():
     # Unusual but not strictly wrong — must NOT be rejected by the double-brace check.
     s = m.parse_stage(S(
         id="extract", type="llm_transform",
-        inputs=[{"id": "load", "schema": {
-            "columns": [{"name": "content", "type": "str", "nullable": True}]}}],
+        inputs=[{"id": "load"}],
         signature={"form": "extends", "adds": [{"name": "out", "type": "str", "nullable": True}]},
         llm={"prompt_template": "score the row"}))
     assert s.llm is not None
@@ -539,8 +520,7 @@ def test_llm_transform_allows_prompt_that_injects_nothing():
 def test_llm_transform_accepts_single_brace_input_column():
     s = m.parse_stage(S(
         id="extract", type="llm_transform",
-        inputs=[{"id": "load", "schema": {
-            "columns": [{"name": "content", "type": "str", "nullable": True}]}}],
+        inputs=[{"id": "load"}],
         signature={
             "form": "extends",
             "reads": [
@@ -594,24 +574,21 @@ def test_data_template_required():
 
 def test_double_brace_checks_data_template_not_instructions():
     # {{text}} in prompt_data_template is the mistake the validator exists to catch.
-    with pytest.raises(ValidationError, match="double-brace"):
-        m.parse_stage(S(
-            id="extract", type="llm_transform",
-            inputs=[{"id": "load", "schema": {
-                "columns": [{"name": "text", "type": "str", "nullable": True}]}}],
-            signature={
-                "form": "extends",
-                "adds": [{"name": "out", "type": "str", "nullable": True}],
-            },
-            llm={"prompt_template": "Analyze {{text}} now"}))
+    assert "double-brace" in "; ".join(m.validate_workflow_draft([
+        source_stage("load", [{"name": "text", "type": "str", "nullable": True}]),
+        S(id="extract", type="llm_transform",
+          inputs=[{"id": "load"}],
+          signature={"form": "extends",
+                     "adds": [{"name": "out", "type": "str", "nullable": True}]},
+          llm={"prompt_template": "Analyze {{text}} now"}),
+    ]))
 
     # The SAME {{text}} placed only in prompt_instructions, with a valid
     # single-braced prompt_data_template, must NOT raise — the validator only
     # inspects the per-row template, never the instructions.
     s = m.parse_stage(S(
         id="extract", type="llm_transform",
-        inputs=[{"id": "load", "schema": {
-            "columns": [{"name": "text", "type": "str", "nullable": True}]}}],
+        inputs=[{"id": "load"}],
         signature={
             "form": "extends",
             "reads": [
@@ -643,14 +620,12 @@ def test_both_fields_round_trip():
 
 
 # ── schema-driven output deliverability ─────────────────────────────────────
-def test_output_schema_issues_raise_at_stage_construction():
+def test_output_schema_issues_raise_when_the_stage_is_placed():
     spec = {
         "id": "totals",
         "description": "Totals",
         "type": "aggregate",
-        # `rows` carries a schema so the mandate is satisfied and the
-        # deliverability issue below is the one that surfaces.
-        "inputs": [{"id": "rows", "schema": {"columns": [{"name": "company", "type": "str", "nullable": True}]}}],
+        "inputs": [{"id": "rows"}],
         "aggregate": {
             "group_by": ["company"],
             "aggregations": [{"output_column": "n", "formula": "count"}],
@@ -667,7 +642,10 @@ def test_output_schema_issues_raise_at_stage_construction():
         },
     }
     with pytest.raises(ValidationError, match="undeclared_extra"):
-        m.parse_stage(spec)
+        m.parse_workflow([
+            source_stage("rows", [{"name": "company", "type": "str", "nullable": True}]),
+            spec,
+        ])
 
 
 # ── mandatory input schemas and signature ────────────────────────────────────
@@ -717,20 +695,27 @@ NON_EXEMPT_TYPES = ["python_row_function", "python_frame_function", "enrich", "e
                     "aggregate", "human_review_queue"]
 
 
-def _schema_spec(stage_type, *, inputs_declared=True, declare_output=True):
-    """`inputs_declared`: one flag for all inputs, or a per-input list of flags."""
+def _schema_spec(stage_type, *, declare_output=True):
     ids = _INPUT_IDS.get(stage_type, ["facilities"])
-    flags = inputs_declared if isinstance(inputs_declared, list) else [inputs_declared] * len(ids)
-    schemas = [_LEFT_SCHEMA, _RIGHT_SCHEMA]
     kw = dict(
         id="s", type=stage_type,
-        inputs=[{"id": i, **({"schema": s} if f else {})}
-                for i, s, f in zip(ids, schemas, flags)],
+        inputs=[{"id": i} for i in ids],
         **_HANDLE_BLOCK[stage_type],
     )
     if declare_output:
         kw["signature"] = _SIGNATURE.get(stage_type, {"form": "extends"})
     return S(**kw)
+
+
+def _placed(stage_type, *, declare_output=True):
+    """The stage in a workflow supplying its inputs, which is what resolves its schemas."""
+    ids = _INPUT_IDS.get(stage_type, ["facilities"])
+    schemas = [_LEFT_SCHEMA, _RIGHT_SCHEMA]
+    workflow = m.parse_workflow([
+        *(source_stage(i, s["columns"]) for i, s in zip(ids, schemas)),
+        _schema_spec(stage_type, declare_output=declare_output),
+    ])
+    return workflow.find_workflow_stage("s")
 
 
 def _input_data_spec(tmp_path, *, declare_output=True):
@@ -749,27 +734,14 @@ def _rejection_message(spec) -> str:
 
 
 @pytest.mark.parametrize("t", NON_EXEMPT_TYPES)
-def test_stage_rejects_input_that_declares_no_schema(t):
-    msg = _rejection_message(_schema_spec(t, inputs_declared=False))
-    assert "inputs.0.schema" in msg
-    assert "Field required" in msg
-
-
-@pytest.mark.parametrize("t", NON_EXEMPT_TYPES)
 def test_stage_rejects_a_missing_signature(t):
     msg = _rejection_message(_schema_spec(t, declare_output=False))
     assert "signature" in msg and "Field required" in msg
 
 
-def test_stage_locates_only_the_input_that_declares_no_schema():
-    msg = _rejection_message(_schema_spec("enrich", inputs_declared=[True, False]))
-    assert "inputs.1.schema" in msg
-    assert "inputs.0.schema" not in msg
-
-
 @pytest.mark.parametrize("t", NON_EXEMPT_TYPES)
 def test_fully_declared_stage_accepted(t):
-    assert m.parse_stage(_schema_spec(t)).resolve_output_schema() is not None
+    assert _placed(t).output_schema is not None
 
 
 def test_input_data_rejects_a_missing_signature(tmp_path):
@@ -778,35 +750,18 @@ def test_input_data_rejects_a_missing_signature(tmp_path):
 
 
 def test_input_data_with_a_signature_accepted(tmp_path):
-    assert m.parse_stage(_input_data_spec(tmp_path)).resolve_output_schema() is not None
+    stage = m.parse_stage(_input_data_spec(tmp_path))
+    assert m.parse_workflow([stage.model_dump(by_alias=True, exclude_none=True)]) is not None
 
 
 def test_publish_producing_nothing_accepted():
-    s = m.parse_stage(_schema_spec("publish", declare_output=False))
-    assert s.resolve_output_schema() is None
+    assert _placed("publish", declare_output=False).output_schema is None
 
 
-def test_publish_rejects_input_that_declares_no_schema():
-    msg = _rejection_message(_schema_spec("publish", inputs_declared=False, declare_output=False))
-    assert "inputs.0.schema" in msg
-    assert "Field required" in msg
-
-
-def test_publish_fully_declared_accepted():
-    s = m.parse_stage(_schema_spec("publish", declare_output=False))
-    assert s.inputs[0].table_schema is not None
-
-
-_EMPTY_SCHEMA: dict[str, list[object]] = {"columns": []}
-
-
-def test_stage_rejects_input_whose_schema_declares_no_columns():
-    """An empty projection makes the edge check inert, so zero columns is not a declaration."""
-    spec = _schema_spec("python_row_function")
-    spec["inputs"] = [{"id": "facilities", "schema": _EMPTY_SCHEMA}]
-    msg = _rejection_message(spec)
-    assert "declares a schema with no columns" in msg
-    assert "facilities" in msg
+def test_publish_reads_what_its_upstream_supplies():
+    placed = _placed("publish", declare_output=False)
+    assert [c.name for c in placed.inputs[0].table_schema.columns] == [
+        c["name"] for c in _LEFT_SCHEMA["columns"]]
 
 
 def test_stage_rejects_a_signature_that_produces_no_columns():
@@ -818,13 +773,13 @@ def test_stage_rejects_a_signature_that_produces_no_columns():
 def test_output_schema_issues_surface_in_draft_validation():
     from app.models.workflow import validate_workflow_draft
 
-    issues = validate_workflow_draft([{
+    issues = validate_workflow_draft([
+        source_stage("rows", [{"name": "company", "type": "str", "nullable": True}]),
+        {
         "id": "totals",
         "description": "Totals",
         "type": "aggregate",
-        # `rows` carries a schema so the mandate is satisfied and the
-        # deliverability issue below is the one that surfaces.
-        "inputs": [{"id": "rows", "schema": {"columns": [{"name": "company", "type": "str", "nullable": True}]}}],
+        "inputs": [{"id": "rows"}],
         "aggregate": {
             "group_by": ["company"],
             "aggregations": [{"output_column": "n", "formula": "count"}],
@@ -839,5 +794,6 @@ def test_output_schema_issues_surface_in_draft_validation():
             ],
             "produces": [{"name": "undeclared_extra", "type": "str", "nullable": True}],
         },
-    }])
+        },
+    ])
     assert any("undeclared_extra" in issue for issue in issues)

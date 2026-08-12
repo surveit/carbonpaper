@@ -12,7 +12,7 @@ import pandas as pd
 from fastapi import HTTPException
 
 from app.core.stage_cache import StageCacheEntry
-from app.models import Column, Stage
+from app.models import Column, Stage, WorkflowStage
 from app.models.stages.human_review_queue import QueueConfig, ReviewVerdict
 from app.runtime.trace_links import RowTraceLinker
 from app.web.loading import QueueFingerprints, display_cell
@@ -97,7 +97,7 @@ class QueuePage:
 
 
 def build_queue_page(
-    project: str, run_id: str, stage_def: Stage, queue: QueueConfig,
+    project: str, run_id: str, stage_def: WorkflowStage, queue: QueueConfig,
     snapshot: pd.DataFrame | None, fingerprints: QueueFingerprints | None,
     drift: str | None,
 ) -> QueuePage:
@@ -152,15 +152,17 @@ def find_definition_drift(stage_def: Stage, halted_fingerprint: str) -> str | No
     )
 
 
-def require_reviewed_column(stage_def: Stage, target: str) -> Column:
-    output_schema = stage_def.resolve_output_schema()
-    assert output_schema is not None  # _schemas_declared: an outer is stored or resolves
+def require_reviewed_column(stage_def: WorkflowStage, target: str) -> Column:
+    output_schema = stage_def.output_schema
+    assert output_schema is not None  # extends-form: it resolves off the anchor input
     declared = output_schema.column_for_name(target)
     assert declared is not None  # find_queue_column_issues: every target is declared
     return declared
 
 
-def build_reviewed_fields(stage_def: Stage, queue: QueueConfig) -> list[ReviewedField]:
+def build_reviewed_fields(
+    stage_def: WorkflowStage, queue: QueueConfig
+) -> list[ReviewedField]:
     source_schema = stage_def.inputs[0].table_schema
     fields = []
     for source, target in queue.reviewed_columns.items():
@@ -174,7 +176,7 @@ def build_reviewed_fields(stage_def: Stage, queue: QueueConfig) -> list[Reviewed
 
 
 def describe_queued_columns(
-    stage_def: Stage, snapshot: pd.DataFrame | None
+    stage_def: WorkflowStage, snapshot: pd.DataFrame | None
 ) -> DescribedColumns:
     names = [str(c) for c in snapshot.columns] if snapshot is not None else []
     schema = stage_def.inputs[0].table_schema
@@ -191,9 +193,11 @@ def describe_queued_columns(
     )
 
 
-def resolve_lineage(stage_def: Stage, fingerprints: QueueFingerprints | None) -> Lineage:
+def resolve_lineage(
+    stage_def: WorkflowStage, fingerprints: QueueFingerprints | None
+) -> Lineage:
     # The queue has no output at halt, so the link points at the UPSTREAM stage's row.
-    input_ids = stage_def.input_ids
+    input_ids = stage_def.stage.input_ids
     if fingerprints is not None and fingerprints.row_ordinals is None:
         return Lineage(None, (
             "This run halted before the queue recorded each row's ordinal, so there is "
@@ -213,9 +217,9 @@ def build_lineage_urls(
     return [linker.build_row_trace_url(lineage.upstream_stage_id, o) for o in ordinals]
 
 
-def resolve_notes_label(stage_def: Stage, column: str) -> str:
-    output_schema = stage_def.resolve_output_schema()
-    assert output_schema is not None  # _schemas_declared: an outer is stored or resolves
+def resolve_notes_label(stage_def: WorkflowStage, column: str) -> str:
+    output_schema = stage_def.output_schema
+    assert output_schema is not None  # extends-form: it resolves off the anchor input
     declared = output_schema.column_for_name(column)
     if declared is not None and declared.description:
         return declared.description

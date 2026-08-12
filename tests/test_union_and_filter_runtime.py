@@ -19,7 +19,7 @@ _AB_SCHEMA = {"columns": [{"name": "a", "type": "str", "nullable": True}, {"name
 def _union_stage(sid: str, input_ids: list[str]) -> Stage:
     return parse_stage({
         "id": sid, "description": sid, "type": "union",
-        "inputs": [{"id": i, "schema": _AB_SCHEMA} for i in input_ids],
+        "inputs": [{"id": i} for i in input_ids],
         "signature": {"form": "replaces", "produces": _AB_SCHEMA["columns"]},
         "union": {},
     })
@@ -28,7 +28,7 @@ def _union_stage(sid: str, input_ids: list[str]) -> Stage:
 def _filter_stage(sid: str, input_id: str, predicate_code: str) -> Stage:
     return parse_stage({
         "id": sid, "description": sid, "type": "filter_rows",
-        "inputs": [{"id": input_id, "schema": _AB_SCHEMA}],
+        "inputs": [{"id": input_id}],
         "signature": {"form": "extends",
                       "reads": [{"input": input_id, "columns": _AB_SCHEMA["columns"]}]},
         "filter": {"code": predicate_code},
@@ -92,7 +92,7 @@ def test_a_filter_that_keeps_nothing_still_feeds_its_downstream_a_valid_frame(tm
     filt = _filter_stage("f", "src", "def should_include(row): return row['b'] > 99")
     tag = parse_stage({
         "id": "tag", "description": "tag", "type": "python_row_function",
-        "inputs": [{"id": "f", "schema": _AB_SCHEMA}],
+        "inputs": [{"id": "f"}],
         "signature": {"form": "extends",
                       "reads": [{"input": "f", "columns": _AB_SCHEMA["columns"]}],
                       "adds": [{"name": "note", "type": "str", "nullable": False}]},
@@ -212,7 +212,7 @@ def test_a_row_mapper_that_may_not_drop_still_rejects_a_none_row(tmp_path):
     load = _load_stage("src", src, tmp_path)
     mapper = parse_stage({
         "id": "m", "description": "m", "type": "python_row_function",
-        "inputs": [{"id": "src", "schema": _AB_SCHEMA}],
+        "inputs": [{"id": "src"}],
         "signature": {
             "form": "extends",
             "reads": [{"input": "src", "columns": _AB_SCHEMA["columns"]}],

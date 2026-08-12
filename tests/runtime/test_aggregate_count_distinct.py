@@ -6,6 +6,7 @@ import pandas as pd
 from app.models import parse_stage
 from app.runtime.context import RunContext
 from app.runtime.stages.aggregate import handle_aggregate
+from conftest import place_stage
 
 # `a` repeats a registrant, `b` has nothing but nulls, `c` mixes a value with a null.
 FILINGS = pd.DataFrame({
@@ -19,7 +20,7 @@ _IN_SCHEMA = {"columns": [{"name": "firm", "type": "str", "nullable": False},
 def _counts() -> pd.DataFrame:
     stage = parse_stage({
         "id": "agg", "type": "aggregate", "description": "agg",
-        "inputs": [{"id": "filings", "schema": _IN_SCHEMA}],
+        "inputs": [{"id": "filings"}],
         "signature": {
             "form": "replaces",
             "reads": [{"input": "filings", "columns": _IN_SCHEMA["columns"]}],
@@ -30,7 +31,7 @@ def _counts() -> pd.DataFrame:
              "value_column": "registrant"}]},
     })
     ctx = RunContext.for_stages_outside_a_run(repo_root=None, run_dir=None)
-    return handle_aggregate(stage, {"filings": FILINGS}, ctx)
+    return handle_aggregate(place_stage(stage), {"filings": FILINGS}, ctx)
 
 
 def _by_firm() -> dict[str, int]:

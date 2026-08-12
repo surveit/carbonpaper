@@ -23,7 +23,7 @@ _KEEP_ACTIVE = "def should_include(row):\n    return row['status'] == 'active'\n
 def _filter_stage(code: str, tests: list[dict], stage_id: str = "keep_active") -> Stage:
     return parse_stage({
         "id": stage_id, "description": "Keep active", "type": "filter_rows",
-        "inputs": [{"id": "load", "schema": _SCHEMA}],
+        "inputs": [{"id": "load"}],
         "signature": {"form": "extends", "reads": reads_of("load", _SCHEMA["columns"])},
         "filter": {"summary": "Keeps the rows marked active.", "code": code},
         "tests": tests,

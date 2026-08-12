@@ -17,9 +17,7 @@ def _python_stage(*, summary=_SUMMARY, corner_cases=None) -> Stage:
         function["corner_cases"] = corner_cases
     return parse_stage({
         "id": "double", "description": "Double", "type": "python_row_function",
-        "inputs": [{"id": "load", "schema": {"columns": [
-            {"name": "amount", "type": "float", "nullable": False},
-        ]}}],
+        "inputs": [{"id": "load"}],
         "function": function,
         "signature": {
             "form": "extends",
@@ -92,10 +90,7 @@ def test_generator_rejects_non_python_stages():
     bad = parse_stage({
         "id": "pub", "description": "Publish", "type": "publish",
         "signature": {"form": "replaces"},
-        "inputs": [{"id": "double", "schema": {"columns": [
-            {"name": "amount", "type": "float", "nullable": False},
-            {"name": "doubled", "type": "float", "nullable": False},
-        ]}}],
+        "inputs": [{"id": "double"}],
         "function": {"kind": "inline", "code": "def transform(df, output_dir):\n    return df\n"},
         "publish": {},
     })
@@ -115,10 +110,7 @@ def _narrow_reads_stage() -> Stage:
     """Reads `amount` off an input that also carries `memo`, which flows past it."""
     return parse_stage({
         "id": "double", "description": "Double", "type": "python_row_function",
-        "inputs": [{"id": "load", "schema": {"columns": [
-            {"name": "amount", "type": "float", "nullable": False},
-            {"name": "memo", "type": "str", "nullable": False},
-        ]}}],
+        "inputs": [{"id": "load"}],
         "function": {"kind": "inline", "code": _CODE, "summary": _SUMMARY},
         "signature": {
             "form": "extends",

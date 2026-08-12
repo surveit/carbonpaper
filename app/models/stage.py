@@ -105,7 +105,8 @@ def validate_stage(spec: Any) -> list[str]:
 # schema_version column, and what an alembic revision rewrites a payload up to.
 # v2: primary_key left the stage vocabulary (the data model keeps its own).
 # v3: `name` became `description` — a stage has one name, its id.
-STAGE_SPEC_SCHEMA_VERSION = 3
+# v4: an input's stored schema left — the graph resolves it (app.models.workflow).
+STAGE_SPEC_SCHEMA_VERSION = 4
 
 
 def stage_to_spec_dict(stage: Stage) -> dict[str, Any]:

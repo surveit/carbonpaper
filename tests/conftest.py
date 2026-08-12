@@ -8,7 +8,8 @@ import pandas as pd
 import pytest
 
 from app.core.stage_cache import ReadOnlyStageCache
-from app.models import Stage
+from app.models import Stage, TableSchema, WorkflowStage, WorkflowStageInput
+from app.models.stages.signature import promised_output_schema, transform_input_schemas
 from app.models.run_manifest import StageContribution, read_run_manifest
 from app.models.run_parameters import RunParameters
 from app.runtime.context import (
@@ -28,6 +29,37 @@ def resumed_stages(project_dir: Path, run_id: str) -> tuple[list[Stage], str]:
     workflow_version = read_run_manifest(project_dir / "runs" / run_id).workflow_version
     assert workflow_version, f"run {run_id} records no workflow_version"
     return load_version_stages(project_dir, workflow_version), workflow_version
+
+
+def source_stage(stage_id: str, columns: list[dict[str, object]]) -> dict[str, object]:
+    """A source supplying `columns`, so a stage under test has an upstream to read them from."""
+    return {
+        "id": stage_id,
+        "type": "input_data",
+        "description": f"rows for {stage_id}",
+        "connector": {"kind": "file"},
+        "signature": {"form": "replaces", "produces": list(columns)},
+    }
+
+
+def place_stage(stage: Stage, **input_schemas: object) -> WorkflowStage:
+    """Each input supplies what the signature reads of it, unless this names a wider one."""
+    reads = transform_input_schemas(stage)
+    inputs = [
+        WorkflowStageInput(
+            id=ref.id,
+            table_schema=(
+                TableSchema.model_validate(input_schemas[ref.id])
+                if ref.id in input_schemas
+                else reads[ref.id]
+            ),
+        )
+        for ref in stage.inputs
+    ]
+    return WorkflowStage(
+        stage=stage, inputs=inputs,
+        output_schema=promised_output_schema(stage, inputs),
+    )
 
 
 def contribution_of(frame: pd.DataFrame) -> StageContribution:
@@ -123,3 +155,13 @@ def queue_added_columns(
 
 QUEUE_COLUMNS: dict[str, object] = queue_columns()
 
+
+
+def drop_input_schemas(spec: dict[str, object]) -> dict[str, object]:
+    """A stage no longer holds one; removing it from STORED payloads is a later migration's job."""
+    inputs = spec.get("inputs")
+    if not isinstance(inputs, list):
+        return spec
+    return {**spec, "inputs": [
+        {"id": ref["id"]} if isinstance(ref, dict) else ref for ref in inputs
+    ]}

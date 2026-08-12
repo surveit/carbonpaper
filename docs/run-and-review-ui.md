@@ -40,8 +40,9 @@ after injection — without that, the panel's JS (the tab strip, the run log) is
   in one pane, because the output reads as a diff *against* its input.
 - **Data**: the stage's output (the stage-aware diff below, or the plain
   preview), validation, then the upstream input previews in an `input rows`
-  disclosure, read-only. **Schema**: the schema each input edge declares, then
-  the output schema `resolve_output_schema()` reads off the stage's signature.
+  disclosure, read-only. **Schema**: what each input supplies, then the stage's
+  output — both resolved for the whole workflow and handed to the page as a
+  `WorkflowStage`.
 - The **simulator** is its own page, `…/stage/{sid}/simulate`, linked from
   Transform: the folded transform, the input rows with per-row checkboxes, the
   controls, then the result. Running it POSTs `…/stage/{sid}/preview`, which
@@ -97,10 +98,9 @@ the material to review, split in two: the columns the queue declares as
 `reviewed_columns` sources appear only in the review section, beside their
 controls; every other column of the row is background context, rendered as a
 key/value table (none of them under review → no table at all). `queue_page`
-describes each column from the schema the queue stage's input edge declares —
+describes each column from what the queue stage's upstream supplies —
 its `description` becomes the label's tooltip, and a column in the declared
-`primary_key` carries a `key` flag. Every stage declares a schema on each input
-edge, but a `primary_key` on it is optional, so where one is missing the page
+`primary_key` carries a `key` flag. A `primary_key` is optional, so where one is missing the page
 states that rather than guessing which columns identify a row. Each card's header
 states its **position in the queue** (`Row 1 of 3`) — an opaque key identifies
 nothing to a human, and the key column is already in the table, flagged.

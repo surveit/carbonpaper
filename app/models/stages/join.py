@@ -1,7 +1,7 @@
 """enrich/expand stage: the join handle config and its column checks."""
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, ClassVar, Literal
+from typing import TYPE_CHECKING, ClassVar, Literal, Sequence
 
 from pydantic import Field, model_validator
 
@@ -17,6 +17,7 @@ from app.models.stages.signature import ExtendsSignature
 
 if TYPE_CHECKING:
     from app.models.schema import TableSchema
+    from app.models.workflow_stage import WorkflowStageInput
 
 
 class JoinKey(_Base):
@@ -62,11 +63,15 @@ class JoinStage(AbstractStage):
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
         return {"join": self.join}
 
-    def find_config_column_issues(self) -> list[str]:
-        return find_join_column_issues(self)
+    def find_config_column_issues(
+        self, inputs: Sequence["WorkflowStageInput"]
+    ) -> list[str]:
+        return find_join_column_issues(self, inputs)
 
-    def find_signature_config_issues(self) -> list[str]:
-        return find_join_signature_issues(self)
+    def find_signature_schema_issues(
+        self, inputs: Sequence["WorkflowStageInput"]
+    ) -> list[str]:
+        return find_join_signature_issues(self, inputs)
 
 
 class EnrichStage(JoinStage):
@@ -90,10 +95,12 @@ ENRICH_WITH_SHADOWS_KEY_ISSUE = (
 )
 
 
-def find_join_column_issues(stage: "JoinStage") -> list[str]:
+def find_join_column_issues(
+    stage: "JoinStage", inputs: Sequence["WorkflowStageInput"]
+) -> list[str]:
     join = stage.join
-    left = resolve_input_columns(stage, 0)
-    right = resolve_input_columns(stage, 1)
+    left = resolve_input_columns(inputs, 0)
+    right = resolve_input_columns(inputs, 1)
     right_keys = {key.right for key in join.keys}
     issues: list[str] = []
     for key in join.keys:
@@ -112,7 +119,7 @@ def find_join_column_issues(stage: "JoinStage") -> list[str]:
             )
         if landed in left:
             issues.append(ENRICH_WITH_REWRITE_ISSUE.format(
-                sid=stage.id, landed=landed, subject=stage.inputs[0].id, src=src
+                sid=stage.id, landed=landed, subject=inputs[0].id, src=src
             ))
         elif landed in right_keys and landed != src:
             issues.append(ENRICH_WITH_SHADOWS_KEY_ISSUE.format(
@@ -121,9 +128,11 @@ def find_join_column_issues(stage: "JoinStage") -> list[str]:
     return issues
 
 
-def find_join_signature_issues(stage: "JoinStage") -> list[str]:
+def find_join_signature_issues(
+    stage: "JoinStage", inputs: Sequence["WorkflowStageInput"]
+) -> list[str]:
     signature = stage.signature
-    subject, reference = stage.inputs[0], stage.inputs[1]
+    subject, reference = inputs[0], inputs[1]
     reads_by_input = {
         entry.input: {column.name for column in entry.columns}
         for entry in signature.reads

@@ -81,7 +81,7 @@ def _write_project(
     })
     _write_stage(root, "02_clean", {
         "id": "clean", "description": "Clean", "type": "python_row_function",
-        "inputs": [{"id": "load", "schema": {"columns": _LOADED}}],
+        "inputs": [{"id": "load"}],
         "signature": {
             "form": "extends",
             "reads": [{"input": "load", "columns": _LOADED}],
@@ -91,7 +91,7 @@ def _write_project(
     })
     _write_stage(root, "03_flag", {
         "id": "flag", "description": "Flag", "type": "python_row_function",
-        "inputs": [{"id": "clean", "schema": {"columns": _CLEANED}}], "cache": flag_cache,
+        "inputs": [{"id": "clean"}], "cache": flag_cache,
         "signature": {
             "form": "extends",
             "reads": [{"input": "clean", "columns": _CLEANED}],
@@ -101,7 +101,7 @@ def _write_project(
     })
     _write_stage(root, "04_totals", {
         "id": "totals", "description": "Totals", "type": "python_frame_function",
-        "inputs": [{"id": "flag", "schema": {"columns": _FLAGGED}}],
+        "inputs": [{"id": "flag"}],
         "signature": {
             "form": "replaces",
             "reads": [{"input": "flag", "columns": _FLAGGED}],

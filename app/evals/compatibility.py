@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from typing import Sequence
 
 from app.models import (EvalConfig, EvalRunSettings, ScoringMetric, Stage,
-                        TableSchema, Workflow, validate_workflow)
+                        TableSchema, Workflow, WorkflowStage, validate_workflow)
 from app.evals.dataset_columns import get_injected_columns
 from app.evals.run_settings import resolve_eval_run_settings
 
@@ -26,18 +26,23 @@ class CompatibilityReport:
 def validate_eval_compatibility(config: EvalConfig,
                              stages: Sequence[Stage]) -> CompatibilityReport:
     """The precondition phases MUST short-circuit: the coverage checks raise, not degrade."""
-    by_id = {s.id: s for s in stages}
-
-    missing = _validate_stages_exist(config, by_id)
+    missing = _validate_stages_exist(config, {s.id: s for s in stages})
     if missing:
         return CompatibilityReport(ok=False, problems=missing, settings=None)
 
+    # Before anything reads a resolved schema: resolution is only defined on a
+    # workflow this comes back clean for.
+    structural = _validate_workflow_structure(stages)
+    if structural:
+        return CompatibilityReport(ok=False, problems=structural, settings=None)
+
+    workflow = Workflow(stages=list(stages))
+    by_id = workflow.index_workflow_stages_by_id()
     precondition_problems = (
         _validate_target_reachable(config, stages)
         + _validate_target_emits_checked_columns(config, by_id)
         + _validate_override_declares_output_schema(config, by_id)
         + _validate_no_reference_override_on_target(config)
-        + _validate_workflow_structure(stages)
     )
     if precondition_problems:
         return CompatibilityReport(ok=False, problems=precondition_problems, settings=None)
@@ -46,7 +51,7 @@ def validate_eval_compatibility(config: EvalConfig,
         _validate_eval_dataset_covers_override(config, by_id)
         + _validate_reference_overrides_cover_stages(config, by_id)
     )
-    settings, grain_problems = _resolve_grain_settings(config, stages)
+    settings, grain_problems = _resolve_grain_settings(config, workflow)
     problems += grain_problems
     return CompatibilityReport(ok=not problems, problems=problems, settings=settings)
 
@@ -81,18 +86,21 @@ def _find_descendants(stage_id: str, stages: Sequence[Stage]) -> set[str]:
 
 
 # ── Precondition: the override must declare an output schema ─────────────────
-def _validate_override_declares_output_schema(config: EvalConfig,
-                                           by_id: dict[str, Stage]) -> list[str]:
+def _validate_override_declares_output_schema(
+    config: EvalConfig, by_id: dict[str, WorkflowStage]
+) -> list[str]:
     if config.table is None:
         return []
     override = by_id[config.override_stage]
-    if override.resolve_output_schema() is None:
+    if override.output_schema is None:
         return [f"override stage `{override.id}` declares no output schema"]
     return []
 
 
 # ── Condition 2: every injected table is a valid stand-in ────────────────────
-def _validate_eval_dataset_covers_override(config: EvalConfig, by_id: dict[str, Stage]) -> list[str]:
+def _validate_eval_dataset_covers_override(
+    config: EvalConfig, by_id: dict[str, WorkflowStage]
+) -> list[str]:
     if config.table is None:
         return []
     override = by_id[config.override_stage]
@@ -103,12 +111,12 @@ def _validate_eval_dataset_covers_override(config: EvalConfig, by_id: dict[str, 
         required, config.table.table_schema, config.override_stage, "eval-dataset table")
 
 
-def _validate_reference_overrides_cover_stages(config: EvalConfig,
-                                            by_id: dict[str, Stage]) -> list[str]:
+def _validate_reference_overrides_cover_stages(
+    config: EvalConfig, by_id: dict[str, WorkflowStage]
+) -> list[str]:
     problems: list[str] = []
     for ov in config.reference_overrides:
-        stage = by_id[ov.stage_id]
-        stage_output = stage.resolve_output_schema()
+        stage_output = by_id[ov.stage_id].output_schema
         if stage_output is None:
             problems.append(f"cannot verify reference override `{ov.stage_id}`: "
                             f"stage declares no output schema")
@@ -127,10 +135,11 @@ def _validate_columns_covered(required: TableSchema, provided: TableSchema,
 
 
 # ── Conditions 3 + 3b: the target's declared output covers the checks ────────
-def _validate_target_emits_checked_columns(config: EvalConfig,
-                                        by_id: dict[str, Stage]) -> list[str]:
+def _validate_target_emits_checked_columns(
+    config: EvalConfig, by_id: dict[str, WorkflowStage]
+) -> list[str]:
     target = by_id[config.target_stage]
-    target_output = target.resolve_output_schema()
+    target_output = target.output_schema
     if target_output is None:
         return [f"cannot verify assertions: target `{target.id}` declares no output schema"]
     problems: list[str] = []
@@ -161,9 +170,9 @@ def _validate_workflow_structure(stages: Sequence[Stage]) -> list[str]:
 
 
 # ── Condition 5: the path must preserve grain (or fall back to a code scorer) ─
-def _resolve_grain_settings(config: EvalConfig,
-                            stages: Sequence[Stage]) -> tuple[EvalRunSettings, list[str]]:
-    workflow = Workflow.model_validate({"stages": [s.model_dump(mode="json") for s in stages]})
+def _resolve_grain_settings(
+    config: EvalConfig, workflow: Workflow
+) -> tuple[EvalRunSettings, list[str]]:
     overrides = [config.override_stage,
                 *(ov.stage_id for ov in config.reference_overrides)]
     settings = resolve_eval_run_settings(workflow, overrides, config.target_stage)

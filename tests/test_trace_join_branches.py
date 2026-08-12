@@ -14,6 +14,7 @@ from app.runtime.lineage import (
 from app.runtime.stages.join import handle_enrich, handle_expand
 from app.runtime.trace import trace_row
 from test_trace_helpers import write_run
+from conftest import place_stage
 
 FILINGS = pd.DataFrame({"client": ["Acme", "Borealis"], "amount": [500, 1200]})
 CONTRACTS = pd.DataFrame({"client": ["Acme"], "agency": ["HHS"]})
@@ -134,12 +135,8 @@ def test_handler_lineage_reaches_the_executor_channel():
     stage = parse_stage({
         "id": "j", "type": "enrich", "description": "j",
         "inputs": [
-            {"id": "filings", "schema": {"columns": [
-                {"name": "client", "type": "str", "nullable": False},
-                {"name": "amount", "type": "int", "nullable": False}]}},
-            {"id": "contracts", "schema": {"columns": [
-                {"name": "client", "type": "str", "nullable": False},
-                {"name": "agency", "type": "str", "nullable": False}]}},
+            {"id": "filings"},
+            {"id": "contracts"},
         ],
         "signature": {
             "form": "extends",
@@ -158,7 +155,7 @@ def test_handler_lineage_reaches_the_executor_channel():
         "join": {"keys": [{"left": "client", "right": "client"}],
                   "enrich_with": {"agency": "agency"}},
     })
-    out = handle_enrich(stage, {"filings": FILINGS, "contracts": CONTRACTS}, None)
+    out = handle_enrich(place_stage(stage), {"filings": FILINGS, "contracts": CONTRACTS}, None)
     lineage = read_row_lineage(out)
     assert lineage is not None
     assert len(lineage) == len(out)
@@ -175,12 +172,8 @@ def test_expand_records_the_subject_row_each_fanned_out_row_came_from():
     stage = parse_stage({
         "id": "x", "type": "expand", "description": "x",
         "inputs": [
-            {"id": "filings", "schema": {"columns": [
-                {"name": "client", "type": "str", "nullable": False},
-                {"name": "amount", "type": "int", "nullable": False}]}},
-            {"id": "contracts", "schema": {"columns": [
-                {"name": "client", "type": "str", "nullable": False},
-                {"name": "agency", "type": "str", "nullable": False}]}},
+            {"id": "filings"},
+            {"id": "contracts"},
         ],
         "signature": {
             "form": "extends",
@@ -201,7 +194,7 @@ def test_expand_records_the_subject_row_each_fanned_out_row_came_from():
     })
     two_contracts = pd.DataFrame({"client": ["Acme", "Acme"], "agency": ["HHS", "DOD"]})
 
-    out = handle_expand(stage, {"filings": FILINGS, "contracts": two_contracts}, None)
+    out = handle_expand(place_stage(stage), {"filings": FILINGS, "contracts": two_contracts}, None)
 
     assert list(out["agency"])[:2] == ["HHS", "DOD"]
     assert pd.isna(out["agency"].iat[2])

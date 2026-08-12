@@ -18,7 +18,7 @@ import pandas as pd
 from app.core.errors import StageNotInRun, StageOutputMissing
 from app.core.frames import read_frame_file
 from app.core.run_status import RunStatus, StageStatus
-from app.models import Stage
+from app.models import WorkflowStage
 from app.models.run_manifest import RunManifest, StageRecord, read_run_manifest
 
 from .context import RunContext
@@ -29,7 +29,7 @@ CONTRIBUTION_ATTR = "stage_contribution"
 
 
 def create_run_manifest(
-    ordered: list[Stage],
+    ordered: list[WorkflowStage],
     ctx: RunContext,
     *,
     run_id: str,
@@ -48,7 +48,8 @@ def create_run_manifest(
         dropped_columns={},
         status=RunStatus.RUNNING,
         stage_records=[
-            StageRecord.record_with_status(s, StageStatus.PENDING) for s in ordered
+            StageRecord.record_with_status(s.stage, StageStatus.PENDING)
+            for s in ordered
         ],
     )
 

@@ -27,10 +27,10 @@ def _seed_project(root: Path) -> None:
         {"id": "q2", "description": "Q2", "type": "input_data",
          "connector": {"kind": "file"}, "signature": {"form": "replaces", "produces": _SCHEMA["columns"]}},
         {"id": "both", "description": "Both quarters", "type": "union",
-         "inputs": [{"id": "q1", "schema": _SCHEMA}, {"id": "q2", "schema": _SCHEMA}],
+         "inputs": [{"id": "q1"}, {"id": "q2"}],
          "signature": {"form": "replaces", "produces": _SCHEMA["columns"]}, "union": {}},
         {"id": "score", "description": "Score", "type": "llm_transform",
-         "inputs": [{"id": "both", "schema": _SCHEMA}],
+         "inputs": [{"id": "both"}],
          "signature": {
              "form": "extends",
              "reads": [{"input": "both", "columns": _SCHEMA["columns"]}],

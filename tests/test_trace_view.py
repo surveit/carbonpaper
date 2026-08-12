@@ -30,7 +30,7 @@ def _stages() -> dict[str, Stage]:
                          "signature": {"form": "replaces", "produces": _SEEDS_SCHEMA["columns"]}}),
         "enrich": _stage({
             "id": "enrich", "type": "python_row_function", "description": "Enrich",
-            "inputs": [{"id": "seeds", "schema": _SEEDS_SCHEMA}],
+            "inputs": [{"id": "seeds"}],
             "signature": {
                 "form": "extends",
                 "reads": [{"input": "seeds", "columns": _SEEDS_SCHEMA["columns"]}],
@@ -94,8 +94,7 @@ def test_trace_shows_instructions_and_data():
     stages = _stages()
     stages["score"] = _stage({
         "id": "score", "type": "llm_transform", "description": "Score",
-        "inputs": [{"id": "enrich", "schema": {
-            "columns": [{"name": "facility_id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True}]}}],
+        "inputs": [{"id": "enrich"}],
         "signature": {
             "form": "extends",
             "reads": [

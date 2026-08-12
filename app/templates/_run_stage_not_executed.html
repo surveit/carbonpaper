@@ -40,8 +40,8 @@
 {# _stage_executable.html renders the function source itself, off `function_code`. #}
 {% include "_stage_executable.html" %}
 
-{% if stage.resolve_output_schema() %}
-<div class="schema-card"><h4>output schema</h4>{{ schema_table(stage.resolve_output_schema()) }}</div>
+{% if workflow_stage and workflow_stage.output_schema %}
+<div class="schema-card"><h4>output schema</h4>{{ schema_table(workflow_stage.output_schema) }}</div>
 {% endif %}
 
 </div>{# /run-stage-panel #}

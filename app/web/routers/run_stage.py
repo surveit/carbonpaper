@@ -87,6 +87,7 @@ async def run_stage_partial(
             "run_id": run_id,
             "stage": stage_record,
             "stage_def": stage_def,
+            "workflow_stage": pinned.workflow_stage,
             "stage_def_error": pinned.error,
             "preview": output_preview,
             # None for every stage type outside the diff's scope, and for any
@@ -98,7 +99,7 @@ async def run_stage_partial(
             "input_previews": input_previews,
             "function_code": function_code,
             "llm_example": llm_example,
-            "test_views": (views := shape_test_views(stage_def)),
+            "test_views": (views := shape_test_views(pinned.workflow_stage)),
             "certification": build_certification(stage_def, views) if stage_def else None,
             "previewable": stage_def is not None and stage_def.type in PREVIEWABLE_TYPES,
             "links": resolve_panel_links(project, run_id),
@@ -272,8 +273,8 @@ async def run_stage_scratch_preview(
     pinned = run_service.load_pinned_stage_def(project, manifest, stage_id)
     if pinned.error is not None:
         return JSONResponse({"ok": False, "error": pinned.error}, status_code=409)
-    stage_def = pinned.stage
-    if stage_def is None:
+    workflow_stage = pinned.workflow_stage
+    if workflow_stage is None:
         raise HTTPException(status_code=404, detail=f"No stage '{stage_id}'")
 
     output_by_id = {
@@ -282,7 +283,7 @@ async def run_stage_scratch_preview(
 
     try:
         result = run_stage_preview(
-            stage_def=stage_def,
+            workflow_stage=workflow_stage,
             run_dir=run_dir,
             repo_root=REPO_ROOT,
             output_by_id=output_by_id,

@@ -8,9 +8,9 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.core.errors import RunVersionUnresolvableError
-from app.models import Stage
+from app.models import Stage, WorkflowStage
 from app.models.review_guide import ReviewGuideStep
-from app.models.workflow import sort_stages_by_dependency
+from app.models.workflow import resolve_workflow_stages, sort_stages_by_dependency
 from app.services.run import load_run_version, read_output_column_counts
 from app.services.versioning import find_latest_review_guide
 
@@ -25,9 +25,9 @@ class GuideStageView:
     executed: bool
     # The two halves of the output frame's shape, both measured off what THIS RUN wrote
     # — the rows off its manifest record, the columns off the footer of the frame file
-    # that record names. Neither is what the version's signatures promise: an input edge
-    # only has to be SATISFIABLE by its upstream, so that promise runs narrower than the
-    # frame the stage wrote.
+    # that record names. Neither is what the version's signatures promise: most stage
+    # types do not trim their output frame to the schema they declared, so that promise
+    # can run narrower than the frame the stage wrote.
     #
     # They are read separately and either can be None on its own, so a reader must
     # state the half it has rather than pair a measured number with a missing one.
@@ -78,20 +78,20 @@ def build_run_guide_view(project: str, manifest: dict[str, Any]) -> RunGuideView
     )
 
 
-def list_written_columns(stage: Stage) -> list[str]:
+def list_written_columns(workflow_stage: WorkflowStage) -> list[str]:
     """The columns the output adds to `inputs[0]` — the subject side of a join."""
-    output_schema = stage.resolve_output_schema()
+    output_schema = workflow_stage.output_schema
     if output_schema is None:
         return []
-    if not stage.inputs:
+    if not workflow_stage.inputs:
         return [column.name for column in output_schema.columns]
-    added = output_schema.subtract(stage.inputs[0].table_schema, strict=False)
+    added = output_schema.subtract(workflow_stage.inputs[0].table_schema, strict=False)
     return [column.name for column in added.columns]
 
 
-def _index_stages_in_execution_order(stages: list[Stage]) -> dict[str, Stage]:
+def _index_stages_in_execution_order(stages: list[Stage]) -> dict[str, WorkflowStage]:
     """The returned mapping's insertion order is load-bearing: it IS the execution order."""
-    by_id = {stage.id: stage for stage in stages}
+    by_id = {workflow_stage.id: workflow_stage for workflow_stage in resolve_workflow_stages(stages)}
     return {draft.id: by_id[draft.id] for draft in sort_stages_by_dependency(stages)}
 
 
@@ -119,7 +119,7 @@ def _read_run_measurements(project: str, manifest: dict[str, Any]) -> _RunMeasur
 
 
 def _view_step(
-    step: ReviewGuideStep, by_id: dict[str, Stage], measured: _RunMeasurements
+    step: ReviewGuideStep, by_id: dict[str, WorkflowStage], measured: _RunMeasurements
 ) -> GuideStepView:
     stages = _view_stages(step.stage_ids, by_id, measured)
     return GuideStepView(
@@ -132,7 +132,7 @@ def _view_step(
 
 
 def _find_step_outputs(
-    stages: list[GuideStageView], by_id: dict[str, Stage]
+    stages: list[GuideStageView], by_id: dict[str, WorkflowStage]
 ) -> list[GuideStageView]:
     feeding = {
         upstream_id
@@ -150,12 +150,12 @@ def _find_step_outputs(
     return [view for view in stages if view.stage_id not in feeding]
 
 
-def _walk_upstream_stage_ids(stage_id: str, by_id: dict[str, Stage]) -> set[str]:
+def _walk_upstream_stage_ids(stage_id: str, by_id: dict[str, WorkflowStage]) -> set[str]:
     seen: set[str] = set()
     frontier = [stage_id]
     while frontier:
-        stage = by_id.get(frontier.pop())
-        for source in stage.inputs if stage is not None else []:
+        workflow_stage = by_id.get(frontier.pop())
+        for source in workflow_stage.inputs if workflow_stage is not None else []:
             if source.id not in seen:
                 seen.add(source.id)
                 frontier.append(source.id)
@@ -163,7 +163,7 @@ def _walk_upstream_stage_ids(stage_id: str, by_id: dict[str, Stage]) -> set[str]
 
 
 def _view_stages(
-    stage_ids: list[str], by_id: dict[str, Stage], measured: _RunMeasurements
+    stage_ids: list[str], by_id: dict[str, WorkflowStage], measured: _RunMeasurements
 ) -> list[GuideStageView]:
     named = set(stage_ids)
     ordered = [stage_id for stage_id in by_id if stage_id in named]
@@ -174,12 +174,12 @@ def _view_stages(
 
 
 def _view_stage(
-    stage_id: str, stage: Stage | None, measured: _RunMeasurements
+    stage_id: str, workflow_stage: WorkflowStage | None, measured: _RunMeasurements
 ) -> GuideStageView:
     return GuideStageView(
         stage_id=stage_id,
-        stage=stage,
-        written_columns=list_written_columns(stage) if stage is not None else [],
+        stage=None if workflow_stage is None else workflow_stage.stage,
+        written_columns=[] if workflow_stage is None else list_written_columns(workflow_stage),
         executed=stage_id in measured.executed,
         output_row_count=measured.row_counts.get(stage_id),
         column_count=measured.column_counts.get(stage_id),

@@ -1,12 +1,12 @@
 """aggregate stage: the config block, plus column validation on both the
 input and output side — `group_by`, each aggregation's `value_column`, and
-every column an aggregation's `where` references must resolve against the
-stage's input edge; and the signature's `produces` must be exactly what
+every column an aggregation's `where` references must resolve against what
+the stage's input supplies; and the signature's `produces` must be exactly what
 group_by + the aggregations compute."""
 from __future__ import annotations
 
 from enum import Enum
-from typing import ClassVar, Literal, Optional
+from typing import TYPE_CHECKING, ClassVar, Literal, Optional, Sequence
 
 from pydantic import Field, model_validator
 
@@ -23,6 +23,8 @@ from app.models.stages.shared import (
 from app.models.stages.stage_type_spec import StageTypeSpec
 from app.models.stages.signature import ReplacesSignature
 
+if TYPE_CHECKING:
+    from app.models.workflow_stage import WorkflowStageInput
 
 
 class AggFormula(str, Enum):
@@ -68,11 +70,15 @@ class AggregateStage(AbstractStage):
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
         return {"aggregate": self.aggregate}
 
-    def find_config_column_issues(self) -> list[str]:
-        return find_aggregate_column_issues(self)
+    def find_config_column_issues(
+        self, inputs: Sequence["WorkflowStageInput"]
+    ) -> list[str]:
+        return find_aggregate_column_issues(self, inputs)
 
-    def find_signature_config_issues(self) -> list[str]:
-        return find_aggregate_signature_issues(self)
+    def find_signature_schema_issues(
+        self, inputs: Sequence["WorkflowStageInput"]
+    ) -> list[str]:
+        return find_aggregate_signature_issues(self, inputs)
 
 
 # Aggregation formula names, compared as plain strings both by
@@ -85,9 +91,11 @@ AGG_FORMULA_FIRST = "first"
 AGG_FORMULA_LIST = "list"
 
 
-def find_aggregate_column_issues(stage: "AggregateStage") -> list[str]:
+def find_aggregate_column_issues(
+    stage: "AggregateStage", inputs: Sequence["WorkflowStageInput"]
+) -> list[str]:
     aggregate = stage.aggregate
-    cols = resolve_input_columns(stage, 0)
+    cols = resolve_input_columns(inputs, 0)
     issues = [
         COLUMN_ISSUE.format(sid=stage.id, field="aggregate.group_by", col=g, cols=sorted(cols))
         for g in aggregate.group_by
@@ -112,10 +120,12 @@ def find_aggregate_column_issues(stage: "AggregateStage") -> list[str]:
     return issues
 
 
-def find_aggregate_signature_issues(stage: "AggregateStage") -> list[str]:
+def find_aggregate_signature_issues(
+    stage: "AggregateStage", inputs: Sequence["WorkflowStageInput"]
+) -> list[str]:
     signature = stage.signature
     aggregate = stage.aggregate
-    input_id = stage.inputs[0].id
+    input_id = inputs[0].id
 
     consumed = set(aggregate.group_by)
     consumed.update(op.value_column for op in aggregate.aggregations if op.value_column)
@@ -142,7 +152,7 @@ def find_aggregate_signature_issues(stage: "AggregateStage") -> list[str]:
         for name in sorted(consumed - declared)
     )
 
-    computed = compute_aggregate_output_types(aggregate, stage.inputs[0].table_schema)
+    computed = compute_aggregate_output_types(aggregate, inputs[0].table_schema)
     issues.extend(find_declared_vs_computed_issues(
         stage.id, "aggregate signature",
         TableSchema(columns=signature.produces), computed,

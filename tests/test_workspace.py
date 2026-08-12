@@ -40,7 +40,7 @@ def _write_stage(compiled: Path, order: int, sid: str, stype: str, inputs: list[
         if stype == "llm_transform"
         else {"form": "replaces", "produces": _LLM_IN_SCHEMA["columns"]})
     if inputs:
-        stage["inputs"] = [{"id": dep, "schema": _LLM_IN_SCHEMA} for dep in inputs]
+        stage["inputs"] = [{"id": dep} for dep in inputs]
     (compiled / f"{order:02d}_{sid}.json").write_text(json.dumps(stage), encoding="utf-8")
 
 

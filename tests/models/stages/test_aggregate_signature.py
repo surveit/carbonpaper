@@ -1,24 +1,22 @@
 from __future__ import annotations
 
-import pytest
-from pydantic import ValidationError
+from app.models.workflow import parse_workflow, validate_workflow_draft
+from conftest import source_stage
 
-from app.models.stage import parse_stage
+_EDGE_COLUMNS = [
+    {"name": "company", "type": "str", "nullable": True},
+    {"name": "revenue", "type": "int", "nullable": True},
+    {"name": "region", "type": "str", "nullable": True},
+]
 
 
 def _aggregate_stage(*, produces, aggregations):
-    edge_schema = {
-        "columns": [
-            {"name": "company", "type": "str", "nullable": True},
-            {"name": "revenue", "type": "int", "nullable": True},
-            {"name": "region", "type": "str", "nullable": True},
-        ],
-    }
+    edge_schema = {"columns": _EDGE_COLUMNS}
     return {
         "id": "totals",
         "description": "Company totals",
         "type": "aggregate",
-        "inputs": [{"id": "facilities", "schema": edge_schema}],
+        "inputs": [{"id": "facilities"}],
         "aggregate": {"group_by": ["company"], "aggregations": aggregations},
         "signature": {
             "form": "replaces",
@@ -35,10 +33,20 @@ def _reads_for(aggregations, edge_schema):
     return [by_name[name] for name in dict.fromkeys(consumed) if name in by_name]
 
 
+def _workflow(stage_dict):
+    return [source_stage("facilities", _EDGE_COLUMNS), stage_dict]
+
+
+def _placed_stage(stage_dict):
+    return parse_workflow(_workflow(stage_dict)).find_workflow_stage("totals")
+
+
+def _placed(stage_dict):
+    return _placed_stage(stage_dict).stage
+
+
 def _issues(stage_dict) -> str:
-    with pytest.raises(ValidationError) as err:
-        parse_stage(stage_dict)
-    return str(err.value)
+    return "; ".join(validate_workflow_draft(_workflow(stage_dict)))
 
 
 def test_declared_column_not_producible_rejected():
@@ -71,14 +79,13 @@ def test_mean_output_declared_non_float_rejected():
 
 
 def test_sum_of_int_declared_int_accepted():
-    stage = parse_stage(_aggregate_stage(
+    assert _issues(_aggregate_stage(
         produces=[{"name": "company", "type": "str", "nullable": True},
                         {"name": "total", "type": "int", "nullable": True}],
         aggregations=[
             {"output_column": "total", "formula": "sum", "value_column": "revenue"},
         ],
-    ))
-    assert stage.id == "totals"
+    )) == ""
 
 
 def test_sum_of_int_declared_str_rejected():
@@ -93,14 +100,13 @@ def test_sum_of_int_declared_str_rejected():
 
 def test_sum_of_str_declared_str_accepted():
     # pandas sum of a string column concatenates, so sum over str gives str.
-    stage = parse_stage(_aggregate_stage(
+    assert _issues(_aggregate_stage(
         produces=[{"name": "company", "type": "str", "nullable": True},
                         {"name": "all_regions", "type": "str", "nullable": True}],
         aggregations=[
             {"output_column": "all_regions", "formula": "sum", "value_column": "region"},
         ],
-    ))
-    assert stage.id == "totals"
+    )) == ""
 
 
 def test_sum_of_str_declared_int_rejected():
@@ -123,15 +129,14 @@ def test_count_distinct_without_a_value_column_rejected():
 
 
 def test_count_distinct_output_declared_int_accepted():
-    stage = parse_stage(_aggregate_stage(
+    assert _issues(_aggregate_stage(
         produces=[{"name": "company", "type": "str", "nullable": True},
                         {"name": "n_regions", "type": "int", "nullable": True}],
         aggregations=[
             {"output_column": "n_regions", "formula": "count_distinct",
              "value_column": "region"},
         ],
-    ))
-    assert stage.id == "totals"
+    )) == ""
 
 
 def test_count_distinct_output_declared_as_the_value_type_rejected():
@@ -146,14 +151,13 @@ def test_count_distinct_output_declared_as_the_value_type_rejected():
 
 
 def test_list_op_declared_list_of_value_type_accepted():
-    stage = parse_stage(_aggregate_stage(
+    assert _issues(_aggregate_stage(
         produces=[{"name": "company", "type": "str", "nullable": True},
                         {"name": "regions", "type": "list[str]", "nullable": True}],
         aggregations=[
             {"output_column": "regions", "formula": "list", "value_column": "region"},
         ],
-    ))
-    assert stage.id == "totals"
+    )) == ""
 
 
 def test_list_op_declared_scalar_rejected():
@@ -175,7 +179,7 @@ def test_group_by_column_type_must_match_edge():
 
 
 def test_valid_aggregate_passes():
-    stage = parse_stage(_aggregate_stage(
+    assert _issues(_aggregate_stage(
         produces=[
             {"name": "company", "type": "str", "nullable": True},
             {"name": "n", "type": "int", "nullable": True},
@@ -185,8 +189,7 @@ def test_valid_aggregate_passes():
             {"output_column": "n", "formula": "count"},
             {"output_column": "avg_revenue", "formula": "mean", "value_column": "revenue"},
         ],
-    ))
-    assert stage.id == "totals"
+    )) == ""
 
 
 # ---- group_by: [] — the whole frame as one group ---------------------------
@@ -208,7 +211,7 @@ def _whole_frame_stage(*, produces, aggregations):
 
 
 def test_whole_frame_producing_the_aggregations_alone_accepted():
-    stage = parse_stage(_whole_frame_stage(
+    stage = _placed(_whole_frame_stage(
         produces=[{"name": "n", "type": "int", "nullable": True},
                   {"name": "total", "type": "int", "nullable": True}],
         aggregations=[{"output_column": "n", "formula": "count"},
@@ -250,7 +253,7 @@ def test_whole_frame_reading_a_column_the_config_never_consumes_rejected():
 def test_compute_aggregate_output_types_emits_the_aggregations_alone():
     from app.models.stages.aggregate import compute_aggregate_output_types
 
-    stage = parse_stage(_whole_frame_stage(
+    placed = _placed_stage(_whole_frame_stage(
         produces=[{"name": "n", "type": "int", "nullable": True},
                   {"name": "regions", "type": "list[str]", "nullable": True}],
         aggregations=[{"output_column": "n", "formula": "count"},
@@ -258,13 +261,13 @@ def test_compute_aggregate_output_types_emits_the_aggregations_alone():
                        "value_column": "region"}],
     ))
     computed = compute_aggregate_output_types(
-        stage.aggregate, stage.inputs[0].table_schema)
+        placed.stage.aggregate, placed.inputs[0].table_schema)
 
     assert computed == {"n": "int", "regions": "list[str]"}
 
 
 def test_whole_frame_counting_rows_consumes_no_column_at_all():
-    stage = parse_stage(_whole_frame_stage(
+    stage = _placed(_whole_frame_stage(
         produces=[{"name": "n", "type": "int", "nullable": True}],
         aggregations=[{"output_column": "n", "formula": "count"}],
     ))
