@@ -65,7 +65,15 @@ class LLMConfig(StageConfig):
             "Row-invariant guidance belongs in prompt_instructions."
         ),
     )
-    model: Optional[LLMModel] = None
+    model: Optional[LLMModel] = Field(
+        default=None,
+        description=(
+            "Which model answers. Name one on every stage you write: the run records "
+            "it beside the rows, so a reader can see what produced them. A stage that "
+            "names none is answered by whatever the deployment defaults to that day, "
+            "and the write path refuses it."
+        ),
+    )
     temperature: float = 0.0
     max_retries: int = 3
     response_format: Literal["json", "text"] = "json"
@@ -223,8 +231,8 @@ STAGE_TYPE_SPECS: dict[str, StageTypeSpec] = {
         blocks=["llm"],
         requires_inputs=True,
         min_inputs=1,
-        required=["prompt_data_template"],
-        optional=["model", "temperature", "response_format", "max_retries",
+        required=["prompt_data_template", "model"],
+        optional=["temperature", "response_format", "max_retries",
                      "rubric", "tools"],
         notes=(
             "Author it as TWO fields: prompt_instructions is the row-invariant guidance "

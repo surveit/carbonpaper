@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pandas as pd
+import pytest
 
 import app.runtime.stages.llm_transform as lt
 from app.core.agent.usage import LlmUsage
@@ -19,6 +20,19 @@ def test_summed_adds_fields_and_counts_calls():
 
 def test_summed_of_nothing_is_the_zero_instance():
     assert LlmUsage.summed([]) == LlmUsage()
+
+
+def test_the_model_survives_being_summed_with_the_zero_usages_beside_it():
+    # The batch path lands a chunk's whole usage on its first row and zeroes the rest.
+    paid = LlmUsage(cost_usd=0.01, calls=1, model="claude-haiku-4-5")
+    assert LlmUsage.summed([paid, LlmUsage(), LlmUsage()]).model == "claude-haiku-4-5"
+
+
+def test_totalling_two_models_raises_rather_than_keeping_one():
+    haiku = LlmUsage(calls=1, model="claude-haiku-4-5")
+    opus = LlmUsage(calls=1, model="claude-opus-5")
+    with pytest.raises(ValueError, match="two models"):
+        LlmUsage.summed([haiku, opus])
 
 
 def _llm_stage() -> Stage:
@@ -115,8 +129,11 @@ def test_run_manifest_records_stage_llm_usage(tmp_path, monkeypatch):
 
     assert manifest["status"] == "ok", manifest
     record = next(r for r in manifest["stage_records"] if r["stage_id"] == "classify")
+    # `model` is None because the stub replaces call_llm, which is where the runtime
+    # resolves and stamps it — the manifest reports "not recorded", never a guess.
     assert record["llm_usage"] == {
         "input_tokens": 20, "output_tokens": 8, "cost_usd": 0.002, "calls": 2,
+        "model": None,
     }
     # The non-LLM load stage carries no usage key at all (never a zero).
     load_rec = next(r for r in manifest["stage_records"] if r["stage_id"] == "load")

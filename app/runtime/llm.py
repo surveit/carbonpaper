@@ -158,10 +158,10 @@ def _run_agent(
             answer = run_sync(
                 asyncio.wait_for(agent.run(forward), timeout=timeout_s)
             )
-            _record_usage(usage_out, agent)
+            _record_usage(usage_out, agent, model_name)
             return answer.model_dump(mode="json")
         except Exception as exc:  # noqa: BLE001 — retry any backend failure, record its usage, re-raise the last
-            _record_usage(usage_out, agent)
+            _record_usage(usage_out, agent, model_name)
             emit_llm_detail(LLM_ERROR, text=str(exc) or type(exc).__name__)
             last_exc = exc
             if attempt + 1 < attempts:
@@ -200,6 +200,9 @@ def _forward_agent_events(
     return emit
 
 
-def _record_usage(usage_out: list[LlmUsage] | None, agent: Agent[BaseModel]) -> None:
+def _record_usage(
+    usage_out: list[LlmUsage] | None, agent: Agent[BaseModel], model_name: str
+) -> None:
+    """`model_name` is stamped here because this is where `model or llm.model or DEFAULT_MODEL` resolved."""
     if usage_out is not None and agent.last_usage is not None:
-        usage_out.append(agent.last_usage)
+        usage_out.append(agent.last_usage.model_copy(update={"model": model_name}))

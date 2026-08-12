@@ -9,7 +9,7 @@ from pathlib import Path
 from app.seeds.seed import discover_workflow_files, seed_all, seed_demo_data_if_enabled
 from app.services import project
 from app.services.project import describe_project
-from app.services.stage_edit import find_description_issues
+from app.services.stage_edit import find_description_issues, find_unnamed_model_issues
 
 _TUTORIAL = "tutorial_lobbying_triage"
 # Every committed bundle, in the order discover_workflow_files sorts them.
@@ -138,4 +138,18 @@ def test_every_seeded_summary_can_be_written_back() -> None:
     assert not offenders, (
         "a seeded stage carries prose its own write path refuses, so every edit to it "
         "fails and `generate tests` cannot save a suite:\n  " + "\n  ".join(offenders)
+    )
+
+
+def test_every_seeded_llm_stage_names_its_model() -> None:
+    """Same write path, same consequence: a seeded stage naming no model cannot be edited back."""
+    offenders = [
+        f"{path.name}::{stage['id']}: {issue}"
+        for path in discover_workflow_files()
+        for stage in json.loads(path.read_text(encoding="utf-8"))["stages"]
+        for issue in find_unnamed_model_issues(stage)
+    ]
+    assert not offenders, (
+        "a seeded llm stage names no model, so its rows are attributed to the deployment "
+        "default and every edit to it is refused:\n  " + "\n  ".join(offenders)
     )

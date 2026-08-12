@@ -108,12 +108,18 @@
     {% if llm or (u and u.calls) %}
     {% set batch = llm.batch_size if llm else None %}
     <dl class="stat-strip">
-        {% if llm %}
-        <div><dt>model</dt><dd><code>{{ llm.model }}</code></dd></div>
-        {% endif %}
+        {# Read off the RUN, never off `stage_def.llm.model`: the definition says which
+           model was asked for and may name none, while the run resolved one and called
+           it. A manifest written before the runtime recorded that says so, rather than
+           borrowing the definition's answer for a call it did not watch. #}
+        <div><dt>model</dt><dd>
+            {%- if u and u.model %}<code>{{ u.model }}</code>
+            {%- elif u and u.calls %}not recorded
+            {%- else %}none
+            {%- endif %}</dd></div>
         {% if u and u.calls %}
         <div><dt>calls</dt><dd>{{ "{:,}".format(u.calls) }}</dd></div>
-        {% if batch and batch > 1 %}<div><dt>rows per call</dt><dd>{{ batch }}</dd></div>{% endif %}
+        {% if batch and batch > 1 %}<div><dt>rows per call</dt><dd>up to {{ batch }}</dd></div>{% endif %}
         <div><dt>cost</dt><dd>{{ u.cost_usd | usd }}</dd></div>
         {% else %}
         {# `none` rather than a zero: the manifest recorded no call and no cost
@@ -124,9 +130,15 @@
     </dl>
     {% if u and u.calls %}
     {% if batch and batch > 1 %}
-    <p class="banner banner-warn">Rows were judged <b>{{ batch }} at a time</b>, not one by one —
-        each call was shown {{ batch }} rows together and answered for all of them. A row's answer
-        could have been swayed by the {{ batch - 1 }} beside it.</p>
+    {# The ceiling is config; the two totals are this run's own. A run of 6 rows must not
+       claim 12 were judged together, so the configured size is stated as a limit and the
+       calls and rows that actually happened are stated beside it. #}
+    <p class="banner banner-warn">Rows were judged in batches of <b>up to {{ batch }}</b>, not one by
+        one — this run answered {{ "{:,}".format(stage.output_row_count or 0) }} row{% if (stage.output_row_count or 0) != 1 %}s{% endif %}
+        in {{ "{:,}".format(u.calls) }} model call{% if u.calls != 1 %}s{% endif %}, and the last call
+        holds whatever is left over. The size is a deliberate trade: fewer, larger calls cost less to
+        run, and a row judged beside others is judged less independently than one judged alone.
+        A row's answer could have been swayed by the others in its call.</p>
     {% endif %}
     {% else %}
     {# `cached_rows` is absent from every manifest written before the runtime
