@@ -69,7 +69,7 @@ Each tool's own description says how it behaves; this says WHEN. Start by callin
 create_project(name, document) — the methodology prose becomes the project's source of
 record, and it returns the project record, whose `id` every other tool takes.
 
-  RESEARCH   read_data_model, describe_workflow, read_stage, get_project_status
+  RESEARCH   read_data_model, read_workflow_summary, read_stage, get_project_status
              run_workflow_test over a few rows, then
              profile_stage_output_data_range, to see what the data really holds,
              and read_stage_output_rows when the question is about a ROW
@@ -91,11 +91,10 @@ it. A run executes a stored version, and run_workflow(project_id, version_id?) i
 full one — get_run_status(project_id, run_id) follows it to its outcome. Publishing is a
 human's mark that they have looked at a version; it does not gate what a run may execute.
 
-An input step reads a file the project holds. list_files(project_id) is what it holds,
-and run_workflow's `files` binds one to a step by the sha256 it gives; no tool here moves
-bytes, so a file arrives by a POST to the `file_upload_url` that listing returns — which
-you make yourself, or hand to the person. list_files(null) is the files in no project,
-and move_file_to_project puts one in.
+An input step reads a file the project holds. list_files(project_id) is what it holds, and
+run_workflow's `files` binds one to a step by the sha256 it gives. To upload a file, POST
+to the returned file_upload_url. list_files(null) is the files in no project, and
+move_file_to_project puts one in.
 
 {REVIEW_GUIDE_NOTE}
 

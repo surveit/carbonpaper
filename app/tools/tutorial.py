@@ -92,7 +92,7 @@ def seed_tutorial_project(ctx: TutorialContext) -> TutorialAgentReference:
     return TutorialAgentReference(
         project=_read_seeded_record(name),
         version_id=version_id,
-        workflow=project_service.describe_workflow(name),
+        workflow=project_service.read_workflow_summary(name),
         input_bindings={
             stage_id: {"path": str(path), "format": "csv"}
             for stage_id, path in _CSV_BY_STAGE_ID.items()

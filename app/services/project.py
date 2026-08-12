@@ -82,7 +82,7 @@ def find_projects_by_name(name: str) -> list[Project]:
     return [record for record in Project.list() if record.label() == name]
 
 
-def describe_project(project_id: str) -> str:
+def read_project_name(project_id: str) -> str:
     """The name to SHOW for an id, falling back to the id — never a guessed name."""
     record = read_project_record(project_id)
     return project_id if record is None else record.display_name()
@@ -390,7 +390,7 @@ def list_project_listings() -> list[ProjectListing]:
     ]
 
 
-def describe_workflow(name: str) -> workspace.WorkflowSummary:
+def read_workflow_summary(name: str) -> workspace.WorkflowSummary:
     return workspace.project_workflow_summary(workspace.resolve_project_dir(name))
 
 

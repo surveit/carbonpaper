@@ -31,7 +31,7 @@ from app.services.loader import (
     load_compiled_dir,
 )
 from app.services.versioning import list_versions, load_version_stages
-from app.services.project import describe_project
+from app.services.project import read_project_name
 from app.services.terms import count_nouns
 from app.services.workspace import resolve_project_dir
 from app.web.config import projects_dir
@@ -65,7 +65,7 @@ def _build_project_card(p: Path) -> ProjectCard | None:
         return None
     return ProjectCard(
         id=p.name,
-        label=describe_project(p.name),
+        label=read_project_name(p.name),
         has_document=has_document,
         has_workflow=has_workflow,
         has_schemas=has_schemas,

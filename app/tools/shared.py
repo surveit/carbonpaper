@@ -141,9 +141,9 @@ async def sleep(seconds: int) -> dict[str, int]:
     return {"slept_seconds": slept}
 
 
-def describe_workflow(project_id: str) -> workspace.WorkflowSummary:
+def read_workflow_summary(project_id: str) -> workspace.WorkflowSummary:
     resolve_existing_project(project_id)
-    return project_service.describe_workflow(project_id)
+    return project_service.read_workflow_summary(project_id)
 
 
 class StageOutputRow(BaseModel):
@@ -232,7 +232,7 @@ _FUNCTIONS: dict[str, Callable[..., Any]] = {
     "run_workflow": run_workflow,
     "get_run_status": get_run_status,
     "sleep": sleep,
-    "describe_workflow": describe_workflow,
+    "read_workflow_summary": read_workflow_summary,
     "read_stage_output_rows": read_stage_output_rows,
 }
 
@@ -283,7 +283,7 @@ _SCHEMAS: dict[str, ToolInputSchema] = {
             f"How long to sleep. Clamped to {MAX_SLEEP_SECONDS} — sleep again to wait longer.",
         ],
     },
-    "describe_workflow": {"project_id": _PROJECT_ID},
+    "read_workflow_summary": {"project_id": _PROJECT_ID},
     "read_stage_output_rows": {
         "project_id": _PROJECT_ID,
         "run_id": Annotated[str, "The run whose stored output you want to read."],
@@ -304,7 +304,7 @@ _LABELS = {
     "run_workflow": "Running the workflow",
     "get_run_status": "Checking the run",
     "sleep": "Waiting",
-    "describe_workflow": "Reading the workflow",
+    "read_workflow_summary": "Reading the workflow",
     "read_stage_output_rows": "Reading the stage's rows",
 }
 

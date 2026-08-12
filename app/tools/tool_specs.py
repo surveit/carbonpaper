@@ -72,8 +72,8 @@ An empty document is refused and no project is written. Next: agree the
 project's terms — the words its methodology already uses — with the user, and
 store them with write_terms.""",
     ),
-    "describe_workflow": ToolSpec(
-        name="describe_workflow",
+    "read_workflow_summary": ToolSpec(
+        name="read_workflow_summary",
         description="""\
 Summarize a project's workflow: each stage's id, type, description, upstream
 input ids, and review state. Read this before editing so you know the current

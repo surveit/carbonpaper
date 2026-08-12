@@ -26,7 +26,7 @@ def workspace_with_a_project(tmp_path, monkeypatch):
     workspace.set_projects_dir(tmp_path)
     monkeypatch.setenv("CARBON_PAPER_FILES_ROOT", str(tmp_path / "files"))
     # A real project record, so the page's picker has something true to offer.
-    return create_project("demo", "A methodology.", source="test")
+    return create_project("demo", "A methodology.", source="test").id
 
 
 @pytest.fixture

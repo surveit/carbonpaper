@@ -76,7 +76,7 @@ def make_tutorial_tools(context: BaseModel) -> list[BoundToolSpec]:
             input_schema=eval_runs.RUN_EVAL_SCHEMA,
             label="Running the eval",
         ),
-        *shared.bind("run_workflow", "get_run_status", "sleep", "describe_workflow"),
+        *shared.bind("run_workflow", "get_run_status", "sleep", "read_workflow_summary"),
     ]
 
 

@@ -16,7 +16,6 @@ from app.web.breadcrumbs import build_runs_child_crumbs
 from app.services.project import project_exists
 from app.services.workspace import resolve_project_dir
 from app.web.config import templates
-from app.web.errors import NoSuchProject
 from app.web.project_view import shell_state
 from app.web.run_inputs import build_run_input_choices
 
@@ -26,7 +25,7 @@ router = APIRouter()
 @router.get("/project/{project}/runs/new", response_class=HTMLResponse)
 async def run_new(request: Request, project: str, version_id: str | None = None):
     if not project_exists(project):
-        raise NoSuchProject(project)
+        raise HTTPException(status_code=404, detail=f"No project '{project}'")
     # Every stored version is runnable (resolve_version_id reads no publication
     # state), so the picker offers all of them newest-first. Registered ahead of
     # /runs/{run_id}, which would otherwise match "new" as a run id.
@@ -60,7 +59,7 @@ async def run_inputs(project: str, version_id: str | None = None):
     """The chosen version's file inputs AND the project's files, so one fetch rebuilds
     every picker."""
     if not project_exists(project):
-        raise NoSuchProject(project)
+        raise HTTPException(status_code=404, detail=f"No project '{project}'")
     return JSONResponse(build_run_input_choices(project, version_id).model_dump())
 
 
@@ -68,7 +67,7 @@ async def run_inputs(project: str, version_id: str | None = None):
 async def upload_file(project: str, file: UploadFile = File(...)):
     """One multipart endpoint for the run form's Browse… and for `curl -F file=@…`."""
     if not project_exists(project):
-        raise NoSuchProject(project)
+        raise HTTPException(status_code=404, detail=f"No project '{project}'")
     if not file.filename:
         return JSONResponse({"ok": False, "error": "no file provided"}, status_code=400)
     # Off the event loop: the copy streams a file of any size to disk and hashes it.

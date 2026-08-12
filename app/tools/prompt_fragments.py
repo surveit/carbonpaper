@@ -32,7 +32,7 @@ CONCEPTS_NOTE = """\
 
 HOW_YOU_WORK_NOTE = """\
 # How you work
-Read before you edit (describe_workflow, read_stage). Prefer small, targeted changes.
+Read before you edit (read_workflow_summary, read_stage). Prefer small, targeted changes.
 Every edit may have complex validations, so large expensive edits that result in errors
 are token inefficient.
 

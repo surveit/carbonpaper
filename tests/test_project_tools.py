@@ -89,7 +89,7 @@ def test_read_tools_report_workspace(examples_root: Path) -> None:
     tools = _tools("alpha")
     assert [(p.id, p.name) for p in _tool(tools, "list_projects")()] == [("alpha", "alpha")]
     assert _tool(tools, "get_current_project")() == "alpha"
-    assert _tool(tools, "describe_workflow")("alpha").name == "alpha"
+    assert _tool(tools, "read_workflow_summary")("alpha").name == "alpha"
     assert '"id": "load"' in _tool(tools, "read_stage")("alpha", "load")
 
 
@@ -127,7 +127,7 @@ def test_project_id_cannot_escape_the_workspace(examples_root: Path) -> None:
     _seed(examples_root, "alpha")
     tools = _tools("alpha")
     with pytest.raises(ValueError, match="invalid project id"):
-        _tool(tools, "describe_workflow")("../outside")
+        _tool(tools, "read_workflow_summary")("../outside")
 
 
 # ── the review-guide tools ───────────────────────────────────────────────────

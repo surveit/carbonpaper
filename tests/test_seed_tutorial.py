@@ -140,7 +140,7 @@ def test_committed_tutorial_fixture_imports_and_validates_cleanly(tmp_path):
     imported_name = import_project(wf, name="tutorial_smoke")
     assert imported_name in project.list_projects()
 
-    summary = project.describe_workflow(imported_name)
+    summary = project.read_workflow_summary(imported_name)
     assert summary.issues == []
     assert [stage.id for stage in summary.stages] == _EXPECTED_STAGE_IDS
 

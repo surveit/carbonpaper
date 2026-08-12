@@ -129,7 +129,7 @@ async def upload_chat_file(sid: str, file: UploadFile = File(...),
     return JSONResponse({"ok": True, "sha256": record.sha256, "filename": record.filename,
                          "bytes": record.byte_count, "project_id": record.project_id,
                          "line": describe_attachment(
-                             record, project_service.describe_project(record.project_id)
+                             record, project_service.read_project_name(record.project_id)
                              if record.project_id else "")})
 
 

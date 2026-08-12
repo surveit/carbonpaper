@@ -8,7 +8,7 @@ from pathlib import Path
 
 from app.seeds.seed import discover_workflow_files, seed_all, seed_demo_data_if_enabled
 from app.services import project
-from app.services.project import describe_project
+from app.services.project import read_project_name
 from app.services.stage_edit import find_description_issues, find_unnamed_model_issues
 
 _TUTORIAL = "tutorial_lobbying_triage"
@@ -46,7 +46,7 @@ def test_seed_all_imports_every_committed_bundle_into_an_empty_workspace(tmp_pat
 
     imported = seed_all()
 
-    assert [describe_project(project_id) for project_id in imported] == _ALL_BUNDLES
+    assert [read_project_name(project_id) for project_id in imported] == _ALL_BUNDLES
     assert set(imported) <= set(project.list_projects())
 
 
@@ -54,7 +54,7 @@ def test_seed_all_skips_a_bundle_whose_project_already_exists(tmp_path):
     examples_dir = tmp_path / "examples"
     examples_dir.mkdir()
     first = seed_all()
-    assert [describe_project(project_id) for project_id in first] == _ALL_BUNDLES
+    assert [read_project_name(project_id) for project_id in first] == _ALL_BUNDLES
 
     second = seed_all()
 
@@ -104,7 +104,7 @@ def test_seed_demo_data_if_enabled_seeds_when_env_var_is_1(tmp_path, monkeypatch
 
     imported = seed_demo_data_if_enabled()
 
-    assert [describe_project(project_id) for project_id in imported] == _ALL_BUNDLES
+    assert [read_project_name(project_id) for project_id in imported] == _ALL_BUNDLES
     assert set(imported) <= set(project.list_projects())
 
 

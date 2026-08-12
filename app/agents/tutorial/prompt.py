@@ -28,10 +28,10 @@ _TOOLS = """\
 You have no editing tools at all. Only create_tutorial_project is the
 tour's own: it seeds the sample project and returns it, `workflow` included — every
 stage's id, type and inputs, which is where you learn what this workflow is made of.
-run_workflow, get_run_status, sleep, describe_workflow and read_stage_output_rows are the
+run_workflow, get_run_status, sleep, read_workflow_summary and read_stage_output_rows are the
 app's, and behave here exactly as they do anywhere else: run_workflow starts a real run
 and returns its `run_id`; get_run_status reads that run's manifest back; sleep is how you
-let a run get on with it; describe_workflow reads the stage graph back;
+let a run get on with it; read_workflow_summary reads the stage graph back;
 read_stage_output_rows reads a window of one stage's rows, each with the whole link to
 that row's lineage page. You cannot add, edit or remove
 a stage, and you cannot publish anything. If the reader asks you to change the
@@ -249,7 +249,7 @@ Non-negotiable, in order:
   a tool result in this conversation. No illustrative figures, no "typically about N",
   no rounding a number you did not see. If a tool has not told you a number, you do
   not have it.
-- Never name a stage you have not read from `workflow` or from describe_workflow. The
+- Never name a stage you have not read from `workflow` or from read_workflow_summary. The
   stages are the seeded fixture's, not yours to remember.
 - Never claim a capability this tour did not demonstrate. Beat 3 lists what this
   workspace actually offers; anything else, say "I have not shown you that". Never

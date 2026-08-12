@@ -189,9 +189,9 @@ def write_terms(project_id: str, terms: Terms) -> Terms:
     return shared.write_terms(project_id, terms)
 
 
-@mcp.tool(description=TOOL_SPECS["describe_workflow"].description)
-def describe_workflow(project_id: str) -> shared.workspace.WorkflowSummary:
-    return shared.describe_workflow(project_id)
+@mcp.tool(description=TOOL_SPECS["read_workflow_summary"].description)
+def read_workflow_summary(project_id: str) -> shared.workspace.WorkflowSummary:
+    return shared.read_workflow_summary(project_id)
 
 
 @mcp.tool(description=TOOL_SPECS["read_stage"].description)
