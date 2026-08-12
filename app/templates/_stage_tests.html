@@ -6,6 +6,7 @@
    before this button existed. Reads like a report: the headings alone give the
    case coverage; expanding a section shows the data. Non-passing sections start
    open. #}
+{% from "_stage_certification.html" import stage_certification %}
 {% if test_views or can_generate_tests %}
 <section class="exec-block test-report">
   <h2>🧪 Example behavior
@@ -15,6 +16,9 @@
     <span class="nr-edit-msg" data-role="generate-tests-msg"></span>
     {% endif %}
   </h2>
+  {# The badge states what these examples establish, so it leads the section they
+     are in rather than sitting under the step's description a screen above. #}
+  {{ stage_certification(certification) }}
   {% if not test_views %}
   <p class="muted">No examples yet.</p>
   {% endif %}

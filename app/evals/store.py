@@ -30,8 +30,13 @@ class EvalConfigEntry:
 
 
 def list_eval_configs(project_dir: Path) -> list[EvalConfigEntry]:
+    return list_project_eval_configs(project_dir.name)
+
+
+def list_project_eval_configs(project_id: str) -> list[EvalConfigEntry]:
+    """The id-taking twin: these documents are keyed by project name, never by path."""
     entries: list[EvalConfigEntry] = []
-    for doc_id, data in get_store().read_all("eval", f"{project_dir.name}/"):
+    for doc_id, data in get_store().read_all("eval", f"{project_id}/"):
         local_id = doc_id.split("/", 1)[1]
         try:
             entries.append(EvalConfigEntry(config=EvalConfig.model_validate(data), id=local_id))
@@ -83,8 +88,12 @@ def load_eval_run(project_dir: Path, run_id: str) -> EvalRun:
 
 
 def list_eval_runs(project_dir: Path, config_id: str) -> list[EvalRun]:
+    return list_project_eval_runs(project_dir.name, config_id)
+
+
+def list_project_eval_runs(project_id: str, config_id: str) -> list[EvalRun]:
     runs = [EvalRun.model_validate(data)
-            for _, data in get_store().read_all("eval_run", f"{project_dir.name}/")]
+            for _, data in get_store().read_all("eval_run", f"{project_id}/")]
     runs = [r for r in runs if r.config == config_id]
     runs.sort(key=lambda r: (r.started_at or "", r.id), reverse=True)
     return runs

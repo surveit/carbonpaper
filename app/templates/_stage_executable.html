@@ -11,7 +11,7 @@
    from this run's actual input first row, for LLM stages. #}
 {% from "_schema_table.html" import columns_table %}
 {% from "_stage_code.html" import stage_summary, stage_corner_cases %}
-{% from "_stage_certification.html" import stage_certification %}
+{% from "_stage_eval_check.html" import stage_eval_check %}
 
 {% if stage.connector %}
 <section class="exec-block">
@@ -34,12 +34,9 @@
 {% if stage.llm %}
 <section class="exec-block">
     <h2>✨ LLM call</h2>
-    {# Reply schema first, prompt second, settings last: a reviewer's first question
-       is how much of the data this stage can touch, and the reply schema bounds it. #}
-    {% if stage.signature and stage.signature.adds %}
-    <h3>expected answer shape</h3>
-    {{ columns_table(stage.signature.adds) }}
-    {% endif %}
+    {# One model call, read in the order it happens: what it is asked, what it is shown,
+       what shape must come back, what that produced on rows a person labelled, and only
+       then the dials. #}
     <h3>what the model is asked</h3>
     <pre class="prompt">{{ stage.llm.prompt_instructions }}</pre>
     <h3>what it sees, per row</h3>
@@ -60,6 +57,11 @@
         <pre class="yaml-block">{{ stage.llm.rubric | tojson(indent=2) }}</pre>
     </details>
     {% endif %}
+    {% if stage.signature and stage.signature.adds %}
+    <h3>expected answer shape</h3>
+    {{ columns_table(stage.signature.adds) }}
+    {% endif %}
+    {{ stage_eval_check(eval_coverages) }}
     <h3>settings</h3>
     <dl class="kv">
         <dt>model</dt><dd><code>{{ stage.llm.model }}</code></dd>
@@ -83,7 +85,7 @@
     <h2>🐍 Code transformation</h2>
     {{ stage_summary(stage.function.summary) }}
     {{ stage_corner_cases(stage.function.corner_cases) }}
-    {{ stage_certification(certification) }}
+    {{ stage_eval_check(eval_coverages) }}
     {# No `kind` row: its two values are `inline` (the code is in the Code block
        below, so saying so tells a reviewer nothing) and `module` (the code lives in
        a file on disk) — and the `module` row already states that case. The whole
@@ -103,7 +105,7 @@
     <h2>🛡️ Sandboxed code transformation</h2>
     {{ stage_summary(stage.starlark.summary) }}
     {{ stage_corner_cases(stage.starlark.corner_cases) }}
-    {{ stage_certification(certification) }}
+    {{ stage_eval_check(eval_coverages) }}
     {% if stage.starlark.function %}
     <dl class="kv">
         <dt>function</dt><dd><code>{{ stage.starlark.function }}</code></dd>
@@ -117,7 +119,7 @@
     <h2>🔎 Row filter</h2>
     {{ stage_summary(stage.filter.summary) }}
     {{ stage_corner_cases(stage.filter.corner_cases) }}
-    {{ stage_certification(certification) }}
+    {{ stage_eval_check(eval_coverages) }}
     <p class="muted">Keeps the rows this predicate returns <code>True</code> for; every kept row passes through unchanged, in order.</p>
     <dl class="kv">
         <dt>function</dt><dd><code>{{ stage.filter.function or 'should_include' }}</code></dd>
