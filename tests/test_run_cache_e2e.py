@@ -270,7 +270,8 @@ def test_a_stage_declaring_cache_false_recomputes_on_every_run(tmp_path):
 
 def test_the_cache_survives_a_process_restart_and_a_change_of_directory(tmp_path):
     """Two different cwds: a frames root resolved against cwd would split the two runs' stores."""
-    from app.core.persistence import SqliteKvStore, configure_store
+    from app.core.persistence import configure_store
+    from app.core.sqlite_store import SqliteKvStore
 
     db = tmp_path / "workspace" / "app.db"
     db.parent.mkdir()

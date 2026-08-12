@@ -120,7 +120,8 @@ def test_uploading_a_bundle_whose_label_is_taken_leaves_the_first_alone(workspac
 
 def _empty_workspace(root):
     """A fresh directory is not enough on its own — project identity is a store record."""
-    from app.core.persistence import SqliteKvStore, configure_store
+    from app.core.persistence import configure_store
+    from app.core.sqlite_store import SqliteKvStore
 
     root.mkdir(parents=True, exist_ok=True)
     workspace.set_projects_dir(root)

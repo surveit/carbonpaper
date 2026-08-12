@@ -162,35 +162,36 @@ allowed_importers = ["app.web"]
 # inversion — e.g. runtime.run_subset must stay eval-agnostic.
 
 [[tool.importlinter.contracts]]
-name = "app.core.persistence sits at the bottom — imports no app layer but core.errors"
-type = "forbidden"
-source_modules = ["app.core.persistence"]
-forbidden_modules = [
-    "app.models", "app.core.llm",
-    "app.services", "app.runtime", "app.web", "app.core.agent", "app.compiler", "app.evals",
-]
-# The document store is the lowest layer: it may lean on app.core.errors (where
-# DocumentNotFound lives) and nothing else first-party. If it imported the contracts
-# (app.models) or any upper layer, "records depend on the store, never the
-# reverse" would be a lie and the backend would stop being swappable in isolation.
+name = "app.core.sqlite_store imported only by the store wiring"
+type = "protected"
+protected_modules = ["app.core.sqlite_store"]
+allowed_importers = ["app.core.store_config"]
+# Which database backs the app is chosen in ONE place: store_config hands the engine to
+# configure_store and every other module reaches storage through the DocumentStore
+# protocol. Whitelisted, like every other boundary here, so a second module reaching for
+# sqlite is denied by default rather than allowed until someone remembers to forbid it —
+# which is also what keeps app.models off the engine, without naming app.models.
+# app.core.persistence is NOT protected: it is the record base and the store handle,
+# pydantic and an indirection with no engine behind it, so a record may sit beside the
+# contract it embeds without dragging sqlite into the type layer. Splitting the old fused
+# module is what makes that distinction expressible.
 
 [[tool.importlinter.contracts]]
-name = "app.models stays pure — never imports the store"
-type = "forbidden"
-source_modules = ["app.models"]
-forbidden_modules = ["app.core.persistence"]
-# The pure contracts (Stage, TableSchema, …) are validation-only and side-effect-free.
-# Records embed contracts, so the arrow is records → contracts; a contract importing
-# persistence would invert that and drag storage into the type layer.
+name = "app.core sits below the domain contracts"
+type = "layers"
+layers = ["app.models", "app.core"]
+# Position, not a list of things not to import: a module added to app.core inherits the
+# ordering instead of needing an entry somewhere. app.core is generic infrastructure
+# (llm, agent, persistence, errors, frames, utils); the contracts sit above it.
 
 [[tool.importlinter.contracts]]
-name = "app.core does not import the domain models"
-type = "forbidden"
-source_modules = ["app.core"]
-forbidden_modules = ["app.models"]
-# app.core (llm, agent, persistence, errors, frames, utils) is generic infrastructure
-# and must sit below the domain layer. app.models (Stage, TableSchema, Workflow, …)
-# sits above it, so a dependency from app.core back onto app.models would be a cycle.
+name = "inside app.core, the store sits below the rest"
+type = "layers"
+containers = ["app.core"]
+layers = ["agent | llm", "sqlite_store", "persistence"]
+# The engine sits below the rest of core and above the record base whose protocol it
+# satisfies, which is what makes "records depend on the store, never the reverse" true by
+# construction rather than by a list someone has to keep current.
 
 [[tool.importlinter.contracts]]
 name = "app.mcp imported only by the entrypoint"

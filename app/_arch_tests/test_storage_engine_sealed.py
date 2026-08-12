@@ -13,10 +13,10 @@ def test_sqlite3_imported_only_by_the_store() -> None:
     offenders = check_no_import(
         find_governed_files(__file__),
         "sqlite3",
-        allow={"app/core/persistence.py"},
+        allow={"app/core/sqlite_store.py"},
     )
     assert not offenders, (
-        "sqlite3 must be imported only by app/core/persistence.py (the store); "
+        "sqlite3 must be imported only by app/core/sqlite_store.py (the engine); "
         "every other module persists via PersistedModel / FrameStore:\n  "
         + "\n  ".join(offenders)
     )
