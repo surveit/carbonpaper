@@ -56,7 +56,7 @@ def handle_python_frame_function(stage: Stage, inputs: dict[str, pa.Table], ctx:
     return StageOutput.of_frame(_require_frame(fn(*args), stage))
 
 
-def make_python_row_mapper(stage: Stage, ctx: RunContext, src: pd.DataFrame) -> RowMapper:
+def make_python_row_mapper(stage: Stage, ctx: RunContext, src: pa.Table) -> RowMapper:
     """Resolve the stage's function once; the runtime maps it over the single
     input's rows — one dict in, one dict out. The function is shown
     neither the frame nor a row's position in it, so it cannot fan out, fan in,

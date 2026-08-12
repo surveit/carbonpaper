@@ -10,7 +10,6 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable
 
-import pandas as pd
 import pyarrow as pa
 from pydantic import create_model
 
@@ -33,7 +32,7 @@ _ROW_NUMBER_FIELD = "row_number"
 
 
 # ── batch_size == 1: per-row path (grain + order + independence by construction) ──
-def make_llm_row_mapper(stage: Stage, ctx: RunContext, src: pd.DataFrame) -> RowMapper:
+def make_llm_row_mapper(stage: Stage, ctx: RunContext, src: pa.Table) -> RowMapper:
     """Build this execution's per-row mapper. A row's reply depends only on that
     row, so neither the input frame nor a row's position in it is read."""
     llm = narrow_stage(stage, LLMTransformStage).llm

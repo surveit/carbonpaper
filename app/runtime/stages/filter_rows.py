@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-import pandas as pd
+import pyarrow as pa
 
 from app.models import Stage
 from app.models.stages.filter_rows import FilterRowsStage
@@ -26,7 +26,7 @@ def _load_predicate(stage: Stage) -> Callable[[dict[str, Any]], object]:
     return fn
 
 
-def make_filter_mapper(stage: Stage, ctx: RunContext, src: pd.DataFrame) -> RowMapper:
+def make_filter_mapper(stage: Stage, ctx: RunContext, src: pa.Table) -> RowMapper:
     """Resolve the predicate once, then decide one row at a time."""
     predicate = _load_predicate(stage)
 

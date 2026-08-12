@@ -16,7 +16,6 @@ from pydantic import (
     model_validator,
 )
 
-import pandas as pd
 
 from app.core.frame_checks import find_frame_violations
 from app.core.utils import format_errors
@@ -214,7 +213,7 @@ def _find_test_frame_problems(
     return [
         f"test {test.name!r}, input {input_id!r}: {violation.message}"
         for input_id in input_schemas
-        for violation in find_frame_violations(pd.DataFrame(test.inputs[input_id]))
+        for violation in find_frame_violations(test.inputs[input_id])
     ]
 
 

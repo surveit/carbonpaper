@@ -345,13 +345,13 @@ def _gather_stage_inputs(
         table = _take_row_window(
             outputs_so_far[ref.id], window, f"from input '{ref.id}'", record)
         inputs_for_stage[ref.id] = table
-        # Both cross-row checks and schema validation still read rows, so the
-        # frame is materialized once here and handed to both.
-        frame = table_to_frame(table)
-        _reject_duplicate_input_rows(frame, ref.id, sid)
+        _reject_duplicate_input_rows(table, ref.id, sid)
         if ref.table_schema is not None:
+            # Validation is the last thing on this path still reading rows as
+            # pandas; it materializes at its own edge rather than here.
             rep = validate_dataframe(
-                frame, ref.table_schema, stage_id=sid, phase=f"input:{ref.id}",
+                table_to_frame(table), ref.table_schema,
+                stage_id=sid, phase=f"input:{ref.id}",
             )
             record.input_validation_report.append(rep.to_dict())
     return inputs_for_stage, window
@@ -767,9 +767,9 @@ def _final_run_status(stage_statuses: Iterable[str]) -> RunStatus:
 # --- duplicate-input-row rejection (every stage type) ------------------------
 
 
-def _reject_duplicate_input_rows(df: pd.DataFrame, input_id: str, stage_id: str) -> None:
+def _reject_duplicate_input_rows(table: pa.Table, input_id: str, stage_id: str) -> None:
     """Fail the stage if an input frame carries exact duplicate rows."""
-    violations = find_duplicate_row_violations(df)
+    violations = find_duplicate_row_violations(table.to_pylist())
     if not violations:
         return
     raise ValueError(

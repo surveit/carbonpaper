@@ -12,7 +12,9 @@ from functools import partial
 from pathlib import Path
 
 import pandas as pd
+import pyarrow as pa
 
+from app.core.frames import table_to_frame
 from app.core.frames import write_frame_file_with_csv_fallback
 from app.core.predicate import parse_predicate
 from app.models import Stage
@@ -43,7 +45,7 @@ class PendingReview:
     row_ordinal: int
 
 
-def make_human_review_mapper(stage: Stage, ctx: RunContext, src: pd.DataFrame) -> RowMapper:
+def make_human_review_mapper(stage: Stage, ctx: RunContext, src: pa.Table) -> RowMapper:
     """The callable that decides one row's outcome for one execution of this stage."""
     # The one place every path through this stage passes, so the frame is checked
     # against the declared columns here — before a row is mapped, a snapshot
@@ -51,10 +53,13 @@ def make_human_review_mapper(stage: Stage, ctx: RunContext, src: pd.DataFrame) -
     # `_approve_row` reaches for no project scope, no cache, no disk and no filter,
     # so a run carrying none of those can still pass a queue stage through.
     queue = narrow_stage(stage, HumanReviewQueueStage).queue
-    validate_reviewed_sources_present(queue, src, stage.id)
+    # The queue's source-column check reads rows, so this handler materializes
+    # at its own edge — see docs/pandas-seam.md.
+    src_frame = table_to_frame(src)
+    validate_reviewed_sources_present(queue, src_frame, stage.id)
     if ctx.params.queue_auto_approve:
         return partial(_approve_row, queue)
-    return _QueueRowMapper(stage, queue, ctx, src)
+    return _QueueRowMapper(stage, queue, ctx, src_frame)
 
 
 def validate_reviewed_sources_present(

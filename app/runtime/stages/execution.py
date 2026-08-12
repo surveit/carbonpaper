@@ -72,7 +72,7 @@ RowMapper = Callable[[Row, int], "Row | None"]
 # handed to the FACTORY, never to the mapper: work that is cheaper — or only
 # correct — done once over the whole input happens here, and the mapper it
 # returns still sees one row at a time.
-MakeRowMapper = Callable[[Stage, RunContext, pd.DataFrame], RowMapper]
+MakeRowMapper = Callable[[Stage, RunContext, pa.Table], RowMapper]
 
 # An LLMTransformHandler's batched execution function: the stage's inputs, the
 # run, the driver's parallelism, and the INPUT POSITION of each row it is handed
@@ -377,9 +377,7 @@ def _run_row_mapper(
         )
     src = inputs[stage.inputs[0].id]
     reads = stage.anchor_reads()
-    # `make_mapper` does frame-wide setup (resolve code, render prompt additions),
-    # so it is one of the places pandas is materialized — see docs/pandas-seam.md.
-    map_row = handler.make_mapper(stage, ctx, table_to_frame(src))
+    map_row = handler.make_mapper(stage, ctx, src)
     # The ONE line of per-row compute, optionally routed through the row cache
     # and the run log. Log outside cache, so a row the cache answers never
     # reaches the mapper's lifecycle wrapper and is logged as the replay it is.

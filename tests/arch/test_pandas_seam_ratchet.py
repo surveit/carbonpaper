@@ -26,16 +26,15 @@ _OWNERS: frozenset[str] = frozenset({"app/core/frames.py"})
 # while it is in progress — a module going 20 → 8 registers instead of looking
 # untouched until its last signature goes.
 #
-# Seeded at 122 signatures across 30 modules, of which `app/core/frames.py` (18)
-# is an owner and not listed — 104 to burn down. The arrow wire format took it
-# from 153/32: every stage handler stopped naming pandas in its signature, and
-# union and publish left the list outright.
+# 95 signatures across 25 modules to burn down, `app/core/frames.py`
+# excluded as the owner. It was 153 before arrow became the wire format: every
+# stage handler stopped naming pandas in its signature, then the row driver's
+# dead `src` parameter and the cross-row checks went too.
 _ALLOWLIST: Mapping[str, int] = {
-    "app/core/frame_checks.py": 3,
     "app/core/stage_cache.py": 3,
     "app/evals/runner.py": 4,
     "app/evals/scoring.py": 3,
-    "app/runtime/executor.py": 5,
+    "app/runtime/executor.py": 4,
     "app/runtime/lineage.py": 3,
     "app/runtime/manifest.py": 1,
     "app/runtime/preview.py": 1,
@@ -43,14 +42,11 @@ _ALLOWLIST: Mapping[str, int] = {
     "app/runtime/stage_tests.py": 3,
     "app/runtime/stages/aggregate.py": 7,
     "app/runtime/stages/execution.py": 11,
-    "app/runtime/stages/filter_rows.py": 1,
     "app/runtime/stages/frame_caching.py": 2,
-    "app/runtime/stages/human_review_queue.py": 7,
+    "app/runtime/stages/human_review_queue.py": 6,
     "app/runtime/stages/input_data.py": 5,
     "app/runtime/stages/join.py": 2,
-    "app/runtime/stages/llm_transform.py": 1,
-    "app/runtime/stages/python_functions.py": 2,
-    "app/runtime/stages/starlark_functions.py": 1,
+    "app/runtime/stages/python_functions.py": 1,
     "app/runtime/trace.py": 5,
     "app/runtime/validation.py": 7,
     "app/services/frame_profile.py": 3,

@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-import pandas as pd
+import pyarrow as pa
 
 from app.core.starlark_source import DEFAULT_FUNCTION_NAME
 from app.models import Stage
@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from ..context import RunContext
 
 
-def make_starlark_row_mapper(stage: Stage, ctx: RunContext, src: pd.DataFrame) -> RowMapper:
+def make_starlark_row_mapper(stage: Stage, ctx: RunContext, src: pa.Table) -> RowMapper:
     """Compile once; the mapper sees one marshalled row and nothing else."""
     block = narrow_stage(stage, StarlarkRowFunctionStage).starlark
     function_name = block.function or DEFAULT_FUNCTION_NAME

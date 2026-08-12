@@ -54,9 +54,16 @@ marshal out, run authored code, coerce the return against the declaration.
 `tests/arch/test_pandas_seam_ratchet.py` is a burn-down ratchet on pandas types
 in `app/` **signatures**. `_OWNERS` is the set of modules allowed to name one at
 all; `_ALLOWLIST` carries every other module at its current count and may only
-shrink. 122 signatures across 30 modules — 18 in `app/core/frames.py` (an
-owner), 104 to burn down. It was 153 across 32 before arrow became the wire
-format.
+shrink. 95 signatures across 25 modules to burn down, `app/core/frames.py`
+excluded as the owner. It was 153 before arrow became the wire format.
+
+What is left is not all wrong. Roughly a quarter of it is the presentation layer
+(`app/web/*`, `app/services/frame_profile.py`), which renders HTML from parquet
+and has no reason to hold an arrow table; and five signatures are pinned by the
+stage cache, whose fingerprint addresses every entry already recorded. Those two
+groups should become declared OWNERS rather than allowlist entries that never
+reach zero. The rest — the sidecars, the row driver's internals, `input_data`'s
+readers, and validation — are genuinely on the wire and should go.
 
 The ratchet governs signatures, which is what makes the coupling measurable. It
 does not yet govern which modules may *materialize* a pandas frame; that rule
