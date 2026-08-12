@@ -1,0 +1,49 @@
+
+╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
+╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
+ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
+ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
+╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
+╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
+  └──▶║║                    ▲ 
+      ╚╝────────────────────┘
+
+
+---------
+Contracts
+---------
+
+Analyzed 217 files, 830 dependencies.
+-------------------------------------
+
+app.web imported only by the entrypoint KEPT
+app.services imported only by cli, web, runtime, evals, compiler, mcp, agents, 
+seeds, tools KEPT
+app.compiler imported only by services KEPT
+app.runtime imported only by evals, web, mcp KEPT
+app.runtime.preview imported only by web KEPT
+app.evals is a leaf — imported only by web KEPT
+app.core.persistence sits at the bottom — imports no app layer but core.errors KEPT
+app.models stays pure — never imports the store BROKEN
+app.core does not import the domain models KEPT
+app.mcp imported only by the entrypoint KEPT
+app.agents imported only by the entrypoint KEPT
+app.tools imported only by the surfaces that expose a tool KEPT
+production run entry points reached only by the run service KEPT
+the runner reads no services module — a caller hands it a version's stages KEPT
+
+Contracts: 13 kept, 1 broken.
+
+
+----------------
+Broken contracts
+----------------
+
+app.models stays pure — never imports the store
+-----------------------------------------------
+
+app.models is not allowed to import app.core.persistence:
+
+-   app.models.authoring_lifecycle_note -> app.core.persistence (l.49)
+
+
