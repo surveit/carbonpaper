@@ -44,7 +44,9 @@ def parse_verbs(payload: str) -> list[Verb]:
 
 
 def validate_one_meaning_per_word(nouns: SchemaLibrary, verbs: list[Verb]) -> None:
-    words = [schema.name for schema in nouns.schemas]
+    words: list[str] = []
+    for schema in nouns.schemas:
+        words += [schema.name, *schema.also_written]
     for verb in verbs:
         words += [verb.name, *verb.also_written]
     repeated = sorted({word for word in words if words.count(word) > 1})

@@ -1,5 +1,5 @@
 """Every prompt that can invent schema or artifacts carries the gated authoring
-lifecycle (app/models/authoring_lifecycle_note.py) — the five CompilerPhase phases,
+lifecycle (app/models/authoring_lifecycle_note.py) — one step per CompilerPhase,
 each with its gate. The workflow-authoring surfaces get the full lifecycle; the
 data-model prompt gets the intermediate-concepts slice."""
 from __future__ import annotations
@@ -9,6 +9,7 @@ from app.models.authoring_lifecycle_note import (
     INTERMEDIATE_CONCEPTS_NOTE,
     CompilerPhase,
 )
+from app.models.stages.stage_types import AUTHORABLE_TYPES
 
 
 def test_editing_prompt_carries_the_full_lifecycle() -> None:
@@ -41,6 +42,7 @@ def test_lifecycle_heads_a_step_with_every_phase_name() -> None:
 
 def test_lifecycle_states_the_steps_and_their_gates() -> None:
     assert "RESEARCH FIRST" in AUTHORING_LIFECYCLE_GUIDANCE
+    assert "AGREE THE WORDS BEFORE THE PLAN" in AUTHORING_LIFECYCLE_GUIDANCE
     assert "PLAN, AND ASK QUESTIONS" in AUTHORING_LIFECYCLE_GUIDANCE
     assert "major stages" in AUTHORING_LIFECYCLE_GUIDANCE
     assert "sign-off gate" in AUTHORING_LIFECYCLE_GUIDANCE
@@ -50,6 +52,21 @@ def test_lifecycle_states_the_steps_and_their_gates() -> None:
     assert "SMOKE BEFORE FULL" in AUTHORING_LIFECYCLE_GUIDANCE
     assert "row limits" in AUTHORING_LIFECYCLE_GUIDANCE
     assert "full-run budget" in AUTHORING_LIFECYCLE_GUIDANCE
+
+
+def test_the_words_are_agreed_before_the_plan_is_written() -> None:
+    # Why TERMS is its own phase, and what an agent may put in it.
+    assert "Ask, never invent" in AUTHORING_LIFECYCLE_GUIDANCE
+    assert "not in the document" in AUTHORING_LIFECYCLE_GUIDANCE
+    assert "`also_written`" in AUTHORING_LIFECYCLE_GUIDANCE
+    assert "costs less than renaming later" in AUTHORING_LIFECYCLE_GUIDANCE
+
+
+def test_a_verb_may_not_restate_a_word_the_app_already_spends() -> None:
+    # The examples are the app's real stage types, so a renamed type fails here.
+    for stage_type in ("aggregate", "filter_rows", "enrich", "publish"):
+        assert stage_type in AUTHORING_LIFECYCLE_GUIDANCE, stage_type
+        assert stage_type in AUTHORABLE_TYPES, stage_type
 
 
 def test_stage_tests_are_built_before_the_run_not_after() -> None:

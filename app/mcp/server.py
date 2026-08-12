@@ -24,6 +24,7 @@ from app.tools import shared
 from app.tools.submitted_stage import SubmittedStage, add_stages_reporting_drops
 from app.tools.tool_specs import SAVE_VERSION_FROM_WORKING_COPY, TOOL_SPECS
 from app.mcp.instructions import INSTRUCTIONS
+from app.models.authoring_lifecycle_note import CompilerPhase
 from app.models.review_guide import ReviewGuideDraft
 from app.services.versioning import ReviewGuide
 from app.runtime import stage_tests
@@ -119,7 +120,9 @@ def list_projects() -> list[ProjectListing]:
 @mcp.tool(description=TOOL_SPECS["create_project"].description)
 def create_project(name: str, document: str) -> dict[str, Any]:
     project_id = project_service.create_project(name, document, source="mcp")
-    return {"project_id": project_id, "next": "generate_data_model"}
+    # A phase, not a tool call: no tool stores terms yet, and naming one that does
+    # not exist sends the client after a tool it cannot call.
+    return {"project_id": project_id, "next": CompilerPhase.TERMS.value}
 
 
 @mcp.tool(description=TOOL_SPECS["get_project_status"].description)
