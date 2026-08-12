@@ -10,7 +10,8 @@ from pydantic import BaseModel
 from app.agents.tutorial.prompt import TUTORIAL_OPENING_PROMPT, TUTORIAL_SYSTEM_PROMPT
 from app.core.agent.bound_tool import BoundToolSpec
 from app.core.agent.registry import AgentConfig, register
-from app.tools import shared
+from app.tools import eval_runs, shared
+from app.tools.eval_runs import EvalRunResult
 from app.tools.shared import StageOutputRows
 from app.tools.tool_specs import TOOL_SPECS
 from app.tools.tutorial import (
@@ -42,9 +43,17 @@ def make_tutorial_tools(context: BaseModel) -> list[BoundToolSpec]:
             project_id, run_id, stage_id, limit, offset, base_url=context.base_url.rstrip("/")
         )
 
+    def run_eval(
+        project_id: str, eval_id: str, version_id: str | None = None
+    ) -> EvalRunResult:
+        return eval_runs.run_eval(
+            project_id, eval_id, version_id, base_url=context.base_url.rstrip("/")
+        )
+
     # One new tool. Seeding is the only thing the tour does that no other surface does.
-    # The row reader is the shared one, wrapped only because the tour's reader CLICKS the
-    # lineage links, so they carry this session's base_url rather than being root-relative.
+    # The row reader and the eval runner are the shared ones, wrapped only because the
+    # tour's reader CLICKS what comes back, so the links carry this session's base_url
+    # rather than being root-relative.
     return [
         BoundToolSpec(
             name="create_tutorial_project",
@@ -59,6 +68,13 @@ def make_tutorial_tools(context: BaseModel) -> list[BoundToolSpec]:
             fn=read_stage_output_rows,
             input_schema=shared.schema_of("read_stage_output_rows"),
             label="Reading the stage's rows",
+        ),
+        BoundToolSpec(
+            name="run_eval",
+            description=eval_runs.RUN_EVAL.description,
+            fn=run_eval,
+            input_schema=eval_runs.RUN_EVAL_SCHEMA,
+            label="Running the eval",
         ),
         *shared.bind("run_workflow", "get_run_status", "sleep", "describe_workflow"),
     ]

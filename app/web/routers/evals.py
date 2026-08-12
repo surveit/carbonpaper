@@ -13,7 +13,7 @@ from app.core.errors import EvalNotScorableError
 from app.core.frames import list_rows
 from app.models import EvalConfig, EvalRun, WorkflowNotFormed
 from app.evals.compatibility import CompatibilityReport, validate_eval_compatibility
-from app.evals.runner import run_eval
+from app.evals.runner import run_project_eval
 from app.evals.store import (
     eval_status,
     latest_version_id,
@@ -22,6 +22,7 @@ from app.evals.store import (
     load_eval_config,
     load_eval_run,
 )
+from app.services.eval_run import configure_eval_runner
 from app.services.versioning import list_versions
 from app.web.breadcrumbs import build_eval_crumbs, build_eval_run_crumbs
 from app.web.config import projects_dir, REPO_ROOT, templates
@@ -42,6 +43,11 @@ from app.web.run_events import (
 )
 
 router = APIRouter()
+
+# app.web is the one package allowed to import app.evals, so the layers below it reach
+# an eval run through a seam filled here: importing this module is what lets an agent
+# tool run the same eval this file's Run button runs.
+configure_eval_runner(run_project_eval)
 
 # Rows rendered in the detail page's eval-dataset preview; the file may be larger.
 DATASET_PREVIEW_ROWS = 50
@@ -244,17 +250,16 @@ def _eval_run_href(project: str, eval_id: str, run_id: str) -> str:
 
 @router.post("/project/{project}/evals/{eval_id}/run")
 async def trigger_eval_run(request: Request, project: str, eval_id: str):
-    project_dir = _resolve_project_dir(project)
-    config = _load_config_or_404(project_dir, eval_id)
     form = await request.form()
     version_id = form.get("version_id") or None
     if version_id is not None and not isinstance(version_id, str):
         raise HTTPException(status_code=400, detail="version_id must be a string")
     try:
-        run = run_eval(project_dir, config, REPO_ROOT, version_id=version_id)
+        run = run_project_eval(project, eval_id, version_id=version_id)
     except EvalNotScorableError as exc:
         return JSONResponse({"detail": str(exc)}, status_code=400)
-    except FileNotFoundError as exc:
+    # A missing project, eval or version, and a stored config that no longer parses.
+    except (FileNotFoundError, ValueError) as exc:
         return JSONResponse({"detail": str(exc)}, status_code=404)
     return RedirectResponse(
         url=f"/project/{project}/evals/{eval_id}/runs/{run.id}", status_code=303)

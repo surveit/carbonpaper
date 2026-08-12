@@ -29,6 +29,7 @@ _BASE_URL = "http://127.0.0.1:8788/"
 _EXPECTED_TOOLS = {
     "create_tutorial_project",
     "read_stage_output_rows",
+    "run_eval",
     "run_workflow",
     "get_run_status",
     "sleep",
