@@ -47,10 +47,10 @@ acting on it needs write_review_guide: an ordered walkthrough, in the methodolog
 terms, saying why each part is there and what is TRUE once it has run. Write it in
 TEST_RUN_REVIEW — after the smoke run, never straight off save_version.
 
-Write it FOR the methodology's owner, not a programmer: use the document's terms of art,
-wrap column names in `backticks`, and say what could be quietly wrong. A line or two a
-step, and not the mechanism — the kind of join, the shape of the code, the stage names
-and their order are all on the page already."""
+Write it FOR the methodology's owner, not a programmer: use the document's nouns at the
+specificity it uses them, wrap column names in `backticks`, and say what could be quietly
+wrong. A line or two a step, and not the mechanism — the kind of join, the shape of the
+code, the stage names and their order are all on the page already."""
 
 HANDOVER_BARS_NOTE = """\
 Two different things you can ask a human for, with different bars:
