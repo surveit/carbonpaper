@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH
+from app.models.stage import StageType
 from app.runtime.manifest import resolve_output_path
 from app.services.loader import resolve_function_code
 from app.services.review_packet.checksums import CHECKSUMS_FILE
@@ -16,6 +17,7 @@ from app.models import WorkflowStage
 from app.services.review_packet.views import (
     LINEAGE_DIR,
     LineageReport,
+    PublishInputRows,
     RunView,
     StageView,
 )
@@ -86,7 +88,13 @@ def write_packet_pages(
     written.extend(_write_diagram_scripts(root))
     written.extend(_write_asset(root, name) for name in CODE_SCRIPTS)
     written.append(_write_diagram_source(root, diagram))
-    written.append(_write_index(root, view, data, lineage, guide, diagram, issues))
+    written.append(
+        _write_index(
+            root, view, data, lineage,
+            _build_publish_inputs(run_dir, view, frozenset(lineage.traced)),
+            guide, diagram, issues,
+        )
+    )
     for stage in view.stages:
         written.append(
             _write_stage_page(
@@ -107,11 +115,60 @@ def read_app_cascade_order() -> list[str]:
     return linked
 
 
+# The index renders every publish input in full, so it is bounded per input rather
+# than by the 5,000 a stage page can carry: this is a section of a page a reader
+# scrolls, not the page itself. Past it the block says so and links the stage page.
+PACKET_MAX_INDEX_ROWS = 200
+
+
+def _build_publish_inputs(
+    run_dir: Path, view: RunView, traced: frozenset[tuple[str, int]]
+) -> list[PublishInputRows]:
+    """The frames the publish stage read, each row carrying its provenance page."""
+    links = PacketPanelLinks(to_root="", traced=traced)
+    return [
+        _one_publish_input(run_dir, view, stage_id, links, traced)
+        for stage_id in _publish_input_ids(view)
+    ]
+
+
+def _publish_input_ids(view: RunView) -> list[str]:
+    """Off the manifest: a run whose version no longer loads still knows what publish read."""
+    publish = next((s for s in view.stages if s.type == StageType.publish), None)
+    if publish is None:
+        return []
+    return [
+        entry["phase"].split(":", 1)[1]
+        for entry in (publish.record.get("input_validation_report") or [])
+        if str(entry.get("phase", "")).startswith("input:")
+    ]
+
+
+def _one_publish_input(
+    run_dir: Path, view: RunView, stage_id: str,
+    links: PacketPanelLinks, traced: frozenset[tuple[str, int]],
+) -> PublishInputRows:
+    output_path = next(
+        (s.output_path for s in view.stages if s.stage_id == stage_id), None
+    )
+    table = load_output_table(run_dir, output_path, PACKET_MAX_INDEX_ROWS)
+    hrefs = [links.row_trace(stage_id, i) for i in range(len(table["rows"]))]
+    return PublishInputRows(
+        stage_id=stage_id,
+        columns=table["columns"],
+        rows=table["rows"],
+        trace_hrefs=hrefs,
+        rows_total=table["rows_total"],
+        traced=sum(1 for (s, _) in traced if s == stage_id),
+    )
+
+
 def _write_index(
     root: Path,
     view: RunView,
     data: DataReport,
     lineage: LineageReport,
+    publish_inputs: list[PublishInputRows],
     guide: RunGuideView | None,
     diagram: str,
     issues: RunIssues,
@@ -120,6 +177,7 @@ def _write_index(
         "packet_index.html",
         run=view,
         lineage=lineage,
+        publish_inputs=publish_inputs,
         lineage_dir_href=f"{LINEAGE_DIR}/index.html",
         guide=guide,
         omitted=data.omitted,

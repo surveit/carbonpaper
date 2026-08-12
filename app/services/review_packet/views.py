@@ -217,3 +217,17 @@ class LineageReport(BaseModel):
     traced: set[tuple[str, int]]
     refused: str | None
     stages: list[StageTraces] = []
+
+
+class PublishInputRows(BaseModel):
+    """One input frame of the publish stage, with each row's provenance page beside it."""
+
+    stage_id: str
+    columns: list[str]
+    # Frame data: the columns are the workflow author's, not a shape this layer knows.
+    rows: list[dict[str, Any]]
+    # Parallel to `rows`. None where the run published no link to that row, so the
+    # packet holds no page for it — the reader is shown the row either way.
+    trace_hrefs: list[str | None]
+    rows_total: int
+    traced: int

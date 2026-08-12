@@ -138,10 +138,8 @@ def test_a_lineage_page_reaches_the_rest_of_the_packet_by_relative_path(tmp_path
     }
 
 
-def _export_demo_packet(tmp_path):
+def _demo_run(tmp_path):
     from app.runtime.lineage import RowLineage, RowParent
-    from app.runtime.trace_links import RowTraceLinker, write_issued_traces
-    from app.web.review_packet.lineage import write_packet_lineage
     from test_trace_helpers import write_run
 
     source = pd.DataFrame({"client": ["a", "b"], "spend": [1, 2]})
@@ -156,6 +154,14 @@ def _export_demo_packet(tmp_path):
              [RowParent("source", 1, kind="contribution")],
          ])},
     ])
+    return run_dir
+
+
+def _export_demo_packet(tmp_path):
+    from app.runtime.trace_links import RowTraceLinker, write_issued_traces
+    from app.web.review_packet.lineage import write_packet_lineage
+
+    run_dir = _demo_run(tmp_path)
     linker = RowTraceLinker(project="p", run_id="r")
     for row in range(2):
         linker.build_row_trace_url("totals", row)
@@ -227,3 +233,20 @@ def test_the_index_links_land_on_a_section_the_directory_defines(tmp_path):
     directory = (packet / "lineage/index.html").read_text(encoding="utf-8")
     ids = set(re.findall(r'<section class="lin-dir" id="([^"]+)"', directory))
     assert ids == {"totals", "source"}, "every stage listed gets an anchor"
+
+
+def test_a_publish_input_row_with_no_page_is_offered_no_link(tmp_path):
+    """The index lists every publish input, including ones the run never linked."""
+    from app.web.review_packet.pages import _one_publish_input
+    from app.web.panel_links import PacketPanelLinks
+
+    run_dir = _demo_run(tmp_path)
+    view = _run_view(2)
+    traced = frozenset({("totals", 0)})
+    built = _one_publish_input(
+        run_dir, view, "totals", PacketPanelLinks(to_root="", traced=traced), traced
+    )
+    assert built.rows_total == 2
+    assert built.trace_hrefs == ["lineage/totals/0.html", None], (
+        "row 1 has no page, so it gets no link"
+    )
