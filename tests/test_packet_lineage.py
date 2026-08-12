@@ -116,7 +116,7 @@ def _run_view(rows: int):
 def test_no_lineage_page_links_a_lineage_page_that_was_not_written(tmp_path):
     """The whole point of the surface: a dead link reads as checked until it is clicked."""
     packet = _export_demo_packet(tmp_path)
-    pages = sorted(packet.glob("lineage/**/*.html"))
+    pages = sorted(p for p in packet.glob("lineage/**/*.html") if p.name != "index.html")
     assert len(pages) == 4, "two published rows, each naming one contributor"
     followed = [
         (page, href)
@@ -181,3 +181,41 @@ def _view_links(html: str) -> list[str]:
         for branch in group.get("named") or []
         if branch["links"].get("trace")
     ]
+
+
+def test_a_fan_in_wider_than_the_app_names_is_still_clickable_in_the_packet():
+    """A 24-contributor aggregate is where the packet's trail used to die."""
+    from app.web.panel_links import AppPanelLinks, PacketPanelLinks
+    from app.web.trace_view import build_trace_view
+
+    trace = _aggregate_trace(contributors=24)
+    packet = build_trace_view(trace, {}, PacketPanelLinks(traced=None))
+    app = build_trace_view(trace, {}, AppPanelLinks("p", "r"))
+
+    def named(view):
+        return [b["links"]["trace"] for n in view["nodes"]
+                for g in n["contributor_groups"] for b in g["named"]]
+
+    assert len(named(packet)) == 24, "the packet names every contributor it can open"
+    assert named(app) == [], "the app still falls back to its filtered rows view"
+    # And the wide-cohort fallback points at data a reader can actually read.
+    assert [g["rows_link"] for n in packet["nodes"] for g in n["contributor_groups"]] == [
+        "../data/spend_by_client.csv"
+    ]
+
+
+def _aggregate_trace(contributors: int):
+    return {
+        "run_id": "r", "start_stage": "totals", "start_row": 0,
+        "steps": [{
+            "stage_id": "totals", "stage_type": "aggregate", "row_ordinal": 0,
+            "row": {"total": 1}, "columns_new": ["total"], "origin": "other",
+            "branches": [
+                {"stage_id": "spend_by_client", "row_ordinal": i,
+                 "kind": "contribution", "columns": None}
+                for i in range(contributors)
+            ],
+        }],
+        "end": {"reached_origin": False, "at_stage": "totals",
+                "message": "this row summarizes its inputs"},
+    }

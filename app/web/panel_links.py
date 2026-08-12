@@ -5,7 +5,17 @@ from __future__ import annotations
 from urllib.parse import quote, urlencode
 
 
+# aggregate makes its single row out of every input row, so a cohort runs to
+# tens of thousands: shipping them all is megabytes of JSON in the page and a
+# query string past the request line any server will accept. `total` beside it
+# is the true size, so nothing the page REPORTS is bounded — only how many rows
+# one link can address.
+CONTRIBUTOR_ROWS_LINKED = 500
+
+
 class AppPanelLinks:
+    contributors_named = 3  # a 360px panel; a wider cohort falls back to the rows view
+
     def __init__(self, project: str, run_id: str) -> None:
         self._base = f"/project/{_segment(project)}/runs/{_segment(run_id)}"
 
@@ -43,6 +53,12 @@ class AppPanelLinks:
     def guide_stage(self, stage_id: str) -> str:
         return f"#{stage_id}"
 
+    def contributor_rows(self, stage_id: str, ordinals: list[int] | None = None) -> str:
+        return self.stage_rows(stage_id, ordinals)
+
+    def rows_link_covers(self, total: int) -> int:
+        return min(total, CONTRIBUTOR_ROWS_LINKED)
+
 
 def packet_lineage_href(to_root: str, stage_id: str, row: int) -> str:
     return f"{to_root}lineage/{_segment(stage_id)}/{row}.html"
@@ -50,6 +66,10 @@ def packet_lineage_href(to_root: str, stage_id: str, row: int) -> str:
 
 class PacketPanelLinks:
     """`None` from a method means the template omits that link, not that it is broken."""
+
+    contributors_named = 50
+    # No panel to fit and no rows view to fall back on; past this a cohort is a
+    # table to read, not a list of links.
 
     def __init__(
         self, to_root: str = "../", traced: frozenset[tuple[str, int]] | None = None
@@ -65,6 +85,12 @@ class PacketPanelLinks:
 
     def stage_rows(self, stage_id: str, ordinals: list[int] | None = None) -> None:
         return None
+
+    def contributor_rows(self, stage_id: str, ordinals: list[int] | None = None) -> str:
+        return self.stage_csv(stage_id)
+
+    def rows_link_covers(self, total: int) -> int:
+        return total  # the CSV the packet writes is uncapped
 
     def stage_rows_raw(self, stage_id: str) -> None:
         """The uncapped rows are stage_csv's data/<id>.csv, linked beside this."""

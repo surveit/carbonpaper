@@ -14,7 +14,7 @@ from app.services.review_packet.views import RunView
 from app.web.breadcrumbs import Crumb
 from app.web.config import templates
 from app.web.panel_links import PacketPanelLinks, packet_lineage_href
-from app.web.review_packet.pages import STYLESHEETS
+from app.web.review_packet.pages import ASSETS_DIR, STYLESHEETS
 from app.web.trace_view import build_trace_view
 
 _log = logging.getLogger(__name__)
@@ -39,6 +39,7 @@ def write_packet_lineage(
 ) -> LineageReport:
     """Traces every row the run PUBLISHED a link to, and the rows feeding those."""
     frames = RunFrames(run_dir)
+    published = set(_published_rows(run_dir))
     closure = _find_closure(frames, run_dir)
     if len(closure) > PACKET_MAX_LINEAGE_PAGES:
         return LineageReport(written=[], traced=set(), refused=(
@@ -51,6 +52,10 @@ def write_packet_lineage(
         _write_page(root, frames, view, stages_by_id, stage_id, row, traced)
         for stage_id, row in sorted(closure)
     ]
+    if written:
+        # No directory where there is nothing to list: a run that published no
+        # links promises no provenance, and an empty page implies otherwise.
+        written.append(_write_directory(root, sorted(closure), published))
     return LineageReport(written=written, traced=set(closure), refused=None)
 
 
@@ -107,3 +112,37 @@ def _write_page(
 def _published_rows(run_dir: Path) -> list[tuple[str, int]]:
     """The rows a publish stage LINKED, recorded by the linker it was handed."""
     return [(t.stage_id, t.row_ordinal) for t in read_issued_traces(run_dir)]
+
+
+def _write_directory(root: Path, traced: list[tuple[str, int]], published: set[tuple[str, int]]) -> str:
+    relative = f"{LINEAGE_DIR}/index.html"
+    by_stage: dict[str, list[int]] = {}
+    for stage_id, row in sorted(traced):
+        by_stage.setdefault(stage_id, []).append(row)
+    html = templates.env.get_template("packet_lineage_index.html").render(
+        stages=[
+            StageTraces(
+                stage_id=stage_id,
+                rows=rows,
+                # Rows the run itself linked, vs rows pulled in because a linked
+                # row's trace named them. The reader is told which is which.
+                published=sum(1 for r in rows if (stage_id, r) in published),
+                hrefs=[packet_lineage_href("", stage_id, r) for r in rows],
+            )
+            for stage_id, rows in by_stage.items()
+        ],
+        total=len(traced),
+        assets=[f"../{ASSETS_DIR}/{name}" for name in STYLESHEETS],
+        index_href="../index.html",
+    )
+    path = root / relative
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(html, encoding="utf-8")
+    return relative
+
+
+class StageTraces(BaseModel):
+    stage_id: str
+    rows: list[int]
+    published: int
+    hrefs: list[str]

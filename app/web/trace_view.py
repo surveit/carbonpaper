@@ -25,18 +25,6 @@ from app.web.panel_links import (
 from app.web.trace_row_diff import build_row_diff, row_diff_to_dict
 
 # How many contributing rows ONE cohort's link addresses. A `group_by: []`
-# aggregate makes its single row out of every input row, so a cohort runs to
-# tens of thousands: shipping them all is megabytes of JSON in the page and a
-# query string past the request line any server will accept. `total` beside it
-# is the true size, so nothing the page REPORTS is bounded — only how many rows
-# one link can address.
-CONTRIBUTOR_ROWS_LINKED = 500
-
-# Below this, the page names each contributing row instead of counting them, so
-# the cohort ships as individual parents carrying their own links.
-CONTRIBUTORS_NAMED = 3
-
-
 @dataclass(frozen=True)
 class ContributorGroup:
     stage_id: str
@@ -194,15 +182,16 @@ def _one_group(
     stage_id: str, columns: tuple[str, ...] | None,
     parents: list[dict[str, Any]], links: PanelLinks,
 ) -> ContributorGroup:
-    linked = parents[:CONTRIBUTOR_ROWS_LINKED]
-    named = parents[:CONTRIBUTORS_NAMED] if len(parents) <= CONTRIBUTORS_NAMED else []
+    cap = links.contributors_named
+    named = parents[:cap] if len(parents) <= cap else []
     return ContributorGroup(
         stage_id=stage_id,
         columns=list(columns) if columns else None,
         total=len(parents),
-        linked=len(linked),
+        linked=links.rows_link_covers(len(parents)),
         named=[{**p, "links": _links_of(links, p["stage_id"], int(p["row_ordinal"]))}
                for p in named],
-        rows_link=links.stage_rows(
-            stage_id, ordinals=[int(p["row_ordinal"]) for p in linked]),
+        rows_link=links.contributor_rows(
+            stage_id,
+            ordinals=[int(p["row_ordinal"]) for p in parents[:CONTRIBUTOR_ROWS_LINKED]]),
     )
