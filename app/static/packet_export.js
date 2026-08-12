@@ -46,7 +46,7 @@
       link.setAttribute("aria-busy", "true");
       icon.textContent = "";
       icon.appendChild(
-        Object.assign(document.createElement("span"), { className: "spinner sm" })
+        Object.assign(document.createElement("span"), { className: "spinner" })
       );
 
       const started = Date.now();
