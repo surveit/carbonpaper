@@ -1,46 +1,43 @@
-{# Whether an eval vouches for this step, in the stage panel's head — above the tab
-   strip, so it is read without opening anything. Context: coverage
-   (app.web.eval_coverage.EvalCoverage), or None where no eval targets this step.
+{# What labelled data says about this step, as a section of the Transform pane —
+   beside the examples, which is where a reader already goes to see how a step is
+   checked. Context: coverages (list[app.web.eval_coverage.EvalCoverage]).
 
-   It borrows `.stage-cert`'s markup because it makes the same KIND of claim as the
-   certification badge and must be read with the same suspicion — but the claim differs,
-   and the wording carries the difference. Certification asks whether a step's description
-   matches its code. This asks whether its output matches rows a person labelled by hand.
-   For an llm_transform there is no certification badge at all (no authored code block), so
-   this is the only thing that can vouch for the step a reader most needs to trust.
+   ONE row per eval, because two evals score different datasets: their row counts
+   do not add up and their accuracies do not average. Any single figure over both
+   would be a number nobody measured. The caveat is the section's, stated once,
+   rather than repeated under every row.
 
-   Nothing is rendered for a step no eval targets. A grey "nothing checked this" on every
-   other step would be furniture: it states no fact, and the app has no eval-authoring form
-   to send anyone to. #}
-{% macro stage_eval_check(coverage) %}
-{% if coverage %}
-{% set cls = {"checked": "certified", "mismatches": "failing", "stale": "untested"} %}
-<div class="stage-cert stage-cert-{{ cls[coverage.status] }} stage-eval-check">
-  {% if coverage.status == "checked" %}
-  <p class="stage-cert-line"><span class="stage-cert-badge">✓ Matches {{ coverage.rows_passed }} of {{ coverage.rows_total }} hand-labelled cases</span></p>
-  <p class="stage-cert-why muted">A person labelled {{ coverage.rows_total }} real row{% if coverage.rows_total != 1 %}s{% endif %} by hand.
-    Run against them, this step produced the same
-    {% for column in coverage.columns %}<code>{{ column }}</code>{% if not loop.last %} and {% endif %}{% endfor %}
-    every time. It says nothing about rows outside that set, nor about the other columns this
-    step writes. <a href="{{ coverage.href }}">{{ coverage.eval_name }} →</a></p>
-
-  {% elif coverage.status == "mismatches" %}
-  {% set missed = coverage.rows_total - coverage.rows_passed %}
-  <p class="stage-cert-line"><span class="stage-cert-badge">⚠ Differs from {{ missed }} of {{ coverage.rows_total }} hand-labelled cases</span></p>
-  <p class="stage-cert-why muted">A person labelled {{ coverage.rows_total }} real row{% if coverage.rows_total != 1 %}s{% endif %} by hand, and this step
-    answered {{ missed }} of them differently. Either the step is wrong on those rows or the
-    labels are — read them side by side before trusting this step's output.
-    <a href="{{ coverage.href }}">{{ coverage.eval_name }} →</a></p>
-
-  {% else %}
-  {# The score is deliberately absent from the badge line. A stale green number is the
-     most misleading thing this could show: it is a verdict on code that has moved. #}
-  <p class="stage-cert-line"><span class="stage-cert-badge">— Not checked since this step changed</span></p>
-  <p class="stage-cert-why muted">The last eval matched {{ coverage.rows_passed }} of
-    {{ coverage.rows_total }}, but it scored version <code>{{ coverage.scored_version }}</code>
-    and this step has moved since. That result is about the older code.
-    <a href="{{ coverage.href }}">{{ coverage.eval_name }} →</a></p>
-  {% endif %}
-</div>
+   Renders nothing for a step no eval targets — the app has no eval-authoring form,
+   so a "nothing checked this" row would state no fact and offer no next step. #}
+{% macro stage_eval_check(coverages) %}
+{% if coverages %}
+<section class="exec-block">
+  <h2>🎯 Checked against labelled data</h2>
+  <p class="muted">Each row below compares what this step produced with rows a person
+    labelled by hand. Nothing here speaks for rows outside those sets, nor for the
+    columns it does not name.</p>
+  <table class="schema eval-checks">
+    <thead>
+      <tr><th>result</th><th>eval</th><th>columns compared</th><th>version scored</th></tr>
+    </thead>
+    <tbody>
+      {% for coverage in coverages %}
+      <tr>
+        <td>
+          {%- if coverage.status == "checked" %}<span class="verdict verdict-pass">{{ coverage.rows_passed }} / {{ coverage.rows_total }}</span>
+          {%- elif coverage.status == "mismatches" %}<span class="verdict verdict-fail">{{ coverage.rows_passed }} / {{ coverage.rows_total }}</span>
+          {# The score is left off a stale row on purpose: it is a verdict on code that
+             has moved, and a green figure here would read as one on the code above. #}
+          {%- else %}<span class="verdict verdict-stale">stale</span>{% endif %}
+        </td>
+        <td><a href="{{ coverage.href }}">{{ coverage.eval_name }}</a></td>
+        <td>{% for column in coverage.columns %}<code>{{ column }}</code>{% if not loop.last %} {% endif %}{% endfor %}</td>
+        <td><code>{{ coverage.scored_version }}</code>
+          {%- if coverage.status == "stale" %} <span class="muted">— this step has moved since</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
 {% endif %}
 {% endmacro %}

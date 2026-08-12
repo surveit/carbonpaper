@@ -18,7 +18,7 @@ from app.runtime.stage_tests import find_failing_stage_tests
 from app.web.config import projects_dir, templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
 from app.web.loading import find_workflow_stage, load_stages
-from app.web.eval_coverage import find_eval_coverage
+from app.web.eval_coverage import find_eval_coverages
 from app.web.stage_test_views import build_certification, shape_test_views
 
 router = APIRouter()
@@ -52,7 +52,7 @@ async def node_panel(request: Request, project: str, stage_id: str):
             "certification": build_certification(workflow_stage, views),
             # The working copy is not a version, so the freshest an eval can be here is
             # "it scored the latest version" — the same test eval_status applies.
-            "eval_coverage": find_eval_coverage(
+            "eval_coverages": find_eval_coverages(
                 project, stage_id, versioning.find_latest_project_version_id(project)),
             "can_generate_tests": stage.CARRIES_RUNNABLE_TESTS,
         },

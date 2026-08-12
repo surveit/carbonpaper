@@ -170,25 +170,28 @@ head — name, status badge, blurb, then a facts line — over ONE tab strip:
   `…/evals/<id>/runs/<run>/events`. A vetoed run executed nothing, so it has no log and the
   panel is absent rather than empty.
 
-## Does an eval vouch for this step? (`app.web.eval_coverage` → `_stage_eval_check.html`)
-A badge in the stage panel's HEAD — above the tab strip on both the run panel and the
-workflow page's node panel, because it is a verdict on the step and not on any one tab.
+## How a step was checked — both statements live in Transform
+Beside the thing each one is a verdict on, not under the step's description:
+- **`_stage_certification.html`** opens **🧪 Example behavior**, because what it claims is
+  about those examples. It used to sit under the summary, a section above the cases it
+  was talking about.
+- **🎯 Checked against labelled data** (`app.web.eval_coverage` → `_stage_eval_check.html`)
+  is the block directly before it — a step's evals, which is the only check that reaches
+  an `llm_transform`'s answers (`build_certification` returns None without an authored
+  code block, so those stages carry no certification at all).
+
+**ONE ROW PER EVAL**, because two evals score different datasets: their row counts do not
+add up and their accuracies do not average, so any single figure over both would be a
+number nobody measured. Worst first. The caveat — that nothing here speaks for rows
+outside those sets — is the section's, said once, not repeated under every row.
+
 Coverage attaches to an eval's **target** stage alone; the rest of the pathway executed,
-but nothing compared what it produced to anything.
-
-It borrows `.stage-cert`'s markup and makes a different claim. Certification asks whether a
-step's DESCRIPTION matches its CODE, and `build_certification` returns None without an
-authored code block — so an `llm_transform` carries no certification at all. This asks
-whether its OUTPUT matches rows a person labelled by hand, which is the only check that
-reaches a model's answers.
-
-Three states, and **staleness outranks the score**: a result about code that has moved is
-not a verdict on this code, however it came out. A stale badge therefore states no number
-in its badge line — only in the explanation, beside the version it was about. The version
-compared against differs by surface: a run panel uses the version THAT RUN pinned (exact),
-the node panel the latest stored version (the same test `eval_status` applies, since a
-working copy is not a version). A step no eval targets renders nothing — a grey "nothing
-checked this" on every other step states no fact and has no form to send anyone to.
+but nothing compared what it produced to anything. **Staleness outranks the score**: a
+stale row's result cell reads `stale` and carries no figure, since the figure is a verdict
+on code that has moved — the version it did score is its own column. Which version counts
+as current differs by surface: a run panel uses the version THAT RUN pinned (exact), the
+node panel the latest stored version (the test `eval_status` already applies, since a
+working copy is not a version). A step no eval targets renders no section.
 
 ## Live progress + the stage simulator
 `POST /project/<m>/run` → `prepare_run` (initial `running` manifest) → background thread →

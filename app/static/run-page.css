@@ -297,3 +297,9 @@ td.row-num, th.row-num { text-align: right; color: var(--idle-bd); font-variant-
 .rows-filter input { vertical-align: middle; margin-right: 3px; }
 /* The version picker and its verb on one line (eval_detail.html). */
 .eval-run-form { display: flex; align-items: center; gap: .5rem; margin: 0 0 1rem; }
+
+/* A stale eval's result cell: amber, and the word rather than a score — the number
+   it got is a verdict on code that has moved (_stage_eval_check.html). */
+.verdict-stale { background: var(--verdict-warn-bg); border-color: var(--verdict-warn-bd); color: var(--warn-ink); }
+.eval-checks td { vertical-align: middle; }
+.eval-checks td code { margin-right: 4px; }

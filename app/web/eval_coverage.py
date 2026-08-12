@@ -16,6 +16,8 @@ from app.web.eval_run_view import tally_scored_rows
 
 CoverageStatus = Literal["checked", "mismatches", "stale"]
 
+_SEVERITY = {"mismatches": 0, "stale": 1, "checked": 2}
+
 
 class EvalCoverage(BaseModel):
     """`checked` means every scored row matched — not that the step is right."""
@@ -31,18 +33,21 @@ class EvalCoverage(BaseModel):
     scored_version: str
 
 
-def find_eval_coverage(
+def find_eval_coverages(
     project: str, stage_id: str, version_id: str | None
-) -> EvalCoverage | None:
+) -> list[EvalCoverage]:
     """`version_id` is the version the reader is looking at; None means none resolved."""
+    coverages = []
     for config in _find_evals_targeting(project, stage_id):
         run = _latest_scored_run(project, config.id)
         if run is None:
             continue
         coverage = _build_coverage(project, config, run, version_id)
         if coverage is not None:
-            return coverage
-    return None
+            coverages.append(coverage)
+    # Worst first: a reader scanning the column meets what needs attention, and the
+    # order does not shuffle when an eval is renamed.
+    return sorted(coverages, key=lambda c: (_SEVERITY[c.status], c.eval_name))
 
 
 def _find_evals_targeting(project: str, stage_id: str) -> list[EvalConfig]:

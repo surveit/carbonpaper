@@ -17,7 +17,7 @@ from app.main import app
 from app.models import EvalConfig, EvalRun, EvalRunSettings, ExpectedOutput
 from app.evals.store import save_eval_config, save_eval_run
 from app.services import workspace
-from app.web.eval_coverage import find_eval_coverage
+from app.web.eval_coverage import find_eval_coverages
 
 client = TestClient(app)
 
@@ -82,14 +82,18 @@ def _save_run(tmp_path, per_row: pd.DataFrame, *, version: str = "v1", run_id: s
         started_at="2026-08-12T10:00:00", finished_at="2026-08-12T10:00:20"))
 
 
+def _only(coverages):
+    assert len(coverages) == 1, f"expected one eval, got {len(coverages)}"
+    return coverages[0]
+
+
 # ── The verdict ──────────────────────────────────────────────────────────────
 
 def test_a_run_against_the_version_being_read_vouches_for_the_stage(tmp_path):
     _save_run(tmp_path, _BOTH_MATCHED)
 
-    coverage = find_eval_coverage("demo", "classify", "v1")
+    coverage = _only(find_eval_coverages("demo", "classify", "v1"))
 
-    assert coverage is not None
     assert coverage.status == "checked"
     assert (coverage.rows_passed, coverage.rows_total) == (2, 2)
     assert coverage.columns == ["label"]
@@ -98,9 +102,8 @@ def test_a_run_against_the_version_being_read_vouches_for_the_stage(tmp_path):
 def test_a_run_against_another_version_is_stale_however_it_scored(tmp_path):
     _save_run(tmp_path, _BOTH_MATCHED, version="v1")
 
-    coverage = find_eval_coverage("demo", "classify", "v2")
+    coverage = _only(find_eval_coverages("demo", "classify", "v2"))
 
-    assert coverage is not None
     assert coverage.status == "stale"
     # The score still travels, so the badge can say what the older result WAS.
     assert (coverage.rows_passed, coverage.rows_total) == (2, 2)
@@ -110,13 +113,13 @@ def test_a_run_against_another_version_is_stale_however_it_scored(tmp_path):
 def test_an_unresolvable_version_is_stale_not_a_verdict(tmp_path):
     _save_run(tmp_path, _BOTH_MATCHED)
 
-    assert find_eval_coverage("demo", "classify", None).status == "stale"
+    assert _only(find_eval_coverages("demo", "classify", None)).status == "stale"
 
 
 def test_a_row_that_did_not_match_is_reported_as_a_mismatch(tmp_path):
     _save_run(tmp_path, _ONE_OF_TWO_MATCHED)
 
-    coverage = find_eval_coverage("demo", "classify", "v1")
+    coverage = _only(find_eval_coverages("demo", "classify", "v1"))
 
     assert coverage.status == "mismatches"
     assert (coverage.rows_passed, coverage.rows_total) == (1, 2)
@@ -126,61 +129,90 @@ def test_coverage_attaches_to_the_target_stage_only(tmp_path):
     _save_run(tmp_path, _BOTH_MATCHED)
 
     # `load` is the eval's OVERRIDE — it was replaced, not checked.
-    assert find_eval_coverage("demo", "load", "v1") is None
+    assert find_eval_coverages("demo", "load", "v1") == []
 
 
 def test_a_stage_no_eval_targets_carries_nothing(tmp_path):
     _save_run(tmp_path, _BOTH_MATCHED)
 
-    assert find_eval_coverage("demo", "nobody_evals_this", "v1") is None
+    assert find_eval_coverages("demo", "nobody_evals_this", "v1") == []
 
 
 def test_a_run_that_never_scored_vouches_for_nothing(tmp_path):
     _save_run(tmp_path, _BOTH_MATCHED, run_id="vetoed1", status="vetoed")
 
-    assert find_eval_coverage("demo", "classify", "v1") is None
+    assert find_eval_coverages("demo", "classify", "v1") == []
 
 
 def test_a_missing_result_table_states_nothing_rather_than_guessing(tmp_path):
     _save_run(tmp_path, _BOTH_MATCHED)
     (tmp_path / "demo" / "eval_run" / "r1" / "result.parquet").unlink()
 
-    assert find_eval_coverage("demo", "classify", "v1") is None
+    assert find_eval_coverages("demo", "classify", "v1") == []
 
 
-# ── The badge the node panel draws ───────────────────────────────────────────
+# ── The section the Transform pane draws ────────────────────────────────────
 
-def test_the_node_panel_carries_the_badge_for_a_checked_stage(tmp_path):
+def _stored_version(version_id: str) -> None:
     from app.services.versioning import WorkflowVersion
-    WorkflowVersion(id="demo/v1", version_id="v1", created_at="2026-08-12T00:00:00",
-                    message="m", reviewer="r").save()
+    WorkflowVersion(id=f"demo/{version_id}", version_id=version_id,
+                    created_at="2026-08-12T00:00:00", message="m", reviewer="r").save()
+
+
+def _eval_section(html: str) -> str:
+    return html.split("Checked against labelled data")[1].split("</section>")[0]
+
+
+def test_the_pane_reports_a_checked_stage_with_its_score(tmp_path):
+    _stored_version("v1")
     _save_run(tmp_path, _BOTH_MATCHED)
 
-    r = client.get("/project/demo/node/classify/panel")
+    section = _eval_section(client.get("/project/demo/node/classify/panel").text)
 
-    assert r.status_code == 200
-    assert "stage-eval-check" in r.text
-    assert "Matches 2 of 2 hand-labelled cases" in r.text
+    assert "verdict-pass" in section and "2 / 2" in section
+    assert "Label check" in section and "label" in section
 
 
-def test_the_node_panel_never_shows_a_stale_score_in_the_badge_line(tmp_path):
-    from app.services.versioning import WorkflowVersion
-    WorkflowVersion(id="demo/v2", version_id="v2", created_at="2026-08-12T00:00:00",
-                    message="m", reviewer="r").save()
+def test_a_stale_row_states_no_score_and_names_the_version_it_scored(tmp_path):
+    _stored_version("v2")
     _save_run(tmp_path, _BOTH_MATCHED, version="v1")
 
-    r = client.get("/project/demo/node/classify/panel")
+    section = _eval_section(client.get("/project/demo/node/classify/panel").text)
+    result_cell = section.split("<tbody>")[1].split("</td>")[0]
 
-    badge = r.text.split('class="stage-cert-badge"')[1].split("</span>")[0]
-    assert "Not checked since this step changed" in badge
-    assert "2 of 2" not in badge          # the number is in the explanation, not the verdict
-    assert "v1" in r.text                 # which version it WAS about is still named
+    assert "verdict-stale" in result_cell and "stale" in result_cell
+    assert "2 / 2" not in result_cell          # a verdict on code that has moved
+    assert "v1" in section                     # which version it WAS about is named
 
 
-def test_the_node_panel_of_an_unevaluated_stage_carries_no_badge(tmp_path):
+def test_two_evals_on_one_stage_get_a_row_each_worst_first(tmp_path):
+    _stored_version("v1")
+    save_eval_config(tmp_path / "demo", EvalConfig(
+        id="second_check", project="demo", name="Second check",
+        override_stage="load", target_stage="classify",
+        expected_outputs=[ExpectedOutput(output_column="label", metric="exact")]))
+    _save_run(tmp_path, _BOTH_MATCHED, run_id="passing")
+    _save_run(tmp_path, _ONE_OF_TWO_MATCHED, run_id="failing")
+    # The second config's run, so both evals have one of their own.
+    save_eval_run(tmp_path / "demo", EvalRun(
+        id="failing", config="second_check", project="demo", workflow_version="v1",
+        status="scored",
+        settings=EvalRunSettings(can_score_declaratively=True, frontier=["classify"],
+                                 blocking_stages=[]),
+        result_ref="eval_run/failing/result.parquet",
+        started_at="2026-08-12T10:00:00", finished_at="2026-08-12T10:00:20"))
+
+    coverages = find_eval_coverages("demo", "classify", "v1")
+    section = _eval_section(client.get("/project/demo/node/classify/panel").text)
+
+    # Two datasets, so two rows — never one summed figure neither eval measured.
+    assert [c.status for c in coverages] == ["mismatches", "checked"]
+    assert section.split("<tbody>")[1].count("<tr>") == 2   # the header row is not one
+    assert section.index("Second check") < section.index("Label check")
+
+
+def test_a_stage_no_eval_targets_gets_no_section(tmp_path):
     _save_run(tmp_path, _BOTH_MATCHED)
 
-    r = client.get("/project/demo/node/load/panel")
-
-    assert r.status_code == 200
-    assert "stage-eval-check" not in r.text
+    assert "Checked against labelled data" not in client.get(
+        "/project/demo/node/load/panel").text
