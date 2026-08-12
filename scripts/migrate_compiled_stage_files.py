@@ -29,7 +29,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from app.core.paths import repo_root
+from app.services.workspace import configure_projects_dir_from_env, projects_dir
 from scripts.stage_description import (
     DescriptionUndeterminable,
     rename_name_to_description,
@@ -54,18 +54,22 @@ _KEY = "primary_key"
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--apply", action="store_true", help="write changes (default: dry run)")
-    parser.add_argument("--projects-dir", type=Path, default=repo_root() / "examples")
+    parser.add_argument("--projects-dir", type=Path, default=None,
+                        help="default: the projects root, CARBON_PAPER_PROJECTS_DIR "
+                             "or ~/.carbonpaper/examples")
     args = parser.parse_args()
+    configure_projects_dir_from_env()
+    root = args.projects_dir or projects_dir()
 
-    stale, refused = find_stale_stage_files(args.projects_dir)
-    _report_refusals(refused, args.projects_dir)
+    stale, refused = find_stale_stage_files(root)
+    _report_refusals(refused, root)
     if not stale:
         print("every compiled stage file this can migrate is already in today's shape")
         return
 
     print(f"{len(stale)} file(s) {'-> rewriting' if args.apply else '(dry run)'}:")
     for path in stale:
-        print(f"  {path.relative_to(args.projects_dir)}")
+        print(f"  {path.relative_to(root)}")
     if args.apply:
         for path in stale:
             _rewrite(path)

@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 
 from app.core.frames import FrameStore, configure_frame_store, is_frame_store_configured
+from app.core.paths import CARBON_PAPER_HOME
 from app.core.persistence import SqliteKvStore, configure_store, is_store_configured
 
 _RENAMED_ENV_PREFIX = "CARBONPAPER_"
@@ -28,20 +29,25 @@ def refuse_renamed_env_vars() -> None:
 
 
 def configure_default_stores() -> None:
-    _configure_default_document_store()
+    configure_default_document_store()
     _configure_default_frame_store()
 
 
-def _renamed(name: str) -> str:
-    return _ENV_PREFIX + name[len(_RENAMED_ENV_PREFIX):]
-
-
-def _configure_default_document_store() -> None:
+def configure_default_document_store() -> None:
     if is_store_configured():
         return
     db_path = resolve_db_path()
     db_path.parent.mkdir(parents=True, exist_ok=True)
     configure_store(SqliteKvStore(str(db_path)))
+
+
+def resolve_db_path() -> Path:
+    override = os.environ.get("CARBON_PAPER_DB_PATH")
+    return Path(override) if override is not None else CARBON_PAPER_HOME / "app.db"
+
+
+def _renamed(name: str) -> str:
+    return _ENV_PREFIX + name[len(_RENAMED_ENV_PREFIX):]
 
 
 def _configure_default_frame_store() -> None:
@@ -51,7 +57,3 @@ def _configure_default_frame_store() -> None:
     override = os.environ.get("CARBON_PAPER_FRAMES_ROOT")
     root = Path(override) if override is not None else resolve_db_path().parent / "frames"
     configure_frame_store(FrameStore(root))
-
-
-def resolve_db_path() -> Path:
-    return Path(os.environ.get("CARBON_PAPER_DB_PATH", "data/app.db"))

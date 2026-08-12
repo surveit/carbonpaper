@@ -10,11 +10,11 @@ __pycache__/
 Thumbs.db
 build/
 
-# Process-wide document store (SQLite; app/core/persistence.py), configured at
-# app startup (app/main.py lifespan) to <repo_root>/data/app.db by default. Path
-# is overridable via CARBON_PAPER_DB_PATH. Anchored to the repo root (leading /)
-# so it doesn't also match a same-named dir elsewhere in the tree, e.g. the committed
-# app/seeds/data/ fixtures.
+# The document store (SQLite; app/core/persistence.py) defaults to ~/.carbonpaper/,
+# outside the checkout, so nothing here holds it — but CARBON_PAPER_DB_PATH can still
+# point a process at data/ inside the tree. Anchored to the repo root (leading /) so it
+# doesn't also match a same-named dir elsewhere, e.g. the committed app/seeds/data/
+# fixtures.
 /data/
 
 # Example methodology content + scratch pipelines. Generated run outputs land

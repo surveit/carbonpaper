@@ -46,7 +46,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     # time (the test suite's autouse fixtures) wins over the on-disk defaults —
     # the app never reconfigures a store that's already set.
     configure_default_stores()
-    # The projects root (CARBON_PAPER_PROJECTS_DIR, default the repo's examples/). Read
+    # The projects root (CARBON_PAPER_PROJECTS_DIR, default ~/.carbonpaper/examples). Read
     # here rather than at import time in app.services.workspace, so the test
     # suite's own set_projects_dir() is never overridden by the environment.
     configure_projects_dir_from_env()

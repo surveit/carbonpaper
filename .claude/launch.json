@@ -6,7 +6,7 @@
       "runtimeExecutable": "/bin/sh",
       "runtimeArgs": [
         "-c",
-        "CARBON_PAPER_DB_PATH=/Users/shuhan/carbonpaper/data/app.db CARBON_PAPER_PROJECTS_DIR=/Users/shuhan/carbonpaper/examples exec /Users/shuhan/carbonpaper/.venv/bin/python -m uvicorn app.main:app --port 8796"
+        "exec /Users/shuhan/carbonpaper/.venv/bin/python -m uvicorn app.main:app --port 8796"
       ],
       "port": 8796
     }
