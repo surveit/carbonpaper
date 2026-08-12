@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+import json
+
 from pathlib import Path
 
 import pandas as pd
 import pytest
 
+from app.evals.compatibility import validate_eval_compatibility
+from app.evals.dataset_columns import get_injected_columns
+from app.evals.store import load_eval_config
 from app.models import Stage, StageType
 from app.models.errors import StepRefused
 from app.models.review_guide import ReviewGuideDraft
@@ -14,7 +19,12 @@ from app.runtime.stages import HANDLERS
 from app.services import project, versioning
 from app.services.loader import load_workflow
 from app.services.project import WorkflowFile, import_project
-from conftest import place_stage
+from app.tools.tutorial import (
+    TutorialContext,
+    read_seed_eval_config,
+    seed_tutorial_project,
+)
+from conftest import pinned_stages, place_stage
 
 _FIXTURE_PATH = (
     Path(__file__).resolve().parents[1]
@@ -48,7 +58,17 @@ _TOUR_LIMIT = 6
 _SEEDED_EXAMPLES = 5
 
 _CONTRADICTS = "Contradicts"
-_ALIGNMENT_VALUES = ["Contradicts", "Matches", "Unclear", "No commitment given"]
+_NO_COMMITMENT = "No commitment given"
+_ALIGNMENT_VALUES = ["Contradicts", "Matches", "Unclear", _NO_COMMITMENT]
+
+_EVAL_PATH = _FIXTURE_PATH.parent / "evals" / _FIXTURE_PATH.name
+_EVAL_ID = "alignment_hard_cases"
+_OVERRIDE_STAGE = "matched_commitments"
+_TARGET_STAGE = "judge_alignment"
+_JUDGED_COLUMN = "alignment"
+# Counted off the committed eval dataset.
+_EVAL_ROWS = 24
+_BASE_URL = "http://127.0.0.1:8788/"
 
 
 def _load_fixture() -> WorkflowFile:
@@ -374,6 +394,85 @@ def test_the_review_guide_keeps_every_check_without_the_padding():
         "linked back to its own lineage",
     ):
         assert check in prose, check
+
+
+# ── the seeded eval ──────────────────────────────────────────────────────────
+
+
+def _import_and_pin(tmp_path):
+    name = import_project(_load_fixture(), name="tutorial_smoke")
+    workflow, _version = pinned_stages(tmp_path / "examples" / name)
+    return name, workflow
+
+
+def _eval_dataset(name: str = "tutorial_smoke") -> pd.DataFrame:
+    config = read_seed_eval_config(name)
+    assert config.table is not None
+    return pd.read_csv(Path(__file__).resolve().parents[1] / config.table.path)
+
+
+def test_the_committed_eval_still_fits_the_tutorial_workflow(tmp_path):
+    name, workflow = _import_and_pin(tmp_path)
+
+    report = validate_eval_compatibility(read_seed_eval_config(name), workflow)
+
+    assert report.ok, report.problems
+    assert report.settings is not None
+    # The dataset stands in for everything upstream, so one model step re-runs.
+    assert report.settings.frontier == [_TARGET_STAGE]
+
+
+def test_the_eval_dataset_supplies_every_column_the_override_stage_emits(tmp_path):
+    _name, workflow = _import_and_pin(tmp_path)
+    by_id = workflow.index_workflow_stages_by_id()
+
+    injected = get_injected_columns(
+        by_id[_OVERRIDE_STAGE], by_id[_TARGET_STAGE], [_JUDGED_COLUMN])
+
+    assert list(_eval_dataset().columns) == [c.name for c in injected] + [_JUDGED_COLUMN]
+
+
+def test_the_eval_dataset_labels_only_with_verdicts_the_stage_may_emit():
+    judge = _stage(_load_fixture(), _TARGET_STAGE)
+    column = next(c for c in judge.signature.adds if c.name == _JUDGED_COLUMN)
+    dataset = _eval_dataset()
+
+    assert len(dataset) == _EVAL_ROWS
+    # Every branch of the rubric is exercised, and none is invented.
+    assert set(dataset[_JUDGED_COLUMN]) == set(column.enum or [])
+
+
+def test_the_eval_labels_a_blank_commitment_and_nothing_else_as_unjudgeable():
+    """Step 3 fixes that answer to the absence, so it may not appear beside a commitment."""
+    dataset = _eval_dataset()
+
+    blank = dataset["public_commitment"].isna()
+    assert set(dataset.loc[blank, _JUDGED_COLUMN]) == {_NO_COMMITMENT}
+    assert _NO_COMMITMENT not in set(dataset.loc[~blank, _JUDGED_COLUMN])
+
+
+def test_scoring_the_eval_costs_two_model_calls():
+    """What a reader re-running it pays: the target reads the dataset at its own batch size."""
+    judge = _stage(_load_fixture(), _TARGET_STAGE)
+    assert judge.llm is not None
+
+    assert len(_eval_dataset()) <= judge.llm.batch_size * 2
+
+
+def test_the_tour_seeds_the_eval_beside_the_review_guide(projects_root):
+    seeded = seed_tutorial_project(TutorialContext(base_url=_BASE_URL))
+
+    stored = load_eval_config(projects_root / seeded.name, _EVAL_ID)
+
+    assert stored.project == seeded.name
+    assert (stored.override_stage, stored.target_stage) == (_OVERRIDE_STAGE, _TARGET_STAGE)
+    assert [check.output_column for check in stored.expected_outputs] == [_JUDGED_COLUMN]
+    assert seeded.eval_url == f"{_BASE_URL}project/{seeded.name}/evals/{_EVAL_ID}"
+
+
+def test_the_committed_eval_names_no_project_of_its_own():
+    """The project id is minted at import, so a project written here would be a guess."""
+    assert "project" not in json.loads(_EVAL_PATH.read_text(encoding="utf-8"))
 
 
 # ── the published report ─────────────────────────────────────────────────────

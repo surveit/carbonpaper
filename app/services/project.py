@@ -15,9 +15,10 @@ from typing import Any, ClassVar, Sequence
 from pydantic import BaseModel, field_validator
 
 from app.core.errors import RunManifestNotJson
-from app.core.persistence import PersistedModel, PersistenceScope
+from app.core.persistence import PersistedModel, PersistenceScope, get_store
 from app.core.timestamp_ids import mint_timestamp_id
 from app.models import (
+    EvalConfig,
     SchemaLibrary,
     Stage,
     StageDraft,
@@ -472,6 +473,12 @@ def write_review_guide(
     )
     versioning.save_version_guide(_resolve_project_dir_to_write(name), version_id, guide)
     return guide
+
+
+def write_eval_config(name: str, config: EvalConfig) -> None:
+    """Writes the document app.evals.store reads back; that package is a leaf app.tools cannot import."""
+    get_store().write(
+        "eval", f"{name}/{config.id}", config.model_dump(mode="json", exclude_none=True))
 
 
 def _resolve_project_dir_to_write(name: str) -> Path:

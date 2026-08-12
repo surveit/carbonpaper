@@ -1,0 +1,33 @@
+{
+  "id": "alignment_hard_cases",
+  "name": "Hard alignment judgments",
+  "description": "Twenty-four invented filings chosen to be hard: a supportive-sounding ask that pushes a coal retirement past the promised date, negations stacked two and three deep, an ask buried in a list of bill numbers, a promise whose carve-out the ask sits outside of, an ask that shares a subject with the commitment but pulls in no direction, and three filings whose client matched no commitment row at all — one of them named almost exactly like a client that did. Each expected label was read off Step 3's four definitions before the workflow was run, and none was changed afterwards, so a disagreement here is a finding rather than a mislabel.",
+  "override_stage": "matched_commitments",
+  "target_stage": "judge_alignment",
+  "expected_outputs": [
+    {"output_column": "alignment", "metric": "exact"}
+  ],
+  "table": {
+    "path": "app/seeds/data/evals/tutorial_alignment_hard.csv",
+    "format": "csv",
+    "table_schema": {
+      "columns": [
+        {"name": "filing_id", "type": "str", "nullable": false},
+        {"name": "client", "type": "str", "nullable": false},
+        {"name": "registrant", "type": "str", "nullable": false},
+        {"name": "amount_usd", "type": "int", "nullable": false},
+        {"name": "filing_period", "type": "str", "nullable": false},
+        {"name": "specific_issues", "type": "str", "nullable": false},
+        {"name": "public_commitment", "type": "str", "nullable": true},
+        {"name": "commitment_source", "type": "str", "nullable": true},
+        {
+          "name": "alignment",
+          "type": "str",
+          "nullable": true,
+          "description": "The label Step 3's definitions give this filing, written before the stage ran.",
+          "enum": ["Contradicts", "Matches", "Unclear", "No commitment given"]
+        }
+      ]
+    }
+  }
+}
