@@ -8,6 +8,7 @@ from pathlib import Path
 
 import app
 from app.agents.tutorial.prompt import TUTORIAL_SYSTEM_PROMPT
+from app.web.breadcrumbs import _HOME_LABEL
 from app.tools.tool_specs import TOOL_SPECS
 from app.agents.tutorial.config import make_tutorial_tools
 from app.services.project import WorkflowFile
@@ -59,11 +60,11 @@ def test_the_greeting_is_prompted_by_a_hello_not_by_an_instruction() -> None:
     assert TUTORIAL_OPENING_PROMPT == "Hi"
 
 
-def test_the_tour_writes_the_product_name_in_lower_case() -> None:
-    """Three casings exist in this repo; prose and CLAUDE.md use the lower-case one."""
-    assert 'The product is written "carbonpaper", lower case' in _flat(_beat(1))
-    assert "Carbonpaper" not in TUTORIAL_SYSTEM_PROMPT
-    assert "CarbonPaper" not in TUTORIAL_SYSTEM_PROMPT
+def test_the_tour_writes_the_product_name_the_page_around_it_writes() -> None:
+    """Read off the breadcrumb: the header names the product while the tour is speaking."""
+    assert f'The product is written "{_HOME_LABEL}"' in _flat(_beat(1))
+    for wrong in ("carbonpaper", "Carbonpaper", "CarbonPaper"):
+        assert wrong not in TUTORIAL_SYSTEM_PROMPT
 
 
 def test_the_greeting_says_the_agent_writes_the_stages_not_the_reader() -> None:
@@ -81,9 +82,9 @@ def test_the_workflow_is_introduced_by_why_it_exists_not_by_its_stage_list() -> 
     beat = _flat(_beat(2))
 
     assert "ONE sentence" in beat and "what this EXAMPLE workflow is for" in beat
-    assert "The mechanics are not the point; the LEAD is" in beat
-    assert "what the client said in public against what the same client paid to ask" in beat
-    assert "Do NOT list the six stages in the chat" in beat
+    assert "what a company committed to in public against what the same company" in beat
+    assert "Do NOT list the stages in the chat" in beat
+    assert "Nor the files it reads" in beat
 
 
 def test_the_invented_data_admission_is_a_hard_rule_too() -> None:
@@ -182,7 +183,7 @@ def _flat(text: str) -> str:
 # fixture, a field of what create_tutorial_project returns, a tool, an argument one of
 # those tools takes, or a run status. A renamed stage, field or argument otherwise leaves
 # the prompt pointing at nothing, silently.
-_RUN_STATUS_WORDS = {"running", "status", "error", "path"}
+_RUN_STATUS_WORDS = {"running", "status", "error"}
 
 
 def test_every_name_the_prompt_quotes_is_one_the_code_defines() -> None:
