@@ -112,3 +112,14 @@ def test_duplicate_fk_edges_are_deduped_though_the_columns_list_is_not():
     ]
     diagram = build_schema_er_diagram(schemas)
     assert diagram.count("orgs ||--o{ filings") == 1
+
+
+def test_schema_with_no_kind_renders_the_placeholder_with_nothing_in_parentheses():
+    schemas = [{"name": "issue_text", "columns": []}]
+    diagram = build_schema_er_diagram(schemas)
+    assert diagram == (
+        "erDiagram\n"
+        "    issue_text {\n"
+        "        any _\n"
+        "    }"
+    )

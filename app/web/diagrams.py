@@ -90,7 +90,8 @@ def _render_er_entity_block(s: dict[str, Any]) -> list[str]:
     pk_set = set(s.get("primary_key") or [])
     lines = [f"    {sid} {{"]
     if not cols:
-        lines.append(f"        any _ \"({s.get('kind', '')})\"")
+        kind = s.get("kind")
+        lines.append(f'        any _ "({kind})"' if kind else "        any _")
     for col in cols:
         line = _render_er_column_row(col, pk_set)
         if line is not None:
@@ -157,16 +158,23 @@ def _render_table_node_block(s: dict[str, Any]) -> list[str]:
     sid = s.get("name")
     if not sid:
         return []
-    klass = SCHEMA_KIND_CLASS.get(s.get("kind", ""), "custom")
     title = (s.get("title") or "").strip().replace('"', "'")[:48]
     label = f'"<b>{sid}</b>'
     if title and title != sid:
         label += f"<br/><span style='font-size:10px;color:#5c6169'>{title}</span>"
     label += '"'
     return [
-        f"    {sid}[{label}]:::{klass}",
+        f"    {sid}[{label}]{_schema_node_class(s.get('kind'))}",
         f'    click {sid} call focusSchema("{sid}") "Open columns"',
     ]
+
+
+def _schema_node_class(kind: Any) -> str:
+    if not kind:
+        # No class at all: `custom` is where an UNRECOGNISED kind lands, and borrowing
+        # it for a schema that declares none would draw a fifth kind nobody chose.
+        return ""
+    return f":::{SCHEMA_KIND_CLASS.get(kind, 'custom')}"
 
 
 def _collect_table_fk_edges(schemas: list[dict[str, Any]], names: set[Any]) -> list[str]:

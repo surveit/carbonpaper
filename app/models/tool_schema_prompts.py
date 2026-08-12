@@ -75,3 +75,17 @@ STARLARK_ROW_FUNCTION_STAGE_TEST_DESCRIPTION = "One row in → that one row out,
 TABLE_SCHEMA_DESCRIPTION = (
     "An anonymous schema — columns declared inline, e.g. an input_data stage's file."
 )
+
+TERMS_DESCRIPTION = (
+    "A methodology's whole vocabulary: its nouns (the data model) and its verbs.\n"
+    "One word carries one meaning — no word appears twice across either half."
+)
+
+VERB_ALSO_WRITTEN_DESCRIPTION = (
+    "The other spellings this methodology uses for this same act."
+)
+
+VERB_DESCRIPTION = (
+    "One act the methodology performs, under the word its owner uses for it — so a\n"
+    "reader meets that word rather than a synonym chosen for them."
+)

@@ -17,11 +17,12 @@ from app.models import (
     SchemaKind,
     SchemaLibrary,
     StageType,
+    Verb,
     stage_to_spec_dict,
 )
 from app.models.stages.input_data import Connector, ConnectorKind, InputDataStage
 from app.models.stages.signature import ReplacesSignature
-from app.services import data_model, project, versioning, workspace
+from app.services import project, terms, versioning, workspace
 from app.services.loader import load_compiled_dir, write_stage
 from app.services.project import WorkflowFile, export_project, import_project
 
@@ -30,6 +31,7 @@ _TINY_LIBRARY = SchemaLibrary(schemas=[NamedSchema(
     columns=[NamedColumn(name="entity_id", type="str", nullable=False),
              NamedColumn(name="entity_name", type="str", nullable=True)],
 )])
+_FLAG = Verb(name="flag", definition="Mark a filing for a human to decide on.")
 
 
 def test_round_trip_through_json_reproduces_the_source_and_mints_a_version(tmp_path):
@@ -43,7 +45,7 @@ def test_round_trip_through_json_reproduces_the_source_and_mints_a_version(tmp_p
         "Round Trip Source", "Trace the shell companies.", source="test")
     pdir = source_examples / name
 
-    data_model.write_data_model(pdir, _TINY_LIBRARY)
+    terms.write_data_model(pdir, _TINY_LIBRARY)
 
     compiled = pdir / "compiled"
     compiled.mkdir()
@@ -69,7 +71,7 @@ def test_round_trip_through_json_reproduces_the_source_and_mints_a_version(tmp_p
 
     assert (target_pdir / "document.md").read_text(encoding="utf-8") == "Trace the shell companies."
 
-    imported_library = data_model.load_data_model(target_pdir)
+    imported_library = terms.load_data_model(target_pdir)
     assert imported_library is not None
     assert imported_library.model_dump() == _TINY_LIBRARY.model_dump()
 
@@ -120,3 +122,48 @@ def test_a_non_null_foreign_config_block_is_still_refused(tmp_path):
     assert [(err["loc"], err["type"]) for err in caught.value.errors()] == [
         (("stages", 0, "input_data", "llm"), "extra_forbidden")
     ]
+
+
+def test_a_bundle_written_before_verbs_existed_still_imports(tmp_path):
+    legacy = json.dumps({
+        "name": "no_verbs", "document": "# doc", "model": "m", "source": "s",
+        "data_model": _TINY_LIBRARY.model_dump(mode="json"), "stages": [],
+    })
+    wf = WorkflowFile.model_validate_json(legacy)
+    assert wf.verbs == []
+
+    project_id = import_project(wf, name="no_verbs_target")
+    pdir = workspace.resolve_project_dir(project_id)
+    assert not (pdir / "verbs.json").exists()
+    assert terms.load_terms(pdir).verbs == []
+
+
+def test_a_bundle_carries_the_verbs_across_and_import_writes_them(tmp_path):
+    source_examples = tmp_path / "source_examples"
+    target_examples = tmp_path / "target_examples"
+    source_examples.mkdir()
+    target_examples.mkdir()
+    workspace.set_projects_dir(source_examples)
+
+    name = project.create_project("Verbs Source", "Flag the filings.", source="test")
+    pdir = source_examples / name
+    terms.write_data_model(pdir, _TINY_LIBRARY)
+    terms.write_verbs(pdir, [_FLAG])
+
+    wf = WorkflowFile.model_validate_json(export_project(name).to_json())
+    assert wf.verbs == [_FLAG]
+
+    workspace.set_projects_dir(target_examples)
+    imported = import_project(wf, name="verbs_target")
+    assert terms.load_terms(target_examples / imported).verbs == [_FLAG]
+
+
+def test_a_bundle_whose_verb_repeats_a_schema_name_is_refused(tmp_path):
+    bundle = json.dumps({
+        "name": "clash", "document": "# doc", "model": "m", "source": "s",
+        "data_model": _TINY_LIBRARY.model_dump(mode="json"),
+        "verbs": [{"name": "entity", "definition": "Name a thing."}],
+        "stages": [],
+    })
+    with pytest.raises(ValidationError, match="entity"):
+        WorkflowFile.model_validate_json(bundle)
