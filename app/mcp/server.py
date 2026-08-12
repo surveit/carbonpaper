@@ -174,11 +174,7 @@ def report_compiler_warnings(project_id: str) -> dict[str, Any]:
     stages = loader.load_workflow(pdir)
     failing = stage_tests.run_stage_tests(stages).count_failing_by_stage()
     report = find_workflow_compiler_warnings(stages, failing)
-    return {
-        "is_clean": report.is_clean,
-        "errors": [w.model_dump(mode="json") for w in report.errors],
-        "warnings": [w.model_dump(mode="json") for w in report.warnings],
-    }
+    return {"warnings": [w.model_dump(mode="json") for w in report.warnings]}
 
 
 @mcp.tool(description=TOOL_SPECS["read_data_model"].description)

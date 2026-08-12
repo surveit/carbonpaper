@@ -9,21 +9,12 @@ from typing import Mapping
 
 from pydantic import BaseModel
 
-from app.models.severity import UserFacingErrorSeverity
 from app.models.stage import Stage
 from app.models.stages.warnings import SEVERITY, CompilerWarning, warn
 
 
 class CompilerWarningReport(BaseModel):
     warnings: list[CompilerWarning]
-
-    @property
-    def errors(self) -> list[CompilerWarning]:
-        return [w for w in self.warnings if w.severity is UserFacingErrorSeverity.error]
-
-    @property
-    def is_clean(self) -> bool:
-        return not self.errors
 
 
 def find_workflow_compiler_warnings(
@@ -34,10 +25,9 @@ def find_workflow_compiler_warnings(
     warnings = [w for stage in stages
                 for w in find_stage_compiler_warnings(stage, failing.get(stage.id))]
     order = list(SEVERITY)
-    return CompilerWarningReport(
-        warnings=sorted(warnings,
-                        key=lambda w: (w.severity is not UserFacingErrorSeverity.error, order.index(w.kind)))
-    )
+    # Every kind is a warning, so SEVERITY's order is the whole sort: the kinds that
+    # leave a stage least reviewable lead.
+    return CompilerWarningReport(warnings=sorted(warnings, key=lambda w: order.index(w.kind)))
 
 
 def find_stage_compiler_warnings(

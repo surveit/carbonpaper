@@ -251,10 +251,9 @@ remaining stage is allowed.""",
         description="""\
 Every problem with this workflow: undescribed stages, descriptions no examples
 check, examples that do not pass, code the review panel cannot show, and
-deliberate choices (cache off) a reviewer should be told about.
-`errors` is the subset you can clear by editing the stage. This DOES run the
-examples — a workflow whose examples disagree with its code is not
-signed-off-able — but run_stage_tests is what tells you which case failed.""",
+deliberate choices (cache off) a reviewer should be told about. None of them
+refuses anything — a human decides what to fix and what to leave standing. This
+DOES run the examples, but run_stage_tests is what tells you which case failed.""",
     ),
     "run_stage_tests": ToolSpec(
         name="run_stage_tests",

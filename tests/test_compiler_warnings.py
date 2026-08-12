@@ -77,26 +77,27 @@ def test_a_config_only_stage_warns_about_nothing():
 
 
 # ── the error kinds ───────────────────────────────────────────────────────
-def test_no_description_is_an_error():
+def test_no_description_is_a_warning():
+    # An author may knowingly leave one standing; nothing here refuses an action.
     assert _kinds(_stage(summary=None)) == ["undescribed"]
-    assert find_stage_compiler_warnings(_stage(summary=None))[0].severity == "error"
+    assert find_stage_compiler_warnings(_stage(summary=None))[0].severity == "warning"
 
 
-def test_a_description_with_no_examples_is_an_error():
+def test_a_description_with_no_examples_warns():
     warnings = find_stage_compiler_warnings(_stage())
     assert [w.kind for w in warnings] == ["unexemplified"]
-    assert warnings[0].severity == "error"
+    assert warnings[0].severity == "warning"
 
 
 def test_missing_description_outranks_missing_examples():
     assert _kinds(_stage(summary=None)) == ["undescribed"]
 
 
-def test_module_code_is_an_error_because_the_panel_cannot_show_it():
+def test_module_code_warns_because_the_panel_cannot_show_it():
     warnings = find_stage_compiler_warnings(
         _stage(kind="module", module="pkg.mod", tests=[_PASSING_EXAMPLE]))
     assert [w.kind for w in warnings] == ["unreviewable_code"]
-    assert warnings[0].severity == "error"
+    assert warnings[0].severity == "warning"
 
 
 def _publish_stage(stage_id="pub"):
@@ -135,30 +136,32 @@ def test_cache_off_is_a_note_not_a_blocker():
 
 
 # ── the workflow-level gate ──────────────────────────────────────────────────
-def test_a_workflow_is_clean_when_no_error_remains():
+def test_every_compiler_note_is_a_warning():
+    # None of them refuses an action, so none of them borrows the runtime's word for
+    # a stage that stopped.
     report = find_workflow_compiler_warnings([
-        _stage(stage_id="ok", tests=[_PASSING_EXAMPLE]),
+        _stage(stage_id="bare"),
+        _stage(stage_id="silent", summary=None),
         _stage(stage_id="note", cache=False, tests=[_PASSING_EXAMPLE]),
     ])
-    assert report.warnings and report.is_clean
-    assert report.errors == []
+    assert report.warnings
+    assert all(w.severity == "warning" for w in report.warnings)
 
 
-def test_a_workflow_with_one_undescribed_stage_is_not_clean():
+def test_a_workflow_with_one_undescribed_stage_still_warns_about_it():
     report = find_workflow_compiler_warnings([
         _stage(stage_id="ok", tests=[_PASSING_EXAMPLE]),
         _stage(stage_id="silent", summary=None),
     ])
-    assert not report.is_clean
-    assert [w.stage_id for w in report.errors] == ["silent"]
+    assert [w.stage_id for w in report.warnings] == ["silent"]
 
 
-def test_errors_sort_before_warnings():
+def test_the_least_reviewable_kinds_sort_first():
     report = find_workflow_compiler_warnings([
         _stage(stage_id="note", cache=False, tests=[_PASSING_EXAMPLE]),
-        _stage(stage_id="silent", summary=None),
+        _stage(stage_id="bare"),
     ])
-    assert [w.kind for w in report.warnings] == ["undescribed", "nondeterministic"]
+    assert [w.kind for w in report.warnings] == ["unexemplified", "nondeterministic"]
 
 
 # ── examples that do not pass ────────────────────────────────────────────────
@@ -190,14 +193,11 @@ def test_missing_examples_outranks_failing_ones():
     assert _kinds(_stage(), ) == ["unexemplified"]
 
 
-def test_a_workflow_with_a_failing_example_is_still_clean():
+def test_a_workflow_with_a_failing_example_says_which_stage():
     report = find_workflow_compiler_warnings(
         [_stage(stage_id="ok", tests=[_PASSING_EXAMPLE]),
          _stage(stage_id="broken", tests=[_PASSING_EXAMPLE])],
         {"broken": 2},
     )
-    # `is_clean` means nothing is OWED an edit. A mismatch is owed a human read,
-    # which the warning asks for; version creation gates on it separately.
-    assert report.is_clean
     assert [(w.stage_id, w.kind) for w in report.warnings] == [("broken", "examples_failing")]
 

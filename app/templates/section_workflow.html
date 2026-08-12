@@ -85,13 +85,12 @@
 
    Drawn with the issue table the run page indexes ITS issues with: the severity
    word leads, the stage links its panel, the kind rides in the narrow cell a run
-   gives the column name. An `error` is a warning an edit to that stage clears; the
-   panel is titled by the two counts, in the words the clean state below already
-   answers in ("0 errors, 0 warnings"). #}
+   gives the column name. Every compiler note is a warning — none of them refuses
+   anything — so the panel is titled by that one count. #}
 {% if compiler_warnings and compiler_warnings.warnings %}
-{% set errors = compiler_warnings.errors|length %}
+
 <div class="wf-issue-index">
-{% call issue_panel(errors, compiler_warnings.warnings|length - errors, open=true) %}
+{% call issue_panel(0, compiler_warnings.warnings|length, open=true) %}
   {% for warning in compiler_warnings.warnings %}
   {{ issue_row(severity=warning.severity, stage_id=warning.stage_id,
                subject=warning.kind, message=warning.detail) }}
