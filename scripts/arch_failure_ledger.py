@@ -140,8 +140,9 @@ def render_markdown(raw_records: list[RunRecord]) -> str:
         _MARKER,
         "# Architecture gate tally",
         "",
-        f"{len(records)} CI runs recorded. Rewritten by the `lint` and `test` jobs on every "
-        "run; raw records live on the `ci-metrics` branch as `ledger.jsonl`.",
+        f"{len(records)} CI {'run' if len(records) == 1 else 'runs'} recorded. Rewritten by "
+        "the `lint` and `test` jobs on every run; raw records live on the `ci-metrics` "
+        "branch as `ledger.jsonl`.",
         "",
         render_headline(records, recent),
         "",
