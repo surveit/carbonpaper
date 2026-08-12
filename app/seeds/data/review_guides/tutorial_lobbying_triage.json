@@ -41,8 +41,16 @@
       "data_description": "The same filings, plus the model's judgment and its one-sentence note."
     },
     {
+      "title": "Put every contradiction in front of a person",
+      "prose": "A contradiction is a proposal until someone reads both texts. After this: every flagged filing carries a reviewer's `reviewed_alignment`, their name and their note; `skipped` means no person was asked.",
+      "stage_ids": [
+        "review_contradictions"
+      ],
+      "data_description": "Every filing, plus the label a person left on the ones the model called contradictions."
+    },
+    {
       "title": "Publish the report",
-      "prose": "What you hand to someone who was not here — open it under Published, below. After this: one page per filing, each row linked back to its own lineage, each contradiction beside the promise it contradicts.",
+      "prose": "What you hand to someone who was not here — open it under Published, below. After this: one page per filing, each row linked back to its own lineage, each printed contradiction naming whoever reviewed it.",
       "stage_ids": [
         "publish_report"
       ],

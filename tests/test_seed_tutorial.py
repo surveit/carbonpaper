@@ -10,10 +10,13 @@ import pytest
 from app.evals.compatibility import validate_eval_compatibility
 from app.evals.dataset_columns import get_injected_columns
 from app.evals.store import load_eval_config
+from app.core.stage_cache import StageCacheEntry
 from app.models import Stage, StageType
 from app.models.errors import StepRefused
 from app.models.review_guide import ReviewGuideDraft
-from app.runtime.context import RunContext
+from app.models.stages.human_review_queue import HumanReviewQueueStage
+from app.runtime.context import RunContext, RunIdentity
+from app.runtime.errors import HaltForReview
 from app.runtime.stage_tests import run_stage_tests
 from app.runtime.stages import HANDLERS
 from app.services import project, versioning
@@ -24,7 +27,7 @@ from app.tools.tutorial import (
     read_seed_eval_config,
     seed_tutorial_project,
 )
-from conftest import pinned_stages, place_stage
+from conftest import make_run_context, pinned_stages, place_stage
 
 _FIXTURE_PATH = (
     Path(__file__).resolve().parents[1]
@@ -43,6 +46,7 @@ _EXPECTED_STAGE_IDS = [
     "check_filings",
     "matched_commitments",
     "judge_alignment",
+    "review_contradictions",
     "publish_report",
 ]
 
@@ -60,6 +64,14 @@ _SEEDED_EXAMPLES = 5
 _CONTRADICTS = "Contradicts"
 _NO_COMMITMENT = "No commitment given"
 _ALIGNMENT_VALUES = ["Contradicts", "Matches", "Unclear", _NO_COMMITMENT]
+
+_REVIEW_STAGE = "review_contradictions"
+_REVIEWED_COLUMN = "reviewed_alignment"
+# The three verdicts the review runtime writes, as the fixture declares them.
+_APPROVE, _MODIFY, _SKIPPED = "approve", "modify", "skipped"
+# Stands in for a decision the run records: a name and the moment it was recorded.
+_REVIEWER = "R. Vasquez"
+_REVIEWED_AT = "2024-05-06T11:20:00"
 
 _EVAL_PATH = _FIXTURE_PATH.parent / "evals" / _FIXTURE_PATH.name
 _EVAL_ID = "alignment_hard_cases"
@@ -341,8 +353,11 @@ def test_the_methodology_document_states_the_batch_size_the_stage_uses():
     wf = _load_fixture()
     # The document is the source of record a reviewer reads against the stage.
 
-    assert "twelve at a time in one model call" in wf.document
+    # "up to": the last call of a run holds whatever is left over.
+    assert "read up to twelve at a time in one model call" in wf.document
     assert "four at a time" not in wf.document
+    # And what the saving costs, which the document owes a reader of the labels.
+    assert "swayed by the ones it happens to travel with" in wf.document
 
 
 def test_the_methodology_document_admits_the_data_is_invented():
@@ -475,6 +490,95 @@ def test_the_committed_eval_names_no_project_of_its_own():
     assert "project" not in json.loads(_EVAL_PATH.read_text(encoding="utf-8"))
 
 
+# ── the review step ──────────────────────────────────────────────────────────
+
+
+def _review_stage() -> HumanReviewQueueStage:
+    stage = _stage(_load_fixture(), _REVIEW_STAGE)
+    assert isinstance(stage, HumanReviewQueueStage)
+    return stage
+
+
+def test_only_the_filings_the_model_called_contradictions_reach_a_reviewer():
+    """The other three labels are published as nobody's finding, so nobody is asked."""
+    queue = _review_stage().queue
+
+    assert queue.filter == f"alignment == '{_CONTRADICTS}'"
+    assert queue.reviewed_columns == {_JUDGED_COLUMN: _REVIEWED_COLUMN}
+
+
+def test_the_reviewers_label_lands_beside_the_models_and_never_on_it():
+    stage = _review_stage()
+    added = {column.name: column for column in stage.signature.adds}
+
+    assert stage.signature.rewrites == []
+    assert added[_REVIEWED_COLUMN].enum == _ALIGNMENT_VALUES
+    # Non-nullable: every filing reaches the report carrying a label, reviewed or not.
+    assert added[_REVIEWED_COLUMN].nullable is False
+    assert added["review_verdict"].enum == [_APPROVE, _MODIFY, _SKIPPED]
+
+
+def test_the_costliest_filing_is_reviewed_first():
+    queue = _review_stage().queue
+
+    assert [(key.column, str(key.direction)) for key in queue.sort] == [
+        ("amount_usd", "descending")
+    ]
+
+
+def test_the_reviewer_is_told_to_read_both_texts_rather_than_the_label():
+    instructions = _review_stage().queue.reviewer_instructions or ""
+
+    assert "the model's label is" in instructions
+    assert "which words in the two texts you decided from" in instructions
+
+
+def test_the_card_carries_every_column_the_decision_is_made_from():
+    """A reviewer sees exactly what the signature reads — both texts included."""
+    read = {
+        column.name
+        for entry in _review_stage().signature.reads
+        for column in entry.columns
+    }
+
+    assert {"public_commitment", "specific_issues", _JUDGED_COLUMN} <= read
+    # The order the queue is worked in is read too, or the queued row would not carry it.
+    assert "amount_usd" in read
+
+
+def test_the_tours_six_filings_leave_two_filings_asking_the_opposite_of_a_promise():
+    """Beat 2's capped run is meant to queue a pair: real, and finishable."""
+    joined = _execute(
+        _stage(_load_fixture(), "matched_commitments"),
+        {"check_filings": _checked(pd.read_csv(_CSV_PATH).head(_TOUR_LIMIT)),
+         "public_commitments": pd.read_csv(_COMMITMENTS_PATH)},
+    )
+    against_a_promise = joined[
+        joined["public_commitment"].notna()
+        & joined["specific_issues"].str.startswith("Opposing")
+    ]
+
+    assert list(against_a_promise["filing_id"]) == ["TUT-2024-0001", "TUT-2024-0005"]
+
+
+def test_the_review_step_queues_the_contradictions_and_halts_the_run(tmp_path):
+    """Stand-in labels, real stage: what halts a run is the filter, not the model."""
+    judged = _stand_in_for_the_model(_joined())
+    contradictions = int((judged[_JUDGED_COLUMN] == _CONTRADICTS).sum())
+    ctx = make_run_context(
+        run_dir=tmp_path,
+        identity=RunIdentity(project="tutorial_queue_smoke", run_id="r1"),
+        stage_cache=StageCacheEntry.read_write(),
+    )
+
+    with pytest.raises(HaltForReview) as halted:
+        HANDLERS[StageType.human_review_queue].execute(
+            place_stage(_review_stage()), {_TARGET_STAGE: judged}, ctx)
+
+    assert contradictions > 0
+    assert halted.value.pending_count == contradictions
+
+
 # ── the published report ─────────────────────────────────────────────────────
 
 
@@ -483,7 +587,8 @@ def _publish_a_report(tmp_path, df: pd.DataFrame) -> str:
     # A project-scoped context, because the step declares `trace_links` — the run's
     # (project, run_id) is what a row-trace URL is built from.
     ctx = RunContext.for_workflow_test_run(tmp_path, tmp_path, "tutorial", "R-1")
-    out = HANDLERS[StageType(stage.type)].execute(place_stage(stage), {"judge_alignment": df}, ctx)
+    out = HANDLERS[StageType(stage.type)].execute(
+        place_stage(stage), {_REVIEW_STAGE: df}, ctx)
     assert out is not None
     return Path(out.iloc[0]["report_path"]).read_text(encoding="utf-8")
 
@@ -494,7 +599,7 @@ def _bound_fixture() -> WorkflowFile:
 
 
 def _three_filings() -> pd.DataFrame:
-    """One contradiction, one match, one filing the join found no commitment for."""
+    """One contradiction a reviewer kept, one match and one filing with no commitment."""
     return pd.DataFrame(
         [
             {
@@ -503,8 +608,11 @@ def _three_filings() -> pd.DataFrame:
                 "specific_issues": "Opposing the national clean electricity standard.",
                 "public_commitment": "Publicly committed to supporting a national clean electricity standard.",
                 "commitment_source": "2023 climate pledge",
-                "alignment": "Contradicts",
+                "alignment": _CONTRADICTS,
                 "alignment_note": "Said it backed the standard; this filing opposes it.",
+                "reviewed_alignment": _CONTRADICTS, "review_verdict": _APPROVE,
+                "reviewer": _REVIEWER, "reviewed_at": _REVIEWED_AT,
+                "review_notes": "Both texts name the same standard, on opposite sides.",
             },
             {
                 "filing_id": "F-2", "client": "Consistent Cooperative", "registrant": "Firm B",
@@ -514,13 +622,17 @@ def _three_filings() -> pd.DataFrame:
                 "commitment_source": "2024 investor letter",
                 "alignment": "Matches",
                 "alignment_note": "Said it would build offshore wind; this filing asks for that.",
+                "reviewed_alignment": "Matches", "review_verdict": _SKIPPED,
+                "reviewer": None, "reviewed_at": None, "review_notes": None,
             },
             {
                 "filing_id": "F-3", "client": "Silent Holdings", "registrant": "Firm C",
                 "amount_usd": 90000, "filing_period": "2024 Q1",
                 "specific_issues": "Seeking shorter permitting timelines.",
                 "public_commitment": None, "commitment_source": None,
-                "alignment": "No commitment given", "alignment_note": None,
+                "alignment": _NO_COMMITMENT, "alignment_note": None,
+                "reviewed_alignment": _NO_COMMITMENT, "review_verdict": _SKIPPED,
+                "reviewer": None, "reviewed_at": None, "review_notes": None,
             },
         ]
     )
@@ -537,6 +649,39 @@ def test_the_report_shows_both_sides_of_a_contradiction(tmp_path):
     # Both texts sit in the follow-up cell, in that order, so the cell stands alone.
     said_at = page.index("<span class=\"label\">Said</span>")
     assert page.index("<span class=\"label\">Lobbied for</span>") > said_at
+
+
+def test_a_published_contradiction_carries_who_confirmed_it_and_when(tmp_path):
+    """The whole point of the review step: nobody publishes a machine's judgment unsigned."""
+    page = _publish_a_report(tmp_path, _three_filings().iloc[[0]])
+
+    assert "Confirmed" in page
+    assert _REVIEWER in page and _REVIEWED_AT in page
+    assert "Both texts name the same standard, on opposite sides." in page
+
+
+def test_the_report_prints_the_label_the_reviewer_left_not_the_models(tmp_path):
+    """A filing the reviewer downgraded is no longer a contradiction on the page."""
+    downgraded = _three_filings().iloc[[0]].assign(
+        reviewed_alignment="Unclear", review_verdict=_MODIFY,
+        review_notes="The filing asks about siting, which the pledge never mentions.",
+    )
+
+    page = _publish_a_report(tmp_path, downgraded)
+
+    assert "1 filings; 0 ask government for the opposite" in page
+    assert "Lobbied for" not in page
+    assert "Unclear" in page
+    # What the model had said is still on the page, as what the reviewer changed it from.
+    assert f"Changed from {_CONTRADICTS}" in page
+    assert _REVIEWER in page
+
+
+def test_a_filing_no_person_was_asked_about_carries_no_reviewer(tmp_path):
+    page = _publish_a_report(tmp_path, _three_filings().iloc[[1]])
+
+    assert "Matches" in page
+    assert "Confirmed" not in page and "Changed from" not in page
 
 
 def test_the_report_prints_no_contradiction_for_a_filing_that_matches(tmp_path):
@@ -576,18 +721,24 @@ def test_every_report_row_links_back_to_the_row_it_came_from(tmp_path):
     page = _publish_a_report(tmp_path, _three_filings())
 
     for ordinal in range(len(_three_filings())):
-        assert f'href="/project/tutorial/runs/R-1/stage/judge_alignment/row/{ordinal}' \
+        assert f'href="/project/tutorial/runs/R-1/stage/{_REVIEW_STAGE}/row/{ordinal}' \
                '/trace/view">Lineage</a>' in page
 
 
 def test_the_report_step_refuses_a_contradiction_it_cannot_print_both_sides_of(tmp_path):
-    """Judged to contradict yet carrying no commitment: there is no other side to show."""
-    df = _three_filings().iloc[[2]].assign(alignment=_CONTRADICTS)
+    """Confirmed as contradicting yet carrying no commitment: there is no other side."""
+    df = _three_filings().iloc[[2]].assign(
+        reviewed_alignment=_CONTRADICTS, review_verdict=_APPROVE,
+        reviewer=_REVIEWER, reviewed_at=_REVIEWED_AT,
+    )
 
     with pytest.raises(StepRefused, match="cannot say what it contradicts"):
         _publish_a_report(tmp_path, df)
 
 
+def test_the_report_step_refuses_a_reviewed_judgment_nobody_reviewed(tmp_path):
+    """A verdict with no reviewer on it is the model's, and is not published as a person's."""
+    df = _three_filings().iloc[[0]].assign(reviewer=None)
 
-
-
+    with pytest.raises(StepRefused, match="cannot say who reviewed it"):
+        _publish_a_report(tmp_path, df)

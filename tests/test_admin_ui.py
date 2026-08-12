@@ -67,7 +67,8 @@ def test_download_returns_the_workflow_file_as_an_attachment(workspace_root):
     assert wf.name == _BUNDLE
     assert [stage.id for stage in wf.stages] == [
         "raw_filings", "public_commitments", "check_filings",
-        "matched_commitments", "judge_alignment", "publish_report",
+        "matched_commitments", "judge_alignment", "review_contradictions",
+        "publish_report",
     ]
 
 

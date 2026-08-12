@@ -8,6 +8,8 @@ from pathlib import Path
 
 import app
 from app.agents.tutorial.prompt import TUTORIAL_SYSTEM_PROMPT
+from app.core.run_status import RunStatus
+from app.models.run_manifest import QueueStats, RunManifest
 from app.web.breadcrumbs import _HOME_LABEL
 from app.tools.tool_specs import TOOL_SPECS
 from app.agents.tutorial.config import make_tutorial_tools
@@ -20,7 +22,7 @@ from app.tools.tutorial import _FIXTURE, TutorialContext, TutorialProject
 _IDENTIFIER = re.compile(r"[a-z_][a-z0-9_]*")
 _TEMPLATES = Path(app.__file__).resolve().parent / "templates"
 
-# Labels beat 3 sends the reader to click. Each must be a string the app renders.
+# Labels beat 4 sends the reader to click. Each must be a string the app renders.
 _NAMED_CONTROLS = (
     "View lineage",
     "Export review packet",
@@ -111,9 +113,9 @@ def test_the_run_beat_hands_over_exactly_one_link() -> None:
     assert "Beat 2 ends on ONE link, the run's." in _flat(TUTORIAL_SYSTEM_PROMPT)
     # The one URL the tour joins, and only from two things a tool returned.
     assert "`runs_url_prefix` with that `run_id` on the end" in beat
-    # The other two pages are not lost — beat 3 is where they are offered.
-    assert "the first beat that may hand over `workflow_url`" in _flat(_beat(3))
-    assert "guide_url" in _flat(_beat(3))
+    # The other two pages are not lost — beat 4 is where they are offered.
+    assert "the first beat that may hand over `workflow_url`" in _flat(_beat(4))
+    assert "guide_url" in _flat(_beat(4))
 
 
 def test_seeding_and_running_are_one_turn_with_no_boundary_to_ask_at() -> None:
@@ -153,27 +155,53 @@ def test_the_run_beat_ends_by_handing_over_rather_than_offering_a_menu() -> None
 
 def test_every_control_the_tour_sends_them_to_click_is_one_the_app_renders() -> None:
     """A button named here that does not exist sends the reader looking for nothing."""
-    rendered = "\n".join(
-        path.read_text(encoding="utf-8") for path in sorted(_TEMPLATES.glob("*.html"))
-    )
-    beat = _flat(_beat(3))
+    rendered = _rendered_templates()
+    beat = _flat(_beat(4))
 
     for label in _NAMED_CONTROLS:
         assert label in beat, label
         assert label in rendered, f"{label} is named in the tour but rendered nowhere"
 
 
-def test_the_script_walks_four_beats() -> None:
-    """The look-around question was a beat of its own; its list is now beat 3 itself."""
+def test_the_run_stopping_for_a_reviewer_is_a_beat_of_its_own() -> None:
+    """awaiting_review is the workflow working; a tour that reads it as an error stops there."""
+    beat = _flat(_beat(3))
+
+    assert "`awaiting_review` is the expected ending" in _flat(_beat(2))
+    assert "queue" in beat
+
+
+def test_the_tour_says_plainly_that_the_review_is_not_its_to_do() -> None:
+    beat = _flat(_beat(3))
+
+    assert "cannot decide a card or resume the run" in beat
+
+
+def test_the_queue_link_is_joined_only_from_what_a_tool_returned() -> None:
+    """The second URL the tour builds; a remembered path here is an invented page."""
+    beat = _flat(_beat(3))
+
+    assert "the run's page, then `/queue/`, then the queue stage's id" in beat
+    assert "whose `type` is `human_review_queue`" in beat
+
+
+def _rendered_templates() -> str:
+    return "\n".join(
+        path.read_text(encoding="utf-8") for path in sorted(_TEMPLATES.glob("*.html"))
+    )
+
+
+def test_the_script_walks_five_beats() -> None:
+    """The run halting for a reviewer is a beat of its own, between the run and the list."""
     numbered = [int(n) for n in re.findall(r"\n(\d+)\. [A-Z]", TUTORIAL_SYSTEM_PROMPT)]
 
-    assert numbered == [1, 2, 3, 4]
-    assert "Walk these four beats in order." in TUTORIAL_SYSTEM_PROMPT
+    assert numbered == [1, 2, 3, 4, 5]
+    assert "Walk these five beats in order." in TUTORIAL_SYSTEM_PROMPT
 
 
 def test_the_beat_after_the_run_hands_the_list_over_rather_than_offering_to() -> None:
     """The round trip this fixes: a reader told to look around had to ask again for the list."""
-    beat = _flat(_beat(3))
+    beat = _flat(_beat(4))
 
     assert "Not two doors and a question" in beat
     assert "these, and only these, a line each" in beat
@@ -181,12 +209,17 @@ def test_the_beat_after_the_run_hands_the_list_over_rather_than_offering_to() ->
     assert "Close on their own workflow, one line" in beat
 
 
-def test_editing_is_offered_in_the_app_as_well_as_from_an_mcp_client() -> None:
-    """The in-app control exists (see _NAMED_CONTROLS), so the tour no longer denies it."""
-    beat = _flat(_beat(4))
+def test_editing_is_reached_by_a_link_and_the_mcp_route_needs_no_terminal() -> None:
+    """A reader told to open a terminal reads this product as their developer's."""
+    beat = _flat(_beat(5))
 
-    assert '"Edit with agent" on `workflow_url`' in beat
-    assert "`mcp_command`" in beat
+    # The in-app route leads, and it is a link a tool returned.
+    assert "HAND OVER `edit_chat_url`" in beat
+    assert beat.index("edit_chat_url") < beat.index("mcp_command")
+    assert "ask that assistant to add this workspace as an MCP server" in beat
+    assert "not a terminal they have to open" in beat
+    # The in-app control is still named where the reader is shown around.
+    assert '"Edit with agent"' in _flat(_beat(4))
     assert "There is no button for this in the app" not in _flat(TUTORIAL_SYSTEM_PROMPT)
 
 
@@ -219,7 +252,10 @@ def _flat(text: str) -> str:
 # fixture, a column of one of its schemas, a field of what a tour tool returns, a stage
 # type, a tool, an argument one of those tools takes, or a run status. A renamed stage, column, field or
 # argument otherwise leaves the prompt pointing at nothing, silently.
-_RUN_STATUS_WORDS = {"running", "status", "error"}
+_RUN_STATUS_WORDS = {status.value for status in RunStatus} | {"status", "error"}
+# Owed by the branch adding the tour's editing-chat tool: the field its payload
+# carries. DELETE this set when that tool lands and TutorialProject declares it.
+_PENDING_TOUR_TOOL_FIELDS = {"edit_chat_url"}
 
 
 def test_every_name_the_prompt_quotes_is_one_the_code_defines() -> None:
@@ -235,7 +271,10 @@ def test_every_name_the_prompt_quotes_is_one_the_code_defines() -> None:
         | {stage_type.value for stage_type in StageType}
         | _tour_tool_names()
         | _tour_tool_arguments()
+        | set(RunManifest.model_fields)
+        | set(QueueStats.__annotations__)
         | _RUN_STATUS_WORDS
+        | _PENDING_TOUR_TOOL_FIELDS
     )
     quoted = set(re.findall(r"`([a-z][a-z0-9_]{3,})`", TUTORIAL_SYSTEM_PROMPT))
 
