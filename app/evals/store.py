@@ -17,6 +17,7 @@ from app.models import EvalConfig, EvalRun
 from app.core.persistence import get_store
 from app.core.utils import format_errors
 from app.evals.compatibility import CompatibilityReport
+from app.services.project import write_eval_config
 from app.services.versioning import find_latest_version_id
 
 _SLUG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
@@ -61,9 +62,7 @@ def load_eval_config(project_dir: Path, eval_id: str) -> EvalConfig:
 
 
 def save_eval_config(project_dir: Path, config: EvalConfig) -> None:
-    get_store().write(
-        "eval", f"{project_dir.name}/{config.id}",
-        config.model_dump(mode="json", exclude_none=True))
+    write_eval_config(project_dir.name, config)
 
 
 def save_eval_run(project_dir: Path, run: EvalRun) -> None:
