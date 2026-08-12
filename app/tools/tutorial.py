@@ -1,8 +1,8 @@
 """The tour's fixture, and the one tool it holds alone because it needs its context.
 
 Importing is app.services.project.import_project — the same call admin's load-bundle
-makes. The fixture's CSVs are supplied per run as bindings, so nothing is rewritten
-into the stored workflow and the project stays portable."""
+makes. The fixture's CSVs go into the project's files the way any upload does, so no
+path is rewritten into the stored workflow and the project stays portable."""
 
 from __future__ import annotations
 
@@ -18,6 +18,7 @@ from app.services import (
     agent as agent_service,
     project as project_service,
     run as run_service,
+    uploads,
     workspace,
 )
 from app.services.project import Project, WorkflowFile, import_project
@@ -51,8 +52,8 @@ class TutorialAgentReference(BaseModel):
     # The stages as seeded: the tour reads its stage ids and types off this rather than
     # off a name written into its prompt.
     workflow: workspace.WorkflowSummary
-    # Pass straight to run_workflow's `bindings`: which file each input stage reads.
-    input_bindings: dict[str, dict[str, str]]
+    # Pass straight to run_workflow's `files`: which stored file each input step reads.
+    input_files: dict[str, str]
     workflow_url: str
     guide_url: str
     runs_url_prefix: str
@@ -93,10 +94,7 @@ def seed_tutorial_project(ctx: TutorialContext) -> TutorialAgentReference:
         project=_read_seeded_record(name),
         version_id=version_id,
         workflow=project_service.read_workflow_summary(name),
-        input_bindings={
-            stage_id: {"path": str(path), "format": "csv"}
-            for stage_id, path in _CSV_BY_STAGE_ID.items()
-        },
+        input_files=_store_tour_files(name),
         workflow_url=f"{ctx.base_url}project/{name}/workflow",
         guide_url=f"{ctx.base_url}project/{name}/workflow/version/{version_id}",
         runs_url_prefix=f"{ctx.base_url}project/{name}/runs/",
@@ -110,6 +108,15 @@ def seed_tutorial_project(ctx: TutorialContext) -> TutorialAgentReference:
         ),
         mcp_command=f"claude mcp add --transport http carbonpaper {ctx.base_url}mcp",
     )
+
+
+def _store_tour_files(project_id: str) -> dict[str, str]:
+    """stage id -> sha256, stored the way an upload is so the tour shows the real flow."""
+    stored = {}
+    for stage_id, path in _CSV_BY_STAGE_ID.items():
+        with path.open("rb") as handle:
+            stored[stage_id] = uploads.save_upload(path.name, handle, project_id).sha256
+    return stored
 
 
 def read_seed_eval_config(project: str) -> EvalConfig:
@@ -145,7 +152,7 @@ CREATE_TUTORIAL_PROJECT = ToolSpec(
         "Seed the committed tutorial project into this workspace and return it: the "
         "ordinary `project` record (its `id` is what every other tool takes), the stored "
         "version, its `workflow` (every stage's id, type and inputs), the "
-        "`input_bindings` its run needs, `eval_id`, the URLs of its workflow, review "
+        "`input_files` its run needs, `eval_id`, the URLs of its workflow, review "
         "guide and runs, `edit_chat_url` — a chat with the editing agent, already open "
         "and waiting — and the three forms of the MCP handoff. Takes no arguments — the "
         "fixture is fixed. If the tutorial project is already in this workspace it is "
