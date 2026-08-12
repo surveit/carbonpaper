@@ -20,7 +20,9 @@ from app.core.agent.store import SessionStore
 from app.core.agent.turns import TurnManager
 from app.core.errors import GenerationError, ReviewGuideValidationError
 from app.main import app
-from app.models import find_stages_reaching_publish, parse_stage
+from app.models import (
+    NamedSchema, SchemaLibrary, Terms, find_stages_reaching_publish, parse_stage,
+)
 from app.models.review_guide import ReviewGuideDraft, ReviewGuideStep
 from app.services import versioning, workspace
 from app.services import project as project_service
@@ -30,6 +32,8 @@ _DOUBLED = {"columns": [
     {"name": "amount", "type": "float", "nullable": False},
     {"name": "doubled", "type": "float", "nullable": False},
 ]}
+
+_NO_TERMS = Terms(nouns=SchemaLibrary(schemas=[]), verbs=[])
 
 _LOAD = {
     "id": "load", "description": "Load", "type": "input_data",
@@ -152,9 +156,10 @@ def test_the_author_is_given_the_versions_stages_not_the_working_copy(
     monkeypatch.setattr(compiler_review_guide, "default_turn_manager", lambda: turns)
     seen: dict[str, Any] = {}
 
-    def _spy(stages, version_id, document, *, model="sonnet"):
+    def _spy(stages, version_id, document, terms, *, model="sonnet"):
         seen["stage_ids"] = [stage.id for stage in stages]
-        seen["task"] = compiler_review_guide.render_guide_task(stages, version_id, document)
+        seen["task"] = compiler_review_guide.render_guide_task(
+            stages, version_id, document, terms)
         return _FakeAuthor(_guide_of(seen["stage_ids"]))
 
     monkeypatch.setattr(compiler_review_guide, "build_review_guide_author", _spy)
@@ -185,7 +190,7 @@ def test_render_guide_task_carries_the_request_the_document_and_the_stages(
     )
 
     task = compiler_review_guide.render_guide_task(
-        version.stages, version.version_id, "Double the amount."
+        version.stages, version.version_id, "Double the amount.", _NO_TERMS
     )
 
     assert task.startswith("make a guide for this version")
@@ -194,6 +199,27 @@ def test_render_guide_task_carries_the_request_the_document_and_the_stages(
     # In execution order, and carrying the code the reviewer would be judging.
     assert task.index("Stage `load`") < task.index("Stage `double`")
     assert "row['amount'] * 2" in task
+    assert "# Terms" not in task     # a project with no words gets no heading
+
+
+def test_render_guide_task_carries_the_words_the_guide_must_be_written_in(
+    tmp_path: Path,
+) -> None:
+    project_dir = _seed_project(tmp_path)
+    version = project_service.save_working_copy_as_version(
+        project_dir, message="v1", reviewer="local"
+    )
+    words = Terms(nouns=SchemaLibrary(schemas=[NamedSchema(
+        name="filing", title="Filing", description="One disclosure a firm sent in.",
+        also_written=["disclosure"])]), verbs=[])
+
+    task = compiler_review_guide.render_guide_task(
+        version.stages, version.version_id, "Double the amount.", words
+    )
+
+    assert "- filing — One disclosure a firm sent in. Also written: disclosure." in task
+    # Before the document, which is the thing it is telling the author how to read.
+    assert task.index("- filing") < task.index("METHODOLOGY DOCUMENT")
 
 
 def _published_stages() -> list:
@@ -216,7 +242,7 @@ def _duty_line(task: str, stage_id: str) -> str:
 
 def test_each_stage_carries_the_requires_narration_flag() -> None:
     task = compiler_review_guide.render_guide_task(
-        _published_stages(), "20260101T000000", "Double the amount."
+        _published_stages(), "20260101T000000", "Double the amount.", _NO_TERMS
     )
 
     assert "requires_narration: true" in _duty_line(task, "load")
@@ -229,7 +255,7 @@ def test_each_stage_carries_the_requires_narration_flag() -> None:
 def test_the_flag_comes_from_the_walk_the_validator_refuses_on() -> None:
     stages = _published_stages()
     task = compiler_review_guide.render_guide_task(
-        stages, "20260101T000000", "Double the amount."
+        stages, "20260101T000000", "Double the amount.", _NO_TERMS
     )
     reaching = find_stages_reaching_publish(stages)
 
@@ -245,7 +271,7 @@ def test_the_author_holds_no_tool_but_submit_answer(tmp_path: Path) -> None:
     )
 
     engine = compiler_review_guide.build_review_guide_author(
-        version.stages, version.version_id, "Double the amount."
+        version.stages, version.version_id, "Double the amount.", _NO_TERMS
     ).build_engine()
 
     assert engine._allowed_tools == ["mcp__tools__submit_answer"]

@@ -25,6 +25,10 @@ class AgentConfig(BaseModel):
     # prompt with no reader message. It is never shown or stored as one, so the
     # reader is not credited with words they did not type. None = wait to be spoken to.
     opening_prompt: str | None = None
+    # Prose only this session's context can supply, appended to system_prompt. What
+    # it says is the agent's business; returning "" appends nothing, not a heading
+    # over nothing.
+    render_session_prompt: Callable[[BaseModel], str] | None = None
 
 
 # Given a validated context, return the bound tools for one agent.
@@ -49,12 +53,21 @@ def build_engine(agent_id: str, context: dict[str, Any]) -> ClaudeAgentSdkEngine
     specs = build_tools(ctx)
     server, allowed, _wrapped = build_mcp_server(specs)
     return ClaudeAgentSdkEngine(
-        system_prompt=config.system_prompt,
+        system_prompt=render_system_prompt(config, ctx),
         mcp_server=server,
         allowed_tools=allowed,
         tool_labels={s.name: s.label for s in specs} | config.extra_tool_labels,
         model=config.model,
     )
+
+
+def render_system_prompt(config: AgentConfig, context: BaseModel) -> str:
+    if config.render_session_prompt is None:
+        return config.system_prompt
+    appended = config.render_session_prompt(context)
+    if not appended:
+        return config.system_prompt
+    return f"{config.system_prompt}\n\n{appended}"
 
 
 # ── claude_agent_sdk MCP wrapping (generic) ──────────────────────────────────

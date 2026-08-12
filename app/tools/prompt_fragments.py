@@ -6,10 +6,8 @@ the two surfaces that render it — so a fragment cannot leak into a lower layer
 """
 from __future__ import annotations
 
-from app.models.named_schemas import NamedSchema
 from app.models.stages.stage_types import AUTHORABLE_TYPES, CODE_CARRYING_TYPES
 from app.models.stages.stage_base import StageType, is_grain_and_order_preserving
-from app.models.terms import Terms, Verb
 
 
 # ─── What Carbon Paper is ────────────────────────────────────────
@@ -61,44 +59,6 @@ Two different things you can ask a human for, with different bars:
 - FINAL SIGNOFF. Do not ask for this with any warning outstanding. Either clear it, or
   state plainly why that specific warning is safe to ignore here. A warning you leave
   unmentioned spends the reviewer's attention on something you already knew about."""
-
-# ─── The words this project is written in ────────────────────────
-
-_TERMS_FRAMING = """\
-# Terms
-The methodology owner's own words for this project. Write in them — a synonym you
-prefer for one of them is a second name for the same thing, and is not introduced."""
-
-
-def render_terms(terms: Terms) -> str:
-    """Nothing at all for a project with no words: a heading over none teaches the wrong lesson."""
-    blocks = [
-        _render_word_list("Nouns:", [_render_noun(noun) for noun in terms.nouns.schemas]),
-        _render_word_list("Verbs:", [_render_verb(verb) for verb in terms.verbs]),
-    ]
-    written = [block for block in blocks if block]
-    if not written:
-        return ""
-    return "\n\n".join([_TERMS_FRAMING, *written])
-
-
-def _render_word_list(heading: str, words: list[str]) -> str:
-    return "\n".join([heading, *words]) if words else ""
-
-
-def _render_noun(noun: NamedSchema) -> str:
-    # A noun that is vocabulary and nothing more carries no description, only its title.
-    return _render_word(noun.name, noun.description or noun.title, noun.also_written)
-
-
-def _render_verb(verb: Verb) -> str:
-    return _render_word(verb.name, verb.definition, verb.also_written)
-
-
-def _render_word(name: str, definition: str, also_written: list[str]) -> str:
-    spellings = f" Also written: {', '.join(also_written)}." if also_written else ""
-    return f"- {name} — {definition}{spellings}"
-
 
 # ─── When a column's `enum` may be declared ──────────────────────
 

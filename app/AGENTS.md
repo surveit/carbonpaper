@@ -6,7 +6,7 @@ routers in `app/web/routers/`, which import the Runner (`app.runtime`) and the s
 `python -m uvicorn app.main:app --port 8765`.
 
 ## Pages / routes
-- `/` project list · `/project/<m>` the project shell (Overview · Document · Data model ·
+- `/` project list · `/project/<m>` the project shell (Overview · Document · Terms ·
   Workflow · Runs); the Workflow section carries the mermaid graph + inline node review
   (`/project/<m>/node/<id>/review-partial`).
 - `/project/<m>/runs`, `/runs/<id>` — run history + detail. `/runs/new` is the

@@ -19,11 +19,12 @@ from app.models.authoring_lifecycle_note import CompilerPhase
 from app.models.stages.signature import transform_input_schemas, transform_output_schema
 from app.models.stages.stage_base import find_stage_test_class
 from app.models.stages.stage_tests import build_stage_tests_model
+from app.models.terms import Terms, render_terms
 
 
 def start_stage_test_generation_agent(
     *,
-    document: str,
+    terms: Terms,
     stage: Stage,
     project_id: str,
     model: str,
@@ -41,7 +42,7 @@ def start_stage_test_generation_agent(
             "hidden": True,
         },
     )
-    agent = build_stage_test_generator(document, stage, model=model)
+    agent = build_stage_test_generator(terms, stage, model=model)
     # Show the framing prompt as the user's message so the live view doesn't lose it.
     store.set_pending_user(session_id, agent.task)
 
@@ -63,14 +64,14 @@ def start_stage_test_generation_agent(
 
 
 def build_stage_test_generator(
-    document: str, stage: Stage, *, model: str = "sonnet"
+    terms: Terms, stage: Stage, *, model: str = "sonnet"
 ) -> Agent[BaseModel]:
     if not stage.CARRIES_RUNNABLE_TESTS:
         raise ValueError(
             f"tests can only be generated for stage types that can run them, "
             f"not `{stage.type}`"
         )
-    task = render_generation_task(document, stage)
+    task = render_generation_task(terms, stage)
     return Agent(
         system_prompt=STAGE_TESTS_SYSTEM_PROMPT,
         target_schema=build_stage_tests_model(
@@ -83,8 +84,7 @@ def build_stage_test_generator(
     )
 
 
-def render_generation_task(document: str, stage: Stage) -> str:
-    """`document` is deliberately unused — the generator sees only what the reviewer sees."""
+def render_generation_task(terms: Terms, stage: Stage) -> str:
     summary = _authored_summary(stage)
     if not summary:
         raise ValueError(
@@ -98,14 +98,18 @@ def render_generation_task(document: str, stage: Stage) -> str:
         f"{read_schemas[ref.id].to_prompt()}"
         for ref in stage.inputs
     )
-    return (
+    # The generator is shown no code and no document, so the project's words are the
+    # only thing telling it what to call what it writes about.
+    blocks = [
+        render_terms(terms),
         f"----- DESCRIPTION OF `{stage.id}` -----\n{summary}\n"
         f"{_render_corner_cases(stage)}"
-        f"----- END DESCRIPTION -----\n\n"
-        f"Write examples for stage `{stage.id}` ({stage.type}): {stage.description}\n\n"
-        f"{inputs}\n\n"
-        f"Expected rows carry:\n{output_schema.to_prompt()}"
-    )
+        f"----- END DESCRIPTION -----",
+        f"Write examples for stage `{stage.id}` ({stage.type}): {stage.description}",
+        inputs,
+        f"Expected rows carry:\n{output_schema.to_prompt()}",
+    ]
+    return "\n\n".join(block for block in blocks if block)
 
 
 def _authored_summary(stage: Stage) -> str | None:

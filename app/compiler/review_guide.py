@@ -16,6 +16,7 @@ from app.core.errors import GenerationError, ReviewGuideValidationError
 from app.models import Stage, stage_to_json
 from app.models.authoring_lifecycle_note import CompilerPhase
 from app.models.review_guide import ReviewGuideDraft
+from app.models.terms import Terms, render_terms
 from app.models.workflow import find_stages_reaching_publish, sort_stages_by_dependency
 
 # What the journalist's click asks for; the version's stages and the methodology
@@ -35,6 +36,7 @@ def start_review_guide_generation_agent(
     version_id: str,
     project_id: str,
     document: str,
+    terms: Terms,
     model: str,
     on_answer: Callable[[ReviewGuideDraft | None], None],
 ) -> str:
@@ -50,7 +52,7 @@ def start_review_guide_generation_agent(
             "hidden": True,
         },
     )
-    agent = build_review_guide_author(stages, version_id, document, model=model)
+    agent = build_review_guide_author(stages, version_id, document, terms, model=model)
     # Show the framing prompt as the user's message so the live view doesn't lose it.
     store.set_pending_user(session_id, agent.task)
 
@@ -72,25 +74,31 @@ def start_review_guide_generation_agent(
 
 
 def build_review_guide_author(
-    stages: list[Stage], version_id: str, document: str, *, model: str = "sonnet"
+    stages: list[Stage], version_id: str, document: str, terms: Terms,
+    *, model: str = "sonnet",
 ) -> Agent[ReviewGuideDraft]:
     return Agent(
         system_prompt=REVIEW_GUIDE_SYSTEM_PROMPT,
         target_schema=ReviewGuideDraft,
-        task=render_guide_task(stages, version_id, document),
+        task=render_guide_task(stages, version_id, document, terms),
         model=model,
     )
 
 
-def render_guide_task(stages: list[Stage], version_id: str, document: str) -> str:
-    return (
+def render_guide_task(
+    stages: list[Stage], version_id: str, document: str, terms: Terms
+) -> str:
+    # The guide's reader is the methodology's owner, so it is written in their words.
+    blocks = [
         f"{GUIDE_REQUEST} — version `{version_id}`. Its stages are frozen below, in the "
         "order a run reaches them; account for every one of them, then submit the guide "
-        "with submit_answer.\n\n"
-        f"----- METHODOLOGY DOCUMENT -----\n{document}\n----- END DOCUMENT -----\n\n"
+        "with submit_answer.",
+        render_terms(terms),
+        f"----- METHODOLOGY DOCUMENT -----\n{document}\n----- END DOCUMENT -----",
         f"----- STAGES OF VERSION `{version_id}` -----\n{_render_stages(stages)}\n"
-        f"----- END STAGES -----"
-    )
+        f"----- END STAGES -----",
+    ]
+    return "\n\n".join(block for block in blocks if block)
 
 
 def _render_stages(stages: list[Stage]) -> str:

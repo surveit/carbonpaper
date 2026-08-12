@@ -64,6 +64,7 @@ def build_nav(state: project.ProjectState) -> list[NavItem]:
     return [
         _nav_leaf("overview", "Overview", base),
         _nav_leaf("document", "Document", f"{base}/document"),
+        _nav_leaf("terms", "Terms", f"{base}/terms"),
         _nav_leaf("workflow", "Workflow", f"{base}/workflow",
                   children=[
                       _nav_leaf("versions", "Versions", f"{base}/workflow/versions"),
@@ -80,12 +81,12 @@ def _next_action(state: project.ProjectState) -> NextAction:
     runs = state.runs
     base = f"/project/{project_id}"
 
-    # 1. No data model → author it.
+    # 1. No nouns → the words have not been agreed.
     if not data_model.present:
         return NextAction(
-            key="author_data_model",
-            label="Author the data model",
-            href=f"{base}/data_model",
+            key="agree_terms",
+            label="Agree the project's terms",
+            href=f"{base}/terms",
         )
     # 2. No workflow → build it.
     if not workflow.present:
