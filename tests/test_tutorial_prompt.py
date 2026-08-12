@@ -13,11 +13,11 @@ from app.models.run_manifest import QueueStats, RunManifest
 from app.web.breadcrumbs import _HOME_LABEL
 from app.tools.tool_specs import TOOL_SPECS
 from app.agents.tutorial.config import make_tutorial_tools
-from app.services.project import WorkflowFile
+from app.services.project import Project, WorkflowFile
 from app.models import StageType
 from app.services.workspace import StageSummary
 from app.tools.shared import StageOutputRow, StageOutputRows
-from app.tools.tutorial import _FIXTURE, TutorialContext, TutorialProject
+from app.tools.tutorial import _FIXTURE, TutorialAgentReference, TutorialContext
 
 _IDENTIFIER = re.compile(r"[a-z_][a-z0-9_]*")
 _TEMPLATES = Path(app.__file__).resolve().parent / "templates"
@@ -263,7 +263,8 @@ def test_every_name_the_prompt_quotes_is_one_the_code_defines() -> None:
     known = (
         {stage.id for stage in fixture.stages}
         | _fixture_column_names(fixture)
-        | set(TutorialProject.model_fields)
+        | set(TutorialAgentReference.model_fields)
+        | set(Project.model_fields)
         | set(StageOutputRow.model_fields)
         | set(StageOutputRows.model_fields)
         # The script names stages by what `workflow` calls them: a field, and a type.

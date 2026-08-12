@@ -7,12 +7,11 @@ from __future__ import annotations
 from fastapi import APIRouter
 from fastapi.responses import RedirectResponse
 
-from app.core.agent.session import create_agent_session
+from app.services.agent import open_agent_chat
 
 router = APIRouter()
 
 
 @router.post("/project/{name}/edit-agent")
 async def open_editing_session(name: str):
-    sid = create_agent_session("editing", {"project_id": name}, title=f"Editing: {name}")
-    return RedirectResponse(url=f"/chat/{sid}", status_code=303)
+    return RedirectResponse(url=open_agent_chat("editing", name), status_code=303)
