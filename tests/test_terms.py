@@ -1,7 +1,7 @@
-"""app/models/terms.py + app/services/terms.py — a project's nouns and verbs.
-Both halves are one stored document per project. What is worth pinning: a noun that is
-only a word claims no kind, a word never means two things, a project that stored nothing
-has nothing, and the schema files projects were authored with before the store still read."""
+"""app/models/terms.py + app/services/terms.py — a project's nouns and verbs, and the
+block an agent is handed them in. Both halves are one stored document per project. What
+is worth pinning: a noun that is only a word claims no kind, a word never means two
+things, a project that stored nothing has nothing, and no words render as nothing."""
 from __future__ import annotations
 
 import json
@@ -12,6 +12,7 @@ from pydantic import ValidationError
 from app.models import NamedSchema, SchemaLibrary, Terms, Verb
 from app.services import terms
 from app.services.terms import StoredTerms
+from app.tools.prompt_fragments import render_terms
 from app.web.config import templates
 from app.web.diagrams import SCHEMA_KIND_CLASS, SCHEMA_KIND_GLYPH, SCHEMA_KIND_ORDER
 
@@ -48,6 +49,28 @@ def test_a_verb_spelling_that_repeats_another_verbs_name_is_refused():
     flagged = Verb(name="flagged", definition="Already marked.")
     with pytest.raises(ValidationError, match="flagged"):
         Terms(nouns=SchemaLibrary(schemas=[]), verbs=[_FLAG, flagged])
+
+
+def test_a_noun_spelling_that_repeats_a_verb_is_refused():
+    # The pair the artifact exists for: the document says one word, the stages another.
+    registrant = NamedSchema(name="registrant", title="Registrant", also_written=["flag"])
+    with pytest.raises(ValidationError, match="flag"):
+        Terms(nouns=SchemaLibrary(schemas=[registrant]), verbs=[_FLAG])
+
+
+def test_two_nouns_written_the_same_second_way_are_refused():
+    firm = NamedSchema(name="firm", title="Firm", also_written=["registrant"])
+    filer = NamedSchema(name="filer", title="Filer", also_written=["registrant"])
+    with pytest.raises(ValidationError, match="registrant"):
+        Terms(nouns=SchemaLibrary(schemas=[firm, filer]), verbs=[])
+
+
+def test_a_nouns_other_spellings_read_back_from_the_store():
+    firm = NamedSchema(name="firm", title="Firm", also_written=["registrant", "filer"])
+    terms.write_terms(_PROJECT, Terms(nouns=SchemaLibrary(schemas=[firm]), verbs=[]))
+
+    library = terms.load_terms(_PROJECT).nouns
+    assert library.schemas[0].also_written == ["registrant", "filer"]
 
 
 def test_two_verbs_sharing_neither_a_name_nor_a_spelling_are_kept():
@@ -127,6 +150,36 @@ def test_the_first_write_moves_a_project_into_the_store_for_good(projects_root):
     # The file is still there and is no longer what the project says.
     assert (projects_root / _PROJECT / "schemas" / "01_issue_text.json").is_file()
     assert terms.load_terms(_PROJECT).nouns.schemas == []
+
+
+# ── the block an agent is handed ─────────────────────────────────────────────
+def test_a_project_with_no_words_renders_nothing_at_all():
+    assert render_terms(Terms(nouns=SchemaLibrary(schemas=[]), verbs=[])) == ""
+
+
+def test_a_project_with_only_verbs_renders_no_noun_heading():
+    block = render_terms(Terms(nouns=SchemaLibrary(schemas=[]), verbs=[_FLAG]))
+    assert "Nouns:" not in block
+    assert "- flag — Mark a row for a human to decide on." in block
+
+
+def test_the_block_carries_every_word_its_meaning_and_its_other_spellings():
+    firm = NamedSchema(
+        name="firm",
+        title="Firm",
+        description="A company that filed.",
+        also_written=["registrant"],
+    )
+    block = render_terms(Terms(nouns=SchemaLibrary(schemas=[firm]), verbs=[_FLAG]))
+
+    assert "- firm — A company that filed. Also written: registrant." in block
+    assert "- flag — Mark a row for a human to decide on. Also written: flagged, flagging." in block
+    assert "synonym" in block  # the framing: do not introduce one
+
+
+def test_a_noun_that_is_only_a_word_is_rendered_under_its_title():
+    block = render_terms(Terms(nouns=SchemaLibrary(schemas=[_ISSUE_TEXT]), verbs=[]))
+    assert "- issue_text — Issue text" in block
 
 
 # ── the data-model section, rendered over both kinded and kindless schemas ───

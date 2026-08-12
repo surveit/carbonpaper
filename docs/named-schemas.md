@@ -21,6 +21,9 @@ The contract, in `app/models/named_schemas.py`:
 
 - A **`NamedSchema`** is a `TableSchema` (columns + primary key) plus:
   - `name` — snake_case identity.
+  - `also_written` — the methodology's other spellings for the same thing (the
+    document's *firm*, the data's *registrant*). `Verb` carries the same field,
+    and `Terms` checks the two halves' names and spellings together.
   - `kind` (`SchemaKind`, optional) — where the table sits in the pipeline. A
     kind is a claim about where the rows come from, so a name that is vocabulary
     alone (see Terms below) carries none:

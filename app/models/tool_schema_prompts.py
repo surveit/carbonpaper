@@ -22,6 +22,10 @@ NAMED_COLUMN_DESCRIPTION = (
     "schema, by name or `schema.column`."
 )
 
+NAMED_SCHEMA_ALSO_WRITTEN_DESCRIPTION = (
+    "The other spellings this methodology uses for this same thing."
+)
+
 NAMED_SCHEMA_DESCRIPTION = (
     "One named table in the data model: a schema promoted to an addressable artifact,\n"
     "with foreign keys on its columns."

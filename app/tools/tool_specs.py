@@ -61,8 +61,8 @@ expendable — if one is lost, start a new one.""",
 Create a NEW project from a methodology document (prose describing how the
 investigation finds, verifies, and surfaces its claims). Writes the document
 as the project's source of record. Returns the project_id (the sanitized
-name). Fails loudly if the name is taken — never overwrites. Next step:
-generate_data_model(project_id).""",
+name). Fails loudly if the name is taken — never overwrites. Next step: agree
+the project's terms, the words its methodology already uses, with the user.""",
     ),
     "describe_workflow": ToolSpec(
         name="describe_workflow",
