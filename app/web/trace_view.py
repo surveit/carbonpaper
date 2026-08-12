@@ -182,8 +182,7 @@ def _one_group(
     stage_id: str, columns: tuple[str, ...] | None,
     parents: list[dict[str, Any]], links: PanelLinks,
 ) -> ContributorGroup:
-    cap = links.contributors_named
-    named = parents[:cap] if len(parents) <= cap else []
+    named = parents[:CONTRIBUTORS_NAMED] if len(parents) <= CONTRIBUTORS_NAMED else []
     return ContributorGroup(
         stage_id=stage_id,
         columns=list(columns) if columns else None,

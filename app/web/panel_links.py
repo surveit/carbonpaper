@@ -12,10 +12,13 @@ from urllib.parse import quote, urlencode
 # one link can address.
 CONTRIBUTOR_ROWS_LINKED = 500
 
+# Below this a cohort is named row by row; at or above it the page links the cohort's
+# own table instead, which is a list of links either way — just one the reader can sort,
+# read and download rather than a row of ordinals.
+CONTRIBUTORS_NAMED = 3
+
 
 class AppPanelLinks:
-    contributors_named = 3  # a 360px panel; a wider cohort falls back to the rows view
-
     def __init__(self, project: str, run_id: str) -> None:
         self._base = f"/project/{_segment(project)}/runs/{_segment(run_id)}"
 
@@ -77,9 +80,6 @@ def packet_contributors_href(
 class PacketPanelLinks:
     """`None` from a method means the template omits that link, not that it is broken."""
 
-    contributors_named = 50
-    # No panel to fit and no rows view to fall back on; past this a cohort is a
-    # table to read, not a list of links.
 
     def __init__(
         self, to_root: str = "../", traced: frozenset[tuple[str, int]] | None = None,

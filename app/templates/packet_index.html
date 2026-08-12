@@ -49,16 +49,13 @@
 </section>
 {% endif %}
 
-{# What the publish stage read, frame by frame, with each row's provenance page
-   beside it. This is the way in: the reader recognises these rows from the
-   published files, and every one that carries a link opens its own lineage. #}
-{% if publish_inputs %}
+{# The figures the published files printed, in the words the publish stage gave
+   them, each opening the rows behind it. #}
+{% if lineage.figures %}
 <section>
   <h2>Row provenance</h2>
-  {# Where the publish stage named its figures, they lead: this is the list the
-     reader just read in the published file, in its own words. The input frames
-     below are what those figures were drawn from. #}
-  {% if lineage.figures %}
+  <p class="muted">Every figure the published files print, and the rows it was
+    counted from. <a href="{{ lineage_dir_href }}">All {{ lineage.traced | length }} traceable rows &rsaquo;</a></p>
   <table class="packet-figures">
     <thead><tr><th>Figure</th><th class="num">Value</th><th></th></tr></thead>
     <tbody>
@@ -71,35 +68,6 @@
     {% endfor %}
     </tbody>
   </table>
-  <h3 class="rp-sub">What those figures were drawn from</h3>
-  {% endif %}
-  <p class="muted">The {{ publish_inputs | length }} table{{ '' if publish_inputs | length == 1 else 's' }}
-    the published files were built from. A row with a lineage link traces back to the data it
-    came from. <a href="{{ lineage_dir_href }}">All {{ lineage.traced | length }} traced rows &rsaquo;</a></p>
-
-  {% for input in publish_inputs %}
-  <div class="preview-block input-preview" id="rp-{{ input.stage_id }}">
-    <div class="preview-head">
-      <a href="{{ stages_dir }}/{{ input.stage_id }}.html"><code>{{ input.stage_id }}</code></a>
-      <span class="muted">· {% if input.rows_total > input.rows | length %}first {{ input.rows | length }} of {% endif %}{{
-        "{:,}".format(input.rows_total) }} row{{ '' if input.rows_total == 1 else 's' }}
-        {% if input.traced %}· {{ input.traced }} traceable{% else %}· no lineage published{% endif %}</span>
-      <span class="preview-actions">· <a href="data/{{ input.stage_id }}.csv">⬇ CSV</a></span>
-    </div>
-    {% if input.rows %}
-    <div class="table-scroll"><table class="data-preview">
-      <thead><tr><th class="syw-cell"></th>{% for c in input.columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
-      <tbody>
-      {% for row in input.rows %}
-      <tr>
-        <td class="syw-cell">{% set href = input.trace_hrefs[loop.index0] %}{% if href %}<a href="{{ href }}" title="trace this row's provenance back through the pipeline">View lineage</a>{% endif %}</td>
-        {% for c in input.columns %}{% set v = row[c] | string %}{% if v[:4] == 'http' %}<td class="cell-url"><a href="{{ v }}" target="_blank" rel="noopener">{{ v }}</a></td>{% else %}<td>{{ v | truncate(240) }}</td>{% endif %}{% endfor %}
-      </tr>{% endfor %}
-      </tbody>
-    </table></div>
-    {% endif %}
-  </div>
-  {% endfor %}
 </section>
 {% endif %}
 

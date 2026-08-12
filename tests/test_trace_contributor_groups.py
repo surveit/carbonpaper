@@ -5,7 +5,11 @@ row can have tens of thousands of contributors.
 """
 from __future__ import annotations
 
-from app.web.panel_links import CONTRIBUTOR_ROWS_LINKED, AppPanelLinks
+from app.web.panel_links import (
+    CONTRIBUTOR_ROWS_LINKED,
+    CONTRIBUTORS_NAMED,
+    AppPanelLinks,
+)
 from app.web.trace_view import build_trace_view
 
 _STOP = {"reached_origin": False, "at_stage": "agg", "message": "summarizes its inputs"}
@@ -78,15 +82,15 @@ def test_the_linked_rows_are_the_first_ones_not_an_arbitrary_sample():
 
 
 def test_a_cohort_small_enough_to_name_ships_its_rows_individually():
-    group = _groups(_fan_in(AppPanelLinks.contributors_named))[0]
-    assert group["total"] == AppPanelLinks.contributors_named
-    assert [p["row_ordinal"] for p in group["named"]] == list(range(AppPanelLinks.contributors_named))
+    group = _groups(_fan_in(CONTRIBUTORS_NAMED))[0]
+    assert group["total"] == CONTRIBUTORS_NAMED
+    assert [p["row_ordinal"] for p in group["named"]] == list(range(CONTRIBUTORS_NAMED))
     # Each carries its own trace link, so the page names no route of its own.
     assert all(p["links"]["trace"] for p in group["named"])
 
 
 def test_a_cohort_too_big_to_name_ships_no_named_rows():
-    assert _groups(_fan_in(AppPanelLinks.contributors_named + 1))[0]["named"] == []
+    assert _groups(_fan_in(CONTRIBUTORS_NAMED + 1))[0]["named"] == []
 
 
 def test_the_rows_link_comes_from_the_app_link_vocabulary():

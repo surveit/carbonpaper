@@ -195,25 +195,24 @@ def _view_links(html: str) -> list[str]:
     ]
 
 
-def test_a_fan_in_wider_than_the_app_names_is_still_clickable_in_the_packet():
-    """A 24-contributor aggregate is where the packet's trail used to die."""
+def test_a_wide_fan_in_is_reached_through_its_table_on_both_surfaces():
+    """24 contributors is where the packet's trail used to die — now both link a table."""
     from app.web.panel_links import AppPanelLinks, PacketPanelLinks
     from app.web.trace_view import build_trace_view
 
     trace = _aggregate_trace(contributors=24)
-    packet = build_trace_view(trace, {}, PacketPanelLinks(traced=None))
+    packet = build_trace_view(
+        trace, {}, PacketPanelLinks(traced=None, owner=("totals", 0))
+    )
     app = build_trace_view(trace, {}, AppPanelLinks("p", "r"))
 
-    def named(view):
-        return [b["links"]["trace"] for n in view["nodes"]
-                for g in n["contributor_groups"] for b in g["named"]]
+    def group(view):
+        return next(g for n in view["nodes"] for g in n["contributor_groups"])
 
-    assert len(named(packet)) == 24, "the packet names every contributor it can open"
-    assert named(app) == [], "the app still falls back to its filtered rows view"
-    # And the wide-cohort fallback points at data a reader can actually read.
-    assert [g["rows_link"] for n in packet["nodes"] for g in n["contributor_groups"]] == [
-        "../data/spend_by_client.csv"
-    ]
+    # Neither names 24 rows inline; each points at the cohort as a table.
+    assert group(packet)["named"] == [] and group(app)["named"] == []
+    assert group(packet)["rows_link"] == "../lineage/totals/0.from-spend_by_client.html"
+    assert "ordinals=" in group(app)["rows_link"], "the app filters its rows view"
 
 
 def _aggregate_trace(contributors: int):
@@ -239,23 +238,6 @@ def test_the_index_links_land_on_a_section_the_directory_defines(tmp_path):
     directory = (packet / "lineage/index.html").read_text(encoding="utf-8")
     ids = set(re.findall(r'<section class="lin-dir" id="([^"]+)"', directory))
     assert ids == {"totals", "source"}, "every stage listed gets an anchor"
-
-
-def test_a_publish_input_row_with_no_page_is_offered_no_link(tmp_path):
-    """The index lists every publish input, including ones the run never linked."""
-    from app.web.review_packet.pages import _one_publish_input
-    from app.web.panel_links import PacketPanelLinks
-
-    run_dir = _demo_run(tmp_path)
-    view = _run_view(2)
-    traced = frozenset({("totals", 0)})
-    built = _one_publish_input(
-        run_dir, view, "totals", PacketPanelLinks(to_root="", traced=traced), traced
-    )
-    assert built.rows_total == 2
-    assert built.trace_hrefs == ["lineage/totals/0.html", None], (
-        "row 1 has no page, so it gets no link"
-    )
 
 
 def test_a_fan_in_ships_the_rows_it_summarized_as_a_table_and_a_csv(tmp_path):
