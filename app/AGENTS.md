@@ -159,6 +159,6 @@ handler **in memory** and persists nothing; refused for `publish`/`human_review_
 
 Every stage definition a run page shows or executes (panel, lineage panel, simulator)
 comes from the version the run pinned, via `services.run.load_pinned_stage_def` /
-`load_run_stages` — never `compiled/`.
+`load_run_workflow` — never `compiled/`.
 Unresolvable version → the panels show a stated reason in place of the definition and the
 in-memory re-run returns 409 rather than executing the working copy.

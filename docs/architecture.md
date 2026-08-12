@@ -52,10 +52,12 @@ per-file issues. Typed `Stage` objects flow end-to-end.
 
 ## `app/runtime/` — the Runner  → `app/runtime/AGENTS.md`
 `runner.py` — `execute_run`/`prepare_run`/`run_prepared`/`resume_run`, each taking the
-stages of the version the run pins. The runner reads no versions: the caller resolves one
+version the run pins as a `Workflow`. The runner reads no versions: the caller resolves one
 (`app/services/versioning.py: resolve_version_id`, defaulting to the newest STORED version,
 published or not — never the working copy, never a draft), loads its frozen stages and
-hands them in. `app/services/run.py` is the one place that composes this, and an
+hands them in. A run's per-stage connector bindings are merged by
+`Workflow.apply_run_bindings`, which rebuilds the workflow rather than letting the runner
+hold bare stages. `app/services/run.py` is the one place that composes this, and an
 import-linter contract keeps `runner.py` free of `app.services` so the arrow between the two
 points one way; `app/cli.py` drives that same seam. Per stage: validate
 inputs, reject duplicate rows, dispatch, validate output, write `outputs/<stage>.parquet`,
@@ -105,7 +107,7 @@ then every issue that did not — see `app/AGENTS.md`), and the per-stage status
 pages draw.
 Everything a run page states about the workflow — its graph, each
 stage's source and schemas, the lineage panel, and the scratch re-run's handler — is read
-from the version its manifest pinned to (`run.load_run_stages` /
+from the version its manifest pinned to (`run.load_run_workflow` /
 `run.load_pinned_stage_def` in `app/services/`), never from `compiled/`; a manifest naming no resolvable version raises
 `RunVersionUnresolvableError`, and the page shows an unavailable notice instead of the
 working copy while the scratch re-run refuses to execute (409).
@@ -114,7 +116,7 @@ working copy while the scratch re-run refuses to execute (409).
 `run.py` (the production run seam — start/execute/resume/status, and the only module that
 drives `app/runtime/runner.py`: it resolves the version and loads its stages before handing
 them to the runner, plus resolves what a run pinned — `resolve_version`,
-`read_pinned_version`, `load_run_stages`, `load_pinned_stage_def`); `loader.py` (stage loader, above); `compilation.py` (compile persistence for
+`read_pinned_version`, `load_run_workflow`, `load_pinned_stage_def`); `loader.py` (stage loader, above); `compilation.py` (compile persistence for
 `app/compiler`); `versioning.py` (`create_version_from_stages`
 is the ONE write path for a `WorkflowVersion` document, born unpublished; `publish_version`
 is the metadata-only record that a human reviewed a version — a signal about it, which

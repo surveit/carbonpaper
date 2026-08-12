@@ -6,10 +6,9 @@ from the stages it describes.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Sequence
 
-from app.models import (EvalConfig, EvalRunSettings, ScoringMetric, Stage,
-                        TableSchema, Workflow, WorkflowStage, validate_workflow)
+from app.models import (EvalConfig, EvalRunSettings, ScoringMetric,
+                        TableSchema, Workflow, WorkflowStage)
 from app.evals.dataset_columns import get_injected_columns
 from app.evals.run_settings import resolve_eval_run_settings
 
@@ -23,23 +22,16 @@ class CompatibilityReport:
     settings: EvalRunSettings | None = None
 
 
-def validate_eval_compatibility(config: EvalConfig,
-                             stages: Sequence[Stage]) -> CompatibilityReport:
-    """The precondition phases MUST short-circuit: the coverage checks raise, not degrade."""
-    missing = _validate_stages_exist(config, {s.id: s for s in stages})
+def validate_eval_compatibility(
+    config: EvalConfig, workflow: Workflow
+) -> CompatibilityReport:
+    by_id = workflow.index_workflow_stages_by_id()
+    missing = _validate_stages_exist(config, by_id)
     if missing:
         return CompatibilityReport(ok=False, problems=missing, settings=None)
 
-    # Before anything reads a resolved schema: resolution is only defined on a
-    # workflow this comes back clean for.
-    structural = _validate_workflow_structure(stages)
-    if structural:
-        return CompatibilityReport(ok=False, problems=structural, settings=None)
-
-    workflow = Workflow(stages=list(stages))
-    by_id = workflow.index_workflow_stages_by_id()
     precondition_problems = (
-        _validate_target_reachable(config, stages)
+        _validate_target_reachable(config, by_id)
         + _validate_target_emits_checked_columns(config, by_id)
         + _validate_override_declares_output_schema(config, by_id)
         + _validate_no_reference_override_on_target(config)
@@ -57,7 +49,7 @@ def validate_eval_compatibility(config: EvalConfig,
 
 
 # ── Condition 1: every referenced stage exists ────────────────────────────────
-def _validate_stages_exist(config: EvalConfig, by_id: dict[str, Stage]) -> list[str]:
+def _validate_stages_exist(config: EvalConfig, by_id: dict[str, WorkflowStage]) -> list[str]:
     referenced = [config.override_stage, config.target_stage,
                  *(ov.stage_id for ov in config.reference_overrides)]
     return [f"stage `{sid}` does not exist in the workflow"
@@ -65,23 +57,26 @@ def _validate_stages_exist(config: EvalConfig, by_id: dict[str, Stage]) -> list[
 
 
 # ── Condition 1b: the override must actually reach the target ────────────────
-def _validate_target_reachable(config: EvalConfig, stages: Sequence[Stage]) -> list[str]:
-    if config.target_stage in _find_descendants(config.override_stage, stages):
+def _validate_target_reachable(
+    config: EvalConfig, by_id: dict[str, WorkflowStage]
+) -> list[str]:
+    if config.target_stage in _find_descendants(config.override_stage, by_id):
         return []
     return [f"target `{config.target_stage}` is not reachable from override "
            f"`{config.override_stage}`; the override would not affect it"]
 
 
-def _find_descendants(stage_id: str, stages: Sequence[Stage]) -> set[str]:
-    """Terminates on a cyclic `stages`: the visited check happens BEFORE a node is pushed."""
+def _find_descendants(stage_id: str, by_id: dict[str, WorkflowStage]) -> set[str]:
+    """Terminates on a cyclic graph: the visited check happens BEFORE an id is pushed."""
     descendants: set[str] = set()
     stack = [stage_id]
     while stack:
-        node = stack.pop()
-        for s in stages:
-            if node in s.input_ids and s.id not in descendants:
-                descendants.add(s.id)
-                stack.append(s.id)
+        upstream = stack.pop()
+        for workflow_stage in by_id.values():
+            reads = [source.id for source in workflow_stage.inputs]
+            if upstream in reads and workflow_stage.id not in descendants:
+                descendants.add(workflow_stage.id)
+                stack.append(workflow_stage.id)
     return descendants
 
 
@@ -158,15 +153,6 @@ def _validate_target_emits_checked_columns(
 def _validate_no_reference_override_on_target(config: EvalConfig) -> list[str]:
     return [f"reference override `{ov.stage_id}` cannot be the target stage"
            for ov in config.reference_overrides if ov.stage_id == config.target_stage]
-
-
-# ── Structural: the stage list itself must be a valid workflow ───────────────
-def _validate_workflow_structure(stages: Sequence[Stage]) -> list[str]:
-    issues = validate_workflow(list(stages))
-    if not issues:
-        return []
-    return ["cannot verify the path: the workflow has structural problems: "
-           + "; ".join(issues)]
 
 
 # ── Condition 5: the path must preserve grain (or fall back to a code scorer) ─

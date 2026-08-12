@@ -12,12 +12,12 @@ from app.core.agent.store import MessageRole, PartType, open_session_store
 from app.services import generation, stage_edit, versioning
 from app.services import project as project_service
 from app.services.errors import WorkflowLoadError
-from app.services.loader import resolve_function_code
+from app.services.loader import find_parsed_stage, list_parsed_stages, resolve_function_code
 from app.models import stage_to_json
 from app.runtime.stage_tests import find_failing_stage_tests
 from app.web.config import projects_dir, templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
-from app.web.loading import find_stage, index_workflow_stages, load_stages
+from app.web.loading import find_workflow_stage, load_stages
 from app.web.stage_test_views import build_certification, shape_test_views
 
 router = APIRouter()
@@ -25,29 +25,30 @@ router = APIRouter()
 
 @router.get("/project/{project}/workflow/graph")
 async def workflow_graph(project: str):
-    stages = load_stages(project).stages
+    stages = list_parsed_stages(load_stages(project).entries)
     return JSONResponse({"mermaid": build_mermaid_graph(stages, project)})
 
 
 @router.get("/project/{project}/node/{stage_id}/panel", response_class=HTMLResponse)
 async def node_panel(request: Request, project: str, stage_id: str):
-    stages = load_stages(project).stages
-    stage = find_stage(stages, stage_id)
+    listing = load_stages(project)
+    stage = find_parsed_stage(listing.entries, stage_id)
     if stage is None:
         raise HTTPException(status_code=404, detail=f"No stage '{stage_id}' in {project}")
+    workflow = listing.workflow
     return templates.TemplateResponse(
         request,
         "_node_panel.html",
         {
             "project": project,
             "stage": stage,
-            "workflow_stage": (workflow_stage := index_workflow_stages(stages).get(stage_id)),
+            "workflow_stage": (workflow_stage := find_workflow_stage(workflow, stage_id)),
             "raw_json": stage_to_json(stage),
             "function_code": resolve_function_code(stage),
             "type_class": TYPE_CLASS,
             "type_glyph": TYPE_GLYPH,
             "test_views": (views := shape_test_views(workflow_stage)),
-            "certification": build_certification(stage, views),
+            "certification": build_certification(workflow_stage, views),
             "can_generate_tests": stage.CARRIES_RUNNABLE_TESTS,
         },
     )
@@ -136,7 +137,8 @@ async def create_version_route(project: str, message: str = Form(...)):
     # compiled workflow exists; without one, save_working_copy_as_version's own
     # FileNotFoundError reports the missing workflow as a 400 below.
     if (project_dir / "compiled").is_dir():
-        failing = find_failing_stage_tests(load_stages(project).stages)
+        failing = find_failing_stage_tests(
+            list_parsed_stages(load_stages(project).entries))
         if failing:
             return JSONResponse({"ok": False, "issues": failing}, status_code=400)
 

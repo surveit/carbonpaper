@@ -30,7 +30,7 @@ from app.web.stage_diff import (
     RowAlignedDiff,
     build_stage_diff,
 )
-from conftest import reads_of
+from conftest import place_stage, reads_of
 
 LOAD_ID = "load"
 _LOAD_PATH = f"outputs/{LOAD_ID}.parquet"
@@ -107,7 +107,7 @@ def _write_lineage(run_dir: Path, stage_id: str, kept: list[int]) -> None:
 
 
 def _diff(run_dir: Path, stage_def: Stage, out_rel: str):
-    return build_stage_diff(stage_def, run_dir, out_rel, {LOAD_ID: _LOAD_PATH})
+    return build_stage_diff(place_stage(stage_def), run_dir, out_rel, {LOAD_ID: _LOAD_PATH})
 
 
 def _numbered_frame(rows: int) -> pd.DataFrame:
@@ -208,7 +208,7 @@ def test_an_llm_transform_is_admitted_to_the_row_aligned_diff(tmp_path: Path) ->
     out_rel = _write_output(tmp_path, "judge", pd.DataFrame(
         {"name": ["a"], "val": [1], "label": ["x"]}))
 
-    diff = build_stage_diff(stage, tmp_path, out_rel, {LOAD_ID: _LOAD_PATH})
+    diff = build_stage_diff(place_stage(stage), tmp_path, out_rel, {LOAD_ID: _LOAD_PATH})
 
     assert isinstance(diff, RowAlignedDiff) and diff.kind == ROW_ALIGNED_KIND
     assert diff.added_column_names == ["label"]
@@ -234,7 +234,7 @@ def test_a_starlark_row_function_is_admitted_to_the_row_aligned_diff(tmp_path: P
     out_rel = _write_output(tmp_path, "classify", pd.DataFrame(
         {"name": ["a"], "val": [1], "basis": ["x"]}))
 
-    diff = build_stage_diff(stage, tmp_path, out_rel, {LOAD_ID: _LOAD_PATH})
+    diff = build_stage_diff(place_stage(stage), tmp_path, out_rel, {LOAD_ID: _LOAD_PATH})
 
     assert isinstance(diff, RowAlignedDiff) and diff.kind == ROW_ALIGNED_KIND
     assert diff.added_column_names == ["basis"]
@@ -264,7 +264,7 @@ def test_a_review_queue_shows_the_human_answer_beside_what_it_answered(tmp_path:
         "name": ["a"], "val": [1], "reviewed_name": ["A, corrected"],
         "verdict": ["approve"], "reviewer": ["shuhan"], "reviewed_at": ["2026-08-06"]}))
 
-    diff = build_stage_diff(stage, tmp_path, out_rel, {LOAD_ID: _LOAD_PATH})
+    diff = build_stage_diff(place_stage(stage), tmp_path, out_rel, {LOAD_ID: _LOAD_PATH})
 
     assert isinstance(diff, RowAlignedDiff)
     assert diff.added_column_names == [
@@ -299,7 +299,7 @@ def _enrich_frames(tmp_path: Path) -> str:
 
 
 def _join_diff(tmp_path: Path, stage_def: Stage, out_rel: str):
-    return build_stage_diff(stage_def, tmp_path, out_rel,
+    return build_stage_diff(place_stage(stage_def), tmp_path, out_rel,
                             {LOAD_ID: _LOAD_PATH, REF_ID: _REF_PATH})
 
 
@@ -528,8 +528,8 @@ def test_the_row_budget_windows_the_output_frame_of_an_aligned_diff(tmp_path: Pa
     out_rel = _write_output(tmp_path, "classify", changed)
     stage = _row_stage(_IN_COLUMNS)
 
-    wide = build_stage_diff(stage, tmp_path, out_rel, {LOAD_ID: _LOAD_PATH}, rows_shown=total)
-    default = build_stage_diff(stage, tmp_path, out_rel, {LOAD_ID: _LOAD_PATH})
+    wide = build_stage_diff(place_stage(stage), tmp_path, out_rel, {LOAD_ID: _LOAD_PATH}, rows_shown=total)
+    default = build_stage_diff(place_stage(stage), tmp_path, out_rel, {LOAD_ID: _LOAD_PATH})
 
     assert isinstance(wide, RowAlignedDiff) and isinstance(default, RowAlignedDiff)
     assert len(wide.rows) == total and len(default.rows) == PREVIEW_ROWS_SHOWN
@@ -546,7 +546,7 @@ def test_the_row_budget_windows_the_input_frame_of_a_filter_diff(tmp_path: Path)
     _write_lineage(tmp_path, "keep", kept=[0, 1, 2, 3, 4, 5, 6])  # dropped: ordinal 7
     stage = _filter_stage()
 
-    diff = build_stage_diff(stage, tmp_path, out_rel, {LOAD_ID: _LOAD_PATH}, rows_shown=8)
+    diff = build_stage_diff(place_stage(stage), tmp_path, out_rel, {LOAD_ID: _LOAD_PATH}, rows_shown=8)
 
     assert isinstance(diff, FilterRowsDiff) and diff.kind == FILTER_ROWS_KIND
     assert len(diff.rows) == 8
@@ -573,7 +573,7 @@ def test_a_frame_function_gets_no_diff_even_at_matching_row_counts(tmp_path: Pat
     _write_output(tmp_path, LOAD_ID, frame)
     out_rel = _write_output(tmp_path, "reshape", frame.copy())
 
-    assert build_stage_diff(stage, tmp_path, out_rel, {LOAD_ID: _LOAD_PATH}) is None
+    assert build_stage_diff(place_stage(stage), tmp_path, out_rel, {LOAD_ID: _LOAD_PATH}) is None
 
 
 def test_a_union_gets_no_diff(tmp_path: Path) -> None:
@@ -587,7 +587,7 @@ def test_a_union_gets_no_diff(tmp_path: Path) -> None:
     _write_output(tmp_path, LOAD_ID, pd.DataFrame({"name": ["a"], "val": [1]}))
     out_rel = _write_output(tmp_path, "both", pd.DataFrame({"name": ["a"], "val": [1]}))
 
-    assert build_stage_diff(stage, tmp_path, out_rel, {LOAD_ID: _LOAD_PATH}) is None
+    assert build_stage_diff(place_stage(stage), tmp_path, out_rel, {LOAD_ID: _LOAD_PATH}) is None
 
 
 def test_a_missing_stage_definition_gets_no_diff(tmp_path: Path) -> None:

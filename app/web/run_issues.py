@@ -12,7 +12,7 @@ from typing import Any, Mapping, Sequence
 from pydantic import BaseModel
 
 from app.core.run_status import StageStatus
-from app.models import Stage, StepRefused
+from app.models import StepRefused, WorkflowStage
 from app.models.run_manifest import SCHEMA_REFUSAL_ERROR_TYPE
 from app.models.severity import UserFacingErrorSeverity
 from app.web.stage_strip import read_stage_records
@@ -81,7 +81,7 @@ class RunIssues(BaseModel):
 
 
 def build_run_issues(
-    manifest: Mapping[str, Any], stages: Sequence[Stage] | None
+    manifest: Mapping[str, Any], stages: Sequence[WorkflowStage] | None
 ) -> RunIssues:
     records = read_stage_records(manifest)
     # Only their edges say which never-ran stage a given stop is what blocked, so
@@ -195,11 +195,11 @@ def _find_stages_it_blocked(
     return [stage for stage in order if stage in reached and stage in never_ran]
 
 
-def _index_consumers(stages: Sequence[Stage] | None) -> dict[str, list[str]]:
+def _index_consumers(stages: Sequence[WorkflowStage] | None) -> dict[str, list[str]]:
     consumers: dict[str, list[str]] = {}
     for stage in stages or ():
-        for ref in stage.inputs:
-            consumers.setdefault(ref.id, []).append(stage.id)
+        for source in stage.inputs:
+            consumers.setdefault(source.id, []).append(stage.id)
     return consumers
 
 

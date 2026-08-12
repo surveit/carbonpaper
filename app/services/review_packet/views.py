@@ -8,8 +8,6 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from app.models import Stage
-
 # A stage that never executed has no output file; the packet says so rather than
 # writing an empty CSV that would read as "this stage produced nothing".
 MISSING_OUTPUT = "no output file recorded"
@@ -49,7 +47,6 @@ class StageView(BaseModel):
     output_path: str | None
     validations: list[ValidationView]
     data_file: str | None
-    definition: Stage | None
     definition_error: str | None
 
 
@@ -70,7 +67,6 @@ class RunView(BaseModel):
 
 def build_run_view(
     manifest: dict[str, Any],
-    definitions: dict[str, Stage],
     definition_error: str | None,
 ) -> RunView:
     return RunView(
@@ -84,25 +80,23 @@ def build_run_view(
         bust_cache=bool(manifest.get("bust_cache", False)),
         halted_at=[str(s) for s in manifest.get("halted_at") or []],
         dropped_columns=_read_dropped_columns(manifest),
-        stages=_build_stage_views(manifest, definitions, definition_error),
+        stages=_build_stage_views(manifest, definition_error),
         inputs=_build_input_views(manifest),
     )
 
 
 def _build_stage_views(
     manifest: dict[str, Any],
-    definitions: dict[str, Stage],
     definition_error: str | None,
 ) -> list[StageView]:
     return [
-        _build_stage_view(record, definitions, definition_error)
+        _build_stage_view(record, definition_error)
         for record in manifest.get("stage_records") or []
     ]
 
 
 def _build_stage_view(
     record: dict[str, Any],
-    definitions: dict[str, Stage],
     definition_error: str | None,
 ) -> StageView:
     stage_id = str(record.get("stage_id") or "")
@@ -119,7 +113,6 @@ def _build_stage_view(
         output_path=output_path,
         validations=_build_validation_views(record),
         data_file=f"data/{stage_id}.csv" if output_path else None,
-        definition=definitions.get(stage_id),
         definition_error=definition_error,
     )
 

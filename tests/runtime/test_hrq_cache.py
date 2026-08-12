@@ -104,7 +104,7 @@ def _put_approval(
 ) -> None:
     """Goes through the real review service, never a hand-assembled entry or a raw store write."""
     review.record_decision(
-        project=project, stage=_stage(),
+        project=project, stage=place_stage(_stage()),
         stage_fingerprint=stage_fingerprint, input_fingerprint=input_fingerprint,
         frozen_row={str(column): value for column, value in row.items()},
         verdict=verdict,

@@ -15,7 +15,7 @@ import pandas as pd
 
 from app.core.frames import write_frame_file_with_csv_fallback
 from app.core.predicate import parse_predicate
-from app.models import Stage, WorkflowStage
+from app.models import WorkflowStage
 from app.models.run_manifest import QueueStats, StageContribution
 from app.models.stages.human_review_queue import (
     HumanReviewQueueStage,
@@ -92,7 +92,8 @@ class _QueueRowMapper:
         pending = _order_pending_reviews(self._queue.sort, _find_pending_reviews(df), stage.id)
         if not pending:
             return
-        queue_path = _write_queue_files(ctx.require_run_dir() / "queue", stage, pending)
+        queue_path = _write_queue_files(
+            ctx.require_run_dir() / "queue", workflow_stage, pending)
         raise HaltForReview(
             stage_id=stage.id,
             pending_count=len(pending),
@@ -224,8 +225,9 @@ def _require_sort_columns_present(
 
 
 def _write_queue_files(
-    queue_dir: Path, stage: Stage, pending: list[PendingReview]
+    queue_dir: Path, workflow_stage: WorkflowStage, pending: list[PendingReview]
 ) -> Path:
+    stage = workflow_stage.stage
     queue_dir.mkdir(parents=True, exist_ok=True)
     queue_path = _write_pending_snapshot(queue_dir, stage.id, pending)
     _write_fingerprint_sidecar(

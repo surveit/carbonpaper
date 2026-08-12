@@ -13,7 +13,7 @@ from typing import ClassVar, Optional, Union
 
 import pandas as pd
 
-from app.models import Stage, StageType
+from app.models import StageType, WorkflowStage
 from app.models.stage import is_grain_and_order_preserving
 from app.runtime.lineage import RowLineage, lineage_sidecar_path
 from app.runtime.manifest import resolve_output_path
@@ -170,15 +170,16 @@ StageDiff = Union[RowAlignedDiff, FilterRowsDiff]
 
 
 def build_stage_diff(
-    stage_def: Optional[Stage],
+    workflow_stage: Optional[WorkflowStage],
     run_dir: Path,
     output_path: Optional[str],
     output_by_id: dict[str, Optional[str]],
     rows_shown: int = PREVIEW_ROWS_SHOWN,
 ) -> Optional[StageDiff]:
-    if stage_def is None:
+    if workflow_stage is None:
         return None
-    input_ids = _resolve_diff_input_ids(stage_def)
+    stage_def = workflow_stage.stage
+    input_ids = _resolve_diff_input_ids(workflow_stage)
     if input_ids is None:
         return None
     input_df = _read_frame(run_dir, output_by_id.get(input_ids[0]))
@@ -215,7 +216,8 @@ def _shape_reference_frame(
     )
 
 
-def _resolve_diff_input_ids(stage_def: Stage) -> Optional[list[str]]:
+def _resolve_diff_input_ids(workflow_stage: WorkflowStage) -> Optional[list[str]]:
+    stage_def = workflow_stage.stage
     if stage_def.type not in ROW_ALIGNED_TYPES and stage_def.type != StageType.filter_rows:
         return None
     # enrich takes two inputs and diffs against inputs[0], its SUBJECT: that is

@@ -11,7 +11,7 @@ from typing import Any, Callable, NamedTuple, Protocol, TypeVar, runtime_checkab
 
 import pandas as pd
 
-from app.models import Stage, WorkflowStage
+from app.models import WorkflowStage
 from app.models.run_manifest import RowError, StageContribution
 from app.models.stage import (
     AbstractStage,
@@ -242,7 +242,7 @@ class FrameTransformHandler(StageHandler):
         self, workflow_stage: WorkflowStage, inputs: dict[str, pd.DataFrame],
         ctx: RunContext,
     ) -> pd.DataFrame | None:
-        caching = open_frame_caching(workflow_stage.stage, ctx, self.caches_frames)
+        caching = open_frame_caching(workflow_stage, ctx, self.caches_frames)
         if caching.key is None:
             output = self.apply(workflow_stage, inputs, ctx)
             return note_skipped_caching(output, caching.skipped_note)
@@ -296,7 +296,7 @@ def _run_row_mapper(
     # reaches the mapper's lifecycle wrapper and is logged as the replay it is.
     # `map_row` itself stays bound: _finish_mapped_frame tests it for the
     # PostMapRowMapper shape, which a wrapper would hide.
-    caching = _open_row_caching(stage, ctx) if handler.caches_rows else None
+    caching = _open_row_caching(workflow_stage, ctx) if handler.caches_rows else None
     compute_row = _log_row_lifecycle(map_row, ctx.run_log, stage.id)
     if caching is not None:
         compute_row = _map_row_through_cache(caching, compute_row, ctx.run_log, stage.id)
@@ -372,7 +372,8 @@ class _RowCaching(NamedTuple):
     writer: StageCache | None
 
 
-def _open_row_caching(stage: Stage, ctx: RunContext) -> _RowCaching | None:
+def _open_row_caching(workflow_stage: WorkflowStage, ctx: RunContext) -> _RowCaching | None:
+    stage = workflow_stage.stage
     if not stage.cache:
         return None
     if ctx.identity is None or ctx.stage_cache is None:
@@ -481,14 +482,14 @@ def _run_batched(
     stage = workflow_stage.stage
     src = inputs[workflow_stage.inputs[0].id]
     records = list_rows(src)
-    caching = _open_row_caching(stage, ctx)
+    caching = _open_row_caching(workflow_stage, ctx)
     hits = {} if caching is None else _find_cached_rows_by_position(caching, records)
     misses = [index for index in range(len(records)) if index not in hits]
     emit_batched_row_starts(ctx.run_log, stage.id, hits, misses)
     computed = _compute_batched_rows(handler, workflow_stage, src, misses, ctx)
     # Ordered before recorded: the ordering step is what verifies one computed
     # row per miss, so nothing is pinned against a row it did not come from.
-    rows = _order_by_input_position(stage, hits, misses, computed, len(records))
+    rows = _order_by_input_position(stage.id, hits, misses, computed, len(records))
     if caching is not None:
         for position, row in zip(misses, computed):
             _record_row_output(caching, records[position], row)
@@ -527,7 +528,7 @@ def _compute_batched_rows(
 
 
 def _order_by_input_position(
-    stage: Stage,
+    stage_id: str,
     hits: dict[int, Row],
     misses: list[int],
     computed: list[Row],
@@ -535,7 +536,7 @@ def _order_by_input_position(
 ) -> list[Row]:
     if len(computed) != len(misses):
         raise RuntimeError(
-            f"stage {stage.id}: batched execution returned {len(computed)} rows "
+            f"stage {stage_id}: batched execution returned {len(computed)} rows "
             f"for the {len(misses)} rows it was asked to compute"
         )
     by_position = dict(hits)

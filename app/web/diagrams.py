@@ -3,9 +3,9 @@ project's stages. No I/O — stages in, diagram source out."""
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Sequence
 
-from app.models import Stage, AbstractStage
+from app.models import AbstractStage
 from app.core.run_status import StageStatus
 
 
@@ -188,7 +188,7 @@ def _collect_table_fk_edges(schemas: list[dict[str, Any]], names: set[Any]) -> l
     return edges
 
 
-def _node_view(s: Stage | dict[str, Any]) -> dict[str, Any]:
+def _node_view(s: AbstractStage | dict[str, Any]) -> dict[str, Any]:
     if isinstance(s, AbstractStage):
         return {
             "id": s.id,
@@ -218,7 +218,7 @@ def _node_view(s: Stage | dict[str, Any]) -> dict[str, Any]:
 
 
 def build_mermaid_graph(
-    stages: list[Stage] | list[dict[str, Any]],
+    stages: Sequence[AbstractStage] | Sequence[dict[str, Any]],
     project: str,
     status_by_id: dict[str, str] | None = None,
 ) -> str:

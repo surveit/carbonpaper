@@ -56,7 +56,7 @@ async def run_stage_partial(
     # executed, so they read the version it pinned. With no resolvable version
     # there is no stage definition to show and the panel says why.
     pinned = run_service.load_pinned_stage_def(project, manifest, stage_id)
-    stage_def = pinned.stage
+    stage_def = None if pinned.workflow_stage is None else pinned.workflow_stage.stage
     if stage_record is None:
         # A stage the graph draws but this run never executed (a workflow test
         # injects its input stages) — see app.web.run_stage_panel.
@@ -77,7 +77,7 @@ async def run_stage_partial(
             )
 
     function_code = resolve_function_code(stage_def)
-    llm_example = build_llm_example(stage_def, input_previews) if stage_def else None
+    llm_example = build_llm_example(pinned.workflow_stage, input_previews)
 
     return templates.TemplateResponse(
         request,
@@ -94,13 +94,14 @@ async def run_stage_partial(
             # stage whose alignment can't be verified — the pane then shows the
             # plain output view (app.web.stage_diff).
             "diff": build_stage_diff(
-                stage_def, run_dir, stage_record.get("output_path"), output_by_id
+                pinned.workflow_stage, run_dir,
+                stage_record.get("output_path"), output_by_id
             ),
             "input_previews": input_previews,
             "function_code": function_code,
             "llm_example": llm_example,
             "test_views": (views := shape_test_views(pinned.workflow_stage)),
-            "certification": build_certification(stage_def, views) if stage_def else None,
+            "certification": build_certification(pinned.workflow_stage, views),
             "previewable": stage_def is not None and stage_def.type in PREVIEWABLE_TYPES,
             "links": resolve_panel_links(project, run_id),
             "event_tail": EVENT_TAIL,
@@ -173,7 +174,7 @@ def _build_full_rows_diff(
 ) -> StageDiff | None:
     manifest = load_manifest(run_dir)
     return build_stage_diff(
-        run_service.load_pinned_stage_def(project, manifest, stage_id).stage,
+        run_service.load_pinned_stage_def(project, manifest, stage_id).workflow_stage,
         run_dir,
         stage_record.get("output_path"),
         {s.get("stage_id"): s.get("output_path") for s in manifest.get("stage_records", [])},
@@ -207,7 +208,7 @@ async def run_stage_simulate(
     # run pinned. No resolvable version, or a type the runner cannot preview, and
     # there is nothing here to simulate — the panel links no page in either case.
     pinned = run_service.load_pinned_stage_def(project, manifest, stage_id)
-    stage_def = pinned.stage
+    stage_def = None if pinned.workflow_stage is None else pinned.workflow_stage.stage
     if stage_def is None:
         raise HTTPException(
             status_code=404, detail=pinned.error or f"No stage '{stage_id}' in run"

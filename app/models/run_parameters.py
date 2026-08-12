@@ -4,9 +4,9 @@ recorded verbatim on `RunManifest.parameters`, so the settings a run executed un
 and the settings it records are one object."""
 from __future__ import annotations
 
-from typing import Any
-
 from pydantic import BaseModel, ConfigDict, model_validator
+
+from app.models.schema import StageId, TypeUnsafeUserStageConfigOverride
 
 
 class RunParameters(BaseModel):
@@ -25,7 +25,7 @@ class RunParameters(BaseModel):
     is_test_run: bool = False
     # Per-run connector params, keyed by stage id, merged over a stage's authored
     # params for this run only.
-    run_bindings: dict[str, dict[str, Any]] = {}
+    run_bindings: dict[StageId, TypeUnsafeUserStageConfigOverride] = {}
 
     @model_validator(mode="after")
     def _only_a_test_run_may_auto_approve(self) -> RunParameters:

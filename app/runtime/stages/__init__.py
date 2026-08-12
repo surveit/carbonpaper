@@ -9,7 +9,8 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from app.models.stage import Stage, StageType
+from app.models.stage import StageType
+from app.models.workflow_stage import WorkflowStage
 
 from ..errors import HaltForReview as HaltForReview
 from ..options import DEFAULT_PARALLEL
@@ -33,7 +34,7 @@ from .python_functions import handle_python_frame_function, make_python_row_mapp
 from .starlark_functions import make_starlark_row_mapper
 from .union import handle_union
 
-Preflight = Callable[[Stage], tuple[list[str], dict[str, Any] | None]]
+Preflight = Callable[[WorkflowStage], tuple[list[str], dict[str, Any] | None]]
 
 PREFLIGHTS: dict[StageType, Preflight] = {
     StageType.input_data: preflight_input_data,

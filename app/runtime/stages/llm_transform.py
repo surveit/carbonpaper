@@ -15,7 +15,7 @@ from pydantic import create_model
 
 from app.core.agent.usage import LlmUsage
 from app.core.frames import list_rows
-from app.models import Stage, WorkflowStage
+from app.models import WorkflowStage
 from app.models.schema import Column, TableSchema
 from app.models.stages.llm_transform import LLMTransformStage
 
@@ -107,7 +107,7 @@ def _build_chunk_processor(
             log, stage.id, tuple(positions[start : start + len(chunk)])
         )
         try:
-            return _process_chunk(stage, llm, batch_reply_schema, start, chunk)
+            return _process_chunk(stage.id, llm, batch_reply_schema, start, chunk)
         finally:
             unbind_detail_sink(token)
 
@@ -150,7 +150,7 @@ def _build_batch_reply_schema(stage: LLMTransformStage) -> type:
 
 
 def _process_chunk(
-    stage: Stage, llm: Any, batch_reply_schema: type, start: int, chunk: list[Row]
+    stage_id: str, llm: Any, batch_reply_schema: type, start: int, chunk: list[Row]
 ) -> list[tuple[int, Row]]:
     """A confused reply fails EVERY row of the chunk: the answers that matched are not trusted."""
     n = len(chunk)
@@ -161,7 +161,7 @@ def _process_chunk(
         task = _render_batch_task(llm.prompt_data_template, chunk, correction=problem if attempt else None)
         try:
             reply = call_llm_batch(
-                stage.id, llm, instructions=llm.prompt_instructions, task=task,
+                stage_id, llm, instructions=llm.prompt_instructions, task=task,
                 reply_schema=batch_reply_schema, usage_out=usages,
             )
         except Exception as exc:  # noqa: BLE001 — a chunk that never returns is thrown back, then errored

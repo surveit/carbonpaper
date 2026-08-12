@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 
 from app.core.stage_cache import ReadOnlyStageCache
-from app.models import Stage, TableSchema, WorkflowStage, WorkflowStageInput
+from app.models import Stage, TableSchema, Workflow, WorkflowStage, WorkflowStageInput
 from app.models.stages.signature import promised_output_schema, transform_input_schemas
 from app.models.run_manifest import StageContribution, read_run_manifest
 from app.models.run_parameters import RunParameters
@@ -20,15 +20,19 @@ from app.runtime.manifest import CONTRIBUTION_ATTR
 from app.services.versioning import load_version_stages, resolve_version_id
 
 
-def pinned_stages(project_dir: Path, version_id: str | None = None) -> tuple[list[Stage], str]:
+def pinned_stages(project_dir: Path, version_id: str | None = None) -> tuple[Workflow, str]:
     workflow_version = resolve_version_id(project_dir, version_id)
-    return load_version_stages(project_dir, workflow_version), workflow_version
+    return _load_version_workflow(project_dir, workflow_version), workflow_version
 
 
-def resumed_stages(project_dir: Path, run_id: str) -> tuple[list[Stage], str]:
+def resumed_stages(project_dir: Path, run_id: str) -> tuple[Workflow, str]:
     workflow_version = read_run_manifest(project_dir / "runs" / run_id).workflow_version
     assert workflow_version, f"run {run_id} records no workflow_version"
-    return load_version_stages(project_dir, workflow_version), workflow_version
+    return _load_version_workflow(project_dir, workflow_version), workflow_version
+
+
+def _load_version_workflow(project_dir: Path, version_id: str) -> Workflow:
+    return Workflow(stages=load_version_stages(project_dir, version_id))
 
 
 def source_stage(stage_id: str, columns: list[dict[str, object]]) -> dict[str, object]:

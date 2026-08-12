@@ -3,12 +3,12 @@
 Executes a workflow and persists the result. Does not import the compiler or the web app.
 **It reads no workflow versions.** A caller resolves which version to pin and loads that
 snapshot (`app/services/versioning.py`: `resolve_version_id` → `load_version_stages`) and
-hands the runner the stages; `app/services/run.py` is the one place that composes this for
+hands the runner that version as a `Workflow`; `app/services/run.py` is the one place that composes this for
 a production run. An import-linter contract forbids `app/runtime/runner.py` from importing
 `app.services` at all, so the arrow between them points one way only.
 
 ## `runner.py` — the executor
-`topological_sort` → `execute_run(project_dir, repo_root, stages, workflow_version)`. Per
+`topological_sort` → `execute_run(project_dir, repo_root, workflow, workflow_version)`. Per
 stage: validate declared inputs (`validation.py`), reject duplicate input rows, dispatch to
 the type's handler, validate the output, write `outputs/<stage>.parquet`, append to
 `manifest.json`.

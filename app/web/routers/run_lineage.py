@@ -42,6 +42,7 @@ async def run_stage_lineage_panel(
     # version the run pinned. Unresolvable → no transform and a stated reason;
     # the page's own row view is unaffected, because that data is still true.
     pinned = run_service.load_pinned_stage_def(project, manifest, stage_id)
+    stage_def = None if pinned.workflow_stage is None else pinned.workflow_stage.stage
     return templates.TemplateResponse(
         request,
         "_lineage_stage.html",
@@ -49,13 +50,13 @@ async def run_stage_lineage_panel(
             "project": project,
             "run_id": run_id,
             "stage": stage_record,
-            "stage_def": pinned.stage,
+            "stage_def": stage_def,
             "workflow_stage": pinned.workflow_stage,
             "stage_def_error": pinned.error,
-            "function_code": resolve_function_code(pinned.stage),
+            "function_code": resolve_function_code(stage_def),
             "test_views": (lineage_views := shape_test_views(pinned.workflow_stage)),
             "certification": (
-                build_certification(pinned.stage, lineage_views) if pinned.stage else None
+                build_certification(pinned.workflow_stage, lineage_views)
             ),
             "scoped_row": row,
             "type_glyph": TYPE_GLYPH,
@@ -98,13 +99,13 @@ async def run_stage_row_trace_view(
     # copy: the story still lists the ancestry, transforms show as "unknown",
     # and no graph is drawn.
     try:
-        stages = run_service.load_run_stages(project, manifest)
+        stages_by_id = run_service.load_run_workflow(
+            project, manifest).index_workflow_stages_by_id()
     except RunVersionUnresolvableError:
-        stages = []
-    stages_by_id = {s.id: s for s in stages}
+        stages_by_id = {}
 
     view = build_trace_view(trace_to_dict(trace), stages_by_id, AppPanelLinks(project, run_id))
-    ordered = [stages_by_id[n["stage_id"]] for n in view["nodes"]
+    ordered = [stages_by_id[n["stage_id"]].stage for n in view["nodes"]
                if n["stage_id"] in stages_by_id]
     mermaid = build_mermaid_graph(ordered, project) if len(ordered) == len(view["nodes"]) else ""
     return templates.TemplateResponse(

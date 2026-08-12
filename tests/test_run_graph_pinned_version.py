@@ -17,7 +17,7 @@ from app.main import app
 from app.runtime.runner import execute_run
 from app.services import versioning
 from app.services import project as project_service
-from app.services.run import load_run_stages
+from app.services.run import load_run_workflow
 from conftest import pinned_stages
 
 client = TestClient(app)
@@ -166,18 +166,18 @@ def test_status_poller_reports_the_unresolvable_version_instead_of_a_graph(
 
 # ─── The loader seam itself ─────────────────────────────────────────────────
 
-def test_load_run_stages_reads_the_pinned_version(project: Path) -> None:
+def test_load_run_workflow_reads_the_pinned_version(project: Path) -> None:
     run_id = _run_once(project)
     _drift_the_working_copy(project)
     manifest = json.loads(
         (project / "runs" / run_id / "manifest.json").read_text(encoding="utf-8"))
 
-    stages = load_run_stages(PROJECT, manifest)
-    assert [s.id for s in stages] == [PINNED_ID]
+    workflow = load_run_workflow(PROJECT, manifest)
+    assert [s.id for s in workflow.stages] == [PINNED_ID]
 
 
-def test_load_run_stages_raises_rather_than_falling_back(project: Path) -> None:
+def test_load_run_workflow_raises_rather_than_falling_back(project: Path) -> None:
     with pytest.raises(RunVersionUnresolvableError, match="records no workflow version"):
-        load_run_stages(PROJECT, {"workflow_version": None})
+        load_run_workflow(PROJECT, {"workflow_version": None})
     with pytest.raises(RunVersionUnresolvableError, match="could not be read"):
-        load_run_stages(PROJECT, {"workflow_version": "20990101T000000"})
+        load_run_workflow(PROJECT, {"workflow_version": "20990101T000000"})

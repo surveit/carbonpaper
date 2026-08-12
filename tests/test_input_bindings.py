@@ -7,8 +7,8 @@ import pandas as pd
 import pytest
 
 from app.core.errors import MissingInputBindingError
-from app.models import parse_stage, Stage
-from app.runtime.runner import apply_run_bindings, validate_stages_ready, execute_run
+from app.models import Workflow, parse_stage, Stage
+from app.runtime.runner import validate_stages_ready, execute_run
 from app.runtime.stages.input_data import read_input_data
 from app.services import versioning
 from app.services.project import save_working_copy_as_version
@@ -40,7 +40,17 @@ def _connectorless_stage(stage_id: str, input_id: str) -> Stage:
     })
 
 
-# ── apply_run_bindings: generic param overrides, no file knowledge ──────────
+def apply_run_bindings(stages: list[Stage], bindings) -> tuple[list[Stage], dict[str, str]]:
+    """Test shim: the app binds through a Workflow; these cases author bare stage lists."""
+    workflow, sources = Workflow(stages=stages).apply_run_bindings(bindings)
+    return workflow.stages, sources
+
+
+def _ready(stages: list[Stage], sources: dict[str, str]):
+    return validate_stages_ready(Workflow(stages=stages).list_workflow_stages(), sources)
+
+
+# ── Workflow.apply_run_bindings: generic param overrides, no file knowledge ──
 
 def test_run_binding_overrides_workflow_params(tmp_path):
     authored, bound = str(tmp_path / "a.csv"), str(tmp_path / "b.csv")
@@ -102,15 +112,14 @@ def test_original_stages_untouched(tmp_path):
 def test_unready_stages_all_named(tmp_path):
     stages = [_input_stage("load_a", None), _input_stage("load_b", None)]
     with pytest.raises(MissingInputBindingError) as exc:
-        validate_stages_ready(stages, {"load_a": "workflow", "load_b": "workflow"})
+        _ready(stages, {"load_a": "workflow", "load_b": "workflow"})
     assert "load_a" in str(exc.value) and "load_b" in str(exc.value)
 
 
 def test_ready_stage_yields_provenance_record(tmp_path):
     data = tmp_path / "a.csv"
     pd.DataFrame({"x": [1]}).to_csv(data, index=False)
-    records = validate_stages_ready(
-        [_input_stage("load", str(data))], {"load": "workflow"})
+    records = _ready([_input_stage("load", str(data))], {"load": "workflow"})
     assert records["load"]["path"] == str(data)
     assert records["load"]["source"] == "workflow"
     assert records["load"]["sha256"] == hashlib.sha256(data.read_bytes()).hexdigest()
@@ -121,7 +130,7 @@ def test_connectorless_stage_has_no_preflight(tmp_path):
     data = tmp_path / "a.csv"
     pd.DataFrame({"x": [1]}).to_csv(data, index=False)
     stages = [_input_stage("load", str(data)), _connectorless_stage("score", "load")]
-    records = validate_stages_ready(stages, {"load": "workflow"})
+    records = _ready(stages, {"load": "workflow"})
     assert set(records) == {"load"}
 
 

@@ -8,19 +8,19 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.core.errors import RunVersionUnresolvableError
-from app.models import Stage, WorkflowStage
+from app.models import Workflow, WorkflowStage
 from app.models.review_guide import ReviewGuideStep
-from app.models.workflow import resolve_workflow_stages, sort_stages_by_dependency
+from app.models.workflow import sort_stages_by_dependency
 from app.services.run import load_run_version, read_output_column_counts
 from app.services.versioning import find_latest_review_guide
 
 
 @dataclass(frozen=True)
 class GuideStageView:
-    """`stage` is None when the guide names an id the pinned version does not define."""
+    """None when the guide names an id the pinned version does not define."""
 
     stage_id: str
-    stage: Stage | None
+    workflow_stage: WorkflowStage | None
     written_columns: list[str]
     executed: bool
     # The two halves of the output frame's shape, both measured off what THIS RUN wrote
@@ -70,7 +70,7 @@ def build_run_guide_view(project: str, manifest: dict[str, Any]) -> RunGuideView
     guide = find_latest_review_guide(project, version.version_id)
     if guide is None:
         return None
-    by_id = _index_stages_in_execution_order(version.stages)
+    by_id = _index_stages_in_execution_order(Workflow(stages=version.stages))
     measured = _read_run_measurements(project, manifest)
     return RunGuideView(
         steps=[_view_step(step, by_id, measured) for step in guide.steps],
@@ -89,10 +89,10 @@ def list_written_columns(workflow_stage: WorkflowStage) -> list[str]:
     return [column.name for column in added.columns]
 
 
-def _index_stages_in_execution_order(stages: list[Stage]) -> dict[str, WorkflowStage]:
+def _index_stages_in_execution_order(workflow: Workflow) -> dict[str, WorkflowStage]:
     """The returned mapping's insertion order is load-bearing: it IS the execution order."""
-    by_id = {workflow_stage.id: workflow_stage for workflow_stage in resolve_workflow_stages(stages)}
-    return {draft.id: by_id[draft.id] for draft in sort_stages_by_dependency(stages)}
+    by_id = workflow.index_workflow_stages_by_id()
+    return {stage.id: by_id[stage.id] for stage in sort_stages_by_dependency(workflow.stages)}
 
 
 @dataclass(frozen=True)
@@ -178,7 +178,7 @@ def _view_stage(
 ) -> GuideStageView:
     return GuideStageView(
         stage_id=stage_id,
-        stage=None if workflow_stage is None else workflow_stage.stage,
+        workflow_stage=workflow_stage,
         written_columns=[] if workflow_stage is None else list_written_columns(workflow_stage),
         executed=stage_id in measured.executed,
         output_row_count=measured.row_counts.get(stage_id),

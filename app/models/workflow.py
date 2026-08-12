@@ -5,13 +5,20 @@ function of the whole graph, so they are computed here and handed out as
 each returns a list of issue strings, [] meaning it found nothing."""
 from __future__ import annotations
 
+from dataclasses import dataclass
 from functools import cached_property
-from typing import Any, Optional, Protocol, Sequence, TypeVar
+from typing import Any, Mapping, Optional, Protocol, Sequence, TypeVar
 
 from pydantic import ValidationError, model_validator
 
-from app.models.schema import TableSchema, _Base
+from app.models.schema import (
+    StageId,
+    TableSchema,
+    TypeUnsafeUserStageConfigOverride,
+    _Base,
+)
 from app.models.stage import Stage, StageType
+from app.models.stages.input_data import Connector, InputDataStage
 from app.models.stages.signature import find_signature_issues, promised_output_schema
 from app.models.workflow_stage import WorkflowStage, WorkflowStageInput
 from app.core.utils import format_errors
@@ -214,6 +221,24 @@ class Workflow(_Base):
             raise ValueError("; ".join(issues))
         return self
 
+    def apply_run_bindings(
+        self, bindings: Mapping[StageId, TypeUnsafeUserStageConfigOverride] | None
+    ) -> tuple["Workflow", dict[StageId, str]]:
+        """A binding reaches `connector.params` only, so every resolved schema survives it."""
+        given = dict(bindings or {})
+        connector_ids = {s.id for s in self.stages if isinstance(s, InputDataStage)}
+        _refuse_unbindable_stage_ids(given, connector_ids)
+        rebound = [
+            _merge_connector_params(stage, given[stage.id])
+            # `given`'s keys were just checked to be connector_ids, which is exactly
+            # the input_data stages — so the isinstance never rejects a bound stage.
+            if isinstance(stage, InputDataStage) and stage.id in given
+            else stage
+            for stage in self.stages
+        ]
+        sources = {sid: "run" if sid in given else "workflow" for sid in connector_ids}
+        return Workflow(stages=rebound), sources
+
     def list_workflow_stages(self) -> list[WorkflowStage]:
         return self._resolved_stages
 
@@ -234,8 +259,52 @@ class Workflow(_Base):
         return resolve_workflow_stages(self.stages)
 
 
+def _refuse_unbindable_stage_ids(
+    given: Mapping[StageId, TypeUnsafeUserStageConfigOverride], connector_ids: set[StageId]
+) -> None:
+    unbindable = sorted(set(given) - connector_ids)
+    if unbindable:
+        raise ValueError(
+            f"bindings target stage id(s) with no connector to bind: {unbindable}; "
+            f"bindable stages are {sorted(connector_ids)}")
+
+
+def _merge_connector_params(
+    stage: InputDataStage, binding: TypeUnsafeUserStageConfigOverride
+) -> InputDataStage:
+    if not isinstance(binding, Mapping):
+        raise ValueError(
+            f"binding for `{stage.id}` must be a dict of connector params, "
+            f"got {type(binding).__name__}: {binding!r}")
+    try:
+        connector = Connector.model_validate({
+            **stage.connector.model_dump(),
+            "params": {**stage.connector.params, **binding},
+        })
+    except ValidationError as err:
+        raise ValueError(f"binding for `{stage.id}` is invalid: {err}") from err
+    return stage.model_copy(update={"connector": connector})
+
+
 def parse_workflow(stages: list[dict[str, Any]]) -> Workflow:
     return Workflow.model_validate({"stages": list(stages)})
+
+
+@dataclass(frozen=True)
+class WorkflowNotFormed:
+    """Never empty: a stage list that forms no workflow carries why it did not."""
+    issues: list[str]
+
+    def __post_init__(self) -> None:
+        if not self.issues:
+            raise ValueError("a workflow that did not form must say why; `issues` is empty")
+
+
+def build_workflow(stages: list[Stage]) -> Workflow | WorkflowNotFormed:
+    try:
+        return Workflow(stages=stages)
+    except ValidationError as err:
+        return WorkflowNotFormed(issues=graph_issues(stages) or format_errors(err))
 
 
 def validate_workflow(stages: list[Stage]) -> list[str]:

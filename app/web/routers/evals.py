@@ -11,8 +11,8 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from app.core.errors import EvalNotScorableError
 from app.core.frames import list_rows
-from app.models import EvalConfig, EvalRun, Stage
-from app.evals.compatibility import validate_eval_compatibility
+from app.models import EvalConfig, EvalRun, WorkflowNotFormed
+from app.evals.compatibility import CompatibilityReport, validate_eval_compatibility
 from app.evals.runner import run_eval
 from app.evals.store import (
     eval_status,
@@ -26,7 +26,7 @@ from app.services.versioning import list_versions
 from app.web.breadcrumbs import build_eval_crumbs, build_eval_run_crumbs
 from app.web.config import projects_dir, REPO_ROOT, templates
 from app.core.frames import read_frame_file
-from app.web.loading import load_stages_or_empty, render_frame_as_text
+from app.web.loading import StageListing, load_stages_or_empty, render_frame_as_text
 from app.web.project_view import shell_state
 
 router = APIRouter()
@@ -47,13 +47,15 @@ async def evals_index(request: Request, project: str):
         {
             "state": shell_state(project_dir, "evals"),
             "section": "evals",
-            "evals": _build_eval_index_rows(project_dir, listing.stages),
+            "evals": _build_eval_index_rows(project_dir, listing),
             "load_issues": listing.issues,
         },
     )
 
 
-def _build_eval_index_rows(project_dir: Path, stages: list[Stage]) -> list[dict[str, Any]]:
+def _build_eval_index_rows(
+    project_dir: Path, listing: StageListing
+) -> list[dict[str, Any]]:
     latest_version = latest_version_id(project_dir)
     rows: list[dict[str, Any]] = []
     for entry in list_eval_configs(project_dir):
@@ -61,7 +63,7 @@ def _build_eval_index_rows(project_dir: Path, stages: list[Stage]) -> list[dict[
             rows.append({"id": entry.id, "name": entry.id,
                          "status": "broken", "issues": entry.issues})
             continue
-        status, run_issue = _resolve_eval_status(entry.config, stages, project_dir,
+        status, run_issue = _resolve_eval_status(entry.config, listing, project_dir,
                                                   latest_version)
         rows.append({"id": entry.config.id, "name": entry.config.name,
                      "status": status, "issues": [run_issue] if run_issue else []})
@@ -80,8 +82,8 @@ async def eval_detail(request: Request, project: str, eval_id: str):
 def _render_eval_detail(
     request: Request, project: str, project_dir: Path, config: EvalConfig
 ) -> HTMLResponse:
-    stages = load_stages_or_empty(project).stages
-    report = validate_eval_compatibility(config, stages)
+    listing = load_stages_or_empty(project)
+    report = _report_compatibility(config, listing)
     runs, runs_error = _list_eval_runs_safely(project_dir, config.id)
     latest_version = latest_version_id(project_dir)
     status = ("broken" if runs_error else
@@ -192,10 +194,20 @@ def _load_config_or_404(project_dir: Path, eval_id: str) -> EvalConfig:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
+def _report_compatibility(config: EvalConfig, listing: StageListing) -> CompatibilityReport:
+    workflow = listing.workflow
+    if isinstance(workflow, WorkflowNotFormed):
+        return CompatibilityReport(ok=False, problems=[
+            "cannot verify the path: the workflow has structural problems: "
+            + "; ".join(workflow.issues)])
+    return validate_eval_compatibility(config, workflow)
+
+
 def _resolve_eval_status(
-    config: EvalConfig, stages: list[Stage], project_dir: Path, latest_version: str | None
+    config: EvalConfig, listing: StageListing, project_dir: Path,
+    latest_version: str | None,
 ) -> tuple[str, str | None]:
-    report = validate_eval_compatibility(config, stages)
+    report = _report_compatibility(config, listing)
     runs, run_issue = _list_eval_runs_safely(project_dir, config.id)
     status = ("broken" if run_issue else
               eval_status(report, runs, latest_version,

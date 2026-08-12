@@ -23,7 +23,6 @@ from app.core.frames import (
 from app.models import (
     JSON_COLUMN_TYPE,
     STR_COLUMN_TYPE,
-    Stage,
     TableSchema,
     WorkflowStage,
 )
@@ -51,7 +50,10 @@ _DATE_TYPES = frozenset({"date", "datetime"})
 _INFERRING_FORMATS = frozenset({FileFormat.csv, FileFormat.json, FileFormat.xlsx})
 
 
-def preflight_input_data(stage: Stage) -> tuple[list[str], dict[str, Any] | None]:
+def preflight_input_data(
+    workflow_stage: WorkflowStage,
+) -> tuple[list[str], dict[str, Any] | None]:
+    stage = workflow_stage.stage
     if not isinstance(stage, InputDataStage):
         raise TypeError(
             f"stage {stage.id}: the input_data preflight got a {type(stage).__name__}")
