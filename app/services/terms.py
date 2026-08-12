@@ -1,62 +1,69 @@
-"""Terms service: a project's nouns (the named schemas under <project>/schemas/) and its
-verbs (<project>/verbs.json). This module is the sole writer of both — generation hands
-its validated result here, and readers that need validated models, not raw dicts, load
-through here."""
+"""Terms service: a project's nouns and its verbs, held as one stored document per
+project. This module is the sole reader and writer of both halves — generation hands its
+validated result here, and readers that need models, not raw dicts, load through here."""
 from __future__ import annotations
 
-import json
-from pathlib import Path
+from typing import ClassVar
 
+from app.core.persistence import PersistedModel, PersistenceScope
 from app.models import parse_schema_library
 from app.models.named_schemas import SchemaLibrary
-from app.models.terms import Terms, Verb, parse_verbs
+from app.models.terms import Terms, Verb
 from app.services import workspace
 
-_VERBS_FILENAME = "verbs.json"
+
+class StoredTerms(PersistedModel):
+    """The halves are stored apart; composing them is where a word meaning two things raises."""
+
+    collection: ClassVar[str] = "terms"
+    # Read by the review-guide and stage-test generators, written only by the
+    # authoring surface — WorkflowVersion's and ReviewGuide's profile.
+    SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
+
+    nouns: SchemaLibrary
+    verbs: list[Verb]
 
 
-def load_terms(project_dir: Path) -> Terms:
-    """Raises where a word means two things — reading the halves together is what catches it."""
-    return Terms(
-        nouns=load_data_model(project_dir) or SchemaLibrary(schemas=[]),
-        verbs=load_verbs(project_dir),
-    )
+def load_terms(project_id: str) -> Terms:
+    """A project that stored none has none: empty Terms, never a stand-in word."""
+    stored = StoredTerms.load_or_none(_document_id(project_id))
+    if stored is None:
+        return Terms(nouns=_read_pre_store_nouns(project_id), verbs=[])
+    return Terms(nouns=stored.nouns, verbs=stored.verbs)
 
 
-def load_data_model(project_dir: Path) -> SchemaLibrary | None:
-    schemas = workspace.load_schemas(project_dir)
-    if not schemas:
-        return None
-    # Strip the loader's bookkeeping keys (_filename/…) before the model validates.
+def count_nouns(project_id: str) -> int:
+    """Counts what the project stored, a pre-store file too broken to parse included."""
+    stored = StoredTerms.load_or_none(_document_id(project_id))
+    if stored is not None:
+        return len(stored.nouns.schemas)
+    return len(workspace.load_schemas(workspace.resolve_project_dir(project_id)))
+
+
+def write_terms(project_id: str, terms: Terms) -> None:
+    """Replaces both halves — a word absent from `terms` is a word the project no longer uses."""
+    StoredTerms(id=_document_id(project_id), nouns=terms.nouns, verbs=terms.verbs).save()
+
+
+def write_nouns(project_id: str, nouns: SchemaLibrary) -> None:
+    """Keeps the verbs already agreed: a generator answering with nouns alone retires none."""
+    write_terms(project_id, Terms(nouns=nouns, verbs=load_terms(project_id).verbs))
+
+
+def _document_id(project_id: str) -> str:
+    # Composed: the store lists by id PREFIX, so a bare id would match a sibling's.
+    return f"{project_id}/terms"
+
+
+# ─── Nouns written before this collection existed ────────────────────────────
+# One file per schema under `<project>/schemas/`, which every project authored up to
+# now carries. Read, never written: the first write_terms moves that project into the
+# store and the files stop being consulted.
+
+
+def _read_pre_store_nouns(project_id: str) -> SchemaLibrary:
+    schemas = workspace.load_schemas(workspace.resolve_project_dir(project_id))
+    # The file loader stamps `_filename` on each; the model forbids what it does not declare.
     return parse_schema_library(
-        [{k: v for k, v in s.items() if not k.startswith("_")} for s in schemas]
+        [{k: v for k, v in schema.items() if not k.startswith("_")} for schema in schemas]
     )
-
-
-def write_data_model(project_dir: Path, library: SchemaLibrary) -> None:
-    """Replaces schemas/ wholesale: every existing *.json is deleted first."""
-    schemas_dir = project_dir / "schemas"
-    schemas_dir.mkdir(parents=True, exist_ok=True)
-    for stale in schemas_dir.glob("*.json"):
-        stale.unlink()
-    for index, schema in enumerate(library.schemas, start=1):
-        payload = schema.model_dump(mode="json", exclude_none=True)
-        path = schemas_dir / f"{index:02d}_{schema.name}.json"
-        path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
-
-
-def load_verbs(project_dir: Path) -> list[Verb]:
-    path = Path(project_dir) / _VERBS_FILENAME
-    if not path.is_file():
-        return []
-    return parse_verbs(path.read_text(encoding="utf-8"))
-
-
-def write_verbs(project_dir: Path, verbs: list[Verb]) -> None:
-    """No verbs is no file: absence is how a project without them is stored."""
-    path = Path(project_dir) / _VERBS_FILENAME
-    if not verbs:
-        path.unlink(missing_ok=True)
-        return
-    payload = [verb.model_dump(mode="json") for verb in verbs]
-    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")

@@ -22,6 +22,7 @@ from app.models import (
     SchemaLibrary,
     Stage,
     StageDraft,
+    Terms,
     Verb,
     stage_to_json,
     stage_to_spec_dict,
@@ -301,9 +302,9 @@ def project_state(pdir: Path) -> ProjectState:
     doc_path = find_document_path(pdir)
     has_document = doc_path is not None
 
-    # ── Data model (named schemas) ──
-    schemas = workspace.load_schemas(pdir)
-    data_model = DataModelStatus(present=bool(schemas), n_schemas=len(schemas))
+    # ── Data model (the noun half of the project's terms) ──
+    n_nouns = terms.count_nouns(project_id)
+    data_model = DataModelStatus(present=bool(n_nouns), n_schemas=n_nouns)
 
     # ── Workflow (compiled stages) ──
     stages = _load_compiled_stages(pdir)
@@ -536,7 +537,7 @@ def export_project(project_id: str) -> WorkflowFile:
     document_path = project_state(pdir).document_path
     if document_path is None:
         raise ValueError(f"project '{project_id}' has no document — cannot export")
-    project_terms = terms.load_terms(pdir)
+    project_terms = terms.load_terms(project_id)
     stages = [c.stage for c in load_compiled_dir(pdir / "compiled") if c.stage is not None]
     return WorkflowFile(
         name=meta.name,
@@ -556,8 +557,7 @@ def import_project(
     label = sanitize_project_name(name or wf.name)
     project_id = create_project(label, wf.document, model=wf.model, source=wf.source)
     pdir = workspace.resolve_project_dir(project_id)
-    terms.write_data_model(pdir, wf.data_model)
-    terms.write_verbs(pdir, wf.verbs)
+    terms.write_terms(project_id, Terms(nouns=wf.data_model, verbs=wf.verbs))
     for i, stage in enumerate(wf.stages, start=1):
         stage_path = pdir / "compiled" / f"{i:02d}_{stage.id}.json"
         stage_path.parent.mkdir(parents=True, exist_ok=True)

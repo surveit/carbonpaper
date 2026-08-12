@@ -43,11 +43,20 @@ and no columns) plus `list[Verb]` (`name`, `definition`, `also_written`).
 Constructing it refuses a word carried twice across either half, since a word
 meaning two things is what the artifact exists to catch.
 
-Storage is `app/services/terms.py`: the nouns stay one file per schema under
-`<project>/schemas/`, the verbs are one `<project>/verbs.json`, and no file means
-no verbs. `load_terms` reads both and validates them together. A project export
-(`WorkflowFile`) carries `data_model` and `verbs` as separate fields, so a bundle
-written before verbs existed still imports.
+Storage is `app/services/terms.py`, the sole reader and writer of both halves:
+one `StoredTerms` document per project in the `terms` collection of the document
+store, keyed `<project_id>/terms`. The halves are stored apart and `load_terms`
+composes them, which is where a word carrying two meanings raises; a project that
+stored nothing loads empty Terms. `count_nouns` is the tolerant count the project
+card and the status snapshot use, so one unreadable noun does not blank a listing.
+
+Projects authored before that collection existed hold their nouns as one file per
+schema under `<project>/schemas/`. Those files are still READ, by `load_terms`
+alone and only where the store holds no document for the project; nothing writes
+them, so the first `write_terms` moves that project into the store for good.
+
+A project export (`WorkflowFile`) carries `data_model` and `verbs` as separate
+fields, so a bundle written before verbs existed still imports.
 
 **What is NOT here (yet):** no `schemas/` directory ships in any project;
 workflow stages do not structurally import named schemas (an import mechanism

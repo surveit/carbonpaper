@@ -9,9 +9,10 @@ import app.services.generation as generation
 from app.core.agent.store import SessionStore
 from app.core.agent.turns import TurnManager
 from app.models.named_schemas import SchemaLibrary
+from app.services.terms import StoredTerms
 
 
-# ── the completion hook (_finish_data_model): persist the schemas, nothing more ──────
+# ── the completion hook (_finish_data_model): store the nouns, nothing more ──────
 
 def test_finish_persists_schemas_on_success(tmp_path: Path):
     project_dir = tmp_path / "demo"
@@ -19,7 +20,7 @@ def test_finish_persists_schemas_on_success(tmp_path: Path):
 
     generation._finish_data_model(project_dir, SchemaLibrary(schemas=[]))
 
-    assert (project_dir / "schemas").exists()  # schemas persisted; the workflow is NOT auto-built
+    assert StoredTerms.exists("demo/terms")  # nouns stored; the workflow is NOT auto-built
 
 
 def test_finish_does_nothing_when_no_answer_was_submitted(tmp_path: Path):
@@ -28,7 +29,7 @@ def test_finish_does_nothing_when_no_answer_was_submitted(tmp_path: Path):
 
     generation._finish_data_model(project_dir, None)
 
-    assert not (project_dir / "schemas").exists()  # nothing written on a failed data model
+    assert not StoredTerms.exists("demo/terms")  # nothing written on a failed data model
 
 
 # ── start_generation wiring: session up front + a live, streamable turn ──────────────
@@ -81,4 +82,4 @@ def test_start_generation_creates_a_session_and_runs_a_live_turn(tmp_path: Path,
 
     assert store.exists(sid)
     assert store.load(sid)["messages"]          # TurnManager persisted the conversation
-    assert (project_dir / "schemas").exists()   # completion hook persisted the schemas
+    assert StoredTerms.exists("demo/terms")     # completion hook stored the nouns

@@ -19,7 +19,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 # The burn-down, with the per-module breakdown and the order: issue #505.
 _NOT_YET_MIGRATED: dict[str, int] = {
     "app/web/routers/runs.py": 13,
-    "app/web/routers/project.py": 13,
+    "app/web/routers/project.py": 12,
     "app/web/routers/evals.py": 11,
     "app/web/routers/node.py": 8,
     "app/web/loading.py": 4,

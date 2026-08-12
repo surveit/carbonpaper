@@ -96,7 +96,7 @@ def start_review_guide_generation(
 def _finish_data_model(project_dir: Path, answer: SchemaLibrary | None) -> None:
     if answer is None:
         return
-    terms.write_data_model(project_dir, answer)
+    terms.write_nouns(project_dir.name, answer)
 
 
 def _finish_review_guide(

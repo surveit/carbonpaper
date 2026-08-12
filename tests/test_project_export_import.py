@@ -17,6 +17,7 @@ from app.models import (
     SchemaKind,
     SchemaLibrary,
     StageType,
+    Terms,
     Verb,
     stage_to_spec_dict,
 )
@@ -45,7 +46,7 @@ def test_round_trip_through_json_reproduces_the_source_and_mints_a_version(tmp_p
         "Round Trip Source", "Trace the shell companies.", source="test")
     pdir = source_examples / name
 
-    terms.write_data_model(pdir, _TINY_LIBRARY)
+    terms.write_terms(name, Terms(nouns=_TINY_LIBRARY, verbs=[]))
 
     compiled = pdir / "compiled"
     compiled.mkdir()
@@ -71,8 +72,7 @@ def test_round_trip_through_json_reproduces_the_source_and_mints_a_version(tmp_p
 
     assert (target_pdir / "document.md").read_text(encoding="utf-8") == "Trace the shell companies."
 
-    imported_library = terms.load_data_model(target_pdir)
-    assert imported_library is not None
+    imported_library = terms.load_terms(imported_name).nouns
     assert imported_library.model_dump() == _TINY_LIBRARY.model_dump()
 
     [entry] = load_compiled_dir(target_pdir / "compiled")
@@ -133,9 +133,7 @@ def test_a_bundle_written_before_verbs_existed_still_imports(tmp_path):
     assert wf.verbs == []
 
     project_id = import_project(wf, name="no_verbs_target")
-    pdir = workspace.resolve_project_dir(project_id)
-    assert not (pdir / "verbs.json").exists()
-    assert terms.load_terms(pdir).verbs == []
+    assert terms.load_terms(project_id).verbs == []
 
 
 def test_a_bundle_carries_the_verbs_across_and_import_writes_them(tmp_path):
@@ -146,16 +144,14 @@ def test_a_bundle_carries_the_verbs_across_and_import_writes_them(tmp_path):
     workspace.set_projects_dir(source_examples)
 
     name = project.create_project("Verbs Source", "Flag the filings.", source="test")
-    pdir = source_examples / name
-    terms.write_data_model(pdir, _TINY_LIBRARY)
-    terms.write_verbs(pdir, [_FLAG])
+    terms.write_terms(name, Terms(nouns=_TINY_LIBRARY, verbs=[_FLAG]))
 
     wf = WorkflowFile.model_validate_json(export_project(name).to_json())
     assert wf.verbs == [_FLAG]
 
     workspace.set_projects_dir(target_examples)
     imported = import_project(wf, name="verbs_target")
-    assert terms.load_terms(target_examples / imported).verbs == [_FLAG]
+    assert terms.load_terms(imported).verbs == [_FLAG]
 
 
 def test_a_bundle_whose_verb_repeats_a_schema_name_is_refused(tmp_path):
