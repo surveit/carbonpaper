@@ -27,14 +27,14 @@ def workspace_root(tmp_path: Path) -> Path:
 
 
 def test_create_returns_an_id_that_is_not_the_name(workspace_root: Path) -> None:
-    project_id = create_project("my_investigation", "prose", source="test")
+    project_id = create_project("my_investigation", "prose", source="test").id
 
     assert project_id != "my_investigation"
     assert Project.load(project_id).name == "my_investigation"
 
 
 def test_the_directory_is_named_by_the_id(workspace_root: Path) -> None:
-    project_id = create_project("my_investigation", "prose", source="test")
+    project_id = create_project("my_investigation", "prose", source="test").id
 
     assert (workspace_root / project_id / "document.md").is_file()
     assert not (workspace_root / "my_investigation").exists()
@@ -42,8 +42,8 @@ def test_the_directory_is_named_by_the_id(workspace_root: Path) -> None:
 
 def test_two_projects_may_share_a_name(workspace_root: Path) -> None:
     """The point of the id: a second investigation of the same subject is not a clash."""
-    first = create_project("my_investigation", "first prose", source="test")
-    second = create_project("my_investigation", "second prose", source="test")
+    first = create_project("my_investigation", "first prose", source="test").id
+    second = create_project("my_investigation", "second prose", source="test").id
 
     assert first != second
     assert {r.id for r in find_projects_by_name("my_investigation")} == {first, second}
@@ -55,16 +55,16 @@ def test_two_projects_may_share_a_name(workspace_root: Path) -> None:
 
 def test_a_name_is_reusable_after_its_project_is_deleted(workspace_root: Path) -> None:
     """The tombstone bug, gone by construction: nothing is ever checked against a name."""
-    first = create_project("my_investigation", "prose", source="test")
+    first = create_project("my_investigation", "prose", source="test").id
     shutil.rmtree(workspace_root / first)
 
-    second = create_project("my_investigation", "prose", source="test")
+    second = create_project("my_investigation", "prose", source="test").id
 
     assert second != first
 
 
 def test_renaming_the_label_moves_nothing(workspace_root: Path) -> None:
-    project_id = create_project("old_name", "prose", source="test")
+    project_id = create_project("old_name", "prose", source="test").id
     record = Project.load(project_id)
 
     record.name = "new_name"
@@ -76,7 +76,7 @@ def test_renaming_the_label_moves_nothing(workspace_root: Path) -> None:
 
 
 def test_listing_and_meta_agree_on_which_is_which(workspace_root: Path) -> None:
-    project_id = create_project("my_investigation", "prose", model="sonnet", source="test")
+    project_id = create_project("my_investigation", "prose", model="sonnet", source="test").id
 
     assert list_projects() == [project_id]
     meta = project_meta(workspace_root / project_id)
@@ -113,7 +113,7 @@ def test_a_record_from_before_labels_existed_still_loads(workspace_root: Path) -
 
 def test_the_shown_name_is_the_title_where_one_is_authored(workspace_root: Path) -> None:
     """The trail, the sidebar and the home card all read this one resolution."""
-    project_id = create_project("dsa_evidence_capture", "prose", source="test")
+    project_id = create_project("dsa_evidence_capture", "prose", source="test").id
     record = Project.load(project_id)
     record.title = "DSA takedown evidence capture"
     record.save()

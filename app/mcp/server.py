@@ -36,7 +36,7 @@ from app.services import generation
 from app.services import loader
 from app.services import frame_profile
 from app.services import project as project_service
-from app.services.project import ProjectListing
+from app.services.project import Project, ProjectListing
 from app.services import terms as terms_service
 from app.services import versioning
 from app.services import workflow_test as workflow_test_service
@@ -122,7 +122,7 @@ def list_projects() -> list[ProjectListing]:
 
 
 @mcp.tool(description=TOOL_SPECS["create_project"].description)
-def create_project(name: str, document: str) -> shared.CreatedProject:
+def create_project(name: str, document: str) -> Project:
     return shared.create_project(name, document, source="mcp")
 
 

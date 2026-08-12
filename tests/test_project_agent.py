@@ -55,7 +55,7 @@ def test_a_session_bound_to_no_project_can_build_one_from_nothing(tmp_path) -> N
     assert call["get_current_project"]() is None
     created = call["create_project"](name="GLP-1 lobbying", document="Follow the filings.")
 
-    project_id = created.project_id
+    project_id = created.id
     call["write_terms"](project_id=project_id, terms=Terms(nouns=SchemaLibrary(schemas=[]), verbs=[]))
     added = call["add_stage"](project_id=project_id, stages=[_LOAD_STAGE])
 

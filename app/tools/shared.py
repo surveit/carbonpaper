@@ -14,7 +14,6 @@ from pydantic import BaseModel
 from app.core.agent.bound_tool import BoundToolSpec
 from app.core.frames import collapse_null_forms, convert_cell_to_json_native, list_rows
 from app.core.run_status import StageStatus
-from app.models.authoring_lifecycle_note import CompilerPhase
 from app.models.terms import Terms
 from app.tools.types import ToolInputSchema
 from app.services import (
@@ -23,6 +22,7 @@ from app.services import (
     terms as terms_service,
     workspace,
 )
+from app.services.project import Project
 from app.tools.tool_specs import TOOL_SPECS
 
 _PROJECT_ID = Annotated[str, "The project's name."]
@@ -47,18 +47,9 @@ def resolve_existing_project(project_id: str) -> Path:
     return pdir
 
 
-class CreatedProject(BaseModel):
-    project_id: str
-    phase: CompilerPhase
-    next: str
-
-
-def create_project(name: str, document: str, *, source: str) -> CreatedProject:
+def create_project(name: str, document: str, *, source: str) -> Project:
     """`source` records WHICH surface authored the project, so it is the surface's to state."""
-    project_id = project_service.create_project(name, document, source=source)
-    return CreatedProject(
-        project_id=project_id, phase=CompilerPhase.TERMS, next="write_terms"
-    )
+    return project_service.create_project(name, document, source=source)
 
 
 def read_terms(project_id: str) -> Terms:

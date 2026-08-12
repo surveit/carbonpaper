@@ -24,7 +24,7 @@ from app.tools.submitted_stage import (
 )
 from app.tools.tool_specs import SAVE_VERSION_FROM_DRAFT, TOOL_SPECS
 from app.services.drafts import DraftDetail, DraftEdit, DraftView, SaveResult
-from app.services.project import ProjectListing
+from app.services.project import Project, ProjectListing
 
 
 class EditingContext(BaseModel):
@@ -38,7 +38,7 @@ def make_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
     def get_current_project() -> str | None:
         return ctx.project_id
 
-    def create_project(name: str, document: str) -> shared.CreatedProject:
+    def create_project(name: str, document: str) -> Project:
         return shared.create_project(name, document, source="editing agent")
 
     def read_stage(project_id: str, stage_id: str) -> str:

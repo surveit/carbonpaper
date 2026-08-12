@@ -88,7 +88,7 @@ def live_project(tmp_path, monkeypatch):
     frame.to_csv(source, index=False)
 
     project_id = create_project(PROJECT, "Classify claims and publish the table.",
-                                source="live smoke test")
+                                source="live smoke test").id
     project_dir = tmp_path / project_id
     (project_dir / "compiled").mkdir()
     for position, stage in enumerate(_workflow_stages(str(source)), start=1):

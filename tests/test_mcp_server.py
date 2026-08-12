@@ -86,15 +86,13 @@ def test_create_project_tool_and_status(tmp_path, monkeypatch):
 
     workspace.set_projects_dir(tmp_path)
     created = server.create_project(name="Money Trail", document="Follow the filings.")
-    project_id = created.project_id
+    project_id = created.id
     # The id is minted, not slugged from the title — the title is only the label.
     assert project_id != "money_trail"
     assert server.list_projects() == [ProjectListing(id=project_id, name="money_trail")]
     status = server.get_project_status(project_id=project_id)
     assert status["has_document"] is True
-    # The phase after create is TERMS, and it now names the tool that serves it.
-    assert created.next == "write_terms"
-    assert created.phase == "terms"
+    assert created.name == "money_trail" and created.source == "mcp"
 
 
 # ── the two terms tools ──────────────────────────────────────────────────────
@@ -107,7 +105,7 @@ def test_a_project_that_has_agreed_no_words_reads_back_empty(tmp_path):
     from app.mcp import server
 
     workspace.set_projects_dir(tmp_path)
-    project_id = server.create_project(name="wordless", document="doc").project_id
+    project_id = server.create_project(name="wordless", document="doc").id
 
     stored = server.read_terms(project_id=project_id)
     assert stored.nouns.schemas == []
@@ -118,7 +116,7 @@ def test_written_terms_read_back_whole(tmp_path):
     from app.mcp import server
 
     workspace.set_projects_dir(tmp_path)
-    project_id = server.create_project(name="vocab", document="doc").project_id
+    project_id = server.create_project(name="vocab", document="doc").id
 
     written = server.write_terms(
         project_id=project_id,
@@ -136,7 +134,7 @@ def test_writing_terms_replaces_rather_than_merges_into_what_is_stored(tmp_path)
     from app.mcp import server
 
     workspace.set_projects_dir(tmp_path)
-    project_id = server.create_project(name="replaced", document="doc").project_id
+    project_id = server.create_project(name="replaced", document="doc").id
     server.write_terms(
         project_id=project_id,
         terms=Terms.model_validate({"nouns": {"schemas": [_FILING]}, "verbs": [_FLAG]}),
@@ -156,7 +154,7 @@ def test_a_word_carrying_two_meanings_is_refused_before_anything_is_written(tmp_
     from app.mcp import server
 
     workspace.set_projects_dir(tmp_path)
-    project_id = server.create_project(name="clash", document="doc").project_id
+    project_id = server.create_project(name="clash", document="doc").id
     server.write_terms(
         project_id=project_id,
         terms=Terms.model_validate({"nouns": {"schemas": [_FILING]}, "verbs": []}),
@@ -187,7 +185,7 @@ def test_generate_data_model_kicks_the_live_turn(tmp_path, monkeypatch):
     from app.mcp import server
 
     workspace.set_projects_dir(tmp_path)
-    project_id = server.create_project(name="probe", document="doc text").project_id
+    project_id = server.create_project(name="probe", document="doc text").id
 
     seen: dict[str, object] = {}
 
@@ -293,7 +291,7 @@ def test_generate_stage_tests_kicks_the_generation_turn(tmp_path, monkeypatch):
     from app.mcp import server
 
     workspace.set_projects_dir(tmp_path)
-    project_id = server.create_project(name="probe", document="doc text").project_id
+    project_id = server.create_project(name="probe", document="doc text").id
 
     seen: dict[str, object] = {}
 
@@ -374,7 +372,7 @@ def test_mcp_add_stage_creates_the_first_stage_of_a_new_project(tmp_path, monkey
 
     workspace.set_projects_dir(tmp_path)
     project_id = server.create_project(
-        name="trail", document="Follow the filings.").project_id
+        name="trail", document="Follow the filings.").id
 
     added = server.add_stage(
         project_id=project_id,
@@ -391,7 +389,7 @@ def test_mcp_add_stage_drops_server_owned_fields_and_names_them(tmp_path, monkey
 
     workspace.set_projects_dir(tmp_path)
     project_id = server.create_project(
-        name="trail", document="Follow the filings.").project_id
+        name="trail", document="Follow the filings.").id
     echoed = {
         "id": "load", "description": "Load", "type": "input_data",
         "connector": {"kind": "file"},
@@ -421,7 +419,7 @@ def test_mcp_add_stage_still_refuses_an_unknown_field(tmp_path, monkeypatch):
 
     workspace.set_projects_dir(tmp_path)
     project_id = server.create_project(
-        name="trail", document="Follow the filings.").project_id
+        name="trail", document="Follow the filings.").id
     typo = {
         "id": "load", "description": "Load", "type": "input_data",
         "connector": {"kind": "file"}, "nonsense": 1,
@@ -578,7 +576,7 @@ def _saved_version(tmp_path, monkeypatch) -> tuple[str, str]:
 
     workspace.set_projects_dir(tmp_path)
     project_id = server.create_project(
-        name="trail", document="Follow the filings.").project_id
+        name="trail", document="Follow the filings.").id
     _write_compiled_workflow(tmp_path / project_id)
     saved = server.save_version(project_id=project_id, message="first cut")
     return project_id, saved["version_id"]

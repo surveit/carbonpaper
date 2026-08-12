@@ -95,7 +95,7 @@ def project(tmp_path, monkeypatch):
 
     workspace.set_projects_dir(tmp_path)
     created = server.create_project(name="trail", document="Follow the filings.")
-    return created.project_id
+    return created.id
 
 
 def test_a_batch_submitted_in_reverse_dependency_order_is_sorted_and_stored(project):

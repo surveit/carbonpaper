@@ -85,7 +85,7 @@ def test_build_engine_hands_the_appended_prompt_to_the_engine(dummy_agent) -> No
 # ── the editing agent's use of it ────────────────────────────────────────────
 def _project_with(tmp_path, terms: Terms | None) -> str:
     workspace.set_projects_dir(tmp_path)
-    project_id = project_service.create_project("vocab", "doc text", source="test")
+    project_id = project_service.create_project("vocab", "doc text", source="test").id
     if terms is not None:
         terms_service.write_terms(project_id, terms)
     return project_id

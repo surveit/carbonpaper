@@ -67,8 +67,7 @@ the schema afterwards.)
 # Your tools, by phase
 Each tool's own description says how it behaves; this says WHEN. Start by calling
 create_project(name, document) — the methodology prose becomes the project's source of
-record, and it returns the project_id every other tool takes, plus the tool the phase
-after it wants.
+record, and it returns the project record, whose `id` every other tool takes.
 
   RESEARCH   read_data_model, describe_workflow, read_stage, get_project_status
              run_workflow_test over a few rows, then
