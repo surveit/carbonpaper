@@ -290,7 +290,7 @@ def test_mcp_add_stage_creates_the_first_stage_of_a_new_project(tmp_path, monkey
     assert added == {
         "ok": True, "issues": [], "added": ["load"], "failed": [], "skipped": [],
     }, "a clean draft warns about nothing"
-    assert server.describe_workflow(project_id=project_id)["stages"][0]["id"] == "load"
+    assert server.describe_workflow(project_id=project_id).stages[0].id == "load"
 
 
 def test_mcp_add_stage_drops_server_owned_fields_and_names_them(tmp_path, monkeypatch):

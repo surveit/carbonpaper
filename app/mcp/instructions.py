@@ -71,7 +71,8 @@ record, and it returns the project_id every other tool takes.
 
   RESEARCH   read_data_model, describe_workflow, read_stage, get_project_status
              run_workflow_test over a few rows, then
-             profile_stage_output_data_range, to see what the data really holds
+             profile_stage_output_data_range, to see what the data really holds,
+             and read_stage_output_rows when the question is about a ROW
   PLANNING   (no tools — this is where you ask the user)
   BUILD      add_stage, edit_stage, remove_stage, then generate_stage_tests and
              loop edit_stage -> run_stage_tests until they pass. Still BUILD.

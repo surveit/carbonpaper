@@ -56,8 +56,8 @@ def test_workflow_summary_reports_ids_types_and_inputs(tmp_path: Path) -> None:
     _write_stage(pdir / "compiled", 1, "load", "input_data", [])
     _write_stage(pdir / "compiled", 2, "score", "llm_transform", ["load"])
     summary = workspace.project_workflow_summary(pdir)
-    assert summary["name"] == "alpha"
-    by_id = {s["id"]: s for s in summary["stages"]}
-    assert by_id["score"]["type"] == "llm_transform"
-    assert by_id["score"]["inputs"] == ["load"]
-    assert summary["issues"] == []
+    assert summary.name == "alpha"
+    by_id = {s.id: s for s in summary.stages}
+    assert by_id["score"].type == "llm_transform"
+    assert by_id["score"].inputs == ["load"]
+    assert summary.issues == []

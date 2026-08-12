@@ -1,4 +1,4 @@
-"""The tour's fixture, and the one tool the tutorial agent does not share.
+"""The tour's fixture, and the one tool it holds alone because it needs its context.
 
 Importing is app.services.project.import_project — the same call admin's load-bundle
 makes. The fixture's CSVs are supplied per run as bindings, so nothing is rewritten
@@ -7,7 +7,6 @@ into the stored workflow and the project stays portable."""
 from __future__ import annotations
 
 from pathlib import Path
-
 from pydantic import BaseModel
 
 from app.core.agent.tool_spec import ToolSpec
@@ -36,6 +35,9 @@ class TutorialContext(BaseModel):
 class TutorialProject(BaseModel):
     name: str
     version_id: str
+    # The stages as seeded: the tour reads its stage ids and types off this rather than
+    # off a name written into its prompt.
+    workflow: workspace.WorkflowSummary
     # Pass straight to run_workflow's `bindings`: which file each input stage reads.
     input_bindings: dict[str, dict[str, str]]
     workflow_url: str
@@ -64,6 +66,7 @@ def seed_tutorial_project(ctx: TutorialContext) -> TutorialProject:
     return TutorialProject(
         name=name,
         version_id=version_id,
+        workflow=project_service.describe_workflow(name),
         input_bindings={
             stage_id: {"path": str(path), "format": "csv"}
             for stage_id, path in _CSV_BY_STAGE_ID.items()
@@ -93,8 +96,9 @@ CREATE_TUTORIAL_PROJECT = ToolSpec(
     name="create_tutorial_project",
     description=(
         "Seed the committed tutorial project into this workspace and return it: its "
-        "name, the stored version, the `input_bindings` its run needs, and the URLs of "
-        "its workflow, review guide and runs. Takes no arguments — the "
+        "name, the stored version, its `workflow` (every stage's id, type and inputs), "
+        "the `input_bindings` its run needs, and the URLs of its workflow, review guide "
+        "and runs. Takes no arguments — the "
         "fixture is fixed. If the tutorial project is already in this workspace it is "
         "returned as it stands, not replaced, so a second tour never overwrites the first."
     ),

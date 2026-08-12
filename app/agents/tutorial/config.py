@@ -11,6 +11,8 @@ from app.agents.tutorial.prompt import TUTORIAL_OPENING_PROMPT, TUTORIAL_SYSTEM_
 from app.core.agent.bound_tool import BoundToolSpec
 from app.core.agent.registry import AgentConfig, register
 from app.tools import shared
+from app.tools.shared import StageOutputRows
+from app.tools.tool_specs import TOOL_SPECS
 from app.tools.tutorial import (
     CREATE_TUTORIAL_PROJECT,
     TutorialContext,
@@ -33,8 +35,16 @@ def make_tutorial_tools(context: BaseModel) -> list[BoundToolSpec]:
     def create_tutorial_project() -> TutorialProject:
         return seed_tutorial_project(context)
 
-    # One new tool. Seeding is the only thing the tour does that no other surface does,
-    # and it is the only one that needs this session's context. The rest it REFERENCES.
+    def read_stage_output_rows(
+        project_id: str, run_id: str, stage_id: str, limit: int | None = None, offset: int = 0
+    ) -> StageOutputRows:
+        return shared.read_stage_output_rows(
+            project_id, run_id, stage_id, limit, offset, base_url=context.base_url.rstrip("/")
+        )
+
+    # One new tool. Seeding is the only thing the tour does that no other surface does.
+    # The row reader is the shared one, wrapped only because the tour's reader CLICKS the
+    # lineage links, so they carry this session's base_url rather than being root-relative.
     return [
         BoundToolSpec(
             name="create_tutorial_project",
@@ -42,6 +52,13 @@ def make_tutorial_tools(context: BaseModel) -> list[BoundToolSpec]:
             fn=create_tutorial_project,
             input_schema={},
             label="Setting up the tutorial project",
+        ),
+        BoundToolSpec(
+            name="read_stage_output_rows",
+            description=TOOL_SPECS["read_stage_output_rows"].description,
+            fn=read_stage_output_rows,
+            input_schema=shared.schema_of("read_stage_output_rows"),
+            label="Reading the stage's rows",
         ),
         *shared.bind("run_workflow", "get_run_status", "sleep", "describe_workflow"),
     ]

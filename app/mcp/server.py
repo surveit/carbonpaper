@@ -178,7 +178,7 @@ def read_data_model(project_id: str) -> list[dict[str, Any]]:
 
 
 @mcp.tool(description=TOOL_SPECS["describe_workflow"].description)
-def describe_workflow(project_id: str) -> dict[str, Any]:
+def describe_workflow(project_id: str) -> shared.workspace.WorkflowSummary:
     return shared.describe_workflow(project_id)
 
 
@@ -275,6 +275,17 @@ def run_workflow_test(
             limit=limit, offset=offset)
     except _RUN_TOOL_ERRORS as exc:
         return {"ok": False, "error": str(exc)}
+
+
+@mcp.tool(description=TOOL_SPECS["read_stage_output_rows"].description)
+def read_stage_output_rows(
+    project_id: str,
+    run_id: str,
+    stage_id: str,
+    limit: int | None = None,
+    offset: int = 0,
+) -> shared.StageOutputRows:
+    return shared.read_stage_output_rows(project_id, run_id, stage_id, limit, offset)
 
 
 @mcp.tool(description=TOOL_SPECS["profile_stage_output_data_range"].description)

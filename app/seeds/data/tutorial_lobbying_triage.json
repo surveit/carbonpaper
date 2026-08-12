@@ -1,6 +1,6 @@
 {
   "name": "tutorial_lobbying_triage",
-  "document": "# Tutorial: Lobbying Say-versus-Do (deliberately artificial sample)\n\n## Purpose\n\nA lobbying filing says what an organisation paid to ask government for. A public\ncommitment says what that same organisation told everyone else it would do. Reporting in\nthis genre is almost always the join of the two: the lead is not a filing on its own, it\nis a filing that asks for the opposite of what its client promised in public. This\nfive-step tutorial workflow joins each filing to its client's public commitment and flags\nthe pairs that contradict.\n\nThe sample data is INVENTED. Every organisation is fictional, nothing is fetched from the\nnetwork, and no row describes a real filing, client, firm or commitment.\n\n## Input data\n\nTwo bundled CSVs.\n\n`tutorial_lobbying_triage.csv`, one row per filing:\n\n- `filing_id` — stable, unique identifier for the filing\n- `client` — the organisation that retained the lobbyists\n- `registrant` — the lobbying firm that filed the disclosure\n- `amount_usd` — reported lobbying spend for the period, in whole US dollars\n- `filing_period` — the reporting period, e.g. \"2024 Q1\"\n- `specific_issues` — the filer's own one-line account of what this filing asked for\n\n`tutorial_public_commitments.csv`, one row per organisation:\n\n- `client` — the organisation that made the commitment\n- `public_commitment` — one line of what it said in public it would do\n- `commitment_source` — where it said it, e.g. \"2023 climate pledge\"\n\n## Step 1 — Join each filing to its client's public commitment\n\nBring `public_commitment` and `commitment_source` onto every filing, matched on\nthe client name. This is a many-to-one join: the commitments file carries at most one row\nper organisation, and a repeat would fail the run rather than quietly multiply filings.\nNo filing is dropped here. A filing whose client has no commitment row keeps every one of\nits own fields and carries a blank commitment — the absence is the record, and the next\nstep is told to read it as an absence rather than as a judgment.\n\n## Step 2 — Judge the filing against the commitment (LLM)\n\nFor each filing, read the client's public commitment and this filing's ask together, and\nadd two fields — one filing in, one filing out (the filing is neither dropped nor duplicated):\n\n- `alignment` — one of: Contradicts, Matches, Unclear, No commitment given. \"Contradicts\"\n  means this filing asks government for the opposite of what the client committed to.\n  \"No commitment given\" is the answer when the commitment field is blank.\n- `alignment_note` — a single plain sentence naming what the client said and what this\n  filing asks for.\n\nThe model is given only these two texts, and is told not to use anything it knows about\nthe organisation and not to invent a commitment that is not in front of it. Filings are\nread twelve at a time in one model call.\n\n## Step 3 — Flag the contradictions\n\nAdd `contradicts_commitment`, decided in plain code from two fields and nothing else: a\nfiling contradicts when a commitment was actually joined onto it AND `alignment` reads\n\"Contradicts\". A filing with no commitment on record is never flagged — there is nothing\nfor it to contradict, and the code decides that, not the model. A filing that has a\ncommitment but no judgment is not guessed either — the step stops and says which filing\nit was.\n\n## Step 4 — Publish the report\n\nProduce a single HTML page listing every filing with client, registrant,\nreported spend, what the filing asked for, what the client committed to in public (or that\nno commitment is on record), and the model's judgment. A flagged filing also shows both\nsides side by side — the commitment as said, and the ask as filed — so the page carries\nthe contradiction itself rather than a bare flag. No score, no ranking and no\nrecommendation: the report is a reading aid, not a verdict.\n\nEvery row also carries a link back to that row's lineage — each stage that touched it, back\nto the input row it came from — so a reader can check any line of the page against the run.\n\nThe page's markup and stylesheet are a committed template file, not text assembled inside\nthe step; the step fills its placeholders and writes the result.\n\n## Out of scope\n\nNo external fetching, no human-review queue, no filtering, and no second join — one join,\none model read, one flag, one page.\n",
+  "document": "# Tutorial: Lobbying Say-versus-Do (deliberately artificial sample)\n\n## Purpose\n\nA lobbying filing says what an organisation paid to ask government for. A public\ncommitment says what that same organisation told everyone else it would do. Reporting in\nthis genre is almost always the join of the two: the lead is not a filing on its own, it\nis a filing that asks for the opposite of what its client promised in public. This\ntutorial workflow reads each filing, joins it to its client's public commitment, and\nreports the pairs that contradict.\n\nThe sample data is INVENTED. Every organisation is fictional, nothing is fetched from the\nnetwork, and no row describes a real filing, client, firm or commitment.\n\n## Input data\n\nTwo bundled CSVs.\n\n`tutorial_lobbying_triage.csv`, one row per filing:\n\n- `filing_id` — stable, unique identifier for the filing\n- `client` — the organisation that retained the lobbyists\n- `registrant` — the lobbying firm that filed the disclosure\n- `amount_usd` — reported lobbying spend for the period, as the filing writes it, e.g. \"$185,000\"\n- `filing_period` — the reporting period, e.g. \"2024 Q1\"\n- `specific_issues` — the filer's own one-line account of what this filing asked for\n\n`tutorial_public_commitments.csv`, one row per organisation:\n\n- `client` — the organisation that made the commitment\n- `public_commitment` — one line of what it said in public it would do\n- `commitment_source` — where it said it, e.g. \"2023 climate pledge\"\n\n## Step 1 — Check every filing before anything reads it\n\nRead each filing's reported spend out of the text the filing writes it in — \"$185,000\"\nbecomes 185000 — so that every later step is weighing a number rather than a string that\nlooks like one. A filing whose spend cannot be read is not carried forward with a blank\nin its place: the run stops and says which filing it was. The same goes for a filing that\nsays nothing about what it asked government for, because there is no ask to judge. This\nis plain code, not the model: reading a dollar figure has one right answer.\n\n## Step 2 — Join each filing to its client's public commitment\n\nBring `public_commitment` and `commitment_source` onto every filing, matched on\nthe client name. This is a many-to-one join: the commitments file carries at most one row\nper organisation, and a repeat would fail the run rather than quietly multiply filings.\nNo filing is dropped here. A filing whose client has no commitment row keeps every one of\nits own fields and carries a blank commitment — the absence is the record, and the next\nstep is told to read it as an absence rather than as a judgment.\n\n## Step 3 — Judge the filing against the commitment (LLM)\n\nFor each filing, read the client's public commitment and this filing's ask together, and\nadd two fields — one filing in, one filing out (the filing is neither dropped nor duplicated):\n\n- `alignment` — one of: Contradicts, Matches, Unclear, No commitment given. \"Contradicts\"\n  means this filing asks government for the opposite of what the client committed to.\n  \"No commitment given\" is the answer when the commitment field is blank.\n- `alignment_note` — a single plain sentence naming what the client said and what this\n  filing asks for.\n\nThe model is given only these two texts, and is told not to use anything it knows about\nthe organisation and not to invent a commitment that is not in front of it. Filings are\nread twelve at a time in one model call.\n\n## Step 4 — Publish the report\n\nProduce a single HTML page listing every filing with client, registrant,\nreported spend, what the filing asked for, what the client committed to in public (or that\nno commitment is on record), and the model's judgment. A filing the model judged to\ncontradict its commitment also shows both sides side by side — the commitment as said, and the ask as filed — so the page carries\nthe contradiction itself rather than a bare label. No score, no ranking and no\nrecommendation: the report is a reading aid, not a verdict.\n\nEvery row also carries a link back to that row's lineage — each stage that touched it, back\nto the input row it came from — so a reader can check any line of the page against the run.\n\nThe page's markup and stylesheet live in the step that writes them, so a reviewer reads\nthe markup and the code that fills it together.\n\n## Out of scope\n\nNo external fetching, no human-review queue, no filtering, and no second join — one\ncheck, one join, one model read, one page.\n",
   "model": "sonnet",
   "source": "seed",
   "data_model": {
@@ -38,9 +38,9 @@
           },
           {
             "name": "amount_usd",
-            "type": "int",
+            "type": "str",
             "nullable": false,
-            "description": "Reported lobbying spend for the period in whole US dollars."
+            "description": "Reported lobbying spend for the period, as the filing writes it, e.g. '$185,000'."
           },
           {
             "name": "filing_period",
@@ -116,12 +116,89 @@
       }
     },
     {
+      "id": "check_filings",
+      "type": "python_row_function",
+      "description": "Check Each Filing Before Anything Reads It",
+      "inputs": [
+        {
+          "id": "raw_filings"
+        }
+      ],
+      "cache": true,
+      "compiler_notes": [
+        "The filing writes its spend as text ('$185,000'), and a plain CSV read would turn one it cannot parse into a blank that every later step treats as a number it has. Reading it here is what makes that a stopped run instead.",
+        "Code, not the model: parsing a dollar figure has one right answer, and a filing the workflow cannot read is refused rather than estimated."
+      ],
+      "signature": {
+        "form": "extends",
+        "reads": [
+          {
+            "input": "raw_filings",
+            "columns": [
+              {
+                "name": "filing_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "amount_usd",
+                "type": "str",
+                "nullable": false,
+                "description": "Reported lobbying spend for the period, as the filing writes it, e.g. '$185,000'."
+              },
+              {
+                "name": "specific_issues",
+                "type": "str",
+                "nullable": false
+              }
+            ]
+          }
+        ],
+        "adds": [],
+        "rewrites": [
+          {
+            "name": "amount_usd",
+            "type": "int",
+            "nullable": false,
+            "description": "Reported lobbying spend for the period, in whole US dollars."
+          }
+        ]
+      },
+      "source": {
+        "section": "Step 1 — Check every filing before anything reads it"
+      },
+      "function": {
+        "kind": "inline",
+        "summary": "Reads each filing's reported spend out of the text the filing writes it in — '$185,000' becomes 185000 — and stops the run on a filing whose spend cannot be read, or that says nothing about what it asked for.",
+        "corner_cases": [
+          {
+            "case": "the spend is written '$185,000'",
+            "expected": "it becomes the number 185000"
+          },
+          {
+            "case": "the spend is written '185000', with no currency or separators",
+            "expected": "it becomes the number 185000"
+          },
+          {
+            "case": "the spend is blank, or reads 'n/a'",
+            "expected": "the step fails, naming the filing, rather than passing a blank on as a figure"
+          },
+          {
+            "case": "the filing carries no account of what it asked for",
+            "expected": "the step fails, naming the filing — there is no ask to judge"
+          }
+        ],
+        "code": "import pandas as pd\n\nCURRENCY = \"$\"\nTHOUSANDS = \",\"\n\n\ndef transform(row):\n    filing_id = row[\"filing_id\"]\n    spend = _digits(row[\"amount_usd\"])\n    if spend is None:\n        raise StepRefused(\n            f\"filing {filing_id} reports its spend as {row['amount_usd']!r}, which is \"\n            f\"not a whole dollar figure — a filing whose spend cannot be read is not \"\n            f\"one this workflow can weigh against a public commitment\"\n        )\n    if not _present(row[\"specific_issues\"]):\n        raise StepRefused(\n            f\"filing {filing_id} says nothing about what it asked government for, so \"\n            f\"there is no ask to judge against its client's commitment\"\n        )\n    return {**row, \"amount_usd\": spend}\n\n\ndef _digits(value):\n    text = _present(value)\n    if text is None:\n        return None\n    stripped = text.replace(CURRENCY, \"\").replace(THOUSANDS, \"\").strip()\n    if not stripped.isdigit():\n        return None\n    return int(stripped)\n\n\ndef _present(value):\n    if value is None or bool(pd.isna(value)):\n        return None\n    text = str(value).strip()\n    return text or None\n",
+        "requirements": []
+      }
+    },
+    {
       "id": "matched_commitments",
       "type": "enrich",
       "description": "Join Each Filing to its Client's Public Commitment",
       "inputs": [
         {
-          "id": "raw_filings"
+          "id": "check_filings"
         },
         {
           "id": "public_commitments"
@@ -137,7 +214,7 @@
         "form": "extends",
         "reads": [
           {
-            "input": "raw_filings",
+            "input": "check_filings",
             "columns": [
               {
                 "name": "client",
@@ -184,7 +261,7 @@
         "rewrites": []
       },
       "source": {
-        "section": "Step 1 — Join each filing to its client's public commitment"
+        "section": "Step 2 — Join each filing to its client's public commitment"
       },
       "join": {
         "keys": [
@@ -211,7 +288,7 @@
       "cache": true,
       "compiler_notes": [
         "Grain is strictly 1:1 — the document states no filing is dropped or duplicated here.",
-        "public_commitment is nullable because the join leaves it blank for a filing whose client has no commitment row; the prompt names that case and fixes its answer, and the next step decides the flag from the join result rather than from this answer.",
+        "public_commitment is nullable because the join leaves it blank for a filing whose client has no commitment row; the prompt names that case and fixes its answer to 'No commitment given', so an absence is never read as a judgment.",
         "The prompt forbids using anything the model knows about the organisation, because the organisations are invented and any outside knowledge would be fabricated.",
         "batch_size 12 amortises the instructions prefix across twelve filings per call, and each call is a process spawn, so the batch size sets how long a run takes; the filings in a batch share one context, which the document accepts for a per-filing judgment this coarse."
       ],
@@ -262,7 +339,7 @@
         "rewrites": []
       },
       "source": {
-        "section": "Step 2 — Judge the filing against the commitment (LLM)"
+        "section": "Step 3 — Judge the filing against the commitment (LLM)"
       },
       "llm": {
         "prompt_instructions": "You are checking one lobbying filing against what the same organisation has said in public.\n\nReturn a JSON object with exactly these two fields:\n\n1. \"alignment\": exactly one of — Contradicts | Matches | Unclear | No commitment given\n   - \"Contradicts\": the filing asks government for the opposite of what the commitment says.\n   - \"Matches\": the filing asks government for what the commitment says.\n   - \"Unclear\": the two texts are about different things, or neither supports nor conflicts with the other.\n   - \"No commitment given\": the commitment line is blank, or reads `nan` or `None` because no commitment was on record for that organisation. Answer this and nothing else in that case — do not judge, and do not supply a commitment yourself.\n\n2. \"alignment_note\": one plain sentence naming what the organisation said in public and what this filing asks for. Empty string when there is no commitment to compare against.\n\nJudge only the two texts in front of you. Do not use anything you know or believe about the organisation, and never invent, complete or paraphrase a commitment that is not printed here.",
@@ -274,9 +351,9 @@
       }
     },
     {
-      "id": "flag_contradiction",
-      "type": "python_row_function",
-      "description": "Flag filings that contradict their client's public commitment",
+      "id": "publish_report",
+      "type": "publish",
+      "description": "Publish HTML Say-versus-Do Report",
       "inputs": [
         {
           "id": "judge_alignment"
@@ -284,99 +361,17 @@
       ],
       "cache": true,
       "compiler_notes": [
-        "Decided from the joined commitment and the model's alignment alone — no spend, no re-reading of either text.",
-        "The no-commitment case is settled in code, not by the model: an absent commitment is never a contradiction, whatever the model answered for that row."
-      ],
-      "signature": {
-        "form": "extends",
-        "reads": [
-          {
-            "input": "judge_alignment",
-            "columns": [
-              {
-                "name": "filing_id",
-                "type": "str",
-                "nullable": false
-              },
-              {
-                "name": "public_commitment",
-                "type": "str",
-                "nullable": true
-              },
-              {
-                "name": "alignment",
-                "type": "str",
-                "nullable": true,
-                "enum": [
-                  "Contradicts",
-                  "Matches",
-                  "Unclear",
-                  "No commitment given"
-                ]
-              }
-            ]
-          }
-        ],
-        "adds": [
-          {
-            "name": "contradicts_commitment",
-            "type": "bool",
-            "nullable": false,
-            "description": "True when a public commitment was joined onto this filing and the model judged the filing's ask to contradict it."
-          }
-        ],
-        "rewrites": []
-      },
-      "source": {
-        "section": "Step 3 — Flag the contradictions"
-      },
-      "function": {
-        "kind": "inline",
-        "summary": "Flags a filing when a public commitment was joined onto it AND the model judged its ask to contradict that commitment. A filing with no commitment on record is never flagged — there is nothing for it to contradict.",
-        "corner_cases": [
-          {
-            "case": "a filing carries a commitment and `alignment` is `Contradicts`",
-            "expected": "the filing is flagged"
-          },
-          {
-            "case": "a filing carries a commitment and `alignment` is `Matches`",
-            "expected": "the filing is kept and not flagged"
-          },
-          {
-            "case": "the join matched no commitment, so `public_commitment` is blank",
-            "expected": "the filing is kept and not flagged, whatever `alignment` says"
-          },
-          {
-            "case": "a filing carries a commitment but `alignment` is blank",
-            "expected": "the step fails, naming the filing, rather than flagging it either way"
-          }
-        ],
-        "code": "import pandas as pd\n\nCONTRADICTS = \"Contradicts\"\n\n\ndef transform(row):\n    commitment = row[\"public_commitment\"]\n    if commitment is None or bool(pd.isna(commitment)):\n        # The join matched no commitment for this client, so there is nothing to\n        # contradict. Code decides this, not the model.\n        return {**row, \"contradicts_commitment\": False}\n    alignment = row[\"alignment\"]\n    if alignment is None or bool(pd.isna(alignment)):\n        raise StepRefused(\n            f\"filing {row['filing_id']} carries a public commitment but no judgment \"\n            f\"on it, so whether it contradicts that commitment cannot be decided\"\n        )\n    return {**row, \"contradicts_commitment\": str(alignment) == CONTRADICTS}\n",
-        "requirements": []
-      }
-    },
-    {
-      "id": "publish_report",
-      "type": "publish",
-      "description": "Publish HTML Say-versus-Do Report",
-      "inputs": [
-        {
-          "id": "flag_contradiction"
-        }
-      ],
-      "cache": true,
-      "compiler_notes": [
-        "The document says this is a reading aid, not a verdict — no score, ranking or recommendation column is rendered. A flagged row shows the two texts the flag was decided from and adds nothing.",
-        "A filing flagged as contradicting a commitment the join never matched stops the step: the page must not show a contradiction it cannot print both sides of.",
+        "The document says this is a reading aid, not a verdict — no score, ranking or recommendation column is rendered. A row that contradicts shows the two texts the judgment was made from and adds nothing.",
+        "A filing judged to contradict a commitment the join never matched stops the step: the page must not show a contradiction it cannot print both sides of.",
         "A filing with no commitment on record says so in its own cell rather than rendering an empty one, so the join's non-matches are visible on the page and not just in lineage.",
-        "The report's markup and stylesheet are the committed file app/seeds/data/tutorial_triage_report.html; TEMPLATE_PATH is bound to it when the tutorial project is seeded, the way the input CSV paths are. A missing file or a missing section stops the step rather than publishing a half-rendered page.",
+        "The page's markup lives in this step, beside the code that fills it, so a reviewer reads both together rather than chasing a file the workflow does not carry.",
         "This stage writes the HTML to disk and returns a file-path pointer rather than embedding the markup inline, which is practical at scale."
       ],
       "signature": {
         "form": "replaces",
         "reads": [
           {
-            "input": "flag_contradiction",
+            "input": "judge_alignment",
             "columns": [
               {
                 "name": "filing_id",
@@ -396,7 +391,8 @@
               {
                 "name": "amount_usd",
                 "type": "int",
-                "nullable": false
+                "nullable": false,
+                "description": "Reported lobbying spend for the period, in whole US dollars."
               },
               {
                 "name": "filing_period",
@@ -433,11 +429,6 @@
                 "name": "alignment_note",
                 "type": "str",
                 "nullable": true
-              },
-              {
-                "name": "contradicts_commitment",
-                "type": "bool",
-                "nullable": false
               }
             ]
           }
@@ -452,7 +443,7 @@
         "summary": "Fills the committed report template — one row per filing, in the order they arrived — with the reported spend, what the filing asked for, what the client committed to in public, and the model's judgment.",
         "corner_cases": [
           {
-            "case": "a filing contradicts its client's public commitment",
+            "case": "the model judged a filing to contradict its client's public commitment",
             "expected": "its cell prints the commitment as said and the ask as filed, both"
           },
           {
@@ -460,15 +451,11 @@
             "expected": "its commitment cell says no commitment is on record, rather than sitting empty"
           },
           {
-            "case": "a filing is flagged yet carries no commitment",
+            "case": "a filing is judged to contradict a commitment the join never matched",
             "expected": "the step fails — the page cannot print a contradiction's other side"
-          },
-          {
-            "case": "the template file is missing, or has lost one of its sections",
-            "expected": "the step fails, naming the file, rather than writing a partial page"
           }
         ],
-        "code": "import html as _html\nimport pathlib\n\nimport pandas as pd\n\n# The page's markup, in the stage that writes it. A publish stage emits a document, so\n# its markup is part of what the stage IS — a reader reviewing this step reads it here\n# rather than chasing a file the workflow does not carry.\nDOCUMENT = \"\"\"\\\n<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"UTF-8\">\n<title>Tutorial Lobbying Say-versus-Do</title>\n<style>\n  body { font-family: -apple-system, \"Segoe UI\", Roboto, Arial, sans-serif;\n         margin: 2rem auto; max-width: 1180px; padding: 0 1rem; line-height: 1.45; }\n  h1 { font-size: 1.45rem; margin-bottom: .2rem; }\n  p { margin: .5rem 0; }\n  .sub, .note, .muted, .src { font-size: .85rem;\n        color: color-mix(in srgb, currentColor 60%, transparent); }\n  .note, .why { border-left: 3px solid color-mix(in srgb, currentColor 30%, transparent);\n        padding: .1rem 0 .1rem .8rem; margin: 1rem 0; }\n  .why { font-size: .9rem; max-width: 62ch; }\n  table { border-collapse: collapse; width: 100%; font-size: .88rem; margin-top: 1.4rem; }\n  th, td { text-align: left; padding: .5rem .6rem; vertical-align: top;\n           border-bottom: 1px solid color-mix(in srgb, currentColor 15%, transparent); }\n  th { font-size: .7rem; text-transform: uppercase; letter-spacing: .05em;\n       border-bottom-width: 2px; }\n  td.num { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }\n  tr.flagged td:first-child { border-left: 3px solid currentColor; }\n  .pill { border: 1px solid color-mix(in srgb, currentColor 30%, transparent);\n          border-radius: 999px; padding: .05rem .5rem; font-size: .78rem;\n          white-space: nowrap; }\n  .none { color: color-mix(in srgb, currentColor 40%, transparent); font-style: italic; }\n  .src { display: block; margin-top: .2rem; }\n  .quote { margin: .4rem 0 0; font-size: .82rem; max-width: 44ch; }\n  .label { font-weight: 700; text-transform: uppercase; letter-spacing: .04em;\n           font-size: .7rem; display: block; }\n</style>\n</head>\n<body>\n<h1>Tutorial Say-versus-Do Report</h1>\n<p class=\"sub\">[[filing_count]] filings; [[flagged_count]] ask government for the opposite of what their client committed to in public; [[unmatched_count]] have no public commitment on record.</p>\n<p class=\"note\">Invented sample data bundled with this tutorial. No row describes a real filing, client, firm or commitment.</p>\n<p class=\"why\">Beside each filing sits what the same client said in public, where a commitment was on\nrecord. A filing is marked when it asks government for the opposite of that commitment &mdash; and where\nit is marked, both texts are printed together, so the contradiction is on the page rather than only in\nthe flag. It is a reading aid, not a verdict, and not a finding about the filer.\nEvery row carries a <em>Show the work</em> link back through each stage that touched it to the input row\nit came from. Those links are served by the app that produced this page; in a copy of this file opened\non its own they will not resolve.</p>\n<table>\n<thead><tr>\n<th>Filing</th><th>Client</th><th>Registrant</th><th>Period</th>\n<th>Reported spend</th><th>What this filing asks for</th><th>What they said in public</th><th>Why follow up</th>\n<th>Show the work</th>\n</tr></thead>\n<tbody>\n[[rows]]</tbody>\n</table>\n</body>\n</html>\n\"\"\"\n\nROW = \"\"\"\\\n<tr class=\"[[row_class]]\">\n<td>[[filing_id]]</td>\n<td>[[client]]</td>\n<td class=\"muted\">[[registrant]]</td>\n<td>[[filing_period]]</td>\n<td class=\"num\">[[amount]]</td>\n<td>[[specific_issues]]</td>\n<td>[[commitment]]</td>\n<td>[[followup]]</td>\n<td>[[trace]]</td>\n</tr>\n\"\"\"\n\nTRACE = \"\"\"\\\n<a href=\"[[trace_url]]\">Lineage</a>\n\"\"\"\n\nCOMMITMENT = \"\"\"\\\n[[public_commitment]]<span class=\"src\">[[commitment_source]]</span>\n\"\"\"\n\nNO_COMMITMENT = \"\"\"\\\n<span class=\"none\">No public commitment on record</span>\n\"\"\"\n\nJUDGMENT = \"\"\"\\\n<span class=\"pill\">[[alignment]]</span>\n\"\"\"\n\nCONTRADICTION = \"\"\"\\\n<p class=\"quote\"><span class=\"label\">Said</span>[[said]]</p>\n<p class=\"quote\"><span class=\"label\">Lobbied for</span>[[lobbied_for]]</p>\n\"\"\"\n\nSECTIONS = {\n    \"document\": DOCUMENT, \"row\": ROW, \"trace\": TRACE, \"commitment\": COMMITMENT,\n    \"no_commitment\": NO_COMMITMENT, \"judgment\": JUDGMENT, \"contradiction\": CONTRADICTION,\n}\nTOKEN_OPEN = \"[[\"\n\n\n# The ordinal a trace URL needs is a position in THIS frame, so the stage it names is\n# this step's own input, and the rows are rendered in the order they arrived.\nTRACED_INPUT = \"flag_contradiction\"\nNOT_JUDGED = \"not judged\"\nNO_SOURCE = \"source not recorded\"\n\n\ndef transform(df, output_dir, trace_links):\n    sections = SECTIONS\n    page = _fill(\n        sections[\"document\"],\n        filing_count=str(len(df)),\n        flagged_count=str(int(df[\"contradicts_commitment\"].sum())),\n        unmatched_count=str(int(df[\"public_commitment\"].isna().sum())),\n        rows=\"\".join(\n            _render_row(sections, row, trace_links, ordinal)\n            for ordinal, (_, row) in enumerate(df.iterrows())\n        ),\n    )\n    out_path = pathlib.Path(output_dir) / \"tutorial_triage_report.html\"\n    out_path.write_text(page, encoding=\"utf-8\")\n    return pd.DataFrame([{\"report_path\": str(out_path), \"filing_count\": len(df)}])\n\n\ndef _render_row(sections, row, trace_links, ordinal):\n    return _fill(\n        sections[\"row\"],\n        row_class=\"flagged\" if bool(row[\"contradicts_commitment\"]) else \"\",\n        filing_id=_escaped(row[\"filing_id\"]),\n        client=_escaped(row[\"client\"]),\n        registrant=_escaped(row[\"registrant\"]),\n        filing_period=_escaped(row[\"filing_period\"]),\n        amount=\"$\" + format(int(row[\"amount_usd\"]), \",\"),\n        specific_issues=_escaped(row[\"specific_issues\"]),\n        commitment=_render_commitment(sections, row),\n        followup=_render_followup(sections, row),\n        trace=_fill(\n            sections[\"trace\"],\n            trace_url=_escaped(trace_links.build_row_trace_url(TRACED_INPUT, ordinal)),\n        ),\n    )\n\n\ndef _render_commitment(sections, row):\n    said = _present(row[\"public_commitment\"])\n    if said is None:\n        return sections[\"no_commitment\"]\n    return _fill(\n        sections[\"commitment\"],\n        public_commitment=_escaped(said),\n        commitment_source=_escaped(_present(row[\"commitment_source\"]) or NO_SOURCE),\n    )\n\n\ndef _render_followup(sections, row):\n    # A flag is not an argument: a flagged row shows both texts it was decided from.\n    judgment = _fill(\n        sections[\"judgment\"],\n        alignment=_escaped(_present(row[\"alignment\"]) or NOT_JUDGED),\n    )\n    if not bool(row[\"contradicts_commitment\"]):\n        return judgment\n    said = _present(row[\"public_commitment\"])\n    if said is None:\n        raise StepRefused(\n            f\"filing {row['filing_id']} is flagged as contradicting a public \"\n            f\"commitment, yet the join matched none onto it, so this report cannot \"\n            f\"say what it contradicts\"\n        )\n    return judgment + _fill(\n        sections[\"contradiction\"],\n        said=_escaped(said),\n        lobbied_for=_escaped(row[\"specific_issues\"]),\n    )\n\n\ndef _fill(template, **values):\n    filled = template\n    for name, value in values.items():\n        filled = filled.replace(TOKEN_OPEN + name + \"]]\", value)\n    if TOKEN_OPEN in filled:\n        raise ValueError(\n            \"the report markup has a placeholder this step does not fill\"\n        )\n    return filled\n\n\ndef _escaped(value):\n    return _html.escape(str(value))\n\n\ndef _present(value):\n    if value is None or bool(pd.isna(value)):\n        return None\n    return str(value)\n",
+        "code": "import html as _html\nimport pathlib\n\nimport pandas as pd\n\n# The page's markup, in the stage that writes it. A publish stage emits a document, so\n# its markup is part of what the stage IS — a reader reviewing this step reads it here\n# rather than chasing a file the workflow does not carry.\nDOCUMENT = \"\"\"\\\n<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"UTF-8\">\n<title>Tutorial Lobbying Say-versus-Do</title>\n<style>\n  body { font-family: -apple-system, \"Segoe UI\", Roboto, Arial, sans-serif;\n         margin: 2rem auto; max-width: 1180px; padding: 0 1rem; line-height: 1.45; }\n  h1 { font-size: 1.45rem; margin-bottom: .2rem; }\n  p { margin: .5rem 0; }\n  .sub, .note, .muted, .src { font-size: .85rem;\n        color: color-mix(in srgb, currentColor 60%, transparent); }\n  .note, .why { border-left: 3px solid color-mix(in srgb, currentColor 30%, transparent);\n        padding: .1rem 0 .1rem .8rem; margin: 1rem 0; }\n  .why { font-size: .9rem; max-width: 62ch; }\n  table { border-collapse: collapse; width: 100%; font-size: .88rem; margin-top: 1.4rem; }\n  th, td { text-align: left; padding: .5rem .6rem; vertical-align: top;\n           border-bottom: 1px solid color-mix(in srgb, currentColor 15%, transparent); }\n  th { font-size: .7rem; text-transform: uppercase; letter-spacing: .05em;\n       border-bottom-width: 2px; }\n  td.num { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }\n  tr.flagged td:first-child { border-left: 3px solid currentColor; }\n  .pill { border: 1px solid color-mix(in srgb, currentColor 30%, transparent);\n          border-radius: 999px; padding: .05rem .5rem; font-size: .78rem;\n          white-space: nowrap; }\n  .none { color: color-mix(in srgb, currentColor 40%, transparent); font-style: italic; }\n  .src { display: block; margin-top: .2rem; }\n  .quote { margin: .4rem 0 0; font-size: .82rem; max-width: 44ch; }\n  .label { font-weight: 700; text-transform: uppercase; letter-spacing: .04em;\n           font-size: .7rem; display: block; }\n</style>\n</head>\n<body>\n<h1>Tutorial Say-versus-Do Report</h1>\n<p class=\"sub\">[[filing_count]] filings; [[flagged_count]] ask government for the opposite of what their client committed to in public; [[unmatched_count]] have no public commitment on record.</p>\n<p class=\"note\">Invented sample data bundled with this tutorial. No row describes a real filing, client, firm or commitment.</p>\n<p class=\"why\">Beside each filing sits what the same client said in public, where a commitment was on\nrecord. A filing is marked when it asks government for the opposite of that commitment &mdash; and where\nit is marked, both texts are printed together, so the contradiction is on the page rather than only in\nthe flag. It is a reading aid, not a verdict, and not a finding about the filer.\nEvery row carries a <em>Show the work</em> link back through each stage that touched it to the input row\nit came from. Those links are served by the app that produced this page; in a copy of this file opened\non its own they will not resolve.</p>\n<table>\n<thead><tr>\n<th>Filing</th><th>Client</th><th>Registrant</th><th>Period</th>\n<th>Reported spend</th><th>What this filing asks for</th><th>What they said in public</th><th>Why follow up</th>\n<th>Show the work</th>\n</tr></thead>\n<tbody>\n[[rows]]</tbody>\n</table>\n</body>\n</html>\n\"\"\"\n\nROW = \"\"\"\\\n<tr class=\"[[row_class]]\">\n<td>[[filing_id]]</td>\n<td>[[client]]</td>\n<td class=\"muted\">[[registrant]]</td>\n<td>[[filing_period]]</td>\n<td class=\"num\">[[amount]]</td>\n<td>[[specific_issues]]</td>\n<td>[[commitment]]</td>\n<td>[[followup]]</td>\n<td>[[trace]]</td>\n</tr>\n\"\"\"\n\nTRACE = \"\"\"\\\n<a href=\"[[trace_url]]\">Lineage</a>\n\"\"\"\n\nCOMMITMENT = \"\"\"\\\n[[public_commitment]]<span class=\"src\">[[commitment_source]]</span>\n\"\"\"\n\nNO_COMMITMENT = \"\"\"\\\n<span class=\"none\">No public commitment on record</span>\n\"\"\"\n\nJUDGMENT = \"\"\"\\\n<span class=\"pill\">[[alignment]]</span>\n\"\"\"\n\nCONTRADICTION = \"\"\"\\\n<p class=\"quote\"><span class=\"label\">Said</span>[[said]]</p>\n<p class=\"quote\"><span class=\"label\">Lobbied for</span>[[lobbied_for]]</p>\n\"\"\"\n\nSECTIONS = {\n    \"document\": DOCUMENT, \"row\": ROW, \"trace\": TRACE, \"commitment\": COMMITMENT,\n    \"no_commitment\": NO_COMMITMENT, \"judgment\": JUDGMENT, \"contradiction\": CONTRADICTION,\n}\nTOKEN_OPEN = \"[[\"\n\n\n# The ordinal a trace URL needs is a position in THIS frame, so the stage it names is\n# this step's own input, and the rows are rendered in the order they arrived.\nTRACED_INPUT = \"judge_alignment\"\nCONTRADICTS = \"Contradicts\"\nNOT_JUDGED = \"not judged\"\nNO_SOURCE = \"source not recorded\"\n\n\ndef transform(df, output_dir, trace_links):\n    sections = SECTIONS\n    page = _fill(\n        sections[\"document\"],\n        filing_count=str(len(df)),\n        flagged_count=str(sum(_contradicts(row) for _, row in df.iterrows())),\n        unmatched_count=str(int(df[\"public_commitment\"].isna().sum())),\n        rows=\"\".join(\n            _render_row(sections, row, trace_links, ordinal)\n            for ordinal, (_, row) in enumerate(df.iterrows())\n        ),\n    )\n    out_path = pathlib.Path(output_dir) / \"tutorial_triage_report.html\"\n    out_path.write_text(page, encoding=\"utf-8\")\n    return pd.DataFrame([{\"report_path\": str(out_path), \"filing_count\": len(df)}])\n\n\ndef _render_row(sections, row, trace_links, ordinal):\n    return _fill(\n        sections[\"row\"],\n        row_class=\"flagged\" if _contradicts(row) else \"\",\n        filing_id=_escaped(row[\"filing_id\"]),\n        client=_escaped(row[\"client\"]),\n        registrant=_escaped(row[\"registrant\"]),\n        filing_period=_escaped(row[\"filing_period\"]),\n        amount=\"$\" + format(int(row[\"amount_usd\"]), \",\"),\n        specific_issues=_escaped(row[\"specific_issues\"]),\n        commitment=_render_commitment(sections, row),\n        followup=_render_followup(sections, row),\n        trace=_fill(\n            sections[\"trace\"],\n            trace_url=_escaped(trace_links.build_row_trace_url(TRACED_INPUT, ordinal)),\n        ),\n    )\n\n\ndef _render_commitment(sections, row):\n    said = _present(row[\"public_commitment\"])\n    if said is None:\n        return sections[\"no_commitment\"]\n    return _fill(\n        sections[\"commitment\"],\n        public_commitment=_escaped(said),\n        commitment_source=_escaped(_present(row[\"commitment_source\"]) or NO_SOURCE),\n    )\n\n\ndef _render_followup(sections, row):\n    # A flag is not an argument: a flagged row shows both texts it was decided from.\n    judgment = _fill(\n        sections[\"judgment\"],\n        alignment=_escaped(_present(row[\"alignment\"]) or NOT_JUDGED),\n    )\n    if not _contradicts(row):\n        return judgment\n    said = _present(row[\"public_commitment\"])\n    if said is None:\n        raise StepRefused(\n            f\"filing {row['filing_id']} is judged to contradict a public commitment, \"\n            f\"yet the join matched none onto it, so this report cannot say what it \"\n            f\"contradicts\"\n        )\n    return judgment + _fill(\n        sections[\"contradiction\"],\n        said=_escaped(said),\n        lobbied_for=_escaped(row[\"specific_issues\"]),\n    )\n\n\ndef _contradicts(row):\n    return _present(row[\"alignment\"]) == CONTRADICTS\n\n\ndef _fill(template, **values):\n    filled = template\n    for name, value in values.items():\n        filled = filled.replace(TOKEN_OPEN + name + \"]]\", value)\n    if TOKEN_OPEN in filled:\n        raise ValueError(\n            \"the report markup has a placeholder this step does not fill\"\n        )\n    return filled\n\n\ndef _escaped(value):\n    return _html.escape(str(value))\n\n\ndef _present(value):\n    if value is None or bool(pd.isna(value)):\n        return None\n    return str(value)\n",
         "requirements": []
       },
       "publish": {

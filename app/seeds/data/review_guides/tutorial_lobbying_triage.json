@@ -17,6 +17,14 @@
       "data_description": "Every organisation with a public commitment on record."
     },
     {
+      "title": "Check every filing before anything reads it",
+      "prose": "The spend is text on the filing until someone reads it. After this: every `amount_usd` is a number, and a filing whose spend could not be read stopped the run rather than travelling as a blank.",
+      "stage_ids": [
+        "check_filings"
+      ],
+      "data_description": "Every filing in the sample, with its reported spend read as a number."
+    },
+    {
       "title": "Join each filing to its client's public commitment",
       "prose": "Puts the promise beside the ask, dropping no filing. After this: every lobbying filing is still here, and a blank `public_commitment` means the client has none on record — the absence IS the record.",
       "stage_ids": [
@@ -33,16 +41,8 @@
       "data_description": "The same filings, plus the model's judgment and its one-sentence note."
     },
     {
-      "title": "Flag the contradictions",
-      "prose": "Turns that reading into something countable. After this: `contradicts_commitment` is true only where a commitment was joined AND `alignment` reads Contradicts, so a client with none on record is never flagged.",
-      "stage_ids": [
-        "flag_contradiction"
-      ],
-      "data_description": "Every filing, plus `contradicts_commitment`."
-    },
-    {
       "title": "Publish the report",
-      "prose": "What you hand to someone who was not here — open it under Published, below. After this: one page listing every filing, each row linked back to its own lineage.",
+      "prose": "What you hand to someone who was not here — open it under Published, below. After this: one page per filing, each row linked back to its own lineage, each contradiction beside the promise it contradicts.",
       "stage_ids": [
         "publish_report"
       ],
