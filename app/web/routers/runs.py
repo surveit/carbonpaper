@@ -1,7 +1,7 @@
-"""Run lifecycle: trigger a run (against the latest stored version, or a
-specific pinned version), list runs, poll live status, render a run's detail,
-serve its artifacts, resume and cancel. The per-stage panel, its row views and
-the scratch re-run are app.web.routers.run_stage."""
+"""Run lifecycle: trigger a run, list runs, poll live status, render a run's detail,
+serve its artifacts, resume and cancel. Configuring one — the form, its pickers and the
+file endpoint they post to — is app.web.routers.run_form; the per-stage panel, its row
+views and the scratch re-run are app.web.routers.run_stage."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import mimetypes
 from dataclasses import dataclass
 from typing import Any
 
-from fastapi import APIRouter, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.datastructures import FormData
 from fastapi.responses import (
     FileResponse,
@@ -18,7 +18,6 @@ from fastapi.responses import (
     RedirectResponse,
     StreamingResponse,
 )
-from starlette.concurrency import run_in_threadpool
 
 from app.core.errors import (
     MissingInputBindingError,
@@ -28,22 +27,12 @@ from app.core.errors import (
 from app.core.run_status import RunStatus, StageStatus
 from app.models import WorkflowStage
 from app.models.schema import StageId, TypeUnsafeUserStageConfigOverride
-from app.services.errors import (
-    FileNotStoredError,
-    UploadTooLargeError,
-    WorkflowLoadError,
-)
-from app.services.versioning import list_versions
+from app.services.errors import FileNotStoredError, WorkflowLoadError
 from app.services import run as run_service
 from app.services.run_guide import build_run_guide_view
-from app.services.uploads import (
-    max_upload_bytes,
-    resolve_file_binding,
-    resolve_stored_path,
-    save_upload,
-)
+from app.services.uploads import resolve_file_binding
 from app.runtime.cancellation import request_cancel
-from app.web.breadcrumbs import build_run_crumbs, build_runs_child_crumbs
+from app.web.breadcrumbs import build_run_crumbs
 from app.web.config import EVENT_TAIL, projects_dir, templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
 from app.web.loading import (
@@ -59,7 +48,6 @@ from app.web.run_events import (
 )
 from app.web.run_header import build_live_view, build_run_header
 from app.web.run_index import build_run_index_rows
-from app.web.run_inputs import build_run_input_choices
 from app.web.run_issues import build_run_issues
 from app.web.run_stage_panel import resolve_panel_links
 
@@ -129,36 +117,6 @@ def _read_bust_cache(form: FormData) -> bool:
     return "bust_cache" in form
 
 
-@router.get("/project/{project}/run-inputs")
-async def run_inputs(project: str, version_id: str | None = None):
-    """The chosen version's file inputs AND the project's files, so one fetch rebuilds
-    every picker."""
-    if not (projects_dir() / project).is_dir():
-        raise HTTPException(status_code=404, detail=f"No project '{project}'")
-    return JSONResponse(build_run_input_choices(project, version_id).model_dump())
-
-
-@router.post("/project/{project}/files")
-async def upload_file(project: str, file: UploadFile = File(...)):
-    """One multipart endpoint for the run form's Browse… and for `curl -F file=@…`."""
-    if not (projects_dir() / project).is_dir():
-        raise HTTPException(status_code=404, detail=f"No project '{project}'")
-    if not file.filename:
-        return JSONResponse({"ok": False, "error": "no file provided"}, status_code=400)
-    # Off the event loop: the copy streams a file of any size to disk and hashes it.
-    try:
-        record = await run_in_threadpool(save_upload, file.filename, file.file, project)
-    except UploadTooLargeError as exc:
-        # The message names the limit and what to do; run_controls.js shows it verbatim.
-        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
-    # `sha256` is what a caller keeps — it names the file for a later run and is the
-    # integrity check on the bytes it just sent. `path` is here for the run form,
-    # whose field still submits a path.
-    return JSONResponse({"ok": True, "sha256": record.sha256, "filename": record.filename,
-                         "bytes": record.byte_count,
-                         "path": str(resolve_stored_path(record))})
-
-
 @router.get("/project/{project}/runs", response_class=HTMLResponse)
 async def runs_index(request: Request, project: str):
     pdir = projects_dir() / project
@@ -174,38 +132,6 @@ async def runs_index(request: Request, project: str):
             "state": shell_state(pdir, "runs"),
             "section": "runs",
             "runs": build_run_index_rows(project),
-        },
-    )
-
-
-@router.get("/project/{project}/runs/new", response_class=HTMLResponse)
-async def run_new(request: Request, project: str, version_id: str | None = None):
-    pdir = projects_dir() / project
-    if not pdir.is_dir():
-        raise HTTPException(status_code=404, detail=f"No project '{project}'")
-    # Every stored version is runnable (resolve_version_id reads no publication
-    # state), so the picker offers all of them newest-first. Registered ahead of
-    # /runs/{run_id}, which would otherwise match "new" as a run id.
-    versions = list_versions(pdir)
-    # ?version_id= pre-picks one (the version page's "Run this version" sends it).
-    # An id no version carries 404s rather than falling back to the latest, which
-    # would launch a different workflow than the link named.
-    if version_id is not None and not any(v.version_id == version_id for v in versions):
-        raise HTTPException(status_code=404,
-                            detail=f"No version '{version_id}' in project '{project}'")
-    selected = version_id or (versions[0].version_id if versions else None)
-    return templates.TemplateResponse(
-        request,
-        "section_run_new.html",
-        {
-            "state": shell_state(pdir, "runs"),
-            "section": "runs",
-            "crumbs": build_runs_child_crumbs(project, label="New run"),
-            "versions": versions,
-            "selected_version_id": selected,
-            "choices": build_run_input_choices(project, selected),
-            # So Browse… can refuse an oversized pick before spending the upload on it.
-            "max_upload_bytes": max_upload_bytes(),
         },
     )
 
