@@ -46,7 +46,7 @@ def run_workflow_test(
     executed_ids = [stage.id for stage in executing]
     limits, offsets = _source_row_windows(executing, limit, offset)
     ok, error = _run_frontier(
-        workflow, injected, executed_ids, run_dir, repo_root(),
+        workflow, injected, executed_ids, run_dir,
         project=project_dir.name, run_id=run_id, workflow_version=version,
         limits=limits, offsets=offsets)
 
@@ -76,7 +76,6 @@ def _run_frontier(
     injected: dict[str, pd.DataFrame],
     stage_ids: list[str],
     run_dir: Path,
-    repo_root: Path,
     *,
     project: str,
     run_id: str,
@@ -87,7 +86,7 @@ def _run_frontier(
     try:
         run_subset(
             workflow, injected_outputs=injected, stage_ids=stage_ids,
-            run_dir=run_dir, repo_root=repo_root,
+            run_dir=run_dir,
             params=RunParameters(limits=limits, offsets=offsets,
                                  queue_auto_approve=True, is_test_run=True),
             project=project, workflow_version=workflow_version,

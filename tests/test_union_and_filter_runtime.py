@@ -59,7 +59,7 @@ def test_union_concatenates_two_inputs_in_declared_order(tmp_path):
 
     outputs = run_subset(
         workflow, injected_outputs={},
-        stage_ids=["left", "right", "u"], run_dir=tmp_path / "runs" / "r1", repo_root=tmp_path,
+        stage_ids=["left", "right", "u"], run_dir=tmp_path / "runs" / "r1",
     )
 
     out = outputs["u"][["a", "b"]].reset_index(drop=True)
@@ -78,7 +78,7 @@ def test_filter_rows_keeps_true_rows_in_order_with_columns_unchanged(tmp_path):
 
     outputs = run_subset(
         workflow, injected_outputs={},
-        stage_ids=["src", "f"], run_dir=tmp_path / "runs" / "r2", repo_root=tmp_path,
+        stage_ids=["src", "f"], run_dir=tmp_path / "runs" / "r2",
     )
 
     out = outputs["f"][["a", "b"]].reset_index(drop=True)
@@ -104,7 +104,7 @@ def test_a_filter_that_keeps_nothing_still_feeds_its_downstream_a_valid_frame(tm
     outputs = run_subset(
         workflow, injected_outputs={},
         stage_ids=["src", "f", "tag"], run_dir=tmp_path / "runs" / "r_empty",
-        repo_root=tmp_path,
+       
     )
 
     out = outputs["tag"]
@@ -121,7 +121,7 @@ def test_filter_rows_non_bool_return_is_a_loud_error(tmp_path):
     with pytest.raises(SubsetRunError) as exc_info:
         run_subset(
             workflow, injected_outputs={},
-            stage_ids=["src", "f"], run_dir=tmp_path / "runs" / "r3", repo_root=tmp_path,
+            stage_ids=["src", "f"], run_dir=tmp_path / "runs" / "r3",
         )
     assert "should_include" in str(exc_info.value)
     assert "bool" in str(exc_info.value)
@@ -139,7 +139,7 @@ def test_trace_walks_through_filter_rows_to_the_right_source_row(tmp_path):
 
     run_subset(
         workflow, injected_outputs={},
-        stage_ids=["src", "f"], run_dir=run_dir, repo_root=tmp_path,
+        stage_ids=["src", "f"], run_dir=run_dir,
     )
 
     # f's output row 1 ('z', b=2) is src's row 2 — the dropped row ('y') sits
@@ -164,7 +164,7 @@ def test_trace_walks_through_union_to_the_right_source_row_in_the_right_input(tm
 
     run_subset(
         workflow, injected_outputs={},
-        stage_ids=["left", "right", "u"], run_dir=run_dir, repo_root=tmp_path,
+        stage_ids=["left", "right", "u"], run_dir=run_dir,
     )
 
     # union output row 3 is right's row 1 ('r1') — left has only 2 rows, so a
@@ -195,7 +195,7 @@ def test_trace_follows_lineage_after_a_limit_caps_what_the_filter_reads(tmp_path
 
     outputs = run_subset(
         workflow, injected_outputs={},
-        stage_ids=["src", "f"], run_dir=run_dir, repo_root=tmp_path,
+        stage_ids=["src", "f"], run_dir=run_dir,
         params=RunParameters(limits={"f": 2}),
     )
 
@@ -225,6 +225,6 @@ def test_a_row_mapper_that_may_not_drop_still_rejects_a_none_row(tmp_path):
         run_subset(
             workflow, injected_outputs={},
             stage_ids=["src", "m"], run_dir=tmp_path / "runs" / "none_row",
-            repo_root=tmp_path,
+           
         )
     assert "must return a dict per row" in str(exc_info.value)

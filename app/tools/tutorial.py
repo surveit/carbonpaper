@@ -12,6 +12,7 @@ from pathlib import Path
 from pydantic import BaseModel
 
 from app.core.agent.tool_spec import ToolSpec
+from app.evals.store import write_eval_dataset
 from app.models import EvalConfig
 from app.models.review_guide import ReviewGuideDraft
 from app.services import (
@@ -31,6 +32,9 @@ _GUIDE = _DATA_DIR / "review_guides" / f"{_FIXTURE_STEM}.json"
 # The project id is minted at import, so the committed eval names no project and is
 # told which one it belongs to here.
 _EVAL = _DATA_DIR / "evals" / f"{_FIXTURE_STEM}.json"
+# Copied into the project on every seeding, because that is where the stored config
+# points: the labelled rows are the project's data, not the checkout's.
+_EVAL_CSV = _DATA_DIR / "evals" / "tutorial_alignment_hard.csv"
 # The fixture carries no path for these — a committed file cannot know where the
 # workspace is — so each run says which file its input stage reads.
 _CSV_BY_STAGE_ID = {
@@ -76,7 +80,7 @@ def seed_tutorial_project(ctx: TutorialContext) -> TutorialAgentReference:
     # A second tour reuses what the first seeded: the workspace is not the tour's to
     # fill up, and re-importing would discard whatever the reader did to it.
     if name is None:
-        for path in (_FIXTURE, _GUIDE, _EVAL, *_CSV_BY_STAGE_ID.values()):
+        for path in (_FIXTURE, _GUIDE, _EVAL, _EVAL_CSV, *_CSV_BY_STAGE_ID.values()):
             if not path.is_file():
                 raise FileNotFoundError(f"the tutorial fixture needs {path}, which is missing")
         name = import_project(
@@ -89,6 +93,7 @@ def seed_tutorial_project(ctx: TutorialContext) -> TutorialAgentReference:
         )
     )
     eval_config = read_seed_eval_config(name)
+    _install_eval_dataset(name, eval_config)
     project_service.write_eval_config(name, eval_config)
     return TutorialAgentReference(
         project=_read_seeded_record(name),
@@ -122,6 +127,17 @@ def _store_tour_files(project_id: str) -> dict[str, str]:
 def read_seed_eval_config(project: str) -> EvalConfig:
     return EvalConfig.model_validate(
         {**json.loads(_EVAL.read_text(encoding="utf-8")), "project": project})
+
+
+def _install_eval_dataset(project: str, config: EvalConfig) -> None:
+    if config.table is None:
+        raise ValueError(f"the tutorial eval fixture {_EVAL} names no dataset")
+    written = write_eval_dataset(
+        workspace.resolve_project_dir(project), _EVAL_CSV.name, _EVAL_CSV.read_bytes())
+    if written != config.table.path:
+        raise ValueError(
+            f"the tutorial eval reads '{config.table.path}', but its rows install "
+            f"at '{written}' — the fixture and its dataset name different files")
 
 
 def _read_seeded_record(project_id: str) -> Project:

@@ -8,6 +8,7 @@ import pandas as pd
 import pytest
 
 from app.evals.compatibility import validate_eval_compatibility
+from app.evals.dataset import read_table_ref
 from app.evals.dataset_columns import get_injected_columns
 from app.evals.store import load_eval_config
 from app.core.stage_cache import StageCacheEntry
@@ -74,6 +75,8 @@ _REVIEWER = "R. Vasquez"
 _REVIEWED_AT = "2024-05-06T11:20:00"
 
 _EVAL_PATH = _FIXTURE_PATH.parent / "evals" / _FIXTURE_PATH.name
+# The packaged labelled rows, which seeding copies into the project the eval names.
+_EVAL_CSV_PATH = _FIXTURE_PATH.parent / "evals" / "tutorial_alignment_hard.csv"
 _EVAL_ID = "alignment_hard_cases"
 _OVERRIDE_STAGE = "matched_commitments"
 _TARGET_STAGE = "judge_alignment"
@@ -420,10 +423,8 @@ def _import_and_pin(tmp_path):
     return name, workflow
 
 
-def _eval_dataset(name: str = "tutorial_smoke") -> pd.DataFrame:
-    config = read_seed_eval_config(name)
-    assert config.table is not None
-    return pd.read_csv(Path(__file__).resolve().parents[1] / config.table.path)
+def _eval_dataset() -> pd.DataFrame:
+    return pd.read_csv(_EVAL_CSV_PATH)
 
 
 def test_the_committed_eval_still_fits_the_tutorial_workflow(tmp_path):
@@ -484,6 +485,26 @@ def test_the_tour_seeds_the_eval_beside_the_review_guide(projects_root):
     assert [check.output_column for check in stored.expected_outputs] == [_JUDGED_COLUMN]
     # run_eval takes the id, so the tour is handed it rather than slicing it off a URL.
     assert seeded.eval_id == _EVAL_ID
+
+
+def test_the_tour_installs_the_labelled_rows_where_the_stored_eval_reads_them(projects_root):
+    """The tour runs this eval live, and the packaged copy is not in every deployment's reach."""
+    seeded = seed_tutorial_project(TutorialContext(base_url=_BASE_URL))
+    stored = load_eval_config(projects_root / seeded.project.id, _EVAL_ID)
+    assert stored.table is not None
+
+    assert len(read_table_ref(seeded.project.id, stored.table)) == _EVAL_ROWS
+
+
+def test_a_second_tour_still_reads_the_eval_dataset(projects_root):
+    first = seed_tutorial_project(TutorialContext(base_url=_BASE_URL))
+
+    again = seed_tutorial_project(TutorialContext(base_url=_BASE_URL))
+
+    assert again.project.id == first.project.id
+    stored = load_eval_config(projects_root / again.project.id, _EVAL_ID)
+    assert stored.table is not None
+    assert len(read_table_ref(again.project.id, stored.table)) == _EVAL_ROWS
 
 
 def test_the_committed_eval_names_no_project_of_its_own():

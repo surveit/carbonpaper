@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from app.models import EvalConfig, EvalRun
+from app.models import EvalConfig, EvalRun, TableRef, TableSchema
 from app.core.persistence import get_store
 from app.evals.compatibility import CompatibilityReport
 from app.evals.store import (
@@ -129,10 +129,12 @@ def test_list_eval_configs_empty_store_returns_empty(tmp_path: Path):
 
 
 # ── save_dataset_upload immutability ──────────────────────────────────────────
-def test_save_dataset_upload_writes_file(tmp_path: Path):
-    path = save_dataset_upload(tmp_path, "eval_dataset.csv", b"a,b\n1,2\n")
-    assert path == tmp_path / "eval_data" / "eval_dataset.csv"
-    assert path.read_bytes() == b"a,b\n1,2\n"
+def test_save_dataset_upload_returns_the_path_a_table_ref_carries(tmp_path: Path):
+    written = save_dataset_upload(tmp_path, "eval_dataset.csv", b"a,b\n1,2\n")
+    assert written == "eval_data/eval_dataset.csv"
+    assert (tmp_path / written).read_bytes() == b"a,b\n1,2\n"
+    # It is a path a TableRef accepts, so writer and config cannot name different files.
+    assert TableRef(path=written, table_schema=TableSchema(columns=[])).path == written
 
 
 def test_save_dataset_upload_raises_file_exists_on_same_name(tmp_path: Path):

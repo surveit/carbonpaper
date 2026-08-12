@@ -2,7 +2,7 @@
 Configs are mutable authored documents (write is upsert); runs are immutable,
 minted by the runner and only read here. Both are project-scoped by document id,
 so a project with no eval activity returns empty rather than needing scaffolding.
-Dataset uploads stay on disk at `eval_data/{filename}`, immutable once written.
+Datasets stay at `<project_dir>/eval_data/{f}` — the path the TableRef carries.
 """
 from __future__ import annotations
 
@@ -98,16 +98,18 @@ def list_project_eval_runs(project_id: str, config_id: str) -> list[EvalRun]:
     return runs
 
 
-def save_dataset_upload(project_dir: Path, filename: str, content: bytes) -> Path:
-    if not _SLUG_RE.match(filename):
-        raise ValueError(f"not a valid upload filename: {filename!r}")
-    data_dir = _resolve_eval_data_dir(project_dir)
-    data_dir.mkdir(parents=True, exist_ok=True)
-    path = data_dir / filename
-    if path.exists():
-        raise FileExistsError(f"dataset upload already exists: {path}")
+def save_dataset_upload(project_dir: Path, filename: str, content: bytes) -> str:
+    if _resolve_dataset_path(project_dir, filename).exists():
+        raise FileExistsError(f"dataset upload already exists: {filename}")
+    return write_eval_dataset(project_dir, filename, content)
+
+
+def write_eval_dataset(project_dir: Path, filename: str, content: bytes) -> str:
+    """Returns what a TableRef then carries, so writer and config cannot name different files."""
+    path = _resolve_dataset_path(project_dir, filename)
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(content)
-    return path
+    return path.relative_to(project_dir).as_posix()
 
 
 def latest_version_id(project_dir: Path) -> str | None:
@@ -131,6 +133,8 @@ def eval_status(report: CompatibilityReport, runs: list[EvalRun],
     return "run succeeded"
 
 
-# ── Directory layout (dataset uploads only — deferred to a later slice) ──────
-def _resolve_eval_data_dir(project_dir: Path) -> Path:
-    return Path(project_dir) / "eval_data"
+# ── Directory layout ─────────────────────────────────────────────────────────
+def _resolve_dataset_path(project_dir: Path, filename: str) -> Path:
+    if not _SLUG_RE.match(filename):
+        raise ValueError(f"not a valid dataset filename: {filename!r}")
+    return Path(project_dir) / "eval_data" / filename

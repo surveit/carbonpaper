@@ -4,16 +4,14 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
-import app.web.routers.evals as evals_router
 from app.core.errors import EvalNotScorableError
 from app.main import app
 from app.models import parse_stage, EvalConfig, ExpectedOutput, TableRef
 from app.models.schema import TableSchema
 from app.models.stages.input_data import FileFormat
 from app.evals.runner import run_eval
-from app.evals.store import load_eval_run, save_eval_config
+from app.evals.store import load_eval_run, save_dataset_upload, save_eval_config
 from app.services.versioning import WorkflowVersion
-from app.services import workspace
 from conftest import QUEUE_COLUMNS
 
 def _load(tmp_path):
@@ -54,8 +52,8 @@ _CLASSIFY = {
 
 
 @pytest.fixture
-def project(tmp_path):
-    demo = tmp_path / "demo"
+def project(tmp_path, projects_root):
+    demo = projects_root / "demo"
     demo.mkdir()
     WorkflowVersion(
         id="demo/v1", version_id="v1", created_at="2026-07-10T00:00:00",
@@ -63,15 +61,14 @@ def project(tmp_path):
         stages=[parse_stage(_load(tmp_path)), parse_stage(_CLASSIFY)],
     ).save()
 
-    data = demo / "eval_data"
-    data.mkdir()
     # score>=0 → classify says pos; expected label disagrees only on doc c (score 2).
-    pd.DataFrame({"doc_id": ["a", "b", "c", "d"], "score": [1, -1, 2, -3],
-                  "label": ["pos", "neg", "neg", "neg"]}).to_csv(data / "cases.csv", index=False)
+    # Written the way an upload writes one, so the path under test is the path in use.
+    dataset = save_dataset_upload(demo, "cases.csv", (
+        b"doc_id,score,label\na,1,pos\nb,-1,neg\nc,2,neg\nd,-3,neg\n"))
     config = EvalConfig(
         id="label_check", project="demo", name="Label check",
         override_stage="load", target_stage="classify",
-        table=TableRef(path="demo/eval_data/cases.csv", format=FileFormat.csv,
+        table=TableRef(path=dataset, format=FileFormat.csv,
                        table_schema=TableSchema(columns=[
                            {"name": "doc_id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True},
                            {"name": "label", "type": "str", "nullable": True}])),
@@ -80,8 +77,8 @@ def project(tmp_path):
 
 
 def test_run_eval_scores_the_pathway(project):
-    repo_root, demo, config = project
-    run = run_eval(demo, config, repo_root)
+    tmp_path, demo, config = project
+    run = run_eval(demo, config)
 
     assert run.status == "scored"
     assert run.workflow_version == "v1"
@@ -93,8 +90,8 @@ def test_run_eval_scores_the_pathway(project):
 
 
 def test_run_eval_writes_a_per_row_result_table(project):
-    repo_root, demo, config = project
-    run = run_eval(demo, config, repo_root)
+    tmp_path, demo, config = project
+    run = run_eval(demo, config)
 
     result = pd.read_parquet(demo / run.result_ref)
     assert list(result["label__actual"]) == ["pos", "neg", "pos", "neg"]
@@ -126,24 +123,24 @@ _QUEUE_REVIEW = {
 
 def test_run_eval_through_a_queue_stage_records_an_error_never_a_score(project):
     """A score here would stand on human decisions nobody made: auto-approval keeps the AI value."""
-    repo_root, demo, _config = project
+    tmp_path, demo, _config = project
     WorkflowVersion(
         id="demo/v-queue", version_id="v-queue", created_at="2026-07-12T00:00:00",
         message="queue pathway", reviewer="test",
-        stages=[parse_stage(_load(repo_root)), parse_stage(_QUEUE_REVIEW)],
+        stages=[parse_stage(_load(tmp_path)), parse_stage(_QUEUE_REVIEW)],
     ).save()
     pd.DataFrame({"doc_id": ["a", "b"], "score": [1, 2], "human_score": [1, 2]}).to_csv(
         demo / "eval_data" / "queue_cases.csv", index=False)
     config = EvalConfig(
         id="queue_check", project="demo", name="Queue check",
         override_stage="load", target_stage="review",
-        table=TableRef(path="demo/eval_data/queue_cases.csv", format=FileFormat.csv,
+        table=TableRef(path="eval_data/queue_cases.csv", format=FileFormat.csv,
                        table_schema=TableSchema(columns=[
                            {"name": "doc_id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True},
                            {"name": "human_score", "type": "int", "nullable": True}])),
         expected_outputs=[ExpectedOutput(output_column="human_score", metric="exact")])
 
-    run = run_eval(demo, config, repo_root, version_id="v-queue")
+    run = run_eval(demo, config, version_id="v-queue")
 
     assert run.settings.can_score_declaratively is True   # the pathway IS row-alignable
     assert run.settings.blocking_stages == []
@@ -153,94 +150,88 @@ def test_run_eval_through_a_queue_stage_records_an_error_never_a_score(project):
 
 
 def test_run_eval_raises_when_no_dataset(project):
-    repo_root, demo, config = project
+    tmp_path, demo, config = project
     config = config.model_copy(update={"table": None})
     with pytest.raises(EvalNotScorableError, match="no dataset"):
-        run_eval(demo, config, repo_root)
+        run_eval(demo, config)
 
 
 def test_run_eval_raises_when_incompatible(project):
-    repo_root, demo, config = project
+    tmp_path, demo, config = project
     config = config.model_copy(update={"target_stage": "nonexistent"})
     with pytest.raises(EvalNotScorableError, match="incompatible"):
-        run_eval(demo, config, repo_root)
+        run_eval(demo, config)
 
 
 def test_run_eval_scores_an_explicit_unpublished_version(project):
-    repo_root, demo, config = project
+    tmp_path, demo, config = project
     WorkflowVersion(
         id="demo/v2-draft", version_id="v2-draft", created_at="2026-07-11T00:00:00",
         message="agent draft", reviewer="agent",
-        stages=[parse_stage(_load(repo_root)), parse_stage(_CLASSIFY)],
+        stages=[parse_stage(_load(tmp_path)), parse_stage(_CLASSIFY)],
         published=False,
     ).save()
-    run = run_eval(demo, config, repo_root, version_id="v2-draft")
+    run = run_eval(demo, config, version_id="v2-draft")
     assert run.status == "scored"
     assert run.workflow_version == "v2-draft"
 
 
 def test_run_eval_none_version_id_resolves_to_newest_overall(project):
-    repo_root, demo, config = project
+    tmp_path, demo, config = project
     WorkflowVersion(
         id="demo/v2-draft", version_id="v2-draft", created_at="2026-07-11T00:00:00",
         message="agent draft", reviewer="agent",
-        stages=[parse_stage(_load(repo_root)), parse_stage(_CLASSIFY)],
+        stages=[parse_stage(_load(tmp_path)), parse_stage(_CLASSIFY)],
         published=False,
     ).save()
-    run = run_eval(demo, config, repo_root)
+    run = run_eval(demo, config)
     assert run.workflow_version == "v2-draft"
 
 
 def test_run_eval_raises_file_not_found_when_selected_version_does_not_exist(project):
-    repo_root, demo, config = project
+    tmp_path, demo, config = project
     with pytest.raises(FileNotFoundError):
-        run_eval(demo, config, repo_root, version_id="nonexistent")
+        run_eval(demo, config, version_id="nonexistent")
 
 
-def test_run_eval_raises_when_no_versions_exist_at_all(tmp_path):
-    demo = tmp_path / "demo2"
+def test_run_eval_raises_when_no_versions_exist_at_all(projects_root):
+    demo = projects_root / "demo2"
     demo.mkdir()
     config = EvalConfig(
         id="label_check", project="demo2", name="Label check",
         override_stage="load", target_stage="classify",
         table=None, expected_outputs=[ExpectedOutput(output_column="label", metric="exact")])
     with pytest.raises(EvalNotScorableError, match="no workflow version"):
-        run_eval(demo, config, tmp_path)
+        run_eval(demo, config)
 
 
-def test_trigger_route_runs_and_redirects_to_the_run(project, monkeypatch):
-    repo_root, demo, config = project
+def test_trigger_route_runs_and_redirects_to_the_run(project):
+    tmp_path, demo, config = project
     save_eval_config(demo, config)
-    workspace.set_projects_dir(repo_root)
-    monkeypatch.setattr(evals_router, "REPO_ROOT", repo_root)
 
     r = TestClient(app).post("/project/demo/evals/label_check/run", follow_redirects=False)
     assert r.status_code == 303
     assert "/project/demo/evals/label_check/runs/" in r.headers["location"]
 
 
-def test_trigger_route_400s_when_not_runnable(project, monkeypatch):
-    repo_root, demo, config = project
+def test_trigger_route_400s_when_not_runnable(project):
+    tmp_path, demo, config = project
     save_eval_config(demo, config.model_copy(update={"table": None}))
-    workspace.set_projects_dir(repo_root)
-    monkeypatch.setattr(evals_router, "REPO_ROOT", repo_root)
 
     r = TestClient(app).post("/project/demo/evals/label_check/run", follow_redirects=False)
     assert r.status_code == 400
     assert "no dataset" in r.json()["detail"]
 
 
-def test_trigger_route_scores_an_explicitly_selected_unpublished_version(project, monkeypatch):
-    repo_root, demo, config = project
+def test_trigger_route_scores_an_explicitly_selected_unpublished_version(project):
+    tmp_path, demo, config = project
     save_eval_config(demo, config)
     WorkflowVersion(
         id="demo/v2-draft", version_id="v2-draft", created_at="2026-07-11T00:00:00",
         message="agent draft", reviewer="agent",
-        stages=[parse_stage(_load(repo_root)), parse_stage(_CLASSIFY)],
+        stages=[parse_stage(_load(tmp_path)), parse_stage(_CLASSIFY)],
         published=False,
     ).save()
-    workspace.set_projects_dir(repo_root)
-    monkeypatch.setattr(evals_router, "REPO_ROOT", repo_root)
 
     r = TestClient(app).post(
         "/project/demo/evals/label_check/run",
@@ -250,11 +241,9 @@ def test_trigger_route_scores_an_explicitly_selected_unpublished_version(project
     assert load_eval_run(demo, run_id).workflow_version == "v2-draft"
 
 
-def test_trigger_route_404s_when_selected_version_does_not_exist(project, monkeypatch):
-    repo_root, demo, config = project
+def test_trigger_route_404s_when_selected_version_does_not_exist(project):
+    tmp_path, demo, config = project
     save_eval_config(demo, config)
-    workspace.set_projects_dir(repo_root)
-    monkeypatch.setattr(evals_router, "REPO_ROOT", repo_root)
 
     r = TestClient(app).post(
         "/project/demo/evals/label_check/run",

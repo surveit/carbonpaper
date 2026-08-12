@@ -63,7 +63,7 @@ _TARGET = {
 
 
 @pytest.fixture(autouse=True)
-def demo_project(tmp_path, monkeypatch):
+def demo_project(tmp_path):
     demo = tmp_path / "demo"
     compiled = demo / "compiled"
     compiled.mkdir(parents=True)
@@ -71,7 +71,6 @@ def demo_project(tmp_path, monkeypatch):
     (compiled / "02_classify.json").write_text(json.dumps(_TARGET), encoding="utf-8")
 
     workspace.set_projects_dir(tmp_path)
-    monkeypatch.setattr(evals_router, "REPO_ROOT", tmp_path, raising=False)
 
     # The eval dataset: the override stage's output columns + the checked column.
     data_dir = demo / "eval_data"
@@ -79,7 +78,7 @@ def demo_project(tmp_path, monkeypatch):
     pd.DataFrame({"doc_id": ["d1", "d2"], "text": ["a", "b"],
                   "label": ["x", "y"]}).to_csv(data_dir / "cases.csv", index=False)
     dataset = TableRef(
-        path="demo/eval_data/cases.csv", format=FileFormat.csv,
+        path="eval_data/cases.csv", format=FileFormat.csv,
         table_schema=TableSchema(columns=[
             {"name": "doc_id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True},
             {"name": "label", "type": "str", "nullable": True}]),

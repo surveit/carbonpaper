@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pandas as pd
 import pytest
 
 from app.models import EvalConfig, ExpectedOutput, ScoringMetric, TableRef, parse_stage
 from app.models.schema import TableSchema
 from app.models.stages.input_data import FileFormat
+from app.evals.store import save_dataset_upload
 from app.services.project import write_eval_config
 from app.services.versioning import WorkflowVersion
 from app.tools.eval_runs import run_eval
@@ -47,21 +47,21 @@ _CLASSIFY = {
 
 
 @pytest.fixture
-def demo(projects_root: Path, tmp_path: Path) -> str:
-    (projects_root / "demo").mkdir(parents=True, exist_ok=True)
+def demo(projects_root: Path) -> str:
+    project_dir = projects_root / "demo"
+    project_dir.mkdir(parents=True, exist_ok=True)
     WorkflowVersion(
         id="demo/v1", version_id="v1", created_at="2026-07-10T00:00:00",
         message="seed", reviewer="test",
         stages=[parse_stage(_LOAD), parse_stage(_CLASSIFY)],
     ).save()
-    cases = tmp_path / "cases.csv"
     # classify says pos for score >= 0, so the expected label disagrees on doc c.
-    pd.DataFrame({"doc_id": ["a", "b", "c", "d"], "score": [1, -1, 2, -3],
-                  "label": ["pos", "neg", "neg", "neg"]}).to_csv(cases, index=False)
+    cases = save_dataset_upload(project_dir, "cases.csv", (
+        b"doc_id,score,label\na,1,pos\nb,-1,neg\nc,2,neg\nd,-3,neg\n"))
     write_eval_config("demo", EvalConfig(
         id="label_check", project="demo", name="Label check",
         override_stage="load", target_stage="classify",
-        table=TableRef(path=str(cases), format=FileFormat.csv,
+        table=TableRef(path=cases, format=FileFormat.csv,
                        table_schema=TableSchema.model_validate({"columns": [
                            {"name": "doc_id", "type": "str", "nullable": True},
                            {"name": "score", "type": "int", "nullable": True},

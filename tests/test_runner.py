@@ -507,7 +507,7 @@ def test_run_subset_surfaces_the_real_row_failure_message(tmp_path, monkeypatch)
     with pytest.raises(SubsetRunError) as exc_info:
         run_subset(
             workflow, injected_outputs=injected_outputs, stage_ids=["score"],
-            run_dir=tmp_path / "runs" / "subset1", repo_root=tmp_path,
+            run_dir=tmp_path / "runs" / "subset1",
         )
 
     message = str(exc_info.value)
@@ -546,7 +546,7 @@ def test_run_subset_preserves_partial_work_in_the_manifest_on_a_mid_frontier_err
     with pytest.raises(SubsetRunError):
         run_subset(
             workflow, injected_outputs=injected, stage_ids=["clean", "score"],
-            run_dir=run_dir, repo_root=tmp_path)
+            run_dir=run_dir)
 
     manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
     records = {r["stage_id"]: r for r in manifest["stage_records"]}

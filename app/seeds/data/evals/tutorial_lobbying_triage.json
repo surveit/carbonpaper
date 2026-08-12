@@ -8,7 +8,7 @@
     {"output_column": "alignment", "metric": "exact"}
   ],
   "table": {
-    "path": "app/seeds/data/evals/tutorial_alignment_hard.csv",
+    "path": "eval_data/tutorial_alignment_hard.csv",
     "format": "csv",
     "table_schema": {
       "columns": [

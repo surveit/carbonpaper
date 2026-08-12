@@ -46,7 +46,7 @@ def _run(
     return run_subset(
         Workflow(stages=stages), injected_outputs={},
         stage_ids=[s.id for s in stages], run_dir=tmp_path / "runs" / name,
-        repo_root=tmp_path, params=RunParameters(limits=limits or {}),
+        params=RunParameters(limits=limits or {}),
     )
 
 

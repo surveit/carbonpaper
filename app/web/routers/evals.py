@@ -13,6 +13,7 @@ from app.core.errors import EvalNotScorableError
 from app.core.frames import list_rows
 from app.models import EvalConfig, EvalRun, WorkflowNotFormed
 from app.evals.compatibility import CompatibilityReport, validate_eval_compatibility
+from app.evals.dataset import read_table_ref
 from app.evals.runner import run_eval
 from app.evals.store import (
     eval_status,
@@ -24,8 +25,7 @@ from app.evals.store import (
 )
 from app.services.versioning import list_versions
 from app.web.breadcrumbs import build_eval_crumbs, build_eval_run_crumbs
-from app.web.config import projects_dir, REPO_ROOT, templates
-from app.core.frames import read_frame_file
+from app.web.config import projects_dir, templates
 from app.web.config import EVENT_TAIL
 from app.web.eval_run_view import (
     build_eval_rows,
@@ -119,12 +119,12 @@ def _render_eval_detail(
             "runs": build_eval_run_rows(project, runs),
             "runs_error": runs_error,
             "versions": list_versions(project_dir),
-            **_read_eval_dataset_preview(config),
+            **_read_eval_dataset_preview(project, config),
         },
     )
 
 
-def _read_eval_dataset_preview(config: EvalConfig) -> dict[str, Any]:
+def _read_eval_dataset_preview(project: str, config: EvalConfig) -> dict[str, Any]:
     if config.table is None:
         return {"has_eval_dataset": False, "dataset_columns": [], "dataset_rows": [],
                 "dataset_error": None, "dataset_capped": False,
@@ -134,10 +134,10 @@ def _read_eval_dataset_preview(config: EvalConfig) -> dict[str, Any]:
     error: str | None = None
     capped = False
     try:
-        frame = read_frame_file(REPO_ROOT / config.table.path)
+        frame = read_table_ref(project, config.table)
         capped = len(frame) > DATASET_PREVIEW_ROWS
         rows = list_rows(render_frame_as_text(frame.head(DATASET_PREVIEW_ROWS)))
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, EvalNotScorableError) as exc:
         error = str(exc)
     return {"has_eval_dataset": True, "dataset_columns": columns, "dataset_rows": rows,
             "dataset_error": error, "dataset_capped": capped,
@@ -177,7 +177,7 @@ async def eval_run_detail(request: Request, project: str, eval_id: str, run_id: 
             # vetoed run and on one that errored before scoring; the pane then
             # states which of those it was rather than showing an empty table.
             "rows": (
-                build_eval_rows(project_dir / run.result_ref, config.table, REPO_ROOT)
+                build_eval_rows(project_dir / run.result_ref, config.table, project)
                 if run.result_ref else None
             ),
             "event_tail": EVENT_TAIL,
@@ -251,7 +251,7 @@ async def trigger_eval_run(request: Request, project: str, eval_id: str):
     if version_id is not None and not isinstance(version_id, str):
         raise HTTPException(status_code=400, detail="version_id must be a string")
     try:
-        run = run_eval(project_dir, config, REPO_ROOT, version_id=version_id)
+        run = run_eval(project_dir, config, version_id=version_id)
     except EvalNotScorableError as exc:
         return JSONResponse({"detail": str(exc)}, status_code=400)
     except FileNotFoundError as exc:
