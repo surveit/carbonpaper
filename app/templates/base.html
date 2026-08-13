@@ -20,7 +20,7 @@
         <a href="/chat" class="back-link header-right">Chats</a>
         <a href="/admin" class="back-link">Admin</a>
     </header>
-    {% include "_demo_notice.html" %}
+    {% if serves_an_open_demo() %}{% include "_demo_notice.html" %}{% endif %}
     <main>
         {% block content %}{% endblock %}
     </main>

@@ -106,6 +106,17 @@ def plain_value(v: object) -> str:
     return str(v.value) if isinstance(v, Enum) else ("" if v is None else str(v))
 
 
+def serves_an_open_demo() -> bool:
+    """True on Fly, which is the only place this app is a shared public deploy."""
+    return bool(os.environ.get("FLY_APP_NAME"))
+
+
+# A function, not its value: read at import time it would freeze, and the whole
+# point is that one process either is the public deploy or is not. Fly sets
+# FLY_APP_NAME on every machine, so nothing has to be remembered in fly.toml —
+# a deploy that forgot a flag would be a public app quietly claiming privacy.
+templates.env.globals["serves_an_open_demo"] = serves_an_open_demo
+
 templates.env.filters["friendly_time"] = friendly_time
 templates.env.filters["relative_time"] = relative_time
 templates.env.filters["friendly_duration"] = friendly_duration
