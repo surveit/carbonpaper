@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 
 import app
-from app.agents.tutorial.prompt import TUTORIAL_SYSTEM_PROMPT
+from app.agents.tutorial.prompt import TUTORIAL_SYSTEM_PROMPT, _WORKED_BEAT
 from app.core.run_status import RunStatus
 from app.models.run_manifest import QueueStats
 from app.runtime.manifest import RunManifest
@@ -23,13 +23,13 @@ from app.tools.tutorial import _FIXTURE, TutorialAgentReference, TutorialContext
 _IDENTIFIER = re.compile(r"[a-z_][a-z0-9_]*")
 _TEMPLATES = Path(app.__file__).resolve().parent / "templates"
 
-# Labels beat 4 sends the reader to click. Each must be a string the app renders.
+# Labels the tour sends the reader to click. Each must be a string the app renders.
 _NAMED_CONTROLS = (
+    "Resume run",
     "View lineage",
     "Export review packet",
     "Example behavior",
     "Generate examples",
-    "Edit with agent",
 )
 
 
@@ -106,17 +106,20 @@ def test_the_invented_data_admission_is_a_hard_rule_too() -> None:
     assert '"Synthetic"' in rules and "does not discharge this rule" in rules
 
 
-def test_the_run_beat_hands_over_exactly_one_link() -> None:
-    """Three links at the end of a turn is three decisions; the run is the one to make."""
+def test_the_run_beat_hands_over_exactly_one_link_and_it_is_the_queues() -> None:
+    """The turn's action is deciding the flagged filings, so it ends where that is done."""
     beat = _flat(_beat(2))
 
     # Stated once, in the hard rules — the beat used to repeat the argument.
-    assert "Beat 2 ends on ONE link, the run's." in _flat(TUTORIAL_SYSTEM_PROMPT)
-    # The one URL the tour joins, and only from two things a tool returned.
+    assert "Beat 2 ends on ONE link, the queue's." in _flat(TUTORIAL_SYSTEM_PROMPT)
+    assert "ONE LINK, AND IT IS THE QUEUE'S" in beat
+    assert "the run's page is not offered in this turn" in beat
+    # Both URLs it joins come from what a tool returned, and nothing else.
     assert "`runs_url_prefix` with that `run_id` on the end" in beat
-    # The other two pages are not lost — beat 4 is where they are offered.
-    assert "the first beat that may hand over `workflow_url`" in _flat(_beat(4))
-    assert "guide_url" in _flat(_beat(4))
+    # The run's own page and the two others are not lost — beat 3 is where they land.
+    assert "the first beat that may hand over the run's own page, `workflow_url`" in _flat(
+        _beat(3))
+    assert "guide_url" in _flat(_beat(3))
 
 
 def test_seeding_and_running_are_one_turn_with_no_boundary_to_ask_at() -> None:
@@ -149,9 +152,94 @@ def test_the_seed_and_run_beat_puts_no_question_to_the_reader() -> None:
 def test_the_run_beat_ends_by_handing_over_rather_than_offering_a_menu() -> None:
     beat = _flat(_beat(2))
 
-    assert "sending them to the run and offering to answer questions" in beat
     assert "No menu" in beat and "no question" in beat
-    assert "The page is the thing now, not you." in beat
+    # The live tour signed off with this line, copied straight from the worked example.
+    assert 'never "let me know if you have any questions"' in beat
+    assert "The queue is the thing now, not you." in beat
+
+
+def test_the_polling_between_a_sleep_and_a_check_is_banned_in_the_words_it_took() -> None:
+    """A rule with no example lost to an example with no rule: the live run narrated twice."""
+    beat = _flat(_beat(2))
+
+    assert "WRITE NOTHING BETWEEN THOSE CALLS" in beat
+    for line in ('"still running"', '"let me check again"', '"checking again"'):
+        assert line in beat, line
+    assert "The tool calls arriving ARE the progress indicator" in beat
+    assert (
+        'you sleep again and check again, WRITING NOTHING between the two calls'
+    ) in _flat(TUTORIAL_SYSTEM_PROMPT)
+
+
+def test_the_close_never_leads_with_the_manifest_status_token() -> None:
+    """`awaiting_review` is a stored value; read cold at a reader it looks like an error code."""
+    beat = _flat(_beat(2))
+
+    assert "NEVER OPEN ON THE RAW STATUS" in beat
+    assert "a reader meeting it first reads it as an error code" in beat
+    assert "never lead with the status word itself" in _flat(TUTORIAL_SYSTEM_PROMPT).lower()
+
+
+# What the merged close owes the reader, in the order it owes it. The beat states the
+# rule and the worked example shows it, and they are read together — so both carry all
+# five. The two used to be separate turns: one too terse to say why, one twice as long.
+_CLOSING_CLAUSES = (
+    "proposed a judgement on",
+    "asking government for the opposite of what the client promised in public",
+    "stopped there on purpose",
+    "not published on a model's say-so",
+    "are waiting for",
+    "keep or change the model's label",
+    "resume run",
+    "publishes the report carrying",
+)
+
+
+def test_the_close_explains_the_pause_and_what_it_asks_of_them() -> None:
+    for source in (_beat(2), _WORKED_BEAT):
+        text = _flat(source).lower()
+        positions = [text.find(clause) for clause in _CLOSING_CLAUSES]
+
+        assert -1 not in positions, [
+            clause for clause, at in zip(_CLOSING_CLAUSES, positions) if at < 0
+        ]
+        assert positions == sorted(positions), _CLOSING_CLAUSES
+
+
+def test_the_one_count_the_close_may_state_is_read_off_the_manifest() -> None:
+    """The verbose turn leaked `items_pending: 2 on the review_contradictions stage`."""
+    beat = _flat(_beat(2))
+
+    assert "ONE clause, because it says how much work" in beat
+    assert "`items_pending`" in beat and "`human_review_queue_stats`" in beat
+    assert 'Write it as "two filings are waiting for you"' in beat
+    assert "never the field name, never the stage id" in beat
+
+
+def test_the_close_asks_for_their_name_once_and_does_not_dwell_on_what_it_cannot_do() -> None:
+    beat = _flat(_beat(2))
+
+    assert "the name said ONCE in the whole turn, not in every sentence" in beat
+    assert "One short clause saying the deciding is theirs and not yours is the most" in beat
+
+
+def test_the_worked_beat_models_the_silence_and_the_close_it_asks_for() -> None:
+    """The example is what the model copies, so both faulty closes are shown AS failures."""
+    worked = _flat(_WORKED_BEAT)
+
+    assert "and not one word written between them" in worked
+    # The terse close is quoted so the model meets the exact lines it produced.
+    assert "A close that fails" in worked
+    assert "Still running — let me check again." in worked
+    assert "Status: awaiting_review." in worked
+    assert "the third hands the reader a manifest value that reads like an error code" in worked
+    # …and so is the verbose one, which said the same thing at twice the length.
+    assert "The other way this close fails is by saying all of it twice as long" in worked
+    assert "`items_pending: 2 on the review_contradictions stage`" in worked
+    # The passing example ends on the queue's link, with no filler under it.
+    passing = worked[: worked.index("A close that fails")]
+    assert "Let me know if you have any questions." not in passing
+    assert "<runs_url_prefix><run_id>/queue/<queue stage id>" in passing
 
 
 def test_the_announced_wait_is_the_one_duration_the_rules_exempt() -> None:
@@ -163,47 +251,40 @@ def test_the_announced_wait_is_the_one_duration_the_rules_exempt() -> None:
     assert "about-a-minute expectation" in _flat(TUTORIAL_SYSTEM_PROMPT)
 
 
-def test_the_run_beat_orients_the_link_without_reciting_the_data() -> None:
-    """The close says what the page shows and what to poke; the page keeps its numbers."""
+def test_the_run_beat_recites_none_of_the_data_the_pages_hold() -> None:
     beat = _flat(_beat(2))
 
-    assert "orientation" in beat
-    assert "paused for a human to review the contradictions" in beat
-    assert "clicking a stage opens the rows it produced" in beat
-    assert "the flagged filings wait at the review step" in beat
     assert "no row counts, no per-stage account" in beat
-    assert "no reciting numbers the page already holds" in beat
+    assert "no reciting numbers the pages already hold" in beat
 
 
 def test_every_control_the_tour_sends_them_to_click_is_one_the_app_renders() -> None:
     """A button named here that does not exist sends the reader looking for nothing."""
     rendered = _rendered_templates()
-    beat = _flat(_beat(4))
+    script = _flat(TUTORIAL_SYSTEM_PROMPT)
 
     for label in _NAMED_CONTROLS:
-        assert label in beat, label
+        assert label in script, label
         assert label in rendered, f"{label} is named in the tour but rendered nowhere"
 
 
-def test_the_run_stopping_for_a_reviewer_is_a_beat_of_its_own() -> None:
-    """awaiting_review is the workflow working; a tour that reads it as an error stops there."""
-    beat = _flat(_beat(3))
+def test_the_halt_is_explained_in_the_turn_that_hits_it_not_a_turn_later() -> None:
+    """It used to wait for the reader to say "looks good" before saying what was waiting."""
+    beat = _flat(_beat(2))
 
-    assert "`awaiting_review` is the expected ending" in _flat(_beat(2))
-    assert "queue" in beat
-
-
-def test_the_tour_says_plainly_that_the_review_is_not_its_to_do() -> None:
-    beat = _flat(_beat(3))
-
-    assert "cannot decide a card or resume the run" in beat
+    assert "`awaiting_review` is the expected ending" in beat
+    assert "WHEN IT SETTLES, IN THIS SAME TURN, SAY WHAT IS WAITING FOR THEM" in beat
+    assert "do not stop on it and wait to be asked what it means" in beat
+    # The explore beat is what the reader's reply reaches, and only once they resumed.
+    assert "`ok` means they decided the cards and resumed it" in beat
+    assert "go on to beat 3" in beat
 
 
 def test_the_queue_link_is_joined_only_from_what_a_tool_returned() -> None:
     """The second URL the tour builds; a remembered path here is an invented page."""
-    beat = _flat(_beat(3))
+    beat = _flat(_beat(2))
 
-    assert "the run's page, then `/queue/`, then the queue stage's id" in beat
+    assert "that page, then `/queue/`, then the queue stage's id" in beat
     assert "whose `type` is `human_review_queue`" in beat
 
 
@@ -213,35 +294,70 @@ def _rendered_templates() -> str:
     )
 
 
-def test_the_script_walks_five_beats() -> None:
-    """The run halting for a reviewer is a beat of its own, between the run and the list."""
+def test_the_script_walks_four_beats() -> None:
+    """The halt is no longer a beat of its own: it closes the turn that hit it."""
     numbered = [int(n) for n in re.findall(r"\n(\d+)\. [A-Z]", TUTORIAL_SYSTEM_PROMPT)]
 
-    assert numbered == [1, 2, 3, 4, 5]
-    assert "Walk these five beats in order." in TUTORIAL_SYSTEM_PROMPT
+    assert numbered == [1, 2, 3, 4]
+    assert "Walk these four beats in order." in TUTORIAL_SYSTEM_PROMPT
 
 
 def test_the_beat_after_the_run_hands_the_list_over_rather_than_offering_to() -> None:
     """The round trip this fixes: a reader told to look around had to ask again for the list."""
-    beat = _flat(_beat(4))
+    beat = _flat(_beat(3))
 
     assert "Not two doors and a question" in beat
     assert "these, and only these, a line each" in beat
-    # Their own workflow is one line at the end of the list, not a door competing with it.
-    assert "Close on their own workflow, one line" in beat
 
 
-def test_editing_is_reached_by_a_link_and_the_mcp_route_needs_no_terminal() -> None:
-    """A reader told to open a terminal reads this product as their developer's."""
-    beat = _flat(_beat(5))
+def test_the_explore_beat_ends_on_one_call_to_action_and_not_a_farewell() -> None:
+    beat = _flat(_beat(3))
 
-    # The in-app route leads, and it is a link a tool returned.
-    assert "HAND OVER `edit_chat_url`" in beat
-    assert beat.index("edit_chat_url") < beat.index("mcp_command")
-    assert "ask that assistant to add this workspace as an MCP server" in beat
-    assert "not a terminal they have to open" in beat
-    # The in-app control is still named where the reader is shown around.
-    assert '"Edit with agent"' in _flat(_beat(4))
+    assert "THEN CLOSE ON THE ONE THING TO DO NEXT: start a project of their own" in beat
+    assert "no menu, and nothing about the tour's project being theirs too" in beat
+    assert "Offer it the two ways beat 4 writes, in beat 4's words" in beat
+
+
+def test_the_eval_is_the_fourth_thing_to_explore_and_names_no_figure_of_its_own() -> None:
+    """`eval_url` is a tool's; the eval's size and score are the page's to state."""
+    beat = _flat(_beat(3))
+
+    assert "Hand over `eval_url`, which create_tutorial_project returned" in beat
+    assert "carrying the label a person settled from the methodology BEFORE the workflow ran" in beat
+    assert "It scores one column — the judgement itself — as an exact match" in beat
+    assert "name no count and no accuracy from here" in beat
+    # (e), the uncapped re-run, is gone: nothing in the tour spends on model calls now.
+    assert "uncapped" not in _flat(TUTORIAL_SYSTEM_PROMPT).lower()
+    assert "Edit with agent" not in beat
+
+
+def test_the_call_to_action_is_a_new_project_offered_exactly_two_ways() -> None:
+    """The reader asked to start their OWN; the tour used to send them to the tour's."""
+    beat = _flat(_beat(4))
+
+    assert "`new_project_chat_url`, exactly as create_tutorial_project returned it" in beat
+    assert "bound to NO project" in beat
+    assert "it creates the project from what they wrote and writes the stages" in beat
+    assert "Do not send them to any page of the tutorial project for this" in beat
+    # The paste-into-your-own-assistant route leads; the tour's own project is not a door.
+    assert beat.index("mcp_ask_your_assistant") < beat.index("new_project_chat_url")
+    assert beat.index("new_project_chat_url") < beat.index("edit_chat_url")
+    assert "not a third door on the call to action" in beat
+
+
+def test_the_mcp_route_promises_no_connect_and_author_in_one_breath() -> None:
+    """Claude Code loads a newly added server's tools at session start, not on the spot."""
+    beat = _flat(_beat(4))
+
+    assert "It is a message they PASTE into that chat" in beat
+    assert "Its tools arrive when that session restarts" in beat
+    assert (
+        "never tell them an assistant can connect and start authoring in the same breath, "
+        "because it cannot"
+    ) in beat
+    # The terminal form is the fallback, offered only on request.
+    assert beat.index("mcp_ask_your_assistant") < beat.index("mcp_command")
+    assert "offer it only if they ask" in beat
     assert "There is no button for this in the app" not in _flat(TUTORIAL_SYSTEM_PROMPT)
 
 

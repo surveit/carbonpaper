@@ -217,6 +217,20 @@ def test_happy_path_renders_items_with_fingerprint_prior_decision_and_counts(tmp
     assert 'placeholder="Include any reasoning or citations for your decision"' in html
 
 
+def test_the_stage_panel_says_what_the_pause_is_for_not_what_is_blocked(tmp_path, monkeypatch):
+    """The halt is a designed pause with something to do, not an obstruction report."""
+    _project_dir, run_id, _run_dir, _snapshot, _fingerprints = _build_and_halt(tmp_path, monkeypatch)
+
+    html = TestClient(app).get(
+        f"/project/{PROJECT}/runs/{run_id}/stage/review/partial").text
+
+    assert "A model proposed a judgement on <strong>" in html
+    assert "the run paused here for a person to decide them" in html
+    # The consequence is reframed, never hidden: nothing downstream runs until then.
+    assert "Nothing downstream runs until each one is kept or changed" in html
+    assert "queue is cleared" not in html
+
+
 # ── 2. Route-level refusals: 404 on the stage, 400 on the payload ───────────
 
 

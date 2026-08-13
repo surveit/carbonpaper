@@ -143,12 +143,15 @@ def test_the_handoff_is_built_from_this_workspaces_base_url() -> None:
     )
 
 
-def test_the_headline_handoff_asks_for_no_terminal() -> None:
+def test_the_headline_handoff_asks_for_no_terminal_and_promises_no_instant_tools() -> None:
     """The objection this answers: a reader who has an assistant open needs no CLI."""
     asked = _seed_a_tour()["mcp_ask_your_assistant"]
 
     assert "claude mcp add" not in asked and "install" not in asked
     assert asked.startswith("Add the MCP server at")
+    # A newly added server's tools load at session start, so the message cannot promise
+    # "then use its tools" in the same breath — it asks for the restart instead.
+    assert "load when the session restarts" in asked
 
 
 def test_the_seeded_payload_carries_a_chat_the_editing_agent_is_already_waiting_in() -> None:
@@ -159,11 +162,35 @@ def test_the_seeded_payload_carries_a_chat_the_editing_agent_is_already_waiting_
     seeded = _seed_a_tour()
 
     minted = {s["session_id"] for s in store.list_sessions()} - before
-    assert len(minted) == 1, "one tour, one editing session"
-    sid = minted.pop()
-    assert seeded["edit_chat_url"] == f"{_BASE_URL}chat/{sid}"
+    # Two: this project's editing chat, and the unbound one a NEW project starts in.
+    assert len(minted) == 2, "one tour, one editing session per handoff"
+    for url in (seeded["edit_chat_url"], seeded["new_project_chat_url"]):
+        sid = url.rsplit("/", 1)[-1]
+        assert sid in minted
+        assert url == f"{_BASE_URL}chat/{sid}"
+        # The claim the tour makes when it hands the URL over: it opens.
+        assert TestClient(fastapi_app).get(f"/chat/{sid}").status_code == 200
+
+
+def test_the_new_project_chat_is_bound_to_no_project_so_the_agent_makes_one() -> None:
+    """A reader starting their own must not land in the tour's project."""
+    seeded = _seed_a_tour()
+
+    session = open_session_store().load(
+        seeded["new_project_chat_url"].rsplit("/", 1)[-1])
+
+    assert session["agent_id"] == "editing"
+    assert session["context"] == {}
+
+
+def test_the_eval_url_addresses_the_eval_the_tour_just_seeded() -> None:
+    seeded = _seed_a_tour()
+
+    path = f"/project/{seeded['project']['id']}/evals/{seeded['eval_id']}"
+
+    assert seeded["eval_url"] == _BASE_URL.rstrip("/") + path
     # The claim the tour makes when it hands the URL over: it opens.
-    assert TestClient(fastapi_app).get(f"/chat/{sid}").status_code == 200
+    assert TestClient(fastapi_app).get(path).status_code == 200
 
 
 def test_the_link_and_the_button_open_the_same_conversation() -> None:

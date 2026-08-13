@@ -254,7 +254,7 @@ def _build_review_cta(
         primary=RunAction(label=_describe_review(manifest, first),
                           url=f"{base}/queue/{first}"),
         secondary=secondary,
-        aside=_describe_blocked(manifest, len(halted)),
+        aside=_describe_what_the_review_releases(manifest, len(halted)),
     )
 
 
@@ -290,12 +290,15 @@ def _describe_review(manifest: Mapping[str, Any], stage_id: str) -> str:
     return f"👤 Review {pending} item{'' if pending == 1 else 's'} in {stage_id} →"
 
 
-def _describe_blocked(manifest: Mapping[str, Any], halted_count: int) -> str | None:
+def _describe_what_the_review_releases(
+    manifest: Mapping[str, Any], halted_count: int
+) -> str | None:
     waiting = count_stage_status(manifest, StageStatus.PENDING)
     if not waiting:
         return None
-    these = "this" if halted_count == 1 else "these"
-    return f"{waiting} stage{'' if waiting == 1 else 's'} waiting on {these}"
+    subject = "this is" if halted_count == 1 else "these are"
+    plural = "" if waiting == 1 else "s"
+    return f"{waiting} stage{plural} run{'s' if waiting == 1 else ''} once {subject} decided"
 
 
 def _describe_cache_reuse(manifest: Mapping[str, Any]) -> str:
