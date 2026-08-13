@@ -105,17 +105,18 @@ allowed_importers = ["app.main"]
 # app.services.workspace and app.web re-exports them so routers are unaffected.
 
 [[tool.importlinter.contracts]]
-name = "app.services imported only by cli, web, runtime, evals, compiler, mcp, agents, seeds, tools"
+name = "app.services imported only by cli, web, runtime, evals, compiler, agents, seeds, tools"
 type = "protected"
 protected_modules = ["app.services"]
-allowed_importers = ["app.cli", "app.web", "app.runtime", "app.evals", "app.compiler", "app.mcp", "app.agents", "app.seeds", "app.tools"]
+allowed_importers = ["app.cli", "app.web", "app.runtime", "app.evals", "app.compiler", "app.agents", "app.seeds", "app.tools"]
 # Domain logic the upper layers lean on. As a declared whitelist, a new importer is
 # a deliberate edit, not an accident. (services → compiler is fine — compilation and
 # generation wrap it — which is why app.compiler lists app.services below.) app.cli is
 # an entrypoint, not a layer: `python -m app.cli <project>` runs one workflow and sits
 # above everything here, beside app.main, which is why nothing imports it. app.agents
-# is the hydrated editing agent, a top-level interface like app.web / app.mcp: it reads
-# and edits projects through app.services.stage_edit / app.services.project. app.seeds'
+# is the hydrated editing agent, a top-level interface like app.web: it reads and edits
+# projects through app.services.stage_edit / app.services.project. app.mcp is NOT here —
+# it reaches everything through app.tools, held by its own contract below. app.seeds'
 # capture scripts compose the project export/import seam the same way — never sqlite3,
 # app.core.persistence, or app.core.frames directly.
 
@@ -128,19 +129,19 @@ allowed_importers = ["app.services"]
 # The reusable agent spine (app.core.agent) must not import it.
 
 [[tool.importlinter.contracts]]
-name = "app.runtime imported only by evals, web, mcp"
+name = "app.runtime imported only by evals, web, and three named service seams"
 type = "protected"
 protected_modules = ["app.runtime"]
-allowed_importers = ["app.evals", "app.web", "app.mcp", "app.services.run", "app.services.workflow_test"]
-# The runner is driven by the top-level interfaces: web, evals, and mcp (the glassbox
-# authoring surface, a top-level runtime driver like app.web — its run_stage_tests tool runs a
-# stage's authored tests against its current code). app.core.agent sits below the runtime
-# (llm.py imports app.core.agent.agent.Agent as the reply backend) rather than the other
-# way round, so it is not an importer here. app.services stays out of the runtime EXCEPT
-# the two named run seams: app.services.run (the production run seam — the sole importer of
-# app.runtime.runner, see the contract below) and app.services.workflow_test (the workflow-test
-# seam, which reaches only app.runtime.executor). Every other service module stays runtime-free —
-# status/review helpers must not reach in.
+allowed_importers = ["app.evals", "app.web", "app.services.run", "app.services.workflow_test", "app.services.stage_tests"]
+# The runner is driven by the top-level interfaces: web and evals. app.core.agent sits below
+# the runtime (llm.py imports app.core.agent.agent.Agent as the reply backend) rather than the
+# other way round, so it is not an importer here. app.services stays out of the runtime EXCEPT
+# three named seams: app.services.run (the production run seam — the sole importer of
+# app.runtime.runner, see the contract below), app.services.workflow_test (the workflow-test
+# seam, which reaches only app.runtime.executor), and app.services.stage_tests (running a
+# stage's authored tests outside a run, which both authoring surfaces and the compile page
+# reach through app.tools). Every other service module stays runtime-free — status/review
+# helpers must not reach in.
 
 [[tool.importlinter.contracts]]
 name = "app.runtime.preview imported only by web"
@@ -201,7 +202,10 @@ type = "protected"
 protected_modules = ["app.mcp"]
 allowed_importers = ["app.main"]
 # The MCP surface is a top-level interface like app.web: app.main mounts it,
-# nothing else imports it. It depends only on app.services (+ app.core).
+# nothing else imports it. What it may reach the OTHER way is a whitelist too, but not
+# expressible here — app.models and app.core are open to everything by design, so naming
+# app.mcp's one legal dependency takes an AST test:
+# tests/arch/test_mcp_reaches_the_app_only_through_tools.py.
 
 [[tool.importlinter.contracts]]
 name = "app.agents imported only by the entrypoint"

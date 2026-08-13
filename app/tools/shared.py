@@ -22,6 +22,7 @@ from app.core.frames import collapse_null_forms, convert_cell_to_json_native, li
 from app.core.run_status import StageStatus
 from app.core.source_files import SheetSurvey
 from app.models.column_profile import TableProfile
+from app.models.review_guide import ReviewGuideDraft
 from app.models.terms import Terms
 from app.tools.types import ToolInputSchema
 from app.services import (
@@ -29,13 +30,15 @@ from app.services import (
     generation,
     project as project_service,
     run as run_service,
+    stage_tests as stage_tests_service,
     terms as terms_service,
     uploads,
     workflow_test as workflow_test_service,
     workspace,
 )
 from app.services.errors import FileNotStoredError, WorkflowLoadError
-from app.services.project import Project
+from app.services.project import Project, ProjectListing
+from app.services.versioning import ReviewGuide
 from app.tools.tool_specs import TOOL_SPECS
 
 _PROJECT_ID = Annotated[str, "The project's name."]
@@ -52,6 +55,13 @@ RUN_TOOL_ERRORS = (
     NoWorkflowTestVersionError,
     ValueError,
 )
+
+# Domain failures an authoring tool turns into {ok: False, issues: [...]} — the same
+# refusal channel a validation failure comes back on, which is the one the instructions
+# tell a client to watch. WorkflowLoadError is a stored workflow that does not load;
+# FileNotFoundError is a stage id that is not in the workflow, or a project with no
+# compiled workflow to snapshot.
+STAGE_TOOL_ERRORS = (WorkflowLoadError, FileNotFoundError)
 
 # One sleep's ceiling, kept SHORT because a reader is watching the transcript: each call
 # is a row on their screen, so short sleeps read as a job in progress where one long one
@@ -95,6 +105,46 @@ async def generate_stage_tests(project_id: str, stage_id: str) -> dict[str, Any]
         "poll": "get_project_status",
         "note": "read_stage to see the generated tests once done",
     }
+
+
+def list_projects() -> list[ProjectListing]:
+    return project_service.list_project_listings()
+
+
+def read_stage(project_id: str, stage_id: str) -> str:
+    return project_service.read_stage(project_id, stage_id)
+
+
+def remove_stage(project_id: str, stage_id: str) -> dict[str, Any]:
+    try:
+        result = project_service.remove_stage(project_id, stage_id)
+    except STAGE_TOOL_ERRORS as exc:
+        return {"ok": False, "issues": [str(exc)]}
+    return {"ok": result.ok, "issues": result.issues}
+
+
+def read_review_guide(project_id: str, version_id: str) -> ReviewGuide | None:
+    resolve_existing_project(project_id)
+    return project_service.read_review_guide(project_id, version_id)
+
+
+def write_review_guide(
+    project_id: str, version_id: str, guide: ReviewGuideDraft
+) -> ReviewGuide:
+    resolve_existing_project(project_id)
+    return project_service.write_review_guide(project_id, version_id, guide)
+
+
+def run_stage_tests(project_id: str, stage_id: str | None = None) -> dict[str, Any]:
+    resolve_existing_project(project_id)
+    return stage_tests_service.run_project_stage_tests(project_id, stage_id).model_dump(
+        mode="json")
+
+
+def report_compiler_warnings(project_id: str) -> dict[str, Any]:
+    resolve_existing_project(project_id)
+    report = stage_tests_service.find_project_compiler_warnings(project_id)
+    return {"warnings": [w.model_dump(mode="json") for w in report.warnings]}
 
 
 def read_terms(project_id: str) -> Terms:
@@ -319,6 +369,13 @@ _FUNCTIONS: dict[str, Callable[..., Any]] = {
     "read_terms": read_terms,
     "write_terms": write_terms,
     "get_project_status": get_project_status,
+    "list_projects": list_projects,
+    "read_stage": read_stage,
+    "remove_stage": remove_stage,
+    "read_review_guide": read_review_guide,
+    "write_review_guide": write_review_guide,
+    "run_stage_tests": run_stage_tests,
+    "report_compiler_warnings": report_compiler_warnings,
     "generate_stage_tests": generate_stage_tests,
     "run_workflow": run_workflow,
     "run_workflow_test": run_workflow_test,
@@ -357,6 +414,41 @@ _SCHEMAS: dict[str, ToolInputSchema] = {
         ],
     },
     "get_project_status": {"project_id": _PROJECT_ID},
+    "list_projects": {},
+    "read_stage": {
+        "project_id": _PROJECT_ID,
+        "stage_id": Annotated[str, "The stage's id, as read_workflow_summary shows it."],
+    },
+    "remove_stage": {
+        "project_id": _PROJECT_ID,
+        "stage_id": Annotated[
+            str,
+            "The stage to delete. Refused if another stage still lists it in its inputs.",
+        ],
+    },
+    "read_review_guide": {
+        "project_id": _PROJECT_ID,
+        "version_id": Annotated[str, "The version whose guide to read."],
+    },
+    "write_review_guide": {
+        "project_id": _PROJECT_ID,
+        "version_id": Annotated[
+            str,
+            "The version this guide describes. The guide is validated against THAT "
+            "version's stages.",
+        ],
+        "guide": Annotated[
+            ReviewGuide,
+            "The complete guide: `steps`, each with `title`, `prose` and `stage_ids`, "
+            "plus `unnarrated`. Sent whole every time — it replaces any earlier guide.",
+        ],
+    },
+    "run_stage_tests": {
+        "project_id": _PROJECT_ID,
+        "stage_id": Annotated[
+            str | None, "One stage to scope the run to. Omit to run every stage with tests."],
+    },
+    "report_compiler_warnings": {"project_id": _PROJECT_ID},
     "generate_stage_tests": {
         "project_id": _PROJECT_ID,
         "stage_id": Annotated[str, "The stage to generate tests for."],
@@ -459,6 +551,13 @@ _LABELS = {
     "read_terms": "Reading the project's words",
     "write_terms": "Storing the project's words",
     "get_project_status": "Checking the project",
+    "list_projects": "Listing projects",
+    "read_stage": "Reading a stage",
+    "remove_stage": "Removing a stage",
+    "read_review_guide": "Reading the review guide",
+    "write_review_guide": "Writing the review guide",
+    "run_stage_tests": "Running the stage's tests",
+    "report_compiler_warnings": "Reading the workflow's warnings",
     "generate_stage_tests": "Generating the stage's tests",
     "run_workflow": "Running the workflow",
     "run_workflow_test": "Testing the workflow on real rows",

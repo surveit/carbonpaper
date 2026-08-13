@@ -12,9 +12,7 @@ from pydantic import BaseModel
 
 from app.core.agent.bound_tool import BoundToolSpec
 from app.tools.types import ToolInputSchema
-from app.models.review_guide import ReviewGuideDraft
-from app.services.versioning import ReviewGuide
-from app.services import drafts, project as project_service
+from app.services import drafts
 from app.tools import shared
 from app.tools.submitted_stage import (
     SubmittedStage,
@@ -24,7 +22,7 @@ from app.tools.submitted_stage import (
 )
 from app.tools.tool_specs import SAVE_VERSION_FROM_DRAFT, TOOL_SPECS
 from app.services.drafts import DraftDetail, DraftEdit, DraftView, SaveResult
-from app.services.project import Project, ProjectListing
+from app.services.project import Project
 
 
 class EditingContext(BaseModel):
@@ -32,27 +30,17 @@ class EditingContext(BaseModel):
 
 
 def make_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
-    def list_projects() -> list[ProjectListing]:
-        return project_service.list_project_listings()
-
     def get_current_project() -> str | None:
         return ctx.project_id
 
     def create_project(name: str, document: str) -> Project:
         return shared.create_project(name, document, source="editing agent")
 
-    def read_stage(project_id: str, stage_id: str) -> str:
-        return project_service.read_stage(project_id, stage_id)
-
     def edit_stage(project_id: str, stage_id: str, changes_json: str) -> dict[str, Any]:
         return edit_stage_reporting_drops(project_id, stage_id, changes_json)
 
     def add_stage(project_id: str, stages: list[SubmittedStage]) -> dict[str, Any]:
         return add_stages_reporting_drops(project_id, stages)
-
-    def remove_stage(project_id: str, stage_id: str) -> dict[str, Any]:
-        result = project_service.remove_stage(project_id, stage_id)
-        return {"ok": result.ok, "issues": result.issues}
 
     def create_draft(project_id: str, from_version: str = "") -> DraftView:
         return drafts.create_draft(project_id, from_version=from_version or None)
@@ -75,30 +63,17 @@ def make_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
         # reached on is theirs and not something this session can be told.
         return shared.list_files(project_id, where)
 
-    def read_review_guide(project_id: str, version_id: str) -> ReviewGuide | None:
-        return project_service.read_review_guide(project_id, version_id)
-
-    def write_review_guide(
-        project_id: str, version_id: str, guide: ReviewGuideDraft
-    ) -> ReviewGuide:
-        return project_service.write_review_guide(project_id, version_id, guide)
-
     tools: list[Callable[..., Any]] = [
-        list_projects,
         get_current_project,
         create_project,
-        read_stage,
         edit_stage,
         add_stage,
-        remove_stage,
         create_draft,
         read_draft,
         set_draft_stage,
         remove_draft_stage,
         save_version,
         list_files,
-        read_review_guide,
-        write_review_guide,
     ]
     return [
         BoundToolSpec(
@@ -110,8 +85,11 @@ def make_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
         )
         for fn in tools
     ] + shared.bind(
-        "read_workflow_summary", "read_stage_output_rows", "read_terms", "write_terms",
+        "list_projects", "read_workflow_summary", "read_stage", "remove_stage",
+        "read_stage_output_rows", "read_terms", "write_terms",
+        "read_review_guide", "write_review_guide",
         "get_project_status", "generate_stage_tests",
+        "run_stage_tests", "report_compiler_warnings",
         "move_file_to_project", "profile_file", "survey_workbook",
         "run_workflow", "run_workflow_test", "get_run_status", "sleep",
         "profile_stage_output_data_range",
@@ -126,13 +104,8 @@ def make_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
 # opaque type-annotation objects we never introspect, so `object` types them
 # honestly without letting `Any` leak past the schema.
 TOOL_SCHEMAS: dict[str, ToolInputSchema] = {
-    "list_projects": {},
     "get_current_project": {},
     "create_project": shared.schema_of("create_project"),
-    "read_stage": {
-        "project_id": Annotated[str, "The project id (call get_current_project first)."],
-        "stage_id": Annotated[str, "The stage's id, as shown by read_workflow_summary."],
-    },
     "edit_stage": {
         "project_id": Annotated[str, "The project id (call get_current_project first)."],
         "stage_id": Annotated[str, "The id of the stage to change."],
@@ -155,14 +128,6 @@ TOOL_SCHEMAS: dict[str, ToolInputSchema] = {
             "`publish` needs BOTH its `publish` block and a `function` block), a MANDATORY "
             "`signature`, and inputs each with a MANDATORY `schema`. Every id in inputs "
             "must already be a stage in this workflow or in this same call.",
-        ],
-    },
-    "remove_stage": {
-        "project_id": Annotated[str, "The project id (call get_current_project first)."],
-        "stage_id": Annotated[
-            str,
-            "The id of the stage to delete from the workflow. Refused if another "
-            "stage still lists it in its inputs.",
         ],
     },
     "create_draft": {
@@ -209,27 +174,6 @@ TOOL_SCHEMAS: dict[str, ToolInputSchema] = {
             "project yet.",
         ],
     },
-    "read_review_guide": {
-        "project_id": Annotated[str, "The project id (call get_current_project first)."],
-        "version_id": Annotated[
-            str,
-            "The version whose guide to read — the id save_version returned for it.",
-        ],
-    },
-    "write_review_guide": {
-        "project_id": Annotated[str, "The project id (call get_current_project first)."],
-        "version_id": Annotated[
-            str,
-            "The version this guide describes — the id save_version returned for it. The "
-            "guide is validated against THAT version's stages.",
-        ],
-        "guide": Annotated[
-            ReviewGuide,
-            "The complete guide: `steps`, each with `title`, `prose` and `stage_ids`, "
-            "plus `unnarrated`. Sent whole every time — it replaces any earlier guide "
-            "rather than merging into it.",
-        ],
-    },
 }
 
 
@@ -243,19 +187,14 @@ _DESCRIPTIONS = TOOL_SPECS | {"save_version": SAVE_VERSION_FROM_DRAFT}
 # workflow…"), keyed by the bare tool name. The full args/result stay available
 # behind a click-to-expand disclosure in the UI.
 TOOL_LABELS: dict[str, str] = {
-    "list_projects": "Listing projects",
     "get_current_project": "Checking the current project",
     "create_project": "Creating the project",
-    "read_stage": "Reading a stage",
     "edit_stage": "Editing a stage",
     "add_stage": "Adding a stage",
-    "remove_stage": "Removing a stage",
     "create_draft": "Starting a draft",
     "read_draft": "Reading the draft",
     "set_draft_stage": "Editing the draft",
     "remove_draft_stage": "Removing a draft stage",
     "save_version": "Saving the draft as a version",
     "list_files": "Listing the project's files",
-    "read_review_guide": "Reading the review guide",
-    "write_review_guide": "Writing the review guide",
 }

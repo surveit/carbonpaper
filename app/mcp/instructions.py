@@ -7,21 +7,21 @@ from __future__ import annotations
 import textwrap
 
 from app.tools.prompt_fragments import (
+    AUTHORABLE_CODE_CARRYING_TYPES,
+    AUTHORING_LIFECYCLE_GUIDANCE,
+    CODE_CORNER_CASES_CONTRACT_NOTE,
+    CODE_SUMMARY_CONTRACT_NOTE,
+    CONCEPTS_NOTE,
+    ENUM_FROM_DATA_GUIDANCE,
     HANDOVER_BARS_NOTE,
     HOW_YOU_WORK_NOTE,
     REVIEW_GUIDE_NOTE,
+    ROLE_NOTE,
+    SIGNATURE_CONTRACT_NOTE,
+    WORKED_STAGE_EXAMPLE,
+    render_stage_anatomy,
+    render_type_catalog,
 )
-from app.models.authoring_lifecycle_note import AUTHORING_LIFECYCLE_GUIDANCE
-from app.tools.prompt_fragments import ENUM_FROM_DATA_GUIDANCE
-from app.tools.prompt_fragments import CONCEPTS_NOTE, ROLE_NOTE
-from app.tools.prompt_fragments import render_stage_anatomy, render_type_catalog
-from app.models.stages.code import (
-    CODE_CORNER_CASES_CONTRACT_NOTE,
-    CODE_SUMMARY_CONTRACT_NOTE,
-)
-from app.models.stages.stage_types import AUTHORABLE_CODE_CARRYING_TYPES
-from app.models.stages.signature import SIGNATURE_CONTRACT_NOTE
-from app.tools.prompt_fragments import WORKED_STAGE_EXAMPLE
 
 
 def _render_stage_type_constraints() -> str:
