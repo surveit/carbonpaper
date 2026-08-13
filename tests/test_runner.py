@@ -188,21 +188,6 @@ def test_offset_makes_the_trace_land_on_the_true_upstream_row(tmp_path):
     assert trace.end.reached_origin is True
 
 
-def test_a_limited_stage_is_not_failed_by_a_duplicate_row_it_never_reads(tmp_path):
-    # Rows 0 and 3 are exact duplicates; a cap of 3 hands the stage only one of them.
-    _row_mapped_project(tmp_path, [
-        {"name": "a", "val": 1}, {"name": "b", "val": 2},
-        {"name": "c", "val": 3}, {"name": "a", "val": 1},
-    ], _IDENTITY_ROW_FUNCTION)
-    _seed_version(tmp_path)
-    manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path),
-                           limits={"keep": 3})
-
-    records = {r["stage_id"]: r for r in manifest["stage_records"]}
-    assert records["keep"]["status"] == "ok"
-    assert manifest["status"] == "ok"
-
-
 def _two_stage_project(root, rows: list[dict]):
     root.mkdir(parents=True, exist_ok=True)
     (root / "data").mkdir(parents=True, exist_ok=True)
@@ -228,8 +213,8 @@ def _two_stage_project(root, rows: list[dict]):
     add_stage(root, consume)
 
 
-def test_duplicate_input_rows_fail_the_stage(tmp_path):
-    # Rows 0 and 2 are identical across EVERY column — not just a `name` clash.
+def test_duplicate_input_rows_reach_the_stage_and_are_all_emitted(tmp_path):
+    # Rows 0 and 2 are identical across EVERY column — the stage still sees three.
     _two_stage_project(tmp_path, [
         {"name": "a", "val": 1},
         {"name": "b", "val": 2},
@@ -239,27 +224,9 @@ def test_duplicate_input_rows_fail_the_stage(tmp_path):
     manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path))
 
     records = {r["stage_id"]: r for r in manifest["stage_records"]}
-    assert records["load"]["status"] == "ok"     # producing dupes isn't the error…
-    assert records["consume"]["status"] == "error"  # …feeding them to a stage is
-    msg = records["consume"]["error"]["message"]
-    assert "load" in msg                          # names the offending input
-    assert "[0, 2]" in msg                        # names the duplicate row numbers
-    assert "row_id" in msg                        # points at the explicit-draws fix
-    assert manifest["status"] == "errors"
-
-
-def test_distinct_input_rows_pass(tmp_path):
-    # Same `name`, distinct full rows — the documented escape hatch.
-    _two_stage_project(tmp_path, [
-        {"name": "a", "val": 1},
-        {"name": "a", "val": 2},
-    ])
-    _seed_version(tmp_path)
-    manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path))
-    assert manifest["status"] == "ok"
-    records = {r["stage_id"]: r for r in manifest["stage_records"]}
     assert records["consume"]["status"] == "ok"
-    assert records["consume"]["output_row_count"] == 2
+    assert records["consume"]["output_row_count"] == 3
+    assert manifest["status"] == "ok"
 
 
 def _output_schema_violation_project(root, transform_code: str):

@@ -17,7 +17,6 @@ from pydantic import (
 )
 
 
-from app.core.frame_checks import find_frame_violations
 from app.core.utils import format_errors
 from app.models.schema import StageId, TableSchema, _Base
 from app.models.tool_schema_prompts import (
@@ -177,21 +176,6 @@ def validate_test_rows(
         raise ValueError("; ".join(problems))
 
 
-def validate_test_frames(
-    input_schemas: dict[StageId, TableSchema],
-    output_schema: TableSchema,
-    tests: list[StageTest],
-) -> None:
-    """Assumes validate_stage_tests passed."""
-    problems = [
-        problem
-        for test in tests
-        for problem in _find_test_frame_problems(test, input_schemas, output_schema)
-    ]
-    if problems:
-        raise ValueError("; ".join(problems))
-
-
 def build_stage_tests_model(
     test_class: type[StageTest],
     input_schemas: dict[StageId, TableSchema],
@@ -206,7 +190,6 @@ def build_stage_tests_model(
         def _stage_rules(self) -> "StageTestSuite":
             validate_stage_tests(list(input_schemas), self.tests)
             validate_test_rows(input_schemas, output_schema, self.tests)
-            validate_test_frames(input_schemas, output_schema, self.tests)
             return self
 
     # `list[test_class]` is a runtime type, so it enters through an Any-typed handle
@@ -234,18 +217,6 @@ def _find_test_row_problems(
         for problem in _find_row_problems(test.expected, expected_model)
     ]
     return problems
-
-
-def _find_test_frame_problems(
-    test: StageTest,
-    input_schemas: dict[StageId, TableSchema],
-    output_schema: TableSchema,
-) -> list[str]:
-    return [
-        f"test {test.name!r}, input {input_id!r}: {violation.message}"
-        for input_id in input_schemas
-        for violation in find_frame_violations(test.inputs[input_id])
-    ]
 
 
 def _find_row_problems(

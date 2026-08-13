@@ -1645,3 +1645,64 @@ def test_the_page_size_is_named_once_in_the_module_the_page_reads_it_from(tmp_pa
 
     assert re.search(r"createQueuePager\([^;]*QUEUE_PAGE_SIZE", source, re.DOTALL)
     assert "/static/queue-paginate.js" in source
+
+
+# ── 7. Duplicate rows: one decision, because a decision is about content ────
+
+
+def _identical_quotes_stage(root):
+    """The two rows are identical across every column — what the runner used to refuse."""
+    (root / "data").mkdir(parents=True, exist_ok=True)
+    csv_path = root / "data" / "quotes.csv"
+    pd.DataFrame({
+        "id": ["a", "a"],
+        "quote": ["Quote about widgets.", "Quote about widgets."],
+    }).to_csv(csv_path, index=False)
+    return {"id": "load", "description": "Load quotes", "type": "input_data",
+            "connector": {"kind": "file",
+                          "params": {"path": str(csv_path), "format": "csv"}},
+            "signature": {"form": "replaces", "produces": [
+                {"name": "id", "type": "str", "nullable": True},
+                {"name": "quote", "type": "str", "nullable": True}]}}
+
+
+def test_two_identical_rows_share_one_decision_and_both_carry_it(tmp_path, monkeypatch):
+    workspace.set_projects_dir(tmp_path)
+    monkeypatch.setattr(lt, "call_llm", lambda stage_id, llm_config, row, **kw: {"score": 1})
+    project_dir = tmp_path / PROJECT
+    _write_stage(project_dir, "01_load.json", _identical_quotes_stage(project_dir))
+    _write_stage(project_dir, "02_score.json", _score_stage())
+    _write_stage(project_dir, "03_review.json", _review_stage())
+    _seed_version(project_dir)
+
+    manifest = run_prepared(
+        prepare_run(project_dir / "runs", project_dir.name, *pinned_stages(project_dir)))
+    assert manifest["status"] == "awaiting_review"
+    run_id = manifest["run_id"]
+    run_dir = project_dir / "runs" / run_id
+    snapshot = pd.read_parquet(run_dir / "queue" / "review.parquet")
+    fingerprints = _read_fingerprints(PROJECT, run_id)
+
+    # Both rows queue, and both address the same decision: the fingerprint is the
+    # row's CONTENT, so there is one thing to decide, not two.
+    assert len(snapshot) == 2
+    assert len(set(fingerprints["input_fingerprints"])) == 1
+    assert fingerprints["row_ordinals"] == [0, 1]
+
+    fp = fingerprints["input_fingerprints"][0]
+    _put_cached_decision(
+        PROJECT, "review", fingerprints["stage_fingerprint"], fp,
+        snapshot.iloc[0], ReviewVerdict.modify, reviewed_score=99,
+    )
+
+    # One decision settles the queue: the page counts the row content, not the rows.
+    html = TestClient(app).get(f"/project/{PROJECT}/runs/{run_id}/queue/review").text
+    assert '<strong id="reviewed-count">2</strong> of <strong>2</strong> reviewed' in html
+
+    resumed = runner.resume_run(project_dir / "runs" / run_id, project_dir.name, run_id,
+                                *resumed_stages(project_dir, run_id))
+    assert resumed["status"] == "ok"
+    out = pd.read_parquet(run_dir / "outputs" / "review.parquet")
+    assert len(out) == 2
+    assert list(out["human_score"]) == [99, 99]
+    assert list(out["decision"]) == ["modify", "modify"]

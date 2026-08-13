@@ -9,14 +9,13 @@ a production run. An import-linter contract forbids `app/runtime/runner.py` from
 
 ## `runner.py` — the executor
 `topological_sort` → `execute_run(project_dir, repo_root, workflow, workflow_version)`. Per
-stage: validate declared inputs (`validation.py`), reject duplicate input rows, dispatch to
-the type's handler, validate the output, write `outputs/<stage>.parquet`, append to
-the run record.
-- **Duplicate-input throw (every stage type):** fails the stage if any input dataframe has
-  exact duplicate full-content rows — the error names the input id + 0-based row numbers.
-  Identity is a content hash over the whole row. If N draws per row are intended, add an explicit row_id upstream.
-  The rule lives in `app/core/frame_checks.py` with the other cross-row rule (key
-  uniqueness), so the stage-test suite validator applies both to a generated test's frames.
+stage: validate declared inputs (`validation.py`), dispatch to the type's handler, validate
+the output, write `outputs/<stage>.parquet`, append to the run record.
+- **Duplicate input rows are allowed.** A stage decides nothing per row-instance: the
+  stage cache and a `human_review_queue` decision are both keyed on row CONTENT, so two
+  identical rows share one cached result and one recorded decision — approving the content
+  approves both. A reviewer is shown one card per row and cannot give the two different
+  verdicts; the second posted verdict replaces the first.
 - **Incremental manifest:** flushed after every stage (`running` → terminal), so the UI
   shows live progress and a run can execute in a background thread (`prepare_run`/`run_prepared`).
 - **Row slicing caps what a stage READS, not what it emits:** it is a per-run parameter,
@@ -25,8 +24,8 @@ the run record.
   makes 3 calls, not 5,000 then a discard — and `--offset <id>=<M>` skips the
   first M rows first (offset 5 + limit 3 = upstream rows 6-8); a multi-input stage
   (`join`/`enrich`/`expand`, `union`) applies the same window to every input. The
-  window is taken BEFORE the duplicate-row and input-schema checks, so a limited run
-  is not failed by a row it never reads. `input_data` is the one type with no input
+  window is taken BEFORE the input-schema checks, so a limited run is not failed by a row
+  it never reads. `input_data` is the one type with no input
   frames: its window is taken on the frame it just loaded, so a limit is never a
   silent no-op on a source. Recorded in the manifest, re-applied on resume, unknown
   ids fail loudly. A sliced stage's rows are recorded in its lineage sidecar under
