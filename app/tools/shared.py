@@ -486,10 +486,7 @@ _SCHEMAS: dict[str, ToolParameterProse] = {
     },
     "list_runs": {
         "project_id": _PROJECT_ID,
-        "limit": Annotated[
-            int,
-            f"How many of the newest runs to name. Clamped to {MAX_RUNS_LISTED}.",
-        ],
+        "limit": f"How many of the newest runs to name. Clamped to {MAX_RUNS_LISTED}.",
     },
     "get_run_status": {
         "project_id": _PROJECT_ID,
