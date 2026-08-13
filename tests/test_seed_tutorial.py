@@ -12,8 +12,9 @@ from app.evals.compatibility import validate_eval_compatibility
 from app.evals.dataset_columns import get_injected_columns
 from app.evals.store import load_eval_config
 from app.core.stage_cache import StageCacheEntry
-from app.models import Stage, StageType
+from app.models import Column, Stage, StageType
 from app.models.errors import StepRefused
+from app.models.stages.signature import ExtendsSignature
 from app.models.review_guide import ReviewGuideDraft
 from app.models.stages.human_review_queue import HumanReviewQueueStage
 from app.runtime.context import RunContext, RunIdentity
@@ -362,6 +363,22 @@ def test_the_methodology_document_states_the_batch_size_the_stage_uses():
     assert "swayed by the ones it happens to travel with" in wf.document
 
 
+def test_every_stage_points_at_a_heading_the_document_still_carries():
+    """Nothing in the app reads `source.section`, so a renamed heading strands it in silence."""
+    wf = _load_fixture()
+    headings = {
+        line.lstrip("#").strip() for line in wf.document.splitlines()
+        if line.startswith("#")
+    }
+
+    pointed = {
+        stage.source.section for stage in wf.stages
+        if stage.source is not None and stage.source.section is not None
+    }
+
+    assert pointed <= headings, sorted(pointed - headings)
+
+
 def test_the_methodology_document_admits_the_data_is_invented():
     wf = _load_fixture()
 
@@ -418,6 +435,12 @@ _JARGON = ("join", "merge", "key", "deduplicate", "schema", "grain", "enrich",
            "column", "null", "cast", "parse", "lineage", "upstream",
            "downstream", "row per", "row-level")
 
+# Words above that a journalist also writes in their own trade: a key finding, a newspaper
+# column, a broadcast, a sparse record, a grain of salt, a merger. The document is long
+# prose and would trip over the substring; a field caption is one line and does not.
+_PROSE_HOMOGRAPHS = frozenset({"key", "column", "cast", "parse", "grain", "merge"})
+_DOCUMENT_JARGON = tuple(word for word in _JARGON if word not in _PROSE_HOMOGRAPHS)
+
 
 def test_the_review_guide_speaks_no_jargon():
     """A journalist reads this rail. Every word in it has to be one they already use."""
@@ -437,6 +460,30 @@ def test_no_stage_description_speaks_jargon():
     assert offenders == [], offenders
 
 
+def test_no_column_description_speaks_jargon():
+    """The Schema tab prints these beside the rows, to the reader the guide is written for."""
+    offenders = _find_jargon_in_column_descriptions(_load_fixture())
+
+    assert offenders == [], offenders
+
+
+def test_no_transform_block_speaks_jargon():
+    """The Transform tab leads on the summary and the cases, for a reviewer who reads no code."""
+    offenders = _find_jargon_in_transform_prose(_load_fixture())
+
+    assert offenders == [], offenders
+
+
+def test_the_methodology_document_speaks_no_jargon():
+    """The document is the account a reviewer reads the run against — same reader, same words."""
+    document = " ".join(_load_fixture().document.lower().split())
+    # Collapsed above because the document is hard-wrapped: `row per` sits in it as `row\nper`.
+
+    offenders = [word for word in _DOCUMENT_JARGON if word in document]
+
+    assert offenders == [], offenders
+
+
 def _find_jargon_in_stage_descriptions(wf: WorkflowFile) -> list[str]:
     return [
         f"{stage.id}: {word!r} in {stage.description!r}"
@@ -444,6 +491,45 @@ def _find_jargon_in_stage_descriptions(wf: WorkflowFile) -> list[str]:
         for word in _JARGON
         if word in stage.description.lower()
     ]
+
+
+def _find_jargon_in_column_descriptions(wf: WorkflowFile) -> list[str]:
+    return [
+        f"{stage.id}/{column.name}: {word!r} in {column.description!r}"
+        for stage in wf.stages
+        for column in _list_signature_columns(stage)
+        for word in _JARGON
+        if word in (column.description or "").lower()
+    ]
+
+
+def _find_jargon_in_transform_prose(wf: WorkflowFile) -> list[str]:
+    return [
+        f"{stage.id}/{label}: {word!r} in {text!r}"
+        for stage in wf.stages
+        for label, text in _list_authored_code_prose(stage)
+        for word in _JARGON
+        if word in text.lower()
+    ]
+
+
+def _list_authored_code_prose(stage: Stage) -> list[tuple[str, str]]:
+    block = stage.find_authored_code_block()
+    if block is None:
+        return []
+    prose = [("summary", block.summary or "")]
+    for ordinal, corner_case in enumerate(block.corner_cases):
+        prose.append((f"corner_case[{ordinal}].case", corner_case.case))
+        prose.append((f"corner_case[{ordinal}].expected", corner_case.expected))
+    return prose
+
+
+def _list_signature_columns(stage: Stage) -> list[Column]:
+    signature = stage.signature
+    read = [column for entry in signature.reads for column in entry.columns]
+    if isinstance(signature, ExtendsSignature):
+        return [*read, *signature.adds, *signature.rewrites]
+    return [*read, *signature.produces]
 
 
 # A number in front of a countable noun ("six real records", "3 rows"): the run measures
