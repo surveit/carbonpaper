@@ -19,7 +19,6 @@ from app.services.uploads import max_upload_bytes, save_upload
 from app.web.file_sizes import describe_attachment, describe_refusal
 
 from app.core.agent.registry import build_engine, opening_prompt
-from app.core.agent.sdk_engine import CLI_MODEL
 from app.core.agent.session import create_agent_session
 from app.core.agent.store import open_session_store
 from app.core.agent.turns import default_turn_manager
@@ -34,12 +33,6 @@ templates.env.filters["markdown"] = render_markdown
 router = APIRouter()
 _store = open_session_store()
 _turns = default_turn_manager()
-
-
-def _backend_label() -> str:
-    if CLI_PATH is not None:
-        return f"claude-cli:{CLI_MODEL} (subscription)"
-    return "claude-cli (unavailable)"
 
 
 def _backend_error() -> str | None:
@@ -62,7 +55,6 @@ async def chat_index(request: Request):
             visible_sessions.append(s)
     return templates.TemplateResponse(request, "chat_index.html", {
         "sessions": visible_sessions,
-        "backend": _backend_label(),
         "crumbs": build_home_crumbs("Chats"),
     })
 
@@ -98,7 +90,6 @@ async def chat_page(request: Request, sid: str):
         # reply to a typed message (post_message 400s), so the composer is hidden.
         "view_only": data.get("agent_id") is None,
         "opens_itself": _has_unspoken_opening(data),
-        "backend": _backend_label(),
         "backend_error": _backend_error(),
         "crumbs": build_chat_crumbs(data.get("title")),
         # What an attached file needs to know before it is sent: the ceiling, the
