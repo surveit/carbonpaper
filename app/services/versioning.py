@@ -56,6 +56,9 @@ class ReviewGuide(PersistedModel):
     # against. Writing a guide appends; the newest one for a version is the live one.
     project: str
     version_id: str
+    # What the reader is here to decide, in one sentence. Optional in the store so a
+    # guide written before the field still loads; required to write one, below.
+    goal: str | None = None
     # Prose only: a stage's name, type, order and columns are read off the
     # version's stages at render time rather than frozen a second time here.
     steps: list[ReviewGuideStep]
@@ -138,6 +141,7 @@ def validate_review_guide(guide: ReviewGuide, stages: list[Stage]) -> None:
     refusals = [
         *_describe_stage_mismatch(guide, stages),
         *_describe_unnarrated_stages_reaching_publish(guide, stages),
+        *_describe_missing_goal(guide),
         *_describe_sections_missing_data_description(guide),
     ]
     if refusals:
@@ -164,6 +168,16 @@ def _describe_stage_mismatch(guide: ReviewGuide, stages: list[Stage]) -> list[st
     if not issues:
         return []
     return ["review guide does not match the version's stages: " + "; ".join(issues)]
+
+
+def _describe_missing_goal(guide: ReviewGuide) -> list[str]:
+    if (guide.goal or "").strip():
+        return []
+    return [
+        "the guide must carry a `goal`: one short sentence, in the second person, "
+        "saying what the reader is here to decide — the judgement they are being "
+        "asked to make, not what the workflow does."
+    ]
 
 
 def _describe_sections_missing_data_description(guide: ReviewGuide) -> list[str]:

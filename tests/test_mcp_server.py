@@ -549,6 +549,7 @@ def _saved_version(tmp_path, monkeypatch) -> tuple[str, str]:
 
 
 _GUIDE = {
+    "goal": "You are here to judge whether every amount was doubled as filed.",
     "steps": [
         {"title": "Double each amount", "prose": "Every `amount` is doubled as filed.",
          "stage_ids": ["double"],

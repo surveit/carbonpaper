@@ -38,9 +38,13 @@ def _stage_view(
     )
 
 
-def _render(*steps: GuideStepView, published: list[object] | None = None) -> str:
+def _render(
+    *steps: GuideStepView,
+    published: list[object] | None = None,
+    goal: str | None = None,
+) -> str:
     html = templates.get_template("_run_guide.html").render(
-        guide=RunGuideView(steps=list(steps), unnarrated=[]),
+        guide=RunGuideView(steps=list(steps), unnarrated=[], goal=goal),
         project_id="demo",
         published_artifacts=published or [],
         links=AppPanelLinks("demo", "20260101T000000"),
@@ -216,3 +220,29 @@ def test_the_published_files_lead_the_rail_rather_than_trailing_it() -> None:
 
 def test_a_run_that_published_nothing_shows_no_published_block() -> None:
     assert "guide-published" not in _render(_section(_union()))
+
+
+# ── the goal: what the reader is here to decide ──────────────────────────────
+
+_GOAL = "You are here to judge whether an organisation lobbied against its own promise."
+
+
+def test_the_goal_leads_the_rail_above_the_published_files() -> None:
+    html = _render(_section(_union()), goal=_GOAL,
+                   published=[_Artifact("filings.xlsx", "/runs/x/artifacts/filings.xlsx")])
+
+    order = [html.index(_GOAL), html.index("guide-published"), html.index("guide-steps")]
+    assert order == sorted(order)
+
+
+def test_the_goal_is_not_dressed_as_a_step() -> None:
+    html = _render(_section(_union()), goal=_GOAL)
+
+    assert html.index(_GOAL) < html.index("guide-steps")
+    assert _GOAL not in html.split('<ol class="guide-steps">', 1)[1]
+
+
+def test_a_guide_with_no_goal_says_nothing_in_its_place() -> None:
+    html = _render(_section(_union()))
+
+    assert "guide-goal" not in html

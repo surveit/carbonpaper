@@ -1,12 +1,13 @@
 {
+  "goal": "You're here to judge whether an organisation publicly committed to something and then lobbied in a way that contradicts that commitment.",
   "steps": [
     {
       "title": "Load what each organisation asked government for",
-      "prose": "The goal: read each public promise beside what the same organisation asked government for, and publish only what a person confirmed. The ask half: six real records, each off a published page.",
+      "prose": "The ask half: six real records, each read off a published page.",
       "stage_ids": [
         "raw_filings"
       ],
-      "data_description": "Every advocacy record in the sample, as the CSV records it."
+      "data_description": "Every advocacy record in the sample, as the file lists it."
     },
     {
       "title": "Load each organisation's public promise",
@@ -18,7 +19,7 @@
     },
     {
       "title": "Refuse a claim with no source",
-      "prose": "Every row of the report links to the page it was read on. A record with no link, no ask or no date stops the run here rather than reaching that page.",
+      "prose": "A record with no link, no ask or no date stops the run here rather than reaching the report.",
       "stage_ids": [
         "check_filings"
       ],
@@ -26,7 +27,7 @@
     },
     {
       "title": "Put each promise beside the ask",
-      "prose": "Nothing is dropped here. A blank promise means none is on record for that organisation — the absence IS the record.",
+      "prose": "Nothing is dropped: a blank promise means none is on record for that organisation, and the absence IS the record.",
       "stage_ids": [
         "matched_commitments"
       ],
@@ -42,7 +43,7 @@
     },
     {
       "title": "Put every contradiction in front of a person",
-      "prose": "The model's label is only a proposal. Every contradiction it proposed waits here for a person to keep or change, under their own name.",
+      "prose": "The model's label is only a proposal: every contradiction it flagged waits here for a person to keep or change, under their own name.",
       "stage_ids": [
         "review_contradictions"
       ],

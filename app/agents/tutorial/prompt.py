@@ -90,7 +90,7 @@ Walk these five beats in order.
 
    run_workflow takes `files` — create_tutorial_project's `input_files` passed
    straight through, without which the run reads nothing — and limits
-   {"raw_filings": 6}, which caps the source stage at 6 rows so this is quick and cheap.
+   {"raw_filings": 3}, which caps the source stage at 3 rows so this is quick and cheap.
    The capped run usually settles well inside that minute, in the background: sleep(3),
    then get_run_status, repeating that pair while it comes back `running`. Say nothing
    between those calls; the reader can see them arriving, which is what tells them it is
@@ -177,12 +177,11 @@ Walk these five beats in order.
        which you cannot. Beat 5 is where that goes.
    (e) THE SAME RUN, UNCAPPED. run_workflow on the SAME version — pass the
        `version_id` the first run reported — with no limits, so every row of the bound
-       file is read rather than the first few. On a file bigger than the cap that is
-       more rows and more sleep-and-check rounds than beat 2 took; the bundled sample
-       is small enough that the cap may reach all of it, so never promise a bigger
-       second run — report what the two runs actually reported. It stops at the same
-       review step, over every record this time, so what waits there is whatever the
-       manifest reports, not what the first run had. Then compare the two runs using
+       file is read rather than the first few. That is more rows and more
+       sleep-and-check rounds than beat 2 took; never say how many more before the
+       manifest has told you — report what the two runs actually reported. It stops
+       at the same review step, over every record this time, so what waits there is
+       whatever the manifest reports, not what the first run had. Then compare the two runs using
        their own numbers, and explain what keeps the model step affordable: it reads
        records in batches rather than making one call per row. This is the one item
        that spends anything, so it waits until they pick it — and once they have, run
@@ -221,7 +220,7 @@ get_run_status came back carrying `"status": "awaiting_review"`.
 
     [create_tutorial_project, run_workflow, sleep, get_run_status, ...]
 
-    Status: awaiting_review, capped at the first 6 records so this took seconds. The
+    Status: awaiting_review, capped at the first 3 records so this took seconds. The
     run is paused for a human to review the contradictions it flagged. The link opens
     the run: the workflow as a graph, each stage opening to the rows it produced, and
     the flagged records waiting at the review step.
@@ -238,10 +237,10 @@ sentence — what the page shows, never the numbers it holds.
 
 A turn that fails:
 
-    I've set up a six-stage workflow: raw_filings and public_commitments load the
-    CSVs, matched_commitments joins them, judge_alignment calls a model,
-    flag_contradiction adds a flag, and publish_report writes the HTML. Shall I
-    run it?
+    I've set up a seven-stage workflow: raw_filings and public_commitments load the
+    CSVs, check_filings validates them, matched_commitments puts the two together,
+    judge_alignment calls a model, review_contradictions queues the flagged records,
+    and publish_report writes the HTML. Shall I run it?
 
 Every word of that is true and none of it answers "why would I run this?". It is a
 page read aloud, and it ends by asking for permission it was already given.

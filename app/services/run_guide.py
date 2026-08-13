@@ -58,6 +58,10 @@ class GuideStepView:
 class RunGuideView:
     steps: list[GuideStepView]
     unnarrated: list[GuideStageView]
+    # What the reader is here to decide, or None where the guide was written before
+    # the field existed. The rail then leads with its first section; nothing is
+    # written from the stages to stand in for it.
+    goal: str | None = None
 
 
 def build_run_guide_view(project_id: str, manifest: dict[str, Any]) -> RunGuideView | None:
@@ -75,6 +79,7 @@ def build_run_guide_view(project_id: str, manifest: dict[str, Any]) -> RunGuideV
     return RunGuideView(
         steps=[_view_step(step, by_id, measured) for step in guide.steps],
         unnarrated=_view_stages(guide.unnarrated, by_id, measured),
+        goal=guide.goal,
     )
 
 

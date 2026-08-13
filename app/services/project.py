@@ -414,7 +414,7 @@ def write_review_guide(
     name: str, version_id: str, draft: ReviewGuideDraft
 ) -> ReviewGuide:
     guide = ReviewGuide(
-        project=name, version_id=version_id,
+        project=name, version_id=version_id, goal=draft.goal,
         steps=draft.steps, unnarrated=draft.unnarrated,
     )
     versioning.save_version_guide(_project_to_write(name), version_id, guide)

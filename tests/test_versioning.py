@@ -340,6 +340,7 @@ def _guide(
     return ReviewGuide(
         project=project_dir.name,
         version_id=version_id,
+        goal="You are here to judge whether the desk filed every document it promised.",
         steps=[ReviewGuideStep(title="Load the docs", prose="Reads `doc_id`.",
                                stage_ids=step_ids,
                                data_description="Every document the desk filed.")],
@@ -435,6 +436,7 @@ def test_save_version_guide_rejects_a_stage_narrated_by_two_steps(tmp_path):
     two_steps = ReviewGuide(
         project=tmp_path.name,
         version_id=vid,
+        goal="You are here to judge whether the desk filed every document it promised.",
         steps=[
             ReviewGuideStep(title="First", prose="a", stage_ids=["load"],
                             data_description="The documents, as filed."),
@@ -546,6 +548,7 @@ def _guide_with_data_descriptions(
     return ReviewGuide(
         project=project_dir.name,
         version_id=version_id,
+        goal="You are here to judge whether the desk filed every document it promised.",
         steps=[
             ReviewGuideStep(title=f"Section {n}", prose="p", stage_ids=[stage_id],
                             data_description=sentence)
@@ -593,6 +596,59 @@ def test_a_guide_stored_before_the_data_sentence_existed_still_loads(tmp_path):
     get_store().write("review_guide", saved.id, payload)
 
     assert [s.data_description for s in ReviewGuide.load(saved.id).steps] == [None]
+
+
+# ── the goal: required to WRITE a guide, optional in the store ──────────────
+
+def _guide_without_goal(project_dir: Path, version_id: str, goal: str | None) -> ReviewGuide:
+    guide = _guide(project_dir, version_id, ["load"], ["tally"])
+    guide.goal = goal
+    return guide
+
+
+def test_save_version_guide_refuses_a_guide_with_no_goal(tmp_path):
+    vid = _two_stage_version(tmp_path)
+
+    with pytest.raises(ReviewGuideValidationError, match="goal"):
+        save_version_guide(tmp_path, vid, _guide_without_goal(tmp_path, vid, None))
+    assert find_latest_review_guide(tmp_path.name, vid) is None
+
+
+def test_a_blank_goal_is_refused_as_absent(tmp_path):
+    vid = _two_stage_version(tmp_path)
+
+    with pytest.raises(ReviewGuideValidationError, match="goal"):
+        save_version_guide(tmp_path, vid, _guide_without_goal(tmp_path, vid, "  \n "))
+    assert find_latest_review_guide(tmp_path.name, vid) is None
+
+
+def test_the_goal_refusal_says_what_the_sentence_has_to_do(tmp_path):
+    vid = _two_stage_version(tmp_path)
+
+    with pytest.raises(ReviewGuideValidationError) as exc:
+        save_version_guide(tmp_path, vid, _guide_without_goal(tmp_path, vid, None))
+    assert "what the reader is here to decide" in str(exc.value)
+
+
+def test_the_goal_survives_a_round_trip_through_the_store(tmp_path):
+    vid = _two_stage_version(tmp_path)
+    saved = save_version_guide(tmp_path, vid, _guide(tmp_path, vid, ["load"], ["tally"]))
+
+    reloaded = find_latest_review_guide(tmp_path.name, vid)
+    assert reloaded is not None
+    assert reloaded.goal == saved.goal
+
+
+def test_a_guide_stored_before_the_goal_existed_still_loads(tmp_path):
+    vid = _two_stage_version(tmp_path)
+    saved = save_version_guide(tmp_path, vid, _guide(tmp_path, vid, ["load"], ["tally"]))
+    payload = get_store().read("review_guide", saved.id)
+    # The record every guide written before the field looks like — extra="forbid" on
+    # the way back in grants no leniency, which is why the field stays optional.
+    del payload["goal"]
+    get_store().write("review_guide", saved.id, payload)
+
+    assert ReviewGuide.load(saved.id).goal is None
 
 
 def test_save_version_guide_unknown_version_raises_file_not_found(tmp_path):

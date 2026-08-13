@@ -79,7 +79,7 @@ def _add_stage_to_the_working_copy(project_dir: Path) -> None:
 
 
 def _guide_of(stage_ids: list[str]) -> ReviewGuideDraft:
-    return ReviewGuideDraft(steps=[ReviewGuideStep(
+    return ReviewGuideDraft(goal="You are here to judge whether every `amount` was doubled.", steps=[ReviewGuideStep(
         title="What this does", prose="Each `amount` is doubled.", stage_ids=stage_ids,
         data_description="Every filed row, its `amount` doubled.",
     )])
@@ -90,7 +90,7 @@ def _save_guide(project_dir: Path, version_id: str, stage_ids: list[str]) -> Non
     versioning.save_version_guide(project_dir.name,
         version_id,
         versioning.ReviewGuide(
-            project=project_dir.name, version_id=version_id,
+            project=project_dir.name, version_id=version_id, goal=draft.goal,
             steps=draft.steps, unnarrated=draft.unnarrated,
         ),
     )

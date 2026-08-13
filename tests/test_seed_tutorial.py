@@ -464,6 +464,17 @@ def test_the_committed_review_guide_accounts_for_every_stage():
         assert step.data_description and step.data_description.strip()
 
 
+def test_the_committed_review_guide_says_what_the_reader_is_here_to_decide():
+    guide = ReviewGuideDraft.model_validate_json(
+        _GUIDE_PATH.read_text(encoding="utf-8")
+    )
+
+    assert guide.goal is not None
+    # The judgement, in the second person — not an account of what the workflow does.
+    assert guide.goal.startswith("You're here to")
+    assert "publicly committed" in guide.goal and "contradicts" in guide.goal
+
+
 def test_the_review_guide_keeps_every_check_without_the_padding():
     """Each step is capped, and each capped step still names what a reviewer must check."""
     guide = ReviewGuideDraft.model_validate_json(
@@ -474,8 +485,6 @@ def test_the_review_guide_keeps_every_check_without_the_padding():
     assert not over, over
     prose = " ".join(step.prose for step in guide.steps)
     for check in (
-        # The first step restates what the whole workflow is for.
-        "read each public promise beside what the same organisation asked government for",
         "a repeat stops the run",
         "the absence IS the record",
         "Trust this step least",
@@ -491,10 +500,11 @@ def test_the_review_guide_speaks_no_jargon():
     guide = ReviewGuideDraft.model_validate_json(
         _GUIDE_PATH.read_text(encoding="utf-8")
     )
-    prose = " ".join(step.prose for step in guide.steps).lower()
+    prose = " ".join([*(step.prose for step in guide.steps), guide.goal or ""]).lower()
 
-    for word in ("join", "schema", "grain", "enrich", "column", "null", "lineage",
-                 "upstream", "downstream", "row per"):
+    for word in ("join", "merge", "key", "deduplicate", "schema", "grain", "enrich",
+                 "column", "null", "cast", "parse", "lineage", "upstream",
+                 "downstream", "row per", "row-level"):
         assert word not in prose, word
 
 

@@ -109,6 +109,11 @@
   .run-guide-head h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em;
                        color: var(--muted); margin: 0 0 4px; }
   .run-guide-lead { font-size: 11.5px; color: var(--muted); margin: 0 0 8px; }
+  /* The goal is read, not skimmed past: full ink and a size above the lead under it,
+     so it reads as a plain sentence to the reader rather than as the rail's first
+     step — it is not numbered, and it carries no rule of its own. */
+  .guide-goal { font-size: 13px; line-height: 1.45; color: var(--fg);
+                margin: 0 0 6px; }
 
   .guide-steps { list-style: none; margin: 0; padding: 0; }
   .guide-steps > li { display: flex; gap: 8px; padding: 10px 0;
@@ -215,11 +220,16 @@
     <h2>Run walkthrough</h2>
   </div>
   {% endif %}
+  {# THE GOAL — what the reader is here to decide, and the first thing on the rail:
+     nothing below it means much until they have read it. A guide written before the
+     field carries none, and then the rail simply starts at what it does have. #}
+  {% if guide.goal %}
+  <p class="guide-goal">{{ guide.goal }}</p>
+  {% endif %}
   {# The size notation is explained once, here, so `45.1k × 15` needs no legend of
-     its own under every Workflow section. #}
-  <p class="run-guide-lead">AI generated summary of what this run did, one Workflow
-    section at a time. Each section ends in the data it left — the link states its
-    size, rows × columns, rounded to fit; hover it for the exact counts.</p>
+     its own under every Workflow section. The framing is the goal's job, above. #}
+  <p class="run-guide-lead">AI generated. Each section ends in a link to the data it
+    left, sized rows × columns and rounded to fit; hover it for the exact counts.</p>
   {# Where the run ended up, first: the reader wants the result before the account of
      how it was reached. Set by the caller that has the run's artifact links — the
      packet page lays its files out differently and sets none, so it shows none. #}

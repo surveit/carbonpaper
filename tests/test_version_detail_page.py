@@ -93,7 +93,9 @@ def _save_covering_guide(project_dir: Path, version_id: str) -> None:
     stages = versioning.load_version(project_dir.name, version_id).stages
     versioning.save_version_guide(project_dir.name,
         version_id,
-        ReviewGuide(project=project_dir.name, version_id=version_id, steps=[ReviewGuideStep(
+        ReviewGuide(project=project_dir.name, version_id=version_id,
+                    goal="You are here to judge whether every row survived the workflow.",
+                    steps=[ReviewGuideStep(
             title="How this workflow works",
             prose="Every stage, narrated together.",
             stage_ids=[stage.id for stage in stages],

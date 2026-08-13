@@ -127,7 +127,7 @@ def _finish_review_guide(
         project_id,
         version_id,
         versioning.ReviewGuide(
-            project=project_id, version_id=version_id,
+            project=project_id, version_id=version_id, goal=draft.goal,
             steps=draft.steps, unnarrated=draft.unnarrated,
         ),
     )
