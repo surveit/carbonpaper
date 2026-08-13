@@ -70,22 +70,30 @@ def test_a_word_growing_on_a_surface_it_already_holds_is_silent() -> None:
     assert find_surface_gains(head, base) == []
 
 
-def test_long_variable_lists_say_how_many_were_dropped() -> None:
+def test_every_word_is_listed() -> None:
     base = VocabularySnapshot(words={}, comment_lines=0)
     head = VocabularySnapshot(
         words={f"word{n}": WordSurfaces(variable=1) for n in range(20)}, comment_lines=1
     )
     body = render_markdown(head, base)
-    assert "8 more" in body, "a truncated list must say what it dropped"
+    assert all(f"`word{n}`" in body for n in range(20)), "a reader cannot act on a word they cannot see"
 
 
-def test_prose_surfaces_are_counted_not_listed() -> None:
-    # 89% of rows and none of the signal; listing them buries the variable rows.
+@pytest.mark.parametrize("surface", list(Surface))
+def test_a_new_word_is_named_on_every_surface(surface: Surface) -> None:
     base = VocabularySnapshot(words={}, comment_lines=0)
-    head = VocabularySnapshot(words={"gerrymander": WordSurfaces(comment=1)}, comment_lines=1)
+    head = VocabularySnapshot(
+        words={"gerrymander": WordSurfaces(**{surface.value: 1})}, comment_lines=1
+    )
+    assert "`gerrymander`" in render_markdown(head, base)
+
+
+def test_a_word_reaching_a_new_surface_is_not_a_new_word() -> None:
+    base = VocabularySnapshot(words={"stage": WordSurfaces(variable=523)}, comment_lines=0)
+    head = VocabularySnapshot(words={"stage": WordSurfaces(variable=523, comment=1)}, comment_lines=1)
     body = render_markdown(head, base)
-    assert "gerrymander" not in body
-    assert "1 new words, not listed (prose)" in body
+    assert "no new words, 1 onto a new surface" in body
+    assert "already used elsewhere, now also here — `stage`" in body
 
 
 def test_clean_diff_renders_the_one_line_form() -> None:
