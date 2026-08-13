@@ -58,7 +58,7 @@ def test_allowed_names_cover_every_tool(examples_root: Path) -> None:
     _server, allowed, _tools = _build("congresswatch")
     specs = make_editing_tools(EditingContext(project_id="congresswatch"))
     assert set(allowed) == {f"mcp__tools__{spec.name}" for spec in specs}
-    assert len(allowed) == 31
+    assert len(allowed) == 27
 
 
 def test_read_stage_handler_returns_text_content(examples_root: Path) -> None:
@@ -83,131 +83,45 @@ def test_handler_surfaces_tool_error_not_fabricated_value(examples_root: Path) -
     assert "no_such_stage" in out["content"][0]["text"]
 
 
-def test_draft_round_trip_creates_an_unpublished_version(examples_root: Path) -> None:
+def test_add_stage_then_save_creates_an_unpublished_version(examples_root: Path) -> None:
+    _seed(examples_root, "congresswatch")
     _server, _allowed, tools = _build("congresswatch")
     by_name = {t.name: t for t in tools}
-    connector = {"kind": "file"}
     stage = {
-        "id": "load",
-        "description": "Load rows",
-        "type": "input_data",
-        "connector": connector,
-        "signature": {
-            "form": "replaces",
-            "produces": [{"name": "id", "type": "str", "nullable": False}],
-        },
-    }
-
-    created = _call(by_name["create_draft"], {"project_id": "congresswatch"})
-    draft = json.loads(created["content"][0]["text"])
-    assert len(draft["id"].split("-")) == 3
-    assert draft["stages"] == []
-
-    edited = _call(
-        by_name["set_draft_stage"],
-        {
-            "project_id": "congresswatch",
-            "draft_id": draft["id"],
-            "stage_json": json.dumps(stage),
-        },
-    )
-    edit_result = json.loads(edited["content"][0]["text"])
-    assert edit_result["ok"] is True
-    assert edit_result["stage_ids"] == ["load"]
-    assert edit_result["issues"] == []
-
-    # read_draft round-trips the stage as a full Stage dump (unset optionals
-    # come back as explicit nulls — tool_spec.as_tool_content doesn't exclude_none)
-    # but every field the agent WROTE survives unchanged, in alias form.
-    read_back = _call(
-        by_name["read_draft"],
-        {"project_id": "congresswatch", "draft_id": draft["id"]},
-    )
-    read_result = json.loads(read_back["content"][0]["text"])
-    assert len(read_result["stages"]) == 1
-    read_stage = read_result["stages"][0]
-    assert read_stage["id"] == stage["id"]
-    assert read_stage["description"] == stage["description"]
-    assert read_stage["type"] == stage["type"]
-    assert read_stage["connector"]["kind"] == connector["kind"]
-
-    saved = _call(
-        by_name["save_version"],
-        {
-            "project_id": "congresswatch",
-            "draft_id": draft["id"],
-            "message": "add the load stage",
-        },
-    )
-    save_result = json.loads(saved["content"][0]["text"])
-    assert save_result["ok"] is True
-    assert save_result["version_id"] is not None
-
-
-def test_set_draft_stage_rejects_malformed_stage_as_tool_error(examples_root: Path) -> None:
-    _server, _allowed, tools = _build("congresswatch")
-    by_name = {t.name: t for t in tools}
-
-    created = _call(by_name["create_draft"], {"project_id": "congresswatch"})
-    draft = json.loads(created["content"][0]["text"])
-
-    malformed = {"id": "load", "type": "input_data"}  # missing name + connector
-    out = _call(
-        by_name["set_draft_stage"],
-        {
-            "project_id": "congresswatch",
-            "draft_id": draft["id"],
-            "stage_json": json.dumps(malformed),
-        },
-    )
-    assert out.get("is_error") is True
-
-    read_back = _call(
-        by_name["read_draft"],
-        {"project_id": "congresswatch", "draft_id": draft["id"]},
-    )
-    read_result = json.loads(read_back["content"][0]["text"])
-    assert read_result["stages"] == []
-
-
-def test_a_draft_stage_input_round_trips_as_the_upstream_id_alone(examples_root: Path) -> None:
-    _server, _allowed, tools = _build("congresswatch")
-    by_name = {t.name: t for t in tools}
-    downstream = {
-        "id": "transform",
-        "description": "Transform rows",
+        "id": "score",
+        "description": "Score rows",
         "type": "python_row_function",
         "inputs": [{"id": "load"}],
-        "signature": {"form": "extends"},
-        "function": {"kind": "inline", "code": "def transform(row): return row"},
+        "signature": {"form": "extends",
+                      "reads": [{"input": "load", "columns": [
+                          {"name": "id", "type": "str", "nullable": False}]}],
+                      "adds": [{"name": "score", "type": "float", "nullable": True}]},
+        "function": {
+            "kind": "inline",
+            "summary": "Scores every row 1.0, which is what a fixture needs and no more.",
+            "corner_cases": [],
+            "code": "def transform(row): return {'score': 1.0}",
+        },
     }
 
-    created = _call(by_name["create_draft"], {"project_id": "congresswatch"})
-    draft = json.loads(created["content"][0]["text"])
-    _call(
-        by_name["set_draft_stage"],
-        {
-            "project_id": "congresswatch",
-            "draft_id": draft["id"],
-            "stage_json": json.dumps(downstream),
-        },
-    )
+    out = _call(by_name["add_stage"], {"project_id": "congresswatch", "stages": [stage]})
+    assert not out.get("is_error"), out["content"][0]["text"]
+    assert json.loads(out["content"][0]["text"])["added"] == ["score"], out["content"][0]["text"]
 
-    read_back = _call(
-        by_name["read_draft"],
-        {"project_id": "congresswatch", "draft_id": draft["id"]},
-    )
-    read_result = json.loads(read_back["content"][0]["text"])
-    stage = next(s for s in read_result["stages"] if s["id"] == "transform")
-    assert stage["inputs"] == [{"id": "load"}]
+    read_back = json.loads(_call(
+        by_name["read_stage"],
+        {"project_id": "congresswatch", "stage_id": "score"})["content"][0]["text"])
+    assert read_back["id"] == stage["id"]
+    assert read_back["type"] == stage["type"]
+
+    saved = json.loads(_call(by_name["save_version"], {
+        "project_id": "congresswatch",
+        "message": "add the score stage"})["content"][0]["text"])
+    assert saved["ok"] is True
+    assert saved["version_id"] is not None
 
 
-def test_unknown_draft_id_surfaces_as_tool_error(examples_root: Path) -> None:
-    _server, _allowed, tools = _build("congresswatch")
-    tool = next(t for t in tools if t.name == "read_draft")
-    out = _call(tool, {"project_id": "congresswatch", "draft_id": "calm-otter-lamp"})
-    assert out.get("is_error") is True
-    assert "No draft" in out["content"][0]["text"]
+
 
 
 def test_as_content_serializes_a_pydantic_model_to_its_fields() -> None:
@@ -217,3 +131,35 @@ def test_as_content_serializes_a_pydantic_model_to_its_fields() -> None:
 
     out = as_tool_content(_Sample(ok=True, label="draft"))
     assert json.loads(out["content"][0]["text"]) == {"ok": True, "label": "draft"}
+
+
+def test_a_tool_taking_a_model_is_handed_json_and_gets_the_model(examples_root: Path) -> None:
+    """add_stage and write_review_guide declare pydantic models; the SDK sends dicts."""
+    _seed(examples_root, "congresswatch")
+    _server, _allowed, tools = _build("congresswatch")
+    spec = next(s for s in make_editing_tools(EditingContext(project_id="congresswatch"))
+                if s.name == "add_stage")
+
+    parsed = spec.parse_arguments({
+        "project_id": "congresswatch",
+        "stages": [{
+            "id": "load", "description": "Load rows", "type": "input_data",
+            "connector": {"kind": "file"},
+            "signature": {"form": "replaces", "produces": [
+                {"name": "id", "type": "str", "nullable": False}]},
+        }],
+    })
+    assert parsed["stages"][0].id == "load"
+    assert parsed["project_id"] == "congresswatch"
+
+
+def test_an_argument_the_model_shapes_wrongly_comes_back_as_a_tool_error(
+    examples_root: Path,
+) -> None:
+    _seed(examples_root, "congresswatch")
+    _server, _allowed, tools = _build("congresswatch")
+    out = _call(next(t for t in tools if t.name == "add_stage"),
+                {"project_id": "congresswatch", "stages": [{"id": "load"}]})
+    assert out["is_error"] is True
+    # The field, not a stack trace: what comes back is what the model reads to retry.
+    assert "type" in out["content"][0]["text"]

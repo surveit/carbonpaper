@@ -13,9 +13,7 @@ from pydantic import Field, model_validator
 from pydantic.json_schema import SkipJsonSchema
 
 from app.models.stage import SERVER_OWNED_STAGE_FIELDS, StageDraft
-from app.services import drafts
 from app.services import project as project_service
-from app.services.drafts import DraftEdit
 
 
 # The strip runs BEFORE validation because both tool surfaces bind this model as an
@@ -63,16 +61,6 @@ def edit_stage_reporting_drops(
     return reported
 
 
-def set_draft_stage_reporting_drops(
-    project_id: str, draft_id: str, stage_json: str
-) -> DraftEdit:
-    """The draft's reply carries no warnings channel, so a drop is reported as an issue."""
-    trimmed, dropped = _drop_server_owned_from_json(stage_json)
-    edit = drafts.set_draft_stage(project_id, draft_id, trimmed)
-    edit.issues = edit.issues + _describe_dropped_fields(_read_id(trimmed), dropped)
-    return edit
-
-
 def _drop_server_owned_from_json(stage_json: str) -> tuple[str, list[str]]:
     """Text that is not a JSON object passes through untouched, so the service states why."""
     submitted = _parse_object(stage_json)
@@ -91,12 +79,6 @@ def _parse_object(text: str) -> dict[str, Any] | None:
     except json.JSONDecodeError:
         return None
     return parsed if isinstance(parsed, dict) else None
-
-
-def _read_id(stage_json: str) -> str:
-    submitted = _parse_object(stage_json) or {}
-    stage_id = submitted.get("id")
-    return stage_id if isinstance(stage_id, str) else "?"
 
 
 def _describe_dropped_fields(stage_id: str, dropped: Sequence[str]) -> list[str]:

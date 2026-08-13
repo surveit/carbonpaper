@@ -19,7 +19,7 @@ from app.tools.submitted_stage import (
     add_stages_reporting_drops,
     edit_stage_reporting_drops,
 )
-from app.tools.tool_specs import SAVE_VERSION_FROM_WORKING_COPY, TOOL_SPECS
+from app.tools.tool_specs import TOOL_SPECS
 
 _RUN_TOOL_ERRORS = shared.RUN_TOOL_ERRORS
 
@@ -143,7 +143,7 @@ def remove_stage(project_id: str, stage_id: str) -> dict[str, Any]:
     return shared.remove_stage(project_id, stage_id)
 
 
-@mcp.tool(description=SAVE_VERSION_FROM_WORKING_COPY.description)
+@mcp.tool(description=TOOL_SPECS["save_version"].description)
 def save_version(
     project_id: str, message: str, parent_version: str | None = None
 ) -> dict[str, Any]:

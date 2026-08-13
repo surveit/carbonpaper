@@ -134,15 +134,11 @@ def test_project_id_cannot_escape_the_workspace(examples_root: Path) -> None:
 def _versioned(examples: Path, name: str) -> tuple[list[BoundToolSpec], str]:
     _seed(examples, name)
     tools = _tools(name)
-    draft = _tool(tools, "create_draft")(name)
-    for stage in (
-        _stage("load", "Load rows", "input_data"),
-        _stage("score", "Score rows", "llm_transform", inputs=["load"]),
-    ):
-        _tool(tools, "set_draft_stage")(name, draft.id, json.dumps(stage))
-    saved = _tool(tools, "save_version")(name, draft.id, "first proposal")
-    assert saved.version_id is not None
-    return tools, saved.version_id
+    # _seed already wrote `load`; the guide these tests write needs a stage above it.
+    add_stage(examples / name, _stage("score", "Score rows", "llm_transform", inputs=["load"]))
+    saved = _tool(tools, "save_version")(name, "first proposal")
+    assert saved["version_id"] is not None
+    return tools, saved["version_id"]
 
 
 def _guide(step_ids: list[str], unnarrated: list[str]) -> ReviewGuideDraft:

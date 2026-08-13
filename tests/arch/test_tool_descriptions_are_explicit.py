@@ -8,7 +8,7 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-from app.tools.editing import TOOL_LABELS, TOOL_SCHEMAS, _DESCRIPTIONS
+from app.tools.editing import TOOL_LABELS, TOOL_SCHEMAS
 from app.tools.tool_specs import TOOL_SPECS
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -71,34 +71,31 @@ def test_no_mcp_tool_carries_a_docstring() -> None:
 
 def test_mcp_descriptions_cover_exactly_the_registered_tools() -> None:
     registered = {name for name, _, _ in find_mcp_tools(_MCP_SERVER)}
-    # save_version is described per-surface (see app.tools.tool_specs); every other
-    # MCP tool reads the shared registry.
-    assert registered - set(TOOL_SPECS) == {"save_version"}
-    # Spec entries another surface owns and this one deliberately lacks: the draft tools
-    # are the editing agent's, and `sleep` exists for in-process agents, which run with
-    # the CLI's built-ins disabled — the CLI client connecting HERE brings its own.
-    assert set(TOOL_SPECS) - registered <= {"get_current_project", "create_draft",
-                                            "read_draft", "set_draft_stage",
-                                            "remove_draft_stage", "sleep"}
+    assert registered - set(TOOL_SPECS) == set()
+    # Spec entries the other surface owns and this one deliberately lacks:
+    # get_current_project is a session's own binding, and `sleep` exists for in-process
+    # agents, which run with the CLI's built-ins disabled — the CLI client connecting
+    # HERE brings its own. The list may shrink; a new name on it is the two surfaces
+    # diverging again, which is what this file exists to catch.
+    assert set(TOOL_SPECS) - registered <= {"get_current_project", "sleep"}
 
 
 def test_no_editing_tool_carries_a_docstring() -> None:
     documented = find_docstringed_editing_tools(_EDITING_TOOLS)
     assert not documented, (
-        "an editing tool's docstring is not what the model reads — the `_DESCRIPTIONS` "
-        "mapping in app/tools/editing.py is, built from app/tools/tool_specs.py; "
+        "an editing tool's docstring is not what the model reads — the shared registry "
+        "in app/tools/tool_specs.py is; "
         f"a docstring here would drift from it unnoticed: {documented}"
     )
 
 
 def test_editing_tool_registries_cover_exactly_the_tools() -> None:
     tools = set(find_editing_tool_names(_EDITING_TOOLS))
-    assert set(_DESCRIPTIONS) >= tools
+    assert set(TOOL_SPECS) >= tools
     assert set(TOOL_SCHEMAS) == tools
     assert tools <= set(TOOL_LABELS)
 
 
 def test_every_description_is_non_empty() -> None:
     blank = [name for name, spec in TOOL_SPECS.items() if not spec.description.strip()]
-    blank += [name for name, spec in _DESCRIPTIONS.items() if not spec.description.strip()]
     assert not blank
