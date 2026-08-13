@@ -4,9 +4,11 @@ a concrete agent registers itself at import, so its module must be imported firs
 """
 from __future__ import annotations
 
+import inspect
+import json
 from typing import Any, Callable
 
-from claude_agent_sdk import McpSdkServerConfig, SdkMcpTool, create_sdk_mcp_server
+from claude_agent_sdk import McpSdkServerConfig, SdkMcpTool, create_sdk_mcp_server, tool
 from pydantic import BaseModel, ConfigDict
 
 from app.core.agent.sdk_engine import MCP_SERVER_NAME, ClaudeAgentSdkEngine
@@ -73,13 +75,54 @@ def render_system_prompt(config: AgentConfig, context: BaseModel) -> str:
 # ── claude_agent_sdk MCP wrapping (generic) ──────────────────────────────────
 # Mounting a set of bound tools as an in-process MCP server is generic infra: it
 # depends only on the specs, not on what any tool does. The server is mounted
-# under the fixed generic name MCP_SERVER_NAME.
+# under the fixed generic name MCP_SERVER_NAME. This is also the only module that
+# names the SDK: a BoundToolSpec describes a tool in JSON Schema and pydantic, and
+# the translation into what THIS provider calls a tool happens here.
 
 
 def build_mcp_server(
     specs: list[BoundToolSpec],
 ) -> tuple[McpSdkServerConfig, list[str], list[SdkMcpTool[Any]]]:
-    wrapped = [spec.as_sdk_tool() for spec in specs]
+    wrapped = [build_sdk_tool(spec) for spec in specs]
     server = create_sdk_mcp_server(MCP_SERVER_NAME, tools=wrapped)
     allowed = [f"mcp__{MCP_SERVER_NAME}__{spec.name}" for spec in specs]
     return server, allowed, wrapped
+
+
+def build_sdk_tool(spec: BoundToolSpec) -> SdkMcpTool[Any]:
+    async def handler(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            result = spec.fn(**spec.parse_arguments(args))
+            # An async tool is one that WAITS (get_run_status holding open on a
+            # running run); awaiting it here is what keeps the app answering
+            # everything else meanwhile.
+            if inspect.isawaitable(result):
+                result = await result
+            return as_tool_content(result)
+        except Exception as exc:  # noqa: BLE001 — tool boundary: any tool failure is surfaced to the model as an error, never swallowed or faked
+            return {
+                "content": [{"type": "text", "text": f"ERROR: {exc}"}],
+                "is_error": True,
+            }
+
+    return tool(spec.name, spec.description, spec.json_schema)(handler)
+
+
+def as_tool_content(value: object) -> dict[str, Any]:
+    if isinstance(value, str):
+        text = value
+    else:
+        # by_alias + exclude_none so a model carrying Stage(s) (e.g. a draft view)
+        # comes back to the agent in the SAME spec-dict form it writes stages
+        # in — aliased (`schema`, not `table_schema`) and without the unset-optional
+        # nulls, matching app.models.stage_to_spec_dict. Additive for every other
+        # model-returning tool: an alias-free model (DraftView, DraftEdit,
+        # SaveResult, ...) dumps equivalently (a dropped null re-parses as its
+        # default).
+        dumpable = (
+            value.model_dump(mode="json", by_alias=True, exclude_none=True)
+            if isinstance(value, BaseModel)
+            else value
+        )
+        text = json.dumps(dumpable, default=str, indent=2)
+    return {"content": [{"type": "text", "text": text}]}

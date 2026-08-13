@@ -4,7 +4,7 @@ what the run holds. Bound to one step's row sources, so it can reach no other da
 from __future__ import annotations
 
 
-from app.core.agent.bound_tool import BoundToolSpec, bind_function
+from app.core.agent.bound_tool import BoundToolSpec, bind_by_signature
 from app.models.schema import StageId
 from app.core.row_search import MAX_MATCHES, InputRows, RowMatches
 
@@ -47,7 +47,7 @@ def build_find_rows_tool(sources: dict[StageId, InputRows]) -> BoundToolSpec:
             )
         return source.search(filter)
 
-    return bind_function(
+    return bind_by_signature(
         name=FIND_ROWS_TOOL,
         description=FIND_ROWS_DESCRIPTION,
         fn=find_rows,

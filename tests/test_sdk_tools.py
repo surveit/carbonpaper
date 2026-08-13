@@ -13,9 +13,10 @@ from claude_agent_sdk import SdkMcpTool
 from pydantic import BaseModel
 
 from app.tools.editing import EditingContext, make_editing_tools
-from app.core.agent.registry import build_mcp_server
-from app.core.agent.bound_tool import as_tool_content, bind_function
+from app.core.agent.registry import as_tool_content, build_mcp_server
+from app.core.agent.bound_tool import bind_by_signature
 from app.tools import shared
+from app.tools.tool_specs import bind
 from app.services import workspace
 from stage_seed import add_stage
 
@@ -183,7 +184,7 @@ def test_a_model_parameter_is_advertised_with_its_own_shape(examples_root: Path)
 
 
 def test_write_review_guide_stores_a_guide_sent_as_an_object(examples_root: Path) -> None:
-    """Through as_sdk_tool, not the bound function: the bridge is what was broken."""
+    """Through the SDK tool, not the bound function: the bridge is what was broken."""
     _seed(examples_root, "congresswatch")
     _server, _allowed, tools = _build("congresswatch")
     by_name = {t.name: t for t in tools}
@@ -214,19 +215,19 @@ def test_write_review_guide_stores_a_guide_sent_as_an_object(examples_root: Path
 def test_a_parameter_the_function_does_not_take_is_refused() -> None:
     """The prose table is the only place a name can disagree with the function."""
     with pytest.raises(ValueError, match=r"does not take \['nonesuch'\]"):
-        bind_function(
+        bind_by_signature(
             name="read_stage", description="d", fn=shared.read_stage, label="l",
             parameters={"nonesuch": "not a parameter of read_stage"},
         )
 
 
 def test_a_defaulted_parameter_is_optional_to_the_model() -> None:
-    schema = next(iter(shared.bind("run_stage_tests"))).json_schema
+    schema = next(iter(bind("run_stage_tests"))).json_schema
     assert set(schema["required"]) == {"project_id"}, schema["required"]
     assert "stage_id" in schema["properties"]
 
 
 def test_a_caller_supplied_parameter_is_not_advertised() -> None:
     """base_url is the reader's address; the model cannot know it and is not asked."""
-    schema = next(iter(shared.bind("read_stage_output_rows"))).json_schema
+    schema = next(iter(bind("read_stage_output_rows"))).json_schema
     assert "base_url" not in schema["properties"]

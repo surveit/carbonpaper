@@ -19,7 +19,7 @@ from app.tools.submitted_stage import (
     add_stages_reporting_drops,
     edit_stage_reporting_drops,
 )
-from app.tools.tool_specs import TOOL_SPECS
+from app.tools.tool_specs import read_tool_description
 
 _RUN_TOOL_ERRORS = shared.RUN_TOOL_ERRORS
 
@@ -76,93 +76,93 @@ async def run_session_manager() -> AsyncIterator[None]:
             _active_manager = None
 
 
-@mcp.tool(description=TOOL_SPECS["list_projects"].description)
+@mcp.tool(description=read_tool_description("list_projects"))
 def list_projects() -> list[shared.ProjectListing]:
     return shared.list_projects()
 
 
-@mcp.tool(description=TOOL_SPECS["create_project"].description)
+@mcp.tool(description=read_tool_description("create_project"))
 def create_project(name: str, document: str) -> shared.Project:
     return shared.create_project(name, document, source="mcp")
 
 
-@mcp.tool(description=TOOL_SPECS["get_project_status"].description)
+@mcp.tool(description=read_tool_description("get_project_status"))
 def get_project_status(project_id: str) -> dict[str, Any]:
     return shared.get_project_status(project_id)
 
 
-@mcp.tool(description=TOOL_SPECS["generate_stage_tests"].description)
+@mcp.tool(description=read_tool_description("generate_stage_tests"))
 async def generate_stage_tests(project_id: str, stage_id: str) -> dict[str, Any]:
     return await shared.generate_stage_tests(project_id, stage_id)
 
 
-@mcp.tool(description=TOOL_SPECS["run_stage_tests"].description)
+@mcp.tool(description=read_tool_description("run_stage_tests"))
 def run_stage_tests(project_id: str, stage_id: str | None = None) -> dict[str, Any]:
     return shared.run_stage_tests(project_id, stage_id)
 
 
-@mcp.tool(description=TOOL_SPECS["report_compiler_warnings"].description)
+@mcp.tool(description=read_tool_description("report_compiler_warnings"))
 def report_compiler_warnings(project_id: str) -> dict[str, Any]:
     return shared.report_compiler_warnings(project_id)
 
 
-@mcp.tool(description=TOOL_SPECS["read_terms"].description)
+@mcp.tool(description=read_tool_description("read_terms"))
 def read_terms(project_id: str) -> shared.Terms:
     return shared.read_terms(project_id)
 
 
-@mcp.tool(description=TOOL_SPECS["write_terms"].description)
+@mcp.tool(description=read_tool_description("write_terms"))
 def write_terms(project_id: str, terms: shared.Terms) -> shared.Terms:
     return shared.write_terms(project_id, terms)
 
 
-@mcp.tool(description=TOOL_SPECS["read_workflow_summary"].description)
+@mcp.tool(description=read_tool_description("read_workflow_summary"))
 def read_workflow_summary(project_id: str) -> shared.workspace.WorkflowSummary:
     return shared.read_workflow_summary(project_id)
 
 
-@mcp.tool(description=TOOL_SPECS["read_stage"].description)
+@mcp.tool(description=read_tool_description("read_stage"))
 def read_stage(project_id: str, stage_id: str) -> str:
     return shared.read_stage(project_id, stage_id)
 
 
-@mcp.tool(description=TOOL_SPECS["edit_stage"].description)
+@mcp.tool(description=read_tool_description("edit_stage"))
 def edit_stage(project_id: str, stage_id: str, changes_json: str) -> dict[str, Any]:
     return working_copy.catch_stage_edit_refusals(
         lambda: edit_stage_reporting_drops(project_id, stage_id, changes_json)
     )
 
 
-@mcp.tool(description=TOOL_SPECS["add_stage"].description)
+@mcp.tool(description=read_tool_description("add_stage"))
 def add_stage(project_id: str, stages: list[SubmittedStage]) -> dict[str, Any]:
     return add_stages_reporting_drops(project_id, stages)
 
 
-@mcp.tool(description=TOOL_SPECS["remove_stage"].description)
+@mcp.tool(description=read_tool_description("remove_stage"))
 def remove_stage(project_id: str, stage_id: str) -> dict[str, Any]:
     return shared.remove_stage(project_id, stage_id)
 
 
-@mcp.tool(description=TOOL_SPECS["save_version"].description)
+@mcp.tool(description=read_tool_description("save_version"))
 def save_version(
     project_id: str, message: str, parent_version: str | None = None
 ) -> dict[str, Any]:
     return working_copy.save_working_copy_as_version(project_id, message, parent_version)
 
 
-@mcp.tool(description=TOOL_SPECS["read_review_guide"].description)
+@mcp.tool(description=read_tool_description("read_review_guide"))
 def read_review_guide(project_id: str, version_id: str) -> shared.ReviewGuide | None:
     return shared.read_review_guide(project_id, version_id)
 
 
-@mcp.tool(description=TOOL_SPECS["write_review_guide"].description)
+@mcp.tool(description=read_tool_description("write_review_guide"))
 def write_review_guide(
     project_id: str, version_id: str, guide: shared.ReviewGuideDraft
 ) -> shared.ReviewGuide:
     return shared.write_review_guide(project_id, version_id, guide)
 
 
-@mcp.tool(description=TOOL_SPECS["run_workflow"].description)
+@mcp.tool(description=read_tool_description("run_workflow"))
 def run_workflow(
     project_id: str,
     version_id: str | None = None,
@@ -175,12 +175,12 @@ def run_workflow(
         return {"ok": False, "error": str(exc)}
 
 
-@mcp.tool(description=TOOL_SPECS["move_file_to_project"].description)
+@mcp.tool(description=read_tool_description("move_file_to_project"))
 def move_file_to_project(project_id: str, sha256: str) -> shared.StoredFileView:
     return shared.move_file_to_project(project_id, sha256)
 
 
-@mcp.tool(description=TOOL_SPECS["run_workflow_test"].description)
+@mcp.tool(description=read_tool_description("run_workflow_test"))
 def run_workflow_test(
     project_id: str,
     limit: int | None,
@@ -191,7 +191,7 @@ def run_workflow_test(
     return shared.run_workflow_test(project_id, limit, version_id, stage_ids, offset)
 
 
-@mcp.tool(description=TOOL_SPECS["profile_stage_output_data_range"].description)
+@mcp.tool(description=read_tool_description("profile_stage_output_data_range"))
 def profile_stage_output_data_range(
     project_id: str, run_id: str, stage_id: str, columns: list[str], max_values: int,
 ) -> dict[str, Any]:
@@ -199,7 +199,7 @@ def profile_stage_output_data_range(
         project_id, run_id, stage_id, columns, max_values)
 
 
-@mcp.tool(description=TOOL_SPECS["profile_file"].description)
+@mcp.tool(description=read_tool_description("profile_file"))
 def profile_file(
     project_id: str, sha256: str, columns: list[str] | None = None, max_values: int = 20,
     sheet_name: str | int = 0, header_row: int = 0, first_column: int = 0,
@@ -212,7 +212,7 @@ def profile_file(
     return {"ok": True, **profile.model_dump()}
 
 
-@mcp.tool(description=TOOL_SPECS["survey_workbook"].description)
+@mcp.tool(description=read_tool_description("survey_workbook"))
 def survey_workbook(project_id: str, sha256: str, from_row: int = 0) -> dict[str, Any]:
     try:
         sheets = shared.survey_workbook(project_id, sha256, from_row)
@@ -221,7 +221,7 @@ def survey_workbook(project_id: str, sha256: str, from_row: int = 0) -> dict[str
     return {"ok": True, "sheets": [sheet._asdict() for sheet in sheets]}
 
 
-@mcp.tool(description=TOOL_SPECS["list_files"].description)
+@mcp.tool(description=read_tool_description("list_files"))
 def list_files(project_id: str | None = None) -> shared.ProjectFilesView:
     return shared.list_files(project_id, _resolve_file_upload_url(project_id))
 
@@ -248,12 +248,12 @@ def _resolve_file_upload_url(project_id: str | None) -> str:
     return f"{scheme}://{host}/project/{project_id}/files"
 
 
-@mcp.tool(description=TOOL_SPECS["list_runs"].description)
+@mcp.tool(description=read_tool_description("list_runs"))
 def list_runs(project_id: str, limit: int = shared.MAX_RUNS_LISTED) -> shared.RunHistory:
     return shared.list_runs(project_id, limit)
 
 
-@mcp.tool(description=TOOL_SPECS["get_run_status"].description)
+@mcp.tool(description=read_tool_description("get_run_status"))
 def get_run_status(project_id: str, run_id: str) -> dict[str, Any]:
     try:
         return shared.get_run_status(project_id, run_id)
@@ -261,7 +261,7 @@ def get_run_status(project_id: str, run_id: str) -> dict[str, Any]:
         return {"ok": False, "error": str(exc)}
 
 
-@mcp.tool(description=TOOL_SPECS["read_stage_output_rows"].description)
+@mcp.tool(description=read_tool_description("read_stage_output_rows"))
 def read_stage_output_rows(
     project_id: str,
     run_id: str,

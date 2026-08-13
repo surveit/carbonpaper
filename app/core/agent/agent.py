@@ -12,7 +12,7 @@ from pydantic import BaseModel, ValidationError
 
 from app.core.agent.diagnostics import AgentRunDiagnostics, summarize_run
 from app.core.agent.registry import build_mcp_server
-from app.core.agent.bound_tool import BoundToolSpec, bind_to_json_schema
+from app.core.agent.bound_tool import BoundToolSpec, bind_by_schema
 from app.core.agent.sdk_engine import CLI_MODEL, ClaudeAgentSdkEngine, ThinkingConfig
 from app.core.agent.usage import LlmUsage
 from app.core.errors import GenerationError
@@ -175,7 +175,7 @@ class Agent(Generic[Model]):
     def build_engine(self) -> ClaudeAgentSdkEngine:
         # submit_answer validates its own arguments: a rejection is an attempt it counts.
         specs = [
-            bind_to_json_schema(
+            bind_by_schema(
                 name=SUBMIT_ANSWER_TOOL,
                 description=SUBMIT_ANSWER_DESCRIPTION,
                 fn=self.submit_answer,

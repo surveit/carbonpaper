@@ -10,7 +10,7 @@ from typing import Any, Callable
 
 from pydantic import BaseModel
 
-from app.core.agent.bound_tool import BoundToolSpec, bind_function
+from app.core.agent.bound_tool import BoundToolSpec, bind_by_signature
 from app.tools.types import ToolParameterProse
 from app.tools import shared, working_copy
 from app.tools.submitted_stage import (
@@ -18,7 +18,7 @@ from app.tools.submitted_stage import (
     add_stages_reporting_drops,
     edit_stage_reporting_drops,
 )
-from app.tools.tool_specs import TOOL_SPECS
+from app.tools.tool_specs import bind, read_parameter_prose, read_tool_description
 from app.services.project import Project
 
 
@@ -71,15 +71,15 @@ def make_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
         read_stage_output_rows,
     ]
     return [
-        bind_function(
+        bind_by_signature(
             name=fn.__name__,
-            description=TOOL_SPECS[fn.__name__].description,
+            description=read_tool_description(fn.__name__),
             fn=fn,
             label=TOOL_LABELS[fn.__name__],
             parameters=TOOL_SCHEMAS[fn.__name__],
         )
         for fn in tools
-    ] + shared.bind(
+    ] + bind(
         "list_projects", "read_workflow_summary", "read_stage", "remove_stage",
         "read_terms", "write_terms",
         "read_review_guide", "write_review_guide",
@@ -92,15 +92,19 @@ def make_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
 
 
 # ── tool input schemas + display labels ──────────────────────────────────────
-# Input schemas keyed by tool __name__, verified against make_editing_tools above.
-# Each parameter maps to its type annotation — a plain type like `str` or an
-# `Annotated[type, "description"]` the SDK turns into the JSON Schema the CLI sees.
-# Empty dict = no parameters. The value type is `object`, not `Any`: the entries are
-# opaque type-annotation objects we never introspect, so `object` types them
-# honestly without letting `Any` leak past the schema.
+# What each argument of THIS surface's own tools IS, keyed by tool __name__ and
+# verified against make_editing_tools above. What each argument TAKES is read off the
+# closure's signature. Empty dict = the tool takes no arguments. A tool with a shared
+# body reads its prose from app.tools.tool_specs instead, so it is absent here.
 TOOL_SCHEMAS: dict[str, ToolParameterProse] = {
     "get_current_project": {},
-    "create_project": shared.read_parameter_prose("create_project"),
+    "create_project": {
+        "name": "What to CALL the project — a label, shown to the human. Two projects may "
+            "share one; the id you work with comes back from this call.",
+        "document": "The methodology prose, whole. It becomes the project's source of record, "
+            "which every later generation reads — so send what the user wrote, never a "
+            "summary of it.",
+    },
     "edit_stage": {
         "project_id": "The project id (call get_current_project first).",
         "stage_id": "The id of the stage to change.",
@@ -130,7 +134,7 @@ TOOL_SCHEMAS: dict[str, ToolParameterProse] = {
         "project_id": "The project whose files to list. Omit for the files that are in no "
             "project yet.",
     },
-    "read_stage_output_rows": shared.read_parameter_prose("read_stage_output_rows"),
+    "read_stage_output_rows": read_parameter_prose("read_stage_output_rows"),
 }
 
 

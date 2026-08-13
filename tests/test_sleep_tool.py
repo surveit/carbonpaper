@@ -12,6 +12,7 @@ import pytest
 from app.core.agent.registry import build_mcp_server
 from app.tools import shared
 from app.tools.shared import MAX_SLEEP_SECONDS
+from app.tools.tool_specs import bind
 
 
 @pytest.fixture
@@ -44,7 +45,7 @@ def test_a_negative_ask_sleeps_nothing(slept: list[float]) -> None:
 
 def test_an_agent_calls_it_through_the_tool_handler(slept: list[float]) -> None:
     """The handler awaits an awaitable result; unawaited, the model would read a coroutine."""
-    [tool] = build_mcp_server(shared.bind("sleep"))[2]
+    [tool] = build_mcp_server(bind("sleep"))[2]
 
     async def _call() -> dict[str, Any]:
         return await tool.handler({"seconds": 3})
