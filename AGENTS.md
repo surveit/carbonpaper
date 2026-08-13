@@ -72,6 +72,16 @@ Also `app/AGENTS.md` (web layer), `app/runtime/AGENTS.md` (the Runner), `README.
   caller. That spends the readability the ceiling exists to protect and leaves the next change
   with even less room. If the split is bigger than the change you are on, say so in the PR and
   let a human decide whether to take it now.
+- **A `PersistedModel`'s `id` is opaque. Never build one out of the record's own data.**
+  A sha256, a filename, a name someone typed, a fingerprint — putting any of them in the id
+  makes the id move when the value does. The record then has two identities that must agree,
+  nothing checks that they do, and re-keying it means deleting and re-writing the row rather
+  than editing a field. Leave `id` alone and let it default to `uuid4().hex`; the real key
+  goes in FIELDS, which is what a lookup filters on.
+  The one composition allowed is the SCOPE PREFIX the store requires: `list()` selects by id
+  prefix only, so a per-project record is `f"{project}/{opaque}"` — project, then something
+  meaningless. `StageCacheEntry` is the deliberate exception and the only one: a cache entry
+  IS its content hash, so its id is built from the fingerprints it looks up by.
 - **Planning docs stay out of the repo.** Design specs, implementation/execution plans,
   brainstorming or "rethink" notes, and refactor/migration roadmaps are ephemeral working
   artifacts — keep them in scratch or the PR description, never commit them. Committed docs

@@ -80,17 +80,27 @@ def save_upload(filename: str, src: BinaryIO, project_id: str | None = None) -> 
     root.mkdir(parents=True, exist_ok=True)
     safe_name = _safe_filename(filename)
     staged, digest, byte_count = _write_to_temp_file(root, src, max_upload_bytes())
-    dest = root / digest / safe_name
-    # The quota is checked here rather than before the read, so re-sending bytes the
-    # store already holds costs nothing and is allowed at quota. The overshoot while
-    # deciding is one file's worth, bounded by the ceiling above.
-    if dest.exists():
+    # One copy per sha256, WHATEVER it was called this time: the same bytes sent again
+    # under a new name used to land beside the first as a second file, so the directory
+    # was content-addressed but its contents were not. `held` is that first name, and it
+    # is what the record keeps pointing at — resolve_stored_path builds from it.
+    if _find_stored_name(root / digest) is not None:
         staged.unlink()
-    else:
-        _refuse_upload_over_quota(root, staged, byte_count)
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        staged.replace(dest)
+        return _record_upload(digest, safe_name, byte_count, project_id)
+    # Checked here rather than before the read, so re-sending bytes the store already
+    # holds costs nothing and is allowed at quota. The overshoot while deciding is one
+    # file's worth, bounded by the ceiling above.
+    _refuse_upload_over_quota(root, staged, digest, byte_count)
+    (root / digest).mkdir(parents=True, exist_ok=True)
+    staged.replace(root / digest / safe_name)
     return _record_upload(digest, safe_name, byte_count, project_id)
+
+
+def _find_stored_name(blob_dir: Path) -> str | None:
+    """None means these bytes are new to the store, so the caller has to write them."""
+    if not blob_dir.is_dir():
+        return None
+    return next((f.name for f in sorted(blob_dir.iterdir()) if f.is_file()), None)
 
 
 def move_file_to_project(sha256: str, project_id: str) -> UploadedFile:
@@ -124,8 +134,13 @@ def delete_file(project_id: str | None, sha256: str) -> None:
 
 
 def resolve_stored_path(record: UploadedFile) -> Path:
-    """Where a stored file sits, read back off its record alone."""
-    return (files_root() / record.sha256 / record.filename).resolve()
+    """The file these bytes were FIRST stored as, which `record.filename` may have moved on from."""
+    blob_dir = files_root() / record.sha256
+    # `filename` is the name of the latest send, shown to whoever picked it. The bytes
+    # were written once, under whatever they were called then, and that name is never
+    # rewritten — a run manifest holds the path it read, so renaming would strand it.
+    held = _find_stored_name(blob_dir)
+    return (blob_dir / (held or record.filename)).resolve()
 
 
 def list_project_files(project_id: str | None) -> list[UploadedFile]:
@@ -157,13 +172,15 @@ def open_project_file(project_id: str, sha256: str) -> tuple[UploadedFile, Path]
 
 
 def measure_files_used_bytes() -> int:
-    """What the store weighs, counted off the disk it occupies rather than off the records."""
-    root = files_root()
-    if not root.is_dir():
-        return 0
-    # Off the disk, not by summing byte_count: two projects holding one blob are two
-    # records over one copy, so the records would double-count the bytes this bounds.
-    return sum(f.stat().st_size for f in root.rglob("*") if f.is_file())
+    """What the store weighs, read off the records rather than by walking the disk."""
+    return _sum_stored_bytes({})
+
+
+def _sum_stored_bytes(arriving: dict[str, int]) -> int:
+    # Content-addressed: two projects holding one blob are two records over ONE copy.
+    weighed = {record.sha256: record.byte_count for record in UploadedFile.list()}
+    # `arriving` is bytes already on disk that no record covers yet — a file mid-upload.
+    return sum((weighed | arriving).values())
 
 
 def _find_records(*, sha256: str | None = None,
@@ -210,10 +227,13 @@ def _write_to_temp_file(root: Path, src: BinaryIO, ceiling: int) -> tuple[Path, 
     return temp, digest.hexdigest(), byte_count
 
 
-def _refuse_upload_over_quota(root: Path, staged: Path, byte_count: int) -> None:
+def _refuse_upload_over_quota(
+    root: Path, staged: Path, digest: str, byte_count: int
+) -> None:
     quota = files_quota_bytes()
-    used = sum(f.stat().st_size for f in root.rglob("*") if f.is_file())
-    # `used` counts the staged copy too — it is on the disk this bounds.
+    # The arriving bytes are staged on disk and have no record yet, so they are passed
+    # in rather than read back — this is the same figure list_files reports as remaining.
+    used = _sum_stored_bytes({digest: byte_count})
     if used > quota:
         staged.unlink()
         raise StoreOverQuota(used=used, quota=quota, sent=byte_count, root=root)
@@ -223,7 +243,7 @@ def _record_upload(digest: str, filename: str, byte_count: int,
                    project_id: str | None) -> UploadedFile:
     stored = _find_records(sha256=digest, project_id=project_id)
     # Re-saving a stored record rather than replacing it keeps `created_at` at the first
-    # arrival of these bytes for this project; only the name of the latest send differs.
+    # arrival of these bytes for this project.
     if not stored:
         record = UploadedFile(sha256=digest, filename=filename,
                               byte_count=byte_count, project_id=project_id)
