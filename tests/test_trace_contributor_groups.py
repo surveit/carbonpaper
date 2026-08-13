@@ -5,12 +5,12 @@ row can have tens of thousands of contributors.
 """
 from __future__ import annotations
 
-from app.web.panel_links import AppPanelLinks
-from app.web.trace_view import (
+from app.web.panel_links import (
     CONTRIBUTOR_ROWS_LINKED,
     CONTRIBUTORS_NAMED,
-    build_trace_view,
+    AppPanelLinks,
 )
+from app.web.trace_view import build_trace_view
 
 _STOP = {"reached_origin": False, "at_stage": "agg", "message": "summarizes its inputs"}
 

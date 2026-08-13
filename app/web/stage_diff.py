@@ -17,7 +17,7 @@ from app.models import StageType, WorkflowStage
 from app.models.stage import is_grain_and_order_preserving
 from app.runtime.lineage import RowLineage, lineage_sidecar_path
 from app.runtime.manifest import resolve_output_path
-from app.core.frames import read_frame_file
+from app.core.frames import read_frame_file, read_frame_table
 from app.web.loading import PREVIEW_ROWS_SHOWN, render_frame_as_text
 
 # The one grain-and-order-preserving type with nothing for a positional diff to
@@ -375,7 +375,7 @@ def _read_kept_ordinals(
     if not path.exists():
         return None
     try:
-        lineage = RowLineage.from_frame(read_frame_file(path))
+        lineage = RowLineage.from_table(read_frame_table(path))
     except (OSError, ValueError):
         return None
     if len(lineage) != rows_out:

@@ -14,7 +14,7 @@ from app.models import WorkflowStage
 from app.models.stages.publish import PublishStage
 
 from ..context import RunContext
-from ..citations import CitationProvider
+from ..citations import CitationProvider, save_citations
 from ..stage_output import StageOutput
 from .execution import narrow_stage
 from .python_functions import _load_python_function
@@ -34,9 +34,13 @@ def handle_publish(
     citation_provider = _resolve_citation_provider(fn, publish_stage, ctx, inputs)
     if citation_provider is None:
         return StageOutput.from_frame(fn(*args, output_dir=str(output_dir)))
-    return StageOutput.from_frame(
-        fn(*args, output_dir=str(output_dir), citation_provider=citation_provider)
-    )
+    result = fn(*args, output_dir=str(output_dir), citation_provider=citation_provider)
+    # Saved after the call, so it holds what the artifact actually cited rather
+    # than what the stage could have cited. The review packet renders exactly this
+    # set: a row nothing published points at needs no page.
+    identity = ctx.require_identity()
+    save_citations(identity.project, identity.run_id, publish_stage.id, citation_provider)
+    return StageOutput.from_frame(result)
 
 
 def _prepare_output_dir(stage: PublishStage, ctx: RunContext) -> Path:
