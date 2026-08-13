@@ -1,6 +1,9 @@
 {% extends "base.html" %}
 {% block title %}{{ title }}{% endblock %}
 {% block breadcrumbs %}{% include "_breadcrumbs.html" %}{% endblock %}
+{# A turn naming a file draws as a card; every other turn is its own text. The TEXT is
+   what the agent reads either way — this is only how the page draws it. #}
+{% macro turn_body(text) %}{% set file = text | attachment %}{% if file %}<div class="ac-body ac-file"><span class="ac-file-icon" aria-hidden="true">▤</span><span class="ac-file-name">{{ file.name }}</span><span class="ac-file-meta">{{ file.meta }}</span></div>{% else %}<div class="ac-body">{{ text }}</div>{% endif %}{% endmacro %}
 {% block content %}
 <div class="ac-head">
   <span class="ac-backend" title="which model backend answers">backend: {{ backend }}</span>
@@ -15,7 +18,7 @@
   {% for b in history %}
     {% if b.role == "user" %}
       <div class="ac-msg user"><div class="ac-role">you</div>
-        {% for blk in b.blocks %}<div class="ac-body">{{ blk.text }}</div>{% endfor %}
+        {% for blk in b.blocks %}{{ turn_body(blk.text) }}{% endfor %}
       </div>
     {% else %}
       <div class="ac-msg assistant">
@@ -39,7 +42,7 @@
     {% endif %}
   {% endfor %}
   {% if pending_user %}
-    <div class="ac-msg user"><div class="ac-role">you</div><div class="ac-body">{{ pending_user }}</div></div>
+    <div class="ac-msg user"><div class="ac-role">you</div>{{ turn_body(pending_user) }}</div>
   {% endif %}
 </div>
 
@@ -89,10 +92,31 @@ function scroll() { window.scrollTo(0, document.body.scrollHeight); }
 function fmtJson(s) { try { return JSON.stringify(JSON.parse(s), null, 2); } catch (e) { return s || ""; } }
 function toolPre(text) { const p = document.createElement("pre"); p.className = "ac-tool-json"; p.textContent = fmtJson(text); return p; }
 
+// Mirrors app.web.file_sizes.render_attachment, so a turn looks the same the moment it
+// is sent as it does after a reload. The text is identical either way — this is only how
+// it is drawn, and the agent reads the text.
+const ATTACHMENT_PREFIX = "[file] ";
+
+function attachmentBody(text) {
+  const body = el("ac-body ac-file");
+  const cut = text.indexOf(" · ");
+  const icon = el("ac-file-icon", "▤"); icon.setAttribute("aria-hidden", "true");
+  const name = el("ac-file-name",
+                  cut === -1 ? text.slice(ATTACHMENT_PREFIX.length)
+                             : text.slice(ATTACHMENT_PREFIX.length, cut));
+  body.append(icon, name);
+  if (cut !== -1) body.appendChild(el("ac-file-meta", text.slice(cut + 3)));
+  return body;
+}
+
 function addUser(text) {
   const b = el("ac-msg user");
   b.appendChild(el("ac-role", "you"));
-  const body = el("ac-body"); body.textContent = text; b.appendChild(body);
+  if (text.startsWith(ATTACHMENT_PREFIX)) {
+    b.appendChild(attachmentBody(text));
+  } else {
+    const body = el("ac-body"); body.textContent = text; b.appendChild(body);
+  }
   log.appendChild(b); scroll();
 }
 

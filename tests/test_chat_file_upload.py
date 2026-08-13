@@ -14,6 +14,7 @@ from app.services.errors import FileNotStoredError
 from app.services.project import create_project
 from app.services.uploads import UploadedFile, list_project_files
 from app.tools import shared
+from app.web.file_sizes import read_attachment
 
 client = TestClient(app)
 
@@ -138,3 +139,31 @@ def test_adopting_something_already_owned_fails_loudly(session_id, project_id):
     attach(session_id, project_id=project_id)
     with pytest.raises(FileNotStoredError, match="outside a project"):
         shared.move_file_to_project(project_id, CSV_SHA)
+
+
+# ─── The turn draws as a card; its text is still the sentence the agent reads ────
+
+def test_a_file_turn_draws_as_a_card(session_id, project_id):
+    line = attach(session_id, project_id=project_id).json()["line"]
+    client.post(f"/chat/{session_id}/message", json={"text": line})
+    page = client.get(f"/chat/{session_id}").text
+    assert 'class="ac-body ac-file"' in page
+    assert '<span class="ac-file-name">posts.csv</span>' in page
+
+
+def test_an_ordinary_message_is_still_its_own_text(session_id):
+    client.post(f"/chat/{session_id}/message", json={"text": "just a message"})
+    page = client.get(f"/chat/{session_id}").text
+    assert 'class="ac-body ac-file"' not in page
+    assert "just a message" in page
+
+
+def test_the_card_changes_how_the_line_looks_and_never_what_it_says(session_id, project_id):
+    line = attach(session_id, project_id=project_id).json()["line"]
+    card = read_attachment(line)
+    assert card is not None
+    # Every field of the sentence survives the split, because the agent is given the
+    # sentence and the reader is given the card, and they must not diverge.
+    assert card.name == "posts.csv"
+    assert card.meta == f"13B · in project demo ({project_id}) · sha256 {CSV_SHA}"
+    assert read_attachment("just a message") is None

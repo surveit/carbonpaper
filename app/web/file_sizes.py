@@ -2,6 +2,8 @@
 refusal is. The service raises with the facts; the wording lives here."""
 from __future__ import annotations
 
+from pydantic import BaseModel
+
 from app.services.errors import FileOverCeiling, StoreOverQuota
 from app.services.uploads import UploadedFile
 
@@ -44,3 +46,23 @@ def describe_attachment(record: UploadedFile, project_name: str = "") -> str:
     # event. sha256 is in it because that is what run_workflow's `files` takes.
     return (f"[file] {record.filename} · {describe_bytes(record.byte_count)} · "
             f"{home} · sha256 {record.sha256}")
+
+
+# What describe_attachment writes, so the two stay in step: a change to the sentence is a
+# change to what this splits. The prefix marks a turn as an attachment rather than prose
+# a person happened to type.
+ATTACHMENT_PREFIX = "[file] "
+_FIELD_SEPARATOR = " · "
+
+
+class Attachment(BaseModel):
+    name: str
+    meta: str
+
+
+def read_attachment(text: str) -> Attachment | None:
+    """The fields behind a file turn, or None for prose. Splits; renders nothing."""
+    if not text.startswith(ATTACHMENT_PREFIX):
+        return None
+    name, _, meta = text[len(ATTACHMENT_PREFIX):].partition(_FIELD_SEPARATOR)
+    return Attachment(name=name, meta=meta)

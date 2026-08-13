@@ -1,0 +1,37 @@
+/* ═══ FILES — what a project holds ═══ */
+/* The meter first, because the page's own question is "can I add another", and the
+   answer is a proportion rather than a number. */
+.files-quota { margin: 0 0 22px; max-width: 680px; }
+.files-quota-line { font-size: .95rem; margin-bottom: 6px; }
+.files-quota-track { height: 8px; border-radius: 4px; background: var(--sunk-deep);
+    border: 1px solid var(--border); overflow: hidden; }
+.files-quota-fill { height: 100%; background: var(--accent); }
+
+.files-table { width: 100%; table-layout: fixed; }
+.files-table td, .files-table th { vertical-align: top; }
+.files-table th { white-space: nowrap; }
+.files-table td:not(.files-name) { white-space: nowrap; }
+.files-table th:nth-child(1) { width: 28%; }
+.files-table th:nth-child(2) { width: 8%; }
+.files-table th:nth-child(3) { width: 13%; }
+.files-table th:nth-child(4) { width: 9%; }
+.files-table th:nth-child(5) { width: 13%; }
+/* The widest column, because the confirmation opens into it and its warning is the
+   thing a reader must be able to read before deleting. */
+.files-table th:nth-child(6) { width: 29%; }
+/* An export's name is long and unbroken; it wraps rather than pushing the row wide. */
+.files-name code { overflow-wrap: anywhere; }
+.files-num { text-align: right; }
+.files-hash { font-size: .78rem; }
+.files-act { text-align: right; }
+
+/* Open, the warning and the field it guards sit in the row — a dialog would take the
+   count of runs that read the file off the screen at the moment it matters. */
+.files-delete summary { cursor: pointer; color: var(--muted); font-size: .85rem; }
+.files-delete summary:hover { color: var(--bad-bd); }
+.files-delete[open] { display: block; text-align: left; padding: 10px 0 4px; }
+.files-delete p { margin: 0 0 8px; font-size: .8rem; line-height: 1.5; white-space: normal; }
+.files-delete input { display: block; font: inherit; font-size: 13px; padding: 6px 9px; width: 100%;
+    border: 1px solid var(--border); border-radius: 6px; margin-bottom: 8px;
+    box-sizing: border-box; }
+.files-delete .btn { width: 100%; box-sizing: border-box; }
