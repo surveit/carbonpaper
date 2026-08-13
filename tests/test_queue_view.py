@@ -249,27 +249,36 @@ def test_an_enum_prefill_keeps_a_declared_value_and_drops_an_undeclared_one():
 
 
 @pytest.mark.parametrize(
-    "target_type, received, recorded, departs",
+    "target_type, received, recorded, departs, enum",
     [
         # A `date` control holds the day alone, so the midnight the row received and
         # the day the record holds are ONE value — approving it edited nothing.
-        ("date", "2026-03-04T00:00:00", "2026-03-04", False),
-        ("date", "2026-03-04T00:00:00", "2026-03-05", True),
-        ("datetime", "2026-03-04T09:30:00", "2026-03-04T09:30:00", False),
+        ("date", "2026-03-04T00:00:00", "2026-03-04", False, None),
+        ("date", "2026-03-04T00:00:00", "2026-03-05", True, None),
+        ("datetime", "2026-03-04T09:30:00", "2026-03-04T09:30:00", False, None),
         # The row carries an int, the record its text: the same value in two types.
-        ("int", 7, "7", False),
-        ("int", 7, "8", True),
-        ("str", "", None, False),
-        ("str", "high", None, True),
+        ("int", 7, "7", False, None),
+        ("int", 7, "8", True, None),
+        ("str", "", None, False, None),
+        ("str", "high", None, True, None),
+        # Out of vocabulary is still a real departure, unlike `_resolve_prefill`,
+        # which would collapse this same received value to a blank control.
+        ("str", "retired", None, True, ["active", "pending"]),
+        ("bool", True, "false", True, None),
+        ("bool", True, "true", False, None),
     ],
 )
 def test_a_record_departs_from_the_received_value_only_where_the_two_differ(
-    target_type, received, recorded, departs
+    target_type, received, recorded, departs, enum
 ):
+    target_spec: dict[str, object] = {"nullable": True}
+    label_column: dict[str, object] = {"name": "label", "type": target_type, "nullable": True}
+    if enum is not None:
+        target_spec["enum"] = enum
+        label_column["enum"] = enum
     stage = _queue_stage(
-        [{"name": "id", "type": "str", "nullable": True},
-         {"name": "label", "type": target_type, "nullable": True}],
-        target_type=target_type, target_spec={"nullable": True},
+        [{"name": "id", "type": "str", "nullable": True}, label_column],
+        target_type=target_type, target_spec=target_spec,
     )
     field, = queue_view.build_reviewed_fields(stage, stage.stage.queue)
 

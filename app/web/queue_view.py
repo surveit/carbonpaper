@@ -397,9 +397,7 @@ def _build_received_departures(
     }
 
 
-# Compared in ONE spelling, never as two independently formatted strings: a `date`
-# control reads a received "2026-03-04T00:00:00" as the "2026-03-04" its record
-# holds, and a reviewer who approved that value edited nothing.
+# Compared in one spelling: a `date` control would else read a received midnight as a false edit.
 def _departs_from_received(field: ReviewedField, received: object, recorded: object) -> bool:
     return _as_field_text(field, received) != _as_field_text(field, recorded)
 

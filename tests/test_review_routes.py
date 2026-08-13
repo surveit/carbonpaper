@@ -1273,8 +1273,6 @@ def test_a_locked_field_strikes_the_received_value_only_when_the_recorded_one_di
 def test_an_unlocked_field_still_shows_what_the_stage_produced(tmp_path, monkeypatch):
     # Unlocking drops every field to `start`, where the struck-through pair is hidden.
     _project_dir, _run_id, _fingerprints, html = _decided_queue_html(tmp_path, monkeypatch)
-    # The context table above is no help: it omits every column under review.
-
     card = " ".join(_first_card(html).split())
     received = re.search(r'<span class="received-value">([^<]*)', card)
     # Named as the stage's own value, not left to read as the reviewer's.
