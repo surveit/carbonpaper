@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Three plies of a carbon set, each copy fainter than the one above it.
+       A favicon renders in its own document and cannot read a custom property, so the
+       two literals sit here; tests/arch/test_favicon_is_one_mark.py pins each to the
+       token it copies. #1d539c is the accent, #ffffff is raised.
+       The plies are white on an accent tile rather than accent on nothing, because a
+       tab strip is light in one theme and near-black in the other: drawn transparent,
+       the third ply measured invisible against a dark strip and the mark collapsed to
+       one square. The tile carries its own ground, so both strips render the same. -->
+  <rect width="32" height="32" rx="7" fill="#1d539c"/>
+  <rect x="15.5" y="14" width="11" height="14" rx="1.5" fill="#ffffff" opacity=".3"/>
+  <rect x="10.5" y="9" width="11" height="14" rx="1.5" fill="#ffffff" opacity=".6"/>
+  <rect x="5.5" y="4" width="11" height="14" rx="1.5" fill="#ffffff"/>
+</svg>
