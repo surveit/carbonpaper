@@ -2,7 +2,6 @@
 narrowed away, and what a search over them reports."""
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +12,7 @@ from app.core.errors import NoRowsToSelectFrom, PredicateError
 from app.models import Stage, parse_stage
 from app.models.stages.signature import transform_input_schemas
 from app.services import workspace
+from run_seed import store_manifest
 from app.core.row_search import MAX_MATCHES
 from app.services.stage_test_rows import load_stage_row_sources
 
@@ -59,7 +59,7 @@ def _write_run(
     (run / "outputs").mkdir(parents=True)
     rows = pd.DataFrame({"amount": _AMOUNTS, "memo": _MEMOS}) if frame is None else frame
     rows.to_parquet(run / "outputs" / f"{stage_id}.parquet", index=False)
-    (run / "manifest.json").write_text(json.dumps({
+    store_manifest(project_dir, run_id, {
         "run_id": run_id, "started_at": run_id, "project": project_dir.name,
         "workflow_version": run_id, "human_review_queue_stats": {}, "status": "ok",
         "stage_records": [{
@@ -68,7 +68,7 @@ def _write_run(
             "input_validation_report": [], "output_validation_report": None,
             "error": None, "output_path": f"outputs/{stage_id}.parquet",
         }],
-    }), encoding="utf-8")
+    })
 
 
 def _load(project_dir: Path, stage: Stage | None = None):

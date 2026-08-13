@@ -50,10 +50,7 @@ _AMOUNTS = [2.0, 7.5, 0.0]
 
 
 def _write_run(project_dir: Path) -> None:
-    """Examples are selected from a finished run, so the fixture project has one.
-
-    The frame goes where the workspace resolves the project, not beside the seed path.
-    """
+    """Examples are selected from a finished run, so the fixture project has one."""
     outputs = resolve_project_dir(project_dir.name) / "runs" / _RUN_ID / "outputs"
     outputs.mkdir(parents=True, exist_ok=True)
     pd.DataFrame({"amount": _AMOUNTS}).to_parquet(outputs / "load.parquet", index=False)

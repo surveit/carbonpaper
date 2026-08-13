@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.services import workspace
-from stage_seed import add_stage
+from stage_seed import add_stage, read_stage
 
 _AMOUNT = {"name": "amount", "type": "float", "nullable": False}
 # `note` is carried through: in the input schema, read by nothing, written by nothing.
@@ -157,7 +157,7 @@ def test_panel_without_tests_has_no_tests_section(client: TestClient, tmp_path: 
 # A case belongs to one of them by what it already carries: a selected row, or no row
 # and a step that must stop, or no row and an expected value. Nothing else decides.
 
-_SECTIONED = [
+_SECTIONED: list[dict] = [
     {"name": "doubles_a_real_amount", "description": "the ordinary case",
      "inputs": {"load": [{"note": "opening balance", "amount": 2.0}]},
      "expected": [{"doubled": 4.0, "note": "opening balance", "amount": 2.0}],
@@ -174,12 +174,10 @@ _SECTIONED = [
 ]
 
 
-def _seed_sectioned(root: Path) -> None:
+def _seed_sectioned(root: Path, tests: list[dict] | None = None) -> None:
     _seed_project(root)
-    path = root / "alpha" / "compiled" / "02_double.json"
-    spec = json.loads(path.read_text(encoding="utf-8"))
-    spec["tests"] = _SECTIONED
-    path.write_text(json.dumps(spec), encoding="utf-8")
+    spec = read_stage(root / "alpha", "double")
+    add_stage(root / "alpha", {**spec, "tests": tests if tests is not None else _SECTIONED})
 
 
 def test_the_panel_leads_with_the_rows_that_came_out_of_a_run(
@@ -223,11 +221,7 @@ def test_a_case_built_on_a_real_row_anticipates_nothing(
 def test_a_suite_with_nothing_written_shows_only_the_first_section(
     client: TestClient, tmp_path: Path
 ) -> None:
-    _seed_sectioned(tmp_path)
-    path = tmp_path / "alpha" / "compiled" / "02_double.json"
-    spec = json.loads(path.read_text(encoding="utf-8"))
-    spec["tests"] = _SECTIONED[:1]
-    path.write_text(json.dumps(spec), encoding="utf-8")
+    _seed_sectioned(tmp_path, tests=_SECTIONED[:1])
 
     html = client.get("/project/alpha/node/double/panel").text
     assert "Examples from your data" in html
