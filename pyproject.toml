@@ -201,11 +201,12 @@ name = "app.mcp imported only by the entrypoint"
 type = "protected"
 protected_modules = ["app.mcp"]
 allowed_importers = ["app.main"]
-# The MCP surface is a top-level interface like app.web: app.main mounts it,
-# nothing else imports it. What it may reach the OTHER way is a whitelist too, but not
-# expressible here — app.models and app.core are open to everything by design, so naming
-# app.mcp's one legal dependency takes an AST test:
-# tests/arch/test_mcp_reaches_the_app_only_through_tools.py.
+# The MCP surface is a top-level interface like app.web: app.main mounts it, nothing else
+# imports it. The other direction is held by ABSENCE: app.mcp is on no whitelist in this
+# file but app.tools', so every protected layer denies it and the server is left as a
+# transport — it decodes a call, hands it to a tool, encodes the reply. That is what stops
+# a tool existing here and not on the editing agent, which is how run_workflow ended up on
+# one surface. app.models and app.core stay open to it, as they are to every package.
 
 [[tool.importlinter.contracts]]
 name = "app.agents imported only by the entrypoint"
