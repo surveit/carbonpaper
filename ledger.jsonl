@@ -335,3 +335,4 @@
 {"run_id":"31704811422","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31704811422","created":"2026-08-13T13:26:56Z","branch":"master","event":"push","contracts_kept":null,"findings":[]}
 {"run_id":"31704826660","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31704826660","created":"2026-08-13T13:27:10Z","branch":"refactor/validation-takes-a-table","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"31704955563","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31704955563","created":"2026-08-13T13:27:21Z","branch":"feat/demo-notice","event":"pull_request","contracts_kept":14,"findings":[]}
+{"run_id":"31705020221","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31705020221","created":"2026-08-13T13:28:13Z","branch":"feat/packet-lineage","event":"pull_request","contracts_kept":14,"findings":[]}
