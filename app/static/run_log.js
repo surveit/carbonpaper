@@ -1,4 +1,4 @@
-// The run page's live log panel: tails runs/<id>/events.jsonl over SSE and
+// The run page's live log panel: tails the run's event log over SSE and
 // renders the lifecycle spine, with two client-side filters over the same feed.
 //
 // Two behaviours are worth knowing before editing:

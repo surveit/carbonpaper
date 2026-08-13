@@ -177,7 +177,7 @@
 </div>{# /panes #}
 
 {# The subset run's own events — the same panel, formatting and paging the run
-   page uses, over eval_run/<id>/events.jsonl. Folded: it connects on first open. #}
+   page uses, over this run's event log. Folded: it connects on first open. #}
 {% if log_href %}
 <div class="eval-run-log" data-base="{{ log_href }}" data-tail="{{ event_tail }}">
   {{ run_log_panel("Run log · this eval run's events", event_tail) }}

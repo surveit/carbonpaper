@@ -67,7 +67,7 @@ class StageRecord(BaseModel):
     started_at: str | None = None
     status: StageStatus
     # No default here or on `output_row_count`: these were renamed out of an older on-disk
-    # vocabulary, and a default would let a pre-rename manifest.json parse and then report a
+    # vocabulary, and a default would let a pre-rename manifest parse and then report a
     # fabricated zero/empty value. Required, such a file fails loudly at parse.
     # One `ValidationReport` dict (app.runtime.validation) per side; the input side is one
     # per upstream input that declares a schema.
@@ -119,12 +119,4 @@ def read_run_bindings(
     if isinstance(nested, dict) and "run_bindings" in nested:
         return dict(nested["run_bindings"] or {})
     return dict(raw.get("run_bindings") or {})
-
-
-# ─── Reading a run's manifest off disk ────────────────────────────────────────
-# The only place a run directory's manifest.json is located, read and JSON-parsed.
-# `read_run_manifest_json` hands back the raw object, so a caller needing one fact
-# off a manifest this model would reject (a partial or pre-rename file already on
-# disk) still gets it; `read_run_manifest` adds the typed validation on top.
-# Neither decides what an unreadable manifest MEANS — each caller answers that.
 

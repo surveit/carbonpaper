@@ -166,7 +166,7 @@ head — name, status badge, blurb, then a facts line — over ONE tab strip:
   the reason stated rather than lined up wrongly. The scored checks are read off the result
   table, not the config — the config may have moved since. `failures only` hides the passing
   rows client-side; the counts above stay the run's.
-- The run's own **events.jsonl** is the run page's log panel, unchanged, over
+- The run's own **event log** is the run page's log panel, unchanged, over
   `…/evals/<id>/runs/<run>/events`. A vetoed run executed nothing, so it has no log and the
   panel is absent rather than empty.
 
@@ -214,6 +214,6 @@ handler **in memory** and persists nothing; refused for `publish`/`human_review_
 
 Every stage definition a run page shows or executes (panel, lineage panel, simulator)
 comes from the version the run pinned, via `services.run.load_pinned_stage_def` /
-`load_run_workflow` — never `compiled/`.
+`load_run_workflow` — never the working copy.
 Unresolvable version → the panels show a stated reason in place of the definition and the
 in-memory re-run returns 409 rather than executing the working copy.

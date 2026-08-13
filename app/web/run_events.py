@@ -1,7 +1,5 @@
-"""Serving a run directory's events.jsonl to the log panel: the opening tail, the
-walk back through older events, and the SSE stream. Written against a run DIRECTORY,
-so a production run under runs/ and an eval's subset run under eval_run/ are the same
-thing to it — both hold an events.jsonl the same writer produced.
+"""Serving a run's stored event chunks to the log panel: the opening tail, the walk
+back through older events, and the SSE stream.
 """
 
 from __future__ import annotations
@@ -16,7 +14,7 @@ from app.core.run_status import RunStatus
 from app.runtime.run_log import RUN_DONE, read_events_since
 from app.web.loading import load_manifest
 
-# How the SSE tail polls events.jsonl, and how many empty polls it tolerates after
+# How often the SSE tail re-reads the chunks, and how many empty polls it tolerates after
 # the manifest has settled before it stops a stream whose run_done never arrived.
 _EVENT_POLL_INTERVAL_S = 0.5
 _IDLE_POLLS_BEFORE_TERMINAL_STOP = 2

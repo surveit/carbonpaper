@@ -85,7 +85,7 @@
       {% else %}<p class="muted"><em>No output schema declared.</em></p>{% endif %}
     </div>
 
-    {# ── Spec: the editable JSON. The edit endpoint is the ONLY writer into compiled/;
+    {# ── Spec: the editable JSON. The edit endpoint is the ONLY writer into the working copy;
           it validates with validate_stage and refuses (400) on issues. ── #}
     <div class="pane" data-pane="spec" hidden>
       <p class="nr-edit-hint muted">Save validates first — invalid JSON is refused, the file untouched.</p>
