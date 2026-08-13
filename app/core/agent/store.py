@@ -39,11 +39,15 @@ class ProseBlock(BaseModel):
     text: str
 
 
-class ToolBlock(BaseModel):
-    kind: Literal["tool"] = "tool"
+class ToolCall(BaseModel):
     name: str
     args: str
     label: str
+
+
+class ToolBlock(BaseModel):
+    kind: Literal["tool"] = "tool"
+    calls: list[ToolCall]
 
 
 class Bubble(BaseModel):
@@ -159,13 +163,23 @@ def _blocks_in_turn_order(message: dict) -> list[ProseBlock | ToolBlock]:
     for part in message.get("parts") or []:
         part_type = part.get("type")
         if part_type == PartType.tool_call:
-            blocks.append(ToolBlock(name=part.get("name", ""), args=part.get("args", ""),
-                                    label=part.get("label") or part.get("name", "")))
+            _append_tool_call(blocks, ToolCall(
+                name=part.get("name", ""), args=part.get("args", ""),
+                label=part.get("label") or part.get("name", "")))
         elif part_type == PartType.text:
             _append_prose(blocks, "text", part.get("text", ""))
         elif part_type == PartType.thinking:
             _append_prose(blocks, "thinking", part.get("text", ""))
     return blocks
+
+
+def _append_tool_call(blocks: list[ProseBlock | ToolBlock], call: ToolCall) -> None:
+    """One block per RUN of a kind, as for prose: calls with no prose between them share a block."""
+    previous = blocks[-1] if blocks else None
+    if isinstance(previous, ToolBlock):
+        previous.calls.append(call)
+    else:
+        blocks.append(ToolBlock(calls=[call]))
 
 
 def _append_prose(blocks: list[ProseBlock | ToolBlock], kind: Literal["text", "thinking"],

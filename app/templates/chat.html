@@ -4,6 +4,9 @@
 {# A turn naming a file draws as a card; every other turn is its own text. The TEXT is
    what the agent reads either way — this is only how the page draws it. #}
 {% macro turn_body(text) %}{% set turn = text | turn %}{% if turn.files %}<div class="ac-files">{% for file in turn.files %}<div class="ac-body ac-file"><span class="ac-file-icon" aria-hidden="true">▤</span><span class="ac-file-name">{{ file.name }}</span><span class="ac-file-meta">{{ file.meta }}</span></div>{% endfor %}</div>{% endif %}{% if turn.said or not turn.files %}<div class="ac-body">{{ turn.said if turn.files else text }}</div>{% endif %}{% endmacro %}
+{# A call and its arguments. Its own macro because a run of calls nests these inside one
+   disclosure, and the two shapes have to draw the individual call identically. #}
+{% macro tool_row(call) %}<details class="ac-tool"><summary title="{{ call.label or call.name }}">Called a tool: {{ call.name }}</summary><pre class="ac-tool-json">{{ call.args }}</pre></details>{% endmacro %}
 {% block content %}
 <div class="ac-head">
   {% include "_new_chat_button.html" %}
@@ -26,7 +29,11 @@
            live stream did: what it said before a tool call sits above that call. #}
         {% for blk in b.blocks %}
           {% if blk.kind == "tool" %}
-            <details class="ac-tool"><summary title="{{ blk.label or blk.name }}">Called a tool: {{ blk.name }}</summary><pre class="ac-tool-json">{{ blk.args }}</pre></details>
+            {% if blk.calls | length == 1 %}
+              {{ tool_row(blk.calls[0]) }}
+            {% else %}
+              <details class="ac-tool ac-tools"><summary title="{{ blk.calls | map(attribute='name') | unique | join(', ') }}">Called {{ blk.calls | length }} tools</summary><div class="ac-tools-body">{% for call in blk.calls %}{{ tool_row(call) }}{% endfor %}</div></details>
+            {% endif %}
           {% elif blk.kind == "thinking" %}
             {% if blk.text.strip() %}
               <details class="ac-think"><summary>💭 thinking</summary><div class="ac-think-text">{{ blk.text }}</div></details>
@@ -143,12 +150,22 @@ function newAssistant() {
   const spinner = el("ac-spinner",
     '<span class="ac-dot"></span><span class="ac-dot"></span><span class="ac-dot"></span><span class="ac-sp-label">thinking…</span>');
   b.appendChild(spinner);
-  let think = null, thinkText = null, body = null;
+  let think = null, thinkText = null, body = null, tools = null;
   const bodies = [];  // every text region opened, in order — what the swap renders
   const pendingTools = [];  // tool_call disclosures awaiting their tool_result (FIFO)
   log.appendChild(b); scroll();
   function stop() { if (spinner.parentNode) spinner.remove(); }
-  function closeRegions() { think = null; thinkText = null; body = null; }
+  function closeRegions() { think = null; thinkText = null; body = null; tools = null; }
+  // The bare name, not the friendly label: the row is furniture, and every row opening
+  // the same way is what lets the eye skip the lot. The label is the tooltip, so it
+  // costs the page nothing and is still reachable.
+  function toolRow(name, args, label) {
+    const d = document.createElement("details"); d.className = "ac-tool";
+    const sum = document.createElement("summary");
+    sum.textContent = "Called a tool: " + name; sum.title = label || name;
+    d.appendChild(sum); d.appendChild(toolPre(args));
+    return d;
+  }
   return {
     thinking(t) {
       stop();
@@ -172,16 +189,27 @@ function newAssistant() {
       if (!body) { closeRegions(); body = el("ac-body ac-streaming"); bodies.push(body); b.appendChild(body); }
       body.textContent += t; scroll();
     },
+    // The SECOND call is what makes a group: one call keeps the plain row, and the
+    // row already on the page moves inside rather than being drawn twice. The count
+    // then stands in for the names, so a turn that calls thirty tools costs one line.
     tool(name, args, label) {
-      stop(); closeRegions();
-      const d = document.createElement("details"); d.className = "ac-tool";
-      // The bare name, not the friendly label: the row is furniture, and every
-      // row opening the same way is what lets the eye skip the lot. The label
-      // is the tooltip, so it costs the page nothing and is still reachable.
-      const sum = document.createElement("summary");
-      sum.textContent = "Called a tool: " + name; sum.title = label || name; d.appendChild(sum);
-      d.appendChild(toolPre(args));
-      b.appendChild(d); pendingTools.push(d); scroll();
+      stop();
+      if (!tools) { closeRegions(); tools = {names: [], first: null, body: null}; }
+      const row = toolRow(name, args, label);
+      tools.names.push(name);
+      if (tools.names.length === 1) { tools.first = row; b.appendChild(row); }
+      else {
+        if (!tools.body) {
+          const group = document.createElement("details"); group.className = "ac-tool ac-tools";
+          tools.summary = document.createElement("summary"); group.appendChild(tools.summary);
+          tools.body = el("ac-tools-body"); group.appendChild(tools.body);
+          b.insertBefore(group, tools.first); tools.body.appendChild(tools.first);
+        }
+        tools.body.appendChild(row);
+        tools.summary.textContent = "Called " + tools.names.length + " tools";
+        tools.summary.title = [...new Set(tools.names)].join(", ");
+      }
+      pendingTools.push(row); scroll();
     },
     toolResult(content) {
       stop();

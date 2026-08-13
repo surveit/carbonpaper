@@ -107,6 +107,11 @@
     padding: 6px 9px; margin: 4px 0 6px; white-space: pre-wrap; overflow-x: auto; }
 .ac-tool-label { font-size: 10px; text-transform: uppercase; letter-spacing: .04em;
     color: var(--muted); margin: 6px 0 1px; }
+/* Calls with no prose between them are one disclosure, so the page costs one line
+   whether the turn called two tools or thirty. Opened, the rail is what says the calls
+   inside belong to the line above rather than to the reply. */
+.ac-tools-body { margin: 2px 0 6px 4px; padding-left: 12px;
+    border-left: 1px solid var(--border); }
 
 .ac-err { color: var(--bad-ink); font-size: 13px; }
 .ac-warn { background: var(--warn-bg); border: 1px solid var(--warn-bd); border-radius: 8px;
