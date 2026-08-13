@@ -23,10 +23,10 @@ class AgentConfig(BaseModel):
     # Labels for tools this agent does not own — e.g. the CLI's own ToolSearch
     # built-in, which has no BoundToolSpec here but still renders in the chat.
     extra_tool_labels: dict[str, str] = {}
-    # Set to make the agent speak first: an empty session runs one turn on this
-    # prompt with no reader message. It is never shown or stored as one, so the
-    # reader is not credited with words they did not type. None = wait to be spoken to.
-    opening_prompt: str | None = None
+    # The message the agent opens with, written rather than generated: given this
+    # session's validated context, the text stored as its first assistant turn at
+    # creation. None = wait to be spoken to; "" = this session opens with nothing.
+    render_opening_message: Callable[[BaseModel], str] | None = None
     # Prose only this session's context can supply, appended to system_prompt. What
     # it says is the agent's business; returning "" appends nothing, not a heading
     # over nothing.
@@ -43,19 +43,23 @@ def register(agent_id: str, config: AgentConfig, build_tools: BuildTools) -> Non
     _registry[agent_id] = (config, build_tools)
 
 
-def opening_prompt(agent_id: str) -> str | None:
-    """None when this agent waits to be spoken to. See AgentConfig.opening_prompt."""
+def render_opening_message(agent_id: str, context: dict[str, Any]) -> str | None:
+    """None when the agent waits to be spoken to. See AgentConfig.render_opening_message."""
     config, _build_tools = _registry[agent_id]
-    return config.opening_prompt
+    if config.render_opening_message is None:
+        return None
+    return config.render_opening_message(config.context_schema.model_validate(context))
 
 
-def build_engine(agent_id: str, context: dict[str, Any]) -> ClaudeAgentSdkEngine:
+def build_engine(
+    agent_id: str, context: dict[str, Any], *, opening_message: str = ""
+) -> ClaudeAgentSdkEngine:
     config, build_tools = _registry[agent_id]
     ctx = config.context_schema.model_validate(context)
     specs = build_tools(ctx)
     server, allowed, _wrapped = build_mcp_server(specs)
     return ClaudeAgentSdkEngine(
-        system_prompt=render_system_prompt(config, ctx),
+        system_prompt=render_system_prompt(config, ctx, opening_message),
         mcp_server=server,
         allowed_tools=allowed,
         tool_labels={s.name: s.label for s in specs} | config.extra_tool_labels,
@@ -63,13 +67,22 @@ def build_engine(agent_id: str, context: dict[str, Any]) -> ClaudeAgentSdkEngine
     )
 
 
-def render_system_prompt(config: AgentConfig, context: BaseModel) -> str:
-    if config.render_session_prompt is None:
-        return config.system_prompt
-    appended = config.render_session_prompt(context)
-    if not appended:
-        return config.system_prompt
-    return f"{config.system_prompt}\n\n{appended}"
+# A turn is driven by the reader's message alone — the engine drops message_history and
+# the store replays nothing — so the session's first message reaches the model only here.
+_OPENED_WITH = "This conversation opened with these words from you, which the reader has read:"
+
+
+def render_system_prompt(
+    config: AgentConfig, context: BaseModel, opening_message: str = ""
+) -> str:
+    """`opening_message` is what this session already said, so the reader may refer back to it."""
+    session_note = (
+        config.render_session_prompt(context) if config.render_session_prompt else ""
+    )
+    opened_with = f"{_OPENED_WITH}\n\n{opening_message}" if opening_message else ""
+    return "\n\n".join(
+        part for part in (config.system_prompt, session_note, opened_with) if part
+    )
 
 
 # ── claude_agent_sdk MCP wrapping (generic) ──────────────────────────────────

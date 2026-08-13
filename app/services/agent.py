@@ -9,13 +9,15 @@ from __future__ import annotations
 from app.core.agent.session import create_agent_session
 
 
-def open_agent_chat(agent_id: str, project_id: str) -> str:
+def open_agent_chat(agent_id: str, project_id: str, base_url: str) -> str:
     """Returns the new session's page, root-relative: a caller with a base URL prefixes it."""
     sid = create_agent_session(
-        agent_id, {"project_id": project_id}, title=f"{agent_id.capitalize()}: {project_id}")
+        agent_id, {"project_id": project_id}, base_url=base_url,
+        title=f"{agent_id.capitalize()}: {project_id}")
     return f"/chat/{sid}"
 
 
-def open_unbound_agent_chat(agent_id: str) -> str:
+def open_unbound_agent_chat(agent_id: str, base_url: str) -> str:
     """No project in context: the agent asks which one, or makes one with create_project."""
-    return f"/chat/{create_agent_session(agent_id, {}, title='New chat')}"
+    sid = create_agent_session(agent_id, {}, base_url=base_url, title="New chat")
+    return f"/chat/{sid}"
