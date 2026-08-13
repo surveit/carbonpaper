@@ -111,6 +111,39 @@ def test_a_project_that_has_agreed_no_words_appends_nothing(tmp_path) -> None:
     assert prompt == EDITING_SYSTEM_PROMPT
 
 
+def test_the_editing_agent_is_handed_the_pages_it_can_link_to(tmp_path) -> None:
+    project_id = _project_with(tmp_path, None)
+
+    prompt = build_engine(
+        "editing", {"project_id": project_id, "base_url": "https://carbon.example/"}
+    )._system_prompt
+
+    assert "https://carbon.example/project/<project_id>/workflow" in prompt
+    assert "https://carbon.example/project/<project_id>/runs/<run_id>" in prompt
+
+
+def test_a_session_with_no_address_is_handed_no_links(tmp_path) -> None:
+    # The prompt dump builds this agent with nobody reading it; a guessed host links nowhere.
+    project_id = _project_with(tmp_path, None)
+
+    prompt = build_engine("editing", {"project_id": project_id})._system_prompt
+
+    assert "# Links" not in prompt
+
+
+def test_the_words_and_the_links_both_reach_one_session(tmp_path) -> None:
+    project_id = _project_with(
+        tmp_path, Terms(nouns=SchemaLibrary(schemas=[_FILING]), verbs=[_FLAG])
+    )
+
+    prompt = build_engine(
+        "editing", {"project_id": project_id, "base_url": "https://carbon.example/"}
+    )._system_prompt
+
+    assert "https://carbon.example/project/<project_id>/workflow" in prompt
+    assert "- flag — Mark a row for a human to decide on." in prompt
+
+
 def test_a_session_bound_to_no_project_appends_nothing(tmp_path) -> None:
     workspace.set_projects_dir(tmp_path)
 

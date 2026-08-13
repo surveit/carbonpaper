@@ -24,9 +24,14 @@ from app.services.project import Project
 
 class EditingContext(BaseModel):
     project_id: str | None = None
+    # The address this session's reader is on, written per turn off their own request.
+    # Empty only where nobody is reading — the prompt dump builds the tools to print them.
+    base_url: str = ""
 
 
 def make_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
+    base = ctx.base_url.rstrip("/")
+
     def get_current_project() -> str | None:
         return ctx.project_id
 
@@ -46,9 +51,16 @@ def make_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
 
     def list_files(project_id: str | None = None) -> shared.ProjectFilesView:
         where = "/files" if project_id is None else f"/project/{project_id}/files"
-        # Root-relative: this reader is already in the app, so the address it was
-        # reached on is theirs and not something this session can be told.
-        return shared.list_files(project_id, where)
+        return shared.list_files(project_id, base + where)
+
+    def read_stage_output_rows(
+        project_id: str, run_id: str, stage_id: str, limit: int | None = None, offset: int = 0
+    ) -> shared.StageOutputRows:
+        # The shared reader's lineage links are root-relative; this one's are clicked
+        # out of a chat bubble.
+        return shared.read_stage_output_rows(
+            project_id, run_id, stage_id, limit, offset, base_url=base
+        )
 
     tools: list[Callable[..., Any]] = [
         get_current_project,
@@ -57,6 +69,7 @@ def make_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
         add_stage,
         save_version,
         list_files,
+        read_stage_output_rows,
     ]
     return [
         BoundToolSpec(
@@ -69,7 +82,7 @@ def make_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
         for fn in tools
     ] + shared.bind(
         "list_projects", "read_workflow_summary", "read_stage", "remove_stage",
-        "read_stage_output_rows", "read_terms", "write_terms",
+        "read_terms", "write_terms",
         "read_review_guide", "write_review_guide",
         "get_project_status", "generate_stage_tests",
         "run_stage_tests", "report_compiler_warnings",
@@ -133,6 +146,7 @@ TOOL_SCHEMAS: dict[str, ToolInputSchema] = {
             "project yet.",
         ],
     },
+    "read_stage_output_rows": shared.schema_of("read_stage_output_rows"),
 }
 
 
@@ -146,4 +160,5 @@ TOOL_LABELS: dict[str, str] = {
     "add_stage": "Adding a stage",
     "save_version": "Saving the workflow as a version",
     "list_files": "Listing the project's files",
+    "read_stage_output_rows": "Reading the stage's rows",
 }

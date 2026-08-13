@@ -141,8 +141,13 @@ def _has_unspoken_opening(data: dict) -> bool:
     return opening_prompt(agent_id) is not None
 
 
+def _turn_context(data: dict, request: Request) -> dict:
+    """The stored context plus the address THIS reader is on, not the one it opened on."""
+    return (data.get("context") or {}) | {"base_url": str(request.base_url)}
+
+
 @router.post("/chat/{sid}/open")
-async def open_conversation(sid: str):
+async def open_conversation(sid: str, request: Request):
     """409s once the session has spoken, so a reload cannot make it greet twice."""
     if not _store.exists(sid):
         raise HTTPException(status_code=404, detail="Session not found")
@@ -152,7 +157,7 @@ async def open_conversation(sid: str):
     agent_id = data["agent_id"]
     prompt = opening_prompt(agent_id)
     assert prompt is not None  # _has_unspoken_opening checked it
-    engine = build_engine(agent_id, data.get("context") or {})
+    engine = build_engine(agent_id, _turn_context(data, request))
     turn_id = _turns.start(
         engine=engine, store=_store, session_id=sid, prompt=prompt, record_prompt=False
     )
@@ -171,7 +176,7 @@ async def post_message(sid: str, request: Request):
     agent_id = data.get("agent_id")
     if not agent_id:
         raise HTTPException(status_code=400, detail="session has no bound agent")
-    engine = build_engine(agent_id, data.get("context") or {})
+    engine = build_engine(agent_id, _turn_context(data, request))
     _store.set_pending_user(sid, text)
     turn_id = _turns.start(engine=engine, store=_store, session_id=sid, prompt=text)
     return JSONResponse({"ok": True, "turn_id": turn_id})

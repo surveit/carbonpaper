@@ -67,12 +67,50 @@ wrong. A line or two a step, and not the mechanism — the kind of join, the sha
 code, the stage names and their order are all on the page already."""
 
 HANDOVER_BARS_NOTE = """\
+Hand over the LINK to what you want looked at — a page they open, never a description
+of where to find it.
+
 Two different things you can ask a human for, with different bars:
 - A look at a smoke test — the run, what came out of it, and the guide you wrote for that
   version. Fine with warnings outstanding; say which ones are open.
 - FINAL SIGNOFF. Do not ask for this with any warning outstanding. Either clear it, or
   state plainly why that specific warning is safe to ignore here. A warning you leave
   unmentioned spends the reviewer's attention on something you already knew about."""
+
+# ─── The pages a session can link its reader to ──────────────────
+
+
+def render_link_map(base_url: str) -> str:
+    """A surface with no reader renders nothing, rather than a link to a host it guessed."""
+    if not base_url:
+        return ""
+    base = base_url.rstrip("/")
+    return "\n".join([
+        "# Links",
+        f"Your reader is in a browser at {base} — write the WHOLE address, since a bare "
+        "path is text on their screen rather than something they can click.",
+        "",
+        *(f"  {label:<20}{base}{path}" for label, path in _PAGES),
+        "",
+        "Every <id> above is one a tool handed you — run_workflow for a run id, "
+        "save_version for a version id, and the stage ids read_workflow_summary lists. "
+        "An id you did not read out of a tool's own output has no link.",
+    ])
+
+
+_PAGES = [
+    ("the project", "/project/<project_id>"),
+    ("its methodology", "/project/<project_id>/document"),
+    ("the workflow", "/project/<project_id>/workflow"),
+    ("one stage of it", "/project/<project_id>/workflow#<stage_id>"),
+    ("its versions", "/project/<project_id>/workflow/versions"),
+    ("one version", "/project/<project_id>/workflow/version/<version_id>"),
+    ("its runs", "/project/<project_id>/runs"),
+    ("one run", "/project/<project_id>/runs/<run_id>"),
+    ("one stage of a run", "/project/<project_id>/runs/<run_id>#<stage_id>"),
+    ("the files", "/project/<project_id>/files"),
+]
+
 
 # ─── When a column's `enum` may be declared ──────────────────────
 
