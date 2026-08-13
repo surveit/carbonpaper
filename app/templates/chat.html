@@ -6,7 +6,6 @@
 {% macro turn_body(text) %}{% set turn = text | turn %}{% if turn.files %}<div class="ac-files">{% for file in turn.files %}<div class="ac-body ac-file"><span class="ac-file-icon" aria-hidden="true">▤</span><span class="ac-file-name">{{ file.name }}</span><span class="ac-file-meta">{{ file.meta }}</span></div>{% endfor %}</div>{% endif %}{% if turn.said or not turn.files %}<div class="ac-body">{{ turn.said if turn.files else text }}</div>{% endif %}{% endmacro %}
 {% block content %}
 <div class="ac-head">
-  <span class="ac-backend" title="which model backend answers">backend: {{ backend }}</span>
   {% include "_new_chat_button.html" %}
 </div>
 
