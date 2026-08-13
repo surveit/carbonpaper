@@ -53,12 +53,6 @@ class ExpectedOutput(_Base):
         return self
 
 
-class CodeScorer(_Base):
-    """The named function must be `function(actual_df, dataset_df) -> dict[str, Any]` of metrics."""
-    module: str
-    function: str
-
-
 # ── The eval config ──────────────────────────────────────────────────────────
 class EvalConfig(_Base):
     id: SlugId
@@ -73,7 +67,6 @@ class EvalConfig(_Base):
     # context + scoring
     reference_overrides: list[StageOutputOverride] = Field(default_factory=list)
     metrics: list[str] = Field(default_factory=list)
-    code: Optional[CodeScorer] = None
 
     @field_validator("expected_outputs")
     @classmethod

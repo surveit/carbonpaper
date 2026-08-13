@@ -232,16 +232,15 @@ def test_grain_blocking_stage_without_code_scorer(tmp_path):
     assert any("agg" in p for p in report.problems)
 
 
-def test_grain_blocking_stage_with_code_scorer_is_not_a_problem(tmp_path):
+def test_a_grain_blocking_stage_has_no_code_scorer_to_fall_back_to(tmp_path):
     src = _file_input("src", tmp_path, cols=["k", "v", "quote"])
     agg = _agg("agg", [src], output_schema={
         "columns": [{"name": "k", "type": "str", "nullable": True}, {"name": "t", "type": "str", "nullable": True}]})
     tgt = _row("tgt", [agg], output_schema={
         "columns": [{"name": "k", "type": "str", "nullable": True}, {"name": "score", "type": "float", "nullable": True}]})
-    config = _config(code={"module": "evals.mod", "function": "score"})
-    report = validate_eval_compatibility(config, [src, agg, tgt])
-    assert report.ok is True
-    assert report.problems == []
+    report = validate_eval_compatibility(_config(), [src, agg, tgt])
+    assert report.ok is False
+    assert any("not scorable row-by-row" in p for p in report.problems)
 
 
 def test_a_reference_override_on_the_target_stage_is_reported_not_crashed_on(tmp_path):

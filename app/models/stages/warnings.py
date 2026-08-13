@@ -17,7 +17,6 @@ WarningKind = Literal[
     "undescribed",
     "unexemplified",
     "examples_failing",
-    "unreviewable_code",
     "nondeterministic",
 ]
 
@@ -30,7 +29,6 @@ WarningKind = Literal[
 SEVERITY: dict[str, UserFacingErrorSeverity] = {
     "undescribed": UserFacingErrorSeverity.warning,
     "unexemplified": UserFacingErrorSeverity.warning,
-    "unreviewable_code": UserFacingErrorSeverity.warning,
     "examples_failing": UserFacingErrorSeverity.warning,
     "nondeterministic": UserFacingErrorSeverity.warning,
 }

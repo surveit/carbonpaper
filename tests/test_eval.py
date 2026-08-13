@@ -225,9 +225,9 @@ def test_eval_config_duplicate_reference_override():
                                  {"stage_id": "a", "table": _ref()}]))
 
 
-def test_eval_config_code_scorer():
-    c = m.EvalConfig.model_validate(_config(code={"module": "evals.org", "function": "score"}))
-    assert c.code.function == "score"
+def test_eval_config_refuses_a_code_scorer():
+    with pytest.raises(ValidationError):
+        m.EvalConfig.model_validate(_config(code={"module": "evals.org", "function": "score"}))
 
 
 def test_expected_output_abs_tol_needs_tolerance():

@@ -6,13 +6,11 @@ the ONE place that reaches the store for it: nothing else names the collection.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import ClassVar
 
 from pydantic import Field, ValidationError
 
 from app.core.errors import DocumentNotFound
-from app.core.paths import repo_root
 from app.core.persistence import (
     JsonDict,
     PersistedModel,
@@ -138,27 +136,10 @@ def _label(spec: JsonDict, index: int) -> str:
 
 # ─── Source & code reads ─────────────────────────────────────────────────────
 
-def read_module_code(module_path: str) -> str | None:
-    if not module_path:
-        return None
-    parts = module_path.split(".")
-    candidate = repo_root() / Path(*parts).with_suffix(".py")
-    if not candidate.exists():
-        return None
-    try:
-        return candidate.read_text(encoding="utf-8")
-    except OSError:
-        return None
-
-
 def resolve_function_code(stage_def: Stage | None) -> str | None:
     fn = stage_def.find_authored_code_block() if stage_def else None
     if isinstance(fn, StarlarkFunction):
         return fn.code
     if not isinstance(fn, PythonFunction):
         return None
-    if fn.kind == "module" and fn.module:
-        return read_module_code(fn.module)
-    if fn.kind == "inline":
-        return fn.code
-    return None
+    return fn.code

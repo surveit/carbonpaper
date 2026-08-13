@@ -35,10 +35,7 @@ def _stage(stage_id="s", type_="python_row_function", handle="function", **kw):
     block = {"summary": kw.pop("summary", "Passes every row through unchanged."),
              "code": _CODE if handle == "function" else "def should_include(row):\n    return True"}
     if handle == "function":
-        block = {"kind": kw.pop("kind", "inline"), **block}
-        if block["kind"] == "module":
-            block = {**block, "module": kw.pop("module", "pkg.mod")}
-            block.pop("code")
+        block = {"kind": "inline", **block}
     spec = {
         "id": stage_id, "description": stage_id.replace("_", " ").title(), "type": type_,
         "inputs": [{"id": "up"}],
@@ -128,12 +125,6 @@ def test_a_description_with_no_examples_warns():
 def test_missing_description_outranks_missing_examples():
     assert _kinds(_stage(summary=None)) == ["undescribed"]
 
-
-def test_module_code_warns_because_the_panel_cannot_show_it():
-    warnings = find_stage_compiler_warnings(
-        _stage(kind="module", module="pkg.mod", tests=[_PASSING_EXAMPLE]))
-    assert [w.kind for w in warnings] == ["unreviewable_code"]
-    assert warnings[0].severity == "warning"
 
 
 def _publish_stage(stage_id="pub"):

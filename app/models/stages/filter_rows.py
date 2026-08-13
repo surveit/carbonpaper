@@ -113,9 +113,8 @@ STAGE_TYPE_SPECS: dict[str, StageTypeSpec] = {
         required=["code"],
         optional=["function", "summary"],
         notes=(
-            "Takes exactly ONE input. The predicate is INLINE code only — there is no "
-            "kind/module here; a filter that needs an importable module is doing more "
-            "than deciding. `should_include(row)` is handed a plain dict and "
+            "Takes exactly ONE input. The predicate is INLINE code on the stage — there "
+            "is no `kind` here. `should_include(row)` is handed a plain dict and "
             "must return a bool — True keeps the row, False drops it; any other return "
             "type is a run-time error. Kept rows preserve their original relative order "
             "and every column unchanged, so the signature never adds or rewrites. The "
