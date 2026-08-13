@@ -11,6 +11,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from app.core.llm import LLMModel
 from app.models.stages.llm_transform import LLMConfig
 from app.runtime import llm as llm_module
 from app.runtime import options
@@ -62,7 +63,7 @@ def _call_one_row(tmp_path: Path, *, bind: bool) -> Path:
     token = bind_row_sink(log, "classify", 3) if bind else None
     try:
         reply = llm_module.call_llm(
-            "classify", LLMConfig(prompt_data_template="Rate: {text}"),
+            "classify", LLMConfig(prompt_data_template="Rate: {text}", model=LLMModel.claude_haiku_4_5),
             {"text": "hello"}, reply_model=_Reply,
         )
     finally:
@@ -111,7 +112,7 @@ def test_a_batched_call_logs_its_chunk_prompt_against_every_row_it_covers(
     token = bind_detail_sink(log, "classify", (4, 5, 6))
     try:
         llm_module.call_llm_batch(
-            "classify", LLMConfig(prompt_data_template="{text}"),
+            "classify", LLMConfig(prompt_data_template="{text}", model=LLMModel.claude_haiku_4_5),
             instructions="score them", task="0. a\n1. b\n2. c",
             reply_schema=_Reply,
         )

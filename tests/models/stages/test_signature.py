@@ -274,7 +274,7 @@ def _llm_stage(*, reads):
         "description": "Score bills",
         "type": "llm_transform",
         "inputs": [{"id": "bills"}],
-        "llm": {"prompt_data_template": "Price: {price}"},
+        "llm": {"model": "claude-haiku-4-5", "prompt_data_template": "Price: {price}"},
         "signature": {
             "form": "extends",
             "reads": [{"input": "bills", "columns": reads}],

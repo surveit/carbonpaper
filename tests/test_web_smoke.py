@@ -29,7 +29,7 @@ def _load(tmp_path):
 _EXTRACT = {
     "id": "extract", "type": "llm_transform", "description": "Extract evidence pieces",
     "inputs": [{"id": "load"}],
-    "llm": {"prompt_template": "You are reading a document {doc_id}. Extract evidence."},
+    "llm": {"model": "claude-haiku-4-5", "prompt_template": "You are reading a document {doc_id}. Extract evidence."},
     "signature": {
         "form": "extends",
         "reads": [

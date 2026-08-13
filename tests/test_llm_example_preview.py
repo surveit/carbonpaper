@@ -22,7 +22,7 @@ def _llm_stage() -> WorkflowStage:
             ],
             "adds": [{"name": "score", "type": "int", "nullable": False}],
         },
-        "llm": {"prompt_instructions": "Score for relevance.",
+        "llm": {"model": "claude-haiku-4-5", "prompt_instructions": "Score for relevance.",
                 "prompt_data_template": "Rate this: {quote}"},
     }))
 

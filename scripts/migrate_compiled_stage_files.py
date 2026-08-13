@@ -3,7 +3,9 @@
 An alembic revision rewrites JSON payloads in the document store; the compiled
 stage files under `<project>/compiled/` live on disk and no revision can reach
 them. Both carry the same stage specs, so a stage-shape change strands the two
-together and only one of them has a migration path. This script is that path.
+together and only one of them has a migration path. This script is that path,
+and `rewrite_stale_stage_files` is the seam a revision calls to walk the same
+files with its own rewrite instead of the whole catalogue below.
 
 Applied here, matching the revisions that do the same to the store:
   0004 — `primary_key` left the stage vocabulary, and TableSchema forbids extras,
@@ -17,6 +19,8 @@ Applied here, matching the revisions that do the same to the store:
   0012 — a publish stage's `template` left; what it said is kept as a
          compiler_note, since the markup it was named for now lives in
          `function.code`.
+  0013 — `llm.model` became required; a stage that named none is stamped with
+         the model it has been running on (app.runtime.options.DEFAULT_MODEL).
 
 Usage:  python -m scripts.migrate_compiled_stage_files [--apply] [--projects-dir PATH]
 Without --apply it is a dry run and writes nothing.
@@ -27,9 +31,11 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
+from app.runtime.options import DEFAULT_MODEL
 from app.services.workspace import configure_projects_dir_from_env, projects_dir
+from scripts.llm_model import LlmConfigUnreadable, stamp_llm_model
 from scripts.stage_description import (
     DescriptionUndeterminable,
     rename_name_to_description,
@@ -50,6 +56,14 @@ from scripts.stage_signatures import (
 
 _KEY = "primary_key"
 
+# One stage spec in, True if it changed it. A revision hands its own rewrite to
+# `rewrite_stale_stage_files`; this module hands the whole catalogue, `_migrate`.
+StageSpecRewrite = Callable[[Any], bool]
+
+# Refused rather than guessed: the file is left as it is and a human authors it.
+REFUSALS = (SignatureUndeterminable, DescriptionUndeterminable,
+            InputRefUnreadable, PublishTemplateUnreadable, LlmConfigUnreadable)
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -61,23 +75,36 @@ def main() -> None:
     configure_projects_dir_from_env()
     root = args.projects_dir or projects_dir()
 
-    stale, refused = find_stale_stage_files(root)
-    _report_refusals(refused, root)
+    stale = rewrite_stale_stage_files(root, _migrate, apply=args.apply)
     if not stale:
         print("every compiled stage file this can migrate is already in today's shape")
-        return
 
-    print(f"{len(stale)} file(s) {'-> rewriting' if args.apply else '(dry run)'}:")
+
+def rewrite_stale_stage_files(
+    projects_dir: Path, rewrite: StageSpecRewrite, *, apply: bool
+) -> list[Path]:
+    """Apply `rewrite` to every compiled stage file under `projects_dir`; the files it changed.
+
+    The survey runs to completion before the first write, so an unreadable file
+    leaves every project's compiled/ untouched."""
+    stale, refused = find_stale_stage_files(projects_dir, rewrite)
+    _report_refusals(refused, projects_dir)
+    if not stale:
+        return stale
+    print(f"{len(stale)} compiled stage file(s) {'-> rewriting' if apply else '(dry run)'}:")
     for path in stale:
-        print(f"  {path.relative_to(root)}")
-    if args.apply:
+        print(f"  {path.relative_to(projects_dir)}")
+    if apply:
         for path in stale:
-            _rewrite(path)
+            _rewrite(path, rewrite)
         print(f"rewrote {len(stale)} file(s)")
+    return stale
 
 
-def find_stale_stage_files(projects_dir: Path) -> tuple[list[Path], list[tuple[Path, str]]]:
-    """The files this can bring to today's shape, and the ones it refuses with why.
+def find_stale_stage_files(
+    projects_dir: Path, rewrite: StageSpecRewrite
+) -> tuple[list[Path], list[tuple[Path, str]]]:
+    """The files `rewrite` would change, and the ones it refuses with why.
 
     Refuse the FILE, not the run: one stage a human must author must not hold back
     every other project's migration (the same rule the alembic revisions follow)."""
@@ -85,10 +112,9 @@ def find_stale_stage_files(projects_dir: Path) -> tuple[list[Path], list[tuple[P
     refused: list[tuple[Path, str]] = []
     for path in sorted(projects_dir.glob("*/compiled/*.json")):
         try:
-            if _migrate(_read(path)):
+            if rewrite(_read(path)):
                 stale.append(path)
-        except (SignatureUndeterminable, DescriptionUndeterminable,
-                InputRefUnreadable, PublishTemplateUnreadable) as exc:
+        except REFUSALS as exc:
             refused.append((path, str(exc)))
     return stale, refused
 
@@ -115,13 +141,14 @@ def _migrate(spec: Any) -> bool:
         | backfill_anchor_reads(spec)
         | drop_stored_input_schemas(spec)
         | move_publish_template_to_notes(spec)
+        | stamp_llm_model(spec, DEFAULT_MODEL)
         | changed
     )
 
 
-def _rewrite(path: Path) -> None:
+def _rewrite(path: Path, rewrite: StageSpecRewrite) -> None:
     spec = _read(path)
-    _migrate(spec)
+    rewrite(spec)
     # Matches loader.stage_to_json's format (indent=2, no trailing newline), so a
     # rewritten file differs from an app-written one only by the dropped key.
     path.write_text(json.dumps(spec, indent=2), encoding="utf-8")

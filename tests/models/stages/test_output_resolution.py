@@ -98,7 +98,7 @@ def test_a_signature_only_llm_stage_resolves_its_reply_schema():
     stage: Stage = parse_stage({
         "id": "score", "description": "Score", "type": "llm_transform",
         "inputs": [{"id": "bills"}],
-        "llm": {"prompt_data_template": "Title: {title}"},
+        "llm": {"model": "claude-haiku-4-5", "prompt_data_template": "Title: {title}"},
         "signature": {
             "form": "extends",
             "reads": [{"input": "bills", "columns": [{"name": "title", "type": "str", "nullable": True}]}],

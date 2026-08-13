@@ -9,6 +9,8 @@ from collections.abc import Iterable
 
 from pydantic import BaseModel, ConfigDict
 
+from app.core.llm.options import LLMModel
+
 
 class LlmUsage(BaseModel):
     model_config = ConfigDict(frozen=True)
@@ -17,11 +19,12 @@ class LlmUsage(BaseModel):
     output_tokens: int = 0
     cost_usd: float = 0.0
     calls: int = 0
-    # The id the backend was called with, as a string rather than an LLMModel: a run
-    # record must stay readable after the deployment narrows its menu, and an enum
-    # would refuse the whole manifest of a run that used a model since dropped.
-    # None where nothing was called, and on every manifest written before this field.
-    model: str | None = None
+    # Which model the backend was called with. None reads as `not recorded`: nothing
+    # was called, or the manifest predates the field. A deployment that DROPS a member
+    # of the menu therefore stops being able to read the manifest of a run that used
+    # it — the day that trade stops being worth it, this field gets its own wider type
+    # rather than every stage config losing the enum.
+    model: LLMModel | None = None
 
     def __add__(self, other: LlmUsage) -> LlmUsage:
         return LlmUsage(
@@ -29,7 +32,7 @@ class LlmUsage(BaseModel):
             output_tokens=self.output_tokens + other.output_tokens,
             cost_usd=self.cost_usd + other.cost_usd,
             calls=self.calls + other.calls,
-            model=_one_model(self.model, other.model),
+            model=_assert_one_model(self.model, other.model),
         )
 
     @classmethod
@@ -40,7 +43,7 @@ class LlmUsage(BaseModel):
         return total
 
 
-def _one_model(left: str | None, right: str | None) -> str | None:
+def _assert_one_model(left: LLMModel | None, right: LLMModel | None) -> LLMModel | None:
     if left and right and left != right:
         raise ValueError(
             f"cannot total usage produced by two models ({left!r} and {right!r}): the "

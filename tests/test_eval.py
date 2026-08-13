@@ -66,7 +66,7 @@ def test_llm_is_grain_and_order_preserving():
         id="e", type="llm_transform",
         inputs=[{"id": "a"}],
         signature={"form": "extends", "adds": [{"name": "out", "type": "str", "nullable": True}]},
-        llm={"prompt_template": "p"}))
+        llm={"model": "claude-haiku-4-5", "prompt_template": "p"}))
     assert s.is_grain_and_order_preserving is True
 
 

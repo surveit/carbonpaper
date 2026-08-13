@@ -190,10 +190,13 @@ layers = ["app.models", "app.core"]
 name = "inside app.core, the store sits below the rest"
 type = "layers"
 containers = ["app.core"]
-layers = ["agent | llm", "sqlite_store", "persistence"]
+layers = ["agent", "llm", "sqlite_store", "persistence"]
 # The engine sits below the rest of core and above the record base whose protocol it
 # satisfies, which is what makes "records depend on the store, never the reverse" true by
 # construction rather than by a list someone has to keep current.
+# `llm` is the deployment's model menu and sits under `agent`, not beside it: the usage an
+# agent call returns names the model that answered, so the spine reads the menu. The arrow
+# is still one-way — the menu knows nothing of the agent.
 
 [[tool.importlinter.contracts]]
 name = "app.mcp imported only by the entrypoint"

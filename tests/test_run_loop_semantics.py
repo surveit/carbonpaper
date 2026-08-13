@@ -90,7 +90,7 @@ def _score_stage(stage_id, input_id, name="Score"):
                 "reads": [{"input": input_id, "columns": [
                     {"name": "text", "type": "str", "nullable": True}]}],
                 "adds": [{"name": "score", "type": "int", "nullable": False}]},
-            "llm": {"prompt_template": "Rate: {text}"}}
+            "llm": {"model": "claude-haiku-4-5", "prompt_template": "Rate: {text}"}}
 
 
 def _queue_stage(stage_id, input_id, name="Review"):

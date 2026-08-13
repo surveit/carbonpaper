@@ -109,7 +109,7 @@ def test_trace_shows_instructions_and_data():
             ],
             "adds": [{"name": "rating", "type": "int", "nullable": False}],
         },
-        "llm": {"prompt_instructions": "Rate for relevance.",
+        "llm": {"model": "claude-haiku-4-5", "prompt_instructions": "Rate for relevance.",
                 "prompt_data_template": "Score: {score}"},
     })
     stages = Workflow(stages=list(authored.values())).index_workflow_stages_by_id()

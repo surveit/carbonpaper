@@ -90,7 +90,7 @@ def test_valid_llm_transform():
             "reads": [{"input": "load", "columns": _PK_ID_SCHEMA["columns"]}],
             "adds": [{"name": "out", "type": "str", "nullable": True}],
         },
-        llm={"prompt_template": "do {id}", "tools": ["WebSearch"]}))
+        llm={"model": "claude-haiku-4-5", "prompt_template": "do {id}", "tools": ["WebSearch"]}))
     assert s.llm.prompt_data_template == "do {id}"
 
 
@@ -110,7 +110,7 @@ def test_llm_transform_rejects_more_than_one_input():
             id="extract", type="llm_transform",
             inputs=[{"id": "a"}, {"id": "b"}],
             signature={"form": "extends"},
-            llm={"prompt_template": "do it"}))
+            llm={"model": "claude-haiku-4-5", "prompt_template": "do it"}))
 
 
 def test_llm_transform_rejects_a_missing_signature():
@@ -118,7 +118,7 @@ def test_llm_transform_rejects_a_missing_signature():
         m.parse_stage(S(
             id="extract", type="llm_transform",
             inputs=[{"id": "a"}],
-            llm={"prompt_template": "do it"}))
+            llm={"model": "claude-haiku-4-5", "prompt_template": "do it"}))
 
 
 def test_llm_transform_rejects_output_that_adds_no_columns():
@@ -130,7 +130,7 @@ def test_llm_transform_rejects_output_that_adds_no_columns():
                 "form": "extends",
                 "reads": [{"input": "a", "columns": _PK_ID_SCHEMA["columns"]}],
             },
-            llm={"prompt_template": "do {id}"}))
+            llm={"model": "claude-haiku-4-5", "prompt_template": "do {id}"}))
 
 
 def test_publish_requires_the_function_block_it_actually_runs():
@@ -492,7 +492,7 @@ def test_llm_transform_rejects_double_braced_input_column():
           inputs=[{"id": "load"}],
           signature={"form": "extends",
                      "adds": [{"name": "out", "type": "str", "nullable": True}]},
-          llm={"prompt_template": "Analyze {{content}} now"}),
+          llm={"model": "claude-haiku-4-5", "prompt_template": "Analyze {{content}} now"}),
     ]))
 
 
@@ -503,7 +503,7 @@ def test_llm_transform_rejects_spaced_double_braced_input_column():
           inputs=[{"id": "load"}],
           signature={"form": "extends",
                      "adds": [{"name": "out", "type": "str", "nullable": True}]},
-          llm={"prompt_template": "Analyze {{ content }} now"}),
+          llm={"model": "claude-haiku-4-5", "prompt_template": "Analyze {{ content }} now"}),
     ]))
 
 
@@ -513,7 +513,7 @@ def test_llm_transform_allows_prompt_that_injects_nothing():
         id="extract", type="llm_transform",
         inputs=[{"id": "load"}],
         signature={"form": "extends", "adds": [{"name": "out", "type": "str", "nullable": True}]},
-        llm={"prompt_template": "score the row"}))
+        llm={"model": "claude-haiku-4-5", "prompt_template": "score the row"}))
     assert s.llm is not None
 
 
@@ -531,7 +531,7 @@ def test_llm_transform_accepts_single_brace_input_column():
             ],
             "adds": [{"name": "out", "type": "str", "nullable": True}],
         },
-        llm={"prompt_template": "Analyze {content} now"}))
+        llm={"model": "claude-haiku-4-5", "prompt_template": "Analyze {content} now"}))
     assert s.llm.prompt_data_template == "Analyze {content} now"
 
 
@@ -542,26 +542,26 @@ def test_prompt_template_field_names_str_format_map_and_single_brace():
 
 
 def test_llm_config_accepts_old_prompt_template_key_via_alias():
-    cfg = LLMConfig.model_validate({"prompt_template": "do {id}"})
+    cfg = LLMConfig.model_validate({"model": "claude-haiku-4-5", "prompt_template": "do {id}"})
     assert cfg.prompt_data_template == "do {id}"
     assert cfg.prompt_instructions == ""
 
 
 def test_llm_config_accepts_new_prompt_data_template_key():
-    cfg = LLMConfig.model_validate({"prompt_data_template": "do {id}"})
+    cfg = LLMConfig.model_validate({"model": "claude-haiku-4-5", "prompt_data_template": "do {id}"})
     assert cfg.prompt_data_template == "do {id}"
 
 
 def test_llm_config_prompt_instructions_optional_and_settable():
     cfg = LLMConfig.model_validate(
-        {"prompt_instructions": "Be terse.", "prompt_data_template": "do {id}"}
+        {"model": "claude-haiku-4-5", "prompt_instructions": "Be terse.", "prompt_data_template": "do {id}"}
     )
     assert cfg.prompt_instructions == "Be terse."
     assert cfg.prompt_data_template == "do {id}"
 
 
 def test_llm_config_model_dump_emits_field_name_not_alias():
-    cfg = LLMConfig.model_validate({"prompt_template": "do {id}"})
+    cfg = LLMConfig.model_validate({"model": "claude-haiku-4-5", "prompt_template": "do {id}"})
     dumped = cfg.model_dump()
     assert "prompt_data_template" in dumped
     assert "prompt_template" not in dumped
@@ -569,7 +569,7 @@ def test_llm_config_model_dump_emits_field_name_not_alias():
 
 def test_data_template_required():
     with pytest.raises(ValidationError):
-        LLMConfig.model_validate({"prompt_instructions": "Be terse."})
+        LLMConfig.model_validate({"model": "claude-haiku-4-5", "prompt_instructions": "Be terse."})
 
 
 def test_double_brace_checks_data_template_not_instructions():
@@ -580,7 +580,7 @@ def test_double_brace_checks_data_template_not_instructions():
           inputs=[{"id": "load"}],
           signature={"form": "extends",
                      "adds": [{"name": "out", "type": "str", "nullable": True}]},
-          llm={"prompt_template": "Analyze {{text}} now"}),
+          llm={"model": "claude-haiku-4-5", "prompt_template": "Analyze {{text}} now"}),
     ]))
 
     # The SAME {{text}} placed only in prompt_instructions, with a valid
@@ -599,13 +599,13 @@ def test_double_brace_checks_data_template_not_instructions():
             ],
             "adds": [{"name": "out", "type": "str", "nullable": True}],
         },
-        llm={"prompt_instructions": "Never echo {{text}} verbatim.",
+        llm={"model": "claude-haiku-4-5", "prompt_instructions": "Never echo {{text}} verbatim.",
              "prompt_template": "Analyze {text} now"}))
     assert s.llm is not None
 
 
 def test_both_fields_round_trip():
-    cfg = LLMConfig.model_validate({
+    cfg = LLMConfig.model_validate({"model": "claude-haiku-4-5", 
         "prompt_instructions": "Be terse and cite sources.",
         "prompt_data_template": "Summarize {id}: {content}",
     })

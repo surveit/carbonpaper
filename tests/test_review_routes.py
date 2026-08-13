@@ -97,7 +97,7 @@ def _score_stage():
                 ],
                 "adds": [{"name": "score", "type": "int", "nullable": False}],
             },
-            "llm": {"prompt_instructions": "Score each quote for tone.",
+            "llm": {"model": "claude-haiku-4-5", "prompt_instructions": "Score each quote for tone.",
                     "prompt_data_template": "Rate this: {quote}"}}
 
 

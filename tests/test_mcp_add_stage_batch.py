@@ -40,7 +40,7 @@ _SCORE_UNADDITIVE = {
     "inputs": [{"id": "clean"}],
     "signature": {"form": "extends",
                   "adds": [{"name": "verdict", "type": "str", "nullable": True}]},
-    "llm": {"prompt_data_template": "judge {amount}"},
+    "llm": {"model": "claude-haiku-4-5", "prompt_data_template": "judge {amount}"},
 }
 _RANK = {
     "id": "rank", "description": "Rank", "type": "python_row_function",

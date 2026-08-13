@@ -43,7 +43,7 @@ def test_an_llm_transform_reads_what_its_template_injects():
     spec = {
         "id": "score", "description": "Score", "type": "llm_transform",
         "inputs": [{"id": "src", "schema": _EDGE}],
-        "llm": {"prompt_data_template": "Rate: {text}"},
+        "llm": {"model": "claude-haiku-4-5", "prompt_data_template": "Rate: {text}"},
         "output_schema": {"columns": [*_EDGE["columns"],
                                       {"name": "score", "type": "int", "nullable": True}]},
     }

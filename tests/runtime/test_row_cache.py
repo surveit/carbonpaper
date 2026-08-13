@@ -60,7 +60,7 @@ def _llm_stage(*, batch_size: int = 1, instructions: str = "score it") -> Stage:
             "reads": [{"input": "src",
                        "columns": [{"name": "x", "type": "int", "nullable": True}]}],
             "adds": [{"name": "verdict", "type": "str", "nullable": True}]},
-        "llm": {"prompt_instructions": instructions, "prompt_data_template": "{x}",
+        "llm": {"model": "claude-haiku-4-5", "prompt_instructions": instructions, "prompt_data_template": "{x}",
                 "batch_size": batch_size},
     })
 

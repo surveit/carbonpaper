@@ -41,7 +41,7 @@ def _judge_stage() -> dict:
             "reads": [{"input": "load", "columns": _COLUMNS}],
             "adds": [{"name": "verdict", "type": "str", "nullable": True}],
         },
-        "llm": {"prompt_instructions": "judge it", "prompt_data_template": "{x}",
+        "llm": {"model": "claude-haiku-4-5", "prompt_instructions": "judge it", "prompt_data_template": "{x}",
                 "batch_size": 1},
     }
 

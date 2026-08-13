@@ -65,13 +65,11 @@ class LLMConfig(StageConfig):
             "Row-invariant guidance belongs in prompt_instructions."
         ),
     )
-    model: Optional[LLMModel] = Field(
-        default=None,
+    model: LLMModel = Field(
         description=(
-            "Which model answers. Name one on every stage you write: the run records "
-            "it beside the rows, so a reader can see what produced them. A stage that "
-            "names none is answered by whatever the deployment defaults to that day, "
-            "and the write path refuses it."
+            "Which model answers. Required: the run records it beside the rows, so a "
+            "reader can see what produced them, and a stage naming none would be "
+            "answered by whatever the deployment defaults to on the day it runs."
         ),
     )
     temperature: float = 0.0

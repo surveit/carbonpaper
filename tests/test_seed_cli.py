@@ -9,7 +9,7 @@ from pathlib import Path
 from app.seeds.seed import discover_workflow_files, seed_all, seed_demo_data_if_enabled
 from app.services import project
 from app.services.project import read_project_name
-from app.services.stage_edit import find_description_issues, find_unnamed_model_issues
+from app.services.stage_edit import find_description_issues
 
 _TUTORIAL = "tutorial_lobbying_triage"
 # Every committed bundle, in the order discover_workflow_files sorts them.
@@ -142,14 +142,14 @@ def test_every_seeded_summary_can_be_written_back() -> None:
 
 
 def test_every_seeded_llm_stage_names_its_model() -> None:
-    """Same write path, same consequence: a seeded stage naming no model cannot be edited back."""
+    """`llm.model` is required on LLMConfig, so a seeded stage naming none loads nowhere."""
     offenders = [
-        f"{path.name}::{stage['id']}: {issue}"
+        f"{path.name}::{stage['id']}"
         for path in discover_workflow_files()
         for stage in json.loads(path.read_text(encoding="utf-8"))["stages"]
-        for issue in find_unnamed_model_issues(stage)
+        if stage.get("type") == "llm_transform" and not stage.get("llm", {}).get("model")
     ]
     assert not offenders, (
-        "a seeded llm stage names no model, so its rows are attributed to the deployment "
-        "default and every edit to it is refused:\n  " + "\n  ".join(offenders)
+        "a seeded llm stage names no model, so the seed cannot be parsed and the "
+        "project it seeds will not open:\n  " + "\n  ".join(offenders)
     )

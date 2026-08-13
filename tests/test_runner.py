@@ -444,7 +444,7 @@ def _llm_transform_project(root):
             ],
             "adds": [{"name": "score", "type": "int", "nullable": False}],
         },
-        "llm": {"prompt_template": "Rate: {text}"},
+        "llm": {"model": "claude-haiku-4-5", "prompt_template": "Rate: {text}"},
     }
     (root / "compiled" / "01_load.json").write_text(json.dumps(load), encoding="utf-8")
     (root / "compiled" / "02_score.json").write_text(json.dumps(score), encoding="utf-8")
@@ -499,7 +499,7 @@ def test_run_subset_surfaces_the_real_row_failure_message(tmp_path, monkeypatch)
             ],
             "adds": [{"name": "score", "type": "int", "nullable": False}],
         },
-        "llm": {"prompt_template": "Rate: {text}"},
+        "llm": {"model": "claude-haiku-4-5", "prompt_template": "Rate: {text}"},
     })
     workflow = Workflow(stages=[load, score])
     injected_outputs = {"load": pd.DataFrame({"id": ["r1"], "text": ["hi"]})}
