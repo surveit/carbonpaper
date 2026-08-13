@@ -1,7 +1,6 @@
 """Every tool description both authoring surfaces read, keyed by tool name.
-The MCP server and the editing agent expose overlapping tools; holding the
-prose once is what stops the two drifting. `save_version` is the one name meaning two
-different operations — see SAVE_VERSION_* below."""
+Both expose the same tools over the same working copy; holding the prose once is what
+stops the two drifting."""
 from __future__ import annotations
 
 from app.core.agent.tool_spec import ToolSpec
@@ -42,18 +41,6 @@ Copying a stage from read_stage is fine: the server-owned fields it carries
 unknown field is still an error — a typo'd field name never passes silently.
 
 The FIRST stage of a project starts its workflow — no other tool creates one.""",
-    ),
-    "create_draft": ToolSpec(
-        name="create_draft",
-        description="""\
-Start a DRAFT: a disposable scratch copy of workflow stages you edit
-freely and later freeze with save_version. Each stage you set must be
-individually valid, but the WORKFLOW may stay incomplete mid-build (e.g.
-a stage whose input references one you have not added yet) until you
-save. Pass from_version to seed it from an existing version's stages;
-omit it to start empty. Returns the draft, whose `id` (a word triplet
-like brisk-otter-lamp) you pass to every draft tool. Drafts are
-expendable — if one is lost, start a new one.""",
     ),
     "create_project": ToolSpec(
         name="create_project",
@@ -134,6 +121,20 @@ The current manifest of one production run as a dict: its overall status
 this after run_workflow to follow progress and see the outcome. An unknown or
 expired run_id returns {ok: False, error} rather than a fabricated status.""",
     ),
+    "save_version": ToolSpec(
+        name="save_version",
+        description="""\
+Freeze the project's CURRENT workflow into an immutable version — the snapshot
+a run or a workflow test executes. Born UNPUBLISHED: only a human publishes.
+
+`parent_version` is the version YOU started this edit from. Supply it only when you
+actually loaded that version; it is recorded verbatim as this snapshot's ancestor,
+and an id naming no version of this project is refused. Omitting it is normal and
+records no ancestor — nothing is inferred from what else the project has stored.
+
+The working copy is strict-loaded first, so an invalid workflow comes back as
+{ok: False, issues} and no version is written.""",
+    ),
     "sleep": ToolSpec(
         name="sleep",
         description="""\
@@ -197,14 +198,6 @@ is a guess. A stage that did not finish is refused rather than read: an errored
 stage still wrote a frame, and the columns it never reached are nulls, not
 results.""",
     ),
-    "read_draft": ToolSpec(
-        name="read_draft",
-        description="""\
-The draft's current stages plus `issues` — every cross-stage graph
-problem (dangling input, duplicate id, cycle) it would fail on if saved
-now ([] means save_version will succeed). Every stored stage is already
-individually valid, so `issues` never covers a single stage's own shape.""",
-    ),
     "read_review_guide": ToolSpec(
         name="read_review_guide",
         description="""\
@@ -228,12 +221,6 @@ the human reads them on the project's Terms page, so what you read here is
 what your writing has to match. A word not in this list is a word to agree
 with the user, never one to coin. An empty result means the words have not
 been agreed yet, not that the project has none.""",
-    ),
-    "remove_draft_stage": ToolSpec(
-        name="remove_draft_stage",
-        description="""\
-Delete one stage from the draft by id. Removing a stage other stages
-still input from leaves dangling edges — visible in `issues` until fixed.""",
     ),
     "remove_stage": ToolSpec(
         name="remove_stage",
@@ -389,18 +376,6 @@ same live/final manifest run_workflow exposes, or
 profile_stage_output_data_range for the values a stage produced. A project with
 no stored version is a loud error.""",
     ),
-    "set_draft_stage": ToolSpec(
-        name="set_draft_stage",
-        description="""\
-Add or replace ONE stage in the draft (matched by the stage's `id`).
-`stage_json` is the complete stage as a JSON object string. A MALFORMED
-stage — invalid JSON, not an object, or failing the stage schema
-(unknown type, missing required field, wrong shape, ...) — is REJECTED:
-nothing is written, and you get the validation errors back to fix and
-retry. A VALID stage whose `inputs` reference a stage id you have not
-added yet IS stored — that's the workflow still being built, not a bad
-stage — and shows up in the returned `issues`.""",
-    ),
     "write_review_guide": ToolSpec(
         name="write_review_guide",
         description="""\
@@ -436,32 +411,3 @@ is shown to the human on the project's Terms page. Agree the words with the
 user before you store them — never invent one to fill the list out.""",
     ),
 }
-
-# `save_version` is one NAME for two operations, because the surfaces author into
-# different places: the MCP server edits the working copy, the editing agent
-# builds a draft. Unifying them means retiring the working copy — see issue #357.
-SAVE_VERSION_FROM_WORKING_COPY = ToolSpec(
-    name="save_version",
-    description="""\
-Freeze the project's CURRENT workflow into an immutable version — the snapshot
-a run or a workflow test executes. Born UNPUBLISHED: only a human publishes.
-
-`parent_version` is the version YOU started this edit from. Supply it only when you
-actually loaded that version; it is recorded verbatim as this snapshot's ancestor,
-and an id naming no version of this project is refused. Omitting it is normal and
-records no ancestor — nothing is inferred from what else the project has stored.
-
-The working copy is strict-loaded first, so an invalid workflow comes back as
-{ok: False, issues} and no version is written.""",
-)
-
-SAVE_VERSION_FROM_DRAFT = ToolSpec(
-    name="save_version",
-    description="""\
-Freeze the draft into a new immutable version — your proposal for a
-human to review. Validates the whole workflow first: an invalid draft is
-refused with the full issue list and nothing is written. The version is
-born UNPUBLISHED; only a human can publish it, and publishing records that
-they have read it. `message` says what changed and why, for the reviewer.
-Save once per finished proposal, not per edit.""",
-)

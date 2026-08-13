@@ -12,16 +12,13 @@ from pydantic import BaseModel
 
 from app.core.agent.bound_tool import BoundToolSpec
 from app.tools.types import ToolInputSchema
-from app.services import drafts
-from app.tools import shared
+from app.tools import shared, working_copy
 from app.tools.submitted_stage import (
     SubmittedStage,
     add_stages_reporting_drops,
     edit_stage_reporting_drops,
-    set_draft_stage_reporting_drops,
 )
-from app.tools.tool_specs import SAVE_VERSION_FROM_DRAFT, TOOL_SPECS
-from app.services.drafts import DraftDetail, DraftEdit, DraftView, SaveResult
+from app.tools.tool_specs import TOOL_SPECS
 from app.services.project import Project
 
 
@@ -42,20 +39,10 @@ def make_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
     def add_stage(project_id: str, stages: list[SubmittedStage]) -> dict[str, Any]:
         return add_stages_reporting_drops(project_id, stages)
 
-    def create_draft(project_id: str, from_version: str = "") -> DraftView:
-        return drafts.create_draft(project_id, from_version=from_version or None)
-
-    def read_draft(project_id: str, draft_id: str) -> DraftDetail:
-        return drafts.read_draft(project_id, draft_id)
-
-    def set_draft_stage(project_id: str, draft_id: str, stage_json: str) -> DraftEdit:
-        return set_draft_stage_reporting_drops(project_id, draft_id, stage_json)
-
-    def remove_draft_stage(project_id: str, draft_id: str, stage_id: str) -> DraftEdit:
-        return drafts.remove_draft_stage(project_id, draft_id, stage_id)
-
-    def save_version(project_id: str, draft_id: str, message: str) -> SaveResult:
-        return drafts.save_version(project_id, draft_id, message=message)
+    def save_version(
+        project_id: str, message: str, parent_version: str | None = None
+    ) -> dict[str, Any]:
+        return working_copy.save_working_copy_as_version(project_id, message, parent_version)
 
     def list_files(project_id: str | None = None) -> shared.ProjectFilesView:
         where = "/files" if project_id is None else f"/project/{project_id}/files"
@@ -68,17 +55,13 @@ def make_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
         create_project,
         edit_stage,
         add_stage,
-        create_draft,
-        read_draft,
-        set_draft_stage,
-        remove_draft_stage,
         save_version,
         list_files,
     ]
     return [
         BoundToolSpec(
             name=fn.__name__,
-            description=_DESCRIPTIONS[fn.__name__].description,
+            description=TOOL_SPECS[fn.__name__].description,
             fn=fn,
             input_schema=TOOL_SCHEMAS[fn.__name__],
             label=TOOL_LABELS[fn.__name__],
@@ -130,41 +113,17 @@ TOOL_SCHEMAS: dict[str, ToolInputSchema] = {
             "must already be a stage in this workflow or in this same call.",
         ],
     },
-    "create_draft": {
-        "project_id": Annotated[str, "The project id (call get_current_project first)."],
-        "from_version": Annotated[
-            str,
-            "Optional: a version id whose stages seed the draft. Omit (or pass "
-            '"") to start from an empty stage list.',
-        ],
-    },
-    "read_draft": {
-        "project_id": Annotated[str, "The project id (call get_current_project first)."],
-        "draft_id": Annotated[str, "The word-triplet id returned by create_draft."],
-    },
-    "set_draft_stage": {
-        "project_id": Annotated[str, "The project id (call get_current_project first)."],
-        "draft_id": Annotated[str, "The word-triplet id returned by create_draft."],
-        "stage_json": Annotated[
-            str,
-            "The complete stage as a JSON object (encoded as a string), including "
-            "its id. An existing stage with the same id is replaced; otherwise "
-            "the stage is added. A malformed stage (bad JSON, wrong shape, unknown "
-            "type) is rejected outright and nothing is written.",
-        ],
-    },
-    "remove_draft_stage": {
-        "project_id": Annotated[str, "The project id (call get_current_project first)."],
-        "draft_id": Annotated[str, "The word-triplet id returned by create_draft."],
-        "stage_id": Annotated[str, "The id of the stage to delete from the draft."],
-    },
     "save_version": {
         "project_id": Annotated[str, "The project id (call get_current_project first)."],
-        "draft_id": Annotated[str, "The word-triplet id returned by create_draft."],
         "message": Annotated[
             str,
             "What this version changes and why — shown to the human reviewer "
             "deciding whether to publish it.",
+        ],
+        "parent_version": Annotated[
+            str | None,
+            "The version you started this edit FROM, if you loaded one. Omit otherwise: "
+            "nothing is inferred from what else the project has stored.",
         ],
     },
     "list_files": {
@@ -177,12 +136,6 @@ TOOL_SCHEMAS: dict[str, ToolInputSchema] = {
 }
 
 
-# This agent's own view of the shared registry: every tool as described there,
-# except save_version — the agent freezes a DRAFT, the MCP server snapshots the
-# working copy, so the two carry different prose under one name (see issue #357).
-_DESCRIPTIONS = TOOL_SPECS | {"save_version": SAVE_VERSION_FROM_DRAFT}
-
-
 # Present-tense labels shown in the chat while a tool runs (e.g. "Reading the
 # workflow…"), keyed by the bare tool name. The full args/result stay available
 # behind a click-to-expand disclosure in the UI.
@@ -191,10 +144,6 @@ TOOL_LABELS: dict[str, str] = {
     "create_project": "Creating the project",
     "edit_stage": "Editing a stage",
     "add_stage": "Adding a stage",
-    "create_draft": "Starting a draft",
-    "read_draft": "Reading the draft",
-    "set_draft_stage": "Editing the draft",
-    "remove_draft_stage": "Removing a draft stage",
-    "save_version": "Saving the draft as a version",
+    "save_version": "Saving the workflow as a version",
     "list_files": "Listing the project's files",
 }

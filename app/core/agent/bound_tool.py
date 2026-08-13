@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 from claude_agent_sdk import SdkMcpTool, tool
-from pydantic import BaseModel
+from pydantic import BaseModel, TypeAdapter
 
 from app.core.agent.tool_spec import ToolSpec
 
@@ -21,7 +21,7 @@ class BoundToolSpec(ToolSpec):
     def as_sdk_tool(self) -> SdkMcpTool[Any]:
         async def handler(args: dict[str, Any]) -> dict[str, Any]:
             try:
-                result = self.fn(**args)
+                result = self.fn(**self.parse_arguments(args))
                 # An async tool is one that WAITS (get_run_status holding open on a
                 # running run); awaiting it here is what keeps the app answering
                 # everything else meanwhile.
@@ -35,6 +35,14 @@ class BoundToolSpec(ToolSpec):
                 }
 
         return tool(self.name, self.description, self.input_schema)(handler)
+
+    def parse_arguments(self, args: dict[str, Any]) -> dict[str, Any]:
+        """A tool taking a MODEL is handed JSON, so without this it gets a dict and raises."""
+        return {
+            name: TypeAdapter(self.input_schema[name]).validate_python(value)
+            if name in self.input_schema else value
+            for name, value in args.items()
+        }
 
 
 def as_tool_content(value: object) -> dict[str, Any]:
