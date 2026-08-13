@@ -201,3 +201,4 @@
 {"run_id":"31687677770","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31687677770","created":"2026-08-13T09:41:29Z","branch":"feat/files-page","event":"pull_request","contracts_kept":14,"findings":[]}
 {"run_id":"31687677770","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31687677770","created":"2026-08-13T09:42:16Z","branch":"feat/files-page","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"31688239188","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31688239188","created":"2026-08-13T09:48:48Z","branch":"fix/files-quota-from-the-store","event":"pull_request","contracts_kept":14,"findings":[]}
+{"run_id":"31688239188","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31688239188","created":"2026-08-13T09:49:55Z","branch":"fix/files-quota-from-the-store","event":"pull_request","contracts_kept":null,"findings":[]}
