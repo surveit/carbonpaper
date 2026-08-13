@@ -12,11 +12,12 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-import pandas as pd
+import pyarrow as pa
 
 from app.core.frames import (
     CELL_TYPE_PREDICATES,
-    dtype_proves_cell_type,
+    is_schema_type_satisfied_by_arrow_type,
+    find_arrow_list_value_type,
     is_null_form,
     is_sequence_cell,
 )
@@ -83,51 +84,55 @@ class ValidationReport:
         }
 
 
-def validate_dataframe(
-    df: pd.DataFrame,
+def validate_table(
+    table: pa.Table,
     schema: TableSchema | None,
     *,
     stage_id: str,
     phase: str,
 ) -> ValidationReport:
-    report = ValidationReport(stage_id=stage_id, phase=phase, rows=len(df))
+    report = ValidationReport(stage_id=stage_id, phase=phase, rows=table.num_rows)
     if schema is None:
         # A stage declaring no schema emits files rather than a table.
         return report
 
     columns: list[Column] = list(schema.columns)
-    declared_names = [c.name for c in columns]
-
-    report.issues.extend(_find_missing_declared_columns(df, columns))
+    present = set(table.column_names)
+    report.issues.extend(_find_missing_declared_columns(present, columns))
 
     for col in columns:
-        name = col.name
-        if name not in df.columns:
+        if col.name not in present:
             continue
-        series = df[name]
-        report.issues.extend(_find_nullability_issues(series, col))
-        report.issues.extend(_find_type_issues(series, col))
-        report.issues.extend(_find_numeric_range_issues(series, col))
-        report.issues.extend(_find_enum_issues(series, col))
+        # One argument, not a values/type pair: a ChunkedArray carries both, so
+        # nothing here can be handed a type belonging to some other column.
+        values = table.column(col.name)
+        report.issues.extend(_find_nullability_issues(values, col))
+        report.issues.extend(_find_type_issues(values, col))
+        report.issues.extend(_find_numeric_range_issues(values, col))
+        report.issues.extend(_find_enum_issues(values, col))
 
-    report.issues.extend(_find_undeclared_columns(df, declared_names))
-
+    report.issues.extend(
+        _find_undeclared_columns(table.column_names, [c.name for c in columns])
+    )
     return report
 
 
-def _find_missing_declared_columns(df: pd.DataFrame, columns: list[Column]) -> list[Issue]:
-    issues: list[Issue] = []
-    for col in columns:
-        name = col.name
-        if name and name not in df.columns:
-            issues.append(Issue("error", name, f"Missing column '{name}'"))
-    return issues
+def _find_missing_declared_columns(present: set[str], columns: list[Column]) -> list[Issue]:
+    return [
+        Issue("error", col.name, f"Missing column '{col.name}'")
+        for col in columns
+        if col.name and col.name not in present
+    ]
 
 
-def _find_nullability_issues(series: pd.Series, col: Column) -> list[Issue]:
+# `null_count` alone is not the answer: a float column carries NaN as a VALUE,
+# and this codebase reads every null form as absent (see `is_null_form`, which
+# the row fingerprint collapses under). A required column holding NaN is missing
+# a measurement, so it is counted here.
+def _find_nullability_issues(values: pa.ChunkedArray, col: Column) -> list[Issue]:
     if col.nullable:
         return []
-    null_n = series.isna().sum()
+    null_n = sum(1 for v in values.to_pylist() if is_null_form(v))
     if null_n > 0:
         return [Issue("error", col.name, f"{null_n} row(s) have no value, but this column is required")]
     return []
@@ -155,74 +160,89 @@ def _value_check_for(type_name: str) -> Callable[[Any], bool] | None:
     return None
 
 
-def _find_type_issues(series: pd.Series, col: Column) -> list[Issue]:
+def _find_type_issues(values: pa.ChunkedArray, col: Column) -> list[Issue]:
     check = _value_check_for(col.type)
     if check is None:
         return []
-    if dtype_proves_cell_type(series, col.type):
+    if _is_declared_type_satisfied_by_arrow_type(values.type, col.type):
         return []
-    non_null = series[~series.map(is_null_form)]
-    if not len(non_null):
-        return []
-    offenders = [v for v in non_null if not check(v)]
+    offenders = [v for v in values.to_pylist() if not is_null_form(v) and not check(v)]
     if not offenders:
         return []
-    sample = ", ".join(repr(v) for v in offenders[:_OFFENDER_SAMPLE_N])
-    ellipsis = "…" if len(offenders) > _OFFENDER_SAMPLE_N else ""
     return [
         Issue(
             "error", col.name,
             f"{len(offenders)} value(s) not of declared type '{col.type}' "
-            f"(e.g. {sample}{ellipsis})",
+            f"(e.g. {_describe_sample(offenders)})",
         )
     ]
 
 
-def _find_numeric_range_issues(series: pd.Series, col: Column) -> list[Issue]:
+# The declared-type vocabulary (`list[X]`, `json`, the scalar set) is app.models
+# knowledge app.core may not import, so frames answers about a plain scalar name
+# and about "is this arrow type a list, and of what"; the `list[X]` composition,
+# which needs both vocabularies, is here.
+def _is_declared_type_satisfied_by_arrow_type(arrow_type: pa.DataType, type_name: str) -> bool:
+    match = _LIST_TYPE_RE.match(type_name)
+    if not match:
+        return is_schema_type_satisfied_by_arrow_type(arrow_type, type_name)
+    value_type = find_arrow_list_value_type(arrow_type)
+    if value_type is None:
+        return False
+    element_name = match.group(1).strip()
+    # `list[json]` admits any element, so being a list at all is the whole check.
+    if element_name == JSON_COLUMN_TYPE:
+        return True
+    return is_schema_type_satisfied_by_arrow_type(value_type, element_name)
+
+
+def _describe_sample(offenders: list[Any]) -> str:
+    shown = ", ".join(repr(v) for v in offenders[:_OFFENDER_SAMPLE_N])
+    return shown + ("…" if len(offenders) > _OFFENDER_SAMPLE_N else "")
+
+
+def _find_numeric_range_issues(values: pa.ChunkedArray, col: Column) -> list[Issue]:
     col_range = col.range
-    if not (col_range and col.type in {"int", "float"}):
-        return []
-    non_null = series.dropna()
-    if not (len(non_null) and len(col_range) == 2):
+    if not (col_range and col.type in {"int", "float"} and len(col_range) == 2):
         return []
     lo, hi = col_range
     # strings like "+inf" → sentinel; treat as unbounded
     lo_v = -math.inf if (isinstance(lo, str) and RANGE_UNBOUNDED_MARKER in lo) else lo
     hi_v = math.inf if (isinstance(hi, str) and RANGE_UNBOUNDED_MARKER in hi) else hi
     try:
-        bad = ((non_null < lo_v) | (non_null > hi_v)).sum()
-        if bad:
-            return [Issue("warning", col.name, f"{bad} value(s) outside range [{lo}, {hi}]")]
+        bad = sum(
+            1 for v in values.to_pylist()
+            if not is_null_form(v) and (v < lo_v or v > hi_v)
+        )
     except TypeError:
-        pass  # mixed types — _find_type_issues reports them
+        return []  # mixed types — _find_type_issues reports them
+    if bad:
+        return [Issue("warning", col.name, f"{bad} value(s) outside range [{lo}, {hi}]")]
     return []
 
 
-def _find_enum_issues(series: pd.Series, col: Column) -> list[Issue]:
+def _find_enum_issues(values: pa.ChunkedArray, col: Column) -> list[Issue]:
     if not (col.enum and col.type == STR_COLUMN_TYPE):
         return []
-    non_null = series.dropna()
-    if not len(non_null):
-        return []
     allowed = set(col.enum)
-    rendered = non_null.astype(str)
-    offending = rendered[~rendered.isin(allowed)]
-    if not len(offending):
+    offending = [
+        str(v) for v in values.to_pylist()
+        if not is_null_form(v) and str(v) not in allowed
+    ]
+    if not offending:
         return []
-    distinct = list(offending.unique())
-    sample = ", ".join(repr(v) for v in distinct[:_OFFENDER_SAMPLE_N])
-    ellipsis = "…" if len(distinct) > _OFFENDER_SAMPLE_N else ""
+    distinct = list(dict.fromkeys(offending))
     return [
         Issue(
             "error", col.name,
             f"{len(offending)} value(s) outside enum {sorted(allowed)} "
-            f"(e.g. {sample}{ellipsis})",
+            f"(e.g. {_describe_sample(distinct)})",
         )
     ]
 
 
-def _find_undeclared_columns(df: pd.DataFrame, declared_names: list[str]) -> list[Issue]:
-    extras = [c for c in df.columns if c not in declared_names]
+def _find_undeclared_columns(present: list[str], declared_names: list[str]) -> list[Issue]:
+    extras = [c for c in present if c not in declared_names]
     if extras:
         return [
             Issue(

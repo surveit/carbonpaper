@@ -8,10 +8,9 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 
-import pandas as pd
 import pyarrow as pa
 
-from app.core.frames import convert_cell_to_json_native, table_to_frame
+from app.core.frames import convert_cell_to_json_native, is_null_form
 from app.models import WorkflowStage
 from app.models.severity import UserFacingErrorSeverity
 from app.models.stages.join import JoinStage
@@ -56,10 +55,8 @@ def find_key_coverage_issues(
 
     left = [key.left for key in stage.join.keys]
     right = [key.right for key in stage.join.keys]
-    # Only a join reads keys, so the materialization is paid here rather than by
-    # every stage the executor validates.
-    subject = _read_key_values(table_to_frame(inputs[subject_id]), left)
-    reference = _read_key_values(table_to_frame(inputs[reference_id]), right)
+    subject = _read_key_values(inputs[subject_id], left)
+    reference = _read_key_values(inputs[reference_id], right)
     if subject is None or reference is None:
         return [Issue(UserFacingErrorSeverity.warning, "+".join(left), UNCOMPARABLE_KEY)]
 
@@ -102,14 +99,21 @@ def _describe_sample(ordered: Sequence[tuple[object, ...]]) -> str:
     return f"{shown}, and {remaining:,} more" if remaining > 0 else shown
 
 
-def _read_key_values(frame: pd.DataFrame, columns: Sequence[str]) -> KeyValues | None:
+# `is_null_form` rather than a plain `is None`: a float key column carries NaN as
+# a VALUE, and a NaN key matches nothing, exactly as a null does. Reading only
+# arrow's nulls here would count those rows as covered keys and under-report the
+# gap — a wrong number in a warning a reviewer acts on.
+def _read_key_values(table: pa.Table, columns: Sequence[str]) -> KeyValues | None:
     """None where the values cannot form a set; a null key matches nothing, so it is excluded."""
-    if any(column not in frame.columns for column in columns):
+    if any(column not in table.column_names for column in columns):
         return None
-    keys = frame[list(columns)]
-    present = keys[keys.notna().all(axis=1)]
+    rows = table.select(list(columns)).to_pylist()
     try:
-        return set(present.itertuples(index=False, name=None))
+        return {
+            tuple(row[column] for column in columns)
+            for row in rows
+            if not any(is_null_form(row[column]) for column in columns)
+        }
     except TypeError:
         return None
 

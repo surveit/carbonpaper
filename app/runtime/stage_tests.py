@@ -24,7 +24,7 @@ from app.models.stages.stage_tests import StageTest
 from app.runtime.context import RunContext
 from app.runtime.stages import HANDLERS
 from app.models.severity import UserFacingErrorSeverity
-from app.runtime.validation import validate_dataframe
+from app.runtime.validation import validate_table
 
 Status = Literal["passed", "mismatch", "error", "malformed"]
 
@@ -279,8 +279,9 @@ def _validate_test_against_schemas(
 ) -> str | None:
     problems: list[str] = []
     for ref in stage.inputs:
-        report = validate_dataframe(
-            input_frames[ref.id], input_schemas[ref.id], stage_id=stage.id, phase="input"
+        report = validate_table(
+            frame_to_table(input_frames[ref.id]), input_schemas[ref.id],
+            stage_id=stage.id, phase="input",
         )
         problems += [
             f"input {ref.id}: {issue.message}"
@@ -292,8 +293,8 @@ def _validate_test_against_schemas(
         return "; ".join(problems) if problems else None
     output_schema = transform_output_schema(stage)
     expected_frame = _build_frame(test.expected, output_schema)
-    report = validate_dataframe(
-        expected_frame, output_schema, stage_id=stage.id, phase="output"
+    report = validate_table(
+        frame_to_table(expected_frame), output_schema, stage_id=stage.id, phase="output"
     )
     problems += [
         f"expected rows: {issue.message}"

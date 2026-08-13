@@ -1,6 +1,5 @@
-"""Tests for app/runtime/validation.validate_dataframe — the dataframe checks
-run between stages (schema conformance, nullability, type, numeric range,
-enum)."""
+"""Tests for app/runtime/validation.validate_table — the checks run between
+stages (schema conformance, nullability, type, numeric range, enum)."""
 from __future__ import annotations
 
 import datetime as dt
@@ -9,8 +8,15 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from app.core.frames import frame_to_table
 from app.models import TableSchema
-from app.runtime.validation import validate_dataframe
+from app.runtime.validation import validate_table
+
+
+# The fixtures below are pandas because a literal frame reads better than a
+# literal table; the validator itself only ever sees the table.
+def validate_dataframe(df, schema, *, stage_id, phase):
+    return validate_table(frame_to_table(df), schema, stage_id=stage_id, phase=phase)
 
 
 def _schema(**kw):
@@ -156,8 +162,7 @@ def test_each_declared_type_accepts_its_own_values(type_name, values):
 
 def test_bool_column_holding_strings_errors():
     schema = _schema(columns=[{"name": "flag", "type": "bool", "nullable": True}])
-    df = pd.DataFrame({"flag": ["yes", "no", True]})
-    report, issues = _issues_for("flag", df, schema)
+    report, issues = _issues_for("flag", pd.DataFrame({"flag": ["yes", "no"]}), schema)
     assert len(issues) == 1
     assert issues[0].severity == "error"
     assert issues[0].message == "2 value(s) not of declared type 'bool' (e.g. 'yes', 'no')"
@@ -224,16 +229,18 @@ def test_bool_does_not_satisfy_an_int_column():
     assert not report.ok
 
 
+# Each of these is what the column's own arrow type settles, with no cell read:
+# the numpy scalars a pandas fixture is built from are gone by the time the
+# validator sees the column, because the wire is arrow.
 @pytest.mark.parametrize("type_name,values", [
     ("bool", [np.bool_(True), np.bool_(False)]),
     ("int", [np.int64(1), np.int32(2)]),
     ("float", [np.float64(1.5), np.float32(2.5)]),
     ("datetime", [np.datetime64("2024-01-01"), np.datetime64("2024-01-02")]),
 ])
-def test_numpy_scalars_satisfy_their_logical_type(type_name, values):
+def test_a_column_arriving_with_its_natural_arrow_type_validates_clean(type_name, values):
     schema = _schema(columns=[{"name": "v", "type": type_name, "nullable": True}])
-    df = pd.DataFrame({"v": pd.Series(values, dtype=object)})
-    report, issues = _issues_for("v", df, schema)
+    report, issues = _issues_for("v", pd.DataFrame({"v": values}), schema)
     assert issues == []
     assert report.ok
 
@@ -256,25 +263,26 @@ def test_nullable_extension_dtypes_satisfy_their_logical_type(type_name, dtype):
 
 def test_json_column_accepts_anything():
     schema = _schema(columns=[{"name": "v", "type": "json", "value_type": "str", "nullable": True}])
-    df = pd.DataFrame({"v": [{"a": "b"}, "not a dict", 7]})
-    report, issues = _issues_for("v", df, schema)
+    # Arrow types this `struct<a: string>`; `json` declares no shape, so whatever
+    # arrives is admissible and nothing is reported.
+    report, issues = _issues_for("v", pd.DataFrame({"v": [{"a": "b"}, {"a": "c"}]}), schema)
     assert issues == []
     assert report.ok
 
 
 def test_list_column_rejects_non_list_values():
     schema = _schema(columns=[{"name": "v", "type": "list[str]", "nullable": True}])
-    df = pd.DataFrame({"v": [["a", "b"], "nope"]})
-    report, issues = _issues_for("v", df, schema)
+    report, issues = _issues_for("v", pd.DataFrame({"v": ["nope", "also nope"]}), schema)
     assert issues[0].severity == "error"
-    assert issues[0].message == "1 value(s) not of declared type 'list[str]' (e.g. 'nope')"
+    assert issues[0].message == (
+        "2 value(s) not of declared type 'list[str]' (e.g. 'nope', 'also nope')"
+    )
     assert not report.ok
 
 
 def test_list_column_checks_element_type():
     schema = _schema(columns=[{"name": "v", "type": "list[int]", "nullable": True}])
-    df = pd.DataFrame({"v": [[1, 2], ["a"]]})
-    _, issues = _issues_for("v", df, schema)
+    _, issues = _issues_for("v", pd.DataFrame({"v": [["a"], ["b"]]}), schema)
     assert "declared type 'list[int]'" in issues[0].message
 
 
@@ -339,6 +347,17 @@ def test_a_genuinely_fractional_value_in_an_int_column_is_still_caught():
 
 # A column mixing an int with a str is the reason validation exists: it must be
 # reported, never raised.
-def test_a_column_of_mixed_types_is_reported_not_crashed():
-    _, issues = _one_column("m", [1, "a"], type="int")
+def test_a_column_whose_type_is_uniform_but_wrong_is_reported_not_crashed():
+    _, issues = _one_column("m", ["a", "b"], type="int")
     assert len(issues) == 1 and "not of declared type" in issues[0].message
+
+
+# A column mixing types has no arrow type, so it cannot reach validation at all —
+# `frame_to_table` refuses it at the wire, which is where a stage's output is
+# converted. Loud either way; this pins WHICH way, so the next reader does not
+# add a validation branch for a case that never arrives.
+def test_a_column_of_mixed_types_is_refused_at_the_wire_not_validated():
+    import pyarrow as pa
+
+    with pytest.raises(pa.ArrowInvalid):
+        frame_to_table(pd.DataFrame({"m": [1, "a"]}))
