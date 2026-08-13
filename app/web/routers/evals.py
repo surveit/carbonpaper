@@ -13,7 +13,7 @@ from app.core.frames import list_rows
 from app.models import EvalConfig, EvalRun, WorkflowNotFormed
 from app.evals.compatibility import CompatibilityReport, validate_eval_compatibility
 from app.evals.dataset import read_table_ref
-from app.evals.runner import run_eval
+from app.evals.runner import start_eval_run
 from app.evals.store import (
     eval_status,
     latest_version_id,
@@ -154,13 +154,7 @@ def _read_eval_dataset_preview(config: EvalConfig) -> dict[str, Any]:
 async def eval_run_detail(request: Request, project_id: str, eval_id: str, run_id: str):
     validate_project_or_404(project_id)
     config = _load_config_or_404(project_id, eval_id)
-    try:
-        run = load_eval_run(project_id, run_id)
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=f"no run {run_id!r} for this eval") from exc
-    except ValueError as exc:
-        # The run file exists but can't be read — distinct from "not found".
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    run = _load_run_or_404(project_id, run_id)
     return templates.TemplateResponse(
         request,
         "eval_run.html",
@@ -183,14 +177,28 @@ async def eval_run_detail(request: Request, project_id: str, eval_id: str, run_i
             ),
             "event_tail": EVENT_TAIL,
             # The subset run's own event log, tailed by the same panel the run
-            # page uses. Absent where the run wrote no log — a vetoed run executed
-            # nothing.
+            # page uses. A run still executing gets the panel before it has logged
+            # anything; a terminal run that wrote no log — a vetoed run executed
+            # nothing — has none to offer.
             "log_href": (
                 _eval_run_href(project_id, config.id, run_id)
-                if count_events(project_id, run_id) else None
+                if run.is_running() or count_events(project_id, run_id) else None
             ),
+            "status_href": _eval_run_status_href(project_id, config.id, run_id),
         },
     )
+
+
+@router.get("/project/{project_id}/evals/{eval_id}/runs/{run_id}/status")
+async def eval_run_status(project_id: str, eval_id: str, run_id: str):
+    """What moves while an eval run is in flight; the run page polls it and stops at `terminal`."""
+    validate_project_or_404(project_id)
+    run = _load_run_or_404(project_id, run_id)
+    return JSONResponse({
+        "status": run.status,
+        "terminal": not run.is_running(),
+        "elapsed": describe_eval_run_duration(run),
+    })
 
 
 # ─── That run's log, served to the same panel the run page uses ──────────────
@@ -241,6 +249,19 @@ def _eval_run_href(project_id: str, eval_id: str, run_id: str) -> str:
     return f"/project/{project_id}/evals/{eval_id}/runs/{run_id}"
 
 
+def _eval_run_status_href(project_id: str, eval_id: str, run_id: str) -> str:
+    return _eval_run_href(project_id, eval_id, run_id) + "/status"
+
+
+def _load_run_or_404(project_id: str, run_id: str) -> EvalRun:
+    try:
+        return load_eval_run(project_id, run_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=f"no run {run_id!r} for this eval") from exc
+    except ValueError as exc:
+        # The run file exists but can't be read — distinct from "not found".
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
 
 # ─── Trigger a run ───────────────────────────────────────────────────────────
 
@@ -253,7 +274,7 @@ async def trigger_eval_run(request: Request, project_id: str, eval_id: str):
     if version_id is not None and not isinstance(version_id, str):
         raise HTTPException(status_code=400, detail="version_id must be a string")
     try:
-        run = run_eval(project_id, config, version_id=version_id)
+        run = start_eval_run(project_id, config, version_id=version_id)
     except EvalNotScorableError as exc:
         return JSONResponse({"detail": str(exc)}, status_code=400)
     except FileNotFoundError as exc:

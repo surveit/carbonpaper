@@ -130,3 +130,6 @@ class EvalRun(_Base):
     started_at: Optional[str] = None
     finished_at: Optional[str] = None
     notes: list[str] = Field(default_factory=list)
+
+    def is_running(self) -> bool:
+        return self.status == "running"

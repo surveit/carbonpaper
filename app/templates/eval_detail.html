@@ -10,11 +10,15 @@
 
 {% block breadcrumbs %}{% include "_breadcrumbs.html" %}{% endblock %}
 
+{# `running` is not a verdict, so it takes the idle tint a run yet to start takes;
+   the word in the badge is what tells the two apart. #}
 {% set badge_class = {
      "run succeeded": "ok", "stale": "warn", "never run": "pending",
      "no eval dataset yet": "pending", "run errored": "err", "broken": "err",
+     "running": "pending",
    } %}
-{% set run_badge = {"scored": "ok", "vetoed": "warn", "error": "err"} %}
+{% set run_badge = {"running": "pending", "scored": "ok",
+                    "vetoed": "warn", "error": "err"} %}
 
 {% block section %}
 <div class="stage-panel-head">

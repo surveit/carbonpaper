@@ -321,6 +321,41 @@ def test_trigger_route_runs_and_redirects_to_the_run(project, monkeypatch):
     assert "/project/demo/evals/label_check/runs/" in r.headers["location"]
 
 
+def test_trigger_route_redirects_while_the_score_is_still_held_open(project, monkeypatch):
+    repo_root, demo, config = project
+    save_eval_config(demo.name, config)
+    workspace.set_projects_dir(repo_root)
+    scoring_started, release_scoring = threading.Event(), threading.Event()
+    real_run_subset = eval_runner.run_subset
+
+    def _held_open(*args, **kwargs):
+        scoring_started.set()
+        assert release_scoring.wait(timeout=30), "the test never released the scorer"
+        return real_run_subset(*args, **kwargs)
+
+    monkeypatch.setattr(eval_runner, "run_subset", _held_open)
+    client = TestClient(app)
+
+    r = client.post("/project/demo/evals/label_check/run", follow_redirects=False)
+
+    # The response is in hand while the scorer is still blocked, and the run it
+    # points at reads as in flight rather than as a result.
+    assert r.status_code == 303
+    run_id = r.headers["location"].rsplit("/", 1)[-1]
+    assert scoring_started.wait(timeout=30), "the scorer never ran"
+    assert load_eval_run(demo.name, run_id).status == "running"
+
+    live = client.get(f"/project/demo/evals/label_check/runs/{run_id}/status").json()
+    assert live["status"] == "running"
+    assert live["terminal"] is False
+
+    release_scoring.set()
+    _wait_for_eval_run_status(demo.name, run_id, "scored")
+    done = client.get(f"/project/demo/evals/label_check/runs/{run_id}/status").json()
+    assert done["status"] == "scored"
+    assert done["terminal"] is True
+
+
 def test_trigger_route_400s_when_not_runnable(project, monkeypatch):
     repo_root, demo, config = project
     save_eval_config(demo.name, config.model_copy(update={"table": None}))

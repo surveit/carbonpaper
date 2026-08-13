@@ -13,7 +13,10 @@
 
 {% block breadcrumbs %}{% include "_breadcrumbs.html" %}{% endblock %}
 
-{% set badge_class = {"scored": "ok", "vetoed": "warn", "error": "err"} %}
+{# `running` takes the idle tint the run page's own running pill takes: it is not a
+   verdict, and the word in the badge is what separates it from a run yet to start. #}
+{% set badge_class = {"running": "pending", "scored": "ok",
+                      "vetoed": "warn", "error": "err"} %}
 
 {% block section %}
 {% from "_run_log_panel.html" import run_log_panel %}
@@ -25,7 +28,7 @@
   </div>
   <p class="stage-blurb"><a href="/project/{{ project }}/evals/{{ config.id }}">{{ config.name }}</a>{% if config.description %} — {{ config.description }}{% endif %}</p>
   <p class="stage-facts">
-    <span>{% if elapsed %}ran {{ elapsed }} · {% endif %}
+    <span>{% if elapsed %}{% if run.is_running() %}running for <span id="eval-run-elapsed">{{ elapsed }}</span>{% else %}ran {{ elapsed }}{% endif %} · {% endif %}
       {%- if rows and not rows.error %}{{ "{:,}".format(rows.rows_total) }} row{% if rows.rows_total != 1 %}s{% endif %} scored · {% endif %}
       version <code>{{ run.workflow_version }}</code>
       {%- if run.finished_at %} · finished {{ run.finished_at | friendly_time }}{% endif %}</span>
@@ -65,7 +68,10 @@
 
   {# ─────────── ROWS — the comparison this run actually made ─────────── #}
   <div class="pane" data-pane="rows">
-  {% if rows is none %}
+  {% if run.is_running() %}
+    <p class="muted"><em>This run is still executing. Nothing has been scored yet —
+      the comparison appears here when it finishes.</em></p>
+  {% elif rows is none %}
     <p class="muted"><em>This run recorded no result table, so there is nothing to
       compare row by row. The reason is the note above.</em></p>
   {% elif rows.error %}
@@ -127,7 +133,9 @@
           {# Off this run's own result table. A rule the run did not score — the
              config changed since — gets a dash, never a borrowed count. #}
           <td>{% set tally = (rows.checks if rows else []) | selectattr('column', 'equalto', check.output_column) | first %}
-            {%- if tally %}{{ "{:,}".format(tally.matched) }} / {{ "{:,}".format(rows.rows_total) }}{% else %}<span class="muted">not scored in this run</span>{% endif %}</td>
+            {%- if tally %}{{ "{:,}".format(tally.matched) }} / {{ "{:,}".format(rows.rows_total) }}
+            {%- elif run.is_running() %}<span class="muted">not scored yet</span>
+            {%- else %}<span class="muted">not scored in this run</span>{% endif %}</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -143,6 +151,8 @@
         {% endfor %}
       </tbody>
     </table>
+    {% elif run.is_running() %}
+    <p class="muted"><em>This run is still executing — it has recorded no metrics yet.</em></p>
     {% else %}
     <p class="muted"><em>No metrics recorded for this run.</em></p>
     {% endif %}
@@ -226,4 +236,33 @@
   }
 })();
 </script>
+
+{# ── Live progress. An eval run's page is a single frozen record, so there is
+      nothing to patch in place beyond the elapsed figure: the poller keeps that
+      moving and reloads once, on the terminal transition, where the badge, the
+      metrics and the scored rows all arrive together. ── #}
+{% if run.is_running() %}
+<script>
+(function () {
+  const STATUS_URL = {{ status_href | tojson }};
+  const elapsed = document.getElementById('eval-run-elapsed');
+  let timer = null;
+
+  async function poll() {
+    let d;
+    try {
+      const r = await fetch(STATUS_URL, { cache: 'no-store' });
+      if (!r.ok) return;
+      d = await r.json();
+    } catch (e) { return; }
+    if (elapsed && d.elapsed) elapsed.textContent = d.elapsed;
+    if (d.terminal) {
+      if (timer) clearInterval(timer);
+      location.reload();
+    }
+  }
+  timer = setInterval(poll, 2000); poll();
+})();
+</script>
+{% endif %}
 {% endblock %}

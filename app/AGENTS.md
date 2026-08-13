@@ -182,8 +182,12 @@ head — name, status badge, blurb, then a facts line — over ONE tab strip:
   table, not the config — the config may have moved since. `failures only` hides the passing
   rows client-side; the counts above stay the run's.
 - The run's own **event log** is the run page's log panel, unchanged, over
-  `…/evals/<id>/runs/<run>/events`. A vetoed run executed nothing, so it has no log and the
-  panel is absent rather than empty.
+  `…/evals/<id>/runs/<run>/events`. A run still executing carries the panel before it has
+  logged anything — that is what shows the log filling. A vetoed run executed nothing, so it
+  has no log and the panel is absent rather than empty.
+- A **run in flight** (`running`) has no result table, so it shows no strip, no rows and no
+  metrics: each pane says it is still executing, and the facts line counts the time it has
+  been running instead of a duration it took.
 
 ## How a step was checked — both statements live in Transform
 Beside the thing each one is a verdict on, and never as a section of its own:
@@ -218,6 +222,13 @@ working copy is not a version). A step no eval targets renders nothing.
 `POST /project/<m>/run` → `prepare_run` (initial `running` manifest) → background thread →
 redirect; `run_detail.html` polls `…/status` every 2s and updates the graph in place, reloading
 once on the terminal transition.
+
+An eval run takes the same shape: `POST …/evals/<id>/run` → `start_eval_run` (validated
+synchronously, so an incompatible eval still answers 400 and an unknown version 404, then an
+initial `running` EvalRun) → daemon thread → redirect. `eval_run.html` polls
+`…/evals/<id>/runs/<run>/status` every 2s **only** while the record reads `running`, moving the
+elapsed figure and reloading once at `terminal` — where the badge, the metrics and the scored
+rows all arrive together.
 
 **The simulator** is its own page — `…/stage/<sid>/simulate` (`run_stage_simulate.html`): the
 folded transform, the input rows with per-row checkboxes, the controls, then the result, one
