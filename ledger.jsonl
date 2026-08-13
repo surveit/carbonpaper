@@ -374,3 +374,4 @@
 {"run_id":"31708665337","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31708665337","created":"2026-08-13T14:10:10Z","branch":"tour/beat2-wait-and-orientation","event":"pull_request","contracts_kept":14,"findings":[]}
 {"run_id":"31709408211","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31709408211","created":"2026-08-13T14:18:21Z","branch":"fix/list-runs-limit-description","event":"pull_request","contracts_kept":14,"findings":[]}
 {"run_id":"31709408211","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31709408211","created":"2026-08-13T14:19:29Z","branch":"fix/list-runs-limit-description","event":"pull_request","contracts_kept":null,"findings":[]}
+{"run_id":"31709578841","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31709578841","created":"2026-08-13T14:20:13Z","branch":"fix/tool-prose-is-a-string","event":"pull_request","contracts_kept":14,"findings":[]}
