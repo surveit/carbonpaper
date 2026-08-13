@@ -51,6 +51,12 @@ _LEGACY_PARAMETER_KEYS = {
 
 
 
+# The run directory a production run lives under, and the `area` segment of its
+# store key. `runs/` vs `eval_run/` was the discriminator before the manifest
+# moved here, so keeping it means a project's production runs stay one prefix
+# scan and an eval run can never appear in the runs index.
+PRODUCTION_RUNS = "runs"
+
 # PersistedModel's own fields. A run recorded none of them, so `to_dict` leaves
 # them out of what every reader above this module consumes.
 _STORE_BOOKKEEPING = {"id", "created_at", "updated_at"}
@@ -144,9 +150,9 @@ class RunManifest(PersistedModel):
         return next((r for r in self.stage_records if r.stage_id == stage_id), None)
 
     @staticmethod
-    def compose_id(project: str, run_id: str) -> str:
-        """The store key — composite, so `list(f"{project}/")` is one project's runs."""
-        return f"{project}/{run_id}"
+    def compose_id(project: str, run_id: str, area: str = PRODUCTION_RUNS) -> str:
+        """The store key; `area` is the directory that held the run."""
+        return f"{project}/{area}/{run_id}"
 
     def to_dict(self) -> dict[str, Any]:
         """What this run RECORDED — the boundary shape every reader consumes."""
@@ -167,9 +173,10 @@ def create_run_manifest(
     project: str,
     workflow_version: str | None,
     input_bindings: dict[str, dict[str, Any]],
+    area: str = PRODUCTION_RUNS,
 ) -> RunManifest:
     return RunManifest(
-        id=RunManifest.compose_id(project, run_id),
+        id=RunManifest.compose_id(project, run_id, area),
         run_id=run_id,
         started_at=datetime.now().isoformat(timespec="seconds"),
         project=project,
@@ -191,10 +198,10 @@ def write_manifest(manifest: RunManifest) -> None:
     manifest.save()
 
 
-def read_run_manifest(project: str, run_id: str) -> RunManifest:
+def read_run_manifest(project: str, run_id: str, area: str = PRODUCTION_RUNS) -> RunManifest:
     """Raises RunNotFoundError when unrecorded, ValidationError on a bad payload."""
     try:
-        return RunManifest.load(RunManifest.compose_id(project, run_id))
+        return RunManifest.load(RunManifest.compose_id(project, run_id, area))
     except DocumentNotFound as exc:
         raise RunNotFoundError(f"no run '{run_id}' in project '{project}'") from exc
 
@@ -213,8 +220,8 @@ class RunEntry:
 
 
 def list_run_entries(project: str) -> list[RunEntry]:
-    """Oldest-first: run ids are strftime timestamps, so id order is time order."""
-    prefix = f"{project}/"
+    """This project's PRODUCTION runs, oldest-first by id (a strftime stamp)."""
+    prefix = f"{project}/{PRODUCTION_RUNS}/"
     # Ids first, then each payload on its own: one unreadable record must not take
     # down the listing of every other run.
     entries = [

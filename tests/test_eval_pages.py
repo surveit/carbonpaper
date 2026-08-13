@@ -26,6 +26,7 @@ from app.evals.store import save_eval_config, save_eval_run
 from app.services.versioning import WorkflowVersion
 from app.services import workspace
 from stage_seed import add_stage, read_stages, set_stages
+from run_seed import store_events
 
 client = TestClient(app)
 
@@ -270,12 +271,11 @@ def test_run_page_states_why_a_vetoed_run_has_no_rows(tmp_path):
 
 def test_run_page_serves_the_subset_runs_own_events(tmp_path):
     _save_scored_run(tmp_path, _ONE_PASS_ONE_FAIL, run_id="logged1")
-    events = tmp_path / "demo" / "eval_run" / "logged1" / "events.jsonl"
-    events.write_text(
-        '{"seq": 0, "ts": "2026-08-12T10:00:00", "kind": "run_start", "level": 0}\n'
-        '{"seq": 1, "ts": "2026-08-12T10:00:01", "kind": "stage_start", '
-        '"stage": "classify", "level": 0}\n',
-        encoding="utf-8")
+    store_events("demo", "logged1", [
+        {"seq": 0, "ts": "2026-08-12T10:00:00", "kind": "run_start", "level": 0},
+        {"seq": 1, "ts": "2026-08-12T10:00:01", "kind": "stage_start",
+         "stage": "classify", "level": 0},
+    ])
 
     page = client.get("/project/demo/evals/label_check/runs/logged1")
     older = client.get(

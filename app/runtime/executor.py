@@ -91,7 +91,10 @@ def run_subset(
     ctx = _subset_ctx(repo_root, run_dir, identity, params)
     manifest = create_run_manifest(
         ordered, ctx, run_id=run_dir.name, project=project,
-        workflow_version=workflow_version, input_bindings={})
+        workflow_version=workflow_version, input_bindings={},
+        # The dir the run lives under is what separates a production run from an
+        # eval one; the record keeps that separation.
+        area=run_dir.parent.name)
     write_manifest(manifest)
     outputs: dict[str, pd.DataFrame] = dict(injected_outputs)
     manifest = _execute_stages(ordered, ctx, manifest, run_dir, outputs)
@@ -129,7 +132,7 @@ def _execute_stages(
     run_dir: Path,
     outputs_so_far: dict[str, pd.DataFrame],
 ) -> RunManifest:
-    run_log = RunLog(run_dir / "events.jsonl")
+    run_log = RunLog(manifest.project, manifest.run_id)
     run_log.emit({
         "kind": RUN_START, "run_id": manifest.run_id, "stage_count": len(ordered),
     })

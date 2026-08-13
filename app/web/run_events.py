@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-from pathlib import Path
 from typing import Any, AsyncIterator
 
 from fastapi import Request
@@ -41,9 +40,9 @@ def select_stage_events(
     ]
 
 
-def tail_start_seq(events_path: Path, tail: int, stage: str | None = None) -> int:
+def tail_start_seq(project: str, run_id: str, tail: int, stage: str | None = None) -> int:
     """Counts parsed events rather than `highest - tail`: seq is not guaranteed gap-free."""
-    events = select_stage_events(read_events_since(events_path, 0), stage)
+    events = select_stage_events(read_events_since(project, run_id, 0), stage)
     if not events:
         return 0
     if tail <= 0:
@@ -52,11 +51,11 @@ def tail_start_seq(events_path: Path, tail: int, stage: str | None = None) -> in
 
 
 def page_events_before(
-    events_path: Path, before_seq: int, limit: int, stage: str | None
+    project: str, run_id: str, before_seq: int, limit: int, stage: str | None
 ) -> dict[str, Any]:
     older = [
         event
-        for event in select_stage_events(read_events_since(events_path, 0), stage)
+        for event in select_stage_events(read_events_since(project, run_id, 0), stage)
         if int(event["seq"]) < before_seq
     ]
     # The window is cut AFTER filtering, not from `before_seq - limit`: a stage
@@ -72,17 +71,16 @@ def page_events_before(
 
 
 async def stream_events(
-    project: str, run_id: str, run_dir: Path, request: Request, from_seq: int,
+    project: str, run_id: str, request: Request, from_seq: int,
     stage: str | None = None,
 ) -> AsyncIterator[str]:
-    """Polls the file: the run executes on worker threads with no access to this loop."""
-    events_path = run_dir / "events.jsonl"
+    """Polls: the run executes on worker threads with no access to this loop."""
     cursor = from_seq
     idle_polls = 0
     while True:
         if await request.is_disconnected():
             return
-        new = read_events_since(events_path, cursor)
+        new = read_events_since(project, run_id, cursor)
         # The cursor clears the whole batch that was READ, not the subset the
         # stage filter yields: an event the filter drops must not come back on
         # the next poll.

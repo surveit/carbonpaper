@@ -16,6 +16,7 @@ from app.runtime.manifest import create_run_manifest, write_manifest
 from app.runtime.run_log import RUN_DONE
 from fastapi.testclient import TestClient
 from app.services import workspace
+from run_seed import store_events
 
 PROJECT = "events_stream"
 
@@ -31,9 +32,7 @@ def _seed_run(tmp_path: Path, monkeypatch, events: list[dict]) -> str:
     )
     manifest.status = RunStatus.OK
     write_manifest(manifest)
-    (run_dir / "events.jsonl").write_text(
-        "".join(json.dumps(e) + "\n" for e in events), encoding="utf-8"
-    )
+    store_events(PROJECT, "r1", events)
     return f"/project/{PROJECT}/runs/r1/events"
 
 

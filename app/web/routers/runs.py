@@ -201,15 +201,14 @@ async def stream_run_events(
     tail: int = EVENT_TAIL,
     stage: str | None = None,
 ):
-    run_dir = runs_dir(project) / run_id
     load_manifest(project, run_id)  # 404s if the run doesn't exist
     start = (
-        tail_start_seq(run_dir / "events.jsonl", tail, stage)
+        tail_start_seq(project, run_id, tail, stage)
         if from_seq is None
         else max(from_seq, 0)
     )
     return StreamingResponse(
-        stream_events(project, run_id, run_dir, request, start, stage),
+        stream_events(project, run_id, request, start, stage),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
@@ -223,10 +222,9 @@ async def run_events_page(
     limit: int = EVENT_TAIL,
     stage: str | None = None,
 ):
-    run_dir = runs_dir(project) / run_id
     load_manifest(project, run_id)  # 404s if the run doesn't exist
     limit = max(1, min(limit, EVENT_PAGE_MAX))
-    return page_events_before(run_dir / "events.jsonl", before_seq, limit, stage)
+    return page_events_before(project, run_id, before_seq, limit, stage)
 
 
 @router.get("/project/{project}/runs/{run_id}", response_class=HTMLResponse)
