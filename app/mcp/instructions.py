@@ -27,7 +27,9 @@ from app.tools.prompt_fragments import (
 def _render_stage_type_constraints() -> str:
     governed = ", ".join(f"`{name}`" for name in AUTHORABLE_CODE_CARRYING_TYPES)
     return "\n".join([
-        textwrap.fill(render_stage_anatomy(), width=88),
+        # Not re-wrapped: the anatomy carries a grain table whose indentation is its
+        # structure, and refilling it also hyphen-splits words across lines.
+        render_stage_anatomy(),
         "",
         textwrap.fill(SIGNATURE_CONTRACT_NOTE, width=88),
         "",

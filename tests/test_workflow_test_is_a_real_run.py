@@ -1,8 +1,8 @@
 """Workflow test = a real run under runs/, marked is_test_run: it may READ the
 stage-result cache (fast replay) but writes NO entries, so a later production run
-is unaffected by having run one. Evidence is the same probe-file technique
-tests/test_run_cache_e2e.py uses: a stage appends a line to a file each time its
-body actually runs, so a cache hit leaves the probe untouched."""
+is unaffected by having run one. Evidence is the probe-file technique
+tests/test_run_cache_e2e.py uses: the `cache: true` stage appends a line each time
+its body actually runs, so a cache hit leaves the probe untouched."""
 from __future__ import annotations
 
 import json
@@ -50,7 +50,7 @@ def _write_project(root: Path) -> Path:
     })
     add_stage(root, {
         "id": "clean", "description": "Clean", "type": "python_row_function",
-        "inputs": [{"id": "load"}],
+        "inputs": [{"id": "load"}], "cache": True,
         "signature": {
             "form": "extends",
             "reads": [{"input": "load", "columns": _LOADED}],

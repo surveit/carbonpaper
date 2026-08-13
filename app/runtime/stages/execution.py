@@ -170,13 +170,11 @@ class RowMapTransformHandler(StageHandler):
         parallelism: int = 1,
         trims_output_to_declared: bool = False,
         drops_rows: bool = False,
-        caches_rows: bool = True,
     ) -> None:
         self.make_mapper = make_mapper
         self.parallelism = parallelism
         self.trims_output_to_declared = trims_output_to_declared
         self.drops_rows = drops_rows
-        self.caches_rows = caches_rows
 
     def execute(
         self, workflow_stage: WorkflowStage, inputs: dict[str, pa.Table],
@@ -302,7 +300,7 @@ def _run_row_mapper(
     # reaches the mapper's lifecycle wrapper and is logged as the replay it is.
     # `map_row` itself stays bound: _finish_mapped_frame tests it for the
     # PostMapRowMapper shape, which a wrapper would hide.
-    caching = _open_row_caching(workflow_stage, ctx) if handler.caches_rows else None
+    caching = _open_row_caching(workflow_stage, ctx)
     compute_row = _log_row_lifecycle(map_row, ctx.run_log, stage.id)
     if caching is not None:
         compute_row = _map_row_through_cache(caching, compute_row, ctx.run_log, stage.id)

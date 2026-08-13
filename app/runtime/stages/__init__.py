@@ -45,12 +45,12 @@ HANDLERS: dict[StageType, StageHandler] = {
     # parallelism stays 1: the mapped function is user-authored code, not assumed thread-safe.
     StageType.python_row_function: RowMapTransformHandler(make_python_row_mapper),
     StageType.python_frame_function: FrameTransformHandler(handle_python_frame_function),
-    # caches_frames=False: the joins (enrich/expand) and aggregate are bounded
-    # vectorised primitives whose compute is lower-order than the hash of their
-    # own input, so fingerprinting the inputs costs more than the pandas
-    # operation a hit would skip — the cache would only ever slow them down.
-    # python_frame_function above runs arbitrary user code of unbounded cost and
-    # does cache.
+    # caches_frames=False REFUSES caching whatever the stage declares, which is a
+    # stronger statement than `Stage.cache`'s per-type default: the joins
+    # (enrich/expand) and aggregate are bounded vectorised primitives whose
+    # compute is lower-order than the hash of their own input, so fingerprinting
+    # the inputs costs more than the pandas operation a hit would skip — there is
+    # no workflow in which an author turning it on would be right.
     StageType.enrich: FrameTransformHandler(handle_enrich, caches_frames=False),
     StageType.expand: FrameTransformHandler(handle_expand, caches_frames=False),
     StageType.aggregate: FrameTransformHandler(handle_aggregate, caches_frames=False),
@@ -74,10 +74,7 @@ HANDLERS: dict[StageType, StageHandler] = {
     # Row-mapped with drops_rows: the runtime drives the predicate row by row
     # and does the selecting itself, so it holds the input ordinals that
     # survived — this stage's lineage — without the handler reporting them.
-    # caches_rows=False: deciding a row costs less than fingerprinting it.
-    StageType.filter_rows: RowMapTransformHandler(
-        make_filter_mapper, drops_rows=True, caches_rows=False
-    ),
+    StageType.filter_rows: RowMapTransformHandler(make_filter_mapper, drops_rows=True),
     # parallelism stays 1: matching python_row_function's calling convention. The
     # interpreter handle is this execution's, and Starlark freezes module globals,
     # so nothing crosses rows either way.

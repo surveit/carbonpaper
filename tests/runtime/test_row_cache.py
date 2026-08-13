@@ -523,10 +523,11 @@ _NOISE_COLUMN = {"name": "noise", "type": "str", "nullable": True}
 _READS_X = [{"input": "src", "columns": [{"name": "x", "type": "int", "nullable": True}]}]
 
 
-def _two_column_stage(*, reads=None, code: str = _DOUBLING_CODE) -> Stage:
+def _two_column_stage(*, reads=None, code: str = _DOUBLING_CODE, cache: bool = False) -> Stage:
     return parse_stage({
         "id": "double", "description": "Double", "type": "python_row_function",
         "inputs": [{"id": "src"}],
+        "cache": cache,
         "signature": {
             "form": "extends",
             "reads": _READS_X if reads is None else reads,
@@ -568,7 +569,7 @@ def test_an_unread_column_still_flows_to_the_output():
 
 
 def test_a_column_the_stage_never_reads_stops_invalidating_its_cache():
-    stage = _two_column_stage()
+    stage = _two_column_stage(cache=True)
     calls: list[Row] = []
     handler = _seen_rows_handler(calls)
 

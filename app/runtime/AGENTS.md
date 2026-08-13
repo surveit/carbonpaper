@@ -65,9 +65,11 @@ execution, keyed by (stage-definition fingerprint, input-row fingerprint), and `
 needs the write-capable `StageCache` accessor; the runtime holds that execution's state and
 decides only whether caching applies and whether a result may be recorded. A row carrying
 `_error`/`_deferred` is never recorded and no internal column is ever part of a recorded row,
-so a hit reports no spend. `Stage.cache: false` declares a stage
-intentionally non-deterministic — no read, no write — and is outside the definition
-fingerprint. There is no per-registration opt-out: `human_review_queue` runs under the same
+so a hit reports no spend. `Stage.cache` decides whether a stage caches at all — no read,
+no write when it is false — and is outside the definition fingerprint. It defaults to true
+only on `llm_transform` and `human_review_queue`, the two types whose recompute spends a
+model call or a human's attention; every other type recomputes unless its author turns
+caching on. There is no per-registration row opt-out: `human_review_queue` runs under the same
 interceptor, which replays a human's recorded decision before its mapper is called, so that
 mapper only ever passes a row through or defers it.
 
@@ -107,7 +109,8 @@ stays the source of truth for stage status; this log is only ever the drill-down
   `RESEARCH_MAX_TURNS` instead of `DEFAULT_TIMEOUT_S` and the submit-only turn cap — because
   searching and reading documents is the work, not overhead on top of it. Such a stage is NOT
   a pure function of its input row: re-running it may legitimately return a different answer,
-  so `Stage.cache: false` belongs on it unless the answer is genuinely expected to be stable.
+  so `Stage.cache: false` — turning off the default this type carries — belongs on it unless
+  the answer is genuinely expected to be stable.
 
 `validation.py` — DATA validation of a dataframe against a stage's resolved output
 schema (columns, types, enum vocabularies, ranges, nullability), distinct from the

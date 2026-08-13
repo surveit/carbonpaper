@@ -149,13 +149,15 @@ class AuthoredStageFields(_Base):
     )
     inputs: list[StageInput] = Field(default_factory=list)
 
-    # False declares this stage INTENTIONALLY non-deterministic — it must
-    # re-roll every run — so the runtime consults no stage-result cache for its
-    # rows. Not a performance knob, and deliberately absent from
-    # compute_definition_fingerprint: it governs WHETHER the cache is consulted,
-    # not WHAT the stage computes, so flipping it must never invalidate an
-    # entry already recorded.
-    cache: bool = True
+    # Whether the runtime records this stage's results and replays them on a
+    # later run. Off by default: recomputing costs less than fingerprinting the
+    # input for every type but llm_transform and human_review_queue, which
+    # redeclare it True because their recompute spends a model call or a human's
+    # attention. An author turns it on where the code is expensive enough to be
+    # worth the storage. Deliberately absent from compute_definition_fingerprint:
+    # it governs WHETHER the cache is consulted, not WHAT the stage computes, so
+    # flipping it must never invalidate an entry already recorded.
+    cache: bool = False
     compiler_notes: list[str] = Field(default_factory=list)
 
     # The authored contract of what this stage reads and writes, per input —

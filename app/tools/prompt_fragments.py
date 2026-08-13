@@ -103,7 +103,11 @@ _WHAT_EVERY_STAGE_DECLARES = """\
 Every stage declares: `id` (its one name), `description`, `inputs` (the stage ids it
 reads, each with the schema it expects), `signature`, and exactly one config block
 named by its type. An input's declared schema must be a subset of what that upstream
-stage's signature promises."""
+stage's signature promises.
+
+Results are recorded and replayed across runs only for `llm_transform` and
+`human_review_queue`; set `cache: true` on another stage when its code is expensive
+enough that recomputing every row costs more than storing it."""
 
 _NULLS = """\
 Absence is null, never a filled-in value. An unmatched join lands nulls; an aggregate

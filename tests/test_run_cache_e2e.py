@@ -1,7 +1,8 @@
 """Whole workflows run twice through the production entry points, spanning both cache
 grains - row-mapped and frame-shaped are intercepted by different code. Evidence is the
 stages' own authored code: each appends a line to a probe file when its body runs, so a
-replayed run leaves the probe untouched."""
+replayed run leaves the probe untouched. Every code stage here declares
+`cache: true`, which only llm_transform and human_review_queue get by default."""
 from __future__ import annotations
 
 import json
@@ -82,7 +83,7 @@ def _write_project(
     })
     _write_stage(root, "02_clean", {
         "id": "clean", "description": "Clean", "type": "python_row_function",
-        "inputs": [{"id": "load"}],
+        "inputs": [{"id": "load"}], "cache": True,
         "signature": {
             "form": "extends",
             "reads": [{"input": "load", "columns": _LOADED}],
@@ -102,7 +103,7 @@ def _write_project(
     })
     _write_stage(root, "04_totals", {
         "id": "totals", "description": "Totals", "type": "python_frame_function",
-        "inputs": [{"id": "flag"}],
+        "inputs": [{"id": "flag"}], "cache": True,
         "signature": {
             "form": "replaces",
             "reads": [{"input": "flag", "columns": _FLAGGED}],

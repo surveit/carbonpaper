@@ -70,7 +70,7 @@ shape. Does not return full stage specs — use read_stage for one.""",
         name="edit_stage",
         description="""\
 Change specific fields of one stage. `changes_json` is a JSON object of
-ONLY the fields to change (a JSON Merge Patch): {"cache": false} sets cache;
+ONLY the fields to change (a JSON Merge Patch): {"cache": true} turns caching on;
 {"llm": {"model": "claude-opus-5"}} changes only llm.model and leaves the rest of the
 llm block intact; a null value deletes a field. Fields you do not mention
 are preserved exactly. Validated first; if invalid, nothing is written and
@@ -236,7 +236,7 @@ remaining stage is allowed.""",
         description="""\
 Every problem with this workflow: undescribed stages, descriptions no examples
 check, examples that do not pass, code the review panel cannot show, and
-deliberate choices (cache off) a reviewer should be told about. None of them
+caching turned off on a model or review stage. None of them
 refuses anything — a human decides what to fix and what to leave standing. This
 DOES run the examples, but run_stage_tests is what tells you which case failed.""",
     ),
