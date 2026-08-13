@@ -35,6 +35,10 @@ primary_region = "iad"
   CARBON_PAPER_DB_PATH = "/data/app.db"
   CARBON_PAPER_PROJECTS_DIR = "/data/projects"
   CLAUDE_CONFIG_DIR = "/data/claude"
+  # Without this the deploy answers with an empty project list, and there is nothing
+  # to try. app.seeds skips a bundle already in the workspace, so this is safe on
+  # every boot: it seeds if absent and never overwrites what a visitor has changed.
+  CARBON_PAPER_SEED_DEMO = "1"
 
 # One machine, one volume. The document store is SQLite on this volume and the
 # projects/frames trees are plain files beside it, so a second machine would be a
