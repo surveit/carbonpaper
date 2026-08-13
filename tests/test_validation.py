@@ -6,6 +6,7 @@ import datetime as dt
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 from app.core.frames import frame_to_table
@@ -361,3 +362,92 @@ def test_a_column_of_mixed_types_is_refused_at_the_wire_not_validated():
 
     with pytest.raises(pa.ArrowInvalid):
         frame_to_table(pd.DataFrame({"m": [1, "a"]}))
+
+
+# ── a json column's declared shape, checked against the arrow struct ──────────
+# `Column._json_shape` makes the author declare `fields` or `value_type`; until
+# now nothing compared the data to it, so the declaration described the column
+# without constraining it.
+
+def _json_column(arrow_values, arrow_type, **column):
+    table = pa.table({"v": pa.array(arrow_values, arrow_type)})
+    schema = _schema(columns=[{"name": "v", "nullable": True, **column}])
+    report = validate_table(table, schema, stage_id="s", phase="output")
+    return report, [i for i in report.issues if i.column == "v"]
+
+
+_ROW_TYPE = pa.struct([("scope", pa.string()), ("value", pa.float64())])
+_ROWS = [{"scope": "s1", "value": 1.5}]
+
+
+def test_a_json_column_matching_its_declared_fields_is_clean():
+    report, issues = _json_column(
+        _ROWS, _ROW_TYPE, type="json",
+        fields=[{"name": "scope", "type": "str", "nullable": True},
+                {"name": "value", "type": "float", "nullable": True}],
+    )
+    assert issues == [] and report.ok
+
+
+def test_a_declared_json_field_absent_from_the_data_is_an_error():
+    _, issues = _json_column(
+        _ROWS, _ROW_TYPE, type="json",
+        fields=[{"name": "scope", "type": "str", "nullable": True},
+                {"name": "currency", "type": "str", "nullable": True}],
+    )
+    assert [i.severity for i in issues] == ["error", "warning"]
+    assert "missing field 'currency'" in issues[0].message
+
+
+def test_a_json_field_of_the_wrong_type_is_an_error():
+    _, issues = _json_column(
+        _ROWS, _ROW_TYPE, type="json",
+        fields=[{"name": "scope", "type": "str", "nullable": True},
+                {"name": "value", "type": "str", "nullable": True}],
+    )
+    assert issues[0].severity == "error"
+    assert "field 'value' is double, not declared type 'str'" in issues[0].message
+
+
+def test_an_undeclared_json_field_is_a_warning_like_an_undeclared_column():
+    _, issues = _json_column(
+        _ROWS, _ROW_TYPE, type="json",
+        fields=[{"name": "scope", "type": "str", "nullable": True}],
+    )
+    assert [i.severity for i in issues] == ["warning"]
+    assert "undeclared field(s) present: ['value']" in issues[0].message
+
+
+def test_list_json_checks_the_element_struct():
+    _, issues = _json_column(
+        [_ROWS], pa.list_(_ROW_TYPE), type="list[json]",
+        fields=[{"name": "scope", "type": "str", "nullable": True},
+                {"name": "missing", "type": "str", "nullable": True}],
+    )
+    assert any("missing field 'missing'" in i.message for i in issues)
+
+
+def test_a_json_column_holding_scalars_is_an_error():
+    _, issues = _json_column(["not an object"], pa.string(), type="json",
+                             fields=[{"name": "scope", "type": "str", "nullable": True}])
+    assert issues[0].severity == "error"
+    assert "does not hold objects" in issues[0].message
+
+
+def test_an_open_map_holds_every_key_to_one_declared_value_type():
+    _, issues = _json_column(
+        [{"a": "x", "b": "y"}],
+        pa.struct([("a", pa.string()), ("b", pa.string())]),
+        type="json", value_type="str",
+    )
+    assert issues == []
+
+
+def test_an_open_map_field_outside_its_value_type_is_an_error():
+    _, issues = _json_column(
+        [{"a": "x", "n": 1}],
+        pa.struct([("a", pa.string()), ("n", pa.int64())]),
+        type="json", value_type="str",
+    )
+    assert issues[0].severity == "error"
+    assert "not of declared value_type 'str'" in issues[0].message and "'n'" in issues[0].message
