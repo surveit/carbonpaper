@@ -539,8 +539,10 @@ def test_queue_page_prefills_a_decided_row_from_the_recorded_value(tmp_path, mon
     decided = html[html.index(f'data-input-fingerprint="{first_fp}"'):]
     decided = decided[:decided.index("</article>")]
     assert 'value="99"' in decided          # the field opens on the recorded value
-    # what the stage received stays visible beside it, under the heading that names it
-    assert '<span class="upstream-value">1</span>' in " ".join(decided.split())
+    # what the stage received stays visible beside it, struck through, since the
+    # recorded value (99) departs from it
+    received = re.search(r'<span class="received-was"><s>([^<]*)</s>', " ".join(decided.split()))
+    assert received is not None and received.group(1).strip() == "1"
     # The control already shows the recorded value, so the row does not say it twice.
     assert "recorded-value" not in decided and "you recorded" not in decided
 
@@ -593,8 +595,10 @@ def test_a_null_bool_ai_value_is_never_rendered_as_false(tmp_path, monkeypatch):
     html = TestClient(app).get(f"/project/queue_route_bool_null/runs/{run_id}/queue/review").text
 
     assert 'type="checkbox"' not in html
-    # the absent upstream value shown as absent, not as "false"
-    assert '<span class="upstream-value"><em>no value</em></span>' in " ".join(html.split())
+    # An undecided row has nothing recorded yet, so the field opens on the AI value
+    # itself; the absent value is shown as absent, never as "false".
+    current = re.search(r'class="current-value">(.*?)</strong>', html, re.DOTALL)
+    assert current is not None and "unset" in current.group(1)
     assert "— unset —" in html
     assert _find_selected_option(html, "human_flag") == ""
 
@@ -615,8 +619,9 @@ def test_a_bool_select_opens_on_the_recorded_value_of_a_decided_row(tmp_path, mo
     html = TestClient(app).get(f"/project/{project}/runs/{run_id}/queue/review").text
 
     assert _find_selected_option(html, "human_flag") == "true"
-    # what the stage received stays visible beside the recorded value
-    assert '<span class="upstream-value">false</span>' in " ".join(html.split())
+    # what the stage received stays visible beside the recorded value, struck through
+    received = re.search(r'<span class="received-was"><s>([^<]*)</s>', " ".join(html.split()))
+    assert received is not None and received.group(1).strip() == "false"
     # The page spells a value the way the options do — never a python repr
     # sitting beside a select that reads `true`.
     assert "True" not in html and "False" not in html
@@ -656,7 +661,7 @@ def _temporal_review_stage(column_type):
         {"name": "seen_at", "type": column_type, "nullable": True}])
 
 
-def _decide_a_temporal_row(tmp_path, monkeypatch, project, column_type, recorded):
+def _halt_a_temporal_queue(tmp_path, project, column_type):
     workspace.set_projects_dir(tmp_path)
     project_dir = tmp_path / project
     (project_dir / "data").mkdir(parents=True, exist_ok=True)
@@ -671,7 +676,11 @@ def _decide_a_temporal_row(tmp_path, monkeypatch, project, column_type, recorded
     _write_stage(project_dir, "02_review.json", _temporal_review_stage(column_type))
     _seed_version(project_dir)
     run_id = run_prepared(prepare_run(project_dir, *pinned_stages(project_dir)))["run_id"]
-    fingerprints = _read_fingerprints(project, run_id)
+    return run_id, _read_fingerprints(project, run_id)
+
+
+def _decide_a_temporal_row(tmp_path, monkeypatch, project, column_type, recorded):
+    run_id, fingerprints = _halt_a_temporal_queue(tmp_path, project, column_type)
 
     client = TestClient(app)
     r = client.post(
@@ -706,6 +715,26 @@ def test_a_temporal_control_opens_on_the_recorded_value_of_a_decided_row(
 
     assert f'type="{control}"' in html
     assert _find_input_value(html, "human_seen_at") == recorded
+
+
+def test_a_date_field_approved_as_it_arrived_strikes_no_received_value(tmp_path, monkeypatch):
+    # A `date` control spells the received midnight shorter; the record still says approve.
+    project = "queue_route_date_approved"
+    run_id, fingerprints = _halt_a_temporal_queue(tmp_path, project, "date")
+    client = TestClient(app)
+    url = f"/project/{project}/runs/{run_id}/queue/review"
+
+    # Approve submits exactly what the control opened on, which is what the row received.
+    opened = _find_input_value(client.get(url).text, "human_seen_at")
+    approved = client.post(f"{url}/decide", data=_decide_data(
+        fingerprints["input_fingerprints"][0], {"human_seen_at": opened},
+        prefilled={"human_seen_at": opened}))
+    assert approved.status_code == 200, approved.text
+    assert approved.json()["verdict"] == "approve"
+
+    card = _first_card(client.get(url).text)
+    assert 'data-state="locked"' in card
+    assert '<span class="received-was">' not in card
 
 
 def _declared_range_review_stage():
@@ -869,7 +898,7 @@ def test_a_queue_whose_upstream_is_not_an_llm_transform_renders_and_links(tmp_pa
         assert f'data-input-fingerprint="{fp}"' in html
     assert 'data-target="human_label"' in html
     assert "AI" not in html
-    assert '<span class="upstream-value">' in html
+    assert 'class="current-value"' in html
 
     assert _lineage_urls(project, run_id) == [
         f"/project/{project}/runs/{run_id}/stage/label/row/{o}/trace/view"
@@ -948,6 +977,15 @@ def test_the_card_renders_the_described_queued_row_and_its_review_section(tmp_pa
     assert described.groups() == ("the score this row was labelled from", "score")
     assert re.search(r'<th[^>]*>\s*<code>id</code>', table) is not None
 
+    # A reviewed field is labelled with the column it reviews — `label`, the column
+    # the value arrived in, never the `human_label` the answer is stored in — and
+    # carries that source column's declared description as its tooltip.
+    reviewed = re.search(
+        r'<div class="reviewed-field"[^>]*>\s*<label([^>]*)>([^<]*)</label>', card)
+    assert reviewed is not None
+    assert 'title="high when the score exceeds one"' in reviewed.group(1)
+    assert reviewed.group(2).strip() == "label"
+
     positions = re.findall(r'<span class="row-position">([^<]*)</span>', html)
     assert positions == [f"Row {n} of {len(positions)}" for n in range(1, len(positions) + 1)]
     assert "identity-cell" not in html
@@ -974,28 +1012,83 @@ def test_the_unreviewed_columns_are_labelled_as_what_the_review_is_judged_agains
     assert "<details" not in card
 
 
-def test_the_field_row_leads_with_the_column_under_review_under_two_headings(
-        tmp_path, monkeypatch):
-    _run_id, _fingerprints, html = _described_queue_html(
-        tmp_path, monkeypatch, "queue_route_field_row")
+def test_the_field_rows_render_under_one_heading_with_a_state_machine(tmp_path, monkeypatch):
+    # One column per field: the reviewer decides it where the value is shown.
+    _project_dir, run_id, _run_dir, _snapshot, _fingerprints = _build_and_halt(tmp_path, monkeypatch)
 
-    card = " ".join(_first_card(html).split())
-    fields = card[card.index('<div class="reviewed-fields">'):]
-    # Two named halves: what came in on the left, the reviewer's own answer on the right.
-    assert re.findall(r'<p class="field-column-heading[^"]*">([^<]*)</p>', fields) == [
-        "Columns to review", "Your review"]
+    html = TestClient(app).get(f"/project/{PROJECT}/runs/{run_id}/queue/review").text
 
-    named = re.search(r'<label for="[^"]*human_label"([^>]*)>([^<]*)</label>', fields)
-    assert named is not None
-    # The reviewer is judging `label`; `human_label` is only where the answer lands,
-    # so it is named on the recorded line of a decided card and nowhere on this row.
-    assert named.group(2) == "label"
-    assert 'title="high when the score exceeds one"' in named.group(1)
-    shown = re.sub(r"<[^>]*>", " ", fields[:fields.index('<div class="field-control">')])
-    assert "human_label" not in shown
+    card = _first_card(html)
+    assert re.findall(r'<p class="field-column-heading[^"]*">([^<]*)</p>', card) == [
+        "Columns to review"]
+    assert "Your review" not in card
+    field = re.search(r'<div class="reviewed-field" data-state="start"[^>]*>', card)
+    assert field is not None
+    # Presence-only attributes — the interface names them bracket-style,
+    # [data-field-approve], because none carries a value.
+    for hook in ("data-field-approve", "data-field-edit", "data-field-save",
+                 "data-field-cancel", "data-field-revert"):
+        assert hook in card, hook
 
-    # No description on the notes column: the box is labelled for what it is.
-    assert "<span>Notes</span>" in card
+
+def test_each_state_shows_only_its_own_controls(tmp_path, monkeypatch):
+    # Markup alone leaves the state machine inert without matching stylesheet rules.
+    _project_dir, run_id, _run_dir, _snapshot, _fingerprints = _build_and_halt(tmp_path, monkeypatch)
+
+    html = TestClient(app).get(f"/project/{PROJECT}/runs/{run_id}/queue/review").text
+    card = _first_card(html)
+    editor = re.search(r'<span class="field-editor"[^>]*>', card)
+    assert editor is not None
+
+    # The queue field rules live in review-queue.css.
+    stylesheet = (Path(app_package.__file__).parent / "static" / "review-queue.css").read_text(
+        encoding="utf-8"
+    )
+    for rule in (
+        r'\.reviewed-field:not\(\[data-state="start"\]\) \[data-field-approve\]',
+        r'\.reviewed-field:not\(\[data-state="editing"\]\) \.field-editor',
+        r'\.reviewed-field\[data-state="editing"\] \.field-ctas',
+        r'\.reviewed-field:not\(\[data-state="approved"\]\) \.state-approved',
+        r'\.reviewed-field:not\(\[data-state="modified"\]\) \.state-modified',
+        r'\.reviewed-field:not\(\[data-state="modified"\]\) \.prefill-was',
+        r'\.reviewed-field:not\(\[data-state="locked"\]\) \.received-was',
+        r'\.reviewed-field\[data-state="locked"\] \.received-value',
+        r'\.reviewed-field\[data-state="locked"\] \.field-ctas',
+        # Without it, `.btn { display: inline-block }` beats the UA's [hidden] rule
+        # and a decided card shows Submit beside "Change my review".
+        r'\.decision-controls \[hidden\]',
+    ):
+        assert re.search(rule + r"[^{]*\{[^}]*display:\s*none", stylesheet), rule
+
+
+def test_the_expand_toggle_is_rendered_hidden_behind_a_stylesheet_clamp(tmp_path, monkeypatch):
+    # Overflow is measured client-side; a server-render test can only see the affordance.
+    _project_dir, run_id, _run_dir, _snapshot, _fingerprints = _build_and_halt(tmp_path, monkeypatch)
+
+    html = TestClient(app).get(f"/project/{PROJECT}/runs/{run_id}/queue/review").text
+    card = _first_card(html)
+    toggle = re.search(r'<button type="button" class="field-expand-toggle"[^>]*>', card)
+    assert toggle is not None
+    assert "hidden" in toggle.group(0)
+    assert 'aria-expanded="false"' in toggle.group(0)
+    assert 'aria-label="Expand ' in toggle.group(0)
+
+    stylesheet = _stylesheet()
+    assert re.search(
+        r'\.field-value\[data-expanded="false"\][^{]*\{[^}]*max-height:[^;]+;[^}]*overflow:\s*hidden',
+        stylesheet,
+    )
+    assert re.search(
+        r'\.field-value\[data-expanded="true"\][^{]*\{[^}]*max-height:\s*none',
+        stylesheet,
+    )
+
+
+def test_field_ctas_is_never_pinned_to_the_far_edge_of_the_card():
+    # A short value must not leave the controls hundreds of pixels away on a wide card.
+    ctas_rules = re.findall(r'\.field-ctas\s*\{[^}]*\}', _stylesheet())
+    assert ctas_rules
+    assert not any("margin-left" in rule for rule in ctas_rules)
 
 
 def test_the_recorded_line_is_where_a_decided_card_names_the_stored_column(
@@ -1006,25 +1099,21 @@ def test_the_recorded_line_is_where_a_decided_card_names_the_stored_column(
     recorded = decided[decided.index('<p class="prior-decision">'):]
     assert "human_score" in recorded
     fields = decided[decided.index('<div class="reviewed-fields">'):
-                     decided.index('<div class="field-control">')]
+                     decided.index('<span class="field-ctas">')]
     assert "human_score" not in re.sub(r"<[^>]*>", " ", fields)
 
 
-def test_a_reviewed_value_is_read_only_until_its_edit_button_is_pressed(tmp_path, monkeypatch):
+def test_an_undecided_card_gates_submit_until_every_field_is_decided(tmp_path, monkeypatch):
+    # `disabled` on the button itself: Enter must not submit undecided fields.
     _project_dir, run_id, _run_dir, _snapshot, _fingerprints = _build_and_halt(tmp_path, monkeypatch)
 
     html = TestClient(app).get(f"/project/{PROJECT}/runs/{run_id}/queue/review").text
 
-    editor = re.search(r'<span class="field-editor"[^>]*>', html)
-    assert editor is not None and re.search(r"\bhidden\b", editor.group(0))
-    opener = re.search(r'<button type="button" class="value-display"[^>]*>', html)
-    assert opener is not None and "data-edit-for=" in opener.group(0)
-    assert 'class="revert-edit"' in html
-
-    stylesheet = _stylesheet()
-    # Without this rule the editor's own `display` beats the UA [hidden] rule and every
-    # field is editable on load.
-    assert re.search(r"\.field-control \[hidden\]\s*\{[^}]*display:\s*none", stylesheet)
+    card = _first_card(html)
+    submit = re.search(r'<button type="submit" class="btn primary"[^>]*>', card)
+    assert submit is not None and "disabled" in submit.group(0)
+    gate = re.search(r'<span class="decide-gate"[^>]*>([^<]*)</span>', card)
+    assert gate is not None and gate.group(1).strip() == "0 of 1 column decided"
 
 
 def test_the_closed_field_displays_exactly_what_it_will_submit(tmp_path, monkeypatch):
@@ -1033,7 +1122,7 @@ def test_the_closed_field_displays_exactly_what_it_will_submit(tmp_path, monkeyp
     html = TestClient(app).get(f"/project/{PROJECT}/runs/{run_id}/queue/review").text
 
     card = _first_card(html)
-    shown = re.search(r'<span class="current-value">(.*?)</span>', card, re.DOTALL)
+    shown = re.search(r'class="current-value">([^<]*)<', card)
     assert shown is not None and shown.group(1).strip() == "1"
     assert 'data-prefill="1"' in card
     assert _find_input_value(html, "human_score") == "1"
@@ -1158,36 +1247,97 @@ def _decided_queue_html(tmp_path, monkeypatch):
     return project_dir, run_id, fingerprints, html
 
 
-def test_a_decided_card_disables_its_openers_and_offers_a_secondary_cta(tmp_path, monkeypatch):
+def test_a_decided_card_locks_its_fields_and_offers_a_secondary_cta(tmp_path, monkeypatch):
+    # A decided card locks every field until "Change my review" restores them.
     _project_dir, _run_id, fingerprints, html = _decided_queue_html(tmp_path, monkeypatch)
 
     decided = _first_card(html)
-    opener = re.search(r'<button type="button" class="value-display"[^>]*>', decided)
-    # `disabled` on the button itself: a CSS-only look would leave it keyboard-activable.
-    assert opener is not None and "disabled" in opener.group(0)
+    assert re.search(r'<div class="reviewed-field" data-state="locked"[^>]*>', decided)
     assert ">Change my review<" in decided
     submit = re.search(r'<button type="submit" class="btn primary"[^>]*>', decided)
-    assert submit is not None and re.search(r"\bhidden\b", submit.group(0))
-    assert "Recorded: <strong>approved</strong>" in " ".join(decided.split())
+    assert submit is not None and "hidden" in submit.group(0)
 
-    stylesheet = _stylesheet()
-    # Without this rule `.btn`'s own `display` beats the UA [hidden] rule.
-    assert re.search(r"\.decision-controls \[hidden\]\s*\{[^}]*display:\s*none", stylesheet)
-
-    # The still-undecided row is the control: live openers, primary Submit, no CTA.
-    undecided = html[html.index(
-        f'data-input-fingerprint="{fingerprints["input_fingerprints"][1]}"'):]
-    undecided = undecided[:undecided.index("</article>")]
-    live = re.search(r'<button type="button" class="value-display"[^>]*>', undecided)
-    assert live is not None and "disabled" not in live.group(0)
+    undecided = _undecided_card(html, fingerprints)
+    assert re.search(r'<div class="reviewed-field" data-state="start"[^>]*>', undecided)
     assert ">Change my review<" not in undecided
-    open_submit = re.search(r'<button type="submit" class="btn primary"[^>]*>', undecided)
-    assert open_submit is not None and not re.search(r"hidden", open_submit.group(0))
 
 
 def _undecided_card(html, fingerprints):
     card = html[html.index(f'data-input-fingerprint="{fingerprints["input_fingerprints"][1]}"'):]
     return card[:card.index("</article>")]
+
+
+def test_a_locked_field_strikes_the_received_value_only_when_the_recorded_one_differs(
+    tmp_path, monkeypatch
+):
+    # The struck-through value shows only where the record departs from it.
+    _project_dir, run_id, _run_dir, _snapshot, fingerprints = _build_and_halt(tmp_path, monkeypatch)
+    client = TestClient(app)
+    modified = client.post(
+        f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
+        data=_decide_data(fingerprints["input_fingerprints"][0],
+                          {"human_score": "7"}, prefilled={"human_score": "1"}),
+    )
+    assert modified.status_code == 200, modified.text
+    # `call_llm` is mocked to always answer {"score": 1}, so approving exactly what
+    # the row received is recording "1" — the one value that leaves nothing struck.
+    approved = client.post(
+        f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
+        data=_decide_data(fingerprints["input_fingerprints"][1],
+                          {"human_score": "1"}, prefilled={"human_score": "1"}),
+    )
+    assert approved.status_code == 200, approved.text
+
+    html = client.get(f"/project/{PROJECT}/runs/{run_id}/queue/review").text
+
+    modified_card = _first_card(html)
+    was = re.search(r'<span class="received-was"><s>([^<]*)</s>', modified_card)
+    assert was is not None and was.group(1).strip() == "1"
+    # The second card by fingerprint, decided since the POST above: without this the
+    # negative below would pass on a card that carries no decision at all.
+    approved_card = _undecided_card(html, fingerprints)
+    assert 'data-state="locked"' in approved_card
+    assert '<span class="received-was">' not in approved_card
+
+
+def test_an_unlocked_field_still_shows_what_the_stage_produced(tmp_path, monkeypatch):
+    # Unlocking drops every field to `start`, where the struck-through pair is hidden.
+    _project_dir, _run_id, _fingerprints, html = _decided_queue_html(tmp_path, monkeypatch)
+    card = " ".join(_first_card(html).split())
+    received = re.search(r'<span class="received-value">([^<]*)', card)
+    # Named as the stage's own value, not left to read as the reviewer's.
+    assert received is not None and received.group(1).strip() == "received: 1"
+
+    stylesheet = (Path(app_package.__file__).parent / "static" / "review-queue.css").read_text(
+        encoding="utf-8"
+    )
+    assert re.search(
+        r'\.reviewed-field\[data-state="locked"\] \.received-value[^{]*\{[^}]*display:\s*none',
+        stylesheet,
+    )
+
+
+def test_a_field_says_which_column_it_decides_and_the_submit_says_why_it_is_dead(
+    tmp_path, monkeypatch
+):
+    # Three buttons per field, one gate per card: the names have to carry the column.
+    _project_dir, run_id, _run_dir, _snapshot, _fingerprints = _build_and_halt(tmp_path, monkeypatch)
+
+    html = TestClient(app).get(f"/project/{PROJECT}/runs/{run_id}/queue/review").text
+    card = _first_card(html)
+
+    for cta in ("Approve", "Change", "Revert"):
+        assert f'aria-label="{cta} score"' in card, cta
+    approve = re.search(r"<button[^>]*data-field-approve[^>]*>", card)
+    # Approve never opens the editor, so it does not claim to control it.
+    assert approve is not None and "aria-controls" not in approve.group(0)
+
+    gate = re.search(r'<span class="decide-gate"[^>]*>', card)
+    assert gate is not None and 'role="status"' in gate.group(0)
+    gate_id = re.search(r'id="([^"]*)"', gate.group(0))
+    assert gate_id is not None and html.count(f'id="{gate_id.group(1)}"') == 1
+    submit = re.search(r'<button type="submit"[^>]*>', card)
+    assert submit is not None and f'aria-describedby="{gate_id.group(1)}"' in submit.group(0)
 
 
 def test_a_decided_card_states_its_verdict_in_a_word(tmp_path, monkeypatch):

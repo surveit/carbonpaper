@@ -116,53 +116,77 @@
     letter-spacing: .04em; color: var(--muted);
 }
 
-/* One row per reviewed column: the column under review, the value the stage
-   received for it, the reviewer's field. The dashed rule above separates the
-   section from the context table. */
-.reviewed-fields {
-    display: grid; grid-template-columns: max-content 1fr minmax(140px, 18rem);
-    gap: 6px 14px; align-items: center;
-    margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border);
-}
+/* One row per reviewed field. `data-state` is the single source of truth:
+   each rule below renders one state by hiding what that state does not show. */
+.reviewed-fields { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
 .reviewed-fields .field-column-heading {
     margin: 0; padding-bottom: 6px; border-bottom: 1px dashed var(--border);
     font-size: 12px; font-weight: 600; text-transform: uppercase;
     letter-spacing: .04em; color: var(--muted);
 }
-/* Spans the name and the received value: one heading over both, because both
-   are what came in. */
-.reviewed-fields .field-column-heading.under-review { grid-column: 1 / 3; }
-.reviewed-field { display: contents; }
-.reviewed-field label {
-    font-weight: 600; font-size: 13px;
-    font-family: "SFMono-Regular", "Consolas", "Liberation Mono", Menlo, monospace;
+/* Column name, then value, then controls left-aligned beneath it — never pinned
+   to the far edge of a wide card, where a short value leaves them out of reach. */
+.reviewed-field {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
+    padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px;
 }
-.reviewed-field .upstream-value { font-size: 13px; }
-.reviewed-field input, .reviewed-field select {
+.reviewed-field label { font-weight: 600; font-size: 13px; }
+.reviewed-field .field-value {
+    display: block; font-size: 14px; line-height: 1.4em; overflow-wrap: anywhere;
+}
+/* Clamped to ~4 lines by default; the toggle below flips `data-expanded` to
+   release it. The clip is visual only — the full text stays in the DOM. */
+.reviewed-field .field-value[data-expanded="false"] { max-height: 5.6em; overflow: hidden; }
+.reviewed-field .field-value[data-expanded="true"] { max-height: none; overflow: visible; }
+.field-expand-toggle {
+    border: none; background: none; padding: 0; font: inherit; font-size: 12px;
+    color: var(--accent); cursor: pointer;
+}
+.field-expand-toggle:hover { text-decoration: underline; }
+.reviewed-field .field-ctas { display: inline-flex; gap: 6px; }
+.btn-field {
+    border: 1px solid var(--border-strong); border-radius: 3px; background: var(--raised);
+    font: inherit; font-size: 12px; padding: 3px 10px; cursor: pointer;
+}
+.btn-field:hover { border-color: var(--accent); }
+.reviewed-field .field-editor { display: inline-flex; align-items: center; gap: 6px; }
+.reviewed-field .field-editor input, .reviewed-field .field-editor select {
     padding: 5px 8px; border: 1px solid var(--border); border-radius: 3px; font: inherit; font-size: 14px;
 }
+.field-state .state-approved { color: var(--good-ink); font-size: 12px; }
+.field-state .state-modified { color: var(--warn-ink); font-size: 12px; }
+.prefill-was, .received-was { color: var(--muted); }
+/* What the stage produced, named as such. It stands in for the struck-through
+   pair while a decided card is unlocked: those render only in `locked`, and the
+   context table above never carries a column that is under review. */
+.received-value { font-size: 12px; color: var(--muted); }
+/* Announced, never shown: the markers beside it change by `display` alone, which
+   reaches no screen reader. The script writes this on every state change. */
+.field-state-note {
+    position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+    border: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+.match-hint { font-size: 12px; color: var(--muted); }
+.field-editor:not([data-match="true"]) .match-hint { display: none; }
 
-/* A reviewed value is read-only until its `change` button swaps in the control. */
-.field-control { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-/* Companion to the display rules in this block: without it they beat the UA's
-   [hidden] rule and both the closed value and its control render at once. */
-.field-control [hidden] { display: none; }
-.field-editor { display: inline-flex; align-items: center; gap: 6px; }
-.value-display {
-    display: inline-flex; align-items: baseline; gap: 8px; cursor: pointer;
-    padding: 4px 8px; border: 1px dashed var(--border); border-radius: 3px;
-    background: var(--raised); font: inherit; font-size: 14px; color: var(--fg); text-align: left;
-}
-.value-display:not(:disabled):hover, .value-display:not(:disabled):focus {
-    border-color: var(--accent); background: var(--hover);
-}
-.value-display:disabled { cursor: default; opacity: 0.7; border-style: solid; }
-.value-display .edit-hint { font-size: 11px; color: var(--accent); text-transform: uppercase; }
-.value-display:disabled .edit-hint { color: var(--muted); }
-.revert-edit {
-    border: 1px solid var(--border); border-radius: 3px; background: var(--raised);
-    font: inherit; font-size: 12px; padding: 3px 7px; cursor: pointer;
-}
+.reviewed-field:not([data-state="start"]) [data-field-approve] { display: none; }
+.reviewed-field[data-state="editing"] [data-field-edit] { display: none; }
+.reviewed-field[data-state="locked"] [data-field-edit] { display: none; }
+.reviewed-field[data-state="start"] [data-field-revert] { display: none; }
+.reviewed-field[data-state="editing"] [data-field-revert] { display: none; }
+.reviewed-field[data-state="locked"] [data-field-revert] { display: none; }
+.reviewed-field:not([data-state="editing"]) .field-editor { display: none; }
+.reviewed-field[data-state="editing"] .field-ctas { display: none; }
+.reviewed-field[data-state="editing"] .current-value { display: none; }
+.reviewed-field[data-state="editing"] .field-state { display: none; }
+.reviewed-field:not([data-state="approved"]) .state-approved { display: none; }
+.reviewed-field:not([data-state="modified"]) .state-modified { display: none; }
+.reviewed-field:not([data-state="modified"]) .prefill-was { display: none; }
+.reviewed-field:not([data-state="locked"]) .received-was { display: none; }
+.reviewed-field[data-state="locked"] .received-value { display: none; }
+.reviewed-field[data-state="locked"] .field-ctas { display: none; }
+
+.decide-gate { font-size: 13px; color: var(--muted); }
 
 .definition-drift {
     margin: 16px 0; padding: 12px 16px; border-radius: 5px;
