@@ -43,6 +43,15 @@ def build_stage_strip(manifest: Mapping[str, Any]) -> StageStrip:
     )
 
 
+def describe_stage_status(status: str, run_status: object) -> str:
+    """The word a reader gets for one square; empty for a status this app does not define."""
+    try:
+        stage_status = StageStatus(status)
+    except ValueError:
+        return ""
+    return _read_tally_label(stage_status, run_status)
+
+
 def describe_stage_tallies(strip: StageStrip) -> str:
     return " · ".join(f"{tally.count} {tally.label}" for tally in strip.tallies)
 

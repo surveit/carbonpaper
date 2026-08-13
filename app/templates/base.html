@@ -35,5 +35,9 @@
     <script src="/static/friendly-time.js"></script>
     <script src="/static/breadcrumbs.js"></script>
     <script src="/static/demo-notice.js"></script>
+    {# ⌘K from anywhere, so the shell is in the shell rather than on the pages it
+       reaches. See static/cmdk-palette.js. #}
+    {% include "_cmdk_palette.html" %}
+    <script src="/static/cmdk-palette.js"></script>
 </body>
 </html>
