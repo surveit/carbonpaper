@@ -11,6 +11,7 @@ from app.services.versioning import WorkflowVersion
 from app.web.loading import list_projects
 from app.services import workspace
 from stage_seed import set_stages
+from app.services.methodology import write_methodology
 
 client = TestClient(app)
 
@@ -24,7 +25,7 @@ def examples_root(tmp_path, monkeypatch):
 def _make_document_only_project(root, name="fresh"):
     proj = root / name
     proj.mkdir(parents=True, exist_ok=True)
-    (proj / "document.md").write_text("methodology prose", encoding="utf-8")
+    write_methodology((proj).name, "methodology prose")
     (proj / "project.json").write_text(
         json.dumps({"name": name, "model": "sonnet"}), encoding="utf-8")
     return proj

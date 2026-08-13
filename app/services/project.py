@@ -38,6 +38,7 @@ from app.services.versioning import ReviewGuide
 from app.core.run_status import RunStatus
 from app.services import stage_edit, terms, versioning, workspace
 from app.services import loader
+from app.services import methodology
 from app.services.errors import WorkflowLoadError
 from app.services.stage_edit import AddStagesResult, EditStageResult
 
@@ -164,32 +165,10 @@ class ProjectState(BaseModel):
     id: str
     meta: ProjectMeta
     has_document: bool
-    document_path: str | None
     data_model: DataModelStatus
     workflow: WorkflowStatus
     versions: int
     runs: RunsSummary
-
-
-# ─── Document discovery ───────────────────────────────────────────────────────
-# A project's source document is the pasted methodology it was authored from. The
-# create flow writes document.md; legacy/imported projects may carry
-# methodology_raw.md or the older methodology_raw.txt. Probe in that order and
-# report the first that exists (a truthful path, never a fabricated one).
-#
-# LEGACY: probing a fixed candidate list is a migration accommodation. The intended
-# direction is for project.json to record the document's path explicitly, so a
-# project references a real file rather than inferring it by filename — at which
-# point this probe (and _DOCUMENT_CANDIDATES) can be retired.
-_DOCUMENT_CANDIDATES = ("document.md", "methodology_raw.md", "methodology_raw.txt")
-
-
-def find_document_path(pdir: Path) -> Path | None:
-    for name in _DOCUMENT_CANDIDATES:
-        p = pdir / name
-        if p.is_file():
-            return p
-    return None
 
 
 # ─── Stage loading (counts / coverage) ────────────────────────────────────────
@@ -252,23 +231,6 @@ def project_meta(pdir: Path) -> ProjectMeta:
     )
 
 
-def write_project_meta(pdir: Path, **fields: Any) -> dict[str, Any]:
-    pdir = Path(pdir)
-    pdir.mkdir(parents=True, exist_ok=True)
-    pj = pdir / "project.json"
-    record: dict[str, Any] = {}
-    if pj.is_file():
-        try:
-            loaded = json.loads(pj.read_text(encoding="utf-8"))
-            if isinstance(loaded, dict):
-                record = loaded
-        except (json.JSONDecodeError, OSError):
-            record = {}
-    record.update(fields)
-    pj.write_text(json.dumps(record, indent=2, ensure_ascii=False), encoding="utf-8")
-    return record
-
-
 # ─── The status snapshot ──────────────────────────────────────────────────────
 
 
@@ -278,8 +240,6 @@ def project_state(pdir: Path) -> ProjectState:
     meta = project_meta(pdir)
 
     # ── Document ──
-    doc_path = find_document_path(pdir)
-    has_document = doc_path is not None
 
     # ── Data model (the noun half of the project's terms) ──
     n_nouns = terms.count_nouns(project_id)
@@ -296,9 +256,8 @@ def project_state(pdir: Path) -> ProjectState:
     return ProjectState(
         id=project_id,
         meta=meta,
-        has_document=has_document,
+        has_document=methodology.exists(pdir.name),
         # Absolute path string (or None) — a link target, never fabricated.
-        document_path=str(doc_path) if doc_path else None,
         data_model=data_model,
         workflow=workflow,
         versions=n_versions,
@@ -336,11 +295,8 @@ def create_project(
     project_id = mint_project_id()
     project_dir = workspace.projects_dir() / project_id
     project_dir.mkdir(parents=True, exist_ok=True)
-    (project_dir / "document.md").write_text(doc, encoding="utf-8")
+    methodology.write_methodology(project_id, doc)
     created_at = datetime.now().isoformat(timespec="seconds")
-    write_project_meta(
-        project_dir, name=label, title=None, created_at=created_at, model=model, source=source,
-    )
     record = Project(
         id=project_id, name=label, title=None,
         model=model, source=source, authored_at=created_at,
@@ -513,14 +469,14 @@ def export_project(project_id: str) -> WorkflowFile:
         raise ValueError(
             f"project '{project_id}' has no recorded model/source — cannot export"
         )
-    document_path = project_state(pdir).document_path
-    if document_path is None:
+    document = methodology.read_methodology(project_id)
+    if document is None:
         raise ValueError(f"project '{project_id}' has no document — cannot export")
     project_terms = terms.load_terms(project_id)
     stages = loader.list_parsed_stages(loader.load_stage_entries(project_id))
     return WorkflowFile(
         name=meta.name,
-        document=Path(document_path).read_text(encoding="utf-8"),
+        document=document,
         model=meta.model,
         source=meta.source,
         data_model=project_terms.nouns,

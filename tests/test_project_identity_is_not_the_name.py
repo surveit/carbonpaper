@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.services import workspace
 from app.services.project import create_project, list_projects, project_meta
+from app.services.methodology import exists as methodology_exists, read_methodology
 from app.services.project import (
     Project,
     read_project_name,
@@ -39,7 +40,8 @@ def test_create_returns_an_id_that_is_not_the_name(workspace_root: Path) -> None
 def test_the_directory_is_named_by_the_id(workspace_root: Path) -> None:
     project_id = create_project("my_investigation", "prose", source="test").id
 
-    assert (workspace_root / project_id / "document.md").is_file()
+    assert (workspace_root / project_id).is_dir()
+    assert methodology_exists(project_id)
     assert not (workspace_root / "my_investigation").exists()
 
 
@@ -50,10 +52,8 @@ def test_two_projects_may_share_a_name(workspace_root: Path) -> None:
 
     assert first != second
     assert {r.id for r in find_projects_by_name("my_investigation")} == {first, second}
-    assert (workspace_root / first / "document.md").read_text(
-        encoding="utf-8") == "first prose"
-    assert (workspace_root / second / "document.md").read_text(
-        encoding="utf-8") == "second prose"
+    assert read_methodology(first) == "first prose"
+    assert read_methodology(second) == "second prose"
 
 
 def test_a_name_is_reusable_after_its_project_is_deleted(workspace_root: Path) -> None:
@@ -74,7 +74,7 @@ def test_renaming_the_label_moves_nothing(workspace_root: Path) -> None:
     record.save()
 
     assert Project.load(project_id).name == "new_name"
-    assert (workspace_root / project_id / "document.md").is_file()
+    assert methodology_exists(project_id)
     assert find_projects_by_name("old_name") == []
 
 

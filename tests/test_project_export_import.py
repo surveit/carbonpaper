@@ -26,6 +26,7 @@ from app.models.stages.signature import ReplacesSignature
 from app.services import project, terms, versioning, workspace
 from app.services.loader import load_stage_entries, save_stages
 from app.services.project import WorkflowFile, export_project, import_project
+from app.services.methodology import read_methodology
 
 _TINY_LIBRARY = SchemaLibrary(schemas=[NamedSchema(
     name="entity", kind=SchemaKind.input, title="Entity",
@@ -66,7 +67,7 @@ def test_round_trip_through_json_reproduces_the_source_and_mints_a_version(tmp_p
     imported_name = import_project(wf, name="round_trip_target")
     target_pdir = target_examples / imported_name
 
-    assert (target_pdir / "document.md").read_text(encoding="utf-8") == "Trace the shell companies."
+    assert read_methodology(imported_name) == "Trace the shell companies."
 
     imported_library = terms.load_terms(imported_name).nouns
     assert imported_library.model_dump() == _TINY_LIBRARY.model_dump()

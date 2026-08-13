@@ -21,6 +21,7 @@ from app.web.routers.review_packet import _write_zip
 from app.web.loading import MAX_TABLE_ROWS
 from app.services.review_packet.checksums import compute_sha256
 from stage_seed import add_stage
+from app.services.methodology import write_methodology
 
 _PROJECT = "proj"
 
@@ -52,7 +53,7 @@ def _make_project(root):
     pd.DataFrame({"name": ["a", "b"], "val": [1, 2]}).to_csv(
         root / "data" / "items.csv", index=False
     )
-    (root / "document.md").write_text("# How we did it\nWe loaded items.\n", encoding="utf-8")
+    write_methodology((root).name, "# How we did it\nWe loaded items.\n")
     _write_stage(root, "01_load.json", _load_stage(root))
     _write_stage(root, "02_double.json", _double_stage())
 

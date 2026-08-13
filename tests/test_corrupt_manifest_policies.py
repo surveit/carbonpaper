@@ -14,6 +14,7 @@ from app.services import project as project_service
 from app.services import workspace
 from app.web import loading
 from app.web.run_index import build_run_index_rows
+from app.services.methodology import write_methodology
 
 GOLDENS = Path(__file__).parent / "goldens"
 
@@ -23,7 +24,7 @@ def project_dir(tmp_path: Path) -> Path:
     workspace.set_projects_dir(tmp_path)
     pdir = tmp_path / "demo"
     (pdir / "runs").mkdir(parents=True)
-    (pdir / "document.md").write_text("methodology", encoding="utf-8")
+    write_methodology((pdir).name, "methodology")
     return pdir
 
 

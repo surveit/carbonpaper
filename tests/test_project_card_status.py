@@ -11,6 +11,7 @@ from app.main import app
 from app.services import workspace
 from app.web.loading import list_projects
 from app.web.project_cards import ProjectStatus, tally_runs
+from app.services.methodology import write_methodology
 
 client = TestClient(app)
 
@@ -36,7 +37,7 @@ def _write_run(runs_dir, run_id, *, status=None, is_test=False):
 def _make_project(root, name, runs=()):
     proj = root / name
     proj.mkdir()
-    (proj / "document.md").write_text("methodology prose", encoding="utf-8")
+    write_methodology((proj).name, "methodology prose")
     for run_id, kwargs in runs:
         _write_run(proj / "runs", run_id, **kwargs)
     return proj

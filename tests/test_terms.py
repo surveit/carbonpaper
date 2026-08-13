@@ -15,6 +15,7 @@ from app.services import terms
 from app.services.terms import StoredTerms
 from app.web.config import templates
 from app.web.diagrams import SCHEMA_KIND_CLASS, SCHEMA_KIND_GLYPH
+from app.services.methodology import write_methodology
 
 _FLAG = Verb(
     name="flag",
@@ -245,7 +246,7 @@ def _get_terms_page(tmp_path, stored: Terms | None):
     workspace.set_projects_dir(tmp_path)
     project_dir = tmp_path / "vocab"
     project_dir.mkdir()
-    (project_dir / "document.md").write_text("Follow the filings.", encoding="utf-8")
+    write_methodology((project_dir).name, "Follow the filings.")
     if stored is not None:
         terms.write_terms("vocab", stored)
     return TestClient(app).get("/project/vocab/terms")

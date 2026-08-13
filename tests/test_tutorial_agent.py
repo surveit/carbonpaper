@@ -28,6 +28,7 @@ from app.runtime.trace import trace_row, trace_to_dict
 from app.tools.editing import EditingContext, make_editing_tools
 from app.agents.tutorial.config import make_tutorial_tools
 from app.tools.tutorial import TutorialContext
+from app.services.methodology import exists as methodology_exists
 
 _BASE_URL = "http://127.0.0.1:8788/"
 _EXPECTED_TOOLS = {
@@ -126,7 +127,7 @@ def test_a_tour_after_the_project_was_deleted_still_seeds(projects_root: Path) -
 
     # Whatever it is called, it must be a project that actually loads and can run.
     assert second["project"]["id"] != first["project"]["id"]
-    assert (projects_root / second["project"]["id"] / "document.md").is_file()
+    assert methodology_exists(second["project"]["id"])
     assert load_workflow(second["project"]["id"])
     assert run_service.resolve_version(second["project"]["id"], None) == second["version_id"]
 

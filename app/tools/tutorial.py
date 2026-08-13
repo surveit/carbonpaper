@@ -23,6 +23,7 @@ from app.services import (
 )
 from app.services.project import Project, WorkflowFile, import_project
 from app.services.project import find_projects_by_name
+from app.services import methodology
 
 _FIXTURE_STEM = "tutorial_lobbying_triage"
 _DATA_DIR = Path(__file__).resolve().parents[1] / "seeds" / "data"
@@ -143,7 +144,7 @@ def _find_reusable_tour_project() -> str | None:
 
 def _is_on_disk(project_id: str) -> bool:
     """A project the workspace can run — not merely an id the store knows."""
-    return (workspace.projects_dir() / project_id / "document.md").is_file()
+    return (workspace.projects_dir() / project_id).is_dir() and methodology.exists(project_id)
 
 
 CREATE_TUTORIAL_PROJECT = ToolSpec(

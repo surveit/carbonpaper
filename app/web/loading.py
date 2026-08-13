@@ -38,6 +38,7 @@ from app.services.terms import count_nouns
 from app.services.workspace import resolve_project_dir
 from app.web.config import projects_dir
 from app.web.project_cards import ProjectCard, tally_runs
+from app.services.methodology import exists as methodology_exists
 
 
 # ─── Projects & stages ──────────────────────────────────────────────────
@@ -61,7 +62,7 @@ def _build_project_card(p: Path) -> ProjectCard | None:
     n_schemas = count_nouns(p.name)
     has_schemas = n_schemas > 0
     runs = tally_runs(p / "runs")
-    has_document = (p / "document.md").is_file() or (p / "project.json").is_file()
+    has_document = methodology_exists(p.name) or (p / "project.json").is_file()
     if not (has_workflow or has_schemas or has_document):
         return None
     return ProjectCard(

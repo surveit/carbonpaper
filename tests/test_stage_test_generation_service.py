@@ -20,6 +20,7 @@ from app.models.stages.stage_tests import (
     build_stage_tests_model,
 )
 from stage_seed import add_stage, read_stage
+from app.services.methodology import write_methodology
 
 _IN_SCHEMA = {"columns": [{"name": "amount", "type": "float", "nullable": False}]}
 _OUT_SCHEMA = {"columns": [
@@ -38,7 +39,7 @@ def _suite_model(output_schema: dict = _OUT_SCHEMA) -> Any:
 
 def _seed_project(project_dir: Path, *, existing_tests: list[dict] | None = None) -> None:
     project_dir.mkdir(parents=True, exist_ok=True)
-    (project_dir / "document.md").write_text("Double the amount.", encoding="utf-8")
+    write_methodology((project_dir).name, "Double the amount.")
     pdir = project_dir
     pdir.mkdir(parents=True, exist_ok=True)
     add_stage(pdir, {
@@ -132,7 +133,7 @@ def test_finish_stage_tests_preserves_null_cells(tmp_path: Path):
     """`exclude_none=True` drops None MODEL FIELDS; `expected` is a plain dict it never walks."""
     project_dir = tmp_path / "demo"
     project_dir.mkdir(parents=True, exist_ok=True)
-    (project_dir / "document.md").write_text("Double the amount.", encoding="utf-8")
+    write_methodology((project_dir).name, "Double the amount.")
     pdir = project_dir
     pdir.mkdir(parents=True, exist_ok=True)
     out_schema = {"columns": [

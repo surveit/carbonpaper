@@ -23,7 +23,7 @@ from app.models.named_schemas import SchemaLibrary
 from app.models.stage import stage_to_spec_dict
 from app.services import terms, versioning
 from app.services.loader import load_workflow
-from app.services.project import find_document_path
+from app.services.methodology import read_methodology
 from app.services.stage_edit import (
     find_description_issues,
     find_unnamed_model_issues,
@@ -82,14 +82,14 @@ def start_review_guide_generation(
             f"version '{version_id}' already has a review guide — edit it with the "
             "authoring agent rather than regenerating over it"
         )
-    doc_path = find_document_path(project_dir)
-    if doc_path is None:
+    document = read_methodology(project_dir.name)
+    if document is None:
         raise ValueError(f"{project_dir.name} has no document to write a guide from")
     return start_review_guide_generation_agent(
         stages=version.stages,
         version_id=version.version_id,
         project_id=project_dir.name,
-        document=doc_path.read_text(encoding="utf-8"),
+        document=document,
         terms=terms.load_terms(project_dir.name),
         model=model,
         on_answer=lambda draft: _finish_review_guide(project_dir, version_id, draft),
