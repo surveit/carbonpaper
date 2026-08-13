@@ -13,12 +13,6 @@ from mcp.server.fastmcp import FastMCP
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from starlette.types import Receive, Scope, Send
 
-from app.core.errors import (
-    MissingInputBindingError,
-    NoVersionToRunError,
-    NoWorkflowTestVersionError,
-    RunNotFoundError,
-)
 from app.models import find_workflow_compiler_warnings
 from app.models.terms import Terms
 from app.tools import shared
@@ -32,29 +26,16 @@ from app.mcp.instructions import INSTRUCTIONS
 from app.models.review_guide import ReviewGuideDraft
 from app.services.versioning import ReviewGuide
 from app.runtime import stage_tests
-from app.services import generation
 from app.services import loader
-from app.services import frame_profile
 from app.services import project as project_service
 from app.services.project import Project, ProjectListing
-from app.services import terms as terms_service
 from app.services import versioning
-from app.services import workflow_test as workflow_test_service
-from app.services.errors import FileNotStoredError, WorkflowLoadError
+from app.services.errors import WorkflowLoadError
 from app.services.stage_edit import EditStageResult
 
-# Domain failures a run/workflow-test tool turns into {ok: False, error: str(exc)} — a
-# loud, honest verdict rather than a traceback or a fabricated run id/status.
-# Anything outside this set propagates as a genuine internal fault.
-_RUN_TOOL_ERRORS = (
-    FileNotStoredError,
-    NoVersionToRunError,
-    MissingInputBindingError,
-    WorkflowLoadError,
-    RunNotFoundError,
-    NoWorkflowTestVersionError,
-    ValueError,
-)
+# The same verdict channel the tools whose bodies live in app.tools.shared already
+# answer on, so a failure reads the same whichever surface asked.
+_RUN_TOOL_ERRORS = shared.RUN_TOOL_ERRORS
 
 # Domain failures an authoring tool turns into {ok: False, issues: [...]} — the
 # same refusal channel a validation failure comes back on, which is the one these
@@ -129,30 +110,12 @@ def create_project(name: str, document: str) -> Project:
 
 @mcp.tool(description=TOOL_SPECS["get_project_status"].description)
 def get_project_status(project_id: str) -> dict[str, Any]:
-    pdir = _resolve_existing_project(project_id)
-    return project_service.project_state(pdir).model_dump(mode="json")
-
-
-@mcp.tool(description=TOOL_SPECS["generate_data_model"].description)
-async def generate_data_model(project_id: str) -> dict[str, Any]:
-    pdir = _resolve_existing_project(project_id)
-    document = _read_document(pdir, project_id)
-    model = project_service.project_meta(pdir).model or "sonnet"
-    session_id = generation.start_generation(pdir, document=document, model=model)
-    return {"status": "started", "watch": f"/chat/{session_id}", "poll": "get_project_status"}
+    return shared.get_project_status(project_id)
 
 
 @mcp.tool(description=TOOL_SPECS["generate_stage_tests"].description)
 async def generate_stage_tests(project_id: str, stage_id: str) -> dict[str, Any]:
-    pdir = _resolve_existing_project(project_id)
-    model = project_service.project_meta(pdir).model or "sonnet"
-    session_id = generation.start_stage_test_generation(pdir, stage_id=stage_id, model=model)
-    return {
-        "status": "started",
-        "watch": f"/chat/{session_id}",
-        "poll": "get_project_status",
-        "note": "read_stage to see the generated tests once done",
-    }
+    return await shared.generate_stage_tests(project_id, stage_id)
 
 
 @mcp.tool(description=TOOL_SPECS["run_stage_tests"].description)
@@ -170,13 +133,6 @@ def report_compiler_warnings(project_id: str) -> dict[str, Any]:
     failing = stage_tests.run_stage_tests(stages).count_failing_by_stage()
     report = find_workflow_compiler_warnings(stages, failing)
     return {"warnings": [w.model_dump(mode="json") for w in report.warnings]}
-
-
-@mcp.tool(description=TOOL_SPECS["read_data_model"].description)
-def read_data_model(project_id: str) -> list[dict[str, Any]]:
-    _resolve_existing_project(project_id)
-    return [noun.model_dump(mode="json", exclude_none=True)
-            for noun in terms_service.load_terms(project_id).nouns.schemas]
 
 
 @mcp.tool(description=TOOL_SPECS["read_terms"].description)
@@ -277,6 +233,25 @@ def move_file_to_project(project_id: str, sha256: str) -> shared.StoredFileView:
     return shared.move_file_to_project(project_id, sha256)
 
 
+@mcp.tool(description=TOOL_SPECS["run_workflow_test"].description)
+def run_workflow_test(
+    project_id: str,
+    limit: int | None,
+    version_id: str | None = None,
+    stage_ids: list[str] | None = None,
+    offset: int = 0,
+) -> dict[str, Any]:
+    return shared.run_workflow_test(project_id, limit, version_id, stage_ids, offset)
+
+
+@mcp.tool(description=TOOL_SPECS["profile_stage_output_data_range"].description)
+def profile_stage_output_data_range(
+    project_id: str, run_id: str, stage_id: str, columns: list[str], max_values: int,
+) -> dict[str, Any]:
+    return shared.profile_stage_output_data_range(
+        project_id, run_id, stage_id, columns, max_values)
+
+
 @mcp.tool(description=TOOL_SPECS["profile_file"].description)
 def profile_file(
     project_id: str, sha256: str, columns: list[str] | None = None, max_values: int = 20,
@@ -334,23 +309,6 @@ def get_run_status(project_id: str, run_id: str) -> dict[str, Any]:
         return {"ok": False, "error": str(exc)}
 
 
-@mcp.tool(description=TOOL_SPECS["run_workflow_test"].description)
-def run_workflow_test(
-    project_id: str,
-    limit: int | None,
-    version_id: str | None = None,
-    stage_ids: list[str] | None = None,
-    offset: int = 0,
-) -> dict[str, Any]:
-    _resolve_existing_project(project_id)  # loud if the project doesn't exist
-    try:
-        return workflow_test_service.run_workflow_test(
-            project_id, version_id=version_id, stage_ids=stage_ids,
-            limit=limit, offset=offset)
-    except _RUN_TOOL_ERRORS as exc:
-        return {"ok": False, "error": str(exc)}
-
-
 @mcp.tool(description=TOOL_SPECS["read_stage_output_rows"].description)
 def read_stage_output_rows(
     project_id: str,
@@ -362,29 +320,5 @@ def read_stage_output_rows(
     return shared.read_stage_output_rows(project_id, run_id, stage_id, limit, offset)
 
 
-@mcp.tool(description=TOOL_SPECS["profile_stage_output_data_range"].description)
-def profile_stage_output_data_range(
-    project_id: str,
-    run_id: str,
-    stage_id: str,
-    columns: list[str],
-    max_values: int,
-) -> dict[str, Any]:
-    _resolve_existing_project(project_id)  # loud if the project doesn't exist
-    try:
-        profile = frame_profile.profile_stage_output(
-            project_id, run_id, stage_id, columns, max_values=max_values)
-    except _RUN_TOOL_ERRORS as exc:
-        return {"ok": False, "error": str(exc)}
-    return {"ok": True, **profile.model_dump()}
-
-
 def _resolve_existing_project(project_id: str) -> Path:
     return shared.resolve_existing_project(project_id)
-
-
-def _read_document(pdir: Path, project_id: str) -> str:
-    doc_path = pdir / "document.md"
-    if not doc_path.is_file():
-        raise ValueError(f"project '{project_id}' has no document.md to generate from")
-    return doc_path.read_text(encoding="utf-8")

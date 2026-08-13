@@ -12,6 +12,12 @@ from typing import Any, Annotated, Callable
 from pydantic import BaseModel
 
 from app.core.agent.bound_tool import BoundToolSpec
+from app.core.errors import (
+    MissingInputBindingError,
+    NoVersionToRunError,
+    NoWorkflowTestVersionError,
+    RunNotFoundError,
+)
 from app.core.frames import collapse_null_forms, convert_cell_to_json_native, list_rows
 from app.core.run_status import StageStatus
 from app.core.source_files import SheetSurvey
@@ -20,16 +26,32 @@ from app.models.terms import Terms
 from app.tools.types import ToolInputSchema
 from app.services import (
     frame_profile,
+    generation,
     project as project_service,
     run as run_service,
     terms as terms_service,
     uploads,
+    workflow_test as workflow_test_service,
     workspace,
 )
+from app.services.errors import FileNotStoredError, WorkflowLoadError
 from app.services.project import Project
 from app.tools.tool_specs import TOOL_SPECS
 
 _PROJECT_ID = Annotated[str, "The project's name."]
+
+# Domain failures a run tool turns into {ok: False, error: str(exc)} — a loud, honest
+# verdict rather than a traceback or a fabricated run id/status. Anything outside this
+# set propagates as a genuine internal fault.
+RUN_TOOL_ERRORS = (
+    FileNotStoredError,
+    NoVersionToRunError,
+    MissingInputBindingError,
+    WorkflowLoadError,
+    RunNotFoundError,
+    NoWorkflowTestVersionError,
+    ValueError,
+)
 
 # One sleep's ceiling, kept SHORT because a reader is watching the transcript: each call
 # is a row on their screen, so short sleeps read as a job in progress where one long one
@@ -54,6 +76,25 @@ def resolve_existing_project(project_id: str) -> Path:
 def create_project(name: str, document: str, *, source: str) -> Project:
     """`source` records WHICH surface authored the project, so it is the surface's to state."""
     return project_service.create_project(name, document, source=source)
+
+
+def get_project_status(project_id: str) -> dict[str, Any]:
+    pdir = resolve_existing_project(project_id)
+    return project_service.project_state(pdir).model_dump(mode="json")
+
+
+async def generate_stage_tests(project_id: str, stage_id: str) -> dict[str, Any]:
+    pdir = resolve_existing_project(project_id)
+    model = project_service.project_meta(pdir).model or "sonnet"
+    session_id = generation.start_stage_test_generation(pdir, stage_id=stage_id, model=model)
+    # Root-relative: the caller's reader is either in this app already or knows the
+    # address it reached the server on, and a guessed host resolves nowhere.
+    return {
+        "status": "started",
+        "watch": f"/chat/{session_id}",
+        "poll": "get_project_status",
+        "note": "read_stage to see the generated tests once done",
+    }
 
 
 def read_terms(project_id: str) -> Terms:
@@ -117,6 +158,18 @@ def survey_workbook(
     return frame_profile.survey_stored_workbook(project_id, sha256, from_row=from_row)
 
 
+def profile_stage_output_data_range(
+    project_id: str, run_id: str, stage_id: str, columns: list[str], max_values: int,
+) -> dict[str, Any]:
+    resolve_existing_project(project_id)
+    try:
+        profile = frame_profile.profile_stage_output(
+            project_id, run_id, stage_id, columns, max_values=max_values)
+    except RUN_TOOL_ERRORS as exc:
+        return {"ok": False, "error": str(exc)}
+    return {"ok": True, **profile.model_dump()}
+
+
 def _view(record: uploads.UploadedFile) -> StoredFileView:
     return StoredFileView(sha256=record.sha256, filename=record.filename,
                           bytes=record.byte_count, added=record.created_at)
@@ -146,6 +199,22 @@ def run_workflow(
     )
     status = run_service.read_run_status(project_id, run_id)["status"]
     return {"run_id": run_id, "status": status}
+
+
+def run_workflow_test(
+    project_id: str,
+    limit: int | None,
+    version_id: str | None = None,
+    stage_ids: list[str] | None = None,
+    offset: int = 0,
+) -> dict[str, Any]:
+    resolve_existing_project(project_id)
+    try:
+        return workflow_test_service.run_workflow_test(
+            project_id, version_id=version_id, stage_ids=stage_ids,
+            limit=limit, offset=offset)
+    except RUN_TOOL_ERRORS as exc:
+        return {"ok": False, "error": str(exc)}
 
 
 def get_run_status(project_id: str, run_id: str) -> dict[str, Any]:
@@ -249,11 +318,16 @@ def _to_json_cell(value: object) -> object:
 _FUNCTIONS: dict[str, Callable[..., Any]] = {
     "read_terms": read_terms,
     "write_terms": write_terms,
+    "get_project_status": get_project_status,
+    "generate_stage_tests": generate_stage_tests,
     "run_workflow": run_workflow,
+    "run_workflow_test": run_workflow_test,
     "get_run_status": get_run_status,
     "sleep": sleep,
     "read_workflow_summary": read_workflow_summary,
     "read_stage_output_rows": read_stage_output_rows,
+    "profile_stage_output_data_range": profile_stage_output_data_range,
+    "move_file_to_project": move_file_to_project,
     "profile_file": profile_file,
     "survey_workbook": survey_workbook,
 }
@@ -282,6 +356,11 @@ _SCHEMAS: dict[str, ToolInputSchema] = {
             "additions.",
         ],
     },
+    "get_project_status": {"project_id": _PROJECT_ID},
+    "generate_stage_tests": {
+        "project_id": _PROJECT_ID,
+        "stage_id": Annotated[str, "The stage to generate tests for."],
+    },
     "run_workflow": {
         "project_id": _PROJECT_ID,
         "version_id": Annotated[str, "Omit for the project's newest stored version."],
@@ -294,6 +373,20 @@ _SCHEMAS: dict[str, ToolInputSchema] = {
             'The stored file each input stage reads for THIS run: '
             '{"<stage id>": "<sha256 from list_files>"}.',
         ],
+    },
+    "run_workflow_test": {
+        "project_id": _PROJECT_ID,
+        "limit": Annotated[
+            int | None,
+            "How many rows of the bound source to run on — the run's budget, since every "
+            "LLM stage pays per row. null runs the whole source.",
+        ],
+        "version_id": Annotated[str, "Omit for the project's newest stored version."],
+        "stage_ids": Annotated[
+            list[str] | None,
+            "Which stages to execute. Omit to run every stage that is not an input.",
+        ],
+        "offset": Annotated[int, "The source row the window starts at. 0 is the first."],
     },
     "get_run_status": {
         "project_id": _PROJECT_ID,
@@ -316,6 +409,22 @@ _SCHEMAS: dict[str, ToolInputSchema] = {
             f"is also the default.",
         ],
         "offset": Annotated[int, "The row ordinal to start at. 0 is the first row."],
+    },
+    "profile_stage_output_data_range": {
+        "project_id": _PROJECT_ID,
+        "run_id": Annotated[str, "The run whose stored output you want to profile."],
+        "stage_id": Annotated[str, "The stage whose output columns you want."],
+        "columns": Annotated[
+            list[str], "The columns to profile — every one you are about to declare."],
+        "max_values": Annotated[
+            int,
+            "How many distinct values to show per column, commonest first. `truncated` "
+            "says whether there were more.",
+        ],
+    },
+    "move_file_to_project": {
+        "project_id": _PROJECT_ID,
+        "sha256": Annotated[str, "The stored file's sha256, as list_files reported it."],
     },
     "profile_file": {
         "project_id": _PROJECT_ID,
@@ -349,11 +458,16 @@ _LABELS = {
     "create_project": "Creating the project",
     "read_terms": "Reading the project's words",
     "write_terms": "Storing the project's words",
+    "get_project_status": "Checking the project",
+    "generate_stage_tests": "Generating the stage's tests",
     "run_workflow": "Running the workflow",
+    "run_workflow_test": "Testing the workflow on real rows",
     "get_run_status": "Checking the run",
     "sleep": "Waiting",
     "read_workflow_summary": "Reading the workflow",
     "read_stage_output_rows": "Reading the stage's rows",
+    "profile_stage_output_data_range": "Reading what the stage's columns hold",
+    "move_file_to_project": "Putting the file in the project",
     "profile_file": "Reading what the file holds",
     "survey_workbook": "Looking over the workbook's sheets",
 }

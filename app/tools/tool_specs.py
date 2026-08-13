@@ -89,16 +89,6 @@ llm block intact; a null value deletes a field. Fields you do not mention
 are preserved exactly. Validated first; if invalid, nothing is written and
 the issues are returned. You cannot change a stage's id this way.""",
     ),
-    "generate_data_model": ToolSpec(
-        name="generate_data_model",
-        description="""\
-Generate the project's DATA MODEL (named schemas) from its methodology
-document. Starts a live generation turn in the background and returns
-immediately — poll get_project_status until schemas appear, and tell the user
-they can watch it stream at the returned `watch` path in the web UI. The
-human then reviews/approves the data model in the web UI; the approved
-schemas are the vocabulary you author the workflow's stages against.""",
-    ),
     "generate_stage_tests": ToolSpec(
         name="generate_stage_tests",
         description="""\
@@ -133,8 +123,8 @@ create_project returned and pass it yourself.""",
         description="""\
 One project's full status snapshot: document present?, data-model state
 (generating shows no schemas yet; then unapproved/approved), workflow stage
-counts and review coverage, versions, runs. Poll this after generate_* to see
-the result land.""",
+counts and review coverage, versions, runs. Poll this after generate_stage_tests
+to see the result land.""",
     ),
     "get_run_status": ToolSpec(
         name="get_run_status",
@@ -206,12 +196,6 @@ A row's ordinal is recorded nowhere else, so a lineage link not read from here
 is a guess. A stage that did not finish is refused rather than read: an errored
 stage still wrote a frame, and the columns it never reached are nulls, not
 results.""",
-    ),
-    "read_data_model": ToolSpec(
-        name="read_data_model",
-        description="""\
-The project's data model: every named schema as JSON (empty list if none
-generated yet).""",
     ),
     "read_draft": ToolSpec(
         name="read_draft",

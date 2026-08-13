@@ -64,8 +64,6 @@ def test_mcp_lists_the_authoring_tools(client):
         "list_projects",
         "create_project",
         "get_project_status",
-        "generate_data_model",
-        "read_data_model",
         "read_workflow_summary",
         "read_stage",
         "edit_stage",
@@ -181,34 +179,6 @@ def test_the_terms_tools_refuse_a_project_that_is_not_in_the_workspace(tmp_path)
         server.read_terms(project_id="never_created")
 
 
-def test_generate_data_model_kicks_the_live_turn(tmp_path, monkeypatch):
-    from app.mcp import server
-
-    workspace.set_projects_dir(tmp_path)
-    project_id = server.create_project(name="probe", document="doc text").id
-
-    seen: dict[str, object] = {}
-
-    def fake_start(pdir: Path, *, document: str, model: str) -> str:
-        seen["pdir"] = pdir
-        seen["document"] = document
-        return "sess123"
-
-    monkeypatch.setattr(server.generation, "start_generation", fake_start)
-    out = asyncio.run(server.generate_data_model(project_id=project_id))
-    assert out["watch"] == "/chat/sess123"
-    assert seen["document"] == "doc text"
-
-
-def test_generate_data_model_without_document_fails_loudly(tmp_path, monkeypatch):
-    from app.mcp import server
-
-    workspace.set_projects_dir(tmp_path)
-    (tmp_path / "empty_proj").mkdir()
-    with pytest.raises(ValueError):
-        asyncio.run(server.generate_data_model(project_id="empty_proj"))
-
-
 _IN_SCHEMA = {"columns": [{"name": "amount", "type": "float", "nullable": False}]}
 _OUT_SCHEMA = {"columns": [
     {"name": "amount", "type": "float", "nullable": False},
@@ -299,7 +269,7 @@ def test_generate_stage_tests_kicks_the_generation_turn(tmp_path, monkeypatch):
         seen["stage_id"] = stage_id
         return "sess-tests"
 
-    monkeypatch.setattr(server.generation, "start_stage_test_generation", fake_start)
+    monkeypatch.setattr(server.shared.generation, "start_stage_test_generation", fake_start)
     out = asyncio.run(server.generate_stage_tests(project_id=project_id, stage_id="double"))
     assert out["status"] == "started"
     assert out["watch"] == "/chat/sess-tests"
@@ -625,7 +595,5 @@ def test_read_tools_reject_unknown_project(tmp_path, monkeypatch):
     from app.mcp import server
 
     workspace.set_projects_dir(tmp_path)
-    with pytest.raises(ValueError):
-        server.read_data_model(project_id="no_such_project")
     with pytest.raises(ValueError):
         server.read_workflow_summary(project_id="no_such_project")
