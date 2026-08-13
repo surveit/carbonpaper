@@ -3,7 +3,7 @@
   "steps": [
     {
       "title": "Load what each organisation asked government for",
-      "prose": "The ask half: six real records, each read off a published page.",
+      "prose": "The ask half: real advocacy records, each read off a published page.",
       "stage_ids": [
         "raw_filings"
       ],
@@ -51,7 +51,7 @@
     },
     {
       "title": "Publish the report",
-      "prose": "What you hand to someone who was not here — open it under Published, below. Each row links to both its sources and back to the record it came from.",
+      "prose": "What you hand to someone who was not here — open it under Published. Each row links to both its sources and back to the record it came from.",
       "stage_ids": [
         "publish_report"
       ],

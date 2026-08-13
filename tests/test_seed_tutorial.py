@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 
 from pathlib import Path
 
@@ -506,6 +507,50 @@ def test_the_review_guide_speaks_no_jargon():
                  "column", "null", "cast", "parse", "lineage", "upstream",
                  "downstream", "row per", "row-level"):
         assert word not in prose, word
+
+
+# A number in front of a countable noun ("six real records", "3 rows"): the run measures
+# that and prints it on the data link, so prose stating it is a second number that can
+# disagree. `one` is left out — "one row per record" is the grain, not a count.
+_COUNTED_NOUN = (
+    r"records?|rows?|stages?|steps?|filings?|organisations?"
+    r"|commitments?|promises?|columns?|entries|entry|results?"
+)
+_STATED_COUNT = re.compile(
+    r"\b(?:two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|dozen|\d[\d,]*)\b"
+    rf"(?:\s+\w+){{0,2}}\s+\b(?:{_COUNTED_NOUN})\b",
+    re.IGNORECASE,
+)
+_SCREEN_POSITION = re.compile(
+    r"\b(?:above|below|underneath|further down|further up|on the left|on the right"
+    r"|at the top|at the bottom|in the rail|in the sidebar)\b",
+    re.IGNORECASE,
+)
+
+
+def test_the_review_guide_states_no_count_and_names_no_place_on_the_screen():
+    """The run measures the count and the layout moves: prose saying either goes stale silently."""
+    guide = ReviewGuideDraft.model_validate_json(
+        _GUIDE_PATH.read_text(encoding="utf-8")
+    )
+
+    offenders = _find_counts_and_screen_positions(guide)
+
+    assert offenders == [], offenders
+
+
+def _find_counts_and_screen_positions(guide: ReviewGuideDraft) -> list[str]:
+    return [
+        f"{step.title} / {field}: {hit!r}"
+        for step in guide.steps
+        for field, text in (
+            ("title", step.title),
+            ("prose", step.prose),
+            ("data_description", step.data_description or ""),
+        )
+        for pattern in (_STATED_COUNT, _SCREEN_POSITION)
+        for hit in pattern.findall(text)
+    ]
 
 
 # ── the seeded eval ──────────────────────────────────────────────────────────
