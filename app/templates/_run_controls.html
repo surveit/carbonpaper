@@ -93,6 +93,12 @@
   <div class="run-inputs">
     {% for row in choices.inputs %}{{ input_row(row.stage_id, row.authored_path, choices.files) }}{% endfor %}
   </div>
+  {# The one place a file leaves the reader's machine, so the one place the strip's
+     standing fact is worth repeating in the specific. #}
+  {% if serves_an_open_demo() %}
+  <p class="demo-upload-note">Open demo — this file becomes readable by every visitor and
+    by any stage anyone writes. Upload only what can be made public.</p>
+  {% endif %}
   <details class="run-advanced">
     <summary>Advanced</summary>
     <label class="run-bust-cache">
