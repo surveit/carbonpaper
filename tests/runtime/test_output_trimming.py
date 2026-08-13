@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import pandas as pd
+import pyarrow as pa
 import pytest
 
 from app.models import parse_stage, Stage
@@ -32,10 +32,10 @@ def _rating_stage() -> Stage:
 
 
 def test_projection_raises_naming_the_stage_and_every_missing_column():
-    frame = pd.DataFrame({"id": ["r1"], "leftover": [1]})
+    table = pa.table({"id": ["r1"], "leftover": [1]})
 
     with pytest.raises(ValueError) as excinfo:
-        _trim_to_declared_columns(place_stage(_rating_stage()), frame, StageContribution())
+        _trim_to_declared_columns(place_stage(_rating_stage()), table, StageContribution())
 
     message = str(excinfo.value)
     assert "rate" in message
@@ -43,10 +43,10 @@ def test_projection_raises_naming_the_stage_and_every_missing_column():
 
 
 def test_projection_keeps_declared_order_and_reports_what_it_dropped():
-    frame = pd.DataFrame({"verdict": ["yes"], "leftover": [1], "id": ["r1"], "score": [3]})
+    table = pa.table({"verdict": ["yes"], "leftover": [1], "id": ["r1"], "score": [3]})
     contribution = StageContribution()
 
-    projected = _trim_to_declared_columns(place_stage(_rating_stage()), frame, contribution)
+    projected = _trim_to_declared_columns(place_stage(_rating_stage()), table, contribution)
 
-    assert list(projected.columns) == ["id", "score", "verdict"]
+    assert list(projected.column_names) == ["id", "score", "verdict"]
     assert contribution.dropped_columns == ["leftover"]

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from collections.abc import Sequence
 from typing import Any, Callable, NamedTuple, Protocol, TypeVar, runtime_checkable
 
 import pandas as pd
@@ -23,7 +24,7 @@ from app.models.stage import (
 from app.models.stages.llm_transform import LLMTransformStage
 
 from app.core.agent.usage import LlmUsage
-from app.core.frames import list_table_rows, table_to_frame
+from app.core.frames import collapse_null_forms, is_null_form, list_table_rows, table_to_frame
 from app.core.stage_cache import StageCache, compute_row_fingerprint
 
 from .frame_caching import (
@@ -145,7 +146,7 @@ class PostMapRowMapper(Protocol):
     def finish_mapped_rows(
         self,
         workflow_stage: WorkflowStage,
-        df: pd.DataFrame,
+        rows: Sequence[Row],
         ctx: RunContext,
         contribution: StageContribution,
     ) -> None: ...
@@ -344,17 +345,15 @@ def _run_row_mapper(
         # mapper's own keys win — that is what a rewrite or an add is.
         out_rows.append({**records[index], **result})
         kept_indices.append(index)
-    mapped = _finish_mapped_frame(
-        pd.DataFrame(out_rows), handler, map_row, workflow_stage, ctx
-    )
+    mapped = _finish_mapped_frame(out_rows, handler, map_row, workflow_stage, ctx)
     # The driver, not the stage, knows which input ordinals survived.
     lineage = (
         kept_rows_lineage(workflow_stage.inputs[0].id, kept_indices)
         if handler.drops_rows
         else None
     )
-    return StageOutput.from_frame(
-        _finish_empty_result(mapped.frame, src, workflow_stage),
+    return StageOutput(
+        _finish_empty_result(mapped.table, src, workflow_stage),
         mapped.contribution,
         lineage,
     )
@@ -508,8 +507,8 @@ def _run_batched(
         ctx.run_log, stage.id, misses, [row.get(ROW_ERROR_KEY) for row in computed]
     )
     batched = _finish_batched_frame(rows, handler, workflow_stage)
-    return StageOutput.from_frame(
-        _finish_empty_result(batched.frame, src, workflow_stage), batched.contribution
+    return StageOutput(
+        _finish_empty_result(batched.table, src, workflow_stage), batched.contribution
     )
 
 
@@ -559,83 +558,91 @@ def _order_by_input_position(
     return [by_position[position] for position in range(row_count)]
 
 
-# Not a StageOutput: coercing to arrow here and again for the empty-result step
-# would convert twice. The driver coerces once, at its own boundary.
-class _MappedFrame(NamedTuple):
-    """The row driver's intermediate — assembled rows plus what they reported."""
+class _MappedRows(NamedTuple):
+    """The row driver's intermediate: the assembled table and what its rows reported."""
 
-    frame: pd.DataFrame
+    table: pa.Table
     contribution: StageContribution
 
 
 def _finish_batched_frame(
     rows: list[Row], handler: RowMapTransformHandler, workflow_stage: WorkflowStage
-) -> _MappedFrame:
-    """No mapper, so no post-map step: collect off the assembled frame, then strip and trim."""
-    df = pd.DataFrame(rows)
-    contribution = _collect_internal_columns(df)
-    return _MappedFrame(
-        _strip_and_trim(df, contribution, handler, workflow_stage), contribution
+) -> _MappedRows:
+    """No mapper, so no post-map step: collect off the rows, then strip and trim."""
+    contribution = _collect_internal_columns(rows)
+    return _MappedRows(
+        _strip_and_trim(rows, contribution, handler, workflow_stage), contribution
     )
 
 
 def _finish_empty_result(
-    mapped: pd.DataFrame, src: pa.Table, workflow_stage: WorkflowStage
-) -> pd.DataFrame:
-    if len(mapped.columns) > 0 or len(mapped) > 0:
+    mapped: pa.Table, src: pa.Table, workflow_stage: WorkflowStage
+) -> pa.Table:
+    if mapped.num_columns > 0 or mapped.num_rows > 0:
         return mapped
-    empty = table_to_frame(src.schema.empty_table())
     promised = workflow_stage.output_schema
-    if promised is not None:
-        empty = empty.reindex(columns=[column.name for column in promised.columns])
-    return empty
+    if promised is None:
+        return src.schema.empty_table()
+    # A promised column the input carried keeps the input's type; one the stage
+    # would have added has no values to type, so it is null.
+    fields = [
+        src.schema.field(column.name)
+        if column.name in src.schema.names
+        else pa.field(column.name, pa.null())
+        for column in promised.columns
+    ]
+    return pa.schema(fields).empty_table()
 
 
 def _finish_mapped_frame(
-    df: pd.DataFrame,
+    rows: Sequence[Row],
     handler: RowMapTransformHandler,
     map_row: RowMapper,
     workflow_stage: WorkflowStage,
     ctx: RunContext,
-) -> _MappedFrame:
+) -> _MappedRows:
     """`finish_mapped_rows` is the last step that sees an internal column: it runs before the strip."""
-    contribution = _collect_internal_columns(df)
+    contribution = _collect_internal_columns(rows)
     if isinstance(map_row, PostMapRowMapper):
-        map_row.finish_mapped_rows(workflow_stage, df, ctx, contribution)
-    return _MappedFrame(
-        _strip_and_trim(df, contribution, handler, workflow_stage), contribution
+        map_row.finish_mapped_rows(workflow_stage, rows, ctx, contribution)
+    return _MappedRows(
+        _strip_and_trim(rows, contribution, handler, workflow_stage), contribution
     )
 
 
-def _collect_internal_columns(df: pd.DataFrame) -> StageContribution:
+def _collect_internal_columns(rows: Sequence[Row]) -> StageContribution:
     contribution = StageContribution()
-    _collect_row_errors(df, contribution)
-    _collect_row_usage(df, contribution)
-    _collect_cached_rows(df, contribution)
+    _collect_row_errors(rows, contribution)
+    _collect_row_usage(rows, contribution)
+    _collect_cached_rows(rows, contribution)
     return contribution
 
 
 def _strip_and_trim(
-    df: pd.DataFrame,
+    rows: Sequence[Row],
     contribution: StageContribution,
     handler: RowMapTransformHandler,
     workflow_stage: WorkflowStage,
-) -> pd.DataFrame:
+) -> pa.Table:
     """Strip before trim: the trim reports what it drops as user columns, which an internal one is not."""
-    df = _strip_internal_columns(df)
+    table = pa.Table.from_pylist(_strip_internal_columns(rows))
     if handler.trims_output_to_declared:
-        df = _trim_to_declared_columns(workflow_stage, df, contribution)
-    return df
+        table = _trim_to_declared_columns(workflow_stage, table, contribution)
+    return table
 
 
-def _strip_internal_columns(df: pd.DataFrame) -> pd.DataFrame:
+def _strip_internal_columns(rows: Sequence[Row]) -> list[Row]:
     stripped = {
         internal.column
         for internal in _INTERNAL_ROW_COLUMNS
         if internal.stripped_from_output
     }
-    present = [column for column in df.columns if column in stripped]
-    return df.drop(columns=present) if present else df
+    # `collapse_null_forms` too: a mapper may hand back pd.NA or NaT, which arrow
+    # cannot type, and which this codebase reads as absent anyway.
+    return [
+        {k: collapse_null_forms(v) for k, v in row.items() if k not in stripped}
+        for row in rows
+    ]
 
 
 def _consume_cancel(ctx: RunContext) -> bool:
@@ -645,52 +652,54 @@ def _consume_cancel(ctx: RunContext) -> bool:
     return consume_cancel(ctx.identity.project, ctx.identity.run_id)
 
 
-def _collect_row_errors(df: pd.DataFrame, contribution: StageContribution) -> None:
-    """`pd.isna`, not truthiness: the empty string a message-less exception yields is a failure too."""
-    if ROW_ERROR_KEY not in df.columns:
+def _collect_row_errors(rows: Sequence[Row], contribution: StageContribution) -> None:
+    """`is_null_form`, not truthiness: the empty string a message-less exception yields is a failure too."""
+    if not any(ROW_ERROR_KEY in row for row in rows):
         return
     contribution.row_errors = [
-        RowError(row=position, message=str(value))
-        for position, value in enumerate(df[ROW_ERROR_KEY])
-        if not pd.isna(value)
+        RowError(row=position, message=str(row[ROW_ERROR_KEY]))
+        for position, row in enumerate(rows)
+        if ROW_ERROR_KEY in row and not is_null_form(row[ROW_ERROR_KEY])
     ]
 
 
-def _collect_row_usage(df: pd.DataFrame, contribution: StageContribution) -> None:
-    if ROW_USAGE_KEY not in df.columns:
+def _collect_row_usage(rows: Sequence[Row], contribution: StageContribution) -> None:
+    if not any(ROW_USAGE_KEY in row for row in rows):
         return
-    parts = [value for value in df[ROW_USAGE_KEY] if isinstance(value, LlmUsage)]
+    parts = [row[ROW_USAGE_KEY] for row in rows if isinstance(row.get(ROW_USAGE_KEY), LlmUsage)]
     contribution.llm_usage = LlmUsage.summed(parts)
 
 
-def _collect_cached_rows(df: pd.DataFrame, contribution: StageContribution) -> None:
-    if ROW_CACHED_KEY not in df.columns:
+def _collect_cached_rows(rows: Sequence[Row], contribution: StageContribution) -> None:
+    # Only when a row carried the marker: no hits reports no count, not a zero.
+    if not any(ROW_CACHED_KEY in row for row in rows):
         return
-    contribution.cached_rows = int(sum(value is True for value in df[ROW_CACHED_KEY]))
+    contribution.cached_rows = sum(1 for row in rows if row.get(ROW_CACHED_KEY) is True)
 
 
 def _trim_to_declared_columns(
-    workflow_stage: WorkflowStage, df: pd.DataFrame, contribution: StageContribution
-) -> pd.DataFrame:
+    workflow_stage: WorkflowStage, table: pa.Table, contribution: StageContribution
+) -> pa.Table:
     output_schema = workflow_stage.output_schema
     declared = [c.name for c in output_schema.columns] if output_schema else []
     if not declared:
-        return df
-    if not len(df.columns) and not len(df):
+        return table
+    if not table.num_columns and not table.num_rows:
         # Not a violation: no mapper result named a single column, so no row
-        # failed to produce a declared one. The driver gives this frame the
+        # failed to produce a declared one. The driver gives this table the
         # promised columns (_finish_empty_result).
-        return df
-    missing = [name for name in declared if name not in df.columns]
+        return table
+    missing = [name for name in declared if name not in table.column_names]
     if missing and not contribution.row_errors:
         raise ValueError(
             f"stage '{workflow_stage.id}' declares output column(s) {missing} that it did not "
-            f"produce; the frame carries {[str(c) for c in df.columns]}. A declared "
+            f"produce; the frame carries {list(table.column_names)}. A declared "
             "column is what downstream stages are entitled to read — it can be neither "
             "invented nor dropped from the projection."
         )
-    df = df.reindex(columns=[*df.columns, *missing]) if missing else df
-    dropped = [str(c) for c in df.columns if c not in declared]
+    dropped = [name for name in table.column_names if name not in declared]
     if dropped:
         contribution.dropped_columns = dropped
-    return df[declared]
+    for name in missing:
+        table = table.append_column(name, pa.nulls(table.num_rows))
+    return table.select(declared)

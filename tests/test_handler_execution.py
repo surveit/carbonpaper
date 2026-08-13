@@ -248,15 +248,15 @@ class _MarksEveryRowAndKeepsTheFrame:
     def __call__(self, row, index):
         return _mark_row_with_every_marker(row, index)
 
-    def finish_mapped_rows(self, stage, df, ctx, contribution):
-        self.seen.append(df.copy())
+    def finish_mapped_rows(self, stage, rows, ctx, contribution):
+        self.seen.append([dict(row) for row in rows])
 
 
 class _MapperWhosePostMapStepRaises:
     def __call__(self, row, index):
         return dict(row)
 
-    def finish_mapped_rows(self, stage, df, ctx, contribution):
+    def finish_mapped_rows(self, stage, rows, ctx, contribution):
         raise RuntimeError("post-map step said stop")
 
 
@@ -266,7 +266,7 @@ def test_row_driver_runs_the_mappers_own_post_map_step_after_the_map():
     handler.execute(place_stage(_row_stage()), as_inputs({"src": pd.DataFrame({"x": [1, 2, 3]})}), make_run_context())
     [collected] = mapper.seen
     assert len(collected) == 3  # every mapped row
-    assert {ROW_ERROR_KEY, ROW_USAGE_KEY, ROW_DEFERRED_KEY} <= set(collected.columns)
+    assert {ROW_ERROR_KEY, ROW_USAGE_KEY, ROW_DEFERRED_KEY} <= set(collected[0])
 
 
 def test_row_driver_lets_a_mappers_post_map_step_raise_out_of_execute():
