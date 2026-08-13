@@ -26,7 +26,7 @@ _OWNERS: frozenset[str] = frozenset({"app/core/frames.py"})
 # while it is in progress — a module going 20 → 8 registers instead of looking
 # untouched until its last signature goes.
 #
-# 94 signatures across 27 modules to burn down, `app/core/frames.py` excluded as
+# 77 signatures across 26 modules to burn down, `app/core/frames.py` excluded as
 # the owner. It was 154 across 33 before arrow became the wire format: every stage
 # handler stopped naming pandas in its signature, and the executor went 13 → 2.
 _ALLOWLIST: Mapping[str, int] = {
@@ -42,9 +42,9 @@ _ALLOWLIST: Mapping[str, int] = {
     "app/runtime/stage_output.py": 1,
     "app/runtime/stage_tests.py": 3,
     "app/runtime/stages/aggregate.py": 7,
-    "app/runtime/stages/execution.py": 11,
+    "app/runtime/stages/execution.py": 1,
     "app/runtime/stages/frame_caching.py": 2,
-    "app/runtime/stages/human_review_queue.py": 7,
+    "app/runtime/stages/human_review_queue.py": 6,
     "app/runtime/stages/input_data.py": 1,
     "app/runtime/stages/join.py": 1,
     "app/runtime/stages/python_functions.py": 1,

@@ -7,6 +7,7 @@ writes a fingerprints sidecar POSITIONALLY aligned to the snapshot's rows, and h
 from __future__ import annotations
 
 from dataclasses import dataclass
+from collections.abc import Sequence
 from functools import partial
 from pathlib import Path
 from typing import ClassVar
@@ -117,10 +118,12 @@ class _QueueRowMapper:
     def finish_mapped_rows(
         self,
         workflow_stage: WorkflowStage,
-        df: pd.DataFrame,
+        rows: Sequence[Row],
         ctx: RunContext,
         contribution: StageContribution,
     ) -> None:
+        # The stats and pending scan are pandas work; materialize at this edge.
+        df = pd.DataFrame(list(rows))
         stage = workflow_stage.stage
         contribution.human_review_queue_stats = _compute_queue_stats(self._queue, df)
         pending = _order_pending_reviews(self._queue.sort, _find_pending_reviews(df), stage.id)

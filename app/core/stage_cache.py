@@ -51,12 +51,14 @@ class StageCacheEntry(PersistedModel):
         return StageCache()
 
 
-# Bumped when a change moves cache keys for SOME rows but not others — reading
-# stage outputs as arrow rather than pandas moves an int column that met a null
-# (float64 `1.0` became int64 `1`) and leaves every other column where it was.
-# A partial move is the dangerous shape: the survivors still hit, so a stale
-# entry is indistinguishable from a fresh one. This makes the invalidation total.
-_CACHE_KEY_VERSION = 2
+# Bumped when a change moves cache keys for SOME rows but not others. A partial
+# move is the dangerous shape: the survivors still hit, so a stale entry is
+# indistinguishable from a fresh one. This makes each invalidation total.
+#   v2 — stage outputs are read as arrow, so an int column that met a null came
+#        back int64 `1` rather than float64 `1.0`.
+#   v3 — the row driver assembles its output as arrow too, so the same shift
+#        happens to a column a MAPPER produced, not only one read off disk.
+_CACHE_KEY_VERSION = 3
 
 
 def _build_cache_prefix(project: str, stage_id: str, stage_fingerprint: str) -> str:
