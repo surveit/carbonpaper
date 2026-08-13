@@ -10,8 +10,7 @@ import pyarrow as pa
 from app.core.errors import NoRowsToSelectFrom
 from app.core.frames import frame_to_table, table_to_frame
 from app.core.row_search import InputRows
-from app.core.run_status import FINISHED_STAGE_STATUSES
-from app.models.run_manifest import StageRecord
+from app.models.run_manifest import FINISHED_STAGE_STATUSES, StageRecord
 from app.models.schema import StageId, TableSchema
 from app.services.frame_profile import profile_table
 from app.services.run import RunEntry, list_run_entries, read_stage_output

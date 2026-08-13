@@ -59,6 +59,11 @@ class StageErrorInfo(BaseModel):
     traceback: str | None
 
 
+# The stage statuses whose output frame holds what the stage promised. An `error`
+# stage also wrote a frame, but its untouched columns are nulls rather than results.
+FINISHED_STAGE_STATUSES = (StageStatus.OK, StageStatus.VALIDATION_WARNINGS)
+
+
 class StageRecord(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 

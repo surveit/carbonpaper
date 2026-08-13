@@ -19,7 +19,7 @@ from app.core.errors import (
     RunNotFoundError,
 )
 from app.core.frames import convert_row_to_json_cells, list_rows
-from app.core.run_status import FINISHED_STAGE_STATUSES
+from app.models.run_manifest import FINISHED_STAGE_STATUSES
 from app.core.source_files import SheetSurvey
 from app.core.column_profile import TableProfile
 from app.models.review_guide import ReviewGuideDraft
