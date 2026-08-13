@@ -10,11 +10,11 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable
 
-import pandas as pd
+import pyarrow as pa
 from pydantic import create_model
 
 from app.core.agent.usage import LlmUsage
-from app.core.frames import list_rows
+from app.core.frames import list_table_rows
 from app.models import WorkflowStage
 from app.models.schema import Column, TableSchema
 from app.models.stages.llm_transform import LLMTransformStage
@@ -33,8 +33,9 @@ _ROW_NUMBER_FIELD = "row_number"
 
 # ── batch_size == 1: per-row path (grain + order + independence by construction) ──
 def make_llm_row_mapper(
-    workflow_stage: WorkflowStage, ctx: RunContext, src: pd.DataFrame
+    workflow_stage: WorkflowStage, ctx: RunContext, src: pa.Table
 ) -> RowMapper:
+    """A row's reply depends only on that row: neither the frame nor the row's position is read."""
     stage = narrow_stage(workflow_stage, LLMTransformStage)
     llm = stage.llm
 
@@ -64,7 +65,7 @@ def make_llm_row_mapper(
 # ── batch_size > 1: batched path (grain + order preserved and VERIFIED) ──
 def run_llm_batches(
     workflow_stage: WorkflowStage,
-    inputs: dict[str, pd.DataFrame],
+    inputs: dict[str, pa.Table],
     ctx: RunContext,
     parallelism: int,
     positions: list[int],
@@ -74,7 +75,7 @@ def run_llm_batches(
     batch_reply_schema = _build_batch_reply_schema(stage)
 
     src = inputs[workflow_stage.inputs[0].id]
-    records: list[Row] = list_rows(src)
+    records: list[Row] = list_table_rows(src)
 
     results: list[Row | None] = [None] * len(records)
     process_chunk = _build_chunk_processor(

@@ -16,7 +16,7 @@ from app.runtime.key_coverage import find_key_coverage_issues
 from app.runtime.runner import execute_run
 from app.services.project import save_working_copy_as_version
 from app.web.run_issues import build_run_issues
-from conftest import pinned_stages, place_stage
+from conftest import as_inputs, pinned_stages, place_stage
 from stage_seed import add_stage
 
 # The 50 states and DC — the 51 jurisdictions the published table ranked.
@@ -72,7 +72,7 @@ _STATE_KEY = [{"left": "state", "right": "state"}]
 def _issues(subject, reference, keys=None):
     return find_key_coverage_issues(
         _enrich(keys or _STATE_KEY),
-        {"arrivals": subject, "jurisdictions": reference},
+        as_inputs({"arrivals": subject, "jurisdictions": reference}),
     )
 
 

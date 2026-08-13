@@ -63,6 +63,13 @@ class FrameNotSerializableError(Exception):
     """A dtype/shape parquet cannot represent. A disk/OS error is NOT reported this way — it propagates."""
 
 
+# Named rather than null-filled: a union's inputs are declared schema-identical,
+# so a column present on one side and not the other is a bug upstream, not a
+# shape for the concatenation to paper over with a value nothing supplied.
+class FrameConcatMismatchError(ValueError):
+    """Tables given to `concat_tables` disagree on their column names."""
+
+
 class ProjectExistsError(Exception):
     pass
 

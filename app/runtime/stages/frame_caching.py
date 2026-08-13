@@ -8,14 +8,14 @@ from typing import NamedTuple
 import pandas as pd
 
 from app.models import WorkflowStage
-from app.models.run_manifest import StageContribution
 
+from app.core.frames import table_to_frame
 from app.core.errors import FrameNotSerializableError
 from app.core.frames import is_frame_store_configured
 from app.core.stage_cache import ReadOnlyStageCache, StageCache
 
 from ..context import RunContext
-from ..manifest import CONTRIBUTION_ATTR
+from ..stage_output import StageOutput
 
 
 class StageCacheKey(NamedTuple):
@@ -68,18 +68,20 @@ def find_cached_frame(
 
 
 def note_skipped_caching(
-    output: pd.DataFrame | None, skipped_note: str | None
-) -> pd.DataFrame | None:
+    output: StageOutput | None, skipped_note: str | None
+) -> StageOutput | None:
+    """A stage that produced no output has nowhere to report from, so the note is dropped."""
     if output is not None and skipped_note is not None:
-        _note_on_contribution(output, skipped_note)
+        output.contribution.notes.append(skipped_note)
     return output
 
 
 def record_frame_output(
     caching: FrameCaching,
     input_frames: list[pd.DataFrame],
-    output: pd.DataFrame | None,
-) -> pd.DataFrame | None:
+    output: StageOutput | None,
+) -> StageOutput | None:
+    """A frame parquet cannot hold is left uncached and noted, rather than failing the run."""
     if output is None or caching.key is None or caching.writer is None:
         return output
     try:
@@ -88,16 +90,8 @@ def record_frame_output(
             stage_id=caching.key.stage_id,
             stage_fingerprint=caching.key.stage_fingerprint,
             input_frames=input_frames,
-            frame=output,
+            frame=table_to_frame(output.table),
         )
     except FrameNotSerializableError as exc:
-        _note_on_contribution(output, f"Stage output left uncached: {exc}")
+        output.contribution.notes.append(f"Stage output left uncached: {exc}")
     return output
-
-
-def _note_on_contribution(frame: pd.DataFrame, note: str) -> None:
-    contribution = frame.attrs.get(CONTRIBUTION_ATTR)
-    if not isinstance(contribution, StageContribution):
-        contribution = StageContribution()
-        frame.attrs[CONTRIBUTION_ATTR] = contribution
-    contribution.notes.append(note)

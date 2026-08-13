@@ -30,9 +30,10 @@ from app.runtime.run_log import (
     read_events_since,
     unbind_detail_sink,
 )
+from app.runtime.stage_output import StageOutput
 from app.runtime.stages import HANDLERS
 from app.runtime.stages.llm_transform import run_llm_batches
-from conftest import make_run_context, place_stage
+from conftest import as_inputs, make_run_context, place_stage
 
 PROJECT = "run-log-tests"
 
@@ -86,8 +87,9 @@ def _events(run_id: str, log: RunLog) -> list[dict[str, Any]]:
     return read_events_since(PROJECT, run_id, 0)
 
 
-def _run(stage: Stage, values: list[int], ctx: RunContext) -> pd.DataFrame:
-    out = HANDLERS[StageType(stage.type)].execute(place_stage(stage), {"src": pd.DataFrame({"x": values})}, ctx
+def _run(stage: Stage, values: list[int], ctx: RunContext) -> StageOutput:
+    out = HANDLERS[StageType(stage.type)].execute(
+        place_stage(stage), as_inputs({"src": pd.DataFrame({"x": values})}), ctx
     )
     assert out is not None
     return out
@@ -149,7 +151,9 @@ def test_a_batched_chunk_binds_the_input_rows_it_actually_covers(tmp_path, monke
         "app.runtime.stages.llm_transform.call_llm_batch", fake_call_llm_batch
     )
     ctx, log = _logged_ctx(tmp_path, "batched")
-    rows = run_llm_batches(place_stage(_llm_stage(batch_size=2)), {"src": pd.DataFrame({"x": [7, 8]})}, ctx, 1, [3, 4]
+    rows = run_llm_batches(
+        place_stage(_llm_stage(batch_size=2)),
+        as_inputs({"src": pd.DataFrame({"x": [7, 8]})}), ctx, 1, [3, 4]
     )
 
     assert [row["verdict"] for row in rows] == ["a", "b"]
@@ -167,17 +171,17 @@ def test_the_batched_path_logs_replayed_and_computed_rows_apart(tmp_path, monkey
     def fake_run_batches(stage, inputs, ctx, parallelism, positions):
         handed.append(list(positions))
         return [{**row, "verdict": f"v{row['x']}"}
-                for row in inputs[stage.inputs[0].id].to_dict("records")]
+                for row in inputs[stage.inputs[0].id].to_pylist()]
 
     monkeypatch.setattr(handler, "run_batches", fake_run_batches)
     stage = _llm_stage(batch_size=2)
 
     seed_ctx, seed_log = _logged_ctx(tmp_path, "seed")
-    handler.execute(place_stage(stage), {"src": pd.DataFrame({"x": [1, 2]})}, seed_ctx)
+    handler.execute(place_stage(stage), as_inputs({"src": pd.DataFrame({"x": [1, 2]})}), seed_ctx)
     seed_log.close()
 
     ctx, log = _logged_ctx(tmp_path, "replay")
-    handler.execute(place_stage(stage), {"src": pd.DataFrame({"x": [1, 2, 3]})}, ctx)
+    handler.execute(place_stage(stage), as_inputs({"src": pd.DataFrame({"x": [1, 2, 3]})}), ctx)
 
     assert handed == [[0, 1], [2]]
     assert _row_events(_events("replay", log)) == [

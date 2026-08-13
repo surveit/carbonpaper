@@ -3,10 +3,10 @@ from __future__ import annotations
 
 import pandas as pd
 
+from conftest import as_inputs, place_stage, rows_of
 from app.models import parse_stage
 from app.runtime.context import RunContext
 from app.runtime.stages.aggregate import handle_aggregate
-from conftest import place_stage
 
 # `a` repeats a registrant, `b` has nothing but nulls, `c` mixes a value with a null.
 FILINGS = pd.DataFrame({
@@ -31,7 +31,7 @@ def _counts() -> pd.DataFrame:
              "value_column": "registrant"}]},
     })
     ctx = RunContext.for_stages_outside_a_run(repo_root=None, run_dir=None)
-    return handle_aggregate(place_stage(stage), {"filings": FILINGS}, ctx)
+    return rows_of(handle_aggregate(place_stage(stage), as_inputs({"filings": FILINGS}), ctx))
 
 
 def _by_firm() -> dict[str, int]:

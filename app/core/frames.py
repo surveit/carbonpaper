@@ -17,7 +17,7 @@ import pyarrow as pa
 import pyarrow.lib as pa_lib
 import pyarrow.parquet as pq
 
-from app.core.errors import FrameNotSerializableError
+from app.core.errors import FrameConcatMismatchError, FrameNotSerializableError
 from app.core.persistence import validate_id
 from app.core.utils import compute_short_hash
 
@@ -137,6 +137,68 @@ def read_frame_column_names(path: Path) -> list[str]:
         # Every writer here saves with index=False, so there is no index column to subtract.
         return [str(name) for name in pq.read_schema(path).names]
     return [str(name) for name in pd.read_csv(path, nrows=0).columns]
+
+
+# Concatenation is permissive about two things and strict about everything else.
+# It promotes an all-null column (arrow `null`) to the type its sibling carries,
+# and joins an int column to a double one — the shape pandas leaves behind when a
+# null upcast a column before it reached the wire. A genuine conflict (str vs
+# int) raises, where `pd.concat` would have merged it into an untyped object
+# column. Differing column NAMES raise too: permissive promotion would otherwise
+# fill the missing column with a value nothing supplied.
+def concat_tables(tables: Sequence[pa.Table]) -> pa.Table:
+    if not tables:
+        return pa.table({})
+    _reject_mismatched_columns(tables)
+    return pa.concat_tables(tables, promote_options="permissive")
+
+
+def _reject_mismatched_columns(tables: Sequence[pa.Table]) -> None:
+    """Column ORDER is not checked: arrow matches fields by name and keeps the first table's."""
+    reference = set(tables[0].schema.names)
+    for position, table in enumerate(tables[1:], start=1):
+        names = set(table.schema.names)
+        if names != reference:
+            raise FrameConcatMismatchError(
+                f"table {position} does not carry the same columns as table 0: "
+                f"only in table 0 {sorted(reference - names)}, "
+                f"only in table {position} {sorted(names - reference)}"
+            )
+
+
+# ── the arrow/pandas seam ────────────────────────────────────────────────────
+# Arrow is the wire format: what a stage is handed, returns, and is stored,
+# hashed and validated as. pandas is materialized only where authored code reads
+# a frame, and coerced back on the way out. These four
+# are that boundary, and the only place the two type systems meet.
+
+
+# Through the same `types_mapper` a store read uses, so a list cell is a `list`.
+def table_to_frame(table: pa.Table) -> pd.DataFrame:
+    """An arrow table as pandas."""
+    return table.to_pandas(types_mapper=_map_list_type_to_arrow_dtype)
+
+
+def frame_to_table(frame: pd.DataFrame) -> pa.Table:
+    """The inverse. `attrs` is dropped: pandas tries to JSON-serialize it into arrow
+    metadata."""
+    untagged = frame.copy(deep=False)
+    untagged.attrs = {}
+    return pa.Table.from_pandas(untagged, preserve_index=False)
+
+
+def list_table_rows(table: pa.Table) -> list[dict[str, Any]]:
+    """One dict per row — the row driver's view, and arrow's `.as_py()` throughout."""
+    return table.to_pylist()
+
+
+# `like` supplies the schema for an EMPTY result, where the rows name no column
+# and arrow would otherwise infer a 0x0 table.
+def table_from_rows(rows: list[dict[str, Any]], like: pa.Table | None = None) -> pa.Table:
+    """Rows back into a table."""
+    if rows:
+        return pa.Table.from_pylist(rows)
+    return like.schema.empty_table() if like is not None else pa.table({})
 
 
 def list_rows(frame: pd.DataFrame) -> list[dict[str, Any]]:

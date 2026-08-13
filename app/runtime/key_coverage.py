@@ -9,8 +9,9 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 
 import pandas as pd
+import pyarrow as pa
 
-from app.core.frames import convert_cell_to_json_native
+from app.core.frames import convert_cell_to_json_native, table_to_frame
 from app.models import WorkflowStage
 from app.models.severity import UserFacingErrorSeverity
 from app.models.stages.join import JoinStage
@@ -44,7 +45,7 @@ UNCOMPARABLE_KEY = (
 
 
 def find_key_coverage_issues(
-    workflow_stage: WorkflowStage, inputs: Mapping[str, pd.DataFrame]
+    workflow_stage: WorkflowStage, inputs: Mapping[str, pa.Table]
 ) -> list[Issue]:
     stage = workflow_stage.stage
     if not isinstance(stage, JoinStage):
@@ -55,8 +56,10 @@ def find_key_coverage_issues(
 
     left = [key.left for key in stage.join.keys]
     right = [key.right for key in stage.join.keys]
-    subject = _read_key_values(inputs[subject_id], left)
-    reference = _read_key_values(inputs[reference_id], right)
+    # Only a join reads keys, so the materialization is paid here rather than by
+    # every stage the executor validates.
+    subject = _read_key_values(table_to_frame(inputs[subject_id]), left)
+    reference = _read_key_values(table_to_frame(inputs[reference_id]), right)
     if subject is None or reference is None:
         return [Issue(UserFacingErrorSeverity.warning, "+".join(left), UNCOMPARABLE_KEY)]
 

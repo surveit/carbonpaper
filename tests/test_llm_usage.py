@@ -8,7 +8,9 @@ from app.core.agent.usage import LlmUsage
 from app.models import parse_stage, Stage
 from app.models.stage import StageType
 from app.runtime.stages import HANDLERS
-from conftest import contribution_of, make_run_context, pinned_stages, place_stage
+from conftest import (
+    as_inputs, contribution_of, make_run_context, pinned_stages, place_stage, rows_of,
+)
 from stage_seed import add_stage
 
 
@@ -66,20 +68,24 @@ def test_row_usage_key_never_reaches_stage_output(monkeypatch):
     monkeypatch.setattr(lt, "call_llm", _fake_call_llm(
         {"score": 5}, LlmUsage(input_tokens=10, output_tokens=4, cost_usd=0.001, calls=1)))
     ctx = make_run_context()
-    out = HANDLERS[StageType.llm_transform].execute(place_stage(_llm_stage(), load={"columns": [
-        {"name": "id", "type": "str", "nullable": True},
-        {"name": "text", "type": "str", "nullable": True}]}), {"load": pd.DataFrame({"id": ["r1", "r2"], "text": ["a", "b"]})}, ctx)
-    assert lt.ROW_USAGE_KEY not in out.columns
-    assert list(out.columns) == ["id", "text", "score"]
+    out = HANDLERS[StageType.llm_transform].execute(
+        place_stage(
+            _llm_stage(), load={"columns": [
+            {"name": "id", "type": "str", "nullable": True},
+            {"name": "text", "type": "str", "nullable": True}]}), as_inputs({"load": pd.DataFrame({"id": ["r1", "r2"], "text": ["a", "b"]})}), ctx)
+    assert lt.ROW_USAGE_KEY not in rows_of(out).columns
+    assert list(rows_of(out).columns) == ["id", "text", "score"]
 
 
 def test_row_usage_sums_across_rows_into_ctx(monkeypatch):
     monkeypatch.setattr(lt, "call_llm", _fake_call_llm(
         {"score": 5}, LlmUsage(input_tokens=10, output_tokens=4, cost_usd=0.001, calls=1)))
     ctx = make_run_context()
-    out = HANDLERS[StageType.llm_transform].execute(place_stage(_llm_stage(), load={"columns": [
-        {"name": "id", "type": "str", "nullable": True},
-        {"name": "text", "type": "str", "nullable": True}]}), {"load": pd.DataFrame({"id": ["r1", "r2", "r3"], "text": ["a", "b", "c"]})}, ctx)
+    out = HANDLERS[StageType.llm_transform].execute(
+        place_stage(
+            _llm_stage(), load={"columns": [
+            {"name": "id", "type": "str", "nullable": True},
+            {"name": "text", "type": "str", "nullable": True}]}), as_inputs({"load": pd.DataFrame({"id": ["r1", "r2", "r3"], "text": ["a", "b", "c"]})}), ctx)
     assert contribution_of(out).llm_usage == LlmUsage(
         input_tokens=30, output_tokens=12, cost_usd=0.003, calls=3)
 
@@ -147,8 +153,10 @@ def test_failed_row_still_records_the_tokens_it_spent(monkeypatch):
         raise RuntimeError("boom")
     monkeypatch.setattr(lt, "call_llm", _call)
     ctx = make_run_context()
-    out = HANDLERS[StageType.llm_transform].execute(place_stage(_llm_stage(), load={"columns": [
-        {"name": "id", "type": "str", "nullable": True},
-        {"name": "text", "type": "str", "nullable": True}]}), {"load": pd.DataFrame({"id": ["r1"], "text": ["a"]})}, ctx)
+    out = HANDLERS[StageType.llm_transform].execute(
+        place_stage(
+            _llm_stage(), load={"columns": [
+            {"name": "id", "type": "str", "nullable": True},
+            {"name": "text", "type": "str", "nullable": True}]}), as_inputs({"load": pd.DataFrame({"id": ["r1"], "text": ["a"]})}), ctx)
     assert contribution_of(out).llm_usage == LlmUsage(
         input_tokens=8, output_tokens=0, cost_usd=0.0005, calls=1)

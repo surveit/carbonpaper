@@ -6,13 +6,15 @@ import inspect
 from pathlib import Path
 from typing import Any, Callable
 
-import pandas as pd
+import pyarrow as pa
 
 from app.core.errors import TraceLinksUnavailableError
+from app.core.frames import table_to_frame
 from app.models import WorkflowStage
 from app.models.stages.publish import PublishStage
 
 from ..context import RunContext
+from ..stage_output import StageOutput
 from ..trace_links import RowTraceLinker
 from .execution import narrow_stage
 from .python_functions import _load_python_function
@@ -21,17 +23,18 @@ TRACE_LINKS_KWARG = "trace_links"
 
 
 def handle_publish(
-    workflow_stage: WorkflowStage, inputs: dict[str, pd.DataFrame], ctx: RunContext
-) -> pd.DataFrame:
+    workflow_stage: WorkflowStage, inputs: dict[str, pa.Table], ctx: RunContext
+) -> StageOutput:
+    """Gets the frames positionally, an `output_dir` kwarg, and `trace_links` only if declared."""
     publish_stage = narrow_stage(workflow_stage, PublishStage)
     output_dir = _prepare_output_dir(publish_stage, ctx)
     fn = _load_python_function(publish_stage)
-    args = [inputs[ref.id] for ref in workflow_stage.inputs]
+    args = [table_to_frame(inputs[ref.id]) for ref in workflow_stage.inputs]
 
     linker = _resolve_trace_linker(fn, publish_stage, ctx)
     if linker is None:
-        return fn(*args, output_dir=str(output_dir))
-    return fn(*args, output_dir=str(output_dir), trace_links=linker)
+        return StageOutput.from_frame(fn(*args, output_dir=str(output_dir)))
+    return StageOutput.from_frame(fn(*args, output_dir=str(output_dir), trace_links=linker))
 
 
 def _prepare_output_dir(stage: PublishStage, ctx: RunContext) -> Path:

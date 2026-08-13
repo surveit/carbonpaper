@@ -300,3 +300,45 @@ def test_empty_dataframe_raises_no_type_issue():
     report, issues = _issues_for("v", pd.DataFrame({"v": []}), schema)
     assert issues == []
     assert report.ok
+
+
+# ── the arrow-schema type prover ─────────────────────────────────────────────
+# Replaces the pandas-dtype one. pandas parks a list, a dict and mixed junk alike
+# in `object`, so the old prover answered "no" for every column that mattered and
+# validation fell through to a per-cell Python loop. Arrow types a list column,
+# so these are proved from the schema without a cell being read.
+
+
+def _one_column(name, values, **column):
+    return _issues_for(name, pd.DataFrame({name: values}),
+                       _schema(columns=[{"name": name, "nullable": True, **column}]))
+
+
+def test_a_list_of_str_column_is_accepted():
+    _, issues = _one_column("tags", [["a", "b"], ["c"]], type="list[str]")
+    assert issues == []
+
+
+def test_a_list_column_holding_the_wrong_element_type_is_still_caught():
+    """The prover must not rubber-stamp any list — arrow types the ELEMENT too."""
+    _, issues = _one_column("tags", [[1, 2], [3]], type="list[str]")
+    assert len(issues) == 1 and "list[str]" in issues[0].message
+
+
+# pandas promotes an int column to float64 on meeting a null, so a whole-valued
+# float there survived a lossy round trip rather than being a type error.
+def test_a_declared_int_column_pandas_upcast_to_float_still_passes():
+    _, issues = _one_column("n", [1, None, 3], type="int")
+    assert issues == []
+
+
+def test_a_genuinely_fractional_value_in_an_int_column_is_still_caught():
+    _, issues = _one_column("n", [1, 1.5], type="int")
+    assert len(issues) == 1 and "'int'" in issues[0].message
+
+
+# A column mixing an int with a str is the reason validation exists: it must be
+# reported, never raised.
+def test_a_column_of_mixed_types_is_reported_not_crashed():
+    _, issues = _one_column("m", [1, "a"], type="int")
+    assert len(issues) == 1 and "not of declared type" in issues[0].message

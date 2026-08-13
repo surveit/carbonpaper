@@ -39,17 +39,17 @@ def test_the_example_code_matches_its_stated_corner_cases(spec: dict) -> None:
     from app.models.errors import StepRefused
     from app.models.stage import StageType
     from app.runtime.stages import HANDLERS
-    from conftest import make_run_context
+    from conftest import rows_of, as_inputs, make_run_context
 
     stage = parse_stage(spec)
     handler = HANDLERS[StageType.starlark_row_function]
     blank = pd.DataFrame([{"filing_id": "F1", "reported_amount": None}])
-    out = handler.execute(place_stage(stage), {"filings": blank}, make_run_context())
-    assert out is not None and out["amount_usd"].isna().all()
+    out = handler.execute(place_stage(stage), as_inputs({"filings": blank}), make_run_context())
+    assert out is not None and rows_of(out)["amount_usd"].isna().all()
 
     euros = pd.DataFrame([{"filing_id": "F2", "reported_amount": "\u20ac45,00"}])
     with pytest.raises(StepRefused):
-        handler.execute(place_stage(stage), {"filings": euros}, make_run_context())
+        handler.execute(place_stage(stage), as_inputs({"filings": euros}), make_run_context())
 
 
 def test_the_example_reaches_both_authoring_prompts() -> None:

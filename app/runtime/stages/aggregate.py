@@ -6,8 +6,10 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 
 from app.core.predicate import parse_predicate
+from app.core.frames import table_to_frame
 from app.models import WorkflowStage
 from app.models.stages.aggregate import (
     AGG_FORMULA_COUNT,
@@ -19,7 +21,8 @@ from app.models.stages.aggregate import (
 )
 
 from ..context import RunContext
-from ..lineage import attach_row_lineage, grouped_contributions_lineage
+from ..stage_output import StageOutput
+from ..lineage import grouped_contributions_lineage
 from .execution import narrow_stage
 
 # Carries each input row's ordinal through the same grouping the numbers go
@@ -29,13 +32,13 @@ ORDINAL_KEY = "_trace_aggregate_ord"
 
 
 def handle_aggregate(
-    workflow_stage: WorkflowStage, inputs: dict[str, pd.DataFrame], ctx: RunContext
-) -> pd.DataFrame:
+    workflow_stage: WorkflowStage, inputs: dict[str, pa.Table], ctx: RunContext
+) -> StageOutput:
     agg_cfg = narrow_stage(workflow_stage, AggregateStage).aggregate
     input_id = workflow_stage.inputs[0].id
-    df = inputs[input_id]
+    df = table_to_frame(inputs[input_id])
     if not agg_cfg.aggregations:
-        return pd.DataFrame(columns=agg_cfg.group_by)
+        return StageOutput.from_frame(pd.DataFrame(columns=agg_cfg.group_by))
 
     rows = df.copy()
     rows[ORDINAL_KEY] = np.arange(len(df))
@@ -43,8 +46,8 @@ def handle_aggregate(
         results, contributors = _aggregate_by_group(rows, agg_cfg.group_by, agg_cfg.aggregations)
     else:
         results, contributors = _reduce_whole_frame(rows, agg_cfg.aggregations)
-    return attach_row_lineage(
-        results, grouped_contributions_lineage(input_id, contributors))
+    return StageOutput.from_frame(
+        results, lineage=grouped_contributions_lineage(input_id, contributors))
 
 
 def _aggregate_by_group(

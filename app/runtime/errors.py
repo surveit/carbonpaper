@@ -30,4 +30,16 @@ class PreviewError(Exception):
 
 
 class RunCancelled(Exception):
-    pass
+    """An internal control signal the runner catches to stop the run; never shown as an error."""
+
+
+# Raised BEFORE the frame is coerced to arrow, so the caller can tell an authored
+# function that returned the wrong thing from one that refused: a refusal raises
+# StepRefused and satisfies an expected-failure test, this does not.
+class AuthoredFrameExpected(TypeError):
+    """An authored `transform`/publish function returned something other than a DataFrame."""
+
+    def __init__(self, message: str, returned: str) -> None:
+        super().__init__(message)
+        # The type name alone, so a caller can report the return without the stage prefix.
+        self.returned = returned

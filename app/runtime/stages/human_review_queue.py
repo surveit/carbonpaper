@@ -12,7 +12,9 @@ from pathlib import Path
 from typing import ClassVar
 
 import pandas as pd
+import pyarrow as pa
 
+from app.core.frames import table_to_frame
 from app.core.frames import write_frame_file_with_csv_fallback
 from app.core.persistence import PersistedModel, PersistenceScope
 from app.core.predicate import parse_predicate
@@ -64,14 +66,24 @@ class PendingReview:
 
 
 def make_human_review_mapper(
-    workflow_stage: WorkflowStage, ctx: RunContext, src: pd.DataFrame
+    workflow_stage: WorkflowStage, ctx: RunContext, src: pa.Table
 ) -> RowMapper:
+    """The callable that decides one row's outcome for one execution of this stage."""
     queue_stage = narrow_stage(workflow_stage, HumanReviewQueueStage)
     queue = queue_stage.queue
-    validate_reviewed_sources_present(queue, src, queue_stage.id)
+    # The queue's source-column check reads rows, so this handler materializes at
+    # its own edge.
+    src_frame = table_to_frame(src)
+    # The one place every path through this stage passes, so the frame is checked
+    # against the declared columns before a row is mapped, a snapshot written or a
+    # halt raised.
+    validate_reviewed_sources_present(queue, src_frame, queue_stage.id)
+    # Auto-approve is answered here and goes no further: `_approve_row` reaches for
+    # no project scope, no cache, no disk and no filter, so a run carrying none of
+    # those can still pass a queue stage through.
     if ctx.params.queue_auto_approve:
         return partial(_approve_row, queue)
-    return _QueueRowMapper(queue_stage, queue, ctx, src)
+    return _QueueRowMapper(queue_stage, queue, ctx, src_frame)
 
 
 def validate_reviewed_sources_present(

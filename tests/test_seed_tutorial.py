@@ -27,7 +27,7 @@ from app.tools.tutorial import (
     read_seed_eval_config,
     seed_tutorial_project,
 )
-from conftest import make_run_context, pinned_stages, place_stage
+from conftest import as_inputs, make_run_context, pinned_stages, place_stage, rows_of
 
 _FIXTURE_PATH = (
     Path(__file__).resolve().parents[1]
@@ -94,9 +94,10 @@ def _stage(wf: WorkflowFile, stage_id: str) -> Stage:
 def _execute(stage: Stage, inputs: dict[str, pd.DataFrame]) -> pd.DataFrame:
     # The same ephemeral, run-dir-less context authored stage tests execute under.
     ctx = RunContext.for_stages_outside_a_run(None, None)
-    result = HANDLERS[StageType(stage.type)].execute(place_stage(stage), inputs, ctx)
+    result = HANDLERS[StageType(stage.type)].execute(
+        place_stage(stage), as_inputs(inputs), ctx)
     assert result is not None
-    return result
+    return rows_of(result)
 
 
 def _all_filings() -> pd.DataFrame:
@@ -574,7 +575,7 @@ def test_the_review_step_queues_the_contradictions_and_halts_the_run(tmp_path):
 
     with pytest.raises(HaltForReview) as halted:
         HANDLERS[StageType.human_review_queue].execute(
-            place_stage(_review_stage()), {_TARGET_STAGE: judged}, ctx)
+            place_stage(_review_stage()), as_inputs({_TARGET_STAGE: judged}), ctx)
 
     assert contradictions > 0
     assert halted.value.pending_count == contradictions
@@ -589,9 +590,9 @@ def _publish_a_report(tmp_path, df: pd.DataFrame) -> str:
     # (project, run_id) is what a row-trace URL is built from.
     ctx = RunContext.for_workflow_test_run(tmp_path, tmp_path, "tutorial", "R-1")
     out = HANDLERS[StageType(stage.type)].execute(
-        place_stage(stage), {_REVIEW_STAGE: df}, ctx)
+        place_stage(stage), as_inputs({_REVIEW_STAGE: df}), ctx)
     assert out is not None
-    return Path(out.iloc[0]["report_path"]).read_text(encoding="utf-8")
+    return Path(rows_of(out).iloc[0]["report_path"]).read_text(encoding="utf-8")
 
 
 def _bound_fixture() -> WorkflowFile:

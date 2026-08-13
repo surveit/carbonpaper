@@ -9,7 +9,10 @@ import importlib
 from typing import Any, Callable
 
 import pandas as pd
+import pyarrow as pa
 
+from app.core.frames import table_to_frame
+from ..errors import AuthoredFrameExpected
 from app.models import FunctionKind, WorkflowStage
 from app.models.stages.code import (
     PythonFrameFunctionStage,
@@ -19,6 +22,7 @@ from app.models.stages.publish import PublishStage
 
 from ..code import load_function
 from ..context import RunContext
+from ..stage_output import StageOutput
 from .execution import Row, RowMapper, narrow_stage
 
 
@@ -43,17 +47,19 @@ def _load_python_function(stage: CodeCarryingStage) -> Callable[..., Any]:
 
 
 def handle_python_frame_function(
-    workflow_stage: WorkflowStage, inputs: dict[str, pd.DataFrame], ctx: RunContext
-) -> pd.DataFrame:
+    workflow_stage: WorkflowStage, inputs: dict[str, pa.Table], ctx: RunContext
+) -> StageOutput:
+    """Whole-frame transform: the function may reshape (group-by, pivot, dedup, merge)."""
     fn = _load_python_function(narrow_stage(workflow_stage, PythonFrameFunctionStage))
     # Pass dataframes positionally in declared input order.
-    args = [inputs[ref.id] for ref in workflow_stage.inputs]
-    return fn(*args)
+    args = [table_to_frame(inputs[ref.id]) for ref in workflow_stage.inputs]
+    return StageOutput.from_frame(_require_frame(fn(*args), workflow_stage))
 
 
 def make_python_row_mapper(
-    workflow_stage: WorkflowStage, ctx: RunContext, src: pd.DataFrame
+    workflow_stage: WorkflowStage, ctx: RunContext, src: pa.Table
 ) -> RowMapper:
+    """One dict in, one dict out: shown neither the frame nor a row's position in it."""
     stage = narrow_stage(workflow_stage, PythonRowFunctionStage)
     fn = _load_python_function(stage)
 
@@ -67,3 +73,14 @@ def make_python_row_mapper(
         return result
 
     return map_row
+
+
+def _require_frame(result: Any, workflow_stage: WorkflowStage) -> pd.DataFrame:
+    """Checked before the coercion to arrow, so a wrong return type is not reported as a crash."""
+    if not isinstance(result, pd.DataFrame):
+        raise AuthoredFrameExpected(
+            f"stage {workflow_stage.id}: function returned {type(result).__name__}, "
+            f"expected a DataFrame",
+            type(result).__name__,
+        )
+    return result

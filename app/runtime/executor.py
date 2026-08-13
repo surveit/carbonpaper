@@ -14,10 +14,16 @@ from pathlib import Path
 from typing import Iterable, NamedTuple
 
 import pandas as pd
+import pyarrow as pa
 
 from app.core.errors import SubsetRunError
 from app.core.frame_checks import find_duplicate_row_violations
-from app.core.frames import write_frame_file, write_frame_file_with_csv_fallback
+from app.core.frames import (
+    frame_to_table,
+    table_to_frame,
+    write_frame_file,
+    write_frame_file_with_csv_fallback,
+)
 from app.models import StageType, Workflow, WorkflowStage
 from app.models.run_manifest import (
     RowError,
@@ -31,17 +37,16 @@ from app.core.run_status import RunStatus, StageStatus
 
 from .cancellation import consume_cancel
 from .context import RunContext, RunIdentity
+from .stage_output import StageOutput
 from .errors import RunCancelled
-from .manifest import CONTRIBUTION_ATTR, RunManifest, create_run_manifest, write_manifest
+from .manifest import RunManifest, create_run_manifest, write_manifest
 from .run_log import RUN_START, STAGE_DONE, STAGE_START, RunLog
 from .stages import HANDLERS, HaltForReview, StageHandler
 from .lineage import (
-    LINEAGE_ATTR,
     RowLineage,
     concatenated_inputs_lineage,
     kept_rows_lineage,
     lineage_sidecar_path,
-    read_row_lineage,
 )
 from app.models.severity import UserFacingErrorSeverity
 from .key_coverage import find_key_coverage_issues
@@ -96,7 +101,9 @@ def run_subset(
         # eval one; the record keeps that separation.
         area=run_dir.parent.name)
     write_manifest(manifest)
-    outputs: dict[str, pd.DataFrame] = dict(injected_outputs)
+    outputs: dict[str, pa.Table] = {
+        sid: frame_to_table(frame) for sid, frame in injected_outputs.items()
+    }
     manifest = _execute_stages(ordered, ctx, manifest, run_dir, outputs)
     _raise_if_run_failed(manifest)
     return outputs
@@ -130,7 +137,7 @@ def _execute_stages(
     ctx: RunContext,
     manifest: RunManifest,
     run_dir: Path,
-    outputs_so_far: dict[str, pd.DataFrame],
+    outputs_so_far: dict[str, pa.Table],
 ) -> RunManifest:
     run_log = RunLog(manifest.project, manifest.run_id)
     run_log.emit({
@@ -152,7 +159,7 @@ def _run_ordered_stages(
     ctx: RunContext,
     manifest: RunManifest,
     run_dir: Path,
-    outputs_so_far: dict[str, pd.DataFrame],
+    outputs_so_far: dict[str, pa.Table],
 ) -> RunManifest:
     halted_stage_ids: list[str] = []
     blocked: set[str] = set()
@@ -240,22 +247,25 @@ def _flush_manifest(
 
 
 def _gather_stage_inputs(
-    workflow_stage: WorkflowStage, outputs_so_far: dict[str, pd.DataFrame],
+    workflow_stage: WorkflowStage, outputs_so_far: dict[str, pa.Table],
     ctx: RunContext, record: StageRecord,
-) -> tuple[dict[str, pd.DataFrame], _RowWindow]:
+) -> tuple[dict[str, pa.Table], _RowWindow]:
     """Cuts the row window BEFORE the duplicate/schema checks, so a limit of 3 isn't failed by row 4,000."""
     sid = workflow_stage.id
     window = _resolve_row_window(workflow_stage, ctx)
-    inputs_for_stage: dict[str, pd.DataFrame] = {}
+    inputs_for_stage: dict[str, pa.Table] = {}
     for ref in workflow_stage.inputs:
         if ref.id not in outputs_so_far:
             raise RuntimeError(f"Upstream stage '{ref.id}' has no output yet")
-        df = _take_row_window(
+        table = _take_row_window(
             outputs_so_far[ref.id], window, f"from input '{ref.id}'", record)
-        _reject_duplicate_input_rows(df, ref.id, sid)
-        inputs_for_stage[ref.id] = df
+        _reject_duplicate_input_rows(table, ref.id, sid)
+        inputs_for_stage[ref.id] = table
+        # Validation is the last thing on this path still reading rows as
+        # pandas; it materializes at its own edge rather than here.
         report = validate_dataframe(
-            df, ref.table_schema, stage_id=sid, phase=f"input:{ref.id}",
+            table_to_frame(table), ref.table_schema,
+            stage_id=sid, phase=f"input:{ref.id}",
         )
         record.input_validation_report.append(report.to_dict())
     return inputs_for_stage, window
@@ -302,18 +312,19 @@ def _resolve_row_window(workflow_stage: WorkflowStage, ctx: RunContext) -> _RowW
 
 
 def _take_row_window(
-    df: pd.DataFrame, window: _RowWindow, source: str, record: StageRecord
-) -> pd.DataFrame:
-    if window.start > 0 and len(df) > 0:
+    table: pa.Table, window: _RowWindow, source: str, record: StageRecord
+) -> pa.Table:
+    """`window` of `table`'s rows; every cut actually taken is noted on `record`, never silent."""
+    if window.start > 0 and len(table) > 0:
         record.add_note(
             f"offset={window.start}: skipped the first "
-            f"{min(window.start, len(df))} of {len(df)} row(s) {source}"
+            f"{min(window.start, len(table))} of {len(table)} row(s) {source}"
         )
-        df = df.iloc[window.start:].reset_index(drop=True).copy()
-    if window.cap is not None and len(df) > window.cap:
-        record.add_note(f"limit={window.cap}: read {window.cap} of {len(df)} row(s) {source}")
-        df = df.head(window.cap).copy()
-    return df
+        table = table.slice(window.start)
+    if window.cap is not None and len(table) > window.cap:
+        record.add_note(f"limit={window.cap}: read {window.cap} of {len(table)} row(s) {source}")
+        table = table.slice(0, window.cap)
+    return table
 
 
 def _persist_row_lineage(lineage: RowLineage, sid: str, run_dir: Path) -> None:
@@ -321,20 +332,19 @@ def _persist_row_lineage(lineage: RowLineage, sid: str, run_dir: Path) -> None:
 
 
 def _stage_row_lineage(
-    workflow_stage: WorkflowStage, output: pd.DataFrame | None,
-    inputs: dict[str, pd.DataFrame], window: _RowWindow,
+    workflow_stage: WorkflowStage, output: StageOutput,
+    inputs: dict[str, pa.Table], window: _RowWindow,
 ) -> RowLineage | None:
     """None means output row i is input row i, so the trace needs no help crossing this stage."""
-    driven = read_row_lineage(output)
-    if driven is not None:
-        return driven.shifted(window.start)
+    if output.lineage is not None:
+        return output.lineage.shifted(window.start)
     if workflow_stage.stage.type == StageType.union:
         return concatenated_inputs_lineage(workflow_stage, inputs, window.start)
-    return _sliced_input_lineage(workflow_stage, output, window)
+    return _sliced_input_lineage(workflow_stage, output.table, window)
 
 
 def _sliced_input_lineage(
-    workflow_stage: WorkflowStage, output: pd.DataFrame | None, window: _RowWindow
+    workflow_stage: WorkflowStage, output: pa.Table | None, window: _RowWindow
 ) -> RowLineage | None:
     if window.start == 0 and window.cap is None:
         return None
@@ -346,9 +356,10 @@ def _sliced_input_lineage(
         workflow_stage.inputs[0].id, list(range(window.start, window.start + rows)))
 
 
-def _persist_stage_output(output: pd.DataFrame, sid: str, run_dir: Path, record: StageRecord) -> Path:
+def _persist_stage_output(output: pa.Table, sid: str, run_dir: Path, record: StageRecord) -> Path:
+    """The stage's artifact path, after writing it — the CSV fallback is NOTED on `record`."""
     written = write_frame_file_with_csv_fallback(
-        output, run_dir / "outputs" / f"{sid}.parquet"
+        table_to_frame(output), run_dir / "outputs" / f"{sid}.parquet"
     )
     if written.parquet_error is not None:
         record.add_note(f"Wrote CSV instead of parquet: {written.parquet_error}")
@@ -359,36 +370,30 @@ def _finalize_stage_output(
     workflow_stage: WorkflowStage,
     window: _RowWindow,
     record: StageRecord,
-    output: pd.DataFrame | None,
-    inputs_for_stage: dict[str, pd.DataFrame],
-    outputs_so_far: dict[str, pd.DataFrame],
+    output: StageOutput | None,
+    inputs_for_stage: dict[str, pa.Table],
+    outputs_so_far: dict[str, pa.Table],
     run_dir: Path,
     manifest: RunManifest,
 ) -> bool:
     sid = workflow_stage.id
-    # Read the contribution off `.attrs` BEFORE any frame is rebuilt — that drops `.attrs`.
-    contribution = _read_stage_contribution(output)
-    row_errors = _merge_stage_contribution(contribution, sid, manifest, record)
-
     if output is None:
-        output = pd.DataFrame()
-    # Drop the contribution channel so it never reaches the persisted parquet
-    # (its metadata isn't JSON-serializable) — it has been merged above.
-    output.attrs.pop(CONTRIBUTION_ATTR, None)
+        output = StageOutput(pa.table({}))
+    row_errors = _merge_stage_contribution(output.contribution, sid, manifest, record)
     lineage = _stage_row_lineage(workflow_stage, output, inputs_for_stage, window)
-    # Drop the lineage channel for the same reason as the contribution one
-    # above: `.attrs` is not JSON-serializable and must not reach the parquet.
-    output.attrs.pop(LINEAGE_ATTR, None)
+    table = output.table
+    frame = table_to_frame(table)
     if not workflow_stage.inputs:
         # A stage with no inputs originates its rows outside the run, so the
         # frame it just loaded is the runtime's only handle on them: its window
         # is taken here rather than on an input frame that does not exist.
-        output = _take_row_window(output, window, "loaded from the source", record)
+        table = _take_row_window(table, window, "loaded from the source", record)
+        frame = table_to_frame(table)
     if lineage is not None:
         _persist_row_lineage(lineage, sid, run_dir)
 
     out_rep = validate_dataframe(
-        output, workflow_stage.output_schema, stage_id=sid, phase="output")
+        frame, workflow_stage.output_schema, stage_id=sid, phase="output")
     out_rep.issues.extend(find_key_coverage_issues(workflow_stage, inputs_for_stage))
     if row_errors:
         out_rep.issues[0:0] = [
@@ -398,8 +403,8 @@ def _finalize_stage_output(
         ]
     record.output_validation_report = out_rep.to_dict()
 
-    output_path = _persist_stage_output(output, sid, run_dir, record)
-    outputs_so_far[sid] = output
+    output_path = _persist_stage_output(table, sid, run_dir, record)
+    outputs_so_far[sid] = table
 
     if row_errors:
         record.status = StageStatus.ERROR
@@ -419,20 +424,11 @@ def _finalize_stage_output(
         record.status = StageStatus.OK if all(
             v["ok"] for v in record.input_validation_report
         ) else StageStatus.VALIDATION_WARNINGS
-    record.output_row_count = int(len(output))
+    record.output_row_count = int(len(frame))
     # Manifest paths are POSIX-style so the persisted JSON is identical on
     # every platform.
     record.output_path = output_path.relative_to(run_dir).as_posix()
     return record.status == StageStatus.ERROR
-
-
-def _read_stage_contribution(output: pd.DataFrame | None) -> StageContribution:
-    if output is None:
-        return StageContribution()
-    attached = output.attrs.get(CONTRIBUTION_ATTR)
-    if isinstance(attached, StageContribution):
-        return attached
-    return StageContribution()
 
 
 def _merge_stage_contribution(
@@ -458,7 +454,7 @@ def _merge_stage_contribution(
 def _run_stage(
     workflow_stage: WorkflowStage,
     ctx: RunContext,
-    outputs_so_far: dict[str, pd.DataFrame],
+    outputs_so_far: dict[str, pa.Table],
     records_by_id: dict[str, StageRecord],
     manifest: RunManifest,
     ordered: list[WorkflowStage],
@@ -621,8 +617,9 @@ def _final_run_status(stage_statuses: Iterable[str]) -> RunStatus:
 # --- duplicate-input-row rejection (every stage type) ------------------------
 
 
-def _reject_duplicate_input_rows(df: pd.DataFrame, input_id: str, stage_id: str) -> None:
-    violations = find_duplicate_row_violations(df)
+def _reject_duplicate_input_rows(table: pa.Table, input_id: str, stage_id: str) -> None:
+    """Fail the stage if an input frame carries exact duplicate rows."""
+    violations = find_duplicate_row_violations(table.to_pylist())
     if not violations:
         return
     raise ValueError(
