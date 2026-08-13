@@ -27,7 +27,7 @@ from app.services.loader import load_workflow
 from app.runtime.trace import trace_row, trace_to_dict
 from app.tools.editing import EditingContext, make_editing_tools
 from app.agents.tutorial.config import make_tutorial_tools
-from app.tools.tutorial import TutorialContext
+from app.tools.tutorial import TutorialAgentReference, TutorialContext
 from app.services.methodology import exists as methodology_exists
 
 _BASE_URL = "http://127.0.0.1:8788/"
@@ -133,25 +133,18 @@ def test_a_tour_after_the_project_was_deleted_still_seeds(projects_root: Path) -
 
 
 def test_the_handoff_is_built_from_this_workspaces_base_url() -> None:
-    """All three forms name the endpoint this workspace actually serves MCP on."""
+    """Both forms name the endpoint this workspace actually serves MCP on."""
     seeded = _seed_a_tour()
 
     assert seeded["mcp_url"] == f"{_BASE_URL}mcp"
-    assert seeded["mcp_url"] in seeded["mcp_ask_your_assistant"]
     assert seeded["mcp_command"] == (
         f"claude mcp add --transport http carbonpaper {_BASE_URL}mcp"
     )
 
 
-def test_the_headline_handoff_asks_for_no_terminal_and_promises_no_instant_tools() -> None:
-    """The objection this answers: a reader who has an assistant open needs no CLI."""
-    asked = _seed_a_tour()["mcp_ask_your_assistant"]
-
-    assert "claude mcp add" not in asked and "install" not in asked
-    assert asked.startswith("Add the MCP server at")
-    # A newly added server's tools load at session start, so the message cannot promise
-    # "then use its tools" in the same breath — it asks for the restart instead.
-    assert "load when the session restarts" in asked
+def test_the_reference_carries_no_paste_into_your_assistant_message() -> None:
+    """It promised a connect-and-author an open session cannot do; the CLI line replaced it."""
+    assert "mcp_ask_your_assistant" not in TutorialAgentReference.model_fields
 
 
 def test_the_seeded_payload_carries_a_chat_the_editing_agent_is_already_waiting_in() -> None:

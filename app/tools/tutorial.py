@@ -68,13 +68,10 @@ class TutorialAgentReference(BaseModel):
     # own: it creates the project from their methodology (create_project) rather than
     # editing the tour's.
     new_project_chat_url: str
-    # The three ways to say the same handoff, headline first: this workspace speaks MCP
-    # at `mcp_url`, so an assistant the reader ALREADY has open can be asked to add it —
-    # `mcp_ask_your_assistant` is what they paste. It says the session has to restart
-    # because that is when a newly added server's tools load. `mcp_command` is the same
-    # connection typed at a terminal, and needs the CLI installed.
+    # The advanced handoff, for a reader who would rather stay in the coding assistant
+    # they already have open: this workspace speaks MCP at `mcp_url`, and `mcp_command`
+    # adds it to Claude Code. Needs the CLI installed.
     mcp_url: str
-    mcp_ask_your_assistant: str
     mcp_command: str
 
 
@@ -112,11 +109,6 @@ def seed_tutorial_project(ctx: TutorialContext) -> TutorialAgentReference:
         new_project_chat_url=ctx.base_url.rstrip("/")
         + agent_service.open_unbound_agent_chat("editing"),
         mcp_url=f"{ctx.base_url}mcp",
-        mcp_ask_your_assistant=(
-            f"Add the MCP server at {ctx.base_url}mcp over streamable HTTP. Its tools "
-            "load when the session restarts, so once it is added I will restart and "
-            "give you my methodology to turn into a workflow."
-        ),
         mcp_command=f"claude mcp add --transport http carbonpaper {ctx.base_url}mcp",
     )
 
@@ -168,7 +160,7 @@ CREATE_TUTORIAL_PROJECT = ToolProse(
         "agent on THIS "
         "project, already open and waiting — `new_project_chat_url`, the same agent in a "
         "chat bound to no project, which is where a reader starts one of their own — and "
-        "the three forms of the MCP handoff. Takes no arguments — the "
+        "`mcp_url` with the `mcp_command` that adds it. Takes no arguments — the "
         "fixture is fixed. If the tutorial project is already in this workspace it is "
         "returned as it stands, not replaced, so a second tour never overwrites the first."
     ),

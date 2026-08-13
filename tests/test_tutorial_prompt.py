@@ -331,33 +331,33 @@ def test_the_eval_is_the_fourth_thing_to_explore_and_names_no_figure_of_its_own(
     assert "Edit with agent" not in beat
 
 
-def test_the_call_to_action_is_a_new_project_offered_exactly_two_ways() -> None:
+def test_the_call_to_action_leads_with_the_new_chat_here() -> None:
     """The reader asked to start their OWN; the tour used to send them to the tour's."""
     beat = _flat(_beat(4))
 
-    assert "`new_project_chat_url`, exactly as create_tutorial_project returned it" in beat
+    assert "PRIMARY — HERE, IN A NEW CHAT: `new_project_chat_url`" in beat
+    assert "This is THE call to action, and it leads" in beat
     assert "bound to NO project" in beat
     assert "it creates the project from what they wrote and writes the stages" in beat
     assert "Do not send them to any page of the tutorial project for this" in beat
-    # The paste-into-your-own-assistant route leads; the tour's own project is not a door.
-    assert beat.index("mcp_ask_your_assistant") < beat.index("new_project_chat_url")
-    assert beat.index("new_project_chat_url") < beat.index("edit_chat_url")
+    # The chat link leads; MCP is the advanced second; the tour's project is not a door.
+    assert beat.index("new_project_chat_url") < beat.index("mcp_command")
+    assert beat.index("mcp_command") < beat.index("edit_chat_url")
     assert "not a third door on the call to action" in beat
 
 
-def test_the_mcp_route_promises_no_connect_and_author_in_one_breath() -> None:
-    """Claude Code loads a newly added server's tools at session start, not on the spot."""
+def test_the_mcp_route_is_the_advanced_second_and_says_where_the_tools_appear() -> None:
     beat = _flat(_beat(4))
 
-    assert "It is a message they PASTE into that chat" in beat
-    assert "Its tools arrive when that session restarts" in beat
-    assert (
-        "never tell them an assistant can connect and start authoring in the same breath, "
-        "because it cannot"
-    ) in beat
-    # The terminal form is the fallback, offered only on request.
-    assert beat.index("mcp_ask_your_assistant") < beat.index("mcp_command")
-    assert "offer it only if they ask" in beat
+    # Claude Code reads a newly added server at session start, so none of its tools show
+    # up in the session that added it — a reader not told that thinks it is broken.
+    assert "SECONDARY, FOR THE ADVANCED READER: `mcp_command`, quoted exactly" in beat
+    assert "would rather stay in the session they already have open" in beat
+    assert "the tools arrive in a NEW session" in beat
+    assert "they add the server, find no tools, and think it is broken" in beat
+    assert "Say it second and say it shorter" in beat
+    # The paste-into-your-assistant message is gone from the tour with its field.
+    assert "mcp_ask_your_assistant" not in _flat(TUTORIAL_SYSTEM_PROMPT)
     assert "There is no button for this in the app" not in _flat(TUTORIAL_SYSTEM_PROMPT)
 
 
