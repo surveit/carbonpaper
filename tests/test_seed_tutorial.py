@@ -414,6 +414,11 @@ def test_the_review_guide_keeps_every_check_without_the_padding():
         assert check in prose, check
 
 
+_JARGON = ("join", "merge", "key", "deduplicate", "schema", "grain", "enrich",
+           "column", "null", "cast", "parse", "lineage", "upstream",
+           "downstream", "row per", "row-level")
+
+
 def test_the_review_guide_speaks_no_jargon():
     """A journalist reads this rail. Every word in it has to be one they already use."""
     guide = ReviewGuideDraft.model_validate_json(
@@ -421,10 +426,24 @@ def test_the_review_guide_speaks_no_jargon():
     )
     prose = " ".join(step.prose for step in guide.steps).lower()
 
-    for word in ("join", "merge", "key", "deduplicate", "schema", "grain", "enrich",
-                 "column", "null", "cast", "parse", "lineage", "upstream",
-                 "downstream", "row per", "row-level"):
+    for word in _JARGON:
         assert word not in prose, word
+
+
+def test_no_stage_description_speaks_jargon():
+    """The same reader meets these first: on the graph node and over the stage panel."""
+    offenders = _find_jargon_in_stage_descriptions(_load_fixture())
+
+    assert offenders == [], offenders
+
+
+def _find_jargon_in_stage_descriptions(wf: WorkflowFile) -> list[str]:
+    return [
+        f"{stage.id}: {word!r} in {stage.description!r}"
+        for stage in wf.stages
+        for word in _JARGON
+        if word in stage.description.lower()
+    ]
 
 
 # A number in front of a countable noun ("six real records", "3 rows"): the run measures

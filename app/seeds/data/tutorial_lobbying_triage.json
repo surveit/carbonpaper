@@ -10,7 +10,7 @@
     {
       "id": "raw_filings",
       "type": "input_data",
-      "description": "Bundled Synthetic Lobbying Filings CSV",
+      "description": "What Each Client Paid to Ask Government For",
       "inputs": [],
       "cache": true,
       "compiler_notes": [],
@@ -72,7 +72,7 @@
     {
       "id": "public_commitments",
       "type": "input_data",
-      "description": "Bundled Synthetic Public Commitments CSV",
+      "description": "What Each Client Promised in Public",
       "inputs": [],
       "cache": true,
       "compiler_notes": [
@@ -279,7 +279,7 @@
     {
       "id": "matched_commitments",
       "type": "enrich",
-      "description": "Join Each Filing to its Client's Public Commitment",
+      "description": "Put Each Promise Beside the Ask",
       "inputs": [
         {
           "id": "check_filings"
@@ -559,7 +559,7 @@
     {
       "id": "publish_report",
       "type": "publish",
-      "description": "Publish HTML Say-versus-Do Report",
+      "description": "Publish the Say-versus-Do Report",
       "inputs": [
         {
           "id": "review_contradictions"
