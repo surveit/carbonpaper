@@ -2,7 +2,6 @@
 lineage link on each row resolves against."""
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pandas as pd
@@ -12,14 +11,15 @@ import app.services.run as run_service
 from app.services.project import save_working_copy_as_version
 from app.services import workspace
 from app.tools import shared
+from stage_seed import add_stage
 
 _PROJECT = "filings_review"
 _ROWS = 60
 
 
 def _make_project(root: Path) -> str:
-    (root / "compiled").mkdir(parents=True)
-    (root / "data").mkdir(parents=True)
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "data").mkdir(parents=True, exist_ok=True)
     pd.DataFrame({
         "filing_id": [f"F-{n:03d}" for n in range(_ROWS)],
         "amount_usd": list(range(_ROWS)),
@@ -34,7 +34,7 @@ def _make_project(root: Path) -> str:
             {"name": "amount_usd", "type": "int", "nullable": False},
         ]},
     }
-    (root / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
+    add_stage(root, stage)
     save_working_copy_as_version(root, message="seed", reviewer="test")
     return str(run_service.execute(_PROJECT)["run_id"])
 

@@ -19,6 +19,7 @@ from app.services import versioning
 from app.services import project as project_service
 from app.services.run import load_run_workflow
 from conftest import pinned_stages
+from stage_seed import add_stage
 
 client = TestClient(app)
 
@@ -45,11 +46,10 @@ def _input_stage(stage_id: str, name: str, data_path: Path) -> dict:
 @pytest.fixture()
 def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     pdir = tmp_path / PROJECT
-    (pdir / "compiled").mkdir(parents=True)
+    pdir.mkdir(parents=True, exist_ok=True)
     data = pdir / "rows.csv"
     pd.DataFrame({"name": ["a", "b"], "val": [1, 2]}).to_csv(data, index=False)
-    (pdir / "compiled" / "01_load.json").write_text(
-        json.dumps(_input_stage(PINNED_ID, "Pinned stage", data)), encoding="utf-8")
+    add_stage(pdir, _input_stage(PINNED_ID, "Pinned stage", data))
     workspace.set_projects_dir(tmp_path)
     return pdir
 
@@ -62,10 +62,8 @@ def _run_once(project_dir: Path) -> str:
 
 
 def _drift_the_working_copy(project_dir: Path) -> None:
-    (project_dir / "compiled" / "01_load.json").write_text(
-        json.dumps(_input_stage(DRIFTED_ID, "Drifted stage",
-                                project_dir / "rows.csv")),
-        encoding="utf-8")
+    add_stage(project_dir, _input_stage(DRIFTED_ID, "Drifted stage",
+                                project_dir / "rows.csv"))
 
 
 def _rewrite_manifest(project_dir: Path, run_id: str, **changes: object) -> None:

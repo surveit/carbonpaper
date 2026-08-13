@@ -90,7 +90,7 @@ def live_project(tmp_path, monkeypatch):
     project_id = create_project(PROJECT, "Classify claims and publish the table.",
                                 source="live smoke test").id
     project_dir = tmp_path / project_id
-    (project_dir / "compiled").mkdir()
+    project_dir.mkdir(parents=True, exist_ok=True)
     for position, stage in enumerate(_workflow_stages(str(source)), start=1):
         path = project_dir / "compiled" / f"{position:02d}_{stage['id']}.json"
         path.write_text(json.dumps(stage), encoding="utf-8")

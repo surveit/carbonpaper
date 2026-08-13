@@ -2,8 +2,6 @@
 from __future__ import annotations
 
 import importlib.util
-import json
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -11,7 +9,6 @@ import pytest
 from pydantic import ValidationError
 
 from app.models import parse_stage
-from scripts import migrate_compiled_stage_files
 from scripts.stage_input_schemas import InputRefUnreadable
 
 _REVISION = (Path(__file__).resolve().parents[1]
@@ -84,37 +81,3 @@ def test_an_inputs_payload_of_an_unknown_shape_is_refused_not_guessed():
 
     with pytest.raises(InputRefUnreadable, match="not an object"):
         rev._drop_document_input_schemas(document)
-
-
-# ── the same rewrite on a project's working copy ─────────────────────────────
-def test_a_compiled_file_is_migrated_and_then_parses(tmp_path, monkeypatch):
-    compiled = tmp_path / "demo" / "compiled"
-    compiled.mkdir(parents=True)
-    path = compiled / "tag.json"
-    path.write_text(json.dumps(_stage([{"id": "load", "schema": dict(_SCHEMA)}])),
-                    encoding="utf-8")
-
-    monkeypatch.setattr(sys, "argv", [
-        "migrate", "--apply", "--projects-dir", str(tmp_path)])
-    migrate_compiled_stage_files.main()
-
-    after = parse_stage(json.loads(path.read_text(encoding="utf-8")))
-    assert [i.id for i in after.inputs] == ["load"]
-
-
-def test_a_compiled_file_that_is_not_json_stops_the_run_before_any_write(tmp_path,
-                                                                        monkeypatch):
-    compiled = tmp_path / "demo" / "compiled"
-    compiled.mkdir(parents=True)
-    stale = compiled / "tag.json"
-    stale.write_text(json.dumps(_stage([{"id": "load", "schema": dict(_SCHEMA)}])),
-                     encoding="utf-8")
-    before = stale.read_text(encoding="utf-8")
-    (compiled / "torn.json").write_text("{", encoding="utf-8")
-
-    monkeypatch.setattr(sys, "argv", [
-        "migrate", "--apply", "--projects-dir", str(tmp_path)])
-    with pytest.raises(ValueError, match="is not JSON"):
-        migrate_compiled_stage_files.main()
-
-    assert stale.read_text(encoding="utf-8") == before

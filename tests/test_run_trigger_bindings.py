@@ -15,6 +15,7 @@ from app.services import versioning
 from app.services import workspace
 from app.services.project import save_working_copy_as_version
 from app.services.uploads import save_upload
+from stage_seed import add_stage, read_stage
 
 client = TestClient(app)
 
@@ -22,7 +23,7 @@ client = TestClient(app)
 @pytest.fixture
 def project(tmp_path, monkeypatch):
     proj = tmp_path / "demo"
-    (proj / "compiled").mkdir(parents=True)
+    proj.mkdir(parents=True, exist_ok=True)
     data = proj / "a.csv"
     pd.DataFrame({"name": ["x", "y"], "val": [1, 2]}).to_csv(data, index=False)
     # output_schema names the CSV's columns; every non-publish stage must declare
@@ -37,7 +38,7 @@ def project(tmp_path, monkeypatch):
              },
              "connector": {"kind": "file",
                            "params": {"path": str(data), "format": "csv"}}}
-    (proj / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
+    add_stage(proj, stage)
     vid = save_working_copy_as_version(proj, message="seed", reviewer="test").version_id
     versioning.publish_version(proj, vid, reviewer="human")
     workspace.set_projects_dir(tmp_path)
@@ -110,10 +111,9 @@ def test_picking_nothing_stays_workflow_source(project):
 
 
 def test_unbound_input_returns_400(project):
-    compiled = project / "compiled" / "01_load.json"
-    stage = json.loads(compiled.read_text(encoding="utf-8"))
+    stage = read_stage(project, "load")
     stage["connector"]["params"] = {}
-    compiled.write_text(json.dumps(stage), encoding="utf-8")
+    add_stage(project, stage)
     vid = save_working_copy_as_version(project, message="unbound", reviewer="test").version_id
     versioning.publish_version(project, vid, reviewer="human")
 

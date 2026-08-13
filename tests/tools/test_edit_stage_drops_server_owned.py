@@ -9,7 +9,6 @@ from pathlib import Path
 
 import pytest
 
-from app.services import project
 from app.services.loader import load_workflow
 from app.services.project import WorkflowFile, import_project
 from app.tools.submitted_stage import edit_stage_reporting_drops
@@ -32,7 +31,7 @@ def tour_project(projects_root):
 
 def _stage(project_id: str, stage_id: str):
     return next(
-        s for s in load_workflow(project.workspace.resolve_project_dir(project_id))
+        s for s in load_workflow(project_id)
         if s.id == stage_id
     )
 

@@ -1,16 +1,17 @@
-"""The compiled-stage loader: tolerant per-file for the viewer,
+"""The working-copy loader: tolerant per-stage for the viewer,
 strict (reject the whole workflow) for the runner."""
 from __future__ import annotations
 
-import json
-
 import pytest
 
+from app.core.persistence import get_store
 from app.services.loader import (
     WorkflowLoadError,
-    load_compiled_dir,
+    WorkingCopy,
+    load_stage_entries,
     load_workflow,
 )
+
 
 def _valid(tmp_path):
     return {
@@ -31,40 +32,39 @@ INVALID = {  # file connector params.path is relative, not absolute
 }
 
 
-def _write(root, name, data):
-    (root / "compiled").mkdir(parents=True, exist_ok=True)
-    (root / "compiled" / name).write_text(json.dumps(data), encoding="utf-8")
+def _store(project, *specs):
+    get_store().write(WorkingCopy.collection, project, {
+        "id": project, "created_at": "2026-01-01T00:00:00",
+        "updated_at": "2026-01-01T00:00:00", "stages": list(specs),
+    })
 
 
-def test_tolerant_load_reports_per_file_issues(tmp_path):
-    _write(tmp_path, "01_load.json", _valid(tmp_path))
-    _write(tmp_path, "02_bad.json", INVALID)
-    entries = load_compiled_dir(tmp_path / "compiled")
-    assert [e.filename for e in entries] == ["01_load.json", "02_bad.json"]
+def test_tolerant_load_reports_per_stage_issues(tmp_path):
+    _store("p", _valid(tmp_path), INVALID)
+    entries = load_stage_entries("p")
+    assert [e.label for e in entries] == ["load", "bad"]
     assert entries[0].stage is not None and not entries[0].issues
     assert entries[1].stage is None and entries[1].issues
 
 
-def test_tolerant_load_handles_unparseable_json(tmp_path):
-    (tmp_path / "compiled").mkdir(parents=True)
-    (tmp_path / "compiled" / "01_broken.json").write_text('{"id": unclosed', encoding="utf-8")
-    [entry] = load_compiled_dir(tmp_path / "compiled")
-    assert entry.stage is None
-    assert any("parse error" in i.lower() for i in entry.issues)
+def test_a_stage_with_no_usable_id_is_labelled_by_position(tmp_path):
+    _store("p", {"type": "input_data"})
+    [entry] = load_stage_entries("p")
+    assert entry.label == "stage #1"
+    assert entry.stage is None and entry.issues
 
 
 def test_strict_load_returns_stages(tmp_path):
-    _write(tmp_path, "01_load.json", _valid(tmp_path))
-    [stage] = load_workflow(tmp_path)
+    _store("p", _valid(tmp_path))
+    [stage] = load_workflow("p")
     assert stage.id == "load"
 
 
 def test_strict_load_raises_with_all_issues(tmp_path):
-    _write(tmp_path, "01_load.json", _valid(tmp_path))
-    _write(tmp_path, "02_bad.json", INVALID)
+    _store("p", _valid(tmp_path), INVALID)
     with pytest.raises(WorkflowLoadError) as exc:
-        load_workflow(tmp_path)
-    assert any("02_bad.json" in i for i in exc.value.issues)
+        load_workflow("p")
+    assert any(i.startswith("bad:") for i in exc.value.issues)
 
 
 def test_strict_load_catches_cross_stage_issues(tmp_path):
@@ -81,15 +81,16 @@ def test_strict_load_catches_cross_stage_issues(tmp_path):
                     ],
                     "produces": [{"name": "k", "type": "str", "nullable": True}],
                 }}
-    _write(tmp_path, "01_x.json", dangling)
+    _store("p", dangling)
     with pytest.raises(WorkflowLoadError) as exc:
-        load_workflow(tmp_path)
+        load_workflow("p")
     assert any("missing_upstream" in i for i in exc.value.issues)
 
 
-def test_strict_load_rejects_missing_or_empty_compiled_dir(tmp_path):
-    with pytest.raises(WorkflowLoadError, match="no compiled stage files"):
-        load_workflow(tmp_path)  # no compiled/ dir at all
-    (tmp_path / "compiled").mkdir()
-    with pytest.raises(WorkflowLoadError, match="no compiled stage files"):
-        load_workflow(tmp_path)  # compiled/ exists but is empty
+def test_strict_load_rejects_an_unstored_or_empty_working_copy():
+    """A typo'd project name must fail loudly, not produce a valid 0-stage workflow."""
+    with pytest.raises(WorkflowLoadError, match="has no stages"):
+        load_workflow("never_stored")
+    _store("empty")
+    with pytest.raises(WorkflowLoadError, match="has no stages"):
+        load_workflow("empty")

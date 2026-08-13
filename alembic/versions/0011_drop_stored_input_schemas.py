@@ -23,8 +23,6 @@ depends_on = None
 # `schema` loads nowhere.
 #
 # The compiled stage files under <project>/compiled/ hold the same specs and no
-# revision reaches them — run `python -m scripts.migrate_compiled_stage_files
-# --apply` alongside this, or those projects stop loading.
 _COLLECTIONS = ("workflow_version", "draft")
 _SCHEMA_VERSION = 4
 

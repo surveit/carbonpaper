@@ -44,7 +44,7 @@ def start_generation(project_dir: Path, *, document: str, model: str) -> str:
 
 def start_stage_test_generation(project_dir: Path, *, stage_id: str, model: str) -> str:
     """Every check runs before the turn starts, so a rejected stage leaves no orphaned session."""
-    stages = {stage.id: stage for stage in load_workflow(project_dir)}
+    stages = {stage.id: stage for stage in load_workflow(project_dir.name)}
     stage = stages.get(stage_id)
     if stage is None:
         raise ValueError(f"no stage '{stage_id}' in {project_dir.name}")
@@ -135,7 +135,7 @@ def _finish_stage_tests(project_dir: Path, stage_id: str, answer: BaseModel | No
             "submitted an empty test suite"
         )
     patch_text = json.dumps(patch)
-    result = patch_stage_spec(project_dir, stage_id, patch_text)
+    result = patch_stage_spec(project_dir.name, stage_id, patch_text)
     if not result.ok:
         raise GenerationError(
             f"stage-test generation for '{stage_id}' in {project_dir.name} "

@@ -17,6 +17,7 @@ from app.services import versioning, workspace
 from app.services import project as project_service
 from app.services.workflow_test import run_workflow_test
 from conftest import pinned_stages
+from stage_seed import add_stage
 
 _ROWS = [{"name": "a", "val": 1}, {"name": "b", "val": 2}, {"name": "c", "val": 3}]
 _LOADED = [{"name": "name", "type": "str", "nullable": True}, {"name": "val", "type": "int", "nullable": True}]
@@ -38,16 +39,16 @@ def _write_rows(root: Path, rows: list[dict[str, object]]) -> None:
 
 def _write_project(root: Path) -> Path:
     probe = root / "probe.log"
-    (root / "compiled").mkdir(parents=True, exist_ok=True)
+    root.mkdir(parents=True, exist_ok=True)
     (root / "data").mkdir(parents=True, exist_ok=True)
     _write_rows(root, _ROWS[:2])
-    (root / "compiled" / "01_load.json").write_text(json.dumps({
+    add_stage(root, {
         "id": "load", "description": "Load items", "type": "input_data",
         "connector": {"kind": "file", "params": {
             "path": str(root / "data" / "items.csv"), "format": "csv"}},
         "signature": {"form": "replaces", "produces": _LOADED},
-    }), encoding="utf-8")
-    (root / "compiled" / "02_clean.json").write_text(json.dumps({
+    })
+    add_stage(root, {
         "id": "clean", "description": "Clean", "type": "python_row_function",
         "inputs": [{"id": "load"}],
         "signature": {
@@ -56,7 +57,7 @@ def _write_project(root: Path) -> Path:
             "adds": [{"name": "doubled", "type": "int", "nullable": True}],
         },
         "function": {"kind": "inline", "code": _clean_code(probe)},
-    }), encoding="utf-8")
+    })
     return probe
 
 
@@ -76,7 +77,7 @@ def _invocations(probe: Path) -> Counter[str]:
 def project(tmp_path, monkeypatch):
     workspace.set_projects_dir(tmp_path)
     root = tmp_path / "demo"
-    root.mkdir()
+    root.mkdir(parents=True, exist_ok=True)
     return root
 
 

@@ -1,20 +1,18 @@
-"""The single validated writer for one compiled stage.
+"""The single validated writer for one stage of a project's working copy.
 
 Every change is validated against the whole resulting workflow before anything is
-written. Removal is the one direct disk touch (the stage's file is unlinked here);
-every other write goes through the loader's `write_stage`.
+written; every write goes through the loader's `save_stage_specs`.
 """
 
 from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from pathlib import Path
 
 from typing import Sequence
 
 from app.core.llm import LLMModel
-from app.models import StageDraft, parse_stage, stage_to_spec_dict
+from app.models import StageDraft
 from app.models.stages.code import SUMMARY_MAX_CHARS
 from app.models.workflow import (
     detect_cycle,
@@ -23,11 +21,10 @@ from app.models.workflow import (
     validate_workflow_draft,
 )
 from app.services.loader import (
-    LOADER_BOOKKEEPING_KEYS,
-    find_stage_file,
-    list_stage_files,
-    load_workflow_object,
-    write_stage,
+    exists as has_working_copy,
+    read_stage_specs,
+    save_stage_specs,
+    index_stage_specs_by_id,
 )
 
 
@@ -71,12 +68,11 @@ def _merge_patch(target: object, patch: object) -> object:
     return base
 
 
-def _current_specs(project_dir: Path) -> dict[str, dict]:
+def _current_specs(project: str) -> dict[str, dict]:
     """An EMPTY workflow reads as {}; a load failure raises — never read a failure as emptiness."""
-    if not list_stage_files(project_dir / "compiled"):
+    if not has_working_copy(project) or not read_stage_specs(project):
         return {}
-    workflow = load_workflow_object(project_dir)
-    return {stage.id: stage_to_spec_dict(stage) for stage in workflow.stages}
+    return index_stage_specs_by_id(project)
 
 
 # The config blocks whose behaviour is authored code, so a reviewer cannot read the
@@ -129,12 +125,7 @@ def find_unnamed_model_issues(candidate: dict) -> list[str]:
     ]
 
 
-def _strip_bookkeeping_keys(spec: dict) -> dict:
-    return {k: v for k, v in spec.items() if k not in LOADER_BOOKKEEPING_KEYS}
-
-
-def _apply(project_dir: Path, specs: dict[str, dict], stage_id: str, candidate: dict) -> EditStageResult:
-    candidate = _strip_bookkeeping_keys(candidate)
+def _apply(project: str, specs: dict[str, dict], stage_id: str, candidate: dict) -> EditStageResult:
     if candidate.get("id") != stage_id:
         return EditStageResult(
             ok=False,
@@ -148,62 +139,58 @@ def _apply(project_dir: Path, specs: dict[str, dict], stage_id: str, candidate: 
     if issues:
         return EditStageResult(ok=False, issues=issues)
 
-    validated_stage = parse_stage(candidate)
-    # Overwrite the stage's existing file if it has one; a new stage is named by
-    # its id (file order is irrelevant — the workflow order is the input_ids DAG).
-    compiled_dir = project_dir / "compiled"
-    target = find_stage_file(compiled_dir, stage_id) or compiled_dir / f"{stage_id}.json"
-    compiled_dir.mkdir(parents=True, exist_ok=True)  # the first stage creates it
-    write_stage(target, validated_stage)
+    # An existing stage keeps its position; a new one lands at the end. Stored
+    # order is presentation only — the workflow order is the input_ids DAG.
+    save_stage_specs(project, list(resulting.values()))
     return EditStageResult(ok=True)
 
 
-def edit_stage_spec(project_dir: Path, stage_id: str, spec_text: str) -> EditStageResult:
+def edit_stage_spec(project: str, stage_id: str, spec_text: str) -> EditStageResult:
     try:
         spec = json.loads(spec_text)
     except json.JSONDecodeError as exc:
         return EditStageResult(ok=False, issues=[f"JSON parse error: {exc}"])
     if not isinstance(spec, dict):
         return EditStageResult(ok=False, issues=["edited spec must be a JSON object (a single stage)"])
-    specs = _current_specs(project_dir)
+    specs = _current_specs(project)
     if stage_id not in specs:
-        raise FileNotFoundError(f"no stage '{stage_id}' in {project_dir.name}")
-    return _apply(project_dir, specs, stage_id, spec)
+        raise FileNotFoundError(f"no stage '{stage_id}' in project '{project}'")
+    return _apply(project, specs, stage_id, spec)
 
 
-def patch_stage_spec(project_dir: Path, stage_id: str, patch_text: str) -> EditStageResult:
+def patch_stage_spec(project: str, stage_id: str, patch_text: str) -> EditStageResult:
     try:
         patch = json.loads(patch_text)
     except json.JSONDecodeError as exc:
         return EditStageResult(ok=False, issues=[f"JSON parse error: {exc}"])
     if not isinstance(patch, dict):
         return EditStageResult(ok=False, issues=["changes must be a JSON object of {field: new_value}"])
-    specs = _current_specs(project_dir)
+    specs = _current_specs(project)
     if stage_id not in specs:
-        raise FileNotFoundError(f"no stage '{stage_id}' in {project_dir.name}")
+        raise FileNotFoundError(f"no stage '{stage_id}' in project '{project}'")
     merged = _merge_patch(specs[stage_id], patch)
     assert isinstance(merged, dict)  # both inputs are dicts, so the merge is too
-    return _apply(project_dir, specs, stage_id, merged)
+    return _apply(project, specs, stage_id, merged)
 
 
-def add_stage_specs(project_dir: Path, stages: Sequence[StageDraft]) -> AddStagesResult:
+def add_stage_specs(project: str, stages: Sequence[StageDraft]) -> AddStagesResult:
     batch_issues = validate_unique_ids(stages) + detect_cycle(stages)
     if batch_issues:
         return AddStagesResult(batch_issues=batch_issues)
 
     result = AddStagesResult()
-    specs = _current_specs(project_dir)
+    specs = _current_specs(project)
     for stage in sort_stages_by_dependency(stages):
         blocker = _find_blocking_input(stage, result)
         if blocker is not None:
             result.skipped.append(SkippedStage(stage.id, f"inputs from {blocker}"))
             continue
         spec = stage.to_stage_spec()
-        outcome = _add_new_stage(project_dir, specs, spec)
+        outcome = _add_new_stage(project, specs, spec)
         if not outcome.ok:
             result.failed.append(StageFailure(stage.id, outcome.issues))
             continue
-        specs[stage.id] = _strip_bookkeeping_keys(spec)
+        specs[stage.id] = spec
         result.added.append(stage.id)
     return result
 
@@ -213,17 +200,17 @@ def _find_blocking_input(stage: StageDraft, result: AddStagesResult) -> str | No
     return next((i for i in stage.input_ids if i in unavailable), None)
 
 
-def add_stage_spec(project_dir: Path, spec_text: str) -> EditStageResult:
+def add_stage_spec(project: str, spec_text: str) -> EditStageResult:
     try:
         spec = json.loads(spec_text)
     except json.JSONDecodeError as exc:
         return EditStageResult(ok=False, issues=[f"JSON parse error: {exc}"])
     if not isinstance(spec, dict):
         return EditStageResult(ok=False, issues=["new stage must be a JSON object (a single stage)"])
-    return _add_new_stage(project_dir, _current_specs(project_dir), spec)
+    return _add_new_stage(project, _current_specs(project), spec)
 
 
-def _add_new_stage(project_dir: Path, specs: dict[str, dict], spec: dict) -> EditStageResult:
+def _add_new_stage(project: str, specs: dict[str, dict], spec: dict) -> EditStageResult:
     stage_id = spec.get("id")
     if not isinstance(stage_id, str) or not stage_id:
         return EditStageResult(ok=False, issues=["new stage must have a non-empty string 'id'"])
@@ -232,20 +219,18 @@ def _add_new_stage(project_dir: Path, specs: dict[str, dict], spec: dict) -> Edi
             ok=False,
             issues=[f"stage '{stage_id}' already exists — use edit_stage to change it"],
         )
-    return _apply(project_dir, specs, stage_id, spec)
+    return _apply(project, specs, stage_id, spec)
 
 
-def remove_stage_spec(project_dir: Path, stage_id: str) -> EditStageResult:
-    specs = _current_specs(project_dir)
+def remove_stage_spec(project: str, stage_id: str) -> EditStageResult:
+    specs = _current_specs(project)
     if stage_id not in specs:
-        raise FileNotFoundError(f"no stage '{stage_id}' in {project_dir.name}")
+        raise FileNotFoundError(f"no stage '{stage_id}' in project '{project}'")
 
     resulting = {k: v for k, v in specs.items() if k != stage_id}
     issues = validate_workflow_draft(list(resulting.values()))
     if issues:
         return EditStageResult(ok=False, issues=issues)
 
-    target = find_stage_file(project_dir / "compiled", stage_id)
-    if target is not None:
-        target.unlink()
+    save_stage_specs(project, list(resulting.values()))
     return EditStageResult(ok=True)

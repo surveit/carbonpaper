@@ -3,7 +3,6 @@ every transform config block — including the two that carry no `function` bloc
 filter_rows' predicate and union's declared inputs. A stage type whose config block
 the panel doesn't render reads as an empty Transform pane, which is worse than
 useless: it says "nothing happens here"."""
-import json
 from pathlib import Path
 
 import pytest
@@ -11,6 +10,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.services import workspace
+from stage_seed import add_stage
 
 _SCHEMA = {"columns": [
     {"name": "client", "type": "str", "nullable": False},
@@ -24,31 +24,31 @@ _PREDICATE = (
 
 
 def _seed_project(root: Path) -> None:
-    compiled = root / "alpha" / "compiled"
-    compiled.mkdir(parents=True)
-    (compiled / "01_load.json").write_text(json.dumps({
+    compiled = root / "alpha"
+    compiled.mkdir(parents=True, exist_ok=True)
+    add_stage(compiled, {
         "id": "load", "description": "Load", "type": "input_data",
         "connector": {"kind": "file"}, "signature": {"form": "replaces", "produces": _SCHEMA["columns"]},
-    }), encoding="utf-8")
-    (compiled / "02_load_more.json").write_text(json.dumps({
+    })
+    add_stage(compiled, {
         "id": "load_more", "description": "Load more", "type": "input_data",
         "connector": {"kind": "file"}, "signature": {"form": "replaces", "produces": _SCHEMA["columns"]},
-    }), encoding="utf-8")
-    (compiled / "03_all_filings.json").write_text(json.dumps({
+    })
+    add_stage(compiled, {
         "id": "all_filings", "description": "Every filing", "type": "union",
         "inputs": [{"id": "load"},
                    {"id": "load_more"}],
         "signature": {"form": "replaces", "produces": _SCHEMA["columns"]},
         "union": {},
-    }), encoding="utf-8")
-    (compiled / "04_incidental.json").write_text(json.dumps({
+    })
+    add_stage(compiled, {
         "id": "select_incidental_filings", "description": "The incidental mentions",
         "type": "filter_rows",
         "inputs": [{"id": "all_filings"}],
         "signature": {"form": "extends",
                       "reads": [{"input": "all_filings", "columns": _SCHEMA["columns"]}]},
         "filter": {"code": _PREDICATE},
-    }), encoding="utf-8")
+    })
 
 
 @pytest.fixture

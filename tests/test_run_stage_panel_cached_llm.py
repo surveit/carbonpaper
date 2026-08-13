@@ -4,7 +4,6 @@ writes no `llm_usage` at all. A block keyed off usage renders nothing for the
 second, which is exactly what a stage with no model looks like."""
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pandas as pd
@@ -18,6 +17,7 @@ from app.runtime.runner import execute_run
 from app.services import project as project_service
 from app.services import versioning
 from conftest import pinned_stages
+from stage_seed import add_stage
 
 PROJECT = "cached_llm_panel"
 _COLUMNS = [{"name": "x", "type": "int", "nullable": True}]
@@ -49,13 +49,11 @@ def _judge_stage() -> dict:
 @pytest.fixture()
 def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     pdir = tmp_path / PROJECT
-    (pdir / "compiled").mkdir(parents=True)
+    pdir.mkdir(parents=True, exist_ok=True)
     data = pdir / "rows.csv"
     pd.DataFrame({"x": [1, 2]}).to_csv(data, index=False)
-    (pdir / "compiled" / "01_load.json").write_text(
-        json.dumps(_load_stage(data)), encoding="utf-8")
-    (pdir / "compiled" / "02_judge.json").write_text(
-        json.dumps(_judge_stage()), encoding="utf-8")
+    add_stage(pdir, _load_stage(data))
+    add_stage(pdir, _judge_stage())
     workspace.set_projects_dir(tmp_path)
 
     def fake_call_llm(stage_id, llm, row, reply_model, usage_out):

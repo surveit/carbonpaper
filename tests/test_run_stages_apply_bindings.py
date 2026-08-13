@@ -3,7 +3,6 @@ run binding replaces connector params, and every reader of the run's stages
 replays it — the same delta `resume_run` replays."""
 from __future__ import annotations
 
-import json
 from typing import Any
 
 import pandas as pd
@@ -13,12 +12,13 @@ import app.services.run as run_service
 from app.core.errors import RunVersionUnresolvableError
 from app.services import versioning, workspace
 from app.services.project import save_working_copy_as_version
+from stage_seed import add_stage
 
 
 @pytest.fixture
 def project(tmp_path):
     proj = tmp_path / "demo"
-    (proj / "compiled").mkdir(parents=True)
+    proj.mkdir(parents=True, exist_ok=True)
     authored = proj / "authored.csv"
     pd.DataFrame({"name": ["x"], "val": [1]}).to_csv(authored, index=False)
     stage = {"id": "load", "description": "Load", "type": "input_data",
@@ -27,7 +27,7 @@ def project(tmp_path):
                  {"name": "val", "type": "int", "nullable": False}]},
              "connector": {"kind": "file",
                            "params": {"path": str(authored), "format": "csv"}}}
-    (proj / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
+    add_stage(proj, stage)
     vid = save_working_copy_as_version(proj, message="seed", reviewer="t").version_id
     versioning.publish_version(proj, vid, reviewer="human")
     workspace.set_projects_dir(tmp_path)

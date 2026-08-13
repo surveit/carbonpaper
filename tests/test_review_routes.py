@@ -26,6 +26,7 @@ from conftest import (
     QUEUE_COLUMNS, pinned_stages, place_stage, queue_added_columns, queue_columns,
     reads_of, resumed_stages,
 )
+from stage_seed import add_stage
 
 PROJECT = "queue_route_journey"
 
@@ -53,8 +54,8 @@ def _with_queue_signature(stage, input_columns):
 
 
 def _write_stage(root, filename, stage):
-    (root / "compiled").mkdir(parents=True, exist_ok=True)
-    (root / "compiled" / filename).write_text(json.dumps(stage), encoding="utf-8")
+    root.mkdir(parents=True, exist_ok=True)
+    add_stage(root, stage)
 
 
 def _load_quotes_stage(root):

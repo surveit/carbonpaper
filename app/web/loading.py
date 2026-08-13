@@ -25,10 +25,12 @@ from app.models.run_manifest import read_run_manifest
 from app.runtime.manifest import resolve_output_path
 from app.services.run import resolve_version
 from app.services.loader import (
-    CompiledStageFile,
+    StageEntry,
+    exists as has_working_copy,
     find_file_issues,
     list_parsed_stages,
-    load_compiled_dir,
+    load_stage_entries,
+    read_stage_specs,
 )
 from app.services.versioning import list_versions, load_version_stages
 from app.services.project import read_project_name
@@ -54,8 +56,7 @@ def list_projects() -> list[ProjectCard]:
 
 
 def _build_project_card(p: Path) -> ProjectCard | None:
-    compiled_dir = p / "compiled"
-    n_stages = len(list(compiled_dir.glob("*.json"))) if compiled_dir.is_dir() else 0
+    n_stages = len(read_stage_specs(p.name))
     has_workflow = n_stages > 0
     n_schemas = count_nouns(p.name)
     has_schemas = n_schemas > 0
@@ -80,47 +81,40 @@ def _build_project_card(p: Path) -> ProjectCard | None:
 
 @dataclass
 class StageListing:
-    """All-or-nothing: one invalid file empties `entries`, and `issues` names the broken ones."""
-    entries: list[CompiledStageFile]
+    """All-or-nothing: one invalid stage empties `entries`, and `issues` names the broken ones."""
+    entries: list[StageEntry]
     # A working copy mid-edit often forms no workflow; `WorkflowNotFormed` says why,
     # so no reader has to hold a reason beside a missing one.
     workflow: Workflow | WorkflowNotFormed
-    issues: list[CompiledStageFile]
-    order: dict[str, str]
+    issues: list[StageEntry]
 
 
 def load_stages(project: str) -> StageListing:
-    compiled_dir = projects_dir() / project / "compiled"
-    if not compiled_dir.is_dir():
-        raise HTTPException(status_code=404, detail=f"No compiled stages for {project}")
-    entries = load_compiled_dir(compiled_dir)
+    if not has_working_copy(project):
+        raise HTTPException(status_code=404, detail=f"No workflow for {project}")
+    entries = load_stage_entries(project)
     issues = [e for e in entries if e.issues]
     if issues:
-        # One invalid file breaks the whole workflow — its inputs no longer
+        # One invalid stage breaks the whole workflow — its inputs no longer
         # resolve, so the surviving stages form a workflow with holes. Rendering that
         # is "unusable but lies." Return no stages, only the issues, so the
         # viewer shows what's broken instead of a false graph.
         return StageListing(
             entries=[], workflow=WorkflowNotFormed(issues=find_file_issues(issues)),
-            issues=issues, order={})
-    stages = list_parsed_stages(entries)
-    order = {e.stage.id: e.filename.split("_", 1)[0]
-             for e in entries if e.stage is not None}
+            issues=issues)
     return StageListing(
         entries=entries,
-        workflow=build_workflow(stages),
+        workflow=build_workflow(list_parsed_stages(entries)),
         issues=[],
-        order=order,
     )
 
 
 def load_stages_or_empty(project: str) -> StageListing:
-    compiled_dir = projects_dir() / project / "compiled"
-    if not compiled_dir.is_dir():
+    if not has_working_copy(project):
         return StageListing(
             entries=[],
-            workflow=WorkflowNotFormed(issues=["the project has no compiled stages yet"]),
-            issues=[], order={})
+            workflow=WorkflowNotFormed(issues=["the project has no stages yet"]),
+            issues=[])
     return load_stages(project)
 
 

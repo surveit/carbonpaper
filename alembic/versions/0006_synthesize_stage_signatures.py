@@ -19,12 +19,6 @@ depends_on = None
 
 # A stage's output schema now resolves from its `signature` alone, and the outer
 # is gone from the model, so a payload carrying one no longer loads. The
-# synthesis is shared with scripts.migrate_compiled_stage_files — a project's
-# working copy carries the same specs and no revision can reach it.
-#
-# add_signature RAISES (SignatureUndeterminable) on a stage whose outer dropped
-# an input column: an `extends` signature cannot express a drop, so the payload
-# does not determine one and a human must author it.
 _COLLECTIONS = ("workflow_version", "draft")
 
 

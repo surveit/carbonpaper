@@ -1,7 +1,7 @@
 """The signature a stored stage spec's `output_schema` and config imply.
 
 Shared by alembic revision 0006 (the document store) and
-scripts.migrate_compiled_stage_files (a project's working copy), so a rewritten
+the alembic revision that rewrites the stored payloads, so a rewritten
 store and a rewritten compiled file cannot disagree about what a spec meant.
 
 REFUSES rather than guesses: an outer that dropped an anchor column does not

@@ -1,5 +1,4 @@
 """The node review partial renders the stage's tests as a skimmable report."""
-import json
 from pathlib import Path
 
 import pytest
@@ -7,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.services import workspace
+from stage_seed import add_stage
 
 _AMOUNT = {"name": "amount", "type": "float", "nullable": False}
 # `note` is carried through: in the input schema, read by nothing, written by nothing.
@@ -14,13 +14,13 @@ _IN_SCHEMA = {"columns": [_AMOUNT, {"name": "note", "type": "str", "nullable": F
 
 
 def _seed_project(root: Path) -> None:
-    compiled = root / "alpha" / "compiled"
-    compiled.mkdir(parents=True)
-    (compiled / "01_load.json").write_text(json.dumps({
+    compiled = root / "alpha"
+    compiled.mkdir(parents=True, exist_ok=True)
+    add_stage(compiled, {
         "id": "load", "description": "Load", "type": "input_data",
         "connector": {"kind": "file"}, "signature": {"form": "replaces", "produces": _IN_SCHEMA["columns"]},
-    }), encoding="utf-8")
-    (compiled / "02_double.json").write_text(json.dumps({
+    })
+    add_stage(compiled, {
         "id": "double", "description": "Double", "type": "python_row_function",
         "inputs": [{"id": "load"}],
         "signature": {
@@ -43,7 +43,7 @@ def _seed_project(root: Path) -> None:
              "inputs": {"load": [{"note": "any balance", "amount": 5.0}]},
              "expected": None},
         ],
-    }), encoding="utf-8")
+    })
 
 
 @pytest.fixture

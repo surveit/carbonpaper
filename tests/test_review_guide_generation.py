@@ -6,7 +6,6 @@ The TestClient is a context manager so its loop survives the POST and the status
 from __future__ import annotations
 
 import asyncio
-import json
 import time
 from pathlib import Path
 from typing import Any
@@ -26,6 +25,7 @@ from app.models import (
 from app.models.review_guide import ReviewGuideDraft, ReviewGuideStep
 from app.services import versioning, workspace
 from app.services import project as project_service
+from stage_seed import add_stage
 
 _ROWS = {"columns": [{"name": "amount", "type": "float", "nullable": False}]}
 _DOUBLED = {"columns": [
@@ -65,18 +65,16 @@ _TRIPLE = {
 
 def _seed_project(root: Path) -> Path:
     project_dir = root / "alpha"
-    compiled = project_dir / "compiled"
-    compiled.mkdir(parents=True)
+    compiled = project_dir
+    compiled.mkdir(parents=True, exist_ok=True)
     (project_dir / "document.md").write_text("Double the amount.", encoding="utf-8")
-    (compiled / "01_load.json").write_text(json.dumps(_LOAD), encoding="utf-8")
-    (compiled / "02_double.json").write_text(json.dumps(_DOUBLE), encoding="utf-8")
+    add_stage(compiled, _LOAD)
+    add_stage(compiled, _DOUBLE)
     return project_dir
 
 
 def _add_stage_to_the_working_copy(project_dir: Path) -> None:
-    (project_dir / "compiled" / "03_triple.json").write_text(
-        json.dumps(_TRIPLE), encoding="utf-8"
-    )
+    add_stage(project_dir, _TRIPLE)
 
 
 def _guide_of(stage_ids: list[str]) -> ReviewGuideDraft:

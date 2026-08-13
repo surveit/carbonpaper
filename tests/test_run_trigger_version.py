@@ -13,6 +13,7 @@ from app.services import workspace
 from app.main import app
 from app.services.project import save_working_copy_as_version
 from app.services.versioning import list_versions, publish_version
+from stage_seed import add_stage, set_stages
 
 client = TestClient(app)
 
@@ -25,14 +26,14 @@ _ROWS_SCHEMA = {"columns": [{"name": "name", "type": "str", "nullable": False},
 @pytest.fixture
 def project_two_versions(tmp_path, monkeypatch):
     proj = tmp_path / "demo"
-    (proj / "compiled").mkdir(parents=True)
+    proj.mkdir(parents=True, exist_ok=True)
     data = proj / "a.csv"
     pd.DataFrame({"name": ["x", "y"], "val": [1, 2]}).to_csv(data, index=False)
     stage = {"id": "load", "description": "Load", "type": "input_data",
              "signature": {"form": "replaces", "produces": _ROWS_SCHEMA["columns"]},
              "connector": {"kind": "file",
                            "params": {"path": str(data), "format": "csv"}}}
-    (proj / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
+    add_stage(proj, stage)
     save_working_copy_as_version(proj, message="v1", reviewer="test")
     save_working_copy_as_version(proj, message="v2", reviewer="test")
     workspace.set_projects_dir(tmp_path)
@@ -93,14 +94,14 @@ def test_new_run_page_404s_for_a_version_id_no_version_carries(project_two_versi
 
 def _seed_load_stage(proj):
     proj.mkdir(parents=True, exist_ok=True)
-    (proj / "compiled").mkdir(parents=True)
+    proj.mkdir(parents=True, exist_ok=True)
     data = proj / "a.csv"
     pd.DataFrame({"name": ["x"], "val": [1]}).to_csv(data, index=False)
     stage = {"id": "load", "description": "Load", "type": "input_data",
              "signature": {"form": "replaces", "produces": _ROWS_SCHEMA["columns"]},
              "connector": {"kind": "file",
                            "params": {"path": str(data), "format": "csv"}}}
-    (proj / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
+    add_stage(proj, stage)
 
 
 def test_run_picker_offers_unpublished_versions_too(tmp_path, monkeypatch):
@@ -148,19 +149,16 @@ def test_run_form_hidden_when_the_project_has_no_version(tmp_path, monkeypatch):
 @pytest.fixture
 def project_versions_diff_paths(tmp_path, monkeypatch):
     proj = tmp_path / "demo"
-    (proj / "compiled").mkdir(parents=True)
+    proj.mkdir(parents=True, exist_ok=True)
     a, b = proj / "a.csv", proj / "b.csv"
     pd.DataFrame({"name": ["x"], "val": [1]}).to_csv(a, index=False)
     pd.DataFrame({"name": ["y"], "val": [2]}).to_csv(b, index=False)
-    compiled = proj / "compiled" / "01_load.json"
-
     def _author(path):
-        compiled.write_text(json.dumps(
+        set_stages(proj, [
             {"id": "load", "description": "Load", "type": "input_data",
              "signature": {"form": "replaces", "produces": _ROWS_SCHEMA["columns"]},
              "connector": {"kind": "file",
-                           "params": {"path": str(path), "format": "csv"}}}),
-            encoding="utf-8")
+                           "params": {"path": str(path), "format": "csv"}}}])
 
     _author(a)
     save_working_copy_as_version(proj, message="v1 reads a.csv", reviewer="test")

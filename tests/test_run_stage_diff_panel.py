@@ -5,7 +5,6 @@ dropped rows in place, the full-rows page keeps its row numbers/expandable cells
 and offers ?raw=1, and an unverifiable alignment falls back to plain output."""
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pandas as pd
@@ -20,6 +19,7 @@ from app.runtime.runner import execute_run
 from app.services import versioning
 from app.services import project as project_service
 from conftest import pinned_stages, reads_of
+from stage_seed import add_stage
 
 client = TestClient(app)
 
@@ -63,10 +63,9 @@ _ROUTE_SCHEMA = {"columns": [{"name": "name", "type": "str", "nullable": True},
                              {"name": "route", "type": "str", "nullable": True}]}
 
 
-def _seed_compiled(pdir: Path, data_path: Path, routes_path: Path) -> None:
-    compiled = pdir / "compiled"
-    compiled.mkdir(parents=True)
-    stages = [
+def _seed_workflow(pdir: Path, data_path: Path, routes_path: Path) -> None:
+    pdir.mkdir(parents=True, exist_ok=True)
+    stages: list[tuple[str, dict]] = [
         ("01_load.json", {
             "id": LOAD_ID, "description": "Load rows", "type": "input_data",
             "connector": {"kind": "file",
@@ -117,13 +116,13 @@ def _seed_compiled(pdir: Path, data_path: Path, routes_path: Path) -> None:
         }),
     ]
     for filename, spec in stages:
-        (compiled / filename).write_text(json.dumps(spec), encoding="utf-8")
+        add_stage(pdir, spec)
 
 
 @pytest.fixture()
 def run_ctx(tmp_path: Path) -> tuple[Path, str]:
     pdir = tmp_path / PROJECT
-    pdir.mkdir()
+    pdir.mkdir(parents=True, exist_ok=True)
     data = pdir / "rows.csv"
     pd.DataFrame({"name": ["alpha", "beta", "gamma"], "val": [1, 2, 1],
                   "junk": ["x", "y", "z"]}).to_csv(
@@ -132,7 +131,7 @@ def run_ctx(tmp_path: Path) -> tuple[Path, str]:
     # Keyed on the names `classify` emits (it uppercases where val > 1).
     pd.DataFrame({"name": ["alpha", "BETA", "gamma"],
                   "route": ["north", "south", "east"]}).to_csv(routes, index=False)
-    _seed_compiled(pdir, data, routes)
+    _seed_workflow(pdir, data, routes)
     workspace.set_projects_dir(tmp_path)
     version_id = project_service.save_working_copy_as_version(
         pdir, message="v1", reviewer="test").version_id

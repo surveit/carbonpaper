@@ -5,6 +5,7 @@ The frames carry key columns only — no arrival or population figure is needed 
 which keys are absent."""
 from __future__ import annotations
 
+
 import json
 
 import pandas as pd
@@ -16,6 +17,7 @@ from app.runtime.runner import execute_run
 from app.services.project import save_working_copy_as_version
 from app.web.run_issues import build_run_issues
 from conftest import pinned_stages, place_stage
+from stage_seed import add_stage
 
 # The 50 states and DC — the 51 jurisdictions the published table ranked.
 STATES = [
@@ -144,8 +146,8 @@ def test_a_key_that_cannot_form_a_set_says_the_check_did_not_run():
 
 # ── the whole way out to the surface a reviewer reads ────────────────────────
 def _write_wyoming_project(root):
-    (root / "compiled").mkdir(parents=True)
-    (root / "data").mkdir(parents=True)
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "data").mkdir(parents=True, exist_ok=True)
     ARRIVALS_BY_STATE.to_csv(root / "data" / "arrivals.csv", index=False)
     JURISDICTIONS.to_csv(root / "data" / "jurisdictions.csv", index=False)
     for order, (sid, name, columns) in enumerate([
@@ -153,14 +155,13 @@ def _write_wyoming_project(root):
         ("jurisdictions", "jurisdictions",
          [_column("state"), _column("jurisdiction_type")]),
     ], start=1):
-        (root / "compiled" / f"0{order}_{sid}.json").write_text(json.dumps({
+        add_stage(root, {
             "id": sid, "description": f"Load {name}", "type": "input_data",
             "connector": {"kind": "file", "params": {
                 "path": str(root / "data" / f"{name}.csv"), "format": "csv"}},
             "signature": {"form": "replaces", "produces": columns},
-        }), encoding="utf-8")
-    (root / "compiled" / "03_enrich.json").write_text(
-        _enrich(_STATE_KEY).stage.model_dump_json(exclude_none=True), encoding="utf-8")
+        })
+    add_stage(root, json.loads(_enrich(_STATE_KEY).stage.model_dump_json(exclude_none=True)))
 
 
 def test_the_gap_reaches_the_run_issue_index(tmp_path):

@@ -26,11 +26,8 @@ from app.models import (
     validate_named_schema,
 )
 from app.services import generation, project, terms, versioning
-from app.services.loader import (
-    LOADER_BOOKKEEPING_KEYS,
-    list_parsed_stages,
-    resolve_function_code,
-)
+from app.services.loader import list_parsed_stages, resolve_function_code
+from app.services.workspace import LOADER_BOOKKEEPING_KEYS
 from app.web.breadcrumbs import build_home_crumbs, build_version_crumbs
 from app.web.config import projects_dir, templates
 from app.runtime.stage_tests import run_stage_tests
@@ -210,7 +207,7 @@ async def project_workflow(request: Request, project_name: str):
     parsed = list_parsed_stages(listing.entries)
     # A valid workflow draws off typed Stages; a broken/partial one falls back to the
     # raw draft dicts so its graph still renders with the holes visible.
-    stages: list[Any] = parsed if parsed else project._load_compiled_stages(pdir)
+    stages: list[Any] = parsed if parsed else project.load_stage_specs(project_name)
     mermaid = build_mermaid_graph(stages, project_name) if stages else None
     return templates.TemplateResponse(
         request,

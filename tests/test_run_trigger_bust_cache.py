@@ -13,6 +13,7 @@ from app.services import versioning
 from app.services import workspace
 from app.services.project import save_working_copy_as_version
 from app.web.routers.runs import _read_bust_cache
+from stage_seed import add_stage
 
 client = TestClient(app)
 
@@ -28,7 +29,7 @@ def test_an_absent_box_reads_as_not_busted():
 @pytest.fixture
 def project(tmp_path, monkeypatch):
     proj = tmp_path / "demo"
-    (proj / "compiled").mkdir(parents=True)
+    proj.mkdir(parents=True, exist_ok=True)
     data = proj / "a.csv"
     pd.DataFrame({"name": ["x", "y"], "val": [1, 2]}).to_csv(data, index=False)
     stage = {"id": "load", "description": "Load", "type": "input_data",
@@ -41,7 +42,7 @@ def project(tmp_path, monkeypatch):
                      {"name": "val", "type": "int", "nullable": True},
                  ],
              }}
-    (proj / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
+    add_stage(proj, stage)
     vid = save_working_copy_as_version(proj, message="seed", reviewer="test").version_id
     versioning.publish_version(proj, vid, reviewer="human")
     workspace.set_projects_dir(tmp_path)
