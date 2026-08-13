@@ -9,14 +9,14 @@ from collections.abc import Mapping, Sequence
 from typing import ClassVar
 import json
 
-import pandas as pd
+import pyarrow as pa
 
 from app.core.frames import (
     collapse_null_forms,
-    compute_frames_fingerprint,
+    compute_tables_fingerprint,
     convert_cell_to_json_native,
     get_frame_store,
-    save_frame_or_reject,
+    save_table_or_reject,
 )
 from app.core.persistence import JsonDict, PersistedModel, PersistenceScope
 from app.core.utils import compute_short_hash
@@ -58,7 +58,9 @@ class StageCacheEntry(PersistedModel):
 #        back int64 `1` rather than float64 `1.0`.
 #   v3 — the row driver assembles its output as arrow too, so the same shift
 #        happens to a column a MAPPER produced, not only one read off disk.
-_CACHE_KEY_VERSION = 3
+#   v4 — the frame cache keys on the arrow table rather than a pandas rendering
+#        of it, so the last pandas-sourced hash is gone.
+_CACHE_KEY_VERSION = 4
 
 
 def _build_cache_prefix(project: str, stage_id: str, stage_fingerprint: str) -> str:
@@ -71,10 +73,10 @@ def _build_cache_id(project: str, stage_id: str, stage_fingerprint: str, input_f
 
 
 def _build_frame_cache_id(
-    project: str, stage_id: str, stage_fingerprint: str, input_frames: Sequence[pd.DataFrame]
+    project: str, stage_id: str, stage_fingerprint: str, input_tables: Sequence[pa.Table]
 ) -> str:
     return _build_cache_id(
-        project, stage_id, stage_fingerprint, compute_frames_fingerprint(input_frames)
+        project, stage_id, stage_fingerprint, compute_tables_fingerprint(input_tables)
     )
 
 
@@ -123,12 +125,12 @@ class ReadOnlyStageCache:
         project: str,
         stage_id: str,
         stage_fingerprint: str,
-        input_frames: Sequence[pd.DataFrame],
-    ) -> pd.DataFrame | None:
-        """`input_frames` ORDER is part of the key — swapping a join's two sides is a different input."""
-        return get_frame_store().load_frame(
+        input_tables: Sequence[pa.Table],
+    ) -> pa.Table | None:
+        """`input_tables` ORDER is part of the key — swapping a join's two sides is a different input."""
+        return get_frame_store().load_table(
             CACHED_FRAME_COLLECTION,
-            _build_frame_cache_id(project, stage_id, stage_fingerprint, input_frames),
+            _build_frame_cache_id(project, stage_id, stage_fingerprint, input_tables),
         )
 
 
@@ -159,12 +161,12 @@ class StageCache(ReadOnlyStageCache):
         project: str,
         stage_id: str,
         stage_fingerprint: str,
-        input_frames: Sequence[pd.DataFrame],
-        frame: pd.DataFrame,
+        input_tables: Sequence[pa.Table],
+        table: pa.Table,
     ) -> None:
-        save_frame_or_reject(
+        save_table_or_reject(
             CACHED_FRAME_COLLECTION,
-            _build_frame_cache_id(project, stage_id, stage_fingerprint, input_frames),
-            frame,
+            _build_frame_cache_id(project, stage_id, stage_fingerprint, input_tables),
+            table,
             described_as=f"stage {stage_id}",
         )

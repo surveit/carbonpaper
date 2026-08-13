@@ -141,7 +141,7 @@ def read_source_excel(
 # inverse of `frame.to_parquet`. `pd.read_parquet` is not that inverse: it
 # materializes a written list cell as an `np.ndarray`, so a saved
 # `["a", "b"]` returns as `array(["a", "b"])` and hashes through the
-# `default=str` fallback in `compute_frame_fingerprint` /
+# `default=str` fallback in `compute_table_fingerprint` /
 # `compute_row_fingerprint` as `"['a' 'b']"` rather than as a JSON array —
 # the same data under a different cache key. `types_mapper` fires only on the
 # arrow LIST types, so every scalar column keeps the numpy-backed dtype and
@@ -389,19 +389,19 @@ def convert_cell_to_json_value(value: object) -> object:
     return convert_cell_to_json_native(cell)
 
 
-def compute_frames_fingerprint(frames: Sequence[pd.DataFrame]) -> str:
+def compute_tables_fingerprint(tables: Sequence[pa.Table]) -> str:
     return compute_short_hash(
-        json.dumps([compute_frame_fingerprint(frame) for frame in frames])
+        json.dumps([compute_table_fingerprint(table) for table in tables])
     )
 
 
-def compute_frame_fingerprint(frame: pd.DataFrame) -> str:
+def compute_table_fingerprint(table: pa.Table) -> str:
     """Row/column ORDER is identity here, unlike a row fingerprint: a frame transform may sort."""
     payload = {
-        "columns": [str(label) for label in frame.columns],
+        "columns": list(table.column_names),
         "rows": [
-            [collapse_null_forms(cell) for cell in row]
-            for row in frame.itertuples(index=False, name=None)
+            [collapse_null_forms(row[name]) for name in table.column_names]
+            for row in table.to_pylist()
         ],
     }
     return compute_short_hash(json.dumps(payload, separators=(",", ":"), default=str))
@@ -416,20 +416,18 @@ class FrameStore:
         validate_id(id)
         return self.root / collection / f"{id}.parquet"
 
-    def save_frame(
-        self, collection: str, id: str, frame: pd.DataFrame, *, overwrite: bool = True
+    def load_table(self, collection: str, id: str) -> pa.Table | None:
+        path = self._path(collection, id)
+        return read_frame_table(path) if path.exists() else None
+
+    def save_table(
+        self, collection: str, id: str, table: pa.Table, *, overwrite: bool = True
     ) -> None:
         path = self._path(collection, id)
         if path.exists() and not overwrite:
             raise FileExistsError(f"frame already exists: {collection}/{id}")
         path.parent.mkdir(parents=True, exist_ok=True)
-        write_frame_file(frame, path)
-
-    def load_frame(self, collection: str, id: str) -> pd.DataFrame | None:
-        path = self._path(collection, id)
-        if not path.exists():
-            return None
-        return read_frame_file(path)
+        write_frame_table(table, path)
 
     def exists(self, collection: str, id: str) -> bool:
         return self._path(collection, id).exists()
@@ -456,14 +454,16 @@ def is_frame_store_configured() -> bool:
     return _frame_store is not None
 
 
-def save_frame_or_reject(
-    collection: str, id: str, frame: pd.DataFrame, *, described_as: str
+def save_table_or_reject(
+    collection: str, id: str, table: pa.Table, *, described_as: str
 ) -> None:
     store = get_frame_store()
     try:
-        store.save_frame(collection, id, frame)
+        store.save_table(collection, id, table)
     except (pa_lib.ArrowException, ValueError, TypeError) as exc:
         store.delete(collection, id)
         raise FrameNotSerializableError(
             f"{described_as}: output frame could not be written as parquet ({exc})"
         ) from exc
+
+
