@@ -1,23 +1,16 @@
-"""What a run RECORDS: the manifest's typed shape, the pure predicates over it, and
-the one read of a run's manifest.json off disk.
-
-Minting one, writing it back, and reading a stage's output frame are the runtime's
-job (`app.runtime.manifest`).
+"""What one STAGE of a run records, and the pure predicates over a raw manifest
+payload. The manifest itself is a stored record — `app.runtime.manifest`.
 """
 
 from __future__ import annotations
 
-import json
 from datetime import datetime
-from pathlib import Path
 from typing import Any, TypedDict
 
-from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict
 
 from app.core.agent.usage import LlmUsage
-from app.core.errors import RunManifestNotJson
-from app.core.run_status import RunStatus, StageStatus
-from app.models.run_parameters import RunParameters
+from app.core.run_status import StageStatus
 from app.models.schema import StageId, TypeUnsafeUserStageConfigOverride
 from app.models.stage import Stage
 from app.models.stages.stage_base import StageType
@@ -35,18 +28,6 @@ class RowError(TypedDict):
 
     row: int
     message: str
-
-
-# RunParameters field -> the top-level key a manifest written before the nesting
-# carried it under. Read by `_lift_legacy_parameters`; may only grow.
-_LEGACY_PARAMETER_KEYS = {
-    "limits": "limit_overrides",
-    "offsets": "offset_overrides",
-    "bust_cache": "bust_cache",
-    "queue_auto_approve": "queue_auto_approve",
-    "is_test_run": "is_test_run",
-    "run_bindings": "run_bindings",
-}
 
 
 class StageContribution(BaseModel):
@@ -124,78 +105,6 @@ class StageRecord(BaseModel):
         self.notes.append(note)
 
 
-class RunManifest(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
-    run_id: str
-    started_at: str
-    project: str | None
-    workflow_version: str | None
-    # What the caller asked of this run, verbatim — the settings a resume replays.
-    # `_lift_legacy_parameters` reads the flat pre-nesting keys off an older
-    # manifest into it, so every run on disk still parses.
-    parameters: RunParameters = RunParameters()
-    # The preflight provenance of each bound input (its absolute path, a sha256 and
-    # a byte count streamed at prepare time). A RESULT, not a parameter: it records
-    # what the run found, not what it was asked for.
-    input_bindings: dict[str, dict[str, Any]] = {}
-    # The live human_review_queue tallies. Required, unlike the override maps
-    # above: the key was renamed out of an older on-disk vocabulary, so a default
-    # would let a pre-rename manifest parse and then report an empty tally for a
-    # run that actually queued items. `create_run_manifest` always sets it.
-    human_review_queue_stats: dict[str, QueueStats]
-    dropped_columns: dict[str, list[str]] = {}
-    status: RunStatus
-    stage_records: list[StageRecord]
-    updated_at: str | None = None
-    finished_at: str | None = None
-    halted_at: list[str] | None = None
-    cancelled_at: str | None = None
-    resumed_at: str | None = None
-
-    @model_validator(mode="before")
-    @classmethod
-    def _lift_legacy_parameters(cls, data: Any) -> Any:
-        if not isinstance(data, dict) or "parameters" in data:
-            return data
-        legacy = {
-            new: data[old]
-            for new, old in _LEGACY_PARAMETER_KEYS.items()
-            if old in data
-        }
-        return {**data, "parameters": legacy} if legacy else data
-
-    @field_validator("halted_at", mode="before")
-    @classmethod
-    def _halted_at_to_list(cls, value: object) -> object:
-        if isinstance(value, str):
-            return [value]
-        return value
-
-    def settle_stage_records(self, records: list[StageRecord]) -> None:
-        self.stage_records = records
-
-    def record_dropped_columns(self, stage_id: str, columns: list[str]) -> None:
-        self.dropped_columns[stage_id] = columns
-        # Marked set so `exclude_unset` still emits it on a legacy manifest that lacked the key.
-        self.__pydantic_fields_set__.add("dropped_columns")
-
-    def record_human_review_queue_stats(self, stage_id: str, stats: QueueStats) -> None:
-        self.human_review_queue_stats[stage_id] = stats
-
-    def clear_halt(self) -> None:
-        self.halted_at = None
-        # Unmarked so `exclude_unset` writes no key: a resumed or cancelled run must not
-        # show a review banner for a halt that no longer holds.
-        self.__pydantic_fields_set__.discard("halted_at")
-
-    def find_stage_record(self, stage_id: str) -> StageRecord | None:
-        return next((r for r in self.stage_records if r.stage_id == stage_id), None)
-
-    def to_dict(self) -> dict[str, Any]:
-        return self.model_dump(exclude_unset=True)
-
-
 def records_a_test_run(raw: dict[str, Any]) -> bool:
     nested = raw.get("parameters")
     if isinstance(nested, dict) and "is_test_run" in nested:
@@ -219,31 +128,3 @@ def read_run_bindings(
 # disk) still gets it; `read_run_manifest` adds the typed validation on top.
 # Neither decides what an unreadable manifest MEANS — each caller answers that.
 
-_MANIFEST_FILENAME = "manifest.json"
-
-
-def find_manifest_backed_run_dirs(runs_dir: Path) -> list[Path]:
-    if not runs_dir.is_dir():
-        return []
-    return sorted(
-        (run for run in runs_dir.iterdir()
-         if run.is_dir() and (run / _MANIFEST_FILENAME).exists()),
-        key=lambda run: run.name,
-    )
-
-
-def read_run_manifest_json(run_dir: Path) -> dict[str, Any]:
-    path = run_dir / _MANIFEST_FILENAME
-    if not path.exists():
-        raise FileNotFoundError(f"No manifest at {path}")
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        raise RunManifestNotJson(f"{path} does not parse as JSON: {exc}") from exc
-    if not isinstance(raw, dict):
-        raise RunManifestNotJson(f"{path} holds a JSON {type(raw).__name__}, not an object")
-    return raw
-
-
-def read_run_manifest(run_dir: Path) -> RunManifest:
-    return RunManifest.model_validate(read_run_manifest_json(run_dir))

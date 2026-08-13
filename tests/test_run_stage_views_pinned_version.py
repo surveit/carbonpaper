@@ -5,7 +5,6 @@ cannot be resolved the panels say so and the scratch re-run refuses to execute.
 """
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pandas as pd
@@ -19,6 +18,7 @@ from app.services import versioning
 from app.services import project as project_service
 from conftest import pinned_stages
 from stage_seed import add_stage
+from run_seed import read_manifest, store_manifest
 
 client = TestClient(app)
 
@@ -92,10 +92,9 @@ def _drift_the_working_copy(project_dir: Path) -> None:
 
 def _unpin_the_run(project_dir: Path, run_id: str) -> None:
     """Drops workflow_version — the shape a pre-versioning run really has on disk."""
-    path = project_dir / "runs" / run_id / "manifest.json"
-    manifest = json.loads(path.read_text(encoding="utf-8"))
+    manifest = read_manifest(project_dir, run_id)
     manifest["workflow_version"] = None
-    path.write_text(json.dumps(manifest), encoding="utf-8")
+    store_manifest(project_dir, run_id, manifest)
 
 
 def _stage_panel(run_id: str):

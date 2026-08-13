@@ -138,7 +138,7 @@ async def runs_index(request: Request, project: str):
 
 @router.get("/project/{project}/runs/{run_id}/status")
 async def run_status(project: str, run_id: str):
-    manifest = load_manifest(runs_dir(project) / run_id)
+    manifest = load_manifest(project, run_id)
     mstages = manifest.get("stage_records", [])
     status_by_id = {s["stage_id"]: s.get("status", "") for s in mstages}
     graph = build_run_graph(project, manifest, status_by_id)
@@ -202,14 +202,14 @@ async def stream_run_events(
     stage: str | None = None,
 ):
     run_dir = runs_dir(project) / run_id
-    load_manifest(run_dir)  # 404s if the run doesn't exist
+    load_manifest(project, run_id)  # 404s if the run doesn't exist
     start = (
         tail_start_seq(run_dir / "events.jsonl", tail, stage)
         if from_seq is None
         else max(from_seq, 0)
     )
     return StreamingResponse(
-        stream_events(run_dir, request, start, stage),
+        stream_events(project, run_id, run_dir, request, start, stage),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
@@ -224,7 +224,7 @@ async def run_events_page(
     stage: str | None = None,
 ):
     run_dir = runs_dir(project) / run_id
-    load_manifest(run_dir)  # 404s if the run doesn't exist
+    load_manifest(project, run_id)  # 404s if the run doesn't exist
     limit = max(1, min(limit, EVENT_PAGE_MAX))
     return page_events_before(run_dir / "events.jsonl", before_seq, limit, stage)
 
@@ -232,7 +232,7 @@ async def run_events_page(
 @router.get("/project/{project}/runs/{run_id}", response_class=HTMLResponse)
 async def run_detail(request: Request, project: str, run_id: str):
     run_dir = runs_dir(project) / run_id
-    manifest = load_manifest(run_dir)
+    manifest = load_manifest(project, run_id)
     status_by_id = {s["stage_id"]: s.get("status", "") for s in manifest.get("stage_records", [])}
     graph = build_run_graph(project, manifest, status_by_id)
 
@@ -289,9 +289,7 @@ async def resume_run_route(project: str, run_id: str):
     project_dir = projects_dir() / project
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
-    run_dir = runs_dir(project) / run_id
-    if not (run_dir / "manifest.json").exists():
-        raise HTTPException(status_code=404, detail="Run not found")
+    load_manifest(project, run_id)  # 404s if the run doesn't exist
     # Resume executes the version the run PINNED, so that snapshot is what has to
     # load — validating the live working copy here would block resuming a valid
     # run because of an unrelated edit. The seam loads it synchronously and only
@@ -312,8 +310,7 @@ async def resume_run_route(project: str, run_id: str):
 
 @router.post("/project/{project}/runs/{run_id}/cancel")
 async def cancel_run_route(project: str, run_id: str):
-    run_dir = runs_dir(project) / run_id
-    manifest = load_manifest(run_dir)  # 404s if the run doesn't exist
+    manifest = load_manifest(project, run_id)  # 404s if the run doesn't exist
     if manifest.get("status") == RunStatus.RUNNING:
         request_cancel(project, run_id)
     return RedirectResponse(

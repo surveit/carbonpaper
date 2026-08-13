@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 
 import pandas as pd
 import pytest
@@ -11,6 +10,7 @@ from app.services import workspace
 from app.services.project import save_working_copy_as_version
 from app.services.versioning import list_versions
 from stage_seed import add_stage
+from run_seed import manifest_exists, read_manifest
 
 # The run service takes a project NAME and resolves it under the workspace root;
 # every test drives that one project.
@@ -59,9 +59,11 @@ def test_start_run_returns_run_id_and_writes_ok_manifest(project_dir):
     _make_project(project_dir)
     _seed_version(project_dir)
     run_id = run_service.start_run(_PROJECT)
-    manifest_path = project_dir / "runs" / run_id / "manifest.json"
-    assert manifest_path.exists()
-    assert json.loads(manifest_path.read_text(encoding="utf-8"))["status"] == "ok"
+    manifest_project = project_dir
+
+    manifest_run = run_id
+    assert manifest_exists(manifest_project, manifest_run)
+    assert read_manifest(manifest_project, manifest_run)["status"] == "ok"
 
 
 def test_start_run_pins_requested_version(project_dir):

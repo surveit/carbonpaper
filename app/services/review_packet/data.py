@@ -49,10 +49,11 @@ def write_packet_data(
     project_dir: Path,
     view: RunView,
     workflow: str | None,
+    manifest: str,
     stage_sources: dict[str, Path | None],
 ) -> DataReport:
     report = DataReport(written=[], omitted=[], artifacts=[])
-    _copy_run_records(root, run_dir, report)
+    _write_run_records(root, run_dir, manifest, report)
     _write_workflow(root, workflow, view, report)
     _write_document(root, project_dir, report)
     _copy_published_artifacts(root, run_dir, view, report)
@@ -65,8 +66,10 @@ def write_packet_data(
     return report
 
 
-def _copy_run_records(root: Path, run_dir: Path, report: DataReport) -> None:
-    _copy_file(run_dir / MANIFEST_FILE, root / MANIFEST_FILE, MANIFEST_FILE, report)
+def _write_run_records(
+    root: Path, run_dir: Path, manifest: str, report: DataReport
+) -> None:
+    _write_text(root / MANIFEST_FILE, manifest, MANIFEST_FILE, report)
     # events.jsonl carries the LLM prompts — the only record of what a model was asked.
     _copy_file(run_dir / EVENTS_FILE, root / EVENTS_FILE, EVENTS_FILE, report)
 

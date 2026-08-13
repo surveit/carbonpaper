@@ -11,7 +11,7 @@ from typing import Any
 import pandas as pd
 from fastapi import HTTPException
 
-from app.core.errors import NoVersionToRunError, StageOutputMissing
+from app.core.errors import RunNotFoundError, NoVersionToRunError, StageOutputMissing
 from app.core.frames import list_rows, read_frame_file, render_frame_as_csv_text
 from app.models import (
     StageType,
@@ -21,8 +21,7 @@ from app.models import (
     build_workflow,
 )
 from app.models.stages.llm_transform import LLMTransformStage
-from app.models.run_manifest import read_run_manifest
-from app.runtime.manifest import resolve_output_path
+from app.runtime.manifest import read_run_manifest, resolve_output_path
 from app.services.run import resolve_version
 from app.services.loader import (
     StageEntry,
@@ -61,7 +60,7 @@ def _build_project_card(p: Path) -> ProjectCard | None:
     has_workflow = n_stages > 0
     n_schemas = count_nouns(p.name)
     has_schemas = n_schemas > 0
-    runs = tally_runs(p / "runs")
+    runs = tally_runs(p.name)
     has_document = methodology_exists(p.name) or (p / "project.json").is_file()
     if not (has_workflow or has_schemas or has_document):
         return None
@@ -148,10 +147,11 @@ def runs_dir(project: str) -> Path:
     return projects_dir() / project / "runs"
 
 
-def load_manifest(run_dir: Path) -> dict[str, Any]:
-    if not (run_dir / "manifest.json").exists():
-        raise HTTPException(status_code=404, detail="Run not found")
-    return read_run_manifest(run_dir).to_dict()
+def load_manifest(project: str, run_id: str) -> dict[str, Any]:
+    try:
+        return read_run_manifest(project, run_id).to_dict()
+    except RunNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Run not found") from exc
 
 
 # ─── Tabular output previews ─────────────────────────────────────────────────
@@ -186,8 +186,8 @@ def csv_download_body(df: pd.DataFrame) -> bytes:
     return (_UTF8_BOM + render_frame_as_csv_text(df)).encode("utf-8")
 
 
-def manifest_stage(run_dir: Path, stage_id: str) -> dict[str, Any]:
-    manifest = load_manifest(run_dir)
+def manifest_stage(project: str, run_id: str, stage_id: str) -> dict[str, Any]:
+    manifest = load_manifest(project, run_id)
     stage_record = next(
         (s for s in manifest.get("stage_records", []) if s.get("stage_id") == stage_id),
         None,

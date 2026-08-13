@@ -9,7 +9,8 @@ from pathlib import Path
 import app
 from app.agents.tutorial.prompt import TUTORIAL_SYSTEM_PROMPT
 from app.core.run_status import RunStatus
-from app.models.run_manifest import QueueStats, RunManifest
+from app.models.run_manifest import QueueStats
+from app.runtime.manifest import RunManifest
 from app.web.breadcrumbs import _HOME_LABEL
 from app.tools.tool_specs import TOOL_SPECS
 from app.agents.tutorial.config import make_tutorial_tools

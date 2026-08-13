@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 
 import pandas as pd
 import pytest
@@ -11,6 +10,7 @@ from app.services import workspace
 from app.services.workflow_test import run_workflow_test
 from app.services.versioning import WorkflowVersion
 from conftest import QUEUE_COLUMNS
+from run_seed import manifest_exists, read_manifest
 
 
 def _load_stage(demo):
@@ -125,9 +125,11 @@ def test_workflow_test_limit_and_offset_slice_the_source(demo):
 def test_workflow_test_writes_a_real_run_marked_is_test_run(demo):
     _seed(demo, [_load_stage(demo), _CLASSIFY])
     result = run_workflow_test("demo")
-    manifest_path = demo / "runs" / result["run_id"] / "manifest.json"
-    assert manifest_path.exists()
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest_project = demo
+
+    manifest_run = result["run_id"]
+    assert manifest_exists(manifest_project, manifest_run)
+    manifest = read_manifest(manifest_project, manifest_run)
     assert manifest["project"] == "demo"
     assert manifest["workflow_version"] == "v1"
     assert manifest["status"] == "ok"
@@ -150,8 +152,7 @@ def test_workflow_test_reports_a_stage_error_as_failure(demo):
     result = run_workflow_test("demo")
     assert result["ok"] is False
     assert "boom" in result["error"]
-    manifest = json.loads(
-        (demo / "runs" / result["run_id"] / "manifest.json").read_text(encoding="utf-8"))
+    manifest = read_manifest(demo, result["run_id"])
     assert manifest["status"] == "errors"
 
 

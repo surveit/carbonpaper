@@ -4,7 +4,6 @@ pinned version cannot be resolved the page says so and draws NO graph.
 """
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pandas as pd
@@ -20,6 +19,7 @@ from app.services import project as project_service
 from app.services.run import load_run_workflow
 from conftest import pinned_stages
 from stage_seed import add_stage
+from run_seed import read_manifest, store_manifest
 
 client = TestClient(app)
 
@@ -67,10 +67,9 @@ def _drift_the_working_copy(project_dir: Path) -> None:
 
 
 def _rewrite_manifest(project_dir: Path, run_id: str, **changes: object) -> None:
-    path = project_dir / "runs" / run_id / "manifest.json"
-    manifest = json.loads(path.read_text(encoding="utf-8"))
+    manifest = read_manifest(project_dir, run_id)
     manifest.update(changes)
-    path.write_text(json.dumps(manifest), encoding="utf-8")
+    store_manifest(project_dir, run_id, manifest)
 
 
 # ─── The regression: the graph tracks the pinned version, not compiled/ ──────
@@ -167,8 +166,7 @@ def test_status_poller_reports_the_unresolvable_version_instead_of_a_graph(
 def test_load_run_workflow_reads_the_pinned_version(project: Path) -> None:
     run_id = _run_once(project)
     _drift_the_working_copy(project)
-    manifest = json.loads(
-        (project / "runs" / run_id / "manifest.json").read_text(encoding="utf-8"))
+    manifest = read_manifest(project, run_id)
 
     workflow = load_run_workflow(PROJECT, manifest)
     assert [s.id for s in workflow.stages] == [PINNED_ID]

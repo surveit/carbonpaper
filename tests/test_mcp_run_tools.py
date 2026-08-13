@@ -9,6 +9,7 @@ from app.services.project import save_working_copy_as_version
 from app.services.versioning import WorkflowVersion
 from app.services import workspace
 from stage_seed import add_stage
+from run_seed import manifest_exists
 
 
 def _make_run_project(root):
@@ -125,8 +126,10 @@ def test_run_workflow_test_delegates_and_reports_verdict(tmp_path, monkeypatch):
     assert "run_id" in result
     # A real run under the project's runs/ dir — reachable through the same
     # get_run_status a production run uses — but marked a test run.
-    manifest_path = tmp_path / "demo" / "runs" / result["run_id"] / "manifest.json"
-    assert manifest_path.exists()
+    manifest_project = tmp_path / "demo"
+
+    manifest_run = result["run_id"]
+    assert manifest_exists(manifest_project, manifest_run)
     status = server.get_run_status(project_id="demo", run_id=result["run_id"])
     assert status["parameters"]["is_test_run"] is True
 

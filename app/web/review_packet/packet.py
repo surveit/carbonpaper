@@ -41,7 +41,8 @@ def export_review_packet(project: str, run_id: str, dest_root: Path) -> ReviewPa
     }
     with log_elapsed(_log, f"{project}/{run_id} data"):
         data = write_packet_data(
-            root, run_dir, project_dir, view, workflow, stage_sources
+            root, run_dir, project_dir, view, workflow,
+            json.dumps(manifest, indent=2, default=str), stage_sources,
         )
     with log_elapsed(_log, f"{project}/{run_id} pages"):
         pages = write_packet_pages(

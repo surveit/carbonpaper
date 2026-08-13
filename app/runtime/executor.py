@@ -21,7 +21,6 @@ from app.core.frames import write_frame_file, write_frame_file_with_csv_fallback
 from app.models import StageType, Workflow, WorkflowStage
 from app.models.run_manifest import (
     RowError,
-    RunManifest,
     SCHEMA_REFUSAL_ERROR_TYPE,
     StageContribution,
     StageErrorInfo,
@@ -33,7 +32,7 @@ from app.core.run_status import RunStatus, StageStatus
 from .cancellation import consume_cancel
 from .context import RunContext, RunIdentity
 from .errors import RunCancelled
-from .manifest import CONTRIBUTION_ATTR, create_run_manifest, write_manifest
+from .manifest import CONTRIBUTION_ATTR, RunManifest, create_run_manifest, write_manifest
 from .run_log import RUN_START, STAGE_DONE, STAGE_START, RunLog
 from .stages import HANDLERS, HaltForReview, StageHandler
 from .lineage import (
@@ -78,7 +77,7 @@ def run_subset(
     run_dir: Path,
     repo_root: Path,
     params: RunParameters = RunParameters(),
-    project: str | None = None,
+    project: str,
     workflow_version: str | None = None,
     identity: RunIdentity | None = None,
 ) -> dict[str, pd.DataFrame]:
@@ -93,7 +92,7 @@ def run_subset(
     manifest = create_run_manifest(
         ordered, ctx, run_id=run_dir.name, project=project,
         workflow_version=workflow_version, input_bindings={})
-    write_manifest(run_dir, manifest)
+    write_manifest(manifest)
     outputs: dict[str, pd.DataFrame] = dict(injected_outputs)
     manifest = _execute_stages(ordered, ctx, manifest, run_dir, outputs)
     _raise_if_run_failed(manifest)
@@ -233,12 +232,8 @@ def _flush_manifest(
             for s in ordered
         ],
         "status": status,
-        "updated_at": datetime.now().isoformat(timespec="seconds"),
     })
-    try:
-        write_manifest(run_dir, snapshot)
-    except OSError:
-        pass
+    write_manifest(snapshot)
 
 
 def _gather_stage_inputs(
@@ -558,7 +553,7 @@ def _finalize_run_manifest(
             record.status for record in manifest.stage_records
         )
 
-    write_manifest(run_dir, manifest)
+    write_manifest(manifest)
     return manifest
 
 

@@ -1,11 +1,12 @@
-"""Architecture: the `app.core.stage_cache` accessors are the only channel a
-stage handler may use to persist something outliving its own run. Two rules:
-no `"project_dir"` dict key under `app/runtime/stages`, and no direct
-`.save()`/`.delete()` anywhere under `app/runtime`. `run_dir` writes stay
-legitimate - that is the run's OWN directory, not project-scope state.
+"""Architecture: `app.core.stage_cache` is the only channel a stage handler may
+use to persist something outliving its own run. Two rules: no `"project_dir"`
+dict key under `app/runtime/stages`, and no `.save()`/`.delete()` under
+`app/runtime` except in a module that DEFINES a PersistenceScope.RUN record —
+the run's OWN state, which is what `run_dir` writes were before it moved here.
 """
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 
 from arch import check_no_dict_keys
@@ -17,11 +18,31 @@ _RUNTIME_DIR = Path(__file__).resolve().parents[1]
 
 _BANNED_PERSISTENCE_METHODS = frozenset({"save", "delete"})
 
+# Written as a property of the module rather than a list of filenames, so it stays
+# the rule it means — project-scope writes from the runtime are still the bug this
+# catches — and needs no allowlist edit for the next run-scoped record.
+_RUN_SCOPE = "PersistenceScope.RUN"
+
+
+def defines_a_run_scoped_record(tree: ast.Module) -> bool:
+    """Whether `tree` declares a class with `SCOPE: ... = PersistenceScope.RUN`."""
+    return any(
+        isinstance(node, ast.AnnAssign)
+        and isinstance(node.target, ast.Name)
+        and node.target.id == "SCOPE"
+        and node.value is not None
+        and ast.unparse(node.value) == _RUN_SCOPE
+        for node in ast.walk(tree)
+    )
+
 
 def find_persisted_write_call_offenders(paths: list[Path]) -> list[str]:
     offenders: list[str] = []
     for path in paths:
-        hits = collect_called_methods(parse_module(path)) & _BANNED_PERSISTENCE_METHODS
+        tree = parse_module(path)
+        if defines_a_run_scoped_record(tree):
+            continue
+        hits = collect_called_methods(tree) & _BANNED_PERSISTENCE_METHODS
         if hits:
             offenders.append(f"{path.name}: {sorted(hits)}")
     return offenders

@@ -10,7 +10,8 @@ import pytest
 from app.core.stage_cache import ReadOnlyStageCache
 from app.models import Stage, TableSchema, Workflow, WorkflowStage, WorkflowStageInput
 from app.models.stages.signature import promised_output_schema, transform_input_schemas
-from app.models.run_manifest import StageContribution, read_run_manifest
+from app.models.run_manifest import StageContribution
+from app.runtime.manifest import read_run_manifest
 from app.models.run_parameters import RunParameters
 from app.runtime.context import (
     RunContext,
@@ -26,7 +27,7 @@ def pinned_stages(project_dir: Path, version_id: str | None = None) -> tuple[Wor
 
 
 def resumed_stages(project_dir: Path, run_id: str) -> tuple[Workflow, str]:
-    workflow_version = read_run_manifest(project_dir / "runs" / run_id).workflow_version
+    workflow_version = read_run_manifest(project_dir.name, run_id).workflow_version
     assert workflow_version, f"run {run_id} records no workflow_version"
     return _load_version_workflow(project_dir, workflow_version), workflow_version
 

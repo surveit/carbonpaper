@@ -22,6 +22,7 @@ from app.web.loading import MAX_TABLE_ROWS
 from app.services.review_packet.checksums import compute_sha256
 from stage_seed import add_stage
 from app.services.methodology import write_methodology
+from run_seed import read_manifest, store_manifest
 
 _PROJECT = "proj"
 
@@ -310,10 +311,12 @@ def test_unreadable_version_is_stated_on_the_stage_page(project_dir, tmp_path, m
     _make_project(project_dir)
     _seed_version(project_dir)
     run_id = run_service.start_run(_PROJECT)
-    manifest_path = project_dir / "runs" / run_id / "manifest.json"
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest_project = project_dir
+
+    manifest_run = run_id
+    manifest = read_manifest(manifest_project, manifest_run)
     manifest["workflow_version"] = "no-such-version"
-    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    store_manifest(manifest_project, manifest_run, manifest)
 
     packet = export_review_packet(_PROJECT, run_id, tmp_path / "packets")
 
@@ -367,10 +370,12 @@ def test_every_step_stays_reachable_when_no_diagram_is_drawn(project_dir, tmp_pa
     _make_project(project_dir)
     _seed_version(project_dir)
     run_id = run_service.start_run(_PROJECT)
-    manifest_path = project_dir / "runs" / run_id / "manifest.json"
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest_project = project_dir
+
+    manifest_run = run_id
+    manifest = read_manifest(manifest_project, manifest_run)
     manifest["workflow_version"] = "no-such-version"
-    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    store_manifest(manifest_project, manifest_run, manifest)
 
     packet = export_review_packet(_PROJECT, run_id, tmp_path / "packets")
 

@@ -15,6 +15,7 @@ from app.services import workspace
 from app.services.versioning import WorkflowVersion
 from app.services.workflow_test import run_workflow_test
 from app.web import loading
+from run_seed import read_manifest
 
 _LOAD_SCHEMA = {"columns": [{"name": "doc_id", "type": "str", "nullable": True}]}
 
@@ -74,8 +75,7 @@ def test_publish_stage_trace_links_works_in_a_workflow_test(demo):
     ]
 
     # The URL resolves through the SAME route a production run's trace links use
-    # — reachable because the workflow test wrote a real manifest under runs/.
-    manifest = json.loads((demo / "runs" / run_id / "manifest.json").read_text(encoding="utf-8"))
+    # — reachable because the workflow test recorded a real manifest.
+    manifest = read_manifest(demo, run_id)
     assert manifest["parameters"]["is_test_run"] is True
     assert loading.runs_dir("demo") == demo / "runs"
-    assert (demo / "runs" / run_id / "manifest.json").exists()

@@ -72,7 +72,8 @@ def page_events_before(
 
 
 async def stream_events(
-    run_dir: Path, request: Request, from_seq: int, stage: str | None = None
+    project: str, run_id: str, run_dir: Path, request: Request, from_seq: int,
+    stage: str | None = None,
 ) -> AsyncIterator[str]:
     """Polls the file: the run executes on worker threads with no access to this loop."""
     events_path = run_dir / "events.jsonl"
@@ -94,7 +95,7 @@ async def stream_events(
         # Fallback stop: if the writer never wrote run_done (a crash mid-run),
         # end once the manifest has settled AND a couple of polls added nothing,
         # so a client never hangs on an interrupted run.
-        if _find_terminal_status(run_dir) is not None:
+        if _find_terminal_status(project, run_id) is not None:
             idle_polls = 0 if new else idle_polls + 1
             if idle_polls >= _IDLE_POLLS_BEFORE_TERMINAL_STOP:
                 yield "event: done\ndata: {}\n\n"
@@ -102,6 +103,6 @@ async def stream_events(
         await asyncio.sleep(_EVENT_POLL_INTERVAL_S)
 
 
-def _find_terminal_status(run_dir: Path) -> str | None:
-    status = load_manifest(run_dir).get("status")
+def _find_terminal_status(project: str, run_id: str) -> str | None:
+    status = load_manifest(project, run_id).get("status")
     return None if status == RunStatus.RUNNING else status

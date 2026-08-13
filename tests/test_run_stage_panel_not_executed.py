@@ -5,7 +5,6 @@ say it never ran, not the bare 404 the panel used to render; a stage absent from
 pinned version too is still a 404."""
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pandas as pd
@@ -20,6 +19,7 @@ from app.services import project as project_service
 from app.services.workflow_test import run_workflow_test
 from conftest import pinned_stages
 from stage_seed import add_stage
+from run_seed import read_manifest
 
 client = TestClient(app)
 
@@ -71,8 +71,7 @@ def _panel(run_id: str, stage_id: str):
 
 def test_input_stage_of_a_workflow_test_opens_instead_of_404ing(project: Path):
     run_id = run_workflow_test(PROJECT, limit=2, offset=0)["run_id"]
-    manifest = json.loads(
-        (project / "runs" / run_id / "manifest.json").read_text(encoding="utf-8"))
+    manifest = read_manifest(project, run_id)
     assert [r["stage_id"] for r in manifest["stage_records"]] == ["classify"]
 
     response = _panel(run_id, "load")

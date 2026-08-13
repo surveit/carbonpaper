@@ -12,12 +12,18 @@ from typing import Any, Mapping
 import pandas as pd
 from pydantic import ValidationError
 
-from app.core.errors import RunNotFoundError, RunVersionUnresolvableError
+from app.core.errors import RunVersionUnresolvableError
 from app.core.frames import read_frame_column_names
 from app.models import Workflow, WorkflowStage
-from app.models.run_manifest import read_run_bindings, read_run_manifest
+from app.models.run_manifest import read_run_bindings
 from app.models.schema import StageId, TypeUnsafeUserStageConfigOverride
-from app.runtime.manifest import read_stage_output_frame, resolve_output_path
+from app.runtime.manifest import (
+    RunEntry as RunEntry,
+    list_run_entries as list_run_entries,
+    read_run_manifest,
+    read_stage_output_frame,
+    resolve_output_path,
+)
 from app.runtime.runner import prepare_run, resume_run, run_prepared
 from app.runtime.trace_links import RowTraceLinker
 from app.services.errors import WorkflowLoadError
@@ -94,21 +100,20 @@ def resume(project: str, run_id: str) -> None:
 
 
 def read_pinned_version(project: str, run_id: str) -> str:
-    run_dir = resolve_run_dir(project, run_id)
-    workflow_version = read_run_manifest(run_dir).workflow_version
+    workflow_version = read_run_manifest(project, run_id).workflow_version
     if not workflow_version:
         raise RunVersionUnresolvableError(
             f"Run '{run_id}' of '{project}' records no workflow version in its "
-            f"manifest ({run_dir / 'manifest.json'}), so the workflow it executed "
-            f"cannot be identified — it cannot be resumed."
+            f"manifest, so the workflow it executed cannot be identified — it "
+            f"cannot be resumed."
         )
     return workflow_version
 
 
 def read_stage_output(project: str, run_id: str, stage_id: str) -> pd.DataFrame:
     run_dir = resolve_run_dir(project, run_id)
-    _validate_run_exists(run_dir, project, run_id)
-    return read_stage_output_frame(run_dir, stage_id)
+    _validate_run_exists(project, run_id)
+    return read_stage_output_frame(project, run_dir, stage_id)
 
 
 def build_row_trace_url(project: str, run_id: str, stage_id: str, row: int) -> str:
@@ -134,9 +139,7 @@ def read_output_column_counts(project: str, manifest: Mapping[str, Any]) -> dict
 
 
 def read_run_status(project: str, run_id: str) -> dict[str, Any]:
-    run_dir = resolve_run_dir(project, run_id)
-    _validate_run_exists(run_dir, project, run_id)
-    return read_run_manifest(run_dir).to_dict()
+    return read_run_manifest(project, run_id).to_dict()
 
 
 def _count_output_columns(run_dir: Path, output_path: str | None) -> int | None:
@@ -151,12 +154,9 @@ def _count_output_columns(run_dir: Path, output_path: str | None) -> int | None:
         return None
 
 
-def _validate_run_exists(run_dir: Path, project: str, run_id: str) -> None:
-    if not (run_dir / "manifest.json").exists():
-        raise RunNotFoundError(
-            f"no run '{run_id}' for project '{project}' "
-            f"(no manifest at {run_dir / 'manifest.json'})"
-        )
+def _validate_run_exists(project: str, run_id: str) -> None:
+    """Raises RunNotFoundError unless the project recorded a run of this id."""
+    read_run_manifest(project, run_id)
 
 
 def resolve_version(project: str, version_id: str | None) -> str:

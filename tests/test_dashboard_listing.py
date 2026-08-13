@@ -12,6 +12,7 @@ from app.web.loading import list_projects
 from app.services import workspace
 from stage_seed import set_stages
 from app.services.methodology import write_methodology
+from run_seed import store_manifest
 
 client = TestClient(app)
 
@@ -99,12 +100,9 @@ def test_card_counts_stages_schemas_and_runs_with_a_manifest(examples_root):
     schemas_dir.mkdir(parents=True, exist_ok=True)
     (schemas_dir / "01_claim.json").write_text(
         json.dumps({"name": "claim", "columns": []}), encoding="utf-8")
-    runs_dir = proj / "runs"
-    finished_run = runs_dir / "20260101T000000"
-    finished_run.mkdir(parents=True, exist_ok=True)
-    (finished_run / "manifest.json").write_text("{}", encoding="utf-8")
-    unfinished_run = runs_dir / "20260102T000000"
-    unfinished_run.mkdir(parents=True, exist_ok=True)  # no manifest.json — not yet a real run
+    store_manifest(proj, "20260101T000000", {})
+    # A run directory with no stored manifest is not yet a real run.
+    (proj / "runs" / "20260102T000000").mkdir(parents=True, exist_ok=True)
 
     [card] = list_projects()
     assert card.n_stages == 2

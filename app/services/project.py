@@ -14,7 +14,6 @@ from typing import Any, ClassVar, Sequence
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from app.core.errors import RunManifestNotJson
 from app.core.persistence import PersistedModel, PersistenceScope, get_store
 from app.core.timestamp_ids import mint_timestamp_id
 from app.models import (
@@ -30,8 +29,6 @@ from app.models import (
 )
 from app.models.review_guide import ReviewGuideDraft
 from app.models.run_manifest import (
-    find_manifest_backed_run_dirs,
-    read_run_manifest_json,
     records_a_test_run,
 )
 from app.services.versioning import ReviewGuide
@@ -39,6 +36,7 @@ from app.core.run_status import RunStatus
 from app.services import stage_edit, terms, versioning, workspace
 from app.services import loader
 from app.services import methodology
+from app.services import run as run_service
 from app.services.errors import WorkflowLoadError
 from app.services.stage_edit import AddStagesResult, EditStageResult
 
@@ -182,23 +180,23 @@ def load_stage_specs(project_id: str) -> list[dict[str, Any]]:
 # ─── Run summary ──────────────────────────────────────────────────────────────
 
 
-def _runs_summary(pdir: Path) -> RunsSummary:
+def _runs_summary(project_id: str) -> RunsSummary:
     statuses: list[tuple[str, str]] = []  # (run_id, status)
     awaiting = 0
-    for run in find_manifest_backed_run_dirs(pdir / "runs"):
-        try:
-            manifest = read_run_manifest_json(run)
-        except RunManifestNotJson:
-            # Counted, not hidden: a manifest this reader cannot parse carries no
-            # `is_test_run` to exclude it by, so it is treated as non-test, same
-            # as every run was before that field existed.
+    for entry in run_service.list_run_entries(project_id):
+        if entry.raw is None:
+            # Counted, not hidden: a record this reader cannot read at all carries
+            # no `is_test_run` to exclude it by, so it is treated as non-test, the
+            # same as every run was before that field existed.
             status, is_test_run = "corrupt", False
         else:
-            status = manifest.get("status", "unknown")
-            is_test_run = records_a_test_run(manifest)
+            # Off the RAW payload, so a run written before a field was renamed
+            # still reports the status it actually reached.
+            status = entry.raw.get("status", "unknown")
+            is_test_run = records_a_test_run(entry.raw)
         if is_test_run:
             continue
-        statuses.append((run.name, status))
+        statuses.append((entry.run_id, status))
         if status == RunStatus.AWAITING_REVIEW:
             awaiting += 1
     if not statuses:
@@ -251,7 +249,7 @@ def project_state(pdir: Path) -> ProjectState:
 
     # ── Versions + runs ──
     n_versions = len(versioning.list_versions(pdir))
-    runs = _runs_summary(pdir)
+    runs = _runs_summary(pdir.name)
 
     return ProjectState(
         id=project_id,

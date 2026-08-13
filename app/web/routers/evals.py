@@ -208,7 +208,7 @@ async def stream_eval_run_events(
     start = (tail_start_seq(events_path, tail, stage) if from_seq is None
              else max(from_seq, 0))
     return StreamingResponse(
-        stream_events(events_path.parent, request, start, stage),
+        stream_events(project, run_id, events_path.parent, request, start, stage),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

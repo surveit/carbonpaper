@@ -3,7 +3,6 @@ one file PICKER per file-kind input stage. A field carries a stored file's sha25
 a path; blank means run whatever the workflow authored."""
 from __future__ import annotations
 
-import json
 
 import pandas as pd
 import pytest
@@ -16,6 +15,7 @@ from app.services import workspace
 from app.services.project import save_working_copy_as_version
 from app.services.uploads import save_upload
 from stage_seed import add_stage, read_stage
+from run_seed import read_manifest
 
 client = TestClient(app)
 
@@ -61,7 +61,7 @@ def _store(name: str, frame: pd.DataFrame, tmp_path) -> str:
 
 def _manifest(proj):
     run_dir = sorted((proj / "runs").iterdir())[-1]
-    return json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
+    return read_manifest(run_dir.parent.parent, run_dir.name)
 
 
 def test_a_picked_file_becomes_run_binding(project, tmp_path):

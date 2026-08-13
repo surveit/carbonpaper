@@ -13,7 +13,8 @@ from pydantic import ValidationError
 
 from app.core.run_status import RunStatus, StageStatus
 from app.models import parse_stage
-from app.models.run_manifest import RunManifest, StageContribution
+from app.models.run_manifest import StageContribution
+from app.runtime.manifest import RunManifest
 from app.runtime.context import RunContext
 from app.runtime.manifest import create_run_manifest
 from conftest import place_stage
@@ -53,8 +54,10 @@ def test_rewriting_a_legacy_manifest_migrates_it_to_the_nested_shape():
 @pytest.mark.parametrize("name", ["ok_run", "errored_run", "halted_run"])
 def test_a_legacy_manifest_round_trips_structurally(name: str):
     raw = _golden(name)
-    assert RunManifest.model_validate_json(_reserialize(raw)) == (
-        RunManifest.model_validate_json(raw))
+    # Compared through `to_dict`, which is what a manifest RECORDED — the store's
+    # own id/created_at/updated_at are minted per parse and are not part of it.
+    assert RunManifest.model_validate_json(_reserialize(raw)).to_dict() == (
+        RunManifest.model_validate_json(raw).to_dict())
 
 
 def test_a_stage_record_carries_only_the_optionals_it_earned():

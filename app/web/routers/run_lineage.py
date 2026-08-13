@@ -30,8 +30,7 @@ router = APIRouter()
 async def run_stage_lineage_panel(
     request: Request, project: str, run_id: str, stage_id: str, row: int
 ):
-    run_dir = runs_dir(project) / run_id
-    manifest = load_manifest(run_dir)
+    manifest = load_manifest(project, run_id)
     stage_record = next(
         (s for s in manifest.get("stage_records", []) if s.get("stage_id") == stage_id),
         None,
@@ -68,7 +67,7 @@ async def run_stage_lineage_panel(
 @router.get("/project/{project}/runs/{run_id}/stage/{stage_id}/row/{row}/trace")
 async def run_stage_row_trace(project: str, run_id: str, stage_id: str, row: int):
     run_dir = runs_dir(project) / run_id
-    load_manifest(run_dir)  # 404s if the run doesn't exist
+    load_manifest(project, run_id)  # 404s if the run doesn't exist
     try:
         trace = trace_row(run_dir, stage_id, row)
     except StageNotInRun as exc:
@@ -86,7 +85,7 @@ async def run_stage_row_trace_view(
     request: Request, project: str, run_id: str, stage_id: str, row: int
 ):
     run_dir = runs_dir(project) / run_id
-    manifest = load_manifest(run_dir)
+    manifest = load_manifest(project, run_id)
     try:
         trace = trace_row(run_dir, stage_id, row)
     except StageNotInRun as exc:
