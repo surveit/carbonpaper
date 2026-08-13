@@ -38,7 +38,7 @@
 <div class="ov-tiles">
 
   {# Document #}
-  <a class="ov-tile" href="/project/{{ s.name }}/document">
+  <a class="ov-tile" href="/project/{{ s.id }}/document">
     <span class="ov-tile-k">Document</span>
     {% if s.has_document %}
       <span class="ov-tile-v ok">present</span>
@@ -50,7 +50,7 @@
   </a>
 
   {# Terms — counted over the nouns, which are where a project's words are stored. #}
-  <a class="ov-tile" href="/project/{{ s.name }}/terms">
+  <a class="ov-tile" href="/project/{{ s.id }}/terms">
     <span class="ov-tile-k">Terms</span>
     {% set dm = s.data_model %}
     {% if not dm.present %}
@@ -62,7 +62,7 @@
   </a>
 
   {# Workflow (the typed-stage pipeline). #}
-  <a class="ov-tile" href="/project/{{ s.name }}/workflow">
+  <a class="ov-tile" href="/project/{{ s.id }}/workflow">
     <span class="ov-tile-k">Workflow</span>
     {% if not s.workflow.present %}
       <span class="ov-tile-v none">not built</span>
@@ -73,7 +73,7 @@
   </a>
 
   {# Runs #}
-  <a class="ov-tile" href="/project/{{ s.name }}/runs">
+  <a class="ov-tile" href="/project/{{ s.id }}/runs">
     <span class="ov-tile-k">Runs</span>
     {% if s.runs.n == 0 %}
       <span class="ov-tile-v none">none</span>
@@ -89,7 +89,7 @@
   </a>
 
   {# Versions #}
-  <a class="ov-tile" href="/project/{{ s.name }}/workflow">
+  <a class="ov-tile" href="/project/{{ s.id }}/workflow">
     <span class="ov-tile-k">Versions</span>
     {% if s.versions == 0 %}
       <span class="ov-tile-v none">none</span>

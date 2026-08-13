@@ -4,11 +4,14 @@ label: it addresses nothing, it may change, and two projects may share one.
 from __future__ import annotations
 
 import json
+import re
 import shutil
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
 
+from app.main import app
 from app.services import workspace
 from app.services.project import create_project, list_projects, project_meta
 from app.services.project import (
@@ -124,6 +127,26 @@ def test_the_shown_name_is_the_title_where_one_is_authored(workspace_root: Path)
     # The slug survives it: a bundle exports under that, and it is what a name lookup takes.
     assert project_meta(workspace_root / project_id).name == "dsa_evidence_capture"
     assert find_projects_by_name("dsa_evidence_capture") == [Project.load(project_id)]
+
+
+_SECTIONS = ("", "/document", "/terms", "/workflow", "/workflow/versions", "/runs", "/evals")
+
+
+def test_every_project_link_carries_the_id(workspace_root: Path) -> None:
+    """The split only holds if the screens link by id: a name in a path addresses nothing."""
+    name = "my_investigation"
+    project_id = create_project(name, "prose", source="test").id
+    client = TestClient(app)
+
+    for section in _SECTIONS:
+        page = client.get(f"/project/{project_id}{section}")
+        assert page.status_code == 200, f"/project/<id>{section} → {page.status_code}"
+        hrefs = re.findall(r'href="(/project/[^"]*)"', page.text)
+        assert hrefs, f"/project/<id>{section} links to no project page"
+        for href in hrefs:
+            addressed = href.split("/")[2]
+            assert addressed, f"/project/<id>{section} → {href} addresses no project"
+            assert addressed != name, f"/project/<id>{section} → {href} links by name"
 
 
 def test_a_project_json_with_no_record_is_still_read_by_name(workspace_root: Path) -> None:
