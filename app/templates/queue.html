@@ -207,37 +207,86 @@
     card.replaceWith(fresh);
   }
 
-  // A field is read-only until the reviewer opens it, so an untouched field
-  // submits exactly the value it displayed. Reverting closes it and restores
-  // the prefill, which is that same displayed value.
-  function openEditor(opener) {
-    const cell = opener.closest('.field-control');
-    opener.hidden = true;
-    cell.querySelector('.field-editor').hidden = false;
-    cell.querySelector('[data-target]').focus();
+  // `data-state` is the single source of truth for a field; the stylesheet
+  // renders each state. In `start` the control still holds its prefill, so
+  // Approve needs no value work, and an approved field submits exactly the
+  // value it displayed — which settles `approve` server-side.
+  function fieldOf(el) { return el.closest('.reviewed-field'); }
+  function controlOf(field) { return field.querySelector('[data-target]'); }
+
+  function setFieldState(field, state) {
+    field.dataset.state = state;
+    syncDecideGate(field.closest('.queue-card'));
   }
 
-  function closeEditor(reverter) {
-    const cell = reverter.closest('.field-control');
-    const control = cell.querySelector('[data-target]');
+  function syncDecideGate(card) {
+    const fields = card.querySelectorAll('.reviewed-field');
+    const decided = Array.from(fields).filter(function (f) {
+      return f.dataset.state === 'approved' || f.dataset.state === 'modified';
+    }).length;
+    const submit = card.querySelector('button[type="submit"]');
+    if (submit) submit.disabled = decided < fields.length;
+    const gate = card.querySelector('.decide-gate');
+    if (gate) {
+      gate.textContent =
+        `${decided} of ${fields.length} column${fields.length === 1 ? '' : 's'} decided`;
+    }
+  }
+
+  function showCurrentValue(field, value) {
+    const shown = field.querySelector('.current-value');
+    if (value === '') { shown.innerHTML = '<em>unset</em>'; } else { shown.textContent = value; }
+  }
+
+  function openEditor(field) {
+    const control = controlOf(field);
+    field.dataset.editReturn = field.dataset.state;
+    field.dataset.editValue = control.value;
+    setFieldState(field, 'editing');
+    syncMatchHint(field);
+    control.focus();
+  }
+
+  function syncMatchHint(field) {
+    const control = controlOf(field);
+    field.querySelector('.field-editor').dataset.match =
+      control.value === control.dataset.prefill ? 'true' : 'false';
+  }
+
+  function saveEdit(field) {
+    const control = controlOf(field);
+    showCurrentValue(field, control.value);
+    setFieldState(field, control.value === control.dataset.prefill ? 'approved' : 'modified');
+  }
+
+  function cancelEdit(field) {
+    const control = controlOf(field);
+    control.value = field.dataset.editValue;
+    setFieldState(field, field.dataset.editReturn);
+  }
+
+  function revertField(field) {
+    const control = controlOf(field);
     control.value = control.dataset.prefill;
-    cell.querySelector('.field-editor').hidden = true;
-    const opener = cell.querySelector('[data-edit-for]');
-    opener.hidden = false;
-    opener.focus();
+    showCurrentValue(field, control.dataset.prefill);
+    setFieldState(field, 'start');
   }
 
   // A decided card records no new decision until the reviewer asks to change
-  // it, so unlocking only re-enables the controls — it submits nothing.
+  // it: unlocking returns every field to `start`, so each must be decided
+  // again before the gate lets a new submit through. It submits nothing.
   function unlockCard(button) {
     const card = button.closest('.queue-card');
-    card.querySelectorAll('[data-edit-for]').forEach(function (opener) {
-      opener.disabled = false;
+    card.querySelectorAll('.reviewed-field').forEach(function (field) {
+      field.dataset.state = 'start';
     });
     const notes = card.querySelector('[data-role="notes"]');
     if (notes) notes.readOnly = false;
     button.hidden = true;
     card.querySelector('button[type="submit"]').hidden = false;
+    const gate = card.querySelector('.decide-gate');
+    if (gate) gate.hidden = false;
+    syncDecideGate(card);
   }
 
   document.addEventListener('click', function (ev) {
@@ -245,16 +294,31 @@
     if (step) { showPage(currentPage + Number(step.dataset.pageStep), { scroll: true }); return; }
     const unlock = ev.target.closest('[data-unlock]');
     if (unlock) { unlockCard(unlock); return; }
-    const opener = ev.target.closest('[data-edit-for]');
-    if (opener) { openEditor(opener); return; }
-    const reverter = ev.target.closest('[data-revert-for]');
-    if (reverter) closeEditor(reverter);
+    const approve = ev.target.closest('[data-field-approve]');
+    if (approve) { setFieldState(fieldOf(approve), 'approved'); return; }
+    const edit = ev.target.closest('[data-field-edit]');
+    if (edit) { openEditor(fieldOf(edit)); return; }
+    const save = ev.target.closest('[data-field-save]');
+    if (save) { saveEdit(fieldOf(save)); return; }
+    const cancel = ev.target.closest('[data-field-cancel]');
+    if (cancel) { cancelEdit(fieldOf(cancel)); return; }
+    const revert = ev.target.closest('[data-field-revert]');
+    if (revert) revertField(fieldOf(revert));
+  });
+
+  document.addEventListener('input', function (ev) {
+    const field = fieldOf(ev.target);
+    if (field && field.dataset.state === 'editing' && ev.target.matches('[data-target]')) {
+      syncMatchHint(field);
+    }
   });
 
   document.addEventListener('submit', function (ev) {
     const form = ev.target.closest('.review-form');
     if (!form) return;
     ev.preventDefault();
+    const submit = form.querySelector('button[type="submit"]');
+    if (submit && (submit.disabled || submit.hidden)) return;
     const card = form.closest('.queue-card');
     if (card) submitDecision(card, readValues(card, 'value'));
   });

@@ -22,35 +22,42 @@
     {% endif %}
 
     <form class="review-form">
-        {# Two named halves: the column under review and the value it arrived with,
-           then the reviewer's own answer. The stored column each answer lands in is
-           named once, on the decided card's recorded line at the foot. #}
+        {# One column per reviewed field: the reviewer decides each field where its
+           value is shown, so there is no separate column to reconcile against it.
+           The stored column each answer lands in is named once, on the decided
+           card's recorded line at the foot. #}
         <div class="reviewed-fields">
         <p class="field-column-heading under-review">Columns to review</p>
-        <p class="field-column-heading">Your review</p>
         {% for field in page.reviewed_fields %}
         {% set field_id = 'rf-' ~ item.input_fingerprint ~ '-' ~ field.target %}
-        {# The upstream value is what this stage received for the column; `prefill`
-           is what the field opens with — the reviewer's own recorded value once this
-           row has been decided — and is also what the closed field displays, so an
-           untouched submit records exactly the value the reviewer was shown. #}
+        {# The upstream value is what this stage received for the column; `prefill` is
+           what the field opens with — the reviewer's own recorded value once this row
+           has been decided. Each field is decided one at a time: `data-state` is the
+           single source of truth, the stylesheet renders each state, and the script
+           only moves the attribute. #}
         {% set upstream_text = item.upstream_text.get(field.target) %}
         {% set prefill = item.prefill.get(field.target) %}
         {% set prefill_text = '' if prefill is none else prefill %}
-        <div class="reviewed-field">
+        <div class="reviewed-field" data-state="{{ 'locked' if item.prior_decision else 'start' }}">
             <label for="{{ field_id }}"
                    {% if field.description %}title="{{ field.description }}"{% endif %}>{{ field.source }}</label>
-            <span class="upstream-value">{% if upstream_text is none or upstream_text == '' %}<em>no value</em>{% else %}{{ upstream_text }}{% endif %}</span>
-            <div class="field-control">
-                {# A decided card is not asking for input: its openers are really
-                   disabled (not merely styled so) until "Change my review" unlocks them. #}
-                <button type="button" class="value-display" data-edit-for="{{ field_id }}"
-                        aria-controls="{{ field_id }}"
-                        {% if item.prior_decision %}disabled{% endif %}>
-                    <span class="current-value">{% if prefill is none %}<em>unset</em>{% else %}{{ prefill }}{% endif %}</span>
-                    <span class="edit-hint">change</span>
-                </button>
-                <span class="field-editor" hidden>
+            <span class="field-value">
+                {% if item.prior_decision and prefill_text != upstream_text %}
+                <span class="received-was"><s>{% if upstream_text is none or upstream_text == '' %}<em>no value</em>{% else %}{{ upstream_text }}{% endif %}</s> →</span>
+                {% endif %}
+                <span class="prefill-was"><s>{% if prefill is none %}<em>unset</em>{% else %}{{ prefill }}{% endif %}</s> →</span>
+                <strong class="current-value">{% if prefill is none %}<em>unset</em>{% else %}{{ prefill }}{% endif %}</strong>
+                <span class="field-state">
+                    <span class="state-approved">✓ approved</span>
+                    <span class="state-modified">✎ modified</span>
+                </span>
+            </span>
+            <span class="field-ctas">
+                <button type="button" class="btn-field" data-field-approve aria-controls="{{ field_id }}">Approve</button>
+                <button type="button" class="btn-field" data-field-edit aria-controls="{{ field_id }}">Change</button>
+                <button type="button" class="btn-field" data-field-revert aria-controls="{{ field_id }}">Revert</button>
+            </span>
+            <span class="field-editor">
                 {% if field.control == 'select' %}
                 <select id="{{ field_id }}" data-target="{{ field.target }}"
                         data-prefill="{{ prefill_text }}">
@@ -69,9 +76,10 @@
                        {% if field.minimum is not none %}min="{{ field.minimum }}"{% endif %}
                        {% if field.maximum is not none %}max="{{ field.maximum }}"{% endif %}>
                 {% endif %}
-                <button type="button" class="revert-edit" data-revert-for="{{ field_id }}">revert</button>
-                </span>
-            </div>
+                <button type="button" class="btn-field" data-field-save>Save</button>
+                <button type="button" class="btn-field" data-field-cancel>Cancel</button>
+                <span class="match-hint">same value — saves as approved</span>
+            </span>
         </div>
         {% endfor %}
         </div>
@@ -90,7 +98,8 @@
             <button type="button" class="btn unlock-review" data-unlock>Change my review</button>
             {% endif %}
             <button type="submit" class="btn primary"
-                    {% if item.prior_decision %}hidden{% endif %}>Submit</button>
+                    {% if item.prior_decision %}hidden{% else %}disabled{% endif %}>Submit</button>
+            <span class="decide-gate" {% if item.prior_decision %}hidden{% endif %}>0 of {{ page.reviewed_fields | length }} column{{ 's' if page.reviewed_fields | length != 1 }} decided</span>
         </div>
     </form>
     {# Below the controls, so recording a decision adds nothing above the place
