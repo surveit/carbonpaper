@@ -1,7 +1,6 @@
 """`queue.sort` orders the queue SNAPSHOT, and the sidecar must be permuted with it."""
 from __future__ import annotations
 
-import json
 
 import pandas as pd
 import pytest
@@ -9,6 +8,7 @@ import pytest
 from app.core.stage_cache import StageCache
 from app.models import Stage, parse_stage
 from app.models.stage import StageType
+from app.runtime.stages.human_review_queue import QueueFingerprints
 from app.runtime.context import RunIdentity
 from app.runtime.errors import HaltForReview
 from app.runtime.stages import HANDLERS
@@ -49,8 +49,9 @@ def _halt(stage: Stage, frame: pd.DataFrame, tmp_path, run_id: str):
             place_stage(stage), {"scored": frame}, ctx
         )
     queue_path = exc_info.value.queue_path
-    sidecar = queue_path.parent / f"{queue_path.stem}.fingerprints.json"
-    return pd.read_parquet(queue_path), json.loads(sidecar.read_text(encoding="utf-8"))
+    fingerprints = QueueFingerprints.load(
+        QueueFingerprints.compose_id(PROJECT, run_id, queue_path.stem))
+    return pd.read_parquet(queue_path), fingerprints.model_dump()
 
 
 def _scored(ids: list[str], scores: list[int | None]) -> pd.DataFrame:

@@ -87,6 +87,16 @@ class RunContext(BaseModel):
     def attach_run_log(self, log: RunLog) -> RunContext:
         return self.model_copy(update={"run_log": log})
 
+    def require_identity(self) -> RunIdentity:
+        """This run's (project, run id), for a handler storing a run-scoped record."""
+        if self.identity is None:
+            raise ValueError(
+                "this run context has no identity — it is an in-memory harness "
+                "context, so a stage that stores a run-scoped record cannot "
+                "execute under it."
+            )
+        return self.identity
+
     def require_run_dir(self) -> Path:
         if self.run_dir is None:
             raise ValueError(

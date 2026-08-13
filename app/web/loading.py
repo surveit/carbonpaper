@@ -2,7 +2,6 @@
 # cache (app.core.stage_cache).
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
@@ -21,6 +20,7 @@ from app.models import (
     build_workflow,
 )
 from app.models.stages.llm_transform import LLMTransformStage
+from app.runtime.stages.human_review_queue import QueueFingerprints
 from app.runtime.manifest import read_run_manifest, resolve_output_path
 from app.services.run import resolve_version
 from app.services.loader import (
@@ -316,32 +316,18 @@ def queue_snapshot(project: str, run_id: str, stage_id: str) -> pd.DataFrame | N
     return None
 
 
-@dataclass
-class QueueFingerprints:
-    """`input_fingerprints` and `row_ordinals` are POSITIONALLY aligned to the snapshot's rows."""
-    stage_fingerprint: str
-    input_fingerprints: list[str]
-    row_ordinals: list[int] | None
-
-
 def load_queue_fingerprints(project: str, run_id: str, stage_id: str) -> QueueFingerprints | None:
-    run_dir = runs_dir(project) / run_id
-    path = run_dir / "queue" / f"{stage_id}.fingerprints.json"
-    if not path.exists():
+    """None when no run has halted at this stage."""
+    fingerprints = QueueFingerprints.load_or_none(
+        QueueFingerprints.compose_id(project, run_id, stage_id))
+    if fingerprints is None:
         return None
-    data = json.loads(path.read_text(encoding="utf-8"))
-    ordinals = data.get("row_ordinals")
-    fingerprints = QueueFingerprints(
-        stage_fingerprint=data["stage_fingerprint"],
-        input_fingerprints=data["input_fingerprints"],
-        row_ordinals=None if ordinals is None else [int(o) for o in ordinals],
-    )
-    _validate_sidecar_alignment(fingerprints, queue_snapshot(project, run_id, stage_id),
-                                stage_id, run_id)
+    _validate_fingerprint_alignment(
+        fingerprints, queue_snapshot(project, run_id, stage_id), stage_id, run_id)
     return fingerprints
 
 
-def _validate_sidecar_alignment(
+def _validate_fingerprint_alignment(
     fingerprints: QueueFingerprints, snapshot: pd.DataFrame | None,
     stage_id: str, run_id: str,
 ) -> None:

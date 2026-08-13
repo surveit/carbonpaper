@@ -15,6 +15,7 @@ import app.web.loading as loading
 from app.services import workspace
 from app.web import queue_view
 from app.main import app
+from app.runtime.stages.human_review_queue import QueueFingerprints
 from app.runtime.runner import prepare_run, run_prepared
 from app.runtime.stages import llm_transform as lt
 from app.services import review, versioning
@@ -115,10 +116,9 @@ def _review_stage():
             "queue": dict(QUEUE_COLUMNS)}
 
 
-def _read_fingerprints(run_dir, stage_id: str = "review") -> dict:
-    path = run_dir / "queue" / f"{stage_id}.fingerprints.json"
-    parsed: dict = json.loads(path.read_text(encoding="utf-8"))
-    return parsed
+def _read_fingerprints(project: str, run_id: str, stage_id: str = "review") -> dict:
+    return QueueFingerprints.load(
+        QueueFingerprints.compose_id(project, run_id, stage_id)).model_dump()
 
 
 def _find_stage_def(project: str, stage_id: str) -> WorkflowStage:
@@ -158,7 +158,7 @@ def _build_and_halt(tmp_path, monkeypatch):
 
     run_dir = project_dir / "runs" / manifest["run_id"]
     snapshot = pd.read_parquet(run_dir / "queue" / "review.parquet")
-    fingerprints = _read_fingerprints(run_dir)
+    fingerprints = _read_fingerprints(PROJECT, run_dir.name)
     return project_dir, manifest["run_id"], run_dir, snapshot, fingerprints
 
 
@@ -368,7 +368,7 @@ def test_e2e_decide_every_verdict_then_resume_completes(tmp_path, monkeypatch):
     run_dir = project_dir / "runs" / run_id
     snapshot = pd.read_parquet(run_dir / "queue" / "review.parquet")
     assert len(snapshot) == 3
-    fingerprints = _read_fingerprints(run_dir)
+    fingerprints = _read_fingerprints(project, run_dir.name)
     stage_fingerprint = fingerprints["stage_fingerprint"]
     fp_by_id = dict(zip(snapshot["id"], fingerprints["input_fingerprints"]))
 
@@ -455,7 +455,7 @@ def test_decide_400_on_notes_when_the_stage_declares_no_notes_column(tmp_path, m
 
     manifest = run_prepared(prepare_run(project_dir, project_dir, *pinned_stages(project_dir)))
     run_id = manifest["run_id"]
-    fingerprints = _read_fingerprints(project_dir / "runs" / run_id)
+    fingerprints = _read_fingerprints(project, run_id)
 
     client = TestClient(app)
     r = client.post(
@@ -573,7 +573,7 @@ def _build_and_halt_bool_queue(tmp_path, monkeypatch, project, *, ai_value, null
     _seed_version(project_dir)
     run_id = run_prepared(prepare_run(project_dir, project_dir, *pinned_stages(project_dir)))["run_id"]
     run_dir = project_dir / "runs" / run_id
-    return run_id, _read_fingerprints(run_dir), pd.read_parquet(run_dir / "queue" / "review.parquet")
+    return run_id, _read_fingerprints(project, run_dir.name), pd.read_parquet(run_dir / "queue" / "review.parquet")
 
 
 def _find_selected_option(html, target):
@@ -671,7 +671,7 @@ def _decide_a_temporal_row(tmp_path, monkeypatch, project, column_type, recorded
     _write_stage(project_dir, "02_review.json", _temporal_review_stage(column_type))
     _seed_version(project_dir)
     run_id = run_prepared(prepare_run(project_dir, project_dir, *pinned_stages(project_dir)))["run_id"]
-    fingerprints = _read_fingerprints(project_dir / "runs" / run_id)
+    fingerprints = _read_fingerprints(project, run_id)
 
     client = TestClient(app)
     r = client.post(
@@ -745,7 +745,7 @@ def _build_and_halt_declared_range_queue(tmp_path, monkeypatch, project):
     _write_stage(project_dir, "02_review.json", _declared_range_review_stage())
     _seed_version(project_dir)
     run_id = run_prepared(prepare_run(project_dir, project_dir, *pinned_stages(project_dir)))["run_id"]
-    return run_id, _read_fingerprints(project_dir / "runs" / run_id)
+    return run_id, _read_fingerprints(project, run_id)
 
 
 def test_decide_coerces_against_the_signature_column_when_declared(tmp_path, monkeypatch):
@@ -790,7 +790,7 @@ def _build_and_halt_queue_over(tmp_path, monkeypatch, project, stages):
     manifest = run_prepared(prepare_run(project_dir, project_dir, *pinned_stages(project_dir)))
     assert manifest["status"] == "awaiting_review", manifest
     run_id = manifest["run_id"]
-    return run_id, _read_fingerprints(project_dir / "runs" / run_id)
+    return run_id, _read_fingerprints(project, run_id)
 
 
 def _lineage_urls(project, run_id, stage_id="review"):
