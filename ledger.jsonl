@@ -441,3 +441,4 @@
 {"run_id":"31717542554","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31717542554","created":"2026-08-13T15:52:07Z","branch":"master","event":"push","contracts_kept":null,"findings":[]}
 {"run_id":"31718625958","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31718625958","created":"2026-08-13T16:03:08Z","branch":"master","event":"push","contracts_kept":14,"findings":[]}
 {"run_id":"31718625958","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31718625958","created":"2026-08-13T16:04:14Z","branch":"master","event":"push","contracts_kept":null,"findings":[]}
+{"run_id":"31720817340","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31720817340","created":"2026-08-13T16:28:44Z","branch":"feat/eval-dataset-is-a-stored-file","event":"pull_request","contracts_kept":14,"findings":[]}
