@@ -2,6 +2,7 @@
 {# standalone page, so it repeats what base.html would have given it #}
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>lineage · {{ title }}</title>
+<link rel="icon" href="{{ static_root | default("/static/", true) }}favicon.svg" type="image/svg+xml">
 {% if assets %}{% for sheet in assets %}<link rel="stylesheet" href="{{ sheet }}">
 {% endfor %}{% else %}{% include "_stylesheets.html" %}{% endif %}
 {% if not offline %}<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>{% endif %}

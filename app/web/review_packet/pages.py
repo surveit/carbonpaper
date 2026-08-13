@@ -44,6 +44,8 @@ PALETTE_STYLESHEET = "palette.css"
 APP_STYLESHEET = "style.css"
 PACKET_STYLESHEET = "packet.css"
 STYLESHEETS = (PALETTE_STYLESHEET, APP_STYLESHEET, PACKET_STYLESHEET)
+# The tab mark, vendored so a packet page opened from disk is not an untitled tab.
+FAVICON = "favicon.svg"
 
 _APP_STATIC = Path(__file__).resolve().parents[2] / "static"
 _APP_TEMPLATES = Path(__file__).resolve().parents[2] / "templates"
@@ -89,6 +91,7 @@ def write_packet_pages(
 ) -> list[str]:
     written = _write_stylesheets(root)
     written.extend(_write_diagram_scripts(root))
+    written.append(_write_asset(root, FAVICON))
     written.append(_write_diagram_source(root, diagram))
     written.append(_write_index(root, view, data, lineage, guide, diagram, issues))
     for stage in view.stages:
@@ -129,6 +132,7 @@ def _write_index(
         omitted=data.omitted,
         artifacts=data.artifacts,
         assets=[f"{ASSETS_DIR}/{name}" for name in STYLESHEETS],
+        icon=f"{ASSETS_DIR}/{FAVICON}",
         stages_dir=STAGES_DIR,
         checksums_href=CHECKSUMS_FILE,
         project=view.project,
@@ -171,6 +175,7 @@ def _write_stage_page(
         "packet_stage.html",
         run=view,
         assets=[f"../{ASSETS_DIR}/{name}" for name in STYLESHEETS],
+        icon=f"../{ASSETS_DIR}/{FAVICON}",
         index_href="../index.html",
         **_build_panel_context(run_dir, view, stage, workflow_stage, traced),
     )
