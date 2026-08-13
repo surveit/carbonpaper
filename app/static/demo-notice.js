@@ -26,13 +26,19 @@
 
     const ack = document.getElementById("demo-gate-ack");
     const go = document.getElementById("demo-gate-continue");
+    let continued = false;
     ack.addEventListener("change", function () { go.disabled = !ack.checked; });
     go.addEventListener("click", function () {
         try { localStorage.setItem(KEY, "1"); } catch (e) { /* private mode: gate returns */ }
+        continued = true;
         gate.close();
     });
-    // Escape and the backdrop close a dialog by default. Here they would walk past the
-    // one thing this page exists to say, so the two ways out are the box and the link.
+    // Escape and the backdrop close a dialog by default, and a browser may honor a
+    // repeated close request even when cancel was prevented. So cancel is prevented,
+    // and any close not made by the Continue button reopens the gate.
     gate.addEventListener("cancel", function (event) { event.preventDefault(); });
+    gate.addEventListener("close", function () {
+        if (!continued) { setTimeout(function () { gate.showModal(); }, 0); }
+    });
     gate.showModal();
 })();
