@@ -50,7 +50,7 @@ from .lineage import (
 )
 from app.models.severity import UserFacingErrorSeverity
 from .key_coverage import find_key_coverage_issues
-from .validation import Issue, ValidationReport, validate_dataframe
+from .validation import Issue, ValidationReport, validate_table
 
 
 def topological_sort(stages: list[WorkflowStage]) -> list[WorkflowStage]:
@@ -261,12 +261,8 @@ def _gather_stage_inputs(
             outputs_so_far[ref.id], window, f"from input '{ref.id}'", record)
         _reject_duplicate_input_rows(table, ref.id, sid)
         inputs_for_stage[ref.id] = table
-        # Validation is the last thing on this path still reading rows as
-        # pandas; it materializes at its own edge rather than here.
-        report = validate_dataframe(
-            table_to_frame(table), ref.table_schema,
-            stage_id=sid, phase=f"input:{ref.id}",
-        )
+        report = validate_table(
+            table, ref.table_schema, stage_id=sid, phase=f"input:{ref.id}")
         record.input_validation_report.append(report.to_dict())
     return inputs_for_stage, window
 
@@ -392,8 +388,8 @@ def _finalize_stage_output(
     if lineage is not None:
         _persist_row_lineage(lineage, sid, run_dir)
 
-    out_rep = validate_dataframe(
-        frame, workflow_stage.output_schema, stage_id=sid, phase="output")
+    out_rep = validate_table(
+        table, workflow_stage.output_schema, stage_id=sid, phase="output")
     out_rep.issues.extend(find_key_coverage_issues(workflow_stage, inputs_for_stage))
     if row_errors:
         out_rep.issues[0:0] = [

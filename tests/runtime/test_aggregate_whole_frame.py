@@ -235,12 +235,13 @@ def test_the_walk_says_no_row_fed_an_empty_group_rather_than_blaming_position(tm
 # ---- The one row has to survive the executor's output checks ----------------
 
 def _output_report(frame: pd.DataFrame):
+    from app.core.frames import frame_to_table
     from app.models.schema import TableSchema
-    from app.runtime.validation import validate_dataframe
+    from app.runtime.validation import validate_table
 
     out = _run(_ALL_FORMULAS, _ALL_PRODUCES, frame)
     schema = TableSchema.model_validate({"columns": _ALL_PRODUCES})
-    return out, validate_dataframe(out, schema, stage_id="agg", phase="output")
+    return out, validate_table(frame_to_table(out), schema, stage_id="agg", phase="output")
 
 
 @pytest.mark.parametrize("frame", [FILINGS, _EMPTY], ids=["rows", "empty"])
