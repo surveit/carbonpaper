@@ -212,3 +212,4 @@
 {"run_id":"31688784967","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31688784967","created":"2026-08-13T09:57:01Z","branch":"refactor/arrow-wire-format-reland","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"31688926997","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31688926997","created":"2026-08-13T09:57:54Z","branch":"fix/files-quota-from-the-store","event":"pull_request","contracts_kept":14,"findings":[]}
 {"run_id":"31688926997","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31688926997","created":"2026-08-13T09:58:55Z","branch":"fix/files-quota-from-the-store","event":"pull_request","contracts_kept":null,"findings":[]}
+{"run_id":"31689158892","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31689158892","created":"2026-08-13T10:00:57Z","branch":"feat/files-page","event":"pull_request","contracts_kept":14,"findings":[]}
