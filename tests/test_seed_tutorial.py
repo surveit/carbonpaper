@@ -200,7 +200,7 @@ def test_the_texts_are_short_enough_to_read_side_by_side():
 
 
 def test_the_tours_capped_run_covers_a_contradiction_a_match_and_a_non_match():
-    """Beat 2 caps raw_filings, so all three outcomes must be inside the cap."""
+    """Beat 1 caps raw_filings, so all three outcomes must be inside the cap."""
     wf = _load_fixture()
     capped = pd.read_csv(_CSV_PATH).head(_TOUR_LIMIT)
 
@@ -287,7 +287,7 @@ def test_check_filings_is_grain_preserving_and_touches_nothing_else():
 
 
 def test_the_seeded_examples_pass_before_anything_has_been_run():
-    """Beat 3 sends the reader to this panel; a failing case there is the tour's first impression."""
+    """Beat 2 sends the reader to this panel; a failing case there is the tour's first impression."""
     report = run_stage_tests(list(_load_fixture().stages))
 
     assert report.summary.stages_run == 1
@@ -387,7 +387,7 @@ def test_the_methodology_document_admits_the_data_is_invented():
 
 
 def test_the_tours_capped_run_is_one_model_call():
-    # What the tour's small run costs: beat 2 caps raw_filings.
+    # What the tour's small run costs: beat 1 caps raw_filings.
     df = pd.read_csv(_CSV_PATH).head(_TOUR_LIMIT)
 
     assert len(df) <= _BATCH_SIZE
@@ -713,7 +713,7 @@ def test_the_card_carries_the_decision_and_nothing_else():
 
 
 def test_the_tours_capped_run_leaves_one_filing_asking_the_opposite_of_a_promise():
-    """Beat 2's capped run is meant to queue a card or two: real, and finishable."""
+    """Beat 1's capped run is meant to queue a card or two: real, and finishable."""
     joined = _execute(
         _stage(_load_fixture(), "matched_commitments"),
         {"check_filings": _checked(pd.read_csv(_CSV_PATH).head(_TOUR_LIMIT)),

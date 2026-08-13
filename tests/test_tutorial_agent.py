@@ -242,7 +242,7 @@ def test_the_run_link_is_the_seeding_tools_prefix_plus_the_returned_run_id() -> 
 def test_a_real_run_resolves_the_bound_csv_and_honours_the_row_cap(
     projects_root: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Beat 3 for real: the run's bindings resolve, and the cap reaches the source."""
+    """Beat 1 for real: the run's bindings resolve, and the cap reaches the source."""
     monkeypatch.setattr(
         run_service, "_run_in_background", lambda target, *args: target(*args)
     )
@@ -356,7 +356,7 @@ def test_a_blank_cell_reaches_the_tour_blank(
 def test_the_row_the_tour_calls_an_absence_is_the_one_with_no_second_parent(
     projects_root: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Beat 4's claim, checked against the trace the link opens."""
+    """Beat 2's claim, checked against the trace the link opens."""
     seeded, run_id = _run_the_tour_capped(monkeypatch)
     run_dir = projects_root / seeded["project"]["id"] / "runs" / run_id
 
@@ -392,7 +392,7 @@ def test_a_stage_that_did_not_finish_is_refused_rather_than_read(
 
 
 def test_the_seeding_tool_hands_back_the_stages_it_seeded(projects_root: Path) -> None:
-    """Beats 3 and 4 pick their stages by TYPE off this, so the script names none itself."""
+    """Beats 1 and 2 pick their stages by TYPE off this, so the script names none itself."""
     workflow = _seed_a_tour()["workflow"]
 
     by_type = {stage["type"]: stage["id"] for stage in workflow["stages"]}
@@ -401,7 +401,7 @@ def test_the_seeding_tool_hands_back_the_stages_it_seeded(projects_root: Path) -
         s.id for s in load_workflow(workflow["name"])
     ]
     # The three rules the script states: the last stage before the publish stage, the
-    # one stage whose behaviour is code, and the queue beat 3 links to.
+    # one stage whose behaviour is code, and the queue beat 1 links to.
     assert by_type["publish"] == "publish_report"
     assert by_type["python_row_function"] == "check_filings"
     assert by_type["human_review_queue"] == "review_contradictions"

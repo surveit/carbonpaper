@@ -21,9 +21,29 @@ from app.tools.tutorial import (
     seed_tutorial_project,
 )
 
+# The tour's first turn, written rather than generated: every reader is welcomed in the
+# same words, and the script picks up from the question it ends on.
+_TUTORIAL_OPENING = """\
+Welcome to Carbon Paper. You write your methodology as prose, an AI agent turns it into a \
+workflow of named, typed stages, and every row of the result traces back to the row it \
+came from.
+
+And welcome to the tutorial — I'm glad you're here.
+
+I'm going to seed a sample investigation for you to explore.
+
+Ready to get started?"""
+
+
+def _render_opening_message(context: BaseModel) -> str:
+    assert isinstance(context, TutorialContext)
+    return _TUTORIAL_OPENING
+
+
 CONFIG = AgentConfig(
     system_prompt=TUTORIAL_SYSTEM_PROMPT,
     context_schema=TutorialContext,
+    render_opening_message=_render_opening_message,
 )
 
 
