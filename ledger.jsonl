@@ -408,3 +408,4 @@
 {"run_id":"31711496105","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31711496105","created":"2026-08-13T14:44:27Z","branch":"tour/beat2-wait-and-orientation","event":"pull_request","contracts_kept":14,"findings":[]}
 {"run_id":"31711512103","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31711512103","created":"2026-08-13T14:44:36Z","branch":"feat/pitch-demo-cta","event":"pull_request","contracts_kept":14,"findings":[]}
 {"run_id":"31711540547","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31711540547","created":"2026-08-13T14:44:44Z","branch":"refactor/one-tool-table","event":"pull_request","contracts_kept":14,"findings":[]}
+{"run_id":"31711496105","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31711496105","created":"2026-08-13T14:45:32Z","branch":"tour/beat2-wait-and-orientation","event":"pull_request","contracts_kept":null,"findings":[]}
