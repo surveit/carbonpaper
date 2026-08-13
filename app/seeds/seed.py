@@ -3,7 +3,6 @@ them into the workspace through the app.services.project seam — never sqlite3,
 app.core.persistence, or app.core.frames."""
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 from app.services.project import WorkflowFile, import_project, sanitize_project_name
@@ -46,8 +45,3 @@ def _find_seeded_copy(bundle_name: str) -> str | None:
         None,
     )
 
-
-def seed_demo_data_if_enabled() -> list[str]:
-    if os.environ.get("CARBON_PAPER_SEED_DEMO") != "1":
-        return []
-    return seed_all()
