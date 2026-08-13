@@ -13,6 +13,7 @@ from fastapi import HTTPException
 
 from app.core.stage_cache import StageCacheEntry
 from app.models import Column, WorkflowStage
+from app.models.schema import STR_COLUMN_TYPE
 from app.models.stages.human_review_queue import QueueConfig, ReviewVerdict
 from app.runtime.citations import build_row_trace_url
 from app.web.loading import QueueFingerprints, display_cell
@@ -107,7 +108,13 @@ def build_queue_page(
 ) -> QueuePage:
     described = describe_queued_columns(stage_def, snapshot)
     lineage = resolve_lineage(stage_def, fingerprints)
-    fields = [] if drift else build_reviewed_fields(stage_def, queue)
+    source_texts = {} if snapshot is None else {
+        source: [str(v) for v in snapshot[source] if not _is_null(v)]
+        for source in queue.reviewed_columns if source in snapshot.columns
+    }
+    fields = [] if drift else build_reviewed_fields(
+        stage_def, queue, find_multiline_sources(source_texts)
+    )
     items: list[ReviewItem] = []
     if snapshot is not None and fingerprints is not None and drift is None:
         entries = _load_decided_entries(project_id, stage_def.id, fingerprints.stage_fingerprint)
@@ -165,7 +172,8 @@ def require_reviewed_column(stage_def: WorkflowStage, target: str) -> Column:
 
 
 def build_reviewed_fields(
-    stage_def: WorkflowStage, queue: QueueConfig
+    stage_def: WorkflowStage, queue: QueueConfig,
+    multiline_sources: frozenset[str] = frozenset(),
 ) -> list[ReviewedField]:
     source_schema = stage_def.inputs[0].table_schema
     fields = []
@@ -174,9 +182,21 @@ def build_reviewed_fields(
         assert declared_source is not None  # find_queue_column_issues: every source is declared
         fields.append(_build_reviewed_field(
             source, target, require_reviewed_column(stage_def, target),
-            declared_source.description,
+            declared_source.description, source in multiline_sources,
         ))
     return fields
+
+
+# Characters. A `str` reviewed column with no `enum` opens in a <textarea> once the
+# longest value the queue holds for its SOURCE column passes this, or holds a newline.
+_MULTILINE_VALUE_THRESHOLD_CHARS = 100
+
+
+def find_multiline_sources(source_texts: Mapping[str, list[str]]) -> frozenset[str]:
+    return frozenset(
+        source for source, texts in source_texts.items()
+        if any("\n" in text or len(text) > _MULTILINE_VALUE_THRESHOLD_CHARS for text in texts)
+    )
 
 
 def describe_queued_columns(
@@ -252,11 +272,12 @@ def describe_verdict(verdict: str) -> str:
 
 
 # ── The reviewed fields ──────────────────────────────────────────────────────
-# The HTML input `type` each scalar column type is entered through; a column
-# declaring an `enum` overrides this with a select of its vocabulary. `bool` is a
-# select rather than a checkbox because a checkbox has two states and a bool
-# column has three — true, false, and (on a nullable column, or before anyone has
-# supplied one) no value at all, which a checkbox would render as false.
+# The HTML input `type` each scalar column type defaults to. A column declaring
+# an `enum` overrides this with a select of its vocabulary, and a multiline `str`
+# column (`_resolve_control`) with a textarea. `bool` is a select rather than a
+# checkbox because a checkbox has two states and a bool column has three — true,
+# false, and (on a nullable column, or before anyone has supplied one) no value
+# at all, which a checkbox would render as false.
 _CONTROL_BY_COLUMN_TYPE: dict[str, str] = {
     "str": "text", "int": "number", "float": "number",
     "bool": "select", "date": "date", "datetime": "datetime-local",
@@ -266,10 +287,19 @@ _STEP_BY_COLUMN_TYPE: dict[str, str] = {"int": "1", "float": "any"}
 _OPTIONS_BY_COLUMN_TYPE: dict[str, list[str]] = {"bool": ["true", "false"]}
 
 
+def _resolve_control(column: Column, multiline: bool) -> str | None:
+    if column.enum is not None:
+        return "select"
+    if column.type == STR_COLUMN_TYPE and multiline:
+        return "textarea"
+    return _CONTROL_BY_COLUMN_TYPE.get(column.type)
+
+
 def _build_reviewed_field(
-    source: str, target: str, column: Column, source_description: str | None
+    source: str, target: str, column: Column, source_description: str | None,
+    multiline: bool,
 ) -> ReviewedField:
-    control = "select" if column.enum is not None else _CONTROL_BY_COLUMN_TYPE.get(column.type)
+    control = _resolve_control(column, multiline)
     if control is None:
         raise HTTPException(
             status_code=400,

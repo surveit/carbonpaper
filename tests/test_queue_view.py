@@ -172,6 +172,65 @@ def test_a_reviewed_field_takes_its_control_from_the_declared_type(
     assert (field.control, field.options, field.step) == (control, options, step)
 
 
+def test_a_multiline_source_column_opens_a_textarea():
+    stage = _queue_stage(_LABEL_COLUMNS)  # source="label", target_type="str"
+
+    field, = queue_view.build_reviewed_fields(
+        stage, stage.stage.queue, frozenset({"label"})
+    )
+
+    assert field.control == "textarea"
+
+
+def test_a_short_source_column_still_opens_an_input():
+    stage = _queue_stage(_LABEL_COLUMNS)
+
+    field, = queue_view.build_reviewed_fields(stage, stage.stage.queue)
+
+    assert field.control == "text"
+
+
+@pytest.mark.parametrize(
+    "target_type, target_spec, expected_control",
+    [
+        ("int", {}, "number"),
+        ("date", {}, "date"),
+        ("str", {"enum": ["yes", "no"]}, "select"),
+    ],
+)
+def test_a_non_str_or_enum_field_ignores_source_value_length(
+    target_type, target_spec, expected_control
+):
+    label_column: dict[str, object] = {"name": "label", "type": target_type, "nullable": True}
+    if "enum" in target_spec:
+        label_column["enum"] = target_spec["enum"]
+    stage = _queue_stage(
+        [{"name": "id", "type": "str", "nullable": True}, label_column],
+        target_type=target_type, target_spec=target_spec,
+    )
+
+    field, = queue_view.build_reviewed_fields(
+        stage, stage.stage.queue, frozenset({"label"})
+    )
+
+    assert field.control == expected_control
+
+
+def test_find_multiline_sources_flags_a_column_whose_longest_value_passes_the_threshold():
+    long_value = "x" * (queue_view._MULTILINE_VALUE_THRESHOLD_CHARS + 1)
+
+    assert queue_view.find_multiline_sources({"label": ["high"]}) == frozenset()
+    assert queue_view.find_multiline_sources({"label": [long_value]}) == frozenset({"label"})
+
+
+def test_find_multiline_sources_flags_a_column_carrying_a_newline_regardless_of_length():
+    assert queue_view.find_multiline_sources({"label": ["short\nline"]}) == frozenset({"label"})
+
+
+def test_find_multiline_sources_is_empty_with_no_values():
+    assert queue_view.find_multiline_sources({}) == frozenset()
+
+
 def test_a_declared_range_becomes_the_fields_bounds():
     stage = _queue_stage(
         [{"name": "id", "type": "str", "nullable": True}, {"name": "label", "type": "int", "range": [0, 5], "nullable": True}],

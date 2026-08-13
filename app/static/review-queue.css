@@ -149,9 +149,21 @@
     font: inherit; font-size: 12px; padding: 3px 10px; cursor: pointer;
 }
 .btn-field:hover { border-color: var(--accent); }
-.reviewed-field .field-editor { display: inline-flex; align-items: center; gap: 6px; }
+/* Groups the state marker with the decision buttons at a fixed position below
+   the value, whatever its length, with clear space above so the row never
+   reads as part of the value's own block. */
+.reviewed-field .field-decision-row {
+    display: inline-flex; align-items: center; gap: 10px; margin-top: 8px;
+}
+.reviewed-field .field-editor { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .reviewed-field .field-editor input, .reviewed-field .field-editor select {
     padding: 5px 8px; border: 1px solid var(--border); border-radius: 3px; font: inherit; font-size: 14px;
+}
+/* Grown by the script as the reviewer types (queue.html's `growTextarea`); it
+   never shrinks back below the `rows` the template opened it on. */
+.reviewed-field .field-editor textarea {
+    padding: 5px 8px; border: 1px solid var(--border); border-radius: 3px; font: inherit;
+    font-size: 14px; width: 100%; resize: vertical;
 }
 .field-state .state-approved { color: var(--good-ink); font-size: 12px; }
 .field-state .state-modified { color: var(--warn-ink); font-size: 12px; }
