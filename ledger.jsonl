@@ -258,3 +258,4 @@
 {"run_id":"31696574965","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31696574965","created":"2026-08-13T11:42:35Z","branch":"master","event":"push","contracts_kept":null,"findings":[]}
 {"run_id":"31697686479","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31697686479","created":"2026-08-13T11:56:37Z","branch":"drop-the-draft-tools","event":"pull_request","contracts_kept":14,"findings":[]}
 {"run_id":"31697686479","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31697686479","created":"2026-08-13T11:57:20Z","branch":"drop-the-draft-tools","event":"pull_request","contracts_kept":null,"findings":[]}
+{"run_id":"31697849128","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31697849128","created":"2026-08-13T11:58:38Z","branch":"chore/migrate-legacy-projects","event":"pull_request","contracts_kept":14,"findings":[]}
