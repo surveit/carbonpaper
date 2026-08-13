@@ -61,6 +61,12 @@ def build_arguments_model(
     unknown = set(parameters) - set(signature.parameters)
     if unknown:
         raise ValueError(f"{fn.__name__} does not take {sorted(unknown)}")
+    undescribed = (set(signature.parameters) - skip) - set(parameters)
+    if undescribed:
+        raise ValueError(
+            f"{fn.__name__} advertises {sorted(undescribed)} to the model with no prose "
+            "saying what they are — describe them, or add them to `skip`"
+        )
     hints = typing.get_type_hints(fn)
     fields: dict[str, Any] = {}
     for parameter_name, parameter in signature.parameters.items():

@@ -6,7 +6,9 @@ from typing import Any, Callable
 
 # What each of a tool's arguments IS, in prose the model reads: name -> description.
 # What each argument TAKES is read off the function, so it is not restated here.
-# Empty = the tool's arguments need no explaining, or it takes none.
+# Every argument the model is shown needs an entry; binding refuses one without. So
+# empty means the model is shown no argument: the function takes none, or `skip` covers
+# every one it takes.
 ToolParameterProse = dict[str, str]
 
 
