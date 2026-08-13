@@ -70,8 +70,9 @@ class StageTest(_Base):
     description: Optional[str] = None
     inputs: dict[StageId, list[DataRow]] = Field(description=_INPUTS_DESCRIPTION)
     expected: Optional[list[DataRow]] = Field(description=_EXPECTED_DESCRIPTION)
-    # Where each input row came from, in `inputs` order per input. Empty on a case
-    # whose rows were written rather than selected, which `authored_reason` explains.
+    # Where each input row came from, in `inputs` order per input. Empty on a case whose
+    # rows were written because no real row shows it; `authored_reason` then says why an
+    # input like it could turn up later, which is the whole claim such a case makes.
     selections: list[RowSelection] = []
     authored_reason: Optional[str] = None
 

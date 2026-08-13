@@ -51,6 +51,10 @@
       {% if view.status != "passed" %}{{ severity_icon("warning") }}{% endif %}<strong>{{ view.name }}</strong>
     </summary>
     {% if view.description %}<p class="muted">{{ view.description }}</p>{% endif %}
+    {# Only a written case has one: a selected row already happened. #}
+    {% if view.authored_reason %}
+    <p class="test-anticipated">Why this may appear: {{ view.authored_reason }}</p>
+    {% endif %}
 
     {% for input in view.inputs %}
     <h3>input <code>{{ input.stage_id }}</code></h3>

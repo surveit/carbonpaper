@@ -166,11 +166,11 @@ _SECTIONED = [
     {"name": "a_negative_amount_stops_the_run", "description": "nobody has decided",
      "inputs": {"load": [{"note": "refund", "amount": -5.0}]},
      "expected": None,
-     "authored_reason": "No filing reports a negative amount."},
+     "authored_reason": "A filing that reports a refund would report a negative amount."},
     {"name": "a_zero_amount_is_doubled_to_zero", "description": "already decided",
      "inputs": {"load": [{"note": "nil return", "amount": 0.0}]},
      "expected": [{"doubled": 0.0, "note": "nil return", "amount": 0.0}],
-     "authored_reason": "No filing reports a plain zero."},
+     "authored_reason": "A filer with nothing to report could enter a plain zero."},
 ]
 
 
@@ -203,15 +203,21 @@ def test_a_case_with_no_row_is_sorted_by_what_the_step_would_do(
     assert decide < html.index("a_zero_amount_is_doubled_to_zero")
 
 
-def test_a_written_row_states_no_reason_beside_itself(
+def test_a_written_case_says_why_the_input_could_turn_up(
     client: TestClient, tmp_path: Path
 ) -> None:
-    """The section it sits in has already said the row was written."""
+    """The one thing such a case claims that its section heading does not."""
     _seed_sectioned(tmp_path)
-    # On the class, not the prose: the stored reason still reaches the page inside the
-    # spec editor's raw JSON, which is not a rendering of it.
+    html = " ".join(client.get("/project/alpha/node/double/panel").text.split())
+    assert "Why this may appear: A filing that reports a refund" in html
+
+
+def test_a_case_built_on_a_real_row_anticipates_nothing(
+    client: TestClient, tmp_path: Path
+) -> None:
+    _seed_sectioned(tmp_path)
     html = client.get("/project/alpha/node/double/panel").text
-    assert "test-authored" not in html
+    assert html.count("test-anticipated") == 2  # the two written cases, not the real one
 
 
 def test_a_suite_with_nothing_written_shows_only_the_first_section(

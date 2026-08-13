@@ -51,6 +51,9 @@
 .test-section { font-size: 0.98rem; margin: 1.6rem 0 0.15rem; }
 .test-subsection { font-size: 0.88rem; margin: 1.1rem 0 0.15rem; }
 .test-section-note { font-size: 0.8rem; color: var(--muted); line-height: 1.5; margin: 0 0 0.7rem; }
+/* What would have to happen for a written row to become real data. The one thing
+   such a case says that its section heading does not. */
+.test-anticipated { font-size: 0.82rem; margin: 0.1rem 0 0.6rem; }
 .test-message { color: var(--bad-ink); }
 /* A refusal is the step working, so it is not tinted like a failure — a case may
    claim the step must refuse, and there it is the outcome the description asked for. */

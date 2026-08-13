@@ -36,10 +36,10 @@ _AUTHORED_ROWS_DESCRIPTION = (
     "only when find_rows genuinely returns nothing."
 )
 _AUTHORED_REASON_DESCRIPTION = (
-    "One sentence on what the data holds INSTEAD, in the reader's words — 'No filing "
-    "reports a negative amount; every reported figure here is positive'. Not that no "
-    "row could be selected, and not a restatement of the case: the reader has been "
-    "told both already."
+    "One sentence on WHY an input like this could turn up in a later run: what would "
+    "have to happen upstream, or in the world, for the data to carry it — 'A filing "
+    "that reports a refund would report a negative amount'. Not that no row matched: "
+    "the reader is already told that by the section this case is shown in."
 )
 
 

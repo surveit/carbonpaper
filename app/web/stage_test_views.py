@@ -99,6 +99,9 @@ def _shape_one_test(
             for stage_id, rows in test.inputs.items()
         ],
         "section": _name_the_section(test),
+        # Why an input like this could turn up later. Only a written case carries one —
+        # a selected row already happened, so there is nothing to anticipate.
+        "authored_reason": test.authored_reason,
         # None, not an empty table: a failure case claims the step must fail, which
         # the template must not render as "succeeded, returned nothing".
         "expected": None if test.expected is None else _shape_expected(
