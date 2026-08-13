@@ -20,6 +20,7 @@ from starlette.types import Scope
 # never as its return value: binding the path at import time would give every
 # router its own stale copy, which is exactly what set_projects_dir() exists to
 # avoid.
+from app.core.paths import repo_root
 from app.core.utils import abbreviate_count
 from app.web.file_sizes import describe_bytes, read_turn
 from app.services.workspace import (
@@ -27,14 +28,13 @@ from app.services.workspace import (
     projects_dir as projects_dir,
 )
 
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 APP_DIR = Path(__file__).resolve().parent.parent
 TEMPLATES_DIR = APP_DIR / "templates"
 STATIC_DIR = APP_DIR / "static"
 # Sits outside app/ because what it holds is a self-contained page mailed as an
 # attachment: it inlines its own colours and cannot reference palette.css, which
 # every file under app/ must. Served, never imported.
-PITCH_DIR = REPO_ROOT / "pitch"
+PITCH_DIR = repo_root() / "pitch"
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 

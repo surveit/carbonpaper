@@ -53,7 +53,6 @@ def validate_stages_ready(
 
 def prepare_run(
     project_dir: Path,
-    repo_root: Path,
     workflow: Workflow,
     workflow_version: str,
     limits: dict[str, int] | None = None,
@@ -87,7 +86,7 @@ def prepare_run(
     # app.runtime.cancellation) — read by _execute_stages, never by name of
     # anything on disk. run_dir above stays I/O-only.
     ctx = RunContext.for_workflow_run(
-        repo_root, run_dir, project_dir.name, run_id,
+        run_dir, project_dir.name, run_id,
         RunParameters(
             limits=dict(limits or {}),
             offsets=dict(offsets or {}),
@@ -120,7 +119,6 @@ def run_prepared(prep: dict[str, Any]) -> dict[str, Any]:
 
 def execute_run(
     project_dir: Path,
-    repo_root: Path,
     workflow: Workflow,
     workflow_version: str,
     limits: dict[str, int] | None = None,
@@ -129,7 +127,7 @@ def execute_run(
     bust_cache: bool = False,
 ) -> dict[str, Any]:
     return run_prepared(
-        prepare_run(project_dir, repo_root, workflow, workflow_version,
+        prepare_run(project_dir, workflow, workflow_version,
                     limits=limits, offsets=offsets, bindings=bindings,
                     bust_cache=bust_cache)
     )
@@ -138,7 +136,6 @@ def execute_run(
 def resume_run(
     project_dir: Path,
     run_id: str,
-    repo_root: Path,
     workflow: Workflow,
     workflow_version: str,
 ) -> dict[str, Any]:
@@ -181,7 +178,7 @@ def resume_run(
     # under — the same row windows, the same refusal to read the cache — rather
     # than quietly reusing what the halted run skipped.
     ctx = RunContext.for_workflow_run(
-        repo_root, run_dir, project_dir.name, run_id, manifest.parameters)
+        run_dir, project_dir.name, run_id, manifest.parameters)
     # The run's telemetry (human_review_queue_stats/dropped_columns) already lives on the
     # loaded manifest, not the context; a resumed run keeps accumulating onto
     # that same manifest via the executor's per-stage merge.

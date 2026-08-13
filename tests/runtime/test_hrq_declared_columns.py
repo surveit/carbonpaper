@@ -113,7 +113,7 @@ def test_each_reviewed_pair_maps_independently(tmp_path):
 
 def _auto_approve_ctx(tmp_path: Path) -> RunContext:
     return RunContext.for_stages_outside_a_run(
-        repo_root=tmp_path, run_dir=tmp_path, queue_auto_approve=True)
+        run_dir=tmp_path, queue_auto_approve=True)
 
 
 def test_auto_approve_copies_the_source_value_under_the_approve_verdict(tmp_path):

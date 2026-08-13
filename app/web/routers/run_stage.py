@@ -18,7 +18,7 @@ from app.runtime.errors import PreviewError
 from app.runtime.preview import PREVIEWABLE_TYPES, run_stage_preview
 from app.web import loading
 from app.web.breadcrumbs import build_run_child_crumbs
-from app.web.config import EVENT_TAIL, REPO_ROOT, templates
+from app.web.config import EVENT_TAIL, templates
 from app.web.eval_coverage import find_eval_coverages
 from app.web.stage_test_views import build_certification, shape_test_views
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH
@@ -291,7 +291,6 @@ async def run_stage_scratch_preview(
         result = run_stage_preview(
             workflow_stage=workflow_stage,
             run_dir=run_dir,
-            repo_root=REPO_ROOT,
             output_by_id=output_by_id,
             selected_indices=indices,
         )

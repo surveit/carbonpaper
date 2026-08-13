@@ -111,7 +111,7 @@ class EvalRowsView(BaseModel):
     input_error: str | None = None
 
 
-def build_eval_rows(result_path: Path, dataset: TableRef | None, repo_root: Path) -> EvalRowsView:
+def build_eval_rows(result_path: Path, dataset: TableRef | None) -> EvalRowsView:
     try:
         result = read_frame_file(result_path)
     except (OSError, ValueError) as exc:
@@ -120,7 +120,7 @@ def build_eval_rows(result_path: Path, dataset: TableRef | None, repo_root: Path
     if not checks:
         return _empty_view(
             f"{result_path.name} holds no scored check columns — nothing to show row by row")
-    inputs, input_error = _read_dataset_inputs(dataset, repo_root, checks, len(result))
+    inputs, input_error = _read_dataset_inputs(dataset, checks, len(result))
     return _assemble_view(result, checks, inputs, input_error)
 
 
@@ -212,12 +212,12 @@ def _read_row_verdicts(result: pd.DataFrame, checks: list[str]) -> list[bool]:
 # ── The dataset columns the model was given ──────────────────────────────────
 
 def _read_dataset_inputs(
-    dataset: TableRef | None, repo_root: Path, checks: list[str], scored_rows: int
+    dataset: TableRef | None, checks: list[str], scored_rows: int
 ) -> tuple[pd.DataFrame | None, str | None]:
     if dataset is None:
         return None, "this eval has no dataset attached, so the scored inputs can't be shown"
     try:
-        frame = read_table_ref(repo_root, dataset)
+        frame = read_table_ref(dataset)
     except (OSError, ValueError, EvalNotScorableError) as exc:
         return None, f"could not read {dataset.path}: {exc}"
     if len(frame) != scored_rows:

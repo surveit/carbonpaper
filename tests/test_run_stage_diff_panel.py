@@ -136,7 +136,7 @@ def run_ctx(tmp_path: Path) -> tuple[Path, str]:
     version_id = project_service.save_working_copy_as_version(
         pdir, message="v1", reviewer="test").version_id
     versioning.publish_version(pdir, version_id, reviewer="test")
-    run_id = str(execute_run(pdir, pdir, *pinned_stages(pdir))["run_id"])
+    run_id = str(execute_run(pdir, *pinned_stages(pdir))["run_id"])
     return pdir, run_id
 
 

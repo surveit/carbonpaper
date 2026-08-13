@@ -169,7 +169,7 @@ def test_the_gap_reaches_the_run_issue_index(tmp_path):
     _write_wyoming_project(tmp_path)
     save_working_copy_as_version(tmp_path, message="wyoming", reviewer="test")
     workflow, version = pinned_stages(tmp_path)
-    manifest = execute_run(tmp_path, tmp_path, workflow, version)
+    manifest = execute_run(tmp_path, workflow, version)
 
     assert manifest["status"] == "ok"
     issues = build_run_issues(manifest, workflow.stages)

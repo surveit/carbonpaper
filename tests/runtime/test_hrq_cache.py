@@ -635,7 +635,7 @@ def test_resume_reattaches_cached_decisions_written_via_the_seam(tmp_path):
     _write_stage(project_dir, "02_review.json", _review_stage_full())
     _seed_version(project_dir)
 
-    halted = run_prepared(prepare_run(project_dir, project_dir, *pinned_stages(project_dir)))
+    halted = run_prepared(prepare_run(project_dir, *pinned_stages(project_dir)))
     assert halted["status"] == "awaiting_review"
     run_id = halted["run_id"]
 
@@ -646,7 +646,7 @@ def test_resume_reattaches_cached_decisions_written_via_the_seam(tmp_path):
 
     _approve_every_row(snapshot, fingerprints, project=project_dir.name)
 
-    resumed = runner.resume_run(project_dir, run_id, project_dir,
+    resumed = runner.resume_run(project_dir, run_id,
                             *resumed_stages(project_dir, run_id))
     assert resumed["status"] == "ok"
     out = pd.read_parquet(run_dir / "outputs" / "review.parquet")
@@ -660,7 +660,7 @@ def test_resume_replays_the_runs_bust_cache(tmp_path):
     _seed_version(project_dir)
 
     halted = run_prepared(
-        prepare_run(project_dir, project_dir, *pinned_stages(project_dir), bust_cache=True))
+        prepare_run(project_dir, *pinned_stages(project_dir), bust_cache=True))
     assert halted["status"] == "awaiting_review"
     run_id = halted["run_id"]
 
@@ -671,6 +671,6 @@ def test_resume_replays_the_runs_bust_cache(tmp_path):
     fingerprints = _read_fingerprints(project_dir.name, run_dir.name)
     _approve_every_row(snapshot, fingerprints, project=project_dir.name)
 
-    resumed = runner.resume_run(project_dir, run_id, project_dir,
+    resumed = runner.resume_run(project_dir, run_id,
                             *resumed_stages(project_dir, run_id))
     assert resumed["status"] == "awaiting_review"

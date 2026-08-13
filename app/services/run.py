@@ -33,7 +33,7 @@ from app.services.versioning import (
     load_version_stages,
     resolve_version_id,
 )
-from app.services.workspace import repo_root, resolve_project_dir, resolve_run_dir
+from app.services.workspace import resolve_project_dir, resolve_run_dir
 
 
 def start_run(
@@ -76,7 +76,6 @@ def _prepare(
     workflow_version = resolve_version_id(project_dir, version_id)
     return prepare_run(
         project_dir,
-        repo_root(),
         Workflow(stages=load_version_stages(project_dir, workflow_version)),
         workflow_version,
         limits=limits,
@@ -93,7 +92,6 @@ def resume(project: str, run_id: str) -> None:
         resume_run,
         project_dir,
         run_id,
-        repo_root(),
         Workflow(stages=load_version_stages(project_dir, workflow_version)),
         workflow_version,
     )

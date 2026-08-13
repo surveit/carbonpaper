@@ -13,7 +13,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from app.core.paths import CARBON_PAPER_HOME, repo_root as repo_root
+from app.core.paths import CARBON_PAPER_HOME
 from app.models import StageType
 from app.services.loader import load_stage_entries
 # The projects storage root: <root>/<name>/ working copies live here. There is

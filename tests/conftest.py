@@ -125,7 +125,6 @@ def reset_cancellation_registry():
 
 def make_run_context(
     *,
-    repo_root: Path = Path("."),
     run_dir: Path = Path("."),
     identity: RunIdentity | None = None,
     stage_cache: ReadOnlyStageCache | None = None,
@@ -135,7 +134,7 @@ def make_run_context(
     queue_auto_approve: bool = False,
 ) -> RunContext:
     return RunContext(
-        repo_root=repo_root, run_dir=run_dir,
+        run_dir=run_dir,
         identity=identity, stage_cache=stage_cache,
         params=RunParameters(
             limits=dict(limits or {}), offsets=dict(offsets or {}),

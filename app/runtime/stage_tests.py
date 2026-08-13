@@ -175,11 +175,11 @@ def _run_one_test(stage: Stage, test: StageTest) -> StageTestResult:
     if malformed:
         return StageTestResult(test.name, "malformed", message=malformed)
     # Ephemeral context: every type declaring CARRIES_RUNNABLE_TESTS runs
-    # authored code over its own input and reads neither repo_root/run_dir nor
-    # project scope — so both are None (no run on disk), no identity, no cache. A
-    # stage reaching for run disk under this context fails loudly via
-    # require_run_dir rather than touching a fabricated path.
-    ctx = RunContext.for_stages_outside_a_run(None, None)
+    # authored code over its own input and reads neither run_dir nor project
+    # scope — so it is None (no run on disk), no identity, no cache. A stage
+    # reaching for run disk under this context fails loudly via require_run_dir
+    # rather than touching a fabricated path.
+    ctx = RunContext.for_stages_outside_a_run(None)
     try:
         produced = HANDLERS[StageType(stage.type)].execute(
             _place_against_its_signature(stage),

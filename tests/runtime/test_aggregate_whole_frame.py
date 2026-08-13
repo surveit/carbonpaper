@@ -70,7 +70,7 @@ def _stage(aggregations, produces):
 
 
 def _run_output(aggregations, produces, frame=FILINGS) -> StageOutput:
-    ctx = RunContext.for_stages_outside_a_run(repo_root=None, run_dir=None)
+    ctx = RunContext.for_stages_outside_a_run(run_dir=None)
     return handle_aggregate(place_stage(_stage(aggregations, produces)), as_inputs({"filings": frame}), ctx)
 
 
@@ -165,7 +165,7 @@ def test_an_empty_slice_matches_what_the_grouped_path_emits_for_that_group():
             "produces": [key, *produces]},
         "aggregate": {"group_by": ["k"], "aggregations": [total, none_pass]},
     })
-    ctx = RunContext.for_stages_outside_a_run(repo_root=None, run_dir=None)
+    ctx = RunContext.for_stages_outside_a_run(run_dir=None)
     by_group = rows_of(handle_aggregate(place_stage(grouped), as_inputs({"filings": FILINGS.assign(k="all")}), ctx)).iloc[0]
 
     assert whole["total"] == by_group["total"]

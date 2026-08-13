@@ -63,7 +63,7 @@ def _two_stage_project(root):
 def test_cancel_requested_before_run_starts_leaves_the_first_stage_pending(tmp_path):
     _one_stage_project(tmp_path)
     _seed_version(tmp_path)
-    prep = prepare_run(tmp_path, tmp_path, *pinned_stages(tmp_path))
+    prep = prepare_run(tmp_path, *pinned_stages(tmp_path))
     request_cancel(tmp_path.name, prep["run_id"])
 
     manifest = run_prepared(prep)
@@ -84,7 +84,7 @@ def test_cancel_requested_before_run_starts_leaves_the_first_stage_pending(tmp_p
 def test_mid_run_cancel_preserves_the_completed_stages_output(tmp_path, monkeypatch):
     _two_stage_project(tmp_path)
     _seed_version(tmp_path)
-    prep = prepare_run(tmp_path, tmp_path, *pinned_stages(tmp_path))
+    prep = prepare_run(tmp_path, *pinned_stages(tmp_path))
 
     calls = {"n": 0}
 
@@ -162,7 +162,7 @@ def test_mid_stage_cancel_marks_the_running_stage_cancelled_not_pending(tmp_path
 
     _three_stage_llm_project(tmp_path)
     _seed_version(tmp_path)
-    prep = prepare_run(tmp_path, tmp_path, *pinned_stages(tmp_path))
+    prep = prepare_run(tmp_path, *pinned_stages(tmp_path))
 
     manifest = run_prepared(prep)
 
@@ -186,13 +186,13 @@ def test_mid_stage_cancel_marks_the_running_stage_cancelled_not_pending(tmp_path
 def test_a_cancelled_run_can_be_resumed_and_runs_to_completion(tmp_path):
     _two_stage_project(tmp_path)
     _seed_version(tmp_path)
-    prep = prepare_run(tmp_path, tmp_path, *pinned_stages(tmp_path))
+    prep = prepare_run(tmp_path, *pinned_stages(tmp_path))
     request_cancel(tmp_path.name, prep["run_id"])
 
     cancelled = run_prepared(prep)
     assert cancelled["status"] == "cancelled"
 
-    resumed = runner.resume_run(tmp_path, prep["run_id"], tmp_path,
+    resumed = runner.resume_run(tmp_path, prep["run_id"],
                             *resumed_stages(tmp_path, prep["run_id"]))
 
     assert resumed["status"] == "ok"
