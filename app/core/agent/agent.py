@@ -88,7 +88,7 @@ class Agent(Generic[Model]):
         task: str,
         model: str = CLI_MODEL,
         max_attempts: int = 4,
-        granted_tools: list[str] | None = None,
+        builtin_tools: list[str] | None = None,
         tools: list[BoundToolSpec] | None = None,
         max_turns: int | None = None,
         thinking: ThinkingConfig | None = None,
@@ -99,12 +99,11 @@ class Agent(Generic[Model]):
         self._model = model
         self._max_attempts = max_attempts
         # Tools the agent may use besides submit_answer, in the two forms it can have
-        # them. `granted_tools` are names of tools the CLI already offers (a research
-        # agent is granted search/fetch/read); this class does not police which names
-        # are grantable — see models.stages.llm_transform.GRANTABLE_TOOLS. `tools` are
-        # ours, mounted on the same in-process server as submit_answer, each closing
-        # over whatever the caller bound it to.
-        self._granted_tools = list(granted_tools or [])
+        # them. `builtin_tools` are the CLI's own (a research agent gets search/fetch/
+        # read); this class does not police which names are grantable — see
+        # models.stages.llm_transform.GRANTABLE_TOOLS. `tools` are ours, mounted on the
+        # same in-process server as submit_answer, each closing over what bound it.
+        self._builtin_tools = list(builtin_tools or [])
         self._tools = list(tools or [])
         # Turn cap. A research agent needs many more turns than a submit-only one,
         # because every search and fetch costs a turn.
@@ -192,7 +191,11 @@ class Agent(Generic[Model]):
             mcp_server=server,
             # submit_answer stays first: it is the only way an answer is recorded,
             # with or without research tools alongside it.
-            allowed_tools=allowed + self._granted_tools,
+            # Both, and they are not the same claim: `tools` is what the CLI OFFERS at
+            # all (the SDK's own default is every built-in; the engine narrows it to
+            # what was asked for), and allowed_tools pre-approves calling it.
+            builtin_tools=self._builtin_tools,
+            allowed_tools=allowed + self._builtin_tools,
             tool_labels={spec.name: spec.label for spec in specs},
             model=self._model,
             max_turns=self._max_turns or (self._max_attempts + 2),
