@@ -11,7 +11,8 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.services import workspace
-from app.services.errors import FileNotStoredError
+from app.services import uploads
+from app.services.errors import FileNotStoredError, StoreOverQuota
 from app.services.uploads import files_root, resolve_file_binding, save_upload
 from app.tools import shared
 
@@ -102,3 +103,52 @@ def test_a_record_whose_bytes_are_gone_fails_before_the_run_starts(project):
 def test_an_unknown_project_is_loud(project):
     with pytest.raises(ValueError, match="no project 'nope'"):
         shared.list_files("nope", URL)
+
+
+def test_one_blob_in_two_projects_is_weighed_once(project, tmp_path):
+    """Content-addressed: two records, one copy on disk, so the quota counts it once."""
+    (tmp_path / "other").mkdir(parents=True)
+    save_upload("posts.csv", io.BytesIO(CSV), "demo")
+    save_upload("posts.csv", io.BytesIO(CSV), "other")
+    assert len(uploads.UploadedFile.list()) == 2
+    assert uploads.measure_files_used_bytes() == len(CSV)
+
+
+def test_what_is_used_is_read_off_the_records_not_the_disk(project):
+    """A blob no record covers is another workspace's; this store does not own its bytes."""
+    save_upload("posts.csv", io.BytesIO(CSV), "demo")
+    orphan = files_root() / ("f" * 64)
+    orphan.mkdir(parents=True)
+    (orphan / "stray.csv").write_bytes(b"x" * 4096)
+    assert uploads.measure_files_used_bytes() == len(CSV)
+
+
+def test_the_arriving_file_counts_against_the_quota_before_it_has_a_record(
+    project, monkeypatch
+):
+    monkeypatch.setenv("CARBON_PAPER_FILES_QUOTA_BYTES", str(len(CSV) + 1))
+    save_upload("posts.csv", io.BytesIO(CSV), "demo")
+    # The second file has no record while it is being weighed, so a records-only count
+    # would let it through: together they are over, and it is refused.
+    with pytest.raises(StoreOverQuota):
+        save_upload("more.csv", io.BytesIO(b"name,val\ny,2\n"), "demo")
+
+
+def test_re_sending_bytes_the_store_already_holds_is_allowed_at_quota(project, monkeypatch):
+    save_upload("posts.csv", io.BytesIO(CSV), "demo")
+    monkeypatch.setenv("CARBON_PAPER_FILES_QUOTA_BYTES", str(len(CSV)))
+    # Same bytes, so nothing new lands on disk and the count does not move.
+    assert save_upload("posts-again.csv", io.BytesIO(CSV), "demo").sha256 == CSV_SHA
+
+
+def test_the_same_bytes_under_a_new_name_do_not_land_twice(project):
+    """The store is content-addressed by directory; its contents have to be too."""
+    save_upload("posts.csv", io.BytesIO(CSV), "demo")
+    again = save_upload("posts-renamed.csv", io.BytesIO(CSV), "demo")
+    blob = files_root() / CSV_SHA
+    assert [f.name for f in blob.iterdir()] == ["posts.csv"]
+    # The record still shows the name they last picked, and the path still resolves to
+    # the one file that exists — renaming it would strand a manifest holding the old one.
+    assert again.filename == "posts-renamed.csv"
+    assert uploads.resolve_stored_path(again).name == "posts.csv"
+    assert uploads.resolve_stored_path(again).is_file()
