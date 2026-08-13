@@ -283,3 +283,4 @@
 {"run_id":"31700515575","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31700515575","created":"2026-08-13T12:32:57Z","branch":"feat/grounded-stage-tests","event":"pull_request","contracts_kept":14,"findings":[]}
 {"run_id":"31700515575","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31700515575","created":"2026-08-13T12:33:52Z","branch":"feat/grounded-stage-tests","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"31700908867","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31700908867","created":"2026-08-13T12:37:54Z","branch":"fix/tool-model-args","event":"pull_request","contracts_kept":14,"findings":[]}
+{"run_id":"31700939292","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31700939292","created":"2026-08-13T12:38:25Z","branch":"refactor/pandas-inside-handlers","event":"pull_request","contracts_kept":14,"findings":[]}
