@@ -11,13 +11,15 @@ from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
 from fastapi import FastAPI
+from starlette.requests import Request
+from starlette.responses import FileResponse, Response
 from starlette.routing import Route
 
 from app.core.logging_config import configure_app_logging
 from app.core.store_config import configure_default_stores, refuse_renamed_env_vars
 from app.seeds.seed import seed_demo_data_if_enabled
 from app.web.config import (
-    STATIC_DIR, RevalidatedStaticFiles, configure_projects_dir_from_env,
+    PITCH_DIR, STATIC_DIR, RevalidatedStaticFiles, configure_projects_dir_from_env,
 )
 from app.web.errors import install_error_pages
 from app.web.routers import include_routers
@@ -60,6 +62,16 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="Workflow", lifespan=lifespan)
 app.mount("/static", RevalidatedStaticFiles(directory=str(STATIC_DIR)), name="static")
+
+
+# A route, not a mount: a mount serves this only at /pitch/index.html unless directory
+# resolution is on, and that switch is a keyword tests/arch/test_markdown_renderer_is_sealed.py
+# forbids anywhere in source.
+async def serve_pitch(request: Request) -> Response:
+    return FileResponse(PITCH_DIR / "index.html", headers={"Cache-Control": "no-cache"})
+
+
+app.router.routes.append(Route("/pitch", endpoint=serve_pitch, methods=["GET"]))
 
 # Registered on the Starlette exception so it also catches the 404 routing raises for
 # an address no router claims — the dead link in a deck never reaches a handler of ours.

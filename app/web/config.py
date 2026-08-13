@@ -31,6 +31,10 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 APP_DIR = Path(__file__).resolve().parent.parent
 TEMPLATES_DIR = APP_DIR / "templates"
 STATIC_DIR = APP_DIR / "static"
+# Sits outside app/ because what it holds is a self-contained page mailed as an
+# attachment: it inlines its own colours and cannot reference palette.css, which
+# every file under app/ must. Served, never imported.
+PITCH_DIR = REPO_ROOT / "pitch"
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
