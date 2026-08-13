@@ -18,7 +18,7 @@
 <div class="run-topbar">
     <h1>Run <code>{{ stage_id }}</code> on rows you pick</h1>
     <p class="stage-id">
-        <span class="type-tag {{ type_class.get(stage.type, 'custom') }}">{{ type_glyph.get(stage.type, '') }} {{ stage.type | plain_value }}</span>
+        <span class="type-tag {{ type_class.get(stage.type, 'custom') }}" title="{{ stage.type | plain_value }}">{{ type_glyph.get(stage.type, '') }} {{ stage.type | label_stage_type }}</span>
         run <code>{{ run_id }}</code>{% if stage.description %} · {{ stage.description }}{% endif %}</p>
 </div>
 

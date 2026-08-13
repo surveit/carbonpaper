@@ -90,7 +90,7 @@
 {% if compiler_warnings and compiler_warnings.warnings %}
 
 <div class="wf-issue-index">
-{% call issue_panel(0, compiler_warnings.warnings|length, open=true) %}
+{% call issue_panel(0, compiler_warnings.warnings|length) %}
   {% for warning in compiler_warnings.warnings %}
   {{ issue_row(severity=warning.severity, stage_id=warning.stage_id,
                subject=warning.kind, message=warning.detail) }}

@@ -9,7 +9,8 @@ from __future__ import annotations
 import re
 
 from app.models import StageType
-from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
+from app.web.config import label_stage_type
+from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, TYPE_LABEL, build_mermaid_graph
 from arch._helpers import read_stylesheets
 
 # The class `TYPE_CLASS.get(stype, ...)` falls back to, so it must be styled too.
@@ -38,6 +39,21 @@ def test_every_stage_type_has_a_glyph() -> None:
         f"{missing} have no TYPE_GLYPH entry (app/web/diagrams.py), so their nodes and "
         "type tags render with a blank glyph slot."
     )
+
+
+def test_every_stage_type_has_a_display_label() -> None:
+    missing = find_types_missing_from(TYPE_LABEL)
+    assert not missing, (
+        f"{missing} have no TYPE_LABEL entry (app/web/diagrams.py), so their type tag "
+        "prints the raw slug at a reader who is a journalist, not an engineer."
+    )
+
+
+def test_the_label_filter_reads_an_enum_member_not_its_repr() -> None:
+    # Bare `{{ stage.type }}` on a StageType renders "StageType.publish".
+    assert label_stage_type(StageType.human_review_queue) == "review queue"
+    assert label_stage_type("human_review_queue") == "review queue"
+    assert label_stage_type("not_a_stage_type") == "not_a_stage_type"
 
 
 def test_every_node_class_has_a_mermaid_classdef() -> None:

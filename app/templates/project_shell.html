@@ -113,14 +113,6 @@
         {% endif %}
       {% endfor %}
     </nav>
-
-    {# A compact "do this next" pointer that's always visible, mirroring the CTA. #}
-    {% if state.next_action %}
-    <a class="app-side-next" href="{{ state.next_action.href }}">
-      <span class="app-side-next-kicker">Next</span>
-      <span class="app-side-next-label">{{ state.next_action.label }} →</span>
-    </a>
-    {% endif %}
   </aside>
 
   <div class="app-main">

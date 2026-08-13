@@ -120,7 +120,7 @@
       the run — the run is only where a reader meets it, and so where it is asked for. ── #}
 {% if guide or can_write_guide %}
 <button type="button" class="drawer-btn nav-expand" id="nav-expand" hidden
-        title="Show the review guide" aria-label="Show the review guide">
+        title="Show the run walkthrough" aria-label="Show the run walkthrough">
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
        stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
     <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="m14 9 3 3-3 3"/>
@@ -128,9 +128,9 @@
 </button>
 <div class="run-nav fade-scroll" id="run-nav">
   <div class="run-nav-head">
-    <h2>Review guide</h2>
+    <h2>Run walkthrough</h2>
     <button type="button" class="drawer-btn" id="nav-collapse"
-            title="Hide the review guide" aria-label="Hide the review guide">
+            title="Hide the run walkthrough" aria-label="Hide the run walkthrough">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
            stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="m16 15-3-3 3-3"/>
@@ -138,9 +138,9 @@
     </button>
   </div>
   {% if guide %}
-  {# The rail is read top to bottom, so it ends where the run does: on the files the
-     run published. The same links as the Run outputs section, at the one place a
-     reader who followed the guide is already looking. #}
+  {# The rail LEADS on the files the run published — the result, before the account of
+     how it was reached. The same links as the Run outputs section, at the one place a
+     reader who came for the walkthrough is already looking. #}
   {% with titled_by_host = true, published_artifacts = header.artifacts %}
   {% include "_run_guide.html" %}
   {% endwith %}

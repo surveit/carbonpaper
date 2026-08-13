@@ -26,7 +26,7 @@
 {% if issues.stopped or issues.flagged %}
 <div class="run-issues" id="run-issues">
 
-{% call issue_panel(issues.error_count, issues.warning_count, open=true) %}
+{% call issue_panel(issues.error_count, issues.warning_count) %}
   {% for stop in issues.stopped %}
   {# Data when the values are the question; Transform when what refused them — the
      declared schema aside, a rule someone wrote — is. #}

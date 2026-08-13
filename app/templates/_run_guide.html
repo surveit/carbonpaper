@@ -1,5 +1,5 @@
-{# The review guide the run's pinned version carries, rendered into the run page's
-   nav column beneath the issue index: the
+{# The run walkthrough the run's pinned version carries (a ReviewGuide record),
+   rendered into the run page's nav column beneath the issue index: the
    ordered walkthrough its author wrote. Each numbered entry is a WORKFLOW SECTION —
    the term the UI uses for one authored step — and reads in three parts, in order:
 
@@ -75,7 +75,7 @@
    and the rail is a walkthrough — the Schema tab is where a reader goes for them. #}
 {% macro stage_row_title(s) %}
 {%- if not s.executed %}This run has no record for this stage — {% endif -%}
-{{ s.workflow_stage.stage.type }}
+{{ s.workflow_stage.stage.type | label_stage_type }}
 {%- if s.written_columns %} · declares it adds {{ s.written_columns | join(", ") }}{% endif -%}
 {% endmacro %}
 
@@ -193,8 +193,12 @@
   .guide-unnarrated h3 { font-size: 12px; margin: 0 0 3px; text-transform: none;
                          letter-spacing: 0; }
   .guide-unnarrated p { font-size: 11px; color: var(--muted); margin: 0 0 6px; }
-  .guide-published { margin-top: 14px; border-top: 1px solid var(--border);
-                     padding-top: 10px; }
+  /* Where the run ended up, at the TOP of the rail: it is what the reader came for,
+     and the walkthrough below it is how it was arrived at. A header block, so the
+     hairline sits UNDER it and closes it off from the steps rather than hanging it
+     off whatever preceded it. */
+  .guide-published { margin: 0 0 10px; border-bottom: 1px solid var(--border);
+                     padding-bottom: 10px; }
   .guide-published h3 { font-size: 12px; margin: 0 0 4px; text-transform: none;
                         letter-spacing: 0; }
   .guide-published ul { list-style: none; margin: 0; padding: 0; }
@@ -208,7 +212,7 @@
      line. The offline packet has no such line, so the title is written here. #}
   {% if not titled_by_host %}
   <div class="run-guide-head">
-    <h2>Review guide</h2>
+    <h2>Run walkthrough</h2>
   </div>
   {% endif %}
   {# The size notation is explained once, here, so `45.1k × 15` needs no legend of
@@ -216,6 +220,19 @@
   <p class="run-guide-lead">AI generated summary of what this run did, one Workflow
     section at a time. Each section ends in the data it left — the link states its
     size, rows × columns, rounded to fit; hover it for the exact counts.</p>
+  {# Where the run ended up, first: the reader wants the result before the account of
+     how it was reached. Set by the caller that has the run's artifact links — the
+     packet page lays its files out differently and sets none, so it shows none. #}
+  {% if published_artifacts is defined and published_artifacts %}
+  <div class="guide-published">
+    <h3>Published</h3>
+    <ul>
+      {% for artifact in published_artifacts %}
+      <li><a href="{{ artifact.url }}">{{ artifact.name }}</a></li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
   <ol class="guide-steps">
     {% for step in guide.steps %}
     <li>
@@ -277,18 +294,6 @@
       judgement a reviewer could act on.</p>
     <ul class="guide-stage-list">
       {% for s in guide.unnarrated %}{{ guide_stage(s) }}{% endfor %}
-    </ul>
-  </div>
-  {% endif %}
-  {# Where the run ended up. Set by the caller that has the run's artifact links —
-     the packet page lays its files out differently and sets none, so it shows none. #}
-  {% if published_artifacts is defined and published_artifacts %}
-  <div class="guide-published">
-    <h3>Published</h3>
-    <ul>
-      {% for artifact in published_artifacts %}
-      <li><a href="{{ artifact.url }}">{{ artifact.name }}</a></li>
-      {% endfor %}
     </ul>
   </div>
   {% endif %}

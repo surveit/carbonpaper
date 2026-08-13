@@ -45,6 +45,26 @@ TYPE_GLYPH = {
     "filter_rows": "🔽",
 }
 
+# What the type tag SAYS. The slug is the id the config, the manifest and the
+# authoring surfaces use; a reader of the run page is a journalist, so the tag
+# reads as English instead. "human" is not a word this vocabulary uses on its
+# own — the queue is named for what it holds. An unmapped type falls back to its
+# slug, which tests/arch/test_stage_type_presentation.py fails on.
+TYPE_LABEL = {
+    "input_data": "input",
+    "llm_transform": "model transform",
+    "python_row_function": "row function",
+    "python_frame_function": "table function",
+    "starlark_row_function": "sandboxed row function",
+    "enrich": "enrich",
+    "expand": "expand",
+    "aggregate": "aggregate",
+    "human_review_queue": "review queue",
+    "publish": "publish",
+    "union": "union",
+    "filter_rows": "filter rows",
+}
+
 
 def _safe_mermaid_type(t: str) -> str:
     return (

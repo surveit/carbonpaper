@@ -303,3 +303,18 @@ def test_what_only_a_stop_carries_is_nested_under_its_own_line():
     assert html.count("<tr ") == 1
     assert '<div class="issue-more">' in html
     assert "<summary>traceback</summary>" in html
+
+
+def test_the_index_opens_closed_with_its_counts_still_on_screen():
+    html = _render(_manifest(
+        _refusal("classify_issues"),
+        _record("score", "validation_warnings",
+                output_validation_report=_report(
+                    "output", ("warning", "spend", "off range"))),
+    ))
+
+    assert "<details class=\"issue-panel" in html
+    assert " open>" not in html
+    # The fold hides the table, never the fact that there is one to open.
+    assert "1 warning, 1 error" in html
+    assert "off range" in html    # present in the markup, behind the disclosure

@@ -22,6 +22,7 @@ from starlette.types import Scope
 # avoid.
 from app.core.paths import repo_root
 from app.core.utils import abbreviate_count
+from app.web.diagrams import TYPE_LABEL
 from app.web.file_sizes import describe_bytes, read_turn
 from app.services.workspace import (
     configure_projects_dir_from_env as configure_projects_dir_from_env,
@@ -110,6 +111,11 @@ def plain_value(v: object) -> str:
     return str(v.value) if isinstance(v, Enum) else ("" if v is None else str(v))
 
 
+def label_stage_type(v: object) -> str:
+    slug = plain_value(v)
+    return TYPE_LABEL.get(slug, slug)
+
+
 def serves_an_open_demo() -> bool:
     """True on Fly, which is the only place this app is a shared public deploy."""
     return bool(os.environ.get("FLY_APP_NAME"))
@@ -126,6 +132,9 @@ templates.env.filters["relative_time"] = relative_time
 templates.env.filters["friendly_duration"] = friendly_duration
 templates.env.filters["usd"] = usd
 templates.env.filters["plain_value"] = plain_value
+# Every type tag goes through this, so a new stage type cannot reach the screen as
+# a raw slug on one surface and a label on another.
+templates.env.filters["label_stage_type"] = label_stage_type
 # The review packet renders the same templates through this env, so the rail's
 # sizes abbreviate identically in a written packet and on a live run page.
 templates.env.filters["abbreviate_count"] = abbreviate_count

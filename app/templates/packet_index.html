@@ -10,7 +10,7 @@
 
 {% if guide %}
 <div class="run-nav" id="run-nav">
-  <div class="run-nav-head"><h2>Review guide</h2></div>
+  <div class="run-nav-head"><h2>Run walkthrough</h2></div>
   {% with titled_by_host = true %}{% include "_run_guide.html" %}{% endwith %}
 </div>
 {% endif %}
@@ -30,7 +30,7 @@
 <p class="banner">📦 <strong>What this is.</strong> Everything this run read, did and produced —
   enough to check the result without the software that made it. Read
   <a href="methodology.md">methodology.md</a> for what the author set out to do,
-  {% if guide %}the review guide beside this for what they say is worth scrutinising,{% endif %}
+  {% if guide %}the run walkthrough beside this for what they say is worth scrutinising,{% endif %}
   then each step for what actually ran.</p>
 
 {# What this run's own records say went wrong — the same index the run page carries
