@@ -38,8 +38,7 @@ def test_create_empty_draft_returns_triplet_id(examples: Path) -> None:
 
 def test_create_draft_seeded_from_version(examples: Path) -> None:
     pdir = examples / "demo"
-    meta = versioning.create_version_from_stages(
-        pdir, [_STAGE], message="v1", reviewer="local"
+    meta = versioning.create_version_from_stages(pdir.name, [_STAGE], message="v1", reviewer="local"
     )
     draft = drafts.create_draft("demo", from_version=meta.version_id)
     assert [s.id for s in draft.stages] == ["load"]
@@ -126,7 +125,7 @@ def test_save_version_freezes_valid_draft_and_chains_parent(examples: Path) -> N
     first = drafts.save_version("demo", draft.id, message="one")
     assert first.ok is True
     assert first.version_id is not None
-    [saved_first] = versioning.list_versions(pdir)
+    [saved_first] = versioning.list_versions(pdir.name)
     assert saved_first.published is False
     assert saved_first.parent_version is None
     after = drafts.read_draft("demo", draft.id)
@@ -134,9 +133,9 @@ def test_save_version_freezes_valid_draft_and_chains_parent(examples: Path) -> N
 
     second = drafts.save_version("demo", draft.id, message="two")
     assert second.version_id is not None
-    saved_second = versioning.load_version(pdir, second.version_id)
+    saved_second = versioning.load_version(pdir.name, second.version_id)
     assert saved_second.parent_version == first.version_id
-    assert len(versioning.list_versions(pdir)) == 2
+    assert len(versioning.list_versions(pdir.name)) == 2
 
 
 def test_save_version_refuses_a_dangling_input_that_per_stage_validation_accepts(examples: Path) -> None:
@@ -147,4 +146,4 @@ def test_save_version_refuses_a_dangling_input_that_per_stage_validation_accepts
     assert result.ok is False
     assert result.issues
     assert result.version_id is None
-    assert versioning.list_versions(pdir) == []
+    assert versioning.list_versions(pdir.name) == []

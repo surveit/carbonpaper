@@ -33,13 +33,13 @@ from app.services.run_guide import build_run_guide_view
 from app.services.uploads import resolve_file_binding
 from app.runtime.cancellation import request_cancel
 from app.web.breadcrumbs import build_run_crumbs
-from app.web.config import EVENT_TAIL, projects_dir, templates
+from app.web.config import EVENT_TAIL, templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
+from app.services.workspace import resolve_run_dir
 from app.web.loading import (
     load_manifest,
-    runs_dir,
 )
-from app.web.project_view import shell_state
+from app.web.project_view import shell_state, validate_project_or_404
 from app.web.run_events import (
     EVENT_PAGE_MAX,
     page_events_before,
@@ -53,19 +53,17 @@ from app.web.run_stage_panel import resolve_panel_links
 
 router = APIRouter()
 
-@router.post("/project/{project}/run")
-async def trigger_run(request: Request, project: str):
-    project_dir = projects_dir() / project
-    if not project_dir.is_dir():
-        raise HTTPException(status_code=404, detail=f"No project '{project}'")
+@router.post("/project/{project_id}/run")
+async def trigger_run(request: Request, project_id: str):
+    validate_project_or_404(project_id)
     # Set up the run (writes an initial `running` manifest), kick off execution
     # in a background thread, and redirect immediately. The run page polls.
     try:
         form = await request.form()
         version_id = str(form.get("version_id") or "").strip() or None
-        bindings = _collect_bindings(form, project)
+        bindings = _collect_bindings(form, project_id)
         limits = _collect_limits(form)
-        run_id = run_service.start_run(project, version_id=version_id,
+        run_id = run_service.start_run(project_id, version_id=version_id,
                                        bindings=bindings, limits=limits,
                                        bust_cache=_read_bust_cache(form))
     except (FileNotStoredError, NoVersionToRunError, MissingInputBindingError,
@@ -77,12 +75,12 @@ async def trigger_run(request: Request, project: str):
         return JSONResponse({"detail": "compiled workflow failed validation",
                              "issues": exc.issues}, status_code=400)
     return RedirectResponse(
-        url=f"/project/{project}/runs/{run_id}",
+        url=f"/project/{project_id}/runs/{run_id}",
         status_code=303,
     )
 
 
-def _collect_bindings(form: FormData, project: str) -> dict[StageId, TypeUnsafeUserStageConfigOverride]:
+def _collect_bindings(form: FormData, project_id: str) -> dict[StageId, TypeUnsafeUserStageConfigOverride]:
     """`binding__<stage>` carries a stored file's sha256; blank means run what the
     workflow authored."""
     bindings: dict[StageId, TypeUnsafeUserStageConfigOverride] = {}
@@ -91,7 +89,7 @@ def _collect_bindings(form: FormData, project: str) -> dict[StageId, TypeUnsafeU
             continue
         sha256 = str(value).strip()
         if sha256:
-            bindings[key[len("binding__"):]] = resolve_file_binding(project, sha256)
+            bindings[key[len("binding__"):]] = resolve_file_binding(project_id, sha256)
     return bindings
 
 
@@ -117,11 +115,9 @@ def _read_bust_cache(form: FormData) -> bool:
     return "bust_cache" in form
 
 
-@router.get("/project/{project}/runs", response_class=HTMLResponse)
-async def runs_index(request: Request, project: str):
-    pdir = projects_dir() / project
-    if not pdir.is_dir():
-        raise HTTPException(status_code=404, detail=f"No project '{project}'")
+@router.get("/project/{project_id}/runs", response_class=HTMLResponse)
+async def runs_index(request: Request, project_id: str):
+    validate_project_or_404(project_id)
     # A stored version that no longer validates raises WorkflowLoadError from
     # any listing/load (shell_state's version count included) and fails this
     # page loudly — the remedy is a store migration, not a tolerant render.
@@ -129,19 +125,19 @@ async def runs_index(request: Request, project: str):
         request,
         "section_runs.html",
         {
-            "state": shell_state(pdir, "runs"),
+            "state": shell_state(project_id, "runs"),
             "section": "runs",
-            "runs": build_run_index_rows(project),
+            "runs": build_run_index_rows(project_id),
         },
     )
 
 
-@router.get("/project/{project}/runs/{run_id}/status")
-async def run_status(project: str, run_id: str):
-    manifest = load_manifest(project, run_id)
+@router.get("/project/{project_id}/runs/{run_id}/status")
+async def run_status(project_id: str, run_id: str):
+    manifest = load_manifest(project_id, run_id)
     mstages = manifest.get("stage_records", [])
     status_by_id = {s["stage_id"]: s.get("status", "") for s in mstages}
-    graph = build_run_graph(project, manifest, status_by_id)
+    graph = build_run_graph(project_id, manifest, status_by_id)
 
     def _count(st: StageStatus) -> int:
         return sum(1 for s in mstages if s.get("status") == st)
@@ -160,7 +156,7 @@ async def run_status(project: str, run_id: str):
         "stages": [{"stage_id": s["stage_id"], "status": s.get("status")} for s in mstages],
         # The header parts that move while a run is in flight; the run page
         # updates them in place rather than fetching a second endpoint.
-        "header": build_live_view(project, run_id, manifest).model_dump(),
+        "header": build_live_view(project_id, run_id, manifest).model_dump(),
         "mermaid": graph.mermaid,
         "graph_error": graph.error,
     })
@@ -176,10 +172,10 @@ class RunGraph:
 
 
 def build_run_graph(
-    project: str, manifest: dict[str, Any], status_by_id: dict[str, str]
+    project_id: str, manifest: dict[str, Any], status_by_id: dict[str, str]
 ) -> RunGraph:
     try:
-        workflow = run_service.load_run_workflow(project, manifest)
+        workflow = run_service.load_run_workflow(project_id, manifest)
     except RunVersionUnresolvableError as exc:
         return RunGraph(stages=None, mermaid="", error=str(exc))
     workflow_stages = workflow.list_workflow_stages()
@@ -187,52 +183,52 @@ def build_run_graph(
         stages=workflow_stages,
         mermaid=build_mermaid_graph(
             [resolved.stage for resolved in workflow_stages],
-            project, status_by_id=status_by_id),
+            project_id, status_by_id=status_by_id),
         error=None,
     )
 
 
-@router.get("/project/{project}/runs/{run_id}/events")
+@router.get("/project/{project_id}/runs/{run_id}/events")
 async def stream_run_events(
-    project: str,
+    project_id: str,
     run_id: str,
     request: Request,
     from_seq: int | None = None,
     tail: int = EVENT_TAIL,
     stage: str | None = None,
 ):
-    load_manifest(project, run_id)  # 404s if the run doesn't exist
+    load_manifest(project_id, run_id)  # 404s if the run doesn't exist
     start = (
-        tail_start_seq(project, run_id, tail, stage)
+        tail_start_seq(project_id, run_id, tail, stage)
         if from_seq is None
         else max(from_seq, 0)
     )
     return StreamingResponse(
-        stream_events(project, run_id, request, start, stage),
+        stream_events(project_id, run_id, request, start, stage),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
 
-@router.get("/project/{project}/runs/{run_id}/events/page")
+@router.get("/project/{project_id}/runs/{run_id}/events/page")
 async def run_events_page(
-    project: str,
+    project_id: str,
     run_id: str,
     before_seq: int,
     limit: int = EVENT_TAIL,
     stage: str | None = None,
 ):
-    load_manifest(project, run_id)  # 404s if the run doesn't exist
+    load_manifest(project_id, run_id)  # 404s if the run doesn't exist
     limit = max(1, min(limit, EVENT_PAGE_MAX))
-    return page_events_before(project, run_id, before_seq, limit, stage)
+    return page_events_before(project_id, run_id, before_seq, limit, stage)
 
 
-@router.get("/project/{project}/runs/{run_id}", response_class=HTMLResponse)
-async def run_detail(request: Request, project: str, run_id: str):
-    run_dir = runs_dir(project) / run_id
-    manifest = load_manifest(project, run_id)
+@router.get("/project/{project_id}/runs/{run_id}", response_class=HTMLResponse)
+async def run_detail(request: Request, project_id: str, run_id: str):
+    run_dir = resolve_run_dir(project_id, run_id)
+    manifest = load_manifest(project_id, run_id)
     status_by_id = {s["stage_id"]: s.get("status", "") for s in manifest.get("stage_records", [])}
-    graph = build_run_graph(project, manifest, status_by_id)
+    graph = build_run_graph(project_id, manifest, status_by_id)
 
     return templates.TemplateResponse(
         request,
@@ -241,10 +237,10 @@ async def run_detail(request: Request, project: str, run_id: str):
             # The run view renders inside the project shell, so it carries the nav
             # state like every other section. `section: runs` keeps the Runs entry
             # highlighted while looking at one run.
-            "state": shell_state(projects_dir() / project, "runs"),
+            "state": shell_state(project_id, "runs"),
             "section": "runs",
-            "crumbs": build_run_crumbs(project, run_id),
-            "project": project,
+            "crumbs": build_run_crumbs(project_id, run_id),
+            "project": project_id,
             "run_id": run_id,
             "manifest": manifest,
             "mermaid": graph.mermaid,
@@ -252,26 +248,26 @@ async def run_detail(request: Request, project: str, run_id: str):
             "event_tail": EVENT_TAIL,
             # The grounding line, the CTA and the stage strip — everything above
             # the graph (app.web.run_header).
-            "header": build_run_header(project, run_id, run_dir, manifest),
+            "header": build_run_header(project_id, run_id, run_dir, manifest),
             # What stopped this run, and what else its own records flagged — the
             # index above the graph (app.web.run_issues). Takes the stages the
             # graph already loaded, so the page reads the pinned version once.
             "issues": build_run_issues(manifest, graph.stages),
             # None when the pinned version carries no guide — the nav column is then
             # not rendered at all, rather than standing in for one with prose.
-            "guide": build_run_guide_view(project, manifest),
+            "guide": build_run_guide_view(project_id, manifest),
             # The guide rail's stage chips resolve through the same links object
             # the stage panel uses, so the packet can point them at its own pages.
-            "links": resolve_panel_links(project, run_id),
+            "links": resolve_panel_links(project_id, run_id),
             "type_glyph": TYPE_GLYPH,
             "type_class": TYPE_CLASS,
         },
     )
 
 
-@router.get("/project/{project}/runs/{run_id}/artifact/{filename:path}")
-async def run_artifact(project: str, run_id: str, filename: str):
-    run_dir = runs_dir(project) / run_id
+@router.get("/project/{project_id}/runs/{run_id}/artifact/{filename:path}")
+async def run_artifact(project_id: str, run_id: str, filename: str):
+    run_dir = resolve_run_dir(project_id, run_id)
     candidate = (run_dir / "artifacts" / filename).resolve()
     if not candidate.exists() or not str(candidate).startswith(str(run_dir.resolve())):
         raise HTTPException(status_code=404, detail="Artifact not found")
@@ -282,36 +278,34 @@ async def run_artifact(project: str, run_id: str, filename: str):
                         filename=candidate.name)
 
 
-@router.post("/project/{project}/runs/{run_id}/resume")
-async def resume_run_route(project: str, run_id: str):
-    project_dir = projects_dir() / project
-    if not project_dir.is_dir():
-        raise HTTPException(status_code=404, detail=f"No project '{project}'")
-    load_manifest(project, run_id)  # 404s if the run doesn't exist
+@router.post("/project/{project_id}/runs/{run_id}/resume")
+async def resume_run_route(project_id: str, run_id: str):
+    validate_project_or_404(project_id)
+    load_manifest(project_id, run_id)  # 404s if the run doesn't exist
     # Resume executes the version the run PINNED, so that snapshot is what has to
     # load — validating the live working copy here would block resuming a valid
     # run because of an unrelated edit. The seam loads it synchronously and only
     # then goes to a background thread (the re-run is LLM-heavy), so a bad
     # snapshot surfaces as a 400 here rather than dying where nothing reports it.
     try:
-        run_service.resume(project, run_id)
+        run_service.resume(project_id, run_id)
     except RunVersionUnresolvableError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except WorkflowLoadError as exc:
         return JSONResponse({"detail": "pinned workflow version failed validation",
                              "issues": exc.issues}, status_code=400)
     return RedirectResponse(
-        url=f"/project/{project}/runs/{run_id}",
+        url=f"/project/{project_id}/runs/{run_id}",
         status_code=303,
     )
 
 
-@router.post("/project/{project}/runs/{run_id}/cancel")
-async def cancel_run_route(project: str, run_id: str):
-    manifest = load_manifest(project, run_id)  # 404s if the run doesn't exist
+@router.post("/project/{project_id}/runs/{run_id}/cancel")
+async def cancel_run_route(project_id: str, run_id: str):
+    manifest = load_manifest(project_id, run_id)  # 404s if the run doesn't exist
     if manifest.get("status") == RunStatus.RUNNING:
-        request_cancel(project, run_id)
+        request_cancel(project_id, run_id)
     return RedirectResponse(
-        url=f"/project/{project}/runs/{run_id}",
+        url=f"/project/{project_id}/runs/{run_id}",
         status_code=303,
     )

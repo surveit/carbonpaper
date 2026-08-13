@@ -42,27 +42,27 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def test_versions_list_shows_read_only_unpublished_status(project: Path) -> None:
-    project_service.save_working_copy_as_version(project, message="v1", reviewer="local")
+    project_service.save_working_copy_as_version(project.name, message="v1", reviewer="local")
     page = client.get("/project/demo/workflow/versions")
     assert page.status_code == 200
     assert "unpublished" in page.text
 
 
 def test_versions_list_never_contains_a_publish_form(project: Path) -> None:
-    project_service.save_working_copy_as_version(project, message="v1", reviewer="local")
+    project_service.save_working_copy_as_version(project.name, message="v1", reviewer="local")
     page = client.get("/project/demo/workflow/versions")
     assert "/publish" not in page.text
     assert "<button type=\"submit\">Publish</button>" not in page.text
 
 
 def test_publish_route_stamps_and_redirects_to_detail(project: Path) -> None:
-    meta = project_service.save_working_copy_as_version(project, message="v1", reviewer="local")
+    meta = project_service.save_working_copy_as_version(project.name, message="v1", reviewer="local")
     resp = client.post(
         f"/project/demo/versions/{meta.version_id}/publish", follow_redirects=False
     )
     assert resp.status_code == 303
     assert resp.headers["location"].endswith(f"/project/demo/workflow/version/{meta.version_id}")
-    assert versioning.load_version(project, meta.version_id).published
+    assert versioning.load_version(project.name, meta.version_id).published
     page = client.get("/project/demo/workflow/versions")
     assert "unpublished" not in page.text
 
@@ -75,7 +75,7 @@ def test_run_of_a_project_with_no_version_says_there_is_none(project: Path) -> N
 
 def test_run_of_unpublished_project_is_not_refused_for_being_unpublished(project: Path) -> None:
     """The fixture's input authors no path, so the run stops there — never on publish."""
-    project_service.save_working_copy_as_version(project, message="v1", reviewer="local")
+    project_service.save_working_copy_as_version(project.name, message="v1", reviewer="local")
     resp = client.post("/project/demo/run", follow_redirects=False)
     assert resp.status_code == 400
     detail = resp.json()["detail"]
@@ -84,13 +84,13 @@ def test_run_of_unpublished_project_is_not_refused_for_being_unpublished(project
 
 
 def test_publish_route_rejects_non_timestamp_version_id(project: Path) -> None:
-    before = versioning.list_versions(project)
+    before = versioning.list_versions(project.name)
     resp = client.post(
         "/project/demo/versions/not-a-version/publish", follow_redirects=False
     )
     assert resp.status_code == 404
     assert "not-a-version" in resp.json()["detail"]
-    assert versioning.list_versions(project) == before
+    assert versioning.list_versions(project.name) == before
 
 
 def test_versions_route_redirects_to_workflow_versions(project: Path) -> None:
@@ -107,6 +107,6 @@ def test_workflow_renders_the_editor(project: Path) -> None:
 
 
 def test_workflow_versions_list_rows_link_to_version_detail(project: Path) -> None:
-    meta = project_service.save_working_copy_as_version(project, message="v1", reviewer="local")
+    meta = project_service.save_working_copy_as_version(project.name, message="v1", reviewer="local")
     page = client.get("/project/demo/workflow/versions")
     assert f"/workflow/version/{meta.version_id}" in page.text

@@ -14,33 +14,35 @@ from app.services import project as project_service
 from app.services.errors import WorkflowLoadError
 from app.services.loader import find_parsed_stage, list_parsed_stages, resolve_function_code
 from app.models import stage_to_json
-from app.web.config import projects_dir, templates
+from app.web.config import templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
 from app.web.loading import find_workflow_stage, load_stages
 from app.web.eval_coverage import find_eval_coverages
 from app.web.stage_test_views import build_certification, shape_test_views
 
+from app.web.project_view import validate_project_or_404
+
 router = APIRouter()
 
 
-@router.get("/project/{project}/workflow/graph")
-async def workflow_graph(project: str):
-    stages = list_parsed_stages(load_stages(project).entries)
-    return JSONResponse({"mermaid": build_mermaid_graph(stages, project)})
+@router.get("/project/{project_id}/workflow/graph")
+async def workflow_graph(project_id: str):
+    stages = list_parsed_stages(load_stages(project_id).entries)
+    return JSONResponse({"mermaid": build_mermaid_graph(stages, project_id)})
 
 
-@router.get("/project/{project}/node/{stage_id}/panel", response_class=HTMLResponse)
-async def node_panel(request: Request, project: str, stage_id: str):
-    listing = load_stages(project)
+@router.get("/project/{project_id}/node/{stage_id}/panel", response_class=HTMLResponse)
+async def node_panel(request: Request, project_id: str, stage_id: str):
+    listing = load_stages(project_id)
     stage = find_parsed_stage(listing.entries, stage_id)
     if stage is None:
-        raise HTTPException(status_code=404, detail=f"No stage '{stage_id}' in {project}")
+        raise HTTPException(status_code=404, detail=f"No stage '{stage_id}' in {project_id}")
     workflow = listing.workflow
     return templates.TemplateResponse(
         request,
         "_node_panel.html",
         {
-            "project": project,
+            "project": project_id,
             "stage": stage,
             "workflow_stage": (workflow_stage := find_workflow_stage(workflow, stage_id)),
             "raw_json": stage_to_json(stage),
@@ -52,26 +54,24 @@ async def node_panel(request: Request, project: str, stage_id: str):
             # The working copy is not a version, so the freshest an eval can be here is
             # "it scored the latest version" — the same test eval_status applies.
             "eval_coverages": find_eval_coverages(
-                project, stage_id, versioning.find_latest_project_version_id(project)),
+                project_id, stage_id, versioning.find_latest_version_id(project_id)),
             "can_generate_tests": stage.CARRIES_RUNNABLE_TESTS,
         },
     )
 
 
-@router.post("/project/{project}/node/{stage_id}/edit")
+@router.post("/project/{project_id}/node/{stage_id}/edit")
 async def node_edit(
-    project: str,
+    project_id: str,
     stage_id: str,
     spec_text: str = Form(...),
 ):
-    project_dir = projects_dir() / project
-    if not project_dir.is_dir():
-        raise HTTPException(status_code=404, detail=f"No project '{project}'")
+    validate_project_or_404(project_id)
 
     # The parse/validate/write core is `stage_edit.edit_stage_spec`, shared with the
     # editing agent's `edit_stage` tool; this route only maps its result onto HTTP.
     try:
-        result = stage_edit.edit_stage_spec(project, stage_id, spec_text)
+        result = stage_edit.edit_stage_spec(project_id, stage_id, spec_text)
     except FileNotFoundError as exc:
         # The project, or the stage's compiled file, is absent.
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -81,16 +81,14 @@ async def node_edit(
     return JSONResponse({"ok": True})
 
 
-@router.post("/project/{project}/node/{stage_id}/generate-tests")
-async def node_generate_tests(project: str, stage_id: str):
+@router.post("/project/{project_id}/node/{stage_id}/generate-tests")
+async def node_generate_tests(project_id: str, stage_id: str):
     """Replaces the stage's existing tests."""
-    project_dir = projects_dir() / project
-    if not project_dir.is_dir():
-        raise HTTPException(status_code=404, detail=f"No project '{project}'")
-    model = project_service.project_meta(project_dir).model or "sonnet"
+    validate_project_or_404(project_id)
+    model = project_service.project_meta(project_id).model or "sonnet"
     try:
         session_id = generation.start_stage_test_generation(
-            project_dir, stage_id=stage_id, model=model
+            project_id, stage_id=stage_id, model=model
         )
     except (ValueError, WorkflowLoadError) as exc:
         # ValueError: unknown/untestable stage, or a project with no document.
@@ -99,9 +97,9 @@ async def node_generate_tests(project: str, stage_id: str):
     return JSONResponse({"ok": True, "session": session_id})
 
 
-@router.get("/project/{project}/generation-session/{sid}/status")
-async def generation_session_status(project: str, sid: str):
-    del project  # URL-namespaced only; sessions are looked up by id, not by project.
+@router.get("/project/{project_id}/generation-session/{sid}/status")
+async def generation_session_status(project_id: str, sid: str):
+    del project_id  # URL-namespaced only; sessions are looked up by id, not by project.
     store = open_session_store()
     if not store.exists(sid):
         raise HTTPException(status_code=404, detail=f"No session '{sid}'")
@@ -128,11 +126,9 @@ def _find_generation_failure(messages: list[dict]) -> str | None:
 # ─── Versioning ──────────────────────────────────────────────────────────────
 
 
-@router.post("/project/{project}/version")
-async def create_version_route(project: str, message: str = Form(...)):
-    project_dir = projects_dir() / project
-    if not project_dir.is_dir():
-        raise HTTPException(status_code=404, detail=f"No project '{project}'")
+@router.post("/project/{project_id}/version")
+async def create_version_route(project_id: str, message: str = Form(...)):
+    validate_project_or_404(project_id)
 
     # No compiler gate: a version is a snapshot of what the author has, and the
     # Workflow page already tells them what is wrong with it. A workflow that
@@ -141,11 +137,11 @@ async def create_version_route(project: str, message: str = Form(...)):
     # save_working_copy_as_version raises below.
     try:
         version = project_service.save_working_copy_as_version(
-            project_dir,
+            project_id,
             message=message,
             reviewer="local",
             # The latest existing version — None for the very first one.
-            parent_version=versioning.find_latest_version_id(project_dir),
+            parent_version=versioning.find_latest_version_id(project_id),
         )
     except FileNotFoundError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -163,18 +159,16 @@ async def create_version_route(project: str, message: str = Form(...)):
     return JSONResponse({"ok": True, "version": version.model_dump(mode="json")})
 
 
-@router.post("/project/{project}/versions/{version_id}/publish")
-async def publish_version_route(project: str, version_id: str):
-    project_dir = projects_dir() / project
-    if not project_dir.is_dir():
-        raise HTTPException(status_code=404, detail=f"No project '{project}'")
+@router.post("/project/{project_id}/versions/{version_id}/publish")
+async def publish_version_route(project_id: str, version_id: str):
+    validate_project_or_404(project_id)
     try:
-        versioning.publish_version(project_dir, version_id, reviewer="local")
+        versioning.publish_version(project_id, version_id, reviewer="local")
     except FileNotFoundError as exc:
         # Also how a malformed version_id lands here — any shape but the timestamp
         # versioning.load_version expects finds no document.
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     # Only ever posted from the version's own detail page, so go back there in one hop.
     return RedirectResponse(
-        url=f"/project/{project}/workflow/version/{version_id}", status_code=303
+        url=f"/project/{project_id}/workflow/version/{version_id}", status_code=303
     )

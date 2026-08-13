@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import json
 import re
-from pathlib import Path
 from typing import Any, ClassVar
 
 from pydantic import BaseModel, Field, ValidationError
@@ -26,7 +25,7 @@ from app.services import versioning, workspace
 
 
 class Draft(PersistedModel):
-    """`id` is the composite `f"{project}/{draft_id}"`; `draft_id` is the local id callers use."""
+    """`id` is the composite `f"{project_id}/{draft_id}"`; `draft_id` is the local id callers use."""
 
     collection: ClassVar[str] = "draft"
     SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
@@ -81,15 +80,15 @@ def create_draft(
     *,
     from_version: str | None = None,
 ) -> DraftView:
-    project_dir = workspace.resolve_project_dir(name)
+    project = workspace.validate_project_id(name)
     stages = (
-        versioning.load_version_stages(project_dir, from_version)
+        versioning.load_version_stages(project, from_version)
         if from_version is not None
         else []
     )
-    draft_id = generate_word_triplet_id(_taken(project_dir))
+    draft_id = generate_word_triplet_id(_taken(project))
     d = Draft(
-        id=_doc_id(project_dir, draft_id),
+        id=_doc_id(project, draft_id),
         draft_id=draft_id,
         parent_version=from_version,
         stages=stages,
@@ -100,16 +99,14 @@ def create_draft(
 
 def read_draft(
     name: str, draft_id: str) -> DraftDetail:
-    project_dir = workspace.resolve_project_dir(name)
-    d = _load(project_dir, draft_id)
+    d = _load(workspace.validate_project_id(name), draft_id)
     return DraftDetail(**_view(d).model_dump(), issues=validate_workflow(d.stages))
 
 
 def set_draft_stage(
     name: str, draft_id: str, stage_json: str) -> DraftEdit:
     stage = _parse_stage(stage_json)
-    project_dir = workspace.resolve_project_dir(name)
-    d = _load(project_dir, draft_id)
+    d = _load(workspace.validate_project_id(name), draft_id)
     kept = [s for s in d.stages if s.id != stage.id]
     d.stages = kept + [stage]
     d.save()
@@ -118,8 +115,7 @@ def set_draft_stage(
 
 def remove_draft_stage(
     name: str, draft_id: str, stage_id: str) -> DraftEdit:
-    project_dir = workspace.resolve_project_dir(name)
-    d = _load(project_dir, draft_id)
+    d = _load(workspace.validate_project_id(name), draft_id)
     kept = [s for s in d.stages if s.id != stage_id]
     if len(kept) == len(d.stages):
         raise ValueError(f"No stage '{stage_id}' in draft '{draft_id}'")
@@ -131,13 +127,13 @@ def remove_draft_stage(
 def save_version(
     name: str, draft_id: str, *, message: str
 ) -> SaveResult:
-    project_dir = workspace.resolve_project_dir(name)
-    d = _load(project_dir, draft_id)
+    project = workspace.validate_project_id(name)
+    d = _load(project, draft_id)
     issues = validate_workflow(d.stages)
     if issues:
         return SaveResult(ok=False, issues=issues)
     meta = versioning.create_version_from_stages(
-        project_dir,
+        project,
         [stage_to_spec_dict(s) for s in d.stages],
         message=message,
         reviewer="agent",
@@ -153,23 +149,23 @@ def save_version(
 _DRAFT_ID = re.compile(r"^[a-z]+-[a-z]+-[a-z]+$")
 
 
-def _doc_id(project_dir: Path, draft_id: str) -> str:
-    return f"{Path(project_dir).name}/{draft_id}"
+def _doc_id(project_id: str, draft_id: str) -> str:
+    return f"{project_id}/{draft_id}"
 
 
-def _taken(project_dir: Path) -> set[str]:
-    return {d.draft_id for d in Draft.list(f"{Path(project_dir).name}/")}
+def _taken(project_id: str) -> set[str]:
+    return {d.draft_id for d in Draft.list(f"{project_id}/")}
 
 
-def _load(project_dir: Path, draft_id: str) -> Draft:
+def _load(project_id: str, draft_id: str) -> Draft:
     """Shape-checks the id FIRST, so a caller-supplied id can never reach the store as a key."""
     if not _DRAFT_ID.match(draft_id):
         raise DraftNotFoundError(f"'{draft_id}' is not a draft id")
     try:
-        return Draft.load(_doc_id(project_dir, draft_id))
+        return Draft.load(_doc_id(project_id, draft_id))
     except DocumentNotFound as exc:
         raise DraftNotFoundError(
-            f"No draft '{draft_id}' for project '{Path(project_dir).name}' — drafts are "
+            f"No draft '{draft_id}' for project '{project_id}' — drafts are "
             f"disposable; start a new one with create_draft."
         ) from exc
 

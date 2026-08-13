@@ -60,18 +60,18 @@ class RunGuideView:
     unnarrated: list[GuideStageView]
 
 
-def build_run_guide_view(project: str, manifest: dict[str, Any]) -> RunGuideView | None:
+def build_run_guide_view(project_id: str, manifest: dict[str, Any]) -> RunGuideView | None:
     try:
-        version = load_run_version(project, manifest)
+        version = load_run_version(project_id, manifest)
     except RunVersionUnresolvableError:
         # The run page already states this reason in place of the workflow graph
         # (`graph_error`), so a second copy of it here tells the reader nothing new.
         return None
-    guide = find_latest_review_guide(project, version.version_id)
+    guide = find_latest_review_guide(project_id, version.version_id)
     if guide is None:
         return None
     by_id = _index_stages_in_execution_order(Workflow(stages=version.stages))
-    measured = _read_run_measurements(project, manifest)
+    measured = _read_run_measurements(project_id, manifest)
     return RunGuideView(
         steps=[_view_step(step, by_id, measured) for step in guide.steps],
         unnarrated=_view_stages(guide.unnarrated, by_id, measured),
@@ -102,7 +102,7 @@ class _RunMeasurements:
     column_counts: dict[str, int]
 
 
-def _read_run_measurements(project: str, manifest: dict[str, Any]) -> _RunMeasurements:
+def _read_run_measurements(project_id: str, manifest: dict[str, Any]) -> _RunMeasurements:
     records = manifest.get("stage_records", [])
     return _RunMeasurements(
         executed={record["stage_id"] for record in records},
@@ -114,7 +114,7 @@ def _read_run_measurements(project: str, manifest: dict[str, Any]) -> _RunMeasur
             if record.get("output_row_count") is not None
         },
         # Off the written frames themselves, and likewise absent where unreadable.
-        column_counts=read_output_column_counts(project, manifest),
+        column_counts=read_output_column_counts(project_id, manifest),
     )
 
 

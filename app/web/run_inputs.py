@@ -28,11 +28,11 @@ class RunInputChoices(BaseModel):
     files: list[FileChoice]
 
 
-def build_run_input_choices(project: str, version_id: str | None = None) -> RunInputChoices:
+def build_run_input_choices(project_id: str, version_id: str | None = None) -> RunInputChoices:
     return RunInputChoices(
         inputs=[InputRow(stage_id=row["stage_id"], authored_path=row["path"])
-                for row in list_file_inputs(project, version_id)],
+                for row in list_file_inputs(project_id, version_id)],
         files=[FileChoice(sha256=record.sha256, filename=record.filename,
                           bytes=record.byte_count)
-               for record in uploads.list_project_files(project)],
+               for record in uploads.list_project_files(project_id)],
     )

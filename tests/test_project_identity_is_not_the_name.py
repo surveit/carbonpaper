@@ -82,7 +82,7 @@ def test_listing_and_meta_agree_on_which_is_which(workspace_root: Path) -> None:
     project_id = create_project("my_investigation", "prose", model="sonnet", source="test").id
 
     assert list_projects() == [project_id]
-    meta = project_meta(workspace_root / project_id)
+    meta = project_meta(project_id)
     assert meta.name == "my_investigation"
     assert meta.model == "sonnet"
 
@@ -92,7 +92,7 @@ def test_a_directory_with_no_record_is_its_own_id(workspace_root: Path) -> None:
     (workspace_root / "copied_in").mkdir()
 
     assert read_project_name("copied_in") == "copied_in"
-    assert project_meta(workspace_root / "copied_in").name == "copied_in"
+    assert project_meta("copied_in").name == "copied_in"
 
 
 def test_a_record_from_before_labels_existed_still_loads(workspace_root: Path) -> None:
@@ -122,10 +122,10 @@ def test_the_shown_name_is_the_title_where_one_is_authored(workspace_root: Path)
     record.save()
 
     assert read_project_name(project_id) == "DSA takedown evidence capture"
-    assert project_meta(workspace_root / project_id).display_name == (
+    assert project_meta(project_id).display_name == (
         "DSA takedown evidence capture")
     # The slug survives it: a bundle exports under that, and it is what a name lookup takes.
-    assert project_meta(workspace_root / project_id).name == "dsa_evidence_capture"
+    assert project_meta(project_id).name == "dsa_evidence_capture"
     assert find_projects_by_name("dsa_evidence_capture") == [Project.load(project_id)]
 
 
@@ -163,7 +163,7 @@ def test_a_project_json_with_no_record_is_still_read_by_name(workspace_root: Pat
 
     assert read_project_name("congress_roster_diff") == (
         "Congress roster — diffing two CSV snapshots")
-    meta = project_meta(pdir)
+    meta = project_meta(pdir.name)
     assert meta.display_name == "Congress roster — diffing two CSV snapshots"
     assert meta.created_at == "2026-08-06T11:30:00"
     assert meta.source == "manual"

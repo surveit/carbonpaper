@@ -33,11 +33,11 @@ from app.services.versioning import (
     load_version_stages,
     resolve_version_id,
 )
-from app.services.workspace import resolve_project_dir, resolve_run_dir
+from app.services.workspace import resolve_run_dir, resolve_runs_dir
 
 
 def start_run(
-    project: str,
+    project_id: str,
     *,
     version_id: str | None = None,
     bindings: Mapping[StageId, TypeUnsafeUserStageConfigOverride] | None = None,
@@ -45,13 +45,13 @@ def start_run(
     offsets: dict[str, int] | None = None,
     bust_cache: bool = False,
 ) -> str:
-    prep = _prepare(project, version_id, bindings, limits, offsets, bust_cache)
+    prep = _prepare(project_id, version_id, bindings, limits, offsets, bust_cache)
     _run_in_background(run_prepared, prep)
     return str(prep["run_id"])
 
 
 def execute(
-    project: str,
+    project_id: str,
     *,
     version_id: str | None = None,
     bindings: Mapping[StageId, TypeUnsafeUserStageConfigOverride] | None = None,
@@ -60,23 +60,23 @@ def execute(
     bust_cache: bool = False,
 ) -> dict[str, Any]:
     return run_prepared(
-        _prepare(project, version_id, bindings, limits, offsets, bust_cache)
+        _prepare(project_id, version_id, bindings, limits, offsets, bust_cache)
     )
 
 
 def _prepare(
-    project: str,
+    project_id: str,
     version_id: str | None,
     bindings: Mapping[StageId, TypeUnsafeUserStageConfigOverride] | None,
     limits: dict[str, int] | None,
     offsets: dict[str, int] | None,
     bust_cache: bool,
 ) -> dict[str, Any]:
-    project_dir = resolve_project_dir(project)
-    workflow_version = resolve_version_id(project_dir, version_id)
+    workflow_version = resolve_version_id(project_id, version_id)
     return prepare_run(
-        project_dir,
-        Workflow(stages=load_version_stages(project_dir, workflow_version)),
+        resolve_runs_dir(project_id),
+        project_id,
+        Workflow(stages=load_version_stages(project_id, workflow_version)),
         workflow_version,
         limits=limits,
         offsets=offsets,
@@ -85,40 +85,40 @@ def _prepare(
     )
 
 
-def resume(project: str, run_id: str) -> None:
-    project_dir = resolve_project_dir(project)
-    workflow_version = read_pinned_version(project, run_id)
+def resume(project_id: str, run_id: str) -> None:
+    workflow_version = read_pinned_version(project_id, run_id)
     _run_in_background(
         resume_run,
-        project_dir,
+        resolve_run_dir(project_id, run_id),
+        project_id,
         run_id,
-        Workflow(stages=load_version_stages(project_dir, workflow_version)),
+        Workflow(stages=load_version_stages(project_id, workflow_version)),
         workflow_version,
     )
 
 
-def read_pinned_version(project: str, run_id: str) -> str:
-    workflow_version = read_run_manifest(project, run_id).workflow_version
+def read_pinned_version(project_id: str, run_id: str) -> str:
+    workflow_version = read_run_manifest(project_id, run_id).workflow_version
     if not workflow_version:
         raise RunVersionUnresolvableError(
-            f"Run '{run_id}' of '{project}' records no workflow version in its "
+            f"Run '{run_id}' of '{project_id}' records no workflow version in its "
             f"manifest, so the workflow it executed cannot be identified — it "
             f"cannot be resumed."
         )
     return workflow_version
 
 
-def read_stage_output(project: str, run_id: str, stage_id: str) -> pd.DataFrame:
-    run_dir = resolve_run_dir(project, run_id)
-    _validate_run_exists(project, run_id)
-    return read_stage_output_frame(project, run_dir, stage_id)
+def read_stage_output(project_id: str, run_id: str, stage_id: str) -> pd.DataFrame:
+    run_dir = resolve_run_dir(project_id, run_id)
+    _validate_run_exists(project_id, run_id)
+    return read_stage_output_frame(project_id, run_dir, stage_id)
 
 
-def read_output_column_counts(project: str, manifest: Mapping[str, Any]) -> dict[str, int]:
+def read_output_column_counts(project_id: str, manifest: Mapping[str, Any]) -> dict[str, int]:
     run_id = manifest.get("run_id")
     if not run_id:
         return {}
-    run_dir = resolve_run_dir(project, str(run_id))
+    run_dir = resolve_run_dir(project_id, str(run_id))
     # Off the frames the run wrote, never off what the version's signatures promise:
     # most stage types do not trim their output frame to the schema they declared, so
     # the frame may carry columns the promise never named. A frame that cannot be read
@@ -130,8 +130,8 @@ def read_output_column_counts(project: str, manifest: Mapping[str, Any]) -> dict
     return {stage_id: count for stage_id, count in counted.items() if count is not None}
 
 
-def read_run_status(project: str, run_id: str) -> dict[str, Any]:
-    return read_run_manifest(project, run_id).to_dict()
+def read_run_status(project_id: str, run_id: str) -> dict[str, Any]:
+    return read_run_manifest(project_id, run_id).to_dict()
 
 
 def _count_output_columns(run_dir: Path, output_path: str | None) -> int | None:
@@ -146,33 +146,33 @@ def _count_output_columns(run_dir: Path, output_path: str | None) -> int | None:
         return None
 
 
-def _validate_run_exists(project: str, run_id: str) -> None:
+def _validate_run_exists(project_id: str, run_id: str) -> None:
     """Raises RunNotFoundError unless the project recorded a run of this id."""
-    read_run_manifest(project, run_id)
+    read_run_manifest(project_id, run_id)
 
 
-def resolve_version(project: str, version_id: str | None) -> str:
-    return resolve_version_id(resolve_project_dir(project), version_id)
+def resolve_version(project_id: str, version_id: str | None) -> str:
+    return resolve_version_id(project_id, version_id)
 
 
-def load_run_version(project: str, manifest: dict[str, Any]) -> WorkflowVersion:
+def load_run_version(project_id: str, manifest: dict[str, Any]) -> WorkflowVersion:
     version_id = manifest.get("workflow_version")
     if not version_id:
         raise RunVersionUnresolvableError(
-            f"This run of '{project}' records no workflow version in its "
+            f"This run of '{project_id}' records no workflow version in its "
             "manifest, so the workflow it executed cannot be identified."
         )
     try:
-        return load_version(resolve_project_dir(project), str(version_id))
+        return load_version(project_id, str(version_id))
     except (FileNotFoundError, WorkflowLoadError) as exc:
         raise RunVersionUnresolvableError(
-            f"This run of '{project}' pinned workflow version "
+            f"This run of '{project_id}' pinned workflow version "
             f"'{version_id}', which could not be read: {exc}"
         ) from exc
 
 
-def load_run_workflow(project: str, manifest: dict[str, Any]) -> Workflow:
-    pinned = _build_pinned_workflow(project, manifest)
+def load_run_workflow(project_id: str, manifest: dict[str, Any]) -> Workflow:
+    pinned = _build_pinned_workflow(project_id, manifest)
     # The snapshot alone is not what ran — the manifest carries the binding as a
     # separate delta, and resume_run replays it. So must every reader, or a panel
     # shows a file the run never opened.
@@ -188,9 +188,9 @@ def load_run_workflow(project: str, manifest: dict[str, Any]) -> Workflow:
     return bound
 
 
-def _build_pinned_workflow(project: str, manifest: dict[str, Any]) -> Workflow:
+def _build_pinned_workflow(project_id: str, manifest: dict[str, Any]) -> Workflow:
     try:
-        return Workflow(stages=load_run_version(project, manifest).stages)
+        return Workflow(stages=load_run_version(project_id, manifest).stages)
     except ValidationError as exc:
         raise RunVersionUnresolvableError(
             f"run {manifest.get('run_id')} pinned workflow version "
@@ -208,10 +208,10 @@ class RunStageDef:
 
 
 def load_pinned_stage_def(
-    project: str, manifest: dict[str, Any], stage_id: str
+    project_id: str, manifest: dict[str, Any], stage_id: str
 ) -> RunStageDef:
     try:
-        workflow = load_run_workflow(project, manifest)
+        workflow = load_run_workflow(project_id, manifest)
     except RunVersionUnresolvableError as exc:
         return RunStageDef(workflow_stage=None, error=str(exc))
     return RunStageDef(

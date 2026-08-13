@@ -76,7 +76,7 @@ def test_round_trip_through_json_reproduces_the_source_and_mints_a_version(tmp_p
     assert entry.stage is not None
     assert stage_to_spec_dict(entry.stage) == stage_to_spec_dict(stage)
 
-    versions = versioning.list_versions(target_pdir)
+    versions = versioning.list_versions(target_pdir.name)
     assert len(versions) == 1
 
 

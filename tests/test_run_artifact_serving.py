@@ -13,11 +13,11 @@ from app.main import app
 
 @pytest.fixture
 def artifact_dir(tmp_path, monkeypatch):
-    import app.web.routers.runs as runs_module
+    from app.services import workspace
 
     root = tmp_path / "proj" / "runs" / "R1"
     (root / "artifacts").mkdir(parents=True)
-    monkeypatch.setattr(runs_module, "runs_dir", lambda project: tmp_path / "proj" / "runs")
+    workspace.set_projects_dir(tmp_path)
     return root / "artifacts"
 
 

@@ -41,7 +41,7 @@ def _stage_view(
 def _render(*steps: GuideStepView) -> str:
     html = templates.get_template("_run_guide.html").render(
         guide=RunGuideView(steps=list(steps), unnarrated=[]),
-        project="demo",
+        project_id="demo",
         links=AppPanelLinks("demo", "20260101T000000"),
     )
     # The rail carries its own stylesheet, which names every class these tests look

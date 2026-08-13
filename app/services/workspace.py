@@ -46,16 +46,27 @@ def configure_projects_dir_from_env() -> None:
         set_projects_dir(Path(configured))
 
 
-def resolve_project_dir(name: str) -> Path:
-    root = projects_dir().resolve()
-    candidate = (root / name).resolve()
-    if not candidate.is_relative_to(root):
-        raise ValueError(f"invalid project id '{name}'")
-    return candidate
+# The escape guard, stated on the ID rather than on the path it resolves to: a project
+# id is also the prefix of every document key (`{project_id}/{local_id}`), so a separator
+# in it splits the wrong way there too, where there is no directory to check it against.
+def validate_project_id(project_id: str) -> str:
+    """One path segment — no separator, and never a relative-directory name."""
+    if not project_id or project_id.startswith(".") or "/" in project_id or "\\" in project_id:
+        raise ValueError(f"invalid project id '{project_id}'")
+    return project_id
 
 
-def resolve_run_dir(name: str, run_id: str) -> Path:
-    return resolve_project_dir(name) / "runs" / run_id
+def resolve_project_dir(project_id: str) -> Path:
+    return projects_dir().resolve() / validate_project_id(project_id)
+
+
+def resolve_runs_dir(project_id: str) -> Path:
+    """Where this project's runs go — the runtime is handed this, never the project."""
+    return resolve_project_dir(project_id) / "runs"
+
+
+def resolve_run_dir(project_id: str, run_id: str) -> Path:
+    return resolve_runs_dir(project_id) / run_id
 
 
 # Keys this reader injects onto a loaded schema dict for its own bookkeeping —
@@ -64,8 +75,8 @@ def resolve_run_dir(name: str, run_id: str) -> Path:
 LOADER_BOOKKEEPING_KEYS: set[str] = {"_filename", "_order", "_error"}
 
 
-def load_schemas(project_dir: Path) -> list[dict[str, Any]]:
-    schemas_dir = Path(project_dir) / "schemas"
+def load_schemas(project_id: str) -> list[dict[str, Any]]:
+    schemas_dir = resolve_project_dir(project_id) / "schemas"
     if not schemas_dir.is_dir():
         return []
     schemas: list[dict[str, Any]] = []

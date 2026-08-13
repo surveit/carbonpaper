@@ -55,10 +55,9 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def _run_once(project_dir: Path) -> str:
-    version_id = project_service.save_working_copy_as_version(
-        project_dir, message="v1", reviewer="test").version_id
-    versioning.publish_version(project_dir, version_id, reviewer="test")
-    return str(execute_run(project_dir, *pinned_stages(project_dir))["run_id"])
+    version_id = project_service.save_working_copy_as_version(project_dir.name, message="v1", reviewer="test").version_id
+    versioning.publish_version(project_dir.name, version_id, reviewer="test")
+    return str(execute_run(project_dir / "runs", project_dir.name, *pinned_stages(project_dir))["run_id"])
 
 
 def _drift_the_working_copy(project_dir: Path) -> None:

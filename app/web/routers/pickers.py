@@ -2,7 +2,7 @@
 
 Each returns the popover body only, never a page. They sit under their own /pickers
 prefix rather than beside the thing they list: `/project/x/runs/picker` was swallowed
-by `/project/{project}/runs/{run_id}`, which matched it as a run named "picker".
+by `/project/{project_id}/runs/{run_id}`, which matched it as a run named "picker".
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from fastapi.responses import HTMLResponse
 
 from app.core.run_status import RunStatus
 from app.services.project import list_project_listings, project_exists
-from app.services.versioning import WorkflowVersion, list_project_versions
+from app.services.versioning import WorkflowVersion, list_versions
 from app.web.breadcrumbs import Picker, PickerRow
 from app.web.config import templates
 from app.web.run_index import RunIndexRow, build_run_index_rows
@@ -39,26 +39,26 @@ async def projects_picker(request: Request, current: str = ""):
     ))
 
 
-@router.get("/pickers/project/{project}/versions", response_class=HTMLResponse)
-async def versions_picker(request: Request, project: str, current: str = ""):
-    _refuse_unknown_project(project)
-    versions = list_project_versions(project)  # newest-first
+@router.get("/pickers/project/{project_id}/versions", response_class=HTMLResponse)
+async def versions_picker(request: Request, project_id: str, current: str = ""):
+    _refuse_unknown_project(project_id)
+    versions = list_versions(project_id)  # newest-first
     return _render(request, Picker(
         heading="Versions of this workflow",
-        rows=[_version_row(project, version, current) for version in versions[:_ROW_CAP]],
-        all_href=f"/project/{project}/workflow/versions",
+        rows=[_version_row(project_id, version, current) for version in versions[:_ROW_CAP]],
+        all_href=f"/project/{project_id}/workflow/versions",
         all_label=_all_label(len(versions), "version"),
     ))
 
 
-@router.get("/pickers/project/{project}/runs", response_class=HTMLResponse)
-async def runs_picker(request: Request, project: str, current: str = ""):
-    _refuse_unknown_project(project)
-    runs = build_run_index_rows(project)  # newest-first
+@router.get("/pickers/project/{project_id}/runs", response_class=HTMLResponse)
+async def runs_picker(request: Request, project_id: str, current: str = ""):
+    _refuse_unknown_project(project_id)
+    runs = build_run_index_rows(project_id)  # newest-first
     return _render(request, Picker(
         heading="Runs of this workflow",
-        rows=[_run_row(project, run, current) for run in runs[:_ROW_CAP]],
-        all_href=f"/project/{project}/runs",
+        rows=[_run_row(project_id, run, current) for run in runs[:_ROW_CAP]],
+        all_href=f"/project/{project_id}/runs",
         all_label=_all_label(len(runs), "run"),
     ))
 
@@ -70,16 +70,16 @@ _UNPUBLISHED = "unpublished"
 _NO_DESCRIPTION = "No description"
 
 
-def _refuse_unknown_project(project: str) -> None:
+def _refuse_unknown_project(project_id: str) -> None:
     # Also refuses an id escaping the workspace, which `projects_dir() / project` accepted.
-    if not project_exists(project):
-        raise HTTPException(status_code=404, detail=f"No project '{project}'")
+    if not project_exists(project_id):
+        raise HTTPException(status_code=404, detail=f"No project '{project_id}'")
 
 
-def _version_row(project: str, version: WorkflowVersion, current: str) -> PickerRow:
+def _version_row(project_id: str, version: WorkflowVersion, current: str) -> PickerRow:
     return PickerRow(
         label=version.version_id,
-        href=f"/project/{project}/workflow/version/{version.version_id}",
+        href=f"/project/{project_id}/workflow/version/{version.version_id}",
         is_code=True,
         badge=_PUBLISHED if version.published else _UNPUBLISHED,
         badge_kind="ok" if version.published else "pending",
@@ -90,10 +90,10 @@ def _version_row(project: str, version: WorkflowVersion, current: str) -> Picker
     )
 
 
-def _run_row(project: str, run: RunIndexRow, current: str) -> PickerRow:
+def _run_row(project_id: str, run: RunIndexRow, current: str) -> PickerRow:
     return PickerRow(
         label=run.run_id,
-        href=f"/project/{project}/runs/{run.run_id}",
+        href=f"/project/{project_id}/runs/{run.run_id}",
         is_code=True,
         badge=run.outcome or None,
         badge_kind=_RUN_BADGE_KINDS.get(run.status, "pending"),

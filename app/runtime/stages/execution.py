@@ -412,7 +412,7 @@ def _record_row_output(caching: _RowCaching, input_row: Row, output_row: Row) ->
     ):
         return
     caching.writer.record(
-        project=caching.project,
+        project_id=caching.project,
         stage_id=caching.stage_id,
         stage_fingerprint=caching.stage_fingerprint,
         input_fingerprint=compute_row_fingerprint(input_row),

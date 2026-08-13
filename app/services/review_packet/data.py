@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from app.core.frames import read_frame_file, write_frame_file
 from app.core.run_status import StageStatus
 from app.services.methodology import read_methodology
+from app.services.workspace import resolve_project_dir
 from app.services.review_packet.checksums import compute_sha256
 from app.services.review_packet.views import InputBindingView, RunView, StageView
 
@@ -47,7 +48,7 @@ class DataReport(BaseModel):
 def write_packet_data(
     root: Path,
     run_dir: Path,
-    project_dir: Path,
+    project_id: str,
     view: RunView,
     workflow: str | None,
     manifest: str,
@@ -57,14 +58,14 @@ def write_packet_data(
     report = DataReport(written=[], omitted=[], artifacts=[])
     _write_run_records(root, manifest, events, report)
     _write_workflow(root, workflow, view, report)
-    _write_document(root, project_dir, report)
+    _write_document(root, project_id, report)
     _copy_published_artifacts(root, run_dir, view, report)
     for stage in view.stages:
         # Pre-resolved by the caller: joining a run dir to a recorded output_path is
         # app.runtime.manifest's alone, and this layer may not import it.
         _write_stage_output(root, stage, stage_sources.get(stage.stage_id), report)
     for index, binding in enumerate(view.inputs):
-        _copy_input_file(root, binding, project_dir, index, report)
+        _copy_input_file(root, binding, project_id, index, report)
     return report
 
 
@@ -91,8 +92,8 @@ def _write_workflow(
     _write_text(root / WORKFLOW_FILE, workflow, WORKFLOW_FILE, report)
 
 
-def _write_document(root: Path, project_dir: Path, report: DataReport) -> None:
-    document = read_methodology(project_dir.name)
+def _write_document(root: Path, project_id: str, report: DataReport) -> None:
+    document = read_methodology(project_id)
     if document is None:
         report.omitted.append(
             OmittedFile(path=DOCUMENT_FILE, reason="this project has no source document")
@@ -181,11 +182,11 @@ def _write_csv(root: Path, source: Path, stage_id: str, report: DataReport) -> N
 
 
 def _copy_input_file(
-    root: Path, binding: InputBindingView, project_dir: Path, index: int, report: DataReport
+    root: Path, binding: InputBindingView, project_id: str, index: int, report: DataReport
 ) -> None:
     recorded = Path(binding.path)
     relative = f"{INPUTS_DIR}/{index:02d}-{binding.stage_id}{recorded.suffix}"
-    source = _locate_input(binding, project_dir)
+    source = _locate_input(binding, project_id)
     if source is None:
         report.omitted.append(
             OmittedFile(
@@ -200,7 +201,7 @@ def _copy_input_file(
     _copy_file(source, root / relative, relative, report)
 
 
-def _locate_input(binding: InputBindingView, project_dir: Path) -> Path | None:
+def _locate_input(binding: InputBindingView, project_id: str) -> Path | None:
     """Where the run read it, or where the project moved it to — never a same-named guess."""
     recorded = Path(binding.path)
     if recorded.is_file():
@@ -209,9 +210,9 @@ def _locate_input(binding: InputBindingView, project_dir: Path) -> Path | None:
     # them. The run recorded what it hashed, and only that hash can say a file
     # under the project's new root is the file the run actually read.
     parts = recorded.parts
-    if not binding.sha256 or project_dir.name not in parts:
+    if not binding.sha256 or project_id not in parts:
         return None
-    moved = project_dir.joinpath(*parts[parts.index(project_dir.name) + 1:])
+    moved = resolve_project_dir(project_id).joinpath(*parts[parts.index(project_id) + 1:])
     if not moved.is_file() or compute_sha256(moved) != binding.sha256:
         return None
     return moved

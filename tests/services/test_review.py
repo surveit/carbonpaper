@@ -58,7 +58,7 @@ def _record(
     review_notes: str | None = None,
 ) -> None:
     review.record_decision(
-        project="proj", stage=place_stage(stage if stage is not None else _stage()),
+        project_id="proj", stage=place_stage(stage if stage is not None else _stage()),
         stage_fingerprint="sf1", input_fingerprint=input_fingerprint,
         frozen_row=frozen_row, verdict=verdict,
         reviewed_values={"human_score": 1} if reviewed_values is None else reviewed_values,

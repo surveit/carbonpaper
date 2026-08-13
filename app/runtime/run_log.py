@@ -37,8 +37,8 @@ class RunEventChunk(PersistedModel):
     events: list[JsonDict] = []
 
     @staticmethod
-    def compose_id(project: str, run_id: str, index: int) -> str:
-        return f"{project}/{run_id}/{index:06d}"
+    def compose_id(project_id: str, run_id: str, index: int) -> str:
+        return f"{project_id}/{run_id}/{index:06d}"
 
 # The run log's whole vocabulary, declared once. The lifecycle spine:
 RUN_START = "run_start"
@@ -79,8 +79,8 @@ LEVEL_DETAIL = 1
 class RunLog:
     """Any thread may emit(); a single writer thread does the writing."""
 
-    def __init__(self, project: str, run_id: str):
-        self._project = project
+    def __init__(self, project_id: str, run_id: str):
+        self._project = project_id
         self._run_id = run_id
         self._q: queue.Queue[Any] = queue.Queue()
         self._closed = False
@@ -156,17 +156,17 @@ def _group_by_chunk(events: list[JsonDict]) -> dict[int, list[JsonDict]]:
     return grouped
 
 
-def _load_chunk(project: str, run_id: str, index: int) -> RunEventChunk | None:
-    return RunEventChunk.load_or_none(RunEventChunk.compose_id(project, run_id, index))
+def _load_chunk(project_id: str, run_id: str, index: int) -> RunEventChunk | None:
+    return RunEventChunk.load_or_none(RunEventChunk.compose_id(project_id, run_id, index))
 
 
-def count_events(project: str, run_id: str) -> int:
+def count_events(project_id: str, run_id: str) -> int:
     """How many events this run has already logged."""
     index = 0
     # Chunk ids are dense from 0, so walking forward to the first partial one
     # finds the end without listing anything.
     while True:
-        chunk = _load_chunk(project, run_id, index)
+        chunk = _load_chunk(project_id, run_id, index)
         if chunk is None:
             return index * CHUNK_SIZE
         if len(chunk.events) < CHUNK_SIZE:
@@ -174,7 +174,7 @@ def count_events(project: str, run_id: str) -> int:
         index += 1
 
 
-def read_events_since(project: str, run_id: str, from_seq: int) -> list[dict[str, Any]]:
+def read_events_since(project_id: str, run_id: str, from_seq: int) -> list[dict[str, Any]]:
     """This run's events with seq >= from_seq, in emission order."""
     out: list[dict[str, Any]] = []
     # seq is a gapless counter from 0, so the first chunk that can hold
@@ -182,7 +182,7 @@ def read_events_since(project: str, run_id: str, from_seq: int) -> list[dict[str
     # chunks before it.
     index = max(0, from_seq // CHUNK_SIZE)
     while True:
-        chunk = _load_chunk(project, run_id, index)
+        chunk = _load_chunk(project_id, run_id, index)
         if chunk is None:
             return out
         out.extend(e for e in chunk.events if int(e["seq"]) >= from_seq)

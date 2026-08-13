@@ -74,8 +74,8 @@ def project(tmp_path, monkeypatch):
              "connector": {"kind": "file",
                            "params": {"path": str(data), "format": "csv"}}}
     add_stage(proj, stage)
-    vid = save_working_copy_as_version(proj, message="seed", reviewer="test").version_id
-    versioning.publish_version(proj, vid, reviewer="human")
+    vid = save_working_copy_as_version(proj.name, message="seed", reviewer="test").version_id
+    versioning.publish_version(proj.name, vid, reviewer="human")
     workspace.set_projects_dir(tmp_path)
     monkeypatch.setattr(run_service, "_run_in_background",
                         lambda target, *args: target(*args))

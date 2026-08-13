@@ -33,19 +33,19 @@ from app.web.queue_view import (
 router = APIRouter()
 
 
-@router.get("/project/{project}/runs/{run_id}/queue/{stage_id}", response_class=HTMLResponse)
-async def queue_page(request: Request, project: str, run_id: str, stage_id: str):
-    manifest = load_manifest(project, run_id)
-    stage_def = _require_queue_stage(load_stages(project).workflow, stage_id)
+@router.get("/project/{project_id}/runs/{run_id}/queue/{stage_id}", response_class=HTMLResponse)
+async def queue_page(request: Request, project_id: str, run_id: str, stage_id: str):
+    manifest = load_manifest(project_id, run_id)
+    stage_def = _require_queue_stage(load_stages(project_id).workflow, stage_id)
     queue = _require_queue_config(stage_def)
-    drift, page = _build_page(project, run_id, stage_id, stage_def, queue)
+    drift, page = _build_page(project_id, run_id, stage_id, stage_def, queue)
 
     return templates.TemplateResponse(
         request,
         "queue.html",
         {
-            "project": project,
-            "crumbs": build_run_child_crumbs(project, run_id, label="Review queue"),
+            "project": project_id,
+            "crumbs": build_run_child_crumbs(project_id, run_id, label="Review queue"),
             "run_id": run_id,
             "stage_id": stage_id,
             "stage_def": stage_def.stage,
@@ -58,15 +58,15 @@ async def queue_page(request: Request, project: str, run_id: str, stage_id: str)
 
 
 @router.get(
-    "/project/{project}/runs/{run_id}/queue/{stage_id}/card/{input_fingerprint}",
+    "/project/{project_id}/runs/{run_id}/queue/{stage_id}/card/{input_fingerprint}",
     response_class=HTMLResponse,
 )
 async def queue_card_partial(
-    request: Request, project: str, run_id: str, stage_id: str, input_fingerprint: str
+    request: Request, project_id: str, run_id: str, stage_id: str, input_fingerprint: str
 ):
-    stage_def = _require_queue_stage(load_stages(project).workflow, stage_id)
+    stage_def = _require_queue_stage(load_stages(project_id).workflow, stage_id)
     queue = _require_queue_config(stage_def)
-    _drift, page = _build_page(project, run_id, stage_id, stage_def, queue)
+    _drift, page = _build_page(project_id, run_id, stage_id, stage_def, queue)
     positioned = find_positioned_item(page, input_fingerprint)
     if positioned is None:
         raise HTTPException(
@@ -77,7 +77,7 @@ async def queue_card_partial(
         request,
         "_queue_card.html",
         {
-            "project": project,
+            "project": project_id,
             "run_id": run_id,
             "stage_id": stage_id,
             "review_notes_column": queue.review_notes_column,
@@ -88,9 +88,9 @@ async def queue_card_partial(
     )
 
 
-@router.post("/project/{project}/runs/{run_id}/queue/{stage_id}/decide")
+@router.post("/project/{project_id}/runs/{run_id}/queue/{stage_id}/decide")
 async def queue_decide(
-    project: str,
+    project_id: str,
     run_id: str,
     stage_id: str,
     input_fingerprint: str = Form(...),
@@ -99,17 +99,17 @@ async def queue_decide(
     prefilled_values: str = Form(...),
     review_notes: str | None = Form(None),
 ):
-    stage_def = _require_queue_stage(load_stages(project).workflow, stage_id)
+    stage_def = _require_queue_stage(load_stages(project_id).workflow, stage_id)
     queue = _require_queue_config(stage_def)
     attributed_to = _require_reviewer_name(reviewer)
     supplied = _parse_posted_values(reviewed_values, "reviewed_values")
     prefilled = _parse_posted_values(prefilled_values, "prefilled_values")
-    stage_fingerprint, row = _resolve_queue_row(project, run_id, stage_id, input_fingerprint)
+    stage_fingerprint, row = _resolve_queue_row(project_id, run_id, stage_id, input_fingerprint)
     _validate_stage_definition_unchanged(stage_def, stage_fingerprint)
     try:
         verdict = review.resolve_verdict(supplied, prefilled)
         review.record_decision(
-            project=project, stage=stage_def,
+            project_id=project_id, stage=stage_def,
             stage_fingerprint=stage_fingerprint, input_fingerprint=input_fingerprint,
             frozen_row={str(k): v for k, v in row.items()},
             verdict=verdict,
@@ -130,17 +130,17 @@ async def queue_decide(
 
 
 def _build_page(
-    project: str, run_id: str, stage_id: str, stage_def: WorkflowStage, queue: QueueConfig
+    project_id: str, run_id: str, stage_id: str, stage_def: WorkflowStage, queue: QueueConfig
 ) -> tuple[str | None, QueuePage]:
     """Returns the drift message beside the page: a drifted queue renders no items."""
-    fingerprints = load_queue_fingerprints(project, run_id, stage_id)
+    fingerprints = load_queue_fingerprints(project_id, run_id, stage_id)
     drift = (
         None if fingerprints is None
         else find_definition_drift(stage_def, fingerprints.stage_fingerprint)
     )
     page = build_queue_page(
-        project, run_id, stage_def, queue,
-        queue_snapshot(project, run_id, stage_id), fingerprints, drift,
+        project_id, run_id, stage_def, queue,
+        queue_snapshot(project_id, run_id, stage_id), fingerprints, drift,
     )
     return drift, page
 
@@ -252,11 +252,11 @@ def _describe_rejections(exc: ValidationError) -> str:
 
 
 def _resolve_queue_row(
-    project: str, run_id: str, stage_id: str, input_fingerprint: str
+    project_id: str, run_id: str, stage_id: str, input_fingerprint: str
 ) -> tuple[str, pd.Series]:
     """Assumes the sidecar's fingerprint list is positionally aligned with the snapshot."""
-    fingerprints = load_queue_fingerprints(project, run_id, stage_id)
-    snapshot = queue_snapshot(project, run_id, stage_id)
+    fingerprints = load_queue_fingerprints(project_id, run_id, stage_id)
+    snapshot = queue_snapshot(project_id, run_id, stage_id)
     if fingerprints is not None and snapshot is not None:
         if input_fingerprint in fingerprints.input_fingerprints:
             position = fingerprints.input_fingerprints.index(input_fingerprint)

@@ -31,7 +31,7 @@ def _make_run_project(root):
         },
     }
     add_stage(root, stage)
-    return save_working_copy_as_version(root, message="seed", reviewer="test").version_id
+    return save_working_copy_as_version(root.name, message="seed", reviewer="test").version_id
 
 
 _LOAD_SCHEMA = {"columns": [{"name": "doc_id", "type": "str", "nullable": True},

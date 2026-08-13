@@ -204,7 +204,7 @@ def _render_version_line(tmp_path: Path, note: VersionNote) -> str:
     run_dir.mkdir(parents=True, exist_ok=True)
     header = build_run_header(PROJECT, RUN, run_dir, _manifest("ok", [("load", "ok")]))
     return templates.env.get_template("_run_header.html").render(
-        project=PROJECT, run_id=RUN, header=header.model_copy(update={"version": note})
+        project_id=PROJECT, run_id=RUN, header=header.model_copy(update={"version": note})
     )
 
 

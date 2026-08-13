@@ -88,15 +88,15 @@ def _make_project(root) -> None:
 
 
 def _seed_and_publish(project_dir) -> None:
-    vid = save_working_copy_as_version(project_dir, message="seed", reviewer="test").version_id
-    versioning.publish_version(project_dir, vid, reviewer="human")
+    vid = save_working_copy_as_version(project_dir.name, message="seed", reviewer="test").version_id
+    versioning.publish_version(project_dir.name, vid, reviewer="human")
 
 
 def test_a_real_run_produces_enum_statuses_that_round_trip_to_bare_strings(tmp_path) -> None:
     _make_project(tmp_path)
     _seed_and_publish(tmp_path)
 
-    manifest = execute_run(tmp_path, *pinned_stages(tmp_path))
+    manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path))
 
     # The producer's in-memory manifest carries real enum members, not plain
     # str — and they still equal / stringify as the bare value.
@@ -122,7 +122,7 @@ def test_a_real_run_renders_bare_status_through_the_web_layer(tmp_path, monkeypa
     _make_project(project_dir)
     _seed_and_publish(project_dir)
 
-    manifest = execute_run(project_dir, *pinned_stages(project_dir))
+    manifest = execute_run(project_dir / "runs", project_dir.name, *pinned_stages(project_dir))
     run_id = manifest["run_id"]
 
     client = TestClient(app)

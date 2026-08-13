@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import json
 import logging
-from pathlib import Path
 
 from pydantic import BaseModel
 
@@ -40,21 +39,21 @@ from app.services.stage_test_rows import load_stage_row_sources
 _log = logging.getLogger(__name__)
 
 
-def start_generation(project_dir: Path, *, document: str, model: str) -> str:
+def start_generation(project_id: str, *, document: str, model: str) -> str:
     return start_data_model_generation_agent(
         document=document,
-        project_name=project_dir.name,
+        project_name=project_id,
         model=model,
-        on_answer=lambda answer: _finish_data_model(project_dir, answer),
+        on_answer=lambda answer: _finish_data_model(project_id, answer),
     )
 
 
-def start_stage_test_generation(project_dir: Path, *, stage_id: str, model: str) -> str:
+def start_stage_test_generation(project_id: str, *, stage_id: str, model: str) -> str:
     """Every check runs before the turn starts, so a rejected stage leaves no orphaned session."""
-    stages = {stage.id: stage for stage in load_workflow(project_dir.name)}
+    stages = {stage.id: stage for stage in load_workflow(project_id)}
     stage = stages.get(stage_id)
     if stage is None:
-        raise ValueError(f"no stage '{stage_id}' in {project_dir.name}")
+        raise ValueError(f"no stage '{stage_id}' in {project_id}")
     if not stage.CARRIES_RUNNABLE_TESTS:
         raise ValueError(
             f"tests can only be generated for stage types that can run them, "
@@ -73,69 +72,69 @@ def start_stage_test_generation(project_dir: Path, *, stage_id: str, model: str)
     # Loaded here, before the turn: examples are selected from real rows, so a project
     # with none refuses without paying for an agent that could select nothing.
     sources = load_stage_row_sources(
-        project_dir.name, transform_input_schemas(stage))
+        project_id, transform_input_schemas(stage))
     test_class = find_stage_test_class(type(stage))
     return start_stage_test_generation_agent(
-        terms=terms.load_terms(project_dir.name),
+        terms=terms.load_terms(project_id),
         stage=stage,
         sources=sources,
-        project_id=project_dir.name,
+        project_id=project_id,
         model=model,
         on_answer=lambda answer: _finish_stage_tests(
-            project_dir, stage_id, answer, test_class, sources),
+            project_id, stage_id, answer, test_class, sources),
     )
 
 
 def start_review_guide_generation(
-    project_dir: Path, *, version_id: str, model: str
+    project_id: str, *, version_id: str, model: str
 ) -> str:
-    version = versioning.load_version(project_dir, version_id)
-    existing = versioning.find_latest_review_guide(project_dir.name, version_id)
+    version = versioning.load_version(project_id, version_id)
+    existing = versioning.find_latest_review_guide(project_id, version_id)
     if existing is not None:
         raise ValueError(
             f"version '{version_id}' already has a review guide — edit it with the "
             "authoring agent rather than regenerating over it"
         )
-    document = read_methodology(project_dir.name)
+    document = read_methodology(project_id)
     if document is None:
-        raise ValueError(f"{project_dir.name} has no document to write a guide from")
+        raise ValueError(f"{project_id} has no document to write a guide from")
     return start_review_guide_generation_agent(
         stages=version.stages,
         version_id=version.version_id,
-        project_id=project_dir.name,
+        project_id=project_id,
         document=document,
-        terms=terms.load_terms(project_dir.name),
+        terms=terms.load_terms(project_id),
         model=model,
-        on_answer=lambda draft: _finish_review_guide(project_dir, version_id, draft),
+        on_answer=lambda draft: _finish_review_guide(project_id, version_id, draft),
     )
 
 
-def _finish_data_model(project_dir: Path, answer: SchemaLibrary | None) -> None:
+def _finish_data_model(project_id: str, answer: SchemaLibrary | None) -> None:
     if answer is None:
         return
-    terms.write_nouns(project_dir.name, answer)
+    terms.write_nouns(project_id, answer)
 
 
 def _finish_review_guide(
-    project_dir: Path, version_id: str, draft: ReviewGuideDraft | None
+    project_id: str, version_id: str, draft: ReviewGuideDraft | None
 ) -> None:
     if draft is None:
         raise GenerationError(
-            f"review-guide generation for version '{version_id}' in {project_dir.name} "
+            f"review-guide generation for version '{version_id}' in {project_id} "
             "did not submit a guide"
         )
     versioning.save_version_guide(
-        project_dir,
+        project_id,
         version_id,
         versioning.ReviewGuide(
-            project=project_dir.name, version_id=version_id,
+            project=project_id, version_id=version_id,
             steps=draft.steps, unnarrated=draft.unnarrated,
         ),
     )
 
 
 def _finish_stage_tests(
-    project_dir: Path,
+    project_id: str,
     stage_id: str,
     answer: BaseModel | None,
     test_class: type[StageTest],
@@ -143,7 +142,7 @@ def _finish_stage_tests(
 ) -> None:
     if answer is None:
         raise GenerationError(
-            f"stage-test generation for '{stage_id}' in {project_dir.name} "
+            f"stage-test generation for '{stage_id}' in {project_id} "
             "did not submit a suite"
         )
     # What is stored is the rows READ OFF the run, not the selections the agent sent:
@@ -154,12 +153,12 @@ def _finish_stage_tests(
     # whatever the stage already had.
     if not tests:
         raise GenerationError(
-            f"stage-test generation for '{stage_id}' in {project_dir.name} "
+            f"stage-test generation for '{stage_id}' in {project_id} "
             "submitted an empty test suite"
         )
-    result = patch_stage_spec(project_dir.name, stage_id, json.dumps({"tests": tests}))
+    result = patch_stage_spec(project_id, stage_id, json.dumps({"tests": tests}))
     if not result.ok:
         raise GenerationError(
-            f"stage-test generation for '{stage_id}' in {project_dir.name} "
+            f"stage-test generation for '{stage_id}' in {project_id} "
             "failed to patch: " + "; ".join(result.issues)
         )

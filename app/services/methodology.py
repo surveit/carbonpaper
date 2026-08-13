@@ -20,20 +20,20 @@ class Methodology(PersistedModel):
     text: str
 
 
-def read_methodology(project: str) -> str | None:
+def read_methodology(project_id: str) -> str | None:
     """The project's prose, or None when it has none — never a stand-in."""
-    record = Methodology.load_or_none(project)
+    record = Methodology.load_or_none(project_id)
     return record.text if record is not None else None
 
 
-def write_methodology(project: str, text: str) -> None:
+def write_methodology(project_id: str, text: str) -> None:
     """Raises ValueError on empty text — absence is stored as no record."""
     if not text.strip():
         raise ValueError("The methodology document is empty.")
-    stored = Methodology.load_or_none(project)
+    stored = Methodology.load_or_none(project_id)
     born = {"created_at": stored.created_at} if stored is not None else {}
-    Methodology(id=project, text=text, **born).save()
+    Methodology(id=project_id, text=text, **born).save()
 
 
-def exists(project: str) -> bool:
-    return Methodology.exists(project)
+def exists(project_id: str) -> bool:
+    return Methodology.exists(project_id)

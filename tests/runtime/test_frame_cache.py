@@ -95,7 +95,7 @@ def test_a_second_run_returns_the_cached_frame_without_calling_the_transform():
 def test_the_registered_python_frame_function_replays_its_recorded_frame():
     stage, src = _frame_stage(), _src([1, 2])
     StageCache().record_frame(
-        project=PROJECT, stage_id=stage.id,
+        project_id=PROJECT, stage_id=stage.id,
         stage_fingerprint=stage.compute_definition_fingerprint(),
         input_tables=[frame_to_table(src)],
         table=frame_to_table(pd.DataFrame({"x": [1, 2], "y": [999, 999]})),

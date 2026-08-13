@@ -1,10 +1,8 @@
 # Route order matters: the literal /project/new is declared on THIS router BEFORE
-# the /project/{project} section routes, so "new" is never captured as a project.
+# the /project/{project_id} section routes, so "new" is never captured as a project.
 from __future__ import annotations
 
 import json
-import shutil
-from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Form, HTTPException, Request
@@ -29,7 +27,7 @@ from app.services import generation, methodology, project, terms, versioning
 from app.services.loader import list_parsed_stages, resolve_function_code
 from app.services.workspace import LOADER_BOOKKEEPING_KEYS
 from app.web.breadcrumbs import build_home_crumbs, build_version_crumbs
-from app.web.config import projects_dir, templates
+from app.web.config import templates
 from app.runtime.stage_tests import run_stage_tests
 from app.web.stage_test_views import build_certification, shape_test_views
 from app.web.diagrams import (
@@ -44,19 +42,10 @@ from app.web.loading import (
     list_projects,
     load_stages_or_empty,
 )
-from app.web.project_view import shell_state
+from app.web.project_view import shell_state, validate_project_or_404
 
 router = APIRouter()
 
-
-# ─── Path guard ──────────────────────────────────────────────────────────────
-
-def _project_dir(project_name: str) -> Path:
-    """Direct-child-of-examples/ is the traversal guard delete_project's rmtree rests on."""
-    target = (projects_dir() / project_name).resolve()
-    if target.parent != projects_dir().resolve() or not target.is_dir():
-        raise HTTPException(status_code=404, detail=f"No project '{project_name}'")
-    return projects_dir() / project_name
 
 
 # ─── Home dashboard ──────────────────────────────────────────────────────────
@@ -72,9 +61,7 @@ async def index(request: Request):
 
 @router.post("/project/{project_name}/delete")
 async def delete_project(project_name: str):
-    """Store documents survive: a project re-created under this name inherits its versions."""
-    target = _project_dir(project_name)
-    shutil.rmtree(target)
+    project.delete_project(validate_project_or_404(project_name))
     return RedirectResponse("/", status_code=303)
 
 
@@ -84,9 +71,9 @@ async def delete_project(project_name: str):
 # examples/<name>/document.md and the chat transcript at chat.jsonl, so the gated
 # authoring streams below key off the project NAME, not a comp id.
 #
-# DECLARED HERE, before the /project/{project} section routes below, so the literal
+# DECLARED HERE, before the /project/{project_id} section routes below, so the literal
 # /project/new is matched first (FastAPI matches in declaration order) — otherwise the
-# {project} catch-all would capture "new" as a project name.
+# {project_id} catch-all would capture "new" as a project name.
 
 
 @router.get("/project/new", response_class=HTMLResponse)
@@ -113,26 +100,25 @@ async def new_project_submit(
             name, doc_text, model=model, source="pasted document").id
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    project_dir = projects_dir() / project_id
     doc = methodology.read_methodology(project_id) or doc_text
     # Kick off data-model generation. It runs as a LIVE chat turn; land the user on it
     # so they watch the model being authored (it streams while it runs, then persists
     # as the session's transcript).
-    session_id = generation.start_generation(project_dir, document=doc, model=model)
+    session_id = generation.start_generation(project_id, document=doc, model=model)
     return RedirectResponse(url=f"/chat/{session_id}", status_code=303)
 
 
 @router.post("/project/{project_name}/generate")
 async def generate_project(project_name: str):
-    pdir = _project_dir(project_name)
+    validate_project_or_404(project_name)
     document = methodology.read_methodology(project_name)
     if document is None:
         raise HTTPException(
             status_code=400,
             detail=f"project '{project_name}' has no methodology to generate from.",
         )
-    model = project.project_meta(pdir).model or "sonnet"
-    session_id = generation.start_generation(pdir, document=document, model=model)
+    model = project.project_meta(project_name).model or "sonnet"
+    session_id = generation.start_generation(project_name, document=document, model=model)
     return RedirectResponse(url=f"/chat/{session_id}", status_code=303)
 
 
@@ -146,18 +132,18 @@ async def generate_project(project_name: str):
 
 @router.get("/project/{project_name}", response_class=HTMLResponse)
 async def project_overview(request: Request, project_name: str):
-    pdir = _project_dir(project_name)
+    validate_project_or_404(project_name)
     return templates.TemplateResponse(
         request,
         "section_overview.html",
-        {"state": shell_state(pdir, "overview"), "section": "overview"},
+        {"state": shell_state(project_name, "overview"), "section": "overview"},
     )
 
 
 @router.get("/project/{project_name}/document", response_class=HTMLResponse)
 async def project_document(request: Request, project_name: str):
-    pdir = _project_dir(project_name)
-    state = shell_state(pdir, "document")
+    validate_project_or_404(project_name)
+    state = shell_state(project_name, "document")
     document = methodology.read_methodology(project_name) or ""
     return templates.TemplateResponse(
         request,
@@ -168,7 +154,7 @@ async def project_document(request: Request, project_name: str):
 
 @router.get("/project/{project_name}/terms", response_class=HTMLResponse)
 async def project_terms(request: Request, project_name: str):
-    pdir = _project_dir(project_name)
+    validate_project_or_404(project_name)
     # write_terms refuses a word carrying two meanings, so stored terms that will not
     # load were hand-edited — say which word, rather than 500 on the page that shows them.
     try:
@@ -181,7 +167,7 @@ async def project_terms(request: Request, project_name: str):
         request,
         "section_terms.html",
         {
-            "state": shell_state(pdir, "terms"),
+            "state": shell_state(project_name, "terms"),
             "section": "terms",
             "terms": stored,
             "unreadable": "; ".join(unreadable),
@@ -193,7 +179,7 @@ async def project_terms(request: Request, project_name: str):
 
 @router.get("/project/{project_name}/workflow", response_class=HTMLResponse)
 async def project_workflow(request: Request, project_name: str):
-    pdir = _project_dir(project_name)
+    validate_project_or_404(project_name)
     listing = load_stages_or_empty(project_name)
     parsed = list_parsed_stages(listing.entries)
     # A valid workflow draws off typed Stages; a broken/partial one falls back to the
@@ -204,7 +190,7 @@ async def project_workflow(request: Request, project_name: str):
         request,
         "section_workflow.html",
         {
-            "state": shell_state(pdir, "workflow"),
+            "state": shell_state(project_name, "workflow"),
             "section": "workflow",
             "stages": stages,
             "mermaid": mermaid,
@@ -226,12 +212,12 @@ async def project_workflow(request: Request, project_name: str):
 
 @router.get("/project/{project_name}/workflow/versions", response_class=HTMLResponse)
 async def project_workflow_versions(request: Request, project_name: str):
-    pdir = _project_dir(project_name)
-    versions = versioning.list_versions(pdir)
+    validate_project_or_404(project_name)
+    versions = versioning.list_versions(project_name)
     return templates.TemplateResponse(
         request,
         "versions.html",
-        {"state": shell_state(pdir, "versions"), "section": "versions", "versions": versions},
+        {"state": shell_state(project_name, "versions"), "section": "versions", "versions": versions},
     )
 
 
@@ -245,16 +231,16 @@ async def versions_redirect(project_name: str):
 @router.get("/project/{project_name}/workflow/version/{version_id}",
             response_class=HTMLResponse)
 async def project_workflow_version(request: Request, project_name: str, version_id: str):
-    pdir = _project_dir(project_name)
+    validate_project_or_404(project_name)
     try:
-        version = versioning.load_version(pdir, version_id)
+        version = versioning.load_version(project_name, version_id)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return templates.TemplateResponse(
         request,
         "version_detail.html",
         {
-            "state": shell_state(pdir, "versions"),
+            "state": shell_state(project_name, "versions"),
             "section": "versions",
             "crumbs": build_version_crumbs(project_name, version_id),
             "version": version,
@@ -270,9 +256,9 @@ async def project_workflow_version(request: Request, project_name: str, version_
 async def version_stage_partial(
     request: Request, project_name: str, version_id: str, stage_id: str
 ):
-    pdir = _project_dir(project_name)
+    validate_project_or_404(project_name)
     try:
-        version = versioning.load_version(pdir, version_id)
+        version = versioning.load_version(project_name, version_id)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     stage = next((s for s in version.stages if s.id == stage_id), None)
@@ -309,7 +295,7 @@ async def version_stage_partial(
 
 @router.post("/project/{project_name}/schema/{schema_name}/edit")
 async def edit_schema(project_name: str, schema_name: str, json_text: str = Form(...)):
-    _project_dir(project_name)
+    validate_project_or_404(project_name)
 
     # Parse — a parse error is the reviewer's, surfaced as a 400 issue, file untouched.
     try:

@@ -150,9 +150,9 @@ class RunManifest(PersistedModel):
         return next((r for r in self.stage_records if r.stage_id == stage_id), None)
 
     @staticmethod
-    def compose_id(project: str, run_id: str, area: str = PRODUCTION_RUNS) -> str:
+    def compose_id(project_id: str, run_id: str, area: str = PRODUCTION_RUNS) -> str:
         """The store key; `area` is the directory that held the run."""
-        return f"{project}/{area}/{run_id}"
+        return f"{project_id}/{area}/{run_id}"
 
     def to_dict(self) -> dict[str, Any]:
         """What this run RECORDED — the boundary shape every reader consumes."""
@@ -166,16 +166,16 @@ def create_run_manifest(
     ctx: RunContext,
     *,
     run_id: str,
-    project: str,
+    project_id: str,
     workflow_version: str | None,
     input_bindings: dict[str, dict[str, Any]],
     area: str = PRODUCTION_RUNS,
 ) -> RunManifest:
     return RunManifest(
-        id=RunManifest.compose_id(project, run_id, area),
+        id=RunManifest.compose_id(project_id, run_id, area),
         run_id=run_id,
         started_at=datetime.now().isoformat(timespec="seconds"),
-        project=project,
+        project=project_id,
         workflow_version=workflow_version,
         parameters=ctx.params,
         input_bindings=input_bindings,
@@ -194,12 +194,12 @@ def write_manifest(manifest: RunManifest) -> None:
     manifest.save()
 
 
-def read_run_manifest(project: str, run_id: str, area: str = PRODUCTION_RUNS) -> RunManifest:
+def read_run_manifest(project_id: str, run_id: str, area: str = PRODUCTION_RUNS) -> RunManifest:
     """Raises RunNotFoundError when unrecorded, ValidationError on a bad payload."""
     try:
-        return RunManifest.load(RunManifest.compose_id(project, run_id, area))
+        return RunManifest.load(RunManifest.compose_id(project_id, run_id, area))
     except DocumentNotFound as exc:
-        raise RunNotFoundError(f"no run '{run_id}' in project '{project}'") from exc
+        raise RunNotFoundError(f"no run '{run_id}' in project '{project_id}'") from exc
 
 
 @dataclass
@@ -215,9 +215,9 @@ class RunEntry:
     manifest: RunManifest | None = None
 
 
-def list_run_entries(project: str) -> list[RunEntry]:
+def list_run_entries(project_id: str) -> list[RunEntry]:
     """This project's PRODUCTION runs, oldest-first by id (a strftime stamp)."""
-    prefix = f"{project}/{PRODUCTION_RUNS}/"
+    prefix = f"{project_id}/{PRODUCTION_RUNS}/"
     # Ids first, then each payload on its own: one unreadable record must not take
     # down the listing of every other run.
     entries = [
@@ -248,8 +248,8 @@ def resolve_output_path(run_dir: Path, output_path: str | None) -> Path | None:
     return resolved
 
 
-def read_stage_output_frame(project: str, run_dir: Path, stage_id: str) -> pd.DataFrame:
-    records = read_run_manifest(project, run_dir.name).stage_records
+def read_stage_output_frame(project_id: str, run_dir: Path, stage_id: str) -> pd.DataFrame:
+    records = read_run_manifest(project_id, run_dir.name).stage_records
     record = _find_stage_record(records, run_dir, stage_id)
     path = resolve_output_path(run_dir, record.output_path)
     if path is None:

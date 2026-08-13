@@ -39,8 +39,8 @@ def project(tmp_path, monkeypatch):
              "connector": {"kind": "file",
                            "params": {"path": str(data), "format": "csv"}}}
     add_stage(proj, stage)
-    vid = save_working_copy_as_version(proj, message="seed", reviewer="test").version_id
-    versioning.publish_version(proj, vid, reviewer="human")
+    vid = save_working_copy_as_version(proj.name, message="seed", reviewer="test").version_id
+    versioning.publish_version(proj.name, vid, reviewer="human")
     workspace.set_projects_dir(tmp_path)
     monkeypatch.setenv("CARBON_PAPER_FILES_ROOT", str(tmp_path / "files"))
     monkeypatch.setattr(run_service, "_run_in_background",
@@ -114,8 +114,8 @@ def test_unbound_input_returns_400(project):
     stage = read_stage(project, "load")
     stage["connector"]["params"] = {}
     add_stage(project, stage)
-    vid = save_working_copy_as_version(project, message="unbound", reviewer="test").version_id
-    versioning.publish_version(project, vid, reviewer="human")
+    vid = save_working_copy_as_version(project.name, message="unbound", reviewer="test").version_id
+    versioning.publish_version(project.name, vid, reviewer="human")
 
     resp = client.post("/project/demo/run",
                        data={"binding__load": ""}, follow_redirects=False)
@@ -175,7 +175,7 @@ def _corrupt_version_document_with_relative_path(project):
     from app.core.persistence import get_store
     from app.services.versioning import list_versions
 
-    version_id = list_versions(project)[0].version_id
+    version_id = list_versions(project.name)[0].version_id
     store = get_store()
     doc = store.read("workflow_version", f"{project.name}/{version_id}")
     doc["stages"][0]["connector"]["params"]["path"] = "relative/a.csv"
@@ -210,5 +210,5 @@ def test_loading_an_invalid_version_explicitly_surfaces_issues(project):
 
     version_id = _corrupt_version_document_with_relative_path(project)
     with pytest.raises(WorkflowLoadError) as exc:
-        load_version_stages(project, version_id)
+        load_version_stages(project.name, version_id)
     assert any("ABSOLUTE" in issue for issue in exc.value.issues)

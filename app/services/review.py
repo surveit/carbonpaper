@@ -30,7 +30,7 @@ def resolve_verdict(
 
 
 def record_decision(
-    *, project: str, stage: WorkflowStage,
+    *, project_id: str, stage: WorkflowStage,
     stage_fingerprint: str, input_fingerprint: str,
     frozen_row: Mapping[str, object],
     verdict: ReviewVerdict, reviewed_values: Mapping[str, object],
@@ -43,7 +43,7 @@ def record_decision(
     _validate_reviewed_values_match_declared_columns(queue, reviewed_values)
     _validate_notes_match_declared_column(queue, review_notes)
     StageCacheEntry.read_write().record(
-        project=project, stage_id=stage.id,
+        project_id=project_id, stage_id=stage.id,
         stage_fingerprint=stage_fingerprint, input_fingerprint=input_fingerprint,
         input_row=frozen_row,
         output_row=_build_output_row(

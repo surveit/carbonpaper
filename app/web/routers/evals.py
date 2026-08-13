@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
@@ -21,11 +20,12 @@ from app.evals.store import (
     list_eval_configs,
     list_eval_runs,
     load_eval_config,
+    resolve_eval_result_path,
     load_eval_run,
 )
 from app.services.versioning import list_versions
 from app.web.breadcrumbs import build_eval_crumbs, build_eval_run_crumbs
-from app.web.config import projects_dir, templates
+from app.web.config import templates
 from app.web.config import EVENT_TAIL
 from app.web.eval_run_view import (
     build_eval_rows,
@@ -33,7 +33,7 @@ from app.web.eval_run_view import (
     describe_eval_run_duration,
 )
 from app.web.loading import StageListing, load_stages_or_empty, render_frame_as_text
-from app.web.project_view import shell_state
+from app.web.project_view import shell_state, validate_project_or_404
 from app.runtime.run_log import count_events
 from app.web.run_events import (
     EVENT_PAGE_MAX,
@@ -50,33 +50,33 @@ DATASET_PREVIEW_ROWS = 50
 
 # ─── The evals list (a project-shell section) ────────────────────────────────
 
-@router.get("/project/{project}/evals", response_class=HTMLResponse)
-async def evals_index(request: Request, project: str):
-    project_dir = _resolve_project_dir(project)
-    listing = load_stages_or_empty(project)
+@router.get("/project/{project_id}/evals", response_class=HTMLResponse)
+async def evals_index(request: Request, project_id: str):
+    validate_project_or_404(project_id)
+    listing = load_stages_or_empty(project_id)
     return templates.TemplateResponse(
         request,
         "section_evals.html",
         {
-            "state": shell_state(project_dir, "evals"),
+            "state": shell_state(project_id, "evals"),
             "section": "evals",
-            "evals": _build_eval_index_rows(project_dir, listing),
+            "evals": _build_eval_index_rows(project_id, listing),
             "load_issues": listing.issues,
         },
     )
 
 
 def _build_eval_index_rows(
-    project_dir: Path, listing: StageListing
+    project_id: str, listing: StageListing
 ) -> list[dict[str, Any]]:
-    latest_version = latest_version_id(project_dir)
+    latest_version = latest_version_id(project_id)
     rows: list[dict[str, Any]] = []
-    for entry in list_eval_configs(project_dir):
+    for entry in list_eval_configs(project_id):
         if entry.config is None:
             rows.append({"id": entry.id, "name": entry.id,
                          "status": "broken", "issues": entry.issues})
             continue
-        status, run_issue = _resolve_eval_status(entry.config, listing, project_dir,
+        status, run_issue = _resolve_eval_status(entry.config, listing, project_id,
                                                   latest_version)
         rows.append({"id": entry.config.id, "name": entry.config.name,
                      "status": status, "issues": [run_issue] if run_issue else []})
@@ -85,20 +85,20 @@ def _build_eval_index_rows(
 
 # ─── One config's detail ─────────────────────────────────────────────────────
 
-@router.get("/project/{project}/evals/{eval_id}", response_class=HTMLResponse)
-async def eval_detail(request: Request, project: str, eval_id: str):
-    project_dir = _resolve_project_dir(project)
-    config = _load_config_or_404(project_dir, eval_id)
-    return _render_eval_detail(request, project, project_dir, config)
+@router.get("/project/{project_id}/evals/{eval_id}", response_class=HTMLResponse)
+async def eval_detail(request: Request, project_id: str, eval_id: str):
+    validate_project_or_404(project_id)
+    config = _load_config_or_404(project_id, eval_id)
+    return _render_eval_detail(request, project_id, config)
 
 
 def _render_eval_detail(
-    request: Request, project: str, project_dir: Path, config: EvalConfig
+    request: Request, project_id: str, config: EvalConfig
 ) -> HTMLResponse:
-    listing = load_stages_or_empty(project)
+    listing = load_stages_or_empty(project_id)
     report = _report_compatibility(config, listing)
-    runs, runs_error = _list_eval_runs_safely(project_dir, config.id)
-    latest_version = latest_version_id(project_dir)
+    runs, runs_error = _list_eval_runs_safely(project_id, config.id)
+    latest_version = latest_version_id(project_id)
     status = ("broken" if runs_error else
               eval_status(report, runs, latest_version,
                           has_eval_dataset=config.table is not None))
@@ -109,17 +109,17 @@ def _render_eval_detail(
         {
             # One eval reads inside the project shell like one run does, with the
             # Evals nav entry still lit while looking at a config below it.
-            "state": shell_state(project_dir, "evals"),
+            "state": shell_state(project_id, "evals"),
             "section": "evals",
-            "project": project,
-            "crumbs": build_eval_crumbs(project, config_name=config.name),
+            "project": project_id,
+            "crumbs": build_eval_crumbs(project_id, config_name=config.name),
             "config": config,
             "report": report,
             "status": status,
             "executing": executing,
-            "runs": build_eval_run_rows(project, runs),
+            "runs": build_eval_run_rows(project_id, runs),
             "runs_error": runs_error,
-            "versions": list_versions(project_dir),
+            "versions": list_versions(project_id),
             **_read_eval_dataset_preview(config),
         },
     )
@@ -148,14 +148,14 @@ def _read_eval_dataset_preview(config: EvalConfig) -> dict[str, Any]:
 # ─── One run's result ────────────────────────────────────────────────────────
 
 @router.get(
-    "/project/{project}/evals/{eval_id}/runs/{run_id}",
+    "/project/{project_id}/evals/{eval_id}/runs/{run_id}",
     response_class=HTMLResponse,
 )
-async def eval_run_detail(request: Request, project: str, eval_id: str, run_id: str):
-    project_dir = _resolve_project_dir(project)
-    config = _load_config_or_404(project_dir, eval_id)
+async def eval_run_detail(request: Request, project_id: str, eval_id: str, run_id: str):
+    validate_project_or_404(project_id)
+    config = _load_config_or_404(project_id, eval_id)
     try:
-        run = load_eval_run(project_dir, run_id)
+        run = load_eval_run(project_id, run_id)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=f"no run {run_id!r} for this eval") from exc
     except ValueError as exc:
@@ -165,11 +165,11 @@ async def eval_run_detail(request: Request, project: str, eval_id: str, run_id: 
         request,
         "eval_run.html",
         {
-            "state": shell_state(project_dir, "evals"),
+            "state": shell_state(project_id, "evals"),
             "section": "evals",
-            "project": project,
+            "project": project_id,
             "crumbs": build_eval_run_crumbs(
-                project, config_name=config.name, config_id=config.id, run_id=run_id
+                project_id, config_name=config.name, config_id=config.id, run_id=run_id
             ),
             "config": config,
             "run": run,
@@ -178,7 +178,7 @@ async def eval_run_detail(request: Request, project: str, eval_id: str, run_id: 
             # vetoed run and on one that errored before scoring; the pane then
             # states which of those it was rather than showing an empty table.
             "rows": (
-                build_eval_rows(project_dir / run.result_ref, config.table)
+                build_eval_rows(resolve_eval_result_path(project_id, run.result_ref), config.table)
                 if run.result_ref else None
             ),
             "event_tail": EVENT_TAIL,
@@ -186,8 +186,8 @@ async def eval_run_detail(request: Request, project: str, eval_id: str, run_id: 
             # page uses. Absent where the run wrote no log — a vetoed run executed
             # nothing.
             "log_href": (
-                _eval_run_href(project, config.id, run_id)
-                if count_events(project, run_id) else None
+                _eval_run_href(project_id, config.id, run_id)
+                if count_events(project_id, run_id) else None
             ),
         },
     )
@@ -195,9 +195,9 @@ async def eval_run_detail(request: Request, project: str, eval_id: str, run_id: 
 
 # ─── That run's log, served to the same panel the run page uses ──────────────
 
-@router.get("/project/{project}/evals/{eval_id}/runs/{run_id}/events")
+@router.get("/project/{project_id}/evals/{eval_id}/runs/{run_id}/events")
 async def stream_eval_run_events(
-    project: str,
+    project_id: str,
     eval_id: str,
     run_id: str,
     request: Request,
@@ -205,75 +205,68 @@ async def stream_eval_run_events(
     tail: int = EVENT_TAIL,
     stage: str | None = None,
 ):
-    _require_eval_run_log(project, run_id)
-    start = (tail_start_seq(project, run_id, tail, stage) if from_seq is None
+    _require_eval_run_log(project_id, run_id)
+    start = (tail_start_seq(project_id, run_id, tail, stage) if from_seq is None
              else max(from_seq, 0))
     return StreamingResponse(
-        stream_events(project, run_id, request, start, stage),
+        stream_events(project_id, run_id, request, start, stage),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
 
-@router.get("/project/{project}/evals/{eval_id}/runs/{run_id}/events/page")
+@router.get("/project/{project_id}/evals/{eval_id}/runs/{run_id}/events/page")
 async def eval_run_events_page(
-    project: str,
+    project_id: str,
     eval_id: str,
     run_id: str,
     before_seq: int,
     limit: int = EVENT_TAIL,
     stage: str | None = None,
 ):
-    _require_eval_run_log(project, run_id)
+    _require_eval_run_log(project_id, run_id)
     return page_events_before(
-        project, run_id, before_seq, max(1, min(limit, EVENT_PAGE_MAX)), stage)
+        project_id, run_id, before_seq, max(1, min(limit, EVENT_PAGE_MAX)), stage)
 
 
-def _require_eval_run_log(project: str, run_id: str) -> None:
+def _require_eval_run_log(project_id: str, run_id: str) -> None:
     """404 when this eval run logged nothing — the same refusal the absent
     log gave."""
-    _resolve_project_dir(project)
-    if not count_events(project, run_id):
+    validate_project_or_404(project_id)
+    if not count_events(project_id, run_id):
         raise HTTPException(status_code=404, detail=f"no log for eval run {run_id!r}")
 
 
-def _eval_run_href(project: str, eval_id: str, run_id: str) -> str:
-    return f"/project/{project}/evals/{eval_id}/runs/{run_id}"
+def _eval_run_href(project_id: str, eval_id: str, run_id: str) -> str:
+    return f"/project/{project_id}/evals/{eval_id}/runs/{run_id}"
 
 
 
 # ─── Trigger a run ───────────────────────────────────────────────────────────
 
-@router.post("/project/{project}/evals/{eval_id}/run")
-async def trigger_eval_run(request: Request, project: str, eval_id: str):
-    project_dir = _resolve_project_dir(project)
-    config = _load_config_or_404(project_dir, eval_id)
+@router.post("/project/{project_id}/evals/{eval_id}/run")
+async def trigger_eval_run(request: Request, project_id: str, eval_id: str):
+    validate_project_or_404(project_id)
+    config = _load_config_or_404(project_id, eval_id)
     form = await request.form()
     version_id = form.get("version_id") or None
     if version_id is not None and not isinstance(version_id, str):
         raise HTTPException(status_code=400, detail="version_id must be a string")
     try:
-        run = run_eval(project_dir, config, version_id=version_id)
+        run = run_eval(project_id, config, version_id=version_id)
     except EvalNotScorableError as exc:
         return JSONResponse({"detail": str(exc)}, status_code=400)
     except FileNotFoundError as exc:
         return JSONResponse({"detail": str(exc)}, status_code=404)
     return RedirectResponse(
-        url=f"/project/{project}/evals/{eval_id}/runs/{run.id}", status_code=303)
+        url=f"/project/{project_id}/evals/{eval_id}/runs/{run.id}", status_code=303)
 
 
 # ─── Shared helpers ──────────────────────────────────────────────────────────
 
-def _resolve_project_dir(project: str) -> Path:
-    project_dir = projects_dir() / project
-    if not project_dir.is_dir():
-        raise HTTPException(status_code=404, detail=f"No project '{project}'")
-    return project_dir
-
-
-def _load_config_or_404(project_dir: Path, eval_id: str) -> EvalConfig:
+def _load_config_or_404(project_id: str, eval_id: str) -> EvalConfig:
     try:
-        return load_eval_config(project_dir, eval_id)
+        return load_eval_config(project_id, eval_id)
     except (FileNotFoundError, ValueError) as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
@@ -288,20 +281,20 @@ def _report_compatibility(config: EvalConfig, listing: StageListing) -> Compatib
 
 
 def _resolve_eval_status(
-    config: EvalConfig, listing: StageListing, project_dir: Path,
+    config: EvalConfig, listing: StageListing, project_id: str,
     latest_version: str | None,
 ) -> tuple[str, str | None]:
     report = _report_compatibility(config, listing)
-    runs, run_issue = _list_eval_runs_safely(project_dir, config.id)
+    runs, run_issue = _list_eval_runs_safely(project_id, config.id)
     status = ("broken" if run_issue else
               eval_status(report, runs, latest_version,
                           has_eval_dataset=config.table is not None))
     return status, run_issue
 
 
-def _list_eval_runs_safely(project_dir: Path, config_id: str) -> tuple[list[EvalRun], str | None]:
+def _list_eval_runs_safely(project_id: str, config_id: str) -> tuple[list[EvalRun], str | None]:
     """Swallowed so that one corrupt eval_run/*.json does not take the page down."""
     try:
-        return list_eval_runs(project_dir, config_id), None
+        return list_eval_runs(project_id, config_id), None
     except (OSError, ValueError) as exc:
         return [], str(exc)

@@ -124,15 +124,15 @@ def _write_stage(root: Path, filename: str, spec: dict[str, object]) -> None:
 
 def _publish_a_version(root: Path) -> str:
     version = project_service.save_working_copy_as_version(
-        root, message="cache e2e", reviewer="test")
-    versioning.publish_version(root, version.version_id, reviewer="human")
+        root.name, message="cache e2e", reviewer="test")
+    versioning.publish_version(root.name, version.version_id, reviewer="human")
     return version.version_id
 
 
 def _run_and_read(
     project: Path, *, bust_cache: bool = False
 ) -> dict[str, pd.DataFrame]:
-    manifest = execute_run(project, *pinned_stages(project), bust_cache=bust_cache)
+    manifest = execute_run(project / "runs", project.name, *pinned_stages(project), bust_cache=bust_cache)
     assert manifest["status"] == "ok", manifest
     run_dir = project / "runs" / manifest["run_id"]
     return {
@@ -142,7 +142,7 @@ def _run_and_read(
 
 
 def _run_and_count_replays(project: Path) -> dict[str, object]:
-    manifest = execute_run(project, *pinned_stages(project))
+    manifest = execute_run(project / "runs", project.name, *pinned_stages(project))
     assert manifest["status"] == "ok", manifest
     return {
         record["stage_id"]: record.get("cached_rows")

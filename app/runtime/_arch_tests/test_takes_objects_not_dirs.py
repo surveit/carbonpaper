@@ -23,14 +23,7 @@ class RuntimeObjectRule:
     scope_file: Path
     banned_names: frozenset[str]
     rationale: str
-    # Pre-existing offenders. A ratchet: new entries are forbidden — a new
-    # offender must be fixed, not added here.
-    #
-    # - app/runtime/runner.py: prepare_run / execute_run / resume_run no longer
-    #   READ the project directory (a caller resolves the version and hands them
-    #   its stages), but they still take it to place the run under <dir>/runs/
-    #   and to name the project on the manifest. Emptying these rows means
-    #   passing that destination and name directly instead.
+    # Empty, and it stays empty: a new offender is fixed, never listed.
     allowlist: frozenset[tuple[str, str, str]] = field(default_factory=frozenset)
 
 
@@ -40,13 +33,6 @@ _RULE = RuntimeObjectRule(
     rationale=(
         "the runtime operates on in-memory objects (Workflow, stages, "
         "frames); reading project directories is the services layer's job"
-    ),
-    allowlist=frozenset(
-        {
-            ("app/runtime/runner.py", "prepare_run", "project_dir"),
-            ("app/runtime/runner.py", "execute_run", "project_dir"),
-            ("app/runtime/runner.py", "resume_run", "project_dir"),
-        }
     ),
 )
 

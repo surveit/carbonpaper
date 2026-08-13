@@ -45,54 +45,54 @@ class Picker(BaseModel):
 
 
 def build_section_crumbs(
-    project: str, *, label: str, parent: tuple[str, str] | None = None
+    project_id: str, *, label: str, parent: tuple[str, str] | None = None
 ) -> list[Crumb]:
     above = [_link(*parent)] if parent else []
-    return [*_project_trail(project), *above, _here(label)]
+    return [*_project_trail(project_id), *above, _here(label)]
 
 
-def build_version_crumbs(project: str, version_id: str) -> list[Crumb]:
+def build_version_crumbs(project_id: str, version_id: str) -> list[Crumb]:
     return [
-        *_project_trail(project),
-        _link("Workflow", _workflow_href(project)),
-        _link("Versions", _versions_href(project)),
-        _switcher(version_id, _versions_picker_href(project), is_code=True),
+        *_project_trail(project_id),
+        _link("Workflow", _workflow_href(project_id)),
+        _link("Versions", _versions_href(project_id)),
+        _switcher(version_id, _versions_picker_href(project_id), is_code=True),
     ]
 
 
-def build_run_crumbs(project: str, run_id: str) -> list[Crumb]:
-    return [*_runs_trail(project), _switcher(run_id, _runs_picker_href(project), is_code=True)]
+def build_run_crumbs(project_id: str, run_id: str) -> list[Crumb]:
+    return [*_runs_trail(project_id), _switcher(run_id, _runs_picker_href(project_id), is_code=True)]
 
 
-def build_runs_child_crumbs(project: str, *, label: str) -> list[Crumb]:
-    return [*_runs_trail(project), _here(label)]
+def build_runs_child_crumbs(project_id: str, *, label: str) -> list[Crumb]:
+    return [*_runs_trail(project_id), _here(label)]
 
 
-def build_run_child_crumbs(project: str, run_id: str, *, label: str) -> list[Crumb]:
+def build_run_child_crumbs(project_id: str, run_id: str, *, label: str) -> list[Crumb]:
     return [
-        *build_run_crumbs(project, run_id)[:-1],
-        _link(run_id, _run_href(project, run_id), is_code=True),
+        *build_run_crumbs(project_id, run_id)[:-1],
+        _link(run_id, _run_href(project_id, run_id), is_code=True),
         _here(label),
     ]
 
 
-def build_eval_crumbs(project: str, *, config_name: str) -> list[Crumb]:
+def build_eval_crumbs(project_id: str, *, config_name: str) -> list[Crumb]:
     return [
-        *_project_trail(project),
-        _link("Workflow", _workflow_href(project)),
-        _link("Evals", _evals_href(project)),
+        *_project_trail(project_id),
+        _link("Workflow", _workflow_href(project_id)),
+        _link("Evals", _evals_href(project_id)),
         _here(config_name),
     ]
 
 
 def build_eval_run_crumbs(
-    project: str, *, config_name: str, config_id: str, run_id: str
+    project_id: str, *, config_name: str, config_id: str, run_id: str
 ) -> list[Crumb]:
     return [
-        *_project_trail(project),
-        _link("Workflow", _workflow_href(project)),
-        _link("Evals", _evals_href(project)),
-        _link(config_name, f"{_evals_href(project)}/{config_id}"),
+        *_project_trail(project_id),
+        _link("Workflow", _workflow_href(project_id)),
+        _link("Evals", _evals_href(project_id)),
+        _link(config_name, f"{_evals_href(project_id)}/{config_id}"),
         _here(run_id, is_code=True),
     ]
 
@@ -117,19 +117,19 @@ _PICKERS = "/pickers"
 _PROJECTS_PICKER = "/pickers/projects"
 
 
-def _project_trail(project: str) -> list[Crumb]:
+def _project_trail(project_id: str) -> list[Crumb]:
     """Every caller passes an ID; the crumb READS as the name, which may repeat."""
     return [
         _home(),
-        _switcher(read_project_name(project), _PROJECTS_PICKER, picker_current=project),
+        _switcher(read_project_name(project_id), _PROJECTS_PICKER, picker_current=project_id),
     ]
 
 
-def _runs_trail(project: str) -> list[Crumb]:
+def _runs_trail(project_id: str) -> list[Crumb]:
     return [
-        *_project_trail(project),
-        _link("Workflow", _workflow_href(project)),
-        _link("Runs", _runs_href(project)),
+        *_project_trail(project_id),
+        _link("Workflow", _workflow_href(project_id)),
+        _link("Runs", _runs_href(project_id)),
     ]
 
 
@@ -150,33 +150,33 @@ def _switcher(label: str, picker: str, *, is_code: bool = False,
     return Crumb(label=label, picker=picker, is_code=is_code, picker_current=picker_current)
 
 
-def _project_href(project: str) -> str:
-    return f"/project/{project}"
+def _project_href(project_id: str) -> str:
+    return f"/project/{project_id}"
 
 
-def _workflow_href(project: str) -> str:
-    return f"{_project_href(project)}/workflow"
+def _workflow_href(project_id: str) -> str:
+    return f"{_project_href(project_id)}/workflow"
 
 
-def _versions_href(project: str) -> str:
-    return f"{_workflow_href(project)}/versions"
+def _versions_href(project_id: str) -> str:
+    return f"{_workflow_href(project_id)}/versions"
 
 
-def _versions_picker_href(project: str) -> str:
-    return f"{_PICKERS}/project/{project}/versions"
+def _versions_picker_href(project_id: str) -> str:
+    return f"{_PICKERS}/project/{project_id}/versions"
 
 
-def _runs_href(project: str) -> str:
-    return f"{_project_href(project)}/runs"
+def _runs_href(project_id: str) -> str:
+    return f"{_project_href(project_id)}/runs"
 
 
-def _run_href(project: str, run_id: str) -> str:
-    return f"{_runs_href(project)}/{run_id}"
+def _run_href(project_id: str, run_id: str) -> str:
+    return f"{_runs_href(project_id)}/{run_id}"
 
 
-def _runs_picker_href(project: str) -> str:
-    return f"{_PICKERS}/project/{project}/runs"
+def _runs_picker_href(project_id: str) -> str:
+    return f"{_PICKERS}/project/{project_id}/runs"
 
 
-def _evals_href(project: str) -> str:
-    return f"{_project_href(project)}/evals"
+def _evals_href(project_id: str) -> str:
+    return f"{_project_href(project_id)}/evals"

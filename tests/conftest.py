@@ -24,7 +24,7 @@ from app.services.versioning import load_version_stages, resolve_version_id
 
 
 def pinned_stages(project_dir: Path, version_id: str | None = None) -> tuple[Workflow, str]:
-    workflow_version = resolve_version_id(project_dir, version_id)
+    workflow_version = resolve_version_id(project_dir.name, version_id)
     return _load_version_workflow(project_dir, workflow_version), workflow_version
 
 
@@ -35,7 +35,7 @@ def resumed_stages(project_dir: Path, run_id: str) -> tuple[Workflow, str]:
 
 
 def _load_version_workflow(project_dir: Path, version_id: str) -> Workflow:
-    return Workflow(stages=load_version_stages(project_dir, version_id))
+    return Workflow(stages=load_version_stages(project_dir.name, version_id))
 
 
 def source_stage(stage_id: str, columns: list[dict[str, object]]) -> dict[str, object]:

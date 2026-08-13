@@ -14,7 +14,7 @@ from app.models import parse_stage
 from app.services import workspace
 from app.services.versioning import WorkflowVersion
 from app.services.workflow_test import run_workflow_test
-from app.web import loading
+from app.services.workspace import resolve_run_dir
 from run_seed import read_manifest
 
 _LOAD_SCHEMA = {"columns": [{"name": "doc_id", "type": "str", "nullable": True}]}
@@ -78,4 +78,4 @@ def test_publish_stage_citations_work_in_a_workflow_test(demo):
     # — reachable because the workflow test recorded a real manifest.
     manifest = read_manifest(demo, run_id)
     assert manifest["parameters"]["is_test_run"] is True
-    assert loading.runs_dir("demo") == demo / "runs"
+    assert resolve_run_dir("demo", run_id) == demo / "runs" / run_id

@@ -6,8 +6,7 @@ and what is waiting in it, its own page states in words.
 
 from __future__ import annotations
 
-from pathlib import Path
-
+from fastapi import HTTPException
 from pydantic import BaseModel, Field
 
 from app.services import project
@@ -36,8 +35,16 @@ class ShellState(project.ProjectState):
     next_action: NextAction
 
 
-def shell_state(pdir: Path, section: str) -> ShellState:
-    state = project.project_state(pdir)
+# The web layer's one project guard: every route that names a project runs it, so a
+# missing (or escaping) id is a 404 here rather than a confusing empty page below.
+def validate_project_or_404(project_id: str) -> str:
+    if not project.project_exists(project_id):
+        raise HTTPException(status_code=404, detail=f"No project '{project_id}'")
+    return project_id
+
+
+def shell_state(project_id: str, section: str) -> ShellState:
+    state = project.project_state(validate_project_or_404(project_id))
     nav = build_nav(state.id)
     return ShellState(
         **state.model_dump(),

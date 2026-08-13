@@ -38,9 +38,9 @@ def select_stage_events(
     ]
 
 
-def tail_start_seq(project: str, run_id: str, tail: int, stage: str | None = None) -> int:
+def tail_start_seq(project_id: str, run_id: str, tail: int, stage: str | None = None) -> int:
     """Counts parsed events rather than `highest - tail`: seq is not guaranteed gap-free."""
-    events = select_stage_events(read_events_since(project, run_id, 0), stage)
+    events = select_stage_events(read_events_since(project_id, run_id, 0), stage)
     if not events:
         return 0
     if tail <= 0:
@@ -49,11 +49,11 @@ def tail_start_seq(project: str, run_id: str, tail: int, stage: str | None = Non
 
 
 def page_events_before(
-    project: str, run_id: str, before_seq: int, limit: int, stage: str | None
+    project_id: str, run_id: str, before_seq: int, limit: int, stage: str | None
 ) -> dict[str, Any]:
     older = [
         event
-        for event in select_stage_events(read_events_since(project, run_id, 0), stage)
+        for event in select_stage_events(read_events_since(project_id, run_id, 0), stage)
         if int(event["seq"]) < before_seq
     ]
     # The window is cut AFTER filtering, not from `before_seq - limit`: a stage
@@ -69,7 +69,7 @@ def page_events_before(
 
 
 async def stream_events(
-    project: str, run_id: str, request: Request, from_seq: int,
+    project_id: str, run_id: str, request: Request, from_seq: int,
     stage: str | None = None,
 ) -> AsyncIterator[str]:
     """Polls: the run executes on worker threads with no access to this loop."""
@@ -78,7 +78,7 @@ async def stream_events(
     while True:
         if await request.is_disconnected():
             return
-        new = read_events_since(project, run_id, cursor)
+        new = read_events_since(project_id, run_id, cursor)
         # The cursor clears the whole batch that was READ, not the subset the
         # stage filter yields: an event the filter drops must not come back on
         # the next poll.
@@ -91,7 +91,7 @@ async def stream_events(
         # Fallback stop: if the writer never wrote run_done (a crash mid-run),
         # end once the manifest has settled AND a couple of polls added nothing,
         # so a client never hangs on an interrupted run.
-        if _find_terminal_status(project, run_id) is not None:
+        if _find_terminal_status(project_id, run_id) is not None:
             idle_polls = 0 if new else idle_polls + 1
             if idle_polls >= _IDLE_POLLS_BEFORE_TERMINAL_STOP:
                 yield "event: done\ndata: {}\n\n"
@@ -99,6 +99,6 @@ async def stream_events(
         await asyncio.sleep(_EVENT_POLL_INTERVAL_S)
 
 
-def _find_terminal_status(project: str, run_id: str) -> str | None:
-    status = load_manifest(project, run_id).get("status")
+def _find_terminal_status(project_id: str, run_id: str) -> str | None:
+    status = load_manifest(project_id, run_id).get("status")
     return None if status == RunStatus.RUNNING else status

@@ -19,7 +19,7 @@
   function readContext() {
     var project = location.pathname.match(/^\/project\/([^/]+)/);
     var run = location.pathname.match(/^\/project\/[^/]+\/runs\/([^/]+)/);
-    return 'project=' + encodeURIComponent(project ? decodeURIComponent(project[1]) : '') +
+    return 'project_id=' + encodeURIComponent(project ? decodeURIComponent(project[1]) : '') +
            '&run=' + encodeURIComponent(run ? decodeURIComponent(run[1]) : '');
   }
 

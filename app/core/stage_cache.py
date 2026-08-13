@@ -63,20 +63,20 @@ class StageCacheEntry(PersistedModel):
 _CACHE_KEY_VERSION = 4
 
 
-def _build_cache_prefix(project: str, stage_id: str, stage_fingerprint: str) -> str:
+def _build_cache_prefix(project_id: str, stage_id: str, stage_fingerprint: str) -> str:
     """Every id starts with this, so a prefix query and an id cannot disagree about the format."""
-    return f"v{_CACHE_KEY_VERSION}/{project}/{stage_id}/{stage_fingerprint}/"
+    return f"v{_CACHE_KEY_VERSION}/{project_id}/{stage_id}/{stage_fingerprint}/"
 
 
-def _build_cache_id(project: str, stage_id: str, stage_fingerprint: str, input_fingerprint: str) -> str:
-    return _build_cache_prefix(project, stage_id, stage_fingerprint) + input_fingerprint
+def _build_cache_id(project_id: str, stage_id: str, stage_fingerprint: str, input_fingerprint: str) -> str:
+    return _build_cache_prefix(project_id, stage_id, stage_fingerprint) + input_fingerprint
 
 
 def _build_frame_cache_id(
-    project: str, stage_id: str, stage_fingerprint: str, input_tables: Sequence[pa.Table]
+    project_id: str, stage_id: str, stage_fingerprint: str, input_tables: Sequence[pa.Table]
 ) -> str:
     return _build_cache_id(
-        project, stage_id, stage_fingerprint, compute_tables_fingerprint(input_tables)
+        project_id, stage_id, stage_fingerprint, compute_tables_fingerprint(input_tables)
     )
 
 
@@ -98,31 +98,31 @@ def _to_json_safe_row(row: Mapping[str, object]) -> JsonDict:
 
 class ReadOnlyStageCache:
     def get(
-        self, project: str, stage_id: str, stage_fingerprint: str, input_fingerprint: str
+        self, project_id: str, stage_id: str, stage_fingerprint: str, input_fingerprint: str
     ) -> StageCacheEntry | None:
         return StageCacheEntry.load_or_none(
-            _build_cache_id(project, stage_id, stage_fingerprint, input_fingerprint)
+            _build_cache_id(project_id, stage_id, stage_fingerprint, input_fingerprint)
         )
 
     def find_entries(
-        self, project: str, stage_id: str, stage_fingerprint: str
+        self, project_id: str, stage_id: str, stage_fingerprint: str
     ) -> list[StageCacheEntry]:
         return StageCacheEntry.list(
-            prefix=_build_cache_prefix(project, stage_id, stage_fingerprint)
+            prefix=_build_cache_prefix(project_id, stage_id, stage_fingerprint)
         )
 
     def find_recorded_rows(
-        self, project: str, stage_id: str, stage_fingerprint: str
+        self, project_id: str, stage_id: str, stage_fingerprint: str
     ) -> dict[str, JsonDict]:
         return {
             entry.input_fingerprint: entry.output_row
-            for entry in self.find_entries(project, stage_id, stage_fingerprint)
+            for entry in self.find_entries(project_id, stage_id, stage_fingerprint)
             if entry.output_row is not None
         }
 
     def find_cached_frame(
         self,
-        project: str,
+        project_id: str,
         stage_id: str,
         stage_fingerprint: str,
         input_tables: Sequence[pa.Table],
@@ -130,7 +130,7 @@ class ReadOnlyStageCache:
         """`input_tables` ORDER is part of the key — swapping a join's two sides is a different input."""
         return get_frame_store().load_table(
             CACHED_FRAME_COLLECTION,
-            _build_frame_cache_id(project, stage_id, stage_fingerprint, input_tables),
+            _build_frame_cache_id(project_id, stage_id, stage_fingerprint, input_tables),
         )
 
 
@@ -138,7 +138,7 @@ class StageCache(ReadOnlyStageCache):
     def record(
         self,
         *,
-        project: str,
+        project_id: str,
         stage_id: str,
         stage_fingerprint: str,
         input_fingerprint: str,
@@ -146,8 +146,8 @@ class StageCache(ReadOnlyStageCache):
         output_row: Mapping[str, object] | None,
     ) -> None:
         StageCacheEntry(
-            id=_build_cache_id(project, stage_id, stage_fingerprint, input_fingerprint),
-            project=project,
+            id=_build_cache_id(project_id, stage_id, stage_fingerprint, input_fingerprint),
+            project=project_id,
             stage_id=stage_id,
             stage_fingerprint=stage_fingerprint,
             input_fingerprint=input_fingerprint,
@@ -158,7 +158,7 @@ class StageCache(ReadOnlyStageCache):
     def record_frame(
         self,
         *,
-        project: str,
+        project_id: str,
         stage_id: str,
         stage_fingerprint: str,
         input_tables: Sequence[pa.Table],
@@ -166,7 +166,7 @@ class StageCache(ReadOnlyStageCache):
     ) -> None:
         save_table_or_reject(
             CACHED_FRAME_COLLECTION,
-            _build_frame_cache_id(project, stage_id, stage_fingerprint, input_tables),
+            _build_frame_cache_id(project_id, stage_id, stage_fingerprint, input_tables),
             table,
             described_as=f"stage {stage_id}",
         )

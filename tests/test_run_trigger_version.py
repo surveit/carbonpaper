@@ -34,8 +34,8 @@ def project_two_versions(tmp_path, monkeypatch):
              "connector": {"kind": "file",
                            "params": {"path": str(data), "format": "csv"}}}
     add_stage(proj, stage)
-    save_working_copy_as_version(proj, message="v1", reviewer="test")
-    save_working_copy_as_version(proj, message="v2", reviewer="test")
+    save_working_copy_as_version(proj.name, message="v1", reviewer="test")
+    save_working_copy_as_version(proj.name, message="v2", reviewer="test")
     workspace.set_projects_dir(tmp_path)
     monkeypatch.setattr(run_service, "_run_in_background",
                         lambda target, *args: target(*args))
@@ -48,7 +48,7 @@ def _manifest(proj):
 
 
 def test_posted_version_id_pins_the_run_even_when_it_is_not_the_latest(project_two_versions):
-    older = list_versions(project_two_versions)[-1].version_id  # list is newest-first
+    older = list_versions(project_two_versions.name)[-1].version_id  # list is newest-first
     resp = client.post("/project/demo/run",
                        data={"version_id": older}, follow_redirects=False)
     assert resp.status_code == 303
@@ -56,14 +56,14 @@ def test_posted_version_id_pins_the_run_even_when_it_is_not_the_latest(project_t
 
 
 def test_omitted_version_id_defaults_to_latest(project_two_versions):
-    latest = list_versions(project_two_versions)[0].version_id
+    latest = list_versions(project_two_versions.name)[0].version_id
     resp = client.post("/project/demo/run", data={}, follow_redirects=False)
     assert resp.status_code == 303
     assert _manifest(project_two_versions)["workflow_version"] == latest
 
 
 def test_new_run_page_renders_version_picker_latest_selected(project_two_versions):
-    versions = list_versions(project_two_versions)  # newest-first
+    versions = list_versions(project_two_versions.name)  # newest-first
     # The picker sits in the same form that collects the input paths, because a
     # different version can author different input stages.
     latest, older = versions[0].version_id, versions[-1].version_id
@@ -76,7 +76,7 @@ def test_new_run_page_renders_version_picker_latest_selected(project_two_version
 
 
 def test_new_run_page_opens_on_the_version_the_link_named(project_two_versions):
-    versions = list_versions(project_two_versions)  # newest-first
+    versions = list_versions(project_two_versions.name)  # newest-first
     latest, older = versions[0].version_id, versions[-1].version_id
 
     resp = client.get(f"/project/demo/runs/new?version_id={older}")
@@ -107,9 +107,9 @@ def _seed_load_stage(proj):
 def test_run_picker_offers_unpublished_versions_too(tmp_path, monkeypatch):
     proj = tmp_path / "demo"
     _seed_load_stage(proj)
-    published = save_working_copy_as_version(proj, message="approved", reviewer="test").version_id
-    unpublished = save_working_copy_as_version(proj, message="draft", reviewer="test").version_id
-    publish_version(proj, published, reviewer="test")  # only the older one
+    published = save_working_copy_as_version(proj.name, message="approved", reviewer="test").version_id
+    unpublished = save_working_copy_as_version(proj.name, message="draft", reviewer="test").version_id
+    publish_version(proj.name, published, reviewer="test")  # only the older one
     workspace.set_projects_dir(tmp_path)
 
     resp = client.get("/project/demo/runs/new")
@@ -123,7 +123,7 @@ def test_run_picker_offers_unpublished_versions_too(tmp_path, monkeypatch):
 def test_run_form_shown_when_the_only_version_is_unpublished(tmp_path, monkeypatch):
     proj = tmp_path / "demo"
     _seed_load_stage(proj)
-    vid = save_working_copy_as_version(proj, message="unpublished", reviewer="test").version_id
+    vid = save_working_copy_as_version(proj.name, message="unpublished", reviewer="test").version_id
     workspace.set_projects_dir(tmp_path)
 
     resp = client.get("/project/demo/runs/new")
@@ -161,9 +161,9 @@ def project_versions_diff_paths(tmp_path, monkeypatch):
                            "params": {"path": str(path), "format": "csv"}}}])
 
     _author(a)
-    save_working_copy_as_version(proj, message="v1 reads a.csv", reviewer="test")
+    save_working_copy_as_version(proj.name, message="v1 reads a.csv", reviewer="test")
     _author(b)
-    save_working_copy_as_version(proj, message="v2 reads b.csv", reviewer="test")
+    save_working_copy_as_version(proj.name, message="v2 reads b.csv", reviewer="test")
     workspace.set_projects_dir(tmp_path)
     monkeypatch.setattr(run_service, "_run_in_background",
                         lambda target, *args: target(*args))
@@ -174,7 +174,7 @@ def test_posting_the_selected_versions_own_authored_path_is_not_a_binding(
     project_versions_diff_paths,
 ):
     proj = project_versions_diff_paths
-    older = list_versions(proj)[-1].version_id  # v1, authored a.csv
+    older = list_versions(proj.name)[-1].version_id  # v1, authored a.csv
     resp = client.post("/project/demo/run",
                        data={"version_id": older, "binding__load": ""},
                        follow_redirects=False)
@@ -186,7 +186,7 @@ def test_new_run_page_binds_the_named_versions_own_input_paths(
     project_versions_diff_paths,
 ):
     proj = project_versions_diff_paths
-    older = list_versions(proj)[-1].version_id  # v1, authored a.csv
+    older = list_versions(proj.name)[-1].version_id  # v1, authored a.csv
 
     resp = client.get(f"/project/demo/runs/new?version_id={older}")
 
@@ -201,7 +201,7 @@ def test_run_inputs_endpoint_returns_the_selected_versions_inputs(
     project_versions_diff_paths,
 ):
     proj = project_versions_diff_paths
-    versions = list_versions(proj)  # newest-first: v2 (b.csv), v1 (a.csv)
+    versions = list_versions(proj.name)  # newest-first: v2 (b.csv), v1 (a.csv)
     latest, older = versions[0].version_id, versions[-1].version_id
 
     latest = client.get(f"/project/demo/run-inputs?version_id={latest}").json()

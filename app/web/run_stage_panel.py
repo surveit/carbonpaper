@@ -17,13 +17,13 @@ from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH
 from app.web.panel_links import AppPanelLinks
 
 
-def resolve_panel_links(project: str, run_id: str) -> AppPanelLinks:
-    return AppPanelLinks(project, run_id)
+def resolve_panel_links(project_id: str, run_id: str) -> AppPanelLinks:
+    return AppPanelLinks(project_id, run_id)
 
 
 def not_executed_panel(
     request: Request,
-    project: str,
+    project_id: str,
     run_id: str,
     manifest: dict[str, Any],
     stage_id: str,
@@ -38,7 +38,7 @@ def not_executed_panel(
         request,
         "_run_stage_not_executed.html",
         {
-            "project": project,
+            "project": project_id,
             "run_id": run_id,
             "stage": stage,
             "workflow_stage": pinned.workflow_stage,

@@ -108,13 +108,13 @@ class RunContext(BaseModel):
     def for_workflow_run(
         cls,
         run_dir: Path,
-        project: str,
+        project_id: str,
         run_id: str,
         params: RunParameters = RunParameters(),
     ) -> RunContext:
         return cls(
             run_dir=run_dir,
-            identity=RunIdentity(project=project, run_id=run_id),
+            identity=RunIdentity(project=project_id, run_id=run_id),
             stage_cache=StageCacheEntry.read_write(),
             params=params,
         )
@@ -123,13 +123,13 @@ class RunContext(BaseModel):
     def for_workflow_test_run(
         cls,
         run_dir: Path,
-        project: str,
+        project_id: str,
         run_id: str,
         params: RunParameters = RunParameters(),
     ) -> RunContext:
         return cls(
             run_dir=run_dir,
-            identity=RunIdentity(project=project, run_id=run_id),
+            identity=RunIdentity(project=project_id, run_id=run_id),
             stage_cache=StageCacheEntry.read_only(),
             params=params.model_copy(
                 update={"is_test_run": True, "queue_auto_approve": True}),
