@@ -7,6 +7,7 @@ from pydantic import ValidationError
 
 from app.core.persistence import get_store
 from app.core.stage_cache import (
+    _build_cache_prefix,
     ReadOnlyStageCache,
     StageCache,
     StageCacheEntry,
@@ -42,7 +43,14 @@ def test_compute_row_fingerprint_guards_array_valued_cells():
 # ── _build_cache_id ───────────────────────────────────────────────────────────
 
 def test_build_cache_id_joins_the_four_parts_with_slashes():
-    assert _build_cache_id("proj", "stage1", "sf123", "if456") == "proj/stage1/sf123/if456"
+    assert _build_cache_id("proj", "stage1", "sf123", "if456") == "v2/proj/stage1/sf123/if456"
+
+
+# A prefix query and an id that disagree read as an empty cache rather than an
+# error, so every row recomputes silently — which is how the v2 salt first broke.
+def test_a_cache_id_starts_with_the_prefix_its_stage_is_queried_by():
+    prefix = _build_cache_prefix("proj", "stage1", "sf123")
+    assert _build_cache_id("proj", "stage1", "sf123", "if456").startswith(prefix)
 
 
 # ── old-shape entries fail loudly on load ────────────────────────────────────

@@ -51,8 +51,21 @@ class StageCacheEntry(PersistedModel):
         return StageCache()
 
 
+# Bumped when a change moves cache keys for SOME rows but not others — reading
+# stage outputs as arrow rather than pandas moves an int column that met a null
+# (float64 `1.0` became int64 `1`) and leaves every other column where it was.
+# A partial move is the dangerous shape: the survivors still hit, so a stale
+# entry is indistinguishable from a fresh one. This makes the invalidation total.
+_CACHE_KEY_VERSION = 2
+
+
+def _build_cache_prefix(project: str, stage_id: str, stage_fingerprint: str) -> str:
+    """Every id starts with this, so a prefix query and an id cannot disagree about the format."""
+    return f"v{_CACHE_KEY_VERSION}/{project}/{stage_id}/{stage_fingerprint}/"
+
+
 def _build_cache_id(project: str, stage_id: str, stage_fingerprint: str, input_fingerprint: str) -> str:
-    return f"{project}/{stage_id}/{stage_fingerprint}/{input_fingerprint}"
+    return _build_cache_prefix(project, stage_id, stage_fingerprint) + input_fingerprint
 
 
 def _build_frame_cache_id(
@@ -90,8 +103,9 @@ class ReadOnlyStageCache:
     def find_entries(
         self, project: str, stage_id: str, stage_fingerprint: str
     ) -> list[StageCacheEntry]:
-        prefix = f"{project}/{stage_id}/{stage_fingerprint}/"
-        return StageCacheEntry.list(prefix=prefix)
+        return StageCacheEntry.list(
+            prefix=_build_cache_prefix(project, stage_id, stage_fingerprint)
+        )
 
     def find_recorded_rows(
         self, project: str, stage_id: str, stage_fingerprint: str

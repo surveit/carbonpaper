@@ -15,6 +15,7 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pyarrow.lib as pa_lib
+import pyarrow.csv as csv
 import pyarrow.parquet as pq
 
 from app.core.errors import FrameConcatMismatchError, FrameNotSerializableError
@@ -35,6 +36,24 @@ PARQUET_SUFFIX = ".parquet"
 # `read_source_*` readers below, for formats that hold no types to read.
 
 
+# The arrow-native pair. Parquet IS arrow, so these are the identity round trip:
+# an int column that met a null comes back int64, where the pandas pair below
+# returns it as float64 and loses which it was. The runtime reads and writes
+# through these; the pandas pair exists for presentation, which formats cells as
+# text and cannot use a table.
+def read_frame_table(path: Path) -> pa.Table:
+    if path.suffix == PARQUET_SUFFIX:
+        return pq.read_table(path, use_pandas_metadata=True)
+    return csv.read_csv(path)
+
+
+def write_frame_table(table: pa.Table, path: Path) -> None:
+    if path.suffix == PARQUET_SUFFIX:
+        pq.write_table(table, path)
+    else:
+        csv.write_csv(table, path)
+
+
 def read_frame_file(path: Path) -> pd.DataFrame:
     return _read_frame_parquet(path) if path.suffix == PARQUET_SUFFIX else pd.read_csv(path)
 
@@ -51,6 +70,17 @@ class FrameWrite(NamedTuple):
     # None when the parquet write succeeded; otherwise the reason it did not,
     # for a caller that reports the degradation to a reviewer.
     parquet_error: str | None
+
+
+def write_frame_table_with_csv_fallback(table: pa.Table, path: Path) -> FrameWrite:
+    """A table arrow itself cannot write is the rescued case; a disk error still propagates."""
+    try:
+        pq.write_table(table, path)
+    except (pa_lib.ArrowException, ValueError, TypeError) as exc:
+        csv_path = path.with_suffix(".csv")
+        csv.write_csv(table, csv_path)
+        return FrameWrite(csv_path, str(exc))
+    return FrameWrite(path, None)
 
 
 def write_frame_file_with_csv_fallback(frame: pd.DataFrame, path: Path) -> FrameWrite:
