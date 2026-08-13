@@ -1,6 +1,6 @@
 """A workflow test now carries project scope (RunContext.for_non_production_run
 with a project/run_id),
-so a publish stage that declares `trace_links` must run successfully in one —
+so a publish stage that declares `citation_provider` must run successfully in one —
 previously TraceLinksUnavailableError, since a workflow test had no
 `ctx.identity`. The URL it builds must resolve to the run's own trace route."""
 from __future__ import annotations
@@ -24,17 +24,17 @@ _LOAD = {
     "signature": {"form": "replaces", "produces": _LOAD_SCHEMA["columns"]},
 }
 
-# The publish function's own `def transform(df, output_dir, trace_links=None)`
-# signature is what makes handle_publish resolve a RowTraceLinker for it
-# (app.runtime.stages.publish._accepts_trace_links).
+# The publish function's own `def transform(df, output_dir, citation_provider=None)`
+# signature is what makes handle_publish resolve a CitationProvider for it
+# (app.runtime.stages.publish._accepts_citation_provider).
 _PUBLISH = {
     "id": "publish_report", "type": "publish", "description": "Publish",
     "inputs": [{"id": "load"}],
     "signature": {"form": "replaces"},
     "function": {"kind": "inline", "code":
-                 "def transform(df, output_dir, trace_links=None):\n"
+                 "def transform(df, output_dir, citation_provider=None):\n"
                  "    import json, os\n"
-                 "    urls = [trace_links.build_row_trace_url('publish_report', i)\n"
+                 "    urls = [citation_provider.cite_row('load', i)\n"
                  "            for i in range(len(df))]\n"
                  "    with open(os.path.join(output_dir, 'urls.json'), 'w') as f:\n"
                  "        json.dump(urls, f)\n"
@@ -60,7 +60,7 @@ def demo(tmp_path, monkeypatch):
     return demo
 
 
-def test_publish_stage_trace_links_works_in_a_workflow_test(demo):
+def test_publish_stage_citations_work_in_a_workflow_test(demo):
     result = run_workflow_test("demo")
     assert result["ok"] is True, result["error"]
     assert result["stages_run"] == ["publish_report"]
@@ -70,8 +70,8 @@ def test_publish_stage_trace_links_works_in_a_workflow_test(demo):
         (demo / "runs" / run_id / "artifacts" / "build" / "urls.json")
         .read_text(encoding="utf-8"))
     assert urls == [
-        f"/project/demo/runs/{run_id}/stage/publish_report/row/0/trace/view",
-        f"/project/demo/runs/{run_id}/stage/publish_report/row/1/trace/view",
+        f"/project/demo/runs/{run_id}/stage/load/row/0/trace/view",
+        f"/project/demo/runs/{run_id}/stage/load/row/1/trace/view",
     ]
 
     # The URL resolves through the SAME route a production run's trace links use

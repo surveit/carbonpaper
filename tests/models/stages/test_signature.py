@@ -437,7 +437,7 @@ def test_publish_signature_must_produce_nothing():
         "type": "publish",
         "inputs": [{"id": "bills"}],
         "publish": {"format": "csv"},
-        "function": {"kind": "inline", "code": "def transform(df, output_dir, trace_links):\n    return df"},
+        "function": {"kind": "inline", "code": "def transform(df, output_dir, citation_provider):\n    return df"},
         "signature": {
             "form": "replaces",
             "reads": [{"input": "bills", "columns": [{"name": "price", "type": "str", "nullable": True}]}],

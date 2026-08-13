@@ -107,7 +107,7 @@ def _publish_stage(stage_id="pub"):
         "inputs": [{"id": "up"}],
         "publish": {"format": "csv"},
         "function": {"kind": "inline", "summary": "Writes one file per row.",
-                     "code": "def transform(df, output_dir, trace_links):\n    return df"},
+                     "code": "def transform(df, output_dir, citation_provider):\n    return df"},
     })
 
 

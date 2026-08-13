@@ -106,7 +106,7 @@ def test_a_code_carrying_type_that_cannot_run_examples_is_untestable():
         "inputs": [{"id": "up"}],
         "publish": {"format": "csv"},
         "function": {"kind": "inline", "summary": "Writes one file per row.",
-                     "code": "def transform(df, output_dir, trace_links):\n    return df"},
+                     "code": "def transform(df, output_dir, citation_provider):\n    return df"},
     })
     assert build_certification(place_stage(stage), []).status == "untestable"
 
@@ -133,6 +133,6 @@ def test_publish_carries_a_function_so_it_still_gets_a_badge():
         "inputs": [{"id": "up"}],
         "publish": {"format": "csv"},
         "function": {"kind": "inline",
-                     "code": "def transform(df, output_dir, trace_links):\n    return df"},
+                     "code": "def transform(df, output_dir, citation_provider):\n    return df"},
     })
     assert build_certification(place_stage(stage), []).status == "unsummarised"

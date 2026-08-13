@@ -586,7 +586,7 @@ def test_the_review_step_queues_the_contradictions_and_halts_the_run(tmp_path):
 
 def _publish_a_report(tmp_path, df: pd.DataFrame) -> str:
     stage = _stage(_bound_fixture(), "publish_report")
-    # A project-scoped context, because the step declares `trace_links` — the run's
+    # A project-scoped context, because the step declares `citation_provider` — the run's
     # (project, run_id) is what a row-trace URL is built from.
     ctx = RunContext.for_workflow_test_run(tmp_path, tmp_path, "tutorial", "R-1")
     out = HANDLERS[StageType(stage.type)].execute(
