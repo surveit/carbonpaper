@@ -63,6 +63,10 @@ class StageErrorInfo(BaseModel):
 # stage also wrote a frame, but its untouched columns are nulls rather than results.
 FINISHED_STAGE_STATUSES = (StageStatus.OK, StageStatus.VALIDATION_WARNINGS)
 
+# What a READER states for a manifest that will not parse. Not a RunStatus member:
+# no run records it, and a stored status this model rejected is how it is reached.
+UNREADABLE_RUN_STATUS = "corrupt"
+
 
 class StageRecord(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)

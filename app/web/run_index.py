@@ -9,11 +9,10 @@ from __future__ import annotations
 from pydantic import BaseModel
 
 from app.core.run_status import RunStatus
+from app.models.run_manifest import UNREADABLE_RUN_STATUS
 from app.runtime.manifest import RunEntry, list_run_entries
 from app.web.run_header import VersionNote, describe_run_duration, read_version_note
 from app.web.stage_strip import StageStrip, build_stage_strip, describe_stage_tallies
-
-_UNREADABLE_STATUS = "corrupt"
 
 
 class RunIndexRow(BaseModel):
@@ -63,7 +62,7 @@ def _build_row(
         # An identity-only row rather than counts it never read, so one unreadable
         # run never takes the index down with it. No test-run filter here on
         # purpose: the index LISTS test runs (flagged), the dashboard count omits them.
-        return RunIndexRow(run_id=entry.run_id, status=_UNREADABLE_STATUS)
+        return RunIndexRow(run_id=entry.run_id, status=UNREADABLE_RUN_STATUS)
     manifest = entry.manifest
     persisted = manifest.to_dict()
     strip = build_stage_strip(persisted)

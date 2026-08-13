@@ -86,7 +86,7 @@ def make_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
         "get_project_status", "generate_stage_tests",
         "run_stage_tests", "report_compiler_warnings",
         "move_file_to_project", "profile_file", "survey_workbook",
-        "run_workflow", "run_workflow_test", "get_run_status", "sleep",
+        "run_workflow", "run_workflow_test", "list_runs", "get_run_status", "sleep",
         "profile_stage_output_data_range",
     )
 

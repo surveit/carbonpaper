@@ -37,6 +37,7 @@ _EXPECTED_TOOL_NAMES = {
     "survey_workbook",
     "run_workflow",
     "run_workflow_test",
+    "list_runs",
     "get_run_status",
     "sleep",
     "profile_stage_output_data_range",

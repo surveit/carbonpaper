@@ -19,7 +19,7 @@ from app.core.errors import (
     RunNotFoundError,
 )
 from app.core.frames import convert_row_to_json_cells, list_rows
-from app.models.run_manifest import FINISHED_STAGE_STATUSES
+from app.models.run_manifest import FINISHED_STAGE_STATUSES, UNREADABLE_RUN_STATUS
 from app.core.source_files import SheetSurvey
 from app.core.column_profile import TableProfile
 from app.models.review_guide import ReviewGuideDraft
@@ -71,6 +71,9 @@ MAX_SLEEP_SECONDS = 3
 # One call's ceiling: a window a model can read in full, and a bound on what a row-by-row
 # read pulls into its context. A caller wanting more pages with `offset`.
 MAX_OUTPUT_ROWS = 50
+# A history a model can read in full. Older runs than this are reachable only from
+# the runs page, so the listing says how many it did not name.
+MAX_RUNS_LISTED = 20
 
 
 def resolve_existing_project(project_id: str) -> Path:
@@ -270,6 +273,47 @@ def get_run_status(project_id: str, run_id: str) -> dict[str, Any]:
     return run_service.read_run_status(project_id, run_id)
 
 
+class RunListing(BaseModel):
+    run_id: str
+    # The stored word, which is what get_run_status reports for the same run.
+    status: str
+    started_at: str | None = None
+    workflow_version: str | None = None
+    is_test_run: bool = False
+
+
+class RunHistory(BaseModel):
+    # Every run this project recorded, so a cut window is read as the cut it is.
+    run_count: int
+    limit: int
+    runs: list[RunListing]
+
+
+def list_runs(project_id: str, limit: int = MAX_RUNS_LISTED) -> RunHistory:
+    resolve_existing_project(project_id)
+    entries = list(reversed(run_service.list_run_entries(project_id)))
+    kept = min(max(limit, 1), MAX_RUNS_LISTED)
+    return RunHistory(
+        run_count=len(entries),
+        limit=kept,
+        runs=[_describe_run(entry) for entry in entries[:kept]],
+    )
+
+
+def _describe_run(entry: run_service.RunEntry) -> RunListing:
+    manifest = entry.manifest
+    if manifest is None:
+        # Its id alone, so one unreadable record does not take the history down with it.
+        return RunListing(run_id=entry.run_id, status=UNREADABLE_RUN_STATUS)
+    return RunListing(
+        run_id=entry.run_id,
+        status=str(manifest.status),
+        started_at=manifest.started_at,
+        workflow_version=manifest.workflow_version,
+        is_test_run=manifest.parameters.is_test_run,
+    )
+
+
 async def sleep(seconds: int) -> dict[str, int]:
     """Reports what it slept, since the ask is clamped rather than refused."""
     slept = min(max(seconds, 0), MAX_SLEEP_SECONDS)
@@ -365,6 +409,7 @@ _FUNCTIONS: dict[str, Callable[..., Any]] = {
     "generate_stage_tests": generate_stage_tests,
     "run_workflow": run_workflow,
     "run_workflow_test": run_workflow_test,
+    "list_runs": list_runs,
     "get_run_status": get_run_status,
     "sleep": sleep,
     "read_workflow_summary": read_workflow_summary,
@@ -466,6 +511,13 @@ _SCHEMAS: dict[str, ToolInputSchema] = {
         ],
         "offset": Annotated[int, "The source row the window starts at. 0 is the first."],
     },
+    "list_runs": {
+        "project_id": _PROJECT_ID,
+        "limit": Annotated[
+            int,
+            f"How many of the newest runs to name. Clamped to {MAX_RUNS_LISTED}.",
+        ],
+    },
     "get_run_status": {
         "project_id": _PROJECT_ID,
         "run_id": Annotated[str, "The run id run_workflow returned."],
@@ -547,6 +599,7 @@ _LABELS = {
     "generate_stage_tests": "Generating the stage's tests",
     "run_workflow": "Running the workflow",
     "run_workflow_test": "Testing the workflow on real rows",
+    "list_runs": "Listing the project's runs",
     "get_run_status": "Checking the run",
     "sleep": "Waiting",
     "read_workflow_summary": "Reading the workflow",
