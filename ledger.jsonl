@@ -482,3 +482,4 @@
 {"run_id":"31732573275","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31732573275","created":"2026-08-13T18:48:18Z","branch":"master","event":"push","contracts_kept":14,"findings":[]}
 {"run_id":"31732581265","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31732581265","created":"2026-08-13T18:48:27Z","branch":"master","event":"push","contracts_kept":14,"findings":[]}
 {"run_id":"31732517122","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31732517122","created":"2026-08-13T18:48:50Z","branch":"master","event":"push","contracts_kept":null,"findings":[]}
+{"run_id":"31732526201","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31732526201","created":"2026-08-13T18:48:57Z","branch":"feedback/guide-and-tutorial-round3","event":"pull_request","contracts_kept":null,"findings":[]}
