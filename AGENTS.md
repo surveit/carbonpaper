@@ -82,6 +82,11 @@ Also `app/AGENTS.md` (web layer), `app/runtime/AGENTS.md` (the Runner), `README.
   prefix only, so a per-project record is `f"{project}/{opaque}"` — project, then something
   meaningless. `StageCacheEntry` is the deliberate exception and the only one: a cache entry
   IS its content hash, so its id is built from the fingerprints it looks up by.
+- **When master is red, do not fix it unless that fix is your whole task.** A trunk breakage
+  is shared state: parallel sessions each patching it on their own branches fork the same fix
+  N ways, and every branch conflicts when the first copy merges. If you hit a red master
+  mid-task, keep working on your branch — do not fold a trunk fix into it. The fix belongs to
+  one agent dedicated to it, as a single-commit PR off master, merged as soon as checks pass.
 - **Planning docs stay out of the repo.** Design specs, implementation/execution plans,
   brainstorming or "rethink" notes, and refactor/migration roadmaps are ephemeral working
   artifacts — keep them in scratch or the PR description, never commit them. Committed docs
