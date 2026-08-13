@@ -31,6 +31,10 @@ _EXPECTED_TOOL_NAMES = {
     "write_review_guide",
     "read_terms",
     "write_terms",
+    "list_files",
+    "profile_file",
+    "survey_workbook",
+    "move_file_to_project",
 }
 
 

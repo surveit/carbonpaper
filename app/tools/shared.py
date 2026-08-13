@@ -69,7 +69,7 @@ def write_terms(project_id: str, terms: Terms) -> Terms:
 
 
 class StoredFileView(BaseModel):
-    """One file a project holds; `sha256` is what names it to run_workflow."""
+    """One file a project holds; `sha256` is what names it to a run."""
 
     sha256: str
     filename: str
@@ -256,6 +256,7 @@ _FUNCTIONS: dict[str, Callable[..., Any]] = {
     "read_stage_output_rows": read_stage_output_rows,
     "profile_file": profile_file,
     "survey_workbook": survey_workbook,
+    "move_file_to_project": move_file_to_project,
 }
 
 _SCHEMAS: dict[str, ToolInputSchema] = {
@@ -336,6 +337,10 @@ _SCHEMAS: dict[str, ToolInputSchema] = {
         "first_column": Annotated[
             int, "xlsx only: the 0-based column the table starts at."],
     },
+    "move_file_to_project": {
+        "project_id": _PROJECT_ID,
+        "sha256": Annotated[str, "The sha256 of a file that is in no project yet."],
+    },
     "survey_workbook": {
         "project_id": _PROJECT_ID,
         "sha256": Annotated[str, "The stored xlsx's sha256, as list_files reported it."],
@@ -356,6 +361,7 @@ _LABELS = {
     "read_stage_output_rows": "Reading the stage's rows",
     "profile_file": "Reading what the file holds",
     "survey_workbook": "Looking over the workbook's sheets",
+    "move_file_to_project": "Moving the file into the project",
 }
 
 

@@ -312,7 +312,7 @@ Put a file that is in no project into one. Moves no bytes.""",
     "list_files": ToolSpec(
         name="list_files",
         description="""\
-The files a project holds, each with the `sha256` run_workflow's `files` binds.
+The files a project holds, each with the `sha256` that names it to a run.
 `project_id` null lists the files that are in no project yet.
 
 Also returns `file_upload_url`: POST a file there as multipart form data to add

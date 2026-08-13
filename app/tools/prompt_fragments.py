@@ -173,3 +173,23 @@ WORKED_STAGE_EXAMPLE = """\
   }
 }
 ```"""
+
+
+# What every surface says about the files an input step reads. How a file ARRIVES
+# differs by surface — a URL to POST to, a paperclip on the conversation — so that
+# sentence stays with each surface and is not here.
+FILES_NOTE = """\
+An input step reads a file the project holds. list_files(project_id) is what it holds,
+and a run binds one to an input step by the sha256 it gives. list_files(null)
+is the files in no project, and move_file_to_project puts one in.
+
+profile_file(project_id, sha256) is what that file HOLDS. Declare an input step's schema
+from that profile rather than from asking someone to describe their own file — they
+answer from memory, and the profile is the file. It reads only a file the project holds,
+so a listed file in no project is moved in first.
+
+On an xlsx, call survey_workbook first. It names the sheets and returns a window of each
+one's cells as they sit; the indices into that window are the sheet, header row and first
+column that profile_file and the input step both then take. Guess none of the three — a
+wrong header row declares a schema against the wrong columns, and nothing downstream
+notices."""

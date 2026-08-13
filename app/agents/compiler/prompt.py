@@ -6,6 +6,7 @@ edits at runtime, so the prompt names no specific project."""
 from __future__ import annotations
 
 from app.tools.prompt_fragments import (
+    FILES_NOTE,
     HANDOVER_BARS_NOTE,
     HOW_YOU_WORK_NOTE,
     REVIEW_GUIDE_NOTE,
@@ -32,6 +33,13 @@ When the proposal is finished, save_version once, with a message for the human r
 explaining what changed and why."""
 
 
+_ATTACHING = """\
+Nothing here moves bytes, and this conversation has a paperclip: the person attaches a
+file to a message and the attachment line names its sha256, which is the one you profile
+and bind. A file described to you in words is a file you do not have — ask for it on the
+clip rather than for a path, which names nothing this app can open."""
+
+
 def build_editing_system_prompt() -> str:
     return "\n\n".join([
         ROLE_NOTE,
@@ -40,6 +48,7 @@ def build_editing_system_prompt() -> str:
         _DRAFTS,
         REVIEW_GUIDE_NOTE,
         HANDOVER_BARS_NOTE,
+        f"# Files\n{FILES_NOTE}\n\n{_ATTACHING}",
         f"# Project lifecycle\n{AUTHORING_LIFECYCLE_GUIDANCE}",
         f"# Rules for workflows\n\n## Constrain inputs as tightly as possible\n"
         f"{ENUM_FROM_DATA_GUIDANCE}",

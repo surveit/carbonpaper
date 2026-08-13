@@ -8,6 +8,7 @@ import re
 import pytest
 
 from app.tools.prompt_fragments import (
+    FILES_NOTE,
     HANDOVER_BARS_NOTE,
     HOW_YOU_WORK_NOTE,
     REVIEW_GUIDE_NOTE,
@@ -32,6 +33,7 @@ SHARED_GUIDANCE = {
     "how_you_work": HOW_YOU_WORK_NOTE,
     "review_guide": REVIEW_GUIDE_NOTE,
     "handover_bars": HANDOVER_BARS_NOTE,
+    "files": FILES_NOTE,
     "lifecycle": AUTHORING_LIFECYCLE_GUIDANCE,
     "enum_from_data": ENUM_FROM_DATA_GUIDANCE,
     "stage_anatomy": render_stage_anatomy(),

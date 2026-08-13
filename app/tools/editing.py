@@ -41,6 +41,11 @@ def make_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
     def create_project(name: str, document: str) -> Project:
         return shared.create_project(name, document, source="editing agent")
 
+    def list_files(project_id: str | None = None) -> shared.ProjectFilesView:
+        # Root-relative: this reader is already in the browser on this origin.
+        upload_path = "/files" if project_id is None else f"/project/{project_id}/files"
+        return shared.list_files(project_id, upload_path)
+
     def read_stage(project_id: str, stage_id: str) -> str:
         return project_service.read_stage(project_id, stage_id)
 
@@ -81,6 +86,7 @@ def make_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
         list_projects,
         get_current_project,
         create_project,
+        list_files,
         read_stage,
         edit_stage,
         add_stage,
@@ -103,7 +109,8 @@ def make_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
         )
         for fn in tools
     ] + shared.bind(
-        "read_workflow_summary", "read_stage_output_rows", "read_terms", "write_terms"
+        "read_workflow_summary", "read_stage_output_rows", "read_terms", "write_terms",
+        "profile_file", "survey_workbook", "move_file_to_project",
     )
 
 
@@ -118,6 +125,12 @@ TOOL_SCHEMAS: dict[str, ToolInputSchema] = {
     "list_projects": {},
     "get_current_project": {},
     "create_project": shared.schema_of("create_project"),
+    "list_files": {
+        "project_id": Annotated[
+            str | None,
+            "The project whose files to list. Omit for the files in no project yet.",
+        ],
+    },
     "read_stage": {
         "project_id": Annotated[str, "The project id (call get_current_project first)."],
         "stage_id": Annotated[str, "The stage's id, as shown by read_workflow_summary."],
@@ -228,6 +241,7 @@ TOOL_LABELS: dict[str, str] = {
     "list_projects": "Listing projects",
     "get_current_project": "Checking the current project",
     "create_project": "Creating the project",
+    "list_files": "Looking at the project's files",
     "read_stage": "Reading a stage",
     "edit_stage": "Editing a stage",
     "add_stage": "Adding a stage",
