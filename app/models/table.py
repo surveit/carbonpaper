@@ -19,9 +19,10 @@ class TableRef(_Base):
 
     @field_validator("path")
     @classmethod
-    def _stays_inside_the_project(cls, v: str) -> str:
-        parts = PurePosixPath(v).parts
-        if PurePosixPath(v).is_absolute() or ".." in parts or not parts:
+    def _assert_path_is_relative_and_does_not_escape_root(cls, path: str) -> str:
+        parts = PurePosixPath(path).parts
+        if PurePosixPath(path).is_absolute() or ".." in parts or not parts:
             raise ValueError(
-                f"a table path is relative to its project directory and may not leave it: {v!r}")
-        return v
+                "a table path is relative to its project directory and may not leave it: "
+                f"{path!r}")
+        return path
