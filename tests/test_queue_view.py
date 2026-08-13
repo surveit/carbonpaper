@@ -248,6 +248,34 @@ def test_an_enum_prefill_keeps_a_declared_value_and_drops_an_undeclared_one():
     assert queue_view._resolve_prefill(field, "retired") is None
 
 
+@pytest.mark.parametrize(
+    "target_type, received, recorded, departs",
+    [
+        # A `date` control holds the day alone, so the midnight the row received and
+        # the day the record holds are ONE value — approving it edited nothing.
+        ("date", "2026-03-04T00:00:00", "2026-03-04", False),
+        ("date", "2026-03-04T00:00:00", "2026-03-05", True),
+        ("datetime", "2026-03-04T09:30:00", "2026-03-04T09:30:00", False),
+        # The row carries an int, the record its text: the same value in two types.
+        ("int", 7, "7", False),
+        ("int", 7, "8", True),
+        ("str", "", None, False),
+        ("str", "high", None, True),
+    ],
+)
+def test_a_record_departs_from_the_received_value_only_where_the_two_differ(
+    target_type, received, recorded, departs
+):
+    stage = _queue_stage(
+        [{"name": "id", "type": "str", "nullable": True},
+         {"name": "label", "type": target_type, "nullable": True}],
+        target_type=target_type, target_spec={"nullable": True},
+    )
+    field, = queue_view.build_reviewed_fields(stage, stage.stage.queue)
+
+    assert queue_view._departs_from_received(field, received, recorded) is departs
+
+
 # ── Finding the item behind one card, by the fingerprint the card carries ────
 
 
@@ -259,6 +287,7 @@ def _page_of(*input_fingerprints: str) -> queue_view.QueuePage:
             queue_view.ReviewItem(
                 input_fingerprint=fingerprint, row={}, lineage_url=None,
                 prior_decision=None, prefill={}, upstream_text={},
+                departs_from_received={},
             )
             for fingerprint in input_fingerprints
         ],

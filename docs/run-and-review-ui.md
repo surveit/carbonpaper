@@ -147,8 +147,12 @@ written into `queue.reviewer_column` on every decision, alongside a timestamp in
 
 The form fields come from the stage's own `queue.reviewed_columns`: one row
 per reviewed column, typed from that column's declared schema, each carrying a
-`data-state` of `start`, `approved`, `modified`, `editing`, or `locked` — the
-stylesheet renders each state and the script only moves the attribute.
+`data-state` of `start`, `approved`, `modified`, `editing`, or `locked`. The
+stylesheet renders each state by hiding what that state does not show; the
+script moves the attribute and writes the value the row displays
+(`showCurrentValue`), the control's value, the submit's `disabled`, the
+readout beside it, and a visually-hidden `role="status"` note per field, since
+a state that changes by `display` alone announces nothing.
 `start` offers **Approve** and **Change**; `approved` and `modified` offer
 **Change** and **Revert**; `editing` shows the control with **Save** and
 **Cancel**, plus a hint that appears once the entered value matches the
@@ -159,20 +163,32 @@ The primary **Submit** stays `disabled` until every field is `approved` or
 `modified`, and a readout beside it counts how many of the reviewed columns
 are decided.
 
+A field in `start` shows one value: the one it will submit if approved — on an
+undecided row that is what the stage produced, on a decided row it is the
+recorded value, and the row's received value is named beside it (`received:`)
+while the card is unlocked. A `locked` field strikes the received value through
+ahead of the recorded one ONLY where the two differ. The two are compared in the
+view model (`ReviewItem.departs_from_received`), reading both in the spelling the
+field's own control uses — a `date` control spells a received `2026-03-04T00:00:00`
+as the `2026-03-04` a record of it holds, so approving that value strikes nothing.
+
 The reviewer names no verdict: the page posts both the values it submits and
 the values it was pre-filled with, and `queue_decide` RECORDS `modify` when
 any submitted value differs from the prefill the page carried, `approve` when
 they all match. (`skipped` is the runtime's own verdict for a row its filter
 excluded; the review service refuses it from a reviewer.) A decision records
-that verdict, a value for each reviewed column, and optionally a note — it
+that verdict, a value for each reviewed column, and optionally a note — one
+note for the row, from the single box under the fields, never one per field. It
 never overwrites the column it reviewed, because a review stage may only ADD
 columns (`app.models.stages.human_review_queue._find_added_column_collisions`
 rejects a target that reuses an input column's name). Once a decision is
 recorded the card locks: it offers no per-field controls, and the primary
 **Submit** is replaced by a secondary **Change my review**, which returns
 every field to `start` — so each must be decided again before Submit
-re-enables — and records nothing itself; the submit that follows settles its
-verdict the same way, against whatever each field is left showing. Decisions
+re-enables — and records nothing itself. The submit that follows settles its
+verdict against the SAME prefill the page carried, which on a decided row is
+the previously recorded value: re-approving every field records `approve`
+again, and changing any one of them records `modify`. Decisions
 are keyed by a hash of the row (`app.core.stage_cache`)
 so they survive re-runs and LLM non-determinism. Recording a decision fetches
 that row's card partial and swaps it in place. The recorded block a decided card

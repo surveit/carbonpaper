@@ -143,6 +143,16 @@
 .field-state .state-approved { color: var(--good-ink); font-size: 12px; }
 .field-state .state-modified { color: var(--warn-ink); font-size: 12px; }
 .prefill-was, .received-was { color: var(--muted); }
+/* What the stage produced, named as such. It stands in for the struck-through
+   pair while a decided card is unlocked: those render only in `locked`, and the
+   context table above never carries a column that is under review. */
+.received-value { font-size: 12px; color: var(--muted); }
+/* Announced, never shown: the markers beside it change by `display` alone, which
+   reaches no screen reader. The script writes this on every state change. */
+.field-state-note {
+    position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+    border: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
 .match-hint { font-size: 12px; color: var(--muted); }
 .field-editor:not([data-match="true"]) .match-hint { display: none; }
 
@@ -160,6 +170,7 @@
 .reviewed-field:not([data-state="modified"]) .state-modified { display: none; }
 .reviewed-field:not([data-state="modified"]) .prefill-was { display: none; }
 .reviewed-field:not([data-state="locked"]) .received-was { display: none; }
+.reviewed-field[data-state="locked"] .received-value { display: none; }
 .reviewed-field[data-state="locked"] .field-ctas { display: none; }
 
 .decide-gate { font-size: 13px; color: var(--muted); }

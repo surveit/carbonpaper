@@ -74,6 +74,10 @@ class ReviewItem:
     prior_decision: DecisionDisplay | None
     prefill: dict[str, object]
     upstream_text: dict[str, str]
+    # Per reviewed column, on a DECIDED row: whether the recorded value departs
+    # from the received one, both read in the spelling the control uses. Empty
+    # while no decision is recorded, since there is nothing yet to depart.
+    departs_from_received: dict[str, bool]
 
 
 @dataclass(frozen=True)
@@ -349,6 +353,7 @@ def _build_review_item(
         prior_decision=prior,
         prefill=_build_field_prefills(fields, displayed_row, prior),
         upstream_text=_build_upstream_texts(fields, displayed_row),
+        departs_from_received=_build_received_departures(fields, displayed_row, prior),
     )
 
 
@@ -378,6 +383,27 @@ def _build_field_prefills(
     }
 
 
+def _build_received_departures(
+    fields: list[ReviewedField], displayed_row: dict[str, object],
+    prior: DecisionDisplay | None,
+) -> dict[str, bool]:
+    if prior is None:
+        return {}
+    return {
+        field.target: _departs_from_received(
+            field, displayed_row.get(field.source), prior.reviewed_values.get(field.target)
+        )
+        for field in fields
+    }
+
+
+# Compared in ONE spelling, never as two independently formatted strings: a `date`
+# control reads a received "2026-03-04T00:00:00" as the "2026-03-04" its record
+# holds, and a reviewer who approved that value edited nothing.
+def _departs_from_received(field: ReviewedField, received: object, recorded: object) -> bool:
+    return _as_field_text(field, received) != _as_field_text(field, recorded)
+
+
 def _resolve_prefill(field: ReviewedField, value: object) -> object:
     resolved = _blank_to_none(value)
     if resolved is None:
@@ -386,6 +412,13 @@ def _resolve_prefill(field: ReviewedField, value: object) -> object:
         return _as_control_value(field.control, resolved)
     text = _as_option_text(resolved)
     return text if text in field.options else None
+
+
+def _as_field_text(field: ReviewedField, value: object) -> str | None:
+    resolved = _blank_to_none(value)
+    if resolved is None:
+        return None
+    return _as_option_text(_as_control_value(field.control, _as_option_text(resolved)))
 
 
 # The controls whose value attribute is rejected unless it is ISO 8601. A

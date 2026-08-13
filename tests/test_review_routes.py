@@ -661,7 +661,7 @@ def _temporal_review_stage(column_type):
         {"name": "seen_at", "type": column_type, "nullable": True}])
 
 
-def _decide_a_temporal_row(tmp_path, monkeypatch, project, column_type, recorded):
+def _halt_a_temporal_queue(tmp_path, project, column_type):
     workspace.set_projects_dir(tmp_path)
     project_dir = tmp_path / project
     (project_dir / "data").mkdir(parents=True, exist_ok=True)
@@ -676,7 +676,11 @@ def _decide_a_temporal_row(tmp_path, monkeypatch, project, column_type, recorded
     _write_stage(project_dir, "02_review.json", _temporal_review_stage(column_type))
     _seed_version(project_dir)
     run_id = run_prepared(prepare_run(project_dir, *pinned_stages(project_dir)))["run_id"]
-    fingerprints = _read_fingerprints(project, run_id)
+    return run_id, _read_fingerprints(project, run_id)
+
+
+def _decide_a_temporal_row(tmp_path, monkeypatch, project, column_type, recorded):
+    run_id, fingerprints = _halt_a_temporal_queue(tmp_path, project, column_type)
 
     client = TestClient(app)
     r = client.post(
@@ -711,6 +715,26 @@ def test_a_temporal_control_opens_on_the_recorded_value_of_a_decided_row(
 
     assert f'type="{control}"' in html
     assert _find_input_value(html, "human_seen_at") == recorded
+
+
+def test_a_date_field_approved_as_it_arrived_strikes_no_received_value(tmp_path, monkeypatch):
+    # A `date` control spells the received midnight shorter; the record still says approve.
+    project = "queue_route_date_approved"
+    run_id, fingerprints = _halt_a_temporal_queue(tmp_path, project, "date")
+    client = TestClient(app)
+    url = f"/project/{project}/runs/{run_id}/queue/review"
+
+    # Approve submits exactly what the control opened on, which is what the row received.
+    opened = _find_input_value(client.get(url).text, "human_seen_at")
+    approved = client.post(f"{url}/decide", data=_decide_data(
+        fingerprints["input_fingerprints"][0], {"human_seen_at": opened},
+        prefilled={"human_seen_at": opened}))
+    assert approved.status_code == 200, approved.text
+    assert approved.json()["verdict"] == "approve"
+
+    card = _first_card(client.get(url).text)
+    assert 'data-state="locked"' in card
+    assert '<span class="received-was">' not in card
 
 
 def _declared_range_review_stage():
@@ -953,6 +977,15 @@ def test_the_card_renders_the_described_queued_row_and_its_review_section(tmp_pa
     assert described.groups() == ("the score this row was labelled from", "score")
     assert re.search(r'<th[^>]*>\s*<code>id</code>', table) is not None
 
+    # A reviewed field is labelled with the column it reviews — `label`, the column
+    # the value arrived in, never the `human_label` the answer is stored in — and
+    # carries that source column's declared description as its tooltip.
+    reviewed = re.search(
+        r'<div class="reviewed-field"[^>]*>\s*<label([^>]*)>([^<]*)</label>', card)
+    assert reviewed is not None
+    assert 'title="high when the score exceeds one"' in reviewed.group(1)
+    assert reviewed.group(2).strip() == "label"
+
     positions = re.findall(r'<span class="row-position">([^<]*)</span>', html)
     assert positions == [f"Row {n} of {len(positions)}" for n in range(1, len(positions) + 1)]
     assert "identity-cell" not in html
@@ -1007,9 +1040,7 @@ def test_each_state_shows_only_its_own_controls(tmp_path, monkeypatch):
     editor = re.search(r'<span class="field-editor"[^>]*>', card)
     assert editor is not None
 
-    # review-queue.css, not the packaged "style.css" (that name is only the review
-    # packet's build-time concatenation of every app sheet — there is no such file
-    # under app/static): this is where the queue field rules actually live.
+    # The queue field rules live in review-queue.css.
     stylesheet = (Path(app_package.__file__).parent / "static" / "review-queue.css").read_text(
         encoding="utf-8"
     )
@@ -1021,7 +1052,11 @@ def test_each_state_shows_only_its_own_controls(tmp_path, monkeypatch):
         r'\.reviewed-field:not\(\[data-state="modified"\]\) \.state-modified',
         r'\.reviewed-field:not\(\[data-state="modified"\]\) \.prefill-was',
         r'\.reviewed-field:not\(\[data-state="locked"\]\) \.received-was',
+        r'\.reviewed-field\[data-state="locked"\] \.received-value',
         r'\.reviewed-field\[data-state="locked"\] \.field-ctas',
+        # Without it, `.btn { display: inline-block }` beats the UA's [hidden] rule
+        # and a decided card shows Submit beside "Change my review".
+        r'\.decision-controls \[hidden\]',
     ):
         assert re.search(rule + r"[^{]*\{[^}]*display:\s*none", stylesheet), rule
 
@@ -1206,7 +1241,7 @@ def test_a_locked_field_strikes_the_received_value_only_when_the_recorded_one_di
     tmp_path, monkeypatch
 ):
     # The struck-through value shows only where the record departs from it.
-    project_dir, run_id, _run_dir, snapshot, fingerprints = _build_and_halt(tmp_path, monkeypatch)
+    _project_dir, run_id, _run_dir, _snapshot, fingerprints = _build_and_halt(tmp_path, monkeypatch)
     client = TestClient(app)
     modified = client.post(
         f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
@@ -1228,8 +1263,53 @@ def test_a_locked_field_strikes_the_received_value_only_when_the_recorded_one_di
     modified_card = _first_card(html)
     was = re.search(r'<span class="received-was"><s>([^<]*)</s>', modified_card)
     assert was is not None and was.group(1).strip() == "1"
+    # The second card by fingerprint, decided since the POST above: without this the
+    # negative below would pass on a card that carries no decision at all.
     approved_card = _undecided_card(html, fingerprints)
+    assert 'data-state="locked"' in approved_card
     assert '<span class="received-was">' not in approved_card
+
+
+def test_an_unlocked_field_still_shows_what_the_stage_produced(tmp_path, monkeypatch):
+    # Unlocking drops every field to `start`, where the struck-through pair is hidden.
+    _project_dir, _run_id, _fingerprints, html = _decided_queue_html(tmp_path, monkeypatch)
+    # The context table above is no help: it omits every column under review.
+
+    card = " ".join(_first_card(html).split())
+    received = re.search(r'<span class="received-value">([^<]*)', card)
+    # Named as the stage's own value, not left to read as the reviewer's.
+    assert received is not None and received.group(1).strip() == "received: 1"
+
+    stylesheet = (Path(app_package.__file__).parent / "static" / "review-queue.css").read_text(
+        encoding="utf-8"
+    )
+    assert re.search(
+        r'\.reviewed-field\[data-state="locked"\] \.received-value[^{]*\{[^}]*display:\s*none',
+        stylesheet,
+    )
+
+
+def test_a_field_says_which_column_it_decides_and_the_submit_says_why_it_is_dead(
+    tmp_path, monkeypatch
+):
+    # Three buttons per field, one gate per card: the names have to carry the column.
+    _project_dir, run_id, _run_dir, _snapshot, _fingerprints = _build_and_halt(tmp_path, monkeypatch)
+
+    html = TestClient(app).get(f"/project/{PROJECT}/runs/{run_id}/queue/review").text
+    card = _first_card(html)
+
+    for cta in ("Approve", "Change", "Revert"):
+        assert f'aria-label="{cta} score"' in card, cta
+    approve = re.search(r"<button[^>]*data-field-approve[^>]*>", card)
+    # Approve never opens the editor, so it does not claim to control it.
+    assert approve is not None and "aria-controls" not in approve.group(0)
+
+    gate = re.search(r'<span class="decide-gate"[^>]*>', card)
+    assert gate is not None and 'role="status"' in gate.group(0)
+    gate_id = re.search(r'id="([^"]*)"', gate.group(0))
+    assert gate_id is not None and html.count(f'id="{gate_id.group(1)}"') == 1
+    submit = re.search(r'<button type="submit"[^>]*>', card)
+    assert submit is not None and f'aria-describedby="{gate_id.group(1)}"' in submit.group(0)
 
 
 def test_a_decided_card_states_its_verdict_in_a_word(tmp_path, monkeypatch):

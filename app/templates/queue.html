@@ -159,6 +159,10 @@
       nameInput.focus();
       return;
     }
+    // Held shut across the round trip: a second click would record the row twice
+    // and count it twice, which can reveal "Resume run" over an unreviewed queue.
+    const submit = card.querySelector('button[type="submit"]');
+    if (submit) submit.disabled = true;
     const fd = new FormData();
     fd.append('input_fingerprint', card.dataset.inputFingerprint);
     fd.append('reviewer', reviewerName());
@@ -170,6 +174,7 @@
     const r = await fetch(DECIDE_URL, { method: 'POST', body: fd });
     if (!r.ok) {
       alert(`Failed: ${r.status} ${await r.text()}`);
+      if (submit) submit.disabled = false;
       return;
     }
     // A reviewer changing their own recorded decision reviews no new row.
@@ -207,16 +212,33 @@
     card.replaceWith(fresh);
   }
 
-  // `data-state` is the single source of truth for a field; the stylesheet
-  // renders each state. In `start` the control still holds its prefill, so
-  // Approve needs no value work, and an approved field submits exactly the
-  // value it displayed — which settles `approve` server-side.
+  // `data-state` says which state a field is in and the stylesheet renders that
+  // state; the value a field displays and submits is written here, in
+  // `showCurrentValue` and on the control. In `start` the control still holds its
+  // prefill, so Approve needs no value work, and an approved field submits exactly
+  // the value it displayed — which settles `approve` server-side.
+  const STATE_NOTES = {
+    start: 'not yet decided', approved: 'approved', modified: 'modified',
+    editing: 'open for a new value', locked: 'recorded',
+  };
+  // Cancel returns a field to the state the editor opened from; a second open
+  // would otherwise return it to `editing`, which no control leaves.
+  const EDIT_RETURN_STATES = ['start', 'approved', 'modified'];
+
   function fieldOf(el) { return el.closest('.reviewed-field'); }
   function controlOf(field) { return field.querySelector('[data-target]'); }
 
   function setFieldState(field, state) {
     field.dataset.state = state;
+    announceFieldState(field, state);
     syncDecideGate(field.closest('.queue-card'));
+  }
+
+  function announceFieldState(field, state) {
+    const note = field.querySelector('[data-state-note]');
+    if (!note) return;
+    const label = field.querySelector('label');
+    note.textContent = `${label ? label.textContent.trim() : ''}: ${STATE_NOTES[state] || state}`;
   }
 
   function syncDecideGate(card) {
@@ -262,7 +284,8 @@
   function cancelEdit(field) {
     const control = controlOf(field);
     control.value = field.dataset.editValue;
-    setFieldState(field, field.dataset.editReturn);
+    const back = field.dataset.editReturn;
+    setFieldState(field, EDIT_RETURN_STATES.indexOf(back) === -1 ? 'start' : back);
   }
 
   function revertField(field) {
@@ -279,6 +302,7 @@
     const card = button.closest('.queue-card');
     card.querySelectorAll('.reviewed-field').forEach(function (field) {
       field.dataset.state = 'start';
+      announceFieldState(field, 'start');
     });
     const notes = card.querySelector('[data-role="notes"]');
     if (notes) notes.readOnly = false;
