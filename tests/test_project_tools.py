@@ -12,6 +12,7 @@ from app.models.review_guide import ReviewGuideDraft, ReviewGuideStep
 from app.services.versioning import ReviewGuide
 from app.services import workspace
 from app.services.project import Project
+from app.tools.submitted_stage import SubmittedStage
 
 # Minimal valid config block per stage type (app/models/stage.py:
 # each type's stage model declares the ones it requires). Mirrors
@@ -135,15 +136,13 @@ def test_project_id_cannot_escape_the_workspace(examples_root: Path) -> None:
 def _versioned(examples: Path, name: str) -> tuple[list[BoundToolSpec], str]:
     _seed(examples, name)
     tools = _tools(name)
-    draft = _tool(tools, "create_draft")(name)
-    for stage in (
-        _stage("load", "Load rows", "input_data"),
-        _stage("score", "Score rows", "llm_transform", inputs=["load"]),
-    ):
-        _tool(tools, "set_draft_stage")(name, draft.id, json.dumps(stage))
-    saved = _tool(tools, "save_version")(name, draft.id, "first proposal")
-    assert saved.version_id is not None
-    return tools, saved.version_id
+    # _seed already wrote `load`, so only the stage on top of it is added here.
+    added = _tool(tools, "add_stage")(name, [SubmittedStage.model_validate(
+        _stage("score", "Score rows", "llm_transform", inputs=["load"]))])
+    assert added["added"] == ["score"], added
+    saved = _tool(tools, "save_version")(name, "first proposal")
+    assert saved["version_id"] is not None
+    return tools, saved["version_id"]
 
 
 def _guide(step_ids: list[str], unnarrated: list[str]) -> ReviewGuideDraft:

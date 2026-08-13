@@ -22,22 +22,11 @@ from app.tools.prompt_fragments import (
     render_type_catalog,
 )
 
-_DRAFTS = """\
-For a multi-stage restructure, work in a scratch copy instead of editing live:
-create_draft (pass from_version to seed it from an existing version's stages; omit it to
-start empty), then iterate with set_draft_stage / remove_draft_stage — invalid
-intermediate states are fine there, and read_draft shows what still blocks saving.
-
-When the proposal is finished, save_version once, with a message for the human reviewer
-explaining what changed and why."""
-
-
 def build_editing_system_prompt() -> str:
     return "\n\n".join([
         ROLE_NOTE,
         CONCEPTS_NOTE,
         HOW_YOU_WORK_NOTE,
-        _DRAFTS,
         REVIEW_GUIDE_NOTE,
         HANDOVER_BARS_NOTE,
         f"# Project lifecycle\n{AUTHORING_LIFECYCLE_GUIDANCE}",
