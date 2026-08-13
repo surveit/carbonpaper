@@ -23,7 +23,7 @@ def find_mcp_descriptions() -> dict[str, str]:
 
 
 def find_editing_descriptions() -> dict[str, str]:
-    bound = make_editing_tools(EditingContext(project_id="any"))
+    bound = make_editing_tools(EditingContext(project_id="any", base_url="http://reader.test/"))
     return {spec.name: spec.description for spec in bound}
 
 

@@ -53,7 +53,7 @@ def examples_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def _tools(name: str) -> list[BoundToolSpec]:
-    return make_editing_tools(EditingContext(project_id=name))
+    return make_editing_tools(EditingContext(project_id=name, base_url="http://reader.test/"))
 
 
 def _stage(sid: str, name: str, stype: str, inputs: list[str] | None = None) -> dict:

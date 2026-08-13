@@ -6,7 +6,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from app.agents.compiler.config import CONFIG as EDITING_CONFIG
 from app.agents.compiler.prompt import EDITING_SYSTEM_PROMPT
@@ -16,6 +16,7 @@ from app.models import NamedSchema, SchemaLibrary, Terms, Verb
 from app.services import terms as terms_service
 from app.services import project as project_service
 from app.services import workspace
+from app.tools.prompt_fragments import render_link_map
 
 _FILING = NamedSchema(
     name="filing",
@@ -91,32 +92,63 @@ def _project_with(tmp_path, terms: Terms | None) -> str:
     return project_id
 
 
+_READER = {"base_url": "https://carbon.example/"}
+
+
 def test_the_editing_agent_is_handed_its_projects_words(tmp_path) -> None:
     project_id = _project_with(
         tmp_path, Terms(nouns=SchemaLibrary(schemas=[_FILING]), verbs=[_FLAG])
     )
 
-    prompt = build_engine("editing", {"project_id": project_id})._system_prompt
+    prompt = build_engine("editing", {"project_id": project_id} | _READER)._system_prompt
 
     assert prompt.startswith(EDITING_SYSTEM_PROMPT)
     assert "- filing — One disclosure a firm sent in. Also written: disclosure." in prompt
     assert "- flag — Mark a row for a human to decide on." in prompt
 
 
-def test_a_project_that_has_agreed_no_words_appends_nothing(tmp_path) -> None:
+def test_a_project_that_has_agreed_no_words_appends_only_the_links(tmp_path) -> None:
     project_id = _project_with(tmp_path, None)
 
-    prompt = build_engine("editing", {"project_id": project_id})._system_prompt
+    prompt = build_engine("editing", {"project_id": project_id} | _READER)._system_prompt
 
-    assert prompt == EDITING_SYSTEM_PROMPT
+    assert prompt == f"{EDITING_SYSTEM_PROMPT}\n\n{render_link_map(_READER['base_url'])}"
 
 
-def test_a_session_bound_to_no_project_appends_nothing(tmp_path) -> None:
+def test_the_editing_agent_is_handed_the_pages_it_can_link_to(tmp_path) -> None:
+    project_id = _project_with(tmp_path, None)
+
+    prompt = build_engine("editing", {"project_id": project_id} | _READER)._system_prompt
+
+    assert "https://carbon.example/project/<project_id>/workflow" in prompt
+    assert "https://carbon.example/project/<project_id>/runs/<run_id>" in prompt
+
+
+def test_a_session_with_no_address_is_refused(tmp_path) -> None:
+    # Every caller has one: a route off the request, the dump off a placeholder host.
     workspace.set_projects_dir(tmp_path)
 
-    prompt = build_engine("editing", {})._system_prompt
+    with pytest.raises(ValidationError):
+        build_engine("editing", {"project_id": _project_with(tmp_path, None)})
 
-    assert prompt == EDITING_SYSTEM_PROMPT
+
+def test_the_words_and_the_links_both_reach_one_session(tmp_path) -> None:
+    project_id = _project_with(
+        tmp_path, Terms(nouns=SchemaLibrary(schemas=[_FILING]), verbs=[_FLAG])
+    )
+
+    prompt = build_engine("editing", {"project_id": project_id} | _READER)._system_prompt
+
+    assert "https://carbon.example/project/<project_id>/workflow" in prompt
+    assert "- flag — Mark a row for a human to decide on." in prompt
+
+
+def test_a_session_bound_to_no_project_is_still_told_where_its_reader_is(tmp_path) -> None:
+    workspace.set_projects_dir(tmp_path)
+
+    prompt = build_engine("editing", dict(_READER))._system_prompt
+
+    assert prompt == f"{EDITING_SYSTEM_PROMPT}\n\n{render_link_map(_READER['base_url'])}"
 
 
 def test_the_hook_the_editing_agent_registered_is_the_one_that_runs() -> None:

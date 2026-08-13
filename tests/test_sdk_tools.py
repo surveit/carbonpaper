@@ -26,7 +26,7 @@ def examples_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def _build(name: str) -> tuple[Any, list[str], list[SdkMcpTool[Any]]]:
-    return build_mcp_server(make_editing_tools(EditingContext(project_id=name)))
+    return build_mcp_server(make_editing_tools(EditingContext(project_id=name, base_url="http://reader.test/")))
 
 
 def _call(tool: SdkMcpTool[Any], args: dict[str, Any]) -> dict[str, Any]:
@@ -56,7 +56,7 @@ def _seed(examples: Path, name: str) -> Path:
 def test_allowed_names_cover_every_tool(examples_root: Path) -> None:
     _seed(examples_root, "congresswatch")
     _server, allowed, _tools = _build("congresswatch")
-    specs = make_editing_tools(EditingContext(project_id="congresswatch"))
+    specs = make_editing_tools(EditingContext(project_id="congresswatch", base_url="http://reader.test/"))
     assert set(allowed) == {f"mcp__tools__{spec.name}" for spec in specs}
     assert len(allowed) == 27
 
@@ -137,7 +137,7 @@ def test_a_tool_taking_a_model_is_handed_json_and_gets_the_model(examples_root: 
     """add_stage and write_review_guide declare pydantic models; the SDK sends dicts."""
     _seed(examples_root, "congresswatch")
     _server, _allowed, tools = _build("congresswatch")
-    spec = next(s for s in make_editing_tools(EditingContext(project_id="congresswatch"))
+    spec = next(s for s in make_editing_tools(EditingContext(project_id="congresswatch", base_url="http://reader.test/"))
                 if s.name == "add_stage")
 
     parsed = spec.parse_arguments({

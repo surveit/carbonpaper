@@ -22,10 +22,15 @@ client = TestClient(app)
 
 class _Ctx(BaseModel):
     label: str
+    base_url: str = ""
+
+
+_CONTEXTS_BUILT: list[_Ctx] = []
 
 
 def _build_tools(ctx: BaseModel) -> list:
     assert isinstance(ctx, _Ctx)
+    _CONTEXTS_BUILT.append(ctx)
 
     def echo() -> str:
         return ctx.label
@@ -75,6 +80,17 @@ def test_post_message_starts_a_turn() -> None:
     body = r.json()
     assert body["ok"] is True
     assert body["turn_id"]
+
+
+def test_a_turn_is_told_the_address_its_reader_is_on() -> None:
+    # Not stored with the session: a reader on another address gets links for THEM.
+    sid = _new_session({"label": "hello"})
+    _CONTEXTS_BUILT.clear()
+
+    client.post(f"/chat/{sid}/message", json={"text": "hi there"})
+
+    assert [c.base_url for c in _CONTEXTS_BUILT] == ["http://testserver/"]
+    assert client.get(f"/chat/{sid}/messages").json()["context"] == {"label": "hello"}
 
 
 def test_post_message_missing_session_is_404() -> None:

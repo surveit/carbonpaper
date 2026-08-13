@@ -11,12 +11,20 @@ from app.agents.compiler.prompt import EDITING_SYSTEM_PROMPT
 from app.models.terms import render_terms
 from app.services import terms as terms_service
 from app.tools.editing import EditingContext, make_editing_tools
+from app.tools.prompt_fragments import render_link_map
 from app.core.agent.registry import AgentConfig, register
 from app.core.agent.bound_tool import BoundToolSpec
 
 
-def _render_project_terms(context: BaseModel) -> str:
+def _render_session_note(context: BaseModel) -> str:
     assert isinstance(context, EditingContext)
+    return "\n\n".join(
+        part for part in [render_link_map(context.base_url), _render_project_terms(context)]
+        if part
+    )
+
+
+def _render_project_terms(context: EditingContext) -> str:
     if context.project_id is None:
         return ""
     return render_terms(terms_service.load_terms(context.project_id))
@@ -29,8 +37,9 @@ CONFIG = AgentConfig(
     # use — it renders in the chat but is not one of this agent's tools.
     extra_tool_labels={"ToolSearch": "Looking up a tool"},
     # The words are read at session start, so an agent edits in whatever the owner
-    # has agreed by then rather than in what the process started with.
-    render_session_prompt=_render_project_terms,
+    # has agreed by then rather than in what the process started with. The address is
+    # read per turn, so it is where this reader is rather than where the session opened.
+    render_session_prompt=_render_session_note,
 )
 
 

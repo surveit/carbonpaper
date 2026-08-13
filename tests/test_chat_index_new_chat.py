@@ -17,9 +17,13 @@ client = TestClient(app)
 _store = open_session_store()
 
 
+# The stored context carries no address — a turn adds the one its reader is on.
+_READER = {"base_url": "http://testserver/"}
+
+
 def read_current_project(sid: str) -> str | None:
     """What the session's own stored context binds `get_current_project` to."""
-    context = _store.load(sid).get("context") or {}
+    context = (_store.load(sid).get("context") or {}) | _READER
     tools = make_editing_tools(EditingContext.model_validate(context))
     return next(t for t in tools if t.name == "get_current_project").fn()
 
@@ -68,4 +72,5 @@ def test_a_session_opened_from_a_project_still_reports_that_project() -> None:
 def test_the_editing_engine_builds_for_a_projectless_session() -> None:
     """build_engine validates the context and binds every tool, so not raising is the check."""
     data = _store.load(open_session("/chat/new"))
-    assert isinstance(build_engine(data["agent_id"], data["context"]), ClaudeAgentSdkEngine)
+    engine = build_engine(data["agent_id"], data["context"] | _READER)
+    assert isinstance(engine, ClaudeAgentSdkEngine)
