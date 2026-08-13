@@ -22,7 +22,7 @@ from app.core.frames import (
     frame_to_table,
     table_to_frame,
     write_frame_file,
-    write_frame_file_with_csv_fallback,
+    write_frame_table_with_csv_fallback,
 )
 from app.models import StageType, Workflow, WorkflowStage
 from app.models.run_manifest import (
@@ -358,8 +358,8 @@ def _sliced_input_lineage(
 
 def _persist_stage_output(output: pa.Table, sid: str, run_dir: Path, record: StageRecord) -> Path:
     """The stage's artifact path, after writing it — the CSV fallback is NOTED on `record`."""
-    written = write_frame_file_with_csv_fallback(
-        table_to_frame(output), run_dir / "outputs" / f"{sid}.parquet"
+    written = write_frame_table_with_csv_fallback(
+        output, run_dir / "outputs" / f"{sid}.parquet"
     )
     if written.parquet_error is not None:
         record.add_note(f"Wrote CSV instead of parquet: {written.parquet_error}")
