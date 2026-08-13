@@ -154,6 +154,27 @@ def test_the_run_beat_ends_by_handing_over_rather_than_offering_a_menu() -> None
     assert "The page is the thing now, not you." in beat
 
 
+def test_the_announced_wait_is_the_one_duration_the_rules_exempt() -> None:
+    """A duration stated before the run exists must be the script's own, not a guess."""
+    beat = _flat(_beat(2))
+
+    assert "it may take about a minute" in beat
+    assert "since a real model reads the filings" in beat
+    assert "about-a-minute expectation" in _flat(TUTORIAL_SYSTEM_PROMPT)
+
+
+def test_the_run_beat_orients_the_link_without_reciting_the_data() -> None:
+    """The close says what the page shows and what to poke; the page keeps its numbers."""
+    beat = _flat(_beat(2))
+
+    assert "orientation" in beat
+    assert "paused for a human to review the contradictions" in beat
+    assert "clicking a stage opens the rows it produced" in beat
+    assert "the flagged filings wait at the review step" in beat
+    assert "no row counts, no per-stage account" in beat
+    assert "no reciting numbers the page already holds" in beat
+
+
 def test_every_control_the_tour_sends_them_to_click_is_one_the_app_renders() -> None:
     """A button named here that does not exist sends the reader looking for nothing."""
     rendered = _rendered_templates()

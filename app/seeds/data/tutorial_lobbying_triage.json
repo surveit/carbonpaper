@@ -557,8 +557,7 @@
           {
             "name": "review_notes",
             "type": "str",
-            "nullable": true,
-            "description": "Which words in the two texts you decided from"
+            "nullable": true
           }
         ],
         "rewrites": []
