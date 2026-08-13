@@ -1,5 +1,5 @@
 """Committed example projects, portable via app.services.project.
 
-data/<name>.json is a hand-edited WorkflowFile fixture; a sibling data/<name>.csv is
-sample input data (WorkflowFile carries none); data/review_guides/<name>.json is a
-ReviewGuideDraft, in a subdirectory so the fixture glob never reads one as a workflow."""
+data/<name>.json is a hand-edited WorkflowFile fixture; sibling data/*.csv files are its
+sample input. review_guides/, evals/ and sources/ hold a ReviewGuideDraft, an EvalConfig
+and the sample's provenance — subdirectories, so the data/*.json glob cannot read one."""

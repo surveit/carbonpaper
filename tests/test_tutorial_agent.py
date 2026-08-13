@@ -236,7 +236,7 @@ def test_a_real_run_resolves_the_bound_csv_and_honours_the_row_cap(
     status = run_service.read_run_status(seeded["project"]["id"], started["run_id"])
     by_stage = {r["stage_id"]: r for r in status["stage_records"]}
     assert by_stage["raw_filings"]["output_row_count"] == 6
-    # The join drops no filing, so the cap is what every later stage sees.
+    # No record is dropped, so the cap is what every later stage sees.
     assert by_stage["matched_commitments"]["output_row_count"] == 6
     # No model is available offline, so the LLM stage is where this run stops.
     assert by_stage["judge_alignment"]["status"] == "error"
@@ -319,18 +319,22 @@ def test_each_row_comes_back_with_the_whole_link_to_its_own_lineage(
         )
 
 
-def test_a_blank_cell_reaches_the_tour_blank(
+def test_an_absent_cell_would_reach_the_tour_as_a_blank_not_as_text(
     projects_root: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The tour picks its absence row off these values — "None" as text would read as one."""
+    """The tour reads an absence off these values — "None" as text would read as one."""
     seeded, run_id = _run_the_tour_capped(monkeypatch)
 
     rows = _read_lineage_links(seeded["project"]["id"], run_id, "matched_commitments")["rows"]
 
-    blank = [row for row in rows if row["values"]["public_commitment"] is None]
-    filled = [row for row in rows if row["values"]["public_commitment"] is not None]
-    assert blank and filled
-    assert all(row["values"]["client"] for row in rows)
+    # Every organisation in the bundled sample has a sourced commitment, so no row is
+    # blank here; what this guards is that a blank would arrive as null rather than as
+    # the word pandas prints for one.
+    assert all(row["values"]["public_commitment"] for row in rows)
+    assert not {"None", "nan", ""} & {
+        row["values"]["public_commitment"] for row in rows
+    }
+    assert all(row["values"]["organisation"] for row in rows)
 
 
 def test_the_row_the_tour_calls_an_absence_is_the_one_with_no_second_parent(
@@ -346,8 +350,8 @@ def test_the_row_the_tour_calls_an_absence_is_the_one_with_no_second_parent(
         trace = trace_to_dict(trace_row(run_dir, "matched_commitments", row["ordinal"]))
         joined = next(s for s in trace["steps"] if s["stage_id"] == "matched_commitments")
         matched = row["values"]["public_commitment"] is not None
-        assert bool(joined["branches"]) is matched, row["values"]["client"]
-        # The chain the reader walks: back through the check to the filing as filed.
+        assert bool(joined["branches"]) is matched, row["values"]["organisation"]
+        # The chain the reader walks: back through the check to the record as read.
         assert [step["stage_id"] for step in trace["steps"]] == [
             "matched_commitments", "check_filings", "raw_filings"
         ]
@@ -367,7 +371,7 @@ def test_a_stage_that_did_not_finish_is_refused_rather_than_read(
     assert out["is_error"] is True
     assert "is 'error'" in out["content"][0]["text"]
     assert run_service.read_stage_output(seeded["project"]["id"], run_id, "judge_alignment")[
-        "alignment"
+        "ai_judgment"
     ].isna().all(), "the frame the refusal is protecting the tour from"
 
 

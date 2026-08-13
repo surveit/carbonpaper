@@ -25,7 +25,7 @@ from app.services.project import find_projects_by_name
 from app.services import methodology
 from app.tools.types import ToolProse
 
-_FIXTURE_STEM = "tutorial_lobbying_triage"
+_FIXTURE_STEM = "tutorial_say_versus_do"
 _DATA_DIR = Path(__file__).resolve().parents[1] / "seeds" / "data"
 _FIXTURE = _DATA_DIR / f"{_FIXTURE_STEM}.json"
 _GUIDE = _DATA_DIR / "review_guides" / f"{_FIXTURE_STEM}.json"
@@ -35,7 +35,7 @@ _EVAL = _DATA_DIR / "evals" / f"{_FIXTURE_STEM}.json"
 # The fixture carries no path for these — a committed file cannot know where the
 # workspace is — so each run says which file its input stage reads.
 _CSV_BY_STAGE_ID = {
-    "raw_filings": _DATA_DIR / f"{_FIXTURE_STEM}.csv",
+    "raw_filings": _DATA_DIR / "tutorial_lobbying_records.csv",
     "public_commitments": _DATA_DIR / "tutorial_public_commitments.csv",
 }
 

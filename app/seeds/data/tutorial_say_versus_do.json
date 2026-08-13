@@ -1,0 +1,807 @@
+{
+  "name": "tutorial_say_versus_do",
+  "document": "# Tutorial: Say versus Do\n\n## Purpose\n\nAn organisation says one thing in public and asks government for another. Reporting in\nthis genre is the two texts read together: the lead is not an advocacy record on its own,\nit is a record that asks for something its own promise cannot easily be squared with.\nThis workflow puts each promise beside the ask, has a model propose how the two stand,\nsends every proposed contradiction to a person, and publishes what that person decided.\n\nThe six records here are real, and every one of them is hard. A reader cannot tell the\nanswer from the two sentences without thinking: two of the six are contradictions at the\nlevel of the mechanism rather than the goal, one reads exactly like a contradiction and\nis not, two are genuinely arguable, and one is an organisation lobbying for the rule it\nalready meets. That is the point of the sample — a set of obvious cases would teach the\nreader nothing about the judgement they are being asked to check.\n\n## Where this data came from\n\nEach record was assembled by hand from two published pages: one where the organisation\nstates its commitment, one where it states what it asked government for. Both pages are\nlinked from every row of the report, and the full provenance — the quoted line each\nsentence was written from, both links, both dates, whether the page is the organisation's\nown or an outlet's account of it, and the reasoning behind the label a researcher gave\nthe pair — is bundled beside this workflow as\n`app/seeds/data/sources/tutorial_say_versus_do.json`.\n\nTwo things this sample does NOT carry, because the sources do not: no lobbying firm, and\nno money. There is no spend column, no filing id and no registrant, because none of these\nrecords is a lobbying disclosure. Anything of that kind on this page would have been\ninvented, and an invented figure beside a real organisation's name is the exact failure\nthis tool exists to prevent.\n\nDates are recorded as the source states them. Several of these pages carry no publication\ndate at all, so their date field reads `undated policy page (fetched 2026-08-13)` rather\nthan a date nobody published. That is uglier than a clean date column and it is the\nhonest shape of the data.\n\n## Input data\n\nTwo bundled CSVs.\n\n`tutorial_lobbying_records.csv`, one row per advocacy record:\n\n- `record_id` — the research set's own case id, unique\n- `organisation` — who made the ask\n- `period` — the stretch the two sources span, e.g. \"2023-2024\"\n- `lobbying_issue` — one sentence on what this organisation asked government for\n- `lobbying_quote` — the line from the source that sentence was written from\n- `lobbying_source_url` — the page it was read on\n- `lobbying_source_date` — what that page says about its own date\n\n`tutorial_public_commitments.csv`, one row per organisation:\n\n- `organisation` — who made the commitment\n- `public_commitment` — one sentence on what it said in public it would do\n- `commitment_quote` — the line from the source that sentence was written from\n- `commitment_source_url` — the page it was read on\n- `commitment_source_date` — what that page says about its own date\n\nBoth files declare every column as required, so a blank commitment, a blank promise or a\nmissing link fails the step that reads the file rather than travelling on as an empty\ncell.\n\n## Step 1 — Refuse a claim with no source\n\nEvery advocacy record is read before anything else touches it, and the run stops on one\nthat cannot be checked: a source link that is absent or is not an http or https address,\nan empty account of what was asked for, or a source that says nothing about when it was\npublished or read. The link that survives is carried forward trimmed of surrounding\nspace. A claim with no source does not enter this workflow, because a claim nobody can\nopen is a claim nobody can check — and every row of the published report is an invitation\nto check it. This is plain code, not the model: whether a link is a link has one right\nanswer.\n\n## Step 2 — Put each promise beside the ask\n\nBring `public_commitment`, `commitment_quote`, `commitment_source_url` and\n`commitment_source_date` onto every advocacy record, matched on the organisation's name.\nThe commitments file carries at most one row per organisation, and a repeat would fail\nthe run rather than quietly multiplying records. No record is dropped here. A record for\nan organisation with no commitment row keeps every one of its own fields and carries a\nblank commitment — the absence is the record, and the next step is told to read it as an\nabsence rather than as a judgment.\n\n## Step 3 — Judge the ask against the promise (LLM)\n\nFor each record, read the organisation's public commitment and this record's ask\ntogether, and add two fields — one record in, one record out (the record is neither\ndropped nor duplicated):\n\n- `ai_judgment` — one of: Contradicts, Matches, Unclear, No commitment given.\n  \"Contradicts\" means the ask cannot be squared with the promise. \"No commitment given\"\n  is the answer when the commitment field is blank. Every record gets one of the four and\n  none is left blank: the absent-commitment case already has its own label, so a blank\n  would be a hole in what the report later prints rather than an answer.\n- `ai_justification` — a single plain sentence naming what the organisation said and what\n  it asked for.\n\nThe organisations are real, which makes the instruction stricter rather than looser: the\nmodel is told to judge only the two texts printed in front of it, because what it half\nremembers about a real company or trade association is not evidence, is not on this\nrecord, and cannot be checked by the person who reads its answer. It is told not to\ninvent, complete or paraphrase a commitment that is not printed. The step names the model\nit runs on, so the run records which model answered rather than whichever one the\nplatform happened to default to that week.\n\nRecords are read up to twelve at a time in one model call — up to, because the last call\nof a run holds whatever is left over. All six of these travel in a single call. This is a\ncost trade: one call carrying twelve records is far cheaper than twelve calls carrying\none. What it costs is independence, since the records sharing a call are judged beside\neach other, so a record's answer could be swayed by the ones it happens to travel with.\n\n## Step 4 — Put every contradiction in front of a person\n\nA contradiction is the one judgment this workflow publishes as a finding, so the model's\nis not the one that gets published. Every record the model called \"Contradicts\" is queued\nfor a human, and the run stops there — nothing below this step runs until each queued\nrecord has been decided.\n\nThe card is deliberately narrow. The reviewer is shown the record's id, the organisation,\nthe promise, the ask, the model's label and the model's sentence — and nothing else,\nbecause everything else is furniture to a decision made from two texts. They record a\nlabel of their own in `reviewed_judgment`. The model's `ai_judgment` is left exactly as\nthe model wrote it, so what the model said and what the person decided are both on the\nrecord afterwards. Beside their label the reviewer records the name they reviewed under,\nthe moment they decided, and a note naming the words in the two texts they decided from.\n\nThis step decides nothing itself. A queued record with no recorded decision stays queued\nand the run stays stopped: there is no wait that expires and no label that stands in for\none nobody chose. A record the model did not call a contradiction is not queued, is read\nby nobody, and passes through unchanged.\n\nAfter this step every record carries `review_verdict`: \"approve\" where the reviewer kept\nthe model's label, \"modify\" where they changed it, and \"skipped\" for a record no person\nwas asked about — so a judgment a person reviewed can be told from one only the model\nmade.\n\n## Step 5 — Publish the report\n\nProduce a single HTML page listing every record with the organisation, the period, what\nit said in public, what it asked government for, and the judgment as it stands after\nreview. Both texts carry a link to the page they were read on, because the link is the\npoint: a reader who does not believe a row can open both sides of it and decide for\nthemselves.\n\nThe label the page prints is the reviewer's, not the model's: a record whose reviewer\nchanged the label is no longer printed as a contradiction, and a contradiction they\nconfirmed carries their name, the time they reviewed it and the note they left. A\njudgment recorded as reviewed with nobody's name against it is not published at all: the\nstep stops instead. No score, no ranking and no recommendation: the report is a reading\naid, not a verdict, and it makes no accusation of its own — it shows two sourced texts\nand says which person decided how they stand.\n\nEvery row also carries a link back to that row's lineage — each stage that touched it,\nback to the input row it came from — so a reader can check any line of the page against\nthe run.\n\nThe page's markup and stylesheet live in the step that writes them, so a reviewer reads\nthe markup and the code that fills it together.\n\n## Out of scope\n\nNo external fetching, no record dropped anywhere, and nothing matched twice — one check,\none match, one model read, one human review, one page.\n",
+  "model": "sonnet",
+  "source": "seed",
+  "data_model": {
+    "schemas": []
+  },
+  "stages": [
+    {
+      "id": "raw_filings",
+      "type": "input_data",
+      "description": "Bundled Advocacy Records CSV",
+      "inputs": [],
+      "cache": true,
+      "compiler_notes": [
+        "Every column is required: a record with a blank source link or a blank account of what was asked for fails here rather than travelling as an empty cell."
+      ],
+      "signature": {
+        "form": "replaces",
+        "reads": [],
+        "produces": [
+          {
+            "name": "record_id",
+            "type": "str",
+            "nullable": false,
+            "description": "The research set's own case id for this advocacy record; unique."
+          },
+          {
+            "name": "organisation",
+            "type": "str",
+            "nullable": false,
+            "description": "The organisation that made the ask; the name its public commitment is filed under."
+          },
+          {
+            "name": "period",
+            "type": "str",
+            "nullable": false,
+            "description": "The stretch the two sources span, as the research recorded it, e.g. '2023-2024'."
+          },
+          {
+            "name": "lobbying_issue",
+            "type": "str",
+            "nullable": false,
+            "description": "One sentence saying what this organisation asked government for."
+          },
+          {
+            "name": "lobbying_quote",
+            "type": "str",
+            "nullable": false,
+            "description": "A line from the source, in its own words, that the sentence was written from."
+          },
+          {
+            "name": "lobbying_source_url",
+            "type": "str",
+            "nullable": false,
+            "description": "The page that ask was read on."
+          },
+          {
+            "name": "lobbying_source_date",
+            "type": "str",
+            "nullable": false,
+            "description": "What the source says about its own date, e.g. '2025-02-27' or 'undated policy page (fetched 2026-08-13)'."
+          }
+        ]
+      },
+      "source": {
+        "doc": "tutorial_lobbying_records.csv",
+        "section": "Input data"
+      },
+      "connector": {
+        "kind": "file",
+        "params": {
+          "format": "csv"
+        },
+        "refresh": "ad_hoc",
+        "notes": "The CSV bundled beside this fixture as app/seeds/data/tutorial_lobbying_records.csv, one row per advocacy record, each assembled by hand from a published page. No path is recorded here — the file is bound when a run starts. Nothing is fetched from the network."
+      }
+    },
+    {
+      "id": "public_commitments",
+      "type": "input_data",
+      "description": "Bundled Public Commitments CSV",
+      "inputs": [],
+      "cache": true,
+      "compiler_notes": [
+        "One row per organisation, which is what lets the step downstream be an enrich (many-to-one, verified) rather than an expand: a repeated organisation here fails the run."
+      ],
+      "signature": {
+        "form": "replaces",
+        "reads": [],
+        "produces": [
+          {
+            "name": "organisation",
+            "type": "str",
+            "nullable": false,
+            "description": "The organisation that made the commitment; one row per organisation."
+          },
+          {
+            "name": "public_commitment",
+            "type": "str",
+            "nullable": false,
+            "description": "One sentence saying what this organisation said in public it would do."
+          },
+          {
+            "name": "commitment_quote",
+            "type": "str",
+            "nullable": false,
+            "description": "A line from the source, in its own words, that the sentence was written from."
+          },
+          {
+            "name": "commitment_source_url",
+            "type": "str",
+            "nullable": false,
+            "description": "The page that commitment was read on."
+          },
+          {
+            "name": "commitment_source_date",
+            "type": "str",
+            "nullable": false,
+            "description": "What the source says about its own date, e.g. '2026-06-05' or 'undated policy page; fetched 2026-08-13'."
+          }
+        ]
+      },
+      "source": {
+        "doc": "tutorial_public_commitments.csv",
+        "section": "Input data"
+      },
+      "connector": {
+        "kind": "file",
+        "params": {
+          "format": "csv"
+        },
+        "refresh": "ad_hoc",
+        "notes": "The CSV bundled beside this fixture as app/seeds/data/tutorial_public_commitments.csv, one row per organisation, each read off that organisation's own published page. No path is recorded here — the file is bound when a run starts. Nothing is fetched from the network."
+      }
+    },
+    {
+      "id": "check_filings",
+      "type": "python_row_function",
+      "description": "Refuse a Claim With No Source",
+      "inputs": [
+        {
+          "id": "raw_filings"
+        }
+      ],
+      "cache": true,
+      "compiler_notes": [
+        "The whole report is an invitation to check it, so a record whose source cannot be opened is refused here rather than published with a link that goes nowhere.",
+        "Code, not the model: whether a string is an http(s) address has one right answer, and a record the workflow cannot check is refused rather than guessed at.",
+        "The source-date column stays text. Several of these pages carry no publication date, so the column records what the page says about its own date; declaring it a date would mean either dropping those records or writing a date nobody published."
+      ],
+      "signature": {
+        "form": "extends",
+        "reads": [
+          {
+            "input": "raw_filings",
+            "columns": [
+              {
+                "name": "record_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "lobbying_issue",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "lobbying_source_url",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "lobbying_source_date",
+                "type": "str",
+                "nullable": false
+              }
+            ]
+          }
+        ],
+        "adds": [],
+        "rewrites": [
+          {
+            "name": "lobbying_source_url",
+            "type": "str",
+            "nullable": false,
+            "description": "The page this record's ask was read on, trimmed and checked to be an http or https address."
+          }
+        ]
+      },
+      "source": {
+        "section": "Step 1 — Refuse a claim with no source"
+      },
+      "function": {
+        "kind": "inline",
+        "summary": "Stops the run on a record whose source link is missing or is not an http(s) address, whose account of the ask is empty, or that says nothing about when its source was read. The link it passes is trimmed.",
+        "corner_cases": [
+          {
+            "case": "the source link is an ordinary https address",
+            "expected": "it passes through, trimmed of any surrounding space"
+          },
+          {
+            "case": "the source link is blank",
+            "expected": "the step fails, naming the record — a claim with no source does not enter this workflow"
+          },
+          {
+            "case": "the source reads 'press release, on file' rather than an address",
+            "expected": "the step fails, naming the record — a reader cannot open it"
+          },
+          {
+            "case": "the record carries no account of what was asked for",
+            "expected": "the step fails, naming the record — there is no ask to judge"
+          },
+          {
+            "case": "the record says nothing about when its source was published or read",
+            "expected": "the step fails, naming the record — an undated page is fine as long as the record says so"
+          }
+        ],
+        "code": "import pandas as pd\n\nLINK_PREFIXES = (\"http://\", \"https://\")\n\n\ndef transform(row):\n    record_id = row[\"record_id\"]\n    link = _present(row[\"lobbying_source_url\"])\n    if link is None or not link.startswith(LINK_PREFIXES):\n        raise StepRefused(\n            f\"record {record_id} gives {row['lobbying_source_url']!r} as the source of \"\n            f\"what it asked for, which is not an http or https address — a claim nobody \"\n            f\"can open is a claim nobody can check, and it does not enter this workflow\"\n        )\n    if _present(row[\"lobbying_issue\"]) is None:\n        raise StepRefused(\n            f\"record {record_id} says nothing about what this organisation asked \"\n            f\"government for, so there is no ask to weigh against its public promise\"\n        )\n    if _present(row[\"lobbying_source_date\"]) is None:\n        raise StepRefused(\n            f\"record {record_id} says nothing about when its source was published or \"\n            f\"read, so nobody reading the report can tell how old the ask is\"\n        )\n    return {**row, \"lobbying_source_url\": link}\n\n\ndef _present(value):\n    if value is None or bool(pd.isna(value)):\n        return None\n    text = str(value).strip()\n    return text or None\n",
+        "requirements": []
+      },
+      "tests": [
+        {
+          "name": "a record whose source is a link",
+          "description": "Record SAYDO-005 as it stands: an https address on eei.org.",
+          "inputs": {
+            "raw_filings": [
+              {
+                "record_id": "SAYDO-005",
+                "lobbying_issue": "EEI's comment letter argues EPA cannot treat carbon capture or low-GHG hydrogen as adequately demonstrated.",
+                "lobbying_source_url": "https://www.eei.org/-/media/497F22CE3B0D45619E5ABA593778C641.pdf",
+                "lobbying_source_date": "2023-08-08"
+              }
+            ]
+          },
+          "expected": [
+            {
+              "record_id": "SAYDO-005",
+              "lobbying_issue": "EEI's comment letter argues EPA cannot treat carbon capture or low-GHG hydrogen as adequately demonstrated.",
+              "lobbying_source_url": "https://www.eei.org/-/media/497F22CE3B0D45619E5ABA593778C641.pdf",
+              "lobbying_source_date": "2023-08-08"
+            }
+          ]
+        },
+        {
+          "name": "a link with space around it",
+          "description": "Record SAYDO-012 with its link padded: the same address, carried forward trimmed.",
+          "inputs": {
+            "raw_filings": [
+              {
+                "record_id": "SAYDO-012",
+                "lobbying_issue": "API publicly applauded congressional passage of the resolution repealing EPA's Waste Emissions Charge.",
+                "lobbying_source_url": "  https://www.api.org/news-policy-and-issues/climate  ",
+                "lobbying_source_date": "2025-02-27"
+              }
+            ]
+          },
+          "expected": [
+            {
+              "record_id": "SAYDO-012",
+              "lobbying_issue": "API publicly applauded congressional passage of the resolution repealing EPA's Waste Emissions Charge.",
+              "lobbying_source_url": "https://www.api.org/news-policy-and-issues/climate",
+              "lobbying_source_date": "2025-02-27"
+            }
+          ]
+        },
+        {
+          "name": "a record with no source at all",
+          "description": "Record SAYDO-010 with its link emptied: nobody can check it, so the step must stop the run rather than carry it.",
+          "inputs": {
+            "raw_filings": [
+              {
+                "record_id": "SAYDO-010",
+                "lobbying_issue": "Citi's comment letter asked the SEC to push back Scope 3 adoption and narrow what it covers.",
+                "lobbying_source_url": "",
+                "lobbying_source_date": "2022-06-17"
+              }
+            ]
+          },
+          "expected": null
+        },
+        {
+          "name": "a source that is not a link",
+          "description": "Record SAYDO-017 with its link rewritten as a description: a reader cannot open it, so the step must stop the run.",
+          "inputs": {
+            "raw_filings": [
+              {
+                "record_id": "SAYDO-017",
+                "lobbying_issue": "The AHA and other hospital groups sued to block the CMS rule requiring disclosure of negotiated rates.",
+                "lobbying_source_url": "press release, on file",
+                "lobbying_source_date": "2019-12-04"
+              }
+            ]
+          },
+          "expected": null
+        },
+        {
+          "name": "a record with no account of what was asked for",
+          "description": "Record SAYDO-019 with its issue line emptied: there is no ask to weigh against a promise, so the step must stop the run.",
+          "inputs": {
+            "raw_filings": [
+              {
+                "record_id": "SAYDO-019",
+                "lobbying_issue": "",
+                "lobbying_source_url": "https://www.aar.org/issue/crew-size/",
+                "lobbying_source_date": "undated policy page (fetched 2026-08-13)"
+              }
+            ]
+          },
+          "expected": null
+        },
+        {
+          "name": "a record that does not say when its source was read",
+          "description": "Record SAYDO-022 with its date emptied: an undated page is fine as long as the record says so, and saying nothing is not.",
+          "inputs": {
+            "raw_filings": [
+              {
+                "record_id": "SAYDO-022",
+                "lobbying_issue": "Amazon states that it has lobbied Congress to raise the federal minimum wage.",
+                "lobbying_source_url": "https://www.aboutamazon.com/news/policy-news-views/amazon-continues-to-advocate-for-higher-federal-and-state-minimum-wages",
+                "lobbying_source_date": "   "
+              }
+            ]
+          },
+          "expected": null
+        }
+      ]
+    },
+    {
+      "id": "matched_commitments",
+      "type": "enrich",
+      "description": "Put Each Promise Beside the Ask",
+      "inputs": [
+        {
+          "id": "check_filings"
+        },
+        {
+          "id": "public_commitments"
+        }
+      ],
+      "cache": true,
+      "compiler_notes": [
+        "enrich, not expand: the commitments file is one row per organisation, so a repeated organisation is a data error the runtime should fail the run on rather than silently multiplying records.",
+        "A LEFT match, so no record is dropped. A record whose organisation has no commitment row survives carrying nulls in all four landed columns, and its ABSENT second parent is what the run's lineage view shows — a null here means 'no row matched', which the next step reads as an absence rather than as a judgment.",
+        "`organisation` is the key on both sides and needs no enrich_with entry; the four landed columns are named the same on both sides because the subject carries none of them."
+      ],
+      "signature": {
+        "form": "extends",
+        "reads": [
+          {
+            "input": "check_filings",
+            "columns": [
+              {
+                "name": "organisation",
+                "type": "str",
+                "nullable": false
+              }
+            ]
+          },
+          {
+            "input": "public_commitments",
+            "columns": [
+              {
+                "name": "organisation",
+                "type": "str",
+                "nullable": false,
+                "description": "The organisation that made the commitment; one row per organisation."
+              },
+              {
+                "name": "public_commitment",
+                "type": "str",
+                "nullable": false,
+                "description": "One sentence saying what this organisation said in public it would do."
+              },
+              {
+                "name": "commitment_quote",
+                "type": "str",
+                "nullable": false,
+                "description": "A line from the source, in its own words, that the sentence was written from."
+              },
+              {
+                "name": "commitment_source_url",
+                "type": "str",
+                "nullable": false,
+                "description": "The page that commitment was read on."
+              },
+              {
+                "name": "commitment_source_date",
+                "type": "str",
+                "nullable": false,
+                "description": "What the source says about its own date, e.g. '2026-06-05' or 'undated policy page; fetched 2026-08-13'."
+              }
+            ]
+          }
+        ],
+        "adds": [
+          {
+            "name": "public_commitment",
+            "type": "str",
+            "nullable": true,
+            "description": "The organisation's public commitment, or null when no commitment row matched."
+          },
+          {
+            "name": "commitment_quote",
+            "type": "str",
+            "nullable": true,
+            "description": "The line the commitment sentence was written from, or null when no commitment row matched."
+          },
+          {
+            "name": "commitment_source_url",
+            "type": "str",
+            "nullable": true,
+            "description": "The page that commitment was read on, or null when no commitment row matched."
+          },
+          {
+            "name": "commitment_source_date",
+            "type": "str",
+            "nullable": true,
+            "description": "What that source says about its own date, or null when no commitment row matched."
+          }
+        ],
+        "rewrites": []
+      },
+      "source": {
+        "section": "Step 2 — Put each promise beside the ask"
+      },
+      "join": {
+        "keys": [
+          {
+            "left": "organisation",
+            "right": "organisation"
+          }
+        ],
+        "enrich_with": {
+          "public_commitment": "public_commitment",
+          "commitment_quote": "commitment_quote",
+          "commitment_source_url": "commitment_source_url",
+          "commitment_source_date": "commitment_source_date"
+        }
+      }
+    },
+    {
+      "id": "judge_alignment",
+      "type": "llm_transform",
+      "description": "Judge the Ask Against the Public Commitment",
+      "inputs": [
+        {
+          "id": "matched_commitments"
+        }
+      ],
+      "cache": true,
+      "compiler_notes": [
+        "Grain is strictly 1:1 — the document states no record is dropped or duplicated here.",
+        "public_commitment is nullable because the match leaves it blank for an organisation with no commitment row; the prompt names that case and fixes its answer to 'No commitment given', so an absence is never read as a judgment.",
+        "The organisations are real, so the prompt forbids using anything the model knows about them: an answer resting on what a model half remembers is one the reader cannot check against either source.",
+        "The model is shown the quoted line beside each paraphrase, so its judgment rests on the source's own words rather than only on the sentence a researcher wrote from them.",
+        "batch_size 12 amortises the instructions prefix across up to twelve records per call, and each call is a process spawn, so the batch size sets how long a run takes; the six bundled records are one call. The records in a call share one context, which the document accepts and states as the cost of the saving."
+      ],
+      "signature": {
+        "form": "extends",
+        "reads": [
+          {
+            "input": "matched_commitments",
+            "columns": [
+              {
+                "name": "organisation",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "lobbying_issue",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "lobbying_quote",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "public_commitment",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "commitment_quote",
+                "type": "str",
+                "nullable": true
+              }
+            ]
+          }
+        ],
+        "adds": [
+          {
+            "name": "ai_judgment",
+            "type": "str",
+            "nullable": false,
+            "description": "How this ask stands against the organisation's public commitment; one of the four labels on every record.",
+            "enum": [
+              "Contradicts",
+              "Matches",
+              "Unclear",
+              "No commitment given"
+            ]
+          },
+          {
+            "name": "ai_justification",
+            "type": "str",
+            "nullable": true,
+            "description": "One sentence naming what the organisation said in public and what it asked government for."
+          }
+        ],
+        "rewrites": []
+      },
+      "source": {
+        "section": "Step 3 — Judge the ask against the promise (LLM)"
+      },
+      "llm": {
+        "prompt_instructions": "You are reading one thing an organisation asked government for against what the same organisation has said in public.\n\nReturn a JSON object with exactly these two fields:\n\n1. \"ai_judgment\": exactly one of — Contradicts | Matches | Unclear | No commitment given\n   - \"Contradicts\": the ask cannot be squared with the commitment.\n   - \"Matches\": the ask asks government for what the commitment says.\n   - \"Unclear\": the two texts are about different things, or neither supports nor conflicts with the other.\n   - \"No commitment given\": the commitment line is blank, or reads `nan` or `None` because no commitment was on record for that organisation. Answer this and nothing else in that case — do not judge, and do not supply a commitment yourself.\n\n2. \"ai_justification\": one plain sentence naming what the organisation said in public and what it asked government for. Empty string when there is no commitment to compare against.\n\nThese are real organisations, which makes this rule stricter, not looser: judge ONLY the two texts printed below. What you know or think you remember about this organisation is not evidence, is not on this record, and cannot be checked by the person who reads your answer — so a judgment resting on it is one nobody can defend. Never invent, complete or paraphrase a commitment that is not printed here.\n\nWorked example — the case most easily got wrong, an organisation with no commitment on record. Given:\n\n  Organisation: Example Bakery Group\n  What it said in public: nan\n  In the source's words: \"nan\"\n  What it asked government for: The group asked Parliament to make country-of-origin labelling compulsory for every baker.\n  In the source's words: \"a level playing field on origin labelling\"\n\n  {\"ai_judgment\": \"No commitment given\", \"ai_justification\": \"\"}\n\nNothing was said in public there, so there is nothing to judge the ask against, and supplying a commitment of your own would be inventing the evidence.\n",
+        "prompt_data_template": "Organisation: {organisation}\nWhat it said in public: {public_commitment}\nIn the source's words: \"{commitment_quote}\"\nWhat it asked government for: {lobbying_issue}\nIn the source's words: \"{lobbying_quote}\"",
+        "temperature": 0.0,
+        "max_retries": 8,
+        "response_format": "json",
+        "model": "claude-haiku-4-5",
+        "batch_size": 12
+      }
+    },
+    {
+      "id": "review_contradictions",
+      "type": "human_review_queue",
+      "description": "Put Every Contradiction in Front of a Person",
+      "inputs": [
+        {
+          "id": "judge_alignment"
+        }
+      ],
+      "cache": true,
+      "compiler_notes": [
+        "queue.filter selects only the records the model called 'Contradicts': those are the only ones the report prints as a finding, so queueing the other three labels would spend a reviewer's attention on rows nothing is claimed about.",
+        "The reviewer sees exactly the columns the signature reads, so this signature reads the six the decision is made from and nothing else — the quotes, the links and the dates are on the report, not on the card.",
+        "No queue.sort: a sort key has to be read, so ordering the queue would put a column back on the card that the decision is not made from.",
+        "The reviewer's label is ADDED as reviewed_judgment; the model's ai_judgment is never overwritten, so the run records both what the model said and what the person decided, and the report can print the second beside the first.",
+        "reviewed_judgment is non-nullable: a queued row's reviewer picks one of the four labels, and a row the filter passed over carries the model's label through unchanged, so no record reaches the report unlabelled."
+      ],
+      "signature": {
+        "form": "extends",
+        "reads": [
+          {
+            "input": "judge_alignment",
+            "columns": [
+              {
+                "name": "record_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "organisation",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "public_commitment",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "lobbying_issue",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "ai_judgment",
+                "type": "str",
+                "nullable": false,
+                "enum": [
+                  "Contradicts",
+                  "Matches",
+                  "Unclear",
+                  "No commitment given"
+                ]
+              },
+              {
+                "name": "ai_justification",
+                "type": "str",
+                "nullable": true
+              }
+            ]
+          }
+        ],
+        "adds": [
+          {
+            "name": "reviewed_judgment",
+            "type": "str",
+            "nullable": false,
+            "description": "How this ask stands against the commitment, as the reviewer left it; the model's own answer stays in `ai_judgment`.",
+            "enum": [
+              "Contradicts",
+              "Matches",
+              "Unclear",
+              "No commitment given"
+            ]
+          },
+          {
+            "name": "review_verdict",
+            "type": "str",
+            "nullable": false,
+            "description": "'approve' where the reviewer kept the model's label, 'modify' where they changed it, 'skipped' for a record no person was asked about.",
+            "enum": [
+              "approve",
+              "modify",
+              "skipped"
+            ]
+          },
+          {
+            "name": "reviewer",
+            "type": "str",
+            "nullable": true,
+            "description": "The name the reviewer decided under; null on a record no person was asked about."
+          },
+          {
+            "name": "reviewed_at",
+            "type": "str",
+            "nullable": true,
+            "description": "When the reviewer recorded that decision; null on a record no person was asked about."
+          },
+          {
+            "name": "review_notes",
+            "type": "str",
+            "nullable": true
+          }
+        ],
+        "rewrites": []
+      },
+      "source": {
+        "section": "Step 4 — Put every contradiction in front of a person"
+      },
+      "queue": {
+        "filter": "ai_judgment == 'Contradicts'",
+        "reviewer_instructions": "You are the last reader before this record is published as a contradiction, and the report will carry your name against it. Read the promise and the ask, and decide from those two texts — the model's label is a proposal, and agreeing with one you have not checked is how a wrong finding gets published under your name. These are real organisations, so what you already believe about this one is not evidence either. Keep 'Contradicts' only if the ask cannot be squared with the promise; if the two are about different things, or the ask asks for what was promised, change the label to the one that fits. Then say in the note which words in the two texts you decided from.",
+        "reviewed_columns": {
+          "ai_judgment": "reviewed_judgment"
+        },
+        "verdict_column": "review_verdict",
+        "reviewer_column": "reviewer",
+        "reviewed_at_column": "reviewed_at",
+        "review_notes_column": "review_notes"
+      }
+    },
+    {
+      "id": "publish_report",
+      "type": "publish",
+      "description": "Publish HTML Say-versus-Do Report",
+      "inputs": [
+        {
+          "id": "review_contradictions"
+        }
+      ],
+      "cache": true,
+      "compiler_notes": [
+        "Both texts are printed with a link to the page they were read on: the link is what makes a row checkable, and a row nobody can check is the thing this workflow exists against.",
+        "The document says this is a reading aid, not a verdict — no score, ranking or recommendation column is rendered, and the page states that the judgement is a person's, not the tool's.",
+        "What is printed is reviewed_judgment, the label as the reviewer left it. The model's ai_judgment is read too, but only to say what a reviewer changed it FROM — nothing on this page claims a contradiction the model alone asserted.",
+        "A record published as contradicting a commitment nothing matched stops the step: the page must not show a contradiction it cannot print both sides of.",
+        "A commitment with no link stops the step too: printing one would be a claim the reader cannot check.",
+        "The page's markup lives in this step, beside the code that fills it, so a reviewer reads both together rather than chasing a file the workflow does not carry.",
+        "This stage writes the HTML to disk and returns a file-path pointer rather than embedding the markup inline, which is practical at scale."
+      ],
+      "signature": {
+        "form": "replaces",
+        "reads": [
+          {
+            "input": "review_contradictions",
+            "columns": [
+              {
+                "name": "record_id",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "organisation",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "period",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "lobbying_issue",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "lobbying_source_url",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "public_commitment",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "commitment_source_url",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "ai_judgment",
+                "type": "str",
+                "nullable": false,
+                "enum": [
+                  "Contradicts",
+                  "Matches",
+                  "Unclear",
+                  "No commitment given"
+                ]
+              },
+              {
+                "name": "reviewed_judgment",
+                "type": "str",
+                "nullable": false,
+                "enum": [
+                  "Contradicts",
+                  "Matches",
+                  "Unclear",
+                  "No commitment given"
+                ]
+              },
+              {
+                "name": "review_verdict",
+                "type": "str",
+                "nullable": false,
+                "enum": [
+                  "approve",
+                  "modify",
+                  "skipped"
+                ]
+              },
+              {
+                "name": "reviewer",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "reviewed_at",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "review_notes",
+                "type": "str",
+                "nullable": true
+              }
+            ]
+          }
+        ],
+        "produces": []
+      },
+      "source": {
+        "section": "Step 5 — Publish the report"
+      },
+      "function": {
+        "kind": "inline",
+        "summary": "Fills the committed report template — one row per record, in the order they arrived — with the promise and the ask, each linked to the page it was read on, and the judgment as the reviewer left it.",
+        "corner_cases": [
+          {
+            "case": "the reviewer kept the model's judgment that an ask contradicts the commitment",
+            "expected": "the row is marked, prints both texts with their links, and says who confirmed it and when"
+          },
+          {
+            "case": "the reviewer changed the model's Contradicts to another label",
+            "expected": "the row is not marked; it prints the reviewer's label and says what the model had said and who changed it"
+          },
+          {
+            "case": "a record no person was asked about, marked skipped by the review step",
+            "expected": "its cell prints the label alone — the model's, carried through — with no reviewer against it"
+          },
+          {
+            "case": "nothing matched a commitment onto a record",
+            "expected": "its commitment cell says no commitment is on record, rather than sitting empty"
+          },
+          {
+            "case": "a record carries a reviewed judgment with no reviewer or time recorded",
+            "expected": "the step fails — an unreviewed judgment is the model's, and is not published as a person's"
+          },
+          {
+            "case": "a record is published as contradicting a commitment nothing matched onto it",
+            "expected": "the step fails — the page cannot print a contradiction's other side"
+          },
+          {
+            "case": "a record carries a commitment with no link to where it was said",
+            "expected": "the step fails — the page would print a claim nobody can check"
+          }
+        ],
+        "code": "import html as _html\nimport pathlib\n\nimport pandas as pd\n\n# The page's markup, in the stage that writes it. A publish stage emits a document, so\n# its markup is part of what the stage IS — a reader reviewing this step reads it here\n# rather than chasing a file the workflow does not carry.\nDOCUMENT = \"\"\"\\\n<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"UTF-8\">\n<title>Tutorial Say versus Do</title>\n<style>\n  body { font-family: -apple-system, \"Segoe UI\", Roboto, Arial, sans-serif;\n         margin: 2rem auto; max-width: 1180px; padding: 0 1rem; line-height: 1.45; }\n  h1 { font-size: 1.45rem; margin-bottom: .2rem; }\n  p { margin: .5rem 0; }\n  .sub, .note, .muted, .src { font-size: .85rem;\n        color: color-mix(in srgb, currentColor 60%, transparent); }\n  .note, .why { border-left: 3px solid color-mix(in srgb, currentColor 30%, transparent);\n        padding: .1rem 0 .1rem .8rem; margin: 1rem 0; }\n  .why { font-size: .9rem; max-width: 62ch; }\n  table { border-collapse: collapse; width: 100%; font-size: .88rem; margin-top: 1.4rem; }\n  th, td { text-align: left; padding: .5rem .6rem; vertical-align: top;\n           border-bottom: 1px solid color-mix(in srgb, currentColor 15%, transparent); }\n  th { font-size: .7rem; text-transform: uppercase; letter-spacing: .05em;\n       border-bottom-width: 2px; }\n  tr.flagged td:first-child { border-left: 3px solid currentColor; }\n  .pill { border: 1px solid color-mix(in srgb, currentColor 30%, transparent);\n          border-radius: 999px; padding: .05rem .5rem; font-size: .78rem;\n          white-space: nowrap; }\n  .none { color: color-mix(in srgb, currentColor 40%, transparent); font-style: italic; }\n  .src { display: block; margin-top: .25rem; }\n  .said, .asked { max-width: 44ch; }\n  .reviewed { margin: .4rem 0 0; font-size: .8rem; max-width: 40ch; }\n  .quote { margin: .4rem 0 0; font-size: .82rem; max-width: 40ch; }\n  .label { font-weight: 700; text-transform: uppercase; letter-spacing: .04em;\n           font-size: .7rem; display: block; }\n</style>\n</head>\n<body>\n<h1>Tutorial Say versus Do</h1>\n<p class=\"sub\">[[record_count]] advocacy records; [[flagged_count]] carry an ask a named reviewer decided cannot be squared with the organisation's own public commitment; [[unmatched_count]] have no public commitment on record.</p>\n<p class=\"why\">Every promise and every ask on this page was read off a published page, and every\none links to it &mdash; the link is the point, and a reader who does not believe a row can open\nboth sides of it. A model proposed how each pair stands; every contradiction it proposed went to a\nperson, who kept or changed the label. What is printed is the person's answer, named and dated\n&mdash; the model's is kept beside it in the run. This page makes no accusation of its own: it puts\ntwo sourced texts side by side and says who decided how they stand. A reading aid, not a verdict.\nEvery row carries a <em>Show the work</em> link back through each stage to the record it came from.</p>\n<table>\n<thead><tr>\n<th>Record</th><th>Organisation</th><th>Period</th>\n<th>What they said in public</th><th>What they asked government for</th>\n<th>Where the judgement stands</th><th>Show the work</th>\n</tr></thead>\n<tbody>\n[[rows]]</tbody>\n</table>\n</body>\n</html>\n\"\"\"\n\nROW = \"\"\"\\\n<tr class=\"[[row_class]]\">\n<td>[[record_id]]</td>\n<td>[[organisation]]</td>\n<td class=\"muted\">[[period]]</td>\n<td class=\"said\">[[commitment]]</td>\n<td class=\"asked\">[[ask]]</td>\n<td>[[judgement]]</td>\n<td>[[trace]]</td>\n</tr>\n\"\"\"\n\nTRACE = \"\"\"\\\n<a href=\"[[trace_url]]\">Lineage</a>\n\"\"\"\n\nSOURCED = \"\"\"\\\n[[text]]<span class=\"src\"><a href=\"[[source_url]]\">source</a></span>\n\"\"\"\n\nNO_COMMITMENT = \"\"\"\\\n<span class=\"none\">No public commitment on record</span>\n\"\"\"\n\nJUDGEMENT = \"\"\"\\\n<span class=\"pill\">[[reviewed_judgment]]</span>\n\"\"\"\n\nREVIEW = \"\"\"\\\n<p class=\"reviewed\"><span class=\"label\">[[headline]]</span>[[reviewer]], [[reviewed_at]]</p>\n[[note]]\n\"\"\"\n\nREVIEW_NOTE = \"\"\"\\\n<p class=\"quote\">[[review_notes]]</p>\n\"\"\"\n\nSECTIONS = {\n    \"document\": DOCUMENT, \"row\": ROW, \"trace\": TRACE, \"sourced\": SOURCED,\n    \"no_commitment\": NO_COMMITMENT, \"judgement\": JUDGEMENT, \"review\": REVIEW,\n    \"review_note\": REVIEW_NOTE,\n}\nTOKEN_OPEN = \"[[\"\n\n\n# The ordinal a trace URL needs is a position in THIS frame, so the stage it names is\n# this step's own input, and the rows are rendered in the order they arrived.\nTRACED_INPUT = \"review_contradictions\"\nCONTRADICTS = \"Contradicts\"\nNOT_REVIEWED = \"skipped\"\nKEPT = \"approve\"\n\n\ndef transform(df, output_dir, citation_provider):\n    sections = SECTIONS\n    page = _fill(\n        sections[\"document\"],\n        record_count=str(len(df)),\n        flagged_count=str(sum(_contradicts(row) for _, row in df.iterrows())),\n        unmatched_count=str(int(df[\"public_commitment\"].isna().sum())),\n        rows=\"\".join(\n            _render_row(sections, row, citation_provider, ordinal)\n            for ordinal, (_, row) in enumerate(df.iterrows())\n        ),\n    )\n    out_path = pathlib.Path(output_dir) / \"tutorial_say_versus_do_report.html\"\n    out_path.write_text(page, encoding=\"utf-8\")\n    return pd.DataFrame([{\"report_path\": str(out_path), \"record_count\": len(df)}])\n\n\ndef _render_row(sections, row, citation_provider, ordinal):\n    return _fill(\n        sections[\"row\"],\n        row_class=\"flagged\" if _contradicts(row) else \"\",\n        record_id=_escaped(row[\"record_id\"]),\n        organisation=_escaped(row[\"organisation\"]),\n        period=_escaped(row[\"period\"]),\n        commitment=_render_commitment(sections, row),\n        ask=_fill(\n            sections[\"sourced\"],\n            text=_escaped(row[\"lobbying_issue\"]),\n            source_url=_escaped(row[\"lobbying_source_url\"]),\n        ),\n        judgement=_render_judgement(sections, row),\n        trace=_fill(\n            sections[\"trace\"],\n            trace_url=_escaped(citation_provider.cite_row(TRACED_INPUT, ordinal)),\n        ),\n    )\n\n\ndef _render_commitment(sections, row):\n    said = _present(row[\"public_commitment\"])\n    link = _present(row[\"commitment_source_url\"])\n    if said is None:\n        return sections[\"no_commitment\"]\n    if link is None:\n        raise StepRefused(\n            f\"record {row['record_id']} carries a public commitment with no link to \"\n            f\"where it was said, so this page would print a claim nobody can check\"\n        )\n    return _fill(sections[\"sourced\"], text=_escaped(said), source_url=_escaped(link))\n\n\ndef _render_judgement(sections, row):\n    label = _reviewed_judgment(row)\n    if label == CONTRADICTS and _present(row[\"public_commitment\"]) is None:\n        raise StepRefused(\n            f\"record {row['record_id']} is judged to contradict a public commitment, \"\n            f\"yet none was matched onto it, so this report cannot say what it \"\n            f\"contradicts\"\n        )\n    return _fill(sections[\"judgement\"], reviewed_judgment=_escaped(label)) + _render_review(\n        sections, row)\n\n\ndef _render_review(sections, row):\n    verdict = _present(row[\"review_verdict\"])\n    if verdict == NOT_REVIEWED:\n        return \"\"\n    reviewer = _present(row[\"reviewer\"])\n    reviewed_at = _present(row[\"reviewed_at\"])\n    if reviewer is None or reviewed_at is None:\n        raise StepRefused(\n            f\"record {row['record_id']} carries a reviewed judgment with no reviewer \"\n            f\"or time recorded against it, so this report cannot say who reviewed it or \"\n            f\"when — an unreviewed judgment is the model's, and is not published as a \"\n            f\"person's\"\n        )\n    return _fill(\n        sections[\"review\"],\n        headline=(\n            \"Confirmed by\" if verdict == KEPT\n            else \"Changed from \" + _escaped(row[\"ai_judgment\"]) + \" by\"\n        ),\n        reviewer=_escaped(reviewer),\n        reviewed_at=_escaped(reviewed_at),\n        note=_render_note(sections, row),\n    )\n\n\ndef _render_note(sections, row):\n    note = _present(row[\"review_notes\"])\n    if note is None:\n        return \"\"\n    return _fill(sections[\"review_note\"], review_notes=_escaped(note))\n\n\ndef _contradicts(row):\n    return _reviewed_judgment(row) == CONTRADICTS\n\n\ndef _reviewed_judgment(row):\n    # The published label is the reviewer's, so a row without one is not publishable.\n    label = _present(row[\"reviewed_judgment\"])\n    if label is None:\n        raise StepRefused(\n            f\"record {row['record_id']} reaches the report with no judgment on it at \"\n            f\"all, neither the model's nor a reviewer's, so there is nothing to print\"\n        )\n    return label\n\n\ndef _fill(template, **values):\n    filled = template\n    for name, value in values.items():\n        filled = filled.replace(TOKEN_OPEN + name + \"]]\", value)\n    if TOKEN_OPEN in filled:\n        raise ValueError(\n            \"the report markup has a placeholder this step does not fill\"\n        )\n    return filled\n\n\ndef _escaped(value):\n    return _html.escape(str(value))\n\n\ndef _present(value):\n    if value is None or bool(pd.isna(value)):\n        return None\n    return str(value)\n",
+        "requirements": []
+      },
+      "publish": {
+        "format": "html_report",
+        "destination": "report"
+      }
+    }
+  ]
+}

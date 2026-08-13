@@ -31,14 +31,14 @@ from conftest import as_inputs, make_run_context, pinned_stages, place_stage, ro
 
 _FIXTURE_PATH = (
     Path(__file__).resolve().parents[1]
-    / "app" / "seeds" / "data" / "tutorial_lobbying_triage.json"
+    / "app" / "seeds" / "data" / "tutorial_say_versus_do.json"
 )
-_CSV_PATH = _FIXTURE_PATH.with_suffix(".csv")
+_CSV_PATH = _FIXTURE_PATH.parent / "tutorial_lobbying_records.csv"
 _COMMITMENTS_PATH = _FIXTURE_PATH.parent / "tutorial_public_commitments.csv"
-_CSV_BY_STAGE_ID = {"raw_filings": _CSV_PATH, "public_commitments": _COMMITMENTS_PATH}
+_SOURCES_PATH = _FIXTURE_PATH.parent / "sources" / _FIXTURE_PATH.name
 _GUIDE_PATH = _FIXTURE_PATH.parent / "review_guides" / _FIXTURE_PATH.name
-# Long enough to say what to check, short enough that the check is what is read.
-_GUIDE_PROSE_CEILING = 210
+# Shorter than the model's 255: a step nobody skims is a step nobody reads.
+_GUIDE_PROSE_CEILING = 200
 
 _EXPECTED_STAGE_IDS = [
     "raw_filings",
@@ -50,23 +50,30 @@ _EXPECTED_STAGE_IDS = [
     "publish_report",
 ]
 
-# Counted off the committed CSVs.
-_ROWS_IN_CSV = 24
-_COMMITMENT_ROWS = 15
-# Filings whose client has no row in the commitments file.
-_UNMATCHED = 8
+_RECORD_COLUMNS = [
+    "record_id", "organisation", "period", "lobbying_issue", "lobbying_quote",
+    "lobbying_source_url", "lobbying_source_date",
+]
+_COMMITMENT_COLUMNS = [
+    "organisation", "public_commitment", "commitment_quote", "commitment_source_url",
+    "commitment_source_date",
+]
+# Counted off the committed CSVs. Every organisation carries a commitment, so the
+# sample exercises no non-match — an organisation with none would be one nobody sourced.
+_ROWS_IN_CSV = 6
+_COMMITMENT_ROWS = 6
 _BATCH_SIZE = 12
 # The cap the tour's first run passes as limits {"raw_filings": N}.
 _TOUR_LIMIT = 6
 # Authored on check_filings, the one stage of this workflow that may carry them.
-_SEEDED_EXAMPLES = 5
+_SEEDED_EXAMPLES = 6
 
 _CONTRADICTS = "Contradicts"
 _NO_COMMITMENT = "No commitment given"
-_ALIGNMENT_VALUES = ["Contradicts", "Matches", "Unclear", _NO_COMMITMENT]
+_JUDGMENT_VALUES = ["Contradicts", "Matches", "Unclear", _NO_COMMITMENT]
 
 _REVIEW_STAGE = "review_contradictions"
-_REVIEWED_COLUMN = "reviewed_alignment"
+_REVIEWED_COLUMN = "reviewed_judgment"
 # The three verdicts the review runtime writes, as the fixture declares them.
 _APPROVE, _MODIFY, _SKIPPED = "approve", "modify", "skipped"
 # Stands in for a decision the run records: a name and the moment it was recorded.
@@ -74,12 +81,12 @@ _REVIEWER = "R. Vasquez"
 _REVIEWED_AT = "2024-05-06T11:20:00"
 
 _EVAL_PATH = _FIXTURE_PATH.parent / "evals" / _FIXTURE_PATH.name
-_EVAL_ID = "alignment_hard_cases"
+_EVAL_ID = "hard_judgment_cases"
 _OVERRIDE_STAGE = "matched_commitments"
 _TARGET_STAGE = "judge_alignment"
-_JUDGED_COLUMN = "alignment"
+_JUDGED_COLUMN = "ai_judgment"
 # Counted off the committed eval dataset.
-_EVAL_ROWS = 24
+_EVAL_ROWS = 6
 _BASE_URL = "http://127.0.0.1:8788/"
 
 
@@ -100,18 +107,18 @@ def _execute(stage: Stage, inputs: dict[str, pd.DataFrame]) -> pd.DataFrame:
     return rows_of(result)
 
 
-def _all_filings() -> pd.DataFrame:
+def _all_records() -> pd.DataFrame:
     return pd.read_csv(_CSV_PATH)
 
 
-def _checked(filings: pd.DataFrame | None = None) -> pd.DataFrame:
+def _checked(records: pd.DataFrame | None = None) -> pd.DataFrame:
     return _execute(
         _stage(_load_fixture(), "check_filings"),
-        {"raw_filings": _all_filings() if filings is None else filings},
+        {"raw_filings": _all_records() if records is None else records},
     )
 
 
-def _joined() -> pd.DataFrame:
+def _matched() -> pd.DataFrame:
     return _execute(
         _stage(_load_fixture(), "matched_commitments"),
         {
@@ -124,12 +131,12 @@ def _joined() -> pd.DataFrame:
 def _stand_in_for_the_model(df: pd.DataFrame) -> pd.DataFrame:
     # Fills what judge_alignment would add. Never calls a model.
     judged = df.copy()
-    judged["alignment"] = [
-        "No commitment given" if pd.isna(said) else _ALIGNMENT_VALUES[i % 3]
+    judged[_JUDGED_COLUMN] = [
+        _NO_COMMITMENT if pd.isna(said) else _JUDGMENT_VALUES[i % 3]
         for i, said in enumerate(judged["public_commitment"])
     ]
-    judged["alignment_note"] = [
-        f"stand-in note for {filing_id}" for filing_id in judged["filing_id"]
+    judged["ai_justification"] = [
+        f"stand-in sentence for {record_id}" for record_id in judged["record_id"]
     ]
     return judged
 
@@ -157,100 +164,146 @@ def test_committed_tutorial_fixture_imports_and_validates_cleanly(tmp_path):
     assert not (project_dir / "input").exists()
 
 
-def test_the_bundled_filings_csv_carries_the_row_count_the_tour_reports():
+def test_the_bundled_records_csv_carries_the_row_count_the_tour_reports():
     df = pd.read_csv(_CSV_PATH)
 
-    assert list(df.columns) == [
-        "filing_id", "client", "registrant", "amount_usd", "filing_period", "specific_issues",
-    ]
+    assert list(df.columns) == _RECORD_COLUMNS
     assert len(df) == _ROWS_IN_CSV
 
 
 def test_the_bundled_commitments_csv_is_one_row_per_organisation():
-    """What lets the join be an enrich: a repeated client would fail the run."""
+    """What lets the match be an enrich: a repeated organisation would fail the run."""
     df = pd.read_csv(_COMMITMENTS_PATH)
 
-    assert list(df.columns) == ["client", "public_commitment", "commitment_source"]
+    assert list(df.columns) == _COMMITMENT_COLUMNS
     assert len(df) == _COMMITMENT_ROWS
-    assert df["client"].is_unique
+    assert df["organisation"].is_unique
 
 
-def test_the_sample_shows_all_three_join_outcomes():
-    """The tour needs a contradiction, an alignment and a non-match to point at."""
-    joined = _joined()
-    unmatched = joined[joined["public_commitment"].isna()]
+def test_no_row_carries_a_lobbying_firm_a_dollar_figure_or_a_filing_id():
+    """The sources record none of the three, so a column for one could only be invented."""
+    retired = {"registrant", "amount_usd", "filing_id", "filing_period", "client",
+               "specific_issues", "alignment", "alignment_note", "reviewed_alignment"}
 
-    assert len(joined) == _ROWS_IN_CSV
-    assert len(unmatched) == _UNMATCHED
-    # Both sides of the say-versus-do frame are represented.
-    asks = joined[joined["public_commitment"].notna()]["specific_issues"]
-    assert int(asks.str.startswith("Opposing").sum()) > 0
-    assert int(asks.str.startswith("Supporting").sum()) > 0
+    for path in (_CSV_PATH, _COMMITMENTS_PATH):
+        assert not retired & set(pd.read_csv(path).columns), path.name
 
 
-def test_the_texts_are_short_enough_to_read_side_by_side():
-    """The point of this sample: the contradiction is visible in one glance."""
-    filings = pd.read_csv(_CSV_PATH)
+def test_every_shipped_row_names_a_source_a_reader_can_open():
+    """The claim this sample makes about itself: each half was read off a published page."""
+    records = _all_records()
     commitments = pd.read_csv(_COMMITMENTS_PATH)
 
-    assert int(filings["specific_issues"].str.len().max()) <= 120
-    assert int(commitments["public_commitment"].str.len().max()) <= 120
+    assert records["lobbying_source_url"].str.startswith("https://").all()
+    assert commitments["commitment_source_url"].str.startswith("https://").all()
+    assert records["lobbying_source_date"].str.strip().str.len().min() > 0
+    assert commitments["commitment_source_date"].str.strip().str.len().min() > 0
 
 
-def test_the_tours_first_six_filings_cover_a_contradiction_an_alignment_and_a_non_match():
-    """Beat 2 caps raw_filings at 6 rows, so all three outcomes must be in there."""
-    wf = _load_fixture()
-    first_six = pd.read_csv(_CSV_PATH).head(_TOUR_LIMIT)
+def test_the_source_date_records_what_the_page_says_rather_than_a_date_nobody_published():
+    """Why the column is text: some of these pages carry no publication date at all."""
+    dates = list(_all_records()["lobbying_source_date"]) + list(
+        pd.read_csv(_COMMITMENTS_PATH)["commitment_source_date"])
+    undated = [text for text in dates if not text[:1].isdigit()]
 
-    joined = _execute(
-        _stage(wf, "matched_commitments"),
-        {"check_filings": _checked(first_six),
+    assert undated, "no undated source left in the sample; the text column has no job"
+    assert all("fetched" in text for text in undated), undated
+
+
+def test_every_shipped_row_has_its_provenance_beside_it():
+    """The raw beside the cooked: any claim on the report retraces to a quote and a link."""
+    sources = json.loads(_SOURCES_PATH.read_text(encoding="utf-8"))
+    records = _all_records()
+    by_id = {entry["record_id"]: entry for entry in sources["records"]}
+
+    assert list(by_id) == list(records["record_id"])
+    for _, row in records.iterrows():
+        entry = by_id[row["record_id"]]
+        assert entry["lobbying_source_url"] == row["lobbying_source_url"]
+        assert entry["lobbying_quote"] and entry["commitment_quote"]
+        assert entry["label_reasoning"] and entry["confidence"]
+        assert entry["researcher_label"] in _JUDGMENT_VALUES
+
+
+def test_the_provenance_file_speaks_for_the_shipped_rows_and_no_others():
+    """A row nobody shipped has no business carrying an allegation on this page."""
+    sources = json.loads(_SOURCES_PATH.read_text(encoding="utf-8"))
+
+    assert len(sources["records"]) == _ROWS_IN_CSV
+    assert set(sources["records"][0]) == {
+        "record_id", "organisation", "subject", "period",
+        "commitment_quote", "commitment_source_url", "commitment_source_date",
+        "commitment_source_type", "lobbying_quote", "lobbying_source_url",
+        "lobbying_source_date", "lobbying_source_type",
+        "researcher_label", "label_reasoning", "confidence",
+    }
+
+
+def test_the_sample_is_not_answerable_from_the_labels_alone():
+    """The point of these six: a reader cannot sort them by tone of voice."""
+    labels = _researcher_labels()
+
+    assert sorted(set(labels.values())) == ["Contradicts", "Matches", "Unclear"]
+    assert sum(1 for label in labels.values() if label == _CONTRADICTS) == 2
+    # Two of the six are contradictions, so the tour's queue holds a pair to work.
+    assert len(labels) == _ROWS_IN_CSV
+
+
+def _researcher_labels() -> dict[str, str]:
+    """Off the eval dataset, which is where the researcher's answer is committed."""
+    dataset = _eval_dataset_file()
+    return dict(zip(dataset["record_id"], dataset[_JUDGED_COLUMN]))
+
+
+def test_the_whole_sample_fits_the_tours_capped_run():
+    """Beat 2 caps raw_filings at 6 rows, and the sample is six."""
+    assert len(_all_records()) <= _TOUR_LIMIT
+
+
+# ── putting each promise beside the ask ──────────────────────────────────────
+
+
+def test_the_match_is_many_to_one_and_drops_no_record():
+    matched = _matched()
+    records = _checked()
+
+    assert len(matched) == len(records) == _ROWS_IN_CSV
+    assert list(matched["record_id"]) == list(records["record_id"])
+    # Every subject column flows through untouched; the step only ever ADDS.
+    for column in records.columns:
+        assert list(matched[column]) == list(records[column])
+    assert list(matched.columns)[-4:] == [
+        "public_commitment", "commitment_quote", "commitment_source_url",
+        "commitment_source_date",
+    ]
+
+
+def test_every_record_lands_the_commitment_it_is_judged_against():
+    matched = _matched()
+
+    assert matched["public_commitment"].notna().all()
+    assert matched["commitment_source_url"].notna().all()
+
+
+def test_a_record_whose_organisation_has_no_commitment_survives_with_a_blank():
+    """The non-match record: the record's own fields are all still there."""
+    records = _all_records()
+    records.loc[0, "organisation"] = "An Organisation Nobody Sourced"
+
+    matched = _execute(
+        _stage(_load_fixture(), "matched_commitments"),
+        {"check_filings": _checked(records),
          "public_commitments": pd.read_csv(_COMMITMENTS_PATH)},
     )
+    unmatched = matched[matched["public_commitment"].isna()]
 
-    assert len(joined) == _TOUR_LIMIT
-    assert int(joined["public_commitment"].isna().sum()) == 2
-    matched = joined[joined["public_commitment"].notna()]["specific_issues"]
-    assert int(matched.str.startswith("Opposing").sum()) >= 1
-    assert int(matched.str.startswith("Supporting").sum()) >= 1
-
-
-# ── the join ─────────────────────────────────────────────────────────────────
-
-
-def test_the_join_is_many_to_one_and_drops_no_filing():
-    joined = _joined()
-    filings = _checked()
-
-    assert len(joined) == len(filings) == _ROWS_IN_CSV
-    assert list(joined["filing_id"]) == list(filings["filing_id"])
-    # Every subject column flows through untouched; the join only ever ADDS.
-    for column in filings.columns:
-        assert list(joined[column]) == list(filings[column])
-    assert list(joined.columns)[-2:] == ["public_commitment", "commitment_source"]
-
-
-def test_one_commitment_serves_several_filings_by_the_same_client():
-    """The many-to-one case, which the runtime verifies rather than trusts."""
-    kept = _all_filings()
-    repeated = kept["client"].value_counts()
-
-    assert int(repeated.max()) > 1, "no client files twice, so m:1 is never exercised"
-    assert len(_joined()) == len(kept)
-
-
-def test_an_unmatched_filing_survives_with_a_blank_commitment():
-    """The non-match record: the filing's own fields are all still there."""
-    joined = _joined()
-    unmatched = joined[joined["public_commitment"].isna()]
-
-    assert len(unmatched) == _UNMATCHED
-    assert unmatched["commitment_source"].isna().all()
-    for column in ("filing_id", "client", "amount_usd", "specific_issues"):
+    assert len(unmatched) == 1
+    assert unmatched["commitment_source_url"].isna().all()
+    for column in ("record_id", "organisation", "lobbying_issue", "lobbying_source_url"):
         assert unmatched[column].notna().all()
 
 
-def test_a_repeated_commitment_row_fails_the_run_rather_than_multiplying_filings():
+def test_a_repeated_commitment_row_fails_the_run_rather_than_multiplying_records():
     stage = _stage(_load_fixture(), "matched_commitments")
     commitments = pd.read_csv(_COMMITMENTS_PATH)
     doubled = pd.concat([commitments, commitments.head(1)], ignore_index=True)
@@ -262,26 +315,25 @@ def test_a_repeated_commitment_row_fails_the_run_rather_than_multiplying_filings
 # ── the check ────────────────────────────────────────────────────────────────
 
 
-def test_every_committed_filing_carries_a_spend_the_check_can_read():
-    """If one could not be read the tour's own run would stop, which is not the demo."""
+def test_every_committed_record_carries_a_source_the_check_accepts():
+    """If one did not the tour's own run would stop, which is not the demo."""
     checked = _checked()
-    filings = _all_filings()
+    records = _all_records()
 
-    assert set(checked["amount_usd"].map(type)) == {int}
-    assert list(checked["amount_usd"]) == [
-        int(text.replace("$", "").replace(",", "")) for text in filings["amount_usd"]
+    assert list(checked["lobbying_source_url"]) == [
+        text.strip() for text in records["lobbying_source_url"]
     ]
 
 
 def test_check_filings_is_grain_preserving_and_touches_nothing_else():
     checked = _checked()
-    filings = _all_filings()
+    records = _all_records()
 
-    assert len(checked) == len(filings) == _ROWS_IN_CSV
-    assert list(checked.columns) == list(filings.columns)
-    for column in filings.columns:
-        if column != "amount_usd":
-            assert list(checked[column]) == list(filings[column])
+    assert len(checked) == len(records) == _ROWS_IN_CSV
+    assert list(checked.columns) == list(records.columns)
+    for column in records.columns:
+        if column != "lobbying_source_url":
+            assert list(checked[column]) == list(records[column])
 
 
 def test_the_seeded_examples_pass_before_anything_has_been_run():
@@ -295,59 +347,73 @@ def test_the_seeded_examples_pass_before_anything_has_been_run():
     assert report.untested_stages == []
 
 
-def test_every_seeded_example_is_one_of_the_bundled_filings():
-    """An invented row reads as fabrication; each case names a filing in the committed CSV."""
+def test_every_seeded_example_is_one_of_the_bundled_records():
+    """An invented row reads as fabrication; each case names a record in the committed CSV."""
     tests = _stage(_load_fixture(), "check_filings").tests or []
-    filing_ids = set(_all_filings()["filing_id"])
+    record_ids = set(_all_records()["record_id"])
 
     assert len(tests) == _SEEDED_EXAMPLES
     for test in tests:
         row = test.inputs["raw_filings"][0]
-        assert row["filing_id"] in filing_ids, test.name
+        assert row["record_id"] in record_ids, test.name
 
 
-@pytest.mark.parametrize("spend", ["n/a", "", "one hundred thousand", "$1,0 00.50"])
-def test_a_spend_the_step_cannot_read_stops_the_run(spend):
-    """The cardinal case: a figure nobody can read never becomes a blank downstream."""
-    filings = _all_filings()
-    filings.loc[0, "amount_usd"] = spend
+@pytest.mark.parametrize(
+    "link", ["", "   ", "press release, on file", "www.example.org/statement",
+             "ftp://example.org/statement.pdf"],
+)
+def test_a_source_a_reader_cannot_open_stops_the_run(link):
+    """The cardinal case: an unopenable claim never reaches a page that invites checking."""
+    records = _all_records()
+    records.loc[0, "lobbying_source_url"] = link
 
-    with pytest.raises(StepRefused, match=filings.loc[0, "filing_id"]):
-        _checked(filings)
+    with pytest.raises(StepRefused, match=records.loc[0, "record_id"]):
+        _checked(records)
 
 
-def test_a_filing_with_no_account_of_its_ask_stops_the_run():
-    filings = _all_filings()
-    filings.loc[0, "specific_issues"] = "   "
+def test_a_record_with_no_account_of_its_ask_stops_the_run():
+    records = _all_records()
+    records.loc[0, "lobbying_issue"] = "   "
 
-    with pytest.raises(StepRefused, match="no ask to judge"):
-        _checked(filings)
+    with pytest.raises(StepRefused, match="no ask to weigh"):
+        _checked(records)
+
+
+def test_a_record_that_does_not_say_when_its_source_was_read_stops_the_run():
+    """An undated page is fine, as long as the record says that is what it is."""
+    records = _all_records()
+    records.loc[0, "lobbying_source_date"] = ""
+
+    with pytest.raises(StepRefused, match="how old the ask is"):
+        _checked(records)
 
 
 # ── the model step ───────────────────────────────────────────────────────────
 
 
-def test_judge_alignment_reads_a_dozen_filings_per_model_call():
+def test_judge_alignment_reads_the_whole_sample_in_one_model_call():
     judge = _stage(_load_fixture(), "judge_alignment")
     # Each call spawns a process, so the batch size is the tour's wall clock.
 
     assert judge.llm is not None
     assert judge.llm.batch_size == _BATCH_SIZE
-    assert _ROWS_IN_CSV <= _BATCH_SIZE * 2
-    for placeholder in ("{client}", "{public_commitment}", "{specific_issues}"):
+    assert _ROWS_IN_CSV <= _BATCH_SIZE
+    for placeholder in ("{organisation}", "{public_commitment}", "{commitment_quote}",
+                        "{lobbying_issue}", "{lobbying_quote}"):
         assert placeholder in judge.llm.prompt_data_template
 
 
 def test_the_model_is_shown_both_texts_and_told_to_use_nothing_else():
-    """The organisations are invented, so any outside knowledge would be fabricated."""
+    """The organisations are real, which makes the instruction stricter, not looser."""
     judge = _stage(_load_fixture(), "judge_alignment")
     assert judge.llm is not None
     instructions = judge.llm.prompt_instructions
 
-    assert "Judge only the two texts in front of you" in instructions
-    assert "never invent, complete or paraphrase a commitment" in instructions
-    # The join leaves this blank for an unmatched filing, and pandas renders it `nan`.
-    assert "No commitment given" in instructions and "`nan`" in instructions
+    assert "judge ONLY the two texts printed below" in instructions
+    assert "cannot be checked by the person who reads your answer" in instructions
+    assert "never invent, complete or paraphrase a commitment" in instructions.lower()
+    # The match leaves this blank for an unmatched record, and pandas renders it `nan`.
+    assert _NO_COMMITMENT in instructions and "`nan`" in instructions
 
 
 def test_the_methodology_document_states_the_batch_size_the_stage_uses():
@@ -356,23 +422,31 @@ def test_the_methodology_document_states_the_batch_size_the_stage_uses():
 
     # "up to": the last call of a run holds whatever is left over.
     assert "read up to twelve at a time in one model call" in wf.document
-    assert "four at a time" not in wf.document
+    # And what this sample actually costs, which is one call, not twelve.
+    assert "All six of these travel in a single call." in wf.document
     # And what the saving costs, which the document owes a reader of the labels.
     assert "swayed by the ones it happens to travel with" in wf.document
 
 
-def test_the_methodology_document_admits_the_data_is_invented():
+def test_the_methodology_document_says_what_the_data_is_and_where_it_came_from():
     wf = _load_fixture()
 
-    assert "The sample data is INVENTED." in wf.document
-    assert "no row describes a real filing, client, firm or commitment" in wf.document
+    assert "The six records here are real" in wf.document
+    assert "app/seeds/data/sources/tutorial_say_versus_do.json" in wf.document
+    # And what it does NOT carry, which is the half the old invented sample made up.
+    assert "no lobbying firm, and\nno money" in wf.document
+    assert "INVENTED" not in wf.document
 
 
-def test_the_first_six_filings_are_one_model_call():
-    # What the tour's small run costs: beat 2 caps raw_filings at 6 rows.
-    df = pd.read_csv(_CSV_PATH).head(_TOUR_LIMIT)
+def test_the_methodology_document_keeps_a_section_for_every_stage():
+    wf = _load_fixture()
+    sections = {
+        stage.source.section for stage in wf.stages
+        if stage.source is not None and stage.source.section
+    }
 
-    assert len(df) <= _BATCH_SIZE
+    for section in sections:
+        assert f"## {section}" in wf.document, section
 
 
 # ── the review guide ─────────────────────────────────────────────────────────
@@ -400,16 +474,28 @@ def test_the_review_guide_keeps_every_check_without_the_padding():
     assert not over, over
     prose = " ".join(step.prose for step in guide.steps)
     for check in (
-        "Invented",
-        "a repeat fails the run",
+        # The first step restates what the whole workflow is for.
+        "read each public promise beside what the same organisation asked government for",
+        "a repeat stops the run",
         "the absence IS the record",
         "Trust this step least",
-        "stopped the run rather than travelling as a blank",
+        "stops the run here",
         # The guide ends where the run does: on the file it published.
         "open it under Published",
-        "linked back to its own lineage",
     ):
         assert check in prose, check
+
+
+def test_the_review_guide_speaks_no_jargon():
+    """A journalist reads this rail. Every word in it has to be one they already use."""
+    guide = ReviewGuideDraft.model_validate_json(
+        _GUIDE_PATH.read_text(encoding="utf-8")
+    )
+    prose = " ".join(step.prose for step in guide.steps).lower()
+
+    for word in ("join", "schema", "grain", "enrich", "column", "null", "lineage",
+                 "upstream", "downstream", "row per"):
+        assert word not in prose, word
 
 
 # ── the seeded eval ──────────────────────────────────────────────────────────
@@ -419,6 +505,12 @@ def _import_and_pin(tmp_path):
     name = import_project(_load_fixture(), name="tutorial_smoke")
     workflow, _version = pinned_stages(tmp_path / "examples" / name)
     return name, workflow
+
+
+def _eval_dataset_file() -> pd.DataFrame:
+    """Read off the committed path, for the tests that run outside a workspace."""
+    config = json.loads(_EVAL_PATH.read_text(encoding="utf-8"))
+    return pd.read_csv(Path(__file__).resolve().parents[1] / config["table"]["path"])
 
 
 def _eval_dataset(name: str = "tutorial_smoke") -> pd.DataFrame:
@@ -448,31 +540,40 @@ def test_the_eval_dataset_supplies_every_column_the_override_stage_emits(tmp_pat
     assert list(_eval_dataset().columns) == [c.name for c in injected] + [_JUDGED_COLUMN]
 
 
-def test_the_eval_dataset_labels_only_with_verdicts_the_stage_may_emit():
+def test_the_eval_labels_only_with_verdicts_the_stage_may_emit():
     judge = _stage(_load_fixture(), _TARGET_STAGE)
     column = next(c for c in judge.signature.adds if c.name == _JUDGED_COLUMN)
-    dataset = _eval_dataset()
+    dataset = _eval_dataset_file()
 
     assert len(dataset) == _EVAL_ROWS
-    # Every branch of the rubric is exercised, and none is invented.
-    assert set(dataset[_JUDGED_COLUMN]) == set(column.enum or [])
+    assert set(dataset[_JUDGED_COLUMN]) <= set(column.enum or [])
+    # No record here lacks a commitment, so the absence label is not among them: an
+    # organisation with no sourced commitment would be one nobody could have researched.
+    assert _NO_COMMITMENT not in set(dataset[_JUDGED_COLUMN])
 
 
-def test_the_eval_labels_a_blank_commitment_and_nothing_else_as_unjudgeable():
-    """Step 3 fixes that answer to the absence, so it may not appear beside a commitment."""
-    dataset = _eval_dataset()
+def test_the_eval_scores_the_rows_the_workflow_actually_ships():
+    """Its answer key is the researcher's, on the same six records — not a second sample."""
+    dataset = _eval_dataset_file()
 
-    blank = dataset["public_commitment"].isna()
-    assert set(dataset.loc[blank, _JUDGED_COLUMN]) == {_NO_COMMITMENT}
-    assert _NO_COMMITMENT not in set(dataset.loc[~blank, _JUDGED_COLUMN])
+    assert list(dataset["record_id"]) == list(_all_records()["record_id"])
+    assert list(dataset["lobbying_issue"]) == list(_all_records()["lobbying_issue"])
 
 
-def test_scoring_the_eval_costs_two_model_calls():
+def test_the_eval_says_whose_reading_its_answer_key_is():
+    """A label presented as ground truth is a claim nobody can appeal."""
+    config = json.loads(_EVAL_PATH.read_text(encoding="utf-8"))
+
+    assert "one researcher's reading, not ground truth" in config["description"]
+    assert "sources/tutorial_say_versus_do.json" in config["description"]
+
+
+def test_scoring_the_eval_costs_one_model_call():
     """What a reader re-running it pays: the target reads the dataset at its own batch size."""
     judge = _stage(_load_fixture(), _TARGET_STAGE)
     assert judge.llm is not None
 
-    assert len(_eval_dataset()) <= judge.llm.batch_size * 2
+    assert len(_eval_dataset_file()) <= judge.llm.batch_size
 
 
 def test_the_tour_seeds_the_eval_beside_the_review_guide(projects_root):
@@ -501,11 +602,11 @@ def _review_stage() -> HumanReviewQueueStage:
     return stage
 
 
-def test_only_the_filings_the_model_called_contradictions_reach_a_reviewer():
+def test_only_the_records_the_model_called_contradictions_reach_a_reviewer():
     """The other three labels are published as nobody's finding, so nobody is asked."""
     queue = _review_stage().queue
 
-    assert queue.filter == f"alignment == '{_CONTRADICTS}'"
+    assert queue.filter == f"{_JUDGED_COLUMN} == '{_CONTRADICTS}'"
     assert queue.reviewed_columns == {_JUDGED_COLUMN: _REVIEWED_COLUMN}
 
 
@@ -514,58 +615,43 @@ def test_the_reviewers_label_lands_beside_the_models_and_never_on_it():
     added = {column.name: column for column in stage.signature.adds}
 
     assert stage.signature.rewrites == []
-    assert added[_REVIEWED_COLUMN].enum == _ALIGNMENT_VALUES
-    # Non-nullable: every filing reaches the report carrying a label, reviewed or not.
+    assert added[_REVIEWED_COLUMN].enum == _JUDGMENT_VALUES
+    # Non-nullable: every record reaches the report carrying a label, reviewed or not.
     assert added[_REVIEWED_COLUMN].nullable is False
     assert added["review_verdict"].enum == [_APPROVE, _MODIFY, _SKIPPED]
 
 
-def test_the_costliest_filing_is_reviewed_first():
-    queue = _review_stage().queue
-
-    assert [(key.column, str(key.direction)) for key in queue.sort] == [
-        ("amount_usd", "descending")
+def test_the_card_carries_the_six_columns_the_decision_is_made_from_and_no_others():
+    """A reviewer sees exactly what the signature reads, so what it reads is the card."""
+    read = [
+        column.name
+        for entry in _review_stage().signature.reads
+        for column in entry.columns
     ]
+
+    assert read == [
+        "record_id", "organisation", "public_commitment", "lobbying_issue",
+        _JUDGED_COLUMN, "ai_justification",
+    ]
+
+
+def test_nothing_orders_the_queue_because_an_order_would_widen_the_card():
+    """A sort key has to be read, and a read column is a column on the card."""
+    assert _review_stage().queue.sort == []
 
 
 def test_the_reviewer_is_told_to_read_both_texts_rather_than_the_label():
     instructions = _review_stage().queue.reviewer_instructions or ""
 
-    assert "the model's label is" in instructions
+    assert "the model's label is a proposal" in instructions
     assert "which words in the two texts you decided from" in instructions
-
-
-def test_the_card_carries_every_column_the_decision_is_made_from():
-    """A reviewer sees exactly what the signature reads — both texts included."""
-    read = {
-        column.name
-        for entry in _review_stage().signature.reads
-        for column in entry.columns
-    }
-
-    assert {"public_commitment", "specific_issues", _JUDGED_COLUMN} <= read
-    # The order the queue is worked in is read too, or the queued row would not carry it.
-    assert "amount_usd" in read
-
-
-def test_the_tours_six_filings_leave_two_filings_asking_the_opposite_of_a_promise():
-    """Beat 2's capped run is meant to queue a pair: real, and finishable."""
-    joined = _execute(
-        _stage(_load_fixture(), "matched_commitments"),
-        {"check_filings": _checked(pd.read_csv(_CSV_PATH).head(_TOUR_LIMIT)),
-         "public_commitments": pd.read_csv(_COMMITMENTS_PATH)},
-    )
-    against_a_promise = joined[
-        joined["public_commitment"].notna()
-        & joined["specific_issues"].str.startswith("Opposing")
-    ]
-
-    assert list(against_a_promise["filing_id"]) == ["TUT-2024-0001", "TUT-2024-0005"]
+    # Real organisations: the reviewer's own prior is not evidence either.
+    assert "what you already believe about this one is not evidence" in instructions
 
 
 def test_the_review_step_queues_the_contradictions_and_halts_the_run(tmp_path):
     """Stand-in labels, real stage: what halts a run is the filter, not the model."""
-    judged = _stand_in_for_the_model(_joined())
+    judged = _stand_in_for_the_model(_matched())
     contradictions = int((judged[_JUDGED_COLUMN] == _CONTRADICTS).sum())
     ctx = make_run_context(
         run_dir=tmp_path,
@@ -585,7 +671,7 @@ def test_the_review_step_queues_the_contradictions_and_halts_the_run(tmp_path):
 
 
 def _publish_a_report(tmp_path, df: pd.DataFrame) -> str:
-    stage = _stage(_bound_fixture(), "publish_report")
+    stage = _stage(_load_fixture(), "publish_report")
     # A project-scoped context, because the step declares `citation_provider` — the run's
     # (project, run_id) is what a row-trace URL is built from.
     ctx = RunContext.for_workflow_test_run(tmp_path, "tutorial", "R-1")
@@ -595,142 +681,130 @@ def _publish_a_report(tmp_path, df: pd.DataFrame) -> str:
     return Path(rows_of(out).iloc[0]["report_path"]).read_text(encoding="utf-8")
 
 
-def _bound_fixture() -> WorkflowFile:
-    """The fixture as committed — it needs no filling in to be a valid document."""
-    return WorkflowFile.model_validate_json(_FIXTURE_PATH.read_text(encoding="utf-8"))
+_SAID = "Publicly committed to supporting a national clean electricity standard."
+_ASKED = "Opposed the national clean electricity standard in its comment letter."
+_SAID_URL = "https://example.org/pledge"
+_ASKED_URL = "https://example.org/comment-letter"
 
 
-def _three_filings() -> pd.DataFrame:
-    """One contradiction a reviewer kept, one match and one filing with no commitment."""
+def _three_records() -> pd.DataFrame:
+    """One contradiction a reviewer kept, one match and one record with no commitment."""
     return pd.DataFrame(
         [
             {
-                "filing_id": "F-1", "client": "Promise Breakers Mutual", "registrant": "Firm A",
-                "amount_usd": 250000, "filing_period": "2024 Q1",
-                "specific_issues": "Opposing the national clean electricity standard.",
-                "public_commitment": "Publicly committed to supporting a national clean electricity standard.",
-                "commitment_source": "2023 climate pledge",
-                "alignment": _CONTRADICTS,
-                "alignment_note": "Said it backed the standard; this filing opposes it.",
-                "reviewed_alignment": _CONTRADICTS, "review_verdict": _APPROVE,
+                "record_id": "R-1", "organisation": "Promise Breakers Mutual",
+                "period": "2023-2024",
+                "lobbying_issue": _ASKED, "lobbying_source_url": _ASKED_URL,
+                "public_commitment": _SAID, "commitment_source_url": _SAID_URL,
+                "ai_judgment": _CONTRADICTS,
+                "reviewed_judgment": _CONTRADICTS, "review_verdict": _APPROVE,
                 "reviewer": _REVIEWER, "reviewed_at": _REVIEWED_AT,
                 "review_notes": "Both texts name the same standard, on opposite sides.",
             },
             {
-                "filing_id": "F-2", "client": "Consistent Cooperative", "registrant": "Firm B",
-                "amount_usd": 60000, "filing_period": "2024 Q1",
-                "specific_issues": "Supporting faster offshore wind lease sales.",
-                "public_commitment": "Publicly committed to building out offshore wind capacity.",
-                "commitment_source": "2024 investor letter",
-                "alignment": "Matches",
-                "alignment_note": "Said it would build offshore wind; this filing asks for that.",
-                "reviewed_alignment": "Matches", "review_verdict": _SKIPPED,
+                "record_id": "R-2", "organisation": "Consistent Cooperative",
+                "period": "2024",
+                "lobbying_issue": "Asked for faster offshore wind lease sales.",
+                "lobbying_source_url": "https://example.org/testimony",
+                "public_commitment": "Publicly committed to building out offshore wind.",
+                "commitment_source_url": "https://example.org/investor-letter",
+                "ai_judgment": "Matches",
+                "reviewed_judgment": "Matches", "review_verdict": _SKIPPED,
                 "reviewer": None, "reviewed_at": None, "review_notes": None,
             },
             {
-                "filing_id": "F-3", "client": "Silent Holdings", "registrant": "Firm C",
-                "amount_usd": 90000, "filing_period": "2024 Q1",
-                "specific_issues": "Seeking shorter permitting timelines.",
-                "public_commitment": None, "commitment_source": None,
-                "alignment": _NO_COMMITMENT, "alignment_note": None,
-                "reviewed_alignment": _NO_COMMITMENT, "review_verdict": _SKIPPED,
+                "record_id": "R-3", "organisation": "Silent Holdings", "period": "2025",
+                "lobbying_issue": "Asked for shorter permitting timelines.",
+                "lobbying_source_url": "https://example.org/letter",
+                "public_commitment": None, "commitment_source_url": None,
+                "ai_judgment": _NO_COMMITMENT,
+                "reviewed_judgment": _NO_COMMITMENT, "review_verdict": _SKIPPED,
                 "reviewer": None, "reviewed_at": None, "review_notes": None,
             },
         ]
     )
 
 
-def test_the_report_shows_both_sides_of_a_contradiction(tmp_path):
-    """A bare flag is not an argument: print what they said and what they lobbied for."""
-    page = _publish_a_report(tmp_path, _three_filings())
+def test_the_report_links_every_text_to_the_page_it_was_read_on(tmp_path):
+    """The link is the point: a reader who does not believe a row can open both sides."""
+    page = _publish_a_report(tmp_path, _three_records())
 
-    assert "Said" in page and "Lobbied for" in page
-    assert "Publicly committed to supporting a national clean electricity standard." in page
-    assert "Opposing the national clean electricity standard." in page
-    assert "$250,000" in page
-    # Both texts sit in the follow-up cell, in that order, so the cell stands alone.
-    said_at = page.index("<span class=\"label\">Said</span>")
-    assert page.index("<span class=\"label\">Lobbied for</span>") > said_at
+    assert _SAID in page and _ASKED in page
+    assert f'href="{_SAID_URL}"' in page and f'href="{_ASKED_URL}"' in page
+    for _, row in _three_records().iterrows():
+        assert f'href="{row["lobbying_source_url"]}"' in page
 
 
 def test_a_published_contradiction_carries_who_confirmed_it_and_when(tmp_path):
     """The whole point of the review step: nobody publishes a machine's judgment unsigned."""
-    page = _publish_a_report(tmp_path, _three_filings().iloc[[0]])
+    page = _publish_a_report(tmp_path, _three_records().iloc[[0]])
 
-    assert "Confirmed" in page
+    assert "Confirmed by" in page
     assert _REVIEWER in page and _REVIEWED_AT in page
     assert "Both texts name the same standard, on opposite sides." in page
 
 
 def test_the_report_prints_the_label_the_reviewer_left_not_the_models(tmp_path):
-    """A filing the reviewer downgraded is no longer a contradiction on the page."""
-    downgraded = _three_filings().iloc[[0]].assign(
-        reviewed_alignment="Unclear", review_verdict=_MODIFY,
-        review_notes="The filing asks about siting, which the pledge never mentions.",
+    """A record the reviewer downgraded is no longer a contradiction on the page."""
+    downgraded = _three_records().iloc[[0]].assign(
+        reviewed_judgment="Unclear", review_verdict=_MODIFY,
+        review_notes="The ask is about siting, which the pledge never mentions.",
     )
 
     page = _publish_a_report(tmp_path, downgraded)
 
-    assert "1 filings; 0 ask government for the opposite" in page
-    assert "Lobbied for" not in page
+    assert "1 advocacy records; 0 carry an ask" in page
     assert "Unclear" in page
     # What the model had said is still on the page, as what the reviewer changed it from.
-    assert f"Changed from {_CONTRADICTS}" in page
+    assert f"Changed from {_CONTRADICTS} by" in page
     assert _REVIEWER in page
 
 
-def test_a_filing_no_person_was_asked_about_carries_no_reviewer(tmp_path):
-    page = _publish_a_report(tmp_path, _three_filings().iloc[[1]])
+def test_a_record_no_person_was_asked_about_carries_no_reviewer(tmp_path):
+    page = _publish_a_report(tmp_path, _three_records().iloc[[1]])
 
     assert "Matches" in page
-    assert "Confirmed" not in page and "Changed from" not in page
-
-
-def test_the_report_prints_no_contradiction_for_a_filing_that_matches(tmp_path):
-    page = _publish_a_report(tmp_path, _three_filings().iloc[[1]])
-
-    assert "Lobbied for" not in page
-    assert "Matches" in page
-    assert "1 filings; 0 ask government for the opposite" in page
+    assert "Confirmed by" not in page and "Changed from" not in page
 
 
 def test_the_report_says_when_no_commitment_was_on_record(tmp_path):
-    """The join's non-match is on the page, not only in lineage."""
-    page = _publish_a_report(tmp_path, _three_filings().iloc[[2]])
+    """The non-match is on the page, not only in lineage."""
+    page = _publish_a_report(tmp_path, _three_records().iloc[[2]])
 
     assert "No public commitment on record" in page
     assert "1 have no public commitment on record" in page
-    assert "Lobbied for" not in page
 
 
 def test_the_report_scores_nothing_and_recommends_nothing(tmp_path):
-    page = _publish_a_report(tmp_path, _three_filings())
+    page = _publish_a_report(tmp_path, _three_records())
 
     assert "reading aid, not a verdict" in page
     for verdict_word in ("score", "rank", "recommend", "priority"):
         assert verdict_word not in page.lower(), verdict_word
 
 
-def test_the_report_admits_the_data_is_invented(tmp_path):
-    page = _publish_a_report(tmp_path, _three_filings())
+def test_the_report_says_the_judgement_is_a_persons_and_not_the_tools(tmp_path):
+    """A page that reads as an accusation is one the tool is making. It is not."""
+    page = _publish_a_report(tmp_path, _three_records())
 
-    assert "Invented sample data bundled with this tutorial." in page
-    assert "No row describes a real filing, client, firm or commitment." in page
+    assert "This page makes no accusation of its own" in page
+    assert "read off a published page" in page
+    assert "What is printed is the person's answer" in page
 
 
 def test_every_report_row_links_back_to_the_row_it_came_from(tmp_path):
     """A published claim nobody can trace is the thing this product exists against."""
-    page = _publish_a_report(tmp_path, _three_filings())
+    page = _publish_a_report(tmp_path, _three_records())
 
-    for ordinal in range(len(_three_filings())):
+    for ordinal in range(len(_three_records())):
         assert f'href="/project/tutorial/runs/R-1/stage/{_REVIEW_STAGE}/row/{ordinal}' \
                '/trace/view">Lineage</a>' in page
 
 
 def test_the_report_step_refuses_a_contradiction_it_cannot_print_both_sides_of(tmp_path):
     """Confirmed as contradicting yet carrying no commitment: there is no other side."""
-    df = _three_filings().iloc[[2]].assign(
-        reviewed_alignment=_CONTRADICTS, review_verdict=_APPROVE,
+    df = _three_records().iloc[[2]].assign(
+        reviewed_judgment=_CONTRADICTS, review_verdict=_APPROVE,
         reviewer=_REVIEWER, reviewed_at=_REVIEWED_AT,
     )
 
@@ -738,9 +812,17 @@ def test_the_report_step_refuses_a_contradiction_it_cannot_print_both_sides_of(t
         _publish_a_report(tmp_path, df)
 
 
+def test_the_report_step_refuses_a_commitment_with_no_link(tmp_path):
+    """Printing a claim with no source is the failure this whole workflow is built against."""
+    df = _three_records().iloc[[1]].assign(commitment_source_url=None)
+
+    with pytest.raises(StepRefused, match="no link to where it was said"):
+        _publish_a_report(tmp_path, df)
+
+
 def test_the_report_step_refuses_a_reviewed_judgment_nobody_reviewed(tmp_path):
     """A verdict with no reviewer on it is the model's, and is not published as a person's."""
-    df = _three_filings().iloc[[0]].assign(reviewer=None)
+    df = _three_records().iloc[[0]].assign(reviewer=None)
 
     with pytest.raises(StepRefused, match="cannot say who reviewed it"):
         _publish_a_report(tmp_path, df)

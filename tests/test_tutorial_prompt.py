@@ -99,11 +99,13 @@ def test_the_workflow_is_introduced_by_why_it_exists_not_by_its_stage_list() -> 
     assert "Nor the files it reads" in beat
 
 
-def test_the_invented_data_admission_is_a_hard_rule_too() -> None:
+def test_saying_what_the_data_is_is_a_hard_rule_too() -> None:
+    """The sample is sourced, so calling it a mock-up is as wrong as inventing a number."""
     rules = _flat(TUTORIAL_SYSTEM_PROMPT)
 
-    assert "The sample data is INVENTED, and you say so plainly at beat 2" in rules
-    assert '"Synthetic"' in rules and "does not discharge this rule" in rules
+    assert "The sample data is REAL" in rules
+    assert "Never call it invented, synthetic or a mock-up" in rules
+    assert "every row links to the page it came from" in rules
 
 
 def test_the_run_beat_hands_over_exactly_one_link() -> None:
@@ -159,7 +161,7 @@ def test_the_announced_wait_is_the_one_duration_the_rules_exempt() -> None:
     beat = _flat(_beat(2))
 
     assert "it may take about a minute" in beat
-    assert "since a real model reads the filings" in beat
+    assert "since a real model reads the records" in beat
     assert "about-a-minute expectation" in _flat(TUTORIAL_SYSTEM_PROMPT)
 
 
@@ -170,7 +172,7 @@ def test_the_run_beat_orients_the_link_without_reciting_the_data() -> None:
     assert "orientation" in beat
     assert "paused for a human to review the contradictions" in beat
     assert "clicking a stage opens the rows it produced" in beat
-    assert "the flagged filings wait at the review step" in beat
+    assert "the flagged records wait at the review step" in beat
     assert "no row counts, no per-stage account" in beat
     assert "no reciting numbers the page already holds" in beat
 
@@ -247,7 +249,7 @@ def test_editing_is_reached_by_a_link_and_the_mcp_route_needs_no_terminal() -> N
 
 def test_the_no_fabrication_rules_survive_the_rewrite() -> None:
     for rule in (
-        "The sample data is INVENTED, and you say so plainly at beat 2",
+        "The sample data is REAL",
         "Never state a number, row count, duration, version or finding you did not read",
         "Never claim a capability this tour did not demonstrate",
         "If a tool has not told you a number, you do not have it.",

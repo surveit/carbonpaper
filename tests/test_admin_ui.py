@@ -12,7 +12,7 @@ from app.services.project import WorkflowFile
 
 client = TestClient(app)
 
-_BUNDLE = "tutorial_lobbying_triage"
+_BUNDLE = "tutorial_say_versus_do"
 
 
 @pytest.fixture(autouse=True)

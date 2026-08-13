@@ -1,0 +1,61 @@
+{
+  "steps": [
+    {
+      "title": "Load what each organisation asked government for",
+      "prose": "The goal: read each public promise beside what the same organisation asked government for, and publish only what a person confirmed. The ask half: six real records, each off a published page.",
+      "stage_ids": [
+        "raw_filings"
+      ],
+      "data_description": "Every advocacy record in the sample, as the CSV records it."
+    },
+    {
+      "title": "Load each organisation's public promise",
+      "prose": "The other half: what each organisation said in public it would do. Each organisation appears once, and a repeat stops the run.",
+      "stage_ids": [
+        "public_commitments"
+      ],
+      "data_description": "One public commitment per organisation."
+    },
+    {
+      "title": "Refuse a claim with no source",
+      "prose": "Every row of the report links to the page it was read on. A record with no link, no ask or no date stops the run here rather than reaching that page.",
+      "stage_ids": [
+        "check_filings"
+      ],
+      "data_description": "The same records, each carrying a link a reader can open."
+    },
+    {
+      "title": "Put each promise beside the ask",
+      "prose": "Nothing is dropped here. A blank promise means none is on record for that organisation — the absence IS the record.",
+      "stage_ids": [
+        "matched_commitments"
+      ],
+      "data_description": "Every record, plus its organisation's public promise."
+    },
+    {
+      "title": "Judge the ask against the promise",
+      "prose": "A model proposes how the two stand and writes one sentence saying why. Trust this step least — read both texts yourself.",
+      "stage_ids": [
+        "judge_alignment"
+      ],
+      "data_description": "The same records, plus the model's label and its one sentence."
+    },
+    {
+      "title": "Put every contradiction in front of a person",
+      "prose": "The model's label is only a proposal. Every contradiction it proposed waits here for a person to keep or change, under their own name.",
+      "stage_ids": [
+        "review_contradictions"
+      ],
+      "data_description": "Every record, plus the label a person left on the proposed contradictions."
+    },
+    {
+      "title": "Publish the report",
+      "prose": "What you hand to someone who was not here — open it under Published, below. Each row links to both its sources and back to the record it came from.",
+      "stage_ids": [
+        "publish_report"
+      ],
+      "data_description": "One row per record, as published."
+    }
+  ],
+  "unnarrated": []
+}

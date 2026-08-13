@@ -15,7 +15,7 @@ from app.tools.submitted_stage import edit_stage_reporting_drops
 
 _FIXTURE_PATH = (
     Path(__file__).resolve().parents[2]
-    / "app" / "seeds" / "data" / "tutorial_lobbying_triage.json"
+    / "app" / "seeds" / "data" / "tutorial_say_versus_do.json"
 )
 # The one stage of the tour's workflow whose type may carry tests, and the examples
 # seeded on it — the count is the fixture's, read back rather than restated.
@@ -41,7 +41,7 @@ def test_a_patch_carrying_tests_leaves_the_stored_ones_untouched(tour_project):
     assert seeded, "the fixture is supposed to ship examples on this stage"
     forged = [{
         "name": "written by the client, not the generator",
-        "inputs": {"raw_filings": [{"filing_id": "X"}]},
+        "inputs": {"raw_filings": [{"record_id": "X"}]},
         "expected": None,
     }]
 
@@ -59,13 +59,13 @@ def test_a_patch_that_does_not_mention_tests_keeps_them(tour_project):
     seeded = _stage(tour_project, _TESTED_STAGE).tests
 
     reply = edit_stage_reporting_drops(
-        tour_project, _TESTED_STAGE, json.dumps({"description": "Check each filing"})
+        tour_project, _TESTED_STAGE, json.dumps({"description": "Check each record"})
     )
 
     assert reply["ok"] is True
     assert "warnings" not in reply
     assert _stage(tour_project, _TESTED_STAGE).tests == seeded
-    assert _stage(tour_project, _TESTED_STAGE).description == "Check each filing"
+    assert _stage(tour_project, _TESTED_STAGE).description == "Check each record"
 
 
 def test_unparseable_changes_still_reach_the_service_for_its_own_error(tour_project):

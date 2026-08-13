@@ -1,16 +1,7 @@
-client,public_commitment,commitment_source
-Alder Bank Mutual,Publicly committed to disclosing the climate risk in its lending book.,2023 responsibility report
-Ashgrove Grain Collective,Publicly committed to clear country-of-origin labeling on everything it sells.,2024 member pledge
-Brindle Financial Mutual,Publicly committed to holding capital well above the regulatory minimum.,2023 annual report
-Cedar Junction Rail Partners,Publicly committed to removing every level crossing on its network.,2024 safety pledge
-Fernbrook Organic Farms Alliance,Publicly committed to farming without synthetic pesticides.,2023 member charter
-Halcyon Grid Services,Publicly committed to hardening its lines against wildfire.,2024 resilience plan
-Harborlight Foods Group,Publicly committed to removing single-use plastic from all its packaging by 2030.,2023 packaging pledge
-Kestrel Point Airways,Publicly committed to compensating passengers for every delay it causes.,2024 passenger charter
-Meridian Power Cooperative,Publicly committed to supporting a national clean electricity standard and retiring its coal plants by 2035.,2023 climate pledge
-Merrick Harbor Shipyards,Publicly committed to training 500 new shipyard apprentices a year.,2024 workforce pledge
-Ninefold Data Corporation,Publicly committed to giving every user one-click deletion of their data.,2023 privacy pledge
-Northvale Medical Alliance,Publicly committed to capping out-of-pocket insulin at $35 a month.,2024 patient pledge
-Tessellate Health Systems,Publicly committed to cutting prior authorization delays for patients.,2024 patient pledge
-Vantor Semiconductor Works,Publicly committed to paying its full statutory tax rate in every country it operates in.,2023 tax principles
-Windrow Turbine Holdings,Publicly committed to building out offshore wind capacity.,2024 investor letter
+organisation,public_commitment,commitment_quote,commitment_source_url,commitment_source_date
+Amazon,"Amazon publicly commits to a $15 starting wage, which it adopted for all US employees in 2018, and presents that floor as the standard it believes the country should meet.",raised its starting wage for all U.S. employees to at least $15 an hour,https://www.aboutamazon.com/impact/economy/15-minimum-wage,page carries no visible date; describes Amazon's 2018 wage increase (fetched 2026-08-13)
+American Hospital Association,"The AHA's June 2026 price-transparency fact sheet states that hospitals and health systems are committed to improving price transparency and want patients to have accurate, timely price information.",Hospital and health systems are committed to improving price transparency,https://www.aha.org/fact-sheets/2026-06-05-fact-sheet-hospital-price-transparency-current-landscape-and-better-path-forward,2026-06-05
+American Petroleum Institute (API),API's climate policy page states the association supports cost-effective direct federal regulation of methane from both new and existing oil and gas sources.,"API supports cost-effective, direct regulation that achieves methane emissions reductions from new and existing sources.",https://www.api.org/news-policy-and-issues/climate,undated policy page; fetched 2026-08-13
+Association of American Railroads (AAR),"In a March 2024 statement on FRA accident data, AAR said the industry's work on safety is continuous and pointed to voluntary safety actions taken in 2023, saying railroads stand ready to work with policymakers on measures that advance safety.",Our commitment to enhancing safety never ends,https://www.aar.org/news/fra-2023-data-affirms-rails-strong-sustained-safety-record/,2024-03-04
+Citigroup,"CEO Jane Fraser committed Citi to net-zero greenhouse gas emissions by 2050 covering its financing as well as its operations, with 2030 interim targets for the Energy and Power portfolios and a promise to report progress on the grounds that transparency and accountability are key.",net zero greenhouse gas emissions by 2050,https://www.citigroup.com/global/news/perspectives/2021/citis-commitment-to-net-zero-by-2050,2021-03-01
+Edison Electric Institute,In its own comment letter EEI states that 41 of its member companies have adopted net-zero-by-2050-or-earlier goals and that it supports EPA's authority to regulate power-sector greenhouse gases.,41 of which include a net-zero by 2050 or earlier equivalent goal,https://www.eei.org/-/media/497F22CE3B0D45619E5ABA593778C641.pdf,2023-08-08
