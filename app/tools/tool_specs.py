@@ -318,6 +318,57 @@ The files a project holds, each with the `sha256` run_workflow's `files` binds.
 Also returns `file_upload_url`: POST a file there as multipart form data to add
 one. Nothing in this conversation moves bytes.""",
     ),
+    "profile_file": ToolSpec(
+        name="profile_file",
+        description="""\
+What a stored file holds, by the `sha256` list_files gave it.
+
+Returns `row_count` and, per column, `null_count`, `distinct_count` (the TRUE
+count of distinct non-null values), `values` (commonest first with their counts,
+cut to `max_values`), `truncated`, and `value_range` (min/max/mean/median) where
+every value is a number. Omit `columns` for every column in the file.
+
+This makes no judgement about types — that decision is yours. csv and xlsx are
+read as text and json with inference off, so `values` are the characters as
+stored and nothing is coerced. parquet and geojson carry real types, which are
+respected as they are.
+
+`truncated` means `values` is a prefix, not the whole vocabulary — raise
+`max_values` before declaring an enum from it.
+
+For an xlsx, `sheet_name`, `header_row` and `first_column` say which table to
+read — the same three the input_data connector takes, so what you profile here
+is what the stage will read. They default to the first sheet, first row as the
+header, first column. survey_workbook is how you find out what to pass.""",
+    ),
+    "survey_workbook": ToolSpec(
+        name="survey_workbook",
+        description="""\
+The sheets in a stored xlsx. Per sheet: its `name`, its `row_count` and
+`column_count`, and `cells` — a 5-row by 8-column window of the sheet exactly as
+it sits, no header picked and nothing skipped.
+
+`cells` is a grid, so POSITION IS THE INDEX: `cells[2][1]` is the third row,
+second column. Those two indices are the `header_row` and `first_column` you
+then pass to profile_file. Read them off the values, which is what tells the
+three cases apart — one long string alone on a row is a title, a row of short
+field-like names is the header, and the row under it is data.
+
+    cells[0] = ["LOBBYING DISCLOSURE — Q1 2026", null, null]
+    cells[1] = [null, null, null]
+    cells[2] = [null, "registrant", "filings"]     -> header_row=2, first_column=1
+
+`first_row` says which sheet row `cells[0]` is, and `from_row` moves the window
+down. A sheet whose whole window is prose has its header further down: survey it
+again from where the prose ran out. The window does not hunt for the table —
+nothing here guesses which row is the header, because a wrong guess is a schema
+declared against the wrong columns.
+
+`row_count` is the extent the sheet declares, which counts a trailing styled but
+empty row, so it is an upper bound rather than the count a read gives.
+
+Refused for every other format: they hold one table and no sheets.""",
+    ),
     "run_workflow_test": ToolSpec(
         name="run_workflow_test",
         description="""\

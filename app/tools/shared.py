@@ -14,9 +14,12 @@ from pydantic import BaseModel
 from app.core.agent.bound_tool import BoundToolSpec
 from app.core.frames import collapse_null_forms, convert_cell_to_json_native, list_rows
 from app.core.run_status import StageStatus
+from app.core.source_files import SheetSurvey
+from app.models.column_profile import TableProfile
 from app.models.terms import Terms
 from app.tools.types import ToolInputSchema
 from app.services import (
+    frame_profile,
     project as project_service,
     run as run_service,
     terms as terms_service,
@@ -95,6 +98,23 @@ def list_files(project_id: str | None, file_upload_url: str) -> ProjectFilesView
         remaining_bytes=max(uploads.files_quota_bytes() - used, 0),
         files=[_view(record) for record in uploads.list_project_files(project_id)],
     )
+
+
+def profile_file(
+    project_id: str, sha256: str, columns: list[str] | None = None, max_values: int = 20,
+    sheet_name: str | int = 0, header_row: int = 0, first_column: int = 0,
+) -> TableProfile:
+    resolve_existing_project(project_id)
+    return frame_profile.profile_stored_file(
+        project_id, sha256, columns, max_values=max_values, sheet_name=sheet_name,
+        header_row=header_row, first_column=first_column)
+
+
+def survey_workbook(
+    project_id: str, sha256: str, from_row: int = 0,
+) -> list[SheetSurvey]:
+    resolve_existing_project(project_id)
+    return frame_profile.survey_stored_workbook(project_id, sha256, from_row=from_row)
 
 
 def _view(record: uploads.UploadedFile) -> StoredFileView:
@@ -234,6 +254,8 @@ _FUNCTIONS: dict[str, Callable[..., Any]] = {
     "sleep": sleep,
     "read_workflow_summary": read_workflow_summary,
     "read_stage_output_rows": read_stage_output_rows,
+    "profile_file": profile_file,
+    "survey_workbook": survey_workbook,
 }
 
 _SCHEMAS: dict[str, ToolInputSchema] = {
@@ -295,6 +317,32 @@ _SCHEMAS: dict[str, ToolInputSchema] = {
         ],
         "offset": Annotated[int, "The row ordinal to start at. 0 is the first row."],
     },
+    "profile_file": {
+        "project_id": _PROJECT_ID,
+        "sha256": Annotated[str, "The stored file's sha256, as list_files reported it."],
+        "columns": Annotated[
+            list[str] | None,
+            "Which columns to profile. Omit for every column in the file.",
+        ],
+        "max_values": Annotated[
+            int,
+            "How many distinct values to show per column, commonest first. "
+            "`truncated` says whether there were more.",
+        ],
+        "sheet_name": Annotated[
+            str | int, "xlsx only: the sheet, by name or 0-based position."],
+        "header_row": Annotated[
+            int, "xlsx only: the 0-based row the header sits on."],
+        "first_column": Annotated[
+            int, "xlsx only: the 0-based column the table starts at."],
+    },
+    "survey_workbook": {
+        "project_id": _PROJECT_ID,
+        "sha256": Annotated[str, "The stored xlsx's sha256, as list_files reported it."],
+        "from_row": Annotated[
+            int, "The 0-based sheet row the window starts at. Raise it to look past a "
+                 "preamble longer than the window."],
+    },
 }
 
 _LABELS = {
@@ -306,6 +354,8 @@ _LABELS = {
     "sleep": "Waiting",
     "read_workflow_summary": "Reading the workflow",
     "read_stage_output_rows": "Reading the stage's rows",
+    "profile_file": "Reading what the file holds",
+    "survey_workbook": "Looking over the workbook's sheets",
 }
 
 

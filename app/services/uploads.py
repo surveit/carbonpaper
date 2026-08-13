@@ -118,19 +118,25 @@ def list_project_files(project_id: str | None) -> list[UploadedFile]:
 
 def resolve_file_binding(project_id: str, sha256: str) -> TypeUnsafeUserStageConfigOverride:
     """The connector params a run of `project_id` binds for one of its files."""
+    _, path = open_project_file(project_id, sha256)
+    return {"path": str(path), "format": resolve_file_format(str(path)).value}
+
+
+def open_project_file(project_id: str, sha256: str) -> tuple[UploadedFile, Path]:
+    """The record and the readable path, or loud — never a path whose bytes are gone."""
     records = _find_records(sha256=sha256, project_id=project_id)
     if not records:
         raise FileNotStoredError(
             f"project '{project_id}' has no file {sha256!r} — list its files, upload this "
             "one, or move it in if it is not in a project yet")
     path = resolve_stored_path(records[0])
-    # A record whose bytes are gone is worse than no record: the run would bind a path
-    # and fail at preflight, naming a file the caller was just told it had.
+    # A record whose bytes are gone is worse than no record: the caller would act on a
+    # path naming a file it was just told the project had.
     if not path.is_file():
         raise FileNotStoredError(
             f"'{records[0].filename}' is recorded for project '{project_id}' but its bytes "
             f"are not on disk at {path} — upload it again")
-    return {"path": str(path), "format": resolve_file_format(str(path)).value}
+    return records[0], path
 
 
 def measure_files_used_bytes() -> int:

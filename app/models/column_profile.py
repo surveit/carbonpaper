@@ -1,5 +1,5 @@
-"""What one run's stage output actually holds, per column: the shape a schema gets
-declared from."""
+"""What a stage output or a stored source file actually holds, per column: the shape
+a schema gets declared from."""
 from __future__ import annotations
 
 from pydantic import BaseModel
@@ -31,5 +31,10 @@ class ColumnProfile(BaseModel):
 class StageOutputProfile(BaseModel):
     run_id: str
     stage_id: str
+    row_count: int
+    columns: list[ColumnProfile]
+
+
+class TableProfile(BaseModel):
     row_count: int
     columns: list[ColumnProfile]

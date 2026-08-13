@@ -96,6 +96,13 @@ run_workflow's `files` binds one to a step by the sha256 it gives. To upload a f
 to the returned file_upload_url. list_files(null) is the files in no project, and
 move_file_to_project puts one in.
 
+profile_file(project_id, sha256) is what that file HOLDS. Declare an input step's schema
+from it rather than from asking someone to describe their own file — they answer from
+memory, and the profile is the file. It reads only a file the project holds, so a listed
+file in no project is moved in first. On an xlsx, call survey_workbook first: it names
+the sheets and shows each one's first cells, which is where you read off the sheet, the
+header row and the first column that profile_file and the input step both then take.
+
 {REVIEW_GUIDE_NOTE}
 
 {HANDOVER_BARS_NOTE}
