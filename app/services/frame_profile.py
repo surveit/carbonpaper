@@ -3,13 +3,15 @@ schema comes from the data rather than from the methodology's prose."""
 from __future__ import annotations
 
 import pandas as pd
+import pyarrow as pa
 
 from app.core.source_files import (
     FileFormat, SheetSurvey, read_source_file, resolve_file_format, survey_xlsx_sheets,
 )
-from app.models.column_profile import (
+from app.core.column_profile import (
     ColumnProfile, NumericRange, StageOutputProfile, TableProfile, ValueCount,
 )
+from app.core.frames import frame_to_table, table_to_frame
 from app.services.run import read_stage_output
 from app.services.uploads import open_project_file
 
@@ -30,15 +32,12 @@ _PROFILE_DTYPE: dict[FileFormat, type | bool | None] = {
 def profile_stage_output(
     project: str, run_id: str, stage_id: str, columns: list[str], *, max_values: int,
 ) -> StageOutputProfile:
-    """Every miss raises, naming what exists — never an empty or partial profile."""
-    if max_values < 1:
-        raise ValueError(f"max_values must be at least 1, got {max_values}")
-    frame = read_stage_output(project, run_id, stage_id)
+    profile = profile_table(
+        frame_to_table(read_stage_output(project, run_id, stage_id)),
+        columns, max_values=max_values)
     return StageOutputProfile(
-        run_id=run_id,
-        stage_id=stage_id,
-        row_count=len(frame),
-        columns=[_profile_column(frame, name, max_values) for name in columns],
+        run_id=run_id, stage_id=stage_id,
+        row_count=profile.row_count, columns=profile.columns,
     )
 
 
@@ -59,14 +58,22 @@ def profile_stored_file(
     project: str, sha256: str, columns: list[str] | None, *, max_values: int,
     sheet_name: str | int = 0, header_row: int = 0, first_column: int = 0,
 ) -> TableProfile:
-    if max_values < 1:
-        raise ValueError(f"max_values must be at least 1, got {max_values}")
     _, path = open_project_file(project, sha256)
     fmt = resolve_file_format(str(path))
     frame = read_source_file(
         path, fmt, dtype=_PROFILE_DTYPE[fmt], sheet_name=sheet_name,
         header_row=header_row, first_column=first_column,
     )
+    return profile_table(frame_to_table(frame), columns, max_values=max_values)
+
+
+def profile_table(
+    table: pa.Table, columns: list[str] | None, *, max_values: int
+) -> TableProfile:
+    """Every miss raises, naming what exists — never an empty or partial profile."""
+    if max_values < 1:
+        raise ValueError(f"max_values must be at least 1, got {max_values}")
+    frame = table_to_frame(table)
     return TableProfile(
         row_count=len(frame),
         columns=[_profile_column(frame, name, max_values)

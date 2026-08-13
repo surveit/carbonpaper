@@ -18,10 +18,10 @@ from app.core.errors import (
     NoWorkflowTestVersionError,
     RunNotFoundError,
 )
-from app.core.frames import collapse_null_forms, convert_cell_to_json_native, list_rows
-from app.core.run_status import StageStatus
+from app.core.frames import convert_row_to_json_cells, list_rows
+from app.models.run_manifest import FINISHED_STAGE_STATUSES
 from app.core.source_files import SheetSurvey
-from app.models.column_profile import TableProfile
+from app.core.column_profile import TableProfile
 from app.models.review_guide import ReviewGuideDraft
 from app.models.terms import Terms
 from app.tools.types import ToolInputSchema
@@ -71,8 +71,6 @@ MAX_SLEEP_SECONDS = 3
 # One call's ceiling: a window a model can read in full, and a bound on what a row-by-row
 # read pulls into its context. A caller wanting more pages with `offset`.
 MAX_OUTPUT_ROWS = 50
-# Both wrote the output they promised; warnings are reported on the run's own page.
-_FINISHED_STATUSES = (StageStatus.OK, StageStatus.VALIDATION_WARNINGS)
 
 
 def resolve_existing_project(project_id: str) -> Path:
@@ -325,7 +323,7 @@ def read_stage_output_rows(
         rows=[
             StageOutputRow(
                 ordinal=offset + position,
-                values=_to_json_cells(row),
+                values=convert_row_to_json_cells(row),
                 lineage_url=base_url + run_service.build_row_trace_url(
                     project_id, run_id, stage_id, offset + position
                 ),
@@ -342,23 +340,11 @@ def _refuse_a_stage_that_did_not_finish(project_id: str, run_id: str, stage_id: 
         (record["status"] for record in records if record["stage_id"] == stage_id), None
     )
     # None: the stage is not in this run at all, which read_stage_output names better.
-    if status is not None and status not in _FINISHED_STATUSES:
+    if status is not None and status not in FINISHED_STAGE_STATUSES:
         raise ValueError(
             f"stage '{stage_id}' of run '{run_id}' is '{status}', so the rows it holds are "
             "not a result to show anyone — read a stage that finished"
         )
-
-
-def _to_json_cells(row: dict[str, Any]) -> dict[str, Any]:
-    return {name: _to_json_cell(value) for name, value in row.items()}
-
-
-def _to_json_cell(value: object) -> object:
-    """A null stays null: a blank cell a reader reads as blank must not arrive as "None"."""
-    cell = collapse_null_forms(value)
-    if cell is None or isinstance(cell, (bool, int, float, str)):
-        return cell
-    return convert_cell_to_json_native(cell)
 
 
 # ── binding them onto an agent ───────────────────────────────────────────────

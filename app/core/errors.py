@@ -104,3 +104,7 @@ class ReviewGuideValidationError(ValueError):
 
 class PredicateError(ValueError):
     pass
+
+
+class NoRowsToSelectFrom(Exception):
+    """No finished run holds the rows a stage's examples would be selected from."""

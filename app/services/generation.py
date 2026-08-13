@@ -14,13 +14,19 @@ from pydantic import BaseModel
 from app.compiler.data_model import start_data_model_generation_agent
 from app.compiler.review_guide import start_review_guide_generation_agent
 from app.compiler.stage_tests import start_stage_test_generation_agent
+from app.compiler.stage_tests_submission import dump_submitted_tests, read_selected_rows
 # Re-exported for the status route: only services may import app.compiler, and the
 # route must match the marker on the same string the turn writes.
 from app.compiler.turn_failure import GENERATION_FAILURE_PREFIX as GENERATION_FAILURE_PREFIX
 from app.core.errors import GenerationError
+from app.core.row_search import InputRows
 from app.models.review_guide import ReviewGuideDraft
 from app.models.named_schemas import SchemaLibrary
+from app.models.schema import StageId
 from app.models.stage import stage_to_spec_dict
+from app.models.stages.signature import transform_input_schemas
+from app.models.stages.stage_base import find_stage_test_class
+from app.models.stages.stage_tests import StageTest
 from app.services import terms, versioning
 from app.services.loader import load_workflow
 from app.services.methodology import read_methodology
@@ -29,6 +35,7 @@ from app.services.stage_edit import (
     find_unnamed_model_issues,
     patch_stage_spec,
 )
+from app.services.stage_test_rows import load_stage_row_sources
 
 _log = logging.getLogger(__name__)
 
@@ -63,12 +70,19 @@ def start_stage_test_generation(project_dir: Path, *, stage_id: str, model: str)
             f"stage `{stage_id}` cannot be written back as it stands, so a generated "
             f"suite could not be saved: " + "; ".join(unwritable)
         )
+    # Loaded here, before the turn: examples are selected from real rows, so a project
+    # with none refuses without paying for an agent that could select nothing.
+    sources = load_stage_row_sources(
+        project_dir.name, transform_input_schemas(stage))
+    test_class = find_stage_test_class(type(stage))
     return start_stage_test_generation_agent(
         terms=terms.load_terms(project_dir.name),
         stage=stage,
+        sources=sources,
         project_id=project_dir.name,
         model=model,
-        on_answer=lambda answer: _finish_stage_tests(project_dir, stage_id, answer),
+        on_answer=lambda answer: _finish_stage_tests(
+            project_dir, stage_id, answer, test_class, sources),
     )
 
 
@@ -120,22 +134,30 @@ def _finish_review_guide(
     )
 
 
-def _finish_stage_tests(project_dir: Path, stage_id: str, answer: BaseModel | None) -> None:
+def _finish_stage_tests(
+    project_dir: Path,
+    stage_id: str,
+    answer: BaseModel | None,
+    test_class: type[StageTest],
+    sources: dict[StageId, InputRows],
+) -> None:
     if answer is None:
         raise GenerationError(
             f"stage-test generation for '{stage_id}' in {project_dir.name} "
             "did not submit a suite"
         )
-    patch = answer.model_dump(mode="json", by_alias=True, exclude_none=True)
+    # What is stored is the rows READ OFF the run, not the selections the agent sent:
+    # the same reading its submission was validated against.
+    submitted = getattr(answer, "tests", [])
+    tests = dump_submitted_tests(read_selected_rows(submitted, test_class, sources))
     # The patch replaces the `tests` array wholesale, so an empty suite would wipe
     # whatever the stage already had.
-    if not patch.get("tests"):
+    if not tests:
         raise GenerationError(
             f"stage-test generation for '{stage_id}' in {project_dir.name} "
             "submitted an empty test suite"
         )
-    patch_text = json.dumps(patch)
-    result = patch_stage_spec(project_dir.name, stage_id, patch_text)
+    result = patch_stage_spec(project_dir.name, stage_id, json.dumps({"tests": tests}))
     if not result.ok:
         raise GenerationError(
             f"stage-test generation for '{stage_id}' in {project_dir.name} "

@@ -150,7 +150,7 @@ def _run_agent(
             target_schema=target_schema,
             task=task,
             model=model_name,
-            extra_tools=list(tools or []),
+            builtin_tools=list(tools or []),
             max_turns=RESEARCH_MAX_TURNS if researching else None,
             thinking=_thinking_config(thinking),
         )

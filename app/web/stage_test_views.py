@@ -17,6 +17,11 @@ CertificationStatus = Literal[
     "certified", "failing", "untested", "unsummarised", "untestable"
 ]
 
+# Which of the panel's three sections a case belongs in. `from_data` is the step running
+# on rows a run really produced; the other two are about data that has not arrived, split
+# by what the step would do with it.
+TestSection = Literal["from_data", "reject_and_defer", "decide_now"]
+
 
 class StageCertification(BaseModel):
     """`certified` means the summary and the code agree ON THE AUTHORED EXAMPLES, not that it is right."""
@@ -89,9 +94,14 @@ def _shape_one_test(
         "inputs": [
             {"stage_id": stage_id,
              "columns": _order_columns(rows, input_schemas.get(stage_id)),
-             "rows": rows}
+             "rows": rows,
+             "selections": _shape_selections(test, stage_id)}
             for stage_id, rows in test.inputs.items()
         ],
+        "section": _name_the_section(test),
+        # Why an input like this could turn up later. Only a written case carries one —
+        # a selected row already happened, so there is nothing to anticipate.
+        "authored_reason": test.authored_reason,
         # None, not an empty table: a failure case claims the step must fail, which
         # the template must not render as "succeeded, returned nothing".
         "expected": None if test.expected is None else _shape_expected(
@@ -103,6 +113,24 @@ def _shape_one_test(
             for diff in result.diffs
         ],
     }
+
+
+def _name_the_section(test: StageTest) -> TestSection:
+    """A case is about the data as it stands, or about data that has not arrived."""
+    if test.selections:
+        return "from_data"
+    # No row to select, so the case turns on what the step does when one appears:
+    # stop and leave the decision open, or act on what the description already says.
+    return "reject_and_defer" if test.expected is None else "decide_now"
+
+
+def _shape_selections(test: StageTest, stage_id: str) -> list[dict[str, Any]]:
+    """One entry per row of this input, in the order the rows stand in the table."""
+    return [
+        {"run_id": selection.run_id, "row": selection.row, "filter": selection.filter,
+         "matched": selection.matched, "scanned": selection.scanned}
+        for selection in test.selections if selection.input == stage_id
+    ]
 
 
 def _shape_returned(

@@ -1,5 +1,4 @@
-"""What a stage output or a stored source file actually holds, per column: the shape
-a schema gets declared from."""
+"""What a frame holds, per column: the shape a schema gets declared from."""
 from __future__ import annotations
 
 from pydantic import BaseModel

@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.services import workspace
-from stage_seed import add_stage
+from stage_seed import add_stage, read_stage
 
 _AMOUNT = {"name": "amount", "type": "float", "nullable": False}
 # `note` is carried through: in the input schema, read by nothing, written by nothing.
@@ -151,3 +151,86 @@ def test_panel_without_tests_has_no_tests_section(client: TestClient, tmp_path: 
     response = client.get("/project/alpha/node/load/panel")
     assert response.status_code == 200
     assert "test-report" not in response.text
+
+
+# ── the three sections ───────────────────────────────────────────────────────
+# A case belongs to one of them by what it already carries: a selected row, or no row
+# and a step that must stop, or no row and an expected value. Nothing else decides.
+
+_SECTIONED: list[dict] = [
+    {"name": "doubles_a_real_amount", "description": "the ordinary case",
+     "inputs": {"load": [{"note": "opening balance", "amount": 2.0}]},
+     "expected": [{"doubled": 4.0, "note": "opening balance", "amount": 2.0}],
+     "selections": [{"input": "load", "run_id": "20260101T000000", "row": 3,
+                     "filter": "amount > 1", "matched": 7, "scanned": 98}]},
+    {"name": "a_negative_amount_stops_the_run", "description": "nobody has decided",
+     "inputs": {"load": [{"note": "refund", "amount": -5.0}]},
+     "expected": None,
+     "authored_reason": "A filing that reports a refund would report a negative amount."},
+    {"name": "a_zero_amount_is_doubled_to_zero", "description": "already decided",
+     "inputs": {"load": [{"note": "nil return", "amount": 0.0}]},
+     "expected": [{"doubled": 0.0, "note": "nil return", "amount": 0.0}],
+     "authored_reason": "A filer with nothing to report could enter a plain zero."},
+]
+
+
+def _seed_sectioned(root: Path, tests: list[dict] | None = None) -> None:
+    _seed_project(root)
+    spec = read_stage(root / "alpha", "double")
+    add_stage(root / "alpha", {**spec, "tests": tests if tests is not None else _SECTIONED})
+
+
+def test_the_panel_leads_with_the_rows_that_came_out_of_a_run(
+    client: TestClient, tmp_path: Path
+) -> None:
+    _seed_sectioned(tmp_path)
+    html = client.get("/project/alpha/node/double/panel").text
+    assert "Examples from your data" in html
+    assert html.index("Examples from your data") < html.index("your data changes")
+
+
+def test_a_case_with_no_row_is_sorted_by_what_the_step_would_do(
+    client: TestClient, tmp_path: Path
+) -> None:
+    """Must-stop leaves the decision open; an expected value is a decision already taken."""
+    _seed_sectioned(tmp_path)
+    html = client.get("/project/alpha/node/double/panel").text
+    rejected = html.index("Examples to reject and defer")
+    decide = html.index("Examples to decide now")
+    assert rejected < html.index("a_negative_amount_stops_the_run") < decide
+    assert decide < html.index("a_zero_amount_is_doubled_to_zero")
+
+
+def test_a_written_case_says_why_the_input_could_turn_up(
+    client: TestClient, tmp_path: Path
+) -> None:
+    """The one thing such a case claims that its section heading does not."""
+    _seed_sectioned(tmp_path)
+    html = " ".join(client.get("/project/alpha/node/double/panel").text.split())
+    assert "Why this may appear: A filing that reports a refund" in html
+
+
+def test_a_case_built_on_a_real_row_anticipates_nothing(
+    client: TestClient, tmp_path: Path
+) -> None:
+    _seed_sectioned(tmp_path)
+    html = client.get("/project/alpha/node/double/panel").text
+    assert html.count("test-anticipated") == 2  # the two written cases, not the real one
+
+
+def test_a_suite_with_nothing_written_shows_only_the_first_section(
+    client: TestClient, tmp_path: Path
+) -> None:
+    _seed_sectioned(tmp_path, tests=_SECTIONED[:1])
+
+    html = client.get("/project/alpha/node/double/panel").text
+    assert "Examples from your data" in html
+    assert "What happens when your data changes" not in html
+
+
+def test_the_first_section_names_the_run_its_rows_came_out_of(
+    client: TestClient, tmp_path: Path
+) -> None:
+    _seed_sectioned(tmp_path)
+    html = " ".join(client.get("/project/alpha/node/double/panel").text.split())
+    assert "1 row out of run 20260101T000000, and what this step did to it." in html

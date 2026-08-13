@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
@@ -15,14 +16,14 @@ from app.compiler.turn_failure import GENERATION_FAILURE_PREFIX
 from app.core.agent.store import SessionStore
 from app.core.agent.turns import TurnManager
 from app.models import TableSchema
-from app.models.stages.stage_tests import (
-    PythonRowFunctionStageTest,
-    build_stage_tests_model,
-)
+from app.models.stages.stage_tests import PythonRowFunctionStageTest
+from app.compiler.stage_tests_submission import build_selector_submission_model
 from app.main import app
 from app.services import workspace
-from stage_seed import add_stage, read_stage, read_stages, set_stages
 from app.services.methodology import write_methodology
+from app.services.stage_test_rows import load_stage_row_sources
+from run_seed import store_manifest
+from stage_seed import add_stage, read_stage, read_stages, set_stages
 
 _IN_SCHEMA = {"columns": [{"name": "amount", "type": "float", "nullable": False}]}
 _OUT_SCHEMA = {"columns": [
@@ -58,19 +59,44 @@ def _seed_project(root: Path) -> Path:
         "function": {"kind": "inline", "summary": "Test fixture step.", "corner_cases": [], "code": "def transform(df, output_dir):\n    return df\n"},
         "publish": {}, "signature": {"form": "replaces"},
     })
+    _write_run(project_dir)
     return project_dir
 
 
-def _valid_suite() -> Any:
-    suite_model = build_stage_tests_model(
+_RUN_ID = "20260101T000000"
+
+
+def _write_run(project_dir: Path) -> None:
+    """Examples are selected from a finished run, so the fixture project has one."""
+    outputs = workspace.resolve_project_dir(
+        project_dir.name) / "runs" / _RUN_ID / "outputs"
+    outputs.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame({"amount": [2.0, 7.5, 0.0]}).to_parquet(
+        outputs / "load.parquet", index=False)
+    store_manifest(project_dir, _RUN_ID, {
+        "run_id": _RUN_ID, "started_at": _RUN_ID, "project": project_dir.name,
+        "workflow_version": _RUN_ID, "human_review_queue_stats": {}, "status": "ok",
+        "stage_records": [{
+            "stage_id": "load", "type": "input_data", "status": "ok",
+            "output_row_count": 3, "elapsed_ms": 1, "input_validation_report": [],
+            "output_validation_report": None, "error": None,
+            "output_path": "outputs/load.parquet",
+        }],
+    })
+
+
+def _valid_suite(project: str = "alpha") -> Any:
+    suite_model = build_selector_submission_model(
         PythonRowFunctionStageTest,
         {"load": TableSchema.model_validate(_IN_SCHEMA)},
         TableSchema.model_validate(_OUT_SCHEMA),
+        load_stage_row_sources(project, {"load": TableSchema.model_validate(_IN_SCHEMA)}),
     )
     return suite_model.model_validate({
         "tests": [{
             "name": "doubles_two",
-            "inputs": {"load": [{"amount": 2.0}]},
+            "description": "the ordinary case",
+            "selected_rows": [{"input": "load", "row": 0, "filter": "amount == 2.0"}],
             "expected": [{"amount": 2.0, "doubled": 4.0}],
         }]
     })

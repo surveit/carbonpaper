@@ -39,6 +39,21 @@
 .test-rows th.test-col-written,
 .test-rows td.test-col-written { background: var(--state-review-bg); }
 .test-rows caption { caption-side: top; text-align: left; font-size: 0.78rem; color: var(--muted); padding-bottom: 2px; }
+/* Where a case's rows came from, under the table holding them. Small and quiet: the
+   reader checks it once per case, and what they are reading is the row itself. The match
+   count is the part that can look wrong at a glance (a corner case found in 61 of 98 rows
+   exercises nothing), so it is spelled out rather than left to a ratio. */
+.test-provenance { font-size: 0.78rem; color: var(--muted); margin: -0.3rem 0 0.6rem; }
+.test-provenance code { font-size: 0.78rem; }
+/* The panel's three sections. The second one is skippable — a reader whose data is not
+   going to change owes it nothing — so its heading and note carry that themselves rather
+   than the section being hidden or folded away. */
+.test-section { font-size: 0.98rem; margin: 1.6rem 0 0.15rem; }
+.test-subsection { font-size: 0.88rem; margin: 1.1rem 0 0.15rem; }
+.test-section-note { font-size: 0.8rem; color: var(--muted); line-height: 1.5; margin: 0 0 0.7rem; }
+/* What would have to happen for a written row to become real data. The one thing
+   such a case says that its section heading does not. */
+.test-anticipated { font-size: 0.82rem; margin: 0.1rem 0 0.6rem; }
 .test-message { color: var(--bad-ink); }
 /* A refusal is the step working, so it is not tinted like a failure — a case may
    claim the step must refuse, and there it is the outcome the description asked for. */
