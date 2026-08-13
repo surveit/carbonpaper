@@ -69,6 +69,12 @@ def make_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
     def save_version(project_id: str, draft_id: str, message: str) -> SaveResult:
         return drafts.save_version(project_id, draft_id, message=message)
 
+    def list_files(project_id: str | None = None) -> shared.ProjectFilesView:
+        where = "/files" if project_id is None else f"/project/{project_id}/files"
+        # Root-relative: this reader is already in the app, so the address it was
+        # reached on is theirs and not something this session can be told.
+        return shared.list_files(project_id, where)
+
     def read_review_guide(project_id: str, version_id: str) -> ReviewGuide | None:
         return project_service.read_review_guide(project_id, version_id)
 
@@ -90,6 +96,7 @@ def make_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
         set_draft_stage,
         remove_draft_stage,
         save_version,
+        list_files,
         read_review_guide,
         write_review_guide,
     ]
@@ -103,7 +110,11 @@ def make_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
         )
         for fn in tools
     ] + shared.bind(
-        "read_workflow_summary", "read_stage_output_rows", "read_terms", "write_terms"
+        "read_workflow_summary", "read_stage_output_rows", "read_terms", "write_terms",
+        "get_project_status", "generate_stage_tests",
+        "move_file_to_project", "profile_file", "survey_workbook",
+        "run_workflow", "run_workflow_test", "get_run_status", "sleep",
+        "profile_stage_output_data_range",
     )
 
 
@@ -191,6 +202,13 @@ TOOL_SCHEMAS: dict[str, ToolInputSchema] = {
             "deciding whether to publish it.",
         ],
     },
+    "list_files": {
+        "project_id": Annotated[
+            str | None,
+            "The project whose files to list. Omit for the files that are in no "
+            "project yet.",
+        ],
+    },
     "read_review_guide": {
         "project_id": Annotated[str, "The project id (call get_current_project first)."],
         "version_id": Annotated[
@@ -237,6 +255,7 @@ TOOL_LABELS: dict[str, str] = {
     "set_draft_stage": "Editing the draft",
     "remove_draft_stage": "Removing a draft stage",
     "save_version": "Saving the draft as a version",
+    "list_files": "Listing the project's files",
     "read_review_guide": "Reading the review guide",
     "write_review_guide": "Writing the review guide",
 }

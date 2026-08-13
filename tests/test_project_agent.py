@@ -31,6 +31,17 @@ _EXPECTED_TOOL_NAMES = {
     "write_review_guide",
     "read_terms",
     "write_terms",
+    "get_project_status",
+    "generate_stage_tests",
+    "list_files",
+    "move_file_to_project",
+    "profile_file",
+    "survey_workbook",
+    "run_workflow",
+    "run_workflow_test",
+    "get_run_status",
+    "sleep",
+    "profile_stage_output_data_range",
 }
 
 
