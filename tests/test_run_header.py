@@ -68,7 +68,20 @@ def test_a_halted_run_offers_the_review_queue_with_its_pending_count():
     assert cta.primary.label == "👤 Review 40 items in review →"
     assert cta.primary.url == f"{BASE}/queue/review"
     assert cta.primary.method == "get"
-    assert cta.aside == "1 stage waiting on this"
+    # The aside says what deciding the queue STARTS. It used to read "1 stage waiting on
+    # this", which frames a designed pause as an obstruction — the count is the same fact.
+    assert cta.aside == "1 stage runs once this is decided"
+
+
+def test_the_aside_counts_every_stage_the_decision_releases():
+    manifest = _manifest(
+        "awaiting_review",
+        [("load", "ok"), ("review", "awaiting_review"), ("score", "pending"),
+         ("publish", "pending")],
+        halted_at=["review"],
+    )
+
+    assert _cta(manifest).aside == "2 stages run once this is decided"
 
 
 def test_a_failed_run_offers_a_re_run_that_keeps_the_completed_stages():

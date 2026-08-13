@@ -52,16 +52,24 @@ after injection — without that, the panel's JS (the tab strip, the run log) is
   output (not just the first-5 preview) — as the same diff where one exists,
   over `MAX_TABLE_ROWS` rows instead of the panel's five, keeping the page's row
   numbers and click-to-expand cells; `?raw=1` serves the plain table instead,
-  and each view names itself and links the other. `…/rows.csv` downloads the
+  and each view names itself and links the other. Both orders their columns the
+  way the diff does — what the stage wrote first — as do the panel's plain
+  output preview and the review packet's stage page; an upstream input preview
+  is drawn as its own producer wrote it, since nothing on it is this stage's
+  work. `…/rows.csv` downloads the
   output uncapped, UTF-8 behind a byte-order mark so accented rows open
   correctly in Excel on Windows (`loading.csv_download_body`).
 - **Stage-aware diff** (`app.web.stage_diff` → `_stage_diff.html`, in Data and
   on the full-rows page):
   a 1:1 stage (`python_row_function`, `llm_transform`, and `enrich` against its
   subject input) draws its INPUT frame as the base with what it did painted
-  over. Every input column holds its input position: one the stage dropped is
-  struck through, carrying the input value it discarded; the columns the stage
-  added follow, tinted. Each column header carries the colour-free mark for what
+  over. The columns its signature declares it rewrites or adds are drawn first,
+  tinted, so the reason the reader opened the stage is not off the right edge
+  behind a horizontal scroll (`app.web.column_order`, over
+  `signature.list_written_column_names` — presentation order only, and the frame
+  on disk and the CSV download keep the order the stage wrote). Behind them
+  every input column holds its own relative position: one the stage dropped is
+  struck through, carrying the input value it discarded. Each column header carries the colour-free mark for what
   happened to it — `+` on an added column, `−` on a dropped one, where the strike
   takes the name and leaves the mark readable — and changed cells carry the
   replaced value struck through. A `filter_rows` stage renders ONE merged table

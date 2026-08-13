@@ -200,7 +200,7 @@ table.issue-table { width: 100%; border-collapse: collapse; font-size: .79rem; }
     padding: 1px 7px; border-radius: 3px; font-size: .74rem; cursor: help; white-space: nowrap; }
 .runs-table .unresolved { color: var(--state-warn-ink); cursor: help; }
 
-/* ── The NAV spine and the WORK surface, as COLUMNS. The spine is the review guide,
+/* ── The NAV spine and the WORK surface, as COLUMNS. The spine is the run walkthrough,
       so a version carrying none leaves the work surface the whole width rather than a
       titled empty column beside it.
 

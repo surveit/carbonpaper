@@ -17,6 +17,7 @@ from app.models.stages.llm_transform import LLMTransformStage
 from app.models.stages.starlark import StarlarkRowFunctionStage
 from app.runtime.lineage import EdgeKind
 from app.services.loader import resolve_function_code
+from app.web.config import label_stage_type
 from app.web.panel_links import (
     CONTRIBUTOR_ROWS_LINKED,
     CONTRIBUTORS_NAMED,
@@ -112,6 +113,9 @@ def _build_node(
         "stage_id": step["stage_id"],
         "row_ordinal": step["row_ordinal"],
         "stage_type": step["stage_type"],
+        # The slug stays — it is what the trace recorded — and the label beside it is
+        # what the panel prints, so both surfaces name a type the same way.
+        "stage_type_label": label_stage_type(step["stage_type"]),
         "origin": step["origin"],
         "role": _role_of(i, len(chrono), truncated),
         "columns_new": step["columns_new"],

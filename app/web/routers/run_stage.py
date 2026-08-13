@@ -18,7 +18,8 @@ from app.runtime.errors import PreviewError
 from app.runtime.preview import PREVIEWABLE_TYPES, run_stage_preview
 from app.web import loading
 from app.web.breadcrumbs import build_run_child_crumbs
-from app.web.config import EVENT_TAIL, templates
+from app.web.column_order import order_preview_columns, order_written_columns_first
+from app.web.config import EVENT_TAIL, label_stage_type, templates
 from app.web.eval_coverage import find_eval_coverages
 from app.web.stage_test_views import build_certification, shape_test_views
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH
@@ -63,7 +64,10 @@ async def run_stage_partial(
         # injects its input stages) — see app.web.run_stage_panel.
         return not_executed_panel(request, project_id, run_id, manifest, stage_id, pinned)
 
-    output_preview = load_output_preview(run_dir, stage_record.get("output_path"))
+    # The stage's own columns lead; its inputs are drawn as the upstream stage
+    # wrote them, since nothing on that frame is this stage's work.
+    output_preview = order_preview_columns(
+        load_output_preview(run_dir, stage_record.get("output_path")), pinned.workflow_stage)
     output_by_id = {
         s.get("stage_id"): s.get("output_path") for s in manifest.get("stage_records", [])
     }
@@ -125,13 +129,16 @@ async def run_stage_rows(
     ordinals: str | None = None,
 ):
     run_dir = resolve_run_dir(project_id, run_id)
+    manifest = load_manifest(project_id, run_id)
     stage_record = manifest_stage(project_id, run_id, stage_id)
+    pinned = run_service.load_pinned_stage_def(project_id, manifest, stage_id)
     selected = _parse_ordinals(ordinals)
     table = (
         loading.load_selected_output_rows(run_dir, stage_record.get("output_path"), selected)
         if selected is not None
         else load_output_table(run_dir, stage_record.get("output_path"))
     )
+    table["columns"] = order_written_columns_first(pinned.workflow_stage, table["columns"])
     return templates.TemplateResponse(
         request,
         "run_stage_rows.html",
@@ -148,7 +155,7 @@ async def run_stage_rows(
             # rows by position, which a subset cannot honour.
             "diff": (
                 None if selected is not None
-                else _build_full_rows_diff(project_id, run_id, run_dir, stage_id, stage_record)
+                else _build_full_rows_diff(manifest, pinned, run_dir, stage_record)
             ),
             "raw": raw,
             "links": resolve_panel_links(project_id, run_id),
@@ -175,11 +182,11 @@ def _parse_ordinals(ordinals: str | None) -> list[int] | None:
 
 
 def _build_full_rows_diff(
-    project_id: str, run_id: str, run_dir: Path, stage_id: str, stage_record: dict[str, Any]
+    manifest: dict[str, Any], pinned: run_service.RunStageDef,
+    run_dir: Path, stage_record: dict[str, Any],
 ) -> StageDiff | None:
-    manifest = load_manifest(project_id, run_id)
     return build_stage_diff(
-        run_service.load_pinned_stage_def(project_id, manifest, stage_id).workflow_stage,
+        pinned.workflow_stage,
         run_dir,
         stage_record.get("output_path"),
         {s.get("stage_id"): s.get("output_path") for s in manifest.get("stage_records", [])},
@@ -221,7 +228,9 @@ async def run_stage_simulate(
     if stage_def.type not in PREVIEWABLE_TYPES:
         raise HTTPException(
             status_code=404,
-            detail=f"'{stage_def.type}' stages cannot be run one row at a time",
+            detail=(
+                f"{label_stage_type(stage_def.type)} stages cannot be run one row at a time"
+            ),
         )
 
     output_by_id = {

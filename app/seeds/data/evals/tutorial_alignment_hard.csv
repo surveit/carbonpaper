@@ -1,4 +1,4 @@
-filing_id,client,registrant,amount_usd,filing_period,specific_issues,public_commitment,commitment_source,alignment
+filing_id,client,registrant,amount_usd,filing_period,lobbied_about,public_commitment,commitment_source,ai_judgment
 EVAL-0001,Marrowdean Utilities,Lansdowne Public Affairs,210000,2025 Q1,Supporting the reliability standard that would require its coal units to remain available through 2040.,Publicly committed to retiring its coal units by 2035.,2024 climate pledge,Contradicts
 EVAL-0002,Brackenmoor Energy Holdings,Harrowgate Strategies LLC,275000,2025 Q1,Seeking to expand the voluntary carbon credit market so that companies can buy offsets against the emissions they report.,Publicly committed to doing its part to solve climate change.,2024 climate statement,Unclear
 EVAL-0003,Rushmere Packaging Group,Pell & Doverton Group,64000,2025 Q1,Seeking to move the recyclable-packaging mandate's compliance date from 2027 to 2032.,Publicly committed to making all of its packaging recyclable by 2027.,2023 packaging pledge,Contradicts

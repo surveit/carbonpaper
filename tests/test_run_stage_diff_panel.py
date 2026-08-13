@@ -178,6 +178,24 @@ def test_a_row_function_output_reads_as_a_diff_against_its_input(run_ctx) -> Non
     assert "output data" not in html
 
 
+def _diff_header(html: str) -> str:
+    return html.split('class="preview-block stage-diff"')[1].split("</thead>")[0]
+
+
+def test_the_columns_the_stage_wrote_are_drawn_at_the_left_edge(run_ctx) -> None:
+    # The output frame puts `label` last, behind a horizontal scroll.
+    _pdir, run_id = run_ctx
+    header = _diff_header(_panel(run_id, CLASSIFY_ID))
+    assert header.index(">label<") < header.index(">name<") < header.index(">junk<")
+
+
+def test_the_raw_rows_view_leads_with_the_same_columns(run_ctx) -> None:
+    # The plain table has no + mark to find an added column by.
+    _pdir, run_id = run_ctx
+    header = _rows_page(run_id, CLASSIFY_ID, "?raw=1").split("</thead>")[0]
+    assert header.index(">label<") < header.index(">name<") < header.index(">junk<")
+
+
 def test_the_rail_tallies_what_the_stage_did_in_one_line(run_ctx) -> None:
     _pdir, run_id = run_ctx
     strip = _diff_head(_panel(run_id, CLASSIFY_ID))

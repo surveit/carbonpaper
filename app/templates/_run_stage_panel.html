@@ -17,7 +17,7 @@
 <div class="stage-panel-head">
     <div class="head-line">
         <h2><code>{{ stage.stage_id }}</code></h2>
-        <span class="type-tag {{ type_class.get(stage.type, 'custom') }}">{{ type_glyph.get(stage.type, '') }} {{ stage.type | plain_value }}</span>
+        <span class="type-tag {{ type_class.get(stage.type, 'custom') }}" title="{{ stage.type | plain_value }}">{{ type_glyph.get(stage.type, '') }} {{ stage.type | label_stage_type }}</span>
     </div>
     {# The description comes from the pinned definition, so a run whose version
        no longer resolves shows no line rather than a guessed one. #}
@@ -31,9 +31,14 @@
 </div>
 
 {# The stage definition comes from the version this run pinned; with
-   stage_def_error set NOTHING is shown in its place. #}
+   stage_def_error set NOTHING is shown in its place. Folded: it is a caveat on the
+   Schema and Transform tabs, not the reason this stage has no rows — the summary
+   line says which stage it is silent about and the reason is one click under it. #}
 {% if stage_def_error %}
-<p class="banner banner-warn" id="stage-def-error">⚠ Stage definition unavailable — {{ stage_def_error }}</p>
+<details class="stage-caveat">
+  <summary>⚠ Stage definition unavailable</summary>
+  <p class="banner banner-warn" id="stage-def-error">{{ stage_def_error }}</p>
+</details>
 {% endif %}
 
 {% if stage.error %}
@@ -45,7 +50,7 @@
 {% endif %}
 {% if stage.status == 'awaiting_review' %}
 <section class="banner banner-review">
-    <p>⏸ <strong>{{ stage.output_row_count }} item{% if stage.output_row_count != 1 %}s{% endif %}</strong> awaiting human review. Downstream stages won't run until the queue is cleared.</p>
+    <p>⏸ A model proposed a judgement on <strong>{{ stage.output_row_count }} item{% if stage.output_row_count != 1 %}s{% endif %}</strong> and the run paused here for a person to decide them. Nothing downstream runs until each one is kept or changed; the rest of the workflow then picks up from those decisions.</p>
     {% if links.review_queue(stage.stage_id) %}<p><a href="{{ links.review_queue(stage.stage_id) }}" class="btn primary">Open review queue →</a></p>{% endif %}
 </section>
 {% elif stage.status == 'pending' %}
@@ -128,19 +133,7 @@
         <div><dt>cost</dt><dd>none</dd></div>
         {% endif %}
     </dl>
-    {% if u and u.calls %}
-    {% if batch and batch > 1 %}
-    {# The ceiling is config; the two totals are this run's own. A run of 6 rows must not
-       claim 12 were judged together, so the configured size is stated as a limit and the
-       calls and rows that actually happened are stated beside it. #}
-    <p class="banner banner-warn">Rows were judged in batches of <b>up to {{ batch }}</b>, not one by
-        one — this run answered {{ "{:,}".format(stage.output_row_count or 0) }} row{% if (stage.output_row_count or 0) != 1 %}s{% endif %}
-        in {{ "{:,}".format(u.calls) }} model call{% if u.calls != 1 %}s{% endif %}, and the last call
-        holds whatever is left over. The size is a deliberate trade: fewer, larger calls cost less to
-        run, and a row judged beside others is judged less independently than one judged alone.
-        A row's answer could have been swayed by the others in its call.</p>
-    {% endif %}
-    {% else %}
+    {% if not (u and u.calls) %}
     {# `cached_rows` is absent from every manifest written before the runtime
        counted replays, so the count is stated only where it was taken. #}
     <p class="muted"><b>Reused, not recomputed.</b>
@@ -166,6 +159,25 @@
     {% elif preview and preview.error %}<p class="muted"><em>output preview unavailable: {{ preview.error }}</em></p>
     {% elif stage.output_path %}<p class="muted"><em>output file missing on disk: <code>{{ stage.output_path }}</code></em></p>
     {% else %}<p class="muted"><em>No output yet.</em></p>{% endif %}
+
+    {# ── A caveat ON the rows above, so it sits under them and folded: it qualifies
+       what they are worth, and a reader who has not yet seen them has nothing to
+       qualify. The `stat-strip` above stays open — model, calls and cost are facts
+       about the run, not a caveat.
+
+       The ceiling is config; the two totals are this run's own. A run of 6 rows must
+       not claim 12 were judged together, so the configured size is stated as a limit
+       and the calls and rows that actually happened are stated beside it. ── #}
+    {% if u and u.calls and batch and batch > 1 %}
+    <details class="stage-caveat">
+      <summary>⚠ Rows were judged in batches of up to {{ batch }}, not one by one</summary>
+      <p class="banner banner-warn">This run answered {{ "{:,}".format(stage.output_row_count or 0) }} row{% if (stage.output_row_count or 0) != 1 %}s{% endif %}
+        in {{ "{:,}".format(u.calls) }} model call{% if u.calls != 1 %}s{% endif %}, and the last call
+        holds whatever is left over. The size is a deliberate trade: fewer, larger calls cost less to
+        run, and a row judged beside others is judged less independently than one judged alone.
+        A row's answer could have been swayed by the others in its call.</p>
+    </details>
+    {% endif %}
 
     {# The rows this stage was given, folded below what it produced. Reading them
        is all that happens here; running the transform over a few of them is its
@@ -227,7 +239,7 @@
   root._wired = true;
 
   // ── tabs ──
-  // Opens on the data: someone arriving from the review guide, the graph or a deep
+  // Opens on the data: someone arriving from the run walkthrough, the graph or a deep
   // link is checking the numbers this step produced; the code is what they descend
   // to when the numbers look wrong. The markup opens the same pane, so the first
   // paint needs no script.

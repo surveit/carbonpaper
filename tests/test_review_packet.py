@@ -430,7 +430,7 @@ def test_index_carries_the_versions_review_guide(project_dir, tmp_path):
     packet = export_review_packet(_PROJECT, run_id, tmp_path / "packets")
 
     index = (packet.root / "index.html").read_text(encoding="utf-8")
-    assert "Review guide" in index
+    assert "Run walkthrough" in index
     assert "Check the doubling" in index
     assert "twice its input" in index
     assert 'href="stages/double.html"' in index
@@ -439,7 +439,7 @@ def test_index_carries_the_versions_review_guide(project_dir, tmp_path):
     assert index.index('class="run-nav"') < index.index('class="run-main"')
     assert "run-shell no-nav" not in index
     # Titled once: the rail's own head, not the partial titling itself again.
-    assert index.count("<h2>Review guide</h2>") == 1
+    assert index.count("<h2>Run walkthrough</h2>") == 1
 
 
 def test_index_takes_the_whole_width_when_the_version_has_no_guide(exported):

@@ -307,7 +307,7 @@ async function renderTransformTab(n){
 function render(){
   renderStory();
   const n = V.nodes[sel];
-  document.getElementById('ptype').textContent = `${n.stage_type} · step ${n.step} of ${V.nodes.length}`;
+  document.getElementById('ptype').textContent = `${n.stage_type_label} · step ${n.step} of ${V.nodes.length}`;
   document.getElementById('ptitle').innerHTML =
     `<code>${esc(n.stage_id)}</code> <span class="lin-sub">row ${n.row_ordinal}</span>`;
   const back = document.getElementById('back');

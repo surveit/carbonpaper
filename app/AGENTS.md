@@ -5,6 +5,10 @@ routers in `app/web/routers/`, which import the Runner (`app.runtime`) and the s
 (`app.models`) and share `app/web/{config,loading,diagrams}`. Run:
 `python -m uvicorn app.main:app --port 8765`.
 
+Writing markup: read `docs/visual-language.md` first — colour, the agent mark, error vs
+warning, and the arch test holding each. `app/templates/AGENTS.md` names the three that
+bite most often.
+
 ## Pages / routes
 - `/` project list · `/project/<m>` the project shell (Overview · Document · Terms ·
   Workflow · Runs); the Workflow section carries the mermaid graph + inline node review
@@ -30,9 +34,11 @@ button is not invented to complete the shape.
 
 ## The run page's two columns (`run_detail.html`)
 `.run-nav` (360px, collapsible) then `.run-main`. The nav column is the **spine** and holds
-the review guide alone — so it is rendered **only** where the pinned version carries a guide,
-and the work column takes the whole width otherwise (`.run-shell.no-nav`). Writing a guide is
-offered on the version page, which is where one is stored. The work column is four named
+the **Run walkthrough** alone (the `ReviewGuide` record — the name is internal, the screen says
+walkthrough) — so it is rendered **only** where the pinned version carries a guide, and the work
+column takes the whole width otherwise (`.run-shell.no-nav`). It LEADS on the files the run
+published (`.guide-published`), then the numbered steps: the result first, the account of how it
+was reached under it. Writing a guide is offered on the version page, which is where one is stored. The work column is four named
 sections, in this order:
 
 1. **Run overview** — the header (grounding line, CTA, status bar) and the issue index.
@@ -63,8 +69,9 @@ statement of what went wrong: ONE list indexing the stages, every entry one line
 and the stage panel names none of them itself. On the run page it stays in the
 work column, not the nav rail: its four-column table needs the width. Drawn with
 `_issue_table.html`, the panel + row macros the **Workflow** page's compiler warnings also use;
-the macros own the heading (`17 warnings, 2 errors`, a severity with none of them left out), so
-neither page can word its counts differently.
+the macros own the heading (`17 warnings, 2 errors`, a severity with none of them left out) and
+the CLOSED default, so neither page can word its counts differently or open on a different one.
+The counts are the summary, so a closed panel still says something is wrong.
 - **A stop** — an `error` stage, the run's own end — is the FIRST line, marked `stopped`, its
   message naming which failure it is, because they route to different people: a schema
   refusal (`OutputSchemaViolation`) says the data changed and links the panel's **Data** tab;
@@ -103,6 +110,9 @@ list and this version's guide. With no guide the narration lines are absent, not
   output** (input + output issues from the manifest), then the upstream input previews,
   folded in an `input rows` disclosure — read-only, since picking rows to run on is its own
   page. URL cells are full clickable links. Compiler notes live on `/compile`, not here.
+  The `stat-strip` (model · calls · cost) stays ABOVE the rows — those are facts about the
+  run. A **caveat** on the rows (batched judging; an unreadable pinned definition) is a
+  `.stage-caveat` `<details>`, closed, its whole warning in the summary line.
 - **Schema** — the static contract: the input schemas, then the output schema.
 - **Transform** — the *raw* transform config block (`_stage_executable.html`): llm prompt+model+tools,
   join keys, aggregate ops, connector/queue/publish spec — plus the only link to the
@@ -111,9 +121,14 @@ list and this version's guide. With no guide the narration lines are absent, not
   last and folded (`_stage_code.html`), because the reviewer is a journalist, not an engineer.
 - **The diff** (`app.web.stage_diff` → `_stage_diff.html`): a 1:1 stage
   (`python_row_function`, `llm_transform`, `enrich` — against its subject input) reads as a
-  positional diff over its INPUT frame as the base: every input column holds its place, one the
-  stage dropped struck through carrying the input value, the added ones tinted after them, changed
-  cells marked; each header carries a `+` or `−` so both read without colour. `filter_rows` reads
+  positional diff over its INPUT frame as the base: the columns its signature declares it
+  REWRITES or ADDS come first, tinted (`app.web.column_order` — the same order the plain output
+  table and the packet's stage page use, so a column the reader came for is not behind a
+  horizontal scroll), then the input frame's own columns in their own order, one the stage
+  dropped struck through carrying the input value, changed
+  cells marked; each header carries a `+` or `−` so both read without colour. A stage whose
+  pinned version does not resolve declares nothing, and every surface keeps frame order.
+  Presentation only: the frame on disk and the CSV download are untouched. `filter_rows` reads
   as ONE merged table with its dropped input rows in place, tinted, off the verified lineage
   sidecar. The header is one horizontal axis, the same for either shape — the inputs stacked
   vertically, a bracket where there is more than one, a rail, then the output, which is a sibling

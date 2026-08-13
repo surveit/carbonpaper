@@ -220,3 +220,11 @@ table.data-preview.scratch th { background: var(--hover); }
 .data-inputs > summary { color: var(--accent); font-size: 12px; cursor: pointer; }
 
 
+
+/* A stage panel's WARNINGS, folded. A caveat qualifies the rows it sits under, so
+   it opens closed with its summary carrying the whole warning in one line — the
+   reader meets the fact without the paragraph displacing the data. The banner
+   inside keeps the warning palette, so an opened caveat reads as it always did. */
+.stage-caveat { margin: 12px 0 4px; }
+.stage-caveat > summary { color: var(--state-warn-ink); font-size: 12px; cursor: pointer; }
+.stage-caveat > .banner { margin-top: 6px; }

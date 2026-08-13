@@ -18,9 +18,13 @@
   so the two pages cannot drift into describing the same list differently. A count
   of zero is not written: "0 errors" reads as a result, and the result here is the
   other number.
+
+  It opens CLOSED on both pages. The counts are the summary, so a reader still meets
+  the fact that something is wrong without the table pushing the page's own subject
+  down; opening it is one click, and neither page can differ on the default.
 #}
-{% macro issue_panel(errors, warnings, open=false) %}
-<details class="issue-panel issue-panel-{{ 'error' if errors else 'warn' }}"{% if open %} open{% endif %}>
+{% macro issue_panel(errors, warnings) %}
+<details class="issue-panel issue-panel-{{ 'error' if errors else 'warn' }}">
   <summary>
     <span class="issue-panel-title">
       {%- if warnings %}{{ warnings }} warning{{ '' if warnings == 1 else 's' }}{% endif -%}

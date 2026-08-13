@@ -21,7 +21,7 @@
 
   <div class="nr-bar">
     <div class="nr-bar-id">
-      <span class="type-tag big {{ type_class.get(stage.type, 'custom') }}">{{ type_glyph.get(stage.type, '') }} {{ stage.type }}</span>
+      <span class="type-tag big {{ type_class.get(stage.type, 'custom') }}" title="{{ stage.type | plain_value }}">{{ type_glyph.get(stage.type, '') }} {{ stage.type | label_stage_type }}</span>
       <div class="nr-bar-name"><h2><code>{{ stage.id }}</code></h2><p>{{ stage.description }}</p></div>
     </div>
   </div>

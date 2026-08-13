@@ -61,14 +61,17 @@ class TutorialAgentReference(BaseModel):
     # What run_eval takes. Slicing it off a URL is a guess, and the seeded eval is the
     # only one that answers here.
     eval_id: str
+    eval_url: str
     # Live the moment this is returned: the editing agent is waiting in that chat.
     edit_chat_url: str
-    # The three ways to say the same handoff, headline first: this workspace speaks MCP
-    # at `mcp_url`, so an assistant the reader ALREADY has open can be told to connect
-    # to it — `mcp_ask_your_assistant` is what they say. `mcp_command` is the same thing
-    # for someone who would rather type it at a terminal, and needs the CLI installed.
+    # The same agent in a chat bound to NO project, for a reader who wants one of their
+    # own: it creates the project from their methodology (create_project) rather than
+    # editing the tour's.
+    new_project_chat_url: str
+    # The advanced handoff, for a reader who would rather stay in the coding assistant
+    # they already have open: this workspace speaks MCP at `mcp_url`, and `mcp_command`
+    # adds it to Claude Code. Needs the CLI installed.
     mcp_url: str
-    mcp_ask_your_assistant: str
     mcp_command: str
 
 
@@ -100,13 +103,12 @@ def seed_tutorial_project(ctx: TutorialContext) -> TutorialAgentReference:
         guide_url=f"{ctx.base_url}project/{name}/workflow/version/{version_id}",
         runs_url_prefix=f"{ctx.base_url}project/{name}/runs/",
         eval_id=eval_config.id,
+        eval_url=f"{ctx.base_url}project/{name}/evals/{eval_config.id}",
         edit_chat_url=ctx.base_url.rstrip("/") + agent_service.open_agent_chat(
             "editing", name),
+        new_project_chat_url=ctx.base_url.rstrip("/")
+        + agent_service.open_unbound_agent_chat("editing"),
         mcp_url=f"{ctx.base_url}mcp",
-        mcp_ask_your_assistant=(
-            f"Add the MCP server at {ctx.base_url}mcp over streamable HTTP, then use "
-            "its tools to turn my methodology into a workflow."
-        ),
         mcp_command=f"claude mcp add --transport http carbonpaper {ctx.base_url}mcp",
     )
 
@@ -153,9 +155,12 @@ CREATE_TUTORIAL_PROJECT = ToolProse(
         "Seed the committed tutorial project into this workspace and return it: the "
         "ordinary `project` record (its `id` is what every other tool takes), the stored "
         "version, its `workflow` (every stage's id, type and inputs), the "
-        "`input_files` its run needs, `eval_id`, the URLs of its workflow, review "
-        "guide and runs, `edit_chat_url` — a chat with the editing agent, already open "
-        "and waiting — and the three forms of the MCP handoff. Takes no arguments — the "
+        "`input_files` its run needs, `eval_id` and `eval_url`, the URLs of its "
+        "workflow, review guide and runs, `edit_chat_url` — a chat with the editing "
+        "agent on THIS "
+        "project, already open and waiting — `new_project_chat_url`, the same agent in a "
+        "chat bound to no project, which is where a reader starts one of their own — and "
+        "`mcp_url` with the `mcp_command` that adds it. Takes no arguments — the "
         "fixture is fixed. If the tutorial project is already in this workspace it is "
         "returned as it stands, not replaced, so a second tour never overwrites the first."
     ),

@@ -7,8 +7,18 @@
 {% block head_extra %}<script src="/static/queue-paginate.js"></script>{% endblock %}
 
 {% block content %}
+{# What the reviewer is here to decide, before the queue and before the gate onto it:
+   the rest of this page is a list of rows, and a row means nothing until the question
+   has been read. Open, not a disclosure — a fold is how a reader skips it. #}
+{% if stage_def.queue and stage_def.queue.reviewer_instructions %}
+<section class="reviewer-instructions">
+    <h2>Reviewer instructions</h2>
+    <p class="instructions-text">{{ stage_def.queue.reviewer_instructions }}</p>
+</section>
+{% endif %}
+
 <div class="stage-header">
-    <span class="type-tag human">👤 human_review_queue</span>
+    <span class="type-tag human" title="human_review_queue">👤 {{ 'human_review_queue' | label_stage_type }}</span>
     <h1><code>{{ stage_id }}</code></h1>
     <p class="stage-id">{{ stage_def.description }} · run <code>{{ run_id }}</code></p>
 </div>
@@ -29,13 +39,6 @@
         <button type="submit" class="btn primary">▶ Resume run</button>
     </form>
 </div>
-
-{% if stage_def.queue and stage_def.queue.reviewer_instructions %}
-<details class="reviewer-instructions" open>
-    <summary>Reviewer instructions</summary>
-    <p class="instructions-text">{{ stage_def.queue.reviewer_instructions }}</p>
-</details>
-{% endif %}
 
 {% if page.schema_note %}<p class="queue-note">{{ page.schema_note }}</p>{% endif %}
 {% if page.lineage_note %}<p class="queue-note">{{ page.lineage_note }}</p>{% endif %}

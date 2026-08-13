@@ -2,7 +2,7 @@
   "steps": [
     {
       "title": "Load the quarter's lobbying filings",
-      "prose": "What each client paid to ask government for, as filed. After this: one row per lobbying filing, and every count downstream is a count of these. Invented data; no real filing.",
+      "prose": "Invented sample data — what each client paid to ask government for, as filed.",
       "stage_ids": [
         "raw_filings"
       ],
@@ -10,7 +10,7 @@
     },
     {
       "title": "Load each client's public commitment",
-      "prose": "What each client told everyone else it would do — the promise its filings get read against. After this: one row per client, and a repeat fails the run rather than quietly multiplying filings. Also invented.",
+      "prose": "What each client told everyone else it would do, one promise each — a repeat fails the run rather than quietly multiplying filings.",
       "stage_ids": [
         "public_commitments"
       ],
@@ -18,31 +18,31 @@
     },
     {
       "title": "Check every filing before anything reads it",
-      "prose": "The spend is text on the filing until someone reads it. After this: every `amount_usd` is a number, and a filing whose spend could not be read stopped the run rather than travelling as a blank.",
+      "prose": "The spend is text on the filing until someone reads it as a number, and one that could not be read stopped the run rather than travelling as a blank.",
       "stage_ids": [
         "check_filings"
       ],
       "data_description": "Every filing in the sample, with its reported spend read as a number."
     },
     {
-      "title": "Join each filing to its client's public commitment",
-      "prose": "Puts the promise beside the ask, dropping no filing. After this: every lobbying filing is still here, and a blank `public_commitment` means the client has none on record — the absence IS the record.",
+      "title": "Put each promise beside the ask",
+      "prose": "Nothing is dropped: a blank promise means the client has none on record, and the absence IS the record.",
       "stage_ids": [
         "matched_commitments"
       ],
       "data_description": "Every filing, plus its client's commitment where one matched."
     },
     {
-      "title": "Judge the filing against the commitment",
-      "prose": "Whether an ask contradicts the client's promise is a reading, made here. After this: every filing carries `alignment` and the sentence behind it. Trust this step least — read both texts yourself.",
+      "title": "Judge the ask against the promise",
+      "prose": "A model proposes how the two stand and writes one sentence saying why. Trust this step least — read both texts yourself.",
       "stage_ids": [
         "judge_alignment"
       ],
-      "data_description": "The same filings, plus the model's judgment and its one-sentence note."
+      "data_description": "The same filings, plus the model's judgment and its one sentence."
     },
     {
       "title": "Put every contradiction in front of a person",
-      "prose": "A contradiction is a proposal until someone reads both texts. After this: every flagged filing carries a reviewer's `reviewed_alignment`, their name and their note; `skipped` means no person was asked.",
+      "prose": "The model's label is only a proposal: every contradiction it flagged waits here for a person to keep or change, under their own name.",
       "stage_ids": [
         "review_contradictions"
       ],
@@ -50,7 +50,7 @@
     },
     {
       "title": "Publish the report",
-      "prose": "What you hand to someone who was not here — open it under Published, below. After this: one page per filing, each row linked back to its own lineage, each printed contradiction naming whoever reviewed it.",
+      "prose": "What you hand to someone who was not here — open it under Published. Each row is linked back to the filing it came from, and each printed contradiction names whoever reviewed it.",
       "stage_ids": [
         "publish_report"
       ],

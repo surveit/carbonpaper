@@ -125,7 +125,7 @@ def test_a_column_the_stage_added_is_named_and_marked(tmp_path: Path) -> None:
 
     assert diff is not None and diff.kind == ROW_ALIGNED_KIND
     assert diff.added_column_names == ["label"]
-    label_cells = [row[2] for row in diff.rows]
+    label_cells = [row[0] for row in diff.rows]  # the stage's own column leads
     assert all(cell.state is CellDiffState.added for cell in label_cells)
     assert diff.changed_cells_total == 0
 
@@ -163,7 +163,7 @@ def test_an_unchanged_passthrough_reports_every_value_carried(tmp_path: Path) ->
     assert all(c.state is ColumnDiffState.carried for c in diff.columns)
 
 
-def test_the_column_spine_is_the_input_frame_with_the_added_columns_after_it(
+def test_the_columns_the_stage_wrote_lead_the_input_frame_spine(
     tmp_path: Path,
 ) -> None:
     # Here `val` is dropped and `label` is added.
@@ -176,14 +176,16 @@ def test_the_column_spine_is_the_input_frame_with_the_added_columns_after_it(
     diff = _diff(tmp_path, _row_stage(out_columns), out_rel)
 
     assert diff is not None
+    # What the signature declares this stage adds comes first; the input frame's
+    # own columns hold their relative order behind it, the dropped one included.
     assert [(c.name, c.state) for c in diff.columns] == [
+        ("label", ColumnDiffState.added),
         ("name", ColumnDiffState.carried),
-        ("val", ColumnDiffState.dropped),
-        ("label", ColumnDiffState.added)]
+        ("val", ColumnDiffState.dropped)]
     assert [cell.state for cell in diff.rows[0]] == [
-        CellDiffState.carried, CellDiffState.dropped, CellDiffState.added]
+        CellDiffState.added, CellDiffState.carried, CellDiffState.dropped]
     # The dropped column carries the INPUT value, so the reader sees what was lost.
-    assert [cell.text for cell in diff.rows[0]] == ["a", "1", "x"]
+    assert [cell.text for cell in diff.rows[0]] == ["x", "a", "1"]
     assert diff.removed_column_names == ["val"] and diff.added_column_names == ["label"]
     assert diff.changed_cells_total == 0
 
@@ -362,10 +364,10 @@ def test_an_enrich_that_dropped_a_subject_column_shows_it_carrying_the_input_val
     assert diff is not None
     assert diff.removed_column_names == ["val"]
     assert [(c.name, c.state) for c in diff.columns] == [
+        ("extra", ColumnDiffState.added),
         ("name", ColumnDiffState.carried),
-        ("val", ColumnDiffState.dropped),
-        ("extra", ColumnDiffState.added)]
-    dropped_cells = [row[1] for row in diff.rows]
+        ("val", ColumnDiffState.dropped)]
+    dropped_cells = [row[2] for row in diff.rows]
     assert [cell.text for cell in dropped_cells] == ["1", "2"]
     assert all(cell.state is CellDiffState.dropped for cell in dropped_cells)
 

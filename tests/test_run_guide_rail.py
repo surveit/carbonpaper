@@ -38,10 +38,14 @@ def _stage_view(
     )
 
 
-def _render(*steps: GuideStepView) -> str:
+def _render(
+    *steps: GuideStepView,
+    published: list[object] | None = None,
+) -> str:
     html = templates.get_template("_run_guide.html").render(
         guide=RunGuideView(steps=list(steps), unnarrated=[]),
         project_id="demo",
+        published_artifacts=published or [],
         links=AppPanelLinks("demo", "20260101T000000"),
     )
     # The rail carries its own stylesheet, which names every class these tests look
@@ -195,4 +199,25 @@ def test_a_section_with_no_authored_sentence_gets_its_link_and_no_sentence() -> 
 
     assert "45.1k" in html
     assert 'class="guide-output-what"' not in html
+
+
+
+# ── where the run ended up ───────────────────────────────────────────────────
+
+class _Artifact:
+    def __init__(self, name: str, url: str) -> None:
+        self.name, self.url = name, url
+
+
+def test_the_published_files_lead_the_rail_rather_than_trailing_it() -> None:
+    html = _render(_section(_union()),
+                   published=[_Artifact("filings.xlsx", "/runs/x/artifacts/filings.xlsx")])
+
+    assert html.index("guide-published") < html.index("guide-steps")
+    assert "filings.xlsx" in html
+
+
+def test_a_run_that_published_nothing_shows_no_published_block() -> None:
+    assert "guide-published" not in _render(_section(_union()))
+
 

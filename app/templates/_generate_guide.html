@@ -18,10 +18,10 @@
   .guide-cta .nr-edit-msg { font-size: 12px; margin: 8px 0 0; }
 </style>
 <div class="guide-cta">
-  <p class="guide-cta-lead">No review guide for the version this run pinned
+  <p class="guide-cta-lead">No run walkthrough for the version this run pinned
     (<code>{{ guide_version_id }}</code>) — the walkthrough a reviewer reads beside
     these stages to judge whether the run did what the methodology says.</p>
-  <button type="button" class="btn" data-role="generate-guide">{{ sparkle() }} Generate guide</button>
+  <button type="button" class="btn" data-role="generate-guide">{{ sparkle() }} Generate walkthrough</button>
   <p class="nr-edit-msg" data-role="generate-guide-msg"></p>
 </div>
 
@@ -63,7 +63,7 @@
 
   btn.addEventListener('click', async function () {
     btn.disabled = true;
-    btn.textContent = 'Writing the guide…';
+    btn.textContent = 'Writing the walkthrough…';
     msg.textContent = 'The agent is reading this version and the methodology. This takes a few minutes.';
     msg.className = 'nr-edit-msg';
     let r;
