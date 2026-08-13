@@ -3,7 +3,7 @@
 {% block breadcrumbs %}{% include "_breadcrumbs.html" %}{% endblock %}
 {# A turn naming a file draws as a card; every other turn is its own text. The TEXT is
    what the agent reads either way — this is only how the page draws it. #}
-{% macro turn_body(text) %}{% set file = text | attachment %}{% if file %}<div class="ac-body ac-file"><span class="ac-file-icon" aria-hidden="true">▤</span><span class="ac-file-name">{{ file.name }}</span><span class="ac-file-meta">{{ file.meta }}</span></div>{% else %}<div class="ac-body">{{ text }}</div>{% endif %}{% endmacro %}
+{% macro turn_body(text) %}{% set turn = text | turn %}{% for file in turn.files %}<div class="ac-body ac-file"><span class="ac-file-icon" aria-hidden="true">▤</span><span class="ac-file-name">{{ file.name }}</span><span class="ac-file-meta">{{ file.meta }}</span></div>{% endfor %}{% if turn.said or not turn.files %}<div class="ac-body">{{ turn.said if turn.files else text }}</div>{% endif %}{% endmacro %}
 {% block content %}
 <div class="ac-head">
   <span class="ac-backend" title="which model backend answers">backend: {{ backend }}</span>
@@ -98,9 +98,9 @@ function toolPre(text) { const p = document.createElement("pre"); p.className = 
 // it is drawn, and the agent reads the text.
 const ATTACHMENT_PREFIX = "[file] ";
 
-function attachmentBody(text) {
+function attachmentBody(line) {
   const body = el("ac-body ac-file");
-  const fields = text.slice(ATTACHMENT_PREFIX.length).split(" · ");
+  const fields = line.slice(ATTACHMENT_PREFIX.length).split(" · ");
   const icon = el("ac-file-icon", "▤"); icon.setAttribute("aria-hidden", "true");
   body.append(icon, el("ac-file-name", fields[0]));
   if (fields.length > 1) body.appendChild(el("ac-file-meta", fields[1]));
@@ -110,11 +110,16 @@ function attachmentBody(text) {
 function addUser(text) {
   const b = el("ac-msg user");
   b.appendChild(el("ac-role", "you"));
-  if (text.startsWith(ATTACHMENT_PREFIX)) {
-    b.appendChild(attachmentBody(text));
-  } else {
-    const body = el("ac-body"); body.textContent = text; b.appendChild(body);
+  // Attachments lead, one chip each, and whatever the person typed follows them — a
+  // turn can carry several files AND words, and neither may swallow the other.
+  const lines = text.split("\n");
+  let cut = 0;
+  while (cut < lines.length && lines[cut].startsWith(ATTACHMENT_PREFIX)) {
+    b.appendChild(attachmentBody(lines[cut]));
+    cut += 1;
   }
+  const said = cut ? lines.slice(cut).join("\n").trim() : text;
+  if (said || !cut) { const body = el("ac-body"); body.textContent = said; b.appendChild(body); }
   log.appendChild(b); scroll();
 }
 
@@ -226,7 +231,7 @@ const clip = document.getElementById("clip");
 const filePicker = document.getElementById("file");
 const attachedBox = document.getElementById("attached");
 const projectModal = document.getElementById("project-modal");
-let attached = null;   // the line the next Send carries
+let attached = [];       // the lines the next Send carries, one per file
 let pendingFile = null;  // picked, waiting on a project answer
 
 function describeBytes(n) {
@@ -237,23 +242,31 @@ function describeBytes(n) {
   return n + "B";
 }
 
-function showAttached(line) {
-  attached = line;
+function drawAttached() {
   attachedBox.replaceChildren();
-  attachedBox.hidden = !line;
-  if (!line) { fitComposer(); return; }
-  const text = document.createElement("span");
-  text.textContent = line;
-  const drop = document.createElement("button");
-  drop.type = "button";
-  drop.className = "ac-unattach";
-  drop.textContent = "×";
-  // The bytes are already stored by now, and nothing in the app deletes a file — so
-  // this takes the file off the message, and says so rather than implying a delete.
-  drop.title = "Take this off the message. The file stays in the store.";
-  drop.addEventListener("click", () => showAttached(""));
-  attachedBox.append(text, drop);
+  attachedBox.hidden = attached.length === 0;
+  attached.forEach((line, index) => {
+    const chip = el("ac-pending-chip");
+    const fields = line.slice(ATTACHMENT_PREFIX.length).split(" · ");
+    chip.appendChild(el("ac-file-name", fields[0]));
+    if (fields.length > 1) chip.appendChild(el("ac-file-meta", fields[1]));
+    const drop = document.createElement("button");
+    drop.type = "button";
+    drop.className = "ac-unattach";
+    drop.textContent = "×";
+    // The bytes are already stored by now, and nothing here deletes a file — so this
+    // takes it off the message, and says so rather than implying a delete.
+    drop.title = "Take this off the message. The file stays in the project's files.";
+    drop.addEventListener("click", () => { attached.splice(index, 1); drawAttached(); });
+    chip.appendChild(drop);
+    attachedBox.appendChild(chip);
+  });
   fitComposer();
+}
+
+function showAttached(line) {
+  if (line) attached.push(line);
+  drawAttached();
 }
 
 function askWhereItGoes() {
@@ -329,11 +342,15 @@ if (clip && filePicker) {
 
 async function send() {
   const typed = input.value.trim();
-  // The attachment IS the message when nothing was typed: the file arriving is the turn.
-  const text = attached ? (typed ? `${attached}\n\n${typed}` : attached) : typed;
+  // Attachments lead, one per line, then a blank line, then what was typed. The files
+  // ARE the message when nothing was typed: a file arriving is the turn.
+  const text = attached.length
+    ? attached.join("\n") + (typed ? `\n\n${typed}` : "")
+    : typed;
   if (!text || streaming) return;
   input.value = "";
-  showAttached("");   // also refits the composer to the now-empty box
+  attached = [];
+  drawAttached();
   addUser(text);
   const r = await fetch(MESSAGE_URL, {
     method: "POST", headers: {"Content-Type": "application/json"},

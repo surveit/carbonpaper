@@ -193,3 +193,10 @@
    second shape around it. */
 .ac-msg.user .ac-body.ac-file { background: var(--raised); padding: 7px 12px;
     border-radius: 999px; }
+/* Each pending file is its own chip, because a turn may carry several and each has to
+   be removable on its own. */
+.ac-attached { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ac-pending-chip { display: inline-flex; align-items: center; gap: 8px;
+    padding: 5px 8px 5px 12px; border: 1px solid var(--border); border-radius: 999px;
+    background: var(--sunk-deep); }
+.ac-pending-chip .ac-file-name { font-size: 12px; }

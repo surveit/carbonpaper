@@ -80,7 +80,10 @@
     <input type="text" id="delete-confirm" name="confirm" autocomplete="off" required>
     <div class="files-modal-actions">
       <button type="button" class="btn" id="delete-cancel">Cancel</button>
-      <button type="submit" class="btn danger">Delete this file</button>
+      {# Disabled until the name matches, so a mistyped confirmation is a button that
+         will not press rather than a page that says no. #}
+      <button type="submit" class="btn danger" id="delete-submit" disabled
+              title="Type the file's name to enable this">Delete this file</button>
     </div>
   </form>
 </dialog>

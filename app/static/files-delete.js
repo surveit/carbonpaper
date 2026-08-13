@@ -6,7 +6,19 @@
   if (!modal) return;
   var form = document.getElementById("delete-form");
   var confirmField = document.getElementById("delete-confirm");
+  var submit = document.getElementById("delete-submit");
   var project = modal.getAttribute("data-project");
+  var expected = "";
+
+  // The server checks this too and answers 400, but nobody should ever meet that: a
+  // typo is a button that will not press, on the page where the name is in front of you.
+  function gateSubmit() {
+    var matches = confirmField.value.trim() === expected;
+    submit.disabled = !matches;
+    submit.title = matches ? "" : "Type the file's name to enable this";
+  }
+
+  confirmField.addEventListener("input", gateSubmit);
 
   function warn(runCount, filename) {
     var runs = parseInt(runCount, 10) || 0;
@@ -25,8 +37,10 @@
       document.getElementById("delete-name").textContent = filename;
       document.getElementById("delete-warning").textContent =
         warn(button.getAttribute("data-runs"), filename);
+      expected = filename;
       confirmField.value = "";
       confirmField.placeholder = filename;
+      gateSubmit();
       form.action = "/project/" + encodeURIComponent(project) + "/files/" +
         button.getAttribute("data-sha256") + "/delete";
       modal.showModal();

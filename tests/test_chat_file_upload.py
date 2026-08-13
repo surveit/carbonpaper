@@ -14,7 +14,7 @@ from app.services.errors import FileNotStoredError
 from app.services.project import create_project
 from app.services.uploads import UploadedFile, list_project_files
 from app.tools import shared
-from app.web.file_sizes import read_attachment
+from app.web.file_sizes import read_turn
 
 client = TestClient(app)
 
@@ -143,9 +143,9 @@ def test_adopting_something_already_owned_fails_loudly(session_id, project_id):
         shared.move_file_to_project(project_id, CSV_SHA)
 
 
-# ─── The turn draws as a card; its text is still the sentence the agent reads ────
+# ─── The turn draws as chips; its text is still the sentence the agent reads ────
 
-def test_a_file_turn_draws_as_a_card(session_id, project_id):
+def test_a_file_turn_draws_as_a_chip(session_id, project_id):
     line = attach(session_id, project_id=project_id).json()["line"]
     client.post(f"/chat/{session_id}/message", json={"text": line})
     page = client.get(f"/chat/{session_id}").text
@@ -160,15 +160,33 @@ def test_an_ordinary_message_is_still_its_own_text(session_id):
     assert "just a message" in page
 
 
-def test_the_card_changes_how_the_line_looks_and_never_what_it_says(session_id, project_id):
+def test_what_was_typed_beside_a_file_is_not_swallowed(session_id, project_id):
     line = attach(session_id, project_id=project_id).json()["line"]
-    card = read_attachment(line)
-    assert card is not None
-    # Every field of the sentence survives the split, because the agent is given the
-    # sentence and the reader is given the card, and they must not diverge.
-    assert card.name == "posts.csv"
+    client.post(f"/chat/{session_id}/message", json={"text": f"{line}\n\nrun this one"})
+    page = client.get(f"/chat/{session_id}").text
+    assert '<span class="ac-file-name">posts.csv</span>' in page
+    assert "run this one" in page  # the chip must not eat the person's own words
+
+
+def test_every_attached_file_gets_its_own_chip(session_id, project_id):
+    first = attach(session_id, project_id=project_id).json()["line"]
+    second = attach(session_id, project_id=project_id, name="other.csv",
+                    body=b"a,b\n1,2\n").json()["line"]
+    client.post(f"/chat/{session_id}/message",
+                json={"text": f"{first}\n{second}\n\nboth of these"})
+    page = client.get(f"/chat/{session_id}").text
+    assert page.count('class="ac-body ac-file"') == 2
+    assert "other.csv" in page and "posts.csv" in page
+    assert "both of these" in page
+
+
+def test_a_turn_splits_into_its_files_and_its_words(session_id, project_id):
+    line = attach(session_id, project_id=project_id).json()["line"]
+    turn = read_turn(f"{line}\n\nrun this one")
+    assert [f.name for f in turn.files] == ["posts.csv"]
     # Only the size rides on the chip; the project and hash stay in the text the agent
     # reads, because on screen they turn a chip into a paragraph.
-    assert card.meta == "13B"
+    assert turn.files[0].meta == "13B"
+    assert turn.said == "run this one"
     assert project_id in line and CSV_SHA in line
-    assert read_attachment("just a message") is None
+    assert read_turn("just a message").files == []

@@ -88,6 +88,15 @@ def test_deleting_takes_the_filename_back(project_id):
     assert not (files_root() / CSV_SHA).exists()  # bytes and their dir both gone
 
 
+def test_the_delete_button_starts_disabled(project_id):
+    store(project_id)
+    page = client.get(f"/project/{project_id}/files").text
+    # A typo should be a button that will not press, not a page that says no. The 400
+    # below is still the real guard; nobody should ever meet it.
+    assert 'id="delete-submit" disabled' in page
+    assert "Type the file\'s name to enable this" in page
+
+
 def test_a_wrong_confirmation_deletes_nothing(project_id):
     store(project_id)
     resp = client.post(f"/project/{project_id}/files/{CSV_SHA}/delete",

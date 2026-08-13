@@ -49,7 +49,7 @@ def describe_attachment(record: UploadedFile, project_name: str = "") -> str:
 
 
 # What describe_attachment writes, so the two stay in step: a change to the sentence is a
-# change to what this splits. The prefix marks a turn as an attachment rather than prose
+# change to what this splits. The prefix marks a line as an attachment rather than prose
 # a person happened to type.
 ATTACHMENT_PREFIX = "[file] "
 _FIELD_SEPARATOR = " · "
@@ -60,11 +60,25 @@ class Attachment(BaseModel):
     meta: str
 
 
-def read_attachment(text: str) -> Attachment | None:
-    """The fields behind a file turn, or None for prose. Splits; renders nothing."""
-    if not text.startswith(ATTACHMENT_PREFIX):
-        return None
-    name, _, rest = text[len(ATTACHMENT_PREFIX):].partition(_FIELD_SEPARATOR)
+class ChatTurn(BaseModel):
+    """A turn's parts: what was attached, and what was said. Either may be empty."""
+
+    files: list[Attachment]
+    said: str
+
+
+def read_turn(text: str) -> ChatTurn:
+    """Splits a turn into its files and its prose; renders nothing."""
+    files, rest = [], text.splitlines()
+    # Attachments lead, one per line, because a turn may carry several — and whatever
+    # follows them is the person's own words, which the chips must not swallow.
+    while rest and rest[0].startswith(ATTACHMENT_PREFIX):
+        files.append(_read_attachment(rest.pop(0)))
+    return ChatTurn(files=files, said="\n".join(rest).strip())
+
+
+def _read_attachment(line: str) -> Attachment:
+    name, _, rest = line[len(ATTACHMENT_PREFIX):].partition(_FIELD_SEPARATOR)
     # Only the size rides on the chip. The project and the sha256 stay in the text, which
     # is what the agent reads — on screen they would turn a chip into a paragraph.
     return Attachment(name=name, meta=rest.partition(_FIELD_SEPARATOR)[0])

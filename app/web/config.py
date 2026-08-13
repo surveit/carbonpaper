@@ -21,7 +21,7 @@ from starlette.types import Scope
 # router its own stale copy, which is exactly what set_projects_dir() exists to
 # avoid.
 from app.core.utils import abbreviate_count
-from app.web.file_sizes import describe_bytes, read_attachment
+from app.web.file_sizes import describe_bytes, read_turn
 from app.services.workspace import (
     configure_projects_dir_from_env as configure_projects_dir_from_env,
     projects_dir as projects_dir,
@@ -119,4 +119,4 @@ templates.env.filters["abbreviate_count"] = abbreviate_count
 templates.env.filters["filesize"] = describe_bytes
 # A chat turn naming an attached file draws as a card; every other turn is
 # its own text. The line itself is what the agent reads either way.
-templates.env.filters["attachment"] = read_attachment
+templates.env.filters["turn"] = read_turn
