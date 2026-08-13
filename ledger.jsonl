@@ -300,3 +300,4 @@
 {"run_id":"31702613430","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31702613430","created":"2026-08-13T13:00:16Z","branch":"feat/grounded-stage-tests","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"31702813147","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31702813147","created":"2026-08-13T13:01:39Z","branch":"feat/publish-copies-never-computes","event":"pull_request","contracts_kept":14,"findings":[]}
 {"run_id":"31702813147","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31702813147","created":"2026-08-13T13:02:38Z","branch":"feat/publish-copies-never-computes","event":"pull_request","contracts_kept":null,"findings":[]}
+{"run_id":"31702989963","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31702989963","created":"2026-08-13T13:03:47Z","branch":"fix/tool-model-args","event":"pull_request","contracts_kept":14,"findings":[]}
