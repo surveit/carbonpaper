@@ -60,10 +60,10 @@ def test_grantable_set_covers_search_fetch_and_extraction():
 
 
 # ── plumbing: tools reach the agent ──────────────────────────────────────────
-def test_agent_grants_extra_tools_alongside_submit_answer():
+def test_agent_grants_named_tools_alongside_submit_answer():
     agent = Agent(
         system_prompt="s", target_schema=Reply, task="t",
-        extra_tools=["WebSearch"], max_turns=RESEARCH_MAX_TURNS,
+        granted_tools=["WebSearch"], max_turns=RESEARCH_MAX_TURNS,
     )
     engine = agent.build_engine()
     assert any(SUBMIT_ANSWER_TOOL in t for t in engine._allowed_tools)
@@ -71,7 +71,7 @@ def test_agent_grants_extra_tools_alongside_submit_answer():
     assert engine._max_turns == RESEARCH_MAX_TURNS
 
 
-def test_agent_without_extra_tools_is_submit_only():
+def test_agent_without_granted_tools_is_submit_only():
     engine = Agent(system_prompt="s", target_schema=Reply, task="t").build_engine()
     assert "WebSearch" not in engine._allowed_tools
 
@@ -105,7 +105,7 @@ def test_research_row_gets_research_budget(monkeypatch):
         "s1", _config(tools=["WebSearch"]), {"q": "who owns this mill?"},
         reply_model=Reply,
     )
-    assert seen["extra_tools"] == ["WebSearch"]
+    assert seen["granted_tools"] == ["WebSearch"]
     assert seen["max_turns"] == RESEARCH_MAX_TURNS
     assert seen["timeout"] == RESEARCH_TIMEOUT_S
 
@@ -113,7 +113,7 @@ def test_research_row_gets_research_budget(monkeypatch):
 def test_plain_row_keeps_the_cheap_budget(monkeypatch):
     seen = _capture(monkeypatch)
     runtime_llm.call_llm("s1", _config(), {"q": "2+2?"}, reply_model=Reply)
-    assert seen["extra_tools"] == []
+    assert seen["granted_tools"] == []
     assert seen["max_turns"] is None
     assert seen["timeout"] == DEFAULT_TIMEOUT_S
 

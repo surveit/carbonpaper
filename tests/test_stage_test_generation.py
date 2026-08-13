@@ -162,7 +162,7 @@ def test_generator_rejects_non_python_stages():
 
 def test_the_generator_can_search_the_rows_it_selects_from():
     agent = build_stage_test_generator(_NO_TERMS, _python_stage(), _sources())
-    assert [spec.name for spec in agent._bound_tools] == [FIND_ROWS_TOOL]
+    assert [spec.name for spec in agent._tools] == [FIND_ROWS_TOOL]
 
 
 # ── what a submission may say ────────────────────────────────────────────────

@@ -94,7 +94,7 @@ def build_stage_test_generator(
         ),
         task=render_generation_task(terms, stage, sources),
         model=model,
-        bound_tools=[build_find_rows_tool(sources)],
+        tools=[build_find_rows_tool(sources)],
         max_turns=_MAX_TURNS,
     )
 

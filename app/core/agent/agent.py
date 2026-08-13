@@ -88,8 +88,8 @@ class Agent(Generic[Model]):
         task: str,
         model: str = CLI_MODEL,
         max_attempts: int = 4,
-        extra_tools: list[str] | None = None,
-        bound_tools: list[BoundToolSpec] | None = None,
+        granted_tools: list[str] | None = None,
+        tools: list[BoundToolSpec] | None = None,
         max_turns: int | None = None,
         thinking: ThinkingConfig | None = None,
     ) -> None:
@@ -98,15 +98,14 @@ class Agent(Generic[Model]):
         self._task = task
         self._model = model
         self._max_attempts = max_attempts
-        # Tools the agent may use BESIDES submit_answer. Empty for an agent that
-        # answers from its task alone; a research agent is granted search/fetch/read
-        # tools here. The caller owns the decision — this class does not police
-        # which names are grantable (see models.stages.llm_transform.GRANTABLE_TOOLS).
-        self._extra_tools = list(extra_tools or [])
-        # Tools of OURS this run may call, mounted beside submit_answer on the same
-        # in-process server. Unlike extra_tools, which are names the CLI already
-        # offers, each of these closes over what the caller bound it to.
-        self._bound_tools = list(bound_tools or [])
+        # Tools the agent may use besides submit_answer, in the two forms it can have
+        # them. `granted_tools` are names of tools the CLI already offers (a research
+        # agent is granted search/fetch/read); this class does not police which names
+        # are grantable — see models.stages.llm_transform.GRANTABLE_TOOLS. `tools` are
+        # ours, mounted on the same in-process server as submit_answer, each closing
+        # over whatever the caller bound it to.
+        self._granted_tools = list(granted_tools or [])
+        self._tools = list(tools or [])
         # Turn cap. A research agent needs many more turns than a submit-only one,
         # because every search and fetch costs a turn.
         self._max_turns = max_turns
@@ -185,7 +184,7 @@ class Agent(Generic[Model]):
                 input_schema=input_schema,
                 label="Submitting the answer",
             ),
-            *self._bound_tools,
+            *self._tools,
         ]
         server, allowed, _wrapped = build_mcp_server(specs)
         return ClaudeAgentSdkEngine(
@@ -193,7 +192,7 @@ class Agent(Generic[Model]):
             mcp_server=server,
             # submit_answer stays first: it is the only way an answer is recorded,
             # with or without research tools alongside it.
-            allowed_tools=allowed + self._extra_tools,
+            allowed_tools=allowed + self._granted_tools,
             tool_labels={spec.name: spec.label for spec in specs},
             model=self._model,
             max_turns=self._max_turns or (self._max_attempts + 2),
