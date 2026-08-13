@@ -20,7 +20,6 @@ from app.core.errors import SubsetRunError
 from app.core.frame_checks import find_duplicate_row_violations
 from app.core.frames import (
     frame_to_table,
-    table_to_frame,
     write_frame_file,
     write_frame_table_with_csv_fallback,
 )
@@ -377,13 +376,11 @@ def _finalize_stage_output(
     row_errors = _merge_stage_contribution(output.contribution, sid, manifest, record)
     lineage = _stage_row_lineage(workflow_stage, output, inputs_for_stage, window)
     table = output.table
-    frame = table_to_frame(table)
     if not workflow_stage.inputs:
         # A stage with no inputs originates its rows outside the run, so the
         # frame it just loaded is the runtime's only handle on them: its window
         # is taken here rather than on an input frame that does not exist.
         table = _take_row_window(table, window, "loaded from the source", record)
-        frame = table_to_frame(table)
     if lineage is not None:
         _persist_row_lineage(lineage, sid, run_dir)
 
@@ -419,7 +416,7 @@ def _finalize_stage_output(
         record.status = StageStatus.OK if all(
             v["ok"] for v in record.input_validation_report
         ) else StageStatus.VALIDATION_WARNINGS
-    record.output_row_count = int(len(frame))
+    record.output_row_count = table.num_rows
     # Manifest paths are POSIX-style so the persisted JSON is identical on
     # every platform.
     record.output_path = output_path.relative_to(run_dir).as_posix()

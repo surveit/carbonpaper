@@ -1,11 +1,13 @@
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 from app.core.frames import (
     FrameStore,
     collapse_null_forms,
-    compute_frame_fingerprint,
+    compute_table_fingerprint,
+    frame_to_table,
     is_bool_cell,
     is_exact_float_cell,
     is_exact_int_cell,
@@ -13,6 +15,7 @@ from app.core.frames import (
     is_null_form,
     is_sequence_cell,
     list_rows,
+    list_table_rows,
     read_frame_column_names,
     read_frame_file,
     render_frame_as_csv_text,
@@ -28,16 +31,15 @@ def frames(tmp_path):
 
 
 def test_save_then_load_roundtrips(frames):
-    df = pd.DataFrame({"a": [1, 2], "b": ["x", "y"]})
-    frames.save_frame("run_output", "proj/run1/stageA", df)
-    loaded = frames.load_frame("run_output", "proj/run1/stageA")
-    pd.testing.assert_frame_equal(loaded, df)
+    table = pa.table({"a": [1, 2], "b": ["x", "y"]})
+    frames.save_table("run_output", "proj/run1/stageA", table)
+    assert frames.load_table("run_output", "proj/run1/stageA").equals(table)
 
 
-# ── save_frame/load_frame are inverses ───────────────────────────────────────
-# One frame carrying every cell shape the store must hand back unchanged: the
-# list forms parquet is lossy about at the pandas boundary, and the scalar
-# columns whose Python types must not move to buy that.
+# ── save_table/load_table are inverses ───────────────────────────────────────
+# One frame carrying every cell shape the store must hand back unchanged. The
+# fixtures are pandas because a literal frame reads better; what the store holds
+# is the table each converts to.
 
 
 def build_every_cell_shape_frame() -> pd.DataFrame:
@@ -56,57 +58,59 @@ def build_every_cell_shape_frame() -> pd.DataFrame:
 
 @pytest.fixture
 def round_tripped(frames):
-    df = build_every_cell_shape_frame()
-    frames.save_frame("run_output", "proj/every_shape", df)
-    return df, frames.load_frame("run_output", "proj/every_shape")
+    saved = frame_to_table(build_every_cell_shape_frame())
+    frames.save_table("run_output", "proj/every_shape", saved)
+    return saved, frames.load_table("run_output", "proj/every_shape")
 
 
 def test_a_list_column_comes_back_as_python_lists(round_tripped):
     saved, loaded = round_tripped
-    assert [type(cell) for cell in loaded["keywords"]] == [list, list, list]
-    assert list(loaded["keywords"]) == list(saved["keywords"])
+    cells = loaded.column("keywords").to_pylist()
+    assert [type(cell) for cell in cells] == [list, list, list]
+    assert cells == saved.column("keywords").to_pylist()
 
 
 @pytest.mark.parametrize("column", ["count", "score", "flag", "name", "seen_at"])
 def test_a_scalar_columns_cell_types_survive_the_round_trip(round_tripped, column):
     saved, loaded = round_tripped
-    assert [type(cell) for cell in loaded[column]] == [type(cell) for cell in saved[column]]
-    assert loaded[column].dtype == saved[column].dtype
+    assert loaded.column(column).to_pylist() == saved.column(column).to_pylist()
+    assert loaded.schema.field(column).type == saved.schema.field(column).type
 
 
 def test_a_null_bearing_column_comes_back_with_its_null_in_place(round_tripped):
     saved, loaded = round_tripped
-    assert [is_null_form(cell) for cell in loaded["maybe_score"]] == [False, True, False]
-    assert loaded["maybe_score"].dtype == saved["maybe_score"].dtype
+    cells = loaded.column("maybe_score").to_pylist()
+    assert [is_null_form(cell) for cell in cells] == [False, True, False]
+    assert loaded.schema.field("maybe_score").type == saved.schema.field("maybe_score").type
 
 
 def test_a_round_tripped_frame_keeps_its_frame_fingerprint(round_tripped):
     saved, loaded = round_tripped
-    assert compute_frame_fingerprint(loaded) == compute_frame_fingerprint(saved)
+    assert compute_table_fingerprint(loaded) == compute_table_fingerprint(saved)
 
 
 def test_a_round_tripped_frames_rows_keep_their_row_fingerprints(round_tripped):
     saved, loaded = round_tripped
-    assert [compute_row_fingerprint(row) for row in list_rows(loaded)] == [
-        compute_row_fingerprint(row) for row in list_rows(saved)
+    assert [compute_row_fingerprint(row) for row in list_table_rows(loaded)] == [
+        compute_row_fingerprint(row) for row in list_table_rows(saved)
     ]
 
 
 def test_load_missing_returns_none(frames):
-    assert frames.load_frame("run_output", "proj/absent") is None
+    assert frames.load_table("run_output", "proj/absent") is None
 
 
 def test_write_once_refuses_overwrite(frames):
     df = pd.DataFrame({"a": [1]})
-    frames.save_frame("eval_data", "proj/set1", df, overwrite=False)
+    frames.save_table("eval_data", "proj/set1", frame_to_table(df), overwrite=False)
     with pytest.raises(FileExistsError):
-        frames.save_frame("eval_data", "proj/set1", df, overwrite=False)
+        frames.save_table("eval_data", "proj/set1", frame_to_table(df), overwrite=False)
 
 
 @pytest.mark.parametrize("bad_id", ["../escape", "C:/escape", "a\\b"])
 def test_unsafe_id_rejected(frames, bad_id):
     with pytest.raises(ValueError):
-        frames.save_frame("run_output", bad_id, pd.DataFrame({"a": [1]}))
+        frames.save_table("run_output", bad_id, pa.table({"a": [1]}))
     # validate_id must run before any path is built or written, so the location
     # that path construction would have produced never appears on disk — including
     # when a drive-absolute id would otherwise land outside frames.root entirely.
@@ -117,7 +121,7 @@ def test_unsafe_id_rejected(frames, bad_id):
 @pytest.mark.parametrize("bad_collection", ["../evil", "C:/escape", "a\\b"])
 def test_unsafe_collection_rejected(frames, bad_collection):
     with pytest.raises(ValueError):
-        frames.save_frame(bad_collection, "proj/1", pd.DataFrame({"a": [1]}))
+        frames.save_table(bad_collection, "proj/1", pa.table({"a": [1]}))
     # Same escape risk as an unsafe id (validate_id must run before any path is
     # built), just on the other path segment — so it never lands on disk either.
     escaped_path = frames.root / bad_collection / "proj/1.parquet"
@@ -222,7 +226,8 @@ def test_write_frame_file_round_trips_a_list_column_through_read_frame_file(tmp_
     write_frame_file(frame, path)
     back = read_frame_file(path)
     assert [list(cell) for cell in back["tags"]] == [["a", "b"], []]
-    assert compute_frame_fingerprint(back) == compute_frame_fingerprint(frame)
+    assert compute_table_fingerprint(frame_to_table(back)) == compute_table_fingerprint(
+        frame_to_table(frame))
 
 
 def test_write_frame_file_writes_csv_for_a_csv_suffix(tmp_path):

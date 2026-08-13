@@ -7,6 +7,7 @@ import pyarrow.lib as pa_lib
 import pytest
 
 from app.core.frames import table_to_frame
+from app.core.frames import frame_to_table
 from app.core.stage_cache import ReadOnlyStageCache, StageCache, StageCacheEntry
 from app.models import parse_stage, Stage
 from app.models.stage import StageType
@@ -66,9 +67,11 @@ def _entries(stage: Stage) -> list[StageCacheEntry]:
     )
 
 
-def _cached_frame(stage: Stage, inputs: list[pd.DataFrame]) -> pd.DataFrame | None:
+def _cached_frame(stage: Stage, inputs: list[pd.DataFrame]):
+    """The fixtures are pandas; the cache keys on the tables they convert to."""
     return ReadOnlyStageCache().find_cached_frame(
-        PROJECT, stage.id, stage.compute_definition_fingerprint(), inputs
+        PROJECT, stage.id, stage.compute_definition_fingerprint(),
+        [frame_to_table(f) for f in inputs],
     )
 
 
@@ -94,7 +97,8 @@ def test_the_registered_python_frame_function_replays_its_recorded_frame():
     StageCache().record_frame(
         project=PROJECT, stage_id=stage.id,
         stage_fingerprint=stage.compute_definition_fingerprint(),
-        input_frames=[src], frame=pd.DataFrame({"x": [1, 2], "y": [999, 999]}),
+        input_tables=[frame_to_table(src)],
+        table=frame_to_table(pd.DataFrame({"x": [1, 2], "y": [999, 999]})),
     )
 
     out = HANDLERS[StageType.python_frame_function].execute(

@@ -1,14 +1,18 @@
-"""Frozen fingerprint values. These key 718,155 stage-cache entries as of
-2026-08-06: a changed hash does not fail, it silently orphans every recorded row
-and every human review decision under the old key. Changing a value here is a
-migration, not a test update.
+"""Frozen fingerprint values — the format of a cache key, not its contents. A
+changed hash does not fail, it silently orphans every entry under the old key, so
+moving one means bumping `_CACHE_KEY_VERSION` to make the invalidation total.
 """
 from __future__ import annotations
 
 import pandas as pd
 import pytest
 
-from app.core.frames import compute_frame_fingerprint, compute_frames_fingerprint, list_rows
+from app.core.frames import (
+    compute_table_fingerprint,
+    compute_tables_fingerprint,
+    frame_to_table,
+    list_rows,
+)
 from app.core.stage_cache import compute_row_fingerprint
 
 # One frame exercising every representation that has moved under us before: an
@@ -37,7 +41,7 @@ def test_row_fingerprints_have_not_moved():
 
 
 def test_frame_fingerprint_has_not_moved():
-    assert compute_frame_fingerprint(_FROZEN_FRAME) == _FROZEN_FRAME_FINGERPRINT
+    assert compute_table_fingerprint(frame_to_table(_FROZEN_FRAME)) == _FROZEN_FRAME_FINGERPRINT
 
 
 @pytest.mark.parametrize(
@@ -63,4 +67,4 @@ def test_a_round_trip_through_the_frame_seam_keeps_a_rows_identity(column, value
 
 
 def test_frames_fingerprint_has_not_moved():
-    assert compute_frames_fingerprint([_FROZEN_FRAME]) == "4689154503d07474"
+    assert compute_tables_fingerprint([frame_to_table(_FROZEN_FRAME)]) == "4689154503d07474"

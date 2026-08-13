@@ -24,7 +24,7 @@ from app.models.stage import (
 from app.models.stages.llm_transform import LLMTransformStage
 
 from app.core.agent.usage import LlmUsage
-from app.core.frames import collapse_null_forms, is_null_form, list_table_rows, table_to_frame
+from app.core.frames import collapse_null_forms, is_null_form, list_table_rows
 from app.core.stage_cache import StageCache, compute_row_fingerprint
 
 from .frame_caching import (
@@ -246,16 +246,13 @@ class FrameTransformHandler(StageHandler):
         if caching.key is None:
             output = self.apply(workflow_stage, inputs, ctx)
             return note_skipped_caching(output, caching.skipped_note)
-        # The frame cache keys on a pandas-sourced fingerprint, and that hash
-        # addresses every entry already recorded — so the inputs are materialized
-        # here rather than the keying moved to arrow. See tests/test_fingerprint_goldens.py.
-        input_frames = [table_to_frame(inputs[ref.id]) for ref in workflow_stage.inputs]
-        cached = find_cached_frame(caching, input_frames)
+        input_tables = [inputs[ref.id] for ref in workflow_stage.inputs]
+        cached = find_cached_frame(caching, input_tables)
         if cached is not None:
             # A replayed frame carries no contribution: nothing ran to report.
-            return StageOutput.from_frame(cached)
+            return StageOutput(cached)
         return record_frame_output(
-            caching, input_frames, self.apply(workflow_stage, inputs, ctx)
+            caching, input_tables, self.apply(workflow_stage, inputs, ctx)
         )
 
     @property

@@ -5,11 +5,11 @@ from __future__ import annotations
 
 from typing import NamedTuple
 
-import pandas as pd
+import pyarrow as pa
+
 
 from app.models import WorkflowStage
 
-from app.core.frames import table_to_frame
 from app.core.errors import FrameNotSerializableError
 from app.core.frames import is_frame_store_configured
 from app.core.stage_cache import ReadOnlyStageCache, StageCache
@@ -55,15 +55,15 @@ def open_frame_caching(
 
 
 def find_cached_frame(
-    caching: FrameCaching, input_frames: list[pd.DataFrame]
-) -> pd.DataFrame | None:
+    caching: FrameCaching, input_tables: list[pa.Table]
+) -> pa.Table | None:
     if caching.key is None or caching.reader is None:
         return None
     return caching.reader.find_cached_frame(
         caching.key.project,
         caching.key.stage_id,
         caching.key.stage_fingerprint,
-        input_frames,
+        input_tables,
     )
 
 
@@ -78,7 +78,7 @@ def note_skipped_caching(
 
 def record_frame_output(
     caching: FrameCaching,
-    input_frames: list[pd.DataFrame],
+    input_tables: list[pa.Table],
     output: StageOutput | None,
 ) -> StageOutput | None:
     """A frame parquet cannot hold is left uncached and noted, rather than failing the run."""
@@ -89,8 +89,8 @@ def record_frame_output(
             project=caching.key.project,
             stage_id=caching.key.stage_id,
             stage_fingerprint=caching.key.stage_fingerprint,
-            input_frames=input_frames,
-            frame=table_to_frame(output.table),
+            input_tables=input_tables,
+            table=output.table,
         )
     except FrameNotSerializableError as exc:
         output.contribution.notes.append(f"Stage output left uncached: {exc}")

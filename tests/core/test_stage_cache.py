@@ -43,7 +43,7 @@ def test_compute_row_fingerprint_guards_array_valued_cells():
 # ── _build_cache_id ───────────────────────────────────────────────────────────
 
 def test_build_cache_id_joins_the_four_parts_with_slashes():
-    assert _build_cache_id("proj", "stage1", "sf123", "if456") == "v3/proj/stage1/sf123/if456"
+    assert _build_cache_id("proj", "stage1", "sf123", "if456") == "v4/proj/stage1/sf123/if456"
 
 
 # A prefix query and an id that disagree read as an empty cache rather than an
