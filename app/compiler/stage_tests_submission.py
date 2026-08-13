@@ -36,9 +36,10 @@ _AUTHORED_ROWS_DESCRIPTION = (
     "only when find_rows genuinely returns nothing."
 )
 _AUTHORED_REASON_DESCRIPTION = (
-    "What was searched for and did not exist, in the reader's words — 'no filing "
-    "reports an amount in another currency'. Shown to them in place of the row's "
-    "provenance."
+    "One sentence on what the data holds INSTEAD, in the reader's words — 'No filing "
+    "reports a negative amount; every reported figure here is positive'. Not that no "
+    "row could be selected, and not a restatement of the case: the reader has been "
+    "told both already."
 )
 
 

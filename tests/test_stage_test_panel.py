@@ -151,3 +151,86 @@ def test_panel_without_tests_has_no_tests_section(client: TestClient, tmp_path: 
     response = client.get("/project/alpha/node/load/panel")
     assert response.status_code == 200
     assert "test-report" not in response.text
+
+
+# ── the three sections ───────────────────────────────────────────────────────
+# A case belongs to one of them by what it already carries: a selected row, or no row
+# and a step that must stop, or no row and an expected value. Nothing else decides.
+
+_SECTIONED = [
+    {"name": "doubles_a_real_amount", "description": "the ordinary case",
+     "inputs": {"load": [{"note": "opening balance", "amount": 2.0}]},
+     "expected": [{"doubled": 4.0, "note": "opening balance", "amount": 2.0}],
+     "selections": [{"input": "load", "run_id": "20260101T000000", "row": 3,
+                     "filter": "amount > 1", "matched": 7, "scanned": 98}]},
+    {"name": "a_negative_amount_stops_the_run", "description": "nobody has decided",
+     "inputs": {"load": [{"note": "refund", "amount": -5.0}]},
+     "expected": None,
+     "authored_reason": "No filing reports a negative amount."},
+    {"name": "a_zero_amount_is_doubled_to_zero", "description": "already decided",
+     "inputs": {"load": [{"note": "nil return", "amount": 0.0}]},
+     "expected": [{"doubled": 0.0, "note": "nil return", "amount": 0.0}],
+     "authored_reason": "No filing reports a plain zero."},
+]
+
+
+def _seed_sectioned(root: Path) -> None:
+    _seed_project(root)
+    path = root / "alpha" / "compiled" / "02_double.json"
+    spec = json.loads(path.read_text(encoding="utf-8"))
+    spec["tests"] = _SECTIONED
+    path.write_text(json.dumps(spec), encoding="utf-8")
+
+
+def test_the_panel_leads_with_the_rows_that_came_out_of_a_run(
+    client: TestClient, tmp_path: Path
+) -> None:
+    _seed_sectioned(tmp_path)
+    html = client.get("/project/alpha/node/double/panel").text
+    assert "Examples from your data" in html
+    assert html.index("Examples from your data") < html.index("your data changes")
+
+
+def test_a_case_with_no_row_is_sorted_by_what_the_step_would_do(
+    client: TestClient, tmp_path: Path
+) -> None:
+    """Must-stop leaves the decision open; an expected value is a decision already taken."""
+    _seed_sectioned(tmp_path)
+    html = client.get("/project/alpha/node/double/panel").text
+    rejected = html.index("Examples to reject and defer")
+    decide = html.index("Examples to decide now")
+    assert rejected < html.index("a_negative_amount_stops_the_run") < decide
+    assert decide < html.index("a_zero_amount_is_doubled_to_zero")
+
+
+def test_a_written_row_states_no_reason_beside_itself(
+    client: TestClient, tmp_path: Path
+) -> None:
+    """The section it sits in has already said the row was written."""
+    _seed_sectioned(tmp_path)
+    # On the class, not the prose: the stored reason still reaches the page inside the
+    # spec editor's raw JSON, which is not a rendering of it.
+    html = client.get("/project/alpha/node/double/panel").text
+    assert "test-authored" not in html
+
+
+def test_a_suite_with_nothing_written_shows_only_the_first_section(
+    client: TestClient, tmp_path: Path
+) -> None:
+    _seed_sectioned(tmp_path)
+    path = tmp_path / "alpha" / "compiled" / "02_double.json"
+    spec = json.loads(path.read_text(encoding="utf-8"))
+    spec["tests"] = _SECTIONED[:1]
+    path.write_text(json.dumps(spec), encoding="utf-8")
+
+    html = client.get("/project/alpha/node/double/panel").text
+    assert "Examples from your data" in html
+    assert "What happens when your data changes" not in html
+
+
+def test_the_first_section_names_the_run_its_rows_came_out_of(
+    client: TestClient, tmp_path: Path
+) -> None:
+    _seed_sectioned(tmp_path)
+    html = " ".join(client.get("/project/alpha/node/double/panel").text.split())
+    assert "1 row out of run 20260101T000000, and what this step did to it." in html

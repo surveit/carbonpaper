@@ -45,9 +45,12 @@
    exercises nothing), so it is spelled out rather than left to a ratio. */
 .test-provenance { font-size: 0.78rem; color: var(--muted); margin: -0.3rem 0 0.6rem; }
 .test-provenance code { font-size: 0.78rem; }
-/* A row nobody's data supplied. Marked, because every value in it is one the reader has
-   never seen — the opposite claim to the line above. */
-.test-authored { font-size: 0.82rem; color: var(--warn-ink); margin: 0.2rem 0 0.6rem; }
+/* The panel's three sections. The second one is skippable — a reader whose data is not
+   going to change owes it nothing — so its heading and note carry that themselves rather
+   than the section being hidden or folded away. */
+.test-section { font-size: 0.98rem; margin: 1.6rem 0 0.15rem; }
+.test-subsection { font-size: 0.88rem; margin: 1.1rem 0 0.15rem; }
+.test-section-note { font-size: 0.8rem; color: var(--muted); line-height: 1.5; margin: 0 0 0.7rem; }
 .test-message { color: var(--bad-ink); }
 /* A refusal is the step working, so it is not tinted like a failure — a case may
    claim the step must refuse, and there it is the outcome the description asked for. */

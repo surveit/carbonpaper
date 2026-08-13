@@ -17,6 +17,11 @@ CertificationStatus = Literal[
     "certified", "failing", "untested", "unsummarised", "untestable"
 ]
 
+# Which of the panel's three sections a case belongs in. `from_data` is the step running
+# on rows a run really produced; the other two are about data that has not arrived, split
+# by what the step would do with it.
+TestSection = Literal["from_data", "reject_and_defer", "decide_now"]
+
 
 class StageCertification(BaseModel):
     """`certified` means the summary and the code agree ON THE AUTHORED EXAMPLES, not that it is right."""
@@ -93,9 +98,7 @@ def _shape_one_test(
              "selections": _shape_selections(test, stage_id)}
             for stage_id, rows in test.inputs.items()
         ],
-        # Why this case's rows were written rather than selected. None on a case whose
-        # rows came out of a run, which the per-input selections then account for.
-        "authored_reason": test.authored_reason,
+        "section": _name_the_section(test),
         # None, not an empty table: a failure case claims the step must fail, which
         # the template must not render as "succeeded, returned nothing".
         "expected": None if test.expected is None else _shape_expected(
@@ -107,6 +110,15 @@ def _shape_one_test(
             for diff in result.diffs
         ],
     }
+
+
+def _name_the_section(test: StageTest) -> TestSection:
+    """A case is about the data as it stands, or about data that has not arrived."""
+    if test.selections:
+        return "from_data"
+    # No row to select, so the case turns on what the step does when one appears:
+    # stop and leave the decision open, or act on what the description already says.
+    return "reject_and_defer" if test.expected is None else "decide_now"
 
 
 def _shape_selections(test: StageTest, stage_id: str) -> list[dict[str, Any]]:

@@ -52,14 +52,22 @@ Each example's name states the behaviour it pins in plain English.
 Each description says WHY the case exists.
 
 When the data cannot supply a case, say so instead of inventing quietly. A case with no
-`selected_rows` states `authored_rows` — rows you wrote — and `authored_reason`, what you
-searched for and did not find. The reader sees those apart from the grounded cases,
-because a written row is a value they have never seen. Two kinds of case need this:
+`selected_rows` states `authored_rows` — rows you wrote — and `authored_reason`, what the
+data holds instead. Two kinds of case need this, and the reader is shown them separately:
 - a case claiming the step must FAIL. If such a row existed in the run, the run would
-  have stopped, so no search can find one. This is expected, not a gap.
-- a boundary the description names that this dataset never reaches. That is worth
-  telling them: their description covers something their data does not contain.
-Search first, and let the search be what decides.
+  have stopped, so no search can find one. The reader reads these as the inputs whose
+  meaning is left open on purpose: an input like this stops a future run, and the
+  decision is taken then, with the data in hand.
+- a boundary the description names that this dataset never reaches. The reader reads
+  these as decisions already taken on their behalf — your expected output is a first
+  guess at data nobody has seen — so they are checking whether they agree with it.
+Search first, and let the search be what decides which of the two a case is.
+
+`authored_reason` is one sentence saying what the data holds instead. Do not explain that
+no row could be selected, and do not restate the case: the reader has already been told
+both. "No filing holds the word None — every empty amount here is blank", not "No filing
+in this data holds the literal text 'None' in income or expenses; every non-numeric
+reading in this data is a true blank, so this stated corner case has no real row."
 
 Surrounding context:
 - The goal is to help a non-engineer understand and verify a code block matches their intent.
