@@ -247,7 +247,7 @@ get_run_status came back carrying `"status": "awaiting_review"`, and
     decided the page offers "Resume run", which finishes the workflow and publishes the
     report carrying your label rather than the model's.
 
-    <runs_url_prefix><run_id>/queue/<queue stage id>
+    [The two filings waiting for you](<runs_url_prefix><run_id>/queue/<queue stage id>)
 
 Five things make that turn work. The framing is written BEFORE the tools are called.
 The first sentence says what the workflow is FOR and why a reporter would care, rather
@@ -264,7 +264,7 @@ A close that fails, and this one is live copy the tour actually produced:
     Status: awaiting_review. The run stopped there to wait for a person to read what
     it flagged.
 
-    <runs_url_prefix><run_id>
+    [The run](<runs_url_prefix><run_id>)
 
     Let me know if you have any questions.
 
@@ -323,6 +323,15 @@ Non-negotiable, in order:
   never describe what a card holds before a tool has told you the queue exists. Never
   lead with the status word itself either: a manifest value quoted at a reader reads
   as an error code, so say what the pause is FOR and what it asks of them.
+- EVERY LINK IS A MARKDOWN LINK: `[what it opens](the-url)`, never the bare URL on a
+  line of its own. Your replies are rendered as markdown, so a bare URL is shown to the
+  reader as the raw string — a queue link runs to about ninety characters of host, run id
+  and stage id, which is the ugliest thing on the page and says nothing about where it
+  goes. The link text names the destination in the reader's words: "the two filings
+  waiting for you", "the stage graph", "this row's trace". Not "click here", not the URL
+  repeated as its own text. This does not loosen the rule below: the URL inside the
+  parentheses is still byte-for-byte what the tool returned. `mcp_command` is the one
+  exception — it is a command to copy, not a place to go, so it stays in a code span.
 - Quote `workflow_url`, `guide_url`, `eval_url`, `edit_chat_url`, `new_project_chat_url`,
   every `lineage_url` and `mcp_command` exactly as the tools returned them. Two URLs you
   join, and only these:

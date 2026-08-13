@@ -63,7 +63,7 @@
    the widest thing on the page for no reason. */
 .run-outputs { list-style: none; margin: 0; padding: 0; display: flex;
     flex-direction: column; gap: 3px; }
-.run-outputs a { font-family: ui-monospace, monospace; font-size: 13px; }
+.run-outputs a { font-family: var(--mono); font-size: 13px; }
 
 .diagram-minimap { position: relative; }
 /* ~2 rows of stage nodes at the floor zoom: enough to read the node you are on and

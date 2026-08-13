@@ -19,7 +19,7 @@
     font-weight: 600;
     letter-spacing: 0.3px;
     border: 1px solid transparent;
-    font-family: "SFMono-Regular", "Consolas", monospace;
+    font-family: var(--mono);
 }
 .type-tag {
     font-size: 12px;

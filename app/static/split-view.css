@@ -54,7 +54,8 @@
     color: var(--muted);
 }
 .empty-state h2 { color: var(--muted); font-weight: 500; margin-bottom: 6px; }
-.empty-state p { margin: 0 auto; max-width: 56ch; }
+.empty-state p { margin: 0 auto; max-width: 56ch;
+    font-family: var(--prose); font-size: 16.5px; line-height: 1.6; }
 /* Two paragraphs at the same weight otherwise set as one block of prose. */
 .empty-state p + p { margin-top: 10px; }
 /* The gap under the line belongs to the button, so a zero state with no action

@@ -5,7 +5,7 @@ Pins the honesty contract: edges come ONLY from declared column `references`
 dataflow story the schemas don't state. See the builder's docstring."""
 from __future__ import annotations
 
-from app.web.diagrams import build_schema_table_graph
+from app.web.diagrams import _NODE_SURFACE, build_schema_table_graph
 
 _SCHEMAS = [
     {
@@ -70,11 +70,11 @@ def test_schema_with_no_name_draws_no_node():
     src = build_schema_table_graph(schemas)
     assert src == "\n".join([
         "flowchart LR",
-        "    classDef aggregate fill:#fdfdfe,stroke:#e9e9eb,color:#24272b",
-        "    classDef custom fill:#fdfdfe,stroke:#e9e9eb,color:#24272b",
-        "    classDef human fill:#fdfdfe,stroke:#e9e9eb,color:#24272b",
-        "    classDef input fill:#fdfdfe,stroke:#e9e9eb,color:#24272b",
-        "    classDef python fill:#fdfdfe,stroke:#e9e9eb,color:#24272b",
+        f"    classDef aggregate {_NODE_SURFACE}",
+        f"    classDef custom {_NODE_SURFACE}",
+        f"    classDef human {_NODE_SURFACE}",
+        f"    classDef input {_NODE_SURFACE}",
+        f"    classDef python {_NODE_SURFACE}",
     ])
 
 

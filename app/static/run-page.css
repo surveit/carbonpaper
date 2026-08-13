@@ -98,7 +98,7 @@
 /* A refusal's reason is prose its author wrote for this reader; only an exception
    string gets the monospace. */
 .issue-reason { max-width: 80ch; }
-.issue-raised { font-family: "SFMono-Regular", "Consolas", monospace; font-size: .95em; }
+.issue-raised { font-family: var(--mono); font-size: .95em; }
 .issue-traceback > summary { cursor: pointer; color: var(--muted); }
 .issue-traceback pre { max-height: 15em; overflow: auto; margin: .3rem 0 0; }
 .issue-blocked { color: var(--state-failed-ink); }
@@ -265,7 +265,7 @@ td.row-num, th.row-num { text-align: right; color: var(--idle-bd); font-variant-
     background: var(--code-deep); color: var(--code-fg);
     border: 1px solid var(--fg); border-radius: 5px;
     padding: 12px 14px; font-size: 12px; line-height: 1.5;
-    font-family: "SFMono-Regular", "Consolas", "Liberation Mono", Menlo, monospace;
+    font-family: var(--mono);
     white-space: pre; overflow: auto; tab-size: 2;
 }
 .edit-textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
@@ -278,7 +278,7 @@ td.row-num, th.row-num { text-align: right; color: var(--idle-bd); font-variant-
     background: var(--bad-bg); border: 1px solid var(--bad-bd); border-radius: 5px;
 }
 .nr-issues[hidden] { display: none; }
-.nr-issues li { color: var(--bad-ink); font-family: "SFMono-Regular", "Consolas", monospace; font-size: 12px; margin: 2px 0; }
+.nr-issues li { color: var(--bad-ink); font-family: var(--mono); font-size: 12px; margin: 2px 0; }
 
 
 

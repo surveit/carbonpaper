@@ -93,7 +93,7 @@ dl.kv, dl.source-meta {
 dl.kv dt, dl.source-meta dt {
     color: var(--muted);
     font-size: 13px;
-    font-family: "SFMono-Regular", "Consolas", monospace;
+    font-family: var(--mono);
 }
 dl.kv dd, dl.source-meta dd { margin: 0; }
 
@@ -129,12 +129,12 @@ table.schema tr:last-child td { border-bottom: 0; }
     border-radius: 3px;
     background: var(--sunk-deep);
     border: 1px solid var(--border);
-    font-family: "SFMono-Regular", "Consolas", monospace;
+    font-family: var(--mono);
     font-size: 11px;
     color: var(--info-ink);
 }
 .range {
-    font-family: "SFMono-Regular", "Consolas", monospace;
+    font-family: var(--mono);
     font-size: 11px;
     color: var(--muted);
 }
@@ -152,7 +152,7 @@ table.schema tr:last-child td { border-bottom: 0; }
     border-radius: 3px;
     background: var(--sunk-deep);
     border: 1px solid var(--border);
-    font-family: "SFMono-Regular", "Consolas", monospace;
+    font-family: var(--mono);
     font-size: 11px;
     color: var(--muted);
 }

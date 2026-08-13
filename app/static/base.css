@@ -7,9 +7,31 @@
    tests/test_review_packet.py enforces by pattern. */
 
 :root {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    font-family: var(--ui);
     font-size: 15px;
     line-height: 1.55;
+
+    --ui: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    /* Two faces, split by job: --ui is the interface — chrome, labels,
+       tables, buttons, every number — and --prose the other, for running
+       text a person actually reads at length. A lede, an empty state, a reply in
+       the chat. Naming the split is the point: one face doing both jobs is what
+       made a page of prose read as a control panel.
+       No web font and no downloaded file: a sheet here may not reference an
+       external resource, because the review packet concatenates these and has to
+       render with no network (tests/test_review_packet.py, which greps the
+       concatenation for the at-rules that would fetch one — comments included, so
+       do not write those spellings here even to say we avoid them). So this is a
+       system stack, and Georgia is the one text serif on Windows and macOS both. */
+    --prose: Georgia, "Iowan Old Style", "Times New Roman", serif;
+
+    /* Every fixed-width run in the app — code, an id, a hash, a filename, a JSON
+       payload. One token because four different stacks had drifted across these
+       sheets, and one of them led with `ui-monospace`, which Chromium does not
+       implement: there it falls through to the generic `monospace`, i.e. whatever
+       the reader has set as their browser's fixed-width font, while the sheet next
+       to it named Consolas. Same page, two typefaces, no rule saying which. */
+    --mono: "SFMono-Regular", "Consolas", "Liberation Mono", Menlo, monospace;
 }
 
 body { background: var(--bg); color: var(--fg); margin: 0; padding: 0; }
@@ -112,7 +134,12 @@ h3 {
     font-weight: 600;
 }
 
-.lede { color: var(--muted); margin-top: 0; margin-bottom: 24px; }
+/* The one paragraph on a page that is meant to be READ rather than scanned, so it
+   is the first place the prose face earns its keep. Slightly larger than the
+   interface around it and leaded looser: at the sans's 15px/1.55 a lede was the
+   same texture as the table under it. */
+.lede { color: var(--muted); margin-top: 0; margin-bottom: 24px;
+    font-family: var(--prose); font-size: 16.5px; line-height: 1.6; }
 
 .load-issues {
     border: 1px solid var(--bad-bd);
@@ -127,7 +154,7 @@ code {
     padding: 1px 5px;
     border-radius: 3px;
     font-size: 0.92em;
-    font-family: "SFMono-Regular", "Consolas", "Liberation Mono", Menlo, monospace;
+    font-family: var(--mono);
 }
 
 pre {
@@ -137,7 +164,7 @@ pre {
     overflow-x: auto;
     font-size: 13px;
     line-height: 1.45;
-    font-family: "SFMono-Regular", "Consolas", "Liberation Mono", Menlo, monospace;
+    font-family: var(--mono);
     white-space: pre-wrap;
     word-wrap: break-word;
 }
