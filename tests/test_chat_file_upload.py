@@ -103,11 +103,13 @@ def test_the_question_blocks_rather_than_sitting_beside_the_composer(session_id)
     assert '<dialog class="ac-modal" id="project-modal">' in page
 
 
-def test_the_third_choice_is_a_new_project_not_a_shrug(session_id):
+def test_new_project_leads_the_choices(session_id):
     page = client.get(f"/chat/{session_id}").text
-    # Its value is blank, so the file lands unclaimed and the agent creates the project
-    # and adopts it — nothing in the browser can, since a project needs a methodology.
-    assert 'class="ac-choice ac-choice-new" data-project="">New project' in page
+    # First and bold: with no project on the session it is the likeliest answer. Its
+    # value is blank, so the file lands in no project and the agent creates one and
+    # moves it in — nothing in the browser can, since a project needs a methodology.
+    assert 'data-project="">\n      <strong>New project</strong>' in page
+    assert page.index("ac-choice-new") < page.index('id="project-choices"')
 
 
 def test_the_picker_names_the_project_it_offers(session_id, project_id):
@@ -165,5 +167,8 @@ def test_the_card_changes_how_the_line_looks_and_never_what_it_says(session_id, 
     # Every field of the sentence survives the split, because the agent is given the
     # sentence and the reader is given the card, and they must not diverge.
     assert card.name == "posts.csv"
-    assert card.meta == f"13B · in project demo ({project_id}) · sha256 {CSV_SHA}"
+    # Only the size rides on the chip; the project and hash stay in the text the agent
+    # reads, because on screen they turn a chip into a paragraph.
+    assert card.meta == "13B"
+    assert project_id in line and CSV_SHA in line
     assert read_attachment("just a message") is None

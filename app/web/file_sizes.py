@@ -64,5 +64,7 @@ def read_attachment(text: str) -> Attachment | None:
     """The fields behind a file turn, or None for prose. Splits; renders nothing."""
     if not text.startswith(ATTACHMENT_PREFIX):
         return None
-    name, _, meta = text[len(ATTACHMENT_PREFIX):].partition(_FIELD_SEPARATOR)
-    return Attachment(name=name, meta=meta)
+    name, _, rest = text[len(ATTACHMENT_PREFIX):].partition(_FIELD_SEPARATOR)
+    # Only the size rides on the chip. The project and the sha256 stay in the text, which
+    # is what the agent reads — on screen they would turn a chip into a paragraph.
+    return Attachment(name=name, meta=rest.partition(_FIELD_SEPARATOR)[0])

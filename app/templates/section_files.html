@@ -55,28 +55,36 @@
       </td>
       <td><code class="files-hash">{{ row.sha256[:12] }}…</code></td>
       <td class="files-act">
-        {# A <details> rather than a confirm(): the warning and the field it guards stay
-           on the page, so what is about to happen is readable rather than a dialog to
-           dismiss. #}
-        <details class="files-delete">
-          <summary>Delete</summary>
-          <form method="post"
-                action="/project/{{ state.id }}/files/{{ row.sha256 }}/delete">
-            <p class="muted">
-              {% if row.run_count %}{{ row.run_count }} run{{ "" if row.run_count == 1 else "s" }} read this file. Their manifests keep saying so, but re-running them stops working.
-              {% else %}No run has read this file.{% endif %}
-              Type <code>{{ row.filename }}</code> to confirm.
-            </p>
-            <input type="text" name="confirm" autocomplete="off"
-                   placeholder="{{ row.filename }}" required>
-            <button type="submit" class="btn danger">Delete this file</button>
-          </form>
-        </details>
+        {# The row carries what the dialog needs to say; one dialog serves every row. #}
+        <button type="button" class="files-trash" title="Delete {{ row.filename }}"
+                data-sha256="{{ row.sha256 }}" data-filename="{{ row.filename }}"
+                data-runs="{{ row.run_count }}" aria-label="Delete {{ row.filename }}">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/>
+            <path d="M10 11v6"/><path d="M14 11v6"/>
+          </svg>
+        </button>
       </td>
     </tr>
     {% endfor %}
   </tbody>
 </table>
+{# One dialog for the table. It blocks, because this is the only thing on the page that
+   cannot be undone; Escape or the scrim cancels. #}
+<dialog class="files-modal" id="delete-modal" data-project="{{ state.id }}">
+  <h2>Delete <span id="delete-name"></span>?</h2>
+  <p class="files-modal-lede" id="delete-warning"></p>
+  <form method="post" id="delete-form">
+    <label for="delete-confirm">Type the file's name to confirm</label>
+    <input type="text" id="delete-confirm" name="confirm" autocomplete="off" required>
+    <div class="files-modal-actions">
+      <button type="button" class="btn" id="delete-cancel">Cancel</button>
+      <button type="submit" class="btn danger">Delete this file</button>
+    </div>
+  </form>
+</dialog>
+<script src="/static/files-delete.js"></script>
 {% else %}
 <div class="empty-state">
   <h2>No files yet</h2>

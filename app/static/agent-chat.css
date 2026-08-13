@@ -161,7 +161,10 @@
     padding: 8px 11px; margin-bottom: 5px; cursor: pointer; border: 1px solid var(--border);
     border-radius: 6px; background: var(--raised); }
 .ac-choice:hover { border-color: var(--accent); }
-.ac-choice-new { border-style: dashed; }
+/* First and bold: the likeliest answer when a session has no project yet. */
+.ac-choice-new { border-style: solid; border-color: var(--border-strong);
+    margin-bottom: 10px; }
+.ac-choice-new strong { font-weight: 600; }
 .ac-muted { color: var(--muted); }
 .ac-attached { display: flex; align-items: center; gap: 8px; }
 .ac-unattach { font: inherit; font-size: 15px; line-height: 1; border: 0; background: none;
@@ -176,9 +179,17 @@
 .ac-modal h2 { margin: 0 0 4px; font-size: 1.05rem; }
 .ac-modal-lede { margin: 0 0 14px; font-size: 12.5px; color: var(--muted); line-height: 1.5; }
 
-/* A turn that carries a file. Its TEXT is the sentence the agent reads; the card is
-   only how the page draws it, so the two can never say different things. */
-.ac-file { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+/* A turn that carries a file, drawn as a chip rather than a line: a file arriving is a
+   different KIND of event from something a person typed, and a line of prose in the same
+   bubble shape reads as one. Its TEXT is still the sentence the agent gets, so the two
+   can never say different things. */
+.ac-file { display: inline-flex; align-items: center; gap: 8px; padding: 7px 12px;
+    border: 1px solid var(--border-strong); border-radius: 999px;
+    background: var(--raised); }
 .ac-file-icon { color: var(--muted); }
-.ac-file-name { font-family: ui-monospace, monospace; font-weight: 600; }
-.ac-file-meta { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.ac-file-name { font-family: ui-monospace, monospace; font-size: 12.5px; font-weight: 600; }
+.ac-file-meta { font-size: 11.5px; color: var(--muted); }
+/* The chip is the bubble: the grey ground and padding a typed message gets would put a
+   second shape around it. */
+.ac-msg.user .ac-body.ac-file { background: var(--raised); padding: 7px 12px;
+    border-radius: 999px; }

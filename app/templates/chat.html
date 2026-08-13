@@ -60,9 +60,10 @@
     <h2>Where should this file go?</h2>
     <p class="ac-modal-lede">Files belong to a project, not to a conversation. This also
       sets the project this session works on.</p>
-    <div id="project-choices"></div>
-    <button type="button" class="ac-choice ac-choice-new" data-project="">New project
+    <button type="button" class="ac-choice ac-choice-new" data-project="">
+      <strong>New project</strong>
       <span class="ac-muted">· the agent reads the file and sets one up</span></button>
+    <div id="project-choices"></div>
   </dialog>
   <div class="ac-composer">
     <button type="button" class="ac-clip" id="clip" title="Attach a data file">📎</button>
@@ -99,13 +100,10 @@ const ATTACHMENT_PREFIX = "[file] ";
 
 function attachmentBody(text) {
   const body = el("ac-body ac-file");
-  const cut = text.indexOf(" · ");
+  const fields = text.slice(ATTACHMENT_PREFIX.length).split(" · ");
   const icon = el("ac-file-icon", "▤"); icon.setAttribute("aria-hidden", "true");
-  const name = el("ac-file-name",
-                  cut === -1 ? text.slice(ATTACHMENT_PREFIX.length)
-                             : text.slice(ATTACHMENT_PREFIX.length, cut));
-  body.append(icon, name);
-  if (cut !== -1) body.appendChild(el("ac-file-meta", text.slice(cut + 3)));
+  body.append(icon, el("ac-file-name", fields[0]));
+  if (fields.length > 1) body.appendChild(el("ac-file-meta", fields[1]));
   return body;
 }
 
