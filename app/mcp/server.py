@@ -277,6 +277,28 @@ def move_file_to_project(project_id: str, sha256: str) -> shared.StoredFileView:
     return shared.move_file_to_project(project_id, sha256)
 
 
+@mcp.tool(description=TOOL_SPECS["profile_file"].description)
+def profile_file(
+    project_id: str, sha256: str, columns: list[str] | None = None, max_values: int = 20,
+    sheet_name: str | int = 0, header_row: int = 0, first_column: int = 0,
+) -> dict[str, Any]:
+    try:
+        profile = shared.profile_file(project_id, sha256, columns, max_values,
+                                      sheet_name, header_row, first_column)
+    except _RUN_TOOL_ERRORS as exc:
+        return {"ok": False, "error": str(exc)}
+    return {"ok": True, **profile.model_dump()}
+
+
+@mcp.tool(description=TOOL_SPECS["survey_workbook"].description)
+def survey_workbook(project_id: str, sha256: str) -> dict[str, Any]:
+    try:
+        survey = shared.survey_workbook(project_id, sha256)
+    except _RUN_TOOL_ERRORS as exc:
+        return {"ok": False, "error": str(exc)}
+    return {"ok": True, **survey.model_dump()}
+
+
 @mcp.tool(description=TOOL_SPECS["list_files"].description)
 def list_files(project_id: str | None = None) -> shared.ProjectFilesView:
     return shared.list_files(project_id, _resolve_file_upload_url(project_id))

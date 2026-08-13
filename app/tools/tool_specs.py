@@ -318,6 +318,47 @@ The files a project holds, each with the `sha256` run_workflow's `files` binds.
 Also returns `file_upload_url`: POST a file there as multipart form data to add
 one. Nothing in this conversation moves bytes.""",
     ),
+    "profile_file": ToolSpec(
+        name="profile_file",
+        description="""\
+What a stored file holds, by the `sha256` list_files gave it.
+
+Returns `row_count` and, per column, `null_count`, `distinct_count` (the TRUE
+count of distinct non-null values), `values` (commonest first with their counts,
+cut to `max_values`), `truncated`, and `value_range` (min/max/mean/median) where
+every value is a number. Omit `columns` for every column in the file.
+
+This makes no judgement about types — that decision is yours. csv and xlsx are
+read as text and json with inference off, so `values` are the characters as
+stored and nothing is coerced. parquet and geojson carry real types, which are
+respected as they are.
+
+`truncated` means `values` is a prefix, not the whole vocabulary — raise
+`max_values` before declaring an enum from it.
+
+For an xlsx, `sheet_name`, `header_row` and `first_column` say which table to
+read — the same three the input_data connector takes, so what you profile here
+is what the stage will read. They default to the first sheet, first row as the
+header, first column. survey_workbook is how you find out what to pass.""",
+    ),
+    "survey_workbook": ToolSpec(
+        name="survey_workbook",
+        description="""\
+The sheets in a stored xlsx: each one's name, its row and column count, and
+`top_left` — its first cells exactly as they sit, before any header row is
+picked.
+
+Call this before profile_file on any workbook you have not seen. A sheet whose
+`top_left` begins with a title row, a blank, then the field names is telling you
+`header_row` is 2, not 0; a table indented from column A is telling you
+`first_column`. Reading those off the cells is the point — profile_file with the
+wrong ones returns a column named `Unnamed: 0` and nothing useful.
+
+`row_count` is the extent the sheet declares, which counts a trailing styled but
+empty row, so treat it as an upper bound rather than the row count a read gives.
+
+Refused for every other format: they hold one table and no sheets.""",
+    ),
     "run_workflow_test": ToolSpec(
         name="run_workflow_test",
         description="""\

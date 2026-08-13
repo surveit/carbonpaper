@@ -7,8 +7,9 @@ import json
 from collections.abc import Hashable, Mapping
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
+import openpyxl
 import pandas as pd
 
 from app.core.frames import (
@@ -78,6 +79,40 @@ def read_source_file(
         return _read_xlsx(path, dtype=dtype, sheet_name=sheet_name, header_row=header_row,
                           first_column=first_column, source_row_column=source_row_column)
     raise ValueError(f"Unsupported file format: {fmt}")
+
+
+class SheetSurvey(NamedTuple):
+    name: str
+    row_count: int
+    column_count: int
+    # The sheet's top-left cells as they sit, before any header row is chosen — which is
+    # what a caller reads to FIND the header in a sheet that does not start at A1.
+    top_left: list[list[str | None]]
+
+
+def survey_xlsx_sheets(path: Path, *, rows: int = 5, columns: int = 8) -> list[SheetSurvey]:
+    """Reads no data: openpyxl's read-only mode streams the corner and the dimensions."""
+    workbook = openpyxl.load_workbook(path, read_only=True, data_only=True)
+    try:
+        return [_survey_one_sheet(workbook[name], name, rows, columns)
+                for name in workbook.sheetnames]
+    finally:
+        workbook.close()
+
+
+def _survey_one_sheet(sheet: Any, name: str, rows: int, columns: int) -> SheetSurvey:
+    corner = [
+        [None if cell.value is None else str(cell.value) for cell in row]
+        for row in sheet.iter_rows(min_row=1, max_row=rows, max_col=columns)
+    ]
+    return SheetSurvey(
+        name=name,
+        # openpyxl reports the sheet's declared extent, which counts a trailing styled
+        # but empty row, so this is an upper bound rather than the row count a read gives.
+        row_count=sheet.max_row or 0,
+        column_count=sheet.max_column or 0,
+        top_left=corner,
+    )
 
 
 def read_source_geojson(path: Path) -> pd.DataFrame:
