@@ -64,7 +64,8 @@
   <div class="ac-composer">
     <button type="button" class="ac-clip" id="clip" title="Attach a data file">📎</button>
     <input type="file" id="file" hidden />
-    <input class="ac-input" id="input" placeholder="Message… (Enter to send)" autocomplete="off" />
+    <textarea class="ac-input" id="input" rows="1" autocomplete="off"
+      placeholder="Message… (Enter to send, Shift+Enter for a new line)"></textarea>
     <button class="ac-send" id="send">Send</button>
   </div>
 {% endif %}
@@ -218,7 +219,7 @@ function showAttached(line) {
   attached = line;
   attachedBox.replaceChildren();
   attachedBox.hidden = !line;
-  if (!line) return;
+  if (!line) { fitComposer(); return; }
   const text = document.createElement("span");
   text.textContent = line;
   const drop = document.createElement("button");
@@ -230,6 +231,7 @@ function showAttached(line) {
   drop.title = "Take this off the message. The file stays in the store.";
   drop.addEventListener("click", () => showAttached(""));
   attachedBox.append(text, drop);
+  fitComposer();
 }
 
 function askWhereItGoes() {
@@ -309,7 +311,7 @@ async function send() {
   const text = attached ? (typed ? `${attached}\n\n${typed}` : attached) : typed;
   if (!text || streaming) return;
   input.value = "";
-  showAttached("");
+  showAttached("");   // also refits the composer to the now-empty box
   addUser(text);
   const r = await fetch(MESSAGE_URL, {
     method: "POST", headers: {"Content-Type": "application/json"},
@@ -320,11 +322,25 @@ async function send() {
   connect(data.turn_id, 0);
 }
 
+// A textarea keeps the height it was given, so every edit re-measures: collapse it, then take
+// what the text needs — scrollHeight is content + padding, and the border is the part the box
+// does not report. The dock is fixed, so the log's padding follows it up: the message being
+// typed must not cover the reply it is answering.
+const dock = document.querySelector(".ac-dock");
+function fitComposer() {
+  input.style.height = "auto";
+  input.style.height = input.scrollHeight + (input.offsetHeight - input.clientHeight) + "px";
+  log.style.paddingBottom = (dock.offsetHeight + 24) + "px";
+}
+
 // The composer exists only when a real agent is bound; a view-only generation session has
 // no input to wire, but must still reattach to stream its live turn.
 if (input && sendBtn) {
   sendBtn.addEventListener("click", send);
   input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } });
+  input.addEventListener("input", fitComposer);
+  window.addEventListener("resize", fitComposer);
+  fitComposer();
 }
 
 // An agent that opens the conversation speaks on load, with nothing typed. The route
