@@ -4,7 +4,7 @@ knowledge the stage cache and the schema checks key under - null forms, numpy
 scalars, extension dtypes, what a cell's Python type says about it, frame identity."""
 from __future__ import annotations
 
-from collections.abc import Callable, Hashable, Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any, NamedTuple, cast
 import datetime as _dt
@@ -84,19 +84,17 @@ def render_frame_as_csv_text(frame: pd.DataFrame) -> str:
 # wrote the file changes nothing about how to read it — `read_frame_file`.
 
 
-def read_source_csv(path: Path, *, dtype: Mapping[Hashable, Any] | None = None) -> pd.DataFrame:
+def read_source_csv(path: Path, *, dtype: Any = None) -> pd.DataFrame:
     return pd.read_csv(path, dtype=dtype)
 
 
-def read_source_json_lines(
-    path: Path, *, dtype: Mapping[Hashable, Any] | None = None
-) -> pd.DataFrame:
+def read_source_json_lines(path: Path, *, dtype: Any = None) -> pd.DataFrame:
+    # `dtype=False` infers nothing, keeping a JSON string "002" a string, not the int 2.
     return pd.read_json(path, lines=True, dtype=dtype)
 
 
 def read_source_excel(
-    path: Path, *, sheet_name: str | int, header_row: int,
-    dtype: Mapping[Hashable, Any] | None = None,
+    path: Path, *, sheet_name: str | int, header_row: int, dtype: Any = None,
 ) -> pd.DataFrame:
     frame = pd.read_excel(
         path, sheet_name=sheet_name, header=header_row, engine="openpyxl",

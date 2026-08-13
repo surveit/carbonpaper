@@ -7,26 +7,20 @@ attaches no meaning of its own."""
 from __future__ import annotations
 
 import hashlib
-import json
 from collections.abc import Hashable
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
 
-from app.core.frames import (
-    read_frame_file,
-    read_source_csv,
-    read_source_excel,
-    read_source_json_lines,
-)
+from app.core.source_files import FileFormat, read_source_file
 from app.models import (
     JSON_COLUMN_TYPE,
     STR_COLUMN_TYPE,
     TableSchema,
     WorkflowStage,
 )
-from app.models.stages.input_data import FileFormat, InputDataStage, XlsxReadParams
+from app.models.stages.input_data import InputDataStage, XlsxReadParams
 
 from ..context import RunContext
 from .execution import narrow_stage
@@ -82,21 +76,17 @@ def read_input_data(workflow_stage: WorkflowStage, ctx: RunContext) -> pd.DataFr
             "workflow to author it or a reference override to inject it"
         )
     path = Path(params["path"])   # absolute: the model rejects a relative path when present
-    fmt = params.get("format", FileFormat.csv)
+    fmt = FileFormat(params.get("format", FileFormat.csv))
     schema = workflow_stage.output_schema  # input_data's produces is non-empty by validation
-    if fmt == FileFormat.csv:
-        df = read_source_csv(path, dtype=_read_dtype(schema, fmt, params))
-    elif fmt == FileFormat.parquet:
-        df = read_frame_file(path)
-    elif fmt == FileFormat.json:
-        df = read_source_json_lines(path, dtype=_read_dtype(schema, fmt, params))
-    elif fmt == FileFormat.geojson:
-        df = _read_geojson(path)
-    elif fmt == FileFormat.xlsx:
-        df = _read_xlsx(path, XlsxReadParams.model_validate(params),
-                        dtype=_read_dtype(schema, fmt, params))
-    else:
-        raise ValueError(f"Unsupported file format: {fmt}")
+    xlsx = XlsxReadParams.model_validate(params)
+    df = read_source_file(
+        path, fmt,
+        dtype=_read_dtype(schema, fmt, params),
+        sheet_name=xlsx.sheet_name,
+        header_row=xlsx.header_row,
+        first_column=xlsx.first_column,
+        source_row_column=xlsx.source_row_column,
+    )
 
     # Optional list-column splitting (e.g., "[a, b]" → ["a", "b"])
     for col in params.get("list_columns", []):
@@ -156,50 +146,6 @@ def _date_columns(schema: TableSchema | None, fmt: str, params: dict[str, Any]) 
     columns.extend(c.name for c in schema.columns
                    if c.type in _DATE_TYPES and c.name not in seen)
     return columns
-
-
-def _read_geojson(path: Path) -> pd.DataFrame:
-    geo = json.loads(path.read_text(encoding="utf-8"))
-    rows: list[dict[str, Any]] = []
-    for feat in geo.get("features", []):
-        props = dict(feat.get("properties") or {})
-        geom = feat.get("geometry") or {}
-        if geom.get("type") == "Point":
-            coords = geom.get("coordinates") or [None, None]
-            props.setdefault("lon", coords[0])
-            props.setdefault("lat", coords[1])
-        rows.append(props)
-    return pd.DataFrame(rows)
-
-
-def _read_xlsx(
-    path: Path, params: XlsxReadParams, *, dtype: dict[Hashable, Any] | None = None
-) -> pd.DataFrame:
-    # header_row/first_column are 0-based indices into the sheet as Excel shows it.
-    frame = read_source_excel(
-        path, sheet_name=params.sheet_name, header_row=params.header_row, dtype=dtype
-    )
-    if params.first_column:
-        _validate_first_column_in_range(params.first_column, frame, path, params.sheet_name)
-        frame = frame.iloc[:, params.first_column:].copy()
-    if params.source_row_column:
-        _add_source_row_column(frame, params.source_row_column, params.header_row)
-    return frame
-
-
-def _add_source_row_column(frame: pd.DataFrame, column: str, header_row: int) -> None:
-    # Sheet rows are 1-based and the data starts one row after the header, hence + 2.
-    if column in frame.columns:
-        raise ValueError(f"source_row_column '{column}' collides with an existing column")
-    frame[column] = frame.index + header_row + 2
-
-
-def _validate_first_column_in_range(first_column: int, frame: pd.DataFrame, path: Path, sheet: Any) -> None:
-    if first_column < 0 or first_column >= len(frame.columns):
-        raise ValueError(
-            f"first_column={first_column} is out of range for {path.name} "
-            f"sheet {sheet!r}, which has {len(frame.columns)} columns"
-        )
 
 
 def _parse_list_cell(cell: Any) -> list[str]:
