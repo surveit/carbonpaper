@@ -9,7 +9,8 @@ from app.compiler.stage_tests_search import FIND_ROWS_TOOL, build_find_rows_tool
 from app.compiler.stage_tests_submission import read_selected_rows
 from app.models import NamedSchema, SchemaLibrary, Terms, Verb, parse_stage, Stage
 from app.models.stages.stage_base import find_stage_test_class
-from app.core.column_profile import profile_frame
+from app.core.frames import frame_to_table
+from app.services.frame_profile import profile_table
 from app.core.row_search import InputRows
 
 _CODE = "def transform(row):\n    return {**row, 'doubled': row['amount'] * 2}\n"
@@ -35,7 +36,7 @@ def _sources(frame: pd.DataFrame = _FRAME, columns=("amount",)) -> dict[str, Inp
     narrowed = frame[list(columns)].reset_index(drop=True)
     return {"load": InputRows(
         input_id="load", run_id=_RUN_ID, frame=narrowed,
-        profile=profile_frame(narrowed, list(columns), max_values=12),
+        profile=profile_table(frame_to_table(narrowed), list(columns), max_values=12),
     )}
 
 

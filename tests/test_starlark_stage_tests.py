@@ -6,7 +6,8 @@ import pandas as pd
 import pytest
 
 from app.compiler.stage_tests import build_stage_test_generator, render_generation_task
-from app.core.column_profile import profile_frame
+from app.core.frames import frame_to_table
+from app.services.frame_profile import profile_table
 from app.core.row_search import InputRows
 from app.models.named_schemas import SchemaLibrary
 from app.models.terms import Terms
@@ -77,7 +78,7 @@ def _sources() -> dict[str, InputRows]:
     })
     return {"filings": InputRows(
         input_id="filings", run_id="20260101T000000", frame=frame,
-        profile=profile_frame(frame, list(frame.columns), max_values=12))}
+        profile=profile_table(frame_to_table(frame), list(frame.columns), max_values=12))}
 
 
 def _dollar_row(filing_id: str = "F1") -> dict:
