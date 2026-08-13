@@ -17,7 +17,6 @@ from starlette.routing import Route
 
 from app.core.logging_config import configure_app_logging
 from app.core.store_config import configure_default_stores, refuse_renamed_env_vars
-from app.seeds.seed import seed_demo_data_if_enabled
 from app.web.config import (
     PITCH_DIR, STATIC_DIR, RevalidatedStaticFiles, configure_projects_dir_from_env,
 )
@@ -48,11 +47,6 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     # here rather than at import time in app.services.workspace, so the test
     # suite's own set_projects_dir() is never overridden by the environment.
     configure_projects_dir_from_env()
-    # Opt-in demo data: CARBON_PAPER_SEED_DEMO=1 seeds the committed example bundles into
-    # the workspace (seed-if-absent, never destructive); a normal boot leaves
-    # this env var unset, so it does nothing. All seeding logic lives in
-    # app.seeds — this is its one call site.
-    seed_demo_data_if_enabled()
     # The MCP session manager's task group must run for the server's lifetime —
     # the /mcp endpoint errors without it. A fresh manager per entry keeps this
     # lifespan re-entrant (several TestClient(app) uses in one process).

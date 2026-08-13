@@ -6,7 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from app.seeds.seed import discover_workflow_files, seed_all, seed_demo_data_if_enabled
+from app.seeds.seed import discover_workflow_files, seed_all
 from app.services import project
 from app.services.project import read_project_name
 from app.services.stage_edit import find_description_issues, find_unnamed_model_issues
@@ -88,28 +88,6 @@ def test_discover_workflow_files_filters_to_json_files(tmp_path):
 
 def test_discover_workflow_files_returns_empty_list_for_a_missing_data_dir(tmp_path):
     assert discover_workflow_files(data_dir=tmp_path / "does_not_exist") == []
-
-
-def test_seed_demo_data_if_enabled_is_a_noop_when_env_var_unset(tmp_path, monkeypatch):
-    monkeypatch.delenv("CARBON_PAPER_SEED_DEMO", raising=False)
-    examples_dir = tmp_path / "examples"
-    examples_dir.mkdir(parents=True, exist_ok=True)
-
-    imported = seed_demo_data_if_enabled()
-
-    assert imported == []
-    assert project.list_projects() == []
-
-
-def test_seed_demo_data_if_enabled_seeds_when_env_var_is_1(tmp_path, monkeypatch):
-    monkeypatch.setenv("CARBON_PAPER_SEED_DEMO", "1")
-    examples_dir = tmp_path / "examples"
-    examples_dir.mkdir(parents=True, exist_ok=True)
-
-    imported = seed_demo_data_if_enabled()
-
-    assert [read_project_name(project_id) for project_id in imported] == _ALL_BUNDLES
-    assert set(imported) <= set(project.list_projects())
 
 
 def test_the_retired_lobbying_issue_triage_bundle_is_gone_whole():
