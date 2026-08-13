@@ -80,19 +80,8 @@
   .n { font-weight: 600; font-variant-numeric: tabular-nums; }
 
   .start { max-width: 34em; margin: 3rem auto 0; text-align: center; }
-  .start .lead { font-size: 1.24rem; margin: 0 0 1.2rem; }
-  .start .step {
-    font-family: var(--sans); font-size: .98rem; line-height: 1.5;
-    margin: 0 0 .5rem; color: var(--muted);
-  }
-  .start .step b {
-    display: inline-block; width: 1.4em; color: var(--accent); font-variant-numeric: tabular-nums;
-  }
-  .start q { color: var(--ink); font-family: var(--serif); font-size: 1.06rem; }
-  .start .note {
-    font-family: var(--sans); font-size: .82rem; color: var(--muted); margin: 1.4rem 0 0;
-  }
-  .start .note a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  .start .lead { font-size: 1.24rem; margin: 0; }
+  .start a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 3px; }
 
   /* The question is context, not a specimen: at full width it outsizes every
      screenshot of the product that follows it. */
@@ -343,10 +332,7 @@
   a workflow you can run again.</p>
 
   <section class="start">
-    <p class="lead">Get started with one prompt.</p>
-    <p class="step"><b>1</b> Add the CarbonPaper MCP server to Claude.</p>
-    <p class="step"><b>2</b> <q>Make me a CarbonPaper project from this conversation.</q></p>
-    <p class="note">Or open it at <a href="https://carbonpaper.fly.dev">carbonpaper.fly.dev</a>.</p>
+    <p class="lead">Try the demo at <a href="https://carbonpaper.fly.dev">carbonpaper.fly.dev</a>.</p>
   </section>
 
 </div>
