@@ -400,3 +400,4 @@
 {"run_id":"31711107459","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31711107459","created":"2026-08-13T14:39:10Z","branch":"fix/demo-gate-survives-double-escape","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"31711233424","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31711233424","created":"2026-08-13T14:40:11Z","branch":"master","event":"push","contracts_kept":14,"findings":[]}
 {"run_id":"31711239564","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31711239564","created":"2026-08-13T14:40:16Z","branch":"demo-gate-drop-repo-link","event":"pull_request","contracts_kept":14,"findings":[]}
+{"run_id":"31711276211","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31711276211","created":"2026-08-13T14:40:57Z","branch":"master","event":"push","contracts_kept":14,"findings":[]}
