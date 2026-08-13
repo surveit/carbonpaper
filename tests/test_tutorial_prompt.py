@@ -44,7 +44,7 @@ def _tour_tool_arguments() -> set[str]:
     return {
         argument
         for spec in make_tutorial_tools(TutorialContext(base_url="http://x/"))
-        for argument in spec.input_schema
+        for argument in spec.json_schema.get("properties", {})
     }
 
 

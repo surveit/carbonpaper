@@ -14,7 +14,7 @@ from pydantic import BaseModel
 from app.web.chat_router import _store
 from app.core.agent import registry
 from app.core.agent.registry import AgentConfig, register
-from app.core.agent.bound_tool import BoundToolSpec
+from app.core.agent.bound_tool import bind_function
 from app.main import app
 
 client = TestClient(app)
@@ -36,12 +36,12 @@ def _build_tools(ctx: BaseModel) -> list:
         return ctx.label
 
     return [
-        BoundToolSpec(
+        bind_function(
             name="echo",
             description="Echo the context label.",
             fn=echo,
-            input_schema={},
             label="Echoing",
+            parameters={},
         )
     ]
 

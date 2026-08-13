@@ -8,7 +8,7 @@ from __future__ import annotations
 from pydantic import BaseModel
 
 from app.agents.tutorial.prompt import TUTORIAL_OPENING_PROMPT, TUTORIAL_SYSTEM_PROMPT
-from app.core.agent.bound_tool import BoundToolSpec
+from app.core.agent.bound_tool import BoundToolSpec, bind_function
 from app.core.agent.registry import AgentConfig, register
 from app.tools import eval_runs, shared
 from app.tools.eval_runs import EvalRunResult
@@ -55,26 +55,26 @@ def make_tutorial_tools(context: BaseModel) -> list[BoundToolSpec]:
     # tour's reader CLICKS what comes back, so the links carry this session's base_url
     # rather than being root-relative.
     return [
-        BoundToolSpec(
+        bind_function(
             name="create_tutorial_project",
             description=CREATE_TUTORIAL_PROJECT.description,
             fn=create_tutorial_project,
-            input_schema={},
             label="Setting up the tutorial project",
+            parameters={},
         ),
-        BoundToolSpec(
+        bind_function(
             name="read_stage_output_rows",
             description=TOOL_SPECS["read_stage_output_rows"].description,
             fn=read_stage_output_rows,
-            input_schema=shared.schema_of("read_stage_output_rows"),
             label="Reading the stage's rows",
+            parameters=shared.read_parameter_prose("read_stage_output_rows"),
         ),
-        BoundToolSpec(
+        bind_function(
             name="run_eval",
             description=eval_runs.RUN_EVAL.description,
             fn=run_eval,
-            input_schema=eval_runs.RUN_EVAL_SCHEMA,
             label="Running the eval",
+            parameters=eval_runs.RUN_EVAL_SCHEMA,
         ),
         *shared.bind("run_workflow", "get_run_status", "sleep", "read_workflow_summary"),
     ]

@@ -4,7 +4,6 @@ The same three calls the eval page's Run button makes.
 """
 from __future__ import annotations
 
-from typing import Annotated
 
 from pydantic import BaseModel
 
@@ -14,7 +13,7 @@ from app.evals.store import load_eval_config
 from app.models import EvalRun
 from app.services.workspace import repo_root
 from app.tools.shared import resolve_existing_project
-from app.tools.types import ToolInputSchema
+from app.tools.types import ToolParameterProse
 
 
 # The stored run whole, so what the caller reports and what the page shows are one
@@ -53,11 +52,8 @@ reader sees WHICH rows disagreed. Hand it over. No pass mark exists: report the 
 and the disagreements, never a verdict.""",
 )
 
-RUN_EVAL_SCHEMA: ToolInputSchema = {
-    "project_id": Annotated[str, "The project's name."],
-    "eval_id": Annotated[str, "The eval's id, as the project's evals page lists it."],
-    "version_id": Annotated[
-        str | None,
-        "Which stored version to score, published or not. Omit for the newest stored.",
-    ],
+RUN_EVAL_SCHEMA: ToolParameterProse = {
+    "project_id": "The project's name.",
+    "eval_id": "The eval's id, as the project's evals page lists it.",
+    "version_id": "Which stored version to score, published or not. Omit for the newest stored.",
 }
