@@ -7,11 +7,11 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Any, Annotated, Callable
+from typing import Any, Callable
 
 from pydantic import BaseModel
 
-from app.core.agent.bound_tool import BoundToolSpec
+from app.core.agent.bound_tool import BoundToolSpec, bind_function
 from app.core.errors import (
     MissingInputBindingError,
     NoVersionToRunError,
@@ -24,7 +24,7 @@ from app.core.source_files import SheetSurvey
 from app.core.column_profile import TableProfile
 from app.models.review_guide import ReviewGuideDraft
 from app.models.terms import Terms
-from app.tools.types import ToolInputSchema
+from app.tools.types import ToolParameterProse
 from app.services import (
     frame_profile,
     generation,
@@ -41,7 +41,11 @@ from app.services.project import Project, ProjectListing
 from app.services.versioning import ReviewGuide
 from app.tools.tool_specs import TOOL_SPECS
 
-_PROJECT_ID = Annotated[str, "The project's name."]
+_PROJECT_ID = "The project's name."
+
+# read_stage_output_rows builds links, so its reader's address is the CALLER's to
+# supply — never something the model is asked for.
+_CALLER_SUPPLIED = frozenset({"base_url"})
 
 # Domain failures a run tool turns into {ok: False, error: str(exc)} — a loud, honest
 # verdict rather than a traceback or a fabricated run id/status. Anything outside this
@@ -375,160 +379,109 @@ _FUNCTIONS: dict[str, Callable[..., Any]] = {
     "survey_workbook": survey_workbook,
 }
 
-_SCHEMAS: dict[str, ToolInputSchema] = {
+_SCHEMAS: dict[str, ToolParameterProse] = {
     "create_project": {
-        "name": Annotated[
-            str,
-            "What to CALL the project — a label, shown to the human. Two projects may "
+        "name": "What to CALL the project — a label, shown to the human. Two projects may "
             "share one; the id you work with comes back from this call.",
-        ],
-        "document": Annotated[
-            str,
-            "The methodology prose, whole. It becomes the project's source of record, "
+        "document": "The methodology prose, whole. It becomes the project's source of record, "
             "which every later generation reads — so send what the user wrote, never a "
             "summary of it.",
-        ],
     },
     "read_terms": {"project_id": _PROJECT_ID},
     "write_terms": {
         "project_id": _PROJECT_ID,
-        "terms": Annotated[
-            Terms,
-            "The WHOLE vocabulary — `nouns` and `verbs` both, every time. What you send "
+        "terms": "The WHOLE vocabulary — `nouns` and `verbs` both, every time. What you send "
             "replaces what is stored, so read_terms first and send that back with your "
             "additions.",
-        ],
     },
     "get_project_status": {"project_id": _PROJECT_ID},
     "list_projects": {},
     "read_stage": {
         "project_id": _PROJECT_ID,
-        "stage_id": Annotated[str, "The stage's id, as read_workflow_summary shows it."],
+        "stage_id": "The stage's id, as read_workflow_summary shows it.",
     },
     "remove_stage": {
         "project_id": _PROJECT_ID,
-        "stage_id": Annotated[
-            str,
-            "The stage to delete. Refused if another stage still lists it in its inputs.",
-        ],
+        "stage_id": "The stage to delete. Refused if another stage still lists it in its inputs.",
     },
     "read_review_guide": {
         "project_id": _PROJECT_ID,
-        "version_id": Annotated[str, "The version whose guide to read."],
+        "version_id": "The version whose guide to read.",
     },
     "write_review_guide": {
         "project_id": _PROJECT_ID,
-        "version_id": Annotated[
-            str,
-            "The version this guide describes. The guide is validated against THAT "
+        "version_id": "The version this guide describes. The guide is validated against THAT "
             "version's stages.",
-        ],
-        "guide": Annotated[
-            ReviewGuide,
-            "The complete guide: `steps`, each with `title`, `prose` and `stage_ids`, "
+        "guide": "The complete guide: `steps`, each with `title`, `prose` and `stage_ids`, "
             "plus `unnarrated`. Sent whole every time — it replaces any earlier guide.",
-        ],
     },
     "run_stage_tests": {
         "project_id": _PROJECT_ID,
-        "stage_id": Annotated[
-            str | None, "One stage to scope the run to. Omit to run every stage with tests."],
+        "stage_id": "One stage to scope the run to. Omit to run every stage with tests.",
     },
     "report_compiler_warnings": {"project_id": _PROJECT_ID},
     "generate_stage_tests": {
         "project_id": _PROJECT_ID,
-        "stage_id": Annotated[str, "The stage to generate tests for."],
+        "stage_id": "The stage to generate tests for.",
     },
     "run_workflow": {
         "project_id": _PROJECT_ID,
-        "version_id": Annotated[str, "Omit for the project's newest stored version."],
-        "limits": Annotated[
-            dict[str, int] | None,
-            'Caps how many rows a stage READS: {"<stage id>": N}.',
-        ],
-        "files": Annotated[
-            dict[str, str] | None,
-            'The stored file each input stage reads for THIS run: '
+        "version_id": "Omit for the project's newest stored version.",
+        "limits": 'Caps how many rows a stage READS: {"<stage id>": N}.',
+        "files": 'The stored file each input stage reads for THIS run: '
             '{"<stage id>": "<sha256 from list_files>"}.',
-        ],
     },
     "run_workflow_test": {
         "project_id": _PROJECT_ID,
-        "limit": Annotated[
-            int | None,
-            "How many rows of the bound source to run on — the run's budget, since every "
+        "limit": "How many rows of the bound source to run on — the run's budget, since every "
             "LLM stage pays per row. null runs the whole source.",
-        ],
-        "version_id": Annotated[str, "Omit for the project's newest stored version."],
-        "stage_ids": Annotated[
-            list[str] | None,
-            "Which stages to execute. Omit to run every stage that is not an input.",
-        ],
-        "offset": Annotated[int, "The source row the window starts at. 0 is the first."],
+        "version_id": "Omit for the project's newest stored version.",
+        "stage_ids": "Which stages to execute. Omit to run every stage that is not an input.",
+        "offset": "The source row the window starts at. 0 is the first.",
     },
     "get_run_status": {
         "project_id": _PROJECT_ID,
-        "run_id": Annotated[str, "The run id run_workflow returned."],
+        "run_id": "The run id run_workflow returned.",
     },
     "sleep": {
-        "seconds": Annotated[
-            int,
-            f"How long to sleep. Clamped to {MAX_SLEEP_SECONDS} — sleep again to wait longer.",
-        ],
+        "seconds": f"How long to sleep. Clamped to {MAX_SLEEP_SECONDS} — sleep again to wait longer.",
     },
     "read_workflow_summary": {"project_id": _PROJECT_ID},
     "read_stage_output_rows": {
         "project_id": _PROJECT_ID,
-        "run_id": Annotated[str, "The run whose stored output you want to read."],
-        "stage_id": Annotated[str, "The stage whose output rows you want."],
-        "limit": Annotated[
-            int | None,
-            f"How many rows to read, from `offset`. Clamped to {MAX_OUTPUT_ROWS}, which "
+        "run_id": "The run whose stored output you want to read.",
+        "stage_id": "The stage whose output rows you want.",
+        "limit": f"How many rows to read, from `offset`. Clamped to {MAX_OUTPUT_ROWS}, which "
             f"is also the default.",
-        ],
-        "offset": Annotated[int, "The row ordinal to start at. 0 is the first row."],
+        "offset": "The row ordinal to start at. 0 is the first row.",
     },
     "profile_stage_output_data_range": {
         "project_id": _PROJECT_ID,
-        "run_id": Annotated[str, "The run whose stored output you want to profile."],
-        "stage_id": Annotated[str, "The stage whose output columns you want."],
-        "columns": Annotated[
-            list[str], "The columns to profile — every one you are about to declare."],
-        "max_values": Annotated[
-            int,
-            "How many distinct values to show per column, commonest first. `truncated` "
+        "run_id": "The run whose stored output you want to profile.",
+        "stage_id": "The stage whose output columns you want.",
+        "columns": "The columns to profile — every one you are about to declare.",
+        "max_values": "How many distinct values to show per column, commonest first. `truncated` "
             "says whether there were more.",
-        ],
     },
     "move_file_to_project": {
         "project_id": _PROJECT_ID,
-        "sha256": Annotated[str, "The stored file's sha256, as list_files reported it."],
+        "sha256": "The stored file's sha256, as list_files reported it.",
     },
     "profile_file": {
         "project_id": _PROJECT_ID,
-        "sha256": Annotated[str, "The stored file's sha256, as list_files reported it."],
-        "columns": Annotated[
-            list[str] | None,
-            "Which columns to profile. Omit for every column in the file.",
-        ],
-        "max_values": Annotated[
-            int,
-            "How many distinct values to show per column, commonest first. "
+        "sha256": "The stored file's sha256, as list_files reported it.",
+        "columns": "Which columns to profile. Omit for every column in the file.",
+        "max_values": "How many distinct values to show per column, commonest first. "
             "`truncated` says whether there were more.",
-        ],
-        "sheet_name": Annotated[
-            str | int, "xlsx only: the sheet, by name or 0-based position."],
-        "header_row": Annotated[
-            int, "xlsx only: the 0-based row the header sits on."],
-        "first_column": Annotated[
-            int, "xlsx only: the 0-based column the table starts at."],
+        "sheet_name": "xlsx only: the sheet, by name or 0-based position.",
+        "header_row": "xlsx only: the 0-based row the header sits on.",
+        "first_column": "xlsx only: the 0-based column the table starts at.",
     },
     "survey_workbook": {
         "project_id": _PROJECT_ID,
-        "sha256": Annotated[str, "The stored xlsx's sha256, as list_files reported it."],
-        "from_row": Annotated[
-            int, "The 0-based sheet row the window starts at. Raise it to look past a "
-                 "preamble longer than the window."],
+        "sha256": "The stored xlsx's sha256, as list_files reported it.",
+        "from_row": "The 0-based sheet row the window starts at. Raise it to look past a "
+                 "preamble longer than the window.",
     },
 }
 
@@ -558,7 +511,7 @@ _LABELS = {
 }
 
 
-def schema_of(name: str) -> ToolInputSchema:
+def read_parameter_prose(name: str) -> ToolParameterProse:
     """For a surface that WRAPS a shared tool instead of binding it."""
     return _SCHEMAS[name]
 
@@ -566,12 +519,13 @@ def schema_of(name: str) -> ToolInputSchema:
 def bind(*names: str) -> list[BoundToolSpec]:
     """The named shared tools as BoundToolSpecs — an agent config lists names, not bodies."""
     return [
-        BoundToolSpec(
+        bind_function(
             name=name,
             description=TOOL_SPECS[name].description,
             fn=_FUNCTIONS[name],
-            input_schema=_SCHEMAS[name],
             label=_LABELS[name],
+            parameters=_SCHEMAS[name],
+            skip=_CALLER_SUPPLIED,
         )
         for name in names
     ]

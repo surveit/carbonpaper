@@ -6,12 +6,12 @@ is bound. A missing stage or column raises, never an invented default."""
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Callable
+from typing import Any, Callable
 
 from pydantic import BaseModel
 
-from app.core.agent.bound_tool import BoundToolSpec
-from app.tools.types import ToolInputSchema
+from app.core.agent.bound_tool import BoundToolSpec, bind_function
+from app.tools.types import ToolParameterProse
 from app.tools import shared, working_copy
 from app.tools.submitted_stage import (
     SubmittedStage,
@@ -71,12 +71,12 @@ def make_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
         read_stage_output_rows,
     ]
     return [
-        BoundToolSpec(
+        bind_function(
             name=fn.__name__,
             description=TOOL_SPECS[fn.__name__].description,
             fn=fn,
-            input_schema=TOOL_SCHEMAS[fn.__name__],
             label=TOOL_LABELS[fn.__name__],
+            parameters=TOOL_SCHEMAS[fn.__name__],
         )
         for fn in tools
     ] + shared.bind(
@@ -98,54 +98,39 @@ def make_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
 # Empty dict = no parameters. The value type is `object`, not `Any`: the entries are
 # opaque type-annotation objects we never introspect, so `object` types them
 # honestly without letting `Any` leak past the schema.
-TOOL_SCHEMAS: dict[str, ToolInputSchema] = {
+TOOL_SCHEMAS: dict[str, ToolParameterProse] = {
     "get_current_project": {},
-    "create_project": shared.schema_of("create_project"),
+    "create_project": shared.read_parameter_prose("create_project"),
     "edit_stage": {
-        "project_id": Annotated[str, "The project id (call get_current_project first)."],
-        "stage_id": Annotated[str, "The id of the stage to change."],
-        "changes_json": Annotated[
-            str,
-            "A JSON object (encoded as a string) of ONLY the fields to change — a "
+        "project_id": "The project id (call get_current_project first).",
+        "stage_id": "The id of the stage to change.",
+        "changes_json": "A JSON object (encoded as a string) of ONLY the fields to change — a "
             "JSON Merge Patch. Fields you omit are preserved verbatim; a null value "
             "deletes a field. Nested objects merge (they are not replaced whole). "
             'Examples: {"cache": true} turns caching on; {"llm": {"model": "claude-opus-5"}} '
             "changes only llm.model. You cannot change a stage's id this way.",
-        ],
     },
     "add_stage": {
-        "project_id": Annotated[str, "The project id (call get_current_project first)."],
-        "stages": Annotated[
-            list[SubmittedStage],
-            "The complete NEW stages: each with id (new and unique — the stage's only "
+        "project_id": "The project id (call get_current_project first).",
+        "stages": "The complete NEW stages: each with id (new and unique — the stage's only "
             "name), description, type, the "
             "config block(s) its type requires (connector / llm / function / ...; "
             "`publish` needs BOTH its `publish` block and a `function` block), a MANDATORY "
             "`signature`, and inputs each with a MANDATORY `schema`. Every id in inputs "
             "must already be a stage in this workflow or in this same call.",
-        ],
     },
     "save_version": {
-        "project_id": Annotated[str, "The project id (call get_current_project first)."],
-        "message": Annotated[
-            str,
-            "What this version changes and why — shown to the human reviewer "
+        "project_id": "The project id (call get_current_project first).",
+        "message": "What this version changes and why — shown to the human reviewer "
             "deciding whether to publish it.",
-        ],
-        "parent_version": Annotated[
-            str | None,
-            "The version you started this edit FROM, if you loaded one. Omit otherwise: "
+        "parent_version": "The version you started this edit FROM, if you loaded one. Omit otherwise: "
             "nothing is inferred from what else the project has stored.",
-        ],
     },
     "list_files": {
-        "project_id": Annotated[
-            str | None,
-            "The project whose files to list. Omit for the files that are in no "
+        "project_id": "The project whose files to list. Omit for the files that are in no "
             "project yet.",
-        ],
     },
-    "read_stage_output_rows": shared.schema_of("read_stage_output_rows"),
+    "read_stage_output_rows": shared.read_parameter_prose("read_stage_output_rows"),
 }
 
 

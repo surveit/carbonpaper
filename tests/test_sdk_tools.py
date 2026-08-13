@@ -14,7 +14,8 @@ from pydantic import BaseModel
 
 from app.tools.editing import EditingContext, make_editing_tools
 from app.core.agent.registry import build_mcp_server
-from app.core.agent.bound_tool import as_tool_content
+from app.core.agent.bound_tool import as_tool_content, bind_function
+from app.tools import shared
 from app.services import workspace
 from stage_seed import add_stage
 
@@ -163,3 +164,69 @@ def test_an_argument_the_model_shapes_wrongly_comes_back_as_a_tool_error(
     assert out["is_error"] is True
     # The field, not a stack trace: what comes back is what the model reads to retry.
     assert "type" in out["content"][0]["text"]
+
+
+def test_a_model_parameter_is_advertised_with_its_own_shape(examples_root: Path) -> None:
+    """The SDK maps a type it does not know to a bare string, and a string has no fields."""
+    _seed(examples_root, "congresswatch")
+    by_name = {s.name: s for s in make_editing_tools(
+        EditingContext(project_id="congresswatch", base_url="http://reader.test/"))}
+
+    schema = by_name["write_review_guide"].json_schema
+    guide = schema["properties"]["guide"]
+    assert guide.get("type") != "string", guide
+    assert "ReviewGuideDraft" in json.dumps(guide) + json.dumps(schema.get("$defs", {}))
+    # The prose the table is written in survives into the schema the model reads.
+    assert "replaces any earlier guide" in guide["description"]
+
+    assert by_name["add_stage"].json_schema["properties"]["stages"]["type"] == "array"
+
+
+def test_write_review_guide_stores_a_guide_sent_as_an_object(examples_root: Path) -> None:
+    """Through as_sdk_tool, not the bound function: the bridge is what was broken."""
+    _seed(examples_root, "congresswatch")
+    _server, _allowed, tools = _build("congresswatch")
+    by_name = {t.name: t for t in tools}
+
+    saved = json.loads(_call(by_name["save_version"], {
+        "project_id": "congresswatch", "message": "the loader alone",
+        "parent_version": None})["content"][0]["text"])
+    assert saved["ok"] is True, saved
+
+    out = _call(by_name["write_review_guide"], {
+        "project_id": "congresswatch",
+        "version_id": saved["version_id"],
+        "guide": {
+            "steps": [{
+                "title": "Load the filings",
+                "prose": "Reads the filings as they were downloaded, one row each.",
+                "stage_ids": ["load"],
+                "data_description": "Every filing the download returned.",
+            }],
+            "unnarrated": [],
+        },
+    })
+    assert not out.get("is_error"), out["content"][0]["text"]
+    assert [step["title"] for step in json.loads(
+        out["content"][0]["text"])["steps"]] == ["Load the filings"]
+
+
+def test_a_parameter_the_function_does_not_take_is_refused() -> None:
+    """The prose table is the only place a name can disagree with the function."""
+    with pytest.raises(ValueError, match=r"does not take \['nonesuch'\]"):
+        bind_function(
+            name="read_stage", description="d", fn=shared.read_stage, label="l",
+            parameters={"nonesuch": "not a parameter of read_stage"},
+        )
+
+
+def test_a_defaulted_parameter_is_optional_to_the_model() -> None:
+    schema = next(iter(shared.bind("run_stage_tests"))).json_schema
+    assert set(schema["required"]) == {"project_id"}, schema["required"]
+    assert "stage_id" in schema["properties"]
+
+
+def test_a_caller_supplied_parameter_is_not_advertised() -> None:
+    """base_url is the reader's address; the model cannot know it and is not asked."""
+    schema = next(iter(shared.bind("read_stage_output_rows"))).json_schema
+    assert "base_url" not in schema["properties"]

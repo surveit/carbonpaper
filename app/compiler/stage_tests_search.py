@@ -3,9 +3,8 @@ what the run holds. Bound to one step's row sources, so it can reach no other da
 """
 from __future__ import annotations
 
-from typing import Annotated
 
-from app.core.agent.bound_tool import BoundToolSpec
+from app.core.agent.bound_tool import BoundToolSpec, bind_function
 from app.models.schema import StageId
 from app.core.row_search import MAX_MATCHES, InputRows, RowMatches
 
@@ -48,13 +47,13 @@ def build_find_rows_tool(sources: dict[StageId, InputRows]) -> BoundToolSpec:
             )
         return source.search(filter)
 
-    return BoundToolSpec(
+    return bind_function(
         name=FIND_ROWS_TOOL,
         description=FIND_ROWS_DESCRIPTION,
         fn=find_rows,
-        input_schema={
-            "input": Annotated[str, "Which input to search, by its stage id."],
-            "filter": Annotated[str, "The filter expression, in the dialect above."],
-        },
         label="Searching the real rows",
+        parameters={
+            "input": "Which input to search, by its stage id.",
+            "filter": "The filter expression, in the dialect above.",
+        },
     )
