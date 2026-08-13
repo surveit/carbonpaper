@@ -9,8 +9,10 @@
     border-radius: 10px; padding: 2px 8px; white-space: nowrap; }
 
 /* Opening a chat, at the right end of the heading line. A chat binds to no project,
-   so the control is the button alone. */
-.ac-new { margin-left: auto; }
+   so the control is the button alone. It leaves the row's baseline group, which the
+   chip beside it wants: a full-height button on the h1's baseline hangs below the
+   heading, where .dash-header's ＋ New project sits flush with the h1's top. */
+.ac-new { margin-left: auto; align-self: flex-start; }
 
 .ac-sessions { list-style: none; padding: 0; max-width: 1080px; }
 .ac-session { border: 1px solid var(--border); border-radius: 8px; background: var(--raised);
