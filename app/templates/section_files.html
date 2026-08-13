@@ -29,8 +29,9 @@
 
 <div class="files-quota">
   <div class="files-quota-line">
-    <strong>{{ files.used }}</strong> stored of {{ files.quota }}
-    <span class="muted">· one file may be up to {{ files.max_upload }}</span>
+    <strong>{{ files.project_used }}</strong> in this project
+    <span class="muted">· {{ files.used }} of {{ files.quota }} across every project ·
+      one file may be up to {{ files.max_upload }}</span>
   </div>
   <div class="files-quota-track">
     <div class="files-quota-fill" style="width: {{ files.used_percent }}%"></div>

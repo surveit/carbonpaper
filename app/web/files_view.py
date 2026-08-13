@@ -25,6 +25,9 @@ class FileRow(BaseModel):
 
 class FilesView(BaseModel):
     rows: list[FileRow]
+    # This project's own files, which is what the page is about, and the store they share
+    # with every other project, which is what the quota bounds.
+    project_used: str
     used: str
     quota: str
     # 0–100, for the meter's width. A store past its quota still draws a full bar
@@ -35,10 +38,13 @@ class FilesView(BaseModel):
 
 def build_files_view(project_id: str) -> FilesView:
     reads = count_runs_by_file(project_id)
+    records = uploads.list_project_files(project_id)
     used, quota = uploads.measure_files_used_bytes(), uploads.files_quota_bytes()
     return FilesView(
-        rows=[_build_row(record, reads.get(record.sha256, []))
-              for record in uploads.list_project_files(project_id)],
+        rows=[_build_row(record, reads.get(record.sha256, [])) for record in records],
+        # Summed off the records, not the disk: the disk is shared, and one project's
+        # files are the ones it holds.
+        project_used=describe_bytes(sum(record.byte_count for record in records)),
         used=describe_bytes(used),
         quota=describe_bytes(quota),
         used_percent=min(used / quota * 100, 100) if quota else 100,

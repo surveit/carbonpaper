@@ -67,10 +67,16 @@ def test_an_empty_project_says_where_files_come_from(project_id):
     assert "No files yet" in page
 
 
-def test_the_page_shows_the_store_against_its_quota(project_id, monkeypatch):
+def test_the_page_leads_with_this_projects_own_files(project_id, monkeypatch):
     monkeypatch.setenv("CARBON_PAPER_FILES_QUOTA_BYTES", "1000")
+    other = create_project("other", "Another methodology.", source="test").id
     store(project_id)
-    assert "13B</strong> stored of 1000B" in client.get(f"/project/{project_id}/files").text
+    store(other, name="theirs.csv", body=b"a,b\n1,2\n")
+    page = client.get(f"/project/{project_id}/files").text
+    # The heading is this project's; the quota is the store every project shares, and
+    # says so — otherwise deleting one file here moves a number nobody can place.
+    assert "<strong>13B</strong> in this project" in page
+    assert "21B of 1000B across every project" in page
 
 
 def test_unknown_project_404s(project_id):
