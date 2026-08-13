@@ -331,7 +331,7 @@ def _build_workflow_node_label(n: dict[str, Any], status: str | None) -> str:
     notes_indicator = "⚠ " if n["has_notes"] else ""
     eval_indicator = "📊" if n["has_eval"] else ""
     review_indicator = "👤" if n["has_review"] else ""
-    small_line = f"{stype}".replace("_", " ")
+    small_line = TYPE_LABEL.get(stype, stype)
     flags = " ".join(filter(None, [eval_indicator, review_indicator]))
     status_prefix = f"{_STATUS_GLYPH.get(status, '')} " if status else ""
     return (

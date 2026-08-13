@@ -19,7 +19,7 @@ from app.runtime.preview import PREVIEWABLE_TYPES, run_stage_preview
 from app.web import loading
 from app.web.breadcrumbs import build_run_child_crumbs
 from app.web.column_order import order_preview_columns, order_written_columns_first
-from app.web.config import EVENT_TAIL, templates
+from app.web.config import EVENT_TAIL, label_stage_type, templates
 from app.web.eval_coverage import find_eval_coverages
 from app.web.stage_test_views import build_certification, shape_test_views
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH
@@ -228,7 +228,9 @@ async def run_stage_simulate(
     if stage_def.type not in PREVIEWABLE_TYPES:
         raise HTTPException(
             status_code=404,
-            detail=f"'{stage_def.type}' stages cannot be run one row at a time",
+            detail=(
+                f"{label_stage_type(stage_def.type)} stages cannot be run one row at a time"
+            ),
         )
 
     output_by_id = {
