@@ -7,6 +7,7 @@ record is found — it never invents a model, a creation date, or a label.
 from __future__ import annotations
 
 import json
+import shutil
 import re
 from datetime import datetime
 from pathlib import Path
@@ -88,15 +89,28 @@ def read_project_record(project_id: str) -> Project | None:
     record = Project.load_or_none(project_id)
     if record is not None:
         return record
-    try:
-        pdir = workspace.resolve_project_dir(project_id)
-    except ValueError:
-        return None
-    return _read_project_json(pdir)
+    return _read_project_json(project_id)
 
 
-def _read_project_json(pdir: Path) -> Project | None:
-    pj = Path(pdir) / "project.json"
+def has_document(project_id: str) -> bool:
+    """A project imported onto disk carries its authoring facts in project.json, not a record."""
+    return methodology.exists(project_id) or _project_json_path(project_id).is_file()
+
+
+def find_workspace_project_ids() -> list[str]:
+    """Every project DIRECTORY, so one imported without a record is still listed."""
+    root = workspace.projects_dir()
+    if not root.exists():
+        return []
+    return sorted(child.name for child in root.iterdir() if child.is_dir())
+
+
+def _project_json_path(project_id: str) -> Path:
+    return workspace.resolve_project_dir(project_id) / "project.json"
+
+
+def _read_project_json(project_id: str) -> Project | None:
+    pj = _project_json_path(project_id)
     if not pj.is_file():
         return None
     try:
@@ -108,7 +122,7 @@ def _read_project_json(pdir: Path) -> Project | None:
     # project.json's `created_at` is the date the PROJECT was authored, which the record
     # calls `authored_at` — its own `created_at` stamps when the record was written.
     return Project(
-        id=Path(pdir).name,
+        id=project_id,
         name=stored.get("name"),
         title=stored.get("title"),
         model=stored.get("model"),
@@ -209,12 +223,9 @@ def _runs_summary(project_id: str) -> RunsSummary:
 # ─── Project identity (meta) ──────────────────────────────────────────────────
 
 
-def project_meta(pdir: Path) -> ProjectMeta:
-    pdir = Path(pdir)
-    # The directory's name IS the project id. Older projects were created under a slug
-    # of their title and so read as one; a project created since carries a minted id.
-    project_id = pdir.name
-    record = Project.load_or_none(project_id) or _read_project_json(pdir)
+def project_meta(project_id: str) -> ProjectMeta:
+    # A project created before ids were minted reads as a slug of its title.
+    record = Project.load_or_none(project_id) or _read_project_json(project_id)
     if record is None:
         # No record: the id is the only name this project has, and it is not invented.
         return ProjectMeta(name=project_id, display_name=project_id, title=None,
@@ -232,10 +243,8 @@ def project_meta(pdir: Path) -> ProjectMeta:
 # ─── The status snapshot ──────────────────────────────────────────────────────
 
 
-def project_state(pdir: Path) -> ProjectState:
-    pdir = Path(pdir)
-    project_id = pdir.name
-    meta = project_meta(pdir)
+def project_state(project_id: str) -> ProjectState:
+    meta = project_meta(project_id)
 
     # ── Document ──
 
@@ -244,17 +253,17 @@ def project_state(pdir: Path) -> ProjectState:
     data_model = DataModelStatus(present=bool(n_nouns), n_schemas=n_nouns)
 
     # ── Workflow (compiled stages) ──
-    stages = load_stage_specs(pdir.name)
+    stages = load_stage_specs(project_id)
     workflow = WorkflowStatus(present=bool(stages), n_stages=len(stages))
 
     # ── Versions + runs ──
-    n_versions = len(versioning.list_versions(pdir))
-    runs = _runs_summary(pdir.name)
+    n_versions = len(versioning.list_versions(project_id))
+    runs = _runs_summary(project_id)
 
     return ProjectState(
         id=project_id,
         meta=meta,
-        has_document=methodology.exists(pdir.name),
+        has_document=has_document(project_id),
         # Absolute path string (or None) — a link target, never fabricated.
         data_model=data_model,
         workflow=workflow,
@@ -291,8 +300,7 @@ def create_project(
     # first one's directory, versions and cached rows are addressed by id, not by
     # what either of them is called.
     project_id = mint_project_id()
-    project_dir = workspace.projects_dir() / project_id
-    project_dir.mkdir(parents=True, exist_ok=True)
+    workspace.resolve_project_dir(project_id).mkdir(parents=True, exist_ok=True)
     methodology.write_methodology(project_id, doc)
     created_at = datetime.now().isoformat(timespec="seconds")
     record = Project(
@@ -301,6 +309,11 @@ def create_project(
     )
     record.save()
     return record
+
+
+def delete_project(project_id: str) -> None:
+    """The working copy only — store documents survive a re-created project."""
+    shutil.rmtree(workspace.resolve_project_dir(project_id), ignore_errors=True)
 
 
 def project_exists(project_id: str) -> bool:
@@ -324,12 +337,11 @@ def list_project_listings() -> list[ProjectListing]:
 
 
 def read_workflow_summary(name: str) -> workspace.WorkflowSummary:
-    workspace.resolve_project_dir(name)
-    return workspace.project_workflow_summary(name)
+    return workspace.project_workflow_summary(workspace.validate_project_id(name))
 
 
 def read_stage(name: str, stage_id: str) -> str:
-    workspace.resolve_project_dir(name)
+    workspace.validate_project_id(name)
     stage = loader.find_parsed_stage(loader.load_stage_entries(name), stage_id)
     if stage is None:
         raise ValueError(f"no stage '{stage_id}' in project '{name}'")
@@ -345,21 +357,20 @@ def add_stage(name: str, stage_json: str) -> EditStageResult:
 
 
 def save_working_copy_as_version(
-    project_dir: Path,
+    project_id: str,
     *,
     message: str,
     reviewer: str,
     parent_version: str | None = None,
 ) -> versioning.WorkflowVersion:
     """Strict-loads the working copy, so an invalid one raises and no version is written."""
-    project_dir = Path(project_dir)
-    if not loader.exists(project_dir.name):
+    if not loader.exists(project_id):
         raise FileNotFoundError(
-            f"Cannot create a version: project '{project_dir.name}' has no workflow"
+            f"Cannot create a version: project '{project_id}' has no workflow"
         )
-    stages = loader.load_workflow(project_dir.name)
+    stages = loader.load_workflow(project_id)
     return versioning.create_version_from_stages(
-        project_dir,
+        project_id,
         [stage_to_spec_dict(s) for s in stages],
         message=message,
         reviewer=reviewer,
@@ -395,7 +406,7 @@ def remove_stage(name: str, stage_id: str) -> EditStageResult:
 
 def read_review_guide(name: str, version_id: str) -> ReviewGuide | None:
     """Loads the version for its existence check alone, so None means "no guide", not "no version"."""
-    versioning.load_version(workspace.resolve_project_dir(name), version_id)
+    versioning.load_version(name, version_id)
     return versioning.find_latest_review_guide(name, version_id)
 
 
@@ -406,8 +417,7 @@ def write_review_guide(
         project=name, version_id=version_id,
         steps=draft.steps, unnarrated=draft.unnarrated,
     )
-    versioning.save_version_guide(
-        workspace.resolve_project_dir(_project_to_write(name)), version_id, guide)
+    versioning.save_version_guide(_project_to_write(name), version_id, guide)
     return guide
 
 
@@ -461,8 +471,7 @@ class WorkflowFile(BaseModel):
 
 def export_project(project_id: str) -> WorkflowFile:
     """The bundle carries the LABEL, not the id: importing it elsewhere mints a fresh id."""
-    pdir = workspace.resolve_project_dir(project_id)
-    meta = project_meta(pdir)
+    meta = project_meta(project_id)
     if meta.model is None or meta.source is None:
         raise ValueError(
             f"project '{project_id}' has no recorded model/source — cannot export"
@@ -489,11 +498,10 @@ def import_project(
     """Returns the project ID. Importing the same bundle twice makes two projects, not a clash."""
     label = sanitize_project_name(name or wf.name)
     project_id = create_project(label, wf.document, model=wf.model, source=wf.source).id
-    pdir = workspace.resolve_project_dir(project_id)
     terms.write_terms(project_id, Terms(nouns=wf.data_model, verbs=wf.verbs))
     if wf.stages:
         loader.save_stages(project_id, list(wf.stages))
         save_working_copy_as_version(
-            pdir, message=f"Imported '{label}'", reviewer="import"
+            project_id, message=f"Imported '{label}'", reviewer="import"
         )
     return project_id

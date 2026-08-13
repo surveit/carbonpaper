@@ -18,7 +18,7 @@ def test_finish_persists_schemas_on_success(tmp_path: Path):
     project_dir = tmp_path / "demo"
     project_dir.mkdir()
 
-    generation._finish_data_model(project_dir, SchemaLibrary(schemas=[]))
+    generation._finish_data_model(project_dir.name, SchemaLibrary(schemas=[]))
 
     assert StoredTerms.exists("demo/terms")  # nouns stored; the workflow is NOT auto-built
 
@@ -27,7 +27,7 @@ def test_finish_does_nothing_when_no_answer_was_submitted(tmp_path: Path):
     project_dir = tmp_path / "demo"
     project_dir.mkdir()
 
-    generation._finish_data_model(project_dir, None)
+    generation._finish_data_model(project_dir.name, None)
 
     assert not StoredTerms.exists("demo/terms")  # nothing written on a failed data model
 
@@ -69,7 +69,7 @@ def test_start_generation_creates_a_session_and_runs_a_live_turn(tmp_path: Path,
     monkeypatch.setattr(data_model, "build_data_model_agent", lambda *a, **k: _FakeAgent())
 
     async def _drive() -> str:
-        sid = generation.start_generation(project_dir, document="doc", model="sonnet")
+        sid = generation.start_generation(project_dir.name, document="doc", model="sonnet")
         # The originating prompt is shown as the user's message (pending_user) so the LIVE
         # view doesn't lose it — checked before the turn completes and clears it.
         assert store.load(sid)["pending_user"] == _FakeAgent.task

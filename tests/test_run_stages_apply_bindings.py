@@ -28,8 +28,8 @@ def project(tmp_path):
              "connector": {"kind": "file",
                            "params": {"path": str(authored), "format": "csv"}}}
     add_stage(proj, stage)
-    vid = save_working_copy_as_version(proj, message="seed", reviewer="t").version_id
-    versioning.publish_version(proj, vid, reviewer="human")
+    vid = save_working_copy_as_version(proj.name, message="seed", reviewer="t").version_id
+    versioning.publish_version(proj.name, vid, reviewer="human")
     workspace.set_projects_dir(tmp_path)
     return proj, vid
 

@@ -66,34 +66,34 @@ def _build_rows_inside(here: str, current_run: str) -> list[CmdkPaletteRow]:
     ]
 
 
-def _build_section_rows(project: str) -> list[CmdkPaletteRow]:
+def _build_section_rows(project_id: str) -> list[CmdkPaletteRow]:
     return [
         CmdkPaletteRow(kind=CmdkPaletteKind.SECTION, label=item.label, href=item.href)
-        for item in _flatten_nav(build_nav(project))
+        for item in _flatten_nav(build_nav(project_id))
     ]
 
 
-def _build_stage_rows(project: str, here: str) -> list[CmdkPaletteRow]:
+def _build_stage_rows(project_id: str, here: str) -> list[CmdkPaletteRow]:
     # Parsed stages only: one that does not parse has no id to offer.
     return [
         CmdkPaletteRow(
             kind=CmdkPaletteKind.STAGE,
             label=stage.id,
-            href=f"/project/{project}/workflow#{stage.id}",
-            meta=_describe_row(project, here, stage.description or ""),
+            href=f"/project/{project_id}/workflow#{stage.id}",
+            meta=_describe_row(project_id, here, stage.description or ""),
             is_code=True,
         )
-        for stage in list_parsed_stages(load_stages_or_empty(project).entries)
+        for stage in list_parsed_stages(load_stages_or_empty(project_id).entries)
     ]
 
 
-def _build_run_stage_rows(project: str, run: RunIndexRow) -> list[CmdkPaletteRow]:
+def _build_run_stage_rows(project_id: str, run: RunIndexRow) -> list[CmdkPaletteRow]:
     # The run's OWN squares, so the bar cannot name a stage this run never pinned.
     return [
         CmdkPaletteRow(
             kind=CmdkPaletteKind.STAGE,
             label=square.stage_id,
-            href=f"/project/{project}/runs/{run.run_id}#{square.stage_id}",
+            href=f"/project/{project_id}/runs/{run.run_id}#{square.stage_id}",
             meta=describe_stage_status(square.status, run.status),
             is_code=True,
         )
@@ -101,16 +101,16 @@ def _build_run_stage_rows(project: str, run: RunIndexRow) -> list[CmdkPaletteRow
     ]
 
 
-def _build_run_rows(project: str, here: str) -> list[CmdkPaletteRow]:
-    return [_build_run_row(project, run, here) for run in build_run_index_rows(project)]
+def _build_run_rows(project_id: str, here: str) -> list[CmdkPaletteRow]:
+    return [_build_run_row(project_id, run, here) for run in build_run_index_rows(project_id)]
 
 
-def _build_run_row(project: str, run: RunIndexRow, here: str) -> CmdkPaletteRow:
+def _build_run_row(project_id: str, run: RunIndexRow, here: str) -> CmdkPaletteRow:
     return CmdkPaletteRow(
         kind=CmdkPaletteKind.RUN,
         label=run.run_id,
-        href=f"/project/{project}/runs/{run.run_id}",
-        meta=_describe_row(project, here, _describe_run(run)),
+        href=f"/project/{project_id}/runs/{run.run_id}",
+        meta=_describe_row(project_id, here, _describe_run(run)),
         is_code=True,
     )
 
@@ -127,11 +127,11 @@ def _describe_run(run: RunIndexRow) -> str:
     return f"{outcome} · test run" if run.is_test_run else outcome
 
 
-def _describe_row(project: str, here: str, detail: str) -> str:
+def _describe_row(project_id: str, here: str, detail: str) -> str:
     # Named only outside the project being read: inside it, the word is on every row.
-    if project == here:
+    if project_id == here:
         return detail
-    return f"{project} · {detail}" if detail else project
+    return f"{project_id} · {detail}" if detail else project_id
 
 
 def _flatten_nav(nav: list[NavItem]) -> list[NavItem]:

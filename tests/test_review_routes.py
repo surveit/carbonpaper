@@ -33,8 +33,8 @@ PROJECT = "queue_route_journey"
 
 
 def _seed_version(root):
-    vid = save_working_copy_as_version(root, message="test seed", reviewer="test").version_id
-    versioning.publish_version(root, vid, reviewer="human")
+    vid = save_working_copy_as_version(root.name, message="test seed", reviewer="test").version_id
+    versioning.publish_version(root.name, vid, reviewer="human")
 
 
 def _with_queue_signature(stage, input_columns):
@@ -152,7 +152,7 @@ def _build_and_halt(tmp_path, monkeypatch):
     _write_stage(project_dir, "03_review.json", _review_stage())
     _seed_version(project_dir)
 
-    manifest = run_prepared(prepare_run(project_dir, *pinned_stages(project_dir)))
+    manifest = run_prepared(prepare_run(project_dir / "runs", project_dir.name, *pinned_stages(project_dir)))
     assert manifest["status"] == "awaiting_review"
     assert manifest["halted_at"] == ["review"]
 
@@ -168,7 +168,7 @@ def _put_cached_decision(
     decision: ReviewVerdict, reviewed_score: float | None = None,
 ) -> None:
     review.record_decision(
-        project=project, stage=place_stage(parse_stage(_review_stage())),
+        project_id=project, stage=place_stage(parse_stage(_review_stage())),
         stage_fingerprint=stage_fingerprint, input_fingerprint=input_fingerprint,
         frozen_row={"id": row["id"], "quote": row["quote"], "score": int(row["score"])},
         verdict=decision,
@@ -361,7 +361,7 @@ def test_e2e_decide_every_verdict_then_resume_completes(tmp_path, monkeypatch):
     _write_stage(project_dir, "02_review.json", _e2e_review_stage())
     _seed_version(project_dir)
 
-    manifest = run_prepared(prepare_run(project_dir, *pinned_stages(project_dir)))
+    manifest = run_prepared(prepare_run(project_dir / "runs", project_dir.name, *pinned_stages(project_dir)))
     assert manifest["status"] == "awaiting_review"
     run_id = manifest["run_id"]
 
@@ -399,7 +399,7 @@ def test_e2e_decide_every_verdict_then_resume_completes(tmp_path, monkeypatch):
         assert entry is not None
         assert set(entry.frozen_input) == {"id", "score"}
 
-    resumed = runner.resume_run(project_dir, run_id,
+    resumed = runner.resume_run(project_dir / "runs" / run_id, project_dir.name, run_id,
                                   *resumed_stages(project_dir, run_id))
     assert resumed["status"] == "ok"
 
@@ -453,7 +453,7 @@ def test_decide_400_on_notes_when_the_stage_declares_no_notes_column(tmp_path, m
     _write_stage(project_dir, "02_review.json", _no_notes_review_stage())
     _seed_version(project_dir)
 
-    manifest = run_prepared(prepare_run(project_dir, *pinned_stages(project_dir)))
+    manifest = run_prepared(prepare_run(project_dir / "runs", project_dir.name, *pinned_stages(project_dir)))
     run_id = manifest["run_id"]
     fingerprints = _read_fingerprints(project, run_id)
 
@@ -573,7 +573,7 @@ def _build_and_halt_bool_queue(tmp_path, monkeypatch, project, *, ai_value, null
             {"name": "flag", "type": "bool", "nullable": nullable}]}})
     _write_stage(project_dir, "02_review.json", _bool_review_stage(nullable))
     _seed_version(project_dir)
-    run_id = run_prepared(prepare_run(project_dir, *pinned_stages(project_dir)))["run_id"]
+    run_id = run_prepared(prepare_run(project_dir / "runs", project_dir.name, *pinned_stages(project_dir)))["run_id"]
     run_dir = project_dir / "runs" / run_id
     return run_id, _read_fingerprints(project, run_dir.name), pd.read_parquet(run_dir / "queue" / "review.parquet")
 
@@ -608,7 +608,7 @@ def test_a_bool_select_opens_on_the_recorded_value_of_a_decided_row(tmp_path, mo
     run_id, fingerprints, snapshot = _build_and_halt_bool_queue(
         tmp_path, monkeypatch, project, ai_value=False)
     review.record_decision(
-        project=project, stage=place_stage(parse_stage(_bool_review_stage(True))),
+        project_id=project, stage=place_stage(parse_stage(_bool_review_stage(True))),
         stage_fingerprint=fingerprints["stage_fingerprint"],
         input_fingerprint=fingerprints["input_fingerprints"][0],
         frozen_row={"id": snapshot.iloc[0]["id"], "flag": bool(snapshot.iloc[0]["flag"])},
@@ -675,7 +675,8 @@ def _halt_a_temporal_queue(tmp_path, project, column_type):
             {"name": "seen_at", "type": column_type, "nullable": True}]}})
     _write_stage(project_dir, "02_review.json", _temporal_review_stage(column_type))
     _seed_version(project_dir)
-    run_id = run_prepared(prepare_run(project_dir, *pinned_stages(project_dir)))["run_id"]
+    run_id = run_prepared(prepare_run(
+        project_dir / "runs", project_dir.name, *pinned_stages(project_dir)))["run_id"]
     return run_id, _read_fingerprints(project, run_id)
 
 
@@ -773,7 +774,7 @@ def _build_and_halt_declared_range_queue(tmp_path, monkeypatch, project):
     _write_stage(project_dir, "01_load.json", load)
     _write_stage(project_dir, "02_review.json", _declared_range_review_stage())
     _seed_version(project_dir)
-    run_id = run_prepared(prepare_run(project_dir, *pinned_stages(project_dir)))["run_id"]
+    run_id = run_prepared(prepare_run(project_dir / "runs", project_dir.name, *pinned_stages(project_dir)))["run_id"]
     return run_id, _read_fingerprints(project, run_id)
 
 
@@ -816,7 +817,7 @@ def _build_and_halt_queue_over(tmp_path, monkeypatch, project, stages):
     for index, stage in enumerate(stages, start=1):
         _write_stage(project_dir, f"{index:02d}_{stage['id']}.json", stage)
     _seed_version(project_dir)
-    manifest = run_prepared(prepare_run(project_dir, *pinned_stages(project_dir)))
+    manifest = run_prepared(prepare_run(project_dir / "runs", project_dir.name, *pinned_stages(project_dir)))
     assert manifest["status"] == "awaiting_review", manifest
     run_id = manifest["run_id"]
     return run_id, _read_fingerprints(project, run_id)
@@ -1619,7 +1620,7 @@ def test_progress_and_resume_are_seeded_from_the_whole_queue_not_a_page(tmp_path
     for position in (25, 26, 27):
         row = snapshot.iloc[position]
         review.record_decision(
-            project=PAGED_PROJECT, stage=place_stage(parse_stage(_e2e_review_stage())),
+            project_id=PAGED_PROJECT, stage=place_stage(parse_stage(_e2e_review_stage())),
             stage_fingerprint=fingerprints["stage_fingerprint"],
             input_fingerprint=fingerprints["input_fingerprints"][position],
             frozen_row={"id": row["id"], "score": int(row["score"])},

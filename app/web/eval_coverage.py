@@ -10,8 +10,7 @@ from typing import Literal
 from pydantic import BaseModel
 
 from app.models import EvalConfig, EvalRun
-from app.evals.store import list_project_eval_configs, list_project_eval_runs
-from app.services.workspace import resolve_project_dir
+from app.evals.store import list_eval_configs, list_eval_runs, resolve_eval_result_path
 from app.web.eval_run_view import tally_scored_rows
 
 CoverageStatus = Literal["checked", "mismatches", "stale"]
@@ -34,15 +33,15 @@ class EvalCoverage(BaseModel):
 
 
 def find_eval_coverages(
-    project: str, stage_id: str, version_id: str | None
+    project_id: str, stage_id: str, version_id: str | None
 ) -> list[EvalCoverage]:
     """`version_id` is the version the reader is looking at; None means none resolved."""
     coverages = []
-    for config in _find_evals_targeting(project, stage_id):
-        run = _latest_scored_run(project, config.id)
+    for config in _find_evals_targeting(project_id, stage_id):
+        run = _latest_scored_run(project_id, config.id)
         if run is None:
             continue
-        coverage = _build_coverage(project, config, run, version_id)
+        coverage = _build_coverage(project_id, config, run, version_id)
         if coverage is not None:
             coverages.append(coverage)
     # Worst first: a reader scanning the column meets what needs attention, and the
@@ -50,17 +49,17 @@ def find_eval_coverages(
     return sorted(coverages, key=lambda c: (_SEVERITY[c.status], c.eval_name))
 
 
-def _find_evals_targeting(project: str, stage_id: str) -> list[EvalConfig]:
+def _find_evals_targeting(project_id: str, stage_id: str) -> list[EvalConfig]:
     return [
         entry.config
-        for entry in list_project_eval_configs(project)
+        for entry in list_eval_configs(project_id)
         if entry.config is not None and entry.config.target_stage == stage_id
     ]
 
 
-def _latest_scored_run(project: str, config_id: str) -> EvalRun | None:
+def _latest_scored_run(project_id: str, config_id: str) -> EvalRun | None:
     try:
-        runs = list_project_eval_runs(project, config_id)
+        runs = list_eval_runs(project_id, config_id)
     except (OSError, ValueError):
         # One unreadable run record must not put a badge on the page or take it down.
         return None
@@ -68,18 +67,17 @@ def _latest_scored_run(project: str, config_id: str) -> EvalRun | None:
 
 
 def _build_coverage(
-    project: str, config: EvalConfig, run: EvalRun, version_id: str | None
+    project_id: str, config: EvalConfig, run: EvalRun, version_id: str | None
 ) -> EvalCoverage | None:
     assert run.result_ref is not None  # _latest_scored_run required one
     # None where the result table will not read: the badge is then absent, never guessed.
-    # resolve_project_dir, not a joined path — it refuses an id escaping the workspace.
-    tally = tally_scored_rows(resolve_project_dir(project) / run.result_ref)
+    tally = tally_scored_rows(resolve_eval_result_path(project_id, run.result_ref))
     if tally is None:
         return None
     return EvalCoverage(
         status=_judge(run, version_id, tally.passed, tally.total),
         eval_name=config.name,
-        href=f"/project/{project}/evals/{config.id}/runs/{run.id}",
+        href=f"/project/{project_id}/evals/{config.id}/runs/{run.id}",
         columns=tally.columns,
         rows_total=tally.total,
         rows_passed=tally.passed,

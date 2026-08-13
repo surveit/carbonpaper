@@ -18,19 +18,20 @@ from app.web.trace_view import build_trace_view
 from app.web.breadcrumbs import build_run_child_crumbs
 from app.web.config import templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
-from app.web.loading import load_manifest, runs_dir
+from app.services.workspace import resolve_run_dir
+from app.web.loading import load_manifest
 
 router = APIRouter()
 
 
 @router.get(
-    "/project/{project}/runs/{run_id}/stage/{stage_id}/lineage_panel",
+    "/project/{project_id}/runs/{run_id}/stage/{stage_id}/lineage_panel",
     response_class=HTMLResponse,
 )
 async def run_stage_lineage_panel(
-    request: Request, project: str, run_id: str, stage_id: str, row: int
+    request: Request, project_id: str, run_id: str, stage_id: str, row: int
 ):
-    manifest = load_manifest(project, run_id)
+    manifest = load_manifest(project_id, run_id)
     stage_record = next(
         (s for s in manifest.get("stage_records", []) if s.get("stage_id") == stage_id),
         None,
@@ -40,13 +41,13 @@ async def run_stage_lineage_panel(
     # Transform detail is part of the lineage of THIS run, so it comes from the
     # version the run pinned. Unresolvable → no transform and a stated reason;
     # the page's own row view is unaffected, because that data is still true.
-    pinned = run_service.load_pinned_stage_def(project, manifest, stage_id)
+    pinned = run_service.load_pinned_stage_def(project_id, manifest, stage_id)
     stage_def = None if pinned.workflow_stage is None else pinned.workflow_stage.stage
     return templates.TemplateResponse(
         request,
         "_lineage_stage.html",
         {
-            "project": project,
+            "project": project_id,
             "run_id": run_id,
             "stage": stage_record,
             "stage_def": stage_def,
@@ -64,10 +65,10 @@ async def run_stage_lineage_panel(
     )
 
 
-@router.get("/project/{project}/runs/{run_id}/stage/{stage_id}/row/{row}/trace")
-async def run_stage_row_trace(project: str, run_id: str, stage_id: str, row: int):
-    run_dir = runs_dir(project) / run_id
-    load_manifest(project, run_id)  # 404s if the run doesn't exist
+@router.get("/project/{project_id}/runs/{run_id}/stage/{stage_id}/row/{row}/trace")
+async def run_stage_row_trace(project_id: str, run_id: str, stage_id: str, row: int):
+    run_dir = resolve_run_dir(project_id, run_id)
+    load_manifest(project_id, run_id)  # 404s if the run doesn't exist
     try:
         trace = trace_row(run_dir, stage_id, row)
     except StageNotInRun as exc:
@@ -78,14 +79,14 @@ async def run_stage_row_trace(project: str, run_id: str, stage_id: str, row: int
 
 
 @router.get(
-    "/project/{project}/runs/{run_id}/stage/{stage_id}/row/{row}/trace/view",
+    "/project/{project_id}/runs/{run_id}/stage/{stage_id}/row/{row}/trace/view",
     response_class=HTMLResponse,
 )
 async def run_stage_row_trace_view(
-    request: Request, project: str, run_id: str, stage_id: str, row: int
+    request: Request, project_id: str, run_id: str, stage_id: str, row: int
 ):
-    run_dir = runs_dir(project) / run_id
-    manifest = load_manifest(project, run_id)
+    run_dir = resolve_run_dir(project_id, run_id)
+    manifest = load_manifest(project_id, run_id)
     try:
         trace = trace_row(run_dir, stage_id, row)
     except StageNotInRun as exc:
@@ -99,22 +100,22 @@ async def run_stage_row_trace_view(
     # and no graph is drawn.
     try:
         stages_by_id = run_service.load_run_workflow(
-            project, manifest).index_workflow_stages_by_id()
+            project_id, manifest).index_workflow_stages_by_id()
     except RunVersionUnresolvableError:
         stages_by_id = {}
 
-    view = build_trace_view(trace_to_dict(trace), stages_by_id, AppPanelLinks(project, run_id))
+    view = build_trace_view(trace_to_dict(trace), stages_by_id, AppPanelLinks(project_id, run_id))
     ordered = [stages_by_id[n["stage_id"]].stage for n in view["nodes"]
                if n["stage_id"] in stages_by_id]
-    mermaid = build_mermaid_graph(ordered, project) if len(ordered) == len(view["nodes"]) else ""
+    mermaid = build_mermaid_graph(ordered, project_id) if len(ordered) == len(view["nodes"]) else ""
     return templates.TemplateResponse(
         request,
         "lineage.html",
         {
             "title": f"{view['start_stage']} · row {view['start_row']}",
             "view": view,
-            "project": project,
-            "crumbs": build_run_child_crumbs(project, run_id, label="Row lineage"),
+            "project": project_id,
+            "crumbs": build_run_child_crumbs(project_id, run_id, label="Row lineage"),
             "mermaid": mermaid,
         },
     )

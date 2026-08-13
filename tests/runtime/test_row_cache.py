@@ -119,7 +119,7 @@ def test_second_run_reuses_the_cache_and_never_calls_the_mapper():
 def test_registered_python_row_function_replays_a_recorded_row_over_its_own_code():
     stage = _row_stage()
     StageCache().record(
-        project=PROJECT, stage_id=stage.id,
+        project_id=PROJECT, stage_id=stage.id,
         stage_fingerprint=stage.compute_definition_fingerprint(),
         input_fingerprint=compute_row_fingerprint({"x": 1}),
         input_row={"x": 1}, output_row={"x": 1, "y": 999},

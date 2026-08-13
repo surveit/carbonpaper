@@ -107,10 +107,9 @@ def _double_stage():
 
 
 def _seed_version(root):
-    vid = versioning.create_version_from_stages(
-        root, [_load_stage(root), _double_stage()], message="seed", reviewer="test"
+    vid = versioning.create_version_from_stages(root.name, [_load_stage(root), _double_stage()], message="seed", reviewer="test"
     ).version_id
-    versioning.publish_version(root, vid, reviewer="human")
+    versioning.publish_version(root.name, vid, reviewer="human")
     return vid
 
 
@@ -410,8 +409,7 @@ def test_missing_run_raises_rather_than_writing_an_empty_packet(project_dir, tmp
 def test_index_carries_the_versions_review_guide(project_dir, tmp_path):
     _make_project(project_dir)
     version_id = _seed_version(project_dir)
-    versioning.save_version_guide(
-        project_dir,
+    versioning.save_version_guide(project_dir.name,
         version_id,
         ReviewGuide(
             project=project_dir.name,
@@ -453,8 +451,7 @@ def test_index_takes_the_whole_width_when_the_version_has_no_guide(exported):
 def test_guide_stage_links_reach_the_packets_own_pages(project_dir, tmp_path):
     _make_project(project_dir)
     version_id = _seed_version(project_dir)
-    versioning.save_version_guide(
-        project_dir,
+    versioning.save_version_guide(project_dir.name,
         version_id,
         ReviewGuide(
             project=project_dir.name,
@@ -598,10 +595,9 @@ def _run_publishing_project(project_dir, tmp_path, code):
     _make_project(project_dir)
     stages = [_load_stage(project_dir), _double_stage(), _publish_stage(code)]
     _write_stage(project_dir, "03_report.json", stages[2])
-    vid = versioning.create_version_from_stages(
-        project_dir, stages, message="seed", reviewer="test"
+    vid = versioning.create_version_from_stages(project_dir.name, stages, message="seed", reviewer="test"
     ).version_id
-    versioning.publish_version(project_dir, vid, reviewer="human")
+    versioning.publish_version(project_dir.name, vid, reviewer="human")
     run_id = run_service.start_run(_PROJECT)
     return export_review_packet(_PROJECT, run_id, tmp_path / "packets")
 
@@ -629,10 +625,9 @@ def test_an_os_dotfile_is_not_reported_as_a_published_output(project_dir, tmp_pa
     _make_project(project_dir)
     stages = [_load_stage(project_dir), _double_stage(), _publish_stage(_PUBLISH_CODE)]
     _write_stage(project_dir, "03_report.json", stages[2])
-    vid = versioning.create_version_from_stages(
-        project_dir, stages, message="seed", reviewer="test"
+    vid = versioning.create_version_from_stages(project_dir.name, stages, message="seed", reviewer="test"
     ).version_id
-    versioning.publish_version(project_dir, vid, reviewer="human")
+    versioning.publish_version(project_dir.name, vid, reviewer="human")
     run_id = run_service.start_run(_PROJECT)
     (project_dir / "runs" / run_id / "artifacts" / "build" / ".DS_Store").write_bytes(b"\x00")
 

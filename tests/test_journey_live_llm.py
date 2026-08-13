@@ -46,7 +46,7 @@ def test_live_llm_journey_reaches_a_published_artifact(live_project):
 
     # Publish it — the human-approval signal. A run no longer requires it, but it
     # stays in the journey: author -> version -> publish -> run -> artifact.
-    version_id = list_versions(live_project)[0].version_id
+    version_id = list_versions(live_project.name)[0].version_id
     resp = client.post(f"/project/{project}/versions/{version_id}/publish",
                        follow_redirects=False)
     assert resp.status_code == 303, resp.text

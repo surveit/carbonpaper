@@ -22,6 +22,7 @@ from app.web.config import EVENT_TAIL, templates
 from app.web.eval_coverage import find_eval_coverages
 from app.web.stage_test_views import build_certification, shape_test_views
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH
+from app.services.workspace import resolve_run_dir
 from app.web.loading import (
     build_llm_example,
     csv_download_body,
@@ -31,7 +32,6 @@ from app.web.loading import (
     manifest_stage,
     read_output_df,
     render_cells_as_text,
-    runs_dir,
 )
 from app.web.run_stage_panel import not_executed_panel, resolve_panel_links
 from app.web.stage_diff import StageDiff, build_stage_diff
@@ -40,14 +40,14 @@ router = APIRouter()
 
 
 @router.get(
-    "/project/{project}/runs/{run_id}/stage/{stage_id}/partial",
+    "/project/{project_id}/runs/{run_id}/stage/{stage_id}/partial",
     response_class=HTMLResponse,
 )
 async def run_stage_partial(
-    request: Request, project: str, run_id: str, stage_id: str
+    request: Request, project_id: str, run_id: str, stage_id: str
 ):
-    run_dir = runs_dir(project) / run_id
-    manifest = load_manifest(project, run_id)
+    run_dir = resolve_run_dir(project_id, run_id)
+    manifest = load_manifest(project_id, run_id)
     stage_record = next(
         (s for s in manifest.get("stage_records", []) if s.get("stage_id") == stage_id),
         None,
@@ -56,12 +56,12 @@ async def run_stage_partial(
     # The panel's Schema tier and Transform detail describe what THIS run
     # executed, so they read the version it pinned. With no resolvable version
     # there is no stage definition to show and the panel says why.
-    pinned = run_service.load_pinned_stage_def(project, manifest, stage_id)
+    pinned = run_service.load_pinned_stage_def(project_id, manifest, stage_id)
     stage_def = None if pinned.workflow_stage is None else pinned.workflow_stage.stage
     if stage_record is None:
         # A stage the graph draws but this run never executed (a workflow test
         # injects its input stages) — see app.web.run_stage_panel.
-        return not_executed_panel(request, project, run_id, manifest, stage_id, pinned)
+        return not_executed_panel(request, project_id, run_id, manifest, stage_id, pinned)
 
     output_preview = load_output_preview(run_dir, stage_record.get("output_path"))
     output_by_id = {
@@ -84,7 +84,7 @@ async def run_stage_partial(
         request,
         "_run_stage_panel.html",
         {
-            "project": project,
+            "project": project_id,
             "run_id": run_id,
             "stage": stage_record,
             "stage_def": stage_def,
@@ -106,9 +106,9 @@ async def run_stage_partial(
             # Judged against the version THIS run pinned, so each verdict is about the
             # code that produced this run's rows. Empty where no eval targets the stage.
             "eval_coverages": find_eval_coverages(
-                project, stage_id, manifest.get("workflow_version")),
+                project_id, stage_id, manifest.get("workflow_version")),
             "previewable": stage_def is not None and stage_def.type in PREVIEWABLE_TYPES,
-            "links": resolve_panel_links(project, run_id),
+            "links": resolve_panel_links(project_id, run_id),
             "event_tail": EVENT_TAIL,
             "type_glyph": TYPE_GLYPH,
             "type_class": TYPE_CLASS,
@@ -117,15 +117,15 @@ async def run_stage_partial(
 
 
 @router.get(
-    "/project/{project}/runs/{run_id}/stage/{stage_id}/rows",
+    "/project/{project_id}/runs/{run_id}/stage/{stage_id}/rows",
     response_class=HTMLResponse,
 )
 async def run_stage_rows(
-    request: Request, project: str, run_id: str, stage_id: str, raw: bool = False,
+    request: Request, project_id: str, run_id: str, stage_id: str, raw: bool = False,
     ordinals: str | None = None,
 ):
-    run_dir = runs_dir(project) / run_id
-    stage_record = manifest_stage(project, run_id, stage_id)
+    run_dir = resolve_run_dir(project_id, run_id)
+    stage_record = manifest_stage(project_id, run_id, stage_id)
     selected = _parse_ordinals(ordinals)
     table = (
         loading.load_selected_output_rows(run_dir, stage_record.get("output_path"), selected)
@@ -136,8 +136,8 @@ async def run_stage_rows(
         request,
         "run_stage_rows.html",
         {
-            "project": project,
-            "crumbs": build_run_child_crumbs(project, run_id, label=f"{stage_id} rows"),
+            "project": project_id,
+            "crumbs": build_run_child_crumbs(project_id, run_id, label=f"{stage_id} rows"),
             "run_id": run_id,
             "stage_id": stage_id,
             "stage": stage_record,
@@ -148,10 +148,10 @@ async def run_stage_rows(
             # rows by position, which a subset cannot honour.
             "diff": (
                 None if selected is not None
-                else _build_full_rows_diff(project, run_id, run_dir, stage_id, stage_record)
+                else _build_full_rows_diff(project_id, run_id, run_dir, stage_id, stage_record)
             ),
             "raw": raw,
-            "links": resolve_panel_links(project, run_id),
+            "links": resolve_panel_links(project_id, run_id),
             # The page's own treatments (row numbers, click-to-expand cells,
             # sticky-header scroll box) the shared diff partial renders on request.
             "full_rows": True,
@@ -175,11 +175,11 @@ def _parse_ordinals(ordinals: str | None) -> list[int] | None:
 
 
 def _build_full_rows_diff(
-    project: str, run_id: str, run_dir: Path, stage_id: str, stage_record: dict[str, Any]
+    project_id: str, run_id: str, run_dir: Path, stage_id: str, stage_record: dict[str, Any]
 ) -> StageDiff | None:
-    manifest = load_manifest(project, run_id)
+    manifest = load_manifest(project_id, run_id)
     return build_stage_diff(
-        run_service.load_pinned_stage_def(project, manifest, stage_id).workflow_stage,
+        run_service.load_pinned_stage_def(project_id, manifest, stage_id).workflow_stage,
         run_dir,
         stage_record.get("output_path"),
         {s.get("stage_id"): s.get("output_path") for s in manifest.get("stage_records", [])},
@@ -187,12 +187,12 @@ def _build_full_rows_diff(
     )
 
 
-@router.get("/project/{project}/runs/{run_id}/stage/{stage_id}/rows.csv")
-async def run_stage_rows_csv(project: str, run_id: str, stage_id: str):
-    run_dir = runs_dir(project) / run_id
-    stage_record = manifest_stage(project, run_id, stage_id)
+@router.get("/project/{project_id}/runs/{run_id}/stage/{stage_id}/rows.csv")
+async def run_stage_rows_csv(project_id: str, run_id: str, stage_id: str):
+    run_dir = resolve_run_dir(project_id, run_id)
+    stage_record = manifest_stage(project_id, run_id, stage_id)
     df = read_output_df(run_dir, stage_record.get("output_path"))
-    filename = f"{project}__{run_id}__{stage_id}.csv"
+    filename = f"{project_id}__{run_id}__{stage_id}.csv"
     return Response(
         content=csv_download_body(df),
         media_type="text/csv; charset=utf-8",
@@ -201,18 +201,18 @@ async def run_stage_rows_csv(project: str, run_id: str, stage_id: str):
 
 
 @router.get(
-    "/project/{project}/runs/{run_id}/stage/{stage_id}/simulate",
+    "/project/{project_id}/runs/{run_id}/stage/{stage_id}/simulate",
     response_class=HTMLResponse,
 )
 async def run_stage_simulate(
-    request: Request, project: str, run_id: str, stage_id: str
+    request: Request, project_id: str, run_id: str, stage_id: str
 ):
-    run_dir = runs_dir(project) / run_id
-    manifest = load_manifest(project, run_id)
+    run_dir = resolve_run_dir(project_id, run_id)
+    manifest = load_manifest(project_id, run_id)
     # The page executes a stage under this run's name, so it offers only what the
     # run pinned. No resolvable version, or a type the runner cannot preview, and
     # there is nothing here to simulate — the panel links no page in either case.
-    pinned = run_service.load_pinned_stage_def(project, manifest, stage_id)
+    pinned = run_service.load_pinned_stage_def(project_id, manifest, stage_id)
     stage_def = None if pinned.workflow_stage is None else pinned.workflow_stage.stage
     if stage_def is None:
         raise HTTPException(
@@ -231,11 +231,11 @@ async def run_stage_simulate(
         request,
         "run_stage_simulate.html",
         {
-            "project": project,
+            "project": project_id,
             "run_id": run_id,
             "stage_id": stage_id,
             "crumbs": build_run_child_crumbs(
-                project, run_id, label=f"simulate {stage_id}"
+                project_id, run_id, label=f"simulate {stage_id}"
             ),
             "stage": stage_def,
             "input_previews": [
@@ -253,12 +253,12 @@ async def run_stage_simulate(
     )
 
 
-@router.post("/project/{project}/runs/{run_id}/stage/{stage_id}/preview")
+@router.post("/project/{project_id}/runs/{run_id}/stage/{stage_id}/preview")
 async def run_stage_scratch_preview(
-    request: Request, project: str, run_id: str, stage_id: str
+    request: Request, project_id: str, run_id: str, stage_id: str
 ):
-    run_dir = runs_dir(project) / run_id
-    manifest = load_manifest(project, run_id)
+    run_dir = resolve_run_dir(project_id, run_id)
+    manifest = load_manifest(project_id, run_id)
 
     try:
         body = await request.json()
@@ -276,7 +276,7 @@ async def run_stage_scratch_preview(
     # stage did here", so it runs the version the run pinned. With no resolvable
     # version it refuses: executing the working copy would answer a question
     # nobody asked, under the label of this run.
-    pinned = run_service.load_pinned_stage_def(project, manifest, stage_id)
+    pinned = run_service.load_pinned_stage_def(project_id, manifest, stage_id)
     if pinned.error is not None:
         return JSONResponse({"ok": False, "error": pinned.error}, status_code=409)
     workflow_stage = pinned.workflow_stage

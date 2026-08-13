@@ -37,7 +37,7 @@ def count_nouns(project_id: str) -> int:
     stored = StoredTerms.load_or_none(_document_id(project_id))
     if stored is not None:
         return len(stored.nouns.schemas)
-    return len(workspace.load_schemas(workspace.resolve_project_dir(project_id)))
+    return len(workspace.load_schemas(project_id))
 
 
 def write_terms(project_id: str, terms: Terms) -> None:
@@ -62,7 +62,7 @@ def _document_id(project_id: str) -> str:
 
 
 def _read_pre_store_nouns(project_id: str) -> SchemaLibrary:
-    schemas = workspace.load_schemas(workspace.resolve_project_dir(project_id))
+    schemas = workspace.load_schemas(project_id)
     # The file loader stamps `_filename` on each; the model forbids what it does not declare.
     return parse_schema_library(
         [{k: v for k, v in schema.items() if not k.startswith("_")} for schema in schemas]

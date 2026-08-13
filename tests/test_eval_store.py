@@ -12,6 +12,7 @@ import pytest
 from app.models import EvalConfig, EvalRun
 from app.core.persistence import get_store
 from app.evals.compatibility import CompatibilityReport
+from app.services.workspace import resolve_project_dir
 from app.evals.store import (
     EvalConfigEntry,
     eval_status,
@@ -58,31 +59,31 @@ def _run(**over):
 # ── save / list / load roundtrip ─────────────────────────────────────────────
 def test_save_list_load_roundtrip(tmp_path: Path):
     config = _config()
-    save_eval_config(tmp_path, config)
+    save_eval_config(tmp_path.name, config)
 
-    entries = list_eval_configs(tmp_path)
+    entries = list_eval_configs(tmp_path.name)
     assert len(entries) == 1
     assert entries[0].config is not None
     assert entries[0].config.id == "scoring"
     assert entries[0].issues == []
     assert entries[0].id == "scoring"
 
-    loaded = load_eval_config(tmp_path, "scoring")
+    loaded = load_eval_config(tmp_path.name, "scoring")
     assert loaded == config
 
 
 def test_save_eval_config_overwrite_allowed(tmp_path: Path):
-    save_eval_config(tmp_path, _config())
+    save_eval_config(tmp_path.name, _config())
     updated = _config(name="new name")
-    save_eval_config(tmp_path, updated)
-    loaded = load_eval_config(tmp_path, "scoring")
+    save_eval_config(tmp_path.name, updated)
+    loaded = load_eval_config(tmp_path.name, "scoring")
     assert loaded.name == "new name"
     # overwrite, not a second document
-    assert [e.id for e in list_eval_configs(tmp_path)] == ["scoring"]
+    assert [e.id for e in list_eval_configs(tmp_path.name)] == ["scoring"]
 
 
 def test_save_eval_config_excludes_none_fields_from_the_stored_doc(tmp_path: Path):
-    save_eval_config(tmp_path, _config())
+    save_eval_config(tmp_path.name, _config())
     data = get_store().read("eval", f"{tmp_path.name}/scoring")
     assert data["id"] == "scoring"
     assert data["override_stage"] == "evidence_with_benchmarks"
@@ -93,7 +94,7 @@ def test_save_eval_config_excludes_none_fields_from_the_stored_doc(tmp_path: Pat
 
 def test_load_eval_config_missing_raises_file_not_found(tmp_path: Path):
     with pytest.raises(FileNotFoundError) as exc:
-        load_eval_config(tmp_path, "nope")
+        load_eval_config(tmp_path.name, "nope")
     assert "nope" in str(exc.value)
     assert tmp_path.name in str(exc.value)
 
@@ -101,17 +102,17 @@ def test_load_eval_config_missing_raises_file_not_found(tmp_path: Path):
 def test_load_eval_config_invalid_schema_raises_value_error(tmp_path: Path):
     get_store().write("eval", f"{tmp_path.name}/broken", {"id": "broken"})
     with pytest.raises(ValueError) as exc:
-        load_eval_config(tmp_path, "broken")
+        load_eval_config(tmp_path.name, "broken")
     assert "broken" in str(exc.value)
 
 
 # ── list_eval_configs tolerance ──────────────────────────────────────────────
 def test_list_eval_configs_tolerates_invalid_document_others_still_load(tmp_path: Path):
-    save_eval_config(tmp_path, _config())
+    save_eval_config(tmp_path.name, _config())
     # valid JSON, but not a valid EvalConfig (missing required fields)
     get_store().write("eval", f"{tmp_path.name}/broken", {"id": "broken"})
 
-    entries = list_eval_configs(tmp_path)
+    entries = list_eval_configs(tmp_path.name)
     assert len(entries) == 2
     by_id = {e.id: e for e in entries}
 
@@ -125,22 +126,22 @@ def test_list_eval_configs_tolerates_invalid_document_others_still_load(tmp_path
 
 
 def test_list_eval_configs_empty_store_returns_empty(tmp_path: Path):
-    assert list_eval_configs(tmp_path) == []
+    assert list_eval_configs(tmp_path.name) == []
 
 
 # ── save_dataset_upload immutability ──────────────────────────────────────────
 def test_save_dataset_upload_writes_file(tmp_path: Path):
-    path = save_dataset_upload(tmp_path, "eval_dataset.csv", b"a,b\n1,2\n")
-    assert path == tmp_path / "eval_data" / "eval_dataset.csv"
+    path = save_dataset_upload(tmp_path.name, "eval_dataset.csv", b"a,b\n1,2\n")
+    assert path == resolve_project_dir(tmp_path.name) / "eval_data" / "eval_dataset.csv"
     assert path.read_bytes() == b"a,b\n1,2\n"
 
 
 def test_save_dataset_upload_raises_file_exists_on_same_name(tmp_path: Path):
-    save_dataset_upload(tmp_path, "eval_dataset.csv", b"a,b\n1,2\n")
+    path = save_dataset_upload(tmp_path.name, "eval_dataset.csv", b"a,b\n1,2\n")
     with pytest.raises(FileExistsError):
-        save_dataset_upload(tmp_path, "eval_dataset.csv", b"different content")
+        save_dataset_upload(tmp_path.name, "eval_dataset.csv", b"different content")
     # original content untouched
-    assert (tmp_path / "eval_data" / "eval_dataset.csv").read_bytes() == b"a,b\n1,2\n"
+    assert path.read_bytes() == b"a,b\n1,2\n"
 
 
 @pytest.mark.parametrize("bad_name", [
@@ -148,21 +149,21 @@ def test_save_dataset_upload_raises_file_exists_on_same_name(tmp_path: Path):
 ])
 def test_save_dataset_upload_rejects_non_slugish_filenames(tmp_path: Path, bad_name):
     with pytest.raises(ValueError):
-        save_dataset_upload(tmp_path, bad_name, b"content")
+        save_dataset_upload(tmp_path.name, bad_name, b"content")
 
 
 # ── save / load eval run roundtrip ────────────────────────────────────────────
 def test_save_load_eval_run_roundtrip(tmp_path: Path):
     run = _run()
-    save_eval_run(tmp_path, run)
+    save_eval_run(tmp_path.name, run)
 
-    loaded = load_eval_run(tmp_path, "run-1")
+    loaded = load_eval_run(tmp_path.name, "run-1")
     assert loaded == run
 
 
 def test_load_eval_run_missing_raises_file_not_found(tmp_path: Path):
     with pytest.raises(FileNotFoundError) as exc:
-        load_eval_run(tmp_path, "nope")
+        load_eval_run(tmp_path.name, "nope")
     assert "nope" in str(exc.value)
     assert tmp_path.name in str(exc.value)
 
@@ -170,16 +171,16 @@ def test_load_eval_run_missing_raises_file_not_found(tmp_path: Path):
 def test_load_eval_run_invalid_schema_raises_value_error(tmp_path: Path):
     get_store().write("eval_run", f"{tmp_path.name}/broken", {"id": "broken"})
     with pytest.raises(ValueError) as exc:
-        load_eval_run(tmp_path, "broken")
+        load_eval_run(tmp_path.name, "broken")
     assert "broken" in str(exc.value)
 
 
 def test_load_eval_run_ignores_sibling_invalid_run(tmp_path: Path):
     wanted = _run(id="run-good")
-    save_eval_run(tmp_path, wanted)
+    save_eval_run(tmp_path.name, wanted)
     get_store().write("eval_run", f"{tmp_path.name}/run-bad", {"id": "run-bad"})
 
-    loaded = load_eval_run(tmp_path, "run-good")
+    loaded = load_eval_run(tmp_path.name, "run-good")
     assert loaded == wanted
 
 
@@ -188,7 +189,7 @@ def test_load_eval_run_ignores_sibling_invalid_run(tmp_path: Path):
 ])
 def test_load_eval_run_rejects_non_slugish_run_id(tmp_path: Path, bad_id):
     with pytest.raises(ValueError):
-        load_eval_run(tmp_path, bad_id)
+        load_eval_run(tmp_path.name, bad_id)
 
 
 # ── list_eval_runs ────────────────────────────────────────────────────────────
@@ -197,23 +198,23 @@ def test_list_eval_runs_filters_by_config_and_sorts_newest_first(tmp_path: Path)
     r_new = _run(id="run-new", started_at="2026-02-01T00:00:00")
     r_other_config = _run(id="run-other", config="other-config")
     for r in (r_old, r_new, r_other_config):
-        save_eval_run(tmp_path, r)
+        save_eval_run(tmp_path.name, r)
 
-    runs = list_eval_runs(tmp_path, "scoring")
+    runs = list_eval_runs(tmp_path.name, "scoring")
     assert [r.id for r in runs] == ["run-new", "run-old"]
 
 
 def test_list_eval_runs_none_stored_returns_empty(tmp_path: Path):
-    assert list_eval_runs(tmp_path, "scoring") == []
+    assert list_eval_runs(tmp_path.name, "scoring") == []
 
 
 def test_list_eval_runs_sorts_by_started_at_then_id_when_missing(tmp_path: Path):
     r_no_start_a = _run(id="run-a", started_at=None)
     r_no_start_b = _run(id="run-b", started_at=None)
     for r in (r_no_start_a, r_no_start_b):
-        save_eval_run(tmp_path, r)
+        save_eval_run(tmp_path.name, r)
 
-    runs = list_eval_runs(tmp_path, "scoring")
+    runs = list_eval_runs(tmp_path.name, "scoring")
     # both have started_at=None -> "" -> tiebreak by id, newest-first means
     # sorted descending on (started_at or "", id)
     assert [r.id for r in runs] == ["run-b", "run-a"]
@@ -221,14 +222,14 @@ def test_list_eval_runs_sorts_by_started_at_then_id_when_missing(tmp_path: Path)
 
 # ── latest_version_id ─────────────────────────────────────────────────────────
 def test_latest_version_id_none_when_no_versions(tmp_path: Path):
-    assert latest_version_id(tmp_path) is None
+    assert latest_version_id(tmp_path.name) is None
 
 
 def test_latest_version_id_returns_newest(tmp_path: Path):
     for vid in ("20260101T000000", "20260201T000000"):
         WorkflowVersion(id=f"{tmp_path.name}/{vid}", version_id=vid, created_at="x",
                 message="m", reviewer="r").save()
-    assert latest_version_id(tmp_path) == "20260201T000000"
+    assert latest_version_id(tmp_path.name) == "20260201T000000"
 
 
 def test_latest_version_id_includes_unpublished_draft(tmp_path: Path):
@@ -236,13 +237,13 @@ def test_latest_version_id_includes_unpublished_draft(tmp_path: Path):
             created_at="x", message="m", reviewer="r", published=True).save()
     WorkflowVersion(id=f"{tmp_path.name}/20260201T000000", version_id="20260201T000000",
             created_at="x", message="m", reviewer="r", published=False).save()
-    assert latest_version_id(tmp_path) == "20260201T000000"
+    assert latest_version_id(tmp_path.name) == "20260201T000000"
 
 
 def test_latest_version_id_returns_the_only_unpublished_version(tmp_path: Path):
     WorkflowVersion(id=f"{tmp_path.name}/20260101T000000", version_id="20260101T000000",
             created_at="x", message="m", reviewer="r", published=False).save()
-    assert latest_version_id(tmp_path) == "20260101T000000"
+    assert latest_version_id(tmp_path.name) == "20260101T000000"
 
 
 # ── eval_status matrix ────────────────────────────────────────────────────────

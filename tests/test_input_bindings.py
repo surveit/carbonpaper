@@ -149,8 +149,8 @@ def _make_bound_project(root, filename="a.csv"):
              "connector": {"kind": "file",
                            "params": {"path": str(data), "format": "csv"}}}
     add_stage(root, stage)
-    vid = save_working_copy_as_version(root, message="seed", reviewer="test").version_id
-    versioning.publish_version(root, vid, reviewer="human")
+    vid = save_working_copy_as_version(root.name, message="seed", reviewer="test").version_id
+    versioning.publish_version(root.name, vid, reviewer="human")
     return data
 
 
@@ -159,7 +159,7 @@ def test_run_binding_recorded_with_hash_and_source(tmp_path):
     other = tmp_path / "b.csv"
     pd.DataFrame({"name": ["z"], "val": [9]}).to_csv(other, index=False)
 
-    manifest = execute_run(tmp_path, *pinned_stages(tmp_path),
+    manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path),
                            bindings={"load": {"path": str(other)}})
 
     assert manifest["status"] == "ok"
@@ -174,7 +174,7 @@ def test_run_binding_recorded_with_hash_and_source(tmp_path):
 
 def test_workflow_path_recorded_as_workflow_source(tmp_path):
     data = _make_bound_project(tmp_path)
-    manifest = execute_run(tmp_path, *pinned_stages(tmp_path))
+    manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path))
     rec = manifest["input_bindings"]["load"]
     assert rec["source"] == "workflow"
     assert rec["path"] == str(data)
@@ -188,18 +188,18 @@ def test_unbound_input_leaves_no_run_dir(tmp_path):
              "signature": {"form": "replaces", "produces": _ROWS_SCHEMA["columns"]},
              "connector": {"kind": "file", "params": {}}}
     add_stage(tmp_path, stage)
-    vid = save_working_copy_as_version(tmp_path, message="seed", reviewer="test").version_id
-    versioning.publish_version(tmp_path, vid, reviewer="human")
+    vid = save_working_copy_as_version(tmp_path.name, message="seed", reviewer="test").version_id
+    versioning.publish_version(tmp_path.name, vid, reviewer="human")
 
     with pytest.raises(MissingInputBindingError, match="load"):
-        execute_run(tmp_path, *pinned_stages(tmp_path))
+        execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path))
     assert not (tmp_path / "runs").exists()
 
 
 def test_bound_file_must_exist_before_run_dir(tmp_path):
     _make_bound_project(tmp_path)
     with pytest.raises(MissingInputBindingError, match="ghost"):
-        execute_run(tmp_path, *pinned_stages(tmp_path),
+        execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path),
                     bindings={"load": {"path": str(tmp_path / "ghost.csv")}})
     assert not (tmp_path / "runs").exists()
 

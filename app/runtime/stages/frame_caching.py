@@ -86,7 +86,7 @@ def record_frame_output(
         return output
     try:
         caching.writer.record_frame(
-            project=caching.key.project,
+            project_id=caching.key.project,
             stage_id=caching.key.stage_id,
             stage_fingerprint=caching.key.stage_fingerprint,
             input_tables=input_tables,

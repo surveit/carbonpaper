@@ -42,7 +42,7 @@ def _suite_model(project_dir: Path, output_schema: dict = _OUT_SCHEMA) -> Any:
 
 def _finish(project_dir: Path, answer: Any) -> None:
     generation._finish_stage_tests(
-        project_dir, "double", answer, PythonRowFunctionStageTest, _sources(project_dir))
+        project_dir.name, "double", answer, PythonRowFunctionStageTest, _sources(project_dir))
 
 
 _RUN_ID = "20260101T000000"
@@ -241,7 +241,7 @@ def test_start_raises_before_session_for_non_python_stage(tmp_path: Path, monkey
 
     before = len(store.list_sessions())
     with pytest.raises(ValueError, match="can run them"):
-        generation.start_stage_test_generation(project_dir, stage_id="load", model="sonnet")
+        generation.start_stage_test_generation(project_dir.name, stage_id="load", model="sonnet")
 
     assert len(store.list_sessions()) == before  # no orphaned session
 
@@ -258,7 +258,7 @@ def test_start_refuses_a_summary_the_write_path_would_reject(tmp_path: Path, mon
 
     before = len(store.list_sessions())
     with pytest.raises(ValueError, match="cannot be written back"):
-        generation.start_stage_test_generation(project_dir, stage_id="double", model="sonnet")
+        generation.start_stage_test_generation(project_dir.name, stage_id="double", model="sonnet")
 
     assert len(store.list_sessions()) == before  # no session, so no turn was paid for
 
@@ -276,7 +276,7 @@ def test_start_creates_hidden_viewonly_session(tmp_path: Path, monkeypatch: Any)
                         lambda *a, **k: _FakeGeneratorAgent(_valid_suite(project_dir)))
 
     async def _drive() -> str:
-        sid = generation.start_stage_test_generation(project_dir, stage_id="double", model="sonnet")
+        sid = generation.start_stage_test_generation(project_dir.name, stage_id="double", model="sonnet")
         assert store.load(sid)["pending_user"] == _FakeGeneratorAgent.task
         turn_id = store.load(sid)["active_turn"]
         assert turn_id, "a live turn should be active on the session while it generates"
@@ -329,7 +329,7 @@ def test_failed_generation_is_persisted_into_the_session(tmp_path: Path, monkeyp
     )
 
     async def _drive() -> str:
-        sid = generation.start_stage_test_generation(project_dir, stage_id="double", model="sonnet")
+        sid = generation.start_stage_test_generation(project_dir.name, stage_id="double", model="sonnet")
         turn_id = store.load(sid)["active_turn"]
         await turns._tasks[turn_id]
         return sid

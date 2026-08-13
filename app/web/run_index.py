@@ -31,11 +31,11 @@ class RunIndexRow(BaseModel):
     is_test_run: bool = False
 
 
-def build_run_index_rows(project: str) -> list[RunIndexRow]:
+def build_run_index_rows(project_id: str) -> list[RunIndexRow]:
     seen_versions: dict[str, VersionNote] = {}
     return [
-        _build_row(project, entry, seen_versions)
-        for entry in reversed(list_run_entries(project))
+        _build_row(project_id, entry, seen_versions)
+        for entry in reversed(list_run_entries(project_id))
     ]
 
 
@@ -56,7 +56,7 @@ _OUTCOME_WORDS = {
 
 
 def _build_row(
-    project: str, entry: RunEntry, seen_versions: dict[str, VersionNote]
+    project_id: str, entry: RunEntry, seen_versions: dict[str, VersionNote]
 ) -> RunIndexRow:
     if entry.manifest is None:
         # An identity-only row rather than counts it never read, so one unreadable
@@ -71,7 +71,7 @@ def _build_row(
         status=str(manifest.status),
         started_at=manifest.started_at,
         duration=describe_run_duration(persisted),
-        version=_read_version(project, manifest.workflow_version, seen_versions),
+        version=_read_version(project_id, manifest.workflow_version, seen_versions),
         strip=strip,
         result_summary=describe_stage_tallies(strip),
         outcome=describe_run_outcome(str(manifest.status)),
@@ -80,9 +80,9 @@ def _build_row(
 
 
 def _read_version(
-    project: str, version_id: str | None, seen: dict[str, VersionNote]
+    project_id: str, version_id: str | None, seen: dict[str, VersionNote]
 ) -> VersionNote:
     key = version_id or ""
     if key not in seen:
-        seen[key] = read_version_note(project, version_id)
+        seen[key] = read_version_note(project_id, version_id)
     return seen[key]

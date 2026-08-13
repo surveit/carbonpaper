@@ -120,9 +120,9 @@ def _store_tour_files(project_id: str) -> dict[str, str]:
     return stored
 
 
-def read_seed_eval_config(project: str) -> EvalConfig:
+def read_seed_eval_config(project_id: str) -> EvalConfig:
     return EvalConfig.model_validate(
-        {**json.loads(_EVAL.read_text(encoding="utf-8")), "project": project})
+        {**json.loads(_EVAL.read_text(encoding="utf-8")), "project": project_id})
 
 
 def _read_seeded_record(project_id: str) -> Project:

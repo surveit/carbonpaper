@@ -61,15 +61,15 @@ def find_parsed_stage(entries: list[StageEntry], stage_id: str) -> Stage | None:
     return next((s for s in list_parsed_stages(entries) if s.id == stage_id), None)
 
 
-def exists(project: str) -> bool:
+def exists(project_id: str) -> bool:
     """Whether a working copy is stored; says nothing about whether it validates."""
-    return WorkingCopy.exists(project)
+    return WorkingCopy.exists(project_id)
 
 
-def load_stage_entries(project: str) -> list[StageEntry]:
+def load_stage_entries(project_id: str) -> list[StageEntry]:
     """Parsed per stage, so ONE invalid stage is an issue, not an exception."""
     entries: list[StageEntry] = []
-    for index, spec in enumerate(read_stage_specs(project)):
+    for index, spec in enumerate(read_stage_specs(project_id)):
         label = _label(spec, index)
         try:
             entries.append(StageEntry(label=label, stage=parse_stage(spec)))
@@ -78,56 +78,56 @@ def load_stage_entries(project: str) -> list[StageEntry]:
     return entries
 
 
-def load_workflow_object(project: str) -> Workflow:
+def load_workflow_object(project_id: str) -> Workflow:
     """Strict: raises WorkflowLoadError on an empty or invalid working copy."""
-    entries = load_stage_entries(project)
+    entries = load_stage_entries(project_id)
     issues = find_file_issues(entries)
     if not entries:
-        issues.append(f"project '{project}' has no stages")
+        issues.append(f"project '{project_id}' has no stages")
     stages = list_parsed_stages(entries)
     issues += validate_workflow(stages)
     if issues:
-        raise WorkflowLoadError(f"project {project!r} working copy", issues)
+        raise WorkflowLoadError(f"project {project_id!r} working copy", issues)
     return Workflow(stages=stages)
 
 
-def load_workflow(project: str) -> list[Stage]:
-    return load_workflow_object(project).stages
+def load_workflow(project_id: str) -> list[Stage]:
+    return load_workflow_object(project_id).stages
 
 
 # ─── Raw specs & save ────────────────────────────────────────────────────────
 
-def read_stage_specs(project: str) -> list[JsonDict]:
+def read_stage_specs(project_id: str) -> list[JsonDict]:
     """The stored stage specs, unvalidated and in order; [] when unstored."""
     try:
         # Strict `read`: an ABSENT working copy is a real empty answer, but an
         # unparseable one is corruption and must raise rather than read as empty
         # and let an edit build on a workflow it never saw.
-        document = get_store().read(WorkingCopy.collection, project)
+        document = get_store().read(WorkingCopy.collection, project_id)
     except DocumentNotFound:
         return []
     stages = document.get("stages")
     return [s for s in stages if isinstance(s, dict)] if isinstance(stages, list) else []
 
 
-def save_stages(project: str, stages: list[Stage]) -> None:
+def save_stages(project_id: str, stages: list[Stage]) -> None:
     """A whole-list write, so a removal leaves nothing behind."""
-    stored = WorkingCopy.load_or_none(project)
+    stored = WorkingCopy.load_or_none(project_id)
     # A fresh record, not a mutated one: `.stages` is never assigned from outside
     # app/models (tests/arch/test_model_encapsulation.py). `created_at` carries
     # forward so it keeps meaning first-authored.
     born = {"created_at": stored.created_at} if stored is not None else {}
-    WorkingCopy(id=project, stages=stages, **born).save()
+    WorkingCopy(id=project_id, stages=stages, **born).save()
 
 
-def save_stage_specs(project: str, specs: list[JsonDict]) -> None:
+def save_stage_specs(project_id: str, specs: list[JsonDict]) -> None:
     """Raises `pydantic.ValidationError` if any spec is not a stage."""
-    save_stages(project, [parse_stage(spec) for spec in specs])
+    save_stages(project_id, [parse_stage(spec) for spec in specs])
 
 
-def index_stage_specs_by_id(project: str) -> dict[str, JsonDict]:
+def index_stage_specs_by_id(project_id: str) -> dict[str, JsonDict]:
     """`{id: spec dict}` — the map the stage editor validates a change against."""
-    return {stage.id: stage_to_spec_dict(stage) for stage in load_workflow(project)}
+    return {stage.id: stage_to_spec_dict(stage) for stage in load_workflow(project_id)}
 
 
 def _label(spec: JsonDict, index: int) -> str:

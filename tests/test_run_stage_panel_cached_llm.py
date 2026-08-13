@@ -61,14 +61,13 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         return {"verdict": f"v{row['x']}"}
 
     monkeypatch.setattr("app.runtime.stages.llm_transform.call_llm", fake_call_llm)
-    version_id = project_service.save_working_copy_as_version(
-        pdir, message="v1", reviewer="test").version_id
-    versioning.publish_version(pdir, version_id, reviewer="test")
+    version_id = project_service.save_working_copy_as_version(pdir.name, message="v1", reviewer="test").version_id
+    versioning.publish_version(pdir.name, version_id, reviewer="test")
     return pdir
 
 
 def _run(project_dir: Path) -> str:
-    return str(execute_run(project_dir, *pinned_stages(project_dir))["run_id"])
+    return str(execute_run(project_dir / "runs", project_dir.name, *pinned_stages(project_dir))["run_id"])
 
 
 def _panel(run_id: str) -> str:

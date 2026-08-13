@@ -193,7 +193,7 @@ def test_display_cell_serializes_datetimes():
 
 
 def test_cmdk_palette_ranks_the_project_being_read_first(demo_project):
-    rows = client.get("/cmdk_palette/index", params={"project": "demo"}).json()["rows"]
+    rows = client.get("/cmdk_palette/index", params={"project_id": "demo"}).json()["rows"]
     kinds = [row["kind"] for row in rows]
     assert kinds.index("section") < kinds.index("stage")
     assert [row["label"] for row in rows if row["kind"] == "section"][:3] == [
@@ -202,7 +202,7 @@ def test_cmdk_palette_ranks_the_project_being_read_first(demo_project):
 
 
 def test_cmdk_palette_deep_links_a_stage_into_the_workflow_page(demo_project):
-    rows = client.get("/cmdk_palette/index", params={"project": "demo"}).json()["rows"]
+    rows = client.get("/cmdk_palette/index", params={"project_id": "demo"}).json()["rows"]
     stage = next(row for row in rows if row["label"] == "extract")
     assert stage["href"] == "/project/demo/workflow#extract"
     assert stage["is_code"]
@@ -224,7 +224,7 @@ def test_cmdk_palette_names_the_project_on_a_row_outside_it(demo_project):
 
 
 def test_cmdk_palette_refuses_a_project_id_that_does_not_exist(demo_project):
-    rows = client.get("/cmdk_palette/index", params={"project": "../etc"}).json()["rows"]
+    rows = client.get("/cmdk_palette/index", params={"project_id": "../etc"}).json()["rows"]
     assert not [row for row in rows if row["kind"] == "section"]
 
 
@@ -244,7 +244,7 @@ def test_cmdk_palette_sends_a_stage_to_the_run_being_read(demo_project, monkeypa
                                               StageSquare(stage_id="gone", status="pending")],
                                      tallies=[]))])
     rows = client.get("/cmdk_palette/index",
-                      params={"project": "demo", "run": "20260813T090000"}).json()["rows"]
+                      params={"project_id": "demo", "run": "20260813T090000"}).json()["rows"]
     stages = [row for row in rows if row["kind"] == "stage"]
     # The RUN's stages, not the working copy's: `gone` is only in the run, and
     # `extract` is only in the working copy.
@@ -256,6 +256,6 @@ def test_cmdk_palette_sends_a_stage_to_the_run_being_read(demo_project, monkeypa
 
 def test_cmdk_palette_falls_back_to_the_workflow_for_a_run_that_is_not_one(demo_project):
     rows = client.get("/cmdk_palette/index",
-                      params={"project": "demo", "run": "new"}).json()["rows"]
+                      params={"project_id": "demo", "run": "new"}).json()["rows"]
     stage = next(row for row in rows if row["kind"] == "stage")
     assert stage["href"] == "/project/demo/workflow#load"

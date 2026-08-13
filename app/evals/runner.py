@@ -24,15 +24,16 @@ from app.evals.dataset_columns import (
     deconflict_column_names,
     get_output_columns_from_stage,
 )
-from app.evals.store import latest_version_id, save_eval_run
+from app.evals.store import latest_version_id, resolve_eval_run_dir, save_eval_run
 from app.services.versioning import load_version, load_version_stages
+from app.services.workspace import resolve_project_dir
 
 
 def run_eval(
-    project_dir: Path, config: EvalConfig, *, version_id: str | None = None,
+    project_id: str, config: EvalConfig, *, version_id: str | None = None,
 ) -> EvalRun:
-    version = _resolve_version(project_dir, version_id)
-    workflow = Workflow(stages=load_version_stages(project_dir, version))
+    version = _resolve_version(project_id, version_id)
+    workflow = Workflow(stages=load_version_stages(project_id, version))
     report = validate_eval_compatibility(config, workflow)
     _require_runnable(config, report)
     settings = report.settings
@@ -41,8 +42,8 @@ def run_eval(
     if not settings.can_score_declaratively:
         run = _vetoed_run(config, version, settings)
     else:
-        run = _score_run(project_dir, config, version, settings, workflow)
-    save_eval_run(project_dir, run)
+        run = _score_run(project_id, config, version, settings, workflow)
+    save_eval_run(project_id, run)
     return run
 
 
@@ -55,7 +56,7 @@ def _require_runnable(config: EvalConfig, report: CompatibilityReport) -> None:
 
 
 def _score_run(
-    project_dir: Path, config: EvalConfig, version: str,
+    project_id: str, config: EvalConfig, version: str,
     settings: EvalRunSettings, workflow: Workflow,
 ) -> EvalRun:
     by_id = workflow.index_workflow_stages_by_id()
@@ -63,19 +64,20 @@ def _score_run(
     assert config.table is not None  # _require_runnable checked this
     dataset = read_table_ref(config.table)
     run_id = _mint_run_id()
-    run_dir = project_dir / "eval_run" / run_id
+    run_dir = resolve_eval_run_dir(project_id, run_id)
     started = _now()
     try:
         outputs = run_subset(
             workflow, stage_ids=settings.frontier, run_dir=run_dir,
             injected_outputs=_build_injected_outputs(config, override, target, dataset),
-            project=project_dir.name, workflow_version=version)
+            project_id=project_id, workflow_version=version)
         score = score_expected_outputs(config, override, target, dataset,
                                        table_to_frame(outputs[config.target_stage]))
     except (SubsetRunError, EvalGrainViolationError) as exc:
         return _build_run(config, version, settings, run_id=run_id, status="error",
                           started=started, notes=[str(exc)])
-    result_ref = _write_result_table(run_dir, score.per_row).relative_to(project_dir).as_posix()
+    result_ref = _write_result_table(run_dir, score.per_row).relative_to(
+        resolve_project_dir(project_id)).as_posix()
     return _build_run(config, version, settings, run_id=run_id, status="scored",
                       started=started, metrics=score.metrics, result_ref=result_ref)
 
@@ -135,12 +137,12 @@ def _write_result_table(run_dir: Path, per_row: pd.DataFrame) -> Path:
 
 # ── Small helpers ────────────────────────────────────────────────────────────
 
-def _resolve_version(project_dir: Path, version_id: str | None) -> str:
+def _resolve_version(project_id: str, version_id: str | None) -> str:
     """Scores the SELECTED version, published or NOT — that is how a proposal is validated."""
     if version_id is not None:
-        load_version(project_dir, version_id)  # raises FileNotFoundError if missing
+        load_version(project_id, version_id)  # raises FileNotFoundError if missing
         return version_id
-    version = latest_version_id(project_dir)
+    version = latest_version_id(project_id)
     if version is None:
         raise EvalNotScorableError(
             "project has no workflow version to run the eval against")

@@ -227,7 +227,7 @@ def _node_view(s: AbstractStage | dict[str, Any]) -> dict[str, Any]:
 
 def build_mermaid_graph(
     stages: Sequence[AbstractStage] | Sequence[dict[str, Any]],
-    project: str,
+    project_id: str,
     status_by_id: dict[str, str] | None = None,
 ) -> str:
     nodes = [_node_view(s) for s in stages]

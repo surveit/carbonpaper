@@ -70,38 +70,38 @@ class RunHeader(BaseModel):
 
 
 def build_run_header(
-    project: str, run_id: str, run_dir: Path, manifest: Mapping[str, Any]
+    project_id: str, run_id: str, run_dir: Path, manifest: Mapping[str, Any]
 ) -> RunHeader:
     strip = build_stage_strip(manifest)
-    cta = choose_run_cta(project, run_id, manifest)
+    cta = choose_run_cta(project_id, run_id, manifest)
     return RunHeader(
         run_id=run_id,
         started_at=_read_text(manifest.get("started_at")),
         is_test_run=bool(manifest.get("parameters", {}).get("is_test_run")),
-        version=read_version_note(project, manifest.get("workflow_version")),
+        version=read_version_note(project_id, manifest.get("workflow_version")),
         strip=strip,
         cta=cta,
-        artifacts=list_artifact_links(project, run_id, run_dir, manifest),
+        artifacts=list_artifact_links(project_id, run_id, run_dir, manifest),
         live=_build_live_view(manifest, strip, cta),
     )
 
 
 def build_live_view(
-    project: str, run_id: str, manifest: Mapping[str, Any]
+    project_id: str, run_id: str, manifest: Mapping[str, Any]
 ) -> RunLiveView:
     return _build_live_view(
         manifest,
         build_stage_strip(manifest),
-        choose_run_cta(project, run_id, manifest),
+        choose_run_cta(project_id, run_id, manifest),
     )
 
 
 def choose_run_cta(
-    project: str,
+    project_id: str,
     run_id: str,
     manifest: Mapping[str, Any],
 ) -> RunCta:
-    base = f"/project/{project}/runs/{run_id}"
+    base = f"/project/{project_id}/runs/{run_id}"
     if manifest.get("status") == RunStatus.RUNNING:
         return _build_cancel_cta(base, manifest)
     halted = find_halted_stage_ids(manifest)
@@ -127,19 +127,19 @@ def find_halted_stage_ids(manifest: Mapping[str, Any]) -> list[str]:
     ]
 
 
-def read_version_note(project: str, version_id: object) -> VersionNote:
+def read_version_note(project_id: str, version_id: object) -> VersionNote:
     text = _read_text(version_id)
     if text is None:
         return VersionNote(version_id=None)
     try:
-        version = run_service.load_run_version(project, {"workflow_version": text})
+        version = run_service.load_run_version(project_id, {"workflow_version": text})
     except RunVersionUnresolvableError as exc:
         return VersionNote(version_id=text, error=str(exc))
     return VersionNote(version_id=text, message=version.message or None)
 
 
 def list_artifact_links(
-    project: str, run_id: str, run_dir: Path, manifest: Mapping[str, Any]
+    project_id: str, run_id: str, run_dir: Path, manifest: Mapping[str, Any]
 ) -> list[ArtifactLink]:
     if manifest.get("status") in (RunStatus.RUNNING, None):
         return []
@@ -158,7 +158,7 @@ def list_artifact_links(
     return [
         ArtifactLink(
             name=f.name,
-            url=(f"/project/{project}/runs/{run_id}/artifact/"
+            url=(f"/project/{project_id}/runs/{run_id}/artifact/"
                  f"{f.relative_to(artifacts_root).as_posix()}"),
         )
         for f in files

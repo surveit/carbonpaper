@@ -9,7 +9,6 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
-import app.web.routers.evals as evals_router
 from app.main import app
 from app.models import (
     EvalConfig,
@@ -86,7 +85,7 @@ def demo_project(tmp_path, monkeypatch):
             {"name": "doc_id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True},
             {"name": "label", "type": "str", "nullable": True}]),
     )
-    save_eval_config(demo, EvalConfig(
+    save_eval_config(demo.name, EvalConfig(
         id="label_check", project="demo", name="Label check",
         description="Does classify still label rows the same way?",
         override_stage="load", target_stage="classify", table=dataset,
@@ -159,7 +158,7 @@ def test_eval_run_page_renders_a_seeded_run():
                                  frontier=["classify"], blocking_stages=[]),
         metrics={"accuracy": 1.0},
     )
-    save_eval_run(evals_router.projects_dir() / "demo", run)
+    save_eval_run("demo", run)
 
     r = client.get("/project/demo/evals/label_check/runs/run1")
     assert r.status_code == 200
@@ -200,7 +199,7 @@ def _save_scored_run(tmp_path, per_row: pd.DataFrame, *, run_id: str = "scored1"
     result = demo / "eval_run" / run_id / "result.parquet"
     result.parent.mkdir(parents=True, exist_ok=True)
     write_frame_file(per_row, result)
-    save_eval_run(demo, EvalRun(
+    save_eval_run(demo.name, EvalRun(
         id=run_id, config="label_check", project="demo",
         workflow_version="v1", status="scored",
         settings=EvalRunSettings(can_score_declaratively=True,
@@ -254,7 +253,7 @@ def test_run_page_refuses_to_line_up_a_dataset_that_changed_since_the_run(tmp_pa
 
 
 def test_run_page_states_why_a_vetoed_run_has_no_rows(tmp_path):
-    save_eval_run(tmp_path / "demo", EvalRun(
+    save_eval_run("demo", EvalRun(
         id="vetoed1", config="label_check", project="demo",
         workflow_version="v1", status="vetoed",
         settings=EvalRunSettings(can_score_declaratively=False, frontier=["classify"],
@@ -313,7 +312,7 @@ def test_eval_lists_its_runs_in_the_runs_index_table(tmp_path):
 
 
 def test_a_run_that_stored_no_accuracy_is_not_given_one(tmp_path):
-    save_eval_run(tmp_path / "demo", EvalRun(
+    save_eval_run("demo", EvalRun(
         id="vetoed2", config="label_check", project="demo",
         workflow_version="v1", status="vetoed",
         settings=EvalRunSettings(can_score_declaratively=False, frontier=["classify"],

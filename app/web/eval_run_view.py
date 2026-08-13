@@ -48,16 +48,16 @@ class EvalRunRow(BaseModel):
 _OUTCOME_WORDS = {"scored": "Scored", "vetoed": "Not scorable", "error": "Error"}
 
 
-def build_eval_run_rows(project: str, runs: list[EvalRun]) -> list[EvalRunRow]:
+def build_eval_run_rows(project_id: str, runs: list[EvalRun]) -> list[EvalRunRow]:
     seen: dict[str, VersionNote] = {}
-    return [_build_run_row(project, run, seen) for run in runs]
+    return [_build_run_row(project_id, run, seen) for run in runs]
 
 
 def _build_run_row(
-    project: str, run: EvalRun, seen: dict[str, VersionNote]
+    project_id: str, run: EvalRun, seen: dict[str, VersionNote]
 ) -> EvalRunRow:
     if run.workflow_version not in seen:
-        seen[run.workflow_version] = read_version_note(project, run.workflow_version)
+        seen[run.workflow_version] = read_version_note(project_id, run.workflow_version)
     accuracy = run.metrics.get("accuracy")
     return EvalRunRow(
         run_id=run.id,

@@ -19,7 +19,7 @@ from app.services.review_packet.checksums import write_checksums
 from app.services.review_packet.data import write_packet_data
 from app.services.review_packet.views import RunView, build_run_view
 from app.services.run_guide import RunGuideView, build_run_guide_view
-from app.services.workspace import resolve_project_dir
+from app.services.workspace import resolve_run_dir
 from app.web.diagrams import build_mermaid_graph
 from app.web.review_packet.lineage import write_packet_lineage
 from app.web.review_packet.pages import write_packet_pages
@@ -27,49 +27,48 @@ from app.web.review_packet.pages import write_packet_pages
 _log = logging.getLogger(__name__)
 
 
-def export_review_packet(project: str, run_id: str, dest_root: Path) -> ReviewPacket:
+def export_review_packet(project_id: str, run_id: str, dest_root: Path) -> ReviewPacket:
     # Writes `dest_root/<project>-<run_id>/`. No manifest raises, not an empty packet.
-    project_dir = resolve_project_dir(project)
-    run_dir = project_dir / "runs" / run_id
-    manifest = run_service.read_run_status(project, run_id)
-    workflow_stages, workflow, definition_error = _load_pinned_workflow(project, manifest)
+    run_dir = resolve_run_dir(project_id, run_id)
+    manifest = run_service.read_run_status(project_id, run_id)
+    workflow_stages, workflow, definition_error = _load_pinned_workflow(project_id, manifest)
     workflow_stages_by_id = {resolved.id: resolved for resolved in workflow_stages}
     view = build_run_view(manifest, definition_error)
 
-    root = dest_root / f"{project}-{run_id}"
+    root = dest_root / f"{project_id}-{run_id}"
     root.mkdir(parents=True, exist_ok=True)
     stage_sources = {
         s.stage_id: resolve_output_path(run_dir, s.output_path) for s in view.stages
     }
-    with log_elapsed(_log, f"{project}/{run_id} data"):
+    with log_elapsed(_log, f"{project_id}/{run_id} data"):
         data = write_packet_data(
-            root, run_dir, project_dir, view, workflow,
+            root, run_dir, project_id, view, workflow,
             json.dumps(manifest, indent=2, default=str),
-            _serialize_events(project, run_id), stage_sources,
+            _serialize_events(project_id, run_id), stage_sources,
         )
     # Before the pages: a stage table only offers "View lineage" on a row the
     # packet actually holds a page for, so the traced set has to exist first.
-    with log_elapsed(_log, f"{project}/{run_id} lineage"):
+    with log_elapsed(_log, f"{project_id}/{run_id} lineage"):
         lineage = write_packet_lineage(root, run_dir, view, workflow_stages_by_id)
-    with log_elapsed(_log, f"{project}/{run_id} pages"):
+    with log_elapsed(_log, f"{project_id}/{run_id} pages"):
         pages = write_packet_pages(
             root,
             run_dir,
             view,
             data,
             lineage,
-            _load_guide(project, manifest),
-            _build_diagram(workflow_stages, project, view),
+            _load_guide(project_id, manifest),
+            _build_diagram(workflow_stages, project_id, view),
             # `workflow_stages or None` is the difference between "nothing blocked"
             # and "no edges to say what was blocked" — build_run_issues reads it.
             build_run_issues(manifest, workflow_stages or None),
             workflow_stages_by_id,
         )
-    with log_elapsed(_log, f"{project}/{run_id} checksums"):
+    with log_elapsed(_log, f"{project_id}/{run_id} checksums"):
         checksums = write_checksums(root)
 
     return ReviewPacket(
-        project=view.project or project,
+        project=view.project or project_id,
         run_id=view.run_id or run_id,
         root=root,
         files=sorted([*data.written, *pages, *lineage.written, checksums]),
@@ -77,37 +76,37 @@ def export_review_packet(project: str, run_id: str, dest_root: Path) -> ReviewPa
     )
 
 
-def _serialize_events(project: str, run_id: str) -> str:
+def _serialize_events(project_id: str, run_id: str) -> str:
     """As JSON lines: the shape a packet reader's tooling already expects."""
     return "".join(
         json.dumps(event, default=str) + "\n"
-        for event in read_events_since(project, run_id, 0)
+        for event in read_events_since(project_id, run_id, 0)
     )
 
 
 def _build_diagram(
-    workflow_stages: list[WorkflowStage], project: str, view: RunView
+    workflow_stages: list[WorkflowStage], project_id: str, view: RunView
 ) -> str:
     # Empty when the pinned version was unreadable; the index then draws no graph.
     if not workflow_stages:
         return ""
     statuses = {s.stage_id: s.status for s in view.stages}
     return build_mermaid_graph(
-        [resolved.stage for resolved in workflow_stages], project, status_by_id=statuses)
+        [resolved.stage for resolved in workflow_stages], project_id, status_by_id=statuses)
 
 
-def _load_guide(project: str, manifest: dict[str, Any]) -> RunGuideView | None:
+def _load_guide(project_id: str, manifest: dict[str, Any]) -> RunGuideView | None:
     try:
-        return build_run_guide_view(project, manifest)
+        return build_run_guide_view(project_id, manifest)
     except RunVersionUnresolvableError:
         return None
 
 
 def _load_pinned_workflow(
-    project: str, manifest: dict[str, Any]
+    project_id: str, manifest: dict[str, Any]
 ) -> tuple[list[WorkflowStage], str | None, str | None]:
     try:
-        workflow = run_service.load_run_workflow(project, manifest)
+        workflow = run_service.load_run_workflow(project_id, manifest)
     except (RunVersionUnresolvableError, RunNotFoundError) as exc:
         return [], None, str(exc)
     workflow_stages = workflow.list_workflow_stages()

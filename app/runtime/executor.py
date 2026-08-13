@@ -80,7 +80,7 @@ def run_subset(
     stage_ids: list[str],
     run_dir: Path,
     params: RunParameters = RunParameters(),
-    project: str,
+    project_id: str,
     workflow_version: str | None = None,
     identity: RunIdentity | None = None,
 ) -> dict[str, pd.DataFrame]:
@@ -93,7 +93,7 @@ def run_subset(
     (run_dir / "outputs").mkdir(parents=True, exist_ok=True)
     ctx = _subset_ctx(run_dir, identity, params)
     manifest = create_run_manifest(
-        ordered, ctx, run_id=run_dir.name, project=project,
+        ordered, ctx, run_id=run_dir.name, project_id=project_id,
         workflow_version=workflow_version, input_bindings={},
         # The dir the run lives under is what separates a production run from an
         # eval one; the record keeps that separation.

@@ -11,16 +11,16 @@ _pending: set[tuple[str, str]] = set()
 _lock = threading.Lock()
 
 
-def request_cancel(project: str, run_id: str) -> None:
+def request_cancel(project_id: str, run_id: str) -> None:
     with _lock:
-        _pending.add((project, run_id))
+        _pending.add((project_id, run_id))
 
 
-def consume_cancel(project: str, run_id: str) -> bool:
+def consume_cancel(project_id: str, run_id: str) -> bool:
     """Read-once: a caller that gets True MUST stop the run, or the cancel is lost."""
     with _lock:
-        if (project, run_id) in _pending:
-            _pending.discard((project, run_id))
+        if (project_id, run_id) in _pending:
+            _pending.discard((project_id, run_id))
             return True
         return False
 

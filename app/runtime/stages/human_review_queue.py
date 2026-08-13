@@ -52,8 +52,8 @@ class QueueFingerprints(PersistedModel):
     row_ordinals: list[int] | None = None
 
     @staticmethod
-    def compose_id(project: str, run_id: str, stage_id: str) -> str:
-        return f"{project}/{run_id}/{stage_id}"
+    def compose_id(project_id: str, run_id: str, stage_id: str) -> str:
+        return f"{project_id}/{run_id}/{stage_id}"
 
 
 @dataclass(frozen=True)

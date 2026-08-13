@@ -52,7 +52,8 @@ def validate_stages_ready(
 
 
 def prepare_run(
-    project_dir: Path,
+    runs_dir: Path,
+    project_id: str,
     workflow: Workflow,
     workflow_version: str,
     limits: dict[str, int] | None = None,
@@ -78,7 +79,7 @@ def prepare_run(
             )
 
     run_id = mint_timestamp_id()
-    run_dir = project_dir / "runs" / run_id
+    run_dir = runs_dir / run_id
     (run_dir / "outputs").mkdir(parents=True, exist_ok=True)
     (run_dir / "artifacts").mkdir(parents=True, exist_ok=True)
 
@@ -86,7 +87,7 @@ def prepare_run(
     # app.runtime.cancellation) — read by _execute_stages, never by name of
     # anything on disk. run_dir above stays I/O-only.
     ctx = RunContext.for_workflow_run(
-        run_dir, project_dir.name, run_id,
+        run_dir, project_id, run_id,
         RunParameters(
             limits=dict(limits or {}),
             offsets=dict(offsets or {}),
@@ -102,7 +103,7 @@ def prepare_run(
         ordered,
         ctx,
         run_id=run_id,
-        project=project_dir.name,
+        project_id=project_id,
         workflow_version=workflow_version,
         input_bindings=input_records,
     )
@@ -118,7 +119,8 @@ def run_prepared(prep: dict[str, Any]) -> dict[str, Any]:
 
 
 def execute_run(
-    project_dir: Path,
+    runs_dir: Path,
+    project_id: str,
     workflow: Workflow,
     workflow_version: str,
     limits: dict[str, int] | None = None,
@@ -127,24 +129,24 @@ def execute_run(
     bust_cache: bool = False,
 ) -> dict[str, Any]:
     return run_prepared(
-        prepare_run(project_dir, workflow, workflow_version,
+        prepare_run(runs_dir, project_id, workflow, workflow_version,
                     limits=limits, offsets=offsets, bindings=bindings,
                     bust_cache=bust_cache)
     )
 
 
 def resume_run(
-    project_dir: Path,
+    run_dir: Path,
+    project_id: str,
     run_id: str,
     workflow: Workflow,
     workflow_version: str,
 ) -> dict[str, Any]:
-    run_dir = project_dir / "runs" / run_id
-    manifest = read_run_manifest(project_dir.name, run_id)
+    manifest = read_run_manifest(project_id, run_id)
 
     if manifest.workflow_version != workflow_version:
         raise ValueError(
-            f"Run {run_id} of '{project_dir.name}' is pinned to workflow version "
+            f"Run {run_id} of '{project_id}' is pinned to workflow version "
             f"{manifest.workflow_version!r}, but stages for {workflow_version!r} "
             f"were supplied; a resume must execute the version the run started on."
         )
@@ -178,7 +180,7 @@ def resume_run(
     # under — the same row windows, the same refusal to read the cache — rather
     # than quietly reusing what the halted run skipped.
     ctx = RunContext.for_workflow_run(
-        run_dir, project_dir.name, run_id, manifest.parameters)
+        run_dir, project_id, run_id, manifest.parameters)
     # The run's telemetry (human_review_queue_stats/dropped_columns) already lives on the
     # loaded manifest, not the context; a resumed run keeps accumulating onto
     # that same manifest via the executor's per-stage merge.

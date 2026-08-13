@@ -58,9 +58,8 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     for index, stage in enumerate(_stages(data), start=1):
         add_stage(pdir, stage)
     workspace.set_projects_dir(tmp_path)
-    version_id = project_service.save_working_copy_as_version(
-        pdir, message="v1", reviewer="test").version_id
-    versioning.publish_version(pdir, version_id, reviewer="test")
+    version_id = project_service.save_working_copy_as_version(pdir.name, message="v1", reviewer="test").version_id
+    versioning.publish_version(pdir.name, version_id, reviewer="test")
     return pdir
 
 
@@ -91,7 +90,7 @@ def test_a_stage_the_run_never_heard_of_is_still_a_404(project: Path):
 
 
 def test_a_production_runs_input_stage_still_shows_its_run_detail(project: Path):
-    run_id = str(execute_run(project, *pinned_stages(project))["run_id"])
+    run_id = str(execute_run(project / "runs", project.name, *pinned_stages(project))["run_id"])
 
     response = _panel(run_id, "load")
     assert response.status_code == 200

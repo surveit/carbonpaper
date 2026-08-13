@@ -253,13 +253,15 @@ def test_a_fan_in_ships_the_rows_it_summarized_as_a_table_and_a_csv(tmp_path):
 
 def test_a_moved_project_still_ships_the_inputs_its_run_read(tmp_path):
     """Bindings hold absolute paths, so relocating a project stales every one."""
+    from app.services import workspace
     from app.services.review_packet.checksums import compute_sha256
     from app.services.review_packet.data import _locate_input
     from app.services.review_packet.views import InputBindingView
 
-    project = tmp_path / "new_home" / "demo"
-    (project / "data").mkdir(parents=True)
-    moved = project / "data" / "aliases.csv"
+    # The new home IS the workspace root now — that is what "the project moved" means.
+    workspace.set_projects_dir(tmp_path / "new_home")
+    (tmp_path / "new_home" / "demo" / "data").mkdir(parents=True)
+    moved = tmp_path / "new_home" / "demo" / "data" / "aliases.csv"
     moved.write_text("name,stands_for\na,A\n", encoding="utf-8")
 
     def binding(sha: str | None) -> InputBindingView:
@@ -268,10 +270,10 @@ def test_a_moved_project_still_ships_the_inputs_its_run_read(tmp_path):
             filename="aliases.csv", sha256=sha, bytes=moved.stat().st_size, source="workflow",
         )
 
-    assert _locate_input(binding(compute_sha256(moved)), project) == moved
+    assert _locate_input(binding(compute_sha256(moved)), "demo") == moved
     # A same-named file is not the same file, and an unhashed binding cannot say.
-    assert _locate_input(binding("0" * 64), project) is None
-    assert _locate_input(binding(None), project) is None
+    assert _locate_input(binding("0" * 64), "demo") is None
+    assert _locate_input(binding(None), "demo") is None
 
 
 def test_the_packet_ships_no_syntax_highlighter():

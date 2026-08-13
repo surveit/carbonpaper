@@ -68,9 +68,8 @@ def _build_project(
 
     monkeypatch.setattr(
         "app.runtime.stages.llm_transform.call_llm_batch", fake_call_llm_batch)
-    version_id = project_service.save_working_copy_as_version(
-        pdir, message="v1", reviewer="test").version_id
-    versioning.publish_version(pdir, version_id, reviewer="test")
+    version_id = project_service.save_working_copy_as_version(pdir.name, message="v1", reviewer="test").version_id
+    versioning.publish_version(pdir.name, version_id, reviewer="test")
     return pdir
 
 
@@ -86,7 +85,7 @@ def project_run_before_the_field(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 
 
 def _panel(project_dir: Path) -> str:
-    run_id = str(execute_run(project_dir, *pinned_stages(project_dir))["run_id"])
+    run_id = str(execute_run(project_dir / "runs", project_dir.name, *pinned_stages(project_dir))["run_id"])
     client = TestClient(app)
     response = client.get(f"/project/{PROJECT}/runs/{run_id}/stage/judge/partial")
     assert response.status_code == 200, response.text

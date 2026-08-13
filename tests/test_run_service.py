@@ -52,7 +52,7 @@ def _make_project(root):
 
 
 def _seed_version(root):
-    return save_working_copy_as_version(root, message="seed", reviewer="test").version_id
+    return save_working_copy_as_version(root.name, message="seed", reviewer="test").version_id
 
 
 def test_start_run_returns_run_id_and_writes_ok_manifest(project_dir):
@@ -95,4 +95,4 @@ def test_resolve_version_defaults_to_latest_stored_and_raises_when_none(project_
         run_service.resolve_version(_PROJECT, None)
     vid = _seed_version(project_dir)  # never published
     assert run_service.resolve_version(_PROJECT, None) == vid
-    assert list_versions(project_dir)[0].version_id == vid
+    assert list_versions(project_dir.name)[0].version_id == vid

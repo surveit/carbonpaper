@@ -148,7 +148,7 @@ def test_committed_tutorial_fixture_imports_and_validates_cleanly(tmp_path):
     project_dir = tmp_path / "examples" / imported_name
     loaded_stages = load_workflow(project_dir.name)
     assert [stage.id for stage in loaded_stages] == _EXPECTED_STAGE_IDS
-    assert len(versioning.list_versions(project_dir)) == 1
+    assert len(versioning.list_versions(project_dir.name)) == 1
 
     # The tutorial skips the data-model step, so the fixture carries no schemas.
     assert wf.data_model.schemas == []
@@ -478,7 +478,7 @@ def test_scoring_the_eval_costs_two_model_calls():
 def test_the_tour_seeds_the_eval_beside_the_review_guide(projects_root):
     seeded = seed_tutorial_project(TutorialContext(base_url=_BASE_URL))
 
-    stored = load_eval_config(projects_root / seeded.project.id, _EVAL_ID)
+    stored = load_eval_config(seeded.project.id, _EVAL_ID)
 
     assert stored.project == seeded.project.id
     assert (stored.override_stage, stored.target_stage) == (_OVERRIDE_STAGE, _TARGET_STAGE)

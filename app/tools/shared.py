@@ -6,7 +6,6 @@ context, and app.tools.tool_specs holds nothing of it but the description.
 from __future__ import annotations
 
 import asyncio
-from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel
@@ -71,12 +70,12 @@ MAX_OUTPUT_ROWS = 50
 MAX_RUNS_LISTED = 20
 
 
-def resolve_existing_project(project_id: str) -> Path:
-    """Loud on a project that is not in the workspace, rather than a later confusing miss."""
-    pdir = workspace.resolve_project_dir(project_id)
-    if not pdir.is_dir():
+def validate_project_exists(project_id: str) -> str:
+    """Returns the id it validated, so a caller passes it straight on."""
+    workspace.validate_project_id(project_id)  # invalid is a different answer to absent
+    if not project_service.project_exists(project_id):
         raise ValueError(f"no project '{project_id}' in the workspace")
-    return pdir
+    return project_id
 
 
 def create_project(name: str, document: str, *, source: str) -> Project:
@@ -85,14 +84,15 @@ def create_project(name: str, document: str, *, source: str) -> Project:
 
 
 def get_project_status(project_id: str) -> dict[str, Any]:
-    pdir = resolve_existing_project(project_id)
-    return project_service.project_state(pdir).model_dump(mode="json")
+    validate_project_exists(project_id)
+    return project_service.project_state(project_id).model_dump(mode="json")
 
 
 async def generate_stage_tests(project_id: str, stage_id: str) -> dict[str, Any]:
-    pdir = resolve_existing_project(project_id)
-    model = project_service.project_meta(pdir).model or "sonnet"
-    session_id = generation.start_stage_test_generation(pdir, stage_id=stage_id, model=model)
+    validate_project_exists(project_id)
+    model = project_service.project_meta(project_id).model or "sonnet"
+    session_id = generation.start_stage_test_generation(
+        project_id, stage_id=stage_id, model=model)
     # Root-relative: the caller's reader is either in this app already or knows the
     # address it reached the server on, and a guessed host resolves nowhere.
     return {
@@ -120,36 +120,36 @@ def remove_stage(project_id: str, stage_id: str) -> dict[str, Any]:
 
 
 def read_review_guide(project_id: str, version_id: str) -> ReviewGuide | None:
-    resolve_existing_project(project_id)
+    validate_project_exists(project_id)
     return project_service.read_review_guide(project_id, version_id)
 
 
 def write_review_guide(
     project_id: str, version_id: str, guide: ReviewGuideDraft
 ) -> ReviewGuide:
-    resolve_existing_project(project_id)
+    validate_project_exists(project_id)
     return project_service.write_review_guide(project_id, version_id, guide)
 
 
 def run_stage_tests(project_id: str, stage_id: str | None = None) -> dict[str, Any]:
-    resolve_existing_project(project_id)
+    validate_project_exists(project_id)
     return stage_tests_service.run_project_stage_tests(project_id, stage_id).model_dump(
         mode="json")
 
 
 def report_compiler_warnings(project_id: str) -> dict[str, Any]:
-    resolve_existing_project(project_id)
+    validate_project_exists(project_id)
     report = stage_tests_service.find_project_compiler_warnings(project_id)
     return {"warnings": [w.model_dump(mode="json") for w in report.warnings]}
 
 
 def read_terms(project_id: str) -> Terms:
-    resolve_existing_project(project_id)
+    validate_project_exists(project_id)
     return terms_service.load_terms(project_id)
 
 
 def write_terms(project_id: str, terms: Terms) -> Terms:
-    resolve_existing_project(project_id)
+    validate_project_exists(project_id)
     terms_service.write_terms(project_id, terms)
     # Read back rather than echoed: what the project now says, not what was sent.
     return terms_service.load_terms(project_id)
@@ -176,7 +176,7 @@ class ProjectFilesView(BaseModel):
 def list_files(project_id: str | None, file_upload_url: str) -> ProjectFilesView:
     """`project_id` None lists the files that are in no project yet."""
     if project_id is not None:
-        resolve_existing_project(project_id)
+        validate_project_exists(project_id)
     # file_upload_url is the caller's: only it knows the address it was reached on.
     used = uploads.measure_files_used_bytes()
     return ProjectFilesView(
@@ -191,7 +191,7 @@ def profile_file(
     project_id: str, sha256: str, columns: list[str] | None = None, max_values: int = 20,
     sheet_name: str | int = 0, header_row: int = 0, first_column: int = 0,
 ) -> TableProfile:
-    resolve_existing_project(project_id)
+    validate_project_exists(project_id)
     return frame_profile.profile_stored_file(
         project_id, sha256, columns, max_values=max_values, sheet_name=sheet_name,
         header_row=header_row, first_column=first_column)
@@ -200,14 +200,14 @@ def profile_file(
 def survey_workbook(
     project_id: str, sha256: str, from_row: int = 0,
 ) -> list[SheetSurvey]:
-    resolve_existing_project(project_id)
+    validate_project_exists(project_id)
     return frame_profile.survey_stored_workbook(project_id, sha256, from_row=from_row)
 
 
 def profile_stage_output_data_range(
     project_id: str, run_id: str, stage_id: str, columns: list[str], max_values: int,
 ) -> dict[str, Any]:
-    resolve_existing_project(project_id)
+    validate_project_exists(project_id)
     try:
         profile = frame_profile.profile_stage_output(
             project_id, run_id, stage_id, columns, max_values=max_values)
@@ -223,7 +223,7 @@ def _view(record: uploads.UploadedFile) -> StoredFileView:
 
 def move_file_to_project(project_id: str, sha256: str) -> StoredFileView:
     """Move a file that is in no project into one. Moves no bytes."""
-    resolve_existing_project(project_id)
+    validate_project_exists(project_id)
     return _view(uploads.move_file_to_project(sha256, project_id))
 
 
@@ -233,7 +233,7 @@ def run_workflow(
     limits: dict[str, int] | None = None,
     files: dict[str, str] | None = None,
 ) -> dict[str, Any]:
-    resolve_existing_project(project_id)
+    validate_project_exists(project_id)
     # A stage id -> sha256 map, resolved here to the path-and-format params a run
     # binds. Resolving it before start_run means an unknown file id fails naming
     # itself, rather than as a missing-input refusal from preflight.
@@ -254,7 +254,7 @@ def run_workflow_test(
     stage_ids: list[str] | None = None,
     offset: int = 0,
 ) -> dict[str, Any]:
-    resolve_existing_project(project_id)
+    validate_project_exists(project_id)
     try:
         return workflow_test_service.run_workflow_test(
             project_id, version_id=version_id, stage_ids=stage_ids,
@@ -264,7 +264,7 @@ def run_workflow_test(
 
 
 def get_run_status(project_id: str, run_id: str) -> dict[str, Any]:
-    resolve_existing_project(project_id)
+    validate_project_exists(project_id)
     return run_service.read_run_status(project_id, run_id)
 
 
@@ -285,7 +285,7 @@ class RunHistory(BaseModel):
 
 
 def list_runs(project_id: str, limit: int = MAX_RUNS_LISTED) -> RunHistory:
-    resolve_existing_project(project_id)
+    validate_project_exists(project_id)
     entries = list(reversed(run_service.list_run_entries(project_id)))
     kept = min(max(limit, 1), MAX_RUNS_LISTED)
     return RunHistory(
@@ -318,7 +318,7 @@ async def sleep(seconds: int) -> dict[str, int]:
 
 
 def read_workflow_summary(project_id: str) -> workspace.WorkflowSummary:
-    resolve_existing_project(project_id)
+    validate_project_exists(project_id)
     return project_service.read_workflow_summary(project_id)
 
 
@@ -348,7 +348,7 @@ def read_stage_output_rows(
     base_url: str = "",
 ) -> StageOutputRows:
     """`base_url` is for a caller whose reader clicks the link; without it they are root-relative."""
-    resolve_existing_project(project_id)
+    validate_project_exists(project_id)
     _refuse_a_stage_that_did_not_finish(project_id, run_id, stage_id)
     window = min(MAX_OUTPUT_ROWS if limit is None else limit, MAX_OUTPUT_ROWS)
     if window < 1 or offset < 0:

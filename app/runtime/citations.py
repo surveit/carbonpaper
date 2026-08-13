@@ -16,12 +16,12 @@ from app.core.persistence import PersistedModel, PersistenceScope
 from app.models.citations import Citation, CitedRow
 
 
-def build_row_trace_url(project: str, run_id: str, stage_id: str, row_ordinal: int) -> str:
+def build_row_trace_url(project_id: str, run_id: str, stage_id: str, row_ordinal: int) -> str:
     """Root-relative: does NOT resolve for an HTML file opened from disk."""
     if row_ordinal < 0:
         raise RowOutOfRange(f"row_ordinal must be >= 0, got {row_ordinal}")
     return (
-        f"/project/{_path_segment(project)}"
+        f"/project/{_path_segment(project_id)}"
         f"/runs/{_path_segment(run_id)}"
         f"/stage/{_path_segment(stage_id)}"
         f"/row/{row_ordinal}/trace/view"
@@ -119,35 +119,35 @@ class StageCitations(PersistedModel):
     cited_rows: list[CitedRow] = []
 
     @staticmethod
-    def compose_id(project: str, run_id: str, stage_id: str) -> str:
-        return f"{project}/{run_id}/{stage_id}"
+    def compose_id(project_id: str, run_id: str, stage_id: str) -> str:
+        return f"{project_id}/{run_id}/{stage_id}"
 
 
 def save_citations(
-    project: str, run_id: str, stage_id: str, provider: CitationProvider
+    project_id: str, run_id: str, stage_id: str, provider: CitationProvider
 ) -> None:
     StageCitations(
-        id=StageCitations.compose_id(project, run_id, stage_id),
+        id=StageCitations.compose_id(project_id, run_id, stage_id),
         citations=provider.citations,
         cited_rows=provider.cited_rows,
     ).save()
 
 
-def read_citations(project: str, run_id: str) -> list[Citation]:
+def read_citations(project_id: str, run_id: str) -> list[Citation]:
     """Every value this run's publish stages cited. Empty where none declared a provider."""
-    return [c for saved in _saved(project, run_id) for c in saved.citations]
+    return [c for saved in _saved(project_id, run_id) for c in saved.citations]
 
 
-def read_cited_row_keys(project: str, run_id: str) -> list[tuple[str, int]]:
+def read_cited_row_keys(project_id: str, run_id: str) -> list[tuple[str, int]]:
     """Every row owed a page, values first, each once and in the order claimed."""
     rows: list[tuple[str, int]] = []
-    for saved in _saved(project, run_id):
+    for saved in _saved(project_id, run_id):
         rows += [(c.stage_id, c.row_ordinal) for c in saved.citations]
         rows += [(r.stage_id, r.row_ordinal) for r in saved.cited_rows]
     return list(dict.fromkeys(rows))
 
 
-def _saved(project: str, run_id: str) -> list[StageCitations]:
+def _saved(project_id: str, run_id: str) -> list[StageCitations]:
     return sorted(
-        StageCitations.list(prefix=f"{project}/{run_id}/"), key=lambda saved: saved.id
+        StageCitations.list(prefix=f"{project_id}/{run_id}/"), key=lambda saved: saved.id
     )

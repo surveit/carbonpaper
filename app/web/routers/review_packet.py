@@ -20,13 +20,13 @@ READY_COOKIE = "packet_ready"
 _COMPRESS_LEVEL = 1
 
 
-@router.get("/project/{project}/runs/{run_id}/packet.zip")
-async def download_review_packet(project: str, run_id: str, ready: str | None = None):
+@router.get("/project/{project_id}/runs/{run_id}/packet.zip")
+async def download_review_packet(project_id: str, run_id: str, ready: str | None = None):
     try:
-        content = await run_in_threadpool(_build_packet_zip, project, run_id)
+        content = await run_in_threadpool(_build_packet_zip, project_id, run_id)
     except RunNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    filename = f"{project}__{run_id}__review-packet.zip"
+    filename = f"{project_id}__{run_id}__review-packet.zip"
     response = Response(
         content=content,
         media_type="application/zip",
@@ -40,14 +40,14 @@ async def download_review_packet(project: str, run_id: str, ready: str | None = 
     return response
 
 
-def _build_packet_zip(project: str, run_id: str) -> bytes:
+def _build_packet_zip(project_id: str, run_id: str) -> bytes:
     with tempfile.TemporaryDirectory() as tmp:
-        packet = export_review_packet(project, run_id, Path(tmp) / "packet")
+        packet = export_review_packet(project_id, run_id, Path(tmp) / "packet")
         archive = Path(tmp) / "archive.zip"
-        with log_elapsed(_log, f"{project}/{run_id} zip"):
+        with log_elapsed(_log, f"{project_id}/{run_id} zip"):
             _write_zip(archive, packet.root)
             content = archive.read_bytes()
-    _log.info("%s/%s packet is %.1f MB", project, run_id, len(content) / 1024 / 1024)
+    _log.info("%s/%s packet is %.1f MB", project_id, run_id, len(content) / 1024 / 1024)
     return content
 
 

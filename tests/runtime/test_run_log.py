@@ -203,7 +203,7 @@ def test_a_run_writes_its_lifecycle_spine_to_the_run_dir(tmp_path):
     run_subset(
         Workflow(stages=[source, _row_stage()]),
         injected_outputs={"src": pd.DataFrame({"x": [1, 2]})},
-        stage_ids=["double"], run_dir=run_dir, project=run_dir.parent.parent.name,
+        stage_ids=["double"], run_dir=run_dir, project_id=run_dir.parent.parent.name,
     )
 
     events = read_events_since(run_dir.parent.parent.name, run_dir.name, 0)

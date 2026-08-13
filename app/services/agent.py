@@ -9,8 +9,8 @@ from __future__ import annotations
 from app.core.agent.session import create_agent_session
 
 
-def open_agent_chat(agent_id: str, project: str) -> str:
+def open_agent_chat(agent_id: str, project_id: str) -> str:
     """Returns the new session's page, root-relative: a caller with a base URL prefixes it."""
     sid = create_agent_session(
-        agent_id, {"project_id": project}, title=f"{agent_id.capitalize()}: {project}")
+        agent_id, {"project_id": project_id}, title=f"{agent_id.capitalize()}: {project_id}")
     return f"/chat/{sid}"

@@ -62,8 +62,8 @@ def _write_project(root: Path) -> Path:
 
 
 def _publish(root: Path) -> str:
-    version = project_service.save_working_copy_as_version(root, message="e2e", reviewer="test")
-    versioning.publish_version(root, version.version_id, reviewer="human")
+    version = project_service.save_working_copy_as_version(root.name, message="e2e", reviewer="test")
+    versioning.publish_version(root.name, version.version_id, reviewer="human")
     return version.version_id
 
 
@@ -85,7 +85,7 @@ def test_workflow_test_replays_cached_rows_and_writes_no_new_entries(project):
     probe = _write_project(project)
     _publish(project)
 
-    manifest = execute_run(project, *pinned_stages(project))
+    manifest = execute_run(project / "runs", project.name, *pinned_stages(project))
     assert manifest["status"] == "ok"
     assert _invocations(probe) == Counter({"clean": 2})
 
@@ -97,7 +97,7 @@ def test_workflow_test_replays_cached_rows_and_writes_no_new_entries(project):
 def test_a_workflow_test_does_not_leak_its_computed_rows_into_the_production_cache(project):
     probe = _write_project(project)
     _publish(project)
-    execute_run(project, *pinned_stages(project))
+    execute_run(project / "runs", project.name, *pinned_stages(project))
     assert _invocations(probe) == Counter({"clean": 2})  # "a", "b"
 
     _write_rows(project, _ROWS)  # add "c" — the workflow test's slice sees it
@@ -105,7 +105,7 @@ def test_a_workflow_test_does_not_leak_its_computed_rows_into_the_production_cac
     assert result["ok"] is True
     assert _invocations(probe) == Counter({"clean": 3})  # only "c" recomputed
 
-    manifest = execute_run(project, *pinned_stages(project))
+    manifest = execute_run(project / "runs", project.name, *pinned_stages(project))
     assert manifest["status"] == "ok"
     # "a"/"b" still replay from the FIRST production run's cache, but "c"
     # recomputes a SECOND time here — proof the workflow test recorded nothing

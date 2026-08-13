@@ -87,8 +87,7 @@ def _guide_of(stage_ids: list[str]) -> ReviewGuideDraft:
 
 def _save_guide(project_dir: Path, version_id: str, stage_ids: list[str]) -> None:
     draft = _guide_of(stage_ids)
-    versioning.save_version_guide(
-        project_dir,
+    versioning.save_version_guide(project_dir.name,
         version_id,
         versioning.ReviewGuide(
             project=project_dir.name, version_id=version_id,
@@ -146,8 +145,7 @@ def test_the_author_is_given_the_versions_stages_not_the_working_copy(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
     project_dir = _seed_project(tmp_path)
-    version = project_service.save_working_copy_as_version(
-        project_dir, message="v1", reviewer="local"
+    version = project_service.save_working_copy_as_version(project_dir.name, message="v1", reviewer="local"
     )
     _add_stage_to_the_working_copy(project_dir)
     store, turns = SessionStore(), TurnManager()
@@ -164,8 +162,7 @@ def test_the_author_is_given_the_versions_stages_not_the_working_copy(
     monkeypatch.setattr(compiler_review_guide, "build_review_guide_author", _spy)
 
     async def _drive() -> None:
-        sid = generation.start_review_guide_generation(
-            project_dir, version_id=version.version_id, model="sonnet"
+        sid = generation.start_review_guide_generation(project_dir.name, version_id=version.version_id, model="sonnet"
         )
         await turns._tasks[store.load(sid)["active_turn"]]
 
@@ -184,8 +181,7 @@ def test_render_guide_task_carries_the_request_the_document_and_the_stages(
     tmp_path: Path,
 ) -> None:
     project_dir = _seed_project(tmp_path)
-    version = project_service.save_working_copy_as_version(
-        project_dir, message="v1", reviewer="local"
+    version = project_service.save_working_copy_as_version(project_dir.name, message="v1", reviewer="local"
     )
 
     task = compiler_review_guide.render_guide_task(
@@ -205,8 +201,7 @@ def test_render_guide_task_carries_the_words_the_guide_must_be_written_in(
     tmp_path: Path,
 ) -> None:
     project_dir = _seed_project(tmp_path)
-    version = project_service.save_working_copy_as_version(
-        project_dir, message="v1", reviewer="local"
+    version = project_service.save_working_copy_as_version(project_dir.name, message="v1", reviewer="local"
     )
     words = Terms(nouns=SchemaLibrary(schemas=[NamedSchema(
         name="filing", title="Filing", description="One disclosure a firm sent in.",
@@ -265,8 +260,7 @@ def test_the_flag_comes_from_the_walk_the_validator_refuses_on() -> None:
 
 def test_the_author_holds_no_tool_but_submit_answer(tmp_path: Path) -> None:
     project_dir = _seed_project(tmp_path)
-    version = project_service.save_working_copy_as_version(
-        project_dir, message="v1", reviewer="local"
+    version = project_service.save_working_copy_as_version(project_dir.name, message="v1", reviewer="local"
     )
 
     engine = compiler_review_guide.build_review_guide_author(
@@ -289,8 +283,7 @@ def test_start_raises_before_session_for_an_unknown_version(
     before = len(store.list_sessions())
 
     with pytest.raises(FileNotFoundError):
-        generation.start_review_guide_generation(
-            project_dir, version_id="20990101-000000", model="sonnet"
+        generation.start_review_guide_generation(project_dir.name, version_id="20990101-000000", model="sonnet"
         )
 
     assert len(store.list_sessions()) == before
@@ -300,8 +293,7 @@ def test_start_refuses_a_version_that_already_has_a_guide(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
     project_dir = _seed_project(tmp_path)
-    version = project_service.save_working_copy_as_version(
-        project_dir, message="v1", reviewer="local"
+    version = project_service.save_working_copy_as_version(project_dir.name, message="v1", reviewer="local"
     )
     _save_guide(project_dir, version.version_id, ["load", "double"])
     store = SessionStore()
@@ -309,8 +301,7 @@ def test_start_refuses_a_version_that_already_has_a_guide(
     before = len(store.list_sessions())
 
     with pytest.raises(ValueError, match="already has a review guide"):
-        generation.start_review_guide_generation(
-            project_dir, version_id=version.version_id, model="sonnet"
+        generation.start_review_guide_generation(project_dir.name, version_id=version.version_id, model="sonnet"
         )
 
     assert len(store.list_sessions()) == before
@@ -321,16 +312,14 @@ def test_start_refuses_a_project_with_no_document(
 ) -> None:
     project_dir = _seed_project(tmp_path)
     Methodology.delete(project_dir.name)
-    version = project_service.save_working_copy_as_version(
-        project_dir, message="v1", reviewer="local"
+    version = project_service.save_working_copy_as_version(project_dir.name, message="v1", reviewer="local"
     )
     store = SessionStore()
     monkeypatch.setattr(compiler_review_guide, "open_session_store", lambda: store)
     before = len(store.list_sessions())
 
     with pytest.raises(ValueError, match="no document"):
-        generation.start_review_guide_generation(
-            project_dir, version_id=version.version_id, model="sonnet"
+        generation.start_review_guide_generation(project_dir.name, version_id=version.version_id, model="sonnet"
         )
 
     assert len(store.list_sessions()) == before
@@ -341,12 +330,10 @@ def test_start_refuses_a_project_with_no_document(
 
 def test_finish_stores_the_guide_on_the_version(tmp_path: Path) -> None:
     project_dir = _seed_project(tmp_path)
-    version = project_service.save_working_copy_as_version(
-        project_dir, message="v1", reviewer="local"
+    version = project_service.save_working_copy_as_version(project_dir.name, message="v1", reviewer="local"
     )
 
-    generation._finish_review_guide(
-        project_dir, version.version_id, _guide_of(["load", "double"])
+    generation._finish_review_guide(project_dir.name, version.version_id, _guide_of(["load", "double"])
     )
 
     stored = versioning.find_latest_review_guide(project_dir.name, version.version_id)
@@ -356,25 +343,22 @@ def test_finish_stores_the_guide_on_the_version(tmp_path: Path) -> None:
 
 def test_finish_with_no_guide_raises_and_writes_nothing(tmp_path: Path) -> None:
     project_dir = _seed_project(tmp_path)
-    version = project_service.save_working_copy_as_version(
-        project_dir, message="v1", reviewer="local"
+    version = project_service.save_working_copy_as_version(project_dir.name, message="v1", reviewer="local"
     )
 
     with pytest.raises(GenerationError, match="did not submit a guide"):
-        generation._finish_review_guide(project_dir, version.version_id, None)
+        generation._finish_review_guide(project_dir.name, version.version_id, None)
 
     assert versioning.find_latest_review_guide(project_dir.name, version.version_id) is None
 
 
 def test_finish_refuses_a_guide_that_misses_a_stage(tmp_path: Path) -> None:
     project_dir = _seed_project(tmp_path)
-    version = project_service.save_working_copy_as_version(
-        project_dir, message="v1", reviewer="local"
+    version = project_service.save_working_copy_as_version(project_dir.name, message="v1", reviewer="local"
     )
 
     with pytest.raises(ReviewGuideValidationError, match="double"):
-        generation._finish_review_guide(
-            project_dir, version.version_id, _guide_of(["load"])
+        generation._finish_review_guide(project_dir.name, version.version_id, _guide_of(["load"])
         )
 
     assert versioning.find_latest_review_guide(project_dir.name, version.version_id) is None
@@ -387,8 +371,7 @@ def test_post_generates_the_guide_and_stores_it_on_the_version(
     client: TestClient, tmp_path: Path, monkeypatch: Any
 ) -> None:
     project_dir = _seed_project(tmp_path)
-    version = project_service.save_working_copy_as_version(
-        project_dir, message="v1", reviewer="local"
+    version = project_service.save_working_copy_as_version(project_dir.name, message="v1", reviewer="local"
     )
     monkeypatch.setattr(compiler_review_guide, "default_turn_manager", lambda: TurnManager())
     monkeypatch.setattr(
@@ -409,8 +392,7 @@ def test_post_reports_a_turn_that_submitted_nothing(
     client: TestClient, tmp_path: Path, monkeypatch: Any
 ) -> None:
     project_dir = _seed_project(tmp_path)
-    version = project_service.save_working_copy_as_version(
-        project_dir, message="v1", reviewer="local"
+    version = project_service.save_working_copy_as_version(project_dir.name, message="v1", reviewer="local"
     )
     monkeypatch.setattr(compiler_review_guide, "default_turn_manager", lambda: TurnManager())
     monkeypatch.setattr(
@@ -444,8 +426,7 @@ def test_post_for_a_version_that_already_has_a_guide_is_400(
     client: TestClient, tmp_path: Path
 ) -> None:
     project_dir = _seed_project(tmp_path)
-    version = project_service.save_working_copy_as_version(
-        project_dir, message="v1", reviewer="local"
+    version = project_service.save_working_copy_as_version(project_dir.name, message="v1", reviewer="local"
     )
     _save_guide(project_dir, version.version_id, ["load", "double"])
 

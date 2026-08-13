@@ -11,7 +11,7 @@ from app.models.schema import TableSchema
 from app.models.stages.input_data import FileFormat
 from app.core import paths
 from app.evals.runner import run_eval
-from app.evals.store import load_eval_run, save_eval_config
+from app.evals.store import load_eval_run, resolve_eval_result_path, save_eval_config
 from app.services.versioning import WorkflowVersion
 from app.services import workspace
 from conftest import QUEUE_COLUMNS
@@ -83,7 +83,7 @@ def project(tmp_path, monkeypatch):
 
 def test_run_eval_scores_the_pathway(project):
     repo_root, demo, config = project
-    run = run_eval(demo, config)
+    run = run_eval(demo.name, config)
 
     assert run.status == "scored"
     assert run.workflow_version == "v1"
@@ -91,14 +91,14 @@ def test_run_eval_scores_the_pathway(project):
     assert run.metrics["rows_passed"] == 3
     assert run.metrics["accuracy"] == pytest.approx(0.75)
     # The run was written and round-trips through the store.
-    assert load_eval_run(demo, run.id).metrics["accuracy"] == pytest.approx(0.75)
+    assert load_eval_run(demo.name, run.id).metrics["accuracy"] == pytest.approx(0.75)
 
 
 def test_run_eval_writes_a_per_row_result_table(project):
     repo_root, demo, config = project
-    run = run_eval(demo, config)
+    run = run_eval(demo.name, config)
 
-    result = pd.read_parquet(demo / run.result_ref)
+    result = pd.read_parquet(resolve_eval_result_path(demo.name, run.result_ref))
     assert list(result["label__actual"]) == ["pos", "neg", "pos", "neg"]
     assert list(result["label__expected"]) == ["pos", "neg", "neg", "neg"]
     assert list(result["row_passed"]) == [True, True, False, True]
@@ -145,7 +145,7 @@ def test_run_eval_through_a_queue_stage_records_an_error_never_a_score(project):
                            {"name": "human_score", "type": "int", "nullable": True}])),
         expected_outputs=[ExpectedOutput(output_column="human_score", metric="exact")])
 
-    run = run_eval(demo, config, version_id="v-queue")
+    run = run_eval(demo.name, config, version_id="v-queue")
 
     assert run.settings.can_score_declaratively is True   # the pathway IS row-alignable
     assert run.settings.blocking_stages == []
@@ -158,14 +158,14 @@ def test_run_eval_raises_when_no_dataset(project):
     repo_root, demo, config = project
     config = config.model_copy(update={"table": None})
     with pytest.raises(EvalNotScorableError, match="no dataset"):
-        run_eval(demo, config)
+        run_eval(demo.name, config)
 
 
 def test_run_eval_raises_when_incompatible(project):
     repo_root, demo, config = project
     config = config.model_copy(update={"target_stage": "nonexistent"})
     with pytest.raises(EvalNotScorableError, match="incompatible"):
-        run_eval(demo, config)
+        run_eval(demo.name, config)
 
 
 def test_run_eval_scores_an_explicit_unpublished_version(project):
@@ -176,7 +176,7 @@ def test_run_eval_scores_an_explicit_unpublished_version(project):
         stages=[parse_stage(_load(repo_root)), parse_stage(_CLASSIFY)],
         published=False,
     ).save()
-    run = run_eval(demo, config, version_id="v2-draft")
+    run = run_eval(demo.name, config, version_id="v2-draft")
     assert run.status == "scored"
     assert run.workflow_version == "v2-draft"
 
@@ -189,14 +189,14 @@ def test_run_eval_none_version_id_resolves_to_newest_overall(project):
         stages=[parse_stage(_load(repo_root)), parse_stage(_CLASSIFY)],
         published=False,
     ).save()
-    run = run_eval(demo, config)
+    run = run_eval(demo.name, config)
     assert run.workflow_version == "v2-draft"
 
 
 def test_run_eval_raises_file_not_found_when_selected_version_does_not_exist(project):
     repo_root, demo, config = project
     with pytest.raises(FileNotFoundError):
-        run_eval(demo, config, version_id="nonexistent")
+        run_eval(demo.name, config, version_id="nonexistent")
 
 
 def test_run_eval_raises_when_no_versions_exist_at_all(tmp_path):
@@ -207,12 +207,12 @@ def test_run_eval_raises_when_no_versions_exist_at_all(tmp_path):
         override_stage="load", target_stage="classify",
         table=None, expected_outputs=[ExpectedOutput(output_column="label", metric="exact")])
     with pytest.raises(EvalNotScorableError, match="no workflow version"):
-        run_eval(demo, config)
+        run_eval(demo.name, config)
 
 
 def test_trigger_route_runs_and_redirects_to_the_run(project, monkeypatch):
     repo_root, demo, config = project
-    save_eval_config(demo, config)
+    save_eval_config(demo.name, config)
     workspace.set_projects_dir(repo_root)
 
     r = TestClient(app).post("/project/demo/evals/label_check/run", follow_redirects=False)
@@ -222,7 +222,7 @@ def test_trigger_route_runs_and_redirects_to_the_run(project, monkeypatch):
 
 def test_trigger_route_400s_when_not_runnable(project, monkeypatch):
     repo_root, demo, config = project
-    save_eval_config(demo, config.model_copy(update={"table": None}))
+    save_eval_config(demo.name, config.model_copy(update={"table": None}))
     workspace.set_projects_dir(repo_root)
 
     r = TestClient(app).post("/project/demo/evals/label_check/run", follow_redirects=False)
@@ -232,7 +232,7 @@ def test_trigger_route_400s_when_not_runnable(project, monkeypatch):
 
 def test_trigger_route_scores_an_explicitly_selected_unpublished_version(project, monkeypatch):
     repo_root, demo, config = project
-    save_eval_config(demo, config)
+    save_eval_config(demo.name, config)
     WorkflowVersion(
         id="demo/v2-draft", version_id="v2-draft", created_at="2026-07-11T00:00:00",
         message="agent draft", reviewer="agent",
@@ -246,12 +246,12 @@ def test_trigger_route_scores_an_explicitly_selected_unpublished_version(project
         data={"version_id": "v2-draft"}, follow_redirects=False)
     assert r.status_code == 303
     run_id = r.headers["location"].rsplit("/", 1)[-1]
-    assert load_eval_run(demo, run_id).workflow_version == "v2-draft"
+    assert load_eval_run(demo.name, run_id).workflow_version == "v2-draft"
 
 
 def test_trigger_route_404s_when_selected_version_does_not_exist(project, monkeypatch):
     repo_root, demo, config = project
-    save_eval_config(demo, config)
+    save_eval_config(demo.name, config)
     workspace.set_projects_dir(repo_root)
 
     r = TestClient(app).post(

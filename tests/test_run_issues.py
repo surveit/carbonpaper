@@ -226,7 +226,7 @@ def test_a_clean_run_has_no_index_at_all():
 
 def _render(manifest: dict[str, Any], stages: Any = None) -> str:
     return templates.env.get_template("_run_issues.html").render(
-        project=PROJECT, run_id=RUN,
+        project_id=PROJECT, run_id=RUN,
         issues=build_run_issues(manifest, stages),
         links=AppPanelLinks(PROJECT, RUN),
     )

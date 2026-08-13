@@ -36,7 +36,7 @@ _ALLOWED_WRITERS: dict[str, str] = {
 
     # Deleting a project's working-copy DIRECTORY, which still holds its frames
     # and uploads. Its documents are a separate act.
-    "app/web/routers/project.py": "removes a deleted project's directory",
+    "app/services/project.py": "removes a deleted project's directory",
 }
 
 # The calls that put BYTES on disk, plus the two that take them away. `mkdir` is

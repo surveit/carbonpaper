@@ -9,18 +9,18 @@ from __future__ import annotations
 from typing import Any, Callable
 
 from app.services import project as project_service, versioning
-from app.tools.shared import STAGE_TOOL_ERRORS, resolve_existing_project
+from app.tools.shared import STAGE_TOOL_ERRORS, validate_project_exists
 
 
 def save_working_copy_as_version(
     project_id: str, message: str, parent_version: str | None = None
 ) -> dict[str, Any]:
-    pdir = resolve_existing_project(project_id)
+    validate_project_exists(project_id)
     try:
         if parent_version is not None:
-            versioning.validate_version_exists(pdir, parent_version)
+            versioning.validate_version_exists(project_id, parent_version)
         version = project_service.save_working_copy_as_version(
-            pdir, message=message, reviewer="agent", parent_version=parent_version
+            project_id, message=message, reviewer="agent", parent_version=parent_version
         )
     except STAGE_TOOL_ERRORS as exc:
         return {"ok": False, "issues": [str(exc)]}

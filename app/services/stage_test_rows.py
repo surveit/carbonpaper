@@ -21,20 +21,20 @@ PROFILE_VALUES = 12
 
 
 def load_stage_row_sources(
-    project: str, reads: dict[StageId, TableSchema]
+    project_id: str, reads: dict[StageId, TableSchema]
 ) -> dict[StageId, InputRows]:
     """Raises unless every input has a finished run output holding every column it reads."""
     return {
-        input_id: _load_one_input(project, input_id, columns)
+        input_id: _load_one_input(project_id, input_id, columns)
         for input_id, columns in reads.items()
     }
 
 
-def _load_one_input(project: str, input_id: StageId, reads: TableSchema) -> InputRows:
-    run_id = _find_newest_run_that_wrote(project, input_id)
+def _load_one_input(project_id: str, input_id: StageId, reads: TableSchema) -> InputRows:
+    run_id = _find_newest_run_that_wrote(project_id, input_id)
     columns = [column.name for column in reads.columns]
     narrowed = _narrow_to_reads(
-        frame_to_table(read_stage_output(project, run_id, input_id)), columns,
+        frame_to_table(read_stage_output(project_id, run_id, input_id)), columns,
         input_id=input_id, run_id=run_id)
     if not narrowed.num_rows:
         raise NoRowsToSelectFrom(
@@ -63,9 +63,9 @@ def _narrow_to_reads(
     return table.select(columns)
 
 
-def _find_newest_run_that_wrote(project: str, stage_id: StageId) -> str:
+def _find_newest_run_that_wrote(project_id: str, stage_id: StageId) -> str:
     unreadable: list[str] = []
-    for entry in reversed(list_run_entries(project)):  # newest first
+    for entry in reversed(list_run_entries(project_id)):  # newest first
         if entry.manifest is None:
             # A run recorded in a shape this model rejects. An older run may still hold
             # the rows, so keep looking — but never report it as one that did not finish.

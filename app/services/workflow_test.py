@@ -1,5 +1,5 @@
 """Workflow-test seam: run a workflow — any subset of its stages, over any slice of
-its real source — as a REAL run: same `<project_dir>/runs/<id>/` dir, manifest, and
+its real source — as a REAL run: same `runs/<id>/` directory, manifest, and
 routes as a production run, but marked `RunManifest.is_test_run` and scoped
 read-only. It reaches the shared engine through app.runtime.executor (run_subset),
 never app.runtime.runner."""
@@ -18,20 +18,19 @@ from app.runtime.executor import run_subset, topological_sort
 from app.models.run_parameters import RunParameters
 from app.runtime.stages.input_data import read_input_data
 from app.services.versioning import list_versions, load_version, load_version_stages
-from app.services.workspace import resolve_project_dir, resolve_run_dir
+from app.services.workspace import resolve_run_dir
 
 
 def run_workflow_test(
-    project: str,
+    project_id: str,
     *,
     version_id: str | None = None,
     stage_ids: list[str] | None = None,
     limit: int | None = None,
     offset: int = 0,
 ) -> dict[str, Any]:
-    project_dir = resolve_project_dir(project)
-    version = _resolve_workflow_test_version(project_dir, version_id)
-    stages = load_version_stages(project_dir, version)
+    version = _resolve_workflow_test_version(project_id, version_id)
+    stages = load_version_stages(project_id, version)
     # Refused before the Workflow is built, so a sourceless workflow fails on the
     # missing source rather than on downstream graph validation.
     _require_a_source([stage.type for stage in stages])
@@ -41,13 +40,13 @@ def run_workflow_test(
     injected = _read_source_slices(workflow_stage, executing, limit=limit, offset=offset)
 
     run_id = mint_timestamp_id()
-    run_dir = resolve_run_dir(project, run_id)
+    run_dir = resolve_run_dir(project_id, run_id)
 
     executed_ids = [stage.id for stage in executing]
     limits, offsets = _source_row_windows(executing, limit, offset)
     ok, error = _run_frontier(
         workflow, injected, executed_ids, run_dir,
-        project=project_dir.name, run_id=run_id, workflow_version=version,
+        project_id=project_id, run_id=run_id, workflow_version=version,
         limits=limits, offsets=offsets)
 
     return {
@@ -59,15 +58,15 @@ def run_workflow_test(
     }
 
 
-def _resolve_workflow_test_version(project_dir: Path, version_id: str | None) -> str:
+def _resolve_workflow_test_version(project_id: str, version_id: str | None) -> str:
     """Any stored version, published or not — a workflow test evaluates a candidate."""
     if version_id is not None:
-        load_version(project_dir, version_id)  # loud FileNotFoundError if missing
+        load_version(project_id, version_id)  # loud FileNotFoundError if missing
         return version_id
-    versions = list_versions(project_dir)  # newest-first
+    versions = list_versions(project_id)  # newest-first
     if not versions:
         raise NoWorkflowTestVersionError(
-            f"project '{project_dir.name}' has no stored workflow version to workflow-test")
+            f"project '{project_id}' has no stored workflow version to workflow-test")
     return versions[0].version_id
 
 
@@ -77,7 +76,7 @@ def _run_frontier(
     stage_ids: list[str],
     run_dir: Path,
     *,
-    project: str,
+    project_id: str,
     run_id: str,
     workflow_version: str,
     limits: dict[str, int],
@@ -89,8 +88,8 @@ def _run_frontier(
             run_dir=run_dir,
             params=RunParameters(limits=limits, offsets=offsets,
                                  queue_auto_approve=True, is_test_run=True),
-            project=project, workflow_version=workflow_version,
-            identity=RunIdentity(project=project, run_id=run_id))
+            project_id=project_id, workflow_version=workflow_version,
+            identity=RunIdentity(project=project_id, run_id=run_id))
     except SubsetRunError as exc:
         return False, str(exc)
     return True, None

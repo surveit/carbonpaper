@@ -96,7 +96,7 @@ def test_one_frame_alone_still_fingerprints_as_a_sequence():
 
 def _record(frame: pd.DataFrame, inputs: list[pd.DataFrame] | None = None) -> None:
     StageCache().record_frame(
-        project=STAGE_KEY[0], stage_id=STAGE_KEY[1], stage_fingerprint=STAGE_KEY[2],
+        project_id=STAGE_KEY[0], stage_id=STAGE_KEY[1], stage_fingerprint=STAGE_KEY[2],
         input_tables=_as_tables(INPUTS if inputs is None else inputs),
         table=frame_to_table(frame),
     )

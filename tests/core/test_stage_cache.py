@@ -72,7 +72,7 @@ def test_old_shape_entry_fails_loudly_on_load():
 def test_stage_cache_record_then_get_roundtrips():
     cache = StageCache()
     cache.record(
-        project="proj", stage_id="review", stage_fingerprint="sf1", input_fingerprint="if1",
+        project_id="proj", stage_id="review", stage_fingerprint="sf1", input_fingerprint="if1",
         input_row={"id": "r1", "score": 0.4},
         output_row={"id": "r1", "score": 0.4, "final_score": 0.4},
     )
@@ -85,7 +85,7 @@ def test_stage_cache_record_then_get_roundtrips():
 def test_stage_cache_record_stores_and_returns_a_none_output_row():
     cache = StageCache()
     cache.record(
-        project="proj", stage_id="review", stage_fingerprint="sf1", input_fingerprint="ift",
+        project_id="proj", stage_id="review", stage_fingerprint="sf1", input_fingerprint="ift",
         input_row={"id": "r1", "score": 0.4}, output_row=None,
     )
     got = cache.get("proj", "review", "sf1", "ift")
@@ -96,7 +96,7 @@ def test_stage_cache_record_stores_and_returns_a_none_output_row():
 def test_record_converts_numpy_scalars_to_json_native_numbers():
     cache = StageCache()
     cache.record(
-        project="proj", stage_id="review", stage_fingerprint="sf1", input_fingerprint="ifn",
+        project_id="proj", stage_id="review", stage_fingerprint="sf1", input_fingerprint="ifn",
         input_row={"id": "r1", "score": np.int64(3)},
         output_row={"id": "r1", "final_score": np.float64(4.5)},
     )
@@ -112,7 +112,7 @@ def test_record_stores_under_the_passed_fingerprint_not_a_recomputed_one():
     pinned = "pinned-fingerprint"
     assert pinned != compute_row_fingerprint(row)
     cache.record(
-        project="proj", stage_id="review", stage_fingerprint="sf1", input_fingerprint=pinned,
+        project_id="proj", stage_id="review", stage_fingerprint="sf1", input_fingerprint=pinned,
         input_row=row, output_row={"id": "r1", "final_score": 0.4},
     )
     assert cache.get("proj", "review", "sf1", pinned) is not None
@@ -127,11 +127,11 @@ def test_stage_cache_get_missing_returns_none():
 def test_find_entries_scopes_by_stage_fingerprint_prefix():
     cache = StageCache()
     output = {"id": "r1", "score": 0.4, "final_score": 0.4}
-    cache.record(project="proj", stage_id="review", stage_fingerprint="sf1",
+    cache.record(project_id="proj", stage_id="review", stage_fingerprint="sf1",
                  input_fingerprint="if1", input_row={"id": "r1"}, output_row=output)
-    cache.record(project="proj", stage_id="review", stage_fingerprint="sf1",
+    cache.record(project_id="proj", stage_id="review", stage_fingerprint="sf1",
                  input_fingerprint="if2", input_row={"id": "r1"}, output_row=output)
-    cache.record(project="proj", stage_id="review", stage_fingerprint="sf-other",
+    cache.record(project_id="proj", stage_id="review", stage_fingerprint="sf-other",
                  input_fingerprint="if3", input_row={"id": "r1"}, output_row=output)
     found = cache.find_entries("proj", "review", "sf1")
     assert {e.input_fingerprint for e in found} == {"if1", "if2"}
@@ -141,10 +141,10 @@ def test_find_entries_scopes_by_stage_fingerprint_prefix():
 
 def test_find_recorded_rows_keys_every_output_row_by_its_input_fingerprint():
     cache = StageCache()
-    cache.record(project="proj", stage_id="review", stage_fingerprint="sf1",
+    cache.record(project_id="proj", stage_id="review", stage_fingerprint="sf1",
                  input_fingerprint="if1", input_row={"id": "r1"},
                  output_row={"id": "r1", "final_score": 0.4})
-    cache.record(project="proj", stage_id="review", stage_fingerprint="sf1",
+    cache.record(project_id="proj", stage_id="review", stage_fingerprint="sf1",
                  input_fingerprint="if2", input_row={"id": "r2"},
                  output_row={"id": "r2", "final_score": 0.9})
     assert cache.find_recorded_rows("proj", "review", "sf1") == {
@@ -155,24 +155,24 @@ def test_find_recorded_rows_keys_every_output_row_by_its_input_fingerprint():
 
 def test_find_recorded_rows_skips_an_entry_that_recorded_no_output_row():
     cache = StageCache()
-    cache.record(project="proj", stage_id="review", stage_fingerprint="sf1",
+    cache.record(project_id="proj", stage_id="review", stage_fingerprint="sf1",
                  input_fingerprint="if1", input_row={"id": "r1"}, output_row=None)
     assert cache.find_recorded_rows("proj", "review", "sf1") == {}
 
 
 def test_find_recorded_rows_is_scoped_to_one_stage_definition():
     cache = StageCache()
-    cache.record(project="proj", stage_id="review", stage_fingerprint="sf1",
+    cache.record(project_id="proj", stage_id="review", stage_fingerprint="sf1",
                  input_fingerprint="if1", input_row={"id": "r1"}, output_row={"v": 1})
-    cache.record(project="proj", stage_id="review", stage_fingerprint="sf-other",
+    cache.record(project_id="proj", stage_id="review", stage_fingerprint="sf-other",
                  input_fingerprint="if2", input_row={"id": "r2"}, output_row={"v": 2})
-    cache.record(project="other-proj", stage_id="review", stage_fingerprint="sf1",
+    cache.record(project_id="other-proj", stage_id="review", stage_fingerprint="sf1",
                  input_fingerprint="if3", input_row={"id": "r3"}, output_row={"v": 3})
     assert cache.find_recorded_rows("proj", "review", "sf1") == {"if1": {"v": 1}}
 
 
 def test_find_recorded_rows_is_available_on_the_read_only_view():
-    StageCache().record(project="proj", stage_id="review", stage_fingerprint="sf1",
+    StageCache().record(project_id="proj", stage_id="review", stage_fingerprint="sf1",
                         input_fingerprint="if1", input_row={"id": "r1"},
                         output_row={"v": 1})
     assert ReadOnlyStageCache().find_recorded_rows("proj", "review", "sf1") == {

@@ -101,7 +101,7 @@ class QueuePage:
 
 
 def build_queue_page(
-    project: str, run_id: str, stage_def: WorkflowStage, queue: QueueConfig,
+    project_id: str, run_id: str, stage_def: WorkflowStage, queue: QueueConfig,
     snapshot: pd.DataFrame | None, fingerprints: QueueFingerprints | None,
     drift: str | None,
 ) -> QueuePage:
@@ -110,10 +110,10 @@ def build_queue_page(
     fields = [] if drift else build_reviewed_fields(stage_def, queue)
     items: list[ReviewItem] = []
     if snapshot is not None and fingerprints is not None and drift is None:
-        entries = _load_decided_entries(project, stage_def.id, fingerprints.stage_fingerprint)
+        entries = _load_decided_entries(project_id, stage_def.id, fingerprints.stage_fingerprint)
         items = _build_review_items(
             snapshot, fingerprints, entries, queue, fields,
-            build_lineage_urls(project, run_id, lineage, fingerprints),
+            build_lineage_urls(project_id, run_id, lineage, fingerprints),
         )
     reviewed_count = sum(1 for item in items if item.prior_decision is not None)
     return QueuePage(
@@ -211,14 +211,14 @@ def resolve_lineage(
 
 
 def build_lineage_urls(
-    project: str, run_id: str, lineage: Lineage, fingerprints: QueueFingerprints
+    project_id: str, run_id: str, lineage: Lineage, fingerprints: QueueFingerprints
 ) -> list[str | None]:
     # POSITIONALLY aligned to `fingerprints.input_fingerprints`; None where no link holds.
     ordinals = fingerprints.row_ordinals
     if lineage.upstream_stage_id is None or ordinals is None:
         return [None] * len(fingerprints.input_fingerprints)
     return [
-        build_row_trace_url(project, run_id, lineage.upstream_stage_id, o) for o in ordinals
+        build_row_trace_url(project_id, run_id, lineage.upstream_stage_id, o) for o in ordinals
     ]
 
 
@@ -441,9 +441,9 @@ def _as_control_value(control: str, value: object) -> object:
 
 
 def _load_decided_entries(
-    project: str, stage_id: str, stage_fingerprint: str
+    project_id: str, stage_id: str, stage_fingerprint: str
 ) -> dict[str, StageCacheEntry]:
-    entries = StageCacheEntry.read_only().find_entries(project, stage_id, stage_fingerprint)
+    entries = StageCacheEntry.read_only().find_entries(project_id, stage_id, stage_fingerprint)
     return {entry.input_fingerprint: entry for entry in entries}
 
 

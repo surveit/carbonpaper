@@ -448,7 +448,7 @@ def test_mcp_save_version_snapshots_the_working_copy_unpublished(tmp_path, monke
     saved = server.save_version(project_id=project_id, message="first cut")
     assert saved["ok"] is True and saved["issues"] == []
 
-    [version] = versioning.list_versions(pdir)
+    [version] = versioning.list_versions(pdir.name)
     assert saved["version_id"] == version.version_id
     assert version.message == "first cut"
     assert version.reviewer == "agent"
@@ -469,7 +469,7 @@ def test_mcp_save_version_omitting_the_parent_records_none(tmp_path, monkeypatch
     second = server.save_version(project_id=project_id, message="second cut")
 
     assert second["ok"] is True
-    assert versioning.load_version(pdir, second["version_id"]).parent_version is None
+    assert versioning.load_version(pdir.name, second["version_id"]).parent_version is None
 
 
 def test_mcp_save_version_records_the_caller_supplied_parent(tmp_path, monkeypatch):
@@ -486,7 +486,7 @@ def test_mcp_save_version_records_the_caller_supplied_parent(tmp_path, monkeypat
         project_id=project_id, message="second cut", parent_version=first["version_id"])
 
     assert second["version_id"] != first["version_id"]
-    saved = versioning.load_version(pdir, second["version_id"])
+    saved = versioning.load_version(pdir.name, second["version_id"])
     assert saved.parent_version == first["version_id"]
 
 
@@ -500,7 +500,7 @@ def test_mcp_save_version_refuses_a_parent_that_does_not_exist(tmp_path, monkeyp
     _store_workflow(pdir)
 
     server.save_version(project_id=project_id, message="first cut")
-    before = [v.version_id for v in versioning.list_versions(pdir)]
+    before = [v.version_id for v in versioning.list_versions(pdir.name)]
 
     refused = server.save_version(
         project_id=project_id, message="second cut", parent_version="20200101T000000")
@@ -508,7 +508,7 @@ def test_mcp_save_version_refuses_a_parent_that_does_not_exist(tmp_path, monkeyp
     assert refused["ok"] is False
     assert "20200101T000000" in " ".join(refused["issues"])
     assert "version_id" not in refused
-    assert [v.version_id for v in versioning.list_versions(pdir)] == before
+    assert [v.version_id for v in versioning.list_versions(pdir.name)] == before
 
 
 def test_mcp_save_version_refuses_an_unloadable_working_copy(tmp_path, monkeypatch):
@@ -524,7 +524,7 @@ def test_mcp_save_version_refuses_an_unloadable_working_copy(tmp_path, monkeypat
     refused = server.save_version(project_id=project_id, message="doomed")
     assert refused["ok"] is False and refused["issues"]
     assert "version_id" not in refused
-    assert versioning.list_versions(pdir) == []
+    assert versioning.list_versions(pdir.name) == []
 
 
 def test_mcp_save_version_refuses_to_invent_a_project(tmp_path, monkeypatch):

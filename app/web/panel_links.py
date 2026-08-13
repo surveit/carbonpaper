@@ -19,8 +19,8 @@ CONTRIBUTORS_NAMED = 3
 
 
 class AppPanelLinks:
-    def __init__(self, project: str, run_id: str) -> None:
-        self._base = f"/project/{_segment(project)}/runs/{_segment(run_id)}"
+    def __init__(self, project_id: str, run_id: str) -> None:
+        self._base = f"/project/{_segment(project_id)}/runs/{_segment(run_id)}"
 
     def stage_anchor(self, stage_id: str) -> str:
         return f"{self._base}#{stage_id}"

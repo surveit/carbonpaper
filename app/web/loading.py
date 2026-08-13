@@ -32,45 +32,35 @@ from app.services.loader import (
     read_stage_specs,
 )
 from app.services.versioning import list_versions, load_version_stages
-from app.services.project import read_project_name
+from app.services.project import find_workspace_project_ids, has_document, read_project_name
 from app.services.terms import count_nouns
-from app.services.workspace import resolve_project_dir
-from app.web.config import projects_dir
+from app.services.workspace import resolve_run_dir
 from app.web.project_cards import ProjectCard, tally_runs
-from app.services.methodology import exists as methodology_exists
 
 
 # ─── Projects & stages ──────────────────────────────────────────────────
 
 def list_projects() -> list[ProjectCard]:
-    if not projects_dir().exists():
-        return []
-    cards: list[ProjectCard] = []
-    for p in sorted(projects_dir().iterdir()):
-        if not p.is_dir():
-            continue
-        card = _build_project_card(p)
-        if card is not None:
-            cards.append(card)
-    return cards
+    cards = [_build_project_card(pid) for pid in find_workspace_project_ids()]
+    return [card for card in cards if card is not None]
 
 
-def _build_project_card(p: Path) -> ProjectCard | None:
-    n_stages = len(read_stage_specs(p.name))
+def _build_project_card(project_id: str) -> ProjectCard | None:
+    n_stages = len(read_stage_specs(project_id))
     has_workflow = n_stages > 0
-    n_schemas = count_nouns(p.name)
+    n_schemas = count_nouns(project_id)
     has_schemas = n_schemas > 0
-    runs = tally_runs(p.name)
-    has_document = methodology_exists(p.name) or (p / "project.json").is_file()
-    if not (has_workflow or has_schemas or has_document):
+    runs = tally_runs(project_id)
+    carries_document = has_document(project_id)
+    if not (has_workflow or has_schemas or carries_document):
         return None
     return ProjectCard(
-        id=p.name,
-        label=read_project_name(p.name),
-        has_document=has_document,
+        id=project_id,
+        label=read_project_name(project_id),
+        has_document=carries_document,
         has_workflow=has_workflow,
         has_schemas=has_schemas,
-        is_ready=bool(list_versions(p)),
+        is_ready=bool(list_versions(project_id)),
         n_stages=n_stages,
         n_schemas=n_schemas,
         n_runs=runs.real,
@@ -89,10 +79,10 @@ class StageListing:
     issues: list[StageEntry]
 
 
-def load_stages(project: str) -> StageListing:
-    if not has_working_copy(project):
-        raise HTTPException(status_code=404, detail=f"No workflow for {project}")
-    entries = load_stage_entries(project)
+def load_stages(project_id: str) -> StageListing:
+    if not has_working_copy(project_id):
+        raise HTTPException(status_code=404, detail=f"No workflow for {project_id}")
+    entries = load_stage_entries(project_id)
     issues = [e for e in entries if e.issues]
     if issues:
         # One invalid stage breaks the whole workflow — its inputs no longer
@@ -109,13 +99,13 @@ def load_stages(project: str) -> StageListing:
     )
 
 
-def load_stages_or_empty(project: str) -> StageListing:
-    if not has_working_copy(project):
+def load_stages_or_empty(project_id: str) -> StageListing:
+    if not has_working_copy(project_id):
         return StageListing(
             entries=[],
             workflow=WorkflowNotFormed(issues=["the project has no stages yet"]),
             issues=[])
-    return load_stages(project)
+    return load_stages(project_id)
 
 
 def find_workflow_stage(
@@ -127,12 +117,12 @@ def find_workflow_stage(
     return workflow.index_workflow_stages_by_id().get(stage_id)
 
 
-def list_file_inputs(project: str, version_id: str | None = None) -> list[dict[str, Any]]:
+def list_file_inputs(project_id: str, version_id: str | None = None) -> list[dict[str, Any]]:
     try:
-        version_id = resolve_version(project, version_id)
+        version_id = resolve_version(project_id, version_id)
     except NoVersionToRunError:
         return []
-    stages = load_version_stages(resolve_project_dir(project), version_id)
+    stages = load_version_stages(project_id, version_id)
     return [
         {"stage_id": s.id,
          "path": str((s.connector.params or {}).get("path") or "")}
@@ -143,13 +133,9 @@ def list_file_inputs(project: str, version_id: str | None = None) -> list[dict[s
 
 # ─── Runs & manifests ────────────────────────────────────────────────────────
 
-def runs_dir(project: str) -> Path:
-    return projects_dir() / project / "runs"
-
-
-def load_manifest(project: str, run_id: str) -> dict[str, Any]:
+def load_manifest(project_id: str, run_id: str) -> dict[str, Any]:
     try:
-        return read_run_manifest(project, run_id).to_dict()
+        return read_run_manifest(project_id, run_id).to_dict()
     except RunNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Run not found") from exc
 
@@ -186,8 +172,8 @@ def csv_download_body(df: pd.DataFrame) -> bytes:
     return (_UTF8_BOM + render_frame_as_csv_text(df)).encode("utf-8")
 
 
-def manifest_stage(project: str, run_id: str, stage_id: str) -> dict[str, Any]:
-    manifest = load_manifest(project, run_id)
+def manifest_stage(project_id: str, run_id: str, stage_id: str) -> dict[str, Any]:
+    manifest = load_manifest(project_id, run_id)
     stage_record = next(
         (s for s in manifest.get("stage_records", []) if s.get("stage_id") == stage_id),
         None,
@@ -307,8 +293,8 @@ def load_output_preview(run_dir: Path, rel_path: str | None) -> dict[str, Any] |
 
 # ─── Queue snapshots ──────────────────────────────────────────────────────────
 
-def queue_snapshot(project: str, run_id: str, stage_id: str) -> pd.DataFrame | None:
-    run_dir = runs_dir(project) / run_id
+def queue_snapshot(project_id: str, run_id: str, stage_id: str) -> pd.DataFrame | None:
+    run_dir = resolve_run_dir(project_id, run_id)
     for ext in (".parquet", ".csv"):
         p = run_dir / "queue" / f"{stage_id}{ext}"
         if p.exists():
@@ -316,14 +302,14 @@ def queue_snapshot(project: str, run_id: str, stage_id: str) -> pd.DataFrame | N
     return None
 
 
-def load_queue_fingerprints(project: str, run_id: str, stage_id: str) -> QueueFingerprints | None:
+def load_queue_fingerprints(project_id: str, run_id: str, stage_id: str) -> QueueFingerprints | None:
     """None when no run has halted at this stage."""
     fingerprints = QueueFingerprints.load_or_none(
-        QueueFingerprints.compose_id(project, run_id, stage_id))
+        QueueFingerprints.compose_id(project_id, run_id, stage_id))
     if fingerprints is None:
         return None
     _validate_fingerprint_alignment(
-        fingerprints, queue_snapshot(project, run_id, stage_id), stage_id, run_id)
+        fingerprints, queue_snapshot(project_id, run_id, stage_id), stage_id, run_id)
     return fingerprints
 
 
