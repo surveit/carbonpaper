@@ -15,6 +15,7 @@ from app.models.stages.stage_base import AbstractStage, StageInput, StageType
 from app.models.stages.shared import COLUMN_ISSUE, resolve_input_columns
 from app.models.stages.stage_type_spec import StageTypeSpec
 from app.models.stages.signature import ExtendsSignature
+from app.models.stages.warnings import CompilerWarning, warn
 
 if TYPE_CHECKING:
     from app.models.workflow_stage import WorkflowStageInput
@@ -139,9 +140,16 @@ class LLMTransformStage(AbstractStage):
     # prompt over ONE frame's rows, so a second input names no rows to map.
     inputs: list[StageInput] = Field(default_factory=list, min_length=1, max_length=1)
     signature: ExtendsSignature
+    # On, against the default: a re-run of this stage re-samples the model, so
+    # replaying the recorded answer is what makes the row reproducible — and it
+    # is the one stage type whose recompute is billed per row.
+    cache: bool = True
 
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
         return {"llm": self.llm}
+
+    def find_handle_compiler_warnings(self) -> list[CompilerWarning]:
+        return find_llm_warnings(self)
 
     def find_config_column_issues(
         self, inputs: Sequence["WorkflowStageInput"]
@@ -151,6 +159,13 @@ class LLMTransformStage(AbstractStage):
     def find_signature_config_issues(self) -> list[str]:
         return find_llm_signature_issues(self)
 
+
+def find_llm_warnings(stage: "LLMTransformStage") -> list[CompilerWarning]:
+    if stage.cache:
+        return []
+    return [warn(stage, "nondeterministic",
+                 "caching is off, so every run re-samples the model and nothing an "
+                 "earlier run answered pins what this stage produces")]
 
 
 def find_llm_signature_issues(stage: "LLMTransformStage") -> list[str]:

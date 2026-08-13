@@ -109,7 +109,7 @@ TOOL_SCHEMAS: dict[str, ToolInputSchema] = {
             "A JSON object (encoded as a string) of ONLY the fields to change — a "
             "JSON Merge Patch. Fields you omit are preserved verbatim; a null value "
             "deletes a field. Nested objects merge (they are not replaced whole). "
-            'Examples: {"cache": false} sets cache; {"llm": {"model": "claude-opus-5"}} '
+            'Examples: {"cache": true} turns caching on; {"llm": {"model": "claude-opus-5"}} '
             "changes only llm.model. You cannot change a stage's id this way.",
         ],
     },

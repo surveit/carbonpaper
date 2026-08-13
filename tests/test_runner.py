@@ -737,10 +737,10 @@ def test_the_documented_cli_runs_a_project_with_nothing_configured(
 _FRAME_STAGE_CODE = "def transform(df):\n    return df.assign(double=df['val'] * 2)\n"
 
 
-def _add_frame_stage(root):
+def _add_frame_stage(root, *, cache: bool = False):
     add_stage(root, {
         "id": "totals", "description": "Totals", "type": "python_frame_function",
-        "inputs": [{"id": "load"}],
+        "inputs": [{"id": "load"}], "cache": cache,
         "signature": {
             "form": "replaces",
             "reads": [{"input": "load", "columns": _NAME_VAL_SCHEMA["columns"]}],
@@ -758,7 +758,8 @@ def test_a_frame_stage_succeeds_with_no_frame_store_configured(tmp_path, monkeyp
     from app.core import frames as frames_module
 
     _make_project(tmp_path)
-    _add_frame_stage(tmp_path)
+    # Only a stage that asked to cache can be told the store is missing.
+    _add_frame_stage(tmp_path, cache=True)
     _seed_version(tmp_path)
     monkeypatch.setattr(frames_module, "_frame_store", None)
 

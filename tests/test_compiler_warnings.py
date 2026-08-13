@@ -49,6 +49,42 @@ def _stage(stage_id="s", type_="python_row_function", handle="function", **kw):
     return m.parse_stage(spec)
 
 
+# The two types that cache by default, and so are the only two whose author can
+# turn caching OFF.
+def _llm_stage(stage_id="ask", **kw):
+    return m.parse_stage({
+        "id": stage_id, "description": "Ask the model", "type": "llm_transform",
+        "inputs": [{"id": "up"}],
+        "signature": {
+            "form": "extends",
+            "reads": reads_of("up", _SCHEMA["columns"]),
+            "adds": [{"name": "answer", "type": "str", "nullable": True}],
+        },
+        "llm": {"prompt_template": "classify {id}"},
+        **kw,
+    })
+
+
+def _queue_stage(stage_id="rev", **kw):
+    return m.parse_stage({
+        "id": stage_id, "description": "A human checks each row", "type": "human_review_queue",
+        "inputs": [{"id": "up"}],
+        "signature": {
+            "form": "extends",
+            "reads": reads_of("up", _SCHEMA["columns"]),
+            "adds": [
+                {"name": "reviewed_id", "type": "str", "nullable": True},
+                {"name": "verdict", "type": "str", "nullable": True},
+                {"name": "reviewer", "type": "str", "nullable": True},
+                {"name": "reviewed_at", "type": "str", "nullable": True},
+            ],
+        },
+        "queue": {"reviewed_columns": {"id": "reviewed_id"}, "verdict_column": "verdict",
+                  "reviewer_column": "reviewer", "reviewed_at_column": "reviewed_at"},
+        **kw,
+    })
+
+
 def _kinds(stage):
     return [w.kind for w in find_stage_compiler_warnings(stage)]
 
@@ -128,11 +164,26 @@ def test_a_filter_with_no_examples_is_unexemplified():
     assert [w.kind for w in warnings] == ["unexemplified"]
 
 
-def test_cache_off_is_a_note_not_a_blocker():
-    warnings = find_stage_compiler_warnings(
-        _stage(cache=False, tests=[_PASSING_EXAMPLE]))
+def test_an_llm_stage_with_cache_off_is_a_note_not_a_blocker():
+    warnings = find_stage_compiler_warnings(_llm_stage(cache=False))
     assert [w.kind for w in warnings] == ["nondeterministic"]
     assert all(w.severity == "warning" for w in warnings)
+
+
+def test_a_review_stage_with_cache_off_is_a_note_not_a_blocker():
+    warnings = find_stage_compiler_warnings(_queue_stage(cache=False))
+    assert [w.kind for w in warnings] == ["nondeterministic"]
+    assert all(w.severity == "warning" for w in warnings)
+
+
+def test_the_two_caching_types_warn_about_nothing_when_left_alone():
+    assert _kinds(_llm_stage()) == []
+    assert _kinds(_queue_stage()) == []
+
+
+def test_a_code_stage_not_caching_is_the_default_and_says_nothing():
+    # Cache off is not a choice here, so it is not one to tell a reviewer about.
+    assert _kinds(_stage(tests=[_PASSING_EXAMPLE])) == []
 
 
 # ── the workflow-level gate ──────────────────────────────────────────────────
@@ -142,7 +193,7 @@ def test_every_compiler_note_is_a_warning():
     report = find_workflow_compiler_warnings([
         _stage(stage_id="bare"),
         _stage(stage_id="silent", summary=None),
-        _stage(stage_id="note", cache=False, tests=[_PASSING_EXAMPLE]),
+        _llm_stage(stage_id="note", cache=False),
     ])
     assert report.warnings
     assert all(w.severity == "warning" for w in report.warnings)
@@ -158,7 +209,7 @@ def test_a_workflow_with_one_undescribed_stage_still_warns_about_it():
 
 def test_the_least_reviewable_kinds_sort_first():
     report = find_workflow_compiler_warnings([
-        _stage(stage_id="note", cache=False, tests=[_PASSING_EXAMPLE]),
+        _llm_stage(stage_id="note", cache=False),
         _stage(stage_id="bare"),
     ])
     assert [w.kind for w in report.warnings] == ["unexemplified", "nondeterministic"]

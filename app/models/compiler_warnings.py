@@ -38,7 +38,7 @@ def find_stage_compiler_warnings(
     # about the examples too would be noise — fix the description first.
     if not any(w.kind == "undescribed" for w in warnings):
         warnings += _find_unchecked_description_warnings(stage, failing_examples)
-    return warnings + _find_deliberate_choice_warnings(stage)
+    return warnings
 
 
 def _find_unchecked_description_warnings(
@@ -66,12 +66,3 @@ def _find_failing_example_warning(
                  f"{failing_examples} of its {total} examples "
                  f"{'mismatches' if failing_examples == 1 else 'mismatch'} what an "
                  f"independent AI agent expected. Further review recommended")]
-
-
-def _find_deliberate_choice_warnings(stage: Stage) -> list[CompilerWarning]:
-    warnings = []
-    if not stage.cache:
-        warnings.append(warn(stage, "nondeterministic",
-                             "declared intentionally non-deterministic (cache off), so it "
-                             "re-rolls every run and its examples cannot pin its output"))
-    return warnings
