@@ -25,8 +25,7 @@ from app.services.project import Project
 class EditingContext(BaseModel):
     project_id: str | None = None
     # The address this session's reader is on, written per turn off their own request.
-    # Empty only where nobody is reading — the prompt dump builds the tools to print them.
-    base_url: str = ""
+    base_url: str
 
 
 def make_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:

@@ -9,5 +9,5 @@ from app.core.agent.sdk_engine import ClaudeAgentSdkEngine
 
 
 def test_build_editing_engine_returns_correct_type() -> None:
-    engine = build_engine("editing", {"project_id": "congresswatch"})
+    engine = build_engine("editing", {"project_id": "congresswatch", "base_url": "http://reader.test/"})
     assert isinstance(engine, ClaudeAgentSdkEngine)

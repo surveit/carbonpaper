@@ -40,7 +40,7 @@ def test_dump_contains_every_shipped_prompt(dump: str) -> None:
 def test_dump_offers_the_editing_agent_every_tool_it_binds(dump: str) -> None:
     from app.tools.editing import EditingContext, make_editing_tools
 
-    bound = make_editing_tools(EditingContext(project_id="p"))
+    bound = make_editing_tools(EditingContext(project_id="p", base_url="http://reader.test/"))
     missing = [spec.name for spec in bound if f"#### `{spec.name}`" not in dump]
     assert not missing, f"editing tools absent from the dump: {missing}"
 

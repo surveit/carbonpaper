@@ -81,9 +81,6 @@ Two different things you can ask a human for, with different bars:
 
 
 def render_link_map(base_url: str) -> str:
-    """A surface with no reader renders nothing, rather than a link to a host it guessed."""
-    if not base_url:
-        return ""
     base = base_url.rstrip("/")
     return "\n".join([
         "# Links",
