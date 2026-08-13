@@ -168,6 +168,7 @@ def test_the_run_beat_orients_the_link_without_reciting_the_data() -> None:
     beat = _flat(_beat(2))
 
     assert "orientation" in beat
+    assert "paused for a human to review the contradictions" in beat
     assert "clicking a stage opens the rows it produced" in beat
     assert "the flagged filings wait at the review step" in beat
     assert "no row counts, no per-stage account" in beat

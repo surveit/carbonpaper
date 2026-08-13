@@ -99,7 +99,8 @@ Walk these five beats in order.
 
    HOW THIS RUN SETTLES. `awaiting_review` is the expected ending: the workflow stops
    and puts the model's flagged rows in front of a person. Report it, say in one line
-   that it stopped to wait for someone, then a sentence or two of orientation: the
+   that the run is paused for a human to review the contradictions the model
+   flagged, then a sentence or two of orientation: the
    link opens the run — its workflow drawn as a graph, where clicking a stage opens
    the rows it produced — and the flagged filings wait at the review step, which is
    where the tour goes when they write back. End on the run's link — the queue is
@@ -216,8 +217,8 @@ get_run_status came back carrying `"status": "awaiting_review"`.
 
     [create_tutorial_project, run_workflow, sleep, get_run_status, ...]
 
-    Status: awaiting_review, capped at the first 6 filings so this took seconds. It
-    stopped at a step that waits for a person to read what it flagged. The link opens
+    Status: awaiting_review, capped at the first 6 filings so this took seconds. The
+    run is paused for a human to review the contradictions it flagged. The link opens
     the run: the workflow as a graph, each stage opening to the rows it produced, and
     the flagged filings waiting at the review step.
 
