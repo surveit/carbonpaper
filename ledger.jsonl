@@ -305,3 +305,4 @@
 {"run_id":"31702989963","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31702989963","created":"2026-08-13T13:04:49Z","branch":"fix/tool-model-args","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"31703014073","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31703014073","created":"2026-08-13T13:05:16Z","branch":"feat/demo-notice","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"31703299043","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31703299043","created":"2026-08-13T13:07:23Z","branch":"cmdk-palette","event":"pull_request","contracts_kept":14,"findings":[]}
+{"run_id":"31703288795","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31703288795","created":"2026-08-13T13:07:25Z","branch":"feat/grounded-stage-tests","event":"pull_request","contracts_kept":14,"findings":[]}
