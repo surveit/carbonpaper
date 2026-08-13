@@ -2,15 +2,13 @@
 each one — the only column that says whether a file can go."""
 from __future__ import annotations
 
-import json
 from collections import defaultdict
-from pathlib import Path
 
 from pydantic import BaseModel
 
-from app.models.run_manifest import find_manifest_backed_run_dirs
+from app.core.persistence import JsonDict
+from app.runtime.manifest import list_run_entries
 from app.services import uploads
-from app.services.workspace import resolve_project_dir
 from app.web.file_sizes import describe_bytes
 
 
@@ -57,17 +55,15 @@ def count_runs_by_file(project_id: str) -> dict[str, list[str]]:
     runs = defaultdict(list)
     # Off each run's own manifest, because that is where what a run ACTUALLY read is
     # recorded — the version it pinned may since have been edited to name another file.
-    for run_dir in find_manifest_backed_run_dirs(resolve_project_dir(project_id) / "runs"):
-        for sha256 in _read_input_hashes(run_dir):
-            runs[sha256].append(run_dir.name)
+    for entry in list_run_entries(project_id):
+        for sha256 in _read_input_hashes(entry.raw):
+            runs[sha256].append(entry.run_id)
     return runs
 
 
-def _read_input_hashes(run_dir: Path) -> list[str]:
-    try:
-        manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        # A torn or unreadable manifest costs this run's rows a mention, not the page.
+def _read_input_hashes(manifest: JsonDict | None) -> list[str]:
+    if manifest is None:
+        # An unreadable manifest costs this run's rows a mention, not the page.
         return []
     bindings = manifest.get("input_bindings") or {}
     return [binding["sha256"] for binding in bindings.values()
