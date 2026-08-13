@@ -229,7 +229,7 @@ def test_halted_queue_stages_item_counts_reach_the_run_manifest(tmp_path):
     }
 
     # The same counts survive the round trip to disk — the run page reads them
-    # back from manifest.json, not from the in-memory object.
+    # back from the stored manifest, not from the in-memory object.
     on_disk = read_manifest(tmp_path, manifest["run_id"])
     assert on_disk["human_review_queue_stats"] == manifest["human_review_queue_stats"]
 

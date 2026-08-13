@@ -89,17 +89,6 @@ def load_schemas(project_dir: Path) -> list[dict[str, Any]]:
     return schemas
 
 
-def list_project_names() -> list[str]:
-    root = projects_dir()
-    if not root.is_dir():
-        return []
-    return sorted(
-        child.name
-        for child in root.iterdir()
-        if child.is_dir() and (child / "compiled").is_dir()
-    )
-
-
 class StageSummary(BaseModel):
     id: str
     type: StageType

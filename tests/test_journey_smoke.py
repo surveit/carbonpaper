@@ -27,7 +27,7 @@ def assert_run_ok(status: dict, project_dir, run_id: str) -> None:
     """pytest truncates a bare `assert ..., status`, so which stage failed never reaches the log."""
     if status.get("status") == "ok":
         return
-    detail = "manifest.json not found"
+    detail = "no manifest stored"
     manifest_project = project_dir
 
     manifest_run = run_id

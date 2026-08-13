@@ -1,5 +1,5 @@
 """Behavior + lineage tests for the union and filter_rows handlers: run them for
-real through run_subset (so manifest.json + outputs/*.parquet land on disk
+real through run_subset (so the run record + outputs/*.parquet land
 exactly like a production run), then prove app.runtime.trace can walk through
 them to the correct source row."""
 from __future__ import annotations
