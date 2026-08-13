@@ -20,6 +20,7 @@ from app.services.review_packet.views import (
     StageView,
 )
 from app.services.run_guide import RunGuideView
+from app.web.column_order import order_preview_columns
 from app.web.config import templates
 from app.web.loading import load_output_preview, load_output_table
 from app.web.panel_links import PacketPanelLinks
@@ -195,7 +196,7 @@ def _build_panel_context(
         "stage_def": stage_def,
         "workflow_stage": workflow_stage,
         "stage_def_error": stage.definition_error,
-        "preview": _load_full_table(run_dir, stage),
+        "preview": order_preview_columns(_load_full_table(run_dir, stage), workflow_stage),
         # Same window as the plain table it replaces, so a diffed step and an
         # undiffed one show the same depth. Capping the diff costs nothing the plain
         # table does not already cost: the types it covers are grain-and-order

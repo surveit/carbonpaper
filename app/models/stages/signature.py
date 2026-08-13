@@ -197,6 +197,14 @@ def promised_output_schema(
     return TableSchema(columns=signature.produces)
 
 
+def list_written_column_names(stage: "AbstractStage") -> list[str]:
+    """[] for a replaces form: nothing flows through it, so no subset is the stage's own work."""
+    signature = stage.signature
+    if not isinstance(signature, ExtendsSignature):
+        return []
+    return [column.name for column in [*signature.rewrites, *signature.adds]]
+
+
 def anchor_read_columns(stage: "AbstractStage") -> list[Column]:
     """What the transform consumes from its anchor input; [] unless the form flows the rest."""
     signature = stage.signature

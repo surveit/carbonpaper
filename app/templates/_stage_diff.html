@@ -1,11 +1,13 @@
 {# The stage diff (context: diff, stage, links — see app.web.stage_diff). Two shapes:
      row_aligned  — the stage's INPUT frame as the base, with what the stage
                     did to it painted over, row by row. This table REPLACES the
-                    plain output preview. Every input column holds its input
-                    position: one the stage DROPPED is struck through, carrying
-                    the input value that was lost; the columns the stage ADDED
-                    follow, in the palette tint the stage-tests table uses. Each
-                    header carries a + or − mark, so both read without colour.
+                    plain output preview. The columns the stage's signature says
+                    it REWRITES or ADDS come first, in the palette tint the
+                    stage-tests table uses (app.web.column_order); behind them
+                    every input column holds its own relative position, one the
+                    stage DROPPED struck through, carrying the input value that
+                    was lost. Each header carries a + or − mark, so both read
+                    without colour.
      filter_rows  — ONE table over the first input rows in input order: kept
                     rows drawn exactly as the plain output preview would draw
                     them (lineage links included), dropped rows in place,

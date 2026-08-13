@@ -18,6 +18,7 @@ from app.models.stage import is_grain_and_order_preserving
 from app.runtime.lineage import RowLineage, lineage_sidecar_path
 from app.runtime.manifest import resolve_output_path
 from app.core.frames import read_frame_file, read_frame_table
+from app.web.column_order import order_written_columns_first
 from app.web.loading import PREVIEW_ROWS_SHOWN, render_frame_as_text
 
 # The one grain-and-order-preserving type with nothing for a positional diff to
@@ -191,7 +192,7 @@ def build_stage_diff(
         return _build_filter_rows_diff(
             stage_def.id, inputs, run_dir, input_df, output_df, rows_shown
         )
-    return _build_row_aligned_diff(inputs, input_df, output_df, rows_shown)
+    return _build_row_aligned_diff(workflow_stage, inputs, input_df, output_df, rows_shown)
 
 
 def _shape_input_frames(
@@ -230,13 +231,15 @@ def _resolve_diff_input_ids(workflow_stage: WorkflowStage) -> Optional[list[str]
 
 
 def _build_row_aligned_diff(
-    inputs: list[DiffFrame], input_df: pd.DataFrame, output_df: pd.DataFrame, rows_shown: int
+    workflow_stage: WorkflowStage, inputs: list[DiffFrame],
+    input_df: pd.DataFrame, output_df: pd.DataFrame, rows_shown: int,
 ) -> Optional[RowAlignedDiff]:
     if len(input_df) != len(output_df):
         return None
     in_text = _text_frame(input_df)
     out_text = _text_frame(output_df)
-    columns = _shape_aligned_columns(in_text, out_text)
+    columns = _order_diff_columns(
+        workflow_stage, _shape_aligned_columns(in_text, out_text))
     return RowAlignedDiff(
         inputs=inputs,
         columns=columns,
@@ -250,6 +253,14 @@ def _build_row_aligned_diff(
             column.name for column in columns if column.state is ColumnDiffState.dropped
         ],
     )
+
+
+def _order_diff_columns(
+    workflow_stage: WorkflowStage, columns: list[DiffColumn]
+) -> list[DiffColumn]:
+    by_name = {column.name: column for column in columns}
+    # The rest hold their input order behind them, dropped ones included.
+    return [by_name[name] for name in order_written_columns_first(workflow_stage, list(by_name))]
 
 
 def _shape_aligned_columns(in_text: pd.DataFrame, out_text: pd.DataFrame) -> list[DiffColumn]:
