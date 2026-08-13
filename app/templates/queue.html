@@ -324,6 +324,14 @@
     setFieldState(field, 'editing');
     syncMatchHint(field);
     control.focus();
+    growTextarea(control);
+  }
+
+  // Grows to fit a pasted paragraph as the reviewer types; never shrinks below
+  // the `rows` the template opened it on, so deleting text keeps the box put.
+  function growTextarea(el) {
+    if (el.tagName !== 'TEXTAREA') return;
+    if (el.scrollHeight > el.clientHeight) el.style.height = `${el.scrollHeight}px`;
   }
 
   function syncMatchHint(field) {
@@ -394,6 +402,7 @@
     const field = fieldOf(ev.target);
     if (field && field.dataset.state === 'editing' && ev.target.matches('[data-target]')) {
       syncMatchHint(field);
+      growTextarea(ev.target);
     }
   });
 

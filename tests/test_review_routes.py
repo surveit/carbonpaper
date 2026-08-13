@@ -1092,6 +1092,87 @@ def test_field_ctas_is_never_pinned_to_the_far_edge_of_the_card():
     assert not any("margin-left" in rule for rule in ctas_rules)
 
 
+def test_the_state_marker_renders_in_the_decision_row_not_the_value(tmp_path, monkeypatch):
+    # It must sit at a fixed position, never trailing a long value's own text.
+    _project_dir, run_id, _run_dir, _snapshot, _fingerprints = _build_and_halt(tmp_path, monkeypatch)
+
+    html = TestClient(app).get(f"/project/{PROJECT}/runs/{run_id}/queue/review").text
+    card = _first_card(html)
+
+    value_start = card.index('<span class="field-value"')
+    expand_start = card.index('<button type="button" class="field-expand-toggle"')
+    decision_row_start = card.index('<span class="field-decision-row">')
+    state_start = card.index('<span class="field-state">')
+
+    assert value_start < expand_start < decision_row_start < state_start
+    assert "field-state" not in card[value_start:expand_start]
+
+
+def test_the_decision_row_gets_vertical_spacing_above_it():
+    stylesheet = _stylesheet()
+    rule = re.search(r'\.field-decision-row\s*\{([^}]*)\}', stylesheet)
+    assert rule is not None
+    margin = re.search(r'margin-top:\s*(\d+)px', rule.group(1))
+    assert margin is not None and int(margin.group(1)) >= 8
+
+
+# ── A str column opens a <textarea> once ITS QUEUE'S values run long ────────
+
+
+def _long_note_load_stage(project_dir):
+    (project_dir / "data").mkdir(parents=True, exist_ok=True)
+    csv_path = project_dir / "data" / "notes.csv"
+    long_note = "This alignment note repeats until it passes the multiline threshold. " * 3
+    pd.DataFrame({"id": ["a", "b"], "note": [long_note, "short"]}).to_csv(csv_path, index=False)
+    return {"id": "load", "description": "Load notes", "type": "input_data",
+            "connector": {"kind": "file", "params": {"path": str(csv_path), "format": "csv"}},
+            "signature": {"form": "replaces", "produces": [
+                {"name": "id", "type": "str", "nullable": True},
+                {"name": "note", "type": "str", "nullable": True},
+            ]}}
+
+
+def _long_note_review_stage():
+    return _with_queue_signature({
+        "id": "review", "description": "Review notes", "type": "human_review_queue",
+        "inputs": [{"id": "load"}],
+        "queue": {**queue_columns(source="note", target="human_note")}}, [
+        {"name": "id", "type": "str", "nullable": True},
+        {"name": "note", "type": "str", "nullable": True}])
+
+
+def test_a_column_whose_queue_values_run_long_renders_a_textarea(tmp_path, monkeypatch):
+    project = "queue_route_multiline"
+    project_dir = tmp_path / project
+    run_id, _fingerprints = _build_and_halt_queue_over(
+        tmp_path, monkeypatch, project,
+        [_long_note_load_stage(project_dir), _long_note_review_stage()],
+    )
+
+    html = TestClient(app).get(f"/project/{project}/runs/{run_id}/queue/review").text
+
+    field = re.search(r'<(input|textarea)[^>]*data-target="human_note"', html)
+    assert field is not None and field.group(1) == "textarea"
+    # One SOURCE column, one control choice for the whole queue: the row whose
+    # own value ("short") is short still opens the same textarea as row "a".
+    assert html.count('data-target="human_note"') == 2
+
+
+def test_a_short_str_column_still_renders_an_input(tmp_path, monkeypatch):
+    project = "queue_route_short_str_column"
+    project_dir = tmp_path / project
+    run_id, _fingerprints = _build_and_halt_queue_over(
+        tmp_path, monkeypatch, project,
+        [_e2e_load_stage(project_dir), _labelled_row_function_stage(), _review_labels_stage()],
+    )
+
+    html = TestClient(app).get(f"/project/{project}/runs/{run_id}/queue/review").text
+
+    field = re.search(r'<(input|textarea)[^>]*data-target="human_label"', html)
+    assert field is not None and field.group(1) == "input"
+    assert 'type="text"' in field.group(0)
+
+
 def test_the_recorded_line_is_where_a_decided_card_names_the_stored_column(
         tmp_path, monkeypatch):
     _project_dir, _run_id, _fingerprints, html = _decided_queue_html(tmp_path, monkeypatch)

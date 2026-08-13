@@ -47,10 +47,6 @@
                 {% endif %}
                 <span class="prefill-was"><s>{% if prefill is none %}<em>unset</em>{% else %}{{ prefill }}{% endif %}</s>&nbsp;→</span>
                 <strong class="current-value">{% if prefill is none %}<em>unset</em>{% else %}{{ prefill }}{% endif %}</strong>
-                <span class="field-state">
-                    <span class="state-approved">✓ approved</span>
-                    <span class="state-modified">✎ modified</span>
-                </span>
                 {% if item.prior_decision %}
                 <span class="received-value">received: {% if upstream_text is none or upstream_text == '' %}<em>no value</em>{% else %}{{ upstream_text }}{% endif %}</span>
                 {% endif %}
@@ -63,13 +59,22 @@
             {# The markers above change by `display` alone, which announces nothing;
                the script writes this region on every state change. #}
             <span class="field-state-note" role="status" data-state-note></span>
-            <span class="field-ctas">
-                <button type="button" class="btn-field" data-field-approve
-                        aria-label="Approve {{ field.source }}">Approve</button>
-                <button type="button" class="btn-field" data-field-edit
-                        aria-label="Change {{ field.source }}" aria-controls="{{ field_id }}">Change</button>
-                <button type="button" class="btn-field" data-field-revert
-                        aria-label="Revert {{ field.source }}" aria-controls="{{ field_id }}">Revert</button>
+            {# State first, then the actions that alter it — at a fixed position
+               regardless of the value's length, unlike the marker this replaced
+               inside `.field-value`. #}
+            <span class="field-decision-row">
+                <span class="field-state">
+                    <span class="state-approved">✓ approved</span>
+                    <span class="state-modified">✎ modified</span>
+                </span>
+                <span class="field-ctas">
+                    <button type="button" class="btn-field" data-field-approve
+                            aria-label="Approve {{ field.source }}">Approve</button>
+                    <button type="button" class="btn-field" data-field-edit
+                            aria-label="Change {{ field.source }}" aria-controls="{{ field_id }}">Change</button>
+                    <button type="button" class="btn-field" data-field-revert
+                            aria-label="Revert {{ field.source }}" aria-controls="{{ field_id }}">Revert</button>
+                </span>
             </span>
             <span class="field-editor">
                 {# The label above is not `for` this control: it is `display: none` in
@@ -85,6 +90,10 @@
                     <option value="{{ option }}" {% if option == prefill %}selected{% endif %}>{{ option }}</option>
                     {% endfor %}
                 </select>
+                {% elif field.control == 'textarea' %}
+                <textarea id="{{ field_id }}" data-target="{{ field.target }}"
+                          aria-label="{{ field.source }}"
+                          data-prefill="{{ prefill_text }}" rows="3">{{ prefill_text }}</textarea>
                 {% else %}
                 <input type="{{ field.control }}" id="{{ field_id }}" data-target="{{ field.target }}"
                        aria-label="{{ field.source }}"
