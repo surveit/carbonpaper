@@ -592,7 +592,11 @@ def test_a_null_bool_ai_value_is_never_rendered_as_false(tmp_path, monkeypatch):
 
     html = TestClient(app).get(f"/project/queue_route_bool_null/runs/{run_id}/queue/review").text
 
-    assert 'type="checkbox"' not in html
+    # Scoped to the review forms, not the page: the app shell carries a checkbox of its
+    # own (the open-demo gate), and what must never be a checkbox is this cell.
+    forms = re.findall(r'<form class="review-form".*?</form>', html, re.DOTALL)
+    assert forms, "no review form rendered"
+    assert 'type="checkbox"' not in " ".join(forms)
     # the absent upstream value shown as absent, not as "false"
     assert '<span class="upstream-value"><em>no value</em></span>' in " ".join(html.split())
     assert "— unset —" in html

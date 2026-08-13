@@ -1,0 +1,115 @@
+/* The open-demo notice, in three places: the strip under the header, the gate that
+   blocks a first visit, and the line beside a file field.
+   Three rather than one because they catch different moments — the gate is read once
+   and forgotten, the strip goes invisible within a week, and neither is in front of
+   the person at the moment a file actually leaves their machine. */
+
+.demo-strip {
+    background: var(--warn-bg);
+    border-bottom: 1px solid var(--warn-bd);
+    color: var(--warn-ink);
+    font-size: 13px;
+    padding: 7px 28px;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px 10px;
+}
+.demo-strip b { font-weight: 600; }
+.demo-strip-sep { color: var(--warn-bd); }
+.demo-strip-toggle {
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: 0;
+    padding: 0;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.demo-strip-more {
+    background: var(--warn-bg);
+    border-bottom: 1px solid var(--warn-bd);
+    color: var(--warn-ink);
+    padding: 2px 28px 14px;
+    font-size: 13px;
+}
+.demo-strip-more ul { margin: 0; padding-left: 18px; max-width: 78ch; }
+.demo-strip-more li { padding: 2px 0; }
+
+/* Sized to the facts it carries, which is wider than the delete dialog: this one is
+   read, not answered. */
+.demo-gate {
+    box-sizing: border-box;
+    max-width: 660px;
+    width: calc(100% - 48px);
+    padding: 32px 34px 26px;
+    border: 1px solid var(--border-strong);
+    border-radius: 10px;
+    background: var(--raised);
+    color: var(--fg);
+}
+.demo-gate::backdrop { background: var(--scrim); }
+.demo-gate h2 { font-size: 25px; line-height: 1.25; margin: 0 0 10px; }
+.demo-gate-lede { margin: 0 0 18px; color: var(--muted); }
+
+.demo-gate-kicker {
+    display: inline-block;
+    margin-bottom: 16px;
+    padding: 3px 8px;
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--warn-ink);
+    background: var(--warn-bg);
+    border: 1px solid var(--warn-bd);
+    border-radius: 4px;
+}
+
+.demo-facts { list-style: none; margin: 0 0 20px; padding: 0; border-top: 1px solid var(--border); }
+.demo-facts li {
+    position: relative;
+    padding: 11px 0 11px 26px;
+    border-bottom: 1px solid var(--border);
+    font-size: 14px;
+}
+/* A dot in the bad hue rather than a bullet: four neutral bullets read as a feature
+   list, which is the opposite of what the sentence beside them says. */
+.demo-facts li::before {
+    content: "";
+    position: absolute;
+    left: 6px;
+    top: 19px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--bad-bd);
+}
+.demo-facts b { font-weight: 600; }
+
+.demo-gate-ask {
+    background: var(--sunk);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin-bottom: 18px;
+}
+.demo-gate-ask label { display: flex; align-items: flex-start; gap: 11px; cursor: pointer; font-size: 14.5px; }
+.demo-gate-ask input { flex: none; width: 16px; height: 16px; margin-top: 3px; accent-color: var(--accent); }
+
+.demo-gate-actions { display: flex; align-items: center; gap: 14px; }
+.demo-gate-actions .btn[disabled] { opacity: 0.45; pointer-events: none; }
+.demo-gate-note { margin: 14px 0 0; font-size: 12.5px; color: var(--muted); }
+
+/* Beside the field, where the file actually leaves the reader's machine. */
+.demo-upload-note {
+    display: inline-block;
+    margin-top: 10px;
+    padding: 6px 10px;
+    font-size: 12.5px;
+    color: var(--warn-ink);
+    background: var(--warn-bg);
+    border: 1px solid var(--warn-bd);
+    border-radius: 5px;
+}
