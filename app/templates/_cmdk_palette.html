@@ -1,0 +1,16 @@
+{# The ⌘K bar, on every page from base.html. A <dialog>, like every other blocking
+   surface here (files-modal, ac-modal): Escape, the backdrop and the focus trap are
+   the element's, not ours. Its rows are fetched by static/cmdk-palette.js — the
+   markup below is the empty shell, so a page with no JS shows nothing rather than a
+   bar that cannot answer. #}
+<dialog class="cmdk-palette" id="cmdk-palette" aria-label="Go to">
+  <input class="cmdk-input" type="text" autocomplete="off" spellcheck="false"
+         placeholder="Go to a project, section, stage or run…">
+  <div class="cmdk-list"></div>
+  <p class="cmdk-foot">
+    <span><kbd>↑</kbd><kbd>↓</kbd> move</span>
+    <span><kbd>↵</kbd> open</span>
+    <span><kbd>esc</kbd> close</span>
+    <span class="cmdk-count"></span>
+  </p>
+</dialog>

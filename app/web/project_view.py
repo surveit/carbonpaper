@@ -38,7 +38,7 @@ class ShellState(project.ProjectState):
 
 def shell_state(pdir: Path, section: str) -> ShellState:
     state = project.project_state(pdir)
-    nav = build_nav(state)
+    nav = build_nav(state.id)
     return ShellState(
         **state.model_dump(),
         nav=nav,
@@ -59,8 +59,8 @@ def build_shell_crumbs(nav: list[NavItem], section: str, project_id: str) -> lis
     raise ValueError(f"no nav item for section '{section}' — the trail would be unlabelled")
 
 
-def build_nav(state: project.ProjectState) -> list[NavItem]:
-    base = f"/project/{state.id}"
+def build_nav(project_id: str) -> list[NavItem]:
+    base = f"/project/{project_id}"
     return [
         _nav_leaf("overview", "Overview", base),
         _nav_leaf("document", "Document", f"{base}/document"),

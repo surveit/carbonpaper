@@ -118,9 +118,9 @@ def test_trigger_run_returns_400_on_invalid_dag(monkeypatch):
 
 
 def test_build_nav_groups_workflow_children(demo_project):
-    from app.web.project_view import build_nav, shell_state
+    from app.web.project_view import build_nav
 
-    nav = build_nav(shell_state(demo_project / "demo", "overview"))
+    nav = build_nav("demo")
     assert [item.key for item in nav] == [
         "overview", "document", "terms", "files", "workflow"]
     workflow = nav[-1]
@@ -130,9 +130,9 @@ def test_build_nav_groups_workflow_children(demo_project):
 
 
 def test_the_nav_carries_no_status_marks(demo_project):
-    from app.web.project_view import build_nav, shell_state
+    from app.web.project_view import build_nav
 
-    nav = build_nav(shell_state(demo_project / "demo", "overview"))
+    nav = build_nav("demo")
     fields = {name for item in nav for name in item.model_dump()}
     assert fields == {"key", "label", "href", "children"}
     assert "app-nav-glyph" not in client.get("/project/demo").text
@@ -187,3 +187,47 @@ def test_display_cell_serializes_datetimes():
     assert loading.display_cell(pd.NaT) == ""
     # the whole row must round-trip through json, as the template's tojson does
     json.dumps({"ts": loading.display_cell(pd.Timestamp.now())})
+
+
+# ─── The ⌘K bar ───────────────────────────────────────────────────────────────
+
+
+def test_cmdk_palette_ranks_the_project_being_read_first(demo_project):
+    rows = client.get("/cmdk_palette/index", params={"project": "demo"}).json()["rows"]
+    kinds = [row["kind"] for row in rows]
+    assert kinds.index("section") < kinds.index("stage")
+    assert [row["label"] for row in rows if row["kind"] == "section"][:3] == [
+        "Overview", "Document", "Terms"]
+    assert [row["label"] for row in rows if row["kind"] == "stage"] == ["load", "extract"]
+
+
+def test_cmdk_palette_deep_links_a_stage_into_the_workflow_page(demo_project):
+    rows = client.get("/cmdk_palette/index", params={"project": "demo"}).json()["rows"]
+    stage = next(row for row in rows if row["label"] == "extract")
+    assert stage["href"] == "/project/demo/workflow#extract"
+    assert stage["is_code"]
+    # Inside the project, the project's own name is not repeated onto every row.
+    assert stage["meta"] == "Extract evidence pieces"
+
+
+def test_cmdk_palette_names_the_project_on_a_row_outside_it(demo_project):
+    from app.services.project import create_project
+
+    other = create_project("other", "A methodology.", source="test").id
+    set_stages(other, [_load(demo_project), _EXTRACT])
+    rows = client.get("/cmdk_palette/index").json()["rows"]
+    # Read from no project at all: nothing is "here", so no section is offered.
+    assert not [row for row in rows if row["kind"] == "section"]
+    assert rows[0]["kind"] == "project"
+    stage = next(row for row in rows if row["label"] == "extract")
+    assert stage["meta"] == f"{other} · Extract evidence pieces"
+
+
+def test_cmdk_palette_refuses_a_project_id_that_does_not_exist(demo_project):
+    rows = client.get("/cmdk_palette/index", params={"project": "../etc"}).json()["rows"]
+    assert not [row for row in rows if row["kind"] == "section"]
+
+
+def test_every_page_carries_the_cmdk_bar(demo_project):
+    for path in ("/", "/project/demo", "/project/demo/workflow"):
+        assert 'id="cmdk-palette"' in client.get(path).text
