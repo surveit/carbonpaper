@@ -97,8 +97,43 @@
     currentPage = pager.clampPage(index);
     queueItems.replaceChildren(...pager.cardsOnPage(currentPage));
     renderPager();
+    syncFieldOverflow(queueItems);
     // The reviewer works a page top-down, so a page change lands them at its top.
     if (scroll && pagers.length) pagers[0].scrollIntoView({ block: 'start' });
+  }
+
+  // A detached or hidden ancestor lays out at zero height, so a value's overflow
+  // can only be measured once its card is attached AND visible. Accepts a card,
+  // a single field, or any container of `.reviewed-field`s.
+  function syncFieldOverflow(root) {
+    const fields = root.classList && root.classList.contains('reviewed-field')
+      ? [root] : root.querySelectorAll('.reviewed-field');
+    fields.forEach(function (field) {
+      const value = field.querySelector('.field-value');
+      const toggle = field.querySelector('[data-field-expand]');
+      if (!value || !toggle) return;
+      // Measured against the clamped height, so a stale expanded flag from a
+      // prior state does not read as "fits" once the clamp is back in force.
+      collapseField(value, toggle);
+      toggle.hidden = value.scrollHeight <= value.clientHeight + 1;
+    });
+  }
+
+  function collapseField(value, toggle) {
+    value.dataset.expanded = 'false';
+    toggle.setAttribute('aria-expanded', 'false');
+    toggle.textContent = 'Show more';
+  }
+
+  function toggleFieldExpand(button) {
+    const value = fieldOf(button).querySelector('.field-value');
+    if (value.dataset.expanded === 'true') {
+      collapseField(value, button);
+    } else {
+      value.dataset.expanded = 'true';
+      button.setAttribute('aria-expanded', 'true');
+      button.textContent = 'Show less';
+    }
   }
 
   // The controls describe the WHOLE queue and appear only when it runs past one
@@ -122,6 +157,9 @@
   function syncReviewerGate() {
     const name = reviewerName();
     queueItems.hidden = !name;
+    // `showPage` ran once at load while this was still hidden, which measures
+    // zero height — re-sync now that the gate opens the list into layout.
+    if (name) syncFieldOverflow(queueItems);
     renderPager();
     hint.textContent = name
       ? 'Decisions are recorded against this name.'
@@ -210,6 +248,7 @@
     // undecided then.
     pager.replaceCard(card.dataset.inputFingerprint, fresh);
     card.replaceWith(fresh);
+    syncFieldOverflow(fresh);
   }
 
   // `data-state` says which state a field is in and the stylesheet renders that
@@ -232,6 +271,9 @@
     field.dataset.state = state;
     announceFieldState(field, state);
     syncDecideGate(field.closest('.queue-card'));
+    // `editing` hides the value, `locked` shows different children — the
+    // value's height is not constant across states, so overflow is re-measured.
+    syncFieldOverflow(field);
   }
 
   function announceFieldState(field, state) {
@@ -303,6 +345,7 @@
     card.querySelectorAll('.reviewed-field').forEach(function (field) {
       field.dataset.state = 'start';
       announceFieldState(field, 'start');
+      syncFieldOverflow(field);
     });
     const notes = card.querySelector('[data-role="notes"]');
     if (notes) notes.readOnly = false;
@@ -327,7 +370,9 @@
     const cancel = ev.target.closest('[data-field-cancel]');
     if (cancel) { cancelEdit(fieldOf(cancel)); return; }
     const revert = ev.target.closest('[data-field-revert]');
-    if (revert) revertField(fieldOf(revert));
+    if (revert) { revertField(fieldOf(revert)); return; }
+    const expand = ev.target.closest('[data-field-expand]');
+    if (expand) toggleFieldExpand(expand);
   });
 
   document.addEventListener('input', function (ev) {

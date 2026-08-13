@@ -1061,6 +1061,36 @@ def test_each_state_shows_only_its_own_controls(tmp_path, monkeypatch):
         assert re.search(rule + r"[^{]*\{[^}]*display:\s*none", stylesheet), rule
 
 
+def test_the_expand_toggle_is_rendered_hidden_behind_a_stylesheet_clamp(tmp_path, monkeypatch):
+    # Overflow is measured client-side; a server-render test can only see the affordance.
+    _project_dir, run_id, _run_dir, _snapshot, _fingerprints = _build_and_halt(tmp_path, monkeypatch)
+
+    html = TestClient(app).get(f"/project/{PROJECT}/runs/{run_id}/queue/review").text
+    card = _first_card(html)
+    toggle = re.search(r'<button type="button" class="field-expand-toggle"[^>]*>', card)
+    assert toggle is not None
+    assert "hidden" in toggle.group(0)
+    assert 'aria-expanded="false"' in toggle.group(0)
+    assert 'aria-label="Expand ' in toggle.group(0)
+
+    stylesheet = _stylesheet()
+    assert re.search(
+        r'\.field-value\[data-expanded="false"\][^{]*\{[^}]*max-height:[^;]+;[^}]*overflow:\s*hidden',
+        stylesheet,
+    )
+    assert re.search(
+        r'\.field-value\[data-expanded="true"\][^{]*\{[^}]*max-height:\s*none',
+        stylesheet,
+    )
+
+
+def test_field_ctas_is_never_pinned_to_the_far_edge_of_the_card():
+    # A short value must not leave the controls hundreds of pixels away on a wide card.
+    ctas_rules = re.findall(r'\.field-ctas\s*\{[^}]*\}', _stylesheet())
+    assert ctas_rules
+    assert not any("margin-left" in rule for rule in ctas_rules)
+
+
 def test_the_recorded_line_is_where_a_decided_card_names_the_stored_column(
         tmp_path, monkeypatch):
     _project_dir, _run_id, _fingerprints, html = _decided_queue_html(tmp_path, monkeypatch)

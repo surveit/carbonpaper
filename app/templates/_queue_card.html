@@ -41,11 +41,11 @@
         {% set prefill_text = '' if prefill is none else prefill %}
         <div class="reviewed-field" data-state="{{ 'locked' if item.prior_decision else 'start' }}">
             <label {% if field.description %}title="{{ field.description }}"{% endif %}>{{ field.source }}</label>
-            <span class="field-value">
+            <span class="field-value" id="{{ field_id }}-value" data-expanded="false">
                 {% if item.departs_from_received.get(field.target) %}
-                <span class="received-was"><s>{% if upstream_text is none or upstream_text == '' %}<em>no value</em>{% else %}{{ upstream_text }}{% endif %}</s> →</span>
+                <span class="received-was"><s>{% if upstream_text is none or upstream_text == '' %}<em>no value</em>{% else %}{{ upstream_text }}{% endif %}</s>&nbsp;→</span>
                 {% endif %}
-                <span class="prefill-was"><s>{% if prefill is none %}<em>unset</em>{% else %}{{ prefill }}{% endif %}</s> →</span>
+                <span class="prefill-was"><s>{% if prefill is none %}<em>unset</em>{% else %}{{ prefill }}{% endif %}</s>&nbsp;→</span>
                 <strong class="current-value">{% if prefill is none %}<em>unset</em>{% else %}{{ prefill }}{% endif %}</strong>
                 <span class="field-state">
                     <span class="state-approved">✓ approved</span>
@@ -55,6 +55,11 @@
                 <span class="received-value">received: {% if upstream_text is none or upstream_text == '' %}<em>no value</em>{% else %}{{ upstream_text }}{% endif %}</span>
                 {% endif %}
             </span>
+            {# Revealed only for a value the script measures as overflowing its clamp;
+               a control that never does anything is worse than no control. #}
+            <button type="button" class="field-expand-toggle" hidden
+                    aria-expanded="false" aria-controls="{{ field_id }}-value"
+                    aria-label="Expand {{ field.source }}" data-field-expand>Show more</button>
             {# The markers above change by `display` alone, which announces nothing;
                the script writes this region on every state change. #}
             <span class="field-state-note" role="status" data-state-note></span>

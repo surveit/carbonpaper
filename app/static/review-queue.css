@@ -124,13 +124,26 @@
     font-size: 12px; font-weight: 600; text-transform: uppercase;
     letter-spacing: .04em; color: var(--muted);
 }
+/* Column name, then value, then controls left-aligned beneath it — never pinned
+   to the far edge of a wide card, where a short value leaves them out of reach. */
 .reviewed-field {
-    display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+    display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
     padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px;
 }
 .reviewed-field label { font-weight: 600; font-size: 13px; }
-.reviewed-field .field-value { font-size: 14px; }
-.reviewed-field .field-ctas { margin-left: auto; display: inline-flex; gap: 6px; }
+.reviewed-field .field-value {
+    display: block; font-size: 14px; line-height: 1.4em; overflow-wrap: anywhere;
+}
+/* Clamped to ~4 lines by default; the toggle below flips `data-expanded` to
+   release it. The clip is visual only — the full text stays in the DOM. */
+.reviewed-field .field-value[data-expanded="false"] { max-height: 5.6em; overflow: hidden; }
+.reviewed-field .field-value[data-expanded="true"] { max-height: none; overflow: visible; }
+.field-expand-toggle {
+    border: none; background: none; padding: 0; font: inherit; font-size: 12px;
+    color: var(--accent); cursor: pointer;
+}
+.field-expand-toggle:hover { text-decoration: underline; }
+.reviewed-field .field-ctas { display: inline-flex; gap: 6px; }
 .btn-field {
     border: 1px solid var(--border-strong); border-radius: 3px; background: var(--raised);
     font: inherit; font-size: 12px; padding: 3px 10px; cursor: pointer;
