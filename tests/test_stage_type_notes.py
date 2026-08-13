@@ -100,12 +100,12 @@ def _flat(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
-def test_publish_note_names_the_trace_link_helper():
+def test_publish_note_names_the_citation_call():
     note = STAGE_TYPES["publish"].notes
     assert note, "publish must carry a `notes` explanation"
     # the authoring agent has to know the keyword to declare and the call to make
-    assert "trace_links" in note
-    assert "build_row_trace_url" in note
+    assert "citation_provider" in note
+    assert "citation_provider.cite_value(" in note
 
 
 def test_publish_note_reaches_the_editing_agent_prompt():

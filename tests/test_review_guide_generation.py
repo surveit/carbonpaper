@@ -229,7 +229,7 @@ def _published_stages() -> list:
         "inputs": [{"id": "double"}],
         "publish": {"format": "csv"}, "signature": {"form": "replaces"},
         "function": {"kind": "inline",
-                     "code": "def transform(df, output_dir, trace_links): return df"},
+                     "code": "def transform(df, output_dir, citation_provider): return df"},
     }
     return [parse_stage(s) for s in (_LOAD, _DOUBLE, audit, publish)]
 

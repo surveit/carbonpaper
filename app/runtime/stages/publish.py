@@ -14,27 +14,29 @@ from app.models import WorkflowStage
 from app.models.stages.publish import PublishStage
 
 from ..context import RunContext
+from ..citations import CitationProvider
 from ..stage_output import StageOutput
-from ..trace_links import RowTraceLinker
 from .execution import narrow_stage
 from .python_functions import _load_python_function
 
-TRACE_LINKS_KWARG = "trace_links"
+CITATIONS_KWARG = "citation_provider"
 
 
 def handle_publish(
     workflow_stage: WorkflowStage, inputs: dict[str, pa.Table], ctx: RunContext
 ) -> StageOutput:
-    """Gets the frames positionally, an `output_dir` kwarg, and `trace_links` only if declared."""
+    """Gets the frames positionally, an `output_dir` kwarg, and `citation_provider` if declared."""
     publish_stage = narrow_stage(workflow_stage, PublishStage)
     output_dir = _prepare_output_dir(publish_stage, ctx)
     fn = _load_python_function(publish_stage)
     args = [table_to_frame(inputs[ref.id]) for ref in workflow_stage.inputs]
 
-    linker = _resolve_trace_linker(fn, publish_stage, ctx)
-    if linker is None:
+    citation_provider = _resolve_citation_provider(fn, publish_stage, ctx, inputs)
+    if citation_provider is None:
         return StageOutput.from_frame(fn(*args, output_dir=str(output_dir)))
-    return StageOutput.from_frame(fn(*args, output_dir=str(output_dir), trace_links=linker))
+    return StageOutput.from_frame(
+        fn(*args, output_dir=str(output_dir), citation_provider=citation_provider)
+    )
 
 
 def _prepare_output_dir(stage: PublishStage, ctx: RunContext) -> Path:
@@ -46,23 +48,27 @@ def _prepare_output_dir(stage: PublishStage, ctx: RunContext) -> Path:
     return output_dir
 
 
-def _resolve_trace_linker(
-    fn: Callable[..., Any], stage: PublishStage, ctx: RunContext
-) -> RowTraceLinker | None:
-    if not _accepts_trace_links(fn):
+def _resolve_citation_provider(
+    fn: Callable[..., Any], stage: PublishStage, ctx: RunContext,
+    inputs: dict[str, pa.Table],
+) -> CitationProvider | None:
+    if not _accepts_citation_provider(fn):
         return None
     if ctx.identity is None:
         raise TraceLinksUnavailableError(
-            f"publish stage {stage.id}: its function declares `{TRACE_LINKS_KWARG}`, but "
+            f"publish stage {stage.id}: its function declares `{CITATIONS_KWARG}`, but "
             "this run has no project scope (a preview, subset, or authored-test run), so "
             "no row-trace URL can be built"
         )
-    return RowTraceLinker(project=ctx.identity.project, run_id=ctx.identity.run_id)
+    return CitationProvider(
+        project=ctx.identity.project, run_id=ctx.identity.run_id,
+        tables={ref.id: inputs[ref.id] for ref in stage.inputs},
+    )
 
 
-def _accepts_trace_links(fn: Callable[..., Any]) -> bool:
+def _accepts_citation_provider(fn: Callable[..., Any]) -> bool:
     parameters = inspect.signature(fn).parameters
-    named = parameters.get(TRACE_LINKS_KWARG)
+    named = parameters.get(CITATIONS_KWARG)
     if named is not None and named.kind is not inspect.Parameter.POSITIONAL_ONLY:
         return True
     return any(p.kind is inspect.Parameter.VAR_KEYWORD for p in parameters.values())

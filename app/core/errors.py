@@ -15,6 +15,10 @@ class RowOutOfRange(ValueError):
     pass
 
 
+class CitationMismatch(ValueError):
+    """A publish stage cited a cell for a value that cell does not hold."""
+
+
 class NoVersionToRunError(Exception):
     """No stored version at all; a named version_id with no document raises FileNotFoundError."""
 

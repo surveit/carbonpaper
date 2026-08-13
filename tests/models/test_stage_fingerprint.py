@@ -49,7 +49,7 @@ def _queue_stage(**queue_overrides):
     })
 
 
-def _publish_stage(code="def transform(df, output_dir, trace_links):\n    return df\n", **overrides):
+def _publish_stage(code="def transform(df, output_dir, citation_provider):\n    return df\n", **overrides):
     base = {
         "id": "report",
         "type": "publish",
@@ -114,7 +114,7 @@ def test_compute_definition_fingerprint_for_queue_reacts_to_reviewer_instruction
 def test_compute_definition_fingerprint_for_publish_reacts_to_function_code():
     base = _publish_stage()
     changed = _publish_stage(
-        code="def transform(df, output_dir, trace_links):\n    return df.head(1)\n"
+        code="def transform(df, output_dir, citation_provider):\n    return df.head(1)\n"
     )
     assert base.compute_definition_fingerprint() != changed.compute_definition_fingerprint()
 

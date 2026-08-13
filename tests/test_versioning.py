@@ -478,7 +478,7 @@ def _published_version(project_dir: Path, publish_reads: str) -> str:
          "inputs": [{"id": publish_reads}],
          "publish": {"format": "csv"},
          "function": {"kind": "inline",
-                      "code": "def transform(df, output_dir, trace_links): return df"},
+                      "code": "def transform(df, output_dir, citation_provider): return df"},
          "signature": {"form": "replaces"}},
     ]
     return create_version_from_stages(

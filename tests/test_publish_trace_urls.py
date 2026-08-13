@@ -15,39 +15,36 @@ from app.main import app
 from app.models import parse_stage, Stage
 from app.runtime.context import RunContext
 from app.runtime.stages.publish import handle_publish
-from app.runtime.trace_links import RowTraceLinker
+from app.runtime.citations import build_row_trace_url
 from test_trace_helpers import write_run
 
 
 # ── the link shape ────────────────────────────────────────────────────────────
 
 def test_build_row_trace_url_matches_the_trace_view_route():
-    linker = RowTraceLinker(project="palm", run_id="20260723T101500")
-    assert linker.build_row_trace_url("score_rows", 4) == (
+    assert build_row_trace_url("palm", "20260723T101500", "score_rows", 4) == (
         "/project/palm/runs/20260723T101500/stage/score_rows/row/4/trace/view"
     )
 
 
 def test_build_row_trace_url_percent_encodes_each_segment():
-    linker = RowTraceLinker(project="my project", run_id="a/b")
-    url = linker.build_row_trace_url("stage one", 0)
+    url = build_row_trace_url("my project", "a/b", "stage one", 0)
     assert url == "/project/my%20project/runs/a%2Fb/stage/stage%20one/row/0/trace/view"
 
 
 def test_build_row_trace_url_rejects_a_negative_ordinal():
-    linker = RowTraceLinker(project="palm", run_id="R1")
     with pytest.raises(ValueError):
-        linker.build_row_trace_url("score_rows", -1)
+        build_row_trace_url("palm", "R1", "score_rows", -1)
 
 
 # ── what the publish handler passes ───────────────────────────────────────────
 
-_LINKING_PUBLISH_CODE = """
+_CITING_PUBLISH_CODE = """
 import pathlib
 
-def transform(df, output_dir, trace_links):
+def transform(df, output_dir, citation_provider):
     rows = [
-        "<li><a href='" + trace_links.build_row_trace_url("enrich", i) + "'>"
+        "<li><a href='" + citation_provider.cite_row("enrich", i) + "'>"
         + str(row["name"]) + "</a></li>"
         for i, row in enumerate(df.to_dict("records"))
     ]
@@ -84,11 +81,11 @@ def _publish_stage(code: str, input_columns=_NAME_COLUMN) -> Stage:
 _FRAME = pd.DataFrame({"name": ["Alpha", "Beta"]})
 
 
-def test_handler_passes_a_linker_when_the_function_declares_it(tmp_path):
+def test_handler_passes_a_service_when_the_function_declares_it(tmp_path):
     ctx = RunContext.for_workflow_run(
         repo_root=tmp_path, run_dir=tmp_path / "run", project="palm", run_id="R1",
     )
-    result = handle_publish(place_stage(_publish_stage(_LINKING_PUBLISH_CODE)), as_inputs({"enrich": _FRAME}), ctx)
+    result = handle_publish(place_stage(_publish_stage(_CITING_PUBLISH_CODE)), as_inputs({"enrich": _FRAME}), ctx)
     html = (tmp_path / "run" / "artifacts" / "build" / "index.html").read_text(encoding="utf-8")
     assert "/project/palm/runs/R1/stage/enrich/row/0/trace/view" in html
     assert "/project/palm/runs/R1/stage/enrich/row/1/trace/view" in html
@@ -107,7 +104,7 @@ def test_handler_leaves_a_function_without_the_keyword_untouched(tmp_path):
 def test_handler_fails_loudly_when_a_scopeless_run_cannot_address_a_trace(tmp_path):
     ctx = RunContext.for_stages_outside_a_run(repo_root=tmp_path, run_dir=tmp_path / "run")
     with pytest.raises(TraceLinksUnavailableError) as exc:
-        handle_publish(place_stage(_publish_stage(_LINKING_PUBLISH_CODE)), as_inputs({"enrich": _FRAME}), ctx)
+        handle_publish(place_stage(_publish_stage(_CITING_PUBLISH_CODE)), as_inputs({"enrich": _FRAME}), ctx)
     assert "report" in str(exc.value)
 
 
@@ -129,7 +126,7 @@ def test_a_link_emitted_into_published_html_resolves(tmp_path, monkeypatch):
     enrich_columns = [{"name": "facility_id", "type": "str", "nullable": True}, *_NAME_COLUMN,
                       {"name": "score", "type": "int", "nullable": True}]
     handle_publish(
-        place_stage(_publish_stage(_LINKING_PUBLISH_CODE, input_columns=enrich_columns)),
+        place_stage(_publish_stage(_CITING_PUBLISH_CODE, input_columns=enrich_columns)),
         as_inputs({"enrich": enrich}), ctx)
     html = (run_dir / "artifacts" / "build" / "index.html").read_text(encoding="utf-8")
 

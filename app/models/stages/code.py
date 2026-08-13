@@ -168,7 +168,7 @@ class PythonFunction(StageConfig):
             "type: python_row_function `def transform(row: dict) -> dict` (1 row in, 1 out; "
             "cannot reorder or fan out); python_frame_function "
             "`def transform(df, ...) -> DataFrame` (inputs positional in declared order); "
-            "publish `def transform(df, ..., output_dir, trace_links) -> DataFrame` (writes "
+            "publish `def transform(df, ..., output_dir, citation_provider) -> DataFrame` (writes "
             "artifact files into output_dir; the returned frame lists them). When the "
             "function meets an input it cannot handle, it refuses instead of "
             f"returning: `raise {StepRefused.__name__}(\"...\")`, which needs no import — the name is "
@@ -280,7 +280,7 @@ STAGE_TYPE_SPECS: dict[str, StageTypeSpec] = {
         notes=(
             "The runtime calls `transform(*frames)`: one POSITIONAL parameter per declared "
             "input, in `inputs` order — never by name, never a dict of frames. It receives no "
-            "output_dir and no trace_links; writing files is publish's job. Return the output "
+            "output_dir and no citation_provider; writing files is publish's job. Return the output "
             "DataFrame."
         ),
     ),
