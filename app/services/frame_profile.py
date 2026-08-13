@@ -5,11 +5,10 @@ from __future__ import annotations
 import pandas as pd
 
 from app.core.source_files import (
-    FileFormat, read_source_file, resolve_file_format, survey_xlsx_sheets,
+    FileFormat, SheetSurvey, read_source_file, resolve_file_format, survey_xlsx_sheets,
 )
 from app.models.column_profile import (
-    ColumnProfile, NumericRange, SheetView, StageOutputProfile, StoredFileProfile,
-    ValueCount, WorkbookSurvey,
+    ColumnProfile, NumericRange, StageOutputProfile, TableProfile, ValueCount,
 )
 from app.services.run import read_stage_output
 from app.services.uploads import open_project_file
@@ -43,7 +42,9 @@ def profile_stage_output(
     )
 
 
-def survey_stored_workbook(project: str, sha256: str) -> WorkbookSurvey:
+def survey_stored_workbook(
+    project: str, sha256: str, *, from_row: int = 0,
+) -> list[SheetSurvey]:
     """Refuses a non-xlsx rather than surveying it: no other format has sheets."""
     record, path = open_project_file(project, sha256)
     fmt = resolve_file_format(str(path))
@@ -51,30 +52,22 @@ def survey_stored_workbook(project: str, sha256: str) -> WorkbookSurvey:
         raise ValueError(
             f"'{record.filename}' is a {fmt.value} file, which has one table and no "
             "sheets — profile_file reads it directly")
-    return WorkbookSurvey(
-        sha256=record.sha256,
-        filename=record.filename,
-        sheets=[SheetView(sheet_name=sheet.name, row_count=sheet.row_count,
-                          column_count=sheet.column_count, top_left=sheet.top_left)
-                for sheet in survey_xlsx_sheets(path)],
-    )
+    return survey_xlsx_sheets(path, from_row=from_row)
 
 
 def profile_stored_file(
     project: str, sha256: str, columns: list[str] | None, *, max_values: int,
     sheet_name: str | int = 0, header_row: int = 0, first_column: int = 0,
-) -> StoredFileProfile:
+) -> TableProfile:
     if max_values < 1:
         raise ValueError(f"max_values must be at least 1, got {max_values}")
-    record, path = open_project_file(project, sha256)
+    _, path = open_project_file(project, sha256)
     fmt = resolve_file_format(str(path))
     frame = read_source_file(
         path, fmt, dtype=_PROFILE_DTYPE[fmt], sheet_name=sheet_name,
         header_row=header_row, first_column=first_column,
     )
-    return StoredFileProfile(
-        sha256=record.sha256,
-        filename=record.filename,
+    return TableProfile(
         row_count=len(frame),
         columns=[_profile_column(frame, name, max_values)
                  for name in (columns if columns is not None else list(frame.columns))],

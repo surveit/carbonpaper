@@ -11,6 +11,7 @@ from typing import Any, NamedTuple
 
 import openpyxl
 import pandas as pd
+from openpyxl.worksheet.worksheet import Worksheet
 
 from app.core.frames import (
     read_frame_file,
@@ -85,25 +86,37 @@ class SheetSurvey(NamedTuple):
     name: str
     row_count: int
     column_count: int
-    # The sheet's top-left cells as they sit, before any header row is chosen — which is
-    # what a caller reads to FIND the header in a sheet that does not start at A1.
-    top_left: list[list[str | None]]
+    # Where `cells` starts, so a caller reading an index off it lands on the right row
+    # after paging past a preamble: sheet row = first_row + index into `cells`.
+    first_row: int
+    # A fixed window of the sheet as it sits, no header chosen and nothing skipped. The
+    # VALUES are what separate a title from a header from a first data row; the indices
+    # into them are the header_row/first_column a read then takes.
+    cells: list[list[str | None]]
 
 
-def survey_xlsx_sheets(path: Path, *, rows: int = 5, columns: int = 8) -> list[SheetSurvey]:
-    """Reads no data: openpyxl's read-only mode streams the corner and the dimensions."""
+def survey_xlsx_sheets(
+    path: Path, *, from_row: int = 0, rows: int = 5, columns: int = 8,
+) -> list[SheetSurvey]:
+    """Reads no data: openpyxl's read-only mode streams the window and the dimensions."""
+    if from_row < 0:
+        raise ValueError(f"from_row must be at least 0, got {from_row}")
     workbook = openpyxl.load_workbook(path, read_only=True, data_only=True)
     try:
-        return [_survey_one_sheet(workbook[name], name, rows, columns)
+        return [_survey_one_sheet(workbook[name], name, from_row, rows, columns)
                 for name in workbook.sheetnames]
     finally:
         workbook.close()
 
 
-def _survey_one_sheet(sheet: Any, name: str, rows: int, columns: int) -> SheetSurvey:
-    corner = [
+def _survey_one_sheet(
+    sheet: Worksheet, name: str, from_row: int, rows: int, columns: int,
+) -> SheetSurvey:
+    window = [
         [None if cell.value is None else str(cell.value) for cell in row]
-        for row in sheet.iter_rows(min_row=1, max_row=rows, max_col=columns)
+        # openpyxl rows are 1-based; from_row is the 0-based index header_row also uses.
+        for row in sheet.iter_rows(
+            min_row=from_row + 1, max_row=from_row + rows, max_col=columns)
     ]
     return SheetSurvey(
         name=name,
@@ -111,7 +124,8 @@ def _survey_one_sheet(sheet: Any, name: str, rows: int, columns: int) -> SheetSu
         # but empty row, so this is an upper bound rather than the row count a read gives.
         row_count=sheet.max_row or 0,
         column_count=sheet.max_column or 0,
-        top_left=corner,
+        first_row=from_row,
+        cells=window,
     )
 
 

@@ -14,7 +14,8 @@ from pydantic import BaseModel
 from app.core.agent.bound_tool import BoundToolSpec
 from app.core.frames import collapse_null_forms, convert_cell_to_json_native, list_rows
 from app.core.run_status import StageStatus
-from app.models.column_profile import StoredFileProfile, WorkbookSurvey
+from app.core.source_files import SheetSurvey
+from app.models.column_profile import TableProfile
 from app.models.terms import Terms
 from app.tools.types import ToolInputSchema
 from app.services import (
@@ -102,16 +103,18 @@ def list_files(project_id: str | None, file_upload_url: str) -> ProjectFilesView
 def profile_file(
     project_id: str, sha256: str, columns: list[str] | None = None, max_values: int = 20,
     sheet_name: str | int = 0, header_row: int = 0, first_column: int = 0,
-) -> StoredFileProfile:
+) -> TableProfile:
     resolve_existing_project(project_id)
     return frame_profile.profile_stored_file(
         project_id, sha256, columns, max_values=max_values, sheet_name=sheet_name,
         header_row=header_row, first_column=first_column)
 
 
-def survey_workbook(project_id: str, sha256: str) -> WorkbookSurvey:
+def survey_workbook(
+    project_id: str, sha256: str, from_row: int = 0,
+) -> list[SheetSurvey]:
     resolve_existing_project(project_id)
-    return frame_profile.survey_stored_workbook(project_id, sha256)
+    return frame_profile.survey_stored_workbook(project_id, sha256, from_row=from_row)
 
 
 def _view(record: uploads.UploadedFile) -> StoredFileView:
@@ -336,6 +339,9 @@ _SCHEMAS: dict[str, ToolInputSchema] = {
     "survey_workbook": {
         "project_id": _PROJECT_ID,
         "sha256": Annotated[str, "The stored xlsx's sha256, as list_files reported it."],
+        "from_row": Annotated[
+            int, "The 0-based sheet row the window starts at. Raise it to look past a "
+                 "preamble longer than the window."],
     },
 }
 

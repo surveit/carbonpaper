@@ -35,25 +35,6 @@ class StageOutputProfile(BaseModel):
     columns: list[ColumnProfile]
 
 
-class StoredFileProfile(BaseModel):
-    sha256: str
-    filename: str
+class TableProfile(BaseModel):
     row_count: int
     columns: list[ColumnProfile]
-
-
-class SheetView(BaseModel):
-    """`top_left` is the sheet's own first cells, before any header row is picked."""
-
-    sheet_name: str
-    row_count: int
-    column_count: int
-    top_left: list[list[str | None]]
-
-
-class WorkbookSurvey(BaseModel):
-    """What an xlsx holds before a sheet is picked; profile again naming one."""
-
-    sha256: str
-    filename: str
-    sheets: list[SheetView]

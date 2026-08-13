@@ -291,12 +291,12 @@ def profile_file(
 
 
 @mcp.tool(description=TOOL_SPECS["survey_workbook"].description)
-def survey_workbook(project_id: str, sha256: str) -> dict[str, Any]:
+def survey_workbook(project_id: str, sha256: str, from_row: int = 0) -> dict[str, Any]:
     try:
-        survey = shared.survey_workbook(project_id, sha256)
+        sheets = shared.survey_workbook(project_id, sha256, from_row)
     except _RUN_TOOL_ERRORS as exc:
         return {"ok": False, "error": str(exc)}
-    return {"ok": True, **survey.model_dump()}
+    return {"ok": True, "sheets": [sheet._asdict() for sheet in sheets]}
 
 
 @mcp.tool(description=TOOL_SPECS["list_files"].description)

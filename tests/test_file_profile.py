@@ -4,6 +4,7 @@ a claim about a file someone actually has rather than about one written to make 
 from __future__ import annotations
 
 import io
+from pathlib import Path
 
 import pandas as pd
 import pytest
@@ -47,7 +48,6 @@ def test_it_profiles_every_column_without_being_told_the_columns(project):
     assert [column.column for column in profile.columns] == [
         "client", "registrant", "income", "issue_codes"]
     assert profile.row_count == 4
-    assert profile.filename == "lda_q1.csv"
 
 
 
@@ -168,18 +168,18 @@ def store_workbook(tmp_path) -> str:
 
 
 def test_the_survey_names_every_sheet(project, tmp_path):
-    survey = shared.survey_workbook("demo", store_workbook(tmp_path))
-    assert [sheet.sheet_name for sheet in survey.sheets] == ["Filings", "Q1 Summary"]
-    assert survey.filename == "book.xlsx"
+    sheets = shared.survey_workbook("demo", store_workbook(tmp_path))
+    assert [sheet.name for sheet in sheets] == ["Filings", "Q1 Summary"]
 
 
 def test_the_survey_shows_where_the_table_really_starts(project, tmp_path):
     """The cells are the answer: the caller reads header_row and first_column off them."""
-    survey = shared.survey_workbook("demo", store_workbook(tmp_path))
-    offset = survey.sheets[1]
-    assert offset.top_left[0][0] == "LOBBYING DISCLOSURE — Q1 2026"
-    assert offset.top_left[1][0] is None
-    assert offset.top_left[2][:3] == [None, "registrant", "filings"]
+    offset = shared.survey_workbook("demo", store_workbook(tmp_path))[1]
+    assert offset.cells[0][0] == "LOBBYING DISCLOSURE — Q1 2026"
+    assert offset.cells[1][0] is None
+    # The indices ARE the two arguments: row 2, column 1.
+    assert offset.cells[2][:3] == [None, "registrant", "filings"]
+    assert offset.first_row == 0
 
 
 def test_profiling_that_sheet_with_the_defaults_gets_junk(project, tmp_path):
@@ -207,3 +207,49 @@ def test_a_named_sheet_is_read_rather_than_the_first(project, tmp_path):
 def test_surveying_a_csv_is_refused_and_says_what_to_call_instead(project):
     with pytest.raises(ValueError, match="no.*sheets"):
         shared.survey_workbook("demo", store())
+
+
+def _long_preamble_workbook(tmp_path) -> Path:
+    """Seven rows of letterhead before the header — longer than one window."""
+    import openpyxl
+    wb = openpyxl.Workbook()
+    sheet = wb.worksheets[0]
+    sheet.title = "Extract"
+    for line in ["Senate Office of Public Records", "", "Extract generated 2026-04-20",
+                 "Coverage: 2026-01-01 to 2026-03-31", "Contact: records@senate.gov",
+                 "", "NOTES"]:
+        sheet.append([line])
+    sheet.append(["registrant", "filings"])
+    sheet.append(["CORNERSTONE GOVERNMENT AFFAIRS", "392"])
+    path = tmp_path / "long.xlsx"
+    wb.save(path)
+    return path
+
+
+def store_long(tmp_path) -> str:
+    with _long_preamble_workbook(tmp_path).open("rb") as handle:
+        return save_upload("long.xlsx", handle, "demo").sha256
+
+
+def test_a_preamble_longer_than_the_window_hides_the_header(project, tmp_path):
+    """The window is a window: it does not hunt for the table, so this shows only prose."""
+    sheet = shared.survey_workbook("demo", store_long(tmp_path))[0]
+    assert [row[0] for row in sheet.cells] == [
+        "Senate Office of Public Records", None, "Extract generated 2026-04-20",
+        "Coverage: 2026-01-01 to 2026-03-31", "Contact: records@senate.gov"]
+
+
+def test_surveying_again_from_further_down_finds_it(project, tmp_path):
+    sheet = shared.survey_workbook("demo", store_long(tmp_path), 5)[0]
+    assert sheet.first_row == 5
+    # cells[2] is sheet row 5 + 2 = 7, which is the header_row profile_file then takes.
+    assert sheet.cells[2][:2] == ["registrant", "filings"]
+    profile = shared.profile_file(
+        "demo", store_long(tmp_path), sheet_name="Extract", header_row=7)
+    assert [c.column for c in profile.columns] == ["registrant", "filings"]
+    assert profile.row_count == 1
+
+
+def test_a_negative_from_row_is_refused(project, tmp_path):
+    with pytest.raises(ValueError, match="from_row"):
+        shared.survey_workbook("demo", store_long(tmp_path), -1)
