@@ -45,7 +45,15 @@ def test_every_contract_says_who_may_import() -> None:
     assert not offenders, (
         "an import-linter contract must say who MAY import a module (`protected`) or "
         "where it sits (`layers`) — a `forbidden` list is legal for anything nobody "
-        "thought to name:\n  " + "\n  ".join(offenders)
+        "thought to name.\n\n"
+        "If you are here because a package must stop reaching a layer, there is nothing "
+        "to WRITE: take that package off the layer's `allowed_importers`. Every "
+        "whitelist it is absent from already denies it, and the layers left open to it "
+        "(app.models, app.core) are open to everything on purpose — a contract naming "
+        "one package as the exception is the denial this rule refuses. Cutting a package "
+        "down to one dependency is therefore a series of REMOVALS, one per whitelist it "
+        "is on, and the whitelist it stays on is the dependency it keeps.\n\n"
+        "The offending contracts:\n  " + "\n  ".join(offenders)
     )
 
 

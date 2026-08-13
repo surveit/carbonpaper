@@ -33,6 +33,8 @@ _EXPECTED_TOOL_NAMES = {
     "write_terms",
     "get_project_status",
     "generate_stage_tests",
+    "run_stage_tests",
+    "report_compiler_warnings",
     "list_files",
     "move_file_to_project",
     "profile_file",

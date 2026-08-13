@@ -6,7 +6,21 @@ the two surfaces that render it — so a fragment cannot leak into a lower layer
 """
 from __future__ import annotations
 
-from app.models.stages.stage_types import AUTHORABLE_TYPES, CODE_CARRYING_TYPES
+from app.models.authoring_lifecycle_note import (
+    AUTHORING_LIFECYCLE_GUIDANCE as AUTHORING_LIFECYCLE_GUIDANCE,
+)
+from app.models.stages.code import (
+    CODE_CORNER_CASES_CONTRACT_NOTE as CODE_CORNER_CASES_CONTRACT_NOTE,
+    CODE_SUMMARY_CONTRACT_NOTE as CODE_SUMMARY_CONTRACT_NOTE,
+)
+from app.models.stages.signature import (
+    SIGNATURE_CONTRACT_NOTE as SIGNATURE_CONTRACT_NOTE,
+)
+from app.models.stages.stage_types import (
+    AUTHORABLE_CODE_CARRYING_TYPES as AUTHORABLE_CODE_CARRYING_TYPES,
+    AUTHORABLE_TYPES,
+    CODE_CARRYING_TYPES,
+)
 from app.models.stages.stage_base import StageType, is_grain_and_order_preserving
 
 

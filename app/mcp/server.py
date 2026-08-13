@@ -1,49 +1,27 @@
-"""The Carbon Paper FastMCP server: authoring tools over app.services.
+"""The Carbon Paper FastMCP server: JSON-RPC transport over the tools in app.tools.
 
-Tools resolve project directories only through workspace.resolve_project_dir, which refuses
-names escaping the workspace. Generation tools start LIVE chat turns on the server event
-loop and return immediately; callers poll get_project_status. Failures raise, never fake success."""
+Every body, input schema and description belongs to app.tools, so a tool cannot exist here
+and nowhere else — an import-linter contract holds it. What is left in a function here is
+the wire signature, which IS the schema a client reads."""
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from pathlib import Path
-from typing import Any, AsyncIterator, Callable
+from typing import Any, AsyncIterator
 
 from mcp.server.fastmcp import FastMCP
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from starlette.types import Receive, Scope, Send
 
-from app.models import find_workflow_compiler_warnings
-from app.models.terms import Terms
-from app.tools import shared
+from app.mcp.instructions import INSTRUCTIONS
+from app.tools import shared, working_copy
 from app.tools.submitted_stage import (
     SubmittedStage,
     add_stages_reporting_drops,
     edit_stage_reporting_drops,
 )
 from app.tools.tool_specs import SAVE_VERSION_FROM_WORKING_COPY, TOOL_SPECS
-from app.mcp.instructions import INSTRUCTIONS
-from app.models.review_guide import ReviewGuideDraft
-from app.services.versioning import ReviewGuide
-from app.runtime import stage_tests
-from app.services import loader
-from app.services import project as project_service
-from app.services.project import Project, ProjectListing
-from app.services import versioning
-from app.services.errors import WorkflowLoadError
-from app.services.stage_edit import EditStageResult
 
-# The same verdict channel the tools whose bodies live in app.tools.shared already
-# answer on, so a failure reads the same whichever surface asked.
 _RUN_TOOL_ERRORS = shared.RUN_TOOL_ERRORS
-
-# Domain failures an authoring tool turns into {ok: False, issues: [...]} — the
-# same refusal channel a validation failure comes back on, which is the one these
-# instructions tell a client to watch. WorkflowLoadError is a stored workflow that
-# does not load; FileNotFoundError is a stage id that is not in the workflow, or a
-# project with no compiled workflow to snapshot.
-# Anything outside this set propagates as a genuine internal fault.
-_STAGE_TOOL_ERRORS = (WorkflowLoadError, FileNotFoundError)
 
 
 mcp = FastMCP(
@@ -99,12 +77,12 @@ async def run_session_manager() -> AsyncIterator[None]:
 
 
 @mcp.tool(description=TOOL_SPECS["list_projects"].description)
-def list_projects() -> list[ProjectListing]:
-    return project_service.list_project_listings()
+def list_projects() -> list[shared.ProjectListing]:
+    return shared.list_projects()
 
 
 @mcp.tool(description=TOOL_SPECS["create_project"].description)
-def create_project(name: str, document: str) -> Project:
+def create_project(name: str, document: str) -> shared.Project:
     return shared.create_project(name, document, source="mcp")
 
 
@@ -120,28 +98,21 @@ async def generate_stage_tests(project_id: str, stage_id: str) -> dict[str, Any]
 
 @mcp.tool(description=TOOL_SPECS["run_stage_tests"].description)
 def run_stage_tests(project_id: str, stage_id: str | None = None) -> dict[str, Any]:
-    pdir = _resolve_existing_project(project_id)
-    stages = loader.load_workflow(pdir)
-    report: stage_tests.StageTestsReport = stage_tests.run_stage_tests(stages, stage_id)
-    return report.model_dump(mode="json")
+    return shared.run_stage_tests(project_id, stage_id)
 
 
 @mcp.tool(description=TOOL_SPECS["report_compiler_warnings"].description)
 def report_compiler_warnings(project_id: str) -> dict[str, Any]:
-    pdir = _resolve_existing_project(project_id)
-    stages = loader.load_workflow(pdir)
-    failing = stage_tests.run_stage_tests(stages).count_failing_by_stage()
-    report = find_workflow_compiler_warnings(stages, failing)
-    return {"warnings": [w.model_dump(mode="json") for w in report.warnings]}
+    return shared.report_compiler_warnings(project_id)
 
 
 @mcp.tool(description=TOOL_SPECS["read_terms"].description)
-def read_terms(project_id: str) -> Terms:
+def read_terms(project_id: str) -> shared.Terms:
     return shared.read_terms(project_id)
 
 
 @mcp.tool(description=TOOL_SPECS["write_terms"].description)
-def write_terms(project_id: str, terms: Terms) -> Terms:
+def write_terms(project_id: str, terms: shared.Terms) -> shared.Terms:
     return shared.write_terms(project_id, terms)
 
 
@@ -152,12 +123,12 @@ def read_workflow_summary(project_id: str) -> shared.workspace.WorkflowSummary:
 
 @mcp.tool(description=TOOL_SPECS["read_stage"].description)
 def read_stage(project_id: str, stage_id: str) -> str:
-    return project_service.read_stage(project_id, stage_id)
+    return shared.read_stage(project_id, stage_id)
 
 
 @mcp.tool(description=TOOL_SPECS["edit_stage"].description)
 def edit_stage(project_id: str, stage_id: str, changes_json: str) -> dict[str, Any]:
-    return catch_stage_edit_refusals(
+    return working_copy.catch_stage_edit_refusals(
         lambda: edit_stage_reporting_drops(project_id, stage_id, changes_json)
     )
 
@@ -169,50 +140,26 @@ def add_stage(project_id: str, stages: list[SubmittedStage]) -> dict[str, Any]:
 
 @mcp.tool(description=TOOL_SPECS["remove_stage"].description)
 def remove_stage(project_id: str, stage_id: str) -> dict[str, Any]:
-    return catch_stage_edit_refusals(
-        lambda: _as_tool_result(project_service.remove_stage(project_id, stage_id))
-    )
-
-
-def catch_stage_edit_refusals(edit: Callable[[], dict[str, Any]]) -> dict[str, Any]:
-    try:
-        return edit()
-    except _STAGE_TOOL_ERRORS as exc:
-        return {"ok": False, "issues": [str(exc)]}
-
-
-def _as_tool_result(result: EditStageResult) -> dict[str, Any]:
-    return {"ok": result.ok, "issues": result.issues}
+    return shared.remove_stage(project_id, stage_id)
 
 
 @mcp.tool(description=SAVE_VERSION_FROM_WORKING_COPY.description)
 def save_version(
     project_id: str, message: str, parent_version: str | None = None
 ) -> dict[str, Any]:
-    pdir = _resolve_existing_project(project_id)
-    try:
-        if parent_version is not None:
-            versioning.validate_version_exists(pdir, parent_version)
-        version = project_service.save_working_copy_as_version(
-            pdir, message=message, reviewer="agent", parent_version=parent_version
-        )
-    except _STAGE_TOOL_ERRORS as exc:
-        return {"ok": False, "issues": [str(exc)]}
-    return {"ok": True, "issues": [], "version_id": version.version_id}
+    return working_copy.save_working_copy_as_version(project_id, message, parent_version)
 
 
 @mcp.tool(description=TOOL_SPECS["read_review_guide"].description)
-def read_review_guide(project_id: str, version_id: str) -> ReviewGuide | None:
-    _resolve_existing_project(project_id)
-    return project_service.read_review_guide(project_id, version_id)
+def read_review_guide(project_id: str, version_id: str) -> shared.ReviewGuide | None:
+    return shared.read_review_guide(project_id, version_id)
 
 
 @mcp.tool(description=TOOL_SPECS["write_review_guide"].description)
 def write_review_guide(
-    project_id: str, version_id: str, guide: ReviewGuideDraft
-) -> ReviewGuide:
-    _resolve_existing_project(project_id)
-    return project_service.write_review_guide(project_id, version_id, guide)
+    project_id: str, version_id: str, guide: shared.ReviewGuideDraft
+) -> shared.ReviewGuide:
+    return shared.write_review_guide(project_id, version_id, guide)
 
 
 @mcp.tool(description=TOOL_SPECS["run_workflow"].description)
@@ -318,7 +265,3 @@ def read_stage_output_rows(
     offset: int = 0,
 ) -> shared.StageOutputRows:
     return shared.read_stage_output_rows(project_id, run_id, stage_id, limit, offset)
-
-
-def _resolve_existing_project(project_id: str) -> Path:
-    return shared.resolve_existing_project(project_id)
