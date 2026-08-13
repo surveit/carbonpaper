@@ -449,3 +449,4 @@
 {"run_id":"31721553767","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31721553767","created":"2026-08-13T16:38:23Z","branch":"fix/tool-prose-symmetry","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"31721681961","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31721681961","created":"2026-08-13T16:39:01Z","branch":"arch/no-module-function-kind","event":"pull_request","contracts_kept":14,"findings":[]}
 {"run_id":"31721681961","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31721681961","created":"2026-08-13T16:40:03Z","branch":"arch/no-module-function-kind","event":"pull_request","contracts_kept":null,"findings":[]}
+{"run_id":"31721777635","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31721777635","created":"2026-08-13T16:40:08Z","branch":"hrq-column-review-states","event":"pull_request","contracts_kept":14,"findings":[]}
