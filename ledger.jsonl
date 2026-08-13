@@ -531,3 +531,4 @@
 {"run_id":"31744086088","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31744086088","created":"2026-08-13T21:08:03Z","branch":"master","event":"push","contracts_kept":null,"findings":[]}
 {"run_id":"31744733910","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31744733910","created":"2026-08-13T21:15:02Z","branch":"master","event":"push","contracts_kept":14,"findings":[]}
 {"run_id":"31744733910","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31744733910","created":"2026-08-13T21:16:13Z","branch":"master","event":"push","contracts_kept":null,"findings":[]}
+{"run_id":"31746677465","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31746677465","created":"2026-08-13T21:40:58Z","branch":"worktree-tour-restyle","event":"pull_request","contracts_kept":14,"findings":[]}
