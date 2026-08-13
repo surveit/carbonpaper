@@ -307,3 +307,4 @@
 {"run_id":"31703299043","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31703299043","created":"2026-08-13T13:07:23Z","branch":"cmdk-palette","event":"pull_request","contracts_kept":14,"findings":[]}
 {"run_id":"31703288795","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31703288795","created":"2026-08-13T13:07:25Z","branch":"feat/grounded-stage-tests","event":"pull_request","contracts_kept":14,"findings":[]}
 {"run_id":"31703358458","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31703358458","created":"2026-08-13T13:08:10Z","branch":"feat/packet-lineage","event":"pull_request","contracts_kept":14,"findings":[]}
+{"run_id":"31703288795","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31703288795","created":"2026-08-13T13:08:10Z","branch":"feat/grounded-stage-tests","event":"pull_request","contracts_kept":null,"findings":[]}
