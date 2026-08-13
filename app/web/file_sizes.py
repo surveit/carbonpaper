@@ -5,7 +5,7 @@ from __future__ import annotations
 from pydantic import BaseModel
 
 from app.services.errors import FileOverCeiling, StoreOverQuota
-from app.services.uploads import UploadedFile
+from app.core.files import StoredFile
 
 _KILOBYTE = 1024
 _MEGABYTE = 1024 * _KILOBYTE
@@ -37,10 +37,11 @@ def describe_refusal(exc: FileOverCeiling | StoreOverQuota) -> str:
             "CARBON_PAPER_FILES_QUOTA_BYTES.")
 
 
-def describe_attachment(record: UploadedFile, project_name: str = "") -> str:
+def describe_attachment(record: StoredFile, project_id: str | None = None,
+                        project_name: str = "") -> str:
     """The one sentence a chat shows for an attached file AND sends to the agent."""
-    home = ("not in a project yet" if not record.project_id
-            else f"in project {project_name or record.project_id} ({record.project_id})")
+    home = ("not in a project yet" if not project_id
+            else f"in project {project_name or project_id} ({project_id})")
     # One sentence for both: the agent reads the turn's text and never the page, so a
     # card saying one thing while the model is told another is two records of one
     # event. sha256 is in it because that is what run_workflow's `files` takes.

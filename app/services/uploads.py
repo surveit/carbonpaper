@@ -1,19 +1,24 @@
 """Data files a run reads: one content-addressed store for the whole workspace, the
-record that says which project holds each one, and the two size limits that keep a
-run loadable and the volume from filling."""
+claim that gives a stored file its project, and the two size limits that keep a run
+loadable and the volume from filling. The two records are in app.core.files."""
 from __future__ import annotations
 
 import hashlib
 import os
 import tempfile
 from pathlib import Path
-from typing import BinaryIO, ClassVar
+from typing import BinaryIO
 
-from app.core.persistence import PersistedModel, PersistenceScope
+from app.core.files import ProjectFile, StoredFile
 from app.core.store_config import resolve_db_path
 from app.models.schema import TypeUnsafeUserStageConfigOverride
 from app.models.stages.input_data import resolve_file_format
-from app.services.errors import FileNotStoredError, FileOverCeiling, StoreOverQuota
+from app.services.errors import (
+    FileHeldByAnotherProject,
+    FileNotStoredError,
+    FileOverCeiling,
+    StoreOverQuota,
+)
 
 # How much of an upload is held in memory at once while it is written and hashed.
 _CHUNK_BYTES = 1024 * 1024
@@ -39,22 +44,6 @@ _DEFAULT_MAX_UPLOAD_BYTES = 512 * _MEGABYTE
 _DEFAULT_FILES_QUOTA_BYTES = 4 * _GIGABYTE
 
 
-# `sha256` addresses the BYTES and `project_id` says which project holds them, so the two
-# are separate: one blob serves however many projects uploaded it, each with its own
-# record and its own filename for it. `project_id` is None for a file that arrived before
-# any project existed — `move_file_to_project` fills it in, moving nothing on disk.
-class UploadedFile(PersistedModel):
-    """One project's hold on one stored file; `id` is incidental, (sha256, project) is the key."""
-
-    collection: ClassVar[str] = "uploaded_file"
-    SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
-
-    sha256: str
-    filename: str
-    byte_count: int
-    project_id: str | None = None
-
-
 def files_root() -> Path:
     """Beside the document store and the frames, so pinning the DB path carries it too."""
     override = os.environ.get("CARBON_PAPER_FILES_ROOT")
@@ -69,7 +58,7 @@ def files_quota_bytes() -> int:
     return _read_byte_limit("CARBON_PAPER_FILES_QUOTA_BYTES", _DEFAULT_FILES_QUOTA_BYTES)
 
 
-def save_upload(filename: str, src: BinaryIO, project_id: str | None = None) -> UploadedFile:
+def save_upload(filename: str, src: BinaryIO, project_id: str | None = None) -> StoredFile:
     """Store an uploaded file and return its record; `project_id` None puts it in no project."""
     root = files_root()
     # Content-addressed, so the destination is not known until the last byte is read:
@@ -103,29 +92,49 @@ def _find_stored_name(blob_dir: Path) -> str | None:
     return next((f.name for f in sorted(blob_dir.iterdir()) if f.is_file()), None)
 
 
-def move_file_to_project(sha256: str, project_id: str) -> UploadedFile:
+def move_file_to_project(sha256: str, project_id: str) -> StoredFile:
     """Move a file with no project into one. Moves no bytes — the store is shared."""
-    without_project = _find_records(sha256=sha256, project_id=None)
+    without_project = _find_files(sha256=sha256, project_id=None)
     if not without_project:
         raise FileNotStoredError(
             f"no file {sha256!r} outside a project — it is either already in one, or was "
             "never uploaded")
     record = without_project[0]
-    record.project_id = project_id
-    record.save()
+    claim_file_for_project(record.id, project_id)
     return record
+
+
+def claim_file_for_project(file_id: str, project_id: str) -> ProjectFile:
+    """A file has at most one project: a second project's claim on it is refused, not moved."""
+    held = _find_edge(file_id)
+    if held is not None:
+        if held.project_id != project_id:
+            raise FileHeldByAnotherProject(
+                file_id=file_id, held_by=held.project_id, claimed_by=project_id)
+        # Re-saving would restamp created_at, which is when this project got the file.
+        return held
+    edge = ProjectFile(project_id=project_id, file_id=file_id)
+    edge.save()
+    return edge
+
+
+def find_holding_project(file_id: str) -> str | None:
+    """Which project holds this file, or None while it is held by nobody."""
+    edge = _find_edge(file_id)
+    return edge.project_id if edge is not None else None
 
 
 def delete_file(project_id: str | None, sha256: str) -> None:
     """Drop one project's hold on a file, and the bytes when nothing else holds them."""
-    records = _find_records(sha256=sha256, project_id=project_id)
+    records = _find_files(sha256=sha256, project_id=project_id)
     if not records:
         raise FileNotStoredError(
             f"no file {sha256!r} in {project_id or 'the files outside a project'} — "
             "nothing to delete")
     path = resolve_stored_path(records[0])
     for record in records:
-        UploadedFile.delete(record.id)
+        _drop_any_claim(record.id)
+        StoredFile.delete(record.id)
     # Content addressing means one blob can serve several projects, so the bytes go only
     # when the last hold on them does — otherwise deleting here empties another project.
     if not _find_any_record(sha256) and path.is_file():
@@ -133,7 +142,7 @@ def delete_file(project_id: str | None, sha256: str) -> None:
         _remove_if_empty(path.parent)
 
 
-def resolve_stored_path(record: UploadedFile) -> Path:
+def resolve_stored_path(record: StoredFile) -> Path:
     """The file these bytes were FIRST stored as, which `record.filename` may have moved on from."""
     blob_dir = files_root() / record.sha256
     # `filename` is the name of the latest send, shown to whoever picked it. The bytes
@@ -143,9 +152,9 @@ def resolve_stored_path(record: UploadedFile) -> Path:
     return (blob_dir / (held or record.filename)).resolve()
 
 
-def list_project_files(project_id: str | None) -> list[UploadedFile]:
+def list_project_files(project_id: str | None) -> list[StoredFile]:
     """One project's files, or those in no project when `project_id` is None."""
-    return _sorted_newest_first(_find_records(project_id=project_id))
+    return _sorted_newest_first(_find_files(project_id=project_id))
 
 
 def resolve_file_binding(project_id: str, sha256: str) -> TypeUnsafeUserStageConfigOverride:
@@ -154,21 +163,34 @@ def resolve_file_binding(project_id: str, sha256: str) -> TypeUnsafeUserStageCon
     return {"path": str(path), "format": resolve_file_format(str(path)).value}
 
 
-def open_project_file(project_id: str, sha256: str) -> tuple[UploadedFile, Path]:
+def open_project_file(project_id: str, sha256: str) -> tuple[StoredFile, Path]:
     """The record and the readable path, or loud — never a path whose bytes are gone."""
-    records = _find_records(sha256=sha256, project_id=project_id)
+    records = _find_files(sha256=sha256, project_id=project_id)
     if not records:
         raise FileNotStoredError(
             f"project '{project_id}' has no file {sha256!r} — list its files, upload this "
             "one, or move it in if it is not in a project yet")
-    path = resolve_stored_path(records[0])
+    return records[0], _require_readable_bytes(records[0])
+
+
+def open_stored_file(sha256: str) -> tuple[StoredFile, Path]:
+    """Bytes addressed by sha256 alone, for a reader holding the address and no project."""
+    records = _find_any_record(sha256)
+    if not records:
+        raise FileNotStoredError(
+            f"no file {sha256!r} anywhere in the store — upload it, or check the address")
+    return records[0], _require_readable_bytes(records[0])
+
+
+def _require_readable_bytes(record: StoredFile) -> Path:
+    path = resolve_stored_path(record)
     # A record whose bytes are gone is worse than no record: the caller would act on a
-    # path naming a file it was just told the project had.
+    # path naming a file it was just told the store had.
     if not path.is_file():
         raise FileNotStoredError(
-            f"'{records[0].filename}' is recorded for project '{project_id}' but its bytes "
-            f"are not on disk at {path} — upload it again")
-    return records[0], path
+            f"'{record.filename}' is recorded but its bytes are not on disk at {path} "
+            "— upload it again")
+    return path
 
 
 def measure_files_used_bytes() -> int:
@@ -178,23 +200,37 @@ def measure_files_used_bytes() -> int:
 
 def _sum_stored_bytes(arriving: dict[str, int]) -> int:
     # Content-addressed: two projects holding one blob are two records over ONE copy.
-    weighed = {record.sha256: record.byte_count for record in UploadedFile.list()}
+    weighed = {record.sha256: record.byte_count for record in StoredFile.list()}
     # `arriving` is bytes already on disk that no record covers yet — a file mid-upload.
     return sum((weighed | arriving).values())
 
 
-def _find_records(*, sha256: str | None = None,
-                  project_id: str | None = None) -> list[UploadedFile]:
-    records = UploadedFile.list()
-    # A full scan: the store selects by id prefix only, and the key here is
-    # (sha256, project_id). Fine at a workspace's worth of files, not at thousands.
-    return [record for record in records
+def _find_files(*, sha256: str | None = None,
+                project_id: str | None = None) -> list[StoredFile]:
+    # A full scan of both: the store selects by id prefix, and neither key is one.
+    holders = _read_holding_projects()
+    return [record for record in StoredFile.list()
             if (sha256 is None or record.sha256 == sha256)
-            and record.project_id == project_id]
+            and holders.get(record.id) == project_id]
 
 
-def _find_any_record(sha256: str) -> list[UploadedFile]:
-    return [record for record in UploadedFile.list() if record.sha256 == sha256]
+def _read_holding_projects() -> dict[str, str]:
+    """file id -> the project holding it; an absent key is a file held by nobody."""
+    return {edge.file_id: edge.project_id for edge in ProjectFile.list()}
+
+
+def _find_edge(file_id: str) -> ProjectFile | None:
+    return next((edge for edge in ProjectFile.list() if edge.file_id == file_id), None)
+
+
+def _drop_any_claim(file_id: str) -> None:
+    edge = _find_edge(file_id)
+    if edge is not None:
+        ProjectFile.delete(edge.id)
+
+
+def _find_any_record(sha256: str) -> list[StoredFile]:
+    return [record for record in StoredFile.list() if record.sha256 == sha256]
 
 
 def _remove_if_empty(directory: Path) -> None:
@@ -202,7 +238,7 @@ def _remove_if_empty(directory: Path) -> None:
         directory.rmdir()
 
 
-def _sorted_newest_first(records: list[UploadedFile]) -> list[UploadedFile]:
+def _sorted_newest_first(records: list[StoredFile]) -> list[StoredFile]:
     return sorted(records, key=lambda record: record.created_at, reverse=True)
 
 
@@ -240,17 +276,22 @@ def _refuse_upload_over_quota(
 
 
 def _record_upload(digest: str, filename: str, byte_count: int,
-                   project_id: str | None) -> UploadedFile:
-    stored = _find_records(sha256=digest, project_id=project_id)
+                   project_id: str | None) -> StoredFile:
+    stored = _find_files(sha256=digest, project_id=project_id)
     # Re-saving a stored record rather than replacing it keeps `created_at` at the first
     # arrival of these bytes for this project.
-    if not stored:
-        record = UploadedFile(sha256=digest, filename=filename,
-                              byte_count=byte_count, project_id=project_id)
-    else:
+    if stored:
         record = stored[0]
         record.filename = filename
+        record.save()
+        return record
+    # A record per (bytes, project), so a second project sending bytes the store already
+    # holds gets its own file to name and to drop — one blob underneath, an edge each
+    # over it, and neither edge able to take the other's file.
+    record = StoredFile(sha256=digest, filename=filename, byte_count=byte_count)
     record.save()
+    if project_id is not None:
+        claim_file_for_project(record.id, project_id)
     return record
 
 

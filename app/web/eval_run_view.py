@@ -14,6 +14,7 @@ from app.core.errors import EvalNotScorableError
 from app.core.frames import read_frame_file
 from app.evals.dataset import read_table_ref
 from app.models import EvalRun, TableRef
+from app.services.errors import FileNotStoredError
 from app.web.loading import render_frame_as_text
 from app.web.run_header import (
     VersionNote,
@@ -221,13 +222,13 @@ def _read_dataset_inputs(
         return None, "this eval has no dataset attached, so the scored inputs can't be shown"
     try:
         frame = read_table_ref(dataset)
-    except (OSError, ValueError, EvalNotScorableError) as exc:
-        return None, f"could not read {dataset.path}: {exc}"
+    except (OSError, ValueError, EvalNotScorableError, FileNotStoredError) as exc:
+        return None, f"could not read the eval dataset: {exc}"
     if len(frame) != scored_rows:
         # Alignment is by position, so a dataset edited since the run would put a
         # different row's text beside this run's verdict.
         return None, (
-            f"{dataset.path} now holds {len(frame)} row(s) but this run scored "
+            f"the eval dataset now holds {len(frame)} row(s) but this run scored "
             f"{scored_rows} — it changed since, so its rows can't be lined up with these")
     return frame.drop(columns=_find_expected_columns(frame, checks)), None
 

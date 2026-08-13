@@ -2,7 +2,6 @@
 Configs are mutable authored documents (write is upsert); runs are immutable,
 minted by the runner and only read here. Both are project-scoped by document id,
 so a project with no eval activity returns empty rather than needing scaffolding.
-Dataset uploads stay on disk at `eval_data/{filename}`, immutable once written.
 """
 from __future__ import annotations
 
@@ -18,7 +17,7 @@ from app.core.persistence import get_store
 from app.core.utils import format_errors
 from app.evals.compatibility import CompatibilityReport
 from app.services.project import write_eval_config
-from app.services.workspace import resolve_project_dir
+from app.services.workspace import resolve_eval_run_dir
 from app.services.versioning import find_latest_version_id
 
 _SLUG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
@@ -90,18 +89,6 @@ def list_eval_runs(project_id: str, config_id: str) -> list[EvalRun]:
     return runs
 
 
-def save_dataset_upload(project_id: str, filename: str, content: bytes) -> Path:
-    if not _SLUG_RE.match(filename):
-        raise ValueError(f"not a valid upload filename: {filename!r}")
-    data_dir = _resolve_eval_data_dir(project_id)
-    data_dir.mkdir(parents=True, exist_ok=True)
-    path = data_dir / filename
-    if path.exists():
-        raise FileExistsError(f"dataset upload already exists: {path}")
-    path.write_bytes(content)
-    return path
-
-
 def latest_version_id(project_id: str) -> str | None:
     return find_latest_version_id(project_id)
 
@@ -126,18 +113,7 @@ def eval_status(report: CompatibilityReport, runs: list[EvalRun],
     return "run succeeded"
 
 
-# `result_ref` is recorded project-relative by the runner, so only this package knows
-# what it hangs off — a reader is handed the run's id, never the directory.
-def resolve_eval_result_path(project_id: str, result_ref: str) -> Path:
-    return resolve_project_dir(project_id) / result_ref
-
-
-def resolve_eval_run_dir(project_id: str, run_id: str) -> Path:
-    return resolve_project_dir(project_id) / "eval_run" / run_id
-
-
-# The one thing here still on disk rather than in the document store, so the one
-# place an id becomes a path — through the resolver that refuses an id escaping
-# the workspace.
-def _resolve_eval_data_dir(project_id: str) -> Path:
-    return resolve_project_dir(project_id) / "eval_data"
+# `result_ref` is recorded relative to the run that wrote it, so it is that run's id a
+# reader is handed — never a project directory, and never a path built from one here.
+def resolve_eval_result_path(project_id: str, run_id: str, result_ref: str) -> Path:
+    return resolve_eval_run_dir(project_id, run_id) / result_ref

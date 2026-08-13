@@ -110,7 +110,7 @@ def test_one_blob_in_two_projects_is_weighed_once(project, tmp_path):
     (tmp_path / "other").mkdir(parents=True)
     save_upload("posts.csv", io.BytesIO(CSV), "demo")
     save_upload("posts.csv", io.BytesIO(CSV), "other")
-    assert len(uploads.UploadedFile.list()) == 2
+    assert len(uploads.StoredFile.list()) == 2
     assert uploads.measure_files_used_bytes() == len(CSV)
 
 

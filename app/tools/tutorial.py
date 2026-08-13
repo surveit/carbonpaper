@@ -30,8 +30,10 @@ _DATA_DIR = Path(__file__).resolve().parents[1] / "seeds" / "data"
 _FIXTURE = _DATA_DIR / f"{_FIXTURE_STEM}.json"
 _GUIDE = _DATA_DIR / "review_guides" / f"{_FIXTURE_STEM}.json"
 # The project id is minted at import, so the committed eval names no project and is
-# told which one it belongs to here.
+# told which one it belongs to here. Its dataset is named here too, and for the same
+# reason: a `TableRef` addresses a stored file, and nothing is stored until this runs.
 _EVAL = _DATA_DIR / "evals" / f"{_FIXTURE_STEM}.json"
+_EVAL_DATASET = _DATA_DIR / "evals" / "tutorial_alignment_hard.csv"
 # The fixture carries no path for these — a committed file cannot know where the
 # workspace is — so each run says which file its input stage reads.
 _CSV_BY_STAGE_ID = {
@@ -80,7 +82,7 @@ def seed_tutorial_project(ctx: TutorialContext) -> TutorialAgentReference:
     # A second tour reuses what the first seeded: the workspace is not the tour's to
     # fill up, and re-importing would discard whatever the reader did to it.
     if name is None:
-        for path in (_FIXTURE, _GUIDE, _EVAL, *_CSV_BY_STAGE_ID.values()):
+        for path in (_FIXTURE, _GUIDE, _EVAL, _EVAL_DATASET, *_CSV_BY_STAGE_ID.values()):
             if not path.is_file():
                 raise FileNotFoundError(f"the tutorial fixture needs {path}, which is missing")
         name = import_project(
@@ -123,8 +125,16 @@ def _store_tour_files(project_id: str) -> dict[str, str]:
 
 
 def read_seed_eval_config(project_id: str) -> EvalConfig:
+    """Stores the committed dataset, since the `sha256` its `table` needs is minted by that."""
+    raw = json.loads(_EVAL.read_text(encoding="utf-8"))
     return EvalConfig.model_validate(
-        {**json.loads(_EVAL.read_text(encoding="utf-8")), "project": project_id})
+        {**raw, "project": project_id,
+         "table": {**raw["table"], "sha256": _store_eval_dataset(project_id)}})
+
+
+def _store_eval_dataset(project_id: str) -> str:
+    with _EVAL_DATASET.open("rb") as handle:
+        return uploads.save_upload(_EVAL_DATASET.name, handle, project_id).sha256
 
 
 def _read_seeded_record(project_id: str) -> Project:

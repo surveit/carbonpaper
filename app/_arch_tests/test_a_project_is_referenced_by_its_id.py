@@ -21,10 +21,8 @@ _RESOLVER = "resolve_project_dir"
 # A module joins onto what it resolves and keeps the result local; nothing hands a
 # project directory to anything else.
 _PATH_OWNERS: dict[str, str] = {
-    "app/services/workspace.py": "the resolver itself, plus runs/ and schemas/",
+    "app/services/workspace.py": "the resolver itself, plus runs/, eval_run/ and schemas/",
     "app/services/project.py": "project.json, and the working copy's own directory",
-    "app/evals/store.py": "eval_data/ uploads, eval_run/ output and its result table",
-    "app/evals/runner.py": "the eval run's result_ref, recorded project-relative",
     "app/services/review_packet/data.py": "relocating a run input whose recorded absolute path went stale",
 }
 

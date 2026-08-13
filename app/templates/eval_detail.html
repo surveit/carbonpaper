@@ -160,7 +160,7 @@
   {# ─────────── DATASET — the fixed rows every run scores against ─────────── #}
   <div class="pane" data-pane="dataset" hidden>
   {% if has_eval_dataset %}
-    <p class="lede"><code>{{ config.table.path }}</code> ({{ config.table.format }})</p>
+    <p class="lede"><code>{{ dataset_name or config.table.sha256 }}</code> ({{ config.table.format }})</p>
     {% if dataset_error %}
     <div class="load-issues">{{ dataset_error }}</div>
     {% else %}

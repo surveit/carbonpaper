@@ -71,7 +71,7 @@ def _build_coverage(
 ) -> EvalCoverage | None:
     assert run.result_ref is not None  # _latest_scored_run required one
     # None where the result table will not read: the badge is then absent, never guessed.
-    tally = tally_scored_rows(resolve_eval_result_path(project_id, run.result_ref))
+    tally = tally_scored_rows(resolve_eval_result_path(project_id, run.id, run.result_ref))
     if tally is None:
         return None
     return EvalCoverage(

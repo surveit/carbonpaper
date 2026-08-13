@@ -1,8 +1,8 @@
 """Tests for app/evals/store.py — eval config/run storage (document store) and
 the status rule. Config/run storage is scoped by a project dir (`tmp_path`
 here; only its `.name` is used, to key documents), isolated per test by the
-autouse in-memory store (see conftest.fresh_store). Dataset uploads stay on
-disk under `tmp_path` and are untouched by this conversion."""
+autouse in-memory store (see conftest.fresh_store). A dataset is a stored
+file, so nothing here writes one — see tests/test_eval_dataset.py."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -12,7 +12,6 @@ import pytest
 from app.models import EvalConfig, EvalRun
 from app.core.persistence import get_store
 from app.evals.compatibility import CompatibilityReport
-from app.services.workspace import resolve_project_dir
 from app.evals.store import (
     EvalConfigEntry,
     eval_status,
@@ -21,15 +20,14 @@ from app.evals.store import (
     list_eval_runs,
     load_eval_config,
     load_eval_run,
-    save_dataset_upload,
     save_eval_config,
     save_eval_run,
 )
 from app.services.versioning import WorkflowVersion
 
 
-def _ref(path="x.csv", cols=("k",)):
-    return {"path": path, "format": "csv",
+def _ref(sha256="0" * 64, cols=("k",)):
+    return {"sha256": sha256, "format": "csv",
             "table_schema": {"columns": [{"name": c, "type": "str", "nullable": True} for c in cols]}}
 
 
@@ -141,29 +139,6 @@ def test_list_eval_configs_tolerates_invalid_document_others_still_load(tmp_path
 
 def test_list_eval_configs_empty_store_returns_empty(tmp_path: Path):
     assert list_eval_configs(tmp_path.name) == []
-
-
-# ── save_dataset_upload immutability ──────────────────────────────────────────
-def test_save_dataset_upload_writes_file(tmp_path: Path):
-    path = save_dataset_upload(tmp_path.name, "eval_dataset.csv", b"a,b\n1,2\n")
-    assert path == resolve_project_dir(tmp_path.name) / "eval_data" / "eval_dataset.csv"
-    assert path.read_bytes() == b"a,b\n1,2\n"
-
-
-def test_save_dataset_upload_raises_file_exists_on_same_name(tmp_path: Path):
-    path = save_dataset_upload(tmp_path.name, "eval_dataset.csv", b"a,b\n1,2\n")
-    with pytest.raises(FileExistsError):
-        save_dataset_upload(tmp_path.name, "eval_dataset.csv", b"different content")
-    # original content untouched
-    assert path.read_bytes() == b"a,b\n1,2\n"
-
-
-@pytest.mark.parametrize("bad_name", [
-    "../escape.csv", "sub/dir.csv", "sub\\dir.csv", "", "..", ".",
-])
-def test_save_dataset_upload_rejects_non_slugish_filenames(tmp_path: Path, bad_name):
-    with pytest.raises(ValueError):
-        save_dataset_upload(tmp_path.name, bad_name, b"content")
 
 
 # ── save / load eval run roundtrip ────────────────────────────────────────────

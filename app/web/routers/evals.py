@@ -12,7 +12,7 @@ from app.core.errors import EvalNotScorableError
 from app.core.frames import list_rows
 from app.models import EvalConfig, EvalRun, WorkflowNotFormed
 from app.evals.compatibility import CompatibilityReport, validate_eval_compatibility
-from app.evals.dataset import read_table_ref
+from app.evals.dataset import read_dataset_filename, read_table_ref
 from app.evals.runner import start_eval_run
 from app.evals.store import (
     eval_status,
@@ -23,6 +23,7 @@ from app.evals.store import (
     resolve_eval_result_path,
     load_eval_run,
 )
+from app.services.errors import FileNotStoredError
 from app.services.versioning import list_versions
 from app.web.breadcrumbs import build_eval_crumbs, build_eval_run_crumbs
 from app.web.config import templates
@@ -128,20 +129,24 @@ def _render_eval_detail(
 def _read_eval_dataset_preview(config: EvalConfig) -> dict[str, Any]:
     if config.table is None:
         return {"has_eval_dataset": False, "dataset_columns": [], "dataset_rows": [],
-                "dataset_error": None, "dataset_capped": False,
+                "dataset_name": None, "dataset_error": None, "dataset_capped": False,
                 "dataset_cap": DATASET_PREVIEW_ROWS}
     columns = [c.name for c in config.table.table_schema.columns]
     rows: list[dict[str, str]] = []
     error: str | None = None
     capped = False
+    # The name is the stored file's, read there rather than copied into the TableRef: a
+    # second copy of it would be free to disagree with the file it is naming.
+    name: str | None = None
     try:
+        name = read_dataset_filename(config.table)
         frame = read_table_ref(config.table)
         capped = len(frame) > DATASET_PREVIEW_ROWS
         rows = list_rows(render_frame_as_text(frame.head(DATASET_PREVIEW_ROWS)))
-    except (OSError, ValueError, EvalNotScorableError) as exc:
+    except (OSError, ValueError, EvalNotScorableError, FileNotStoredError) as exc:
         error = str(exc)
     return {"has_eval_dataset": True, "dataset_columns": columns, "dataset_rows": rows,
-            "dataset_error": error, "dataset_capped": capped,
+            "dataset_name": name, "dataset_error": error, "dataset_capped": capped,
             "dataset_cap": DATASET_PREVIEW_ROWS}
 
 
@@ -172,7 +177,9 @@ async def eval_run_detail(request: Request, project_id: str, eval_id: str, run_i
             # vetoed run and on one that errored before scoring; the pane then
             # states which of those it was rather than showing an empty table.
             "rows": (
-                build_eval_rows(resolve_eval_result_path(project_id, run.result_ref), config.table)
+                build_eval_rows(
+                    resolve_eval_result_path(project_id, run.id, run.result_ref),
+                    config.table)
                 if run.result_ref else None
             ),
             "event_tail": EVENT_TAIL,
