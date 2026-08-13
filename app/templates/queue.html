@@ -104,7 +104,8 @@
 
   // A detached or hidden ancestor lays out at zero height, so a value's overflow
   // can only be measured once its card is attached AND visible. Accepts a card,
-  // a single field, or any container of `.reviewed-field`s.
+  // a single field, or any container of `.reviewed-field`s. Re-measuring must
+  // never collapse a field the reviewer already opened while it still overflows.
   function syncFieldOverflow(root) {
     const fields = root.classList && root.classList.contains('reviewed-field')
       ? [root] : root.querySelectorAll('.reviewed-field');
@@ -112,10 +113,14 @@
       const value = field.querySelector('.field-value');
       const toggle = field.querySelector('[data-field-expand]');
       if (!value || !toggle) return;
-      // Measured against the clamped height, so a stale expanded flag from a
-      // prior state does not read as "fits" once the clamp is back in force.
-      collapseField(value, toggle);
-      toggle.hidden = value.scrollHeight <= value.clientHeight + 1;
+      const wasExpanded = value.dataset.expanded === 'true';
+      // Measured against the clamped height, never the reviewer's open state —
+      // a forced synchronous read, so the browser never paints this mid-flip.
+      value.dataset.expanded = 'false';
+      const overflowing = value.scrollHeight > value.clientHeight + 1;
+      toggle.hidden = !overflowing;
+      if (overflowing && wasExpanded) expandField(value, toggle);
+      else collapseField(value, toggle);
     });
   }
 
@@ -125,15 +130,16 @@
     toggle.textContent = 'Show more';
   }
 
+  function expandField(value, toggle) {
+    value.dataset.expanded = 'true';
+    toggle.setAttribute('aria-expanded', 'true');
+    toggle.textContent = 'Show less';
+  }
+
   function toggleFieldExpand(button) {
     const value = fieldOf(button).querySelector('.field-value');
-    if (value.dataset.expanded === 'true') {
-      collapseField(value, button);
-    } else {
-      value.dataset.expanded = 'true';
-      button.setAttribute('aria-expanded', 'true');
-      button.textContent = 'Show less';
-    }
+    if (value.dataset.expanded === 'true') collapseField(value, button);
+    else expandField(value, button);
   }
 
   // The controls describe the WHOLE queue and appear only when it runs past one
@@ -181,6 +187,15 @@
     if (reviewerName()) syncReviewerGate();
   });
   nameInput.addEventListener('blur', syncReviewerGate);
+
+  // A value's line count depends on the card's width, so a viewport resize can
+  // both create and remove overflow. `resize` fires continuously during a
+  // drag, so this is debounced rather than measuring every frame.
+  let resizeSyncTimer = null;
+  window.addEventListener('resize', function () {
+    clearTimeout(resizeSyncTimer);
+    resizeSyncTimer = setTimeout(function () { syncFieldOverflow(queueItems); }, 150);
+  });
 
   function readValues(card, key) {
     const values = {};
