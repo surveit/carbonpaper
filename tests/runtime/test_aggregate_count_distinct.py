@@ -30,7 +30,7 @@ def _counts() -> pd.DataFrame:
             {"output_column": "n_registrants", "formula": "count_distinct",
              "value_column": "registrant"}]},
     })
-    ctx = RunContext.for_stages_outside_a_run(repo_root=None, run_dir=None)
+    ctx = RunContext.for_stages_outside_a_run(run_dir=None)
     return rows_of(handle_aggregate(place_stage(stage), as_inputs({"filings": FILINGS}), ctx))
 
 

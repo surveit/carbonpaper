@@ -93,7 +93,7 @@ def _stage(wf: WorkflowFile, stage_id: str) -> Stage:
 
 def _execute(stage: Stage, inputs: dict[str, pd.DataFrame]) -> pd.DataFrame:
     # The same ephemeral, run-dir-less context authored stage tests execute under.
-    ctx = RunContext.for_stages_outside_a_run(None, None)
+    ctx = RunContext.for_stages_outside_a_run(None)
     result = HANDLERS[StageType(stage.type)].execute(
         place_stage(stage), as_inputs(inputs), ctx)
     assert result is not None
@@ -588,7 +588,7 @@ def _publish_a_report(tmp_path, df: pd.DataFrame) -> str:
     stage = _stage(_bound_fixture(), "publish_report")
     # A project-scoped context, because the step declares `citation_provider` — the run's
     # (project, run_id) is what a row-trace URL is built from.
-    ctx = RunContext.for_workflow_test_run(tmp_path, tmp_path, "tutorial", "R-1")
+    ctx = RunContext.for_workflow_test_run(tmp_path, "tutorial", "R-1")
     out = HANDLERS[StageType(stage.type)].execute(
         place_stage(stage), as_inputs({_REVIEW_STAGE: df}), ctx)
     assert out is not None

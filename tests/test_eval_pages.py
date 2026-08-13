@@ -1,7 +1,7 @@
 """Route tests for the eval read pages (app/web/routers/evals.py). Builds a demo
 project on disk — a compiled two-stage workflow, one valid+compatible eval with an
 attached dataset, plus one leftover config that no longer validates — points
-the projects root and REPO_ROOT at it, and checks each page renders the truthful state."""
+the projects root and the repo root at it, and checks each page renders the truthful state."""
 from __future__ import annotations
 
 
@@ -20,6 +20,7 @@ from app.models import (
 )
 from app.models.schema import TableSchema
 from app.models.stages.input_data import FileFormat
+from app.core import paths
 from app.core.frames import write_frame_file
 from app.core.persistence import get_store
 from app.evals.store import save_eval_config, save_eval_run
@@ -72,7 +73,7 @@ def demo_project(tmp_path, monkeypatch):
     add_stage(compiled, _TARGET)
 
     workspace.set_projects_dir(tmp_path)
-    monkeypatch.setattr(evals_router, "REPO_ROOT", tmp_path, raising=False)
+    monkeypatch.setattr(paths, "REPO_ROOT", tmp_path)
 
     # The eval dataset: the override stage's output columns + the checked column.
     data_dir = demo / "eval_data"

@@ -11,7 +11,6 @@ from app.core.agent.tool_spec import ToolSpec
 from app.evals.runner import run_eval as run_project_eval
 from app.evals.store import load_eval_config
 from app.models import EvalRun
-from app.services.workspace import repo_root
 from app.tools.shared import resolve_existing_project
 from app.tools.types import ToolParameterProse
 
@@ -33,7 +32,7 @@ def run_eval(
     """`base_url` is for a caller whose reader clicks the link; without it it is root-relative."""
     project_dir = resolve_existing_project(project_id)
     run = run_project_eval(
-        project_dir, load_eval_config(project_dir, eval_id), repo_root(),
+        project_dir, load_eval_config(project_dir, eval_id),
         version_id=version_id,
     )
     return EvalRunResult(

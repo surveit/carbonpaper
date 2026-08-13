@@ -26,12 +26,10 @@ class RunIdentity:
 class RunContext(BaseModel):
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
-    # A run's on-disk roots. Both are None only when stages execute outside any
-    # run (the stage-test runner) — the stage types it runs read neither. Every
-    # handler that DOES reach for run-scoped disk goes through require_run_dir()
-    # and fails loudly on None rather than touching a fabricated directory;
-    # repo_root has no reader in the runtime.
-    repo_root: Path | None
+    # A run's on-disk root. None only when stages execute outside any run (the
+    # stage-test runner) — the stage types it runs read it never. Every handler
+    # that DOES reach for run-scoped disk goes through require_run_dir() and
+    # fails loudly on None rather than touching a fabricated directory.
     run_dir: Path | None
     # This run's logical identity, read by cancellation's checkpoints and the
     # stage-result cache key. Set for a workflow run and a workflow test's run;
@@ -109,14 +107,12 @@ class RunContext(BaseModel):
     @classmethod
     def for_workflow_run(
         cls,
-        repo_root: Path,
         run_dir: Path,
         project: str,
         run_id: str,
         params: RunParameters = RunParameters(),
     ) -> RunContext:
         return cls(
-            repo_root=repo_root,
             run_dir=run_dir,
             identity=RunIdentity(project=project, run_id=run_id),
             stage_cache=StageCacheEntry.read_write(),
@@ -126,14 +122,12 @@ class RunContext(BaseModel):
     @classmethod
     def for_workflow_test_run(
         cls,
-        repo_root: Path,
         run_dir: Path,
         project: str,
         run_id: str,
         params: RunParameters = RunParameters(),
     ) -> RunContext:
         return cls(
-            repo_root=repo_root,
             run_dir=run_dir,
             identity=RunIdentity(project=project, run_id=run_id),
             stage_cache=StageCacheEntry.read_only(),
@@ -144,14 +138,12 @@ class RunContext(BaseModel):
     @classmethod
     def for_stages_outside_a_run(
         cls,
-        repo_root: Path | None,
         run_dir: Path | None,
         params: RunParameters = RunParameters(),
         queue_auto_approve: bool = False,
     ) -> RunContext:
         bypassing = queue_auto_approve or params.queue_auto_approve
         return cls(
-            repo_root=repo_root,
             run_dir=run_dir,
             identity=None,
             stage_cache=None,

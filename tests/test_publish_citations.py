@@ -156,7 +156,7 @@ def _publish_stage(code: str) -> Stage:
 
 def _run_publish(code: str, tmp_path):
     ctx = RunContext.for_workflow_run(
-        repo_root=tmp_path, run_dir=tmp_path / "run",
+        run_dir=tmp_path / "run",
         project="venezuela_lda_lobbying", run_id="R1",
     )
     return handle_publish(

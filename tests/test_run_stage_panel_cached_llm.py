@@ -68,7 +68,7 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def _run(project_dir: Path) -> str:
-    return str(execute_run(project_dir, project_dir, *pinned_stages(project_dir))["run_id"])
+    return str(execute_run(project_dir, *pinned_stages(project_dir))["run_id"])
 
 
 def _panel(run_id: str) -> str:

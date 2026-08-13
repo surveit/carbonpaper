@@ -29,7 +29,7 @@ from app.services.versioning import load_version, load_version_stages
 
 
 def run_eval(
-    project_dir: Path, config: EvalConfig, repo_root: Path, *, version_id: str | None = None,
+    project_dir: Path, config: EvalConfig, *, version_id: str | None = None,
 ) -> EvalRun:
     version = _resolve_version(project_dir, version_id)
     workflow = Workflow(stages=load_version_stages(project_dir, version))
@@ -41,7 +41,7 @@ def run_eval(
     if not settings.can_score_declaratively:
         run = _vetoed_run(config, version, settings)
     else:
-        run = _score_run(project_dir, repo_root, config, version, settings, workflow)
+        run = _score_run(project_dir, config, version, settings, workflow)
     save_eval_run(project_dir, run)
     return run
 
@@ -55,20 +55,20 @@ def _require_runnable(config: EvalConfig, report: CompatibilityReport) -> None:
 
 
 def _score_run(
-    project_dir: Path, repo_root: Path, config: EvalConfig, version: str,
+    project_dir: Path, config: EvalConfig, version: str,
     settings: EvalRunSettings, workflow: Workflow,
 ) -> EvalRun:
     by_id = workflow.index_workflow_stages_by_id()
     override, target = by_id[config.override_stage], by_id[config.target_stage]
     assert config.table is not None  # _require_runnable checked this
-    dataset = read_table_ref(repo_root, config.table)
+    dataset = read_table_ref(config.table)
     run_id = _mint_run_id()
     run_dir = project_dir / "eval_run" / run_id
     started = _now()
     try:
         outputs = run_subset(
-            workflow, stage_ids=settings.frontier, run_dir=run_dir, repo_root=repo_root,
-            injected_outputs=_build_injected_outputs(repo_root, config, override, target, dataset),
+            workflow, stage_ids=settings.frontier, run_dir=run_dir,
+            injected_outputs=_build_injected_outputs(config, override, target, dataset),
             project=project_dir.name, workflow_version=version)
         score = score_expected_outputs(config, override, target, dataset,
                                        table_to_frame(outputs[config.target_stage]))
@@ -81,12 +81,12 @@ def _score_run(
 
 
 def _build_injected_outputs(
-    repo_root: Path, config: EvalConfig, override: WorkflowStage, target: WorkflowStage,
+    config: EvalConfig, override: WorkflowStage, target: WorkflowStage,
     dataset: pd.DataFrame,
 ) -> dict[str, pd.DataFrame]:
     outputs = {config.override_stage: _compute_override_output(override, target, config, dataset)}
     for ref in config.reference_overrides:
-        outputs[ref.stage_id] = read_table_ref(repo_root, ref.table)
+        outputs[ref.stage_id] = read_table_ref(ref.table)
     return outputs
 
 

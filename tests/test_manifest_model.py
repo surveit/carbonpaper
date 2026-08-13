@@ -85,7 +85,7 @@ def test_minted_manifest_omits_the_run_level_optionals():
          }}
     )
     manifest = create_run_manifest(
-        [place_stage(stage)], RunContext(repo_root=None, run_dir=None),
+        [place_stage(stage)], RunContext(run_dir=None),
         run_id="r", project="p", workflow_version="v",
         input_bindings={})
     dumped = manifest.to_dict()

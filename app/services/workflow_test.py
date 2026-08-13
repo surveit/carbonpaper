@@ -18,7 +18,7 @@ from app.runtime.executor import run_subset, topological_sort
 from app.models.run_parameters import RunParameters
 from app.runtime.stages.input_data import read_input_data
 from app.services.versioning import list_versions, load_version, load_version_stages
-from app.services.workspace import repo_root, resolve_project_dir, resolve_run_dir
+from app.services.workspace import resolve_project_dir, resolve_run_dir
 
 
 def run_workflow_test(
@@ -46,7 +46,7 @@ def run_workflow_test(
     executed_ids = [stage.id for stage in executing]
     limits, offsets = _source_row_windows(executing, limit, offset)
     ok, error = _run_frontier(
-        workflow, injected, executed_ids, run_dir, repo_root(),
+        workflow, injected, executed_ids, run_dir,
         project=project_dir.name, run_id=run_id, workflow_version=version,
         limits=limits, offsets=offsets)
 
@@ -76,7 +76,6 @@ def _run_frontier(
     injected: dict[str, pd.DataFrame],
     stage_ids: list[str],
     run_dir: Path,
-    repo_root: Path,
     *,
     project: str,
     run_id: str,
@@ -87,7 +86,7 @@ def _run_frontier(
     try:
         run_subset(
             workflow, injected_outputs=injected, stage_ids=stage_ids,
-            run_dir=run_dir, repo_root=repo_root,
+            run_dir=run_dir,
             params=RunParameters(limits=limits, offsets=offsets,
                                  queue_auto_approve=True, is_test_run=True),
             project=project, workflow_version=workflow_version,
@@ -141,10 +140,10 @@ def _read_source_slices(
 ) -> dict[str, pd.DataFrame]:
     sources = [stage for stage in stages if _is_source(stage)]
     # Ephemeral context: read_input_data reads only the stage's connector params
-    # (an absolute bound path), never repo_root/run_dir or project scope — so this
-    # source read carries the real repo_root and no run_dir (None, the read
-    # precedes any run-dir creation) rather than a fabricated cwd sentinel.
-    ctx = RunContext.for_stages_outside_a_run(repo_root(), None)
+    # (an absolute bound path), never run_dir or project scope — so this source
+    # read carries no run_dir (None, it precedes any run-dir creation) rather
+    # than a fabricated cwd sentinel.
+    ctx = RunContext.for_stages_outside_a_run(None)
     executing_ids = {stage.id for stage in executing}
     end = None if limit is None else offset + limit
     return {

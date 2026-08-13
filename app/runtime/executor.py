@@ -80,7 +80,6 @@ def run_subset(
     injected_outputs: dict[str, pd.DataFrame],
     stage_ids: list[str],
     run_dir: Path,
-    repo_root: Path,
     params: RunParameters = RunParameters(),
     project: str,
     workflow_version: str | None = None,
@@ -93,7 +92,7 @@ def run_subset(
         raise SubsetRunError(f"subset names stage(s) not in the workflow: {missing}")
     ordered = topological_sort([by_id[sid] for sid in stage_ids])
     (run_dir / "outputs").mkdir(parents=True, exist_ok=True)
-    ctx = _subset_ctx(repo_root, run_dir, identity, params)
+    ctx = _subset_ctx(run_dir, identity, params)
     manifest = create_run_manifest(
         ordered, ctx, run_id=run_dir.name, project=project,
         workflow_version=workflow_version, input_bindings={},
@@ -110,12 +109,12 @@ def run_subset(
 
 
 def _subset_ctx(
-    repo_root: Path, run_dir: Path, identity: RunIdentity | None, params: RunParameters,
+    run_dir: Path, identity: RunIdentity | None, params: RunParameters,
 ) -> RunContext:
     if identity is not None:
         return RunContext.for_workflow_test_run(
-            repo_root, run_dir, identity.project, identity.run_id, params)
-    return RunContext.for_stages_outside_a_run(repo_root, run_dir, params)
+            run_dir, identity.project, identity.run_id, params)
+    return RunContext.for_stages_outside_a_run(run_dir, params)
 
 
 def _raise_if_run_failed(manifest: RunManifest) -> None:

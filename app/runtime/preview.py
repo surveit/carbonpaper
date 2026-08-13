@@ -68,7 +68,6 @@ def run_stage_preview(
     *,
     workflow_stage: WorkflowStage,
     run_dir: Path,
-    repo_root: Path,
     output_by_id: dict[str, str | None],
     selected_indices: list[int],
 ) -> StagePreview:
@@ -109,7 +108,7 @@ def run_stage_preview(
     # Ephemeral context: no identity/stage_cache (this run has no project
     # scope), and a pure handler (python/llm/join/aggregate) never writes — we
     # never call the runner, so no manifest/output is touched.
-    ctx = RunContext.for_stages_outside_a_run(repo_root, run_dir)
+    ctx = RunContext.for_stages_outside_a_run(run_dir)
 
     output = handler.execute(
         workflow_stage, {name: frame_to_table(f) for name, f in inputs.items()}, ctx)
