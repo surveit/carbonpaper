@@ -1,0 +1,22 @@
+<!doctype html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Row provenance · review packet</title>
+{% for sheet in assets %}<link rel="stylesheet" href="{{ sheet }}">
+{% endfor %}</head><body class="packet">
+<header class="packet-head">
+  <a class="packet-back" href="{{ index_href }}">&lsaquo; Review packet</a>
+  <h1>Row provenance</h1>
+</header>
+<main class="packet-main">
+  <p class="muted">{{ total }} rows in this run can be traced back to the data they came from.
+  Each opens the stages that produced it, in order, ending at the source file.</p>
+  {% for stage in stages %}
+  <section id="{{ stage.stage_id }}">
+    <h2><code>{{ stage.stage_id }}</code>
+      <span class="muted">{{ stage.rows | length }} row{{ '' if stage.rows | length == 1 else 's' }}{%
+        if stage.published < stage.rows | length %} · {{ stage.published }} linked by the run, {{
+        stage.rows | length - stage.published }} reached through a contributor{% endif %}</span></h2>
+    <p class="muted">{% for row in stage.rows %}<a href="../{{ stage.hrefs[loop.index0] }}">{{ row }}</a>{% if not loop.last %} {% endif %}{% endfor %}</p>
+  </section>
+  {% endfor %}
+</main></body></html>

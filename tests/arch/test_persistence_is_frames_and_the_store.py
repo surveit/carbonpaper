@@ -27,6 +27,7 @@ _ALLOWED_WRITERS: dict[str, str] = {
     "app/services/review_packet/data.py": "builds a downloadable review packet",
     "app/services/review_packet/checksums.py": "builds a downloadable review packet",
     "app/web/review_packet/pages.py": "builds a downloadable review packet",
+    "app/web/review_packet/lineage.py": "builds a downloadable review packet",
 
     # 3. A file the user handed us. Raw bytes we did not author and must not
     # reinterpret — an input CSV, an eval dataset.

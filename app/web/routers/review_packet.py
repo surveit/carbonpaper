@@ -15,21 +15,29 @@ from app.web.review_packet import export_review_packet
 
 router = APIRouter()
 _log = logging.getLogger(__name__)
+
+READY_COOKIE = "packet_ready"
 _COMPRESS_LEVEL = 1
 
 
 @router.get("/project/{project}/runs/{run_id}/packet.zip")
-async def download_review_packet(project: str, run_id: str):
+async def download_review_packet(project: str, run_id: str, ready: str | None = None):
     try:
         content = await run_in_threadpool(_build_packet_zip, project, run_id)
     except RunNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     filename = f"{project}__{run_id}__review-packet.zip"
-    return Response(
+    response = Response(
         content=content,
         media_type="application/zip",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+    if ready is not None:
+        # The page polls for this to stop its spinner: a download gives the browser
+        # no event to fire, and the wait being timed is the packet BUILD, not the
+        # transfer. Read and discarded client-side (static/packet_export.js).
+        response.set_cookie(READY_COOKIE, ready, path="/", samesite="lax")
+    return response
 
 
 def _build_packet_zip(project: str, run_id: str) -> bytes:

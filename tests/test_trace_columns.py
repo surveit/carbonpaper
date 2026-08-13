@@ -4,6 +4,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from conftest import as_inputs
+
 from app.runtime.trace import _new_columns, _read_output, _row_dict
 from test_trace_helpers import write_run
 
@@ -20,15 +22,16 @@ def test_read_output_returns_none_when_file_missing(tmp_path):
 
 def test_row_dict_stringifies_keys_and_delists_arrays():
     df = pd.DataFrame({"name": ["x"], "tags": [np.array(["p", "q"])]})
-    assert _row_dict(df, 0) == {"name": "x", "tags": ["p", "q"]}
+    assert _row_dict(as_inputs({"t": df})["t"], 0) == {"name": "x", "tags": ["p", "q"]}
 
 
 def test_new_columns_is_child_minus_parent():
     parent = pd.DataFrame({"facility_id": ["a"], "name": ["x"]})
     child = pd.DataFrame({"facility_id": ["a"], "name": ["x"], "score": [1]})
-    assert _new_columns(child, parent) == ["score"]
+    tables = as_inputs({"child": child, "parent": parent})
+    assert _new_columns(tables["child"], tables["parent"]) == ["score"]
 
 
 def test_new_columns_all_when_no_parent():
     child = pd.DataFrame({"facility_id": ["a"], "name": ["x"]})
-    assert _new_columns(child, None) == ["facility_id", "name"]
+    assert _new_columns(as_inputs({"c": child})["c"], None) == ["facility_id", "name"]
