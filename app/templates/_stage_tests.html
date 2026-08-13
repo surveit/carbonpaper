@@ -66,10 +66,22 @@
     </summary>
     {% if view.description %}<p class="muted">{{ view.description }}</p>{% endif %}
 
+    {% if view.authored_reason %}
+    <p class="test-authored">These rows are written, not taken from your data:
+      {{ view.authored_reason }}</p>
+    {% endif %}
+
     {% for input in view.inputs %}
     <h3>input <code>{{ input.stage_id }}</code></h3>
     {% if input.rows %}
     {{ rows_table(input.columns, input.rows) }}
+    {# Where each row came from. One line per row, in the table's own order, so a case
+       feeding two rows accounts for both. #}
+    {% for selection in input.selections %}
+    <p class="test-provenance">row {{ selection.row }} of run {{ selection.run_id }},
+      found by <code>{{ selection.filter }}</code> — which matches
+      {{ selection.matched }} of the {{ selection.scanned }} rows that run produced.</p>
+    {% endfor %}
     {% else %}<p class="muted">no rows (empty input)</p>{% endif %}
     {% endfor %}
 

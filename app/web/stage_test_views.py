@@ -89,9 +89,13 @@ def _shape_one_test(
         "inputs": [
             {"stage_id": stage_id,
              "columns": _order_columns(rows, input_schemas.get(stage_id)),
-             "rows": rows}
+             "rows": rows,
+             "selections": _shape_selections(test, stage_id)}
             for stage_id, rows in test.inputs.items()
         ],
+        # Why this case's rows were written rather than selected. None on a case whose
+        # rows came out of a run, which the per-input selections then account for.
+        "authored_reason": test.authored_reason,
         # None, not an empty table: a failure case claims the step must fail, which
         # the template must not render as "succeeded, returned nothing".
         "expected": None if test.expected is None else _shape_expected(
@@ -103,6 +107,15 @@ def _shape_one_test(
             for diff in result.diffs
         ],
     }
+
+
+def _shape_selections(test: StageTest, stage_id: str) -> list[dict[str, Any]]:
+    """One entry per row of this input, in the order the rows stand in the table."""
+    return [
+        {"run_id": selection.run_id, "row": selection.row, "filter": selection.filter,
+         "matched": selection.matched, "scanned": selection.scanned}
+        for selection in test.selections if selection.input == stage_id
+    ]
 
 
 def _shape_returned(

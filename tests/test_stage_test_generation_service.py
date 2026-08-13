@@ -4,6 +4,7 @@ import asyncio
 from pathlib import Path
 from typing import Any
 
+import pandas as pd
 import pytest
 
 import app.compiler.stage_tests as compiler_stage_tests
@@ -15,12 +16,13 @@ from app.core.errors import GenerationError
 from app.models import TableSchema
 from app.models.authoring_lifecycle_note import CompilerPhase
 from app.models.stages.code import SUMMARY_MAX_CHARS
-from app.models.stages.stage_tests import (
-    PythonRowFunctionStageTest,
-    build_stage_tests_model,
-)
-from stage_seed import add_stage, read_stage
+from app.models.stages.stage_tests import PythonRowFunctionStageTest
+from app.compiler.stage_tests_submission import build_selector_submission_model
 from app.services.methodology import write_methodology
+from app.services.stage_test_rows import load_stage_row_sources
+from app.services.workspace import resolve_project_dir
+from run_seed import store_manifest
+from stage_seed import add_stage, read_stage
 
 _IN_SCHEMA = {"columns": [{"name": "amount", "type": "float", "nullable": False}]}
 _OUT_SCHEMA = {"columns": [
@@ -29,12 +31,48 @@ _OUT_SCHEMA = {"columns": [
 ]}
 
 
-def _suite_model(output_schema: dict = _OUT_SCHEMA) -> Any:
-    return build_stage_tests_model(
+def _suite_model(project_dir: Path, output_schema: dict = _OUT_SCHEMA) -> Any:
+    return build_selector_submission_model(
         PythonRowFunctionStageTest,
         {"load": TableSchema.model_validate(_IN_SCHEMA)},
         TableSchema.model_validate(output_schema),
+        _sources(project_dir),
     )
+
+
+def _finish(project_dir: Path, answer: Any) -> None:
+    generation._finish_stage_tests(
+        project_dir, "double", answer, PythonRowFunctionStageTest, _sources(project_dir))
+
+
+_RUN_ID = "20260101T000000"
+_AMOUNTS = [2.0, 7.5, 0.0]
+
+
+def _write_run(project_dir: Path) -> None:
+    """Examples are selected from a finished run, so the fixture project has one.
+
+    The frame goes where the workspace resolves the project, not beside the seed path.
+    """
+    outputs = resolve_project_dir(project_dir.name) / "runs" / _RUN_ID / "outputs"
+    outputs.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame({"amount": _AMOUNTS}).to_parquet(outputs / "load.parquet", index=False)
+    store_manifest(project_dir, _RUN_ID, {
+        "run_id": _RUN_ID, "started_at": _RUN_ID, "project": project_dir.name,
+        "workflow_version": _RUN_ID, "human_review_queue_stats": {}, "status": "ok",
+        "stage_records": [{
+            "stage_id": "load", "type": "input_data", "status": "ok",
+            "output_row_count": len(_AMOUNTS), "elapsed_ms": 1,
+            "input_validation_report": [], "output_validation_report": None,
+            "error": None, "output_path": "outputs/load.parquet",
+        }],
+    })
+
+
+def _sources(project_dir: Path) -> Any:
+    return load_stage_row_sources(
+        project_dir.name, {"load": TableSchema.model_validate(_IN_SCHEMA)})
+
 
 
 def _seed_project(project_dir: Path, *, existing_tests: list[dict] | None = None) -> None:
@@ -61,13 +99,15 @@ def _seed_project(project_dir: Path, *, existing_tests: list[dict] | None = None
     if existing_tests is not None:
         double_spec["tests"] = existing_tests
     add_stage(pdir, double_spec)
+    _write_run(project_dir)
 
 
-def _valid_suite() -> Any:
-    return _suite_model().model_validate({
+def _valid_suite(project_dir: Path) -> Any:
+    return _suite_model(project_dir).model_validate({
         "tests": [{
             "name": "doubles_two",
-            "inputs": {"load": [{"amount": 2.0}]},
+            "description": "the ordinary case",
+            "selected_rows": [{"input": "load", "row": 0, "filter": "amount == 2.0"}],
             "expected": [{"amount": 2.0, "doubled": 4.0}],
         }]
     })
@@ -79,7 +119,7 @@ def test_finish_stage_tests_patches_the_stage(tmp_path: Path):
     project_dir = tmp_path / "demo"
     _seed_project(project_dir)
 
-    generation._finish_stage_tests(project_dir, "double", _valid_suite())
+    _finish(project_dir, _valid_suite(project_dir))
 
     stage = read_stage(project_dir, "double")
     assert len(stage["tests"]) == 1
@@ -94,7 +134,7 @@ def test_finish_stage_tests_replaces_existing_tests(tmp_path: Path):
         "expected": [{"amount": 1.0, "doubled": 2.0}],
     }])
 
-    generation._finish_stage_tests(project_dir, "double", _valid_suite())
+    _finish(project_dir, _valid_suite(project_dir))
 
     stage = read_stage(project_dir, "double")
     names = [t["name"] for t in stage["tests"]]
@@ -106,7 +146,7 @@ def test_finish_with_no_answer_raises(tmp_path: Path):
     _seed_project(project_dir)
 
     with pytest.raises(GenerationError):
-        generation._finish_stage_tests(project_dir, "double", None)
+        _finish(project_dir, None)
 
     stage = read_stage(project_dir, "double")
     assert "tests" not in stage  # nothing written on a failed generation
@@ -119,10 +159,10 @@ def test_finish_with_empty_suite_raises(tmp_path: Path):
         "inputs": {"load": [{"amount": 1.0}]},
         "expected": [{"amount": 1.0, "doubled": 2.0}],
     }])
-    empty_suite = _suite_model().model_validate({"tests": []})
+    empty_suite = _suite_model(project_dir).model_validate({"tests": []})
 
     with pytest.raises(GenerationError, match="empty test suite"):
-        generation._finish_stage_tests(project_dir, "double", empty_suite)
+        _finish(project_dir, empty_suite)
 
     stage = read_stage(project_dir, "double")
     names = [t["name"] for t in stage["tests"]]
@@ -154,18 +194,20 @@ def test_finish_stage_tests_preserves_null_cells(tmp_path: Path):
                      "code": "def transform(row):\n    return {**row, 'flag': None}\n"},
     })
 
-    suite = _suite_model(out_schema).model_validate({
+    _write_run(project_dir)
+    suite = _suite_model(project_dir, out_schema).model_validate({
         "tests": [{
             "name": "flag_defaults_null",
-            "inputs": {"load": [{"amount": 1.0}]},
-            "expected": [{"amount": 1.0, "flag": None}],
+            "description": "a step that writes no flag",
+            "selected_rows": [{"input": "load", "row": 0, "filter": "amount == 2.0"}],
+            "expected": [{"amount": 2.0, "flag": None}],
         }]
     })
 
-    generation._finish_stage_tests(project_dir, "double", suite)
+    _finish(project_dir, suite)
 
     stage = read_stage(project_dir, "double")
-    assert stage["tests"][0]["expected"][0] == {"amount": 1.0, "flag": None}
+    assert stage["tests"][0]["expected"][0] == {"amount": 2.0, "flag": None}
 
 
 # ── start_stage_test_generation wiring: hidden view-only session + a live turn ───────────
@@ -174,7 +216,8 @@ class _FakeGeneratorAgent:
 
     task = "generate tests for stage `double` and submit them"
 
-    def __init__(self) -> None:
+    def __init__(self, suite: Any) -> None:
+        self.suite = suite
         self._answer: Any = None
 
     @property
@@ -187,7 +230,7 @@ class _FakeGeneratorAgent:
         class _Engine:
             async def stream_turn(self, prompt: str, *, message_history: Any, emit: Any, resume: Any):
                 emit({"kind": "text", "text": "generated"})
-                agent._answer = _valid_suite()  # the submit_answer tool would set this
+                agent._answer = agent.suite  # the submit_answer tool would set this
                 return [{"role": "assistant", "parts": [{"type": "text", "text": "generated"}]}], None
 
         return _Engine()
@@ -232,7 +275,8 @@ def test_start_creates_hidden_viewonly_session(tmp_path: Path, monkeypatch: Any)
     # generation delegates to.
     monkeypatch.setattr(compiler_stage_tests, "open_session_store", lambda: store)
     monkeypatch.setattr(compiler_stage_tests, "default_turn_manager", lambda: turns)
-    monkeypatch.setattr(compiler_stage_tests, "build_stage_test_generator", lambda *a, **k: _FakeGeneratorAgent())
+    monkeypatch.setattr(compiler_stage_tests, "build_stage_test_generator",
+                        lambda *a, **k: _FakeGeneratorAgent(_valid_suite(project_dir)))
 
     async def _drive() -> str:
         sid = generation.start_stage_test_generation(project_dir, stage_id="double", model="sonnet")

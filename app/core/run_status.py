@@ -19,6 +19,11 @@ class StageStatus(enum.StrEnum):
     CANCELLED = "cancelled"
 
 
+# The stage statuses whose output frame holds what the stage promised. An `error`
+# stage also wrote a frame, but its untouched columns are nulls rather than results.
+FINISHED_STAGE_STATUSES = (StageStatus.OK, StageStatus.VALIDATION_WARNINGS)
+
+
 class RunStatus(enum.StrEnum):
     RUNNING = "running"
     OK = "ok"

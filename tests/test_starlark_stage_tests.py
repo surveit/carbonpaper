@@ -2,9 +2,12 @@
 refusal seam that tells refuse() apart from a crash, and the generator's binding."""
 from __future__ import annotations
 
+import pandas as pd
 import pytest
 
 from app.compiler.stage_tests import build_stage_test_generator, render_generation_task
+from app.core.column_profile import profile_frame
+from app.core.row_search import InputRows
 from app.models.named_schemas import SchemaLibrary
 from app.models.terms import Terms
 from app.models import Stage, parse_stage
@@ -64,6 +67,17 @@ def _starlark_stage(
         "starlark": block,
         "tests": tests,
     })
+
+
+def _sources() -> dict[str, InputRows]:
+    """The rows one run of `filings` wrote, which a generated case selects between."""
+    frame = pd.DataFrame({
+        "filing_id": ["F1", "F2"],
+        "reported_amount": ["$45,000.00", None],
+    })
+    return {"filings": InputRows(
+        input_id="filings", run_id="20260101T000000", frame=frame,
+        profile=profile_frame(frame, list(frame.columns), max_values=12))}
 
 
 def _dollar_row(filing_id: str = "F1") -> dict:
@@ -203,21 +217,22 @@ def test_find_stage_test_class_binds_the_starlark_suite_model():
 
 
 def test_the_generator_builds_for_a_starlark_stage_without_showing_it_the_code():
-    agent = build_stage_test_generator(_NO_TERMS, _starlark_stage(_PARSE_DOLLARS, []))
+    agent = build_stage_test_generator(_NO_TERMS, _starlark_stage(_PARSE_DOLLARS, []), _sources())
     assert _SUMMARY in agent.task
     assert "starlark_row_function" in agent.task
     assert "def transform" not in agent.task
 
 
 def test_the_generators_target_schema_is_bound_to_the_starlark_stages_inputs():
-    agent = build_stage_test_generator(_NO_TERMS, _starlark_stage(_PARSE_DOLLARS, []))
-    with pytest.raises(Exception, match="declared inputs"):
+    agent = build_stage_test_generator(_NO_TERMS, _starlark_stage(_PARSE_DOLLARS, []), _sources())
+    with pytest.raises(Exception, match="does not read"):
         agent._target_schema.model_validate({"tests": [{
-            "name": "x", "inputs": {"ghost": [_dollar_row()]},
+            "name": "x", "description": "a row from somewhere else",
+            "selected_rows": [{"input": "ghost", "row": 0, "filter": "filing_id == 'F1'"}],
             "expected": [{**_dollar_row(), "amount_usd": 45000.0}]}]})
 
 
 def test_a_starlark_stage_with_no_summary_cannot_generate_examples():
     stage = _starlark_stage(_PARSE_DOLLARS, [], summary=None)
     with pytest.raises(ValueError, match="has no summary"):
-        render_generation_task(_NO_TERMS, stage)
+        render_generation_task(_NO_TERMS, stage, _sources())

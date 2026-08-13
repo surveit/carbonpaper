@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict
 
 from app.models.named_schemas import SchemaLibrary
 from app.models.review_guide import ReviewGuideDraft
+from app.compiler.stage_tests_submission import SubmittedCase
 from app.models.stages.stage_base import StageTest
 from app.tools.submitted_stage import SubmittedStage
 
@@ -31,6 +32,7 @@ _SCHEMA_ROOTS: tuple[type[BaseModel], ...] = (
     SchemaLibrary,
     ReviewGuideDraft,
     StageTest,
+    SubmittedCase,
 )
 
 # A target_schema the source computes rather than names, each mapped to the listed root
@@ -40,6 +42,7 @@ _SCHEMA_ROOTS: tuple[type[BaseModel], ...] = (
 # carries no docstring because `create_model` sets `__doc__` to None.
 _DYNAMIC_ROOTS: dict[str, str] = {
     "build_stage_tests_model(...)": "StageTest",
+    "build_selector_submission_model(...)": "SubmittedCase",
     "target_schema": "a create_model() schema — no class, no docstring",
 }
 

@@ -51,6 +51,18 @@ _OneInputRow: TypeAlias = Annotated[
 ]
 
 
+# `row` is a position in that run's output for `input`, narrowed to what the step reads.
+class RowSelection(_Base):
+    input: StageId
+    run_id: str
+    row: int = Field(ge=0)
+    filter: str
+    # How many rows the filter selected, out of how many it read. A case whose filter
+    # matched most of the frame is grounded on a row that may exercise nothing.
+    matched: int = Field(ge=1)
+    scanned: int = Field(ge=1)
+
+
 class StageTest(_Base):
     model_config = ConfigDict(json_schema_extra={"description": STAGE_TEST_DESCRIPTION})
 
@@ -58,6 +70,10 @@ class StageTest(_Base):
     description: Optional[str] = None
     inputs: dict[StageId, list[DataRow]] = Field(description=_INPUTS_DESCRIPTION)
     expected: Optional[list[DataRow]] = Field(description=_EXPECTED_DESCRIPTION)
+    # Where each input row came from, in `inputs` order per input. Empty on a case
+    # whose rows were written rather than selected, which `authored_reason` explains.
+    selections: list[RowSelection] = []
+    authored_reason: Optional[str] = None
 
     @model_serializer(mode="wrap")
     def _keep_a_failure_claim_visible(
@@ -115,6 +131,28 @@ def validate_stage_tests(input_ids: list[StageId], tests: list[StageTest]) -> No
             raise ValueError(
                 f"test {test.name!r}: inputs keys {sorted(test.inputs)} "
                 f"must be exactly the stage's declared inputs {sorted(declared)}"
+            )
+        _refuse_inconsistent_provenance(test, declared)
+
+
+def _refuse_inconsistent_provenance(test: StageTest, declared: set[StageId]) -> None:
+    if test.selections and test.authored_reason:
+        raise ValueError(
+            f"test {test.name!r}: its rows are selected from real data, so it cannot "
+            f"also state why they were written instead"
+        )
+    unknown = sorted({s.input for s in test.selections} - declared)
+    if unknown:
+        raise ValueError(
+            f"test {test.name!r}: a row is selected from {unknown}, which this step "
+            f"does not read — its inputs are {sorted(declared)}"
+        )
+    for input_id, rows in test.inputs.items():
+        selected = [s for s in test.selections if s.input == input_id]
+        if selected and len(selected) != len(rows):
+            raise ValueError(
+                f"test {test.name!r}, input {input_id!r}: {len(selected)} row(s) "
+                f"selected for {len(rows)} row(s) fed in — each row states where it came from"
             )
 
 
