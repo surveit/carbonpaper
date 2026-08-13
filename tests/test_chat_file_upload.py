@@ -102,11 +102,13 @@ def test_the_question_blocks_rather_than_sitting_beside_the_composer(session_id)
     assert '<dialog class="ac-modal" id="project-modal">' in page
 
 
-def test_the_third_choice_is_a_new_project_not_a_shrug(session_id):
+def test_new_project_leads_the_choices(session_id):
     page = client.get(f"/chat/{session_id}").text
-    # Its value is blank, so the file lands unclaimed and the agent creates the project
-    # and adopts it — nothing in the browser can, since a project needs a methodology.
-    assert 'class="ac-choice ac-choice-new" data-project="">New project' in page
+    # First and bold: with no project on the session it is the likeliest answer. Its
+    # value is blank, so the file lands in no project and the agent creates one and
+    # moves it in — nothing in the browser can, since a project needs a methodology.
+    assert 'data-project="">\n      <strong>New project</strong>' in page
+    assert page.index("ac-choice-new") < page.index('id="project-choices"')
 
 
 def test_the_picker_names_the_project_it_offers(session_id, project_id):

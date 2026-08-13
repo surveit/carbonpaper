@@ -106,6 +106,23 @@ def move_file_to_project(sha256: str, project_id: str) -> UploadedFile:
     return record
 
 
+def delete_file(project_id: str | None, sha256: str) -> None:
+    """Drop one project's hold on a file, and the bytes when nothing else holds them."""
+    records = _find_records(sha256=sha256, project_id=project_id)
+    if not records:
+        raise FileNotStoredError(
+            f"no file {sha256!r} in {project_id or 'the files outside a project'} — "
+            "nothing to delete")
+    path = resolve_stored_path(records[0])
+    for record in records:
+        UploadedFile.delete(record.id)
+    # Content addressing means one blob can serve several projects, so the bytes go only
+    # when the last hold on them does — otherwise deleting here empties another project.
+    if not _find_any_record(sha256) and path.is_file():
+        path.unlink()
+        _remove_if_empty(path.parent)
+
+
 def resolve_stored_path(record: UploadedFile) -> Path:
     """Where a stored file sits, read back off its record alone."""
     return (files_root() / record.sha256 / record.filename).resolve()
@@ -157,6 +174,15 @@ def _find_records(*, sha256: str | None = None,
     return [record for record in records
             if (sha256 is None or record.sha256 == sha256)
             and record.project_id == project_id]
+
+
+def _find_any_record(sha256: str) -> list[UploadedFile]:
+    return [record for record in UploadedFile.list() if record.sha256 == sha256]
+
+
+def _remove_if_empty(directory: Path) -> None:
+    if directory.is_dir() and not any(directory.iterdir()):
+        directory.rmdir()
 
 
 def _sorted_newest_first(records: list[UploadedFile]) -> list[UploadedFile]:

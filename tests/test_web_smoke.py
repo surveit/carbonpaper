@@ -123,7 +123,8 @@ def test_build_nav_groups_workflow_children(demo_project):
     from app.web.project_view import build_nav, shell_state
 
     nav = build_nav(shell_state(demo_project / "demo", "overview"))
-    assert [item.key for item in nav] == ["overview", "document", "terms", "workflow"]
+    assert [item.key for item in nav] == [
+        "overview", "document", "terms", "files", "workflow"]
     workflow = nav[-1]
     assert [child.key for child in workflow.children] == ["versions", "runs", "evals"]
     # The top-level items are leaves (only Workflow groups).

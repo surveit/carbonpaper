@@ -65,6 +65,7 @@ def build_nav(state: project.ProjectState) -> list[NavItem]:
         _nav_leaf("overview", "Overview", base),
         _nav_leaf("document", "Document", f"{base}/document"),
         _nav_leaf("terms", "Terms", f"{base}/terms"),
+        _nav_leaf("files", "Files", f"{base}/files"),
         _nav_leaf("workflow", "Workflow", f"{base}/workflow",
                   children=[
                       _nav_leaf("versions", "Versions", f"{base}/workflow/versions"),

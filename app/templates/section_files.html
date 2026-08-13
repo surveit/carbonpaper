@@ -1,0 +1,100 @@
+{% extends "project_shell.html" %}
+{#
+  FILES — every data file this project holds.
+
+  Project-level, beside Document and Terms: a file is not versioned with the workflow
+  and outlives every version that reads it.
+
+  "read by" is the column the page exists for. It is the only thing here that says
+  whether a file can go — size sorts the big ones to the top and tells you nothing about
+  whether anything still needs them. It counts each run's OWN manifest, so it says what
+  ran, not what the current version happens to name.
+
+  Deleting takes the filename typed back. A run that read the file keeps its manifest
+  either way, but re-running it stops working the moment the bytes go, and this is the
+  only irreversible thing on the page.
+
+  Context the route passes:
+    state = shell_state(...); section = "files"
+    files = files_view.build_files_view(project) — rows, and the store's totals
+#}
+{% block section %}
+<div class="sec-head wf-head">
+  <div class="wf-head-title">
+    <h1>Files</h1>
+    <p class="lede">Every data file this project holds. A run binds one to an input step
+      by the hash of its contents, so the same file added twice is one copy.</p>
+  </div>
+</div>
+
+<div class="files-quota">
+  <div class="files-quota-line">
+    <strong>{{ files.project_used }}</strong> in this project
+    <span class="muted">· {{ files.used }} of {{ files.quota }} across every project ·
+      one file may be up to {{ files.max_upload }}</span>
+  </div>
+  <div class="files-quota-track">
+    <div class="files-quota-fill" style="width: {{ files.used_percent }}%"></div>
+  </div>
+</div>
+
+{% if files.rows %}
+<table class="stages files-table">
+  <thead>
+    <tr><th>file</th><th>size</th><th>added</th><th>read by</th><th>SHA-256</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for row in files.rows %}
+    <tr>
+      <td class="files-name"><code>{{ row.filename }}</code></td>
+      <td class="files-num">{{ row.size }}</td>
+      <td>{{ row.added | friendly_time }}</td>
+      <td>
+        {% if row.run_count %}
+        <a href="/project/{{ state.id }}/runs/{{ row.last_run_id }}">{{ row.run_count }} run{{ "" if row.run_count == 1 else "s" }}</a>
+        {% else %}<span class="muted">never read</span>{% endif %}
+      </td>
+      <td><code class="files-hash">{{ row.sha256[:12] }}…</code></td>
+      <td class="files-act">
+        {# The row carries what the dialog needs to say; one dialog serves every row. #}
+        <button type="button" class="files-trash" title="Delete {{ row.filename }}"
+                data-sha256="{{ row.sha256 }}" data-filename="{{ row.filename }}"
+                data-runs="{{ row.run_count }}" aria-label="Delete {{ row.filename }}">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/>
+            <path d="M10 11v6"/><path d="M14 11v6"/>
+          </svg>
+        </button>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{# One dialog for the table. It blocks, because this is the only thing on the page that
+   cannot be undone; Escape or the scrim cancels. #}
+<dialog class="files-modal" id="delete-modal" data-project="{{ state.id }}">
+  <h2>Delete <span id="delete-name"></span>?</h2>
+  <p class="files-modal-lede" id="delete-warning"></p>
+  <form method="post" id="delete-form">
+    <label for="delete-confirm">Type the file's name to confirm</label>
+    <input type="text" id="delete-confirm" name="confirm" autocomplete="off" required>
+    <div class="files-modal-actions">
+      <button type="button" class="btn" id="delete-cancel">Cancel</button>
+      {# Disabled until the name matches, so a mistyped confirmation is a button that
+         will not press rather than a page that says no. #}
+      <button type="submit" class="btn danger" id="delete-submit" disabled
+              title="Type the file's name to enable this">Delete this file</button>
+    </div>
+  </form>
+</dialog>
+<script src="/static/files-delete.js"></script>
+{% else %}
+<div class="empty-state">
+  <h2>No files yet</h2>
+  <p>A run reads its inputs from here. Files arrive when you start a run, or when you
+    attach one to a conversation with the agent.</p>
+  <a href="/project/{{ state.id }}/runs/new" class="btn primary">Start new run</a>
+</div>
+{% endif %}
+{% endblock %}

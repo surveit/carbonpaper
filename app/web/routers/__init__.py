@@ -8,7 +8,7 @@ from fastapi import FastAPI
 
 from app.web.chat_router import router as chat_router
 from app.web.routers import (
-    admin, editing, evals, guide, node, pickers, project, review, review_packet,
+    admin, editing, evals, files, guide, node, pickers, project, review, review_packet,
     run_form, run_lineage, run_stage, runs, tutorial,
 )
 
@@ -17,6 +17,7 @@ def include_routers(app: FastAPI) -> None:
     app.include_router(project.router)
     # Ahead of runs: run_form owns /runs/new, which runs' /runs/{run_id} would
     # otherwise match with "new" as a run id.
+    app.include_router(files.router)
     app.include_router(run_form.router)
     app.include_router(runs.router)
     app.include_router(run_stage.router)
