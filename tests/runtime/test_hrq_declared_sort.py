@@ -13,7 +13,7 @@ from app.runtime.context import RunIdentity
 from app.runtime.errors import HaltForReview
 from app.runtime.stages import HANDLERS
 from conftest import (
-    QUEUE_COLUMNS, make_run_context, place_stage, queue_added_columns, reads_of,
+    QUEUE_COLUMNS, as_inputs, make_run_context, place_stage, queue_added_columns, reads_of,
 )
 
 PROJECT = "hrq-sort-tests"
@@ -46,7 +46,7 @@ def _halt(stage: Stage, frame: pd.DataFrame, tmp_path, run_id: str):
     )
     with pytest.raises(HaltForReview) as exc_info:
         HANDLERS[StageType.human_review_queue].execute(
-            place_stage(stage), {"scored": frame}, ctx
+            place_stage(stage), as_inputs({"scored": frame}), ctx
         )
     queue_path = exc_info.value.queue_path
     fingerprints = QueueFingerprints.load(

@@ -8,7 +8,7 @@ from app.runtime.context import RunContext, RunIdentity
 from app.runtime.stages import HANDLERS
 from app.runtime.stages import llm_transform as lt
 from app.core.stage_cache import StageCacheEntry
-from conftest import contribution_of, make_run_context, place_stage, queue_columns, reads_of
+from conftest import as_inputs, contribution_of, make_run_context, place_stage, queue_columns, reads_of, rows_of
 
 
 def _place(stage, upstream_id, input_columns):
@@ -41,9 +41,9 @@ def test_llm_transform_drops_undeclared_columns_including_former_hardcoded_ids(m
     out = HANDLERS[StageType.llm_transform].execute(
         _place(stage, "load", [{"name": "id", "type": "str", "nullable": True},
                                {"name": "text", "type": "str", "nullable": True}]),
-        {"load": pd.DataFrame({"id": ["r1"], "text": ["hi"]})}, ctx)
+        as_inputs({"load": pd.DataFrame({"id": ["r1"], "text": ["hi"]})}), ctx)
 
-    assert list(out.columns) == ["id", "text", "score"]
+    assert list(rows_of(out).columns) == ["id", "text", "score"]
     dropped = contribution_of(out).dropped_columns
     assert "benchmark_id" in dropped and "query_id" in dropped
 
@@ -63,10 +63,10 @@ def test_llm_transform_declared_input_column_rides_through(monkeypatch):
         _place(stage, "load", [{"name": "id", "type": "str", "nullable": True},
                                {"name": "text", "type": "str", "nullable": True},
                                {"name": "entity_id", "type": "str", "nullable": True}]),
-        {"load": src}, ctx)
+        as_inputs({"load": src}), ctx)
 
-    assert list(out.columns) == ["id", "text", "entity_id", "score"]
-    assert out.loc[0, "entity_id"] == "C:acme"                # rode through from input
+    assert list(rows_of(out).columns) == ["id", "text", "entity_id", "score"]
+    assert rows_of(out).loc[0, "entity_id"] == "C:acme"                # rode through from input
     assert not contribution_of(out).dropped_columns           # nothing undeclared
 
 
@@ -129,8 +129,8 @@ def test_human_review_queue_carries_every_input_column_through(tmp_path):
     )
     ctx = _queue_test_ctx(tmp_path, "keeps-declared-columns")
     out = HANDLERS[StageType.human_review_queue].execute(
-        _place(stage, "scored", _SCORED_COLUMNS), {"scored": _src_scored()}, ctx)
+        _place(stage, "scored", _SCORED_COLUMNS), as_inputs({"scored": _src_scored()}), ctx)
 
-    assert list(out.columns) == [c["name"] for c in _SCORED_COLUMNS] + [
+    assert list(rows_of(out).columns) == [c["name"] for c in _SCORED_COLUMNS] + [
         "final_score"] + _REVIEW_RECORD
     assert contribution_of(out).dropped_columns == []

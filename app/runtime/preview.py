@@ -13,7 +13,7 @@ from pathlib import Path
 import pandas as pd
 import pyarrow
 
-from app.core.frames import read_frame_file
+from app.core.frames import frame_to_table, read_frame_file, table_to_frame
 from app.models import WorkflowStage
 
 from .context import RunContext
@@ -111,8 +111,8 @@ def run_stage_preview(
     # never call the runner, so no manifest/output is touched.
     ctx = RunContext.for_stages_outside_a_run(repo_root, run_dir)
 
-    output = handler.execute(workflow_stage, inputs, ctx)
-    if output is None:
-        output = pd.DataFrame()
+    output = handler.execute(
+        workflow_stage, {name: frame_to_table(f) for name, f in inputs.items()}, ctx)
+    frame = pd.DataFrame() if output is None else table_to_frame(output.table)
 
-    return StagePreview(frame=output, input_rows=len(valid), selected_indices=valid)
+    return StagePreview(frame=frame, input_rows=len(valid), selected_indices=valid)

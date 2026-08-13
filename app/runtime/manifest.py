@@ -161,10 +161,6 @@ class RunManifest(PersistedModel):
 
 
 
-# The `.attrs` key a stage's output frame carries its StageContribution under.
-CONTRIBUTION_ATTR = "stage_contribution"
-
-
 def create_run_manifest(
     ordered: list[WorkflowStage],
     ctx: RunContext,

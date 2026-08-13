@@ -14,6 +14,7 @@ from typing import Any
 
 import pytest
 
+
 _CLIENT = Path(__file__).resolve().parents[1] / "app" / "static" / "run_log.js"
 
 

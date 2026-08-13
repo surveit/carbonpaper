@@ -4,17 +4,16 @@ from __future__ import annotations
 
 import pandas as pd
 
+from conftest import as_inputs, place_stage, rows_of
 from app.models import parse_stage
 from app.runtime.lineage import (
     EdgeKind,
     RowLineage,
     RowParent,
-    read_row_lineage,
 )
 from app.runtime.stages.join import handle_enrich, handle_expand
 from app.runtime.trace import trace_row
 from test_trace_helpers import write_run
-from conftest import place_stage
 
 FILINGS = pd.DataFrame({"client": ["Acme", "Borealis"], "amount": [500, 1200]})
 CONTRACTS = pd.DataFrame({"client": ["Acme"], "agency": ["HHS"]})
@@ -155,8 +154,8 @@ def test_handler_lineage_reaches_the_executor_channel():
         "join": {"keys": [{"left": "client", "right": "client"}],
                   "enrich_with": {"agency": "agency"}},
     })
-    out = handle_enrich(place_stage(stage), {"filings": FILINGS, "contracts": CONTRACTS}, None)
-    lineage = read_row_lineage(out)
+    produced = handle_enrich(place_stage(stage), as_inputs({"filings": FILINGS, "contracts": CONTRACTS}), None)
+    out, lineage = rows_of(produced), produced.lineage
     assert lineage is not None
     assert len(lineage) == len(out)
     assert lineage.parents == [
@@ -194,11 +193,12 @@ def test_expand_records_the_subject_row_each_fanned_out_row_came_from():
     })
     two_contracts = pd.DataFrame({"client": ["Acme", "Acme"], "agency": ["HHS", "DOD"]})
 
-    out = handle_expand(place_stage(stage), {"filings": FILINGS, "contracts": two_contracts}, None)
+    produced = handle_expand(place_stage(stage), as_inputs({"filings": FILINGS, "contracts": two_contracts}), None)
+    out = rows_of(produced)
 
     assert list(out["agency"])[:2] == ["HHS", "DOD"]
     assert pd.isna(out["agency"].iat[2])
-    lineage = read_row_lineage(out)
+    lineage = produced.lineage
     assert lineage is not None
     # Both fanned-out rows name the SAME subject row; the unmatched one still has
     # a single parent, so the fan-out and the non-match are both readable.

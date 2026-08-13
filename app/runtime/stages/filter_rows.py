@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-import pandas as pd
+import pyarrow as pa
 
 from app.models import WorkflowStage
 from app.models.stages.filter_rows import FilterRowsStage
@@ -30,8 +30,9 @@ def _load_predicate(
 
 
 def make_filter_mapper(
-    workflow_stage: WorkflowStage, ctx: RunContext, src: pd.DataFrame
+    workflow_stage: WorkflowStage, ctx: RunContext, src: pa.Table
 ) -> RowMapper:
+    """Resolve the predicate once, then decide one row at a time."""
     filter_stage = narrow_stage(workflow_stage, FilterRowsStage)
     predicate = _load_predicate(filter_stage)
     sid = filter_stage.id

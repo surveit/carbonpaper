@@ -1,7 +1,7 @@
 """Frozen fingerprint values. These key 718,155 stage-cache entries as of
 2026-08-06: a changed hash does not fail, it silently orphans every recorded row
 and every human review decision under the old key. Changing a value here is a
-migration, not a test update — see docs/pandas-seam.md and #437's failure #1.
+migration, not a test update.
 """
 from __future__ import annotations
 

@@ -8,6 +8,7 @@ import pandas as pd
 import pytest
 
 from app.core.errors import SubsetRunError
+from app.core.frames import table_to_frame
 from app.models import parse_stage, Stage, Workflow
 from app.models.run_parameters import RunParameters
 from app.runtime.executor import run_subset
@@ -61,7 +62,7 @@ def test_union_concatenates_two_inputs_in_declared_order(tmp_path):
         workflow, injected_outputs={},
         stage_ids=["left", "right", "u"], run_dir=tmp_path / "runs" / "r1", repo_root=tmp_path, project=(tmp_path / "runs" / "r1").parent.parent.name)
 
-    out = outputs["u"][["a", "b"]].reset_index(drop=True)
+    out = table_to_frame(outputs["u"])[["a", "b"]].reset_index(drop=True)
     expected = pd.concat([left, right], ignore_index=True)
     pd.testing.assert_frame_equal(out, expected)
 
@@ -79,7 +80,7 @@ def test_filter_rows_keeps_true_rows_in_order_with_columns_unchanged(tmp_path):
         workflow, injected_outputs={},
         stage_ids=["src", "f"], run_dir=tmp_path / "runs" / "r2", repo_root=tmp_path, project=(tmp_path / "runs" / "r2").parent.parent.name)
 
-    out = outputs["f"][["a", "b"]].reset_index(drop=True)
+    out = table_to_frame(outputs["f"])[["a", "b"]].reset_index(drop=True)
     expected = pd.DataFrame({"a": ["x", "z"], "b": [1, 2]})
     pd.testing.assert_frame_equal(out, expected)
 
@@ -104,7 +105,7 @@ def test_a_filter_that_keeps_nothing_still_feeds_its_downstream_a_valid_frame(tm
         stage_ids=["src", "f", "tag"], run_dir=tmp_path / "runs" / "r_empty",
         repo_root=tmp_path, project=(tmp_path / "runs" / "r_empty").parent.parent.name)
 
-    out = outputs["tag"]
+    out = table_to_frame(outputs["tag"])
     assert len(out) == 0
     assert list(out.columns) == ["a", "b", "note"]
 
@@ -194,7 +195,7 @@ def test_trace_follows_lineage_after_a_limit_caps_what_the_filter_reads(tmp_path
 
     # src row 2 ('z') would also have passed the predicate — it is outside the
     # window, so it was never offered to it.
-    assert outputs["f"]["a"].tolist() == ["y"]
+    assert table_to_frame(outputs["f"])["a"].tolist() == ["y"]
     trace = trace_row(run_dir, "f", 0)
     assert trace.steps[1].row_ordinal == 1
     assert trace.steps[1].row["a"] == "y"
