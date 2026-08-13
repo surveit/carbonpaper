@@ -127,10 +127,17 @@
     border-top: 1px solid var(--border); }
 /* 28px, main's own side padding: below the width the column can hold, the row
    then narrows exactly as the log above it does instead of drifting wider. */
-.ac-composer { max-width: 1080px; margin: 0 auto; padding: 10px 28px; display: flex; gap: 8px; }
+/* Bottom-aligned: the message box grows upward with what is typed, and the buttons
+   beside it stay on the last line rather than stretching with it. */
+.ac-composer { max-width: 1080px; margin: 0 auto; padding: 10px 28px; display: flex;
+    gap: 8px; align-items: flex-end; }
 .ac-view-only { color: var(--muted); font-size: 13px; font-style: italic; }
+/* A textarea, so a message can hold paragraphs. `fitComposer` sets its height per keystroke
+   and measures against border-box; the cap is what keeps a long draft off the screen. The
+   drag handle is off — a hand-dragged height would fight every keystroke after it. */
 .ac-input { flex: 1; font: inherit; padding: 9px 11px; border: 1px solid var(--border);
-    border-radius: 8px; }
+    border-radius: 8px; box-sizing: border-box; resize: none; overflow-y: auto;
+    line-height: 1.45; max-height: 40vh; }
 .ac-send { font: inherit; padding: 9px 16px; border-radius: 8px; border: 1px solid var(--accent);
     background: var(--accent); color: var(--on-dark); cursor: pointer; }
 .ac-send:hover { background: var(--accent-deep); border-color: var(--accent-deep); }
