@@ -140,7 +140,8 @@ class Column(_Base):
         default=None,
         description=(
             "Sub-columns of a `json`/`list[json]` column. Declare exactly ONE of "
-            "`fields` or `value_type`."
+            "`fields` or `value_type`. Both are CHECKED against the data: a wrong "
+            "declaration fails the stage."
         ),
     )
     value_type: Optional[str] = Field(

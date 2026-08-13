@@ -24,6 +24,7 @@ from app.core.frames import (
 from app.models import (
     Column,
     JSON_COLUMN_TYPE,
+    LIST_JSON_COLUMN_TYPE,
     RANGE_UNBOUNDED_MARKER,
     SCALAR_COLUMN_TYPES,
     STR_COLUMN_TYPE,
@@ -110,6 +111,7 @@ def validate_table(
         report.issues.extend(_find_type_issues(values, col))
         report.issues.extend(_find_numeric_range_issues(values, col))
         report.issues.extend(_find_enum_issues(values, col))
+        report.issues.extend(_find_json_shape_issues(values, col))
 
     report.issues.extend(
         _find_undeclared_columns(table.column_names, [c.name for c in columns])
@@ -251,3 +253,68 @@ def _find_undeclared_columns(present: list[str], declared_names: list[str]) -> l
             )
         ]
     return []
+
+
+# A `json`/`list[json]` column MUST declare its shape (`fields` or `value_type`,
+# enforced by Column._json_shape) — but nothing checked the data against that
+# declaration, so it described the column without constraining it. Arrow types
+# the struct precisely, so the whole check reads types and no cells.
+def _find_json_shape_issues(values: pa.ChunkedArray, col: Column) -> list[Issue]:
+    if col.type not in (JSON_COLUMN_TYPE, LIST_JSON_COLUMN_TYPE):
+        return []
+    struct = _find_declared_struct(values.type, col.type)
+    if struct is None:
+        return [Issue("error", col.name, f"'{col.type}' column does not hold objects")]
+    present = {struct.field(i).name: struct.field(i).type for i in range(struct.num_fields)}
+    if col.value_type is not None:
+        return _find_open_map_issues(present, col)
+    return _find_declared_field_issues(present, col)
+
+
+def _find_declared_struct(arrow_type: pa.DataType, type_name: str) -> pa.DataType | None:
+    if type_name == LIST_JSON_COLUMN_TYPE:
+        element = find_arrow_list_value_type(arrow_type)
+        if element is None:
+            return None
+        arrow_type = element
+    return arrow_type if pa.types.is_struct(arrow_type) else None
+
+
+def _find_declared_field_issues(present: dict[str, pa.DataType], col: Column) -> list[Issue]:
+    issues: list[Issue] = []
+    for declared in col.fields or []:
+        if declared.name not in present:
+            issues.append(
+                Issue("error", col.name, f"'{col.type}' column is missing field '{declared.name}'")
+            )
+        elif not _is_declared_type_satisfied_by_arrow_type(
+            present[declared.name], declared.type
+        ):
+            issues.append(Issue(
+                "error", col.name,
+                f"field '{declared.name}' is {present[declared.name]}, "
+                f"not declared type '{declared.type}'",
+            ))
+    undeclared = sorted(set(present) - {f.name for f in col.fields or []})
+    if undeclared:
+        issues.append(Issue(
+            "warning", col.name,
+            f"{len(undeclared)} undeclared field(s) present: {undeclared[:8]}",
+        ))
+    return issues
+
+
+def _find_open_map_issues(present: dict[str, pa.DataType], col: Column) -> list[Issue]:
+    """An open map declares one value type for every key, so each arrow field must meet it."""
+    assert col.value_type is not None  # enforced by Column._json_shape
+    offenders = [
+        name for name, arrow_type in present.items()
+        if not _is_declared_type_satisfied_by_arrow_type(arrow_type, col.value_type)
+    ]
+    if not offenders:
+        return []
+    return [Issue(
+        "error", col.name,
+        f"{len(offenders)} field(s) not of declared value_type '{col.value_type}': "
+        f"{sorted(offenders)[:8]}",
+    )]
