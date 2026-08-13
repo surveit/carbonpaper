@@ -221,6 +221,21 @@ def test_a_parameter_the_function_does_not_take_is_refused() -> None:
         )
 
 
+def test_a_parameter_no_prose_describes_is_refused() -> None:
+    """The other half of the same seam: a signature that grew an argument silently."""
+    def read_stage(project_id: str, stage_id: str, include_tests: bool = False) -> str:
+        return ""
+
+    with pytest.raises(ValueError, match=r"advertises \['include_tests'\]"):
+        bind_by_signature(
+            name="read_stage", description="d", fn=read_stage, label="l",
+            parameters={
+                "project_id": "The project's name.",
+                "stage_id": "The stage's id, as read_workflow_summary shows it.",
+            },
+        )
+
+
 def test_a_defaulted_parameter_is_optional_to_the_model() -> None:
     schema = next(iter(bind("run_stage_tests"))).json_schema
     assert set(schema["required"]) == {"project_id"}, schema["required"]
