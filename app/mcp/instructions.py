@@ -71,7 +71,8 @@ Each tool's own description says how it behaves; this says WHEN. Start by callin
 create_project(name, document) — the methodology prose becomes the project's source of
 record, and it returns the project record, whose `id` every other tool takes.
 
-  RESEARCH   read_workflow_summary, read_stage, get_project_status
+  RESEARCH   read_workflow_summary, read_stage, get_project_status, list_runs
+             for what this project has already run,
              run_workflow_test over a few rows, then
              profile_stage_output_data_range, to see what the data really holds,
              and read_stage_output_rows when the question is about a ROW
@@ -88,7 +89,8 @@ record, and it returns the project record, whose `id` every other tool takes.
              against, and the warnings still open.
 
 A run executes a stored version, and run_workflow(project_id, version_id?) is the
-full one — get_run_status(project_id, run_id) follows it to its outcome. Publishing is a
+full one — get_run_status(project_id, run_id) follows it to its outcome, and list_runs
+names the runs someone else started. Publishing is a
 human's mark that they have looked at a version; it does not gate what a run may execute.
 
 An input step reads a file the project holds. list_files(project_id) is what it holds, and

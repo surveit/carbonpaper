@@ -248,6 +248,11 @@ def _resolve_file_upload_url(project_id: str | None) -> str:
     return f"{scheme}://{host}/project/{project_id}/files"
 
 
+@mcp.tool(description=TOOL_SPECS["list_runs"].description)
+def list_runs(project_id: str, limit: int = shared.MAX_RUNS_LISTED) -> shared.RunHistory:
+    return shared.list_runs(project_id, limit)
+
+
 @mcp.tool(description=TOOL_SPECS["get_run_status"].description)
 def get_run_status(project_id: str, run_id: str) -> dict[str, Any]:
     try:

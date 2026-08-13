@@ -113,6 +113,15 @@ One project's full status snapshot: document present?, data-model state
 counts and review coverage, versions, runs. Poll this after generate_stage_tests
 to see the result land.""",
     ),
+    "list_runs": ToolSpec(
+        name="list_runs",
+        description="""\
+This project's production runs, newest first: each one's id, status, when it
+started, the version it pinned, and whether it was a test run. The run id is what
+get_run_status and read_stage_output_rows take, and the only way to name a run
+you did not start yourself. `run_count` is every run the project has, so a
+listing cut to `limit` reads as the window it is.""",
+    ),
     "get_run_status": ToolSpec(
         name="get_run_status",
         description="""\
