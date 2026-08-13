@@ -6,7 +6,10 @@ rather than recording a fake result.
 """
 from __future__ import annotations
 
-from datetime import datetime
+import threading
+import traceback
+from dataclasses import dataclass
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal
 
@@ -32,19 +35,64 @@ from app.services.workspace import resolve_project_dir
 def run_eval(
     project_id: str, config: EvalConfig, *, version_id: str | None = None,
 ) -> EvalRun:
+    """Blocks until the eval is scored; the returned record is the final one."""
+    prepared = _prepare_eval_run(project_id, config, version_id)
+    run = (_score_run(prepared, _mint_run_id(), _now())
+           if prepared.settings.can_score_declaratively else _vetoed_run(prepared))
+    save_eval_run(project_id, run)
+    return run
+
+
+def start_eval_run(
+    project_id: str, config: EvalConfig, *, version_id: str | None = None,
+) -> EvalRun:
+    """Returns at once with a `running` record; scoring lands on a daemon thread."""
+    prepared = _prepare_eval_run(project_id, config, version_id)
+    if not prepared.settings.can_score_declaratively:
+        # Nothing executes, so there is nothing to wait on — the veto is the result.
+        vetoed = _vetoed_run(prepared)
+        save_eval_run(project_id, vetoed)
+        return vetoed
+    run_id, started = _mint_run_id(), _now()
+    running = _build_run(prepared, run_id=run_id, status="running",
+                         started=started, finished=None)
+    save_eval_run(project_id, running)
+    threading.Thread(target=_score_in_background, daemon=True,
+                     args=(prepared, run_id, started)).start()
+    return running
+
+
+def _score_in_background(prepared: _PreparedEval, run_id: str, started: str) -> None:
+    try:
+        run = _score_run(prepared, run_id, started)
+    except Exception:  # noqa: BLE001 — a record left at `running` forever is a silent lie
+        run = _build_run(prepared, run_id=run_id, status="error", started=started,
+                         finished=_now(), notes=[traceback.format_exc()])
+    save_eval_run(prepared.project_id, run)
+
+
+# ── What both entry points resolve before anything is recorded ───────────────
+
+@dataclass(frozen=True)
+class _PreparedEval:
+    project_id: str
+    config: EvalConfig
+    version: str
+    settings: EvalRunSettings
+    workflow: Workflow
+
+
+def _prepare_eval_run(
+    project_id: str, config: EvalConfig, version_id: str | None,
+) -> _PreparedEval:
     version = _resolve_version(project_id, version_id)
     workflow = Workflow(stages=load_version_stages(project_id, version))
     report = validate_eval_compatibility(config, workflow)
     _require_runnable(config, report)
     settings = report.settings
     assert settings is not None  # report.ok (checked above) guarantees settings
-
-    if not settings.can_score_declaratively:
-        run = _vetoed_run(config, version, settings)
-    else:
-        run = _score_run(project_id, config, version, settings, workflow)
-    save_eval_run(project_id, run)
-    return run
+    return _PreparedEval(project_id=project_id, config=config, version=version,
+                         settings=settings, workflow=workflow)
 
 
 def _require_runnable(config: EvalConfig, report: CompatibilityReport) -> None:
@@ -55,31 +103,27 @@ def _require_runnable(config: EvalConfig, report: CompatibilityReport) -> None:
         raise EvalNotScorableError("eval has no dataset attached")
 
 
-def _score_run(
-    project_id: str, config: EvalConfig, version: str,
-    settings: EvalRunSettings, workflow: Workflow,
-) -> EvalRun:
+def _score_run(prepared: _PreparedEval, run_id: str, started: str) -> EvalRun:
+    config, workflow = prepared.config, prepared.workflow
     by_id = workflow.index_workflow_stages_by_id()
     override, target = by_id[config.override_stage], by_id[config.target_stage]
     assert config.table is not None  # _require_runnable checked this
     dataset = read_table_ref(config.table)
-    run_id = _mint_run_id()
-    run_dir = resolve_eval_run_dir(project_id, run_id)
-    started = _now()
+    run_dir = resolve_eval_run_dir(prepared.project_id, run_id)
     try:
         outputs = run_subset(
-            workflow, stage_ids=settings.frontier, run_dir=run_dir,
+            workflow, stage_ids=prepared.settings.frontier, run_dir=run_dir,
             injected_outputs=_build_injected_outputs(config, override, target, dataset),
-            project_id=project_id, workflow_version=version)
+            project_id=prepared.project_id, workflow_version=prepared.version)
         score = score_expected_outputs(config, override, target, dataset,
                                        table_to_frame(outputs[config.target_stage]))
     except (SubsetRunError, EvalGrainViolationError) as exc:
-        return _build_run(config, version, settings, run_id=run_id, status="error",
-                          started=started, notes=[str(exc)])
+        return _build_run(prepared, run_id=run_id, status="error",
+                          started=started, finished=_now(), notes=[str(exc)])
     result_ref = _write_result_table(run_dir, score.per_row).relative_to(
-        resolve_project_dir(project_id)).as_posix()
-    return _build_run(config, version, settings, run_id=run_id, status="scored",
-                      started=started, metrics=score.metrics, result_ref=result_ref)
+        resolve_project_dir(prepared.project_id)).as_posix()
+    return _build_run(prepared, run_id=run_id, status="scored", started=started,
+                      finished=_now(), metrics=score.metrics, result_ref=result_ref)
 
 
 def _build_injected_outputs(
@@ -109,23 +153,25 @@ def _compute_override_output(
 
 # ── Run records ──────────────────────────────────────────────────────────────
 
-def _vetoed_run(config: EvalConfig, version: str, settings: EvalRunSettings) -> EvalRun:
-    return _build_run(config, version, settings, run_id=_mint_run_id(), status="vetoed",
-                started=_now(), notes=[
+def _vetoed_run(prepared: _PreparedEval) -> EvalRun:
+    return _build_run(prepared, run_id=_mint_run_id(), status="vetoed",
+                started=_now(), finished=_now(), notes=[
                     "path is not grain-preserving, so it can't be scored row-by-row; "
-                    f"needs a code scorer for stages {settings.blocking_stages}"])
+                    f"needs a code scorer for stages {prepared.settings.blocking_stages}"])
 
 
 def _build_run(
-    config: EvalConfig, version: str, settings: EvalRunSettings, *,
-    run_id: str, status: Literal["scored", "vetoed", "error"], started: str,
+    prepared: _PreparedEval, *,
+    run_id: str, status: Literal["running", "scored", "vetoed", "error"],
+    started: str, finished: str | None,
     metrics: dict[str, Any] | None = None, result_ref: str | None = None,
     notes: list[str] | None = None,
 ) -> EvalRun:
     return EvalRun(
-        id=run_id, config=config.id, project=config.project, workflow_version=version,
-        status=status, settings=settings, metrics=metrics or {}, result_ref=result_ref,
-        started_at=started, finished_at=_now(), notes=notes or [])
+        id=run_id, config=prepared.config.id, project=prepared.config.project,
+        workflow_version=prepared.version, status=status, settings=prepared.settings,
+        metrics=metrics or {}, result_ref=result_ref,
+        started_at=started, finished_at=finished, notes=notes or [])
 
 
 def _write_result_table(run_dir: Path, per_row: pd.DataFrame) -> Path:
@@ -149,9 +195,19 @@ def _resolve_version(project_id: str, version_id: str | None) -> str:
     return version
 
 
+# datetime.now() advances in ~15ms steps on Windows, so two runs started inside one tick
+# read the same instant. The last instant minted is kept here so the next id is nudged
+# past it rather than colliding and overwriting that run's record.
+_mint_lock = threading.Lock()
+_last_minted = datetime.min
+
+
 def _mint_run_id() -> str:
-    # Lowercase so it passes the EvalRun slug rule (no uppercase 'T' separator).
-    return datetime.now().strftime("run_%Y%m%d_%H%M%S_%f")
+    global _last_minted
+    with _mint_lock:
+        _last_minted = max(datetime.now(), _last_minted + timedelta(microseconds=1))
+        # Lowercase so it passes the EvalRun slug rule (no uppercase 'T' separator).
+        return _last_minted.strftime("run_%Y%m%d_%H%M%S_%f")
 
 
 def _now() -> str:

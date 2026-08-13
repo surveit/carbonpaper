@@ -72,6 +72,20 @@ def test_save_list_load_roundtrip(tmp_path: Path):
     assert loaded == config
 
 
+def test_a_running_eval_run_round_trips_carrying_nothing_it_has_not_learned_yet(
+    tmp_path: Path,
+):
+    run = _run(id="run_in_flight", status="running", finished_at=None)
+    save_eval_run(tmp_path.name, run)
+
+    loaded = load_eval_run(tmp_path.name, "run_in_flight")
+    assert loaded.status == "running"
+    assert loaded.metrics == {}
+    assert loaded.result_ref is None
+    assert loaded.finished_at is None
+    assert loaded.started_at == "2026-01-01T00:00:00"
+
+
 def test_save_eval_config_overwrite_allowed(tmp_path: Path):
     save_eval_config(tmp_path.name, _config())
     updated = _config(name="new name")
@@ -290,6 +304,18 @@ def test_eval_status_run_errored(status):
     runs = [_run(status=status, workflow_version="v1")]
     assert eval_status(_report(ok=True), runs, latest_version="v1",
                        has_eval_dataset=True) == "run errored"
+
+
+def test_eval_status_reports_running_while_the_latest_run_is_in_flight():
+    runs = [_run(status="running", workflow_version="v1", finished_at=None)]
+    assert eval_status(_report(ok=True), runs, latest_version="v1",
+                       has_eval_dataset=True) == "running"
+
+
+def test_eval_status_running_beats_stale_because_there_is_no_verdict_yet():
+    runs = [_run(status="running", workflow_version="v1", finished_at=None)]
+    assert eval_status(_report(ok=True), runs, latest_version="v2",
+                       has_eval_dataset=True) == "running"
 
 
 def test_eval_status_run_succeeded():

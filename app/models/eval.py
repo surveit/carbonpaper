@@ -114,7 +114,10 @@ class EvalRun(_Base):
     # Which workflow version was scored — the stale tripwire. If the target's key or
     # domain moved since the config was authored, it's stale; don't re-score.
     workflow_version: str
-    status: Literal["scored", "vetoed", "error"]
+    # `running` is the only non-final state: the record exists so a run in flight is
+    # visible, and it carries no metrics, no `result_ref` and no `finished_at` until
+    # the scorer replaces it under the same id.
+    status: Literal["running", "scored", "vetoed", "error"]
     # How this run was scored (from app.evals.run_settings). `vetoed` = it
     # couldn't be scored declaratively and no code scorer was supplied.
     settings: EvalRunSettings
