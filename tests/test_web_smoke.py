@@ -231,3 +231,31 @@ def test_cmdk_palette_refuses_a_project_id_that_does_not_exist(demo_project):
 def test_every_page_carries_the_cmdk_bar(demo_project):
     for path in ("/", "/project/demo", "/project/demo/workflow"):
         assert 'id="cmdk-palette"' in client.get(path).text
+
+
+def test_cmdk_palette_sends_a_stage_to_the_run_being_read(demo_project, monkeypatch):
+    from app.web import cmdk_palette
+    from app.web.run_index import RunIndexRow
+    from app.web.stage_strip import StageSquare, StageStrip
+
+    monkeypatch.setattr(cmdk_palette, "build_run_index_rows", lambda project: [
+        RunIndexRow(run_id="20260813T090000", status="errors", outcome="Error",
+                    strip=StageStrip(squares=[StageSquare(stage_id="load", status="ok"),
+                                              StageSquare(stage_id="gone", status="pending")],
+                                     tallies=[]))])
+    rows = client.get("/cmdk_palette/index",
+                      params={"project": "demo", "run": "20260813T090000"}).json()["rows"]
+    stages = [row for row in rows if row["kind"] == "stage"]
+    # The RUN's stages, not the working copy's: `gone` is only in the run, and
+    # `extract` is only in the working copy.
+    assert [row["label"] for row in stages] == ["load", "gone"]
+    assert stages[0]["href"] == "/project/demo/runs/20260813T090000#load"
+    assert stages[0]["meta"] == "done"
+    assert stages[1]["meta"] == "not reached"
+
+
+def test_cmdk_palette_falls_back_to_the_workflow_for_a_run_that_is_not_one(demo_project):
+    rows = client.get("/cmdk_palette/index",
+                      params={"project": "demo", "run": "new"}).json()["rows"]
+    stage = next(row for row in rows if row["kind"] == "stage")
+    assert stage["href"] == "/project/demo/workflow#load"

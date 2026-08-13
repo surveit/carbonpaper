@@ -14,5 +14,5 @@ router = APIRouter()
 
 
 @router.get("/cmdk_palette/index")
-async def cmdk_palette_index(project: str = "") -> CmdkPaletteIndex:
-    return build_cmdk_palette_index(project)
+async def cmdk_palette_index(project: str = "", run: str = "") -> CmdkPaletteIndex:
+    return build_cmdk_palette_index(project, run)

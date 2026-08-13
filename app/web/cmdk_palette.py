@@ -15,6 +15,7 @@ from app.services.project import ProjectListing, list_project_listings, project_
 from app.web.loading import load_stages_or_empty
 from app.web.project_view import NavItem, build_nav
 from app.web.run_index import RunIndexRow, build_run_index_rows, describe_run_outcome
+from app.web.stage_strip import describe_stage_status
 
 
 class CmdkPaletteKind(enum.StrEnum):
@@ -38,21 +39,31 @@ class CmdkPaletteIndex(BaseModel):
     rows: list[CmdkPaletteRow]
 
 
-def build_cmdk_palette_index(current_project: str) -> CmdkPaletteIndex:
+def build_cmdk_palette_index(current_project: str, current_run: str = "") -> CmdkPaletteIndex:
     here = current_project if project_exists(current_project) else ""
     others = [item for item in list_project_listings() if item.id != here]
     return CmdkPaletteIndex(rows=[
-        *_build_rows_inside(here),
+        *_build_rows_inside(here, current_run),
         *[_build_project_row(item) for item in others],
         *[row for item in others for row in _build_stage_rows(item.id, here)],
         *[row for item in others for row in _build_run_rows(item.id, here)],
     ])
 
 
-def _build_rows_inside(here: str) -> list[CmdkPaletteRow]:
+def _build_rows_inside(here: str, current_run: str) -> list[CmdkPaletteRow]:
     if not here:  # unknown, absent, or escaping the workspace — project_exists settled it
         return []
-    return [*_build_section_rows(here), *_build_stage_rows(here, here), *_build_run_rows(here, here)]
+    runs = build_run_index_rows(here)
+    open_run = next((run for run in runs if run.run_id == current_run), None)
+    return [
+        *_build_section_rows(here),
+        # A stage means a different page depending on where it is read from: the
+        # workflow defines it, a run is one execution of it. Reading a run, the id
+        # the reader means is that run's, so the rows are its own and go nowhere else.
+        *(_build_run_stage_rows(here, open_run) if open_run
+          else _build_stage_rows(here, here)),
+        *[_build_run_row(here, run, here) for run in runs],
+    ]
 
 
 def _build_section_rows(project: str) -> list[CmdkPaletteRow]:
@@ -76,17 +87,32 @@ def _build_stage_rows(project: str, here: str) -> list[CmdkPaletteRow]:
     ]
 
 
-def _build_run_rows(project: str, here: str) -> list[CmdkPaletteRow]:
+def _build_run_stage_rows(project: str, run: RunIndexRow) -> list[CmdkPaletteRow]:
+    # The run's OWN squares, so the bar cannot name a stage this run never pinned.
     return [
         CmdkPaletteRow(
-            kind=CmdkPaletteKind.RUN,
-            label=run.run_id,
-            href=f"/project/{project}/runs/{run.run_id}",
-            meta=_describe_row(project, here, _describe_run(run)),
+            kind=CmdkPaletteKind.STAGE,
+            label=square.stage_id,
+            href=f"/project/{project}/runs/{run.run_id}#{square.stage_id}",
+            meta=describe_stage_status(square.status, run.status),
             is_code=True,
         )
-        for run in build_run_index_rows(project)
+        for square in (run.strip.squares if run.strip else [])
     ]
+
+
+def _build_run_rows(project: str, here: str) -> list[CmdkPaletteRow]:
+    return [_build_run_row(project, run, here) for run in build_run_index_rows(project)]
+
+
+def _build_run_row(project: str, run: RunIndexRow, here: str) -> CmdkPaletteRow:
+    return CmdkPaletteRow(
+        kind=CmdkPaletteKind.RUN,
+        label=run.run_id,
+        href=f"/project/{project}/runs/{run.run_id}",
+        meta=_describe_row(project, here, _describe_run(run)),
+        is_code=True,
+    )
 
 
 def _build_project_row(listing: ProjectListing) -> CmdkPaletteRow:

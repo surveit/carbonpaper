@@ -14,17 +14,20 @@
 
   var SHOWN_CAP = 50;
 
-  function readProject() {
-    var match = location.pathname.match(/^\/project\/([^/]+)/);
-    return match ? decodeURIComponent(match[1]) : '';
+  // Where the reader is, off the URL. A path segment is a claim, not a fact — the
+  // server settles both, so /runs/new needs no case of its own here.
+  function readContext() {
+    var project = location.pathname.match(/^\/project\/([^/]+)/);
+    var run = location.pathname.match(/^\/project\/[^/]+\/runs\/([^/]+)/);
+    return 'project=' + encodeURIComponent(project ? decodeURIComponent(project[1]) : '') +
+           '&run=' + encodeURIComponent(run ? decodeURIComponent(run[1]) : '');
   }
 
   // A failed fetch says so and leaves the bar open; rows stays null, so the next
   // open asks again rather than showing an empty list as if the workspace were empty.
   function loadRows() {
     if (rows) return Promise.resolve(true);
-    return fetch('/cmdk_palette/index?project=' + encodeURIComponent(readProject()),
-                 { cache: 'no-store' })
+    return fetch('/cmdk_palette/index?' + readContext(), { cache: 'no-store' })
       .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
       .then(function (data) { rows = data.rows; return true; })
       .catch(function () { return false; });
@@ -99,9 +102,9 @@
   function go(href) {
     var url = new URL(href, location.href);
     if (url.pathname !== location.pathname || !url.hash) { location.href = href; return; }
-    // Already on the page the stage lives on. Setting the hash alone would move
-    // nothing — the workflow page reads it on load — so hand the id to the loader
-    // it exposes, and fall back to a reload where that page is not this one.
+    // Already on the page the stage lives on — the workflow, or the run being read.
+    // Both read the hash ON LOAD, so setting it now would move nothing; both expose
+    // the same loader, and a page that does not is reloaded instead.
     dialog.close();
     if (window._loadStage) { window._loadStage(decodeURIComponent(url.hash.slice(1))); return; }
     location.hash = url.hash;
