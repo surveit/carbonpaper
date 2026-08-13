@@ -1,4 +1,4 @@
-"""_read_xlsx maps connector params onto pd.read_excel (app/runtime/stages/input_data.py)."""
+"""The xlsx read maps connector params onto pd.read_excel (app/core/source_files.py)."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -7,8 +7,15 @@ import openpyxl
 import pytest
 from pydantic import ValidationError
 
-from app.models.stages.input_data import FileFormat, XlsxReadParams
-from app.runtime.stages.input_data import _read_xlsx
+from app.core.source_files import FileFormat, read_source_file
+from app.models.stages.input_data import XlsxReadParams
+
+
+def _read_xlsx(path: Path, params: XlsxReadParams) -> object:
+    """The unpacking read_input_data does, so these cases exercise the real call."""
+    return read_source_file(
+        path, FileFormat.xlsx, sheet_name=params.sheet_name, header_row=params.header_row,
+        first_column=params.first_column, source_row_column=params.source_row_column)
 
 
 def _params(**kwargs: object) -> XlsxReadParams:

@@ -9,6 +9,8 @@ from typing import Any, ClassVar, Literal, Optional
 
 from pydantic import ConfigDict, Field, model_validator
 
+from app.core.source_files import FileFormat as FileFormat
+from app.core.source_files import resolve_file_format as resolve_file_format
 from app.models.schema import StageConfig, _Base
 from app.models.stages.stage_base import AbstractStage, StageType
 from app.models.stages.stage_type_spec import StageTypeSpec
@@ -17,37 +19,6 @@ from app.models.stages.signature import ReplacesSignature
 
 class ConnectorKind(str, Enum):
     file = "file"
-
-
-class FileFormat(str, Enum):
-    csv = "csv"
-    parquet = "parquet"
-    json = "json"
-    geojson = "geojson"
-    xlsx = "xlsx"
-
-
-# The extension each format is designated by on disk. `.jsonl` names the same
-# reader as `.json` (both are read line-delimited).
-_FORMAT_BY_SUFFIX: dict[str, FileFormat] = {
-    ".csv": FileFormat.csv,
-    ".parquet": FileFormat.parquet,
-    ".json": FileFormat.json,
-    ".jsonl": FileFormat.json,
-    ".geojson": FileFormat.geojson,
-    ".xlsx": FileFormat.xlsx,
-}
-
-
-def resolve_file_format(path: str) -> FileFormat:
-    suffix =Path(path).suffix.lower()
-    fmt = _FORMAT_BY_SUFFIX.get(suffix)
-    if fmt is None:
-        raise ValueError(
-            f"cannot tell what format {path!r} holds: extension "
-            f"{suffix or '(none)'} is not one of {sorted(_FORMAT_BY_SUFFIX)}"
-        )
-    return fmt
 
 
 class Connector(StageConfig):
