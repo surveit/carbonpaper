@@ -103,34 +103,3 @@ def test_the_session_carries_a_base_url_the_tutorial_context_accepts() -> None:
 
 def test_two_visitors_get_their_own_sessions() -> None:
     assert _start_the_tour() != _start_the_tour()
-
-
-def test_the_tour_page_opens_the_conversation_itself() -> None:
-    """The reader lands on a greeting, not on an empty box waiting to be typed in."""
-    page = client.get(f"/chat/{_start_the_tour()}")
-
-    assert "const OPENS_ITSELF = true" in page.text
-
-
-def test_a_session_that_has_already_opened_will_not_greet_twice() -> None:
-    """A reload must replay the transcript, not start a second opening turn."""
-    sid = _start_the_tour()
-    _store.append_messages(sid, [{"role": "assistant", "parts": [{"type": "text",
-                                                                "text": "Hello."}]}])
-
-    assert "const OPENS_ITSELF = false" in client.get(f"/chat/{sid}").text
-    assert client.post(f"/chat/{sid}/open").status_code == 409
-
-
-def test_the_opening_turn_is_not_attributed_to_the_reader() -> None:
-    """The prompt that makes the agent speak is the app's, so it is stored as nobody's."""
-    from app.agents.tutorial.prompt import TUTORIAL_OPENING_PROMPT
-    from app.core.agent.store import TranscriptMessage
-    from app.core.agent.turns import _drop_user_messages
-
-    engine_transcript: list[TranscriptMessage] = [
-        {"role": "user", "parts": [{"type": "text", "text": TUTORIAL_OPENING_PROMPT}]},
-        {"role": "assistant", "parts": [{"type": "text", "text": "Hello."}]},
-    ]
-
-    assert _drop_user_messages(engine_transcript) == engine_transcript[1:]

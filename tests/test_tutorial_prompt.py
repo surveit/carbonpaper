@@ -65,13 +65,6 @@ def test_beat_one_is_conversation_and_calls_no_tool() -> None:
     assert "Beat 1 calls no tool." in TUTORIAL_SYSTEM_PROMPT
 
 
-def test_the_greeting_is_prompted_by_a_hello_not_by_an_instruction() -> None:
-    """An instruction gets performed; a hello gets answered. The tour wants the answer."""
-    from app.agents.tutorial.prompt import TUTORIAL_OPENING_PROMPT
-
-    assert TUTORIAL_OPENING_PROMPT == "Hi"
-
-
 def test_the_tour_writes_the_product_name_the_page_around_it_writes() -> None:
     """Read off the breadcrumb: the header names the product while the tour is speaking."""
     assert f'The product is written "{_HOME_LABEL}"' in _flat(_beat(1))

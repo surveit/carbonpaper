@@ -338,10 +338,3 @@ Non-negotiable, in order:
 TUTORIAL_SYSTEM_PROMPT = "\n\n".join(
     (_ROLE, _TOOLS, _SCRIPT, _WORKED_BEAT, _HARD_RULES)
 )
-
-# Not a reader message: the tour page runs one turn on this the moment it loads, so the
-# first thing in the transcript is the greeting rather than a demand to speak first. It
-# is a plain hello and not an instruction, because the model answers an instruction by
-# performing it — beat 1 is already in the script above, and what this has to supply is
-# the register, not the task. Never stored: see TurnManager.start(record_prompt=False).
-TUTORIAL_OPENING_PROMPT = "Hi"
