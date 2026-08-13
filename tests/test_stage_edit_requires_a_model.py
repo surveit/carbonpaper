@@ -12,6 +12,7 @@ import pytest
 
 from app.services.loader import load_workflow_object
 from app.services.stage_edit import add_stage_spec, edit_stage_spec
+from stage_seed import add_stage
 
 _COLUMNS = [{"name": "text", "type": "str", "nullable": True}]
 
@@ -39,9 +40,9 @@ def _source_spec():
 
 @pytest.fixture
 def project(tmp_path):
-    (tmp_path / "compiled").mkdir()
-    assert add_stage_spec(tmp_path, json.dumps(_source_spec())).ok
-    return tmp_path
+    name = tmp_path.name
+    assert add_stage_spec(name, json.dumps(_source_spec())).ok
+    return name
 
 
 def test_adding_an_llm_stage_without_a_model_is_refused(project):
@@ -62,16 +63,14 @@ def test_adding_an_llm_stage_that_names_a_model_is_accepted(project):
 
 
 def test_a_stage_stored_without_a_model_still_loads(project):
-    (project / "compiled" / "02_judge.json").write_text(
-        json.dumps(_judge_spec()), encoding="utf-8")
+    add_stage(project, _judge_spec())
     workflow = load_workflow_object(project)
     assert {stage.id for stage in workflow.stages} == {"src", "judge"}
     assert next(s for s in workflow.stages if s.id == "judge").llm.model is None
 
 
 def test_editing_a_stored_model_less_stage_is_refused_until_it_names_one(project):
-    (project / "compiled" / "02_judge.json").write_text(
-        json.dumps(_judge_spec()), encoding="utf-8")
+    add_stage(project, _judge_spec())
     refused = edit_stage_spec(
         project, "judge", json.dumps(_judge_spec(temperature=0.5)))
     assert not refused.ok

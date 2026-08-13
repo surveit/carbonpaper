@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
 
 import pandas as pd
 import pytest
@@ -13,6 +12,7 @@ from app.runtime.stages.input_data import read_input_data
 from app.services import versioning
 from app.services.project import save_working_copy_as_version
 from conftest import make_run_context, pinned_stages, place_stage
+from stage_seed import add_stage
 
 
 # Every input declares the schema it expects and every non-publish stage declares
@@ -141,14 +141,14 @@ _ROWS_SCHEMA = {"columns": [{"name": "name", "type": "str", "nullable": True},
 
 
 def _make_bound_project(root, filename="a.csv"):
-    (root / "compiled").mkdir(parents=True)
+    root.mkdir(parents=True, exist_ok=True)
     data = root / filename
     pd.DataFrame({"name": ["x", "y"], "val": [1, 2]}).to_csv(data, index=False)
     stage = {"id": "load", "description": "Load", "type": "input_data",
              "signature": {"form": "replaces", "produces": _ROWS_SCHEMA["columns"]},
              "connector": {"kind": "file",
                            "params": {"path": str(data), "format": "csv"}}}
-    (root / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
+    add_stage(root, stage)
     vid = save_working_copy_as_version(root, message="seed", reviewer="test").version_id
     versioning.publish_version(root, vid, reviewer="human")
     return data
@@ -181,13 +181,13 @@ def test_workflow_path_recorded_as_workflow_source(tmp_path):
 
 
 def test_unbound_input_leaves_no_run_dir(tmp_path):
-    (tmp_path / "compiled").mkdir(parents=True)
+    tmp_path.mkdir(parents=True, exist_ok=True)
     # No file is ever bound, so the declared columns are never materialised —
     # the stage declares the shape the rest of this file's data uses.
     stage = {"id": "load", "description": "Load", "type": "input_data",
              "signature": {"form": "replaces", "produces": _ROWS_SCHEMA["columns"]},
              "connector": {"kind": "file", "params": {}}}
-    (tmp_path / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
+    add_stage(tmp_path, stage)
     vid = save_working_copy_as_version(tmp_path, message="seed", reviewer="test").version_id
     versioning.publish_version(tmp_path, vid, reviewer="human")
 
@@ -208,7 +208,7 @@ def test_handler_ignores_repo_root_for_file_inputs(tmp_path):
     # The path is absolute; repo_root must play no part in resolving it.
     _make_bound_project(tmp_path)
     elsewhere = tmp_path / "unrelated_repo_root"
-    elsewhere.mkdir()
+    elsewhere.mkdir(parents=True, exist_ok=True)
     manifest = execute_run(tmp_path, elsewhere, *pinned_stages(tmp_path))
     assert manifest["status"] == "ok"
     assert manifest["stage_records"][0]["output_row_count"] == 2

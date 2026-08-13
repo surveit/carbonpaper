@@ -5,6 +5,9 @@ import pytest
 
 from app.services import stage_edit
 from app.services.errors import WorkflowLoadError
+from app.core.persistence import get_store
+from app.services.loader import WorkingCopy
+from stage_seed import read_stage, read_stages, set_stages
 
 # A strictly-1:1 llm_transform (app/models/stage.py): its input and output
 # schemas stay additive (keeps every input
@@ -30,18 +33,16 @@ _VALID = {
 }
 
 
-def _seed(tmp_path: Path) -> Path:
-    compiled = tmp_path / "alpha" / "compiled"
-    compiled.mkdir(parents=True, exist_ok=True)
+_LOAD = {"id": "load", "description": "Load", "type": "input_data",
+         "connector": {"kind": "file"},
+         "signature": {"form": "replaces", "produces": _IN_SCHEMA["columns"]}}
+
+
+def _seed(tmp_path: Path) -> str:
+    set_stages("alpha", [_LOAD, _VALID])
     # `load` must exist so score's input resolves: the write gate validates the
     # whole resulting workflow (graph included), not just the one edited stage.
-    (compiled / "01_load.json").write_text(
-        json.dumps({"id": "load", "description": "Load", "type": "input_data",
-                    "connector": {"kind": "file"}, "signature": {"form": "replaces", "produces": _IN_SCHEMA["columns"]}}),
-        encoding="utf-8",
-    )
-    (compiled / "02_score.json").write_text(json.dumps(_VALID), encoding="utf-8")
-    return tmp_path / "alpha"
+    return "alpha"
 
 
 def test_valid_edit_writes(tmp_path: Path) -> None:
@@ -50,15 +51,15 @@ def test_valid_edit_writes(tmp_path: Path) -> None:
     result = stage_edit.edit_stage_spec(pdir, "score", edited)
     # The writer reports only success; it no longer computes the review colour.
     assert result.ok is True and not result.issues
-    assert "Score every row" in (pdir / "compiled" / "02_score.json").read_text(encoding="utf-8")
+    assert _score(pdir)["description"] == "Score every row"
 
 
 def test_invalid_edit_writes_nothing(tmp_path: Path) -> None:
     pdir = _seed(tmp_path)
-    before = (pdir / "compiled" / "02_score.json").read_text(encoding="utf-8")
+    before = _score(pdir)
     result = stage_edit.edit_stage_spec(pdir, "score", json.dumps({"id": "score", "type": "not_a_real_type", "description": "x"}))
     assert result.ok is False and result.issues
-    assert (pdir / "compiled" / "02_score.json").read_text(encoding="utf-8") == before
+    assert _score(pdir) == before
 
 
 def test_id_mismatch_rejected(tmp_path: Path) -> None:
@@ -77,8 +78,8 @@ def test_missing_stage_file_raises(tmp_path: Path) -> None:
         stage_edit.edit_stage_spec(pdir, "ghost", json.dumps(valid_ghost))
 
 
-def _score(pdir: Path) -> dict:
-    return json.loads((pdir / "compiled" / "02_score.json").read_text(encoding="utf-8"))
+def _score(project: str) -> dict:
+    return read_stage(project, "score")
 
 
 def test_patch_changes_only_named_field_and_preserves_the_rest(tmp_path: Path) -> None:
@@ -113,10 +114,10 @@ def test_patch_null_deletes_a_field(tmp_path: Path) -> None:
 
 def test_patch_invalid_result_writes_nothing(tmp_path: Path) -> None:
     pdir = _seed(tmp_path)
-    before = (pdir / "compiled" / "02_score.json").read_text(encoding="utf-8")
+    before = _score(pdir)
     result = stage_edit.patch_stage_spec(pdir, "score", json.dumps({"type": "not_a_real_type"}))
     assert result.ok is False and result.issues
-    assert (pdir / "compiled" / "02_score.json").read_text(encoding="utf-8") == before
+    assert _score(pdir) == before
 
 
 def test_patch_cannot_change_id(tmp_path: Path) -> None:
@@ -134,7 +135,7 @@ def test_patch_missing_stage_raises(tmp_path: Path) -> None:
 def test_edit_that_breaks_the_workflow_graph_is_rejected(tmp_path: Path) -> None:
     # The stage is valid on its own; the resulting WORKFLOW is not.
     pdir = _seed(tmp_path)
-    before = (pdir / "compiled" / "02_score.json").read_text(encoding="utf-8")
+    before = _score(pdir)
     result = stage_edit.patch_stage_spec(pdir, "score", json.dumps({
         "inputs": [{"id": "ghost"}],
         "signature": {
@@ -145,18 +146,12 @@ def test_edit_that_breaks_the_workflow_graph_is_rejected(tmp_path: Path) -> None
     }))
     assert result.ok is False
     assert any("ghost" in i for i in result.issues)
-    assert (pdir / "compiled" / "02_score.json").read_text(encoding="utf-8") == before
+    assert _score(pdir) == before
 
 
-def _seed_load(tmp_path: Path) -> Path:
-    compiled = tmp_path / "beta" / "compiled"
-    compiled.mkdir(parents=True, exist_ok=True)
-    (compiled / "01_load.json").write_text(
-        json.dumps({"id": "load", "description": "Load", "type": "input_data",
-                    "connector": {"kind": "file"}, "signature": {"form": "replaces", "produces": _IN_SCHEMA["columns"]}}),
-        encoding="utf-8",
-    )
-    return tmp_path / "beta"
+def _seed_load(tmp_path: Path) -> str:
+    set_stages("beta", [_LOAD])
+    return "beta"
 
 
 def test_add_stage_creates_new_stage_referencing_existing_input(tmp_path: Path) -> None:
@@ -171,8 +166,8 @@ def test_add_stage_creates_new_stage_referencing_existing_input(tmp_path: Path) 
            }}
     result = stage_edit.add_stage_spec(pdir, json.dumps(new))
     assert result.ok is True and not result.issues
-    # a new stage is named by its id (no NN_ prefix; file order is irrelevant)
-    assert (pdir / "compiled" / "score.json").exists()
+    # a new stage lands at the end of the stored list; order is presentation only
+    assert [s["id"] for s in read_stages(pdir)] == ["load", "score"]
 
 
 def test_add_stage_rejects_dangling_input(tmp_path: Path) -> None:
@@ -191,7 +186,7 @@ def test_add_stage_rejects_dangling_input(tmp_path: Path) -> None:
     assert result.ok is False
     assert any("does_not_exist" in i for i in result.issues)
     # nothing written for the rejected stage
-    assert not any(p.name.endswith("_score.json") for p in (pdir / "compiled").glob("*.json"))
+    assert [s["id"] for s in read_stages(pdir)] == ["load"]
 
 
 def test_add_stage_rejects_duplicate_id(tmp_path: Path) -> None:
@@ -208,7 +203,7 @@ def test_remove_stage_rejected_when_a_downstream_depends_on_it(tmp_path: Path) -
     result = stage_edit.remove_stage_spec(pdir, "load")
     assert result.ok is False
     assert any("load" in issue for issue in result.issues)
-    assert (pdir / "compiled" / "01_load.json").exists()
+    assert "load" in stage_edit._current_specs(pdir)
 
 
 def test_remove_stage_deletes_the_stage_and_its_file(tmp_path: Path) -> None:
@@ -226,7 +221,7 @@ def test_remove_stage_deletes_the_stage_and_its_file(tmp_path: Path) -> None:
     result = stage_edit.remove_stage_spec(pdir, "score")
     assert result.ok is True and not result.issues
     assert "score" not in stage_edit._current_specs(pdir)
-    assert not (pdir / "compiled" / "score.json").exists()
+    assert [s["id"] for s in read_stages(pdir)] == ["load"]
 
 
 def test_remove_nonexistent_stage_raises(tmp_path: Path) -> None:
@@ -241,47 +236,42 @@ _FIRST_STAGE = {"id": "load", "description": "Load", "type": "input_data",
                 "connector": {"kind": "file"}, "signature": {"form": "replaces", "produces": _IN_SCHEMA["columns"]}}
 
 
-def _seed_empty(tmp_path: Path) -> Path:
-    (tmp_path / "gamma" / "compiled").mkdir(parents=True)
-    return tmp_path / "gamma"
+def _seed_empty(tmp_path: Path) -> str:
+    """A stored working copy holding no stages — before its first stage is added."""
+    set_stages("gamma", [])
+    return "gamma"
 
 
 def test_add_stage_creates_the_first_stage_of_an_empty_workflow(tmp_path: Path) -> None:
     pdir = _seed_empty(tmp_path)
     result = stage_edit.add_stage_spec(pdir, json.dumps(_FIRST_STAGE))
     assert result.ok is True and not result.issues
-    assert (pdir / "compiled" / "load.json").exists()
     assert set(stage_edit._current_specs(pdir)) == {"load"}
 
 
-def test_add_stage_creates_the_first_stage_when_compiled_dir_is_absent(tmp_path: Path) -> None:
-    pdir = tmp_path / "delta"
-    pdir.mkdir()
-    result = stage_edit.add_stage_spec(pdir, json.dumps(_FIRST_STAGE))
+def test_add_stage_creates_the_first_stage_when_no_working_copy_is_stored() -> None:
+    result = stage_edit.add_stage_spec("delta", json.dumps(_FIRST_STAGE))
     assert result.ok is True and not result.issues
-    assert (pdir / "compiled" / "load.json").exists()
+    assert [s["id"] for s in read_stages("delta")] == ["load"]
 
 
-def test_add_stage_still_refuses_when_the_existing_workflow_is_unloadable(tmp_path: Path) -> None:
-    # A stage file that does not parse is a BROKEN workflow, not an empty one.
-    pdir = tmp_path / "epsilon"
-    (pdir / "compiled").mkdir(parents=True)
-    (pdir / "compiled" / "01_broken.json").write_text(
-        json.dumps({"id": "broken", "description": "Broken", "type": "not_a_real_type"}),
-        encoding="utf-8",
+def test_add_stage_still_refuses_when_the_existing_workflow_is_unloadable() -> None:
+    # A stored stage that does not parse is a BROKEN workflow, not an empty one.
+    set_stages("epsilon", [{"id": "broken", "description": "Broken", "type": "not_a_real_type"}])
+    with pytest.raises(WorkflowLoadError):
+        stage_edit.add_stage_spec("epsilon", json.dumps(_FIRST_STAGE))
+    assert [s["id"] for s in read_stages("epsilon")] == ["broken"]
+
+
+def test_add_stage_still_refuses_when_the_stored_document_is_unparseable() -> None:
+    """A corrupt payload raises rather than reading as an empty workflow."""
+    get_store().write(WorkingCopy.collection, "zeta", {})
+    get_store()._conn.execute(  # type: ignore[attr-defined]
+        "UPDATE documents SET data='{not json' WHERE collection=? AND id=?",
+        (WorkingCopy.collection, "zeta"),
     )
-    with pytest.raises(WorkflowLoadError):
-        stage_edit.add_stage_spec(pdir, json.dumps(_FIRST_STAGE))
-    assert not (pdir / "compiled" / "load.json").exists()
-
-
-def test_add_stage_still_refuses_when_a_stage_file_is_unparseable(tmp_path: Path) -> None:
-    pdir = tmp_path / "zeta"
-    (pdir / "compiled").mkdir(parents=True)
-    (pdir / "compiled" / "01_truncated.json").write_text("{not json", encoding="utf-8")
-    with pytest.raises(WorkflowLoadError):
-        stage_edit.add_stage_spec(pdir, json.dumps(_FIRST_STAGE))
-    assert not (pdir / "compiled" / "load.json").exists()
+    with pytest.raises(json.JSONDecodeError):
+        stage_edit.add_stage_spec("zeta", json.dumps(_FIRST_STAGE))
 
 
 def test_remove_stage_on_an_empty_workflow_raises(tmp_path: Path) -> None:

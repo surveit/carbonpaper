@@ -34,6 +34,7 @@ from app.web.eval_run_view import (
 )
 from app.web.loading import StageListing, load_stages_or_empty, render_frame_as_text
 from app.web.project_view import shell_state
+from app.runtime.run_log import count_events
 from app.web.run_events import (
     EVENT_PAGE_MAX,
     page_events_before,
@@ -181,12 +182,12 @@ async def eval_run_detail(request: Request, project: str, eval_id: str, run_id: 
                 if run.result_ref else None
             ),
             "event_tail": EVENT_TAIL,
-            # The subset run's own events.jsonl, tailed by the same panel the run
+            # The subset run's own event log, tailed by the same panel the run
             # page uses. Absent where the run wrote no log — a vetoed run executed
             # nothing.
             "log_href": (
                 _eval_run_href(project, config.id, run_id)
-                if (project_dir / "eval_run" / run_id / "events.jsonl").exists() else None
+                if count_events(project, run_id) else None
             ),
         },
     )
@@ -204,11 +205,11 @@ async def stream_eval_run_events(
     tail: int = EVENT_TAIL,
     stage: str | None = None,
 ):
-    events_path = _resolve_eval_events_path(project, run_id)
-    start = (tail_start_seq(events_path, tail, stage) if from_seq is None
+    _require_eval_run_log(project, run_id)
+    start = (tail_start_seq(project, run_id, tail, stage) if from_seq is None
              else max(from_seq, 0))
     return StreamingResponse(
-        stream_events(events_path.parent, request, start, stage),
+        stream_events(project, run_id, request, start, stage),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
@@ -223,16 +224,17 @@ async def eval_run_events_page(
     limit: int = EVENT_TAIL,
     stage: str | None = None,
 ):
-    events_path = _resolve_eval_events_path(project, run_id)
+    _require_eval_run_log(project, run_id)
     return page_events_before(
-        events_path, before_seq, max(1, min(limit, EVENT_PAGE_MAX)), stage)
+        project, run_id, before_seq, max(1, min(limit, EVENT_PAGE_MAX)), stage)
 
 
-def _resolve_eval_events_path(project: str, run_id: str) -> Path:
-    events_path = _resolve_project_dir(project) / "eval_run" / run_id / "events.jsonl"
-    if not events_path.is_file():
+def _require_eval_run_log(project: str, run_id: str) -> None:
+    """404 when this eval run logged nothing — the same refusal the absent
+    log gave."""
+    _resolve_project_dir(project)
+    if not count_events(project, run_id):
         raise HTTPException(status_code=404, detail=f"no log for eval run {run_id!r}")
-    return events_path
 
 
 def _eval_run_href(project: str, eval_id: str, run_id: str) -> str:

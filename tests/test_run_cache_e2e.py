@@ -18,6 +18,7 @@ from app.runtime.runner import execute_run
 from app.services import versioning
 from app.services import project as project_service
 from conftest import pinned_stages
+from stage_seed import add_stage
 
 _ROWS = [{"name": "a", "val": 1}, {"name": "b", "val": 2}, {"name": "c", "val": 3}]
 
@@ -70,7 +71,7 @@ def _write_project(
     root: Path, *, clean_edit: str = "", totals_edit: str = "", flag_cache: bool = True
 ) -> Path:
     probe = root / "probe.log"
-    (root / "compiled").mkdir(parents=True, exist_ok=True)
+    root.mkdir(parents=True, exist_ok=True)
     (root / "data").mkdir(parents=True, exist_ok=True)
     pd.DataFrame(_ROWS).to_csv(root / "data" / "items.csv", index=False)
     _write_stage(root, "01_load", {
@@ -117,8 +118,7 @@ def _append_input_row(root: Path, row: dict[str, object]) -> None:
 
 
 def _write_stage(root: Path, filename: str, spec: dict[str, object]) -> None:
-    (root / "compiled" / f"{filename}.json").write_text(
-        json.dumps(spec), encoding="utf-8")
+    add_stage(root, spec)
 
 
 def _publish_a_version(root: Path) -> str:
@@ -274,13 +274,13 @@ def test_the_cache_survives_a_process_restart_and_a_change_of_directory(tmp_path
     from app.core.sqlite_store import SqliteKvStore
 
     db = tmp_path / "workspace" / "app.db"
-    db.parent.mkdir()
+    db.parent.mkdir(parents=True, exist_ok=True)
     configure_store(SqliteKvStore(str(db)))  # the version must outlive this process too
     probe = _write_project(tmp_path)
     _publish_a_version(tmp_path)
     first_cwd, second_cwd = tmp_path / "launch_a", tmp_path / "launch_b"
-    first_cwd.mkdir()
-    second_cwd.mkdir()
+    first_cwd.mkdir(parents=True, exist_ok=True)
+    second_cwd.mkdir(parents=True, exist_ok=True)
 
     _run_in_a_fresh_process(tmp_path, db=db, cwd=first_cwd)
     assert _invocations(probe) == _EVERYTHING_COMPUTED

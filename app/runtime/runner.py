@@ -17,7 +17,6 @@ from app.core.errors import MissingInputBindingError
 from app.core.timestamp_ids import mint_timestamp_id
 from app.core.frames import read_frame_file
 from app.models import StageType, Workflow, WorkflowStage
-from app.models.run_manifest import read_run_manifest
 from app.models.run_parameters import RunParameters
 from app.models.schema import StageId, TypeUnsafeUserStageConfigOverride
 from app.core.run_status import StageStatus
@@ -25,6 +24,7 @@ from app.core.run_status import StageStatus
 from .context import RunContext
 from .executor import _execute_stages, topological_sort
 from .manifest import (
+    read_run_manifest,
     create_run_manifest,
     resolve_output_path,
     write_manifest,
@@ -106,7 +106,7 @@ def prepare_run(
         workflow_version=workflow_version,
         input_bindings=input_records,
     )
-    write_manifest(run_dir, manifest)
+    write_manifest(manifest)
     return {"run_id": run_id, "run_dir": run_dir, "ctx": ctx,
             "ordered": ordered, "manifest": manifest}
 
@@ -142,7 +142,7 @@ def resume_run(
     workflow_version: str,
 ) -> dict[str, Any]:
     run_dir = project_dir / "runs" / run_id
-    manifest = read_run_manifest(run_dir)
+    manifest = read_run_manifest(project_dir.name, run_id)
 
     if manifest.workflow_version != workflow_version:
         raise ValueError(

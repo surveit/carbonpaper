@@ -13,6 +13,9 @@ import app.web.loading as loading
 import app.services.run as run_service
 from app.main import app
 from app.services import workspace
+from stage_seed import set_stages
+from app.models import NamedSchema, SchemaLibrary, Terms
+from app.services import terms
 
 client = TestClient(app)
 
@@ -51,15 +54,10 @@ _SCHEMA = {
 @pytest.fixture(autouse=True)
 def demo_project(tmp_path, monkeypatch):
     demo = tmp_path / "demo"
-    compiled = demo / "compiled"
-    compiled.mkdir(parents=True)
-    (compiled / "01_load.json").write_text(json.dumps(_load(tmp_path), indent=2), encoding="utf-8")
-    (compiled / "02_extract.json").write_text(json.dumps(_EXTRACT, indent=2), encoding="utf-8")
-    schemas = demo / "schemas"
-    schemas.mkdir()
-    (schemas / "01_documents.json").write_text(
-        json.dumps(_SCHEMA, indent=2), encoding="utf-8"
-    )
+    demo.mkdir(parents=True, exist_ok=True)
+    set_stages("demo", [_load(tmp_path), _EXTRACT])
+    terms.write_terms("demo", Terms(nouns=SchemaLibrary(
+        schemas=[NamedSchema.model_validate(_SCHEMA)]), verbs=[]))
     workspace.set_projects_dir(tmp_path)
     return tmp_path
 

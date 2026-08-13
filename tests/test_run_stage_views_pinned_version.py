@@ -5,7 +5,6 @@ cannot be resolved the panels say so and the scratch re-run refuses to execute.
 """
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pandas as pd
@@ -18,6 +17,8 @@ from app.runtime.runner import execute_run
 from app.services import versioning
 from app.services import project as project_service
 from conftest import pinned_stages
+from stage_seed import add_stage
+from run_seed import read_manifest, store_manifest
 
 client = TestClient(app)
 
@@ -69,13 +70,11 @@ def _classify_stage(marker: str) -> dict:
 @pytest.fixture()
 def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     pdir = tmp_path / PROJECT
-    (pdir / "compiled").mkdir(parents=True)
+    pdir.mkdir(parents=True, exist_ok=True)
     data = pdir / "rows.csv"
     pd.DataFrame({"name": ["a", "b"], "val": [1, 2]}).to_csv(data, index=False)
-    (pdir / "compiled" / "01_load.json").write_text(
-        json.dumps(_load_stage(data)), encoding="utf-8")
-    (pdir / "compiled" / "02_classify.json").write_text(
-        json.dumps(_classify_stage(PINNED_MARKER)), encoding="utf-8")
+    add_stage(pdir, _load_stage(data))
+    add_stage(pdir, _classify_stage(PINNED_MARKER))
     workspace.set_projects_dir(tmp_path)
     return pdir
 
@@ -88,16 +87,14 @@ def _run_once(project_dir: Path) -> str:
 
 
 def _drift_the_working_copy(project_dir: Path) -> None:
-    (project_dir / "compiled" / "02_classify.json").write_text(
-        json.dumps(_classify_stage(DRIFTED_MARKER)), encoding="utf-8")
+    add_stage(project_dir, _classify_stage(DRIFTED_MARKER))
 
 
 def _unpin_the_run(project_dir: Path, run_id: str) -> None:
     """Drops workflow_version — the shape a pre-versioning run really has on disk."""
-    path = project_dir / "runs" / run_id / "manifest.json"
-    manifest = json.loads(path.read_text(encoding="utf-8"))
+    manifest = read_manifest(project_dir, run_id)
     manifest["workflow_version"] = None
-    path.write_text(json.dumps(manifest), encoding="utf-8")
+    store_manifest(project_dir, run_id, manifest)
 
 
 def _stage_panel(run_id: str):

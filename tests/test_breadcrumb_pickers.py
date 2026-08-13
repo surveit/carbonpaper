@@ -5,7 +5,6 @@ matched it as a run named "picker" — the rung was dead and only a popover said
 """
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pandas as pd
@@ -16,6 +15,7 @@ from app.main import app
 from app.web import breadcrumbs
 from app.services import project as project_service
 from app.services import workspace
+from stage_seed import add_stage
 
 client = TestClient(app)
 
@@ -25,15 +25,15 @@ _ROWS_SCHEMA = [{"name": "name", "type": "str", "nullable": False}]
 @pytest.fixture()
 def project(tmp_path: Path) -> Path:
     pdir = tmp_path / "demo"
-    compiled = pdir / "compiled"
-    compiled.mkdir(parents=True)
+    compiled = pdir
+    compiled.mkdir(parents=True, exist_ok=True)
     data = pdir / "a.csv"
     pd.DataFrame({"name": ["x"]}).to_csv(data, index=False)
-    (compiled / "01_load.json").write_text(json.dumps({
+    add_stage(compiled, {
         "id": "load", "description": "Load rows", "type": "input_data",
         "connector": {"kind": "file", "params": {"path": str(data), "format": "csv"}},
         "signature": {"form": "replaces", "produces": _ROWS_SCHEMA},
-    }), encoding="utf-8")
+    })
     workspace.set_projects_dir(tmp_path)
     return pdir
 

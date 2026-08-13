@@ -1,7 +1,7 @@
 """Dropping the schema a stage used to store for each of its inputs.
 
 Shared by alembic revision 0011 (the document store) and
-scripts.migrate_compiled_stage_files (a project's working copy), so a rewritten
+the alembic revision that rewrites the stored payloads, so a rewritten
 store and a rewritten compiled file cannot disagree about what a spec meant.
 """
 from __future__ import annotations

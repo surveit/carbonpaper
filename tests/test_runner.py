@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 
 import pandas as pd
 import pytest
@@ -12,7 +11,7 @@ from app.core.run_status import RunStatus
 from app.models import parse_stage, Workflow
 from app.runtime.runner import execute_run, resume_run
 from app.runtime.executor import _raise_if_run_failed, run_subset
-from app.models.run_manifest import RunManifest
+from app.runtime.manifest import RunManifest
 from app.runtime.trace import trace_row
 from app.runtime.stages import llm_transform as lt
 from app.services.loader import WorkflowLoadError
@@ -20,6 +19,8 @@ from app.services import versioning
 from app.services.project import save_working_copy_as_version
 from app.services.versioning import list_versions
 from conftest import pinned_stages, resumed_stages
+from stage_seed import add_stage
+from run_seed import read_manifest, store_manifest
 
 
 # The two shapes every fixture in this file loads: the (name, val) items csv and
@@ -36,8 +37,8 @@ def _seed_version(root):
 
 
 def _make_project(root):
-    (root / "compiled").mkdir(parents=True)
-    (root / "data").mkdir(parents=True)
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "data").mkdir(parents=True, exist_ok=True)
     pd.DataFrame({"name": [f"row{i}" for i in range(5)], "val": list(range(5))}) \
         .to_csv(root / "data" / "items.csv", index=False)
     stage = {
@@ -46,7 +47,7 @@ def _make_project(root):
                       "params": {"path": str(root / "data" / "items.csv"), "format": "csv"}},
         "signature": {"form": "replaces", "produces": _NAME_VAL_SCHEMA["columns"]},
     }
-    (root / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
+    add_stage(root, stage)
 
 
 def test_limit_on_a_source_stage_caps_the_rows_it_loads(tmp_path):
@@ -65,7 +66,7 @@ def test_limit_on_a_source_stage_caps_the_rows_it_loads(tmp_path):
     out = pd.read_parquet(run_dir / "outputs" / "load.parquet")
     assert len(out) == 2
 
-    on_disk = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
+    on_disk = read_manifest(run_dir.parent.parent, run_dir.name)
     assert on_disk["run_id"] == manifest["run_id"]
     assert on_disk["status"] == "ok"
 
@@ -91,9 +92,7 @@ def test_per_run_limit_and_offset_slice_and_are_recorded(tmp_path):
     assert any(n.startswith("offset=1") for n in notes)
     assert any(n.startswith("limit=3") for n in notes)
 
-    on_disk = json.loads(
-        (tmp_path / "runs" / manifest["run_id"] / "manifest.json")
-        .read_text(encoding="utf-8"))
+    on_disk = read_manifest(tmp_path, manifest["run_id"])
     assert on_disk["parameters"]["limits"] == {"load": 3}
     assert on_disk["parameters"]["offsets"] == {"load": 1}
 
@@ -104,9 +103,7 @@ def test_bust_cache_is_recorded_on_the_manifest(tmp_path):
     manifest = execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path), bust_cache=True)
 
     assert manifest["parameters"]["bust_cache"] is True
-    on_disk = json.loads(
-        (tmp_path / "runs" / manifest["run_id"] / "manifest.json")
-        .read_text(encoding="utf-8"))
+    on_disk = read_manifest(tmp_path, manifest["run_id"])
     assert on_disk["parameters"]["bust_cache"] is True
 
 
@@ -150,8 +147,8 @@ _IDENTITY_ROW_FUNCTION = "def transform(row):\n    return row\n"
 
 
 def _row_mapped_project(root, rows: list[dict], code: str):
-    (root / "compiled").mkdir(parents=True)
-    (root / "data").mkdir(parents=True)
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "data").mkdir(parents=True, exist_ok=True)
     pd.DataFrame(rows).to_csv(root / "data" / "items.csv", index=False)
     load = {
         "id": "load", "description": "Load items", "type": "input_data",
@@ -168,8 +165,8 @@ def _row_mapped_project(root, rows: list[dict], code: str):
         },
         "function": {"kind": "inline", "code": code},
     }
-    (root / "compiled" / "01_load.json").write_text(json.dumps(load), encoding="utf-8")
-    (root / "compiled" / "02_keep.json").write_text(json.dumps(keep), encoding="utf-8")
+    add_stage(root, load)
+    add_stage(root, keep)
 
 
 def test_offset_makes_the_trace_land_on_the_true_upstream_row(tmp_path):
@@ -207,8 +204,8 @@ def test_a_limited_stage_is_not_failed_by_a_duplicate_row_it_never_reads(tmp_pat
 
 
 def _two_stage_project(root, rows: list[dict]):
-    (root / "compiled").mkdir(parents=True)
-    (root / "data").mkdir(parents=True)
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "data").mkdir(parents=True, exist_ok=True)
     pd.DataFrame(rows).to_csv(root / "data" / "items.csv", index=False)
     load = {
         "id": "load", "description": "Load items", "type": "input_data",
@@ -227,10 +224,8 @@ def _two_stage_project(root, rows: list[dict]):
         "function": {"kind": "inline",
                      "code": "def transform(df):\n    return df\n"},
     }
-    (root / "compiled" / "01_load.json").write_text(
-        json.dumps(load), encoding="utf-8")
-    (root / "compiled" / "02_consume.json").write_text(
-        json.dumps(consume), encoding="utf-8")
+    add_stage(root, load)
+    add_stage(root, consume)
 
 
 def test_duplicate_input_rows_fail_the_stage(tmp_path):
@@ -268,8 +263,8 @@ def test_distinct_input_rows_pass(tmp_path):
 
 
 def _output_schema_violation_project(root, transform_code: str):
-    (root / "compiled").mkdir(parents=True)
-    (root / "data").mkdir(parents=True)
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "data").mkdir(parents=True, exist_ok=True)
     pd.DataFrame({"name": ["a", "b"], "val": [1, 2]}).to_csv(
         root / "data" / "items.csv", index=False)
     load = {
@@ -300,7 +295,7 @@ def _output_schema_violation_project(root, transform_code: str):
     }
     for filename, stage in (("01_load.json", load), ("02_shape.json", shape),
                             ("03_tail.json", tail)):
-        (root / "compiled" / filename).write_text(json.dumps(stage), encoding="utf-8")
+        add_stage(root, stage)
 
 
 def test_output_missing_a_declared_column_errors_the_stage_and_blocks_downstream(tmp_path):
@@ -340,8 +335,8 @@ def test_warning_only_output_report_does_not_error_the_stage(tmp_path):
 
 def test_output_validation_error_other_than_a_missing_column_also_errors_the_stage(tmp_path):
     # The rule is on severity, not on one issue kind.
-    (tmp_path / "compiled").mkdir(parents=True)
-    (tmp_path / "data").mkdir(parents=True)
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    (tmp_path / "data").mkdir(parents=True, exist_ok=True)
     pd.DataFrame({"name": ["a"], "val": [1]}).to_csv(
         tmp_path / "data" / "items.csv", index=False)
     load = {
@@ -364,8 +359,8 @@ def test_output_validation_error_other_than_a_missing_column_also_errors_the_sta
         "function": {"kind": "inline",
                      "code": "def transform(df):\n    df['val'] = None\n    return df\n"},
     }
-    (tmp_path / "compiled" / "01_load.json").write_text(json.dumps(load), encoding="utf-8")
-    (tmp_path / "compiled" / "02_blank.json").write_text(json.dumps(blank), encoding="utf-8")
+    add_stage(tmp_path, load)
+    add_stage(tmp_path, blank)
     _seed_version(tmp_path)
     manifest = execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path))
 
@@ -377,8 +372,8 @@ def test_output_validation_error_other_than_a_missing_column_also_errors_the_sta
 
 
 def test_value_outside_a_declared_enum_errors_the_stage_and_blocks_downstream(tmp_path):
-    (tmp_path / "compiled").mkdir(parents=True)
-    (tmp_path / "data").mkdir(parents=True)
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    (tmp_path / "data").mkdir(parents=True, exist_ok=True)
     pd.DataFrame({"name": ["a"], "val": [1]}).to_csv(
         tmp_path / "data" / "items.csv", index=False)
     labelled_schema = {"columns": [
@@ -407,7 +402,7 @@ def test_value_outside_a_declared_enum_errors_the_stage_and_blocks_downstream(tm
     }
     for filename, stage in (("01_load.json", load), ("02_label.json", label),
                             ("03_tail.json", tail)):
-        (tmp_path / "compiled" / filename).write_text(json.dumps(stage), encoding="utf-8")
+        add_stage(tmp_path, stage)
     _seed_version(tmp_path)
     manifest = execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path))
 
@@ -421,8 +416,8 @@ def test_value_outside_a_declared_enum_errors_the_stage_and_blocks_downstream(tm
 
 
 def _llm_transform_project(root):
-    (root / "compiled").mkdir(parents=True)
-    (root / "data").mkdir(parents=True)
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "data").mkdir(parents=True, exist_ok=True)
     pd.DataFrame({"id": ["r1"], "text": ["hi"]}).to_csv(
         root / "data" / "items.csv", index=False)
     load = {
@@ -446,8 +441,8 @@ def _llm_transform_project(root):
         },
         "llm": {"prompt_template": "Rate: {text}"},
     }
-    (root / "compiled" / "01_load.json").write_text(json.dumps(load), encoding="utf-8")
-    (root / "compiled" / "02_score.json").write_text(json.dumps(score), encoding="utf-8")
+    add_stage(root, load)
+    add_stage(root, score)
 
 
 def test_llm_generation_failure_surfaces_as_error_status_not_raised(tmp_path, monkeypatch):
@@ -507,8 +502,7 @@ def test_run_subset_surfaces_the_real_row_failure_message(tmp_path, monkeypatch)
     with pytest.raises(SubsetRunError) as exc_info:
         run_subset(
             workflow, injected_outputs=injected_outputs, stage_ids=["score"],
-            run_dir=tmp_path / "runs" / "subset1", repo_root=tmp_path,
-        )
+            run_dir=tmp_path / "runs" / "subset1", repo_root=tmp_path, project=(tmp_path / "runs" / "subset1").parent.parent.name)
 
     message = str(exc_info.value)
     assert "failed generation" in message and "boom" in message
@@ -546,24 +540,25 @@ def test_run_subset_preserves_partial_work_in_the_manifest_on_a_mid_frontier_err
     with pytest.raises(SubsetRunError):
         run_subset(
             workflow, injected_outputs=injected, stage_ids=["clean", "score"],
-            run_dir=run_dir, repo_root=tmp_path)
+            run_dir=run_dir, repo_root=tmp_path, project=(run_dir).parent.parent.name)
 
-    manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
+    manifest = read_manifest(run_dir.parent.parent, run_dir.name)
     records = {r["stage_id"]: r for r in manifest["stage_records"]}
     assert records["clean"]["status"] == "ok"          # completed upstream preserved
     assert records["score"]["status"] == "error"       # failing stage's error recorded
     assert records["score"]["error"] is not None
     assert "kaboom" in records["score"]["error"]["message"]
     assert manifest["status"] == "errors"
-    # Identity not supplied to this subset run — recorded honestly, not fabricated.
-    assert manifest["project"] is None
+    # The version was not supplied to this subset run — recorded honestly, not
+    # fabricated; the project is required, since it is the run's own id.
+    assert manifest["project"] == run_dir.parent.parent.name
     assert manifest["workflow_version"] is None
 
 
 def test_raise_if_run_failed_lists_halted_stages_as_readable_text():
     manifest = RunManifest(
-        run_id="r", started_at="t", project=None, workflow_version=None,
-        limit_overrides={}, offset_overrides={}, run_bindings={}, input_bindings={},
+        run_id="r", started_at="t", project="p", workflow_version=None,
+        input_bindings={},
         human_review_queue_stats={}, dropped_columns={}, status="awaiting_review",
         stage_records=[], halted_at=["review_a", "review_b"],
     )
@@ -616,13 +611,12 @@ def test_run_with_explicit_unpublished_id_succeeds(tmp_path):
 
 
 def test_create_version_rejects_invalid_working_copy(tmp_path):
-    (tmp_path / "compiled").mkdir(parents=True)
+    tmp_path.mkdir(parents=True, exist_ok=True)
     bad = {"id": "load", "description": "Load", "type": "input_data",
            "connector": {"kind": "file",
                          "params": {"path": "data/items.csv", "format": "csv"}},  # relative path
            "signature": {"form": "replaces", "produces": _NAME_VAL_SCHEMA["columns"]}}
-    (tmp_path / "compiled" / "01_load.json").write_text(
-        json.dumps(bad), encoding="utf-8")
+    add_stage(tmp_path, bad)
 
     with pytest.raises(WorkflowLoadError) as exc:
         save_working_copy_as_version(tmp_path, message="x", reviewer="test")
@@ -632,13 +626,12 @@ def test_create_version_rejects_invalid_working_copy(tmp_path):
 
 def test_invalid_workflow_never_becomes_a_version_and_run_never_pins_stale(tmp_path):
     # Invalid working copy: file connector params.path is relative, not absolute.
-    (tmp_path / "compiled").mkdir(parents=True)
+    tmp_path.mkdir(parents=True, exist_ok=True)
     bad = {"id": "load", "description": "Load", "type": "input_data",
            "connector": {"kind": "file",
                          "params": {"path": "data/items.csv", "format": "csv"}},
            "signature": {"form": "replaces", "produces": _NAME_VAL_SCHEMA["columns"]}}
-    (tmp_path / "compiled" / "01_load.json").write_text(
-        json.dumps(bad), encoding="utf-8")
+    add_stage(tmp_path, bad)
 
     # You cannot make a version from it, and it writes nothing.
     with pytest.raises(WorkflowLoadError):
@@ -653,15 +646,14 @@ def test_invalid_workflow_never_becomes_a_version_and_run_never_pins_stale(tmp_p
 
     # Fix the working copy. A run STILL refuses until a version is created
     # explicitly — it never silently pins to a stale snapshot (there is none).
-    (tmp_path / "data").mkdir(parents=True)
+    (tmp_path / "data").mkdir(parents=True, exist_ok=True)
     pd.DataFrame({"name": ["a"], "val": [1]}).to_csv(
         tmp_path / "data" / "items.csv", index=False)
     good = {"id": "load", "description": "Load", "type": "input_data",
             "connector": {"kind": "file",
                           "params": {"path": str(tmp_path / "data" / "items.csv"), "format": "csv"}},
             "signature": {"form": "replaces", "produces": _NAME_VAL_SCHEMA["columns"]}}
-    (tmp_path / "compiled" / "01_load.json").write_text(
-        json.dumps(good), encoding="utf-8")
+    add_stage(tmp_path, good)
     with pytest.raises(NoVersionToRunError):
         execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path))
 
@@ -674,12 +666,11 @@ def test_invalid_workflow_never_becomes_a_version_and_run_never_pins_stale(tmp_p
 def test_resume_reapplies_run_bindings_for_a_pending_input_stage(tmp_path):
     """Hand-builds the post-halt manifest: a real halt through human_review_queue is
     disproportionate."""
-    (tmp_path / "compiled").mkdir(parents=True)
+    tmp_path.mkdir(parents=True, exist_ok=True)
     stage = {"id": "load", "description": "Load items", "type": "input_data",
               "connector": {"kind": "file", "params": {}},  # no workflow-authored path
               "signature": {"form": "replaces", "produces": _NAME_VAL_SCHEMA["columns"]}}
-    (tmp_path / "compiled" / "01_load.json").write_text(
-        json.dumps(stage), encoding="utf-8")
+    add_stage(tmp_path, stage)
     version_id = _seed_version(tmp_path)
 
     bound_csv = tmp_path / "bound.csv"
@@ -687,7 +678,7 @@ def test_resume_reapplies_run_bindings_for_a_pending_input_stage(tmp_path):
 
     run_id = "20260101T000000"
     run_dir = tmp_path / "runs" / run_id
-    (run_dir / "outputs").mkdir(parents=True)
+    (run_dir / "outputs").mkdir(parents=True, exist_ok=True)
     manifest = {
         "run_id": run_id, "started_at": run_id, "project": tmp_path.name,
         "workflow_version": version_id,
@@ -704,7 +695,7 @@ def test_resume_reapplies_run_bindings_for_a_pending_input_stage(tmp_path):
                     "elapsed_ms": 0, "output_row_count": 0, "error": None,
                     "started_at": None, "finished_at": None}],
     }
-    (run_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    store_manifest(run_dir.parent.parent, run_dir.name, manifest)
 
     result = resume_run(tmp_path, run_id, tmp_path, *resumed_stages(tmp_path, run_id))
 
@@ -724,7 +715,7 @@ def test_the_documented_cli_runs_a_project_with_nothing_configured(
     from app.core.sqlite_store import SqliteKvStore
 
     db_path = tmp_path / "db" / "app.db"
-    db_path.parent.mkdir(parents=True)
+    db_path.parent.mkdir(parents=True, exist_ok=True)
     monkeypatch.setenv("CARBON_PAPER_DB_PATH", str(db_path))
     monkeypatch.setenv("CARBON_PAPER_FRAMES_ROOT", str(tmp_path / "frames"))
 
@@ -747,7 +738,7 @@ _FRAME_STAGE_CODE = "def transform(df):\n    return df.assign(double=df['val'] *
 
 
 def _add_frame_stage(root):
-    (root / "compiled" / "02_totals.json").write_text(json.dumps({
+    add_stage(root, {
         "id": "totals", "description": "Totals", "type": "python_frame_function",
         "inputs": [{"id": "load"}],
         "signature": {
@@ -760,7 +751,7 @@ def _add_frame_stage(root):
             ],
         },
         "function": {"kind": "inline", "code": _FRAME_STAGE_CODE},
-    }), encoding="utf-8")
+    })
 
 
 def test_a_frame_stage_succeeds_with_no_frame_store_configured(tmp_path, monkeypatch):

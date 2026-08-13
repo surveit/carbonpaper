@@ -6,7 +6,6 @@ as LEVEL_DETAIL keyed to that (stage, rows); with none bound, nothing extra.
 """
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel
@@ -22,6 +21,8 @@ from app.runtime.run_log import (
     read_events_since,
     unbind_detail_sink,
 )
+
+PROJECT = "detail-log-tests"
 
 
 class _Reply(BaseModel):
@@ -48,17 +49,16 @@ def _use_fake_agent(monkeypatch) -> None:
     monkeypatch.setattr(llm_module, "Agent", _FakeAgent)
 
 
-def _events(path: Path) -> list[dict[str, Any]]:
-    return read_events_since(path, 0)
+def _events(run_id: str) -> list[dict[str, Any]]:
+    return read_events_since(PROJECT, run_id, 0)
 
 
-def _llm_events(path: Path) -> dict[str, dict[str, Any]]:
-    return {e["kind"]: e for e in _events(path) if e["kind"].startswith("llm_")}
+def _llm_events(run_id: str) -> dict[str, dict[str, Any]]:
+    return {e["kind"]: e for e in _events(run_id) if e["kind"].startswith("llm_")}
 
 
-def _call_one_row(tmp_path: Path, *, bind: bool) -> Path:
-    path = tmp_path / "events.jsonl"
-    log = RunLog(path)
+def _call_one_row(run_id: str, *, bind: bool) -> str:
+    log = RunLog(PROJECT, run_id)
     token = bind_row_sink(log, "classify", 3) if bind else None
     try:
         reply = llm_module.call_llm(
@@ -70,13 +70,13 @@ def _call_one_row(tmp_path: Path, *, bind: bool) -> Path:
             unbind_detail_sink(token)
     log.close()
     assert reply == {"score": 5}
-    return path
+    return run_id
 
 
 def test_detail_events_logged_when_a_row_is_bound(tmp_path, monkeypatch):
     _use_fake_agent(monkeypatch)
 
-    by_kind = _llm_events(_call_one_row(tmp_path, bind=True))
+    by_kind = _llm_events(_call_one_row("bound", bind=True))
 
     # Prompt, thinking, and the submitted response all land, at the detail tier,
     # attributed to the bound (stage, row).
@@ -99,15 +99,14 @@ def test_detail_events_logged_when_a_row_is_bound(tmp_path, monkeypatch):
 def test_no_detail_events_without_a_bound_row(tmp_path, monkeypatch):
     _use_fake_agent(monkeypatch)
 
-    assert _llm_events(_call_one_row(tmp_path, bind=False)) == {}
+    assert _llm_events(_call_one_row("unbound", bind=False)) == {}
 
 
 def test_a_batched_call_logs_its_chunk_prompt_against_every_row_it_covers(
     tmp_path, monkeypatch
 ):
     _use_fake_agent(monkeypatch)
-    path = tmp_path / "events.jsonl"
-    log = RunLog(path)
+    log = RunLog(PROJECT, "batched")
     token = bind_detail_sink(log, "classify", (4, 5, 6))
     try:
         llm_module.call_llm_batch(
@@ -119,7 +118,7 @@ def test_a_batched_call_logs_its_chunk_prompt_against_every_row_it_covers(
         unbind_detail_sink(token)
     log.close()
 
-    prompt = _llm_events(path)["llm_prompt"]
+    prompt = _llm_events("batched")["llm_prompt"]
     assert prompt["text"] == "0. a\n1. b\n2. c"
     assert prompt["level"] == LEVEL_DETAIL
     # One prompt covered three rows: `rows` says so rather than the chunk's

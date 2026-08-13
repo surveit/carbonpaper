@@ -21,7 +21,6 @@ from app.web.loading import (
     load_queue_fingerprints,
     load_stages,
     queue_snapshot,
-    runs_dir,
 )
 from app.web.queue_view import (
     QueuePage,
@@ -36,7 +35,7 @@ router = APIRouter()
 
 @router.get("/project/{project}/runs/{run_id}/queue/{stage_id}", response_class=HTMLResponse)
 async def queue_page(request: Request, project: str, run_id: str, stage_id: str):
-    manifest = load_manifest(runs_dir(project) / run_id)
+    manifest = load_manifest(project, run_id)
     stage_def = _require_queue_stage(load_stages(project).workflow, stage_id)
     queue = _require_queue_config(stage_def)
     drift, page = _build_page(project, run_id, stage_id, stage_def, queue)

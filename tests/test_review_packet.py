@@ -20,6 +20,9 @@ from app.web.review_packet.pages import PACKET_MAX_TABLE_ROWS
 from app.web.routers.review_packet import _write_zip
 from app.web.loading import MAX_TABLE_ROWS
 from app.services.review_packet.checksums import compute_sha256
+from stage_seed import add_stage
+from app.services.methodology import write_methodology
+from run_seed import read_manifest, store_manifest
 
 _PROJECT = "proj"
 
@@ -46,18 +49,18 @@ def exported(project_dir, tmp_path):
 
 
 def _make_project(root):
-    (root / "compiled").mkdir(parents=True)
-    (root / "data").mkdir(parents=True)
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "data").mkdir(parents=True, exist_ok=True)
     pd.DataFrame({"name": ["a", "b"], "val": [1, 2]}).to_csv(
         root / "data" / "items.csv", index=False
     )
-    (root / "document.md").write_text("# How we did it\nWe loaded items.\n", encoding="utf-8")
+    write_methodology((root).name, "# How we did it\nWe loaded items.\n")
     _write_stage(root, "01_load.json", _load_stage(root))
     _write_stage(root, "02_double.json", _double_stage())
 
 
 def _write_stage(root, filename, stage):
-    (root / "compiled" / filename).write_text(json.dumps(stage), encoding="utf-8")
+    add_stage(root, stage)
 
 
 def _load_stage(root):
@@ -308,10 +311,12 @@ def test_unreadable_version_is_stated_on_the_stage_page(project_dir, tmp_path, m
     _make_project(project_dir)
     _seed_version(project_dir)
     run_id = run_service.start_run(_PROJECT)
-    manifest_path = project_dir / "runs" / run_id / "manifest.json"
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest_project = project_dir
+
+    manifest_run = run_id
+    manifest = read_manifest(manifest_project, manifest_run)
     manifest["workflow_version"] = "no-such-version"
-    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    store_manifest(manifest_project, manifest_run, manifest)
 
     packet = export_review_packet(_PROJECT, run_id, tmp_path / "packets")
 
@@ -365,10 +370,12 @@ def test_every_step_stays_reachable_when_no_diagram_is_drawn(project_dir, tmp_pa
     _make_project(project_dir)
     _seed_version(project_dir)
     run_id = run_service.start_run(_PROJECT)
-    manifest_path = project_dir / "runs" / run_id / "manifest.json"
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest_project = project_dir
+
+    manifest_run = run_id
+    manifest = read_manifest(manifest_project, manifest_run)
     manifest["workflow_version"] = "no-such-version"
-    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    store_manifest(manifest_project, manifest_run, manifest)
 
     packet = export_review_packet(_PROJECT, run_id, tmp_path / "packets")
 
@@ -500,7 +507,7 @@ def _client():
 
 def test_the_packet_zip_trades_bytes_for_speed_on_compression(tmp_path):
     root = tmp_path / "packet-root"
-    root.mkdir()
+    root.mkdir(parents=True, exist_ok=True)
     payload = ("registrant,client,amount\n" * 8000).encode()
     (root / "big.csv").write_bytes(payload)
     archive = tmp_path / "a.zip"

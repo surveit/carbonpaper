@@ -1,8 +1,8 @@
 """The run log's SSE tail (GET /project/{p}/runs/{id}/events).
 
-One code path serves the live feed and a finished run: drain
-runs/<id>/events.jsonl, end on the terminal run_done marker — or, if it never
-arrived, once the manifest settled, so an interrupted run can't hang a client.
+One code path serves the live feed and a finished run: drain the run's stored
+events, end on the terminal run_done marker — or, if it never arrived, once the
+manifest settled, so an interrupted run can't hang a client.
 """
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ from app.runtime.manifest import create_run_manifest, write_manifest
 from app.runtime.run_log import RUN_DONE
 from fastapi.testclient import TestClient
 from app.services import workspace
+from run_seed import store_events
 
 PROJECT = "events_stream"
 
@@ -30,10 +31,8 @@ def _seed_run(tmp_path: Path, monkeypatch, events: list[dict]) -> str:
         input_bindings={},
     )
     manifest.status = RunStatus.OK
-    write_manifest(run_dir, manifest)
-    (run_dir / "events.jsonl").write_text(
-        "".join(json.dumps(e) + "\n" for e in events), encoding="utf-8"
-    )
+    write_manifest(manifest)
+    store_events(PROJECT, "r1", events)
     return f"/project/{PROJECT}/runs/r1/events"
 
 

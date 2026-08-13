@@ -3,14 +3,11 @@ from __future__ import annotations
 
 import enum
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
-from app.core.errors import RunManifestNotJson
 from app.core.run_status import RunStatus
+from app.runtime.manifest import list_run_entries
 from app.models.run_manifest import (
-    find_manifest_backed_run_dirs,
-    read_run_manifest_json,
     records_a_test_run,
 )
 
@@ -76,11 +73,15 @@ class RunTally:
     headline: ProjectStatus
 
 
-def tally_runs(runs_dir: Path) -> RunTally:
+def tally_runs(project_id: str) -> RunTally:
     real = tests = 0
     headline: ProjectStatus | None = None
-    for run_dir in reversed(find_manifest_backed_run_dirs(runs_dir)):
-        manifest = _read_manifest_or_none(run_dir)
+    for entry in reversed(list_run_entries(project_id)):
+        # Read off the RAW payload, so a run written before a field was renamed
+        # still counts; one that is not even JSON is dropped, not counted
+        # 'corrupt' (as the project's own runs summary does), because a card's
+        # count must not advertise a run nothing can be read off at all.
+        manifest = entry.raw
         if manifest is None:
             continue
         if records_a_test_run(manifest):
@@ -91,15 +92,6 @@ def tally_runs(runs_dir: Path) -> RunTally:
             headline = _read_headline(manifest)
     return RunTally(real=real, tests=tests,
                     headline=headline or ProjectStatus.IN_PROGRESS)
-
-
-def _read_manifest_or_none(run_dir: Path) -> dict[str, Any] | None:
-    try:
-        return read_run_manifest_json(run_dir)
-    except RunManifestNotJson:
-        # Dropped, not counted 'corrupt' (as the project's own runs summary does):
-        # a card's count must not advertise a run nothing can be read off.
-        return None
 
 
 def _read_headline(manifest: dict[str, Any]) -> ProjectStatus | None:

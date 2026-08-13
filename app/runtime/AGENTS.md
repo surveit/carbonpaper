@@ -11,7 +11,7 @@ a production run. An import-linter contract forbids `app/runtime/runner.py` from
 `topological_sort` → `execute_run(project_dir, repo_root, workflow, workflow_version)`. Per
 stage: validate declared inputs (`validation.py`), reject duplicate input rows, dispatch to
 the type's handler, validate the output, write `outputs/<stage>.parquet`, append to
-`manifest.json`.
+the run record.
 - **Duplicate-input throw (every stage type):** fails the stage if any input dataframe has
   exact duplicate full-content rows — the error names the input id + 0-based row numbers.
   Identity is a content hash over the whole row. If N draws per row are intended, add an explicit row_id upstream.
@@ -72,7 +72,7 @@ interceptor, which replays a human's recorded decision before its mapper is call
 mapper only ever passes a row through or defers it.
 
 ## `run_log.py` — the per-run event log
-`_execute_stages` opens a `RunLog` on `runs/<id>/events.jsonl` for every entry path and
+`_execute_stages` opens a `RunLog` on the run's `run_events` chunks for every entry path and
 closes it (writing the terminal `run_done` marker) before returning. Workers emit
 lock-free; one writer thread stamps a monotonic `seq` + `ts` + `level` and appends one JSON
 line per event. `read_events_since(path, from_seq)` re-reads it for both the run page's SSE
@@ -135,4 +135,5 @@ python -m app.cli <project>
 package: it drives `app/services/run.py` (which resolves the newest stored version and
 loads its stages), never `runner.py` directly. `<project>` is a
 NAME under the projects root, so a project outside it needs `CARBON_PAPER_PROJECTS_DIR`.
-Outputs: `runs/<id>/{manifest.json, events.jsonl, outputs/*.parquet, artifacts/, queue/}`.
+Outputs: the run record and its event chunks in the store, plus
+`runs/<id>/{outputs/*.parquet, artifacts/, queue/}` on disk.

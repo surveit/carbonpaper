@@ -5,7 +5,6 @@ reach, because a project's newest eval run is normally against its newest versio
 """
 from __future__ import annotations
 
-import json
 from typing import Literal
 
 import pandas as pd
@@ -18,6 +17,7 @@ from app.models import EvalConfig, EvalRun, EvalRunSettings, ExpectedOutput
 from app.evals.store import save_eval_config, save_eval_run
 from app.services import workspace
 from app.web.eval_coverage import find_eval_coverages
+from stage_seed import add_stage
 
 client = TestClient(app)
 
@@ -56,10 +56,10 @@ _BOTH_MATCHED = pd.DataFrame({
 @pytest.fixture(autouse=True)
 def demo_project(tmp_path):
     demo = tmp_path / "demo"
-    compiled = demo / "compiled"
-    compiled.mkdir(parents=True)
-    (compiled / "01_load.json").write_text(json.dumps(_load_stage(tmp_path)), encoding="utf-8")
-    (compiled / "02_classify.json").write_text(json.dumps(_CLASSIFY), encoding="utf-8")
+    compiled = demo
+    compiled.mkdir(parents=True, exist_ok=True)
+    add_stage(compiled, _load_stage(tmp_path))
+    add_stage(compiled, _CLASSIFY)
     workspace.set_projects_dir(tmp_path)
     save_eval_config(demo, EvalConfig(
         id="label_check", project="demo", name="Label check",
@@ -230,8 +230,7 @@ def test_the_llm_block_reads_in_the_order_one_call_happens(tmp_path):
             {"name": "text", "type": "str", "nullable": True}]}],
             "adds": [{"name": "label", "type": "str", "nullable": True}]},
     }
-    (tmp_path / "demo" / "compiled" / "03_arbiter.json").write_text(
-        json.dumps(llm), encoding="utf-8")
+    add_stage(tmp_path / "demo", llm)
     save_eval_config(tmp_path / "demo", EvalConfig(
         id="arbiter_check", project="demo", name="Arbiter check",
         override_stage="load", target_stage="arbiter",

@@ -4,7 +4,6 @@ app/runtime/cancellation.py for the request/poll design this route drives.
 """
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pandas as pd
@@ -14,6 +13,8 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.runtime.cancellation import consume_cancel
 from app.services import workspace
+from stage_seed import add_stage
+from run_seed import store_manifest
 
 PROJ = "testmeth"
 RUN = "run-0001"
@@ -33,12 +34,9 @@ def client() -> TestClient:
 def _write_manifest(examples_dir: Path, status: str) -> Path:
     run_dir = examples_dir / PROJ / "runs" / RUN
     run_dir.mkdir(parents=True, exist_ok=True)
-    (run_dir / "manifest.json").write_text(
-        json.dumps({"run_id": RUN, "started_at": RUN, "project": PROJ,
+    store_manifest(run_dir.parent.parent, run_dir.name, {"run_id": RUN, "started_at": RUN, "project": PROJ,
                     "workflow_version": RUN, "status": status,
-                    "human_review_queue_stats": {}, "stage_records": []}),
-        encoding="utf-8",
-    )
+                    "human_review_queue_stats": {}, "stage_records": []})
     return run_dir
 
 
@@ -65,13 +63,13 @@ def test_cancel_on_a_missing_run_404s(examples_dir, client):
 
 def _write_one_stage_project(examples_dir: Path) -> None:
     proj_dir = examples_dir / PROJ
-    (proj_dir / "compiled").mkdir(parents=True)
-    (proj_dir / "data").mkdir(parents=True)
+    proj_dir.mkdir(parents=True, exist_ok=True)
+    (proj_dir / "data").mkdir(parents=True, exist_ok=True)
     pd.DataFrame({"name": ["a"], "val": [1]}).to_csv(proj_dir / "data" / "items.csv", index=False)
     stage = {"id": "load", "description": "Load items", "type": "input_data",
              "connector": {"kind": "file",
                            "params": {"path": str(proj_dir / "data" / "items.csv"), "format": "csv"}}}
-    (proj_dir / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
+    add_stage(proj_dir, stage)
 
 
 def _write_status_manifest(examples_dir: Path, stage_statuses: list[tuple[str, str]]) -> Path:
@@ -82,12 +80,9 @@ def _write_status_manifest(examples_dir: Path, stage_statuses: list[tuple[str, s
          "input_validation_report": [], "output_validation_report": None,
          "output_row_count": 0}
         for sid, status in stage_statuses]
-    (run_dir / "manifest.json").write_text(
-        json.dumps({"run_id": RUN, "started_at": RUN, "project": PROJ,
+    store_manifest(run_dir.parent.parent, run_dir.name, {"run_id": RUN, "started_at": RUN, "project": PROJ,
                     "workflow_version": RUN, "status": "cancelled",
-                    "human_review_queue_stats": {}, "stage_records": stages}),
-        encoding="utf-8",
-    )
+                    "human_review_queue_stats": {}, "stage_records": stages})
     return run_dir
 
 

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 
 import pandas as pd
 
@@ -9,11 +8,13 @@ from app.models import parse_stage
 from app.services.project import save_working_copy_as_version
 from app.services.versioning import WorkflowVersion
 from app.services import workspace
+from stage_seed import add_stage
+from run_seed import manifest_exists
 
 
 def _make_run_project(root):
-    (root / "compiled").mkdir(parents=True)
-    (root / "data").mkdir(parents=True)
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "data").mkdir(parents=True, exist_ok=True)
     pd.DataFrame({"name": ["a", "b"], "val": [1, 2]}).to_csv(
         root / "data" / "items.csv", index=False)
     stage = {
@@ -29,7 +30,7 @@ def _make_run_project(root):
             ],
         },
     }
-    (root / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
+    add_stage(root, stage)
     return save_working_copy_as_version(root, message="seed", reviewer="test").version_id
 
 
@@ -55,7 +56,7 @@ _CLASSIFY = {
 
 
 def _make_workflow_test_project(root):
-    (root / "data").mkdir(parents=True)
+    (root / "data").mkdir(parents=True, exist_ok=True)
     pd.DataFrame({"doc_id": ["a", "b", "c", "d"], "score": [1, -1, 2, -3]}).to_csv(
         root / "data" / "rows.csv", index=False)
     load = dict(_LOAD_STAGE_TMPL,
@@ -93,7 +94,7 @@ def test_run_workflow_translates_no_version_to_error(tmp_path, monkeypatch):
 
     workspace.set_projects_dir(tmp_path)
     _sync_background(monkeypatch)
-    (tmp_path / "unready").mkdir()
+    (tmp_path / "unready").mkdir(parents=True, exist_ok=True)
 
     result = server.run_workflow(project_id="unready")
     assert result["ok"] is False
@@ -125,8 +126,10 @@ def test_run_workflow_test_delegates_and_reports_verdict(tmp_path, monkeypatch):
     assert "run_id" in result
     # A real run under the project's runs/ dir — reachable through the same
     # get_run_status a production run uses — but marked a test run.
-    manifest_path = tmp_path / "demo" / "runs" / result["run_id"] / "manifest.json"
-    assert manifest_path.exists()
+    manifest_project = tmp_path / "demo"
+
+    manifest_run = result["run_id"]
+    assert manifest_exists(manifest_project, manifest_run)
     status = server.get_run_status(project_id="demo", run_id=result["run_id"])
     assert status["parameters"]["is_test_run"] is True
 

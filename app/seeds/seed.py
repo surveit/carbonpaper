@@ -7,8 +7,8 @@ import os
 from pathlib import Path
 
 from app.services.project import WorkflowFile, import_project, sanitize_project_name
-from app.services.workspace import projects_dir
 from app.services.project import find_projects_by_name
+from app.services import methodology
 
 # The packaged fixtures directory: app/seeds/data/<name>.json, each a
 # self-contained WorkflowFile document (see app/seeds/__init__.py for the
@@ -42,7 +42,7 @@ def _find_seeded_copy(bundle_name: str) -> str | None:
     label = sanitize_project_name(bundle_name)
     return next(
         (record.id for record in find_projects_by_name(label)
-         if (projects_dir() / record.id / "document.md").is_file()),
+         if methodology.exists(record.id)),
         None,
     )
 

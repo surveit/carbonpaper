@@ -15,6 +15,8 @@ from app.main import app
 from app.services.project import create_project
 from app.services.versioning import list_versions
 from app.services import workspace
+from stage_seed import add_stage
+from run_seed import manifest_exists, read_manifest
 
 client = TestClient(app)
 
@@ -25,10 +27,12 @@ def assert_run_ok(status: dict, project_dir, run_id: str) -> None:
     """pytest truncates a bare `assert ..., status`, so which stage failed never reaches the log."""
     if status.get("status") == "ok":
         return
-    detail = "manifest.json not found"
-    manifest_path = project_dir / "runs" / run_id / "manifest.json"
-    if manifest_path.exists():
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    detail = "no manifest stored"
+    manifest_project = project_dir
+
+    manifest_run = run_id
+    if manifest_exists(manifest_project, manifest_run):
+        manifest = read_manifest(manifest_project, manifest_run)
         problems = [
             record for record in manifest.get("stage_records", [])
             if record and record.get("status") not in ("ok", "pending")
@@ -81,9 +85,7 @@ def test_offline_journey_reaches_a_published_artifact(journey_project, tmp_path)
     assert status["terminal"] is True
 
     # The manifest records the binding's provenance: a run-supplied path, hashed.
-    manifest = json.loads(
-        (journey_project / "runs" / run_id / "manifest.json").read_text(encoding="utf-8")
-    )
+    manifest = read_manifest(journey_project, run_id)
     binding = manifest["input_bindings"]["load"]
     assert binding["source"] == "run"
     assert binding["sha256"]
@@ -114,9 +116,7 @@ def test_publish_stage_records_no_output_validation_issue(journey_project):
     status = client.get(f"/project/{journey_project.name}/runs/{run_id}/status").json()
     assert_run_ok(status, journey_project, run_id)
 
-    manifest = json.loads(
-        (journey_project / "runs" / run_id / "manifest.json").read_text(encoding="utf-8")
-    )
+    manifest = read_manifest(journey_project, run_id)
     record = {r["stage_id"]: r for r in manifest["stage_records"]}["report"]
     assert record["status"] == "ok"
     assert record["output_validation_report"]["issues"] == []
@@ -137,10 +137,9 @@ def journey_project(tmp_path, monkeypatch):
     project_id = create_project(PROJECT, "Flag rows over the threshold and publish totals.",
                                 source="smoke test").id
     project_dir = tmp_path / project_id
-    (project_dir / "compiled").mkdir()
-    for position, stage in enumerate(_workflow_stages(str(authored)), start=1):
-        path = project_dir / "compiled" / f"{position:02d}_{stage['id']}.json"
-        path.write_text(json.dumps(stage), encoding="utf-8")
+    project_dir.mkdir(parents=True, exist_ok=True)
+    for stage in _workflow_stages(str(authored)):
+        add_stage(project_dir, stage)
     return project_dir
 
 

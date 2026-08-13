@@ -45,10 +45,10 @@ runtime or web — keep it pure.** Checks the *spec*, distinct from RUNTIME data
   tools, mcp, agents, compiler) still names `Stage`. `named_schemas.py` — named schemas +
   FK `references`. `eval.py` — `EvalConfig` + grain-preservation gate. `table.py` — `TableRef`.
 
-**Loading is normalizing + strict.** Stages persist as JSON (`compiled/<NN>_<stage_id>.json`,
-a validated `Stage`); `app/services/loader.py` is the one loader — the runner refuses a
-workflow with an invalid stage (`WorkflowLoadError`), the viewer (same loader) renders
-per-file issues. Typed `Stage` objects flow end-to-end.
+**Loading is normalizing + strict.** Stages persist in the project's `working_copy`
+document, one validated `Stage` per entry; `app/services/loader.py` is the one loader — the
+runner refuses a workflow with an invalid stage (`WorkflowLoadError`), the viewer (same
+loader) renders per-stage issues. Typed `Stage` objects flow end-to-end.
 
 ## `app/runtime/` — the Runner  → `app/runtime/AGENTS.md`
 `runner.py` — `execute_run`/`prepare_run`/`run_prepared`/`resume_run`, each taking the
@@ -61,7 +61,7 @@ hold bare stages. `app/services/run.py` is the one place that composes this, and
 import-linter contract keeps `runner.py` free of `app.services` so the arrow between the two
 points one way; `app/cli.py` drives that same seam. Per stage: validate
 inputs, reject duplicate rows, dispatch, validate output, write `outputs/<stage>.parquet`,
-flush `manifest.json` mid-run; halt-on-review + resume; per-run `--limit`/`--offset`
+flush the run record mid-run; halt-on-review + resume; per-run `--limit`/`--offset`
 capping the rows a stage READS (cut off its inputs before its handler runs);
 `field_checks`. `stages/` — one module per type. `llm.py`/`options.py` — the agent
 backend (no fallback). `preview.py` — scratch re-runs.
@@ -97,7 +97,7 @@ lists every version newest-first, `/workflow/version/{id}` is one immutable vers
 read-only detail with Publish/Run-this-version; the mutable editor stays at `/workflow`),
 `runs.py` (trigger/list/detail/status-poll, rows + CSV, scratch preview, resume, plus
 running one specific pinned version), `review.py` (review queue), `node.py` (the per-node
-panel + spec editing + version creation + publish — the only writer to `compiled/`),
+panel + spec editing + version creation + publish — the only writer to the working copy),
 `guide.py` (`POST /workflow/version/{id}/guide` — starts review-guide authoring for one
 version, watched through node.py's generation-session status endpoint).
 `web/{config,loading,diagrams}.py` — paths + Jinja · viewer reads over the loader ·
@@ -109,7 +109,7 @@ pages draw.
 Everything a run page states about the workflow — its graph, each
 stage's source and schemas, the lineage panel, and the scratch re-run's handler — is read
 from the version its manifest pinned to (`run.load_run_workflow` /
-`run.load_pinned_stage_def` in `app/services/`), never from `compiled/`; a manifest naming no resolvable version raises
+`run.load_pinned_stage_def` in `app/services/`), never from the working copy; a manifest naming no resolvable version raises
 `RunVersionUnresolvableError`, and the page shows an unavailable notice instead of the
 working copy while the scratch re-run refuses to execute (409).
 

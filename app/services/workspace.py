@@ -15,7 +15,7 @@ from pydantic import BaseModel
 
 from app.core.paths import CARBON_PAPER_HOME, repo_root as repo_root
 from app.models import StageType
-from app.services.loader import load_compiled_dir
+from app.services.loader import load_stage_entries
 # The projects storage root: <root>/<name>/ working copies live here. There is
 # exactly ONE in a running process — the app does not serve multiple
 # workspaces, so no function takes a root as an argument. Configure it the way
@@ -58,6 +58,12 @@ def resolve_run_dir(name: str, run_id: str) -> Path:
     return resolve_project_dir(name) / "runs" / run_id
 
 
+# Keys this reader injects onto a loaded schema dict for its own bookkeeping —
+# never part of the spec, so a writer must strip them before validating or
+# persisting (the spec model is `extra="forbid"`).
+LOADER_BOOKKEEPING_KEYS: set[str] = {"_filename", "_order", "_error"}
+
+
 def load_schemas(project_dir: Path) -> list[dict[str, Any]]:
     schemas_dir = Path(project_dir) / "schemas"
     if not schemas_dir.is_dir():
@@ -83,17 +89,6 @@ def load_schemas(project_dir: Path) -> list[dict[str, Any]]:
     return schemas
 
 
-def list_project_names() -> list[str]:
-    root = projects_dir()
-    if not root.is_dir():
-        return []
-    return sorted(
-        child.name
-        for child in root.iterdir()
-        if child.is_dir() and (child / "compiled").is_dir()
-    )
-
-
 class StageSummary(BaseModel):
     id: str
     type: StageType
@@ -104,19 +99,17 @@ class StageSummary(BaseModel):
 class WorkflowSummary(BaseModel):
     name: str
     stages: list[StageSummary]
-    # One per compiled file that would not parse — the stage is absent from `stages`
+    # One per stored stage that would not parse — the stage is absent from `stages`
     # rather than standing in the list as a half-read one.
     issues: list[str]
 
 
-def project_workflow_summary(project_dir: Path) -> WorkflowSummary:
-    compiled = load_compiled_dir(project_dir / "compiled")
-
+def project_workflow_summary(project_id: str) -> WorkflowSummary:
     stages: list[StageSummary] = []
     issues: list[str] = []
-    for compiled_file in compiled:
+    for compiled_file in load_stage_entries(project_id):
         if compiled_file.stage is None:
-            issues.append(f"{compiled_file.filename}: {'; '.join(compiled_file.issues)}")
+            issues.append(f"{compiled_file.label}: {'; '.join(compiled_file.issues)}")
             continue
         stage = compiled_file.stage
         stages.append(StageSummary(
@@ -125,4 +118,4 @@ def project_workflow_summary(project_dir: Path) -> WorkflowSummary:
             description=stage.description,
             inputs=[ref.id for ref in stage.inputs],
         ))
-    return WorkflowSummary(name=project_dir.name, stages=stages, issues=issues)
+    return WorkflowSummary(name=project_id, stages=stages, issues=issues)

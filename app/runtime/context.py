@@ -46,7 +46,7 @@ class RunContext(BaseModel):
     # bindings) — the same object the manifest records, so the settings executed
     # under and the settings written down cannot drift.
     params: RunParameters = RunParameters()
-    # This run's event log (runs/<id>/events.jsonl), attached by the executor for
+    # This run's event log, attached by the executor for
     # the duration of the run — see `attach_run_log`. Write-only from here: a
     # handler emits onto it and never reads it back, so it carries no run state
     # and nothing here becomes load-bearing. None outside a logged execution
@@ -86,6 +86,16 @@ class RunContext(BaseModel):
 
     def attach_run_log(self, log: RunLog) -> RunContext:
         return self.model_copy(update={"run_log": log})
+
+    def require_identity(self) -> RunIdentity:
+        """This run's (project, run id), for a handler storing a run-scoped record."""
+        if self.identity is None:
+            raise ValueError(
+                "this run context has no identity — it is an in-memory harness "
+                "context, so a stage that stores a run-scoped record cannot "
+                "execute under it."
+            )
+        return self.identity
 
     def require_run_dir(self) -> Path:
         if self.run_dir is None:

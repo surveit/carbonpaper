@@ -2,17 +2,10 @@
 from __future__ import annotations
 
 import importlib.util
-import json
-import sys
 from pathlib import Path
 from typing import Any
 
-import pytest
-from pydantic import ValidationError
 
-from app.models import parse_stage
-from conftest import drop_input_schemas
-from scripts import migrate_compiled_stage_files
 
 _REVISION = (Path(__file__).resolve().parents[1]
              / "alembic/versions/0010_backfill_filter_and_queue_reads.py")
@@ -83,25 +76,3 @@ def test_a_stage_whose_input_declares_no_columns_is_left_for_a_human():
     # Inventing an edge here would be fabricating what the stage reads.
     assert rev._backfill_document(document) is False
     assert "reads" not in stage["signature"]
-
-
-# ── the same rewrite on a project's working copy ─────────────────────────────
-def test_a_compiled_filter_file_is_migrated_and_then_parses(tmp_path, monkeypatch):
-    compiled = tmp_path / "demo" / "compiled"
-    compiled.mkdir(parents=True)
-    path = compiled / "keep.json"
-    path.write_text(json.dumps({
-        **_stage("filter_rows", {"form": "extends"}),
-        "filter": {"code": "def should_include(row):\n    return row['score'] > 0\n"},
-    }), encoding="utf-8")
-    # Before: the file parsed clean under the old model and produced nothing;
-    # under today's it does not parse at all.
-    with pytest.raises(ValidationError, match="reads nothing"):
-        parse_stage(drop_input_schemas(json.loads(path.read_text(encoding="utf-8"))))
-
-    monkeypatch.setattr(sys, "argv", [
-        "migrate", "--apply", "--projects-dir", str(tmp_path)])
-    migrate_compiled_stage_files.main()
-
-    after = parse_stage(drop_input_schemas(json.loads(path.read_text(encoding="utf-8"))))
-    assert after.anchor_reads() == {"id", "score"}

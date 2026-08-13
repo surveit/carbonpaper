@@ -26,8 +26,6 @@ depends_on = None
 # so a stage of either type must say so or be handed nothing.
 #
 # The rewrite itself is backfill_anchor_reads, shared with
-# scripts.migrate_compiled_stage_files — a project's working copy carries the same
-# specs and no revision can reach it.
 _COLLECTIONS = ("workflow_version", "draft")
 
 

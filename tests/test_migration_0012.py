@@ -2,8 +2,6 @@
 from __future__ import annotations
 
 import importlib.util
-import json
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -11,7 +9,6 @@ import pytest
 from pydantic import ValidationError
 
 from app.models import parse_stage
-from scripts import migrate_compiled_stage_files
 from scripts.publish_template import NOTE_PREFIX, PublishTemplateUnreadable
 
 _REVISION = (Path(__file__).resolve().parents[1]
@@ -112,21 +109,3 @@ def test_a_publish_payload_of_an_unknown_shape_is_refused_not_guessed():
 
     with pytest.raises(PublishTemplateUnreadable, match="not an object"):
         rev._retire_document_templates(document)
-
-
-# ── the same rewrite on a project's working copy ─────────────────────────────
-def test_a_compiled_file_is_migrated_and_then_parses(tmp_path, monkeypatch):
-    compiled = tmp_path / "demo" / "compiled"
-    compiled.mkdir(parents=True)
-    path = compiled / "publish_evidence_table.json"
-    path.write_text(json.dumps(_stage({"format": "csv", "template": _TEMPLATE})),
-                    encoding="utf-8")
-
-    monkeypatch.setattr(sys, "argv", [
-        "migrate", "--apply", "--projects-dir", str(tmp_path)])
-    migrate_compiled_stage_files.main()
-
-    spec = json.loads(path.read_text(encoding="utf-8"))
-    assert "template" not in spec["publish"]
-    assert spec["compiler_notes"] == [f"{NOTE_PREFIX}{_TEMPLATE}"]
-    parse_stage(spec)

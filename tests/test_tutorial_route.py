@@ -14,6 +14,7 @@ from app.main import app
 from app.services import workspace
 from app.tools.tutorial import TutorialContext
 from app.web.chat_router import _store
+from app.services.methodology import write_methodology
 
 client = TestClient(app)
 
@@ -29,7 +30,7 @@ def examples_root(tmp_path: Path) -> Path:
 def _make_project(root: Path, name: str = "already-here") -> None:
     proj = root / name
     proj.mkdir()
-    (proj / "document.md").write_text("methodology prose", encoding="utf-8")
+    write_methodology((proj).name, "methodology prose")
     (proj / "project.json").write_text(
         json.dumps({"name": name, "model": "sonnet"}), encoding="utf-8"
     )

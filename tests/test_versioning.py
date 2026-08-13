@@ -3,7 +3,6 @@ store (conftest.fresh_store).
 """
 from __future__ import annotations
 
-import json
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -30,6 +29,7 @@ from app.services.versioning import (
     resolve_version_id,
     save_version_guide,
 )
+from stage_seed import add_stage
 
 # Every non-publish stage's signature must say what it outputs
 # (app/models/stages/stage_base.py: AbstractStage._schemas_declared).
@@ -44,9 +44,9 @@ _LOAD_STAGE = {
 
 def _seed(project_dir: Path, stage: dict = _LOAD_STAGE) -> None:
     """A path-free file connector, so no data file need exist: nothing here executes."""
-    compiled = project_dir / "compiled"
+    compiled = project_dir
     compiled.mkdir(parents=True, exist_ok=True)
-    (compiled / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
+    add_stage(compiled, stage)
 
 
 # ── save_working_copy_as_version ─────────────────────────────────────────────────
@@ -99,12 +99,12 @@ def test_create_version_no_compiled_dir_raises_file_not_found(tmp_path):
 
 
 def test_create_version_invalid_workflow_raises_and_writes_nothing(tmp_path):
-    (tmp_path / "compiled").mkdir()
+    tmp_path.mkdir(parents=True, exist_ok=True)
     bad = {"id": "load", "description": "Load", "type": "input_data",
            "signature": {"form": "replaces", "produces": _ROWS_SCHEMA["columns"]},
            "connector": {"kind": "file",
                          "params": {"path": "data/items.csv", "format": "csv"}}}  # relative path
-    (tmp_path / "compiled" / "01_load.json").write_text(json.dumps(bad), encoding="utf-8")
+    add_stage(tmp_path, bad)
 
     with pytest.raises(WorkflowLoadError) as exc:
         save_working_copy_as_version(tmp_path, message="x", reviewer="test")

@@ -9,7 +9,7 @@ from pydantic import BaseModel
 
 from app.core.frames import read_frame_file, write_frame_file
 from app.core.run_status import StageStatus
-from app.services.project import find_document_path
+from app.services.methodology import read_methodology
 from app.services.review_packet.views import RunView, StageView
 
 DATA_DIR = "data"
@@ -49,12 +49,14 @@ def write_packet_data(
     project_dir: Path,
     view: RunView,
     workflow: str | None,
+    manifest: str,
+    events: str,
     stage_sources: dict[str, Path | None],
 ) -> DataReport:
     report = DataReport(written=[], omitted=[], artifacts=[])
-    _copy_run_records(root, run_dir, report)
+    _write_run_records(root, manifest, events, report)
     _write_workflow(root, workflow, view, report)
-    _copy_document(root, project_dir, report)
+    _write_document(root, project_dir, report)
     _copy_published_artifacts(root, run_dir, view, report)
     for stage in view.stages:
         # Pre-resolved by the caller: joining a run dir to a recorded output_path is
@@ -65,10 +67,10 @@ def write_packet_data(
     return report
 
 
-def _copy_run_records(root: Path, run_dir: Path, report: DataReport) -> None:
-    _copy_file(run_dir / MANIFEST_FILE, root / MANIFEST_FILE, MANIFEST_FILE, report)
-    # events.jsonl carries the LLM prompts — the only record of what a model was asked.
-    _copy_file(run_dir / EVENTS_FILE, root / EVENTS_FILE, EVENTS_FILE, report)
+def _write_run_records(root: Path, manifest: str, events: str, report: DataReport) -> None:
+    _write_text(root / MANIFEST_FILE, manifest, MANIFEST_FILE, report)
+    # The events carry the LLM prompts — the only record of what a model was asked.
+    _write_text(root / EVENTS_FILE, events, EVENTS_FILE, report)
 
 
 def _write_workflow(
@@ -88,14 +90,14 @@ def _write_workflow(
     _write_text(root / WORKFLOW_FILE, workflow, WORKFLOW_FILE, report)
 
 
-def _copy_document(root: Path, project_dir: Path, report: DataReport) -> None:
-    source = find_document_path(project_dir)
-    if source is None:
+def _write_document(root: Path, project_dir: Path, report: DataReport) -> None:
+    document = read_methodology(project_dir.name)
+    if document is None:
         report.omitted.append(
-            OmittedFile(path=DOCUMENT_FILE, reason="this project has no source document on disk")
+            OmittedFile(path=DOCUMENT_FILE, reason="this project has no source document")
         )
         return
-    _copy_file(source, root / DOCUMENT_FILE, DOCUMENT_FILE, report)
+    _write_text(root / DOCUMENT_FILE, document, DOCUMENT_FILE, report)
 
 
 def _copy_published_artifacts(

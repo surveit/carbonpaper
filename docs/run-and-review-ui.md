@@ -179,10 +179,10 @@ reviewing a run's flagged rows.
 - `GET …/node/{stage_id}/panel` renders one stage's Inputs / Transform / Outputs
   / Spec; `GET /project/{p}/workflow/graph` re-renders the mermaid graph after an
   edit changes a stage's inputs.
-- `POST …/node/{stage_id}/edit` is the **only** code path that writes to
-  `compiled/`.
-- `POST /project/{p}/version` freezes `compiled/` into a `Version` document (in
-  the store); `GET /project/{p}/versions` lists the frozen versions.
+- `POST …/node/{stage_id}/edit` is the **only** code path that writes to the
+  working copy.
+- `POST /project/{p}/version` freezes the working copy into a `Version` document
+  (in the store); `GET /project/{p}/versions` lists the frozen versions.
 
 ## Where to confirm visually
 

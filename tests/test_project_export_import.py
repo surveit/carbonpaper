@@ -24,8 +24,9 @@ from app.models import (
 from app.models.stages.input_data import Connector, ConnectorKind, InputDataStage
 from app.models.stages.signature import ReplacesSignature
 from app.services import project, terms, versioning, workspace
-from app.services.loader import load_compiled_dir, write_stage
+from app.services.loader import load_stage_entries, save_stages
 from app.services.project import WorkflowFile, export_project, import_project
+from app.services.methodology import read_methodology
 
 _TINY_LIBRARY = SchemaLibrary(schemas=[NamedSchema(
     name="entity", kind=SchemaKind.input, title="Entity",
@@ -38,18 +39,14 @@ _FLAG = Verb(name="flag", definition="Mark a filing for a human to decide on.")
 def test_round_trip_through_json_reproduces_the_source_and_mints_a_version(tmp_path):
     source_examples = tmp_path / "source_examples"
     target_examples = tmp_path / "target_examples"
-    source_examples.mkdir()
-    target_examples.mkdir()
+    source_examples.mkdir(parents=True, exist_ok=True)
+    target_examples.mkdir(parents=True, exist_ok=True)
     workspace.set_projects_dir(source_examples)
 
     name = project.create_project(
         "Round Trip Source", "Trace the shell companies.", source="test").id
-    pdir = source_examples / name
-
     terms.write_terms(name, Terms(nouns=_TINY_LIBRARY, verbs=[]))
 
-    compiled = pdir / "compiled"
-    compiled.mkdir()
     stage = InputDataStage(
         id="load_entities", description="Load Entities", type=StageType.input_data,
         connector=Connector(kind=ConnectorKind.file, params={"format": "csv"}),
@@ -59,7 +56,7 @@ def test_round_trip_through_json_reproduces_the_source_and_mints_a_version(tmp_p
             Column(name="entity_name", type="str", nullable=True),
         ]),
     )
-    write_stage(compiled / "01_load_entities.json", stage)
+    save_stages(name, [stage])
 
     exported = export_project(name)
     wf = WorkflowFile.model_validate_json(exported.to_json())
@@ -70,12 +67,12 @@ def test_round_trip_through_json_reproduces_the_source_and_mints_a_version(tmp_p
     imported_name = import_project(wf, name="round_trip_target")
     target_pdir = target_examples / imported_name
 
-    assert (target_pdir / "document.md").read_text(encoding="utf-8") == "Trace the shell companies."
+    assert read_methodology(imported_name) == "Trace the shell companies."
 
     imported_library = terms.load_terms(imported_name).nouns
     assert imported_library.model_dump() == _TINY_LIBRARY.model_dump()
 
-    [entry] = load_compiled_dir(target_pdir / "compiled")
+    [entry] = load_stage_entries(imported_name)
     assert entry.stage is not None
     assert stage_to_spec_dict(entry.stage) == stage_to_spec_dict(stage)
 
@@ -139,8 +136,8 @@ def test_a_bundle_written_before_verbs_existed_still_imports(tmp_path):
 def test_a_bundle_carries_the_verbs_across_and_import_writes_them(tmp_path):
     source_examples = tmp_path / "source_examples"
     target_examples = tmp_path / "target_examples"
-    source_examples.mkdir()
-    target_examples.mkdir()
+    source_examples.mkdir(parents=True, exist_ok=True)
+    target_examples.mkdir(parents=True, exist_ok=True)
     workspace.set_projects_dir(source_examples)
 
     name = project.create_project("Verbs Source", "Flag the filings.", source="test").id

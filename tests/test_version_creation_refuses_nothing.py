@@ -4,7 +4,6 @@ The compiler report tells them what is wrong; it does not hold the button. A wor
 copy that does not LOAD is the one refusal, and test_version_route_invalid_workflow
 covers that.
 """
-import json
 from pathlib import Path
 
 import pytest
@@ -12,24 +11,25 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.services import workspace
+from stage_seed import add_stage
 
 _IN_SCHEMA = {"columns": [{"name": "amount", "type": "float", "nullable": False}]}
 _SUMMARY = "Doubles the amount on every row."
 
 
 def _seed_project(root: Path, expected_doubled: float, summary: str | None = _SUMMARY) -> None:
-    compiled = root / "alpha" / "compiled"
-    compiled.mkdir(parents=True)
-    (compiled / "01_load.json").write_text(json.dumps({
+    compiled = root / "alpha"
+    compiled.mkdir(parents=True, exist_ok=True)
+    add_stage(compiled, {
         "id": "load", "description": "Load", "type": "input_data",
         "connector": {"kind": "file"},
         "signature": {"form": "replaces", "produces": _IN_SCHEMA["columns"]},
-    }), encoding="utf-8")
+    })
     function = {"kind": "inline",
                 "code": "def transform(row):\n    return {**row, 'doubled': row['amount'] * 2}\n"}
     if summary is not None:
         function["summary"] = summary
-    (compiled / "02_double.json").write_text(json.dumps({
+    add_stage(compiled, {
         "id": "double", "description": "Double", "type": "python_row_function",
         "inputs": [{"id": "load"}],
         "signature": {
@@ -43,7 +43,7 @@ def _seed_project(root: Path, expected_doubled: float, summary: str | None = _SU
             "inputs": {"load": [{"amount": 2.0}]},
             "expected": [{"amount": 2.0, "doubled": expected_doubled}],
         }],
-    }), encoding="utf-8")
+    })
 
 
 @pytest.fixture
@@ -82,6 +82,6 @@ def test_a_clean_workflow_versions(client: TestClient, tmp_path: Path) -> None:
 
 
 def test_project_without_workflow_still_gets_400(client: TestClient, tmp_path: Path) -> None:
-    (tmp_path / "alpha").mkdir()
+    (tmp_path / "alpha").mkdir(parents=True, exist_ok=True)
     response = client.post("/project/alpha/version", data={"message": "v1"})
     assert response.status_code == 400

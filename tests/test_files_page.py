@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import io
-import json
 
 import pytest
 from fastapi.testclient import TestClient
@@ -13,6 +12,7 @@ from app.main import app
 from app.services import workspace
 from app.services.project import create_project
 from app.services.uploads import files_root, list_project_files, save_upload
+from run_seed import store_manifest
 
 client = TestClient(app)
 
@@ -32,12 +32,9 @@ def store(project_id: str, name: str = "posts.csv", body: bytes = CSV):
 
 
 def record_a_run(project_id: str, sha256: str, run_id: str = "20260812T120000") -> None:
-    """A run that read this file, written the way the runner writes one."""
-    run_dir = workspace.resolve_project_dir(project_id) / "runs" / run_id
-    run_dir.mkdir(parents=True)
-    (run_dir / "manifest.json").write_text(json.dumps(
-        {"input_bindings": {"load": {"path": "/x/posts.csv", "sha256": sha256}}}),
-        encoding="utf-8")
+    """A run that read this file, stored the way the runner stores one."""
+    store_manifest(project_id, run_id,
+                   {"input_bindings": {"load": {"path": "/x/posts.csv", "sha256": sha256}}})
 
 
 def test_the_page_lists_what_the_project_holds(project_id):

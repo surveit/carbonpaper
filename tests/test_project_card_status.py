@@ -1,7 +1,6 @@
 """The home card's four-state headline and its run tallies (app.web.project_cards)."""
 from __future__ import annotations
 
-import json
 
 import pytest
 from fastapi.testclient import TestClient
@@ -11,6 +10,8 @@ from app.main import app
 from app.services import workspace
 from app.web.loading import list_projects
 from app.web.project_cards import ProjectStatus, tally_runs
+from app.services.methodology import write_methodology
+from run_seed import store_manifest
 
 client = TestClient(app)
 
@@ -29,14 +30,14 @@ def _write_run(runs_dir, run_id, *, status=None, is_test=False):
         manifest["status"] = str(status)
     if is_test:
         manifest["parameters"] = {"is_test_run": True}
-    (run / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    store_manifest(run.parent.parent, run.name, manifest)
     return run
 
 
 def _make_project(root, name, runs=()):
     proj = root / name
     proj.mkdir()
-    (proj / "document.md").write_text("methodology prose", encoding="utf-8")
+    write_methodology((proj).name, "methodology prose")
     for run_id, kwargs in runs:
         _write_run(proj / "runs", run_id, **kwargs)
     return proj
@@ -57,7 +58,7 @@ def _make_project(root, name, runs=()):
 )
 def test_every_run_status_has_a_headline(examples_root, run_status, expected):
     proj = _make_project(examples_root, "p", [("20260101T000000", {"status": run_status})])
-    assert tally_runs(proj / "runs").headline is expected
+    assert tally_runs(proj.name).headline is expected
 
 
 def test_the_mapping_covers_every_run_status():
@@ -74,7 +75,7 @@ def test_the_headline_is_the_newest_run(examples_root):
         ("20260101T000000", {"status": RunStatus.ERRORS}),
         ("20260102T000000", {"status": RunStatus.OK}),
     ])
-    assert tally_runs(proj / "runs").headline is ProjectStatus.COMPLETED
+    assert tally_runs(proj.name).headline is ProjectStatus.COMPLETED
 
 
 def test_a_test_run_never_sets_the_headline(examples_root):
@@ -82,14 +83,14 @@ def test_a_test_run_never_sets_the_headline(examples_root):
         ("20260101T000000", {"status": RunStatus.ERRORS}),
         ("20260102T000000", {"status": RunStatus.OK, "is_test": True}),
     ])
-    tally = tally_runs(proj / "runs")
+    tally = tally_runs(proj.name)
     assert tally.headline is ProjectStatus.ERRORED
     assert (tally.real, tally.tests) == (1, 1)
 
 
 def test_a_project_with_no_runs_is_in_progress(examples_root):
     proj = _make_project(examples_root, "p")
-    tally = tally_runs(proj / "runs")
+    tally = tally_runs(proj.name)
     assert tally.headline is ProjectStatus.IN_PROGRESS
     assert (tally.real, tally.tests) == (0, 0)
 
@@ -99,7 +100,7 @@ def test_a_status_this_app_does_not_define_falls_through(examples_root):
         ("20260101T000000", {"status": RunStatus.ERRORS}),
         ("20260102T000000", {"status": "teleported"}),
     ])
-    tally = tally_runs(proj / "runs")
+    tally = tally_runs(proj.name)
     assert tally.headline is ProjectStatus.ERRORED
     assert tally.real == 2
 

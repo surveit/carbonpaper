@@ -145,7 +145,7 @@ def test_committed_tutorial_fixture_imports_and_validates_cleanly(tmp_path):
     assert [stage.id for stage in summary.stages] == _EXPECTED_STAGE_IDS
 
     project_dir = tmp_path / "examples" / imported_name
-    loaded_stages = load_workflow(project_dir)
+    loaded_stages = load_workflow(project_dir.name)
     assert [stage.id for stage in loaded_stages] == _EXPECTED_STAGE_IDS
     assert len(versioning.list_versions(project_dir)) == 1
 

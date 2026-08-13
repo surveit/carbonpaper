@@ -22,8 +22,6 @@ depends_on = None
 # nowhere — 26 stored versions across three projects, and five compiled files.
 #
 # The compiled stage files under <project>/compiled/ hold the same specs and no
-# revision reaches them — run `python -m scripts.migrate_compiled_stage_files
-# --apply` alongside this, or those projects stop loading.
 _COLLECTIONS = ("workflow_version", "draft")
 _SCHEMA_VERSION = 5
 

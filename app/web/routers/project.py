@@ -25,12 +25,9 @@ from app.models import (
     stage_to_json,
     validate_named_schema,
 )
-from app.services import generation, project, terms, versioning
-from app.services.loader import (
-    LOADER_BOOKKEEPING_KEYS,
-    list_parsed_stages,
-    resolve_function_code,
-)
+from app.services import generation, methodology, project, terms, versioning
+from app.services.loader import list_parsed_stages, resolve_function_code
+from app.services.workspace import LOADER_BOOKKEEPING_KEYS
 from app.web.breadcrumbs import build_home_crumbs, build_version_crumbs
 from app.web.config import projects_dir, templates
 from app.runtime.stage_tests import run_stage_tests
@@ -117,7 +114,7 @@ async def new_project_submit(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     project_dir = projects_dir() / project_id
-    doc = (project_dir / "document.md").read_text(encoding="utf-8")
+    doc = methodology.read_methodology(project_id) or doc_text
     # Kick off data-model generation. It runs as a LIVE chat turn; land the user on it
     # so they watch the model being authored (it streams while it runs, then persists
     # as the session's transcript).
@@ -128,16 +125,14 @@ async def new_project_submit(
 @router.post("/project/{project_name}/generate")
 async def generate_project(project_name: str):
     pdir = _project_dir(project_name)
-    document_path = pdir / "document.md"
-    if not document_path.is_file():
+    document = methodology.read_methodology(project_name)
+    if document is None:
         raise HTTPException(
             status_code=400,
-            detail=f"examples/{project_name}/ has no document.md to generate from.",
+            detail=f"project '{project_name}' has no methodology to generate from.",
         )
     model = project.project_meta(pdir).model or "sonnet"
-    session_id = generation.start_generation(
-        pdir, document=document_path.read_text(encoding="utf-8"), model=model
-    )
+    session_id = generation.start_generation(pdir, document=document, model=model)
     return RedirectResponse(url=f"/chat/{session_id}", status_code=303)
 
 
@@ -163,14 +158,7 @@ async def project_overview(request: Request, project_name: str):
 async def project_document(request: Request, project_name: str):
     pdir = _project_dir(project_name)
     state = shell_state(pdir, "document")
-    document = ""
-    if state.document_path:
-        try:
-            document = Path(state.document_path).read_text(encoding="utf-8")
-        except OSError:
-            # The path came from project_state probing the disk; if it vanished
-            # between snapshot and read, show the empty state rather than 500.
-            document = ""
+    document = methodology.read_methodology(project_name) or ""
     return templates.TemplateResponse(
         request,
         "section_document.html",
@@ -210,7 +198,7 @@ async def project_workflow(request: Request, project_name: str):
     parsed = list_parsed_stages(listing.entries)
     # A valid workflow draws off typed Stages; a broken/partial one falls back to the
     # raw draft dicts so its graph still renders with the holes visible.
-    stages: list[Any] = parsed if parsed else project._load_compiled_stages(pdir)
+    stages: list[Any] = parsed if parsed else project.load_stage_specs(project_name)
     mermaid = build_mermaid_graph(stages, project_name) if stages else None
     return templates.TemplateResponse(
         request,

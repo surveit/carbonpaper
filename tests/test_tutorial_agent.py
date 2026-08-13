@@ -28,6 +28,7 @@ from app.runtime.trace import trace_row, trace_to_dict
 from app.tools.editing import EditingContext, make_editing_tools
 from app.agents.tutorial.config import make_tutorial_tools
 from app.tools.tutorial import TutorialContext
+from app.services.methodology import exists as methodology_exists
 
 _BASE_URL = "http://127.0.0.1:8788/"
 _EXPECTED_TOOLS = {
@@ -96,7 +97,7 @@ def test_the_seeded_project_keeps_no_path_of_its_own(projects_root: Path) -> Non
     assert all(resolve_file_binding(seeded["project"]["id"], sha)["path"]
                for sha in files.values())
 
-    sources = [s for s in load_workflow(projects_root / seeded["project"]["id"])
+    sources = [s for s in load_workflow(seeded["project"]["id"])
                if isinstance(s, InputDataStage)]
     assert [s.connector.params.get("path") for s in sources] == [None, None]
 
@@ -126,8 +127,8 @@ def test_a_tour_after_the_project_was_deleted_still_seeds(projects_root: Path) -
 
     # Whatever it is called, it must be a project that actually loads and can run.
     assert second["project"]["id"] != first["project"]["id"]
-    assert (projects_root / second["project"]["id"] / "document.md").is_file()
-    assert load_workflow(projects_root / second["project"]["id"])
+    assert methodology_exists(second["project"]["id"])
+    assert load_workflow(second["project"]["id"])
     assert run_service.resolve_version(second["project"]["id"], None) == second["version_id"]
 
 
@@ -247,7 +248,7 @@ def test_the_tour_seeds_a_review_guide_the_reader_can_open(projects_root: Path) 
     guide = project_service.read_review_guide(seeded["project"]["id"], seeded["version_id"])
     assert guide is not None
     narrated = [sid for step in guide.steps for sid in step.stage_ids]
-    assert narrated == [s.id for s in load_workflow(projects_root / seeded["project"]["id"])]
+    assert narrated == [s.id for s in load_workflow(seeded["project"]["id"])]
     assert guide.unnarrated == []
     assert seeded["guide_url"] == (
         f"{_BASE_URL}project/{seeded['project']['id']}/workflow/version/{seeded['version_id']}"
@@ -377,7 +378,7 @@ def test_the_seeding_tool_hands_back_the_stages_it_seeded(projects_root: Path) -
     by_type = {stage["type"]: stage["id"] for stage in workflow["stages"]}
     assert workflow["issues"] == []
     assert [stage["id"] for stage in workflow["stages"]] == [
-        s.id for s in load_workflow(projects_root / workflow["name"])
+        s.id for s in load_workflow(workflow["name"])
     ]
     # The three rules the script states: the last stage before the publish stage, the
     # one stage whose behaviour is code, and the queue beat 3 links to.

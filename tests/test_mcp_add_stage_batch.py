@@ -7,6 +7,7 @@ import asyncio
 
 import pytest
 from app.services import workspace
+from stage_seed import read_stages
 
 _CLAIM = {"columns": [
     {"name": "claim_id", "type": "str", "nullable": False},
@@ -86,7 +87,7 @@ def _call_add_stage(project_id, stages):
 
 
 def _list_stored_stage_ids(project_id) -> set[str]:
-    return {p.stem for p in (workspace.projects_dir() / project_id / "compiled").glob("*.json")}
+    return {s["id"] for s in read_stages(project_id)}
 
 
 @pytest.fixture

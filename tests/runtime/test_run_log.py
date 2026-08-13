@@ -74,16 +74,16 @@ def _llm_stage(batch_size: int) -> Stage:
 
 
 def _logged_ctx(tmp_path: Path, run_id: str) -> tuple[RunContext, RunLog]:
-    log = RunLog(tmp_path / f"{run_id}.jsonl")
+    log = RunLog(PROJECT, run_id)
     ctx = make_run_context(
         identity=RunIdentity(project=PROJECT, run_id=run_id), stage_cache=StageCache()
     ).attach_run_log(log)
     return ctx, log
 
 
-def _events(path: Path, log: RunLog) -> list[dict[str, Any]]:
+def _events(run_id: str, log: RunLog) -> list[dict[str, Any]]:
     log.close()
-    return read_events_since(path, 0)
+    return read_events_since(PROJECT, run_id, 0)
 
 
 def _run(stage: Stage, values: list[int], ctx: RunContext) -> pd.DataFrame:
@@ -103,7 +103,7 @@ def test_a_computed_row_opens_and_settles(tmp_path):
     ctx, log = _logged_ctx(tmp_path, "computed")
     _run(_row_stage(), [1, 2], ctx)
 
-    assert _row_events(_events(tmp_path / "computed.jsonl", log)) == [
+    assert _row_events(_events("computed", log)) == [
         ("row_start", 0, None), ("row_ok", 0, SOURCE_COMPUTED),
         ("row_start", 1, None), ("row_ok", 1, SOURCE_COMPUTED),
     ]
@@ -120,7 +120,7 @@ def test_a_replayed_row_settles_once_and_is_marked_cached(tmp_path):
 
     # One terminal event per row, marked cached — and NO row_start, because
     # nothing ran. A replayed row must never read as a computed one.
-    assert _row_events(_events(tmp_path / "replay.jsonl", log)) == [
+    assert _row_events(_events("replay", log)) == [
         ("row_ok", 0, SOURCE_CACHED), ("row_ok", 1, SOURCE_CACHED),
     ]
 
@@ -130,7 +130,7 @@ def test_a_raising_mapper_is_logged_before_it_propagates(tmp_path):
     with pytest.raises(Exception):
         _run(_row_stage(_RAISING_CODE), [1], ctx)
 
-    errors = [e for e in _events(tmp_path / "raiser.jsonl", log)
+    errors = [e for e in _events("raiser", log)
               if e["kind"] == "row_error"]
     assert len(errors) == 1
     assert errors[0]["row"] == 0 and errors[0]["source"] == SOURCE_COMPUTED
@@ -153,7 +153,7 @@ def test_a_batched_chunk_binds_the_input_rows_it_actually_covers(tmp_path, monke
     )
 
     assert [row["verdict"] for row in rows] == ["a", "b"]
-    prompts = [e for e in _events(tmp_path / "batched.jsonl", log)
+    prompts = [e for e in _events("batched", log)
                if e["kind"] == LLM_PROMPT]
     assert len(prompts) == 1
     assert prompts[0]["level"] == LEVEL_DETAIL
@@ -180,7 +180,7 @@ def test_the_batched_path_logs_replayed_and_computed_rows_apart(tmp_path, monkey
     handler.execute(place_stage(stage), {"src": pd.DataFrame({"x": [1, 2, 3]})}, ctx)
 
     assert handed == [[0, 1], [2]]
-    assert _row_events(_events(tmp_path / "replay.jsonl", log)) == [
+    assert _row_events(_events("replay", log)) == [
         ("row_ok", 0, SOURCE_CACHED), ("row_ok", 1, SOURCE_CACHED),
         ("row_start", 2, None), ("row_ok", 2, SOURCE_COMPUTED),
     ]
@@ -200,9 +200,10 @@ def test_a_run_writes_its_lifecycle_spine_to_the_run_dir(tmp_path):
         Workflow(stages=[source, _row_stage()]),
         injected_outputs={"src": pd.DataFrame({"x": [1, 2]})},
         stage_ids=["double"], run_dir=run_dir, repo_root=tmp_path,
+        project=run_dir.parent.parent.name,
     )
 
-    events = read_events_since(run_dir / "events.jsonl", 0)
+    events = read_events_since(run_dir.parent.parent.name, run_dir.name, 0)
     assert [e["kind"] for e in events] == [
         "run_start", "stage_start",
         "row_start", "row_ok", "row_start", "row_ok",
@@ -213,56 +214,54 @@ def test_a_run_writes_its_lifecycle_spine_to_the_run_dir(tmp_path):
     assert [e["seq"] for e in events] == list(range(len(events)))
 
 
-def _resumable_log(path: Path, stage: str) -> None:
+def _resumable_log(run_id: str, stage: str) -> None:
     """`close()` writes the run_done marker; a second RunLog on the path appends to it."""
-    log = RunLog(path)
+    log = RunLog(PROJECT, run_id)
     log.emit({"kind": "stage_start", "stage": stage})
     log.close()
 
 
 def test_a_resumed_log_keeps_seq_equal_to_the_line_index(tmp_path):
-    path = tmp_path / "events.jsonl"
-    _resumable_log(path, "first")
-    _resumable_log(path, "second")
-    _resumable_log(path, "third")
+    _resumable_log("r", "first")
+    _resumable_log("r", "second")
+    _resumable_log("r", "third")
 
-    events = read_events_since(path, 0)
+    events = read_events_since(PROJECT, "r", 0)
     assert [e["kind"] for e in events] == ["stage_start", RUN_DONE] * 3
     assert [e["seq"] for e in events] == list(range(len(events)))
 
 
 def test_a_tailer_resuming_at_the_pre_resume_cursor_sees_the_resumed_events(tmp_path):
     """A restarted seq would make an SSE client filtering seq >= cursor drop the resumed run's events."""
-    path = tmp_path / "events.jsonl"
-    _resumable_log(path, "first")
-    cursor = max(e["seq"] for e in read_events_since(path, 0)) + 1
+    _resumable_log("r", "first")
+    cursor = max(e["seq"] for e in read_events_since(PROJECT, "r", 0)) + 1
 
-    _resumable_log(path, "second")
+    _resumable_log("r", "second")
 
-    resumed = read_events_since(path, cursor)
+    resumed = read_events_since(PROJECT, "r", cursor)
     assert [e["kind"] for e in resumed] == ["stage_start", RUN_DONE]
     assert resumed[0]["stage"] == "second"
 
 
 def test_an_unbound_detail_emit_is_a_no_op(tmp_path):
-    log = RunLog(tmp_path / "events.jsonl")
+    log = RunLog(PROJECT, "r")
     emit_llm_detail(LLM_PROMPT, text="nobody is listening")
-    assert [e["kind"] for e in _events(tmp_path / "events.jsonl", log)] == [RUN_DONE]
+    assert [e["kind"] for e in _events("r", log)] == [RUN_DONE]
 
 
 def test_a_none_log_binds_no_sink(tmp_path):
-    log = RunLog(tmp_path / "events.jsonl")
+    log = RunLog(PROJECT, "r")
     token = bind_detail_sink(None, "stage", (0,))
     try:
         emit_llm_detail(LLM_PROMPT, text="dropped")
     finally:
         unbind_detail_sink(token)
-    assert [e["kind"] for e in _events(tmp_path / "events.jsonl", log)] == [RUN_DONE]
+    assert [e["kind"] for e in _events("r", log)] == [RUN_DONE]
 
 
 def test_an_event_defaults_to_the_lifecycle_level(tmp_path):
-    log = RunLog(tmp_path / "events.jsonl")
+    log = RunLog(PROJECT, "r")
     log.emit({"kind": "stage_start", "stage": "s"})   # no level given
-    events = _events(tmp_path / "events.jsonl", log)
+    events = _events("r", log)
     assert [e["kind"] for e in events] == ["stage_start", RUN_DONE]
     assert all(e["level"] == LEVEL_LIFECYCLE for e in events)

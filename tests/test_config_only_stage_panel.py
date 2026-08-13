@@ -3,7 +3,6 @@
 A union's inputs and a join's keys are the whole step — there is no description for a
 badge to make a claim about, so the panel shows the settings and says nothing.
 """
-import json
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +11,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.services import workspace
+from stage_seed import add_stage
 
 _SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": False}]}
 _SCORED = {"columns": [{"name": "id", "type": "str", "nullable": False},
@@ -19,8 +19,8 @@ _SCORED = {"columns": [{"name": "id", "type": "str", "nullable": False},
 
 
 def _seed_project(root: Path) -> None:
-    compiled = root / "alpha" / "compiled"
-    compiled.mkdir(parents=True)
+    compiled = root / "alpha"
+    compiled.mkdir(parents=True, exist_ok=True)
     stages: list[dict[str, Any]] = [
         {"id": "q1", "description": "Q1", "type": "input_data",
          "connector": {"kind": "file"}, "signature": {"form": "replaces", "produces": _SCHEMA["columns"]}},
@@ -39,8 +39,7 @@ def _seed_project(root: Path) -> None:
          "llm": {"prompt_template": "score {id}"}},
     ]
     for position, stage in enumerate(stages, start=1):
-        (compiled / f"{position:02d}_{stage['id']}.json").write_text(
-            json.dumps(stage), encoding="utf-8")
+        add_stage(compiled, stage)
 
 
 @pytest.fixture

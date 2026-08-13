@@ -5,7 +5,6 @@ say it never ran, not the bare 404 the panel used to render; a stage absent from
 pinned version too is still a 404."""
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pandas as pd
@@ -19,6 +18,8 @@ from app.services import versioning
 from app.services import project as project_service
 from app.services.workflow_test import run_workflow_test
 from conftest import pinned_stages
+from stage_seed import add_stage
+from run_seed import read_manifest
 
 client = TestClient(app)
 
@@ -51,12 +52,11 @@ def _stages(data_path: Path) -> list[dict]:
 @pytest.fixture()
 def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     pdir = tmp_path / PROJECT
-    (pdir / "compiled").mkdir(parents=True)
+    pdir.mkdir(parents=True, exist_ok=True)
     data = pdir / "rows.csv"
     pd.DataFrame({"name": ["a", "b"], "val": [1, 2]}).to_csv(data, index=False)
     for index, stage in enumerate(_stages(data), start=1):
-        (pdir / "compiled" / f"{index:02d}_{stage['id']}.json").write_text(
-            json.dumps(stage), encoding="utf-8")
+        add_stage(pdir, stage)
     workspace.set_projects_dir(tmp_path)
     version_id = project_service.save_working_copy_as_version(
         pdir, message="v1", reviewer="test").version_id
@@ -71,8 +71,7 @@ def _panel(run_id: str, stage_id: str):
 
 def test_input_stage_of_a_workflow_test_opens_instead_of_404ing(project: Path):
     run_id = run_workflow_test(PROJECT, limit=2, offset=0)["run_id"]
-    manifest = json.loads(
-        (project / "runs" / run_id / "manifest.json").read_text(encoding="utf-8"))
+    manifest = read_manifest(project, run_id)
     assert [r["stage_id"] for r in manifest["stage_records"]] == ["classify"]
 
     response = _panel(run_id, "load")

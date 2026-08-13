@@ -6,16 +6,17 @@ writes a fingerprints sidecar POSITIONALLY aligned to the snapshot's rows, and h
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
+from typing import ClassVar
 
 import pandas as pd
 
 from app.core.frames import write_frame_file_with_csv_fallback
+from app.core.persistence import PersistedModel, PersistenceScope
 from app.core.predicate import parse_predicate
-from app.models import WorkflowStage
+from app.models import AbstractStage, WorkflowStage
 from app.models.run_manifest import QueueStats, StageContribution
 from app.models.stages.human_review_queue import (
     HumanReviewQueueStage,
@@ -26,9 +27,30 @@ from app.models.stages.human_review_queue import (
 )
 from app.core.stage_cache import compute_row_fingerprint
 
-from ..context import RunContext
+from ..context import RunContext, RunIdentity
 from ..errors import HaltForReview
 from .execution import ROW_DEFERRED_KEY, Row, RowMapper, narrow_stage
+
+
+class QueueFingerprints(PersistedModel):
+    """A halted queue stage's bookkeeping, stored as
+    `queue_fingerprints/<project>/<run_id>/<stage_id>`."""
+
+    collection: ClassVar[str] = "queue_fingerprints"
+    SCOPE: ClassVar[PersistenceScope] = PersistenceScope.RUN
+
+    # Never snapshot COLUMNS: `stage_fingerprint` is shared by every pending row
+    # of that halt; `input_fingerprints` and `row_ordinals` hold one entry per
+    # row each, POSITIONALLY aligned to the snapshot's row order. `row_ordinals`
+    # is None on a record stored before the runtime recorded them — an
+    # unknowable position, never a guessed one.
+    stage_fingerprint: str
+    input_fingerprints: list[str]
+    row_ordinals: list[int] | None = None
+
+    @staticmethod
+    def compose_id(project: str, run_id: str, stage_id: str) -> str:
+        return f"{project}/{run_id}/{stage_id}"
 
 
 @dataclass(frozen=True)
@@ -93,7 +115,8 @@ class _QueueRowMapper:
         if not pending:
             return
         queue_path = _write_queue_files(
-            ctx.require_run_dir() / "queue", workflow_stage, pending)
+            ctx.require_run_dir() / "queue", ctx.require_identity(),
+            workflow_stage, pending)
         raise HaltForReview(
             stage_id=stage.id,
             pending_count=len(pending),
@@ -225,14 +248,14 @@ def _require_sort_columns_present(
 
 
 def _write_queue_files(
-    queue_dir: Path, workflow_stage: WorkflowStage, pending: list[PendingReview]
+    queue_dir: Path, identity: RunIdentity, workflow_stage: WorkflowStage,
+    pending: list[PendingReview],
 ) -> Path:
+    """Write the snapshot frame and store its fingerprints; return the frame's path."""
     stage = workflow_stage.stage
     queue_dir.mkdir(parents=True, exist_ok=True)
     queue_path = _write_pending_snapshot(queue_dir, stage.id, pending)
-    _write_fingerprint_sidecar(
-        queue_dir, stage.id, stage.compute_definition_fingerprint(), pending
-    )
+    _store_fingerprints(identity, stage, pending)
     return queue_path
 
 
@@ -241,14 +264,13 @@ def _write_pending_snapshot(queue_dir: Path, sid: str, pending: list[PendingRevi
     return write_frame_file_with_csv_fallback(frame, queue_dir / f"{sid}.parquet").path
 
 
-def _write_fingerprint_sidecar(
-    queue_dir: Path, sid: str, stage_fingerprint: str, pending: list[PendingReview]
+def _store_fingerprints(
+    identity: RunIdentity, stage: AbstractStage, pending: list[PendingReview]
 ) -> None:
-    (queue_dir / f"{sid}.fingerprints.json").write_text(
-        json.dumps({
-            "stage_fingerprint": stage_fingerprint,
-            "input_fingerprints": [item.input_fingerprint for item in pending],
-            "row_ordinals": [item.row_ordinal for item in pending],
-        }),
-        encoding="utf-8",
-    )
+    """`input_fingerprints` and `row_ordinals` are POSITIONALLY aligned to the snapshot."""
+    QueueFingerprints(
+        id=QueueFingerprints.compose_id(identity.project, identity.run_id, stage.id),
+        stage_fingerprint=stage.compute_definition_fingerprint(),
+        input_fingerprints=[item.input_fingerprint for item in pending],
+        row_ordinals=[item.row_ordinal for item in pending],
+    ).save()

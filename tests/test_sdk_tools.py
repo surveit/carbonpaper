@@ -16,6 +16,7 @@ from app.tools.editing import EditingContext, make_editing_tools
 from app.core.agent.registry import build_mcp_server
 from app.core.agent.bound_tool import as_tool_content
 from app.services import workspace
+from stage_seed import add_stage
 
 
 @pytest.fixture(autouse=True)
@@ -36,7 +37,7 @@ def _call(tool: SdkMcpTool[Any], args: dict[str, Any]) -> dict[str, Any]:
 
 
 def _seed(examples: Path, name: str) -> Path:
-    compiled = examples / name / "compiled"
+    compiled = examples / name
     compiled.mkdir(parents=True, exist_ok=True)
     stage = {
         "id": "load",
@@ -48,7 +49,7 @@ def _seed(examples: Path, name: str) -> Path:
             "produces": [{"name": "id", "type": "str", "nullable": False}],
         },
     }
-    (compiled / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
+    add_stage(compiled, stage)
     return examples / name
 
 
@@ -67,7 +68,7 @@ def test_read_stage_handler_returns_text_content(examples_root: Path) -> None:
 
     from app.services.workspace import project_workflow_summary
 
-    stage_id = project_workflow_summary(pdir).stages[0].id
+    stage_id = project_workflow_summary(pdir.name).stages[0].id
     out = _call(tool, {"project_id": "congresswatch", "stage_id": stage_id})
     assert out["content"][0]["type"] == "text"
     assert stage_id in out["content"][0]["text"]

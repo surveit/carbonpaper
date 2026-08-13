@@ -2,7 +2,6 @@
 # cache (app.core.stage_cache).
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
@@ -11,7 +10,7 @@ from typing import Any
 import pandas as pd
 from fastapi import HTTPException
 
-from app.core.errors import NoVersionToRunError, StageOutputMissing
+from app.core.errors import RunNotFoundError, NoVersionToRunError, StageOutputMissing
 from app.core.frames import list_rows, read_frame_file, render_frame_as_csv_text
 from app.models import (
     StageType,
@@ -21,14 +20,16 @@ from app.models import (
     build_workflow,
 )
 from app.models.stages.llm_transform import LLMTransformStage
-from app.models.run_manifest import read_run_manifest
-from app.runtime.manifest import resolve_output_path
+from app.runtime.stages.human_review_queue import QueueFingerprints
+from app.runtime.manifest import read_run_manifest, resolve_output_path
 from app.services.run import resolve_version
 from app.services.loader import (
-    CompiledStageFile,
+    StageEntry,
+    exists as has_working_copy,
     find_file_issues,
     list_parsed_stages,
-    load_compiled_dir,
+    load_stage_entries,
+    read_stage_specs,
 )
 from app.services.versioning import list_versions, load_version_stages
 from app.services.project import read_project_name
@@ -36,6 +37,7 @@ from app.services.terms import count_nouns
 from app.services.workspace import resolve_project_dir
 from app.web.config import projects_dir
 from app.web.project_cards import ProjectCard, tally_runs
+from app.services.methodology import exists as methodology_exists
 
 
 # ─── Projects & stages ──────────────────────────────────────────────────
@@ -54,13 +56,12 @@ def list_projects() -> list[ProjectCard]:
 
 
 def _build_project_card(p: Path) -> ProjectCard | None:
-    compiled_dir = p / "compiled"
-    n_stages = len(list(compiled_dir.glob("*.json"))) if compiled_dir.is_dir() else 0
+    n_stages = len(read_stage_specs(p.name))
     has_workflow = n_stages > 0
     n_schemas = count_nouns(p.name)
     has_schemas = n_schemas > 0
-    runs = tally_runs(p / "runs")
-    has_document = (p / "document.md").is_file() or (p / "project.json").is_file()
+    runs = tally_runs(p.name)
+    has_document = methodology_exists(p.name) or (p / "project.json").is_file()
     if not (has_workflow or has_schemas or has_document):
         return None
     return ProjectCard(
@@ -80,47 +81,40 @@ def _build_project_card(p: Path) -> ProjectCard | None:
 
 @dataclass
 class StageListing:
-    """All-or-nothing: one invalid file empties `entries`, and `issues` names the broken ones."""
-    entries: list[CompiledStageFile]
+    """All-or-nothing: one invalid stage empties `entries`, and `issues` names the broken ones."""
+    entries: list[StageEntry]
     # A working copy mid-edit often forms no workflow; `WorkflowNotFormed` says why,
     # so no reader has to hold a reason beside a missing one.
     workflow: Workflow | WorkflowNotFormed
-    issues: list[CompiledStageFile]
-    order: dict[str, str]
+    issues: list[StageEntry]
 
 
 def load_stages(project: str) -> StageListing:
-    compiled_dir = projects_dir() / project / "compiled"
-    if not compiled_dir.is_dir():
-        raise HTTPException(status_code=404, detail=f"No compiled stages for {project}")
-    entries = load_compiled_dir(compiled_dir)
+    if not has_working_copy(project):
+        raise HTTPException(status_code=404, detail=f"No workflow for {project}")
+    entries = load_stage_entries(project)
     issues = [e for e in entries if e.issues]
     if issues:
-        # One invalid file breaks the whole workflow — its inputs no longer
+        # One invalid stage breaks the whole workflow — its inputs no longer
         # resolve, so the surviving stages form a workflow with holes. Rendering that
         # is "unusable but lies." Return no stages, only the issues, so the
         # viewer shows what's broken instead of a false graph.
         return StageListing(
             entries=[], workflow=WorkflowNotFormed(issues=find_file_issues(issues)),
-            issues=issues, order={})
-    stages = list_parsed_stages(entries)
-    order = {e.stage.id: e.filename.split("_", 1)[0]
-             for e in entries if e.stage is not None}
+            issues=issues)
     return StageListing(
         entries=entries,
-        workflow=build_workflow(stages),
+        workflow=build_workflow(list_parsed_stages(entries)),
         issues=[],
-        order=order,
     )
 
 
 def load_stages_or_empty(project: str) -> StageListing:
-    compiled_dir = projects_dir() / project / "compiled"
-    if not compiled_dir.is_dir():
+    if not has_working_copy(project):
         return StageListing(
             entries=[],
-            workflow=WorkflowNotFormed(issues=["the project has no compiled stages yet"]),
-            issues=[], order={})
+            workflow=WorkflowNotFormed(issues=["the project has no stages yet"]),
+            issues=[])
     return load_stages(project)
 
 
@@ -153,10 +147,11 @@ def runs_dir(project: str) -> Path:
     return projects_dir() / project / "runs"
 
 
-def load_manifest(run_dir: Path) -> dict[str, Any]:
-    if not (run_dir / "manifest.json").exists():
-        raise HTTPException(status_code=404, detail="Run not found")
-    return read_run_manifest(run_dir).to_dict()
+def load_manifest(project: str, run_id: str) -> dict[str, Any]:
+    try:
+        return read_run_manifest(project, run_id).to_dict()
+    except RunNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Run not found") from exc
 
 
 # ─── Tabular output previews ─────────────────────────────────────────────────
@@ -191,8 +186,8 @@ def csv_download_body(df: pd.DataFrame) -> bytes:
     return (_UTF8_BOM + render_frame_as_csv_text(df)).encode("utf-8")
 
 
-def manifest_stage(run_dir: Path, stage_id: str) -> dict[str, Any]:
-    manifest = load_manifest(run_dir)
+def manifest_stage(project: str, run_id: str, stage_id: str) -> dict[str, Any]:
+    manifest = load_manifest(project, run_id)
     stage_record = next(
         (s for s in manifest.get("stage_records", []) if s.get("stage_id") == stage_id),
         None,
@@ -321,32 +316,18 @@ def queue_snapshot(project: str, run_id: str, stage_id: str) -> pd.DataFrame | N
     return None
 
 
-@dataclass
-class QueueFingerprints:
-    """`input_fingerprints` and `row_ordinals` are POSITIONALLY aligned to the snapshot's rows."""
-    stage_fingerprint: str
-    input_fingerprints: list[str]
-    row_ordinals: list[int] | None
-
-
 def load_queue_fingerprints(project: str, run_id: str, stage_id: str) -> QueueFingerprints | None:
-    run_dir = runs_dir(project) / run_id
-    path = run_dir / "queue" / f"{stage_id}.fingerprints.json"
-    if not path.exists():
+    """None when no run has halted at this stage."""
+    fingerprints = QueueFingerprints.load_or_none(
+        QueueFingerprints.compose_id(project, run_id, stage_id))
+    if fingerprints is None:
         return None
-    data = json.loads(path.read_text(encoding="utf-8"))
-    ordinals = data.get("row_ordinals")
-    fingerprints = QueueFingerprints(
-        stage_fingerprint=data["stage_fingerprint"],
-        input_fingerprints=data["input_fingerprints"],
-        row_ordinals=None if ordinals is None else [int(o) for o in ordinals],
-    )
-    _validate_sidecar_alignment(fingerprints, queue_snapshot(project, run_id, stage_id),
-                                stage_id, run_id)
+    _validate_fingerprint_alignment(
+        fingerprints, queue_snapshot(project, run_id, stage_id), stage_id, run_id)
     return fingerprints
 
 
-def _validate_sidecar_alignment(
+def _validate_fingerprint_alignment(
     fingerprints: QueueFingerprints, snapshot: pd.DataFrame | None,
     stage_id: str, run_id: str,
 ) -> None:

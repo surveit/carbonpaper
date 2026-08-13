@@ -184,13 +184,13 @@ def test_sits_in_the_seam_rejects_a_package_sharing_a_name_prefix() -> None:
 
 def test_find_stage_annotations_outside_the_seam_reports_repo_relative_path(tmp_path: Path) -> None:
     target = tmp_path / "app" / "web" / "panel.py"
-    target.parent.mkdir(parents=True)
+    target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text("def f(s: Stage) -> None: ...\n", encoding="utf-8")
     assert find_stage_annotations_outside_the_seam([target], tmp_path) == ["app/web/panel.py:1"]
 
 
 def test_find_stage_annotations_outside_the_seam_skips_a_seam_module(tmp_path: Path) -> None:
     target = tmp_path / "app" / "services" / "loader.py"
-    target.parent.mkdir(parents=True)
+    target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text("def f(s: Stage) -> None: ...\n", encoding="utf-8")
     assert find_stage_annotations_outside_the_seam([target], tmp_path) == []

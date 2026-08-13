@@ -4,7 +4,6 @@ attached dataset, plus one leftover config that no longer validates — points
 the projects root and REPO_ROOT at it, and checks each page renders the truthful state."""
 from __future__ import annotations
 
-import json
 
 import pandas as pd
 import pytest
@@ -26,6 +25,8 @@ from app.core.persistence import get_store
 from app.evals.store import save_eval_config, save_eval_run
 from app.services.versioning import WorkflowVersion
 from app.services import workspace
+from stage_seed import add_stage, read_stages, set_stages
+from run_seed import store_events
 
 client = TestClient(app)
 
@@ -65,17 +66,17 @@ _TARGET = {
 @pytest.fixture(autouse=True)
 def demo_project(tmp_path, monkeypatch):
     demo = tmp_path / "demo"
-    compiled = demo / "compiled"
-    compiled.mkdir(parents=True)
-    (compiled / "01_load.json").write_text(json.dumps(_override(tmp_path)), encoding="utf-8")
-    (compiled / "02_classify.json").write_text(json.dumps(_TARGET), encoding="utf-8")
+    compiled = demo
+    compiled.mkdir(parents=True, exist_ok=True)
+    add_stage(compiled, _override(tmp_path))
+    add_stage(compiled, _TARGET)
 
     workspace.set_projects_dir(tmp_path)
     monkeypatch.setattr(evals_router, "REPO_ROOT", tmp_path, raising=False)
 
     # The eval dataset: the override stage's output columns + the checked column.
     data_dir = demo / "eval_data"
-    data_dir.mkdir()
+    data_dir.mkdir(parents=True, exist_ok=True)
     pd.DataFrame({"doc_id": ["d1", "d2"], "text": ["a", "b"],
                   "label": ["x", "y"]}).to_csv(data_dir / "cases.csv", index=False)
     dataset = TableRef(
@@ -125,8 +126,7 @@ def test_eval_pages_render_a_working_copy_whose_stages_form_no_workflow(demo_pro
                           "reads": [{"input": "missing",
                                      "columns": [{"name": "doc_id", "type": "str",
                                                   "nullable": True}]}]}
-    (demo_project / "demo" / "compiled" / "03_spare.json").write_text(
-        json.dumps(spare), encoding="utf-8")
+    add_stage(demo_project / "demo", spare)
 
     detail = client.get("/project/demo/evals/label_check")
     assert detail.status_code == 200
@@ -135,13 +135,15 @@ def test_eval_pages_render_a_working_copy_whose_stages_form_no_workflow(demo_pro
     assert client.get("/project/demo/evals").status_code == 200
 
 
-def test_eval_detail_names_the_stage_file_that_would_not_parse(demo_project):
-    (demo_project / "demo" / "compiled" / "02_classify.json").write_text("{", encoding="utf-8")
+def test_eval_detail_names_the_stage_that_would_not_parse(demo_project):
+    stages = read_stages(demo_project / "demo")
+    stages[1] = {"id": "classify", "type": "not_a_real_type"}
+    set_stages(demo_project / "demo", stages)
 
     r = client.get("/project/demo/evals/label_check")
     assert r.status_code == 200
     assert "structural problems" in r.text
-    assert "02_classify.json" in r.text
+    assert "classify" in r.text
 
 
 def test_eval_detail_404_for_unknown_config():
@@ -269,12 +271,11 @@ def test_run_page_states_why_a_vetoed_run_has_no_rows(tmp_path):
 
 def test_run_page_serves_the_subset_runs_own_events(tmp_path):
     _save_scored_run(tmp_path, _ONE_PASS_ONE_FAIL, run_id="logged1")
-    events = tmp_path / "demo" / "eval_run" / "logged1" / "events.jsonl"
-    events.write_text(
-        '{"seq": 0, "ts": "2026-08-12T10:00:00", "kind": "run_start", "level": 0}\n'
-        '{"seq": 1, "ts": "2026-08-12T10:00:01", "kind": "stage_start", '
-        '"stage": "classify", "level": 0}\n',
-        encoding="utf-8")
+    store_events("demo", "logged1", [
+        {"seq": 0, "ts": "2026-08-12T10:00:00", "kind": "run_start", "level": 0},
+        {"seq": 1, "ts": "2026-08-12T10:00:01", "kind": "stage_start",
+         "stage": "classify", "level": 0},
+    ])
 
     page = client.get("/project/demo/evals/label_check/runs/logged1")
     older = client.get(

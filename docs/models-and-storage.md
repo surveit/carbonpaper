@@ -25,29 +25,33 @@ case: `validate_workflow(stages) -> list[str]` and `validate_stage(stage) -> lis
   compiled workflows (weighting is done inside `python_frame_function` modules).
 
 **Enforced at load, via `app/services/loader.py`.** This is the only place that
-reads the on-disk compiled-stage JSON (`compiled/<NN>_<stage_id>.json`, the JSON
-dump of the validated `Stage` model; the `NN_` prefix orders the stage list in
-the UI); everything past it speaks `Stage` objects, not dicts. Two entry points,
-both parsing each file through `parse_stage`:
+reads a project's `working_copy` document (a list of stage specs, each the JSON
+dump of a validated `Stage`, in the order the UI shows them); everything past it
+speaks `Stage` objects, not dicts. Two entry points, both parsing each spec
+through `parse_stage`:
 - `load_workflow` — strict, for the runner. Any invalid stage or
   cross-stage issue raises `WorkflowLoadError`, and the runner refuses to
   execute the workflow.
-- `load_compiled_dir` — tolerant, per-file, for the viewer. Each compiled file
-  gets a `CompiledStageFile` (parsed `Stage` or `None` + an issues list). If any
-  file is invalid, the viewer surfaces the issues and renders no workflow at all
+- `load_stage_entries` — tolerant, per-stage, for the viewer. Each spec gets a
+  `StageEntry` (parsed `Stage` or `None` + an issues list). If any stage is
+  invalid, the viewer surfaces the issues and renders no workflow at all
   (a partial graph with holes would mislead) instead of crashing.
 
 `app/runtime/handlers.py`, `runner.py`, `preview.py`, and the web layer all consume
 the typed `Stage` objects this loader returns.
 
-## Storage convention — `<object_type>/<object_id>.data` — DECIDED, NOT YET IMPLEMENTED
+## Storage — two layers, and nothing else
 
-Objects are stored on disk as `<object_type>/<object_id>.data`, with a **uniform
-`.data` extension** for consistency (e.g. `workflow/<workflow_id>.data`, `run/<run_id>.data`,
-`decision/<decision_id>.data`). "We're not making a DB, but we still follow a clean
-`<object_type>/<object_id>` object store."
+A project's state lives in exactly two places:
 
-Current layout is `examples/<name>/{compiled, runs/<id>/…, decisions, data, code, stages}`.
-Migrating to the new convention touches the runner's output paths, `main.py`'s
-loader, and moves existing example runs — so it's **deferred to a separate, reviewed
-change**, not bundled with the model work.
+- **The document store** (`app/core/persistence.py`), a SQLite key-value table
+  keyed `(collection, id)`. Every stored record is a `PersistedModel`: the
+  methodology, the working copy, each `workflow_version`, a run's record and its
+  chunked event log, the review-queue fingerprints, the review decisions, the
+  terms, and the uploaded-file index.
+- **Frames** (`app/core/frames.py`), the parquet files a run reads and writes.
+
+`tests/arch/test_persistence_is_frames_and_the_store.py` holds this: nothing under
+`app/` writes a file except frames, an export the user downloads, and a file the
+user uploaded. What is left on disk under a project is `code/`, `data/` and
+`runs/<id>/{outputs, artifacts, queue}` — frames and the files around them.

@@ -10,6 +10,7 @@ from app.seeds.seed import discover_workflow_files, seed_all, seed_demo_data_if_
 from app.services import project
 from app.services.project import read_project_name
 from app.services.stage_edit import find_description_issues, find_unnamed_model_issues
+import sqlite3
 
 _TUTORIAL = "tutorial_lobbying_triage"
 # Every committed bundle, in the order discover_workflow_files sorts them.
@@ -20,7 +21,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 def test_seed_cli_subprocess_bootstraps_the_store_and_seeds(tmp_path):
     """In-process the autouse store fixture masks the bug; only a subprocess is store-free."""
     examples_dir = tmp_path / "examples"
-    examples_dir.mkdir()
+    examples_dir.mkdir(parents=True, exist_ok=True)
     env = {
         **os.environ,
         "CARBON_PAPER_PROJECTS_DIR": str(examples_dir),
@@ -36,13 +37,16 @@ def test_seed_cli_subprocess_bootstraps_the_store_and_seeds(tmp_path):
         f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     )
     assert f"imported: {_TUTORIAL}" in result.stdout
-    # The directory is named by the minted id, so find it by what it contains.
-    assert [d.name for d in examples_dir.iterdir() if (d / "compiled").is_dir()]
+    # The subprocess has its own store; read the working copies straight out of it.
+    with sqlite3.connect(tmp_path / "app.db") as connection:
+        stored = connection.execute(
+            "SELECT id FROM documents WHERE collection='working_copy'").fetchall()
+    assert stored
 
 
 def test_seed_all_imports_every_committed_bundle_into_an_empty_workspace(tmp_path):
     examples_dir = tmp_path / "examples"
-    examples_dir.mkdir()
+    examples_dir.mkdir(parents=True, exist_ok=True)
 
     imported = seed_all()
 
@@ -52,7 +56,7 @@ def test_seed_all_imports_every_committed_bundle_into_an_empty_workspace(tmp_pat
 
 def test_seed_all_skips_a_bundle_whose_project_already_exists(tmp_path):
     examples_dir = tmp_path / "examples"
-    examples_dir.mkdir()
+    examples_dir.mkdir(parents=True, exist_ok=True)
     first = seed_all()
     assert [read_project_name(project_id) for project_id in first] == _ALL_BUNDLES
 
@@ -74,7 +78,7 @@ def test_discover_workflow_files_finds_the_committed_tutorial_fixture():
 
 def test_discover_workflow_files_filters_to_json_files(tmp_path):
     (tmp_path / "alpha.json").write_text("{}", encoding="utf-8")
-    (tmp_path / "beta_a_directory").mkdir()  # a dir, not a fixture
+    (tmp_path / "beta_a_directory").mkdir(parents=True, exist_ok=True)  # a dir, not a fixture
     (tmp_path / "gamma.csv").write_text("a,b\n1,2\n", encoding="utf-8")  # sibling data, not a fixture
 
     found = discover_workflow_files(data_dir=tmp_path)
@@ -89,7 +93,7 @@ def test_discover_workflow_files_returns_empty_list_for_a_missing_data_dir(tmp_p
 def test_seed_demo_data_if_enabled_is_a_noop_when_env_var_unset(tmp_path, monkeypatch):
     monkeypatch.delenv("CARBON_PAPER_SEED_DEMO", raising=False)
     examples_dir = tmp_path / "examples"
-    examples_dir.mkdir()
+    examples_dir.mkdir(parents=True, exist_ok=True)
 
     imported = seed_demo_data_if_enabled()
 
@@ -100,7 +104,7 @@ def test_seed_demo_data_if_enabled_is_a_noop_when_env_var_unset(tmp_path, monkey
 def test_seed_demo_data_if_enabled_seeds_when_env_var_is_1(tmp_path, monkeypatch):
     monkeypatch.setenv("CARBON_PAPER_SEED_DEMO", "1")
     examples_dir = tmp_path / "examples"
-    examples_dir.mkdir()
+    examples_dir.mkdir(parents=True, exist_ok=True)
 
     imported = seed_demo_data_if_enabled()
 

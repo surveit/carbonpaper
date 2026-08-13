@@ -14,7 +14,6 @@ from typing import Any, ClassVar, Sequence
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from app.core.errors import RunManifestNotJson
 from app.core.persistence import PersistedModel, PersistenceScope, get_store
 from app.core.timestamp_ids import mint_timestamp_id
 from app.models import (
@@ -30,18 +29,14 @@ from app.models import (
 )
 from app.models.review_guide import ReviewGuideDraft
 from app.models.run_manifest import (
-    find_manifest_backed_run_dirs,
-    read_run_manifest_json,
     records_a_test_run,
 )
 from app.services.versioning import ReviewGuide
 from app.core.run_status import RunStatus
 from app.services import stage_edit, terms, versioning, workspace
-from app.services.loader import (
-    load_compiled_dir,
-    load_workflow,
-    write_stage,
-)
+from app.services import loader
+from app.services import methodology
+from app.services import run as run_service
 from app.services.errors import WorkflowLoadError
 from app.services.stage_edit import AddStagesResult, EditStageResult
 
@@ -168,79 +163,40 @@ class ProjectState(BaseModel):
     id: str
     meta: ProjectMeta
     has_document: bool
-    document_path: str | None
     data_model: DataModelStatus
     workflow: WorkflowStatus
     versions: int
     runs: RunsSummary
 
 
-# ─── Document discovery ───────────────────────────────────────────────────────
-# A project's source document is the pasted methodology it was authored from. The
-# create flow writes document.md; legacy/imported projects may carry
-# methodology_raw.md or the older methodology_raw.txt. Probe in that order and
-# report the first that exists (a truthful path, never a fabricated one).
-#
-# LEGACY: probing a fixed candidate list is a migration accommodation. The intended
-# direction is for project.json to record the document's path explicitly, so a
-# project references a real file rather than inferring it by filename — at which
-# point this probe (and _DOCUMENT_CANDIDATES) can be retired.
-_DOCUMENT_CANDIDATES = ("document.md", "methodology_raw.md", "methodology_raw.txt")
-
-
-def find_document_path(pdir: Path) -> Path | None:
-    for name in _DOCUMENT_CANDIDATES:
-        p = pdir / name
-        if p.is_file():
-            return p
-    return None
-
-
 # ─── Stage loading (counts / coverage) ────────────────────────────────────────
 
 
-def _load_compiled_stages(pdir: Path) -> list[dict[str, Any]]:
-    compiled_dir = pdir / "compiled"
-    if not compiled_dir.is_dir():
-        return []
-    stages: list[dict[str, Any]] = []
-    for json_file in sorted(compiled_dir.glob("*.json")):
-        try:
-            data = json.loads(json_file.read_text(encoding="utf-8")) or {}
-        except json.JSONDecodeError as exc:
-            data = {
-                "id": json_file.stem,
-                "name": f"[JSON ERROR] {json_file.name}",
-                "type": "python_transform",
-                "compiler_notes": [f"JSON parse error: {exc}"],
-                "_error": True,
-            }
-        data["_filename"] = json_file.name
-        data["_order"] = json_file.stem.split("_", 1)[0]
-        stages.append(data)
-    return stages
+def load_stage_specs(project_id: str) -> list[dict[str, Any]]:
+    """Raw specs, valid or not — the draft graph the workflow page falls back to."""
+    return loader.read_stage_specs(project_id)
 
 
 # ─── Run summary ──────────────────────────────────────────────────────────────
 
 
-def _runs_summary(pdir: Path) -> RunsSummary:
+def _runs_summary(project_id: str) -> RunsSummary:
     statuses: list[tuple[str, str]] = []  # (run_id, status)
     awaiting = 0
-    for run in find_manifest_backed_run_dirs(pdir / "runs"):
-        try:
-            manifest = read_run_manifest_json(run)
-        except RunManifestNotJson:
-            # Counted, not hidden: a manifest this reader cannot parse carries no
-            # `is_test_run` to exclude it by, so it is treated as non-test, same
-            # as every run was before that field existed.
+    for entry in run_service.list_run_entries(project_id):
+        if entry.raw is None:
+            # Counted, not hidden: a record this reader cannot read at all carries
+            # no `is_test_run` to exclude it by, so it is treated as non-test, the
+            # same as every run was before that field existed.
             status, is_test_run = "corrupt", False
         else:
-            status = manifest.get("status", "unknown")
-            is_test_run = records_a_test_run(manifest)
+            # Off the RAW payload, so a run written before a field was renamed
+            # still reports the status it actually reached.
+            status = entry.raw.get("status", "unknown")
+            is_test_run = records_a_test_run(entry.raw)
         if is_test_run:
             continue
-        statuses.append((run.name, status))
+        statuses.append((entry.run_id, status))
         if status == RunStatus.AWAITING_REVIEW:
             awaiting += 1
     if not statuses:
@@ -273,23 +229,6 @@ def project_meta(pdir: Path) -> ProjectMeta:
     )
 
 
-def write_project_meta(pdir: Path, **fields: Any) -> dict[str, Any]:
-    pdir = Path(pdir)
-    pdir.mkdir(parents=True, exist_ok=True)
-    pj = pdir / "project.json"
-    record: dict[str, Any] = {}
-    if pj.is_file():
-        try:
-            loaded = json.loads(pj.read_text(encoding="utf-8"))
-            if isinstance(loaded, dict):
-                record = loaded
-        except (json.JSONDecodeError, OSError):
-            record = {}
-    record.update(fields)
-    pj.write_text(json.dumps(record, indent=2, ensure_ascii=False), encoding="utf-8")
-    return record
-
-
 # ─── The status snapshot ──────────────────────────────────────────────────────
 
 
@@ -299,27 +238,24 @@ def project_state(pdir: Path) -> ProjectState:
     meta = project_meta(pdir)
 
     # ── Document ──
-    doc_path = find_document_path(pdir)
-    has_document = doc_path is not None
 
     # ── Data model (the noun half of the project's terms) ──
     n_nouns = terms.count_nouns(project_id)
     data_model = DataModelStatus(present=bool(n_nouns), n_schemas=n_nouns)
 
     # ── Workflow (compiled stages) ──
-    stages = _load_compiled_stages(pdir)
+    stages = load_stage_specs(pdir.name)
     workflow = WorkflowStatus(present=bool(stages), n_stages=len(stages))
 
     # ── Versions + runs ──
     n_versions = len(versioning.list_versions(pdir))
-    runs = _runs_summary(pdir)
+    runs = _runs_summary(pdir.name)
 
     return ProjectState(
         id=project_id,
         meta=meta,
-        has_document=has_document,
+        has_document=methodology.exists(pdir.name),
         # Absolute path string (or None) — a link target, never fabricated.
-        document_path=str(doc_path) if doc_path else None,
         data_model=data_model,
         workflow=workflow,
         versions=n_versions,
@@ -357,11 +293,8 @@ def create_project(
     project_id = mint_project_id()
     project_dir = workspace.projects_dir() / project_id
     project_dir.mkdir(parents=True, exist_ok=True)
-    (project_dir / "document.md").write_text(doc, encoding="utf-8")
+    methodology.write_methodology(project_id, doc)
     created_at = datetime.now().isoformat(timespec="seconds")
-    write_project_meta(
-        project_dir, name=label, title=None, created_at=created_at, model=model, source=source,
-    )
     record = Project(
         id=project_id, name=label, title=None,
         model=model, source=source, authored_at=created_at,
@@ -391,25 +324,24 @@ def list_project_listings() -> list[ProjectListing]:
 
 
 def read_workflow_summary(name: str) -> workspace.WorkflowSummary:
-    return workspace.project_workflow_summary(workspace.resolve_project_dir(name))
+    workspace.resolve_project_dir(name)
+    return workspace.project_workflow_summary(name)
 
 
 def read_stage(name: str, stage_id: str) -> str:
-    project_dir = workspace.resolve_project_dir(name)
-    stages = {c.stage.id: c.stage
-              for c in load_compiled_dir(project_dir / "compiled") if c.stage is not None}
-    stage = stages.get(stage_id)
+    workspace.resolve_project_dir(name)
+    stage = loader.find_parsed_stage(loader.load_stage_entries(name), stage_id)
     if stage is None:
         raise ValueError(f"no stage '{stage_id}' in project '{name}'")
     return stage_to_json(stage)
 
 
 def edit_stage(name: str, stage_id: str, changes_json: str) -> EditStageResult:
-    return stage_edit.patch_stage_spec(_resolve_project_dir_to_write(name), stage_id, changes_json)
+    return stage_edit.patch_stage_spec(_project_to_write(name), stage_id, changes_json)
 
 
 def add_stage(name: str, stage_json: str) -> EditStageResult:
-    return stage_edit.add_stage_spec(_resolve_project_dir_to_write(name), stage_json)
+    return stage_edit.add_stage_spec(_project_to_write(name), stage_json)
 
 
 def save_working_copy_as_version(
@@ -421,12 +353,11 @@ def save_working_copy_as_version(
 ) -> versioning.WorkflowVersion:
     """Strict-loads the working copy, so an invalid one raises and no version is written."""
     project_dir = Path(project_dir)
-    compiled_src = project_dir / "compiled"
-    if not compiled_src.is_dir():
+    if not loader.exists(project_dir.name):
         raise FileNotFoundError(
-            f"Cannot create a version: no compiled/ workflow at {compiled_src}"
+            f"Cannot create a version: project '{project_dir.name}' has no workflow"
         )
-    stages = load_workflow(project_dir)
+    stages = loader.load_workflow(project_dir.name)
     return versioning.create_version_from_stages(
         project_dir,
         [stage_to_spec_dict(s) for s in stages],
@@ -455,11 +386,11 @@ def add_stages_reporting_outcome(
 def add_stages(
     name: str, stages: Sequence[StageDraft]
 ) -> AddStagesResult:
-    return stage_edit.add_stage_specs(_resolve_project_dir_to_write(name), stages)
+    return stage_edit.add_stage_specs(_project_to_write(name), stages)
 
 
 def remove_stage(name: str, stage_id: str) -> EditStageResult:
-    return stage_edit.remove_stage_spec(_resolve_project_dir_to_write(name), stage_id)
+    return stage_edit.remove_stage_spec(_project_to_write(name), stage_id)
 
 
 def read_review_guide(name: str, version_id: str) -> ReviewGuide | None:
@@ -475,7 +406,8 @@ def write_review_guide(
         project=name, version_id=version_id,
         steps=draft.steps, unnarrated=draft.unnarrated,
     )
-    versioning.save_version_guide(_resolve_project_dir_to_write(name), version_id, guide)
+    versioning.save_version_guide(
+        workspace.resolve_project_dir(_project_to_write(name)), version_id, guide)
     return guide
 
 
@@ -485,11 +417,11 @@ def write_eval_config(name: str, config: EvalConfig) -> None:
         "eval", f"{name}/{config.id}", config.model_dump(mode="json", exclude_none=True))
 
 
-def _resolve_project_dir_to_write(name: str) -> Path:
-    project_dir = workspace.resolve_project_dir(name)
-    if not project_dir.is_dir():
+def _project_to_write(name: str) -> str:
+    """Raises for an unknown name: writing a stage never brings a project into being."""
+    if not workspace.resolve_project_dir(name).is_dir():
         raise ValueError(f"no project '{name}' in the workspace")
-    return project_dir
+    return name
 
 
 # ─── Portable WorkflowFile: project export / import ──────────────────────────
@@ -535,14 +467,14 @@ def export_project(project_id: str) -> WorkflowFile:
         raise ValueError(
             f"project '{project_id}' has no recorded model/source — cannot export"
         )
-    document_path = project_state(pdir).document_path
-    if document_path is None:
+    document = methodology.read_methodology(project_id)
+    if document is None:
         raise ValueError(f"project '{project_id}' has no document — cannot export")
     project_terms = terms.load_terms(project_id)
-    stages = [c.stage for c in load_compiled_dir(pdir / "compiled") if c.stage is not None]
+    stages = loader.list_parsed_stages(loader.load_stage_entries(project_id))
     return WorkflowFile(
         name=meta.name,
-        document=Path(document_path).read_text(encoding="utf-8"),
+        document=document,
         model=meta.model,
         source=meta.source,
         data_model=project_terms.nouns,
@@ -559,11 +491,8 @@ def import_project(
     project_id = create_project(label, wf.document, model=wf.model, source=wf.source).id
     pdir = workspace.resolve_project_dir(project_id)
     terms.write_terms(project_id, Terms(nouns=wf.data_model, verbs=wf.verbs))
-    for i, stage in enumerate(wf.stages, start=1):
-        stage_path = pdir / "compiled" / f"{i:02d}_{stage.id}.json"
-        stage_path.parent.mkdir(parents=True, exist_ok=True)
-        write_stage(stage_path, stage)
     if wf.stages:
+        loader.save_stages(project_id, list(wf.stages))
         save_working_copy_as_version(
             pdir, message=f"Imported '{label}'", reviewer="import"
         )
