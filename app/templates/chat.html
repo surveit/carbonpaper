@@ -3,7 +3,7 @@
 {% block breadcrumbs %}{% include "_breadcrumbs.html" %}{% endblock %}
 {# A turn naming a file draws as a card; every other turn is its own text. The TEXT is
    what the agent reads either way — this is only how the page draws it. #}
-{% macro turn_body(text) %}{% set turn = text | turn %}{% for file in turn.files %}<div class="ac-body ac-file"><span class="ac-file-icon" aria-hidden="true">▤</span><span class="ac-file-name">{{ file.name }}</span><span class="ac-file-meta">{{ file.meta }}</span></div>{% endfor %}{% if turn.said or not turn.files %}<div class="ac-body">{{ turn.said if turn.files else text }}</div>{% endif %}{% endmacro %}
+{% macro turn_body(text) %}{% set turn = text | turn %}{% if turn.files %}<div class="ac-files">{% for file in turn.files %}<div class="ac-body ac-file"><span class="ac-file-icon" aria-hidden="true">▤</span><span class="ac-file-name">{{ file.name }}</span><span class="ac-file-meta">{{ file.meta }}</span></div>{% endfor %}</div>{% endif %}{% if turn.said or not turn.files %}<div class="ac-body">{{ turn.said if turn.files else text }}</div>{% endif %}{% endmacro %}
 {% block content %}
 <div class="ac-head">
   <span class="ac-backend" title="which model backend answers">backend: {{ backend }}</span>
@@ -114,10 +114,14 @@ function addUser(text) {
   // turn can carry several files AND words, and neither may swallow the other.
   const lines = text.split("\n");
   let cut = 0;
+  // The chips share one row that wraps; the bubble below shrinks to its own words, which
+  // it cannot do as a flex item of the same row.
+  const files = el("ac-files");
   while (cut < lines.length && lines[cut].startsWith(ATTACHMENT_PREFIX)) {
-    b.appendChild(attachmentBody(lines[cut]));
+    files.appendChild(attachmentBody(lines[cut]));
     cut += 1;
   }
+  if (cut) b.appendChild(files);
   const said = cut ? lines.slice(cut).join("\n").trim() : text;
   if (said || !cut) { const body = el("ac-body"); body.textContent = said; b.appendChild(body); }
   log.appendChild(b); scroll();
