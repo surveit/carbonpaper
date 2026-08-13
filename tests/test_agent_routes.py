@@ -14,7 +14,7 @@ from pydantic import BaseModel
 from app.web.chat_router import _store
 from app.core.agent import registry
 from app.core.agent.registry import AgentConfig, register
-from app.core.agent.bound_tool import bind_function
+from app.core.agent.bound_tool import bind_by_signature
 from app.main import app
 
 client = TestClient(app)
@@ -36,7 +36,7 @@ def _build_tools(ctx: BaseModel) -> list:
         return ctx.label
 
     return [
-        bind_function(
+        bind_by_signature(
             name="echo",
             description="Echo the context label.",
             fn=echo,

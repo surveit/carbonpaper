@@ -7,12 +7,11 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from app.core.agent.tool_spec import ToolSpec
 from app.evals.runner import run_eval as run_project_eval
 from app.evals.store import load_eval_config
 from app.models import EvalRun
 from app.tools.shared import resolve_existing_project
-from app.tools.types import ToolParameterProse
+from app.tools.types import ToolProse
 
 
 # The stored run whole, so what the caller reports and what the page shows are one
@@ -41,18 +40,19 @@ def run_eval(
     )
 
 
-RUN_EVAL = ToolSpec(
-    name="run_eval",
+# The tour binds this to its own wrapper, which stamps the reader's base_url onto
+# `run_url`, so the record carries the prose and no body.
+RUN_EVAL = ToolProse(
     description="""\
 Score one of the project's evals: it replays the workflow over rows whose right answers
 were written down first. Blocks, and a model stage costs real money. Returns the run and
 `run_url` — each expected value beside what the workflow produced, the only place the
 reader sees WHICH rows disagreed. Hand it over. No pass mark exists: report the metrics
 and the disagreements, never a verdict.""",
+    parameters={
+        "project_id": "The project's name.",
+        "eval_id": "The eval's id, as the project's evals page lists it.",
+        "version_id": "Which stored version to score, published or not. Omit for the "
+            "newest stored.",
+    },
 )
-
-RUN_EVAL_SCHEMA: ToolParameterProse = {
-    "project_id": "The project's name.",
-    "eval_id": "The eval's id, as the project's evals page lists it.",
-    "version_id": "Which stored version to score, published or not. Omit for the newest stored.",
-}

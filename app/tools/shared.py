@@ -1,17 +1,16 @@
-"""Tools more than one surface offers, defined once and REFERENCED rather than rewritten.
-Each closes over nothing, so the MCP server can decorate it and an agent config can wrap
-it in a BoundToolSpec. A tool that must close over a session's context is not one of
-these: it belongs to the agent owning that context.
+"""The tool bodies that close over nothing, so any surface can offer one: the MCP server
+decorates it, an agent config binds it by name through app.tools.tool_specs. A tool that
+must close over a session's context is not here — it belongs to the agent owning that
+context, and app.tools.tool_specs holds nothing of it but the description.
 """
 from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from pydantic import BaseModel
 
-from app.core.agent.bound_tool import BoundToolSpec, bind_function
 from app.core.errors import (
     MissingInputBindingError,
     NoVersionToRunError,
@@ -24,7 +23,6 @@ from app.core.source_files import SheetSurvey
 from app.core.column_profile import TableProfile
 from app.models.review_guide import ReviewGuideDraft
 from app.models.terms import Terms
-from app.tools.types import ToolParameterProse
 from app.services import (
     frame_profile,
     generation,
@@ -39,13 +37,6 @@ from app.services import (
 from app.services.errors import FileNotStoredError, WorkflowLoadError
 from app.services.project import Project, ProjectListing
 from app.services.versioning import ReviewGuide
-from app.tools.tool_specs import TOOL_SPECS
-
-_PROJECT_ID = "The project's name."
-
-# read_stage_output_rows builds links, so its reader's address is the CALLER's to
-# supply — never something the model is asked for.
-_CALLER_SUPPLIED = frozenset({"base_url"})
 
 # Domain failures a run tool turns into {ok: False, error: str(exc)} — a loud, honest
 # verdict rather than a traceback or a fabricated run id/status. Anything outside this
@@ -393,189 +384,3 @@ def _refuse_a_stage_that_did_not_finish(project_id: str, run_id: str, stage_id: 
             f"stage '{stage_id}' of run '{run_id}' is '{status}', so the rows it holds are "
             "not a result to show anyone — read a stage that finished"
         )
-
-
-# ── binding them onto an agent ───────────────────────────────────────────────
-
-# create_project is absent: both surfaces WRAP it to stamp their own `source`, so
-# neither binds the body. Its schema is here because both wrappers advertise it.
-_FUNCTIONS: dict[str, Callable[..., Any]] = {
-    "read_terms": read_terms,
-    "write_terms": write_terms,
-    "get_project_status": get_project_status,
-    "list_projects": list_projects,
-    "read_stage": read_stage,
-    "remove_stage": remove_stage,
-    "read_review_guide": read_review_guide,
-    "write_review_guide": write_review_guide,
-    "run_stage_tests": run_stage_tests,
-    "report_compiler_warnings": report_compiler_warnings,
-    "generate_stage_tests": generate_stage_tests,
-    "run_workflow": run_workflow,
-    "run_workflow_test": run_workflow_test,
-    "list_runs": list_runs,
-    "get_run_status": get_run_status,
-    "sleep": sleep,
-    "read_workflow_summary": read_workflow_summary,
-    "read_stage_output_rows": read_stage_output_rows,
-    "profile_stage_output_data_range": profile_stage_output_data_range,
-    "move_file_to_project": move_file_to_project,
-    "profile_file": profile_file,
-    "survey_workbook": survey_workbook,
-}
-
-_SCHEMAS: dict[str, ToolParameterProse] = {
-    "create_project": {
-        "name": "What to CALL the project — a label, shown to the human. Two projects may "
-            "share one; the id you work with comes back from this call.",
-        "document": "The methodology prose, whole. It becomes the project's source of record, "
-            "which every later generation reads — so send what the user wrote, never a "
-            "summary of it.",
-    },
-    "read_terms": {"project_id": _PROJECT_ID},
-    "write_terms": {
-        "project_id": _PROJECT_ID,
-        "terms": "The WHOLE vocabulary — `nouns` and `verbs` both, every time. What you send "
-            "replaces what is stored, so read_terms first and send that back with your "
-            "additions.",
-    },
-    "get_project_status": {"project_id": _PROJECT_ID},
-    "list_projects": {},
-    "read_stage": {
-        "project_id": _PROJECT_ID,
-        "stage_id": "The stage's id, as read_workflow_summary shows it.",
-    },
-    "remove_stage": {
-        "project_id": _PROJECT_ID,
-        "stage_id": "The stage to delete. Refused if another stage still lists it in its inputs.",
-    },
-    "read_review_guide": {
-        "project_id": _PROJECT_ID,
-        "version_id": "The version whose guide to read.",
-    },
-    "write_review_guide": {
-        "project_id": _PROJECT_ID,
-        "version_id": "The version this guide describes. The guide is validated against THAT "
-            "version's stages.",
-        "guide": "The complete guide: `steps`, each with `title`, `prose` and `stage_ids`, "
-            "plus `unnarrated`. Sent whole every time — it replaces any earlier guide.",
-    },
-    "run_stage_tests": {
-        "project_id": _PROJECT_ID,
-        "stage_id": "One stage to scope the run to. Omit to run every stage with tests.",
-    },
-    "report_compiler_warnings": {"project_id": _PROJECT_ID},
-    "generate_stage_tests": {
-        "project_id": _PROJECT_ID,
-        "stage_id": "The stage to generate tests for.",
-    },
-    "run_workflow": {
-        "project_id": _PROJECT_ID,
-        "version_id": "Omit for the project's newest stored version.",
-        "limits": 'Caps how many rows a stage READS: {"<stage id>": N}.',
-        "files": 'The stored file each input stage reads for THIS run: '
-            '{"<stage id>": "<sha256 from list_files>"}.',
-    },
-    "run_workflow_test": {
-        "project_id": _PROJECT_ID,
-        "limit": "How many rows of the bound source to run on — the run's budget, since every "
-            "LLM stage pays per row. null runs the whole source.",
-        "version_id": "Omit for the project's newest stored version.",
-        "stage_ids": "Which stages to execute. Omit to run every stage that is not an input.",
-        "offset": "The source row the window starts at. 0 is the first.",
-    },
-    "list_runs": {
-        "project_id": _PROJECT_ID,
-        "limit": f"How many of the newest runs to name. Clamped to {MAX_RUNS_LISTED}.",
-    },
-    "get_run_status": {
-        "project_id": _PROJECT_ID,
-        "run_id": "The run id run_workflow returned.",
-    },
-    "sleep": {
-        "seconds": f"How long to sleep. Clamped to {MAX_SLEEP_SECONDS} — sleep again to wait longer.",
-    },
-    "read_workflow_summary": {"project_id": _PROJECT_ID},
-    "read_stage_output_rows": {
-        "project_id": _PROJECT_ID,
-        "run_id": "The run whose stored output you want to read.",
-        "stage_id": "The stage whose output rows you want.",
-        "limit": f"How many rows to read, from `offset`. Clamped to {MAX_OUTPUT_ROWS}, which "
-            f"is also the default.",
-        "offset": "The row ordinal to start at. 0 is the first row.",
-    },
-    "profile_stage_output_data_range": {
-        "project_id": _PROJECT_ID,
-        "run_id": "The run whose stored output you want to profile.",
-        "stage_id": "The stage whose output columns you want.",
-        "columns": "The columns to profile — every one you are about to declare.",
-        "max_values": "How many distinct values to show per column, commonest first. `truncated` "
-            "says whether there were more.",
-    },
-    "move_file_to_project": {
-        "project_id": _PROJECT_ID,
-        "sha256": "The stored file's sha256, as list_files reported it.",
-    },
-    "profile_file": {
-        "project_id": _PROJECT_ID,
-        "sha256": "The stored file's sha256, as list_files reported it.",
-        "columns": "Which columns to profile. Omit for every column in the file.",
-        "max_values": "How many distinct values to show per column, commonest first. "
-            "`truncated` says whether there were more.",
-        "sheet_name": "xlsx only: the sheet, by name or 0-based position.",
-        "header_row": "xlsx only: the 0-based row the header sits on.",
-        "first_column": "xlsx only: the 0-based column the table starts at.",
-    },
-    "survey_workbook": {
-        "project_id": _PROJECT_ID,
-        "sha256": "The stored xlsx's sha256, as list_files reported it.",
-        "from_row": "The 0-based sheet row the window starts at. Raise it to look past a "
-                 "preamble longer than the window.",
-    },
-}
-
-_LABELS = {
-    "create_project": "Creating the project",
-    "read_terms": "Reading the project's words",
-    "write_terms": "Storing the project's words",
-    "get_project_status": "Checking the project",
-    "list_projects": "Listing projects",
-    "read_stage": "Reading a stage",
-    "remove_stage": "Removing a stage",
-    "read_review_guide": "Reading the review guide",
-    "write_review_guide": "Writing the review guide",
-    "run_stage_tests": "Running the stage's tests",
-    "report_compiler_warnings": "Reading the workflow's warnings",
-    "generate_stage_tests": "Generating the stage's tests",
-    "run_workflow": "Running the workflow",
-    "run_workflow_test": "Testing the workflow on real rows",
-    "list_runs": "Listing the project's runs",
-    "get_run_status": "Checking the run",
-    "sleep": "Waiting",
-    "read_workflow_summary": "Reading the workflow",
-    "read_stage_output_rows": "Reading the stage's rows",
-    "profile_stage_output_data_range": "Reading what the stage's columns hold",
-    "move_file_to_project": "Putting the file in the project",
-    "profile_file": "Reading what the file holds",
-    "survey_workbook": "Looking over the workbook's sheets",
-}
-
-
-def read_parameter_prose(name: str) -> ToolParameterProse:
-    """For a surface that WRAPS a shared tool instead of binding it."""
-    return _SCHEMAS[name]
-
-
-def bind(*names: str) -> list[BoundToolSpec]:
-    """The named shared tools as BoundToolSpecs — an agent config lists names, not bodies."""
-    return [
-        bind_function(
-            name=name,
-            description=TOOL_SPECS[name].description,
-            fn=_FUNCTIONS[name],
-            label=_LABELS[name],
-            parameters=_SCHEMAS[name],
-            skip=_CALLER_SUPPLIED,
-        )
-        for name in names
-    ]

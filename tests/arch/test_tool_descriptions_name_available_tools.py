@@ -9,7 +9,7 @@ import asyncio
 import re
 
 from app.tools.editing import EditingContext, make_editing_tools
-from app.tools.tool_specs import TOOL_SPECS
+from app.tools.tool_specs import find_tool_names
 
 # Tool names are lowercase identifiers, and so are the parameter/field names the prose
 # also mentions — intersecting with the known tool names is what tells them apart.
@@ -30,7 +30,7 @@ def find_editing_descriptions() -> dict[str, str]:
 # Every name that is a tool somewhere: the two surfaces plus the shared registry, so a
 # spec entry dropped from both surfaces while still named in prose is still detected.
 def find_known_tool_names() -> set[str]:
-    return set(TOOL_SPECS) | set(find_mcp_descriptions()) | set(find_editing_descriptions())
+    return find_tool_names() | set(find_mcp_descriptions()) | set(find_editing_descriptions())
 
 
 def find_names_a_description_uses(description: str, known: set[str]) -> set[str]:

@@ -12,7 +12,7 @@ from app.core.run_status import RunStatus
 from app.models.run_manifest import QueueStats
 from app.runtime.manifest import RunManifest
 from app.web.breadcrumbs import _HOME_LABEL
-from app.tools.tool_specs import TOOL_SPECS
+from app.tools.tool_specs import find_tool_names
 from app.agents.tutorial.config import make_tutorial_tools
 from app.services.project import Project, WorkflowFile
 from app.models import StageType
@@ -49,7 +49,7 @@ def _tour_tool_arguments() -> set[str]:
 
 
 def test_the_prompt_names_no_tool_the_tour_does_not_hold() -> None:
-    known = set(TOOL_SPECS) | _tour_tool_names()
+    known = find_tool_names() | _tour_tool_names()
     # A retired tool still named in the script reads to the model as an instruction.
     named = set(_IDENTIFIER.findall(TUTORIAL_SYSTEM_PROMPT)) & known
 

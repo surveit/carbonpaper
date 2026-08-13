@@ -11,7 +11,6 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
-from app.core.agent.tool_spec import ToolSpec
 from app.models import EvalConfig
 from app.models.review_guide import ReviewGuideDraft
 from app.services import (
@@ -24,6 +23,7 @@ from app.services import (
 from app.services.project import Project, WorkflowFile, import_project
 from app.services.project import find_projects_by_name
 from app.services import methodology
+from app.tools.types import ToolProse
 
 _FIXTURE_STEM = "tutorial_lobbying_triage"
 _DATA_DIR = Path(__file__).resolve().parents[1] / "seeds" / "data"
@@ -147,8 +147,8 @@ def _is_on_disk(project_id: str) -> bool:
     return (workspace.projects_dir() / project_id).is_dir() and methodology.exists(project_id)
 
 
-CREATE_TUTORIAL_PROJECT = ToolSpec(
-    name="create_tutorial_project",
+CREATE_TUTORIAL_PROJECT = ToolProse(
+    parameters={},
     description=(
         "Seed the committed tutorial project into this workspace and return it: the "
         "ordinary `project` record (its `id` is what every other tool takes), the stored "
