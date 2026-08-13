@@ -15,10 +15,6 @@ from app.models.tool_schema_prompts import (
 PROSE_MAX_CHARS = 255
 # The data sentence sits on a link, beside a measured shape, and wraps in a 360px rail.
 DATA_DESCRIPTION_MAX_CHARS = 120
-# The goal leads the same 360px rail, where a line holds roughly 60 characters: three
-# lines is the most a reader takes in before the walkthrough, and past that it stops
-# leading. It also stays under a step's own ceiling, so no goal outweighs the steps.
-GOAL_MAX_CHARS = 180
 
 
 class ReviewGuideStep(_Base):
@@ -59,22 +55,5 @@ class ReviewGuideDraft(_Base):
     model_config = ConfigDict(json_schema_extra={"description": REVIEW_GUIDE_DRAFT_DESCRIPTION})
 
 
-    # OPTIONAL HERE for the same reason `data_description` is: a guide stored before
-    # this field existed parses through PersistedModel.load's extra="forbid"
-    # model_validate, and a required field would orphan every one of them. Such a
-    # guide leads with its first section — no sentence is invented to stand in.
-    # WRITING a guide is where it is required: versioning.validate_review_guide
-    # refuses one carrying no goal, naming it.
-    goal: str | None = Field(
-        default=None,
-        max_length=GOAL_MAX_CHARS,
-        description=(
-            "One short sentence, in the second person, saying what the reader is here "
-            "to decide: \"You're here to judge whether an organisation publicly "
-            "committed to something and then lobbied against it.\" It names the "
-            "JUDGEMENT, never the workflow's mechanics, and leads the walkthrough — "
-            "nothing below it means anything until the reader has read it."
-        ),
-    )
     steps: list[ReviewGuideStep]
     unnarrated: list[str] = Field(default_factory=list)

@@ -198,7 +198,6 @@ def test_write_review_guide_stores_a_guide_sent_as_an_object(examples_root: Path
         "project_id": "congresswatch",
         "version_id": saved["version_id"],
         "guide": {
-            "goal": "You are here to judge whether the filings were read as downloaded.",
             "steps": [{
                 "title": "Load the filings",
                 "prose": "Reads the filings as they were downloaded, one row each.",

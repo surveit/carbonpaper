@@ -152,7 +152,6 @@ def _version_with_guide(project_dir: Path, **overrides) -> str:
     guide = ReviewGuide(
         project=project_dir.name,
         version_id=version.version_id,
-        goal=f"You are here to judge whether {project_dir.name} read every row it filed.",
         steps=overrides.get("steps", _STEPS),
         unnarrated=overrides.get("unnarrated", _UNNARRATED),
     )

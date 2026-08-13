@@ -5,6 +5,10 @@ routers in `app/web/routers/`, which import the Runner (`app.runtime`) and the s
 (`app.models`) and share `app/web/{config,loading,diagrams}`. Run:
 `python -m uvicorn app.main:app --port 8765`.
 
+Writing markup: read `docs/visual-language.md` first — colour, the agent mark, error vs
+warning, and the arch test holding each. `app/templates/AGENTS.md` names the three that
+bite most often.
+
 ## Pages / routes
 - `/` project list · `/project/<m>` the project shell (Overview · Document · Terms ·
   Workflow · Runs); the Workflow section carries the mermaid graph + inline node review

@@ -94,7 +94,6 @@ def _save_covering_guide(project_dir: Path, version_id: str) -> None:
     versioning.save_version_guide(project_dir.name,
         version_id,
         ReviewGuide(project=project_dir.name, version_id=version_id,
-                    goal="You are here to judge whether every row survived the workflow.",
                     steps=[ReviewGuideStep(
             title="How this workflow works",
             prose="Every stage, narrated together.",

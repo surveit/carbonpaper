@@ -414,7 +414,6 @@ def test_index_carries_the_versions_review_guide(project_dir, tmp_path):
         ReviewGuide(
             project=project_dir.name,
             version_id=version_id,
-            goal="You are here to judge whether every `val` was doubled as loaded.",
             steps=[
                 ReviewGuideStep(
                     title="Check the doubling",
@@ -457,7 +456,6 @@ def test_guide_stage_links_reach_the_packets_own_pages(project_dir, tmp_path):
         ReviewGuide(
             project=project_dir.name,
             version_id=version_id,
-            goal="You are here to judge whether every `val` was doubled as loaded.",
             steps=[
                 ReviewGuideStep(title="Step", prose="p", stage_ids=["load", "double"],
                                 data_description="Every loaded row, its `val` doubled.")

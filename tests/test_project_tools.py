@@ -143,7 +143,6 @@ def _versioned(examples: Path, name: str) -> tuple[list[BoundToolSpec], str]:
 
 def _guide(step_ids: list[str], unnarrated: list[str]) -> ReviewGuideDraft:
     return ReviewGuideDraft(
-        goal="You are here to judge whether every row was scored as reported.",
         steps=[
             ReviewGuideStep(
                 title="Score each row",
@@ -192,7 +191,6 @@ def test_write_review_guide_rejects_a_mismatch_naming_the_stage(
 def test_write_review_guide_rejects_a_stage_narrated_by_two_steps(examples_root: Path) -> None:
     tools, version_id = _versioned(examples_root, "alpha")
     two_steps = ReviewGuideDraft(
-        goal="You are here to judge whether every row was scored as reported.",
         steps=[
             ReviewGuideStep(title="Load", prose="Reads the rows.", stage_ids=["load"],
                             data_description="The rows as filed."),
