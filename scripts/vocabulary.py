@@ -25,7 +25,6 @@ from scripts.lexicon import find_scanned_files, parse_source, split_words
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _MARKER = "<!-- vocabulary-report -->"
 _WORD = re.compile(r"[A-Za-z][A-Za-z'-]+")
-_LISTED_PER_SURFACE = 12
 
 
 class Surface(StrEnum):
@@ -87,16 +86,18 @@ def render_markdown(head: VocabularySnapshot, base: VocabularySnapshot) -> str:
     gains = find_surface_gains(head, base)
     if not gains:
         return f"{_MARKER}\n### 🟢 vocabulary — no new words\n\n`{len(head.words)}` words across variables, docstrings and comments · unchanged."
-    lines = [_MARKER, f"### 🟡 vocabulary — {len(gains)} new word{'s' if len(gains) != 1 else ''}", ""]
+    lines = [_MARKER, f"### 🟡 vocabulary — {_render_headline(gains)}", ""]
     for surface in Surface:
         lines += _render_surface(surface, [gain for gain in gains if gain.surface is surface])
-    lines += [
-        "<sub>Report-only. Prose surfaces are counted, not listed — measured across 8 open PRs "
-        "they were 89% of the rows and none of the signal.</sub>",
-        "",
-        _render_totals(head, base),
-    ]
+    lines += ["<sub>Report-only.</sub>", "", _render_totals(head, base)]
     return "\n".join(lines)
+
+
+def _render_headline(gains: list[SurfaceGain]) -> str:
+    words = len({gain.word for gain in gains if gain.is_new_word})
+    moved = len({gain.word for gain in gains if not gain.is_new_word})
+    headline = f"{words} new word{'s' if words != 1 else ''}" if words else "no new words"
+    return f"{headline}, {moved} onto a new surface" if moved else headline
 
 
 def _record_identifiers(tree: ast.Module, seen: dict[str, Counter[Surface]]) -> None:
@@ -132,16 +133,20 @@ def _count(seen: dict[str, Counter[Surface]], surface: Surface, words: list[str]
 
 
 def _render_surface(surface: Surface, gains: list[SurfaceGain]) -> list[str]:
-    """Prose is counted, not listed: 89% of rows over 8 open PRs, none of the signal."""
     if not gains:
         return []
-    if surface is not Surface.VARIABLE:
-        return [f"**{surface.value}** — {len(gains)} new words, not listed (prose). Full set in the uploaded JSON.", ""]
-    shown = gains[:_LISTED_PER_SURFACE]
-    words = " ".join(f"`{gain.word}`" for gain in shown)
-    dropped = len(gains) - len(shown)
-    tail = f" …and **{dropped} more** (see the uploaded JSON)" if dropped else ""
-    return [f"**{surface.value}** — {len(gains)} new", "", f"{words}{tail}", ""]
+    fresh = [gain for gain in gains if gain.is_new_word]
+    moved = [gain for gain in gains if not gain.is_new_word]
+    lines = [f"**{surface.value}** — {len(fresh)} new", ""]
+    if fresh:
+        lines += [_render_words(fresh), ""]
+    if moved:
+        lines += [f"already used elsewhere, now also here — {_render_words(moved)}", ""]
+    return lines
+
+
+def _render_words(gains: list[SurfaceGain]) -> str:
+    return " ".join(f"`{gain.word}`" for gain in gains)
 
 
 def _render_totals(head: VocabularySnapshot, base: VocabularySnapshot) -> str:
