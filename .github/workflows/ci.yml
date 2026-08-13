@@ -132,8 +132,14 @@ jobs:
       contents: read
       pull-requests: write
     steps:
+      # head.sha, not the default checkout: with no ref a pull_request event gets
+      # refs/pull/N/merge — this branch merged into master's tip. base.sha is the
+      # fork point, so every commit master gained since would read as this PR's.
+      # head.sha is also the sha the reports build their source links from.
       - name: Checkout PR head
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
       - name: Checkout PR base
         uses: actions/checkout@v4
         with:
@@ -204,8 +210,11 @@ jobs:
       contents: read
       pull-requests: write
     steps:
+      # head.sha for the same reason as import-graph-report.
       - name: Checkout PR head
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
       - name: Checkout PR base
         uses: actions/checkout@v4
         with:
@@ -277,8 +286,11 @@ jobs:
       contents: read
       pull-requests: write
     steps:
+      # head.sha for the same reason as import-graph-report.
       - name: Checkout PR head
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
       - name: Checkout PR base
         uses: actions/checkout@v4
         with:
