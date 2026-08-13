@@ -1,8 +1,7 @@
-"""The authoring boundary refuses to WRITE an `llm_transform` that names no model.
+"""`llm.model` is required on LLMConfig, so nothing writes or loads a stage without one.
 
-Enforced on the write path, not on `LLMConfig` and not in `graph_issues`: `Workflow`
-is built to RUN a stored version (app.services.run), so a rule in either place would
-refuse to run every llm stage saved before the rule existed.
+The rule is on the type, not the write path, so it also refuses a stage stored before it
+existed — which is what alembic 0013 stamps, in the store and in every working copy.
 """
 from __future__ import annotations
 
@@ -10,6 +9,7 @@ import json
 
 import pytest
 
+from app.services.errors import WorkflowLoadError
 from app.services.loader import load_workflow_object
 from app.services.stage_edit import add_stage_spec, edit_stage_spec
 
@@ -47,11 +47,12 @@ def project(tmp_path):
 def test_adding_an_llm_stage_without_a_model_is_refused(project):
     result = add_stage_spec(project, json.dumps(_judge_spec()))
     assert not result.ok
-    assert any("`llm.model` is required" in issue for issue in result.issues)
+    assert any("llm.model" in issue for issue in result.issues)
 
 
-def test_the_refusal_lists_the_models_this_deployment_offers(project):
-    result = add_stage_spec(project, json.dumps(_judge_spec()))
+def test_a_model_off_the_menu_is_refused_and_the_refusal_lists_the_menu(project):
+    result = add_stage_spec(project, json.dumps(_judge_spec(model="gpt-4")))
+    assert not result.ok
     assert any("claude-haiku-4-5" in issue for issue in result.issues)
 
 
@@ -61,21 +62,26 @@ def test_adding_an_llm_stage_that_names_a_model_is_accepted(project):
     assert result.ok, result.issues
 
 
-def test_a_stage_stored_without_a_model_still_loads(project):
+def test_a_stage_stored_without_a_model_no_longer_loads(project):
     (project / "compiled" / "02_judge.json").write_text(
         json.dumps(_judge_spec()), encoding="utf-8")
-    workflow = load_workflow_object(project)
-    assert {stage.id for stage in workflow.stages} == {"src", "judge"}
-    assert next(s for s in workflow.stages if s.id == "judge").llm.model is None
+
+    with pytest.raises(WorkflowLoadError) as caught:
+        load_workflow_object(project)
+
+    assert any("llm.model" in issue for issue in caught.value.issues)
 
 
 def test_editing_a_stored_model_less_stage_is_refused_until_it_names_one(project):
-    (project / "compiled" / "02_judge.json").write_text(
-        json.dumps(_judge_spec()), encoding="utf-8")
-    refused = edit_stage_spec(
-        project, "judge", json.dumps(_judge_spec(temperature=0.5)))
-    assert not refused.ok
+    stored = project / "compiled" / "02_judge.json"
+    stored.write_text(json.dumps(_judge_spec()), encoding="utf-8")
+    # `edit_stage_spec` reads the whole workflow first, so the model-less neighbour
+    # is what refuses the edit — naming a model on the way in is what lets it through.
+    with pytest.raises(WorkflowLoadError):
+        edit_stage_spec(project, "judge", json.dumps(_judge_spec(temperature=0.5)))
+
+    stored.write_text(json.dumps(_judge_spec(model="claude-haiku-4-5")), encoding="utf-8")
     accepted = edit_stage_spec(
         project, "judge",
-        json.dumps(_judge_spec(temperature=0.5, model="claude-haiku-4-5")))
+        json.dumps(_judge_spec(temperature=0.5, model="claude-opus-5")))
     assert accepted.ok, accepted.issues

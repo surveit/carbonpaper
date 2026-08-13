@@ -439,7 +439,7 @@ _UNADDITIVE_LLM_STAGE = {
         "reads": [{"input": "load", "columns": [{"name": "id", "type": "str", "nullable": True}]}],
         "adds": [{"name": "verdict", "type": "str", "nullable": True}],
     },
-    "llm": {"prompt_data_template": "judge {amount}"},
+    "llm": {"model": "claude-haiku-4-5", "prompt_data_template": "judge {amount}"},
 }
 
 

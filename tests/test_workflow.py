@@ -167,7 +167,7 @@ def _llm_1to1_dict(**over):
             ],
             "adds": [{"name": "score", "type": "int", "nullable": True}],
         },
-        llm={"prompt_template": "score {text}"},
+        llm={"model": "claude-haiku-4-5", "prompt_template": "score {text}"},
     )
     base.update(over)
     return S(**base)

@@ -101,7 +101,7 @@ def _workflow_stages(source_path: str) -> list[dict]:
     load_schema = {
         "columns": [{"name": "claim_id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}],
     }
-    llm = {
+    llm = {"model": "claude-haiku-4-5", 
         "prompt_template": (
             'Statement: "{text}"\n'
             "Is this statement about money, payment, or revenue?"

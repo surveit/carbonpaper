@@ -26,7 +26,7 @@ def _llm_stage(prompt_template):
                 read := [c for c in _EDGE_COLUMNS if c["name"] in injected]) else [],
             "adds": [{"name": "verdict", "type": "str", "nullable": False}],
         },
-        "llm": {"prompt_template": prompt_template},
+        "llm": {"model": "claude-haiku-4-5", "prompt_template": prompt_template},
     }
 
 

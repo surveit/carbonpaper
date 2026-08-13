@@ -36,7 +36,7 @@ def _seed_project(root: Path) -> None:
              "reads": [{"input": "both", "columns": _SCHEMA["columns"]}],
              "adds": [{"name": "score", "type": "int", "nullable": False}],
          },
-         "llm": {"prompt_template": "score {id}"}},
+         "llm": {"model": "claude-haiku-4-5", "prompt_template": "score {id}"}},
     ]
     for position, stage in enumerate(stages, start=1):
         (compiled / f"{position:02d}_{stage['id']}.json").write_text(

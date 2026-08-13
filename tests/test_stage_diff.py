@@ -192,7 +192,7 @@ def test_an_llm_transform_is_admitted_to_the_row_aligned_diff(tmp_path: Path) ->
     stage = parse_stage({
         "id": "judge", "description": "Judge", "type": "llm_transform",
         "inputs": [{"id": LOAD_ID}],
-        "llm": {"prompt_data_template": "{name}"},
+        "llm": {"model": "claude-haiku-4-5", "prompt_data_template": "{name}"},
         "signature": {
             "form": "extends",
             "reads": [

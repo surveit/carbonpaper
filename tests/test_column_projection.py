@@ -25,7 +25,7 @@ def _llm_stage(input_columns, output_columns, pk=("id",)):
             "reads": [{"input": "load", "columns": [
                 c for c in input_columns if c["name"] == "text"]}],
             "adds": [c for c in output_columns if c["name"] not in flowing]},
-        "llm": {"prompt_template": "extract from {text}"},
+        "llm": {"model": "claude-haiku-4-5", "prompt_template": "extract from {text}"},
     })
 
 

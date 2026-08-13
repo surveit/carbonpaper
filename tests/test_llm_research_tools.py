@@ -10,6 +10,7 @@ import pytest
 from pydantic import BaseModel, ValidationError
 
 from app.core.agent.agent import SUBMIT_ANSWER_TOOL, Agent
+from app.core.llm import LLMModel
 from app.models.stages.llm_transform import GRANTABLE_TOOLS, LLMConfig
 from app.runtime import llm as runtime_llm
 from app.runtime.options import (
@@ -24,7 +25,7 @@ class Reply(BaseModel):
 
 
 def _config(**kw) -> LLMConfig:
-    return LLMConfig(prompt_data_template="{q}", **kw)
+    return LLMConfig(prompt_data_template="{q}", model=LLMModel.claude_haiku_4_5, **kw)
 
 
 # ── what is grantable ────────────────────────────────────────────────────────

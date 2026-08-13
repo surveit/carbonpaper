@@ -91,7 +91,7 @@ def test_a_stage_that_breaks_a_cross_field_rule_parses_as_a_draft_and_is_refused
                        "columns": [{"name": "text", "type": "str", "nullable": True}]}],
             "adds": [{"name": "score", "type": "float", "nullable": True}],
         },
-        "llm": {"prompt_data_template": "score this"},
+        "llm": {"model": "claude-haiku-4-5", "prompt_data_template": "score this"},
     }
 
     draft = StageDraft.model_validate(broken)  # must not raise

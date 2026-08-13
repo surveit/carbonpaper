@@ -114,7 +114,7 @@ def test_a_non_null_foreign_config_block_is_still_refused(tmp_path):
                 "form": "replaces",
                 "produces": [{"name": "entity_id", "type": "str", "nullable": False}],
             },
-            "llm": {"prompt_instructions": "do a thing"},
+            "llm": {"model": "claude-haiku-4-5", "prompt_instructions": "do a thing"},
         }],
     })
     with pytest.raises(ValidationError) as caught:

@@ -15,12 +15,12 @@ from pydantic import BaseModel
 from app.core.agent.agent import Agent
 from app.core.agent.usage import LlmUsage
 from app.core.errors import LLMError
+from app.core.llm import LLMModel
 from app.core.llm_sdk import run_sync
 from app.core.agent.sdk_engine import ThinkingConfig
 from app.models.stages.llm_transform import LLMConfig, ThinkingMode
 
 from .options import (
-    DEFAULT_MODEL,
     DEFAULT_TIMEOUT_S,
     RESEARCH_MAX_TURNS,
     RESEARCH_TIMEOUT_S,
@@ -82,17 +82,15 @@ def call_llm(
     input_row: dict[str, Any],
     *,
     reply_model: type[BaseModel],
-    model: str | None = None,
     usage_out: list[LlmUsage] | None = None,
 ) -> dict[str, Any]:
     """`usage_out` collects EVERY attempt's usage, failed ones included — those tokens were spent."""
     if not llm_config.prompt_data_template:
         raise LLMError(f"stage {stage_id}: llm_transform has no prompt_data_template")
     task = render_prompt(llm_config.prompt_data_template, input_row)
-    model_name = str(model or llm_config.model or DEFAULT_MODEL)
     return _run_agent(
-        _compose_system(llm_config.prompt_instructions), task, reply_model, model_name,
-        llm_config.max_retries, usage_out, tools=llm_config.tools,
+        _compose_system(llm_config.prompt_instructions), task, reply_model,
+        llm_config.model, llm_config.max_retries, usage_out, tools=llm_config.tools,
         thinking=llm_config.thinking,
     )
 
@@ -104,13 +102,11 @@ def call_llm_batch(
     instructions: str,
     task: str,
     reply_schema: type[BaseModel],
-    model: str | None = None,
     usage_out: list[LlmUsage] | None = None,
 ) -> dict[str, Any]:
-    model_name = str(model or llm_config.model or DEFAULT_MODEL)
     # No tools by construction: LLMConfig refuses tools with batch_size > 1.
     return _run_agent(
-        _compose_system(instructions), task, reply_schema, model_name,
+        _compose_system(instructions), task, reply_schema, llm_config.model,
         llm_config.max_retries, usage_out, thinking=llm_config.thinking,
     )
 
@@ -129,7 +125,7 @@ def _run_agent(
     system_prompt: str,
     task: str,
     target_schema: type[BaseModel],
-    model_name: str,
+    model: LLMModel,
     max_retries: int,
     usage_out: list[LlmUsage] | None,
     tools: list[str] | None = None,
@@ -149,7 +145,7 @@ def _run_agent(
             system_prompt=system_prompt,
             target_schema=target_schema,
             task=task,
-            model=model_name,
+            model=str(model),
             extra_tools=list(tools or []),
             max_turns=RESEARCH_MAX_TURNS if researching else None,
             thinking=_thinking_config(thinking),
@@ -158,10 +154,10 @@ def _run_agent(
             answer = run_sync(
                 asyncio.wait_for(agent.run(forward), timeout=timeout_s)
             )
-            _record_usage(usage_out, agent, model_name)
+            _record_usage(usage_out, agent, model)
             return answer.model_dump(mode="json")
         except Exception as exc:  # noqa: BLE001 — retry any backend failure, record its usage, re-raise the last
-            _record_usage(usage_out, agent, model_name)
+            _record_usage(usage_out, agent, model)
             emit_llm_detail(LLM_ERROR, text=str(exc) or type(exc).__name__)
             last_exc = exc
             if attempt + 1 < attempts:
@@ -201,8 +197,8 @@ def _forward_agent_events(
 
 
 def _record_usage(
-    usage_out: list[LlmUsage] | None, agent: Agent[BaseModel], model_name: str
+    usage_out: list[LlmUsage] | None, agent: Agent[BaseModel], model: LLMModel
 ) -> None:
-    """`model_name` is stamped here because this is where `model or llm.model or DEFAULT_MODEL` resolved."""
+    """The agent reports tokens and cost; only the caller knows which model was asked."""
     if usage_out is not None and agent.last_usage is not None:
-        usage_out.append(agent.last_usage.model_copy(update={"model": model_name}))
+        usage_out.append(agent.last_usage.model_copy(update={"model": model}))

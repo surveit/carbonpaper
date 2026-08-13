@@ -24,7 +24,7 @@ def _stage(batch_size: int = 3, max_retries: int = 0) -> Stage:
             "adds": [{"name": "label", "type": "str", "nullable": True}]},
         # max_retries 0 → exactly one batched call, so the mock's reply is the
         # whole story (no retry masking a drop).
-        "llm": {"prompt_data_template": "process {text}", "batch_size": batch_size,
+        "llm": {"model": "claude-haiku-4-5", "prompt_data_template": "process {text}", "batch_size": batch_size,
                 "max_retries": max_retries},
     })
 

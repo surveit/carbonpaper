@@ -14,10 +14,11 @@ from app.core.llm_sdk import CLI_PATH
 
 # ── Config knobs (env-overridable) ───────────────────────────────────────────
 CLAUDE_BIN = shutil.which("claude") or CLI_PATH
-# What an `llm_transform` naming no model runs on. Pinned like every LLMModel value, and
-# refused at import if the override names something off the menu — a stage that omits
-# `llm.model` records nothing about which model answered, so the default is the only
-# thing left saying what a run's rows were produced by.
+# What an `llm_transform` naming no model RAN on, before `llm.model` became required.
+# Pinned like every LLMModel value, and refused at import if the override names something
+# off the menu. No run resolves it any more — alembic 0013 reads it to stamp the stages
+# that never named a model, which is why it must keep resolving the same env var the
+# runtime read: the value stamped is then the model those rows were actually produced by.
 DEFAULT_MODEL = LLMModel.parse(
     os.environ.get("CARBON_PAPER_LLM_MODEL", LLMModel.claude_haiku_4_5.value),
     source="CARBON_PAPER_LLM_MODEL",

@@ -49,7 +49,7 @@ def _llm_stage() -> Stage:
             ],
             "adds": [{"name": "score", "type": "int", "nullable": True}],
         },
-        "llm": {"prompt_template": "{text}"},
+        "llm": {"model": "claude-haiku-4-5", "prompt_template": "{text}"},
     })
 
 
@@ -119,7 +119,7 @@ def test_run_manifest_records_stage_llm_usage(tmp_path, monkeypatch):
                     ],
                     "adds": [{"name": "score", "type": "int", "nullable": True}],
                 },
-                "llm": {"prompt_template": "{text}"}}
+                "llm": {"model": "claude-haiku-4-5", "prompt_template": "{text}"}}
     (tmp_path / "compiled" / "01_load.json").write_text(json.dumps(load), encoding="utf-8")
     (tmp_path / "compiled" / "02_classify.json").write_text(json.dumps(classify), encoding="utf-8")
     vid = save_working_copy_as_version(tmp_path, message="seed", reviewer="test").version_id

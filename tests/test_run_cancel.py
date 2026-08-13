@@ -134,7 +134,7 @@ def _three_stage_llm_project(root):
             ],
             "adds": [{"name": "score", "type": "int", "nullable": False}],
         },
-        "llm": {"prompt_template": "Rate: {text}"},
+        "llm": {"model": "claude-haiku-4-5", "prompt_template": "Rate: {text}"},
     }
     downstream = {
         "id": "downstream", "description": "Downstream", "type": "python_frame_function",
