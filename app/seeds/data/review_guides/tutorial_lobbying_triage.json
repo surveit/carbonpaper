@@ -4,7 +4,7 @@
       "title": "Load the quarter's lobbying filings",
       "prose": "Invented sample data — what each client paid to ask government for, as filed.",
       "stage_ids": [
-        "raw_filings"
+        "lobbying_filings"
       ],
       "data_description": "Every filing in the sample, as the CSV records it."
     },
@@ -17,10 +17,10 @@
       "data_description": "Every organisation with a public commitment on record."
     },
     {
-      "title": "Check every filing before anything reads it",
+      "title": "Clean every filing's reported spend before anything reads it",
       "prose": "The spend is text on the filing until someone reads it as a number, and one that could not be read stopped the run rather than travelling as a blank.",
       "stage_ids": [
-        "check_filings"
+        "clean_filings"
       ],
       "data_description": "Every filing in the sample, with its reported spend read as a number."
     },
@@ -28,7 +28,7 @@
       "title": "Put each promise beside the ask",
       "prose": "Nothing is dropped: a blank promise means the client has none on record, and the absence IS the record.",
       "stage_ids": [
-        "matched_commitments"
+        "filings_with_commitments"
       ],
       "data_description": "Every filing, plus its client's commitment where one matched."
     },

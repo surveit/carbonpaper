@@ -1,6 +1,6 @@
 {
   "name": "tutorial_lobbying_triage",
-  "document": "# Tutorial: Lobbying Say-versus-Do (deliberately artificial sample)\n\n## Purpose\n\nA lobbying filing says what an organisation paid to ask government for. A public\ncommitment says what that same organisation told everyone else it would do. Reporting in\nthis genre almost always comes from reading the two side by side: the lead is not a\nfiling on its own, it is a filing that asks for the opposite of what its client\npromised in public. This tutorial workflow reads each filing, sets it beside that\nclient's public commitment, asks a model which pairs contradict, and publishes the\ncontradictions a person has reviewed.\n\nThe sample data is INVENTED. Every organisation is fictional, nothing is fetched from the\nnetwork, and no row describes a real filing, client, firm or commitment.\n\n## Input data\n\nTwo bundled CSVs.\n\n`tutorial_lobbying_triage.csv`, one line for each filing:\n\n- `filing_id` — stable, unique identifier for the filing\n- `client` — the organisation that retained the lobbyists\n- `registrant` — the lobbying firm that filed the disclosure\n- `amount_usd` — reported lobbying spend for the period, as the filing writes it, e.g. \"$185,000\"\n- `filing_period` — the reporting period, e.g. \"2024 Q1\"\n- `lobbied_about` — the filer's own one-line account of what this filing asked for\n\n`tutorial_public_commitments.csv`, one line for each organisation:\n\n- `client` — the organisation that made the commitment\n- `public_commitment` — one line of what it said in public it would do\n- `commitment_source` — where it said it, e.g. \"2023 climate pledge\"\n\n## Step 1 — Check every filing before anything reads it\n\nRead each filing's reported spend out of the text the filing writes it in — \"$185,000\"\nbecomes 185000 — so that every later step is weighing a number rather than a string that\nlooks like one. A filing whose spend cannot be read is not carried forward with a blank\nin its place: the run stops and says which filing it was. The same goes for a filing that\nsays nothing about what it asked government for, because there is no ask to judge. This\nis plain code, not the model: reading a dollar figure has one right answer.\n\n## Step 2 — Put each promise beside the ask\n\nBring `public_commitment` and `commitment_source` onto every filing, matched on the\nclient name. Several filings can share one promise: the commitments file carries at\nmost one line for each organisation, and a repeat would fail the run rather than\nquietly multiply filings. No filing is dropped here. A filing whose client made no\ncommitment keeps every one of its own fields and carries a blank commitment — the\nabsence is the record, and the next step is told to read it as an absence rather\nthan as a judgment.\n\n## Step 3 — Judge the filing against the commitment (LLM)\n\nFor each filing, read the client's public commitment and this filing's ask together, and\nadd two fields — one filing in, one filing out (the filing is neither dropped nor duplicated):\n\n- `ai_judgment` — one of: Contradicts, Matches, Unclear, No commitment given. \"Contradicts\"\n  means this filing asks government for the opposite of what the client committed to.\n  \"No commitment given\" is the answer when the commitment field is blank. Every filing\n  gets one of the four and none is left blank: the absent-commitment case already has its\n  own label, so a blank would be a hole in what the report later prints rather than an\n  answer.\n- `ai_justification` — a single plain sentence naming what the client said and what this\n  filing asks for.\n\nThe model is given only these two texts, and is told not to use anything it knows about\nthe organisation and not to invent a commitment that is not in front of it. The step\nnames the model it runs on, so the run records which model answered rather than whichever\none the platform happened to default to that week.\n\nFilings are read up to twelve at a time in one model call — up to, because the last call\nof a run holds whatever is left over. This is a cost trade: one call carrying twelve\nfilings is far cheaper than twelve calls carrying one. What it costs is independence,\nsince the filings sharing a call are judged beside each other, so a filing's answer could\nbe swayed by the ones it happens to travel with.\n\n## Step 4 — Put every contradiction in front of a person\n\nA contradiction is the one judgment this workflow publishes as a finding, so the model's\nis not the one that gets published. Every filing the model called \"Contradicts\" is queued\nfor a human, and the run stops there — nothing below this\nstep runs until each queued filing has been decided.\n\nThe reviewer's card is exactly what this step reads: the filing and its client, the ask as\nfiled, the commitment as said, and the model's answer with the sentence behind it. Nothing\nelse the filing carries is on it, because nothing else decides the question. They record a\nlabel of their own in `reviewed_judgment`. The model's `ai_judgment` is\nleft exactly as the model wrote it, so what the model said and what the person decided are\nboth on the record afterwards. Beside their label the reviewer records the name they\nreviewed under, the moment they decided, and a note naming the words in the two texts they\ndecided from.\n\nThis step decides nothing itself. A queued filing with no recorded decision stays queued\nand the run stays stopped: there is no wait that expires and no label that stands in for\none nobody chose. A filing the model did not call a contradiction is not queued, is read\nby nobody, and passes through unchanged.\n\nAfter this step every filing carries `review_verdict`: \"approve\" where the reviewer kept\nthe model's label, \"modify\" where they changed it, and \"skipped\" for a filing no person\nwas asked about — so a judgment a person reviewed can be told from one only the model made.\n\n## Step 5 — Publish the report\n\nProduce a single HTML page listing every filing with client, registrant,\nreported spend, what the filing asked for, what the client committed to in public (or that\nno commitment is on record), and the judgment as it stands after review. The label the page\nprints is the reviewer's, not the model's: a filing whose reviewer changed the label is no\nlonger printed as a contradiction, and a contradiction they confirmed carries their name,\nthe time they reviewed it and the note they left. A filing shown as a contradiction also\nshows both sides side by side — the commitment as said, and the ask as filed — so the page\ncarries the contradiction itself rather than a bare label. A judgment recorded as reviewed\nwith nobody's name against it is not published at all: the step stops instead. No score, no\nranking and no recommendation: the report is a reading aid, not a verdict.\n\nEvery row also carries a link back through each stage that touched it to the filing it\ncame from, so a reader can check any line of the page against the run.\n\nThe page's markup and stylesheet live in the step that writes them, so a reviewer reads\nthe markup and the code that fills it together.\n\n## Out of scope\n\nNo external fetching, no filing dropped anywhere, and nothing paired twice — one\ncheck, one pairing, one model read, one human review, one page.\n",
+  "document": "# Tutorial: Lobbying Say-versus-Do (deliberately artificial sample)\n\n## Purpose\n\nA lobbying filing says what an organisation paid to ask government for. A public\ncommitment says what that same organisation told everyone else it would do. Reporting in\nthis genre almost always comes from reading the two side by side: the lead is not a\nfiling on its own, it is a filing that asks for the opposite of what its client\npromised in public. This tutorial workflow reads each filing, sets it beside that\nclient's public commitment, asks a model which pairs contradict, and publishes the\ncontradictions a person has reviewed.\n\nThe sample data is INVENTED. Every organisation is fictional, nothing is fetched from the\nnetwork, and no row describes a real filing, client, firm or commitment.\n\n## Input data\n\nTwo bundled CSVs.\n\n`tutorial_lobbying_triage.csv`, one line for each filing:\n\n- `filing_id` — stable, unique identifier for the filing\n- `client` — the organisation that retained the lobbyists\n- `registrant` — the lobbying firm that filed the disclosure\n- `amount_usd` — reported lobbying spend for the period, as the filing writes it, e.g. \"$185,000\"\n- `filing_period` — the reporting period, e.g. \"2024 Q1\"\n- `lobbied_about` — the filer's own one-line account of what this filing asked for\n\n`tutorial_public_commitments.csv`, one line for each organisation:\n\n- `client` — the organisation that made the commitment\n- `public_commitment` — one line of what it said in public it would do\n- `commitment_source` — where it said it, e.g. \"2023 climate pledge\"\n\n## Step 1 — Clean every filing's reported spend before anything reads it\n\nRead each filing's reported spend out of the text the filing writes it in — \"$185,000\"\nbecomes 185000 — so that every later step is weighing a number rather than a string that\nlooks like one. A filing whose spend cannot be read is not carried forward with a blank\nin its place: the run stops and says which filing it was. The same goes for a filing that\nsays nothing about what it asked government for, because there is no ask to judge. This\nis plain code, not the model: reading a dollar figure has one right answer.\n\n## Step 2 — Put each promise beside the ask\n\nBring `public_commitment` and `commitment_source` onto every filing, matched on the\nclient name. Several filings can share one promise: the commitments file carries at\nmost one line for each organisation, and a repeat would fail the run rather than\nquietly multiply filings. No filing is dropped here. A filing whose client made no\ncommitment keeps every one of its own fields and carries a blank commitment — the\nabsence is the record, and the next step is told to read it as an absence rather\nthan as a judgment.\n\n## Step 3 — Judge the filing against the commitment (LLM)\n\nFor each filing, read the client's public commitment and this filing's ask together, and\nadd two fields — one filing in, one filing out (the filing is neither dropped nor duplicated):\n\n- `ai_judgment` — one of: Contradicts, Matches, Unclear, No commitment given. \"Contradicts\"\n  means this filing asks government for the opposite of what the client committed to.\n  \"No commitment given\" is the answer when the commitment field is blank. Every filing\n  gets one of the four and none is left blank: the absent-commitment case already has its\n  own label, so a blank would be a hole in what the report later prints rather than an\n  answer.\n- `ai_justification` — a single plain sentence naming what the client said and what this\n  filing asks for.\n\nThe model is given only these two texts, and is told not to use anything it knows about\nthe organisation and not to invent a commitment that is not in front of it. The step\nnames the model it runs on, so the run records which model answered rather than whichever\none the platform happened to default to that week.\n\nFilings are read up to twelve at a time in one model call — up to, because the last call\nof a run holds whatever is left over. This is a cost trade: one call carrying twelve\nfilings is far cheaper than twelve calls carrying one. What it costs is independence,\nsince the filings sharing a call are judged beside each other, so a filing's answer could\nbe swayed by the ones it happens to travel with.\n\n## Step 4 — Put every contradiction in front of a person\n\nA contradiction is the one judgment this workflow publishes as a finding, so the model's\nis not the one that gets published. Every filing the model called \"Contradicts\" is queued\nfor a human, and the run stops there — nothing below this\nstep runs until each queued filing has been decided.\n\nThe reviewer's card is exactly what this step reads: the filing and its client, the ask as\nfiled, the commitment as said, and the model's answer with the sentence behind it. Nothing\nelse the filing carries is on it, because nothing else decides the question. They record a\nlabel of their own in `reviewed_judgment`. The model's `ai_judgment` is\nleft exactly as the model wrote it, so what the model said and what the person decided are\nboth on the record afterwards. Beside their label the reviewer records the name they\nreviewed under, the moment they decided, and a note naming the words in the two texts they\ndecided from.\n\nThis step decides nothing itself. A queued filing with no recorded decision stays queued\nand the run stays stopped: there is no wait that expires and no label that stands in for\none nobody chose. A filing the model did not call a contradiction is not queued, is read\nby nobody, and passes through unchanged.\n\nAfter this step every filing carries `review_verdict`: \"approve\" where the reviewer kept\nthe model's label, \"modify\" where they changed it, and \"skipped\" for a filing no person\nwas asked about — so a judgment a person reviewed can be told from one only the model made.\n\n## Step 5 — Publish the report\n\nProduce a single HTML page listing every filing with client, registrant,\nreported spend, what the filing asked for, what the client committed to in public (or that\nno commitment is on record), and the judgment as it stands after review. The label the page\nprints is the reviewer's, not the model's: a filing whose reviewer changed the label is no\nlonger printed as a contradiction, and a contradiction they confirmed carries their name,\nthe time they reviewed it and the note they left. A filing shown as a contradiction also\nshows both sides side by side — the commitment as said, and the ask as filed — so the page\ncarries the contradiction itself rather than a bare label. A judgment recorded as reviewed\nwith nobody's name against it is not published at all: the step stops instead. No score, no\nranking and no recommendation: the report is a reading aid, not a verdict.\n\nEvery row also carries a link back through each stage that touched it to the filing it\ncame from, so a reader can check any line of the page against the run.\n\nThe page's markup and stylesheet live in the step that writes them, so a reviewer reads\nthe markup and the code that fills it together.\n\n## Out of scope\n\nNo external fetching, no filing dropped anywhere, and nothing paired twice — one\nclean, one pairing, one model read, one human review, one page.\n",
   "model": "sonnet",
   "source": "seed",
   "data_model": {
@@ -8,7 +8,7 @@
   },
   "stages": [
     {
-      "id": "raw_filings",
+      "id": "lobbying_filings",
       "type": "input_data",
       "description": "What Each Client Paid to Ask Government For",
       "inputs": [],
@@ -116,12 +116,12 @@
       }
     },
     {
-      "id": "check_filings",
+      "id": "clean_filings",
       "type": "python_row_function",
-      "description": "Check Each Filing Before Anything Reads It",
+      "description": "Clean Each Filing's Reported Spend Before Anything Reads It",
       "inputs": [
         {
-          "id": "raw_filings"
+          "id": "lobbying_filings"
         }
       ],
       "cache": true,
@@ -133,7 +133,7 @@
         "form": "extends",
         "reads": [
           {
-            "input": "raw_filings",
+            "input": "lobbying_filings",
             "columns": [
               {
                 "name": "filing_id",
@@ -165,7 +165,7 @@
         ]
       },
       "source": {
-        "section": "Step 1 — Check every filing before anything reads it"
+        "section": "Step 1 — Clean every filing's reported spend before anything reads it"
       },
       "function": {
         "kind": "inline",
@@ -196,7 +196,7 @@
           "name": "a spend written with a currency mark and separators",
           "description": "The bundled filing TUT-2024-0001 as it stands: '$185,000' is the number 185,000.",
           "inputs": {
-            "raw_filings": [
+            "lobbying_filings": [
               {
                 "filing_id": "TUT-2024-0001",
                 "amount_usd": "$185,000",
@@ -216,7 +216,7 @@
           "name": "a spend written as bare digits",
           "description": "Filing TUT-2024-0004, its spend rewritten '38500' — the same figure, no currency mark, no separators.",
           "inputs": {
-            "raw_filings": [
+            "lobbying_filings": [
               {
                 "filing_id": "TUT-2024-0004",
                 "amount_usd": "38500",
@@ -236,7 +236,7 @@
           "name": "a filing whose spend is blank",
           "description": "Filing TUT-2024-0009 with its spend emptied: a blank is not a figure, so the step must stop the run rather than pass one on.",
           "inputs": {
-            "raw_filings": [
+            "lobbying_filings": [
               {
                 "filing_id": "TUT-2024-0009",
                 "amount_usd": "",
@@ -250,7 +250,7 @@
           "name": "a filing whose spend reads n/a",
           "description": "Filing TUT-2024-0017 with its spend rewritten 'n/a': text nobody can read as dollars, so the step must stop the run.",
           "inputs": {
-            "raw_filings": [
+            "lobbying_filings": [
               {
                 "filing_id": "TUT-2024-0017",
                 "amount_usd": "n/a",
@@ -264,7 +264,7 @@
           "name": "a filing with no account of what it asked for",
           "description": "Filing TUT-2024-0020 with its issues line emptied: there is no ask to weigh against a commitment, so the step must stop the run.",
           "inputs": {
-            "raw_filings": [
+            "lobbying_filings": [
               {
                 "filing_id": "TUT-2024-0020",
                 "amount_usd": "$156,000",
@@ -277,12 +277,12 @@
       ]
     },
     {
-      "id": "matched_commitments",
+      "id": "filings_with_commitments",
       "type": "enrich",
       "description": "Put Each Promise Beside the Ask",
       "inputs": [
         {
-          "id": "check_filings"
+          "id": "clean_filings"
         },
         {
           "id": "public_commitments"
@@ -298,7 +298,7 @@
         "form": "extends",
         "reads": [
           {
-            "input": "check_filings",
+            "input": "clean_filings",
             "columns": [
               {
                 "name": "client",
@@ -366,7 +366,7 @@
       "description": "Judge the Filing's Ask Against the Public Commitment",
       "inputs": [
         {
-          "id": "matched_commitments"
+          "id": "filings_with_commitments"
         }
       ],
       "cache": true,
@@ -380,7 +380,7 @@
         "form": "extends",
         "reads": [
           {
-            "input": "matched_commitments",
+            "input": "filings_with_commitments",
             "columns": [
               {
                 "name": "client",
@@ -546,7 +546,7 @@
       },
       "queue": {
         "filter": "ai_judgment == 'Contradicts'",
-        "reviewer_instructions": "You're here to judge whether an organisation publicly committed to something and then lobbied in a way that contradicts that commitment. You are the last reader before this filing is published as a contradiction, and the report will carry your name against it. Read the commitment as said and the ask as filed, and decide from those two texts — the model's label is a suggestion, and agreeing with one you have not checked is how a wrong finding gets published under your name. Keep 'Contradicts' only if this filing asks government for the opposite of what the client promised; otherwise change it to the label that fits. Then say in the note which words in the two texts you decided from.",
+        "reviewer_instructions": "Review whether this filing's ask contradicts the organisation's public commitment. Select Contradicts if it does, Unclear if you're not sure, or Matches if the ask aligns with their public commitment. Add a note on how you reached your conclusion.",
         "reviewed_columns": {
           "ai_judgment": "reviewed_judgment"
         },

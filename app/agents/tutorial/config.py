@@ -25,6 +25,10 @@ CONFIG = AgentConfig(
     system_prompt=TUTORIAL_SYSTEM_PROMPT,
     context_schema=TutorialContext,
     opening_prompt=TUTORIAL_OPENING_PROMPT,
+    # The tour's turns are short and its tool sequence is dictated by the prompt —
+    # there is nothing here for a reasoning block to earn, and the greeting turn
+    # should read as a message, not a pause.
+    thinking={"type": "disabled"},
 )
 
 

@@ -11,13 +11,17 @@ from typing import Any, Callable
 from claude_agent_sdk import McpSdkServerConfig, SdkMcpTool, create_sdk_mcp_server, tool
 from pydantic import BaseModel, ConfigDict
 
-from app.core.agent.sdk_engine import MCP_SERVER_NAME, ClaudeAgentSdkEngine
+from app.core.agent.sdk_engine import MCP_SERVER_NAME, ClaudeAgentSdkEngine, ThinkingConfig
 from app.core.agent.bound_tool import BoundToolSpec
 
 
 class AgentConfig(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
     system_prompt: str
+    # None leaves the CLI's own default in place. A scripted agent whose replies
+    # are short and whose tool sequence the prompt already dictates has nothing
+    # for a reasoning block to earn — {"type": "disabled"} skips straight to text.
+    thinking: ThinkingConfig | None = None
     model: str = "sonnet"
     context_schema: type[BaseModel]
     # Labels for tools this agent does not own — e.g. the CLI's own ToolSearch
@@ -60,6 +64,7 @@ def build_engine(agent_id: str, context: dict[str, Any]) -> ClaudeAgentSdkEngine
         allowed_tools=allowed,
         tool_labels={s.name: s.label for s in specs} | config.extra_tool_labels,
         model=config.model,
+        thinking=config.thinking,
     )
 
 
