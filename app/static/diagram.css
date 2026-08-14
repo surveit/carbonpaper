@@ -81,7 +81,12 @@
       not the viewport, so the controls and the survey line come with it. ── */
 .diagram-survey { display: none; }
 .diagram-block:fullscreen { background: var(--bg); padding: 10px 14px; }
-.diagram-block:fullscreen .diagram-viewport { height: calc(100vh - 96px); max-height: none; }
+/* align-content, not flex: making the viewport a flex container lets its `pre` shrink
+   to the box width, and a wide graph then overflows it CENTRED — half the graph ends up
+   left of the scroll origin, where no scrollLeft can reach it. `safe` so a reader who
+   zooms back past the box still gets top-start alignment and can scroll to the corner. */
+.diagram-block:fullscreen .diagram-viewport { height: calc(100vh - 96px); max-height: none;
+    align-content: safe center; }
 .diagram-block:fullscreen .diagram-survey { display: flex; gap: 20px; flex-wrap: wrap;
     align-items: baseline; font-size: 12.5px; padding-top: 9px; margin-top: 9px;
     border-top: 1px solid var(--border); }

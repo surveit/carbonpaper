@@ -16,6 +16,7 @@
  *
  * data-zoom-floor on the viewport sets the smallest scale fit-to-width may choose, so a
  * short band can hold a wide graph at a readable size and pan instead of shrinking it.
+ * Fullscreen ignores the floor and fits the whole graph on both axes, centred.
  *
  * The page must call mermaid.initialize({ startOnLoad: false, ... }) BEFORE loading this
  * file; boot() renders the diagrams then wires each viewport. A caller that re-renders a
@@ -31,14 +32,16 @@
     var block = vp.closest(".diagram-block") || document;
     // zoomFloor is the smallest scale this viewport considers legible: fit-to-width
     // will not go below it, and focusing a node lifts a smaller scale up to it.
-    var svg = null, baseW = 1000, scale = 1;
+    var svg = null, baseW = 1000, baseH = 800, scale = 1;
     var zoomFloor = Number(vp.dataset.zoomFloor) || 0;
+    var MIN_SCALE = 0.1, MAX_SCALE = 8, PAD = 24;
 
     function grabSvg() {
       svg = vp.querySelector("svg");
       if (!svg) return false;
       var vb = (svg.getAttribute("viewBox") || "0 0 1000 800").split(/\s+/).map(Number);
       baseW = vb[2] || svg.getBoundingClientRect().width || 1000;
+      baseH = vb[3] || svg.getBoundingClientRect().height || 800;
       svg.style.maxWidth = "none";   // defeat mermaid useMaxWidth so zoom is real
       svg.style.height = "auto";
       return true;
@@ -49,13 +52,31 @@
       // Collapse the svg FIRST so the diagram's own width can't inflate the viewport
       // (its container is content-sized in some layouts); then measure the real width.
       svg.style.width = "0px";
-      scale = Math.max(zoomFloor, Math.min(1, (vp.clientWidth - 24) / baseW));
+      scale = Math.max(zoomFloor, Math.min(1, (vp.clientWidth - PAD) / baseW));
       apply();
+    }
+    // Fullscreen is the survey: fit the whole graph on BOTH axes and park it in the
+    // middle. The zoom floor is not honoured here — it exists to stop a 200px band
+    // shrinking a graph below legibility, and a screen that holds all of it has no
+    // such trade to make.
+    function fitWholeGraph() {
+      if (!svg) return;
+      svg.style.width = "0px";
+      scale = Math.max(MIN_SCALE, Math.min(
+        1, (vp.clientWidth - PAD) / baseW, (vp.clientHeight - PAD) / baseH));
+      apply();
+      centreInViewport();
+    }
+    // Vertical centring of a graph SMALLER than the box is CSS (align-content on the
+    // fullscreened viewport); this handles the other case, where it still overflows.
+    function centreInViewport() {
+      vp.scrollLeft = (vp.scrollWidth - vp.clientWidth) / 2;
+      vp.scrollTop = (vp.scrollHeight - vp.clientHeight) / 2;
     }
     function zoom(f) {
       if (!svg) return;
       var cx = vp.scrollLeft + vp.clientWidth / 2, cy = vp.scrollTop + vp.clientHeight / 2;
-      scale = Math.min(8, Math.max(0.1, scale * f)); apply();
+      scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale * f)); apply();
       vp.scrollLeft = cx * f - vp.clientWidth / 2; vp.scrollTop = cy * f - vp.clientHeight / 2;
     }
 
@@ -134,14 +155,34 @@
       else if (fsEl.requestFullscreen) fsEl.requestFullscreen();
     });
     document.addEventListener("fullscreenchange", function () {
-      if (document.fullscreenElement === fsEl) fit();   // fullscreen changed clientWidth
+      // Both dimensions change, so re-fit either way. On the way out the band would
+      // otherwise keep a scale chosen for a whole screen, which is unreadable in 200px.
+      if (document.fullscreenElement === fsEl) fitWholeGraph();
+      else if (!document.fullscreenElement) fit();
     });
 
     // ⌘/Ctrl + wheel = zoom; plain wheel = native scroll.
+    //
+    // The step follows the gesture's SIZE, not only its sign. A trackpad pinch fires a
+    // stream of small-delta events, and a flat per-event step spent a full 10% on each
+    // one, so the graph shot past the scale being reached for. A firm scroll still lands
+    // near that 10%; a light one now moves about 1%.
+    var ZOOM_PER_WHEEL_PIXEL = 0.0025, WHEEL_PIXEL_CAP = 40;
     vp.addEventListener("wheel", function (e) {
       if (!(e.ctrlKey || e.metaKey)) return;
-      e.preventDefault(); zoom(e.deltaY < 0 ? 1.1 : 0.9);
+      e.preventDefault();
+      var px = readWheelPixels(e);
+      zoom(Math.exp(-Math.max(-WHEEL_PIXEL_CAP, Math.min(WHEEL_PIXEL_CAP, px))
+                    * ZOOM_PER_WHEEL_PIXEL));
     }, { passive: false });
+
+    // deltaY is in pixels only when deltaMode is 0. A line- or page-mode wheel reports 3
+    // or 1, which a size-sensitive step would otherwise read as a barely-there nudge.
+    function readWheelPixels(e) {
+      if (e.deltaMode === 1) return e.deltaY * 16;                // lines
+      if (e.deltaMode === 2) return e.deltaY * vp.clientHeight;    // pages
+      return e.deltaY;
+    }
 
     // Drag to pan — WITHOUT stealing clicks. Panning engages only after the pointer
     // moves past a small threshold, and captures the pointer only THEN. A plain click
