@@ -19,7 +19,7 @@ _FIXTURE_PATH = (
 )
 # The one stage of the tour's workflow whose type may carry tests, and the examples
 # seeded on it — the count is the fixture's, read back rather than restated.
-_TESTED_STAGE = "check_filings"
+_TESTED_STAGE = "clean_filings"
 
 
 @pytest.fixture
@@ -41,7 +41,7 @@ def test_a_patch_carrying_tests_leaves_the_stored_ones_untouched(tour_project):
     assert seeded, "the fixture is supposed to ship examples on this stage"
     forged = [{
         "name": "written by the client, not the generator",
-        "inputs": {"raw_filings": [{"filing_id": "X"}]},
+        "inputs": {"lobbying_filings": [{"filing_id": "X"}]},
         "expected": None,
     }]
 

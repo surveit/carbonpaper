@@ -1,8 +1,8 @@
 {
   "id": "alignment_hard_cases",
   "name": "Hard say-versus-do judgments",
-  "description": "Twenty-four invented filings, most of them ambiguous rather than merely hard to read: a broad aspirational promise met by an ask that is arguably in service of it and arguably beside it, a promise about the client's own operations met by an ask about what everyone else should be required to do, an ask sitting just inside a promise's carve-out and another sitting just outside it, an ask that would cut emissions on one timescale and raise them on another, and one that asks government for exactly what the promise says while backing the later of two effective dates. Beside them a handful of plain cases — a supportive-sounding ask that pushes a coal retirement past the promised date, a negation stacked two deep, an ask buried in a list of bill numbers — and three filings whose client matched no commitment row at all, one of them naming a climate plan of its own. Each expected label was read off Step 3's four definitions before the workflow was run, and none was changed afterwards, so a disagreement here is a finding rather than a mislabel.",
-  "override_stage": "matched_commitments",
+  "description": "24 invented filings, most deliberately ambiguous rather than merely hard to read. Each expected label was fixed from Step 3's four definitions before the workflow ran, so a disagreement here is a finding, not a mislabel.",
+  "override_stage": "filings_with_commitments",
   "target_stage": "judge_alignment",
   "expected_outputs": [
     {"output_column": "ai_judgment", "metric": "exact"}

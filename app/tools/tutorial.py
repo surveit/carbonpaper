@@ -35,7 +35,7 @@ _EVAL = _DATA_DIR / "evals" / f"{_FIXTURE_STEM}.json"
 # The fixture carries no path for these — a committed file cannot know where the
 # workspace is — so each run says which file its input stage reads.
 _CSV_BY_STAGE_ID = {
-    "raw_filings": _DATA_DIR / f"{_FIXTURE_STEM}.csv",
+    "lobbying_filings": _DATA_DIR / f"{_FIXTURE_STEM}.csv",
     "public_commitments": _DATA_DIR / "tutorial_public_commitments.csv",
 }
 

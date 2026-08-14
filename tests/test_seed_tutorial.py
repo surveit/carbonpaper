@@ -37,16 +37,16 @@ _FIXTURE_PATH = (
 )
 _CSV_PATH = _FIXTURE_PATH.with_suffix(".csv")
 _COMMITMENTS_PATH = _FIXTURE_PATH.parent / "tutorial_public_commitments.csv"
-_CSV_BY_STAGE_ID = {"raw_filings": _CSV_PATH, "public_commitments": _COMMITMENTS_PATH}
+_CSV_BY_STAGE_ID = {"lobbying_filings": _CSV_PATH, "public_commitments": _COMMITMENTS_PATH}
 _GUIDE_PATH = _FIXTURE_PATH.parent / "review_guides" / _FIXTURE_PATH.name
 # Long enough to say what to check, short enough that the check is what is read.
 _GUIDE_PROSE_CEILING = 210
 
 _EXPECTED_STAGE_IDS = [
-    "raw_filings",
+    "lobbying_filings",
     "public_commitments",
-    "check_filings",
-    "matched_commitments",
+    "clean_filings",
+    "filings_with_commitments",
     "judge_alignment",
     "review_contradictions",
     "publish_report",
@@ -58,9 +58,9 @@ _COMMITMENT_ROWS = 15
 # Filings whose client has no row in the commitments file.
 _UNMATCHED = 8
 _BATCH_SIZE = 12
-# The cap the tour's first run passes as limits {"raw_filings": N}.
+# The cap the tour's first run passes as limits {"lobbying_filings": N}.
 _TOUR_LIMIT = 3
-# Authored on check_filings, the one stage of this workflow that may carry them.
+# Authored on clean_filings, the one stage of this workflow that may carry them.
 _SEEDED_EXAMPLES = 5
 
 _CONTRADICTS = "Contradicts"
@@ -77,7 +77,7 @@ _REVIEWED_AT = "2024-05-06T11:20:00"
 
 _EVAL_PATH = _FIXTURE_PATH.parent / "evals" / _FIXTURE_PATH.name
 _EVAL_ID = "alignment_hard_cases"
-_OVERRIDE_STAGE = "matched_commitments"
+_OVERRIDE_STAGE = "filings_with_commitments"
 _TARGET_STAGE = "judge_alignment"
 _JUDGED_COLUMN = "ai_judgment"
 # Counted off the committed eval dataset.
@@ -108,16 +108,16 @@ def _all_filings() -> pd.DataFrame:
 
 def _checked(filings: pd.DataFrame | None = None) -> pd.DataFrame:
     return _execute(
-        _stage(_load_fixture(), "check_filings"),
-        {"raw_filings": _all_filings() if filings is None else filings},
+        _stage(_load_fixture(), "clean_filings"),
+        {"lobbying_filings": _all_filings() if filings is None else filings},
     )
 
 
 def _joined() -> pd.DataFrame:
     return _execute(
-        _stage(_load_fixture(), "matched_commitments"),
+        _stage(_load_fixture(), "filings_with_commitments"),
         {
-            "check_filings": _checked(),
+            "clean_filings": _checked(),
             "public_commitments": pd.read_csv(_COMMITMENTS_PATH),
         },
     )
@@ -200,13 +200,13 @@ def test_the_texts_are_short_enough_to_read_side_by_side():
 
 
 def test_the_tours_capped_run_covers_a_contradiction_a_match_and_a_non_match():
-    """Beat 2 caps raw_filings, so all three outcomes must be inside the cap."""
+    """Beat 2 caps lobbying_filings, so all three outcomes must be inside the cap."""
     wf = _load_fixture()
     capped = pd.read_csv(_CSV_PATH).head(_TOUR_LIMIT)
 
     joined = _execute(
-        _stage(wf, "matched_commitments"),
-        {"check_filings": _checked(capped),
+        _stage(wf, "filings_with_commitments"),
+        {"clean_filings": _checked(capped),
          "public_commitments": pd.read_csv(_COMMITMENTS_PATH)},
     )
 
@@ -253,12 +253,12 @@ def test_an_unmatched_filing_survives_with_a_blank_commitment():
 
 
 def test_a_repeated_commitment_row_fails_the_run_rather_than_multiplying_filings():
-    stage = _stage(_load_fixture(), "matched_commitments")
+    stage = _stage(_load_fixture(), "filings_with_commitments")
     commitments = pd.read_csv(_COMMITMENTS_PATH)
     doubled = pd.concat([commitments, commitments.head(1)], ignore_index=True)
 
     with pytest.raises(ValueError, match="public_commitments"):
-        _execute(stage, {"check_filings": _checked(), "public_commitments": doubled})
+        _execute(stage, {"clean_filings": _checked(), "public_commitments": doubled})
 
 
 # ── the check ────────────────────────────────────────────────────────────────
@@ -275,7 +275,7 @@ def test_every_committed_filing_carries_a_spend_the_check_can_read():
     ]
 
 
-def test_check_filings_is_grain_preserving_and_touches_nothing_else():
+def test_clean_filings_is_grain_preserving_and_touches_nothing_else():
     checked = _checked()
     filings = _all_filings()
 
@@ -299,12 +299,12 @@ def test_the_seeded_examples_pass_before_anything_has_been_run():
 
 def test_every_seeded_example_is_one_of_the_bundled_filings():
     """An invented row reads as fabrication; each case names a filing in the committed CSV."""
-    tests = _stage(_load_fixture(), "check_filings").tests or []
+    tests = _stage(_load_fixture(), "clean_filings").tests or []
     filing_ids = set(_all_filings()["filing_id"])
 
     assert len(tests) == _SEEDED_EXAMPLES
     for test in tests:
-        row = test.inputs["raw_filings"][0]
+        row = test.inputs["lobbying_filings"][0]
         assert row["filing_id"] in filing_ids, test.name
 
 
@@ -387,7 +387,7 @@ def test_the_methodology_document_admits_the_data_is_invented():
 
 
 def test_the_tours_capped_run_is_one_model_call():
-    # What the tour's small run costs: beat 2 caps raw_filings.
+    # What the tour's small run costs: beat 2 caps lobbying_filings.
     df = pd.read_csv(_CSV_PATH).head(_TOUR_LIMIT)
 
     assert len(df) <= _BATCH_SIZE
@@ -692,10 +692,10 @@ def test_the_queue_is_worked_in_the_order_the_filings_arrived():
 def test_the_reviewer_is_told_what_they_are_here_to_decide_before_anything_else():
     instructions = _review_stage().queue.reviewer_instructions or ""
 
-    assert instructions.startswith("You're here to judge whether an organisation")
-    assert "publicly committed" in instructions and "contradicts" in instructions
-    assert "the model's label is" in instructions
-    assert "which words in the two texts you decided from" in instructions
+    assert instructions.startswith("Review whether this filing's ask contradicts")
+    assert "public commitment" in instructions and "Contradicts" in instructions
+    assert "Unclear" in instructions and "Matches" in instructions
+    assert "Add a note" in instructions
 
 
 def test_the_card_carries_the_decision_and_nothing_else():
@@ -715,8 +715,8 @@ def test_the_card_carries_the_decision_and_nothing_else():
 def test_the_tours_capped_run_leaves_one_filing_asking_the_opposite_of_a_promise():
     """Beat 2's capped run is meant to queue a card or two: real, and finishable."""
     joined = _execute(
-        _stage(_load_fixture(), "matched_commitments"),
-        {"check_filings": _checked(pd.read_csv(_CSV_PATH).head(_TOUR_LIMIT)),
+        _stage(_load_fixture(), "filings_with_commitments"),
+        {"clean_filings": _checked(pd.read_csv(_CSV_PATH).head(_TOUR_LIMIT)),
          "public_commitments": pd.read_csv(_COMMITMENTS_PATH)},
     )
     against_a_promise = joined[
