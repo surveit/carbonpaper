@@ -1,8 +1,8 @@
 /* The agent chat at /chat: the session index, the message log, and the docked composer. */
 
-:root { --chat-column: 720px; --reply-measure: 32em; }
-/* The old column, for comparison. `none` because the reply used to fill it. */
-:root[data-theme="classic"] { --chat-column: 1080px; --reply-measure: none; }
+:root { --chat-column: 1280px; }
+/* The old column, for comparison. */
+:root[data-theme="classic"] { --chat-column: 1080px; }
 
 /* ═══ The session index (chat_index.html) ═══ */
 .ac-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
@@ -13,7 +13,7 @@
    ＋ New project sits flush with the h1's top. */
 .ac-new { margin-left: auto; align-self: flex-start; }
 
-.ac-sessions { list-style: none; padding: 0; max-width: 1080px; }
+.ac-sessions { list-style: none; padding: 0; max-width: 1280px; }
 .ac-session { border: 1px solid var(--border); border-radius: 8px; background: var(--raised);
     padding: 10px 12px; margin: 6px 0; }
 .ac-session a { text-decoration: none; font-weight: 500; }
@@ -22,10 +22,9 @@
 /* ═══ The transcript (chat.html) ═══ */
 /* --chat-column is the conversation's width wherever it is drawn — the log, the
    composer under it, the attachment row and the popover all read it, so the
-   column cannot drift apart from the box you type into. 720px rather than main's
-   1500: at 1080 a reply ran 162 characters to the line (measured, not estimated —
-   the interface sans averages 6.66px a character at 15px), well over twice what is
-   comfortable, and the tour is the longest stretch of prose in the app.
+   column cannot drift apart from the box you type into. 1280px rather than main's
+   1500: replies carry code blocks, specs and tables that want the width, and the
+   margin left over keeps the column reading as a column inside the page.
    The composer is fixed to the viewport, so the log's own bottom padding is what
    keeps the last turn clear of it. */
 .ac-log { max-width: var(--chat-column); margin: 0 auto; padding: 8px 0 128px;
@@ -48,15 +47,6 @@
    returning. A user bubble is always plain text. */
 .ac-body.ac-streaming, .ac-msg.user .ac-body { white-space: pre-wrap; }
 
-/* The column is 720px but the reply is capped tighter: about 72 characters is the
-   line a person reads without losing their place, and the width left over goes to
-   the things that need it — a table, a code block, a long link — which overflow
-   this cap rather than being squeezed to it.
-   NOT in `ch`. That unit is the advance of "0", and Georgia's zero is 10.14px
-   against an average of 7.27px measured over real prose at this size — 39% wide.
-   `68ch` here renders as 689px, which is 95 characters, not 68. em is off the font
-   size, so it does not inherit that lie: 32em is 528px is ~72 characters. */
-.ac-msg.assistant .ac-body { max-width: var(--reply-measure); }
 .ac-msg.assistant .ac-body > :first-child { margin-top: 0; }
 .ac-msg.assistant .ac-body > :last-child { margin-bottom: 0; }
 .ac-msg.assistant .ac-body p,
