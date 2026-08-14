@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from app.models import parse_stage
-from app.web.diagrams import build_mermaid_graph
+from app.web.diagrams import _NODE_SURFACE, build_mermaid_graph
 
 
 def test_cancelled_stage_gets_glyph_and_grey_stroke() -> None:
@@ -33,7 +33,10 @@ def test_plain_stage_with_no_status_renders_the_bare_node() -> None:
     assert 'click s1 call dvNode("s1") "Stage One"' in graph   # description is the tooltip
     assert "]:::input" in graph
     assert "stroke:" not in graph.split("classDef")[0]
-    assert "    classDef input fill:#fdfdfe,stroke:#e9e9eb,color:#24272b" in graph
+    # The surface itself is pinned to palette.css by
+    # tests/arch/test_status_colour_contract.py; what this line checks is that an
+    # unstyled node is drawn ON it, so it reads the value rather than copying it.
+    assert f"    classDef input {_NODE_SURFACE}" in graph
 
 
 def test_every_node_class_gets_the_same_neutral_surface() -> None:

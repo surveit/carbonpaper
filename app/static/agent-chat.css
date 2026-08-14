@@ -1,5 +1,9 @@
 /* The agent chat at /chat: the session index, the message log, and the docked composer. */
 
+:root { --chat-column: 720px; --reply-measure: 32em; }
+/* The old column, for comparison. `none` because the reply used to fill it. */
+:root[data-theme="classic"] { --chat-column: 1080px; --reply-measure: none; }
+
 /* ═══ The session index (chat_index.html) ═══ */
 .ac-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
 
@@ -16,11 +20,16 @@
 .ac-session-meta { color: var(--muted); font-size: 12px; }
 
 /* ═══ The transcript (chat.html) ═══ */
-/* 1080px rather than main's 1500: a reading measure for prose. The composer is
-   fixed to the viewport, so the log's own bottom padding is what keeps the last
-   turn clear of it. */
-.ac-log { max-width: 1080px; margin: 0 auto; padding: 8px 0 128px;
-    display: flex; flex-direction: column; gap: 20px; }
+/* --chat-column is the conversation's width wherever it is drawn — the log, the
+   composer under it, the attachment row and the popover all read it, so the
+   column cannot drift apart from the box you type into. 720px rather than main's
+   1500: at 1080 a reply ran 162 characters to the line (measured, not estimated —
+   the interface sans averages 6.66px a character at 15px), well over twice what is
+   comfortable, and the tour is the longest stretch of prose in the app.
+   The composer is fixed to the viewport, so the log's own bottom padding is what
+   keeps the last turn clear of it. */
+.ac-log { max-width: var(--chat-column); margin: 0 auto; padding: 8px 0 128px;
+    display: flex; flex-direction: column; gap: 28px; }
 
 /* Who spoke, for a screen reader only. On the page the grey bubble hard right and
    the unboxed prose under it already say it, so the label was a third row of
@@ -29,33 +38,53 @@
    label used to. */
 .ac-role { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
     overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
-.ac-body { word-wrap: break-word; }
+/* What either party actually said, and the longest stretch of reading in the app —
+   so this is the prose face, not the interface one. Everything AROUND it stays
+   sans: the tool lines, the composer, a table inside a reply. */
+.ac-body { word-wrap: break-word; font-family: var(--prose);
+    font-size: var(--prose-size); line-height: var(--prose-lh); }
 /* Assistant replies are rendered markdown; .ac-streaming is the plain-text bubble
    held mid-turn, before the swap at `done`. A user bubble is always plain text. */
 .ac-body.ac-streaming, .ac-msg.user .ac-body { white-space: pre-wrap; }
 
+/* The column is 720px but the reply is capped tighter: about 72 characters is the
+   line a person reads without losing their place, and the width left over goes to
+   the things that need it — a table, a code block, a long link — which overflow
+   this cap rather than being squeezed to it.
+   NOT in `ch`. That unit is the advance of "0", and Georgia's zero is 10.14px
+   against an average of 7.27px measured over real prose at this size — 39% wide.
+   `68ch` here renders as 689px, which is 95 characters, not 68. em is off the font
+   size, so it does not inherit that lie: 32em is 528px is ~72 characters. */
+.ac-msg.assistant .ac-body { max-width: var(--reply-measure); }
 .ac-msg.assistant .ac-body > :first-child { margin-top: 0; }
 .ac-msg.assistant .ac-body > :last-child { margin-bottom: 0; }
 .ac-msg.assistant .ac-body p,
 .ac-msg.assistant .ac-body ul,
-.ac-msg.assistant .ac-body ol { margin: 0 0 10px; }
+.ac-msg.assistant .ac-body ol { margin: 0 0 14px; }
 .ac-msg.assistant .ac-body ul, .ac-msg.assistant .ac-body ol { padding-left: 22px; }
-.ac-msg.assistant .ac-body li { margin: 2px 0; }
+.ac-msg.assistant .ac-body li { margin: 6px 0; }
 .ac-msg.assistant .ac-body a { color: var(--info-bd); }
-.ac-msg.assistant .ac-body code { font-family: ui-monospace, monospace; font-size: 12px;
+.ac-msg.assistant .ac-body code { font-family: var(--mono); font-size: 13px;
     background: var(--sunk-deep); border: 1px solid var(--border); border-radius: 4px;
     padding: 1px 4px; }
-.ac-msg.assistant .ac-body pre { font-family: ui-monospace, monospace; font-size: 12px;
+.ac-msg.assistant .ac-body pre { font-family: var(--mono); font-size: 13px;
     background: var(--sunk-deep); border: 1px solid var(--border); border-radius: 6px;
     padding: 8px 10px; overflow-x: auto; }
 .ac-msg.assistant .ac-body pre code { background: none; border: none; padding: 0; }
-.ac-msg.assistant .ac-body blockquote { margin: 0 0 10px; padding-left: 10px;
+.ac-msg.assistant .ac-body blockquote { margin: 0 0 14px; padding-left: 10px;
     color: var(--muted); border-left: 3px solid var(--border-strong); }
-.ac-msg.assistant .ac-body h1,
-.ac-msg.assistant .ac-body h2,
-.ac-msg.assistant .ac-body h3 { font-size: 15px; margin: 12px 0 6px; }
+/* All three used to be 15px — body size — so a reply's structure was invisible and
+   a long turn read as one undifferentiated column. They take the same shape the
+   rest of the app gives them: h1/h2 stay in the prose face and lead by size, h3 is
+   the sans eyebrow base.css uses everywhere else. Separating them by VOICE as well
+   as size is what lets them stay this small inside a reply. */
+.ac-msg.assistant .ac-body h1 { font-size: 19px; font-weight: 600; margin: 22px 0 6px; }
+.ac-msg.assistant .ac-body h2 { font-size: 17px; font-weight: 600; margin: 20px 0 6px; }
+.ac-msg.assistant .ac-body h3 { font-family: var(--ui); font-size: 11.5px;
+    text-transform: uppercase; letter-spacing: .08em; color: var(--muted);
+    font-weight: 700; margin: 20px 0 6px; }
 .ac-msg.assistant .ac-body table { border-collapse: collapse; font-size: 13px;
-    margin: 0 0 10px; }
+    font-family: var(--ui); margin: 0 0 14px; }
 .ac-msg.assistant .ac-body th,
 .ac-msg.assistant .ac-body td { border: 1px solid var(--border); padding: 3px 7px; }
 
@@ -102,7 +131,7 @@
 /* The reply is a different kind of thing from the calls above it, and now that
    neither one is tinted, the gap is the only thing left saying so. */
 .ac-tool + .ac-body { margin-top: 12px; }
-.ac-tool-json { font-family: ui-monospace, monospace; font-size: 11px; color: var(--muted);
+.ac-tool-json { font-family: var(--mono); font-size: 11px; color: var(--muted);
     background: var(--sunk); border: 1px solid var(--border); border-radius: 6px;
     padding: 6px 9px; margin: 4px 0 6px; white-space: pre-wrap; overflow-x: auto; }
 .ac-tool-label { font-size: 10px; text-transform: uppercase; letter-spacing: .04em;
@@ -130,14 +159,14 @@
 /* ═══ The composer ═══ */
 /* Fixed to the viewport bottom: main is a scrolling document with no height
    contract, so a full-height flex shell would mean scoping 100vh onto this page
-   alone. The inner row holds the log's 1080px so the two line up. */
+   alone. The inner row holds the log's --chat-column so the two line up. */
 .ac-dock { position: fixed; bottom: 0; left: 0; right: 0; background: var(--raised);
     border-top: 1px solid var(--border); }
 /* 28px, main's own side padding: below the width the column can hold, the row
    then narrows exactly as the log above it does instead of drifting wider. */
 /* Bottom-aligned: the message box grows upward with what is typed, and the buttons
    beside it stay on the last line rather than stretching with it. */
-.ac-composer { max-width: 1080px; margin: 0 auto; padding: 10px 28px; display: flex;
+.ac-composer { max-width: var(--chat-column); margin: 0 auto; padding: 10px 28px; display: flex;
     gap: 8px; align-items: flex-end; --ac-control: 44px; }
 /* The three controls rest at one declared height — a floor clearing every one's own content
    box, so the row's top edge stays straight while the message box grows past it. */
@@ -163,11 +192,11 @@
     border: 1px solid var(--border); border-radius: 8px; background: var(--sunk-deep);
     cursor: pointer; }
 .ac-clip:hover { border-color: var(--border-strong); }
-.ac-attached { max-width: 1080px; margin: 0 auto; padding: 8px 28px 0; font-size: 12.5px;
-    color: var(--muted); font-family: ui-monospace, monospace; }
+.ac-attached { max-width: var(--chat-column); margin: 0 auto; padding: 8px 28px 0; font-size: 12.5px;
+    color: var(--muted); font-family: var(--mono); }
 /* Above the composer rather than over the log: it belongs to what is being composed,
    and a question the reader can scroll away from is one they can miss. */
-.ac-pop { max-width: 1080px; margin: 0 auto; padding: 10px 28px; }
+.ac-pop { max-width: var(--chat-column); margin: 0 auto; padding: 10px 28px; }
 .ac-pop-head { font-size: 12.5px; color: var(--muted); margin-bottom: 6px; }
 .ac-choice { display: block; width: 100%; text-align: left; font: inherit; font-size: 13px;
     padding: 8px 11px; margin-bottom: 5px; cursor: pointer; border: 1px solid var(--border);
@@ -199,8 +228,10 @@
     border: 1px solid var(--border-strong); border-radius: 999px;
     background: var(--raised); }
 .ac-file-icon { color: var(--muted); }
-.ac-file-name { font-family: ui-monospace, monospace; font-size: 12.5px; font-weight: 600; }
-.ac-file-meta { font-size: 11.5px; color: var(--muted); }
+.ac-file-name { font-family: var(--mono); font-size: 12.5px; font-weight: 600; }
+/* A chip is furniture, not something anyone reads at length, so it stays in the
+   interface face even though it is drawn with .ac-body's markup. */
+.ac-file-meta { font-family: var(--ui); font-size: 11.5px; color: var(--muted); }
 /* The chip is the bubble: the grey ground and padding a typed message gets would put a
    second shape around it. */
 .ac-msg.user .ac-body.ac-file { background: var(--raised); padding: 7px 12px;

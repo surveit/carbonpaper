@@ -35,7 +35,7 @@
 
 .emit-card .ec-kind { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); }
 
-.emit-card .ec-name { font-family: ui-monospace, monospace; font-weight: 600; font-size: 13px; }
+.emit-card .ec-name { font-family: var(--mono); font-weight: 600; font-size: 13px; }
 
 .emit-card .ec-ok { color: var(--good-bd); font-size: 11px; }
 
@@ -43,7 +43,7 @@
 
 .emit-card .ec-issues { margin: 6px 0 0; padding-left: 18px; }
 
-.emit-card .ec-issues li { color: var(--bad-bd); font-family: ui-monospace, monospace; font-size: 11px; }
+.emit-card .ec-issues li { color: var(--bad-bd); font-family: var(--mono); font-size: 11px; }
 
 .chat-input-row { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
 
@@ -92,7 +92,7 @@
     background: var(--code-deep); color: var(--code-fg);
     border: 1px solid var(--fg); border-radius: 5px; padding: 10px 12px; margin-top: 8px;
     font-size: 12px; line-height: 1.5;
-    font-family: "SFMono-Regular", "Consolas", "Liberation Mono", Menlo, monospace;
+    font-family: var(--mono);
     white-space: pre; overflow: auto; tab-size: 2; }
 
 .schema-edit-textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
@@ -110,7 +110,7 @@
 
 .se-issues[hidden] { display: none; }
 
-.se-issues li { color: var(--bad-ink); font-family: "SFMono-Regular", "Consolas", monospace; font-size: 12px; margin: 2px 0; }
+.se-issues li { color: var(--bad-ink); font-family: var(--mono); font-size: 12px; margin: 2px 0; }
 
 /* Document (read-only prose) — same look compile_flow.html's step 1 used. */
 .doc-prose { background: var(--raised); border: 1px solid var(--border); border-radius: 8px;
