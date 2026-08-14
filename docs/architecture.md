@@ -60,7 +60,7 @@ hands them in. A run's per-stage connector bindings are merged by
 hold bare stages. `app/services/run.py` is the one place that composes this, and an
 import-linter contract keeps `runner.py` free of `app.services` so the arrow between the two
 points one way; `app/cli.py` drives that same seam. Per stage: validate
-inputs, reject duplicate rows, dispatch, validate output, write `outputs/<stage>.parquet`,
+inputs, dispatch, validate output, write `outputs/<stage>.parquet`,
 flush the run record mid-run; halt-on-review + resume; per-run `--limit`/`--offset`
 capping the rows a stage READS (cut off its inputs before its handler runs);
 `field_checks`. `stages/` — one module per type. `llm.py`/`options.py` — the agent

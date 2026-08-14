@@ -295,18 +295,16 @@ _KEYED_SCHEMA = {
 }
 
 
-def test_stage_tests_model_rejects_an_input_frame_repeating_a_whole_row():
-    bad = {
+def test_stage_tests_model_accepts_an_input_frame_repeating_a_whole_row():
+    # The runner feeds a stage duplicate rows, so a test may exercise them.
+    suite = _frame_suite_model(_TWO_COLUMN_SCHEMA).model_validate({"tests": [{
         "name": "the_same_row_twice",
         "inputs": {"load": [{"amount": 1.0, "label": "a"},
                             {"amount": 1.0, "label": "a"}]},
-        "expected": [{"amount": 1.0, "label": "a"}],
-    }
-    with pytest.raises(ValidationError) as excinfo:
-        _frame_suite_model(_TWO_COLUMN_SCHEMA).model_validate({"tests": [bad]})
-    message = str(excinfo.value)
-    assert "the_same_row_twice" in message
-    assert "exact duplicate rows" in message
+        "expected": [{"amount": 1.0, "label": "a"},
+                     {"amount": 1.0, "label": "a"}],
+    }]})
+    assert len(suite.tests[0].inputs["load"]) == 2
 
 
 def test_stage_tests_model_accepts_repeated_expected_rows_under_no_key():

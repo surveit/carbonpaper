@@ -17,7 +17,6 @@ import pandas as pd
 import pyarrow as pa
 
 from app.core.errors import SubsetRunError
-from app.core.frame_checks import find_duplicate_row_violations
 from app.core.frames import (
     frame_to_table,
     write_frame_file,
@@ -248,7 +247,7 @@ def _gather_stage_inputs(
     workflow_stage: WorkflowStage, outputs_so_far: dict[str, pa.Table],
     ctx: RunContext, record: StageRecord,
 ) -> tuple[dict[str, pa.Table], _RowWindow]:
-    """Cuts the row window BEFORE the duplicate/schema checks, so a limit of 3 isn't failed by row 4,000."""
+    """Cuts the row window BEFORE the schema checks, so a limit of 3 isn't failed by row 4,000."""
     sid = workflow_stage.id
     window = _resolve_row_window(workflow_stage, ctx)
     inputs_for_stage: dict[str, pa.Table] = {}
@@ -257,7 +256,6 @@ def _gather_stage_inputs(
             raise RuntimeError(f"Upstream stage '{ref.id}' has no output yet")
         table = _take_row_window(
             outputs_so_far[ref.id], window, f"from input '{ref.id}'", record)
-        _reject_duplicate_input_rows(table, ref.id, sid)
         inputs_for_stage[ref.id] = table
         report = validate_table(
             table, ref.table_schema, stage_id=sid, phase=f"input:{ref.id}")
@@ -604,16 +602,3 @@ def _final_run_status(stage_statuses: Iterable[str]) -> RunStatus:
     if StageStatus.VALIDATION_WARNINGS in statuses:
         return RunStatus.WARNINGS
     return RunStatus.OK
-
-
-# --- duplicate-input-row rejection (every stage type) ------------------------
-
-
-def _reject_duplicate_input_rows(table: pa.Table, input_id: str, stage_id: str) -> None:
-    """Fail the stage if an input frame carries exact duplicate rows."""
-    violations = find_duplicate_row_violations(table.to_pylist())
-    if not violations:
-        return
-    raise ValueError(
-        f"Input '{input_id}' to stage '{stage_id}' contains {violations[0].message}"
-    )

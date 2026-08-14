@@ -14,7 +14,6 @@ from app.models.stages.stage_tests import (
     RowSelection,
     StageTest,
     validate_stage_tests,
-    validate_test_frames,
     validate_test_rows,
 )
 from app.core.row_search import InputRows
@@ -85,7 +84,6 @@ def build_selector_submission_model(
             built = read_selected_rows(list(self.tests), test_class, sources)
             validate_stage_tests(list(input_schemas), built)
             validate_test_rows(input_schemas, output_schema, built)
-            validate_test_frames(input_schemas, output_schema, built)
             return self
 
     return SelectedStageTests
