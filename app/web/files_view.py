@@ -6,6 +6,7 @@ from collections import defaultdict
 
 from pydantic import BaseModel
 
+from app.core.files import StoredFile
 from app.core.persistence import JsonDict
 from app.runtime.manifest import list_run_entries
 from app.services import uploads
@@ -70,7 +71,7 @@ def _read_input_hashes(manifest: JsonDict | None) -> list[str]:
             if isinstance(binding, dict) and binding.get("sha256")]
 
 
-def _build_row(record: uploads.UploadedFile, run_ids: list[str]) -> FileRow:
+def _build_row(record: StoredFile, run_ids: list[str]) -> FileRow:
     return FileRow(
         sha256=record.sha256,
         filename=record.filename,

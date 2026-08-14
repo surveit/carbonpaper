@@ -36,8 +36,11 @@ def _py(id_, inputs, granularity="frame", schema=_K, **kw):
              signature=signature, **kw)
 
 
-def _ref(path="x.csv", cols=("k",)):
-    return {"path": path, "format": "csv",
+_SHA = "0" * 64
+
+
+def _ref(sha256=_SHA, cols=("k",)):
+    return {"sha256": sha256, "format": "csv",
             "table_schema": {"columns": [{"name": c, "type": "str", "nullable": True} for c in cols]}}
 
 
@@ -146,12 +149,18 @@ def test_joins_and_aggregate_change_grain():
 
 # ── TableRef (general, schema now required) ──────────────────────────────────
 def test_tableref_valid():
-    assert m.TableRef.model_validate(_ref()).path == "x.csv"
+    assert m.TableRef.model_validate(_ref()).sha256 == _SHA
 
 
 def test_tableref_schema_required():
     with pytest.raises(ValidationError):
-        m.TableRef.model_validate({"path": "x.csv", "format": "csv"})
+        m.TableRef.model_validate({"sha256": _SHA, "format": "csv"})
+
+
+def test_tableref_names_a_stored_file_not_a_path():
+    with pytest.raises(ValidationError):
+        m.TableRef.model_validate({"path": "x.csv", "format": "csv",
+                                   "table_schema": {"columns": []}})
 
 
 # ── EvalConfig (defined by its checks; eval-dataset table is optional data) ──

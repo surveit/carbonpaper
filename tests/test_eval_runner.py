@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import threading
 import time
 from datetime import datetime
@@ -17,9 +18,16 @@ from app.core import paths
 from app.evals import runner as eval_runner
 from app.evals.runner import run_eval, start_eval_run
 from app.evals.store import load_eval_run, resolve_eval_result_path, save_eval_config
+from app.services.uploads import save_upload
 from app.services.versioning import WorkflowVersion
 from app.services import workspace
 from conftest import QUEUE_COLUMNS
+
+
+def store_dataset(project_id: str, name: str, frame: pd.DataFrame) -> str:
+    """The sha256 a TableRef holds — the same call an upload through the web form makes."""
+    body = io.BytesIO(frame.to_csv(index=False).encode())
+    return save_upload(name, body, project_id).sha256
 
 def _load(tmp_path):
     return {
@@ -60,7 +68,6 @@ _CLASSIFY = {
 
 @pytest.fixture
 def project(tmp_path, monkeypatch):
-    # A TableRef path is checkout-relative, so tmp_path must BE the repo root.
     monkeypatch.setattr(paths, "REPO_ROOT", tmp_path)
     demo = tmp_path / "demo"
     demo.mkdir()
@@ -70,15 +77,14 @@ def project(tmp_path, monkeypatch):
         stages=[parse_stage(_load(tmp_path)), parse_stage(_CLASSIFY)],
     ).save()
 
-    data = demo / "eval_data"
-    data.mkdir()
     # score>=0 → classify says pos; expected label disagrees only on doc c (score 2).
-    pd.DataFrame({"doc_id": ["a", "b", "c", "d"], "score": [1, -1, 2, -3],
-                  "label": ["pos", "neg", "neg", "neg"]}).to_csv(data / "cases.csv", index=False)
+    dataset = store_dataset("demo", "cases.csv", pd.DataFrame(
+        {"doc_id": ["a", "b", "c", "d"], "score": [1, -1, 2, -3],
+         "label": ["pos", "neg", "neg", "neg"]}))
     config = EvalConfig(
         id="label_check", project="demo", name="Label check",
         override_stage="load", target_stage="classify",
-        table=TableRef(path="demo/eval_data/cases.csv", format=FileFormat.csv,
+        table=TableRef(sha256=dataset, format=FileFormat.csv,
                        table_schema=TableSchema(columns=[
                            {"name": "doc_id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True},
                            {"name": "label", "type": "str", "nullable": True}])),
@@ -103,7 +109,7 @@ def test_run_eval_writes_a_per_row_result_table(project):
     repo_root, demo, config = project
     run = run_eval(demo.name, config)
 
-    result = pd.read_parquet(resolve_eval_result_path(demo.name, run.result_ref))
+    result = pd.read_parquet(resolve_eval_result_path(demo.name, run.id, run.result_ref))
     assert list(result["label__actual"]) == ["pos", "neg", "pos", "neg"]
     assert list(result["label__expected"]) == ["pos", "neg", "neg", "neg"]
     assert list(result["row_passed"]) == [True, True, False, True]
@@ -139,12 +145,12 @@ def test_run_eval_through_a_queue_stage_records_an_error_never_a_score(project):
         message="queue pathway", reviewer="test",
         stages=[parse_stage(_load(repo_root)), parse_stage(_QUEUE_REVIEW)],
     ).save()
-    pd.DataFrame({"doc_id": ["a", "b"], "score": [1, 2], "human_score": [1, 2]}).to_csv(
-        demo / "eval_data" / "queue_cases.csv", index=False)
+    dataset = store_dataset("demo", "queue_cases.csv", pd.DataFrame(
+        {"doc_id": ["a", "b"], "score": [1, 2], "human_score": [1, 2]}))
     config = EvalConfig(
         id="queue_check", project="demo", name="Queue check",
         override_stage="load", target_stage="review",
-        table=TableRef(path="demo/eval_data/queue_cases.csv", format=FileFormat.csv,
+        table=TableRef(sha256=dataset, format=FileFormat.csv,
                        table_schema=TableSchema(columns=[
                            {"name": "doc_id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True},
                            {"name": "human_score", "type": "int", "nullable": True}])),

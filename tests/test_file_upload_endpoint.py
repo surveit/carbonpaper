@@ -14,8 +14,9 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.services import workspace
 from app.services.errors import FileNotStoredError
+from app.core.files import StoredFile
 from app.services.uploads import (
-    UploadedFile,
+    find_holding_project,
     move_file_to_project,
     files_root,
     list_project_files,
@@ -42,8 +43,8 @@ def project(tmp_path, monkeypatch):
     return proj
 
 
-def _only_record() -> UploadedFile:
-    records = UploadedFile.list()
+def _only_record() -> StoredFile:
+    records = StoredFile.list()
     assert len(records) == 1, f"expected one record, got {len(records)}"
     return records[0]
 
@@ -205,12 +206,14 @@ def test_two_projects_sending_the_same_bytes_share_one_copy_and_hold_two_claims(
     demo = Path(upload("posts.csv", CSV, project_name="demo").json()["path"])
     other = Path(upload("posts.csv", CSV, project_name="other").json()["path"])
     assert demo == other  # one blob on disk
-    assert {r.project_id for r in UploadedFile.list()} == {"demo", "other"}  # two claims
+    # Two files over one blob, and an edge each: the one-project rule is on the FILE, so
+    # sharing bytes is still what content addressing makes it.
+    assert {find_holding_project(r.id) for r in StoredFile.list()} == {"demo", "other"}
 
 
 def test_a_file_can_arrive_before_any_project_owns_it(project):
     record = save_upload("posts.csv", io.BytesIO(CSV))
-    assert record.project_id is None
+    assert find_holding_project(record.id) is None
     assert [r.sha256 for r in list_project_files(None)] == [CSV_SHA]
     assert list_project_files("demo") == []
 
@@ -219,7 +222,7 @@ def test_claiming_moves_no_bytes(project):
     record = save_upload("posts.csv", io.BytesIO(CSV))
     before = resolve_stored_path(record)
     claimed = move_file_to_project(CSV_SHA, "demo")
-    assert claimed.project_id == "demo"
+    assert find_holding_project(claimed.id) == "demo"
     assert resolve_stored_path(claimed) == before  # the path never depended on the project
     assert list_project_files(None) == []
     assert [r.filename for r in list_project_files("demo")] == ["posts.csv"]

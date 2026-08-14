@@ -69,6 +69,17 @@ def resolve_run_dir(project_id: str, run_id: str) -> Path:
     return resolve_runs_dir(project_id) / run_id
 
 
+# An eval's subset run writes beside the production runs rather than among them. This
+# directory's NAME is load-bearing: the executor records a manifest's `area` as its run
+# dir's parent name, so renaming it re-keys every eval run manifest in the store.
+def resolve_eval_runs_dir(project_id: str) -> Path:
+    return resolve_project_dir(project_id) / "eval_run"
+
+
+def resolve_eval_run_dir(project_id: str, run_id: str) -> Path:
+    return resolve_eval_runs_dir(project_id) / run_id
+
+
 # Keys this reader injects onto a loaded schema dict for its own bookkeeping —
 # never part of the spec, so a writer must strip them before validating or
 # persisting (the spec model is `extra="forbid"`).

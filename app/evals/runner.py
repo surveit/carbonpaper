@@ -26,9 +26,9 @@ from app.evals.dataset_columns import (
     deconflict_column_names,
     get_output_columns_from_stage,
 )
-from app.evals.store import latest_version_id, resolve_eval_run_dir, save_eval_run
+from app.evals.store import latest_version_id, save_eval_run
 from app.services.versioning import load_version, load_version_stages
-from app.services.workspace import resolve_project_dir
+from app.services.workspace import resolve_eval_run_dir
 
 
 def run_eval(
@@ -98,8 +98,7 @@ def _score_run(
                                        table_to_frame(outputs[config.target_stage]))
     except (SubsetRunError, EvalGrainViolationError) as exc:
         return _unscored(run, "error", [str(exc)])
-    result_ref = _write_result_table(run_dir, score.per_row).relative_to(
-        resolve_project_dir(project_id)).as_posix()
+    result_ref = _write_result_table(run_dir, score.per_row).relative_to(run_dir).as_posix()
     return _scored(run, score.metrics, result_ref)
 
 

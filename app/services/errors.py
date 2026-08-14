@@ -17,6 +17,16 @@ class FileNotStoredError(Exception):
     """A file id the project has no stored bytes for."""
 
 
+class FileHeldByAnotherProject(Exception):
+    """A second project claiming a file the store already recorded against a first."""
+
+    def __init__(self, *, file_id: str, held_by: str, claimed_by: str) -> None:
+        self.file_id, self.held_by, self.claimed_by = file_id, held_by, claimed_by
+        super().__init__(
+            f"file {file_id!r} is held by project '{held_by}' and cannot also be held by "
+            f"'{claimed_by}' — upload the bytes to '{claimed_by}', which stores no second copy")
+
+
 class FileOverCeiling(Exception):
     """Carries the numbers, not a sentence — a surface writes the sentence."""
 

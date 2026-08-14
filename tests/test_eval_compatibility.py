@@ -82,8 +82,11 @@ def _agg(id_, inputs, output_schema=None):
                    "produces": (output_schema or {}).get("columns", [])}))
 
 
-def _ref(path="x.csv", cols=("k",)):
-    return {"path": path, "format": "csv",
+_SHA = "0" * 64
+
+
+def _ref(sha256=_SHA, cols=("k",)):
+    return {"sha256": sha256, "format": "csv",
             "table_schema": {"columns": [{"name": c, "type": "str", "nullable": True} for c in cols]}}
 
 
@@ -180,7 +183,7 @@ def test_dataset_schema_types_shared_column_differently(tmp_path):
     config = _config(table=_ref(cols=["k", "quote", "expected_score"]))
     # override table_schema types `v` as str (default) but stage declares int.
     config = config.model_copy(update={"table": m.TableRef.model_validate({
-        "path": "x.csv", "format": "csv",
+        "sha256": "0" * 64, "format": "csv",
         "table_schema": {"columns": [
             {"name": "k", "type": "str", "nullable": True}, {"name": "v", "type": "str", "nullable": True}, {"name": "quote", "type": "str", "nullable": True},
             {"name": "expected_score", "type": "str", "nullable": True}]}})})

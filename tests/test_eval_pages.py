@@ -4,6 +4,7 @@ attached dataset, plus one leftover config that no longer validates — points
 the projects root and the repo root at it, and checks each page renders the truthful state."""
 from __future__ import annotations
 
+import io
 import re
 from datetime import datetime, timedelta
 
@@ -24,14 +25,22 @@ from app.models.stages.input_data import FileFormat
 from app.core import paths
 from app.core.frames import write_frame_file
 from app.core.persistence import get_store
-from app.evals.store import save_eval_config, save_eval_run
+from app.evals.store import load_eval_config, save_eval_config, save_eval_run
 from app.runtime.run_log import count_events
+from app.services.uploads import save_upload
 from app.services.versioning import WorkflowVersion
 from app.services import workspace
 from stage_seed import add_stage, read_stages, set_stages
 from run_seed import store_events
 
 client = TestClient(app)
+
+
+def store_dataset(project_id: str, name: str, frame: pd.DataFrame) -> str:
+    """The sha256 a TableRef holds — the same call an upload through the web form makes."""
+    return save_upload(name, io.BytesIO(frame.to_csv(index=False).encode()),
+                       project_id).sha256
+
 
 def _override(tmp_path):
     return {
@@ -78,12 +87,10 @@ def demo_project(tmp_path, monkeypatch):
     monkeypatch.setattr(paths, "REPO_ROOT", tmp_path)
 
     # The eval dataset: the override stage's output columns + the checked column.
-    data_dir = demo / "eval_data"
-    data_dir.mkdir(parents=True, exist_ok=True)
-    pd.DataFrame({"doc_id": ["d1", "d2"], "text": ["a", "b"],
-                  "label": ["x", "y"]}).to_csv(data_dir / "cases.csv", index=False)
     dataset = TableRef(
-        path="demo/eval_data/cases.csv", format=FileFormat.csv,
+        sha256=store_dataset("demo", "cases.csv", pd.DataFrame(
+            {"doc_id": ["d1", "d2"], "text": ["a", "b"], "label": ["x", "y"]})),
+        format=FileFormat.csv,
         table_schema=TableSchema(columns=[
             {"name": "doc_id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True},
             {"name": "label", "type": "str", "nullable": True}]),
@@ -207,7 +214,7 @@ def _save_scored_run(tmp_path, per_row: pd.DataFrame, *, run_id: str = "scored1"
         workflow_version="v1", status="scored",
         settings=EvalRunSettings(can_score_declaratively=True,
                                  frontier=["classify"], blocking_stages=[]),
-        metrics={"accuracy": 0.5}, result_ref=f"eval_run/{run_id}/result.parquet",
+        metrics={"accuracy": 0.5}, result_ref="result.parquet",
         started_at="2026-08-12T10:00:00", finished_at="2026-08-12T10:00:20",
     ))
 
@@ -245,8 +252,12 @@ def test_run_page_shows_the_dataset_columns_beside_the_verdicts(tmp_path):
 
 def test_run_page_refuses_to_line_up_a_dataset_that_changed_since_the_run(tmp_path):
     _save_scored_run(tmp_path, _ONE_PASS_ONE_FAIL)
-    pd.DataFrame({"doc_id": ["d1"], "text": ["a"], "label": ["x"]}).to_csv(
-        tmp_path / "demo" / "eval_data" / "cases.csv", index=False)
+    # A stored file cannot be edited under a run — its sha256 IS its bytes — so the way
+    # a dataset moves is the config being pointed at another one.
+    config = load_eval_config("demo", "label_check")
+    save_eval_config("demo", config.model_copy(update={"table": config.table.model_copy(
+        update={"sha256": store_dataset("demo", "shorter.csv", pd.DataFrame(
+            {"doc_id": ["d1"], "text": ["a"], "label": ["x"]}))})}))
 
     r = client.get("/project/demo/evals/label_check/runs/scored1")
 

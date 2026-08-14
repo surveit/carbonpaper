@@ -76,6 +76,7 @@ _REVIEWER = "R. Vasquez"
 _REVIEWED_AT = "2024-05-06T11:20:00"
 
 _EVAL_PATH = _FIXTURE_PATH.parent / "evals" / _FIXTURE_PATH.name
+_EVAL_DATASET_PATH = _EVAL_PATH.parent / "tutorial_alignment_hard.csv"
 _EVAL_ID = "alignment_hard_cases"
 _OVERRIDE_STAGE = "matched_commitments"
 _TARGET_STAGE = "judge_alignment"
@@ -585,10 +586,9 @@ def _import_and_pin(tmp_path):
     return name, workflow
 
 
-def _eval_dataset(name: str = "tutorial_smoke") -> pd.DataFrame:
-    config = read_seed_eval_config(name)
-    assert config.table is not None
-    return pd.read_csv(Path(__file__).resolve().parents[1] / config.table.path)
+def _eval_dataset() -> pd.DataFrame:
+    """The committed file, read as a file: what a TableRef names is the copy the tour stored."""
+    return pd.read_csv(_EVAL_DATASET_PATH)
 
 
 def test_the_committed_eval_still_fits_the_tutorial_workflow(tmp_path):

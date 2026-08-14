@@ -216,7 +216,7 @@ def profile_stage_output_data_range(
     return {"ok": True, **profile.model_dump()}
 
 
-def _view(record: uploads.UploadedFile) -> StoredFileView:
+def _view(record: uploads.StoredFile) -> StoredFileView:
     return StoredFileView(sha256=record.sha256, filename=record.filename,
                           bytes=record.byte_count, added=record.created_at)
 

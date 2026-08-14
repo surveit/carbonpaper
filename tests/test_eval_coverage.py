@@ -5,6 +5,7 @@ reach, because a project's newest eval run is normally against its newest versio
 """
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Literal
 
 import pandas as pd
@@ -68,17 +69,21 @@ def demo_project(tmp_path):
     return tmp_path
 
 
+def _make_run_dir(tmp_path, run_id: str) -> Path:
+    run = tmp_path / "demo" / "eval_run" / run_id
+    run.mkdir(parents=True, exist_ok=True)
+    return run
+
+
 def _save_run(tmp_path, per_row: pd.DataFrame, *, version: str = "v1", run_id: str = "r1",
               status: Literal["scored", "vetoed", "error"] = "scored") -> None:
-    result = tmp_path / "demo" / "eval_run" / run_id / "result.parquet"
-    result.parent.mkdir(parents=True, exist_ok=True)
-    write_frame_file(per_row, result)
+    write_frame_file(per_row, _make_run_dir(tmp_path, run_id) / "result.parquet")
     save_eval_run("demo", EvalRun(
         id=run_id, config="label_check", project="demo", workflow_version=version,
         status=status,
         settings=EvalRunSettings(can_score_declaratively=True, frontier=["classify"],
                                  blocking_stages=[]),
-        result_ref=f"eval_run/{run_id}/result.parquet",
+        result_ref="result.parquet",
         started_at="2026-08-12T10:00:00", finished_at="2026-08-12T10:00:20"))
 
 
@@ -200,7 +205,7 @@ def test_two_evals_on_one_stage_get_a_row_each_worst_first(tmp_path):
         status="scored",
         settings=EvalRunSettings(can_score_declaratively=True, frontier=["classify"],
                                  blocking_stages=[]),
-        result_ref="eval_run/failing/result.parquet",
+        result_ref="result.parquet",
         started_at="2026-08-12T10:00:00", finished_at="2026-08-12T10:00:20"))
 
     coverages = find_eval_coverages("demo", "classify", "v1")
@@ -236,12 +241,15 @@ def test_the_llm_block_reads_in_the_order_one_call_happens(tmp_path):
         override_stage="load", target_stage="arbiter",
         expected_outputs=[ExpectedOutput(output_column="label", metric="exact")]))
     _stored_version("v1")
+    # `result_ref` is relative to the run that wrote it, so this run needs its own table
+    # rather than a borrowed reach into another run's directory.
+    write_frame_file(_BOTH_MATCHED, _make_run_dir(tmp_path, "ar1") / "result.parquet")
     save_eval_run("demo", EvalRun(
         id="ar1", config="arbiter_check", project="demo", workflow_version="v1",
         status="scored",
         settings=EvalRunSettings(can_score_declaratively=True, frontier=["arbiter"],
                                  blocking_stages=[]),
-        result_ref="eval_run/r1/result.parquet"))
+        result_ref="result.parquet"))
     _save_run(tmp_path, _BOTH_MATCHED)
 
     html = client.get("/project/demo/node/arbiter/panel").text

@@ -2,6 +2,7 @@
 back with the URL of the page that shows which rows disagreed."""
 from __future__ import annotations
 
+import io
 from pathlib import Path
 
 import pandas as pd
@@ -11,6 +12,7 @@ from app.models import EvalConfig, ExpectedOutput, ScoringMetric, TableRef, pars
 from app.models.schema import TableSchema
 from app.models.stages.input_data import FileFormat
 from app.services.project import write_eval_config
+from app.services.uploads import save_upload
 from app.services.versioning import WorkflowVersion
 from app.tools.eval_runs import run_eval
 
@@ -54,14 +56,15 @@ def demo(projects_root: Path, tmp_path: Path) -> str:
         message="seed", reviewer="test",
         stages=[parse_stage(_LOAD), parse_stage(_CLASSIFY)],
     ).save()
-    cases = tmp_path / "cases.csv"
     # classify says pos for score >= 0, so the expected label disagrees on doc c.
-    pd.DataFrame({"doc_id": ["a", "b", "c", "d"], "score": [1, -1, 2, -3],
-                  "label": ["pos", "neg", "neg", "neg"]}).to_csv(cases, index=False)
+    cases = io.BytesIO(pd.DataFrame(
+        {"doc_id": ["a", "b", "c", "d"], "score": [1, -1, 2, -3],
+         "label": ["pos", "neg", "neg", "neg"]}).to_csv(index=False).encode())
+    dataset = save_upload("cases.csv", cases, "demo").sha256
     write_eval_config("demo", EvalConfig(
         id="label_check", project="demo", name="Label check",
         override_stage="load", target_stage="classify",
-        table=TableRef(path=str(cases), format=FileFormat.csv,
+        table=TableRef(sha256=dataset, format=FileFormat.csv,
                        table_schema=TableSchema.model_validate({"columns": [
                            {"name": "doc_id", "type": "str", "nullable": True},
                            {"name": "score", "type": "int", "nullable": True},

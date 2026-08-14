@@ -15,7 +15,7 @@ from starlette.concurrency import run_in_threadpool
 from app.core.llm_sdk import CLI_PATH
 from app.services import project as project_service
 from app.services.errors import FileOverCeiling, StoreOverQuota
-from app.services.uploads import max_upload_bytes, save_upload
+from app.services.uploads import find_holding_project, max_upload_bytes, save_upload
 from app.web.file_sizes import describe_attachment, describe_refusal
 
 from app.core.agent.registry import build_engine, opening_prompt
@@ -117,11 +117,12 @@ async def upload_chat_file(sid: str, file: UploadFile = File(...),
     # The line the conversation carries. The agent never sees the bytes and never sees
     # this page — it sees the next turn's text, so what the reader is shown and what the
     # agent is told have to be the same sentence.
+    home = find_holding_project(record.id)
     return JSONResponse({"ok": True, "sha256": record.sha256, "filename": record.filename,
-                         "bytes": record.byte_count, "project_id": record.project_id,
+                         "bytes": record.byte_count, "project_id": home,
                          "line": describe_attachment(
-                             record, project_service.read_project_name(record.project_id)
-                             if record.project_id else "")})
+                             record, home,
+                             project_service.read_project_name(home) if home else "")})
 
 
 def _has_unspoken_opening(data: dict) -> bool:

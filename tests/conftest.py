@@ -103,6 +103,12 @@ def fresh_frame_store(tmp_path):
 
 
 @pytest.fixture(autouse=True)
+def fresh_files_root(tmp_path, monkeypatch):
+    """Without it an upload in a test lands in the developer's own ~/.carbonpaper/files."""
+    monkeypatch.setenv("CARBON_PAPER_FILES_ROOT", str(tmp_path / "files"))
+
+
+@pytest.fixture(autouse=True)
 def fresh_workspace(tmp_path):
     from app.services.workspace import set_projects_dir
     set_projects_dir(tmp_path / "examples")
