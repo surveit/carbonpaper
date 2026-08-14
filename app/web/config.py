@@ -10,7 +10,6 @@ from pathlib import Path
 
 from fastapi.templating import Jinja2Templates
 from markupsafe import Markup, escape
-from starlette.requests import Request
 from starlette.responses import Response
 from starlette.staticfiles import StaticFiles
 from starlette.types import Scope
@@ -120,33 +119,6 @@ def label_stage_type(v: object) -> str:
 def serves_an_open_demo() -> bool:
     """True on Fly, which is the only place this app is a shared public deploy."""
     return bool(os.environ.get("FLY_APP_NAME"))
-
-
-# A DECISION AID, not a product feature: three candidate looks, side by side, until
-# one is picked and the other two are deleted along with this whole mechanism.
-# See docs — or the toggle's own copy on /admin — for what it does and does not cover.
-THEME_COOKIE = "carbonpaper_theme"
-DEFAULT_THEME = "paper-sans"
-THEMES = {
-    "classic": "Classic — white paper, one sans face at 15px",
-    "paper": "Paper + serif — canary paper, Georgia prose",
-    "paper-sans": "Paper + sans — canary paper, sans prose at reading size",
-    "half": "Half tint — the canary at half chroma, same sans",
-    "third": "Third tint — the canary at a third chroma, same sans",
-    "half-helvetica": "Half tint, Helvetica Neue",
-    "half-avenir": "Half tint, Avenir Next",
-    "half-seravek": "Half tint, Seravek",
-}
-
-
-def active_theme(request: Request) -> str:
-    """An unknown value falls back: it would reach an attribute selector."""
-    chosen = request.cookies.get(THEME_COOKIE, "")
-    return chosen if chosen in THEMES else DEFAULT_THEME
-
-
-templates.env.globals["active_theme"] = active_theme
-templates.env.globals["THEMES"] = THEMES
 
 
 # A function, not its value: read at import time it would freeze, and the whole

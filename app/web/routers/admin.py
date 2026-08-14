@@ -18,14 +18,9 @@ from app.services import project
 from app.services.project import (
     WorkflowFile, read_project_name, export_project, import_project,
 )
-from app.web.config import THEME_COOKIE, THEMES, templates
+from app.web.config import templates
 
 router = APIRouter()
-
-# A year: long enough that comparing two looks over a week is not interrupted by
-# the cookie expiring, and irrelevant either way once the choice is made and the
-# whole mechanism is deleted.
-_THEME_COOKIE_MAX_AGE = 60 * 60 * 24 * 365
 
 
 # ─── Path guards ───────────────────────────────────────────────────────────
@@ -77,18 +72,6 @@ async def load_bundle(bundle: str):
     return _redirect_to_admin(
         f"Loaded '{read_project_name(project_id)}' ({project_id}) from bundle '{bundle}'."
     )
-
-
-@router.post("/admin/theme/{theme}")
-async def choose_theme(theme: str):
-    """A cookie, not a workspace setting: two windows can hold two looks."""
-    if theme not in THEMES:
-        raise HTTPException(status_code=404, detail=f"No theme '{theme}'")
-    response = _redirect_to_admin(f"Showing '{THEMES[theme]}'.")
-    response.set_cookie(
-        THEME_COOKIE, theme, max_age=_THEME_COOKIE_MAX_AGE, httponly=True, samesite="lax"
-    )
-    return response
 
 
 @router.get("/admin/export/{project_name}")

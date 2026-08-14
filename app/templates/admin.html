@@ -12,35 +12,6 @@
 <div class="banner">{{ msg }}</div>
 {% endif %}
 
-{# A DECISION AID WITH A DELETION DATE: three candidate looks to compare in the
-   running app. When one is chosen, this section goes, along with the [data-theme]
-   blocks in palette.css / base.css / agent-chat.css and /admin/theme. #}
-<h2>Look</h2>
-<p class="lede">Candidate looks, to compare on real pages rather than in a mockup.
-  The choice is a cookie on this browser, so a second window can hold a second look
-  and nobody else's view moves.</p>
-<table class="stages">
-    <tbody>
-        {% set current = active_theme(request) %}
-        {% for slug, label in THEMES.items() %}
-        <tr>
-            <td>{{ label }}{% if slug == current %} <span class="badge ok">showing</span>{% endif %}</td>
-            <td>
-                <form method="post" action="/admin/theme/{{ slug }}" style="display:inline;">
-                    <button type="submit" class="btn"{% if slug == current %} disabled{% endif %}>Show this</button>
-                </form>
-            </td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
-<p class="muted">What it covers: the paper, the prose face, prose sizing, and the chat
-  column. What it does not: the chat's heading scale and tool rows are the new ones
-  under every look, and a Mermaid <code>style</code> line takes a literal colour it
-  cannot read from the stylesheet — so under Classic a workflow graph draws its nodes
-  on the canary fill against a white page. Classic is a reference for comparison, not
-  a rollback.</p>
-
 <h2>Seed bundles</h2>
 {% if bundles %}
 <table class="stages">

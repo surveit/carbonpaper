@@ -145,35 +145,3 @@ def test_a_malformed_upload_400s_and_writes_no_project(payload):
     assert r.status_code == 400
     assert "not a valid WorkflowFile document" in r.json()["detail"]
     assert project.list_projects() == []
-
-
-# ─── The look toggle ──────────────────────────────────────────────────────
-# A DECISION AID WITH A DELETION DATE: these go when a look is chosen.
-
-@pytest.fixture(autouse=True)
-def no_look_chosen():
-    """The client is module-scoped: one test's cookie would decide the next one's page."""
-    client.cookies.clear()
-
-
-def test_a_page_renders_in_the_default_look_when_no_choice_has_been_made():
-    assert 'data-theme="paper-sans"' in client.get("/admin").text
-
-
-def test_choosing_a_look_sets_the_cookie_and_the_next_page_renders_in_it():
-    chosen = client.post("/admin/theme/classic", follow_redirects=False)
-    assert chosen.status_code == 303
-    assert chosen.cookies["carbonpaper_theme"] == "classic"
-    assert 'data-theme="classic"' in client.get("/admin").text
-
-
-def test_an_unknown_look_is_refused_rather_than_written_into_the_page():
-    assert client.post("/admin/theme/../../etc", follow_redirects=False).status_code == 404
-    # The chosen value lands in an attribute selector on <html>, so anything off the
-    # list has to 404 rather than become a cookie: it would be markup from a URL.
-    assert client.post("/admin/theme/onyx", follow_redirects=False).status_code == 404
-
-
-def test_a_cookie_naming_no_known_look_falls_back_instead_of_rendering_it():
-    client.cookies.set("carbonpaper_theme", "onyx")
-    assert 'data-theme="paper-sans"' in client.get("/admin").text
