@@ -539,3 +539,4 @@
 {"run_id":"31749204444","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31749204444","created":"2026-08-13T22:17:14Z","branch":"feat/agent-opening-message","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"31777749203","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31777749203","created":"2026-08-14T06:51:51Z","branch":"master","event":"push","contracts_kept":14,"findings":[]}
 {"run_id":"31777749203","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31777749203","created":"2026-08-14T06:53:06Z","branch":"master","event":"push","contracts_kept":null,"findings":[]}
+{"run_id":"31778562570","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31778562570","created":"2026-08-14T07:05:25Z","branch":"feat/tutorial-prompt-basics","event":"pull_request","contracts_kept":14,"findings":[]}
