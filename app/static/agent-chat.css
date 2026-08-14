@@ -1,8 +1,6 @@
 /* The agent chat at /chat: the session index, the message log, and the docked composer. */
 
 :root { --chat-column: 1280px; }
-/* The old column, for comparison. */
-:root[data-theme="classic"] { --chat-column: 1080px; }
 
 /* ═══ The session index (chat_index.html) ═══ */
 .ac-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }

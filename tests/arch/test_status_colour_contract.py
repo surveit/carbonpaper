@@ -19,9 +19,6 @@ _COMMENT = re.compile(r"/\*.*?\*/", re.S)
 # The three roles a run state declares: `--state-<name>` is the stroke/border/fill,
 # `--state-<name>-bg` the tint behind it, `--state-<name>-ink` text on that tint.
 _DEFAULT_THEME_SELECTOR = ":root {"
-# The candidate looks compared on /admin. A DECISION AID: when one is picked, this
-# constant and the rule below go with the losing blocks.
-_ALTERNATE_THEME_SELECTORS = (':root[data-theme="classic"] {',)
 _STATE_PREFIX = "state-"
 _TINT_SUFFIX = "-bg"
 _INK_SUFFIX = "-ink"
@@ -191,26 +188,6 @@ def test_the_default_node_surface_is_the_sheet() -> None:
         f"--bg / --border / --fg say {expected!r}. An unstated stage type would sit on a "
         "different paper from the page around it."
     )
-
-
-def test_a_theme_only_restates_surfaces_the_default_already_declares() -> None:
-    """A theme repaints the paper; a hue that moved with a cookie is not a look."""
-    default = read_declared_colours()
-    surfaces = {"bg", "raised", "hover", "sunk", "sunk-deep", "border", "border-strong"}
-    for selector in _ALTERNATE_THEME_SELECTORS:
-        declared = {name for name, _ in _DECLARATION.findall(read_theme_rules(selector))}
-        assert declared, f"{selector} in palette.css declares nothing — it is dead weight"
-        unknown = sorted(declared - set(default))
-        assert not unknown, (
-            f"{selector} declares {unknown}, which the default :root block does not. A "
-            "theme that introduces its own token leaves every other theme falling back "
-            "to currentColor for it."
-        )
-        beyond = sorted(declared - surfaces)
-        assert not beyond, (
-            f"{selector} redeclares {beyond}, which are not surfaces. Only the paper "
-            f"varies by theme; {sorted(surfaces)} is the whole of what may."
-        )
 
 
 def test_no_palette_comment_closes_early() -> None:
