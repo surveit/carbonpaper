@@ -18,7 +18,7 @@ from app.services.errors import FileOverCeiling, StoreOverQuota
 from app.services.uploads import max_upload_bytes, save_upload
 from app.web.file_sizes import describe_attachment, describe_refusal
 
-from app.core.agent.registry import build_engine, opening_prompt
+from app.core.agent.registry import build_engine
 from app.core.agent.session import create_agent_session
 from app.core.agent.store import open_session_store
 from app.core.agent.turns import default_turn_manager
@@ -89,7 +89,6 @@ async def chat_page(request: Request, sid: str):
         # No bound agent → the UI renders and streams the session, but there is no agent to
         # reply to a typed message (post_message 400s), so the composer is hidden.
         "view_only": data.get("agent_id") is None,
-        "opens_itself": _has_unspoken_opening(data),
         "backend_error": _backend_error(),
         "crumbs": build_chat_crumbs(data.get("title")),
         # What an attached file needs to know before it is sent: the ceiling, the
@@ -124,35 +123,9 @@ async def upload_chat_file(sid: str, file: UploadFile = File(...),
                              if record.project_id else "")})
 
 
-def _has_unspoken_opening(data: dict) -> bool:
-    """True when this page must start the agent's opening turn on load."""
-    agent_id = data.get("agent_id")
-    if agent_id is None or data.get("messages") or data.get("active_turn"):
-        return False
-    return opening_prompt(agent_id) is not None
-
-
 def _turn_context(data: dict, request: Request) -> dict:
     """The stored context plus the address THIS reader is on, not the one it opened on."""
     return (data.get("context") or {}) | {"base_url": str(request.base_url)}
-
-
-@router.post("/chat/{sid}/open")
-async def open_conversation(sid: str, request: Request):
-    """409s once the session has spoken, so a reload cannot make it greet twice."""
-    if not _store.exists(sid):
-        raise HTTPException(status_code=404, detail="Session not found")
-    data = _store.load(sid)
-    if not _has_unspoken_opening(data):
-        raise HTTPException(status_code=409, detail="session has already opened")
-    agent_id = data["agent_id"]
-    prompt = opening_prompt(agent_id)
-    assert prompt is not None  # _has_unspoken_opening checked it
-    engine = build_engine(agent_id, _turn_context(data, request))
-    turn_id = _turns.start(
-        engine=engine, store=_store, session_id=sid, prompt=prompt, record_prompt=False
-    )
-    return JSONResponse({"ok": True, "turn_id": turn_id})
 
 
 @router.post("/chat/{sid}/message")
