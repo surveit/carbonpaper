@@ -18,7 +18,7 @@ from starlette.routing import Route
 from app.core.logging_config import configure_app_logging
 from app.core.store_config import configure_default_stores, refuse_renamed_env_vars
 from app.web.config import (
-    PITCH_DIR, STATIC_DIR, RevalidatedStaticFiles, configure_projects_dir_from_env,
+    INTRO_DIR, STATIC_DIR, RevalidatedStaticFiles, configure_projects_dir_from_env,
 )
 from app.web.errors import install_error_pages
 from app.web.routers import include_routers
@@ -58,14 +58,14 @@ app = FastAPI(title="Workflow", lifespan=lifespan)
 app.mount("/static", RevalidatedStaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
-# A route, not a mount: a mount serves this only at /pitch/index.html unless directory
+# A route, not a mount: a mount serves this only at /intro/index.html unless directory
 # resolution is on, and that switch is a keyword tests/arch/test_markdown_renderer_is_sealed.py
 # forbids anywhere in source.
-async def serve_pitch(request: Request) -> Response:
-    return FileResponse(PITCH_DIR / "index.html", headers={"Cache-Control": "no-cache"})
+async def serve_intro(request: Request) -> Response:
+    return FileResponse(INTRO_DIR / "index.html", headers={"Cache-Control": "no-cache"})
 
 
-app.router.routes.append(Route("/pitch", endpoint=serve_pitch, methods=["GET"]))
+app.router.routes.append(Route("/intro", endpoint=serve_intro, methods=["GET"]))
 
 # Registered on the Starlette exception so it also catches the 404 routing raises for
 # an address no router claims — the dead link in a deck never reaches a handler of ours.
