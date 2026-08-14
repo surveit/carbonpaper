@@ -92,7 +92,7 @@ def test_the_seeded_project_keeps_no_path_of_its_own(projects_root: Path) -> Non
 
     assert seeded["project"]["id"] in project_service.list_projects()
     files = seeded["input_files"]
-    assert set(files) == {"raw_filings", "public_commitments"}
+    assert set(files) == {"lobbying_filings", "public_commitments"}
     # A sha256 the project holds, not a path baked into the workflow.
     assert all(resolve_file_binding(seeded["project"]["id"], sha)["path"]
                for sha in files.values())
@@ -218,12 +218,12 @@ def test_run_workflow_passes_limits_through_to_the_run_service(
     monkeypatch.setattr(run_service, "read_run_status", lambda p, r: {"status": "ok"})
 
     tool = next(t for t in _tools() if t.name == "run_workflow")
-    out = _call(tool, {"project_id": seeded["project"]["id"], "limits": {"raw_filings": 6},
+    out = _call(tool, {"project_id": seeded["project"]["id"], "limits": {"lobbying_filings": 6},
                        "files": seeded["input_files"]})
     started = json.loads(out["content"][0]["text"])
 
     assert seen["project"] == seeded["project"]["id"]
-    assert seen["limits"] == {"raw_filings": 6}
+    assert seen["limits"] == {"lobbying_filings": 6}
     assert seen["version_id"] is None
     # The same {run_id, status} the MCP surface returns — no tour-shaped extra field.
     assert started == {"run_id": "20260810T101112", "status": "ok"}
@@ -249,15 +249,15 @@ def test_a_real_run_resolves_the_bound_csv_and_honours_the_row_cap(
     seeded = _seed_a_tour()
 
     tool = next(t for t in _tools() if t.name == "run_workflow")
-    out = _call(tool, {"project_id": seeded["project"]["id"], "limits": {"raw_filings": 6},
+    out = _call(tool, {"project_id": seeded["project"]["id"], "limits": {"lobbying_filings": 6},
                        "files": seeded["input_files"]})
     started = json.loads(out["content"][0]["text"])
 
     status = run_service.read_run_status(seeded["project"]["id"], started["run_id"])
     by_stage = {r["stage_id"]: r for r in status["stage_records"]}
-    assert by_stage["raw_filings"]["output_row_count"] == 6
+    assert by_stage["lobbying_filings"]["output_row_count"] == 6
     # The join drops no filing, so the cap is what every later stage sees.
-    assert by_stage["matched_commitments"]["output_row_count"] == 6
+    assert by_stage["filings_with_commitments"]["output_row_count"] == 6
     # No model is available offline, so the LLM stage is where this run stops.
     assert by_stage["judge_alignment"]["status"] == "error"
 
@@ -304,7 +304,7 @@ def _run_the_tour_capped(monkeypatch: pytest.MonkeyPatch) -> tuple[dict[str, Any
     seeded = _seed_a_tour()
     out = _call(
         next(t for t in _tools() if t.name == "run_workflow"),
-        {"project_id": seeded["project"]["id"], "limits": {"raw_filings": 6},
+        {"project_id": seeded["project"]["id"], "limits": {"lobbying_filings": 6},
          "files": seeded["input_files"]},
     )
     return seeded, json.loads(out["content"][0]["text"])["run_id"]
@@ -328,14 +328,14 @@ def test_each_row_comes_back_with_the_whole_link_to_its_own_lineage(
     """Nothing is left for the tour to join: an ordinal it guessed would link a wrong row."""
     seeded, run_id = _run_the_tour_capped(monkeypatch)
 
-    links = _read_lineage_links(seeded["project"]["id"], run_id, "matched_commitments")
+    links = _read_lineage_links(seeded["project"]["id"], run_id, "filings_with_commitments")
 
     assert links["row_count"] == 6
     assert [row["ordinal"] for row in links["rows"]] == list(range(6))
     for row in links["rows"]:
         assert row["lineage_url"] == (
             f"{seeded['runs_url_prefix']}{run_id}"
-            f"/stage/matched_commitments/row/{row['ordinal']}/trace/view"
+            f"/stage/filings_with_commitments/row/{row['ordinal']}/trace/view"
         )
 
 
@@ -345,7 +345,7 @@ def test_a_blank_cell_reaches_the_tour_blank(
     """The tour picks its absence row off these values — "None" as text would read as one."""
     seeded, run_id = _run_the_tour_capped(monkeypatch)
 
-    rows = _read_lineage_links(seeded["project"]["id"], run_id, "matched_commitments")["rows"]
+    rows = _read_lineage_links(seeded["project"]["id"], run_id, "filings_with_commitments")["rows"]
 
     blank = [row for row in rows if row["values"]["public_commitment"] is None]
     filled = [row for row in rows if row["values"]["public_commitment"] is not None]
@@ -360,16 +360,16 @@ def test_the_row_the_tour_calls_an_absence_is_the_one_with_no_second_parent(
     seeded, run_id = _run_the_tour_capped(monkeypatch)
     run_dir = projects_root / seeded["project"]["id"] / "runs" / run_id
 
-    rows = _read_lineage_links(seeded["project"]["id"], run_id, "matched_commitments")["rows"]
+    rows = _read_lineage_links(seeded["project"]["id"], run_id, "filings_with_commitments")["rows"]
 
     for row in rows:
-        trace = trace_to_dict(trace_row(run_dir, "matched_commitments", row["ordinal"]))
-        joined = next(s for s in trace["steps"] if s["stage_id"] == "matched_commitments")
+        trace = trace_to_dict(trace_row(run_dir, "filings_with_commitments", row["ordinal"]))
+        joined = next(s for s in trace["steps"] if s["stage_id"] == "filings_with_commitments")
         matched = row["values"]["public_commitment"] is not None
         assert bool(joined["branches"]) is matched, row["values"]["client"]
         # The chain the reader walks: back through the check to the filing as filed.
         assert [step["stage_id"] for step in trace["steps"]] == [
-            "matched_commitments", "check_filings", "raw_filings"
+            "filings_with_commitments", "clean_filings", "lobbying_filings"
         ]
 
 
@@ -403,7 +403,7 @@ def test_the_seeding_tool_hands_back_the_stages_it_seeded(projects_root: Path) -
     # The three rules the script states: the last stage before the publish stage, the
     # one stage whose behaviour is code, and the queue beat 3 links to.
     assert by_type["publish"] == "publish_report"
-    assert by_type["python_row_function"] == "check_filings"
+    assert by_type["python_row_function"] == "clean_filings"
     assert by_type["human_review_queue"] == "review_contradictions"
     feeds_publish = next(s for s in workflow["stages"] if s["id"] == by_type["publish"])
     assert feeds_publish["inputs"] == ["review_contradictions"]

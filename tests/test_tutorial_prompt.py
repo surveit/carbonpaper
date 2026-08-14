@@ -7,7 +7,7 @@ from pathlib import Path
 
 import app
 from app.agents.tutorial.config import make_tutorial_tools
-from app.agents.tutorial.prompt import TUTORIAL_OPENING_PROMPT, TUTORIAL_SYSTEM_PROMPT
+from app.agents.tutorial.prompt import TUTORIAL_OPENING_MESSAGE, TUTORIAL_SYSTEM_PROMPT
 from app.core.run_status import RunStatus
 from app.models import StageType
 from app.models.run_manifest import QueueStats
@@ -62,9 +62,10 @@ def _fixture_column_names(fixture: WorkflowFile) -> set[str]:
     }
 
 
-def test_the_greeting_is_prompted_by_a_hello_not_by_an_instruction() -> None:
-    """An instruction gets performed; a hello gets answered. The tour wants the answer."""
-    assert TUTORIAL_OPENING_PROMPT == "Hi"
+def test_the_prompt_embeds_the_opening_message_the_reader_actually_saw() -> None:
+    """The model has no turn for the canned greeting, so the prompt has to quote it."""
+    assert TUTORIAL_OPENING_MESSAGE in TUTORIAL_SYSTEM_PROMPT
+    assert "Ready to get started?" in TUTORIAL_OPENING_MESSAGE
 
 
 def test_the_prompt_writes_the_product_name_the_page_around_it_writes() -> None:
@@ -102,6 +103,14 @@ def test_the_prompt_covers_the_five_requested_beats() -> None:
 
 def test_no_fabrication_rule_survives() -> None:
     assert "Never state a number, row count, or fact you did not just read" in TUTORIAL_SYSTEM_PROMPT
+
+
+def test_the_prompt_tells_the_model_not_to_repeat_the_canned_greeting() -> None:
+    """No turn exists for the greeting, so the model must be told it already happened."""
+    prompt = " ".join(TUTORIAL_SYSTEM_PROMPT.split())
+
+    assert "do not repeat it" in prompt
+    assert 'treat it as "yes"' in prompt
 
 
 def test_every_control_the_tour_sends_them_to_click_is_one_the_app_renders() -> None:

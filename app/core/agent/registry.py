@@ -11,22 +11,28 @@ from typing import Any, Callable
 from claude_agent_sdk import McpSdkServerConfig, SdkMcpTool, create_sdk_mcp_server, tool
 from pydantic import BaseModel, ConfigDict
 
-from app.core.agent.sdk_engine import MCP_SERVER_NAME, ClaudeAgentSdkEngine
+from app.core.agent.sdk_engine import MCP_SERVER_NAME, ClaudeAgentSdkEngine, ThinkingConfig
 from app.core.agent.bound_tool import BoundToolSpec
 
 
 class AgentConfig(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
     system_prompt: str
+    # None leaves the CLI's own default in place. A scripted agent whose replies
+    # are short and whose tool sequence the prompt already dictates has nothing
+    # for a reasoning block to earn — {"type": "disabled"} skips straight to text.
+    thinking: ThinkingConfig | None = None
     model: str = "sonnet"
     context_schema: type[BaseModel]
     # Labels for tools this agent does not own — e.g. the CLI's own ToolSearch
     # built-in, which has no BoundToolSpec here but still renders in the chat.
     extra_tool_labels: dict[str, str] = {}
-    # Set to make the agent speak first: an empty session runs one turn on this
-    # prompt with no reader message. It is never shown or stored as one, so the
-    # reader is not credited with words they did not type. None = wait to be spoken to.
-    opening_prompt: str | None = None
+    # Set to make the agent speak first with FIXED text: appended straight to a
+    # fresh session's transcript at creation, no model call. For a greeting the
+    # prompt already dictates near verbatim, paying for a live turn (cost,
+    # latency, a thinking block) buys nothing over writing the words directly.
+    # None = wait to be spoken to.
+    canned_opening: str | None = None
     # Prose only this session's context can supply, appended to system_prompt. What
     # it says is the agent's business; returning "" appends nothing, not a heading
     # over nothing.
@@ -43,10 +49,10 @@ def register(agent_id: str, config: AgentConfig, build_tools: BuildTools) -> Non
     _registry[agent_id] = (config, build_tools)
 
 
-def opening_prompt(agent_id: str) -> str | None:
-    """None when this agent waits to be spoken to. See AgentConfig.opening_prompt."""
+def canned_opening(agent_id: str) -> str | None:
+    """None when this agent waits to be spoken to. See AgentConfig.canned_opening."""
     config, _build_tools = _registry[agent_id]
-    return config.opening_prompt
+    return config.canned_opening
 
 
 def build_engine(agent_id: str, context: dict[str, Any]) -> ClaudeAgentSdkEngine:
@@ -60,6 +66,7 @@ def build_engine(agent_id: str, context: dict[str, Any]) -> ClaudeAgentSdkEngine
         allowed_tools=allowed,
         tool_labels={s.name: s.label for s in specs} | config.extra_tool_labels,
         model=config.model,
+        thinking=config.thinking,
     )
 
 

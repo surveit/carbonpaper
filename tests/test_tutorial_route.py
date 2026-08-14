@@ -108,32 +108,42 @@ def test_two_visitors_get_their_own_sessions() -> None:
     assert _start_the_tour() != _start_the_tour()
 
 
-def test_the_tour_page_opens_the_conversation_itself() -> None:
-    """The reader lands on a greeting, not on an empty box waiting to be typed in."""
-    page = client.get(f"/chat/{_start_the_tour()}")
+def test_the_seeded_session_already_carries_the_greeting_with_no_model_call() -> None:
+    """Fixed text written at creation, not a live turn: no turn_id exists yet."""
+    from app.agents.tutorial.prompt import TUTORIAL_OPENING_MESSAGE
 
-    assert "const OPENS_ITSELF = true" in page.text
-
-
-def test_a_session_that_has_already_opened_will_not_greet_twice() -> None:
-    """A reload must replay the transcript, not start a second opening turn."""
     sid = _start_the_tour()
-    _store.append_messages(sid, [{"role": "assistant", "parts": [{"type": "text",
-                                                                "text": "Hello."}]}])
+    data = _store.load(sid)
 
-    assert "const OPENS_ITSELF = false" in client.get(f"/chat/{sid}").text
-    assert client.post(f"/chat/{sid}/open").status_code == 409
-
-
-def test_the_opening_turn_is_not_attributed_to_the_reader() -> None:
-    """The prompt that makes the agent speak is the app's, so it is stored as nobody's."""
-    from app.agents.tutorial.prompt import TUTORIAL_OPENING_PROMPT
-    from app.core.agent.store import TranscriptMessage
-    from app.core.agent.turns import _drop_user_messages
-
-    engine_transcript: list[TranscriptMessage] = [
-        {"role": "user", "parts": [{"type": "text", "text": TUTORIAL_OPENING_PROMPT}]},
-        {"role": "assistant", "parts": [{"type": "text", "text": "Hello."}]},
+    assert data["active_turn"] is None
+    assert data["messages"] == [
+        {"role": "assistant", "parts": [{"type": "text", "text": TUTORIAL_OPENING_MESSAGE}]}
     ]
 
-    assert _drop_user_messages(engine_transcript) == engine_transcript[1:]
+
+def test_the_tour_page_renders_the_greeting_on_first_load() -> None:
+    """The reader lands on a greeting, not on an empty box waiting to be typed in."""
+    from app.agents.tutorial.prompt import TUTORIAL_OPENING_MESSAGE
+
+    page = client.get(f"/chat/{_start_the_tour()}")
+
+    assert "Welcome to Carbon Paper" in page.text
+    assert "Ready to get started?" in TUTORIAL_OPENING_MESSAGE
+
+
+def test_reloading_the_tour_page_never_duplicates_the_greeting() -> None:
+    """There is no opening turn to re-trigger — the message was written once, at creation."""
+    sid = _start_the_tour()
+
+    client.get(f"/chat/{sid}")
+    page = client.get(f"/chat/{sid}")
+
+    assert page.text.count("Welcome to Carbon Paper") == 1
+    assert len(_store.load(sid)["messages"]) == 1
+
+
+def test_the_open_route_no_longer_exists() -> None:
+    """The greeting used to be a live turn started by this route; it is gone with it."""
+    sid = _start_the_tour()
+
+    assert client.post(f"/chat/{sid}/open").status_code == 404
